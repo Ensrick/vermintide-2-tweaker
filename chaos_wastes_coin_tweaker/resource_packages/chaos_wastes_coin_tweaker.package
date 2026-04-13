@@ -1,0 +1,6 @@
+
+lua = [
+    "scripts/mods/chaos_wastes_coin_tweaker/chaos_wastes_coin_tweaker"
+    "scripts/mods/chaos_wastes_coin_tweaker/chaos_wastes_coin_tweaker_data"
+    "scripts/mods/chaos_wastes_coin_tweaker/chaos_wastes_coin_tweaker_localization"
+]

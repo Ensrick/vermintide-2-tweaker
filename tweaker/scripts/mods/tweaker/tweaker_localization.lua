@@ -1,0 +1,806 @@
+return {
+    mod_name = {
+        en = "Tweaker",
+    },
+    mod_description = {
+        en = "Tweak coin pickups, starting coins, boon choices, curse modifiers, and more.",
+    },
+    -- Groups
+    general_group = {
+        en = "General",
+    },
+    chaos_wastes_group = {
+        en = "Chaos Wastes",
+    },
+    curses_group = {
+        en = "Curses",
+    },
+    banned_traits_group = {
+        en = "Banned Weapon Traits",
+    },
+    disabled_boons_group = {
+        en = "Disabled Boons",
+    },
+    starting_boons_group = {
+        en = "Starting Boons",
+    },
+    -- General
+    disable_friendly_fire = {
+        en = "Disable Friendly Fire",
+    },
+    any_weapon_any_career = {
+        en = "Any Weapon on Any Career (requires restart)",
+    },
+    -- Chaos Wastes
+    force_belakor = {
+        en = "Always Include Belakor's Temple",
+    },
+    finale_dominant_god = {
+        en = "Finale God (0=weekly, 1=Nurgle, 2=Tzeentch, 3=Khorne, 4=Slaanesh)",
+    },
+    chest_upgrade_count = {
+        en = "Upgrade Altars (sum of 4 capped ~5 by map)",
+    },
+    chest_swap_melee_count = {
+        en = "Melee Swap Altars (sum of 4 capped ~5 by map)",
+    },
+    chest_swap_ranged_count = {
+        en = "Ranged Swap Altars (sum of 4 capped ~5 by map)",
+    },
+    chest_power_up_count = {
+        en = "Boon Altars (sum of 4 capped ~5 by map)",
+    },
+    cursed_chest_count = {
+        en = "Chests of Trials per Mission",
+    },
+    arena_ammo_count = {
+        en = "Arena Ammo Boxes",
+    },
+    enable_campaign_potions = {
+        en = "Enable Strength/Speed/Ability Potions",
+    },
+    any_trait_any_weapon = {
+        en = "Any Trait on Any Weapon",
+    },
+    coin_multiplier = {
+        en = "Coin Pickup Multiplier",
+    },
+    starting_coins = {
+        en = "Starting Coins",
+    },
+    shrine_boon_count = {
+        en = "Shrine Boon Options",
+    },
+    chest_boon_count = {
+        en = "Chest Boon Options",
+    },
+    -- Curses
+    disable_curse_abundance_of_life = {
+        en = "Disable: Abundance of Life",
+    },
+    disable_curse_belakor_totems = {
+        en = "Disable: Belakor's Totems",
+    },
+    disable_curse_blood_storm = {
+        en = "Disable: Blood Storm",
+    },
+    disable_curse_bolt_of_change = {
+        en = "Disable: Bolt of Change",
+    },
+    disable_curse_change_of_tzeentch = {
+        en = "Disable: Change of Tzeentch",
+    },
+    disable_curse_corrupted_flesh = {
+        en = "Disable: Corrupted Flesh",
+    },
+    disable_curse_egg_of_tzeentch = {
+        en = "Disable: Egg of Tzeentch",
+    },
+    disable_curse_empathy = {
+        en = "Disable: Empathy",
+    },
+    disable_curse_greed_pinata = {
+        en = "Disable: Greed",
+    },
+    disable_curse_khorne_champions = {
+        en = "Disable: Khorne Champions",
+    },
+    disable_curse_rotten_miasma = {
+        en = "Disable: Rotten Miasma",
+    },
+    disable_curse_shadow_homing_skulls = {
+        en = "Disable: Shadow Homing Skulls",
+    },
+    disable_curse_skulking_sorcerer = {
+        en = "Disable: Skulking Sorcerer",
+    },
+    disable_curse_skulls_of_fury = {
+        en = "Disable: Skulls of Fury",
+    },
+    -- Banned Weapon Traits
+    ban_trait_always_blocking = {
+        en = "Always Blocking",
+    },
+    ban_trait_armor_breaker = {
+        en = "Armor Breaker",
+    },
+    ban_trait_bloodthirst = {
+        en = "Bloodthirst",
+    },
+    ban_trait_crescendo_strike = {
+        en = "Crescendo Strike",
+    },
+    ban_trait_deus_ammo_pickup_reload_speed = {
+        en = "Ammo Pickup Reload Speed",
+    },
+    ban_trait_deus_big_swing_stagger = {
+        en = "Big Swing Stagger",
+    },
+    ban_trait_deus_collateral_damage_on_melee_killing_blow = {
+        en = "Collateral Damage (Melee Kill)",
+    },
+    ban_trait_deus_crit_chain_lightning = {
+        en = "Chain Lightning on Crit",
+    },
+    ban_trait_deus_extra_shot = {
+        en = "Extra Shot",
+    },
+    ban_trait_deus_ranged_crit_explosion = {
+        en = "Ranged Crit Explosion",
+    },
+    ban_trait_follow_up = {
+        en = "Follow Up",
+    },
+    ban_trait_headhunter = {
+        en = "Headhunter",
+    },
+    ban_trait_home_run = {
+        en = "Home Run",
+    },
+    ban_trait_melee_attack_speed_on_crit = {
+        en = "Attack Speed on Crit",
+    },
+    ban_trait_melee_counter_push_power = {
+        en = "Counter-Push Power",
+    },
+    ban_trait_melee_heal_on_crit = {
+        en = "Heal on Crit",
+    },
+    ban_trait_melee_increase_damage_on_block = {
+        en = "Damage Bonus on Block",
+    },
+    ban_trait_melee_shield_on_assist = {
+        en = "Shield on Assist",
+    },
+    ban_trait_melee_timed_block_cost = {
+        en = "Timed Block Cost",
+    },
+    ban_trait_piercing_projectiles = {
+        en = "Piercing Projectiles",
+    },
+    ban_trait_ranged_reduce_cooldown_on_crit = {
+        en = "Reduce Cooldown on Crit",
+    },
+    ban_trait_ranged_restore_stamina_headshot = {
+        en = "Restore Stamina on Headshot",
+    },
+    ban_trait_refilling_shot = {
+        en = "Refilling Shot",
+    },
+    ban_trait_serrated_blade = {
+        en = "Serrated Blade",
+    },
+    ban_trait_shield_of_isha = {
+        en = "Shield of Isha",
+    },
+    ban_trait_shield_splinters = {
+        en = "Shield Splinters",
+    },
+    ban_trait_stagger_aoe_on_crit = {
+        en = "Stagger AoE on Crit",
+    },
+    -- Disabled Boons
+    disable_boon_attack_speed_per_cooldown = {
+        en = "Attack Speed Per Cooldown",
+    },
+    disable_boon_bad_breath = {
+        en = "Bad Breath",
+    },
+    disable_boon_barkskin = {
+        en = "Barkskin",
+    },
+    disable_boon_blazing_revenge = {
+        en = "Blazing Revenge",
+    },
+    disable_boon_boon_aoe_02 = {
+        en = "AoE Burst II",
+    },
+    disable_boon_boon_aoe_03 = {
+        en = "AoE Burst III",
+    },
+    disable_boon_boon_aura_01 = {
+        en = "Aura I",
+    },
+    disable_boon_boon_aura_02 = {
+        en = "Aura II",
+    },
+    disable_boon_boon_aura_03 = {
+        en = "Aura III",
+    },
+    disable_boon_boon_bomb_heavy_01 = {
+        en = "Heavy Bomb",
+    },
+    disable_boon_boon_careerskill_01 = {
+        en = "Career Skill Boon I",
+    },
+    disable_boon_boon_careerskill_02 = {
+        en = "Career Skill Boon II",
+    },
+    disable_boon_boon_careerskill_03 = {
+        en = "Career Skill Boon III",
+    },
+    disable_boon_boon_careerskill_04 = {
+        en = "Career Skill Boon IV",
+    },
+    disable_boon_boon_careerskill_06 = {
+        en = "Career Skill Boon VI",
+    },
+    disable_boon_boon_careerskill_07 = {
+        en = "Career Skill Boon VII",
+    },
+    disable_boon_boon_dot_burning_01 = {
+        en = "Burning DoT",
+    },
+    disable_boon_boon_meta_01 = {
+        en = "Meta Boon",
+    },
+    disable_boon_boon_range_01 = {
+        en = "Range Boon I",
+    },
+    disable_boon_boon_range_02 = {
+        en = "Range Boon II",
+    },
+    disable_boon_boon_skulls_01 = {
+        en = "Skulls I",
+    },
+    disable_boon_boon_skulls_02 = {
+        en = "Skulls II",
+    },
+    disable_boon_boon_skulls_03 = {
+        en = "Skulls III",
+    },
+    disable_boon_boon_skulls_04 = {
+        en = "Skulls IV",
+    },
+    disable_boon_boon_skulls_05 = {
+        en = "Skulls V",
+    },
+    disable_boon_boon_skulls_06 = {
+        en = "Skulls VI",
+    },
+    disable_boon_boon_skulls_07 = {
+        en = "Skulls VII",
+    },
+    disable_boon_boon_skulls_08 = {
+        en = "Skulls VIII",
+    },
+    disable_boon_boon_supportbomb_concentration_01 = {
+        en = "Support Bomb: Concentration",
+    },
+    disable_boon_boon_supportbomb_crit_01 = {
+        en = "Support Bomb: Crit",
+    },
+    disable_boon_boon_supportbomb_healing_01 = {
+        en = "Support Bomb: Healing",
+    },
+    disable_boon_boon_supportbomb_speed_01 = {
+        en = "Support Bomb: Speed",
+    },
+    disable_boon_boon_supportbomb_strenght_01 = {
+        en = "Support Bomb: Strength",
+    },
+    disable_boon_boon_teamaura_01 = {
+        en = "Team Aura I",
+    },
+    disable_boon_boon_teamaura_02 = {
+        en = "Team Aura II",
+    },
+    disable_boon_boon_weaponrarity_01 = {
+        en = "Weapon Rarity I",
+    },
+    disable_boon_boon_weaponrarity_02 = {
+        en = "Weapon Rarity II",
+    },
+    disable_boon_boonset_drone_part1 = {
+        en = "Drone Set Part 1",
+    },
+    disable_boon_boonset_drone_part2 = {
+        en = "Drone Set Part 2",
+    },
+    disable_boon_boonset_drone_part3 = {
+        en = "Drone Set Part 3",
+    },
+    disable_boon_boulder_bro = {
+        en = "Boulder Bro",
+    },
+    disable_boon_cluster_barrel = {
+        en = "Cluster Barrel",
+    },
+    disable_boon_comradery = {
+        en = "Comradery",
+    },
+    disable_boon_cooldown_on_friendly_ability = {
+        en = "Cooldown on Friendly Ability",
+    },
+    disable_boon_curative_empowerment = {
+        en = "Curative Empowerment",
+    },
+    disable_boon_decanter = {
+        en = "Decanter",
+    },
+    disable_boon_detect_weakness = {
+        en = "Detect Weakness",
+    },
+    disable_boon_deus_ammo_pickup_heal = {
+        en = "Ammo Pickup Heals",
+    },
+    disable_boon_deus_barrel_power = {
+        en = "Barrel Power",
+    },
+    disable_boon_deus_block_procs_parry = {
+        en = "Block Procs Parry",
+    },
+    disable_boon_deus_cooldown_reg_not_hit = {
+        en = "Cooldown Regen (Not Hit)",
+    },
+    disable_boon_deus_cooldown_regen = {
+        en = "Cooldown Regen",
+    },
+    disable_boon_deus_crit_on_damage_taken = {
+        en = "Crit on Damage Taken",
+    },
+    disable_boon_deus_damage_reduction_on_incapacitated = {
+        en = "DR When Downed",
+    },
+    disable_boon_deus_extra_stamina = {
+        en = "Extra Stamina",
+    },
+    disable_boon_deus_free_potion_use_on_ability = {
+        en = "Free Potion on Ability",
+    },
+    disable_boon_deus_grenade_multi_throw = {
+        en = "Multi-Throw Grenades",
+    },
+    disable_boon_deus_guard_aura_check = {
+        en = "Guard Aura",
+    },
+    disable_boon_deus_health_regeneration = {
+        en = "Health Regen",
+    },
+    disable_boon_deus_increased_healing_taken = {
+        en = "Increased Healing",
+    },
+    disable_boon_deus_infinite_dodges = {
+        en = "Infinite Dodges",
+    },
+    disable_boon_deus_knockdown_damage_immunity_aura = {
+        en = "KO Damage Immunity Aura",
+    },
+    disable_boon_deus_max_health = {
+        en = "Max Health",
+    },
+    disable_boon_deus_more_head_less_body_damage = {
+        en = "More Headshot Damage",
+    },
+    disable_boon_deus_parry_damage_immune = {
+        en = "Parry Damage Immunity",
+    },
+    disable_boon_deus_powerup_attack_speed = {
+        en = "Attack Speed (Powerup)",
+    },
+    disable_boon_deus_push_charge = {
+        en = "Push Charge",
+    },
+    disable_boon_deus_push_cost_reduction = {
+        en = "Push Cost Reduction",
+    },
+    disable_boon_deus_push_increased_cleave = {
+        en = "Push Increased Cleave",
+    },
+    disable_boon_deus_reckless_swings = {
+        en = "Reckless Swings",
+    },
+    disable_boon_deus_revive_regen = {
+        en = "Revive Regen",
+    },
+    disable_boon_deus_second_wind = {
+        en = "Second Wind",
+    },
+    disable_boon_deus_skill_on_special_kill = {
+        en = "Skill on Special Kill",
+    },
+    disable_boon_deus_standing_still_damage_reduction = {
+        en = "DR Standing Still",
+    },
+    disable_boon_deus_target_full_health_damage_mult = {
+        en = "Bonus vs Full Health",
+    },
+    disable_boon_deus_uninterruptable_attacks = {
+        en = "Uninterruptable Attacks",
+    },
+    disable_boon_drop_item_on_ability_use = {
+        en = "Drop Item on Ability",
+    },
+    disable_boon_explosive_kills_on_elite_kills = {
+        en = "Explosive Elite Kills",
+    },
+    disable_boon_explosive_ordinance = {
+        en = "Explosive Ordinance",
+    },
+    disable_boon_focused_accuracy = {
+        en = "Focused Accuracy",
+    },
+    disable_boon_friendly_cooldown_on_ability = {
+        en = "Friendly Cooldown on Ability",
+    },
+    disable_boon_grenadier = {
+        en = "Grenadier",
+    },
+    disable_boon_hand_of_shallya = {
+        en = "Hand of Shallya",
+    },
+    disable_boon_heal_on_dot_damage_dealt = {
+        en = "Heal on DoT Damage",
+    },
+    disable_boon_healers_touch = {
+        en = "Healer's Touch",
+    },
+    disable_boon_health_orbs = {
+        en = "Health Orbs",
+    },
+    disable_boon_hidden_escape = {
+        en = "Hidden Escape",
+    },
+    disable_boon_home_brewer = {
+        en = "Home Brewer",
+    },
+    disable_boon_indomitable = {
+        en = "Indomitable",
+    },
+    disable_boon_invigorating_strike = {
+        en = "Invigorating Strike",
+    },
+    disable_boon_last_player_standing_power_reg = {
+        en = "Last Player Standing Power",
+    },
+    disable_boon_lucky = {
+        en = "Lucky",
+    },
+    disable_boon_melee_killing_spree_speed = {
+        en = "Killing Spree Speed",
+    },
+    disable_boon_melee_wave = {
+        en = "Melee Wave",
+    },
+    disable_boon_missing_health_power_up = {
+        en = "Missing Health Power",
+    },
+    disable_boon_money_magnet = {
+        en = "Money Magnet",
+    },
+    disable_boon_movement_speed_on_active_ability_use = {
+        en = "Move Speed on Ability",
+    },
+    disable_boon_natural_bond = {
+        en = "Natural Bond",
+    },
+    disable_boon_pent_up_anger = {
+        en = "Pent-Up Anger",
+    },
+    disable_boon_power_up_of_shallya = {
+        en = "Power Up of Shallya",
+    },
+    disable_boon_protection_orbs = {
+        en = "Protection Orbs",
+    },
+    disable_boon_pyrotechnical_echo = {
+        en = "Pyrotechnical Echo",
+    },
+    disable_boon_pyrrhic_strength = {
+        en = "Pyrrhic Strength",
+    },
+    disable_boon_resolve = {
+        en = "Resolve",
+    },
+    disable_boon_sharing_is_caring = {
+        en = "Sharing is Caring",
+    },
+    disable_boon_shrapnel = {
+        en = "Shrapnel",
+    },
+    disable_boon_skill_by_block = {
+        en = "Skill by Block",
+    },
+    disable_boon_speed_over_stamina = {
+        en = "Speed over Stamina",
+    },
+    disable_boon_staggering_force = {
+        en = "Staggering Force",
+    },
+    disable_boon_static_blade = {
+        en = "Static Blade",
+    },
+    disable_boon_static_charge = {
+        en = "Static Charge",
+    },
+    disable_boon_surprise_strike = {
+        en = "Surprise Strike",
+    },
+    disable_boon_tenacious = {
+        en = "Tenacious",
+    },
+    disable_boon_thorn_skin = {
+        en = "Thorn Skin",
+    },
+    disable_boon_transfer_temp_health_at_full = {
+        en = "Overflow THP",
+    },
+    disable_boon_triple_melee_headshot_power = {
+        en = "Triple Headshot Power",
+    },
+    disable_boon_wolfpack = {
+        en = "Wolfpack",
+    },
+    -- Starting Boons (same display names as Disabled Boons)
+    start_boon_attack_speed_per_cooldown             = { en = "Attack Speed Per Cooldown" },
+    start_boon_bad_breath                            = { en = "Bad Breath" },
+    start_boon_barkskin                              = { en = "Barkskin" },
+    start_boon_blazing_revenge                       = { en = "Blazing Revenge" },
+    start_boon_boon_aoe_02                           = { en = "AoE Burst II" },
+    start_boon_boon_aoe_03                           = { en = "AoE Burst III" },
+    start_boon_boon_aura_01                          = { en = "Aura I" },
+    start_boon_boon_aura_02                          = { en = "Aura II" },
+    start_boon_boon_aura_03                          = { en = "Aura III" },
+    start_boon_boon_bomb_heavy_01                    = { en = "Heavy Bomb" },
+    start_boon_boon_careerskill_01                   = { en = "Career Skill Boon I" },
+    start_boon_boon_careerskill_02                   = { en = "Career Skill Boon II" },
+    start_boon_boon_careerskill_03                   = { en = "Career Skill Boon III" },
+    start_boon_boon_careerskill_04                   = { en = "Career Skill Boon IV" },
+    start_boon_boon_careerskill_06                   = { en = "Career Skill Boon VI" },
+    start_boon_boon_careerskill_07                   = { en = "Career Skill Boon VII" },
+    start_boon_boon_dot_burning_01                   = { en = "Burning DoT" },
+    start_boon_boon_meta_01                          = { en = "Meta Boon" },
+    start_boon_boon_range_01                         = { en = "Range Boon I" },
+    start_boon_boon_range_02                         = { en = "Range Boon II" },
+    start_boon_boon_skulls_01                        = { en = "Skulls I" },
+    start_boon_boon_skulls_02                        = { en = "Skulls II" },
+    start_boon_boon_skulls_03                        = { en = "Skulls III" },
+    start_boon_boon_skulls_04                        = { en = "Skulls IV" },
+    start_boon_boon_skulls_05                        = { en = "Skulls V" },
+    start_boon_boon_skulls_06                        = { en = "Skulls VI" },
+    start_boon_boon_skulls_07                        = { en = "Skulls VII" },
+    start_boon_boon_skulls_08                        = { en = "Skulls VIII" },
+    start_boon_boon_supportbomb_concentration_01     = { en = "Support Bomb: Concentration" },
+    start_boon_boon_supportbomb_crit_01              = { en = "Support Bomb: Crit" },
+    start_boon_boon_supportbomb_healing_01           = { en = "Support Bomb: Healing" },
+    start_boon_boon_supportbomb_speed_01             = { en = "Support Bomb: Speed" },
+    start_boon_boon_supportbomb_strenght_01          = { en = "Support Bomb: Strength" },
+    start_boon_boon_teamaura_01                      = { en = "Team Aura I" },
+    start_boon_boon_teamaura_02                      = { en = "Team Aura II" },
+    start_boon_boon_weaponrarity_01                  = { en = "Weapon Rarity I" },
+    start_boon_boon_weaponrarity_02                  = { en = "Weapon Rarity II" },
+    start_boon_boonset_drone_part1                   = { en = "Drone Set Part 1" },
+    start_boon_boonset_drone_part2                   = { en = "Drone Set Part 2" },
+    start_boon_boonset_drone_part3                   = { en = "Drone Set Part 3" },
+    start_boon_boulder_bro                           = { en = "Boulder Bro" },
+    start_boon_cluster_barrel                        = { en = "Cluster Barrel" },
+    start_boon_comradery                             = { en = "Comradery" },
+    start_boon_cooldown_on_friendly_ability          = { en = "Cooldown on Friendly Ability" },
+    start_boon_curative_empowerment                  = { en = "Curative Empowerment" },
+    start_boon_decanter                              = { en = "Decanter" },
+    start_boon_detect_weakness                       = { en = "Detect Weakness" },
+    start_boon_deus_ammo_pickup_heal                 = { en = "Ammo Pickup Heals" },
+    start_boon_deus_barrel_power                     = { en = "Barrel Power" },
+    start_boon_deus_block_procs_parry                = { en = "Block Procs Parry" },
+    start_boon_deus_cooldown_reg_not_hit             = { en = "Cooldown Regen (Not Hit)" },
+    start_boon_deus_cooldown_regen                   = { en = "Cooldown Regen" },
+    start_boon_deus_crit_on_damage_taken             = { en = "Crit on Damage Taken" },
+    start_boon_deus_damage_reduction_on_incapacitated= { en = "DR When Downed" },
+    start_boon_deus_extra_stamina                    = { en = "Extra Stamina" },
+    start_boon_deus_free_potion_use_on_ability       = { en = "Free Potion on Ability" },
+    start_boon_deus_grenade_multi_throw              = { en = "Multi-Throw Grenades" },
+    start_boon_deus_guard_aura_check                 = { en = "Guard Aura" },
+    start_boon_deus_health_regeneration              = { en = "Health Regen" },
+    start_boon_deus_increased_healing_taken          = { en = "Increased Healing" },
+    start_boon_deus_infinite_dodges                  = { en = "Infinite Dodges" },
+    start_boon_deus_knockdown_damage_immunity_aura   = { en = "KO Damage Immunity Aura" },
+    start_boon_deus_max_health                       = { en = "Max Health" },
+    start_boon_deus_more_head_less_body_damage       = { en = "More Headshot Damage" },
+    start_boon_deus_parry_damage_immune              = { en = "Parry Damage Immunity" },
+    start_boon_deus_powerup_attack_speed             = { en = "Attack Speed (Powerup)" },
+    start_boon_deus_push_charge                      = { en = "Push Charge" },
+    start_boon_deus_push_cost_reduction              = { en = "Push Cost Reduction" },
+    start_boon_deus_push_increased_cleave            = { en = "Push Increased Cleave" },
+    start_boon_deus_reckless_swings                  = { en = "Reckless Swings" },
+    start_boon_deus_revive_regen                     = { en = "Revive Regen" },
+    start_boon_deus_second_wind                      = { en = "Second Wind" },
+    start_boon_deus_skill_on_special_kill            = { en = "Skill on Special Kill" },
+    start_boon_deus_standing_still_damage_reduction  = { en = "DR Standing Still" },
+    start_boon_deus_target_full_health_damage_mult   = { en = "Bonus vs Full Health" },
+    start_boon_deus_uninterruptable_attacks          = { en = "Uninterruptable Attacks" },
+    start_boon_drop_item_on_ability_use              = { en = "Drop Item on Ability" },
+    start_boon_explosive_kills_on_elite_kills        = { en = "Explosive Elite Kills" },
+    start_boon_explosive_ordinance                   = { en = "Explosive Ordinance" },
+    start_boon_focused_accuracy                      = { en = "Focused Accuracy" },
+    start_boon_friendly_cooldown_on_ability          = { en = "Friendly Cooldown on Ability" },
+    start_boon_grenadier                             = { en = "Grenadier" },
+    start_boon_hand_of_shallya                       = { en = "Hand of Shallya" },
+    start_boon_heal_on_dot_damage_dealt              = { en = "Heal on DoT Damage" },
+    start_boon_healers_touch                         = { en = "Healer's Touch" },
+    start_boon_health_orbs                           = { en = "Health Orbs" },
+    start_boon_hidden_escape                         = { en = "Hidden Escape" },
+    start_boon_home_brewer                           = { en = "Home Brewer" },
+    start_boon_indomitable                           = { en = "Indomitable" },
+    start_boon_invigorating_strike                   = { en = "Invigorating Strike" },
+    start_boon_last_player_standing_power_reg        = { en = "Last Player Standing Power" },
+    start_boon_lucky                                 = { en = "Lucky" },
+    start_boon_melee_killing_spree_speed             = { en = "Killing Spree Speed" },
+    start_boon_melee_wave                            = { en = "Melee Wave" },
+    start_boon_missing_health_power_up               = { en = "Missing Health Power" },
+    start_boon_money_magnet                          = { en = "Money Magnet" },
+    start_boon_movement_speed_on_active_ability_use  = { en = "Move Speed on Ability" },
+    start_boon_natural_bond                          = { en = "Natural Bond" },
+    start_boon_pent_up_anger                         = { en = "Pent-Up Anger" },
+    start_boon_power_up_of_shallya                   = { en = "Power Up of Shallya" },
+    start_boon_protection_orbs                       = { en = "Protection Orbs" },
+    start_boon_pyrotechnical_echo                    = { en = "Pyrotechnical Echo" },
+    start_boon_pyrrhic_strength                      = { en = "Pyrrhic Strength" },
+    start_boon_resolve                               = { en = "Resolve" },
+    start_boon_sharing_is_caring                     = { en = "Sharing is Caring" },
+    start_boon_shrapnel                              = { en = "Shrapnel" },
+    start_boon_skill_by_block                        = { en = "Skill by Block" },
+    start_boon_speed_over_stamina                    = { en = "Speed over Stamina" },
+    start_boon_staggering_force                      = { en = "Staggering Force" },
+    start_boon_static_blade                          = { en = "Static Blade" },
+    start_boon_static_charge                         = { en = "Static Charge" },
+    start_boon_surprise_strike                       = { en = "Surprise Strike" },
+    start_boon_tenacious                             = { en = "Tenacious" },
+    start_boon_thorn_skin                            = { en = "Thorn Skin" },
+    start_boon_transfer_temp_health_at_full          = { en = "Overflow THP" },
+    start_boon_triple_melee_headshot_power           = { en = "Triple Headshot Power" },
+    start_boon_wolfpack                              = { en = "Wolfpack" },
+
+    -- Weapons — section / group headers
+    weapons_group                      = { en = "Weapons" },
+    remove_weapon_restrictions_group   = { en = "Remove Weapon Restrictions" },
+
+    kruber_weapons_group               = { en = "Kruber" },
+    es_mercenary_weapons_group         = { en = "Mercenary" },
+    es_mercenary_melee_group           = { en = "Melee" },
+    es_mercenary_ranged_group          = { en = "Ranged" },
+    es_huntsman_weapons_group          = { en = "Huntsman" },
+    es_huntsman_melee_group            = { en = "Melee" },
+    es_huntsman_ranged_group           = { en = "Ranged" },
+    es_knight_weapons_group            = { en = "Foot Knight" },
+    es_knight_melee_group              = { en = "Melee" },
+    es_knight_ranged_group             = { en = "Ranged" },
+    es_questingknight_weapons_group    = { en = "Grail Knight" },
+    es_questingknight_melee_group      = { en = "Melee" },
+    es_questingknight_ranged_group     = { en = "Ranged" },
+
+    bardin_weapons_group               = { en = "Bardin" },
+    dr_ranger_weapons_group            = { en = "Ranger Veteran" },
+    dr_ranger_melee_group              = { en = "Melee" },
+    dr_ironbreaker_weapons_group       = { en = "Ironbreaker" },
+    dr_ironbreaker_melee_group         = { en = "Melee" },
+    dr_slayer_weapons_group            = { en = "Slayer" },
+    dr_slayer_melee_group              = { en = "Melee" },
+    dr_engineer_weapons_group          = { en = "Engineer" },
+    dr_engineer_melee_group            = { en = "Melee" },
+
+    kerillian_weapons_group            = { en = "Kerillian" },
+    we_maidenguard_weapons_group       = { en = "Handmaiden" },
+    we_maidenguard_ranged_group        = { en = "Ranged" },
+    we_shade_weapons_group             = { en = "Shade" },
+    we_shade_ranged_group              = { en = "Ranged" },
+    we_thornsister_weapons_group       = { en = "Sister of the Thorn" },
+    we_thornsister_ranged_group        = { en = "Ranged" },
+
+    saltzpyre_weapons_group            = { en = "Saltzpyre" },
+    wh_captain_weapons_group           = { en = "Witch Hunter Captain" },
+    wh_captain_melee_group             = { en = "Melee" },
+    wh_captain_ranged_group            = { en = "Ranged" },
+    wh_bountyhunter_weapons_group      = { en = "Bounty Hunter" },
+    wh_bountyhunter_melee_group        = { en = "Melee" },
+    wh_bountyhunter_ranged_group       = { en = "Ranged" },
+    wh_zealot_weapons_group            = { en = "Zealot" },
+    wh_zealot_melee_group              = { en = "Melee" },
+    wh_zealot_ranged_group             = { en = "Ranged" },
+    wh_priest_weapons_group            = { en = "Warrior Priest" },
+    wh_priest_melee_group              = { en = "Melee" },
+    wh_priest_ranged_group             = { en = "Ranged" },
+
+    -- Weapons — per-career unlock checkboxes
+    -- Kruber (melee: Bardin's axe/hammer + Saltzpyre's axe/Skullsplitter; ranged: elf longbow)
+    unlock_es_mercenary_dr_1h_axe           = { en = "Axe (Bardin)" },
+    unlock_es_mercenary_wh_1h_axe           = { en = "Axe (Saltzpyre)" },
+    unlock_es_mercenary_dr_1h_hammer        = { en = "Hammer (Bardin)" },
+    unlock_es_mercenary_wh_1h_hammer        = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_es_mercenary_dr_shield_hammer    = { en = "Hammer & Shield (Bardin)" },
+    unlock_es_mercenary_wh_hammer_shield    = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    unlock_es_mercenary_we_longbow          = { en = "Longbow (Kerillian)" },
+    unlock_es_huntsman_dr_1h_axe            = { en = "Axe (Bardin)" },
+    unlock_es_huntsman_wh_1h_axe            = { en = "Axe (Saltzpyre)" },
+    unlock_es_huntsman_dr_1h_hammer         = { en = "Hammer (Bardin)" },
+    unlock_es_huntsman_wh_1h_hammer         = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_es_huntsman_dr_shield_hammer     = { en = "Hammer & Shield (Bardin)" },
+    unlock_es_huntsman_wh_hammer_shield     = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    unlock_es_huntsman_we_longbow           = { en = "Longbow (Kerillian)" },
+    unlock_es_knight_dr_1h_axe              = { en = "Axe (Bardin)" },
+    unlock_es_knight_wh_1h_axe              = { en = "Axe (Saltzpyre)" },
+    unlock_es_knight_dr_1h_hammer           = { en = "Hammer (Bardin)" },
+    unlock_es_knight_wh_1h_hammer           = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_es_knight_dr_shield_hammer       = { en = "Hammer & Shield (Bardin)" },
+    unlock_es_knight_wh_hammer_shield       = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    unlock_es_knight_we_longbow             = { en = "Longbow (Kerillian)" },
+    unlock_es_questingknight_dr_1h_axe      = { en = "Axe (Bardin)" },
+    unlock_es_questingknight_wh_1h_axe      = { en = "Axe (Saltzpyre)" },
+    unlock_es_questingknight_dr_1h_hammer   = { en = "Hammer (Bardin)" },
+    unlock_es_questingknight_wh_1h_hammer   = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_es_questingknight_dr_shield_hammer = { en = "Hammer & Shield (Bardin)" },
+    unlock_es_questingknight_wh_hammer_shield = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    unlock_es_questingknight_we_longbow     = { en = "Longbow (Kerillian)" },
+    -- Bardin (borrows Kruber's mace and Saltzpyre's axe/Skullsplitter)
+    unlock_dr_ranger_es_1h_mace             = { en = "Mace (Kruber)" },
+    unlock_dr_ranger_wh_1h_axe              = { en = "Axe (Saltzpyre)" },
+    unlock_dr_ranger_wh_1h_hammer           = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_dr_ranger_es_mace_shield         = { en = "Mace & Shield (Kruber)" },
+    unlock_dr_ranger_wh_hammer_shield       = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    unlock_dr_ironbreaker_es_1h_mace        = { en = "Mace (Kruber)" },
+    unlock_dr_ironbreaker_wh_1h_axe         = { en = "Axe (Saltzpyre)" },
+    unlock_dr_ironbreaker_wh_1h_hammer      = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_dr_ironbreaker_es_mace_shield    = { en = "Mace & Shield (Kruber)" },
+    unlock_dr_ironbreaker_wh_hammer_shield  = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    unlock_dr_slayer_es_1h_mace             = { en = "Mace (Kruber)" },
+    unlock_dr_slayer_wh_1h_axe              = { en = "Axe (Saltzpyre)" },
+    unlock_dr_slayer_wh_1h_hammer           = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_dr_slayer_es_mace_shield         = { en = "Mace & Shield (Kruber)" },
+    unlock_dr_slayer_wh_hammer_shield       = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    unlock_dr_engineer_es_1h_mace           = { en = "Mace (Kruber)" },
+    unlock_dr_engineer_wh_1h_axe            = { en = "Axe (Saltzpyre)" },
+    unlock_dr_engineer_wh_1h_hammer         = { en = "Skullsplitter (Saltzpyre)" },
+    unlock_dr_engineer_es_mace_shield       = { en = "Mace & Shield (Kruber)" },
+    unlock_dr_engineer_wh_hammer_shield     = { en = "Skullsplitter & Shield (Saltzpyre)" },
+    -- Kerillian (longbow for non-Waystalker careers)
+    unlock_we_waywatcher_we_longbow         = { en = "Longbow" },
+    unlock_we_maidenguard_we_longbow        = { en = "Longbow" },
+    unlock_we_shade_we_longbow              = { en = "Longbow" },
+    unlock_we_thornsister_we_longbow        = { en = "Longbow" },
+    -- Saltzpyre (Kruber's mace/sword + Bardin's hammer/axe + Sienna's sword + elf longbow; shields only for Warrior Priest)
+    unlock_wh_captain_es_1h_mace            = { en = "Mace (Kruber)" },
+    unlock_wh_captain_es_1h_sword           = { en = "Sword (Kruber)" },
+    unlock_wh_captain_dr_1h_hammer          = { en = "Hammer (Bardin)" },
+    unlock_wh_captain_dr_1h_axe             = { en = "Axe (Bardin)" },
+    unlock_wh_captain_bw_sword              = { en = "Sword (Sienna)" },
+    unlock_wh_captain_we_longbow            = { en = "Longbow (Kerillian)" },
+    unlock_wh_bountyhunter_es_1h_mace       = { en = "Mace (Kruber)" },
+    unlock_wh_bountyhunter_es_1h_sword      = { en = "Sword (Kruber)" },
+    unlock_wh_bountyhunter_dr_1h_hammer     = { en = "Hammer (Bardin)" },
+    unlock_wh_bountyhunter_dr_1h_axe        = { en = "Axe (Bardin)" },
+    unlock_wh_bountyhunter_bw_sword         = { en = "Sword (Sienna)" },
+    unlock_wh_bountyhunter_we_longbow       = { en = "Longbow (Kerillian)" },
+    unlock_wh_zealot_es_1h_mace             = { en = "Mace (Kruber)" },
+    unlock_wh_zealot_es_1h_sword            = { en = "Sword (Kruber)" },
+    unlock_wh_zealot_dr_1h_hammer           = { en = "Hammer (Bardin)" },
+    unlock_wh_zealot_dr_1h_axe              = { en = "Axe (Bardin)" },
+    unlock_wh_zealot_bw_sword               = { en = "Sword (Sienna)" },
+    unlock_wh_zealot_we_longbow             = { en = "Longbow (Kerillian)" },
+    unlock_wh_priest_es_1h_mace             = { en = "Mace (Kruber)" },
+    unlock_wh_priest_es_1h_sword            = { en = "Sword (Kruber)" },
+    unlock_wh_priest_dr_1h_hammer           = { en = "Hammer (Bardin)" },
+    unlock_wh_priest_dr_1h_axe              = { en = "Axe (Bardin)" },
+    unlock_wh_priest_bw_sword               = { en = "Sword (Sienna)" },
+    unlock_wh_priest_we_longbow             = { en = "Longbow (Kerillian)" },
+    unlock_wh_priest_es_mace_shield         = { en = "Mace & Shield (Kruber)" },
+    unlock_wh_priest_dr_shield_hammer       = { en = "Hammer & Shield (Bardin)" },
+}

@@ -1,0 +1,6 @@
+
+lua = [
+    "scripts/mods/tweaker/tweaker"
+    "scripts/mods/tweaker/tweaker_data"
+    "scripts/mods/tweaker/tweaker_localization"
+]
