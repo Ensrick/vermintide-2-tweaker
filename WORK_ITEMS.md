@@ -1,6 +1,6 @@
 # Tweaker — Work Items
 
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ---
 
@@ -24,8 +24,12 @@ Last updated: 2026-04-18
 | **Elf + Flail** (`es_1h_flail`) | Works with standard animations — confirmed same rule as 1h sword/axe/mace |
 | **Elf + Rapier & Pistol** (`wh_fencing_sword`) | `Unit.animation_event` fallback fires `to_fencing_sword → to_sword_and_dagger/to_1h_sword` — confirmed working |
 | Curse disable — node/course curse hooks | Working |
+| Crowbill item key fix | `bw_crowbill` → `bw_1h_crowbill` in weapon map, settings, and localization |
+| Camera Lua ordering fix | `_tp_inst_patched` / `_try_patch_tp_camera` forward-declared before `on_game_state_changed` |
 
 **General rule (confirmed):** Any weapon with `wield_anim` of `to_1h_sword`, `to_1h_axe`, or `to_1h_mace` works cross-career with no animation patching. All skeletons have these events.
+
+**Animation hook rule:** Never put an event in `_wield_anim_prefer` if that event exists natively on ANY career's skeleton. The prefer list fires before the original for ALL units — it will redirect a career's own native weapon to a wrong animation. Use a career-aware special-case function (`_fencing_sword_anim`, `_longbow_anim`, etc.) instead.
 
 ---
 
@@ -82,6 +86,14 @@ Last updated: 2026-04-18
 
 ---
 
+## 🗑️ Confirmed Dead — Animation
+
+### Rapier & Pistol (`wh_fencing_sword`) on Elf — Sword & Dagger animations
+- **Status:** DEAD END. Log confirmed elf has `to_fencing_sword` as a skeleton event but it maps to the generic 1h sword set — NOT sword & dagger. Five S&D event name variants were tried (`to_sword_and_dagger`, `to_dagger_sword`, `to_sword_dagger`, `to_we_sword_dagger`, `to_dagger`) and none exist on elf skeletons.
+- **Final result:** `to_fencing_sword → to_1h_sword` fallback is the only option. Elf will use 1h sword animations when wielding a rapier. Do not retry.
+
+---
+
 ## 🗑️ Approaches Confirmed Dead (do not retry)
 
 | Approach | Why |
@@ -90,3 +102,5 @@ Last updated: 2026-04-18
 | `unit_template.unit_3p` swap in GearUtils hook | `unit_template.unit_3p` is always `nil` at hook time. Removed. |
 | `to_es_longbow` fallback on Saltzpyre | Saltzpyre skeleton has no bow animations. Removed from fallback table. |
 | `_crossbow_3p_path` via Weapons global | All crossbow templates have `unit_3p = nil`. Model is in ItemMasterList. |
+| Career-naive `_wield_anim_prefer` for `to_fencing_sword` | Ran for all careers — redirected WHC away from his own native animation. Any event that exists natively on some careers must use a career-aware special-case function, not a global prefer table. |
+| `first_person_mode_active` patching for TP camera | Only controls arm mesh visibility. Camera position is not affected. |
