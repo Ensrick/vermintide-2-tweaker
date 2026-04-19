@@ -1,5 +1,36 @@
 local mod = get_mod("t")
 
+-- Shared option list for every talent-swap dropdown (all 20 careers + "none").
+-- Each option's text key is looked up in tweaker_localization.lua.
+local talent_swap_options = {
+    { text = "talent_source_none",              value = "none"              },
+    -- Bardin
+    { text = "cname_dr_ironbreaker",            value = "dr_ironbreaker"    },
+    { text = "cname_dr_slayer",                 value = "dr_slayer"         },
+    { text = "cname_dr_ranger",                 value = "dr_ranger"         },
+    { text = "cname_dr_engineer",               value = "dr_engineer"       },
+    -- Markus
+    { text = "cname_es_huntsman",               value = "es_huntsman"       },
+    { text = "cname_es_knight",                 value = "es_knight"         },
+    { text = "cname_es_mercenary",              value = "es_mercenary"      },
+    { text = "cname_es_questingknight",         value = "es_questingknight" },
+    -- Kerillian
+    { text = "cname_we_shade",                  value = "we_shade"          },
+    { text = "cname_we_maidenguard",            value = "we_maidenguard"    },
+    { text = "cname_we_waywatcher",             value = "we_waywatcher"     },
+    { text = "cname_we_thornsister",            value = "we_thornsister"    },
+    -- Victor
+    { text = "cname_wh_zealot",                 value = "wh_zealot"         },
+    { text = "cname_wh_bountyhunter",           value = "wh_bountyhunter"   },
+    { text = "cname_wh_captain",                value = "wh_captain"        },
+    { text = "cname_wh_priest",                 value = "wh_priest"         },
+    -- Sienna
+    { text = "cname_bw_scholar",                value = "bw_scholar"        },
+    { text = "cname_bw_adept",                  value = "bw_adept"          },
+    { text = "cname_bw_unchained",              value = "bw_unchained"      },
+    { text = "cname_bw_necromancer",            value = "bw_necromancer"    },
+}
+
 return {
     name              = mod:localize("mod_name"),
     description       = mod:localize("mod_description"),
@@ -15,6 +46,11 @@ return {
                 sub_widgets = {
                     {
                         setting_id    = "disable_friendly_fire",
+                        type          = "checkbox",
+                        default_value = false,
+                    },
+                    {
+                        setting_id    = "allow_duplicate_careers",
                         type          = "checkbox",
                         default_value = false,
                     },
@@ -471,6 +507,8 @@ return {
                                             { setting_id = "unlock_es_mercenary_wh_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_mercenary_dr_shield_hammer", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_mercenary_wh_hammer_shield", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_mercenary_bw_sword",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_mercenary_es_sword_shield",  type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "es_mercenary_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_es_mercenary_we_longbow", type = "checkbox", default_value = false },
@@ -484,6 +522,8 @@ return {
                                             { setting_id = "unlock_es_huntsman_wh_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_huntsman_dr_shield_hammer", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_huntsman_wh_hammer_shield", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_huntsman_bw_sword",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_huntsman_es_sword_shield",  type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "es_huntsman_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_es_huntsman_we_longbow", type = "checkbox", default_value = false },
@@ -497,6 +537,8 @@ return {
                                             { setting_id = "unlock_es_knight_wh_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_knight_dr_shield_hammer", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_knight_wh_hammer_shield", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_knight_bw_sword",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_knight_es_sword_shield",  type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "es_knight_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_es_knight_we_longbow", type = "checkbox", default_value = false },
@@ -510,6 +552,7 @@ return {
                                             { setting_id = "unlock_es_questingknight_wh_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_questingknight_dr_shield_hammer", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_questingknight_wh_hammer_shield", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_questingknight_bw_sword",         type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "es_questingknight_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_es_questingknight_we_longbow", type = "checkbox", default_value = false },
@@ -562,22 +605,45 @@ return {
                                 },
                             },
 
-                            -- Kerillian: longbow for non-Waystalker careers (Waystalker already has it)
+                            -- Kerillian: longbow for non-Waystalker careers (Waystalker already has it);
+                            --   Saltzpyre melee (rapier+pistol, falchion, flail) for all elf careers
                             {
                                 setting_id = "kerillian_weapons_group",
                                 type       = "group",
                                 sub_widgets = {
+                                    { setting_id = "we_waywatcher_weapons_group",  type = "group", sub_widgets = {
+                                        { setting_id = "we_waywatcher_melee_group",  type = "group", sub_widgets = {
+                                            { setting_id = "unlock_we_waywatcher_wh_fencing_sword", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_waywatcher_wh_1h_falchion",      type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_waywatcher_es_1h_flail",         type = "checkbox", default_value = false },
+                                        }},
+                                    }},
                                     { setting_id = "we_maidenguard_weapons_group", type = "group", sub_widgets = {
+                                        { setting_id = "we_maidenguard_melee_group", type = "group", sub_widgets = {
+                                            { setting_id = "unlock_we_maidenguard_wh_fencing_sword", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_maidenguard_wh_1h_falchion",      type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_maidenguard_es_1h_flail",         type = "checkbox", default_value = false },
+                                        }},
                                         { setting_id = "we_maidenguard_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_we_maidenguard_we_longbow", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "we_shade_weapons_group",       type = "group", sub_widgets = {
+                                        { setting_id = "we_shade_melee_group",       type = "group", sub_widgets = {
+                                            { setting_id = "unlock_we_shade_wh_fencing_sword", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_shade_wh_1h_falchion",      type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_shade_es_1h_flail",         type = "checkbox", default_value = false },
+                                        }},
                                         { setting_id = "we_shade_ranged_group",       type = "group", sub_widgets = {
                                             { setting_id = "unlock_we_shade_we_longbow", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "we_thornsister_weapons_group", type = "group", sub_widgets = {
+                                        { setting_id = "we_thornsister_melee_group", type = "group", sub_widgets = {
+                                            { setting_id = "unlock_we_thornsister_wh_fencing_sword", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_thornsister_wh_1h_falchion",      type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_thornsister_es_1h_flail",         type = "checkbox", default_value = false },
+                                        }},
                                         { setting_id = "we_thornsister_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_we_thornsister_we_longbow", type = "checkbox", default_value = false },
                                         }},
@@ -597,8 +663,10 @@ return {
                                             { setting_id = "unlock_wh_captain_dr_1h_hammer", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_captain_dr_1h_axe",    type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_captain_bw_sword",     type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_wh_captain_bw_crowbill",  type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "wh_captain_ranged_group",     type = "group", sub_widgets = {
+                                            { setting_id = "unlock_wh_captain_es_longbow",   type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_captain_we_longbow",   type = "checkbox", default_value = false },
                                         }},
                                     }},
@@ -609,8 +677,10 @@ return {
                                             { setting_id = "unlock_wh_bountyhunter_dr_1h_hammer", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_bountyhunter_dr_1h_axe",    type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_bountyhunter_bw_sword",     type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_wh_bountyhunter_bw_crowbill",  type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "wh_bountyhunter_ranged_group", type = "group", sub_widgets = {
+                                            { setting_id = "unlock_wh_bountyhunter_es_longbow",   type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_bountyhunter_we_longbow",   type = "checkbox", default_value = false },
                                         }},
                                     }},
@@ -621,8 +691,10 @@ return {
                                             { setting_id = "unlock_wh_zealot_dr_1h_hammer", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_zealot_dr_1h_axe",    type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_zealot_bw_sword",     type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_wh_zealot_bw_crowbill",  type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "wh_zealot_ranged_group",      type = "group", sub_widgets = {
+                                            { setting_id = "unlock_wh_zealot_es_longbow",   type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_zealot_we_longbow",   type = "checkbox", default_value = false },
                                         }},
                                     }},
@@ -633,10 +705,12 @@ return {
                                             { setting_id = "unlock_wh_priest_dr_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_priest_dr_1h_axe",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_priest_bw_sword",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_wh_priest_bw_crowbill",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_priest_es_mace_shield",   type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_priest_dr_shield_hammer", type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "wh_priest_ranged_group",      type = "group", sub_widgets = {
+                                            { setting_id = "unlock_wh_priest_es_longbow",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_wh_priest_we_longbow",       type = "checkbox", default_value = false },
                                         }},
                                     }},
@@ -647,6 +721,46 @@ return {
                     },
                 },
             },
+        -- ============================================================
+        -- Talents
+        -- ============================================================
+        {
+            setting_id = "talents_group",
+            type       = "group",
+            sub_widgets = {
+                {
+                    setting_id = "career_swapping_group",
+                    type       = "group",
+                    sub_widgets = {
+                        -- Bardin
+                        { setting_id = "talent_swap_dr_ironbreaker",    type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_dr_slayer",         type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_dr_ranger",         type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_dr_engineer",       type = "dropdown", default_value = "none", options = talent_swap_options },
+                        -- Markus
+                        { setting_id = "talent_swap_es_huntsman",       type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_es_knight",         type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_es_mercenary",      type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_es_questingknight", type = "dropdown", default_value = "none", options = talent_swap_options },
+                        -- Kerillian
+                        { setting_id = "talent_swap_we_shade",          type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_we_maidenguard",    type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_we_waywatcher",     type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_we_thornsister",    type = "dropdown", default_value = "none", options = talent_swap_options },
+                        -- Victor
+                        { setting_id = "talent_swap_wh_zealot",         type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_wh_bountyhunter",   type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_wh_captain",        type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_wh_priest",         type = "dropdown", default_value = "none", options = talent_swap_options },
+                        -- Sienna
+                        { setting_id = "talent_swap_bw_scholar",        type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_bw_adept",          type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_bw_unchained",      type = "dropdown", default_value = "none", options = talent_swap_options },
+                        { setting_id = "talent_swap_bw_necromancer",    type = "dropdown", default_value = "none", options = talent_swap_options },
+                    },
+                },
+            },
         },
     },
+},
 }

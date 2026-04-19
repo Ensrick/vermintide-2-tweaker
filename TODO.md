@@ -19,6 +19,7 @@
 - [x] `t god` command — toggle invincibility
 - [x] `t win` command — complete the current map
 - [x] `t dump_boons` command — log boon IDs from next shrine/chest roll
+- [x] Allow duplicate careers (host-only setting — multiple players can share the same hero/career)
 
 ## Known Issues
 - [ ] **Force Belakor — pre-run lobby UI** — Core gameplay works (`with_belakor=true` → `spread_belakor` → Belakor nodes get curses, graph synced to clients). Remaining: expedition-select screen reads `backend_deus:deus_journey_with_belakor()` which returns false when not Belakor week — clients see no Belakor indicator in pre-run lobby.
@@ -55,7 +56,7 @@
 - [ ] **Research: campaign maps in Chaos Wastes** — campaign/adventure maps don't have `primary_pickup_spawners` baked in for CW altars/chests. Would require adding each level to `DEUS_LEVEL_SETTINGS` with correct themes, paths, and locations. Likely requires custom level packages; investigate if any workaround exists.
 
 ## Weapons
-- [ ] **GiveWeapon command** — give any weapon by item key (integrate from Shazbot/Vermintide-Mods) (Perhaps there's a way to use the in-game crafting menu in modded to allow the player to craft items just for modded)
+- [ ] **GiveWeapon command** — give any weapon by item key (integrate from Shazbot/Vermintide-Mods) (Perhaps there's a way to use the in-game crafting menu in modded realm to allow the player to craft items just for modded)
 - [ ] **AnyWeapon** — allow any weapon regardless of career restrictions (integrate from Shazbot/Vermintide-Mods)
 
 ## Multiplayer
@@ -65,5 +66,8 @@
 - [ ] **Skip/disable character voiceovers** — option to silence or suppress specific character voices and voiceover lines during missions.
 
 ## Careers
+- [x] Allow duplicate careers — multiple players can pick the same hero/career (host setting)
 - [ ] Change the Power Bonus talent
 - [ ] Adjust Temporary HP (THP) talents
+- [ ] **Talent/ability transplant** — swap one career's full talent tree and career ability with another's (e.g. give Battle Wizard all of Grail Knight's talents and passive/active ability). Purely data-driven: patch the career's `talents` table and `career_ability_template` at game-state init. No model or animation changes — the character looks the same but plays like a different career.
+- [ ] **Per-talent overrides** — replace individual talent slots across any career (e.g. swap one THP talent for a different character's talent)
