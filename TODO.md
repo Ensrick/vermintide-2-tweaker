@@ -21,9 +21,9 @@
 - [x] `t dump_boons` command — log boon IDs from next shrine/chest roll
 - [x] Allow duplicate careers (host-only setting — multiple players can share the same hero/career)
 
-## Known Issues
-- [ ] **Force Belakor — pre-run lobby UI** — Core gameplay works (`with_belakor=true` → `spread_belakor` → Belakor nodes get curses, graph synced to clients). Remaining: expedition-select screen reads `backend_deus:deus_journey_with_belakor()` which returns false when not Belakor week — clients see no Belakor indicator in pre-run lobby.
-- [ ] **Menu names not yet updated until first CW run** — boon/curse labels show guessed/internal names on first load; the runtime localization patch fires on `DeusRunController:init` so correct names appear after the first run starts. Trait labels are still unaudited.
+- [ ] **Investigate Elf native weapon crash** — Native weapons like Glaive (`we_2h_axe`) and Dual Daggers (`we_dual_wield_daggers`) are causing engine assertion failures in `spawn_unit`. Added aggressive logging and runtime guards to help isolate the cause.
+- [ ] **Verify Settings Sync** — Ensure `weapon_tweaker` settings are correctly applied on the client for non-host players.
+- [ ] **Complete weapon_tweaker_data.lua** — Add the missing career weapon checkboxes to the new modular project.
 
 ---
 

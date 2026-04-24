@@ -1,4 +1,14 @@
 local mod = get_mod("t")
+local weapon_backend = mod:dofile("scripts/mods/tweaker/tweaker_weapon_backend")
+
+local function _feature_enabled(setting_id, default_value)
+    local value = mod:get(setting_id)
+    if value == nil then
+        return default_value ~= false
+    end
+
+    return value == true
+end
 
 local _ALL_CAREERS = {
     "dr_ironbreaker", "dr_slayer",  "dr_ranger",  "dr_engineer",
@@ -22,11 +32,11 @@ local _WEAPON_UNLOCK_MAP = {
     -- Kruber: other-faction weapons (native es_* weapons already equippable)
     -- es_spear/es_spear_shield/we_spear_shield don't exist in ItemMasterList; bw_fireball_staff key invalid
     es_mercenary      = { "dr_1h_axe", "wh_1h_axe", "dr_1h_hammer", "wh_1h_hammer", "dr_shield_hammer", "wh_hammer_shield", "bw_sword", "we_longbow", "es_sword_shield", "we_1h_sword",
-                          "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear" },
+                          "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear", "es_sword_shield_breton" },
     es_huntsman       = { "dr_1h_axe", "wh_1h_axe", "dr_1h_hammer", "wh_1h_hammer", "dr_shield_hammer", "wh_hammer_shield", "bw_sword", "we_longbow", "es_sword_shield", "we_1h_sword",
-                          "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear" },
+                          "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear", "es_sword_shield_breton" },
     es_knight         = { "dr_1h_axe", "wh_1h_axe", "dr_1h_hammer", "wh_1h_hammer", "dr_shield_hammer", "wh_hammer_shield", "bw_sword", "we_longbow", "es_sword_shield", "we_1h_sword",
-                          "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear" },
+                          "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear", "es_sword_shield_breton" },
     es_questingknight = { "dr_1h_axe", "wh_1h_axe", "dr_1h_hammer", "wh_1h_hammer", "dr_shield_hammer", "wh_hammer_shield", "bw_sword", "we_longbow", "we_1h_sword",
                           "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear" },
     -- Bardin
@@ -40,13 +50,13 @@ local _WEAPON_UNLOCK_MAP = {
                        "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "we_spear" },
     -- Kerillian
     we_waywatcher  = { "es_longbow", "wh_fencing_sword", "wh_1h_falchion", "es_1h_flail", "es_1h_sword", "es_1h_mace", "dr_1h_axe", "dr_1h_hammer", "wh_1h_axe", "wh_1h_hammer", "bw_sword", "bw_1h_crowbill",
-                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun" },
+                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_1h_spears_shield", "es_bastard_sword" },
     we_maidenguard = { "we_longbow", "es_longbow", "wh_fencing_sword", "wh_1h_falchion", "es_1h_flail", "es_1h_sword", "es_1h_mace", "dr_1h_axe", "dr_1h_hammer", "wh_1h_axe", "wh_1h_hammer", "bw_sword", "bw_1h_crowbill",
-                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun" },
+                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "es_bastard_sword" },
     we_shade       = { "we_longbow", "es_longbow", "wh_fencing_sword", "wh_1h_falchion", "es_1h_flail", "es_1h_sword", "es_1h_mace", "dr_1h_axe", "dr_1h_hammer", "wh_1h_axe", "wh_1h_hammer", "bw_sword", "bw_1h_crowbill",
-                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun" },
+                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_1h_spears_shield", "es_bastard_sword" },
     we_thornsister = { "we_longbow", "es_longbow", "wh_fencing_sword", "wh_1h_falchion", "es_1h_flail", "es_1h_sword", "es_1h_mace", "dr_1h_axe", "dr_1h_hammer", "wh_1h_axe", "wh_1h_hammer", "bw_sword", "bw_1h_crowbill",
-                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun" },
+                       "es_2h_sword", "es_halberd", "es_handgun", "wh_crossbow", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_1h_spears_shield", "es_bastard_sword" },
     -- Saltzpyre: wh_crossbow is native
     wh_captain      = { "es_1h_mace", "es_1h_sword", "es_longbow", "dr_1h_hammer", "dr_1h_axe", "bw_sword", "we_longbow", "bw_1h_crowbill", "we_1h_sword",
                         "es_2h_sword", "es_halberd", "es_handgun", "wh_2h_sword", "dr_crossbow", "dr_handgun", "we_spear" },
@@ -106,18 +116,28 @@ local function apply_weapon_unlocks()
                 while #t > 0 do table.remove(t) end
                 for _, v in ipairs(orig) do t[#t + 1] = v end
             else
-                -- Original was nil. If we created a table in a previous call, clear it.
-                if item.can_wield then
-                    while #item.can_wield > 0 do table.remove(item.can_wield) end
-                end
+                -- Original was nil. Restore to nil.
+                item.can_wield = nil
             end
         end
+    end
+
+    if not _feature_enabled("enable_weapon_unlocks_core", true) then
+        return
     end
 
     -- Re-apply only currently-enabled unlocks.
     for career, weapons in pairs(_WEAPON_UNLOCK_MAP) do
         for _, weapon_key in ipairs(weapons) do
-            if mod:get("unlock_" .. career .. "_" .. weapon_key) then
+            local setting_key = "unlock_" .. career .. "_" .. weapon_key
+            local val = mod:get(setting_key)
+            
+            if weapon_key == "es_sword_shield_breton" and _feature_enabled("force_bretonnian_shield_unlock", false) then
+                val = true
+                mod:info("FORCING UNLOCK: " .. setting_key)
+            end
+
+            if val then
                 local item = ItemMasterList[weapon_key]
                 if item then
                     -- Create can_wield if missing so we can add the career.
@@ -128,7 +148,10 @@ local function apply_weapon_unlocks()
                     end
                     if not already then
                         item.can_wield[#item.can_wield + 1] = career
+                        mod:echo("SUCCESS: Unlocked " .. weapon_key .. " for " .. career)
                     end
+                else
+                    mod:echo("ERROR: Weapon ID not found: " .. weapon_key)
                 end
             end
         end
@@ -150,6 +173,10 @@ local _debug = mod:get("debug") == true  -- persists via settings; command toggl
 -- (3P-only) call. We swap the longbow model to crossbow so other players see a crossbow.
 -- 1P is unaffected because unit_1p is set for the local player's own call.
 local function _safe_create_equipment(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+    if not _feature_enabled("enable_weapon_create_equipment_guard", true) then
+        return func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+    end
+
     local item_key = item_data and item_data.name
     if _log_create_equipment and item_key then
         local item_entry = ItemMasterList and ItemMasterList[item_key]
@@ -162,6 +189,9 @@ local function _safe_create_equipment(func, world, slot_name, item_data, unit_1p
         end
     end
 
+    -- TODO: The 3P model swap for longbow -> crossbow is bugging out on the Elf.
+    -- Disabled for now. Revisit when Steam is back online.
+    --[[
     if unit_1p == nil and _saltzpyre_careers[career_name] and ItemMasterList and Weapons then
         local item_entry = item_key and ItemMasterList[item_key]
         local tmpl       = item_entry and item_entry.template and Weapons[item_entry.template]
@@ -183,6 +213,7 @@ local function _safe_create_equipment(func, world, slot_name, item_data, unit_1p
             end
         end
     end
+    ]]
 
     local result
     local ok, err = pcall(function()
@@ -277,6 +308,10 @@ local function patch_career_actions_on_weapons()
     end
     _career_action_injections = {}
 
+    if not _feature_enabled("enable_weapon_career_action_injection", true) then
+        return
+    end
+
     for career, weapons in pairs(_WEAPON_UNLOCK_MAP) do
         local cs = CareerSettings[career]
         if cs then
@@ -305,6 +340,44 @@ end
 -- Cleared on each game-state change; tracks which wield events have been logged once.
 local _anim_logged = {}
 
+local _original_slot_2_allowed = {}
+local function apply_slot_settings()
+    if not CareerSettings then return end
+    
+    local allow_melee_in_ranged = mod:get("allow_melee_in_ranged_slot")
+    
+    for career_name, cs in pairs(CareerSettings) do
+        if type(cs) == "table" and cs.item_types_allowed_in_slot_2 then
+            if not _original_slot_2_allowed[career_name] then
+                -- Save original
+                local orig = {}
+                for _, v in ipairs(cs.item_types_allowed_in_slot_2) do
+                    orig[#orig + 1] = v
+                end
+                _original_slot_2_allowed[career_name] = orig
+            end
+            
+            -- Restore original
+            local t = cs.item_types_allowed_in_slot_2
+            while #t > 0 do table.remove(t) end
+            for _, v in ipairs(_original_slot_2_allowed[career_name]) do
+                t[#t + 1] = v
+            end
+            
+            -- Apply setting if needed
+            if allow_melee_in_ranged then
+                local has_melee = false
+                for _, v in ipairs(t) do
+                    if v == "melee" then has_melee = true; break end
+                end
+                if not has_melee then
+                    t[#t + 1] = "melee"
+                end
+            end
+        end
+    end
+end
+
 -- Forward declarations so on_game_state_changed can call these before they're defined below.
 local _tp_inst_patched = false
 local _try_patch_tp_camera
@@ -315,18 +388,26 @@ mod.on_game_state_changed = function(status, state_name)
     _tp_inst_patched  = false   -- re-patch on each new level (camera object may change)
     _try_patch_tp_camera()
     apply_weapon_unlocks()
+    apply_slot_settings()
     apply_talent_swaps()
     patch_career_actions_on_weapons()
     if _debug then _debug_dump_level() end
 end
 
 mod.on_setting_changed = function(setting_id)
+    mod:echo("Setting changed: " .. tostring(setting_id))
     if setting_id == "debug" then
         _debug = mod:get("debug") == true
     end
-    if setting_id:find("^unlock_") then
+    local is_weapon_feature_setting = setting_id:find("^enable_weapon_") or setting_id == "force_bretonnian_shield_unlock"
+    if setting_id:find("^unlock_") or setting_id == "allow_melee_in_ranged_slot" or is_weapon_feature_setting then
         apply_weapon_unlocks()
+        apply_slot_settings()
         patch_career_actions_on_weapons()
+
+        if setting_id == "enable_weapon_backend_hooks" and mod.loadout_cache then
+            mod.loadout_cache = {}
+        end
     end
     if setting_id:find("^talent_swap_") then
         apply_talent_swaps()
@@ -338,10 +419,40 @@ end
 -- ============================================================
 
 mod:hook("Unit", "node", function(func, unit, node_name, ...)
+    if not _feature_enabled("enable_weapon_runtime_guards", true) then
+        return func(unit, node_name, ...)
+    end
+
     if type(node_name) == "string" and not Unit.has_node(unit, node_name) then
         return 0
     end
     return func(unit, node_name, ...)
+end)
+
+-- Safety hook for animation variables.
+-- Foreign weapons often look for unique variables (like parry windows) that don't exist on the skeleton.
+-- Returning 0 instead of nil prevents the "bad argument #2 to animation_set_variable" crash.
+mod:hook("Unit", "animation_find_variable", function(func, unit, name, ...)
+    if not _feature_enabled("enable_weapon_runtime_guards", true) then
+        return func(unit, name, ...)
+    end
+
+    local index = func(unit, name, ...)
+    if not index and type(name) == "string" then
+        return 0
+    end
+    return index
+end)
+
+mod:hook("Unit", "animation_set_variable", function(func, unit, index, value, ...)
+    if not _feature_enabled("enable_weapon_runtime_guards", true) then
+        return func(unit, index, value, ...)
+    end
+
+    if not index or not value then
+        return
+    end
+    return func(unit, index, value, ...)
 end)
 
 -- Crash prevention: nil explosion template.
@@ -385,6 +496,7 @@ local _wield_anim_prefer = {
 -- to_longbow is NOT here — it exists on all 1P skeletons (phantom entry), so has_orig is
 -- always true and fallback never fires. Handled by _longbow_anim special case instead.
 local _wield_anim_fallback = {
+    to_bastard_sword           = { "to_2h_sword_we", "to_2h_sword", "to_greatsword" },
     to_fencing_sword           = { "to_1h_sword" },
     to_flail_shield            = { "to_1h_sword" },
     to_1h_flail                = { "to_1h_sword" },
@@ -410,14 +522,26 @@ local _cached_career = nil
 local function _local_career_name()
     local pm = Managers.player
     if not pm then return _cached_career end
-    local ok, pl = pcall(pm.local_player, pm)
-    if not ok or not pl then return _cached_career end
-    local ok2, p = pcall(pl.profile, pl)
-    if not ok2 or not p then return _cached_career end
-    if p.career_name then _cached_career = p.career_name; return p.career_name end
-    if Profiles and p.profile_index and p.career_index then
-        local prof = Profiles[p.profile_index]
-        local c = prof and prof.careers and prof.careers[p.career_index]
+    local pl = pm:local_player()
+    if not pl then 
+        -- Fallback: try to get it from the camera system's player unit
+        local cam = Managers.state.camera
+        local unit = cam and cam:follow_unit()
+        if unit and Unit.alive(unit) then
+            local career_ext = ScriptUnit.has_extension(unit, "career_system")
+            if career_ext then return career_ext:career_name() end
+        end
+        return _cached_career 
+    end
+    
+    local career = pl:career_name()
+    if career then _cached_career = career; return career end
+    
+    local profile_idx = pl:profile_index()
+    local career_idx = pl:career_index()
+    if Profiles and profile_idx and career_idx then
+        local prof = Profiles[profile_idx]
+        local c = prof and prof.careers and prof.careers[career_idx]
         local n = c and c.name
         if n then _cached_career = n; return n end
     end
@@ -514,6 +638,10 @@ local function _billhook_anim(func, unit, fallback_event, ...)
 end
 
 mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
+    if not _feature_enabled("enable_weapon_animation_redirects", true) then
+        return func(unit, event_name, ...)
+    end
+
     -- Retry camera patch here: player_unit is guaranteed present when animations fire,
     -- whereas on_game_state_changed fires too early for the unit to exist.
     if not _tp_inst_patched then _try_patch_tp_camera() end
@@ -575,6 +703,10 @@ end)
 
 -- Crash prevention: attachment node mismatches when equipping off-career weapons.
 mod:hook("SimpleInventoryExtension", "_wield_slot", function(func, self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
+    if not _feature_enabled("enable_weapon_wield_slot_guard", true) then
+        return func(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
+    end
+
     local ret
     local ok, err = pcall(function() ret = func(self, equipment, slot_data, unit_1p, unit_3p, buff_extension) end)
     if not ok then
@@ -584,6 +716,10 @@ mod:hook("SimpleInventoryExtension", "_wield_slot", function(func, self, equipme
 end)
 
 mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
+    if not _feature_enabled("enable_weapon_wield_slot_guard", true) then
+        return func(self, world, equipment, slot_name, unit_1p, unit_3p)
+    end
+
     local ret
     local ok, err = pcall(function() ret = func(self, world, equipment, slot_name, unit_1p, unit_3p) end)
     if not ok then
@@ -595,6 +731,86 @@ end)
 -- ============================================================
 -- Commands
 -- ============================================================
+
+mod:command("dump_all_items", "Dumps every ID in ItemMasterList to the console log, categorized", function()
+    if not ItemMasterList then mod:echo("ItemMasterList not available.") return end
+    
+    local categories = {}
+    local total = 0
+    
+    for key, data in pairs(ItemMasterList) do
+        local slot = tostring(data.slot_type or "other")
+        categories[slot] = categories[slot] or {}
+        table.insert(categories[slot], key)
+        total = total + 1
+    end
+    
+    mod:info("=== TWEAKER ITEM DUMP START (Total: " .. total .. ") ===")
+    
+    -- Sort categories for cleaner logs
+    local keys = {}
+    for k in pairs(categories) do table.insert(keys, k) end
+    table.sort(keys)
+    
+    for _, slot in ipairs(keys) do
+        mod:info("CATEGORY: " .. slot)
+        table.sort(categories[slot])
+        for _, item_id in ipairs(categories[slot]) do
+            mod:info("  " .. item_id)
+        end
+    end
+    
+    mod:info("=== TWEAKER ITEM DUMP END ===")
+    mod:echo("Dumped " .. total .. " item IDs to the console log. Categories: " .. table.concat(keys, ", "))
+end)
+
+mod:command("t_version", "Show the build timestamp of the current mod version", function()
+    mod:echo("Tweaker Build: 2026-04-21 14:11")
+end)
+
+mod:command("dump_animations", "Dumps all unique animation events from Items and Weapons", function()
+    local anims = {}
+    
+    local function scan(t, source_name)
+        if not t then return end
+        for key, data in pairs(t) do
+            if type(data) == "table" then
+                -- Check top-level fields
+                for k, v in pairs(data) do
+                    if type(k) == "string" and string.find(k, "anim") and type(v) == "string" then
+                        anims[v] = anims[v] or {}
+                        table.insert(anims[v], string.format("%s[%s].%s", source_name, key, k))
+                    end
+                end
+                -- Also check item.inventory_ad_data (ItemMasterList specific)
+                if data.inventory_ad_data then
+                    for k, v in pairs(data.inventory_ad_data) do
+                        if type(k) == "string" and string.find(k, "anim") and type(v) == "string" then
+                            anims[v] = anims[v] or {}
+                            table.insert(anims[v], string.format("%s[%s].ad.%s", source_name, key, k))
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    scan(ItemMasterList, "Item")
+    scan(Weapons, "Weapon")
+    scan(ActionTemplates, "Action")
+    
+    mod:echo("Dumping animations to log...")
+    mod:info("=== WEAPON ANIMATION EVENTS START ===")
+    local sorted = {}
+    for a in pairs(anims) do table.insert(sorted, a) end
+    table.sort(sorted)
+    
+    for _, a in ipairs(sorted) do
+        mod:info(string.format("[%s] sources: %s", a, table.concat(anims[a], ", ")))
+    end
+    mod:info("=== WEAPON ANIMATION EVENTS END ===")
+    mod:echo("Dump complete. Unique events: " .. #sorted)
+end)
 
 -- Probe what 3P animation events exist on the local player's character unit.
 -- Run in-game as Saltzpyre to discover which wield anims his state machine supports.
@@ -795,7 +1011,7 @@ end)
 
 -- Dump all career-exclusive weapons grouped by character faction prefix.
 -- These are items locked to a single career — exactly what we need to unlock them.
--- Usage: t dump_exclusive  (no args; loads in-level only)
+-- Usage: t dump_exclusive  (no args)
 mod:command("dump_exclusive", "List all career-exclusive weapons grouped by character faction", function()
     if not ItemMasterList then mod:echo("ItemMasterList not loaded yet.") return end
     local by_career = {}
@@ -818,7 +1034,7 @@ mod:command("dump_exclusive", "List all career-exclusive weapons grouped by char
 end)
 
 -- Dump ItemMasterList items with a single-career can_wield — these are typically
--- career ability weapons.  Run after a level loads (ItemMasterList must be populated).
+-- career ability weapons.
 mod:command("dump_career_items", "Log items whose can_wield has exactly 1 entry (career ability weapons)", function()
     if not ItemMasterList then mod:echo("ItemMasterList not loaded yet.") return end
     local found = {}
@@ -1140,13 +1356,18 @@ end
 
 -- Logs unit paths for every weapon equipped or inspected by the backend.
 -- Right-hand and left-hand model paths tell us what 3P models are actually loaded.
+--[[
 mod:hook("BackendUtils", "get_item_units", function(func, item_data, career_name, item_skin)
-    local units = func(item_data, career_name, item_skin)
+    local ret = { func(item_data, career_name, item_skin) }
+    local units = ret[1]
 
+    -- TODO: The 3P model swap for longbow -> crossbow is bugging out on the Elf.
+    -- Disabled for now. Revisit when Steam is back online.
+    --[[
     -- Swap longbow 3P model to crossbow for Saltzpyre careers.
     -- Longbow has no crossbow-compatible animations on Saltzpyre's skeleton; the
     -- wield anim already redirects to to_crossbow_loaded, so the model should match.
-    if units and item_data and item_data.name then
+    if type(units) == "table" and item_data and item_data.name then
         local name = tostring(item_data.name)
         local is_longbow = name:find("longbow") ~= nil
         local local_career = _local_career_name()
@@ -1161,13 +1382,12 @@ mod:hook("BackendUtils", "get_item_units", function(func, item_data, career_name
             if xbow_item then
                 -- Clone the original units table so we keep skin, ammo_unit, icon, etc.
                 local swapped = {}
-                if type(units) == "table" then
-                    for k, v in pairs(units) do swapped[k] = v end
-                end
+                for k, v in pairs(units) do swapped[k] = v end
                 -- Crossbow has only left_hand_unit (confirmed from log); right_hand_unit is nil on both.
                 swapped.left_hand_unit  = xbow_item.left_hand_unit
                 swapped.right_hand_unit = xbow_item.right_hand_unit  -- nil is fine
                 units = swapped
+                ret[1] = units
                 if _debug then
                     mod:info("get_item_units: swapped %s→crossbow lhu=%s", name, tostring(xbow_item.left_hand_unit))
                 end
@@ -1176,6 +1396,7 @@ mod:hook("BackendUtils", "get_item_units", function(func, item_data, career_name
             end
         end
     end
+    ]]
 
     if _debug and item_data then
         local name = tostring(item_data.name)
@@ -1200,8 +1421,10 @@ mod:hook("BackendUtils", "get_item_units", function(func, item_data, career_name
             end
         end
     end
-    return units
+    
+    return unpack(ret)
 end)
+]]
 
 -- Dumps the chest view's field list when it opens, so we can find the background node name.
 mod:hook_safe("DeusCursedChestView", "on_enter", function(self)
@@ -2042,3 +2265,5 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
 
     return unpack(results)
 end)
+
+weapon_backend.install(mod, _WEAPON_UNLOCK_MAP, apply_weapon_unlocks)

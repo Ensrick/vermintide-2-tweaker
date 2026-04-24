@@ -37,6 +37,13 @@ return {
     is_togglable      = true,
     options = {
         widgets = {
+            {
+                setting_id = "allow_melee_in_ranged_slot",
+                type = "checkbox",
+                default_value = false,
+                title = "Allow Melee Weapons in Ranged Slots",
+                tooltip = "Allows all careers to equip any of their enabled melee weapons in the ranged slot, similar to Slayer and Grail Knight. Note: Using two melee weapons on a career not designed for it may disable their ability to deal with distant specials.",
+            },
             -- ============================================================
             -- General
             -- ============================================================
@@ -58,6 +65,57 @@ return {
                         setting_id    = "allow_duplicate_careers",
                         type          = "checkbox",
                         default_value = false,
+                    },
+                    {
+                        setting_id = "weapon_experiments_group",
+                        type       = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "enable_weapon_unlocks_core",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "enable_weapon_backend_hooks",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "enable_weapon_ui_hooks",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "enable_weapon_animation_redirects",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "enable_weapon_runtime_guards",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "enable_weapon_wield_slot_guard",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "enable_weapon_create_equipment_guard",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "enable_weapon_career_action_injection",
+                                type          = "checkbox",
+                                default_value = true,
+                            },
+                            {
+                                setting_id    = "force_bretonnian_shield_unlock",
+                                type          = "checkbox",
+                                default_value = false,
+                            },
+                        },
                     },
                 },
             },
@@ -509,6 +567,16 @@ return {
                                             { setting_id = "unlock_es_mercenary_wh_hammer_shield", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_mercenary_bw_sword",         type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_mercenary_es_sword_shield",  type = "checkbox", default_value = false },
+                                            {
+                                                ["setting_id"] = "unlock_es_mercenary_es_sword_shield_breton",
+                                                ["type"] = "checkbox",
+                                                ["default_value"] = false,
+                                            },
+                                            {
+                                                ["setting_id"] = "unlock_es_mercenary_vs_warpfire_thrower_gun",
+                                                ["type"] = "checkbox",
+                                                ["default_value"] = false,
+                                            },
                                             { setting_id = "unlock_es_mercenary_we_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_mercenary_wh_2h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_mercenary_we_spear",         type = "checkbox", default_value = false },
@@ -530,6 +598,7 @@ return {
                                             { setting_id = "unlock_es_huntsman_wh_hammer_shield", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_huntsman_bw_sword",         type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_huntsman_es_sword_shield",  type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_huntsman_es_sword_shield_breton", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_huntsman_we_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_huntsman_wh_2h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_huntsman_we_spear",         type = "checkbox", default_value = false },
@@ -551,8 +620,10 @@ return {
                                             { setting_id = "unlock_es_knight_wh_hammer_shield", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_knight_bw_sword",         type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_knight_es_sword_shield",  type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_knight_es_sword_shield_breton", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_knight_we_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_knight_wh_2h_sword",      type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_knight_es_2h_heavy_spear",type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_knight_we_spear",         type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "es_knight_ranged_group", type = "group", sub_widgets = {
@@ -574,6 +645,11 @@ return {
                                             { setting_id = "unlock_es_questingknight_we_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_questingknight_wh_2h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_es_questingknight_we_spear",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_questingknight_es_halberd",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_questingknight_es_2h_heavy_spear",type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_questingknight_we_1h_spears_shield",type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_questingknight_es_mace_shield",   type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_es_questingknight_es_sword_shield",  type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "es_questingknight_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_es_questingknight_we_longbow",       type = "checkbox", default_value = false },
@@ -605,10 +681,12 @@ return {
                                             { setting_id = "unlock_dr_ranger_es_halberd",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_ranger_wh_2h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_ranger_we_spear",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_ranger_dr_dual_wield_axes", type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "dr_ranger_ranged_group",     type = "group", sub_widgets = {
                                             { setting_id = "unlock_dr_ranger_es_handgun",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_ranger_wh_crossbow",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_ranger_dr_deus_01",        type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "dr_ironbreaker_weapons_group", type = "group", sub_widgets = {
@@ -626,10 +704,12 @@ return {
                                             { setting_id = "unlock_dr_ironbreaker_es_halberd",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_ironbreaker_wh_2h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_ironbreaker_we_spear",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_ironbreaker_dr_dual_wield_axes", type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "dr_ironbreaker_ranged_group", type = "group", sub_widgets = {
                                             { setting_id = "unlock_dr_ironbreaker_es_handgun",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_ironbreaker_wh_crossbow",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_ironbreaker_dr_1h_throwing_axes", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "dr_slayer_weapons_group",      type = "group", sub_widgets = {
@@ -651,6 +731,11 @@ return {
                                         { setting_id = "dr_slayer_ranged_group",     type = "group", sub_widgets = {
                                             { setting_id = "unlock_dr_slayer_es_handgun",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_slayer_wh_crossbow",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_slayer_dr_crossbow",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_slayer_dr_handgun",        type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_slayer_dr_rakegun",        type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_slayer_dr_steam_pistol",   type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_slayer_dr_deus_01",        type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "dr_engineer_weapons_group",    type = "group", sub_widgets = {
@@ -668,10 +753,12 @@ return {
                                             { setting_id = "unlock_dr_engineer_es_halberd",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_engineer_wh_2h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_engineer_we_spear",         type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_engineer_dr_dual_wield_axes", type = "checkbox", default_value = false },
                                         }},
                                         { setting_id = "dr_engineer_ranged_group",   type = "group", sub_widgets = {
                                             { setting_id = "unlock_dr_engineer_es_handgun",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_dr_engineer_wh_crossbow",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_dr_engineer_dr_1h_throwing_axes", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                 },
@@ -690,6 +777,8 @@ return {
                                             { setting_id = "unlock_we_waywatcher_es_1h_flail",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_waywatcher_es_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_waywatcher_es_1h_mace",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_waywatcher_we_1h_spears_shield", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_waywatcher_es_bastard_sword", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_waywatcher_dr_1h_axe",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_waywatcher_dr_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_waywatcher_wh_1h_axe",        type = "checkbox", default_value = false },
@@ -706,6 +795,7 @@ return {
                                             { setting_id = "unlock_we_waywatcher_wh_crossbow",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_waywatcher_dr_crossbow",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_waywatcher_dr_handgun",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_waywatcher_we_crossbow_repeater", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "we_maidenguard_weapons_group", type = "group", sub_widgets = {
@@ -715,6 +805,7 @@ return {
                                             { setting_id = "unlock_we_maidenguard_es_1h_flail",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_maidenguard_es_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_maidenguard_es_1h_mace",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_maidenguard_es_bastard_sword", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_maidenguard_dr_1h_axe",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_maidenguard_dr_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_maidenguard_wh_1h_axe",        type = "checkbox", default_value = false },
@@ -731,7 +822,8 @@ return {
                                             { setting_id = "unlock_we_maidenguard_es_handgun",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_maidenguard_wh_crossbow",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_maidenguard_dr_crossbow",     type = "checkbox", default_value = false },
-                                            { setting_id = "unlock_we_maidenguard_dr_handgun",      type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_maidenguard_dr_handgun",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_maidenguard_we_crossbow_repeater", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "we_shade_weapons_group",       type = "group", sub_widgets = {
@@ -741,6 +833,8 @@ return {
                                             { setting_id = "unlock_we_shade_es_1h_flail",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_shade_es_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_shade_es_1h_mace",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_shade_we_1h_spears_shield", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_shade_es_bastard_sword", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_shade_dr_1h_axe",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_shade_dr_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_shade_wh_1h_axe",        type = "checkbox", default_value = false },
@@ -767,6 +861,8 @@ return {
                                             { setting_id = "unlock_we_thornsister_es_1h_flail",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_thornsister_es_1h_sword",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_thornsister_es_1h_mace",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_thornsister_we_1h_spears_shield", type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_thornsister_es_bastard_sword", type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_thornsister_dr_1h_axe",        type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_thornsister_dr_1h_hammer",     type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_thornsister_wh_1h_axe",        type = "checkbox", default_value = false },
@@ -784,6 +880,7 @@ return {
                                             { setting_id = "unlock_we_thornsister_wh_crossbow",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_thornsister_dr_crossbow",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_we_thornsister_dr_handgun",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_we_thornsister_we_crossbow_repeater", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                 },
@@ -910,6 +1007,7 @@ return {
                                             { setting_id = "unlock_bw_scholar_wh_crossbow",    type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_scholar_dr_crossbow",    type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_scholar_dr_handgun",     type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_bw_scholar_bw_necromancy_staff", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "bw_adept_weapons_group",       type = "group", sub_widgets = {
@@ -931,6 +1029,7 @@ return {
                                             { setting_id = "unlock_bw_adept_wh_crossbow",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_adept_dr_crossbow",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_adept_dr_handgun",        type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_bw_adept_bw_necromancy_staff", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "bw_unchained_weapons_group",   type = "group", sub_widgets = {
@@ -952,6 +1051,7 @@ return {
                                             { setting_id = "unlock_bw_unchained_wh_crossbow",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_unchained_dr_crossbow",       type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_unchained_dr_handgun",        type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_bw_unchained_bw_necromancy_staff", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                     { setting_id = "bw_necromancer_weapons_group", type = "group", sub_widgets = {
@@ -973,6 +1073,7 @@ return {
                                             { setting_id = "unlock_bw_necromancer_wh_crossbow",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_necromancer_dr_crossbow",      type = "checkbox", default_value = false },
                                             { setting_id = "unlock_bw_necromancer_dr_handgun",       type = "checkbox", default_value = false },
+                                            { setting_id = "unlock_bw_necromancer_bw_skullstaff_flamethrower", type = "checkbox", default_value = false },
                                         }},
                                     }},
                                 },

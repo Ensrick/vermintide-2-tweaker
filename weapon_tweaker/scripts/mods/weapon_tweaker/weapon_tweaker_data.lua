@@ -1,0 +1,349 @@
+local mod = get_mod("wt")
+
+return {
+    name = mod:localize("mod_name"),
+    description = mod:localize("mod_description"),
+    is_togglable = true,
+    options = {
+        widgets = {
+            {
+                setting_id = "melee_weapons",
+                type = "group",
+                sub_widgets = {
+                    {
+                        setting_id = "melee_kruber",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "melee_es_mercenary",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_es_mercenary_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_es_sword_shield_breton", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_dr_1h_hammer", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_dr_shield_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_es_huntsman",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_es_huntsman_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_huntsman_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_huntsman_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_huntsman_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_huntsman_dr_1h_hammer", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_huntsman_dr_shield_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_es_knight",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_es_knight_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_dr_1h_hammer", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_es_2h_heavy_spear", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_dr_shield_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_es_questingknight",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_es_questingknight_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_dr_1h_hammer", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_es_2h_heavy_spear", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_we_1h_spears_shield", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_es_halberd", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_dr_shield_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        setting_id = "melee_bardin",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "melee_dr_ranger",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_dr_ranger_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ranger_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ranger_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ranger_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ranger_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ranger_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ranger_es_mace_shield", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_dr_ironbreaker",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_dr_ironbreaker_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ironbreaker_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ironbreaker_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ironbreaker_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ironbreaker_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ironbreaker_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_ironbreaker_es_mace_shield", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_dr_slayer",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_dr_slayer_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_slayer_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_slayer_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_slayer_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_slayer_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_slayer_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_slayer_es_mace_shield", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_dr_engineer",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_dr_engineer_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_engineer_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_engineer_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_engineer_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_engineer_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_engineer_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_dr_engineer_es_mace_shield", type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        setting_id = "melee_kerillian",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "melee_we_waywatcher",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_we_waywatcher_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_waywatcher_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_waywatcher_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_waywatcher_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_waywatcher_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_waywatcher_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_waywatcher_dr_1h_hammer", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_waywatcher_we_1h_spears_shield", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_we_maidenguard",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_we_maidenguard_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_maidenguard_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_maidenguard_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_maidenguard_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_maidenguard_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_maidenguard_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_maidenguard_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_we_shade",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_we_shade_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_shade_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_shade_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_shade_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_shade_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_shade_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_shade_dr_1h_hammer", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_shade_we_1h_spears_shield", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_we_thornsister",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_we_thornsister_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_thornsister_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_thornsister_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_thornsister_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_thornsister_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_thornsister_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_thornsister_dr_1h_hammer", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_we_thornsister_we_1h_spears_shield", type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        setting_id = "melee_saltzpyre",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "melee_wh_captain",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_wh_captain_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_captain_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_captain_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_captain_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_captain_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_captain_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_wh_bountyhunter",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_wh_bountyhunter_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_bountyhunter_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_bountyhunter_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_bountyhunter_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_bountyhunter_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_bountyhunter_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_wh_zealot",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_wh_zealot_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_zealot_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_zealot_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_zealot_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_zealot_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_zealot_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_wh_priest",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_wh_priest_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_priest_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_priest_bw_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_priest_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_priest_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_priest_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        setting_id = "melee_sienna",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "melee_bw_scholar",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_bw_scholar_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_scholar_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_scholar_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_scholar_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_scholar_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_scholar_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_scholar_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_bw_adept",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_bw_adept_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_adept_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_adept_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_adept_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_adept_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_adept_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_adept_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_bw_unchained",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_bw_unchained_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_unchained_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_unchained_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_unchained_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_unchained_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_unchained_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_unchained_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "melee_bw_necromancer",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_bw_necromancer_es_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_necromancer_es_1h_mace", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_necromancer_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_necromancer_dr_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_necromancer_wh_1h_axe", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_necromancer_we_1h_sword", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_bw_necromancer_dr_1h_hammer", type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                setting_id = "ranged_weapons",
+                type = "group",
+                sub_widgets = {
+                    {
+                        setting_id = "ranged_kerillian",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "ranged_we_waywatcher",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_we_waywatcher_we_crossbow_repeater", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "ranged_we_maidenguard",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_we_maidenguard_we_crossbow_repeater", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "ranged_we_thornsister",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "unlock_we_thornsister_we_crossbow_repeater", type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                setting_id = "debug_group",
+                type = "group",
+                sub_widgets = {
+                    { setting_id = "debug", type = "checkbox", default_value = false },
+                    { setting_id = "enable_weapon_debug_logging", type = "checkbox", default_value = false },
+                },
+            },
+        },
+    },
+}

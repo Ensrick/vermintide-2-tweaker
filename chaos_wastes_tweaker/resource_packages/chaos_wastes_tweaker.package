@@ -1,0 +1,5 @@
+lua = [
+    "scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker"
+    "scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_data"
+    "scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_localization"
+]
