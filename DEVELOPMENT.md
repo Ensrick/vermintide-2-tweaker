@@ -8,6 +8,7 @@ A modular set of Vermintide 2 VMF mods split from the original monolithic **"Twe
 | :--- | :--- | :--- | :--- | :--- |
 | Chaos Wastes Tweaker | `ct` | `ct <command>` | **3712929235** | Uploaded |
 | Weapon Tweaker | `wt` | `wt <command>` | **3712896117** | Uploaded |
+| General Tweaker | `gt` | `gt <command>` | **3713619122** | Uploaded |
 | Career Tweaker | `crt` | `crt <command>` | TBD | Not started |
 | ~~Tweaker (legacy)~~ | `t` | `t <command>` | 3704660429 | Deprecated -- split into above |
 
@@ -31,6 +32,7 @@ vermintide-2-tweaker/
 │   │   └── content/               <- deploy target for built bundles
 │   └── .build/OUT/                 <- compiler output (generated)
 ├── chaos_wastes_tweaker/           <- Chaos Wastes Tweaker mod source (same structure as above)
+├── general_tweaker/                <- General Tweaker mod source (same structure as above)
 ├── career_tweaker/                 <- Career Tweaker (future)
 ├── tweaker/                        <- LEGACY -- original monolithic mod (deprecated)
 ├── upload/                         <- LEGACY -- original tweaker's upload staging
@@ -162,23 +164,255 @@ When adding a weapon:
 - `es_sword_shield_breton` -- Bretonnian Sword & Shield
 - `es_bastard_sword` -- Bretonnian Longsword
 - `es_sword_shield` -- Sword & Shield (Empire)
+- `es_deus_01` -- Kruber's Spear & Shield (DLC "grass"). NOT named `es_spear_shield` -- uses Chaos Wastes DLC naming convention.
+- `dr_1h_throwing_axes` -- Bardin's Throwing Axes (DLC "scorpion"). Native to Slayer + Ranger Veteran.
+- `dr_crossbow` -- Bardin's Crossbow. Native to Ironbreaker + Ranger Veteran (NOT Engineer).
+- `we_1h_spears_shield` -- Kerillian's Spear & Shield. Do NOT use on non-elf careers -- crashes hero previewer.
 - See `ITEM_LIST.md` for the full catalog dumped from `ItemMasterList`
 
-## Animation Logic & Gotchas
+### DLC weapon naming conventions
 
-### Issue: Animation "Corruption"
+DLC weapons sometimes use `<prefix>_deus_01` (Chaos Wastes / "grass" DLC) instead of descriptive names. Always use `wt dump` in-game or check the source code `item_master_list_*.lua` files to confirm weapon keys -- don't guess from the weapon's display name.
+
+## Animation System Architecture
+
+### The Two Units: Understanding 1P vs 3P
+
+VT2 uses two separate units for the local player:
+
+| Unit | How to identify | What it renders | What it receives |
+| :--- | :--- | :--- | :--- |
+| `player.player_unit` | `_is_local_player_unit(unit) == true` | **3P body** (visible to other players) | `anim_event_3p` from weapon action data |
+| Non-player unit | `_is_local_player_unit(unit) == false` | **1P hands** (visible to you) | `anim_event` from weapon action data |
+
+**This is counterintuitive.** Despite being called `player_unit`, it is the third-person body. The first-person hands/weapon view is a separate unit that is NOT `player_unit`.
+
+Evidence: the billhook's `default_stab` action defines `anim_event = attack_swing_charge_stab` and `anim_event_3p = attack_swing_stab_charge`. In practice, `player_unit` receives `attack_swing_stab_charge` (the 3P value) and the non-player unit receives `attack_swing_charge_stab` (the 1P value). Confirmed via `wt dump_actions billhook` + `wt animlog`.
+
+### Weapon Action Data: anim_event vs anim_event_3p
+
+Each weapon action in the `Weapons` global table has two animation event fields:
+
+```lua
+-- From wt dump_actions billhook:
+action_one.default_stab   1P=attack_swing_charge_stab   3P=attack_swing_stab_charge
+action_one.default_left   1P=attack_swing_charge_down    3P=attack_swing_charge_left_diagonal
+action_one.heavy_attack_stab  1P=attack_swing_heavy_stab  3P=-    (no override, both units get anim_event)
+```
+
+- `anim_event` → sent to the 1P hands unit. Also used as fallback for player_unit if no `anim_event_3p` exists.
+- `anim_event_3p` → sent to `player_unit` (3P body), overriding `anim_event` on that unit.
+
+Many weapons (e.g., elf spear, Kruber's heavy spear) have **no `anim_event_3p` fields at all** — both units receive `anim_event`. This is fine for the native career but breaks when the weapon is equipped cross-career, because the 3P body can't play those events in a different weapon stance.
+
+### Three Layers of Animation Fixes for Cross-Career Weapons
+
+#### Layer 1: Stance Redirect (`to_` events)
+
+Sets the 3P body's idle/walk/block stance to match the target weapon. Without this, the character holds the weapon wrong.
+
+```lua
+-- Career-aware: elf spear on Saltzpyre → use billhook stance
+to_spear → to_2h_billhook   (via _career_anim_redirect overrides)
+```
+
+This alone fixes idle, walking, blocking, and push animations — anything driven by the stance blend tree. Attack animations still won't work because the attack events don't match.
+
+#### Layer 2: 1P Event Redirect (`_anim_redirect`)
+
+Fixes missing 1P events on `player_unit` (which is actually the 3P body, but these events affect the fallback animations). Only fires when the event is MISSING on the unit's skeleton.
+
+```lua
+attack_swing_down_left_axe → attack_swing_down_left   (axe diagonal doesn't exist on all skeletons)
+push_stab                  → attack_swing_stab         (push follow-up missing on some skeletons)
+```
+
+#### Layer 3: 3P Body Attack Remap (`_3p_weapon_remap`)
+
+The key system for making cross-career weapons animate in 3rd person. Intercepts attack events on `player_unit` and replaces them with the target weapon's `anim_event_3p` values.
+
+```lua
+-- Elf spear on Saltzpyre: remap spear anim_event → billhook anim_event_3p
+local _3p_remap_spear_to_billhook = {
+    attack_swing_charge_right  = "attack_swing_stab_charge",         -- billhook default_stab 3P
+    attack_swing_charge_left   = "attack_swing_charge_left_diagonal", -- billhook default_left 3P
+    attack_swing_down_right    = "attack_swing_stab",                 -- billhook light_attack_stab_2 3P
+    attack_swing_down_left_axe = "attack_swing_left_diagonal",        -- billhook light_attack_bopp 3P
+    attack_swing_heavy         = "attack_swing_heavy_stab",           -- billhook heavy (no 3P override)
+    push_stab                  = "attack_swing_left_diagonal",        -- billhook push follow-up
+}
+```
+
+The remap MUST target `is_local` (player_unit = 3P body) and use `anim_event_3p` values from the target weapon. Using `anim_event` values will send events to the wrong animation layer.
+
+**Activated by:** the career redirect sets `_3p_weapon_remap` when a `to_` event triggers a career override (e.g., `to_spear` on Saltzpyre → `to_2h_billhook`).
+
+**Cleared by:** weapon switches only. Must NOT be cleared by non-weapon `to_` events.
+
+### Non-Weapon `to_` Events (Trap)
+
+The game fires many `to_` events that are NOT weapon switches:
+
+| Event | Trigger |
+| :--- | :--- |
+| `to_crouch` / `to_uncrouch` | Crouching |
+| `to_onground` | Landing after a jump |
+| `to_zoom` / `to_unzoom` | Ranged weapon zoom |
+
+If `_3p_weapon_remap` is cleared on these, the 3P remap silently stops mid-combat. The fix: whitelist actual weapon events instead of checking `event_name:sub(1, 3) == "to_"`.
+
+### Animation "Corruption"
 
 Forcing a fallback animation (e.g., using 1H Sword anims for a Rapier) can overwrite a character's native animations.
 
-### Solution: The "Native Check" Pattern
-
-Always verify if the unit already possesses the animation event before applying a redirection.
+Always verify if the unit already possesses the animation event before applying a redirection:
 ```lua
 if Unit.has_animation_event(unit, event_name) then
     return func(unit, event_name, ...)
 end
 -- Only then apply fallback...
 ```
+
+### Debug Commands
+
+- `wt animlog` -- toggles animation event logging; tags each event as "1P" (player_unit / 3P body) or "3P" (1P hands); shows `[MISSING]`, `REDIR ->`, and `3P REMAP ->` markers
+- `wt dump_actions [pattern]` -- dumps all `Weapons` template actions matching pattern (or ALL templates if no pattern), showing `anim_event` (1P hands) and `anim_event_3p` (3P body) fields; output goes to both in-game chat and mod log file; sorted alphabetically; essential for building remap tables
+- `wt force3p <event>` -- forces an animation event on the last-seen non-player unit (for testing if events exist/play)
+- `wt dump` -- dumps equipped item data to log
+
+### Building a New 3P Remap Table
+
+1. Run `wt dump_actions <source_weapon>` and `wt dump_actions <target_weapon>` in-game
+2. For each source weapon action, map its `anim_event` value to the target weapon's `anim_event_3p` value (or `anim_event` if no 3P override exists for that action)
+3. Create a Lua table with these mappings
+4. Add it to `_3p_remap_triggers` keyed by the source weapon's `to_` event name
+5. Add the source weapon's `to_` event to `_career_anim_redirect` with the target weapon's `to_` event as the override
+6. Verify with `wt animlog` — every attack should show a `3P REMAP ->` line on `player_unit`
+
+## Cross-Career Weapon Animation Status
+
+Tracks which weapons have been tested cross-career and what animation workarounds are in place. Every enabled cross-career weapon should appear here. **Untested** = unlockable but animations not verified in-game.
+
+Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Remap** = 3P remap table built | **Untested** = needs in-game verification
+
+### Polearms / Spears / Billhook
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Elf Spear | `we_spear` | Saltzpyre (WHC/BH/Zealot) | **OK** — Redirect + Remap | `to_spear`→`to_2h_billhook`, `_3p_remap_spear_to_billhook`. Fully working v0.7.1 |
+| Elf Spear | `we_spear` | Saltzpyre (Priest) | **Redirect only** | `to_spear`→`to_1h_hammer`. Untested |
+| Elf Spear | `we_spear` | Kruber (all) | **Redirect only** | Native `to_spear` exists. Untested |
+| Kruber Heavy Spear | `es_2h_heavy_spear` | Saltzpyre (WHC/BH/Zealot) | **Redirect only** | `to_polearm`→`to_2h_billhook`, shares spear remap. Untested — may need own remap table |
+| Kruber Heavy Spear | `es_2h_heavy_spear` | Saltzpyre (Priest) | **Redirect only** | `to_polearm`→`to_1h_hammer`. Untested |
+| Kruber Heavy Spear | `es_2h_heavy_spear` | Kerillian (all) | **Redirect only** | `to_polearm`→`to_spear`. Untested |
+| Halberd | `es_halberd` | Kerillian (all) | **Untested** | No redirect yet |
+| Halberd | `es_halberd` | Saltzpyre (WHC/BH/Zealot) | **Untested** | No redirect yet |
+| Halberd | `es_halberd` | Saltzpyre (Priest) | **Untested** | No redirect yet |
+| Billhook | `wh_2h_billhook` | Kruber (all) | **Redirect only** | `to_2h_billhook`→`to_polearm`. Untested |
+| Billhook | `wh_2h_billhook` | Saltzpyre (Priest) | **Redirect only** | `to_2h_billhook`→`to_1h_hammer`. Untested |
+| Elf Spear & Shield | `we_1h_spears_shield` | Kruber (all) | **Untested** | No redirect yet. Crashes hero previewer on non-elf |
+| Kruber Spear & Shield | `es_deus_01` | Kerillian (all) | **Untested** | No redirect yet |
+
+### Greatswords
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Elf Greatsword | `we_2h_sword` | Kruber (all) | **Untested** | Elf uses different anims than es/wh. Redirect expected to work |
+| Elf Greatsword | `we_2h_sword` | Saltzpyre (WHC/BH/Zealot) | **Untested** | Same as above |
+| Kruber Greatsword | `es_2h_sword` | Saltzpyre (WHC/BH/Zealot) | **Untested** | es/wh share anims — may just work |
+| Kruber Greatsword | `es_2h_sword` | Kerillian (all) | **Untested** | Elf stance differs — needs redirect |
+| Saltzpyre Greatsword | `wh_2h_sword` | Kruber (all) | **Untested** | es/wh share anims — may just work |
+| Saltzpyre Greatsword | `wh_2h_sword` | Kerillian (all) | **Untested** | Elf stance differs — needs redirect |
+
+### Greataxe / Greathammers
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Bardin Greataxe | `dr_2h_axe` | Kruber (all) | **Untested** | Analogous to Kruber's greathammer — no redirect expected |
+| Bardin Greathammer | `dr_2h_hammer` | Kruber (all) | **Untested** | Should share stance with Kruber's greathammer |
+| Kruber Greathammer | `es_2h_hammer` | Bardin (all) | **Untested** | Should share stance with Bardin's greathammer |
+| Saltzpyre Greathammer | `wh_2h_hammer` | Saltzpyre (WHC/BH/Zealot) | **Untested** | Priest-native; same model expected on WHC/BH/Zealot |
+| Saltzpyre Dual Hammers | `wh_dual_hammer` | Saltzpyre (WHC/BH/Zealot) | **Untested** | Priest-native; analogous stance expected |
+| Saltzpyre Dual Hammers | `wh_dual_hammer` | Bardin (all) | **Untested** | Should share stance with Bardin's dual hammers |
+| Bardin Dual Hammers | `dr_dual_wield_hammers` | Saltzpyre (all) | **Untested** | Should share stance with Saltzpyre's dual hammers |
+| Bardin Dual Hammers | `dr_dual_wield_hammers` | Bardin (non-native) | **Untested** | Enabling on careers that don't have it natively |
+
+### 1H Swords
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Kruber Sword | `es_1h_sword` | Bardin (all), Kerillian (all), Saltzpyre (all), Sienna (all) | **Untested** | Likely shared `to_1h_sword` stance |
+| Sienna Sword | `bw_sword` | Kruber (all), Bardin (all), Kerillian (all exc. Maiden), Saltzpyre (all) | **Untested** | |
+| Kerillian Sword | `we_1h_sword` | Kruber (all), Bardin (all), Saltzpyre (all), Sienna (all) | **Untested** | |
+
+### 1H Axes
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Bardin Axe | `dr_1h_axe` | Kruber (Merc), Kerillian (all exc. Maiden), Saltzpyre (WHC/BH/Zealot/Priest), Sienna (all) | **Untested** | Redirect for Priest: `to_1h_axe`→`to_1h_hammer` |
+| Saltzpyre Axe | `wh_1h_axe` | Kruber (all), Kerillian (all), Sienna (all) | **Untested** | |
+
+### 1H Hammers / Maces
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Bardin Hammer | `dr_1h_hammer` | Kruber (all), Kerillian (all), Saltzpyre (all) | **Untested** | |
+| Kruber Mace | `es_1h_mace` | Bardin (all), Kerillian (all), Saltzpyre (all), Sienna (all) | **Untested** | |
+| Saltzpyre Hammer | `wh_1h_hammer` | Kruber (all), Bardin (all), Kerillian (all), Sienna (all) | **Untested** | |
+
+### Falchion / Crowbill
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Falchion | `wh_1h_falchion` | Kruber (all), Bardin (all), Kerillian (all), Sienna (all) | **Untested** | Redirect for Priest: `to_1h_falchion`→`to_1h_hammer` |
+| Crowbill | `bw_1h_crowbill` | Kruber (all), Bardin (all), Kerillian (all), Saltzpyre (all) | **Untested** | Redirect: `to_1h_crowbill`→`to_1h_sword` (Priest→`to_1h_hammer`) |
+
+### Shields
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Bretonnian S&S | `es_sword_shield_breton` | Kruber (Merc) | **Untested** | |
+| Bardin Hammer & Shield | `dr_shield_hammer` | Kruber (all exc. Merc), Saltzpyre (Priest) | **Untested** | |
+| Saltzpyre Hammer & Shield | `wh_hammer_shield` | Kruber (all), Bardin (all) | **Untested** | |
+| Kruber Mace & Shield | `es_mace_shield` | Bardin (all), Saltzpyre (Priest) | **Untested** | |
+
+### Flails
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Saltzpyre Flail | `es_1h_flail` | Kruber (all exc. Huntsman), Saltzpyre (Priest), Sienna (all) | **Untested** | |
+| Sienna Flaming Flail | `bw_1h_flail_flaming` | Kruber (all), Saltzpyre (WHC/BH/Zealot/Priest) | **Untested** | |
+
+### Ranged
+
+| Weapon | Key | On Career(s) | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Kerillian Longbow | `we_longbow` | Kruber (all) | **Redirect only** | `to_longbow`→`to_es_longbow`. Untested |
+| Kruber Longbow | `es_longbow` | Kerillian (all), Grail Knight | **Untested** | |
+| Kerillian Volley Xbow | `we_crossbow_repeater` | Kerillian (native careers), Saltzpyre (all) | **Redirect only** | `to_repeating_crossbow_elf`→`to_repeating_crossbow`. Untested |
+| Saltzpyre Volley Xbow | `wh_crossbow_repeater` | Kerillian (all) | **Untested** | |
+| Saltzpyre Crossbow | `wh_crossbow` | Bardin (Ranger/Slayer/Engineer) | **Untested** | |
+| Bardin Crossbow | `dr_crossbow` | Saltzpyre (WHC/BH/Zealot), Bardin (Engineer) | **Untested** | |
+| Bardin Throwing Axes | `dr_1h_throwing_axes` | Bardin (IB/Engineer) | **Untested** | |
+| Bardin Trollhammer | `dr_deus_01` | Bardin (Ranger/Slayer) | **Untested** | |
+| Kruber Handgun | `es_handgun` | Grail Knight | **Untested** | |
+| Kruber Repeating Handgun | `es_repeating_handgun` | Grail Knight | **Untested** | |
+| Kruber Blunderbuss | `es_blunderbuss` | Grail Knight | **Untested** | |
+| Bardin Handgun | `dr_handgun` | Bardin (Slayer), Kruber (all) | **Untested** | Analogous to Kruber's handgun |
+| Kruber Handgun | `es_handgun` | Grail Knight, Bardin (all) | **Untested** | Analogous to Bardin's handgun |
+| Bardin Grudge-Raker | `dr_rakegun` | Bardin (Slayer) | **Untested** | |
+| Bardin Steam Pistol | `dr_steam_pistol` | Bardin (Slayer) | **Untested** | |
+| Bardin Dual Axes | `dr_dual_wield_axes` | Bardin (Ranger/IB/Engineer) | **Untested** | |
+| Bardin Axe & Shield | `dr_shield_axe` | Bardin (Slayer) | **Untested** | |
+
+### Testing checklist for new cross-career weapons
+
+1. Equip weapon, check stance event in animlog (`to_` event on wield)
+2. Verify 1P attack animations play (first-person hands)
+3. Check 3P body animations with another player or `wt animlog` — look for `[MISSING]` on `player_unit`
+4. If 3P attacks show no animation, build a remap table using `wt dump_actions`
+5. Test crouch, jump, weapon swap, push-attack — confirm remap doesn't break
+6. Note: `we_1h_spears_shield` crashes the hero previewer on non-elf careers — this is a known issue but gameplay may still work
 
 ## VMF Hook Timing
 
@@ -242,6 +476,16 @@ end
 
 - **Cause:** `on_soft_currency_picked_up(amount, unit)` -- the amount is `args[1]`, not `args[2]`.
 - **Fix:** Read and multiply `args[1]`.
+
+### 3P remap stops working mid-combat (animations revert)
+
+- **Cause:** Non-weapon `to_` events (`to_onground`, `to_crouch`, `to_zoom`, etc.) were clearing `_3p_weapon_remap`. These fire on jumps, crouches, and zoom but are NOT weapon switches.
+- **Fix:** Don't clear `_3p_weapon_remap` on all `to_` events. Whitelist only actual weapon switch events: keys in `_career_anim_redirect`, `to_crossbow_loaded`, `to_grenade`, `to_2h_billhook`.
+
+### 3P remap events firing but no visual animation
+
+- **Cause:** Remap was targeting the wrong unit. `player_unit` (tagged "1P" in animlog) is actually the 3P body. The remap was running on `not is_local` (1P hands) instead of `is_local` (3P body). Also, remap values used `anim_event` names instead of `anim_event_3p` names.
+- **Fix:** Flip to `is_local` and use target weapon's `anim_event_3p` values. Use `wt dump_actions` to find correct values.
 
 ### VMF setting slider shows `<x>` / localization failure
 

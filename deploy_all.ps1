@@ -1,5 +1,5 @@
 param(
-    [string[]]$Mods = @("chaos_wastes_tweaker", "weapon_tweaker")
+    [string[]]$Mods = @("chaos_wastes_tweaker", "weapon_tweaker", "general_tweaker")
 )
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -9,6 +9,7 @@ $workshopBase = "C:\Program Files (x86)\Steam\steamapps\workshop\content\552500"
 $workshopIds = @{
     "chaos_wastes_tweaker" = "3712929235"
     "weapon_tweaker"       = "3712896117"
+    "general_tweaker"      = "3713619122"
     "career_tweaker"       = $null  # TBD
 }
 

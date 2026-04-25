@@ -56,11 +56,17 @@
 - [ ] **Research: campaign maps in Chaos Wastes** — campaign/adventure maps don't have `primary_pickup_spawners` baked in for CW altars/chests. Would require adding each level to `DEUS_LEVEL_SETTINGS` with correct themes, paths, and locations. Likely requires custom level packages; investigate if any workaround exists.
 
 ## Weapons
-- [ ] **GiveWeapon command** — give any weapon by item key (integrate from Shazbot/Vermintide-Mods) (Perhaps there's a way to use the in-game crafting menu in modded realm to allow the player to craft items just for modded)
-- [ ] **AnyWeapon** — allow any weapon regardless of career restrictions (integrate from Shazbot/Vermintide-Mods)
+- [ ] **GiveWeapon command** — give any weapon by item key (integrate from Shazbot/Vermintide-Mods)
+- [x] **AnyWeapon** — allow any weapon regardless of career restrictions (implemented in weapon_tweaker)
+- [ ] **Modded-realm crafting** — hook the in-game crafting menu to allow crafting weapons only in modded realm, bypassing normal restrictions
+- [ ] **Weapon illusion/cosmetic swapper** — change weapon illusions and cosmetics in modded realm only, using the existing crafting UI
 
 ## Multiplayer
 - [ ] **Settings sync review** — decide which settings should be host-authoritative (curse disabling, boon filtering, altar counts, Belakor override, friendly fire, potions, ammo) and enforce them for clients that affect shared game state.
+
+## Cosmetics
+- [ ] **Cosmetic unlocks** — enable cosmetics (hats, skins, frames) across careers the same way weapon_tweaker unlocks weapons, by patching `can_wield` / item filters
+- [ ] **3rd person mod** — enable 3rd person camera view so players can see their character model and cosmetics in gameplay
 
 ## Audio
 - [ ] **Skip/disable character voiceovers** — option to silence or suppress specific character voices and voiceover lines during missions.
