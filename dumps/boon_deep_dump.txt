@@ -1,0 +1,4208 @@
+========== ability_cooldown_reduction ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_ability_cooldown_reduction  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = activated_cooldown  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_ability_cooldown_reduction  (string)
+  icon = icon_property_activated_cdr  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_ability_cooldown_reduction_plain  (string)
+========== attack_speed ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_attack_speed  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = attack_speed  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_attack_speed  (string)
+  icon = icon_property_attack_speed  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_attack_speed_plain  (string)
+========== attack_speed_per_cooldown ==========
+--- PowerUp Template ---
+  advanced_description = description_attack_speed_per_cooldown  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        name = attack_speed_per_cooldown  (string)
+        stat_buff = attack_speed  (string)
+        update_func = update_attack_speed_per_cooldown  (string)
+        value = 0.20000000000000001  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_attack_speed_per_cooldown  (string)
+  icon = deus_icon_attack_speed_per_cooldown  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== bad_breath ==========
+--- PowerUp Template ---
+  advanced_description = description_bad_breath  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = start_bad_breath_timer  (string)
+        cooldown_buff = bad_breath_cooldown_buff  (string)
+        event = on_player_disabled  (string)
+        explosion_template = bad_breath  (string)
+        name = bad_breath  (string)
+        rescuable_disable_types = {
+          assassin_pounced = true  (boolean)
+          corruptor_grab = true  (boolean)
+          pack_master_grab = true  (boolean)
+        }
+        rescue_delay = 0.5  (number)
+        update_func = update_bad_breath  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 45  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_bad_breath  (string)
+  icon = deus_icon_bad_breath  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== barkskin ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_necklace_damage_taken_reduction_on_heal_2  (string)
+  buff_name = trait_necklace_damage_taken_reduction_on_heal  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = buff_defence_on_damage_taken  (string)
+        dormant = true  (boolean)
+        event = on_damage_taken  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.40000000000000002  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 2  (number)
+      value_type = duration  (string)
+    }
+    3 = {
+      value = 2  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = trait_necklace_damage_taken_reduction_on_heal  (string)
+  icon = necklace_damage_taken_reduction_on_heal  (string)
+  max_amount = 1  (number)
+--- Buff Template: trait_necklace_damage_taken_reduction_on_heal (from BuffTemplates) ---
+  buffs = {
+    1 = {
+      buff_func = buff_defence_on_damage_taken  (string)
+      event = on_damage_taken  (string)
+      name = trait_necklace_damage_taken_reduction_on_heal  (string)
+    }
+  }
+========== blazing_revenge ==========
+--- PowerUp Template ---
+  advanced_description = description_blazing_revenge  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = blazing_revenge_on_knocked_down  (string)
+        event = on_knocked_down  (string)
+        explosion_template = blazing_revenge  (string)
+        name = blazing_revenge_on_knocked_down  (string)
+        radius = 2  (number)
+        remove_buff_func = blazing_revenge_clear_aoe  (string)
+        sound_end_event = boon_blazing_revenge_end  (string)
+        sound_start_event = boon_blazing_revenge_start  (string)
+      }
+      2 = {
+        buff_func = blazing_revenge_clear_aoe  (string)
+        event = on_revived  (string)
+        name = blazing_revenge_on_revived  (string)
+        sound_end_event = boon_blazing_revenge_end  (string)
+      }
+      3 = {
+        buff_func = blazing_revenge_clear_aoe  (string)
+        event = on_death  (string)
+        name = blazing_revenge_on_death  (string)
+        sound_end_event = boon_blazing_revenge_end  (string)
+      }
+    }
+    create_parent_buff_shared_table = true  (boolean)
+  }
+  description_values = {
+  }
+  display_name = display_name_blazing_revenge  (string)
+  icon = deus_icon_blazing_revenge  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== block_cost ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_block_cost  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = block_cost  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_block_cost  (string)
+  icon = icon_property_block_cost_reduction  (string)
+  max_amount = 2  (number)
+  plain_display_name = properties_block_cost_plain  (string)
+========== boon_aoe_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_aoe_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = cursed_chest_area_buff  (string)
+        buff_to_add = boon_cursed_chest_damage_area_buff  (string)
+        event = cursed_chest_running  (string)
+        name = boon_aoe_02  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.34999999999999998  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 30  (number)
+    }
+  }
+  display_name = display_name_boon_aoe_02  (string)
+  icon = deus_icon_aoe_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_aoe_03 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_aoe_03  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = cursed_chest_area_buff  (string)
+        buff_to_add = boon_cursed_chest_cooldown_area_buff  (string)
+        event = cursed_chest_running  (string)
+        name = boon_aoe_03  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 30  (number)
+    }
+  }
+  display_name = display_name_boon_aoe_03  (string)
+  icon = deus_icon_aoe_03  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_aura_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_aura_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = apply_generic_aoe  (string)
+        name = boon_aura_01  (string)
+        range_check = {
+          only_ai = true  (boolean)
+          radius = 5  (number)
+          server_only = true  (boolean)
+          unit_entered_range_func = teammates_extra_damage_aura_enter  (string)
+          unit_left_range_func = teammates_extra_damage_aura_leave  (string)
+          update_rate = 1  (number)
+        }
+        remove_buff_func = remove_generic_aoe  (string)
+        update_func = update_generic_aoe  (string)
+      }
+      2 = {
+        buff_func = teammates_extra_damage_aura_reduce_own_damage  (string)
+        event = damage_calculation_started  (string)
+        name = deus_damage_aura_reduce_own_damage  (string)
+      }
+      3 = {
+        buff_func = teammates_extra_damage_aura_revert_own_damage  (string)
+        event = damage_calculation_ended  (string)
+        name = deus_damage_aura_increase_own_damage  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.14999999999999999  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_aura_01  (string)
+  icon = deus_icon_aura_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_aura_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_aura_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = apply_generic_aoe  (string)
+        name = boon_aura_02  (string)
+        range_check = {
+          only_ai = true  (boolean)
+          radius = 5  (number)
+          server_only = true  (boolean)
+          unit_entered_range_func = teammates_extra_stagger_aura_enter  (string)
+          unit_left_range_func = teammates_extra_stagger_aura_leave  (string)
+          update_rate = 1  (number)
+        }
+        remove_buff_func = remove_generic_aoe  (string)
+        update_func = update_generic_aoe  (string)
+      }
+      2 = {
+        buff_func = teammates_extra_stagger_aura_reduce_own_stagger  (string)
+        event = stagger_calculation_started  (string)
+        name = deus_stagger_aura_reduce_own_stagger  (string)
+      }
+      3 = {
+        buff_func = teammates_extra_stagger_aura_revert_own_stagger  (string)
+        event = stagger_calculation_ended  (string)
+        name = deus_stagger_aura_increase_own_stagger  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_aura_02  (string)
+  icon = deus_icon_aura_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_aura_03 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_aura_03  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        explosion_template_name = periodic_aoe_stagger  (string)
+        min_update_frequency = 2.5  (number)
+        min_update_frequency_at = 0.29999999999999999  (number)
+        name = boon_aura_03  (string)
+        update_frequency = 5  (number)
+        update_func = periodic_aoe_stagger  (string)
+      }
+    }
+  }
+  display_name = display_name_boon_aura_03  (string)
+  icon = deus_icon_aura_03  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_bomb_heavy_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_bomb_heavy_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = -0.5  (number)
+        name = boon_bomb_heavy_01  (string)
+        stat_buff = grenade_throw_range  (string)
+      }
+      2 = {
+        multiplier = 1  (number)
+        name = boon_bomb_heavy_01_radius  (string)
+        stat_buff = explosion_radius  (string)
+      }
+      3 = {
+        multiplier = 1  (number)
+        name = boon_bomb_heavy_01_damage  (string)
+        stat_buff = explosion_damage  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_bomb_heavy_01  (string)
+  icon = deus_icon_boon_bomb_heavy_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_careerskill_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_careerskill_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        area_radius = 7  (number)
+        buff_func = lightning_adjecent_enemies  (string)
+        damage_profile_name = boon_career_ability_lightning_aoe  (string)
+        damage_source = buff  (string)
+        event = on_ability_activated  (string)
+        explosion_template = static_blade  (string)
+        fx = fx/cw_chain_lightning  (string)
+        name = boon_careerskill_01  (string)
+        sound_event = boon_static_blade  (string)
+      }
+    }
+  }
+  display_name = display_name_boon_careerskill_01  (string)
+  icon = deus_icon_careerskill_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_careerskill_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_careerskill_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        area_radius = 7  (number)
+        authority = server  (string)
+        buff_func = career_ability_apply_dot_to_adjecent_enemies  (string)
+        dot_template_name = boon_career_ability_burning_aoe  (string)
+        event = on_ability_activated  (string)
+        name = boon_careerskill_02  (string)
+      }
+    }
+  }
+  display_name = display_name_boon_careerskill_02  (string)
+  icon = deus_icon_careerskill_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_careerskill_03 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_careerskill_03  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        area_radius = 7  (number)
+        authority = server  (string)
+        buff_func = career_ability_apply_dot_to_adjecent_enemies  (string)
+        dot_template_name = boon_career_ability_poison_aoe  (string)
+        event = on_ability_activated  (string)
+        name = boon_careerskill_03  (string)
+      }
+    }
+  }
+  display_name = display_name_boon_careerskill_03  (string)
+  icon = deus_icon_careerskill_03  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_careerskill_04 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_careerskill_04  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        area_radius = 7  (number)
+        authority = server  (string)
+        buff_func = career_ability_apply_dot_to_adjecent_enemies  (string)
+        dot_template_name = boon_career_ability_bleed_aoe  (string)
+        event = on_ability_activated  (string)
+        name = boon_careerskill_04  (string)
+      }
+    }
+  }
+  display_name = display_name_boon_careerskill_04  (string)
+  icon = deus_icon_careerskill_04  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_careerskill_06 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_careerskill_06  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        bonus = 1  (number)
+        name = boon_careerskill_06  (string)
+        stat_buff = extra_ability_charges  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+    }
+  }
+  display_name = display_name_boon_careerskill_06  (string)
+  icon = deus_icon_careerskill_06  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_careerskill_07 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_careerskill_07  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = spawn_drones_proc_ability  (string)
+        damage_profile_name = deus_damage_drone  (string)
+        event = on_ability_activated  (string)
+        name = boon_careerskill_07  (string)
+        num_drones = 6  (number)
+        radius = 15  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 6  (number)
+    }
+  }
+  display_name = display_name_boon_careerskill_07  (string)
+  icon = deus_icon_careerskill_07  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_deus_coins_greed ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_deus_coins_greed  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = deus_coins_greed  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.14999999999999999  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_deus_coins_greed  (string)
+  icon = bardin_ironbreaker_gromril_armour  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_deus_coins_greed  (string)
+========== boon_dot_burning_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_dot_burning_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        area_radius = 5  (number)
+        authority = server  (string)
+        buff_func = boon_dot_burning_01_spread  (string)
+        dot_template_name = boon_career_ability_burning_aoe  (string)
+        event = on_kill  (string)
+        name = boon_dot_burning_01  (string)
+      }
+    }
+  }
+  display_name = display_name_boon_dot_burning_01  (string)
+  icon = deus_icon_dot_burning_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_meta_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_meta_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = boon_meta_01_apply  (string)
+        buff_func = boon_meta_01_boon_granted  (string)
+        event = on_boon_granted  (string)
+        name = boon_meta_01  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.01  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.01  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_meta_01  (string)
+  icon = deus_icon_meta_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_range_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_range_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = 1  (number)
+        name = boon_range_01  (string)
+        stat_buff = ammo_used_multiplier  (string)
+      }
+      2 = {
+        multiplier = 1  (number)
+        name = boon_range_01_damage  (string)
+        stat_buff = increased_weapon_damage_ranged  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_range_01  (string)
+  icon = deus_icon_range_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_range_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_range_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = boon_range_02_delayed_add_on_hit  (string)
+        event = on_ranged_hit  (string)
+        name = boon_range_02  (string)
+      }
+      2 = {
+        buff_func = boon_range_02_damage_check  (string)
+        event = damage_calculation_started  (string)
+        name = boon_range_02_damage_check  (string)
+      }
+      3 = {
+        buff_func = boon_range_02_damage_cleanup  (string)
+        event = damage_calculation_ended  (string)
+        name = boon_range_02_damage_cleanup  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.14999999999999999  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 5  (number)
+    }
+  }
+  display_name = display_name_boon_range_02  (string)
+  icon = deus_icon_ranged_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = boon_skulls_01_on_hit  (string)
+        buff_to_add = boon_skulls_01_stack  (string)
+        event = on_melee_hit  (string)
+        name = boon_skulls_01  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.01  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 10  (number)
+    }
+    3 = {
+      value = 10  (number)
+    }
+    4 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+    5 = {
+      value = 10  (number)
+    }
+  }
+  display_name = display_name_boon_skulls_01  (string)
+  icon = boon_skulls_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = boon_skulls_02_on_kill  (string)
+        buff_to_add = boon_skulls_02_stack  (string)
+        event = on_kill  (string)
+        name = boon_skulls_02  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.014999999999999999  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 10  (number)
+    }
+    3 = {
+      value = 0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+    4 = {
+      value = 10  (number)
+    }
+  }
+  display_name = display_name_boon_skulls_02  (string)
+  icon = boon_skulls_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_03 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_03  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = boon_skulls_03_on_parry  (string)
+        cooldown_buff_name = boon_skulls_03_cooldown  (string)
+        event = on_timed_block  (string)
+        explosion_template_name = boon_skulls_03  (string)
+        name = boon_skulls_03  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 30  (number)
+    }
+  }
+  display_name = display_name_boon_skulls_03  (string)
+  icon = boon_skulls_03  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_04 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_04  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = boon_skulls_04_on_hit  (string)
+        buff_to_add = boon_skulls_04_regen  (string)
+        event = on_melee_hit  (string)
+        name = boon_skulls_04  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+    }
+    2 = {
+      value = 30  (number)
+    }
+    3 = {
+      value = 3  (number)
+    }
+    4 = {
+      value = 0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+    5 = {
+      value = 10  (number)
+    }
+  }
+  display_name = display_name_boon_skulls_04  (string)
+  icon = boon_skulls_04  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_05 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_05  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = boon_skulls_05_on_hit  (string)
+        buff_to_add = boon_skulls_05_stack  (string)
+        event = on_melee_hit  (string)
+        name = boon_skulls_05  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.02  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 10  (number)
+    }
+    3 = {
+      value = 5  (number)
+    }
+    4 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+    5 = {
+      value = 10  (number)
+    }
+  }
+  display_name = display_name_boon_skulls_05  (string)
+  icon = boon_skulls_05  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_06 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_06  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = [function]
+        name = boon_skulls_06  (string)
+        stat_buff = power_level  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.025000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_skulls_06  (string)
+  icon = boon_skulls_06  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_07 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_07  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = boon_skulls_07_on_skull_picked_up  (string)
+        event = on_mutator_skull_picked_up  (string)
+        name = boon_skulls_07  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+    }
+  }
+  display_name = display_name_boon_skulls_07  (string)
+  icon = boon_skulls_07  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_08 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_08  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = boon_skulls_08_on_skull_picked_up  (string)
+        event = on_mutator_skull_picked_up  (string)
+        name = boon_skulls_08  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.34999999999999998  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_skulls_08  (string)
+  icon = boon_skulls_08  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_set_bonus_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_set_bonus_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        max_stacks = 1  (number)
+        name = boon_skulls_set_bonus_01  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_skulls_set_bonus_01  (string)
+  icon = boon_skulls_set_bonus_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_skulls_set_bonus_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_skulls_set_bonus_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        max_stacks = 1  (number)
+        name = boon_skulls_set_bonus_02  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.25  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_skulls_set_bonus_02  (string)
+  icon = boon_skulls_set_bonus_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_supportbomb_concentration_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_supportbomb_concentration_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = grenade_explode_buff_area  (string)
+        buff_to_add = boon_supportbomb_concentration_01_zone  (string)
+        event = on_grenade_exploded  (string)
+        name = boon_supportbomb_concentration_01  (string)
+        perks = {
+          1 = no_explosion_friendly_fire  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+    }
+    2 = {
+      value = 10  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_supportbomb_concentration_01  (string)
+  icon = deus_icon_supportbomb_concentration_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_supportbomb_crit_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_supportbomb_crit_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = grenade_explode_buff_area  (string)
+        buff_to_add = boon_supportbomb_crit_01_zone  (string)
+        event = on_grenade_exploded  (string)
+        name = boon_supportbomb_crit_01  (string)
+        perks = {
+          1 = no_explosion_friendly_fire  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+    }
+    2 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_supportbomb_crit_01  (string)
+  icon = deus_icon_supportbomb_crit_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_supportbomb_healing_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_supportbomb_healing_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = grenade_explode_buff_area  (string)
+        buff_to_add = boon_supportbomb_healing_01_zone  (string)
+        event = on_grenade_exploded  (string)
+        name = boon_supportbomb_healing_01  (string)
+        perks = {
+          1 = no_explosion_friendly_fire  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+    }
+    2 = {
+      value = 2  (number)
+    }
+  }
+  display_name = display_name_boon_supportbomb_healing_01  (string)
+  icon = deus_icon_supportbomb_healing_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_supportbomb_speed_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_supportbomb_speed_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = grenade_explode_buff_area  (string)
+        buff_to_add = boon_supportbomb_speed_01_zone  (string)
+        event = on_grenade_exploded  (string)
+        name = boon_supportbomb_speed_01  (string)
+        perks = {
+          1 = no_explosion_friendly_fire  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+    }
+    2 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_supportbomb_speed_01  (string)
+  icon = deus_icon_supportbomb_speed_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_supportbomb_strenght_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_supportbomb_strenght_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = grenade_explode_buff_area  (string)
+        buff_to_add = boon_supportbomb_strenght_01_zone  (string)
+        event = on_grenade_exploded  (string)
+        name = boon_supportbomb_strenght_01  (string)
+        perks = {
+          1 = no_explosion_friendly_fire  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+    }
+    2 = {
+      value = 0.34999999999999998  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_supportbomb_strenght_01  (string)
+  icon = deus_icon_supportbomb_strenght_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_teamaura_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_teamaura_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = extra_damage_near_teammates_check  (string)
+        distance_from_allies = 7  (number)
+        event = damage_calculation_started  (string)
+        name = boon_teamaura_01  (string)
+      }
+      2 = {
+        buff_func = extra_damage_near_teammates_cleanup  (string)
+        event = damage_calculation_ended  (string)
+        name = boon_teamaura_01_cleanup  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_teamaura_01  (string)
+  icon = deus_icon_teamaura_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_teamaura_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_teamaura_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = extra_stagger_near_teammates_check  (string)
+        distance_from_allies = 7  (number)
+        event = stagger_calculation_started  (string)
+        name = boon_teamaura_02  (string)
+      }
+      2 = {
+        buff_func = extra_stagger_near_teammates_cleanup  (string)
+        event = stagger_calculation_ended  (string)
+        name = boon_teamaura_02_cleanup  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_teamaura_02  (string)
+  icon = deus_icon_teamaura_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_weaponrarity_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_weaponrarity_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = boon_weaponrarity_01_apply  (string)
+        authority = client  (string)
+        buff_func = boon_weaponrarity_01_weapon_wielded  (string)
+        event = on_wield  (string)
+        multiplier = 1  (number)
+        name = boon_weaponrarity_01  (string)
+        stat_buff = cooldown_regen  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.25  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_weaponrarity_01  (string)
+  icon = deus_icon_weaponrarity_01  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boon_weaponrarity_02 ==========
+--- PowerUp Template ---
+  advanced_description = description_boon_weaponrarity_02  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = boon_weaponrarity_02_apply  (string)
+        authority = client  (string)
+        bonus = 1  (number)
+        buff_func = boon_weaponrarity_02_weapon_wielded  (string)
+        event = on_wield  (string)
+        name = boon_weaponrarity_02  (string)
+        stat_buff = critical_strike_chance  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.25  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_boon_weaponrarity_02  (string)
+  icon = deus_icon_weaponrarity_02  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boonset_crit_set_bonus ==========
+--- PowerUp Template ---
+  advanced_description = description_boonset_crit_set_bonus  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        bonus = 1  (number)
+        name = boonset_crit_set_bonus  (string)
+        stat_buff = critical_strike_chance_heavy  (string)
+      }
+    }
+  }
+  display_name = display_name_boonset_crit_set_bonus  (string)
+  icon = deus_icon_crit_set_bonus  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boonset_drone_part1 ==========
+--- PowerUp Template ---
+  advanced_description = description_boonset_drone_part1  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = spawn_drones_proc_headshot  (string)
+        damage_profile_name = deus_damage_drone  (string)
+        event = on_damage_dealt  (string)
+        name = boonset_drone_part1  (string)
+        num_drones = 4  (number)
+        radius = 15  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 4  (number)
+    }
+  }
+  display_name = display_name_boonset_drone_part1  (string)
+  icon = deus_icon_drone_part1  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boonset_drone_part2 ==========
+--- PowerUp Template ---
+  advanced_description = description_boonset_drone_part2  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = spawn_drones_proc  (string)
+        damage_profile_name = deus_damage_drone  (string)
+        event = on_timed_block  (string)
+        name = boonset_drone_part2  (string)
+        num_drones = 4  (number)
+        radius = 15  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 4  (number)
+    }
+  }
+  display_name = display_name_boonset_drone_part2  (string)
+  icon = deus_icon_drone_part2  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boonset_drone_part3 ==========
+--- PowerUp Template ---
+  advanced_description = description_boonset_drone_part3  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = spawn_drones_proc  (string)
+        damage_profile_name = deus_damage_drone  (string)
+        event = on_critical_hit  (string)
+        name = boonset_drone_part3  (string)
+        num_drones = 6  (number)
+        radius = 15  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 6  (number)
+    }
+  }
+  display_name = display_name_boonset_drone_part3  (string)
+  icon = deus_icon_drone_part3  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boonset_drone_part4 ==========
+--- PowerUp Template ---
+  advanced_description = description_boonset_drone_part4  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        bonus = 2  (number)
+        name = boonset_drone_part4  (string)
+        stat_buff = increased_drone_count  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 2  (number)
+    }
+  }
+  display_name = display_name_boonset_drone_part4  (string)
+  icon = deus_icon_drone_part4  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== boulder_bro ==========
+--- PowerUp Template ---
+  advanced_description = description_boulder_bro  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = boulder_bro_add_buff  (string)
+        buff_to_add = boulder_bro_buff  (string)
+        name = boulder_bro  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_boulder_bro  (string)
+  icon = deus_icon_boulder_bro  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== cluster_barrel ==========
+--- PowerUp Template ---
+  advanced_description = description_cluster_barrel  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        barrel_count = 4  (number)
+        buff_func = cluster_barrel_on_barrel_exploded  (string)
+        event = on_barrel_exploded  (string)
+        explode_time = 2  (number)
+        fuse_time = 3  (number)
+        item_name = tiny_explosive_barrel  (string)
+        max_horizontal_velocity = 4  (number)
+        name = cluster_barrel  (string)
+        random_explosion_delay = 0.80000000000000004  (number)
+        vertical_velocity = 7  (number)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_cluster_barrel  (string)
+  icon = deus_icon_cluster_barrel  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== comradery ==========
+--- PowerUp Template ---
+  advanced_description = description_comradery  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = comradery_apply  (string)
+        buff_to_add = comradery_buff  (string)
+        name = comradery  (string)
+        range_check = {
+          only_players = true  (boolean)
+          radius = 10  (number)
+          unit_entered_range_func = comradery_entered_range  (string)
+          unit_left_range_func = comradery_left_range  (string)
+          update_rate = 3  (number)
+        }
+        remove_buff_func = comradery_remove  (string)
+        update_func = comradery_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.050000000000000003  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_comradery  (string)
+  icon = deus_icon_comradery  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== cooldown_on_friendly_ability ==========
+--- PowerUp Template ---
+  advanced_description = description_cooldown_on_friendly_ability  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = cooldown_on_friendly_ability  (string)
+        event = on_ability_activated  (string)
+        name = cooldown_on_friendly_ability  (string)
+        range = 20  (number)
+        value = 0.10000000000000001  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_cooldown_on_friendly_ability  (string)
+  icon = deus_icon_cooldown_on_friendly_ability  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== crit_boost ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_crit_boost  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = critical_strike_effectiveness  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.40000000000000002  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_crit_boost  (string)
+  icon = icon_property_crit_boost  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_crit_boost_plain  (string)
+========== crit_chance ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_crit_chance  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = critical_strike_chance  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_crit_chance  (string)
+  icon = icon_property_crit_chance  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_crit_chance_plain  (string)
+========== curative_empowerment ==========
+--- PowerUp Template ---
+  advanced_description = description_curative_empowerment  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = curative_empowerment_on_healed_ally  (string)
+        buff_to_add = curative_empowerment_buff  (string)
+        event = on_healed_ally  (string)
+        heal_type = bandage  (string)
+        name = curative_empowerment  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 40  (number)
+    }
+  }
+  display_name = display_name_curative_empowerment  (string)
+  icon = deus_icon_curative_empowerment  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== curse_resistance ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_curse_resistance  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = curse_protection  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_curse_resistance  (string)
+  icon = icon_property_grimoire_resistance  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_curse_resistance_plain  (string)
+========== decanter ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_ring_potion_duration  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        dormant = true  (boolean)
+        perks = {
+          1 = potion_duration  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = trait_ring_potion_duration  (string)
+  icon = charm_potion_duration_increased  (string)
+  max_amount = 1  (number)
+========== detect_weakness ==========
+--- PowerUp Template ---
+  advanced_description = description_detect_weakness  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = apply_generic_aoe  (string)
+        mark_buff = detect_weakness_marked_enemy  (string)
+        mark_cooldown = 20  (number)
+        markable_enemies = {
+          beastmen_bestigor = true  (boolean)
+          beastmen_gor = true  (boolean)
+          beastmen_ungor = true  (boolean)
+          chaos_berzerker = true  (boolean)
+          chaos_fanatic = true  (boolean)
+          chaos_marauder = true  (boolean)
+          chaos_marauder_with_shield = true  (boolean)
+          chaos_raider = true  (boolean)
+          chaos_warrior = true  (boolean)
+          skaven_clan_rat = true  (boolean)
+          skaven_clan_rat_with_shield = true  (boolean)
+          skaven_plague_monk = true  (boolean)
+          skaven_slave = true  (boolean)
+          skaven_storm_vermin = true  (boolean)
+          skaven_storm_vermin_champion = true  (boolean)
+          skaven_storm_vermin_commander = true  (boolean)
+          skaven_storm_vermin_with_shield = true  (boolean)
+        }
+        name = detect_weakness  (string)
+        range_check = {
+          only_ai = true  (boolean)
+          radius = 10  (number)
+          randomize_result = true  (boolean)
+          unit_entered_range_func = detect_weakness_unit_entered_range  (string)
+          unit_left_range_func = detect_weakness_unit_left_range  (string)
+          update_rate = 0.5  (number)
+        }
+        remove_buff_func = remove_generic_aoe  (string)
+        update_func = update_generic_aoe  (string)
+      }
+      2 = {
+        buff_func = detect_weakness_on_kill  (string)
+        event = on_kill  (string)
+        kill_buff = detect_weakness_buff  (string)
+        mark_buff = detect_weakness_marked_enemy  (string)
+        name = detect_weakness_on_kill  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_detect_weakness  (string)
+  icon = deus_icon_kill_the_marked  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_ammo_pickup_give_allies_ammo ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_ammo_pickup_give_allies_ammo  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = ally_gain_ammo_on_pickup  (string)
+        event = on_consumable_picked_up  (string)
+        name = deus_ammo_pickup_give_allies_ammo  (string)
+        pickup_types = {
+          ammo = {
+            ammo_bonus_fraction = 0.10000000000000001  (number)
+            max_range = 10  (number)
+          }
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_ammo_pickup_give_allies_ammo  (string)
+  icon = deus_icon_ammo_pickup_give_allies_ammo  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_ammo_pickup_heal ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_ammo_pickup_heal  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = heal_on_pickup  (string)
+        event = on_consumable_picked_up  (string)
+        name = deus_ammo_pickup_heal  (string)
+        pickup_types = {
+          ammo = {
+            amount = 15  (number)
+            type = health_regen  (string)
+          }
+        }
+        sound_event = hud_player_buff_regen_health  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 15  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_deus_ammo_pickup_heal  (string)
+  icon = deus_icon_ammo_pickup_heal  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_barrel_power ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_barrel_power  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = deus_damage_source_damage_mult  (string)
+        damage_mult = 4  (number)
+        event = on_damage_dealt  (string)
+        name = deus_barrel_power  (string)
+        valid_damage_sources = {
+          explosive_barrel = true  (boolean)
+          explosive_barrel_objective = true  (boolean)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_barrel_power  (string)
+  icon = deus_icon_barrel_power  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_block_procs_parry ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_block_procs_parry  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = block_procs_parry  (string)
+        event = on_block  (string)
+        name = deus_block_procs_parry  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_deus_block_procs_parry  (string)
+  icon = deus_icon_block_procs_parry  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_coin_pickup_regen ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_coin_pickup_regen  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = add_buff_on_pickup  (string)
+        event = on_consumable_picked_up  (string)
+        name = deus_coin_pickup_regen  (string)
+        pickup_types = {
+          deus_soft_currency = {
+            1 = deus_coin_pickup_regen_buff  (string)
+          }
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_coin_pickup_regen  (string)
+  icon = deus_healing  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_cooldown_reg_not_hit ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_cooldown_reg_not_hit  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = deus_cooldown_reg_not_hit_init  (string)
+        authority = server  (string)
+        buff_func = deus_cooldown_reg_not_hit_damage_taken  (string)
+        buff_to_add = cooldown_reg_not_hit_buff  (string)
+        event = on_damage_taken  (string)
+        interval = 5  (number)
+        name = cooldown_reg_on_not_hit  (string)
+        update_func = deus_cooldown_reg_not_hit_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 5  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 0.050000000000000003  (number)
+      value_type = percent  (string)
+    }
+    3 = {
+      value = 5  (number)
+      value_type = stacks  (string)
+    }
+  }
+  display_name = display_name_deus_cooldown_reg_not_hit  (string)
+  icon = deus_icon_cooldown_reg_not_hit  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_cooldown_regen ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_cooldown_regen  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        max_stacks = 10  (number)
+        multiplier = 0.10000000000000001  (number)
+        name = deus_cooldown_regen  (string)
+        stat_buff = cooldown_regen  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_cooldown_regen  (string)
+  icon = deus_icon_cooldown_regen  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_crit_on_damage_taken ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_crit_on_damage_taken  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff_on_non_friendly_damage_taken  (string)
+        buff_to_add = deus_crit_on_damage_taken_buff  (string)
+        event = on_damage_taken  (string)
+        name = deus_crit_on_damage_taken  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_crit_on_damage_taken  (string)
+  icon = deus_icon_crit_on_damage_taken  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_damage_reduction_on_incapacitated ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_damage_reduction_on_incapacitated  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = deus_damage_reduction_on_incapacitated  (string)
+        buff_to_add = deus_damage_reduction_on_incapacitated_buff  (string)
+        event = on_damage_taken  (string)
+        name = deus_damage_reduction_on_incapacitated  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 10  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_damage_reduction_on_incapacitated  (string)
+  icon = deus_icon_damage_reduction_on_incapacitated  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_extra_stamina ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_extra_stamina  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        bonus = 4  (number)
+        name = deus_extra_stamina  (string)
+        stat_buff = max_fatigue  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 2  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_deus_extra_stamina  (string)
+  icon = deus_icon_extra_stamina  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_free_potion_use_on_ability ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_free_potion_use_on_ability  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = apply_held_potion_effect  (string)
+        event = on_ability_cooldown_started  (string)
+        name = deus_free_potion_use_on_ability  (string)
+        proc_chance = 0.5  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_free_potion_use_on_ability  (string)
+  icon = deus_icon_free_potion_use_on_ability  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_grenade_multi_throw ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_grenade_multi_throw  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        bonus = 1  (number)
+        name = deus_grenade_multi_throw  (string)
+        stat_buff = grenade_extra_shot  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = bonus  (string)
+    }
+  }
+  display_name = display_name_deus_grenade_multi_throw  (string)
+  icon = deus_icon_grenade_multi_throw  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_guard_aura_check ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_guard_aura_check  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_to_add = deus_guard_aura  (string)
+        health_threshold = 0.75  (number)
+        name = deus_guard_aura_check  (string)
+        update_frequency = 0.5  (number)
+        update_func = update_server_buff_on_health_percent  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.75  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_guard_aura_check  (string)
+  icon = deus_icon_guard_aura_check  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_health_regeneration ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_health_regeneration  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = health_regen_start  (string)
+        authority = server  (string)
+        heal = 1  (number)
+        heal_type = health_regen  (string)
+        name = deus_health_regeneration  (string)
+        time_between_heal = 3  (number)
+        update_func = health_regen_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = duration  (string)
+    }
+    2 = {
+      value = 3  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_health_regeneration  (string)
+  icon = deus_icon_health_regeneration  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_increased_healing_taken ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_increased_healing_taken  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        max_stacks = 10  (number)
+        multiplier = 0.5  (number)
+        name = deus_more_healing_received  (string)
+        priority_buff = true  (boolean)
+        stat_buff = healing_received  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_increased_healing_taken  (string)
+  icon = deus_increased_healing_taken  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_infinite_dodges ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_infinite_dodges  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        name = deus_infinite_dodges  (string)
+        perks = {
+          1 = infinite_dodge  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    exotic = {
+    }
+  }
+  display_name = display_name_deus_infinite_dodges  (string)
+  icon = deus_infinite_dodges  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_knockdown_damage_immunity_aura ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_knockdown_damage_immunity_aura  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_to_add = deus_knockdown_damage_immunity_buff  (string)
+        name = deus_knockdown_damage_immunity_aura  (string)
+        range = 10  (number)
+        remove_buff_func = remove_aura_buff  (string)
+        update_func = deus_knockdown_damage_immunity_aura_func  (string)
+      }
+    }
+  }
+  description_values = {
+    exotic = {
+    }
+  }
+  display_name = display_name_deus_knockdown_damage_immunity_aura  (string)
+  icon = deus_knockdown_damage_immunity_aura  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_large_ammo_pickup_infinite_ammo ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_large_ammo_pickup_infinite_ammo  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = add_buff_on_pickup  (string)
+        event = on_consumable_picked_up  (string)
+        name = deus_large_ammo_pickup_infinite_ammo  (string)
+        pickup_names = {
+          all_ammo = {
+            1 = deus_large_ammo_pickup_infinite_ammo_buff  (string)
+          }
+          all_ammo_small = {
+            1 = deus_large_ammo_pickup_infinite_ammo_buff  (string)
+          }
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_large_ammo_pickup_infinite_ammo  (string)
+  icon = deus_offense  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_larger_clip ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_larger_clip  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = 1  (number)
+        name = deus_larger_clip  (string)
+        stat_buff = clip_size  (string)
+      }
+      2 = {
+        apply_buff_func = refresh_ranged_slot_buffs  (string)
+        name = deus_larger_clip_update  (string)
+        remove_buff_func = refresh_ranged_slot_buffs  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_larger_clip  (string)
+  icon = deus_offense  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_max_health ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_max_health  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = 0.5  (number)
+        name = deus_max_health  (string)
+        stat_buff = max_health  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_max_health  (string)
+  icon = deus_max_health  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_more_head_less_body_damage ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_more_head_less_body_damage  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = 0.5  (number)
+        name = deus_more_head_less_body_damage  (string)
+        stat_buff = headshot_damage  (string)
+      }
+      2 = {
+        multiplier = -0.10000000000000001  (number)
+        name = deus_more_head_less_body_damage_negative  (string)
+        stat_buff = non_headshot_damage  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = -0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_more_head_less_body_damage  (string)
+  icon = deus_more_head_less_body_damage  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_parry_damage_immune ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_parry_damage_immune  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff  (string)
+        buff_to_add = deus_parry_damage_immune_buff  (string)
+        event = on_timed_block  (string)
+        name = deus_parry_damage_immune  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 2  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_parry_damage_immune  (string)
+  icon = deus_parry_damage_immune  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_power_up_quest_granted_test_01 ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_power_up_quest_granted_test_01  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = spawn_orb  (string)
+        event = on_kill  (string)
+        name = deus_power_up_quest_granted_test_01  (string)
+        orb_settings = {
+          orb_name = test_orb_01  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_deus_power_up_quest_granted_test_01  (string)
+  icon = melee_killing_spree_speed  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_powerup_attack_speed ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_powerup_attack_speed  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = 0.10000000000000001  (number)
+        name = deus_powerup_attack_speed  (string)
+        stat_buff = attack_speed  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_powerup_attack_speed  (string)
+  icon = deus_powerup_attack_speed  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_push_charge ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_push_charge  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = deus_push_charge  (string)
+        event = on_push  (string)
+        lunge_settings = {
+          duration = 0.25  (number)
+          falloff_to_speed = 5  (number)
+          initial_speed = 25  (number)
+        }
+        name = deus_push_charge  (string)
+        sound_event = dodge  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_deus_push_charge  (string)
+  icon = deus_push_charge  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_push_cost_reduction ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_push_cost_reduction  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        name = deus_push_cost_reduction  (string)
+        perks = {
+          1 = slayer_stamina  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_push_cost_reduction  (string)
+  icon = deus_push_cost_reduction  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_push_increased_cleave ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_push_increased_cleave  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff  (string)
+        buff_to_add = deus_push_increased_cleave_buff  (string)
+        event = on_push  (string)
+        name = deus_push_increased_cleave  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 3  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_push_increased_cleave  (string)
+  icon = deus_push_increased_cleave  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_reckless_swings ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_reckless_swings  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_to_add = deus_reckless_swings_buff  (string)
+        health_threshold = 0.5  (number)
+        name = deus_reckless_swings  (string)
+        update_frequency = 0.5  (number)
+        update_func = update_server_buff_on_health_percent  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.25  (number)
+      value_type = percent  (string)
+    }
+    3 = {
+      value = 3  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_deus_reckless_swings  (string)
+  icon = deus_reckless_swings  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_revive_regen ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_revive_regen  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = add_buff_on_ally_revived  (string)
+        buff_to_add = {
+          1 = deus_revive_regen_buff  (string)
+        }
+        buff_to_add_revived = {
+          1 = deus_revive_regen_buff  (string)
+        }
+        event = on_revived_ally  (string)
+        name = deus_revive_regen  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 15  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_revive_regen  (string)
+  icon = deus_revive_regen  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_second_wind ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_second_wind  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = deus_second_wind_on_hit  (string)
+        buffs_to_add = {
+          1 = deus_second_wind_attack_speed  (string)
+          2 = deus_second_wind_movement_speed  (string)
+        }
+        event = on_damage_taken  (string)
+        health_threshold = 0.10000000000000001  (number)
+        max_stacks = 1  (number)
+        name = deus_second_wind  (string)
+        proc_weight = 10  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 0.14999999999999999  (number)
+      value_type = percent  (string)
+    }
+    3 = {
+      value = 10  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_deus_second_wind  (string)
+  icon = deus_second_wind  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_skill_on_special_kill ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_skill_on_special_kill  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = skill_on_special_kill  (string)
+        event = on_special_killed  (string)
+        name = deus_skill_on_special_kill  (string)
+        percent_restored = 0.10000000000000001  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_skill_on_special_kill  (string)
+  icon = deus_skill_on_special_kill  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_standing_still_damage_reduction ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_standing_still_damage_reduction  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_to_add = deus_standing_still_damage_reduction_buff  (string)
+        name = deus_standing_still_damage_reduction  (string)
+        update_frequency = 0.20000000000000001  (number)
+        update_func = deus_standing_still_damage_reduction_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.59999999999999998  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_standing_still_damage_reduction  (string)
+  icon = deus_standing_still_damage_reduction  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_target_full_health_damage_mult ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_target_full_health_damage_mult  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = deus_target_full_health_damage_mult  (string)
+        damage_mult = 1.2  (number)
+        event = on_player_damage_dealt  (string)
+        name = deus_target_full_health_damage_mult  (string)
+        valid_attack_types = {
+          heavy_attack = true  (boolean)
+          light_attack = true  (boolean)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_target_full_health_damage_mult  (string)
+  icon = deus_target_full_health_damage_mult  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_throw_speed_increase ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_throw_speed_increase  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        max_stacks = 1  (number)
+        multiplier = 1  (number)
+        name = deus_throw_speed_increase  (string)
+        stat_buff = throw_speed_increase  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_deus_throw_speed_increase  (string)
+  icon = deus_utils  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_timed_block_free_shot ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_timed_block_free_shot  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff  (string)
+        buff_to_add = deus_timed_block_free_shot_buff  (string)
+        event = on_timed_block  (string)
+        name = deus_timed_block_free_shot  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_deus_timed_block_free_shot  (string)
+  icon = deus_utils  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_transmute_into_coins ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_transmute_into_coins  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = deus_transmute_into_coins  (string)
+        event = on_hit  (string)
+        name = deus_transmute_into_coins  (string)
+        sound_event = morris_power_ups_drop_coins  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_deus_transmute_into_coins  (string)
+  icon = icons_placeholder  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== deus_uninterruptable_attacks ==========
+--- PowerUp Template ---
+  advanced_description = description_deus_uninterruptable_attacks  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        name = deus_uninterruptable_attacks  (string)
+        perks = {
+          1 = uninterruptible  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_deus_uninterruptable_attacks  (string)
+  icon = deus_uninterruptable_attacks  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== drop_item_on_ability_use ==========
+--- PowerUp Template ---
+  advanced_description = description_drop_item_on_ability_use  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = drop_item_on_ability_use  (string)
+        cooldown_buff = drop_item_on_ability_use_cooldown  (string)
+        cooldown_durations = {
+          deus_rally_flag = 180  (number)
+          holy_hand_grenade = 180  (number)
+          pockets_full_of_bombs_potion = 120  (number)
+        }
+        event = on_ability_cooldown_started  (string)
+        name = drop_item_on_active_ability_use  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_drop_item_on_ability_use  (string)
+  icon = drop_item_on_ability_use  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== explosive_kills_on_elite_kills ==========
+--- PowerUp Template ---
+  advanced_description = description_explosive_kills_on_elite_kills  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff_on_melee_kills_proc  (string)
+        buff_to_add = elites_on_kill_explosion_buff  (string)
+        event = on_kill_elite_special  (string)
+        name = explosive_kills_on_elite_kills  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_explosive_kills_on_elite_kills  (string)
+  icon = explosive_kills_on_elite_kills  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== explosive_ordinance ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_trinket_increase_grenade_radius  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        dormant = true  (boolean)
+        stat_buff = grenade_radius  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = trait_trinket_increase_grenade_radius  (string)
+  icon = trinket_increase_grenade_radius  (string)
+  max_amount = 1  (number)
+========== explosive_pushes_on_damage_taken ==========
+--- PowerUp Template ---
+  advanced_description = description_explosive_pushes_on_damage_taken  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff_on_proc  (string)
+        buff_to_add = explosive_pushes  (string)
+        event = on_damage_taken  (string)
+        name = explosive_pushes_on_damage_taken  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 5  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_explosive_pushes_on_damage_taken  (string)
+  icon = icons_placeholder  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== fatigue_regen ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_fatigue_regen  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = fatigue_regen  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_fatigue_regen  (string)
+  icon = icon_property_speed_stamina_regen  (string)
+  max_amount = 2  (number)
+  plain_display_name = properties_fatigue_regen_plain  (string)
+========== focused_accuracy ==========
+--- PowerUp Template ---
+  advanced_description = description_focused_accuracy  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = focused_accuracy_on_hit  (string)
+        cooldown_buff = focused_accuracy_cooldown  (string)
+        event = on_hit  (string)
+        name = focused_accuracy  (string)
+        orb_settings = {
+          orb_name = ability_cooldown_reduction_orb  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 0.5  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_focused_accuracy  (string)
+  icon = deus_icon_focussed_accuracy  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== friendly_cooldown_on_ability ==========
+--- PowerUp Template ---
+  advanced_description = description_friendly_cooldown_on_ability  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = friendly_cooldown_on_ability  (string)
+        event = on_ability_activated  (string)
+        name = friendly_cooldown_on_ability  (string)
+        range = 20  (number)
+        value = 0.10000000000000001  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.10000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_friendly_cooldown_on_ability  (string)
+  icon = friendly_cooldown_on_ability  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== grenadier ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_trinket_not_consume_grenade  (string)
+  buff_name = trait_trinket_not_consume_grenade  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        dormant = true  (boolean)
+        stat_buff = not_consume_grenade  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = trait_trinket_not_consume_grenade  (string)
+  icon = trait_trinket_not_consume_grenade  (string)
+  max_amount = 1  (number)
+--- Buff Template: trait_trinket_not_consume_grenade (from BuffTemplates) ---
+  buffs = {
+    1 = {
+      name = trait_trinket_not_consume_grenade  (string)
+      proc_chance = 0.25  (number)
+      stat_buff = not_consume_grenade  (string)
+    }
+  }
+========== hand_of_shallya ==========
+--- PowerUp Template ---
+  advanced_description = conqueror_desc_3  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = heal_other_players_percent_at_range  (string)
+        dormant = true  (boolean)
+        event = on_healed_consumeable  (string)
+        multiplier = 0.20000000000000001  (number)
+        name = necklace_heal_share  (string)
+        range = 10  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = trait_necklace_heal_self_on_heal_other  (string)
+  icon = necklace_heal_self_on_heal_other  (string)
+  max_amount = 1  (number)
+========== heal_on_dot_damage_dealt ==========
+--- PowerUp Template ---
+  advanced_description = description_heal_on_dot_damage_dealt  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = heal_on_dot_damage_dealt  (string)
+        event = on_dot_damage_dealt  (string)
+        name = heal_on_dot_damage_dealt  (string)
+        value = 0.25  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.25  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_heal_on_dot_damage_dealt  (string)
+  icon = heal_on_dot_damage_dealt  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== healers_touch ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_necklace_not_consume_healing  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        dormant = true  (boolean)
+        stat_buff = not_consume_medpack  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.25  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = trait_necklace_not_consume_healing  (string)
+  icon = necklace_not_consume_healing  (string)
+  max_amount = 1  (number)
+========== health ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_health  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = max_health  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_health  (string)
+  icon = icon_property_health_increase  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_health_plain  (string)
+========== health_orbs ==========
+--- PowerUp Template ---
+  advanced_description = description_health_orbs  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = on_damage_taken_health_orbs  (string)
+        event = on_damage_taken  (string)
+        health_per_orb = 10  (number)
+        name = health_orbs  (string)
+        orb_settings = {
+          orb_name = health_orb  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 5  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_health_orbs  (string)
+  icon = deus_icon_health_orbs  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== hidden_escape ==========
+--- PowerUp Template ---
+  advanced_description = description_hidden_escape  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = hidden_escape_on_damage_taken  (string)
+        buff_to_add = hidden_escape_buff  (string)
+        cooldown_buff = hidden_escape_cooldown_buff  (string)
+        event = on_damage_taken  (string)
+        invalid_damage_sources = {
+          ground_impact = true  (boolean)
+          life_drain = true  (boolean)
+          life_tap = true  (boolean)
+          overcharge = true  (boolean)
+          temporary_health_degen = true  (boolean)
+        }
+        invisibility_cooldown = 60  (number)
+        name = hidden_escape  (string)
+      }
+    }
+    create_parent_buff_shared_table = true  (boolean)
+  }
+  description_values = {
+    1 = {
+      value = 30  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 5  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_hidden_escape  (string)
+  icon = deus_icon_hidden_escape  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== home_brewer ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_ring_not_consume_potion  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        dormant = true  (boolean)
+        stat_buff = not_consume_potion  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.25  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = trait_ring_not_consume_potion  (string)
+  icon = charm_not_consume_potion  (string)
+  max_amount = 1  (number)
+========== indomitable ==========
+--- PowerUp Template ---
+  advanced_description = description_indomitable  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        name = indomitable  (string)
+        perks = {
+          1 = infinite_wounds  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_indomitable  (string)
+  icon = deus_icon_indomitable  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== invigorating_strike ==========
+--- PowerUp Template ---
+  advanced_description = description_invigorating_strike  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = invigorating_strike_on_damage_dealt  (string)
+        cooldown_buff = invigorating_strike_cooldown  (string)
+        damage_to_heal_conversion_multiplier = 0.40000000000000002  (number)
+        event = on_damage_dealt  (string)
+        name = invigorating_strike  (string)
+      }
+    }
+    create_parent_buff_shared_table = true  (boolean)
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_invigorating_strike  (string)
+  icon = deus_icon_invigorating_strike  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== last_player_standing_power_reg ==========
+--- PowerUp Template ---
+  advanced_description = description_last_player_standing_power_reg  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = last_player_standing_knocked_down_check  (string)
+        buff_to_add = last_player_standing_power_reg_boost  (string)
+        event = on_ally_knocked_down  (string)
+        name = last_player_standing_power_reg  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 10  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_last_player_standing_power_reg  (string)
+  icon = last_player_standing_power_reg  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== lucky ==========
+--- PowerUp Template ---
+  advanced_description = description_lucky  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = lucky_on_non_crit  (string)
+        buff_to_add = lucky_buff  (string)
+        event = on_non_critical_action  (string)
+        name = lucky_on_non_crit  (string)
+      }
+      2 = {
+        buff_func = lucky_on_crit  (string)
+        event = on_critical_action  (string)
+        name = lucky_on_crit  (string)
+      }
+    }
+    create_parent_buff_shared_table = true  (boolean)
+  }
+  description_values = {
+    1 = {
+      value = 0.050000000000000003  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_lucky  (string)
+  icon = deus_icon_lucky  (string)
+  incompatibility = {
+    es_mercenary = {
+      1 = talent_2_3  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== melee_killing_spree_speed ==========
+--- PowerUp Template ---
+  advanced_description = description_melee_killing_spree_speed  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = client  (string)
+        buff_func = melee_killing_spree_speed_counter  (string)
+        buff_to_add = melee_killing_spree_speed_boost  (string)
+        event = on_kill  (string)
+        kills = 10  (number)
+        name = melee_killing_spree_speed  (string)
+        time = 10  (number)
+        update_func = melee_killing_spree_speed_counter_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+    3 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_melee_killing_spree_speed  (string)
+  icon = melee_killing_spree_speed  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== melee_wave ==========
+--- PowerUp Template ---
+  advanced_description = description_melee_wave  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_melee_wave_stacks  (string)
+        buff_to_add = melee_wave_buff  (string)
+        event = on_ability_activated  (string)
+        name = melee_wave  (string)
+        stacks_to_add = 3  (number)
+      }
+      2 = {
+        buff_func = melee_wave_effect  (string)
+        event = on_hit  (string)
+        explosion_template = melee_wave  (string)
+        name = melee_wave_on_hit  (string)
+      }
+    }
+    create_parent_buff_shared_table = true  (boolean)
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_melee_wave  (string)
+  icon = deus_icon_melee_wave  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== missing_health_power_up ==========
+--- PowerUp Template ---
+  advanced_description = description_missing_health_power_up  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_to_add = missing_health_power_up_buff  (string)
+        chunk_size = 20  (number)
+        max_stacks = 5  (number)
+        name = missing_health_power_up  (string)
+        update_func = activate_buff_stacks_based_on_health_chunks  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.050000000000000003  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 20  (number)
+      value_type = amount  (string)
+    }
+    3 = {
+      value = 5  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_missing_health_power_up  (string)
+  icon = deus_icon_missing_health_power_up  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== money_magnet ==========
+--- PowerUp Template ---
+  advanced_description = description_money_magnet  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = money_magnet_start  (string)
+        magnet_distance = 10  (number)
+        name = money_magnet  (string)
+        update_every = 1  (number)
+        update_func = money_magnet_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_money_magnet  (string)
+  icon = deus_icon_money_magnet  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== movement_speed_on_active_ability_use ==========
+--- PowerUp Template ---
+  advanced_description = description_movement_speed_on_active_ability_use  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff_on_proc  (string)
+        buff_to_add = active_ability_movement_speed  (string)
+        event = on_ability_cooldown_started  (string)
+        name = movement_speed_on_active_ability_use  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.40000000000000002  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 5  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_movement_speed_on_active_ability_use  (string)
+  icon = movement_speed_on_active_ability_use  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== movespeed ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_movespeed  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = apply_movement_buff  (string)
+        path_to_movement_setting_to_modify = {
+          1 = move_speed  (string)
+        }
+        remove_buff_func = remove_movement_buff  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.050000000000000003  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_movespeed  (string)
+  icon = icon_property_movement_speed  (string)
+  max_amount = 2  (number)
+  plain_display_name = properties_movespeed_plain  (string)
+========== natural_bond ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_necklace_no_healing_health_regen_2  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        dormant = true  (boolean)
+        max_stacks = 1  (number)
+        perks = {
+          1 = no_permanent_health  (string)
+        }
+        update_func = update_heal_ticks  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 1  (number)
+    }
+    2 = {
+      value = 5  (number)
+    }
+  }
+  display_name = trait_necklace_no_healing_health_regen  (string)
+  icon = necklace_no_healing_health_regen  (string)
+  max_amount = 1  (number)
+========== pent_up_anger ==========
+--- PowerUp Template ---
+  advanced_description = description_pent_up_anger  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = pent_up_anger_on_block  (string)
+        buff_to_add = pent_up_anger_buff  (string)
+        crit_buff = pent_up_anger_guaranteed_crit_buff  (string)
+        event = on_block  (string)
+        name = pent_up_anger  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_pent_up_anger  (string)
+  icon = deus_icon_pent_up_anger  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== power_up_of_shallya ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_necklace_increased_healing_received  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        dormant = true  (boolean)
+        max_stacks = 1  (number)
+        stat_buff = healing_received  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = trait_necklace_increased_healing_received  (string)
+  icon = necklace_increased_healing_received  (string)
+  max_amount = 1  (number)
+========== power_vs_armoured ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_power_vs_armoured  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = power_level_armoured  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_power_vs_armoured  (string)
+  icon = icon_property_power_armoured  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_power_vs_armoured_plain  (string)
+========== power_vs_chaos ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_power_vs_chaos  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = power_level_chaos  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_power_vs_chaos  (string)
+  icon = icon_property_power_chaos  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_power_vs_chaos_plain  (string)
+========== power_vs_frenzy ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_power_vs_frenzy  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = power_level_frenzy  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_power_vs_frenzy  (string)
+  icon = icon_property_power_frenzy  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_power_vs_frenzy_plain  (string)
+========== power_vs_large ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_power_vs_large  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = power_level_large  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.40000000000000002  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_power_vs_large  (string)
+  icon = icon_property_power_large  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_power_vs_large_plain  (string)
+========== power_vs_skaven ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_power_vs_skaven  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = power_level_skaven  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_power_vs_skaven  (string)
+  icon = icon_property_power_skaven  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_power_vs_skaven_plain  (string)
+========== power_vs_unarmoured ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_power_vs_unarmoured  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = power_level_unarmoured  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_power_vs_unarmoured  (string)
+  icon = icon_property_power_unarmoured  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_power_vs_unarmoured_plain  (string)
+========== protection_aoe ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_protection_aoe  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = protection_aoe  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_protection_aoe  (string)
+  icon = icon_property_dmg_reduction_aoe  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_protection_aoe_plain  (string)
+========== protection_chaos ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_protection_chaos  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = protection_chaos  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_protection_chaos  (string)
+  icon = icon_property_dmg_reduction_chaos  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_protection_chaos_plain  (string)
+========== protection_orbs ==========
+--- PowerUp Template ---
+  advanced_description = description_protection_orbs  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = on_timed_block_protection_orbs  (string)
+        cooldown = 3  (number)
+        event = on_timed_block  (string)
+        name = protection_orbs  (string)
+        orb_settings = {
+          orb_name = protection_orb  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+    3 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_protection_orbs  (string)
+  icon = deus_icon_protection  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== protection_skaven ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_protection_skaven  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = protection_skaven  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_protection_skaven  (string)
+  icon = icon_property_dmg_reduction_skaven  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_protection_skaven_plain  (string)
+========== push_block_arc ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_push_block_arc  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = block_angle  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.59999999999999998  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_push_block_arc  (string)
+  icon = icon_property_block_arc  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_push_block_arc_plain  (string)
+========== pyrotechnical_echo ==========
+--- PowerUp Template ---
+  advanced_description = description_pyrotechnical_echo  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = pyrotechnical_echo_on_grenade_exploded  (string)
+        event = on_grenade_exploded  (string)
+        explosion_delay = 1  (number)
+        name = pyrotechnical_echo  (string)
+        update_func = pyrotechnical_echo_update  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_pyrotechnical_echo  (string)
+  icon = deus_icon_pyrotechnical_echo  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== pyrrhic_strength ==========
+--- PowerUp Template ---
+  advanced_description = description_pyrrhic_strength  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        multiplier = 0.25  (number)
+        name = pyrrhic_strength_power  (string)
+        stat_buff = power_level  (string)
+      }
+      2 = {
+        bonus = -0.5  (number)
+        name = pyrrhic_strength_health  (string)
+        stat_buff = health_curse  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.25  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = -0.5  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_pyrrhic_strength  (string)
+  icon = deus_icon_pyrrhic_strength  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== resolve ==========
+--- PowerUp Template ---
+  advanced_description = description_resolve  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = resolve_on_revived  (string)
+        cooldown_buff = resolve_cooldown_buff  (string)
+        event = on_revived  (string)
+        full_heal_buff = resolve_buff  (string)
+        name = resolve  (string)
+        update_func = resolve_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 120  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_resolve  (string)
+  icon = deus_icon_resolve  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== respawn_speed ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_respawn_speed  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = faster_respawn  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.59999999999999998  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_respawn_speed  (string)
+  icon = icon_property_speed_respawn  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_respawn_speed_plain  (string)
+========== revive_speed ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_revive_speed  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = faster_revive  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = -0.59999999999999998  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = properties_revive_speed  (string)
+  icon = icon_property_speed_revive  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_revive_speed_plain  (string)
+========== sharing_is_caring ==========
+--- PowerUp Template ---
+  advanced_description = description_sharing_is_caring  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = on_potion_consumed_sharing_is_caring  (string)
+        event = on_potion_consumed  (string)
+        name = sharing_is_caring  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_sharing_is_caring  (string)
+  icon = deus_icon_sharing_is_caring  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== shrapnel ==========
+--- PowerUp Template ---
+  advanced_description = description_trait_trinket_grenade_damage_taken  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = debuff_defence_grenade_hit  (string)
+        event = on_hit  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 10  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = trait_trinket_grenade_damage_taken  (string)
+  icon = trinket_reduce_radius_by_50_increase_power_by_50  (string)
+  max_amount = 1  (number)
+========== skill_by_block ==========
+--- PowerUp Template ---
+  advanced_description = description_skill_by_block  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = reduce_activated_ability_cooldown_on_block  (string)
+        event = on_block  (string)
+        name = skill_by_block  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_skill_by_block  (string)
+  icon = deus_icon_skill_by_block  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== speed_over_stamina ==========
+--- PowerUp Template ---
+  advanced_description = description_speed_over_stamina  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = add_buff  (string)
+        buff_to_add = speed_over_stamina_buff  (string)
+        event = on_block_broken  (string)
+        name = speed_over_stamina  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.14999999999999999  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 15  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_speed_over_stamina  (string)
+  icon = deus_icon_speed_over_stamina  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== squats ==========
+--- PowerUp Template ---
+  advanced_description = description_squats  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        actual_buff = squats_buff  (string)
+        buff_func = squats_add_buff  (string)
+        buff_to_add = squats_buff  (string)
+        build_up_buff = squats_build_up_buff  (string)
+        event = on_crouch  (string)
+        name = squats  (string)
+        stack_count_to_trigger_actual_buff = 5  (number)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.5  (number)
+      value_type = percent  (string)
+    }
+    2 = {
+      value = 25  (number)
+      value_type = amount  (string)
+    }
+    3 = {
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_squats  (string)
+  icon = deus_icon_squats  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== staggering_force ==========
+--- PowerUp Template ---
+  advanced_description = description_staggering_force  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = staggering_force_on_stagger  (string)
+        buff_to_add = staggering_force_buff  (string)
+        enemy_count = 5  (number)
+        event = on_stagger  (string)
+        name = staggering_force  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 5  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 0.20000000000000001  (number)
+      value_type = percent  (string)
+    }
+    3 = {
+      value = 5  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_staggering_force  (string)
+  icon = deus_icon_staggering_force  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== stamina ==========
+--- PowerUp Template ---
+  advanced_description = description_properties_stamina  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        stat_buff = max_fatigue  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 4  (number)
+      value_type = bonus  (string)
+    }
+  }
+  display_name = properties_stamina  (string)
+  icon = icon_property_stamina  (string)
+  max_amount = 1  (number)
+  plain_display_name = properties_stamina_plain  (string)
+========== static_blade ==========
+--- PowerUp Template ---
+  advanced_description = description_static_blade  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = static_blade_on_timed_block  (string)
+        cooldown_buff = static_blade_cooldown_buff  (string)
+        damage_profile_name = static_blade  (string)
+        damage_source = buff  (string)
+        event = on_timed_block  (string)
+        explosion_template = static_blade  (string)
+        fx = fx/cw_chain_lightning  (string)
+        name = static_blade  (string)
+        sound_event = boon_static_blade  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 8  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_static_blade  (string)
+  icon = deus_icon_static_blade  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== static_charge ==========
+--- PowerUp Template ---
+  advanced_description = description_static_charge  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = on_kill_static_charge  (string)
+        event = on_kill  (string)
+        kills_per_orb = 10  (number)
+        name = static_charge  (string)
+        orb_settings = {
+          orb_name = static_charge  (string)
+        }
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 10  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 5  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_static_charge  (string)
+  icon = deus_icon_static_charge  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== surprise_strike ==========
+--- PowerUp Template ---
+  advanced_description = description_surprise_strike  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = surprise_strike_add_buff  (string)
+        buff_to_add = surprise_strike_guaranteed_crit_buff  (string)
+        event = on_visible  (string)
+        name = surprise_strike  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 2  (number)
+      value_type = amount  (string)
+    }
+  }
+  display_name = display_name_surprise_strike  (string)
+  icon = deus_icon_surprise_strike  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== talent_1_1 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 1  (number)
+  talent_tier = 1  (number)
+========== talent_1_2 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 2  (number)
+  talent_tier = 1  (number)
+========== talent_1_3 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 3  (number)
+  talent_tier = 1  (number)
+========== talent_2_1 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 1  (number)
+  talent_tier = 2  (number)
+========== talent_2_2 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 2  (number)
+  talent_tier = 2  (number)
+========== talent_2_3 ==========
+--- PowerUp Template ---
+  incompatibility = {
+    es_mercenary = {
+      1 = lucky  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 3  (number)
+  talent_tier = 2  (number)
+========== talent_3_1 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 1  (number)
+  talent_tier = 3  (number)
+========== talent_3_2 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 2  (number)
+  talent_tier = 3  (number)
+========== talent_3_3 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 3  (number)
+  talent_tier = 3  (number)
+========== talent_4_1 ==========
+--- PowerUp Template ---
+  incompatibility = {
+    dr_engineer = {
+      1 = talent_4_3  (string)
+    }
+    dr_ranger = {
+      1 = talent_4_2  (string)
+      2 = talent_4_3  (string)
+    }
+    es_knight = {
+      1 = talent_4_2  (string)
+      2 = talent_4_3  (string)
+    }
+    es_mercenary = {
+      1 = talent_4_2  (string)
+      2 = talent_4_3  (string)
+    }
+    we_waywatcher = {
+      1 = talent_4_2  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 1  (number)
+  talent_tier = 4  (number)
+========== talent_4_2 ==========
+--- PowerUp Template ---
+  incompatibility = {
+    dr_ranger = {
+      1 = talent_4_1  (string)
+      2 = talent_4_3  (string)
+    }
+    es_knight = {
+      1 = talent_4_1  (string)
+      2 = talent_4_3  (string)
+    }
+    es_mercenary = {
+      1 = talent_4_1  (string)
+      2 = talent_4_3  (string)
+    }
+    we_waywatcher = {
+      1 = talent_4_1  (string)
+      2 = talent_4_3  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 2  (number)
+  talent_tier = 4  (number)
+========== talent_4_3 ==========
+--- PowerUp Template ---
+  incompatibility = {
+    dr_engineer = {
+      1 = talent_4_1  (string)
+    }
+    dr_ranger = {
+      1 = talent_4_1  (string)
+      2 = talent_4_2  (string)
+    }
+    es_knight = {
+      1 = talent_4_1  (string)
+      2 = talent_4_2  (string)
+    }
+    es_mercenary = {
+      1 = talent_4_1  (string)
+      2 = talent_4_2  (string)
+    }
+    we_waywatcher = {
+      1 = talent_4_2  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 3  (number)
+  talent_tier = 4  (number)
+========== talent_5_1 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 1  (number)
+  talent_tier = 5  (number)
+========== talent_5_2 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 2  (number)
+  talent_tier = 5  (number)
+========== talent_5_3 ==========
+--- PowerUp Template ---
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 3  (number)
+  talent_tier = 5  (number)
+========== talent_6_1 ==========
+--- PowerUp Template ---
+  incompatibility = {
+    dr_engineer = {
+      1 = talent_6_2  (string)
+      2 = talent_6_3  (string)
+    }
+    dr_ranger = {
+      1 = talent_6_2  (string)
+    }
+    es_questingknight = {
+      1 = talent_6_3  (string)
+    }
+    we_shade = {
+      1 = talent_6_3  (string)
+    }
+    we_thornsister = {
+      1 = talent_6_2  (string)
+    }
+    we_waywatcher = {
+      1 = talent_6_2  (string)
+      2 = talent_6_3  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 1  (number)
+  talent_tier = 6  (number)
+========== talent_6_2 ==========
+--- PowerUp Template ---
+  incompatibility = {
+    dr_engineer = {
+      1 = talent_6_1  (string)
+    }
+    dr_ranger = {
+      1 = talent_6_1  (string)
+    }
+    es_huntsman = {
+      1 = talent_6_3  (string)
+    }
+    we_thornsister = {
+      1 = talent_6_1  (string)
+      2 = talent_6_3  (string)
+    }
+    we_waywatcher = {
+      1 = talent_6_1  (string)
+    }
+    wh_bountyhunter = {
+      1 = talent_6_3  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 2  (number)
+  talent_tier = 6  (number)
+========== talent_6_3 ==========
+--- PowerUp Template ---
+  incompatibility = {
+    dr_engineer = {
+      1 = talent_6_1  (string)
+    }
+    es_huntsman = {
+      1 = talent_6_2  (string)
+    }
+    es_questingknight = {
+      1 = talent_6_1  (string)
+    }
+    we_shade = {
+      1 = talent_6_1  (string)
+    }
+    we_thornsister = {
+      1 = talent_6_2  (string)
+    }
+    we_waywatcher = {
+      1 = talent_6_1  (string)
+    }
+    wh_bountyhunter = {
+      1 = talent_6_2  (string)
+    }
+  }
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+  talent = true  (boolean)
+  talent_index = 3  (number)
+  talent_tier = 6  (number)
+========== tenacious ==========
+--- PowerUp Template ---
+  advanced_description = description_tenacious  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        health_per_tick = 2  (number)
+        health_threshold = 0.29999999999999999  (number)
+        name = tenacious  (string)
+        tick = 1  (number)
+        update_func = tenacious_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 2  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 0.29999999999999999  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_tenacious  (string)
+  icon = deus_icon_tenacious  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== thorn_skin ==========
+--- PowerUp Template ---
+  advanced_description = description_thorn_skin  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = thorn_skin_effect  (string)
+        event = on_damage_taken  (string)
+        explosion_template = thorn_skin  (string)
+        name = thorn_skin  (string)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_thorn_skin  (string)
+  icon = deus_icon_thorn_skin  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== transfer_temp_health_at_full ==========
+--- PowerUp Template ---
+  advanced_description = description_transfer_temp_health_at_full  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        authority = server  (string)
+        buff_func = transfer_temp_health_at_full  (string)
+        event = on_healed  (string)
+        name = transfer_temp_health_at_full  (string)
+        range = 20  (number)
+      }
+    }
+  }
+  description_values = {
+  }
+  display_name = display_name_transfer_temp_health_at_full  (string)
+  icon = transfer_temp_health_at_full  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== triple_melee_headshot_power ==========
+--- PowerUp Template ---
+  advanced_description = description_triple_melee_headshot_power  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        buff_func = triple_melee_headshot_power_counter  (string)
+        buff_to_add = triple_melee_headshot_power_boost  (string)
+        event = on_hit  (string)
+        hits = 3  (number)
+        name = triple_melee_headshot_power  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 3  (number)
+      value_type = amount  (string)
+    }
+    2 = {
+      value = 0.14999999999999999  (number)
+      value_type = percent  (string)
+    }
+    3 = {
+      value = 10  (number)
+      value_type = duration  (string)
+    }
+  }
+  display_name = display_name_triple_melee_headshot_power  (string)
+  icon = triple_melee_headshot_power  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)
+========== wolfpack ==========
+--- PowerUp Template ---
+  advanced_description = description_wolfpack  (string)
+  buff_template = {
+    buffs = {
+      1 = {
+        apply_buff_func = wolfpack_apply  (string)
+        buff_to_add = wolfpack_buff  (string)
+        name = wolfpack  (string)
+        range_check = {
+          only_players = true  (boolean)
+          radius = 20  (number)
+          unit_entered_range_func = wolfpack_entered_range  (string)
+          unit_left_range_func = wolfpack_left_range  (string)
+          update_rate = 3  (number)
+        }
+        remove_buff_func = wolfpack_remove  (string)
+        update_func = wolfpack_update  (string)
+      }
+    }
+  }
+  description_values = {
+    1 = {
+      value = 0.050000000000000003  (number)
+      value_type = percent  (string)
+    }
+  }
+  display_name = display_name_wolfpack  (string)
+  icon = deus_icon_wolfpack  (string)
+  max_amount = 1  (number)
+  rectangular_icon = true  (boolean)

@@ -30,4 +30,30 @@ return {
     tp_side_offset_tooltip = {
         en = "Horizontal offset (positive = right, negative = left).",
     },
+
+    gameplay_group = {
+        en = "Gameplay",
+    },
+    godmode_enabled = {
+        en = "Godmode",
+    },
+    godmode_enabled_tooltip = {
+        en = "Toggle invincibility. Can also be toggled with the 'gt god' chat command.",
+    },
+    allow_duplicate_careers = {
+        en = "Allow Duplicate Careers",
+    },
+    allow_duplicate_careers_tooltip = {
+        en = "Allow multiple players to pick the same hero/career in a lobby.",
+    },
+
+    mission_inventory_group = {
+        en = "Inventory in Missions",
+    },
+    mission_inventory_enabled = {
+        en = "Enable Inventory Access in Missions",
+    },
+    mission_inventory_enabled_tooltip = {
+        en = "Allow opening the equipment/loadout screen during adventure, survival, and Chaos Wastes missions.",
+    },
 }

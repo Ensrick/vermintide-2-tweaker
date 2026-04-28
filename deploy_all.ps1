@@ -10,6 +10,7 @@ $workshopIds = @{
     "chaos_wastes_tweaker" = "3712929235"
     "weapon_tweaker"       = "3712896117"
     "general_tweaker"      = "3713619122"
+    "cosmetics_tweaker"    = "3715714222"
     "career_tweaker"       = $null  # TBD
 }
 

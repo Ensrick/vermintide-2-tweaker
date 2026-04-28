@@ -65,11 +65,22 @@
 - [ ] **Settings sync review** — decide which settings should be host-authoritative (curse disabling, boon filtering, altar counts, Belakor override, friendly fire, potions, ammo) and enforce them for clients that affect shared game state.
 
 ## Cosmetics
-- [ ] **Cosmetic unlocks** — enable cosmetics (hats, skins, frames) across careers the same way weapon_tweaker unlocks weapons, by patching `can_wield` / item filters
+- [ ] **Cosmetic unlocks** — enable cosmetics (hats, skins) across careers within the same character (no cross-character; skip wh_priest), like weapon_tweaker unlocks weapons by patching `can_wield`/item filters. **In progress in `cosmetics_tweaker` mod (Workshop 3715714222, private).** Started v0.2.0 with `cos probe_cosmetics` runtime probe to enumerate items + native career allow-lists; next pass populates static unlock maps and the nested settings UI.
+- [ ] **Per-hat character portraits (future)** — when the cosmetic-unlocks UI is in, layer a portrait-override system on top: for every hat a character can wear, generate a matching character portrait via Photoshop + AI character-consistency tools so the lobby/HUD portrait swaps to match the equipped hat. Static asset pipeline (one portrait per hat × character), runtime side just patches the active portrait based on equipped hat.
+- [ ] **Cross-character hat unlocks (investigation)** — figure out which hat→character combos are skeleton-compatible. Currently `cosmetics_tweaker` is intra-character only because cross-character would crash on skeleton-attachment-node mismatch (e.g. Kruber wearing Kerillian's hat). Some pairs may share enough headpiece rigging to work — needs per-pair empirical testing.
+- [ ] **Cloned + recolored cosmetics ("matching hats")** — generate new hat (and sometimes outfit) variants by cloning an existing item and tinting its materials to match a specific outfit's palette, where vanilla provides no matching combo. Concrete example: Grail Knight's white purified Chaos Wastes outfit has no white hat to pair with; clone a GK hat and tint it white. Two-part task:
+  1. **Item cloning** — register a new entry in `ItemMasterList` at boot that copies an existing item's `unit`, `slot_type`, `can_wield`, etc., with a new unique key/display_name. Verify it shows up in inventory and equips.
+  2. **Per-clone color override** — apply tint via `Material.set_color`/`set_vector3` on the spawned unit, only for the cloned variant (so the original hat stays vanilla). Use `Material.get_color` (or equivalent getter) to sample the target outfit's color so the recolor automatically matches; alternatively expose RGB sliders per clone.
+  Requires confirming Stingray exposes BOTH getters and setters on material parameters, and that we can spawn a per-unit material instance so tinting one player's hat doesn't tint everyone else's.
+- [ ] **Free weapon illusion/skin swap from inventory** — let the inventory menu pick any illusion/skin available to the weapon type without going through Okri's "apply illusion" flow (and without consuming a one-time illusion). Show all illusions for that weapon as selectable options inline on the weapon card.
 - [ ] **3rd person mod** — enable 3rd person camera view so players can see their character model and cosmetics in gameplay
 
 ## Audio
 - [ ] **Skip/disable character voiceovers** — option to silence or suppress specific character voices and voiceover lines during missions.
+
+## Enemies & Bosses (General Tweaker)
+- [ ] **Chief Krench from VT1** — port Chief Krench boss from Vermintide 1 into VT2 via modding (pending Fatshark permission — not just community manager approval)
+- [ ] **Lords as monster spawns** — allow a selection of lord/boss enemies to spawn in place of regular monsters (e.g. Bodvarr, Skarrik, Rasknitt, Nurgloth as random monster replacements)
 
 ## Careers
 - [x] Allow duplicate careers — multiple players can pick the same hero/career (host setting)

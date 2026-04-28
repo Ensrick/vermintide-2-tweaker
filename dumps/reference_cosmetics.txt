@@ -1,0 +1,922 @@
+﻿# ============================================
+# VT2 Cosmetics Reference — Organized by Hero
+# ============================================
+# Source: dumps/cosmetics_raw.txt (756 items)
+# Generated: 2026-04-25
+
+## UNIVERSAL COSMETICS (239 items — available to all/most careers)
+
+### FRAME (239)
+  frame_0000
+  frame_0001
+  frame_0002
+  frame_0003
+  frame_0004
+  frame_0005
+  frame_0006
+  frame_0007
+  frame_0008
+  frame_0009
+  frame_0010
+  frame_0011
+  frame_0012
+  frame_0013
+  frame_0014
+  frame_0015
+  frame_0016
+  frame_0017
+  frame_0018
+  frame_0019
+  frame_0020
+  frame_0021
+  frame_0022
+  frame_0023
+  frame_0024
+  frame_0025
+  frame_0026
+  frame_0027
+  frame_0028
+  frame_0029
+  frame_0030
+  frame_0031
+  frame_0032
+  frame_0033
+  frame_0034
+  frame_0035
+  frame_0036
+  frame_0037
+  frame_0038
+  frame_0039
+  frame_0040
+  frame_0041
+  frame_0042
+  frame_0043
+  frame_0044
+  frame_0045
+  frame_0046
+  frame_0047
+  frame_0048
+  frame_0049
+  frame_0050
+  frame_0051
+  frame_0052
+  frame_0053
+  frame_0054
+  frame_0055
+  frame_0056
+  frame_0057
+  frame_0058
+  frame_0059
+  frame_0060
+  frame_0061
+  frame_0062
+  frame_0063
+  frame_0064
+  frame_0065
+  frame_0066
+  frame_0067
+  frame_0068
+  frame_0069
+  frame_0070
+  frame_0071
+  frame_0072
+  frame_0073
+  frame_0074
+  frame_0075
+  frame_0076
+  frame_0077
+  frame_0078
+  frame_0079
+  frame_0080
+  frame_0081
+  frame_0084
+  frame_0085
+  frame_0086
+  frame_0087
+  frame_0089
+  frame_0090
+  frame_0091
+  frame_0094
+  frame_0095
+  frame_0096
+  frame_0097
+  frame_0098
+  frame_0099
+  frame_0100
+  frame_0101
+  frame_0102
+  frame_0103
+  frame_0104
+  frame_0105
+  frame_0106
+  frame_0107
+  frame_0108
+  frame_0109
+  frame_0110
+  frame_0111
+  frame_apology_2025
+  frame_bear
+  frame_beta_2024
+  frame_bogenhafen_01
+  frame_bogenhafen_02
+  frame_bogenhafen_03
+  frame_bogenhafen_04
+  frame_celebration_01
+  frame_celebration_02
+  frame_celebration_03
+  frame_celebration_05
+  frame_celebration_06
+  frame_celebration_07
+  frame_celebration_08
+  frame_collectors_edition
+  frame_collectors_edition_preorder
+  frame_community_01
+  frame_deus_portrait_belakor
+  frame_deus_portrait_chaos_gods
+  frame_deus_portrait_citadel
+  frame_deus_portrait_khorne
+  frame_deus_portrait_lileath_1
+  frame_deus_portrait_lileath_2
+  frame_deus_portrait_lileath_3
+  frame_deus_portrait_myrmidia_1
+  frame_deus_portrait_myrmidia_2
+  frame_deus_portrait_myrmidia_3
+  frame_deus_portrait_nurgle
+  frame_deus_portrait_sigmar_1
+  frame_deus_portrait_sigmar_2
+  frame_deus_portrait_sigmar_3
+  frame_deus_portrait_slaanesh
+  frame_deus_portrait_taal_1
+  frame_deus_portrait_taal_2
+  frame_deus_portrait_taal_3
+  frame_deus_portrait_tzeentch
+  frame_deus_portrait_valaya_1
+  frame_deus_portrait_valaya_2
+  frame_deus_portrait_valaya_3
+  frame_dev
+  frame_divine
+  frame_drachenfels_01
+  frame_drachenfels_02
+  frame_drachenfels_03
+  frame_drachenfels_04
+  frame_drachenfels_05
+  frame_dwarf_fest
+  frame_geheimnisnacht_01
+  frame_geheimnisnacht_02
+  frame_geheimnisnacht_03
+  frame_geheimnisnacht_04
+  frame_geheimnisnacht_05
+  frame_geheimnisnacht_2024
+  frame_geheimnisnacht_2025
+  frame_globadier_01
+  frame_globadier_02
+  frame_gotwf_01
+  frame_gotwf_2024
+  frame_gotwf_2025
+  frame_gutter_runner_01
+  frame_gutter_runner_02
+  frame_holly_01
+  frame_holly_02
+  frame_holly_03
+  frame_holly_04
+  frame_karak_01
+  frame_karak_02
+  frame_karak_03
+  frame_karak_04
+  frame_karak_05
+  frame_mondstille_01
+  frame_mondstille_02
+  frame_mondstille_03
+  frame_necromancer_01
+  frame_necromancer_02
+  frame_necromancer_03
+  frame_packmaster_01
+  frame_packmaster_02
+  frame_rat_ogre_01
+  frame_rat_ogre_02
+  frame_ratling_gunner_01
+  frame_ratling_gunner_02
+  frame_scorpion_complete_all_helmgart_level_achievements_cataclysm
+  frame_scorpion_complete_all_helmgart_levels_cataclysm
+  frame_scorpion_complete_bogenhafen_cataclysm
+  frame_scorpion_complete_crater_cataclysm
+  frame_scorpion_complete_crater_champion
+  frame_scorpion_complete_crater_legend
+  frame_scorpion_complete_crater_recruit
+  frame_scorpion_complete_crater_veteran
+  frame_scorpion_complete_plaza_cataclysm
+  frame_scorpion_season_1_beasts
+  frame_scorpion_season_1_cataclysm_1
+  frame_scorpion_season_1_cataclysm_2
+  frame_scorpion_season_1_cataclysm_3
+  frame_scorpion_season_1_death
+  frame_scorpion_season_1_fire
+  frame_scorpion_season_1_heavens
+  frame_scorpion_season_1_life
+  frame_scorpion_season_1_light
+  frame_scorpion_season_1_metal
+  frame_scorpion_season_1_shadow
+  frame_season_03_quickplay
+  frame_season_03_tier_1
+  frame_season_03_tier_2
+  frame_season_03_tier_3
+  frame_season_04_quickplay
+  frame_season_04_tier_1
+  frame_season_04_tier_2
+  frame_season_04_tier_3
+  frame_season_04_tier_4
+  frame_skulls
+  frame_skulls_2021
+  frame_skulls_2022
+  frame_skulls_2023
+  frame_skulls_2024
+  frame_skulls_2025
+  frame_streamer
+  frame_summer
+  frame_termite_01
+  frame_termite_02
+  frame_termite_03
+  frame_troll_01
+  frame_troll_02
+  frame_tyot_creator
+  frame_versus_01
+  frame_versus_02
+  frame_warpfire_thrower_01
+  frame_warpfire_thrower_02
+  frame_wizards_tower_01
+  frame_wizards_trail_01
+  frame_year_of_the_rat
+
+## EMPIRE SOLDIER (MARKUS KRUBER) (89 career-specific items)
+
+### Huntsman (es_huntsman) — HAT (14 exclusive, 6 shared)
+  huntsman_hat_0000
+  huntsman_hat_0001
+  huntsman_hat_0002
+  huntsman_hat_0003
+  huntsman_hat_0004
+  huntsman_hat_0005
+  huntsman_hat_0006
+  huntsman_hat_0007
+  huntsman_hat_0008
+  huntsman_hat_0009
+  huntsman_hat_1001
+  huntsman_hat_1002
+  huntsman_hat_1003
+  huntsman_hat_1005
+  # shared with other careers:
+  es_hat_0000  [+es_knight, es_mercenary]
+  es_hat_0001  [+es_knight, es_mercenary]
+  es_hat_0002  [+es_knight, es_mercenary]
+  es_hat_0003  [+es_knight, es_mercenary]
+  es_helmet_0003  [+es_knight, es_mercenary]
+  huntsman_hat_1010  [+es_knight, es_mercenary, es_questingknight]
+
+### Huntsman (es_huntsman) — SKIN (9 exclusive, 0 shared)
+  skin_es_huntsman
+  skin_es_huntsman_1001
+  skin_es_huntsman_black_and_gold
+  skin_es_huntsman_middenland
+  skin_es_huntsman_ostermark
+  skin_es_huntsman_red_and_white
+  skin_es_huntsman_white
+  skin_es_huntsman_yellow_and_green
+  skin_es_longshark
+
+### Foot Knight (es_knight) — HAT (15 exclusive, 6 shared)
+  knight_hat_0000
+  knight_hat_0001
+  knight_hat_0002
+  knight_hat_0003
+  knight_hat_0004
+  knight_hat_0005
+  knight_hat_0006
+  knight_hat_0007
+  knight_hat_0008
+  knight_hat_0009
+  knight_hat_0010
+  knight_hat_0011
+  knight_hat_1001
+  knight_hat_1002
+  knight_hat_1003
+  # shared with other careers:
+  es_hat_0000  [+es_huntsman, es_mercenary]
+  es_hat_0001  [+es_huntsman, es_mercenary]
+  es_hat_0002  [+es_huntsman, es_mercenary]
+  es_hat_0003  [+es_huntsman, es_mercenary]
+  es_helmet_0003  [+es_huntsman, es_mercenary]
+  huntsman_hat_1010  [+es_huntsman, es_mercenary, es_questingknight]
+
+### Foot Knight (es_knight) — SKIN (9 exclusive, 0 shared)
+  skin_es_knight
+  skin_es_knight_1001
+  skin_es_knight_1002
+  skin_es_knight_black_and_gold
+  skin_es_knight_bronze
+  skin_es_knight_green
+  skin_es_knight_middenland
+  skin_es_knight_red
+  skin_es_knight_white
+
+### Mercenary (es_mercenary) — HAT (13 exclusive, 6 shared)
+  mercenary_hat_0000
+  mercenary_hat_0001
+  mercenary_hat_0002
+  mercenary_hat_0003
+  mercenary_hat_0004
+  mercenary_hat_0005
+  mercenary_hat_0006
+  mercenary_hat_0007
+  mercenary_hat_0008
+  mercenary_hat_0009
+  mercenary_hat_1001
+  mercenary_hat_1002
+  mercenary_hat_1003
+  # shared with other careers:
+  es_hat_0000  [+es_huntsman, es_knight]
+  es_hat_0001  [+es_huntsman, es_knight]
+  es_hat_0002  [+es_huntsman, es_knight]
+  es_hat_0003  [+es_huntsman, es_knight]
+  es_helmet_0003  [+es_huntsman, es_knight]
+  huntsman_hat_1010  [+es_huntsman, es_knight, es_questingknight]
+
+### Mercenary (es_mercenary) — SKIN (12 exclusive, 0 shared)
+  skin_es_default
+  skin_es_mercenary
+  skin_es_mercenary_1001
+  skin_es_mercenary_1002
+  skin_es_mercenary_1003
+  skin_es_mercenary_black_and_gold
+  skin_es_mercenary_carroburg
+  skin_es_mercenary_helmgart
+  skin_es_mercenary_middenland
+  skin_es_mercenary_ostermark
+  skin_es_mercenary_ostland
+  skin_es_mercenary_white
+
+### Grail Knight (es_questingknight) — HAT (4 exclusive,  shared)
+  questing_knight_hat_0000
+  questing_knight_hat_0001
+  questing_knight_hat_0003
+  questing_knight_hat_1001
+
+### Grail Knight (es_questingknight) — SKIN (7 exclusive, 0 shared)
+  skin_es_questingknight
+  skin_es_questingknight_1001
+  skin_es_questingknight_black_and_gold
+  skin_es_questingknight_black_and_yellow
+  skin_es_questingknight_blue_and_white
+  skin_es_questingknight_white
+  skin_es_questingknight_yellow_and_white
+
+## WITCH HUNTER (VICTOR SALTZPYRE) (93 career-specific items)
+
+### Bounty Hunter (wh_bountyhunter) — HAT (16 exclusive, 4 shared)
+  bountyhunter_hat_0000
+  bountyhunter_hat_0001
+  bountyhunter_hat_0002
+  bountyhunter_hat_0003
+  bountyhunter_hat_0004
+  bountyhunter_hat_0005
+  bountyhunter_hat_0006
+  bountyhunter_hat_0007
+  bountyhunter_hat_0008
+  bountyhunter_hat_0009
+  bountyhunter_hat_1001
+  bountyhunter_hat_1002
+  bountyhunter_hat_1004
+  bountyhunter_hat_1005
+  wh_hat_0008
+  wh_hat_0009
+  # shared with other careers:
+  bountyhunter_hat_1010  [+wh_captain, wh_priest]
+  wh_hat_0000  [+wh_zealot, wh_captain]
+  wh_hat_0001  [+wh_zealot, wh_captain]
+  wh_hat_0003  [+wh_zealot, wh_captain]
+
+### Bounty Hunter (wh_bountyhunter) — SKIN (10 exclusive, 0 shared)
+  skin_wh_bountyhunter
+  skin_wh_bountyhunter_1001
+  skin_wh_bountyhunter_1002
+  skin_wh_bountyhunter_1003
+  skin_wh_bountyhunter_black_and_gold
+  skin_wh_bountyhunter_brown_and_white
+  skin_wh_bountyhunter_green_and_yellow
+  skin_wh_bountyhunter_middenland
+  skin_wh_bountyhunter_white
+  skin_wh_bountyhunter_yellow_and_red
+
+### Witch Hunter Captain (wh_captain) — HAT (14 exclusive, 4 shared)
+  witchhunter_hat_0000
+  witchhunter_hat_0001
+  witchhunter_hat_0002
+  witchhunter_hat_0003
+  witchhunter_hat_0004
+  witchhunter_hat_0005
+  witchhunter_hat_0006
+  witchhunter_hat_0007
+  witchhunter_hat_0008
+  witchhunter_hat_0009
+  witchhunter_hat_0010
+  witchhunter_hat_1001
+  witchhunter_hat_1003
+  witchhunter_hat_1004
+  # shared with other careers:
+  bountyhunter_hat_1010  [+wh_bountyhunter, wh_priest]
+  wh_hat_0000  [+wh_zealot, wh_bountyhunter]
+  wh_hat_0001  [+wh_zealot, wh_bountyhunter]
+  wh_hat_0003  [+wh_zealot, wh_bountyhunter]
+
+### Witch Hunter Captain (wh_captain) — SKIN (11 exclusive, 0 shared)
+  skin_wh_captain
+  skin_wh_captain_1001
+  skin_wh_captain_1002
+  skin_wh_captain_black_and_gold
+  skin_wh_captain_grey_and_yellow
+  skin_wh_captain_helmgart
+  skin_wh_captain_middenland
+  skin_wh_captain_ostermark
+  skin_wh_captain_ostland
+  skin_wh_captain_white
+  skin_wh_default
+
+### Warrior Priest (wh_priest) — HAT (6 exclusive,  shared)
+  priest_hat_0000
+  priest_hat_0001
+  priest_hat_0002
+  priest_hat_0003
+  priest_hat_0004
+  priest_hat_1001
+
+### Warrior Priest (wh_priest) — SKIN (5 exclusive, 0 shared)
+  skin_wh_priest
+  skin_wh_priest_0002
+  skin_wh_priest_0002_a
+  skin_wh_priest_1001
+  skin_wh_priest_white
+
+### Zealot (wh_zealot) — HAT (18 exclusive, 3 shared)
+  wh_hat_0007
+  zealot_hat_0000
+  zealot_hat_0001
+  zealot_hat_0002
+  zealot_hat_0003
+  zealot_hat_0004
+  zealot_hat_0005
+  zealot_hat_0006
+  zealot_hat_0007
+  zealot_hat_0008
+  zealot_hat_0009
+  zealot_hat_0010
+  zealot_hat_0011
+  zealot_hat_1001
+  zealot_hat_1002
+  zealot_hat_1003
+  zealot_hat_1007
+  zealot_hat_1010
+  # shared with other careers:
+  wh_hat_0000  [+wh_bountyhunter, wh_captain]
+  wh_hat_0001  [+wh_bountyhunter, wh_captain]
+  wh_hat_0003  [+wh_bountyhunter, wh_captain]
+
+### Zealot (wh_zealot) — SKIN (9 exclusive, 0 shared)
+  skin_wh_flagellant
+  skin_wh_zealot
+  skin_wh_zealot_1001
+  skin_wh_zealot_black_and_gold
+  skin_wh_zealot_crimson
+  skin_wh_zealot_green_and_yellow
+  skin_wh_zealot_middenland
+  skin_wh_zealot_pure
+  skin_wh_zealot_white
+
+## DWARF RANGER (BARDIN GOREKSSON) (105 career-specific items)
+
+### Outcast Engineer (dr_engineer) — HAT (4 exclusive,  shared)
+  engineer_hat_0000
+  engineer_hat_0001
+  engineer_hat_1001
+  engineer_hat_1002
+
+### Outcast Engineer (dr_engineer) — SKIN (7 exclusive, 0 shared)
+  skin_dr_engineer
+  skin_dr_engineer_1001
+  skin_dr_engineer_black_and_gold
+  skin_dr_engineer_blue_and_gold
+  skin_dr_engineer_brown_and_iron
+  skin_dr_engineer_purple_and_copper
+  skin_dr_engineer_white
+
+### Ironbreaker (dr_ironbreaker) — HAT (18 exclusive, 8 shared)
+  ironbreaker_hat_0000
+  ironbreaker_hat_0001
+  ironbreaker_hat_0002
+  ironbreaker_hat_0003
+  ironbreaker_hat_0004
+  ironbreaker_hat_0005
+  ironbreaker_hat_0006
+  ironbreaker_hat_0007
+  ironbreaker_hat_0008
+  ironbreaker_hat_0009
+  ironbreaker_hat_0010
+  ironbreaker_hat_0011
+  ironbreaker_hat_0012
+  ironbreaker_hat_0013
+  ironbreaker_hat_1001
+  ironbreaker_hat_1002
+  ironbreaker_hat_1004
+  ironbreaker_hat_1005
+  # shared with other careers:
+  dr_helmet_0000  [+dr_ranger]
+  dr_helmet_0001  [+dr_ranger]
+  dr_helmet_0002  [+dr_ranger]
+  dr_helmet_0003  [+dr_ranger]
+  dr_helmet_0005  [+dr_ranger]
+  dr_helmet_0008  [+dr_ranger]
+  dr_helmet_0011  [+dr_ranger]
+  ranger_hat_1010  [+dr_ranger, dr_engineer]
+
+### Ironbreaker (dr_ironbreaker) — SKIN (9 exclusive, 0 shared)
+  skin_dr_ironbreaker
+  skin_dr_ironbreaker_1001
+  skin_dr_ironbreaker_black_and_gold
+  skin_dr_ironbreaker_blue
+  skin_dr_ironbreaker_crimson
+  skin_dr_ironbreaker_green
+  skin_dr_ironbreaker_iron
+  skin_dr_ironbreaker_white
+  skin_dr_irondrake
+
+### Ranger Veteran (dr_ranger) — HAT (19 exclusive, 8 shared)
+  ranger_hat_0000
+  ranger_hat_0001
+  ranger_hat_0002
+  ranger_hat_0003
+  ranger_hat_0004
+  ranger_hat_0005
+  ranger_hat_0006
+  ranger_hat_0007
+  ranger_hat_0008
+  ranger_hat_0009
+  ranger_hat_0010
+  ranger_hat_0011
+  ranger_hat_0012
+  ranger_hat_0013
+  ranger_hat_0014
+  ranger_hat_0015
+  ranger_hat_1001
+  ranger_hat_1005
+  ranger_hat_1006
+  # shared with other careers:
+  dr_helmet_0000  [+dr_ironbreaker]
+  dr_helmet_0001  [+dr_ironbreaker]
+  dr_helmet_0002  [+dr_ironbreaker]
+  dr_helmet_0003  [+dr_ironbreaker]
+  dr_helmet_0005  [+dr_ironbreaker]
+  dr_helmet_0008  [+dr_ironbreaker]
+  dr_helmet_0011  [+dr_ironbreaker]
+  ranger_hat_1010  [+dr_ironbreaker, dr_engineer]
+
+### Ranger Veteran (dr_ranger) — SKIN (11 exclusive, 0 shared)
+  skin_dr_default
+  skin_dr_ranger
+  skin_dr_ranger_1001
+  skin_dr_ranger_1002
+  skin_dr_ranger_barak_varr
+  skin_dr_ranger_black_and_gold
+  skin_dr_ranger_brown_and_yellow
+  skin_dr_ranger_helmgart
+  skin_dr_ranger_karak_norn
+  skin_dr_ranger_white
+  skin_dr_ranger_zhufbar
+
+### Slayer (dr_slayer) — HAT (18 exclusive, 0 shared)
+  dr_slayer_hair_0002
+  slayer_hat_0000
+  slayer_hat_0001
+  slayer_hat_0002
+  slayer_hat_0003
+  slayer_hat_0004
+  slayer_hat_0005
+  slayer_hat_0006
+  slayer_hat_0007
+  slayer_hat_0008
+  slayer_hat_0009
+  slayer_hat_0010
+  slayer_hat_0011
+  slayer_hat_0012
+  slayer_hat_1001
+  slayer_hat_1002
+  slayer_hat_1005
+  slayer_hat_1010
+
+### Slayer (dr_slayer) — SKIN (11 exclusive, 0 shared)
+  skin_dr_slayer
+  skin_dr_slayer_1001
+  skin_dr_slayer_1002
+  skin_dr_slayer_1003
+  skin_dr_slayer_axe
+  skin_dr_slayer_dragon
+  skin_dr_slayer_runes
+  skin_dr_slayer_skaven
+  skin_dr_slayer_skull
+  skin_dr_slayer_white
+  skin_dr_slayer_wing
+
+## BRIGHT WIZARD (SIENNA FUEGONASUS) (92 career-specific items)
+
+### Battle Wizard (bw_adept) — HAT (15 exclusive, 6 shared)
+  adept_hat_0000
+  adept_hat_0001
+  adept_hat_0002
+  adept_hat_0003
+  adept_hat_0004
+  adept_hat_0005
+  adept_hat_0006
+  adept_hat_0007
+  adept_hat_0008
+  adept_hat_0009
+  adept_hat_0010
+  adept_hat_1001
+  adept_hat_1002
+  adept_hat_1003
+  adept_hat_1005
+  # shared with other careers:
+  adept_hat_1010  [+bw_scholar, bw_unchained]
+  bw_gate_0000  [+bw_scholar, bw_unchained]
+  bw_gate_0001  [+bw_scholar, bw_unchained]
+  bw_gate_0006  [+bw_scholar, bw_unchained]
+  bw_gate_0007  [+bw_scholar, bw_unchained]
+  bw_gate_0008  [+bw_scholar, bw_unchained]
+
+### Battle Wizard (bw_adept) — SKIN (11 exclusive, 0 shared)
+  skin_bw_adept
+  skin_bw_adept_1001
+  skin_bw_adept_1002
+  skin_bw_adept_ash
+  skin_bw_adept_black_and_gold
+  skin_bw_adept_brown_and_yellow
+  skin_bw_adept_helmgart
+  skin_bw_adept_ostermark
+  skin_bw_adept_ostland
+  skin_bw_adept_white
+  skin_bw_default
+
+### Necromancer (bw_necromancer) — HAT (5 exclusive, 0 shared)
+  bw_necromancer_hat_0000
+  bw_necromancer_hat_0001
+  bw_necromancer_hat_0002
+  bw_necromancer_hat_0003
+  bw_necromancer_hat_1010
+
+### Necromancer (bw_necromancer) — SKIN (5 exclusive,  shared)
+  skin_bw_necromancer
+  skin_bw_necromancer_0001
+  skin_bw_necromancer_0001_a
+  skin_bw_necromancer_0002
+  skin_bw_necromancer_white
+
+### Pyromancer (bw_scholar) — HAT (17 exclusive, 6 shared)
+  scholar_hat_0000
+  scholar_hat_0001
+  scholar_hat_0002
+  scholar_hat_0003
+  scholar_hat_0004
+  scholar_hat_0005
+  scholar_hat_0006
+  scholar_hat_0007
+  scholar_hat_0008
+  scholar_hat_0009
+  scholar_hat_0010
+  scholar_hat_0011
+  scholar_hat_0012
+  scholar_hat_1001
+  scholar_hat_1002
+  scholar_hat_1003
+  scholar_hat_1004
+  # shared with other careers:
+  adept_hat_1010  [+bw_adept, bw_unchained]
+  bw_gate_0000  [+bw_adept, bw_unchained]
+  bw_gate_0001  [+bw_adept, bw_unchained]
+  bw_gate_0006  [+bw_adept, bw_unchained]
+  bw_gate_0007  [+bw_adept, bw_unchained]
+  bw_gate_0008  [+bw_adept, bw_unchained]
+
+### Pyromancer (bw_scholar) — SKIN (10 exclusive,  shared)
+  skin_bw_myrmidia
+  skin_bw_scholar
+  skin_bw_scholar_1001
+  skin_bw_scholar_1002
+  skin_bw_scholar_ash
+  skin_bw_scholar_black_and_gold
+  skin_bw_scholar_bronze
+  skin_bw_scholar_brown_and_white
+  skin_bw_scholar_ostermark
+  skin_bw_scholar_white
+
+### Unchained (bw_unchained) — HAT (13 exclusive, 6 shared)
+  unchained_hat_0000
+  unchained_hat_0001
+  unchained_hat_0002
+  unchained_hat_0003
+  unchained_hat_0004
+  unchained_hat_0005
+  unchained_hat_0006
+  unchained_hat_0007
+  unchained_hat_0008
+  unchained_hat_0009
+  unchained_hat_1001
+  unchained_hat_1003
+  unchained_hat_1004
+  # shared with other careers:
+  adept_hat_1010  [+bw_adept, bw_scholar]
+  bw_gate_0000  [+bw_scholar, bw_adept]
+  bw_gate_0001  [+bw_scholar, bw_adept]
+  bw_gate_0006  [+bw_scholar, bw_adept]
+  bw_gate_0007  [+bw_scholar, bw_adept]
+  bw_gate_0008  [+bw_scholar, bw_adept]
+
+### Unchained (bw_unchained) — SKIN (9 exclusive, 0 shared)
+  skin_bw_unchained
+  skin_bw_unchained_1001
+  skin_bw_unchained_1002
+  skin_bw_unchained_ash
+  skin_bw_unchained_black_and_gold
+  skin_bw_unchained_bronze
+  skin_bw_unchained_brown_and_white
+  skin_bw_unchained_ostermark
+  skin_bw_unchained_white
+
+## WOOD ELF (KERILLIAN) (111 career-specific items)
+
+### Handmaiden (we_maidenguard) — HAT (16 exclusive, 21 shared)
+  maidenguard_hat_0000
+  maidenguard_hat_0001
+  maidenguard_hat_0002
+  maidenguard_hat_0003
+  maidenguard_hat_0004
+  maidenguard_hat_0005
+  maidenguard_hat_0006
+  maidenguard_hat_0007
+  maidenguard_hat_0008
+  maidenguard_hat_0009
+  maidenguard_hat_0010
+  maidenguard_hat_1001
+  maidenguard_hat_1002
+  maidenguard_hat_1004
+  maidenguard_hat_1005
+  maidenguard_hat_1010
+  # shared with other careers:
+  test_item_1001  [+we_shade, we_waywatcher]
+  test_item_1002  [+we_shade, we_waywatcher]
+  test_item_1003  [+we_shade, we_waywatcher]
+  test_item_1004  [+we_shade, we_waywatcher]
+  test_item_1005  [+we_shade, we_waywatcher]
+  test_item_1006  [+we_shade, we_waywatcher]
+  test_item_1007  [+we_shade, we_waywatcher]
+  test_item_1008  [+we_shade, we_waywatcher]
+  test_item_1009  [+we_shade, we_waywatcher]
+  test_item_1010  [+we_shade, we_waywatcher]
+  test_item_1011  [+we_shade, we_waywatcher]
+  test_item_1012  [+we_shade, we_waywatcher]
+  test_item_1013  [+we_shade, we_waywatcher]
+  test_item_1014  [+we_shade, we_waywatcher]
+  test_item_1015  [+we_shade, we_waywatcher]
+  test_item_1017  [+we_shade, we_waywatcher]
+  test_item_1018  [+we_shade, we_waywatcher]
+  ww_hood_0000  [+we_waywatcher]
+  ww_hood_0001  [+we_waywatcher]
+  ww_hood_0002  [+we_waywatcher]
+  ww_hood_0004  [+we_waywatcher]
+
+### Handmaiden (we_maidenguard) — SKIN (10 exclusive,  shared)
+  skin_ww_maidenguard
+  skin_ww_maidenguard_1001
+  skin_ww_maidenguard_1002
+  skin_ww_maidenguard_black_and_gold
+  skin_ww_maidenguard_caledor
+  skin_ww_maidenguard_elyrion
+  skin_ww_maidenguard_red_and_yellow
+  skin_ww_maidenguard_white
+  skin_ww_maidenguard_white_and_gold
+  skin_ww_moonmantle
+
+### Shade (we_shade) — HAT (16 exclusive, 17 shared)
+  shade_hat_0000
+  shade_hat_0001
+  shade_hat_0002
+  shade_hat_0003
+  shade_hat_0004
+  shade_hat_0005
+  shade_hat_0006
+  shade_hat_0007
+  shade_hat_0008
+  shade_hat_0009
+  shade_hat_0010
+  shade_hat_1001
+  shade_hat_1002
+  shade_hat_1003
+  shade_hat_1004
+  shade_hat_1010
+  # shared with other careers:
+  test_item_1001  [+we_maidenguard, we_waywatcher]
+  test_item_1002  [+we_maidenguard, we_waywatcher]
+  test_item_1003  [+we_maidenguard, we_waywatcher]
+  test_item_1004  [+we_maidenguard, we_waywatcher]
+  test_item_1005  [+we_maidenguard, we_waywatcher]
+  test_item_1006  [+we_maidenguard, we_waywatcher]
+  test_item_1007  [+we_maidenguard, we_waywatcher]
+  test_item_1008  [+we_maidenguard, we_waywatcher]
+  test_item_1009  [+we_maidenguard, we_waywatcher]
+  test_item_1010  [+we_maidenguard, we_waywatcher]
+  test_item_1011  [+we_maidenguard, we_waywatcher]
+  test_item_1012  [+we_maidenguard, we_waywatcher]
+  test_item_1013  [+we_maidenguard, we_waywatcher]
+  test_item_1014  [+we_maidenguard, we_waywatcher]
+  test_item_1015  [+we_maidenguard, we_waywatcher]
+  test_item_1017  [+we_maidenguard, we_waywatcher]
+  test_item_1018  [+we_maidenguard, we_waywatcher]
+
+### Shade (we_shade) — SKIN (9 exclusive,  shared)
+  skin_ww_shade
+  skin_ww_shade_1001
+  skin_ww_shade_1002
+  skin_ww_shade_ash
+  skin_ww_shade_black_and_gold
+  skin_ww_shade_crimson
+  skin_ww_shade_emerald
+  skin_ww_shade_midnight
+  skin_ww_shade_white
+
+### Sister of the Thorn (we_thornsister) — HAT (5 exclusive, 0 shared)
+  thornsister_hat_0000
+  thornsister_hat_0001
+  thornsister_hat_0002
+  thornsister_hat_0003
+  thornsister_hat_1010
+
+### Sister of the Thorn (we_thornsister) — SKIN (6 exclusive,  shared)
+  skin_ww_thornsister
+  skin_ww_thornsister_black_and_gold
+  skin_ww_thornsister_blue
+  skin_ww_thornsister_green
+  skin_ww_thornsister_redblack
+  skin_ww_thornsister_white
+
+### Waystalker (we_waywatcher) — HAT (16 exclusive, 21 shared)
+  waywatcher_hat_0000
+  waywatcher_hat_0001
+  waywatcher_hat_0002
+  waywatcher_hat_0003
+  waywatcher_hat_0004
+  waywatcher_hat_0005
+  waywatcher_hat_0006
+  waywatcher_hat_0007
+  waywatcher_hat_0008
+  waywatcher_hat_0009
+  waywatcher_hat_0010
+  waywatcher_hat_0011
+  waywatcher_hat_1001
+  waywatcher_hat_1004
+  waywatcher_hat_1005
+  waywatcher_hat_1010
+  # shared with other careers:
+  test_item_1001  [+we_shade, we_maidenguard]
+  test_item_1002  [+we_shade, we_maidenguard]
+  test_item_1003  [+we_shade, we_maidenguard]
+  test_item_1004  [+we_shade, we_maidenguard]
+  test_item_1005  [+we_shade, we_maidenguard]
+  test_item_1006  [+we_shade, we_maidenguard]
+  test_item_1007  [+we_shade, we_maidenguard]
+  test_item_1008  [+we_shade, we_maidenguard]
+  test_item_1009  [+we_shade, we_maidenguard]
+  test_item_1010  [+we_shade, we_maidenguard]
+  test_item_1011  [+we_shade, we_maidenguard]
+  test_item_1012  [+we_shade, we_maidenguard]
+  test_item_1013  [+we_shade, we_maidenguard]
+  test_item_1014  [+we_shade, we_maidenguard]
+  test_item_1015  [+we_shade, we_maidenguard]
+  test_item_1017  [+we_shade, we_maidenguard]
+  test_item_1018  [+we_shade, we_maidenguard]
+  ww_hood_0000  [+we_maidenguard]
+  ww_hood_0001  [+we_maidenguard]
+  ww_hood_0002  [+we_maidenguard]
+  ww_hood_0004  [+we_maidenguard]
+
+### Waystalker (we_waywatcher) — SKIN (11 exclusive,  shared)
+  skin_ww_default
+  skin_ww_waywatcher
+  skin_ww_waywatcher_1001
+  skin_ww_waywatcher_1002
+  skin_ww_waywatcher_anmyr
+  skin_ww_waywatcher_atylwyth
+  skin_ww_waywatcher_black_and_gold
+  skin_ww_waywatcher_cythral
+  skin_ww_waywatcher_helmgart
+  skin_ww_waywatcher_tirsyth
+  skin_ww_waywatcher_white
+
+## SUMMARY
+Total: 756 items (307 hats, 210 skins, 239 frames)
+Universal: 239
+Career-specific: 517

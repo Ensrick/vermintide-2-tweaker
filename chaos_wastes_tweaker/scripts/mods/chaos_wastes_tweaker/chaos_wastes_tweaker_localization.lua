@@ -1,5 +1,5 @@
 return {
-    mod_name = { en = "Chaos Wastes Tweaker" },
+    mod_name = { en = "Tweaker: Chaos Wastes" },
     mod_description = { en = "Chaos Wastes run modifiers split out from the old monolithic Tweaker mod." },
     chaos_wastes_group = { en = "Chaos Wastes" },
     curses_group = { en = "Curses" },

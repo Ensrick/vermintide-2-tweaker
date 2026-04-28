@@ -1,0 +1,11 @@
+mod = [
+	"cosmetics_tweaker"
+]
+
+package = [
+	"resource_packages/cosmetics_tweaker/cosmetics_tweaker"
+]
+
+lua = [
+	"scripts/mods/cosmetics_tweaker/*"
+]

@@ -1,0 +1,272 @@
+﻿bardin_engineer_career_skill_weapon_preview | dr_steam_pistol | ranged | Beardling's Thrundtak | 
+bw_1h_crowbill | bw_1h_crowbill | melee | Master's Crowbill | bw_scholar,bw_adept,bw_unchained,bw_necromancer,wh_captain,we_waywatcher,wh_priest,dr_ranger,dr_slayer
+bw_1h_crowbill_magic_01 | bw_1h_crowbill | melee | Weave-Forged Crowbill | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_1h_flail_flaming | bw_1h_flail_flaming | melee | Dressad's Roaster | bw_scholar,bw_adept,bw_unchained,bw_necromancer,wh_captain,wh_priest
+bw_1h_flail_flaming_magic_01 | bw_1h_flail_flaming | melee | Weave-Forged Incinerator | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_1h_mace | bw_morningstar | melee | Feeble Mace | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_1h_mace_magic_01 | bw_morningstar | melee | Weave-Forged Mace | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_dagger | bw_1h_dagger | melee | Tilean Paperweight | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_dagger_magic_01 | bw_1h_dagger | melee | Weave-Forged Dagger | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_deus_01 | bw_deus_01 | ranged | Enchanter's Coruscation Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_deus_01_magic | bw_deus_01 | ranged | Weave-Forged Coruscation Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_flame_sword | bw_flame_sword | melee | Apprentice's Flame-Sword | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_flame_sword_magic_01 | bw_flame_sword | melee | Weave-Forged Flame-Sword | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_ghost_scythe | bw_ghost_scythe | melee | Vysserik's Verdigrised Vanquisher | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_ghost_scythe_magic_01 | bw_ghost_scythe | melee | Weavebound Ensorcelled Reaper | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_ghost_scythe_skin_magic_01 | bw_ghost_scythe | weapon_skin | Weavebound Ensorcelled Reaper | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_necromancy_staff | bw_necromancy_staff | ranged | Clatterstaff | bw_necromancer
+bw_necromancy_staff_magic_01 | bw_necromancy_staff | ranged | Weavebound Soulstealer Staff | bw_necromancer
+bw_skullstaff_beam | bw_staff_beam | ranged | Sputtering Beam Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_skullstaff_beam_magic_01 | bw_staff_beam | ranged | Weave-Forged Beam Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_skullstaff_fireball | bw_staff_firball | ranged | Sputtering Fireball Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_skullstaff_fireball_magic_01 | bw_staff_firball | ranged | Weave-Forged Fireball Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_skullstaff_flamethrower | bw_staff_flamethrower | ranged | Sputtering Flamewave Staff | bw_scholar,bw_adept,bw_unchained
+bw_skullstaff_flamethrower_magic_01 | bw_staff_flamethrower | ranged | Weave-Forged Flamethrower Staff | bw_scholar,bw_adept,bw_unchained
+bw_skullstaff_geiser | bw_staff_geiser | ranged | Sputtering Conflagration Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_skullstaff_geiser_magic_01 | bw_staff_geiser | ranged | Weave-Forged Conflagration Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_skullstaff_spear | bw_staff_spear | ranged | Sputtering Bolt Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_skullstaff_spear_magic_01 | bw_staff_spear | ranged | Weave-Forged Bolt Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+bw_sword | bw_1h_sword | melee | Apprentice's Sword | bw_scholar,bw_adept,bw_unchained,bw_necromancer,we_shade,wh_captain,we_waywatcher,wh_priest,dr_ranger,wh_bountyhunter,es_questingknight,dr_slayer
+bw_sword_magic_01 | bw_1h_sword | melee | Weave-Forged Sword | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+dr_1h_axe | dr_1h_axes | melee | Beardling's Az | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer,we_shade,bw_adept,we_waywatcher,wh_priest,wh_bountyhunter,bw_scholar
+dr_1h_axe_magic_01 | dr_1h_axes | melee | Weave-Forged Az | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_1h_hammer | dr_1h_hammer | melee | Beardling's Grund | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer,we_shade,bw_adept,wh_captain,we_waywatcher,wh_priest,wh_bountyhunter,es_questingknight,bw_scholar
+dr_1h_hammer_magic_01 | dr_1h_hammer | melee | Weave-Forged Grund | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_1h_throwing_axes | dr_1h_throwing_axes | ranged | Beardling's Azdrek | dr_ranger,dr_engineer,dr_slayer
+dr_1h_throwing_axes_magic_01 | dr_1h_throwing_axes | ranged | Weave-Forged Azdrek | dr_slayer,dr_ranger
+dr_2h_axe | dr_2h_axes | melee | Beardling's Az-Dreugi | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_2h_axe_magic_01 | dr_2h_axes | melee | Weave-Forged Az-Dreugi | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_2h_cog_hammer | dr_cog_hammer | melee | Beardling's Coggrund | dr_engineer,dr_ranger,dr_ironbreaker,dr_slayer
+dr_2h_cog_hammer_magic_01 | dr_cog_hammer | melee | Dromthicoggrund | dr_engineer,dr_ranger,dr_ironbreaker,dr_slayer
+dr_2h_hammer | dr_2h_hammer | melee | Beardling's Grundreugi | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_2h_hammer_magic_01 | dr_2h_hammer | melee | Weave-Forged Grundreugi | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_2h_pick | dr_2h_picks | melee | Beardling's Skrundaz | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_2h_pick_magic_01 | dr_2h_picks | melee | Weave-Forged Skrundaz | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_crossbow | dr_crossbow | ranged | Beardling's Drekmakaz | dr_ironbreaker,dr_ranger,wh_captain,wh_bountyhunter,dr_engineer,dr_slayer
+dr_crossbow_magic_01 | dr_crossbow | ranged | Weave-Forged Drekmakaz | dr_ironbreaker,dr_ranger
+dr_deus_01 | dr_deus_01 | ranged | Debgrozthrund Trolldrengi | dr_ironbreaker,dr_engineer,dr_slayer
+dr_deus_01_magic | dr_deus_01 | ranged | Weave-Forged Trollhammer Torpedo | dr_ironbreaker,dr_engineer
+dr_drake_pistol | dr_drakefire_pistols | ranged | Beardling's Drakktuk | dr_ironbreaker,dr_engineer
+dr_drake_pistol_magic_01 | dr_drakefire_pistols | ranged | Weave-Forged Drakktuk | dr_ironbreaker,dr_engineer
+dr_drakegun | dr_drakegun | ranged | Beardling's Drakkthrund | dr_ironbreaker,dr_engineer
+dr_drakegun_magic_01 | dr_drakegun | ranged | Weave-Forged Drakkthrund | dr_ironbreaker,dr_engineer
+dr_dual_wield_axes | dr_dual_axes | melee | Beardling's Tukaz | dr_slayer,dr_ranger
+dr_dual_wield_axes_magic_01 | dr_dual_axes | melee | Weave-Forged Tukaz | dr_slayer
+dr_dual_wield_hammers | dr_dual_wield_hammers | melee | Warrior's Tukgrund | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer,wh_captain
+dr_dual_wield_hammers_magic_01 | dr_dual_wield_hammers | melee | Weave-Forged Tukgrund | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+dr_hammer_pistol_preview | dr_steam_pistol | ranged | Beardling's Thrundtak | 
+dr_handgun | dr_handgun | ranged | Umgak Thrund | dr_ironbreaker,dr_ranger,dr_engineer,dr_slayer,es_mercenary
+dr_handgun_magic_01 | dr_handgun | ranged | Weave-Forged Thrund | dr_ironbreaker,dr_ranger,dr_engineer
+dr_rakegun | dr_grudgeraker | ranged | Beardling's Dammaz-Thrund | dr_ironbreaker,dr_ranger,dr_engineer,dr_slayer
+dr_rakegun_magic_01 | dr_grudgeraker | ranged | Weave-Forged Dammaz-Thrund | dr_ironbreaker,dr_ranger,dr_engineer
+dr_shield_axe | dr_1h_axe_shield | melee | Umgak Karinaz | dr_ironbreaker,dr_ranger,dr_engineer,dr_slayer
+dr_shield_axe_magic_01 | dr_1h_axe_shield | melee | Weave-Forged Karinaz | dr_ironbreaker,dr_ranger,dr_engineer
+dr_shield_hammer | dr_1h_hammer_shield | melee | Umgak Karingrund | dr_ironbreaker,dr_ranger,dr_engineer,wh_priest,es_questingknight,dr_slayer
+dr_shield_hammer_magic_01 | dr_1h_hammer_shield | melee | Weave-Forged Karingrund | dr_ironbreaker,dr_ranger,dr_engineer
+dr_steam_pistol | dr_steam_pistol | ranged | Beardling's Thrundtak | dr_engineer,dr_ranger,dr_ironbreaker,dr_slayer
+dr_steam_pistol_magic_01 | dr_steam_pistol | ranged | Smakthrundtak | dr_engineer,dr_ranger,dr_ironbreaker
+es_1h_flail | es_flail | melee | Adjudicator's Flail | wh_zealot,wh_captain,wh_bountyhunter,bw_adept,wh_priest
+es_1h_flail_magic_01 | es_flail | melee | Weave-Forged Flail | wh_zealot,wh_captain,wh_bountyhunter
+es_1h_mace | es_1h_mace | melee | Recruit's Mace | es_huntsman,es_knight,es_mercenary,es_questingknight,we_shade,bw_adept,wh_captain,we_waywatcher,wh_priest,dr_ranger,wh_bountyhunter,dr_slayer,bw_scholar
+es_1h_mace_magic_01 | es_1h_mace | melee | Weave-Forged Mace | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_1h_sword | es_1h_sword | melee | Recruit's Longsword | es_huntsman,es_knight,es_mercenary,es_questingknight,we_shade,bw_adept,wh_captain,we_waywatcher,wh_priest,dr_ranger,wh_bountyhunter,dr_slayer,bw_scholar
+es_1h_sword_magic_01 | es_1h_sword | melee | Weave-Forged Longsword | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_2h_hammer | es_2h_war_hammer | melee | Recruit's Warhammer | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_2h_hammer_magic_01 | es_2h_war_hammer | melee | Weave-Forged Warhammer | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_2h_hammer_tutorial | es_2h_war_hammer | melee | White Wolf Hammer | empire_soldier_tutorial
+es_2h_hammer_tutorial_magic_01 | es_2h_war_hammer | melee | White Wolf Hammer | empire_soldier_tutorial
+es_2h_heavy_spear | es_2h_heavy_spear | melee | Huntsman's Spear | es_huntsman,es_mercenary,wh_captain,we_waywatcher,wh_priest,es_questingknight
+es_2h_heavy_spear_magic_01 | es_2h_heavy_spear | melee | Weave-Forged Tuskgor Spear | es_huntsman,es_mercenary
+es_2h_sword | es_2h_sword | melee | Recruit's Greatsword | es_huntsman,es_knight,es_mercenary,es_questingknight,wh_captain,we_waywatcher
+es_2h_sword_executioner | es_2h_sword_executioner | melee | Recruit's Executioner | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_2h_sword_executioner_magic_01 | es_2h_sword_executioner | melee | Weave-Forged Executioner's Sword | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_2h_sword_magic_01 | es_2h_sword | melee | Weave-Forged Greatsword | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_bastard_sword | es_bastard_sword | melee | Gallant's Blade | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_bastard_sword_magic_01 | es_bastard_sword | melee | Orc Cleaver | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_bastard_sword_preview | es_bastard_sword | melee | Gallant's Blade | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_blunderbuss | es_blunderbuss | ranged | Soldier's Coach Gun | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_blunderbuss_magic_01 | es_blunderbuss | ranged | Weave-Forged Coach Gun | es_huntsman,es_knight,es_mercenary
+es_deus_01 | es_deus_01 | melee | Blacksmith's Spear & Shield | es_huntsman,es_knight,es_mercenary,we_waywatcher,es_questingknight
+es_deus_01_magic | es_deus_01 | melee | Weave-Forged Spear and Shield | es_huntsman,es_knight,es_mercenary
+es_dual_wield_hammer_sword | es_dual_wield_hammer_sword | melee | Sergeant's Trusty Companions | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_dual_wield_hammer_sword_magic_01 | es_dual_wield_hammer_sword | melee | Weave-Forged Trusty Companions | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_halberd | es_2h_halberd | melee | Recruit's Chopping Stick | es_huntsman,es_knight,es_mercenary,wh_captain,we_waywatcher,wh_priest,es_questingknight
+es_halberd_magic_01 | es_2h_halberd | melee | Weave-Forged Halberd | es_huntsman,es_knight,es_mercenary
+es_handgun | es_handgun | ranged | Recruit's Handgun | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_handgun_magic_01 | es_handgun | ranged | Weave-Forged Handgun | es_huntsman,es_knight,es_mercenary
+es_longbow | ww_longbow | ranged | Soldier's Longbow | es_huntsman,we_shade,we_waywatcher,es_questingknight
+es_longbow_magic_01 | ww_longbow | ranged | Weave-Forged Longbow | es_huntsman
+es_longbow_tutorial | ww_longbow | ranged | Plentiful Imperial Longbow | empire_soldier_tutorial
+es_longbow_tutorial_magic_01 | ww_longbow | ranged | Plentiful Imperial Longbow | empire_soldier_tutorial
+es_mace_shield | es_1h_mace_shield | melee | Recruit's Mace and Shield | es_huntsman,es_knight,es_mercenary,es_questingknight,wh_priest,dr_ranger,dr_slayer
+es_mace_shield_magic_01 | es_1h_mace_shield | melee | Weave-Forged Mace and Shield | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_repeating_handgun | es_repeating_handgun | ranged | Soldier's Repeating Handgun | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_repeating_handgun_magic_01 | es_repeating_handgun | ranged | Weave-Forged Repeating Handgun | es_huntsman,es_knight,es_mercenary
+es_sword_shield | es_1h_sword_shield | melee | Recruit's Longsword and Shield | es_huntsman,es_knight,es_mercenary,es_questingknight
+es_sword_shield_breton | es_1h_sword_shield_breton | melee | Gallant's Sword and Shield | es_questingknight
+es_sword_shield_breton_magic_01 | es_1h_sword_shield_breton | melee | Righteous Arms | es_questingknight
+es_sword_shield_magic_01 | es_1h_sword_shield | melee | Weave-Forged Longsword and Shield | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_bw_1h_crowbill | bw_1h_crowbill | melee | Master's Crowbill | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_1h_flail_flaming | bw_1h_flail_flaming | melee | Dressad's Roaster | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_1h_mace | bw_morningstar | melee | Feeble Mace | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_dagger | bw_1h_dagger | melee | Tilean Paperweight | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_deus_01 | bw_deus_01 | ranged | Enchanter's Coruscation Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_flame_sword | bw_flame_sword | melee | Apprentice's Flame-Sword | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_ghost_scythe | bw_ghost_scythe | melee | Vysserik's Verdigrised Vanquisher | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_necromancy_staff | bw_necromancy_staff | ranged | Clatterstaff | bw_necromancer
+vs_bw_skullstaff_beam | bw_staff_beam | ranged | Sputtering Beam Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_skullstaff_fireball | bw_staff_firball | ranged | Sputtering Fireball Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_skullstaff_flamethrower | bw_staff_flamethrower | ranged | Sputtering Flamewave Staff | bw_scholar,bw_adept,bw_unchained
+vs_bw_skullstaff_geiser | bw_staff_geiser | ranged | Sputtering Conflagration Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_skullstaff_spear | bw_staff_spear | ranged | Sputtering Bolt Staff | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_bw_sword | bw_1h_sword | melee | Apprentice's Sword | bw_scholar,bw_adept,bw_unchained,bw_necromancer
+vs_chaos_troll_axe | dr_1h_axes | melee | Beardling's Az | vs_chaos_troll
+vs_dr_1h_axe | dr_1h_axes | melee | Beardling's Az | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+vs_dr_1h_hammer | dr_1h_hammer | melee | Beardling's Grund | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+vs_dr_1h_throwing_axes | dr_1h_throwing_axes | ranged | Beardling's Azdrek | dr_slayer,dr_ranger
+vs_dr_2h_axe | dr_2h_axes | melee | Beardling's Az-Dreugi | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+vs_dr_2h_cog_hammer | dr_cog_hammer | melee | Beardling's Coggrund | dr_engineer,dr_ranger,dr_ironbreaker,dr_slayer
+vs_dr_2h_hammer | dr_2h_hammer | melee | Beardling's Grundreugi | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+vs_dr_2h_pick | dr_2h_picks | melee | Beardling's Skrundaz | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+vs_dr_crossbow | dr_crossbow | ranged | Beardling's Drekmakaz | dr_ironbreaker,dr_ranger
+vs_dr_deus_01 | dr_deus_01 | ranged | Debgrozthrund Trolldrengi | dr_ironbreaker,dr_engineer
+vs_dr_drake_pistol | dr_drakefire_pistols | ranged | Beardling's Drakktuk | dr_ironbreaker,dr_engineer
+vs_dr_drakegun | dr_drakegun | ranged | Beardling's Drakkthrund | dr_ironbreaker,dr_engineer
+vs_dr_dual_wield_axes | dr_dual_axes | melee | Beardling's Tukaz | dr_slayer
+vs_dr_dual_wield_hammers | dr_dual_wield_hammers | melee | Warrior's Tukgrund | dr_ironbreaker,dr_slayer,dr_ranger,dr_engineer
+vs_dr_handgun | dr_handgun | ranged | Umgak Thrund | dr_ironbreaker,dr_ranger,dr_engineer
+vs_dr_rakegun | dr_grudgeraker | ranged | Beardling's Dammaz-Thrund | dr_ironbreaker,dr_ranger,dr_engineer
+vs_dr_shield_axe | dr_1h_axe_shield | melee | Umgak Karinaz | dr_ironbreaker,dr_ranger,dr_engineer
+vs_dr_shield_hammer | dr_1h_hammer_shield | melee | Umgak Karingrund | dr_ironbreaker,dr_ranger,dr_engineer
+vs_dr_steam_pistol | dr_steam_pistol | ranged | Beardling's Thrundtak | dr_engineer,dr_ranger,dr_ironbreaker
+vs_es_1h_flail | es_flail | melee | Adjudicator's Flail | wh_zealot,wh_captain,wh_bountyhunter
+vs_es_1h_mace | es_1h_mace | melee | Recruit's Mace | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_1h_sword | es_1h_sword | melee | Recruit's Longsword | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_2h_hammer | es_2h_war_hammer | melee | Recruit's Warhammer | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_2h_hammer_tutorial | es_2h_war_hammer | melee | White Wolf Hammer | empire_soldier_tutorial
+vs_es_2h_heavy_spear | es_2h_heavy_spear | melee | Huntsman's Spear | es_huntsman,es_mercenary
+vs_es_2h_sword | es_2h_sword | melee | Recruit's Greatsword | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_2h_sword_executioner | es_2h_sword_executioner | melee | Recruit's Executioner | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_bastard_sword | es_bastard_sword | melee | Gallant's Blade | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_blunderbuss | es_blunderbuss | ranged | Soldier's Coach Gun | es_huntsman,es_knight,es_mercenary
+vs_es_deus_01 | es_deus_01 | melee | Blacksmith's Spear & Shield | es_huntsman,es_knight,es_mercenary
+vs_es_dual_wield_hammer_sword | es_dual_wield_hammer_sword | melee | Sergeant's Trusty Companions | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_halberd | es_2h_halberd | melee | Recruit's Chopping Stick | es_huntsman,es_knight,es_mercenary
+vs_es_handgun | es_handgun | ranged | Recruit's Handgun | es_huntsman,es_knight,es_mercenary
+vs_es_longbow | ww_longbow | ranged | Soldier's Longbow | es_huntsman
+vs_es_longbow_tutorial | ww_longbow | ranged | Plentiful Imperial Longbow | empire_soldier_tutorial
+vs_es_mace_shield | es_1h_mace_shield | melee | Recruit's Mace and Shield | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_repeating_handgun | es_repeating_handgun | ranged | Soldier's Repeating Handgun | es_huntsman,es_knight,es_mercenary
+vs_es_sword_shield | es_1h_sword_shield | melee | Recruit's Longsword and Shield | es_huntsman,es_knight,es_mercenary,es_questingknight
+vs_es_sword_shield_breton | es_1h_sword_shield_breton | melee | Gallant's Sword and Shield | es_questingknight
+vs_gutter_runner_claws | we_dual_wield_daggers | melee | Beardling's Az | vs_gutter_runner
+vs_gutter_runner_claws_1001 | we_dual_wield_daggers | melee | <display_name_vs_gutter_runner_claws_1001> | vs_gutter_runner
+vs_packmaster_claw | we_spear | melee | Beardling's Az | vs_packmaster
+vs_packmaster_claw_skin_1001 | we_spear | melee | <display_name_vs_packmaster_claw_1001> | vs_packmaster
+vs_poison_wind_globadier_orb | dr_1h_axes | melee | Beardling's Az | vs_poison_wind_globadier
+vs_poison_wind_globadier_orb_1001 | dr_1h_axes | melee | <display_name_vs_poison_wind_globadier_orb_1001> | vs_poison_wind_globadier
+vs_rat_ogre_hands | dr_1h_axes | melee | Beardling's Az | vs_rat_ogre
+vs_ratling_gunner_gun | dr_drakegun | melee | Beardling's Az | vs_ratling_gunner
+vs_ratling_gunner_gun_1001 | dr_drakegun | melee | <display_name_vs_ratling_gunner_gun_1001> | vs_ratling_gunner
+vs_warpfire_thrower_gun | dr_drakegun | melee | Beardling's Az | vs_warpfire_thrower
+vs_warpfire_thrower_gun_skin_1001 | dr_drakegun | melee | <display_name_vs_warpfire_thrower_gun_1001> | vs_warpfire_thrower
+vs_we_1h_axe | we_1h_axe | melee | Glade Guardian's Hadraich | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_1h_spears_shield | we_1h_spears_shield | melee | Tiranoc Watch-Shield | we_maidenguard
+vs_we_1h_sword | ww_1h_sword | melee | Glade Guardian's Ceyl | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_2h_axe | ww_2h_axe | melee | Greenleaf's Khelthrax | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_2h_sword | ww_2h_sword | melee | Greenleaf's Draich | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_crossbow_repeater | wh_repeating_crossbow | ranged | Stalker's Crossbow | we_shade
+vs_we_deus_01 | we_deus_01 | ranged | Woodweaver's Moonfire Bow | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_dual_wield_daggers | ww_dual_daggers | melee | Glade Guardian's Glaia | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_dual_wield_sword_dagger | ww_sword_and_dagger | melee | Greenleaf's Galria | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_dual_wield_swords | ww_dual_swords | melee | Greenleaf's Celya | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_javelin | we_javelin | ranged | Mournglade Kindrathi | we_thornsister,we_shade,we_maidenguard,we_waywatcher
+vs_we_life_staff | we_life_staff | ranged | Mournglade Sariothi | we_thornsister
+vs_we_longbow | ww_longbow | ranged | Glade Guardian's Nastirrath | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_shortbow | ww_shortbow | ranged | Greenleaf's Edduath | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_shortbow_hagbane | ww_hagbane | ranged | Greenleaf's Kenuiath | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_we_spear | we_2h_spear | melee | Greenleaf's Drannach | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+vs_wh_1h_axe | wh_1h_axes | melee | Patchwork Axe | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_1h_falchion | wh_1h_falchions | melee | Templar's Excoriator | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_1h_hammer | wh_1h_hammer | melee | Noviciateâ€™s Skull-Splitter | wh_priest,wh_zealot
+vs_wh_2h_billhook | wh_2h_billhook | melee | The Spear of Stirland | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_2h_hammer | wh_2h_hammer | melee | Noviciateâ€™s Reckoner | wh_priest,wh_zealot
+vs_wh_2h_sword | wh_2h_sword | melee | Unbalanced Greatsword | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_brace_of_pistols | wh_brace_of_pisols | ranged | Patchwork Pistols | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_crossbow | wh_crossbow | ranged | Patchwork Crossbow | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_crossbow_repeater | wh_repeating_crossbow | ranged | Templar's Repeater Crossbow | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_deus_01 | wh_deus_01 | ranged | Blacksmith's Griffon-foot | wh_bountyhunter,wh_captain,wh_zealot
+vs_wh_dual_hammer | wh_dual_hammer | melee | Noviciateâ€™s Paired Skull-splitters | wh_priest,wh_zealot
+vs_wh_dual_wield_axe_falchion | wh_dual_wield_axe_falchion | melee | Templar's Twin Excoriators | wh_zealot,wh_bountyhunter,wh_captain
+vs_wh_fencing_sword | wh_fencing_sword | melee | Unbalanced Rapier | wh_bountyhunter,wh_captain,wh_zealot
+vs_wh_flail_shield | wh_flail_shield | melee | Noviciateâ€™s Flail & Shield | wh_priest
+vs_wh_hammer_book | wh_hammer_book | melee | Noviciateâ€™s Skull-Splitter & Blessed Tome | wh_priest
+vs_wh_hammer_shield | wh_hammer_shield | melee | Noviciateâ€™s Skull-Splitter & Shield | wh_priest
+vs_wh_repeating_pistols | wh_repeating_pistol | ranged | Patchwork Pistol | wh_zealot,wh_bountyhunter,wh_captain
+we_1h_axe | we_1h_axe | melee | Glade Guardian's Hadraich | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_1h_axe_magic_01 | we_1h_axe | melee | Weave-Forged Hadraich | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_1h_spears_shield | we_1h_spears_shield | melee | Tiranoc Watch-Shield | we_maidenguard,we_shade,we_waywatcher,es_questingknight
+we_1h_spears_shield_magic_01 | we_1h_spears_shield | melee | Weave-Forged Drannach-Isalt | we_maidenguard
+we_1h_sword | ww_1h_sword | melee | Glade Guardian's Ceyl | we_shade,we_maidenguard,we_waywatcher,we_thornsister,bw_adept,wh_captain,wh_priest,dr_ranger,wh_bountyhunter,es_questingknight,dr_slayer,bw_scholar
+we_1h_sword_magic_01 | ww_1h_sword | melee | Weave-Forged Ceyl | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_2h_axe | ww_2h_axe | melee | Greenleaf's Khelthrax | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_2h_axe_magic_01 | ww_2h_axe | melee | Weave-Forged Khelthrax | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_2h_sword | ww_2h_sword | melee | Greenleaf's Draich | we_shade,we_maidenguard,we_waywatcher,we_thornsister,wh_captain
+we_2h_sword_magic_01 | ww_2h_sword | melee | Weave-Forged Draich | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_crossbow_repeater | wh_repeating_crossbow | ranged | Stalker's Crossbow | we_shade,wh_captain,we_waywatcher,wh_bountyhunter
+we_crossbow_repeater_magic_01 | wh_repeating_crossbow | ranged | Weave-Forged Crossbow | we_shade
+we_deus_01 | we_deus_01 | ranged | Woodweaver's Moonfire Bow | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_deus_01_magic | we_deus_01 | ranged | Weave-Forged Moonfire Bow | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_dual_wield_daggers | ww_dual_daggers | melee | Glade Guardian's Glaia | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_dual_wield_daggers_magic_01 | ww_dual_daggers | melee | Weave-Forged Glaia | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_dual_wield_sword_dagger | ww_sword_and_dagger | melee | Greenleaf's Galria | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_dual_wield_sword_dagger_magic_01 | ww_sword_and_dagger | melee | Weave-Forged Galria | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_dual_wield_swords | ww_dual_swords | melee | Greenleaf's Celya | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_dual_wield_swords_magic_01 | ww_dual_swords | melee | Weave-Forged Ceyla | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_javelin | we_javelin | ranged | Mournglade Kindrathi | we_thornsister,we_shade,we_maidenguard,we_waywatcher
+we_javelin_magic | we_javelin | ranged | Weave-bound Kindrathi | we_thornsister,we_shade,we_maidenguard,we_waywatcher
+we_life_staff | we_life_staff | ranged | Mournglade Sariothi | we_thornsister
+we_life_staff_magic | we_life_staff | ranged | Weave-bound Sariothi | we_thornsister
+we_longbow | ww_longbow | ranged | Glade Guardian's Nastirrath | we_shade,we_maidenguard,we_waywatcher,we_thornsister,es_questingknight,es_knight,es_mercenary,es_huntsman
+we_longbow_magic_01 | ww_longbow | ranged | Weave-Forged Nastirrah | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_shortbow | ww_shortbow | ranged | Greenleaf's Edduath | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_shortbow_hagbane | ww_hagbane | ranged | Greenleaf's Kenuiath | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_shortbow_hagbane_magic_01 | ww_hagbane | ranged | Weave-Forged Kenuiath | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_shortbow_magic_01 | ww_shortbow | ranged | Weave-Forged Edduath | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+we_spear | we_2h_spear | melee | Greenleaf's Drannach | we_shade,we_maidenguard,we_waywatcher,we_thornsister,wh_captain,wh_priest
+we_spear_magic_01 | we_2h_spear | melee | Weave-Forged Drannach | we_shade,we_maidenguard,we_waywatcher,we_thornsister
+wh_1h_axe | wh_1h_axes | melee | Patchwork Axe | wh_zealot,wh_bountyhunter,wh_captain,we_shade,bw_adept,we_waywatcher,wh_priest,dr_ranger,es_questingknight,dr_slayer,bw_scholar
+wh_1h_axe_magic_01 | wh_1h_axes | melee | Weave-Forged Axe | wh_zealot,wh_bountyhunter,wh_captain
+wh_1h_falchion | wh_1h_falchions | melee | Templar's Excoriator | wh_zealot,wh_bountyhunter,wh_captain,we_shade,bw_adept,we_waywatcher,wh_priest,dr_ranger,es_questingknight,dr_slayer,bw_scholar
+wh_1h_falchion_magic_01 | wh_1h_falchions | melee | Weave-Forged Falchion | wh_zealot,wh_bountyhunter,wh_captain
+wh_1h_hammer | wh_1h_hammer | melee | Noviciateâ€™s Skull-Splitter | bw_adept,wh_captain,we_waywatcher,wh_priest,dr_ranger,dr_slayer,bw_scholar
+wh_1h_hammer_magic_01 | wh_1h_hammer | melee | Weavebound Skull-Splitter | wh_priest,wh_zealot
+wh_2h_billhook | wh_2h_billhook | melee | The Spear of Stirland | wh_zealot,wh_bountyhunter,wh_captain,wh_priest
+wh_2h_billhook_magic_01 | wh_2h_billhook | melee | Weave-Forged Bill Hook | wh_zealot,wh_bountyhunter,wh_captain
+wh_2h_hammer | wh_2h_hammer | melee | Noviciateâ€™s Reckoner | wh_priest,wh_captain
+wh_2h_hammer_magic_01 | wh_2h_hammer | melee | Weavebound Reckoner | wh_priest,wh_zealot
+wh_2h_sword | wh_2h_sword | melee | Unbalanced Greatsword | wh_zealot,wh_bountyhunter,wh_captain,we_waywatcher
+wh_2h_sword_magic_01 | wh_2h_sword | melee | Weave-Forged Greatsword | wh_zealot,wh_bountyhunter,wh_captain
+wh_brace_of_pistols | wh_brace_of_pisols | ranged | Patchwork Pistols | wh_zealot,wh_bountyhunter,wh_captain
+wh_brace_of_pistols_magic_01 | wh_brace_of_pisols | ranged | Weave-Forged Matched Pistols | wh_zealot,wh_bountyhunter,wh_captain
+wh_crossbow | wh_crossbow | ranged | Patchwork Crossbow | wh_zealot,wh_bountyhunter,wh_captain,dr_ranger,dr_engineer,dr_ironbreaker,dr_slayer
+wh_crossbow_magic_01 | wh_crossbow | ranged | Weave-Forged Crossbow | wh_zealot,wh_bountyhunter,wh_captain
+wh_crossbow_repeater | wh_repeating_crossbow | ranged | Templar's Repeater Crossbow | wh_zealot,wh_bountyhunter,wh_captain,we_waywatcher
+wh_crossbow_repeater_magic_01 | wh_repeating_crossbow | ranged | Weave-Forged Repeater Crossbow | wh_zealot,wh_bountyhunter,wh_captain
+wh_deus_01 | wh_deus_01 | ranged | Blacksmith's Griffon-foot | wh_bountyhunter,wh_captain,wh_zealot
+wh_deus_01_magic | wh_deus_01 | ranged | Weave-Forged Griffon-Foot | wh_bountyhunter,wh_captain,wh_zealot
+wh_dual_hammer | wh_dual_hammer | melee | Noviciateâ€™s Paired Skull-splitters | wh_priest,wh_captain
+wh_dual_hammer_magic_01 | wh_dual_hammer | melee | Weavebound Paired Skull-splitters | wh_priest,wh_zealot
+wh_dual_wield_axe_falchion | wh_dual_wield_axe_falchion | melee | Templar's Twin Excoriators | wh_zealot,wh_bountyhunter,wh_captain
+wh_dual_wield_axe_falchion_magic_01 | wh_dual_wield_axe_falchion | melee | Weave-Forged Excoriators | wh_zealot,wh_bountyhunter,wh_captain
+wh_fencing_sword | wh_fencing_sword | melee | Unbalanced Rapier | wh_bountyhunter,wh_captain,wh_zealot
+wh_fencing_sword_magic_01 | wh_fencing_sword | melee | Weave-Forged Rapier | wh_bountyhunter,wh_captain,wh_zealot
+wh_flail_shield | wh_flail_shield | melee | Noviciateâ€™s Flail & Shield | wh_priest
+wh_flail_shield_magic_01 | wh_flail_shield | melee | Weavebound Flail & Shield | wh_priest
+wh_hammer_book | wh_hammer_book | melee | Noviciateâ€™s Skull-Splitter & Blessed Tome | wh_priest
+wh_hammer_book_magic_01 | wh_hammer_book | melee | Weavebound Skull-Splitter & Blessed Tome | wh_priest
+wh_hammer_shield | wh_hammer_shield | melee | Noviciateâ€™s Skull-Splitter & Shield | wh_priest,dr_ranger,dr_slayer
+wh_hammer_shield_magic_01 | wh_hammer_shield | melee | Weavebound Skull-Splitter & Shield | wh_priest
+wh_priest_career_weapon_preview | wh_hammer_book | melee | <wh_hammer_book_name> | wh_priest
+wh_repeating_pistols | wh_repeating_pistol | ranged | Patchwork Pistol | wh_zealot,wh_bountyhunter,wh_captain
+wh_repeating_pistols_magic_01 | wh_repeating_pistol | ranged | Weave-Forged Outrider's Pistol | wh_zealot,wh_bountyhunter,wh_captain

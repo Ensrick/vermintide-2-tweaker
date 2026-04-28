@@ -1,140 +1,176 @@
-local mod = get_mod("career_tweaker")
+local mod = get_mod("crt")
 
 local MOD_VERSION = "0.1.0-dev"
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Career Tweaker v" .. MOD_VERSION)
 
-local ALL_CAREERS = {
-    "dr_ironbreaker", "dr_slayer", "dr_ranger", "dr_engineer",
-    "es_huntsman", "es_knight", "es_mercenary", "es_questingknight",
-    "we_shade", "we_maidenguard", "we_waywatcher", "we_thornsister",
-    "wh_zealot", "wh_bountyhunter", "wh_captain", "wh_priest",
-    "bw_scholar", "bw_adept", "bw_unchained", "bw_necromancer",
+-- All 20 careers in the game.
+local _ALL_CAREERS = {
+    "dr_ironbreaker", "dr_slayer",  "dr_ranger",  "dr_engineer",
+    "es_huntsman",    "es_knight",  "es_mercenary", "es_questingknight",
+    "we_shade",       "we_maidenguard", "we_waywatcher", "we_thornsister",
+    "wh_zealot",      "wh_bountyhunter", "wh_captain", "wh_priest",
+    "bw_scholar",     "bw_adept",   "bw_unchained", "bw_necromancer",
 }
 
-local talent_swap_originals = {}
-local original_slot_2_allowed = {}
+-- ============================================================
+-- Talent & Ability Swapping
+-- ============================================================
+-- Directly mutates the live TalentTrees global (which is read every time the
+-- game looks up a talent by tier/index) and the CareerSettings activated_ability
+-- / passive_ability fields (read by career_extension:init at level load).
+-- All originals are saved before mutation so the function is safe to call
+-- repeatedly -- it restores first, then re-applies the current settings.
+--
+-- KNOWN ISSUE: The talent picker UI does not refresh after swapping. The
+-- underlying data is correct but the visual display is stale. Need to find
+-- and hook the talent UI refresh function. (see WORK_ITEMS.md)
+--
+-- KNOWN ISSUE: Swapping a career whose ability is a weapon (e.g. GK blessed
+-- blade) to a career that does not support it can crash. Ability swap is
+-- wrapped in pcall for safety. (see WORK_ITEMS.md)
+
+local _talent_swap_originals = {}  -- [career_name] = { tree, activated_ability, passive_ability }
+
+local function apply_talent_swaps()
+    if not CareerSettings or not TalentTrees then return end
+
+    -- Restore all previous overrides to their originals
+    for career_name, orig in pairs(_talent_swap_originals) do
+        local cs = CareerSettings[career_name]
+        if cs then
+            local trees = TalentTrees[cs.profile_name]
+            if trees then trees[cs.talent_tree_index] = orig.tree end
+            cs.activated_ability = orig.activated_ability
+            cs.passive_ability   = orig.passive_ability
+        end
+    end
+    _talent_swap_originals = {}
+
+    -- Apply current settings
+    for _, career_name in ipairs(_ALL_CAREERS) do
+        local src_name = mod:get("talent_swap_" .. career_name)
+        if src_name and src_name ~= "none" then
+            local cs  = CareerSettings[career_name]
+            local src = CareerSettings[src_name]
+            if cs and src then
+                -- Save originals before first modification
+                _talent_swap_originals[career_name] = {
+                    tree              = TalentTrees[cs.profile_name] and TalentTrees[cs.profile_name][cs.talent_tree_index],
+                    activated_ability = cs.activated_ability,
+                    passive_ability   = cs.passive_ability,
+                }
+
+                -- Swap talent tree slot (read in-place by TalentTrees[profile][tree_idx][tier][col])
+                local dst_trees = TalentTrees[cs.profile_name]
+                local src_trees = TalentTrees[src.profile_name]
+                if dst_trees and src_trees then
+                    dst_trees[cs.talent_tree_index] = src_trees[src.talent_tree_index]
+                end
+
+                -- Swap career ability and passive (read by CareerUtils at level spawn)
+                -- pcall protection: GK weapon-ability crash when swapping to a career
+                -- that does not support weapon-based abilities (see WORK_ITEMS.md)
+                local ok, err = pcall(function()
+                    cs.activated_ability = src.activated_ability
+                    cs.passive_ability   = src.passive_ability
+                end)
+                if not ok then
+                    mod:warning("Failed to swap ability for %s <- %s: %s", career_name, src_name, tostring(err))
+                end
+            end
+        end
+    end
+end
+
+-- Career action injection is handled by weapon_tweaker (owns the unlock map).
+-- If both mods are loaded, weapon_tweaker's patch_career_actions_on_weapons
+-- runs on game state change and covers all unlocked weapons.
+
+-- ============================================================
+-- Melee weapons in ranged slot
+-- ============================================================
+local _original_slot_2_allowed = {}
 
 local function apply_slot_settings()
-    if not CareerSettings then
-        return
-    end
+    if not CareerSettings then return end
 
     local allow_melee_in_ranged = mod:get("allow_melee_in_ranged_slot")
 
-    for career_name, settings in pairs(CareerSettings) do
-        if type(settings) == "table" and settings.item_types_allowed_in_slot_2 then
-            if not original_slot_2_allowed[career_name] then
-                local original = {}
-                for _, value in ipairs(settings.item_types_allowed_in_slot_2) do
-                    original[#original + 1] = value
+    for career_name, cs in pairs(CareerSettings) do
+        if type(cs) == "table" and cs.item_types_allowed_in_slot_2 then
+            if not _original_slot_2_allowed[career_name] then
+                -- Save original
+                local orig = {}
+                for _, v in ipairs(cs.item_types_allowed_in_slot_2) do
+                    orig[#orig + 1] = v
                 end
-                original_slot_2_allowed[career_name] = original
+                _original_slot_2_allowed[career_name] = orig
             end
 
-            local slot_list = settings.item_types_allowed_in_slot_2
-            while #slot_list > 0 do
-                table.remove(slot_list)
+            -- Restore original
+            local t = cs.item_types_allowed_in_slot_2
+            while #t > 0 do table.remove(t) end
+            for _, v in ipairs(_original_slot_2_allowed[career_name]) do
+                t[#t + 1] = v
             end
 
-            for _, value in ipairs(original_slot_2_allowed[career_name]) do
-                slot_list[#slot_list + 1] = value
-            end
-
+            -- Apply setting if needed
             if allow_melee_in_ranged then
                 local has_melee = false
-                for _, value in ipairs(slot_list) do
-                    if value == "melee" then
-                        has_melee = true
-                        break
-                    end
+                for _, v in ipairs(t) do
+                    if v == "melee" then has_melee = true; break end
                 end
-
                 if not has_melee then
-                    slot_list[#slot_list + 1] = "melee"
+                    t[#t + 1] = "melee"
                 end
             end
         end
     end
 end
 
-local function apply_talent_swaps()
-    if not CareerSettings or not TalentTrees then
-        return
-    end
+-- ============================================================
+-- Lifecycle hooks
+-- ============================================================
 
-    for career_name, original in pairs(talent_swap_originals) do
-        local settings = CareerSettings[career_name]
-        if settings then
-            local trees = TalentTrees[settings.profile_name]
-            if trees then
-                trees[settings.talent_tree_index] = original.tree
-            end
-            settings.activated_ability = original.activated_ability
-            settings.passive_ability = original.passive_ability
-        end
-    end
-    talent_swap_originals = {}
-
-    for _, career_name in ipairs(ALL_CAREERS) do
-        local source_name = mod:get("talent_swap_" .. career_name)
-        if source_name and source_name ~= "none" then
-            local settings = CareerSettings[career_name]
-            local source = CareerSettings[source_name]
-            if settings and source then
-                talent_swap_originals[career_name] = {
-                    tree = TalentTrees[settings.profile_name] and TalentTrees[settings.profile_name][settings.talent_tree_index],
-                    activated_ability = settings.activated_ability,
-                    passive_ability = settings.passive_ability,
-                }
-
-                local destination_trees = TalentTrees[settings.profile_name]
-                local source_trees = TalentTrees[source.profile_name]
-                if destination_trees and source_trees then
-                    destination_trees[settings.talent_tree_index] = source_trees[source.talent_tree_index]
-                end
-
-                settings.activated_ability = source.activated_ability
-                settings.passive_ability = source.passive_ability
-            end
-        end
-    end
-end
-
-mod.on_game_state_changed = function()
+mod.on_game_state_changed = function(status, state_name)
     apply_slot_settings()
     apply_talent_swaps()
 end
 
 mod.on_setting_changed = function(setting_id)
+    mod:echo("Setting changed: " .. tostring(setting_id))
+
     if setting_id == "allow_melee_in_ranged_slot" then
         apply_slot_settings()
-    elseif setting_id and setting_id:find("^talent_swap_") then
+    end
+
+    if setting_id:find("^talent_swap_") then
         apply_talent_swaps()
     end
+
+    -- enable_career_action_injection is handled by weapon_tweaker
 end
 
-mod:hook("ProfileSynchronizer", "get_profile_index_reservation", function(func, self, party_id, profile_index)
-    if mod:get("allow_duplicate_careers") then
-        return nil, nil
-    end
-    return func(self, party_id, profile_index)
-end)
+-- ============================================================
+-- Console command: crt status
+-- ============================================================
 
-mod:hook("ProfileSynchronizer", "try_reserve_profile_for_peer", function(func, self, party_id, peer_id, profile_index, career_index)
-    local result = func(self, party_id, peer_id, profile_index, career_index)
-    if result then
-        return true
-    end
-    if mod:get("allow_duplicate_careers") then
-        return true
-    end
-    return false
-end)
+mod:command("ct_status", "Show Career Tweaker version and active talent swaps", function()
+    mod:echo("Career Tweaker v" .. MOD_VERSION)
 
-mod:hook("ProfileSynchronizer", "is_free_in_lobby", function(func, profile_index, lobby_data, optional_party_id)
-    if mod:get("allow_duplicate_careers") then
-        return true
+    local any_swap = false
+    for _, career_name in ipairs(_ALL_CAREERS) do
+        local src = mod:get("talent_swap_" .. career_name)
+        if src and src ~= "none" then
+            mod:echo("  " .. career_name .. " <- " .. src)
+            any_swap = true
+        end
     end
-    return func(profile_index, lobby_data, optional_party_id)
+    if not any_swap then
+        mod:echo("  No talent swaps active")
+    end
+
+    local melee_in_ranged = mod:get("allow_melee_in_ranged_slot")
+    mod:echo("  Melee in ranged slot: " .. tostring(melee_in_ranged or false))
 end)

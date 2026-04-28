@@ -1,0 +1,1497 @@
+DATA|hats|we_maidenguard|maidenguard_hat_0003
+DATA|hats|we_maidenguard|maidenguard_hat_0007
+DATA|hats|we_maidenguard|maidenguard_hat_0000
+DATA|hats|we_maidenguard|maidenguard_hat_0001
+DATA|hats|we_maidenguard|maidenguard_hat_0002
+DATA|hats|we_maidenguard|maidenguard_hat_1001
+DATA|hats|we_maidenguard|maidenguard_hat_1002
+DATA|hats|we_maidenguard|maidenguard_hat_0005
+DATA|hats|we_maidenguard|maidenguard_hat_0006
+DATA|hats|we_maidenguard|maidenguard_hat_0010
+DATA|hats|we_maidenguard|maidenguard_hat_0004
+DATA|hats|we_maidenguard|maidenguard_hat_0008
+DATA|hats|we_maidenguard|maidenguard_hat_1010
+DATA|hats|we_maidenguard|maidenguard_hat_0009
+DATA|hats|we_maidenguard|maidenguard_hat_1004
+DATA|hats|we_maidenguard|maidenguard_hat_1005
+DATA|hats|bw_unchained|unchained_hat_0009
+DATA|hats|bw_unchained|unchained_hat_0000
+DATA|hats|bw_unchained|unchained_hat_0002
+DATA|hats|bw_unchained|unchained_hat_0001
+DATA|hats|bw_unchained|unchained_hat_0004
+DATA|hats|bw_unchained|unchained_hat_1001
+DATA|hats|bw_unchained|unchained_hat_1004
+DATA|hats|bw_unchained|unchained_hat_0003
+DATA|hats|bw_unchained|unchained_hat_0006
+DATA|hats|bw_unchained|unchained_hat_1003
+DATA|hats|bw_unchained|unchained_hat_0005
+DATA|hats|bw_unchained|unchained_hat_0008
+DATA|hats|bw_unchained|unchained_hat_0007
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0007
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0008
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0006
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0000
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0001
+DATA|hats|bw_adept,bw_scholar,bw_unchained|adept_hat_1010
+DATA|hats|es_mercenary|mercenary_hat_0007
+DATA|hats|es_mercenary|mercenary_hat_0006
+DATA|hats|es_mercenary|mercenary_hat_0009
+DATA|hats|es_mercenary|mercenary_hat_1003
+DATA|hats|es_mercenary|mercenary_hat_0008
+DATA|hats|es_mercenary|mercenary_hat_0003
+DATA|hats|es_mercenary|mercenary_hat_0002
+DATA|hats|es_mercenary|mercenary_hat_0005
+DATA|hats|es_mercenary|mercenary_hat_0004
+DATA|hats|es_mercenary|mercenary_hat_1002
+DATA|hats|es_mercenary|mercenary_hat_1001
+DATA|hats|es_mercenary|mercenary_hat_0001
+DATA|hats|es_mercenary|mercenary_hat_0000
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_helmet_0003
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0000
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0001
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0002
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0003
+DATA|hats|bw_adept|adept_hat_0005
+DATA|hats|bw_adept|adept_hat_0008
+DATA|hats|bw_adept|adept_hat_0009
+DATA|hats|bw_adept|adept_hat_0002
+DATA|hats|bw_adept|adept_hat_0010
+DATA|hats|bw_adept|adept_hat_1001
+DATA|hats|bw_adept|adept_hat_0003
+DATA|hats|bw_adept|adept_hat_0006
+DATA|hats|bw_adept|adept_hat_1005
+DATA|hats|bw_adept|adept_hat_0007
+DATA|hats|bw_adept|adept_hat_1002
+DATA|hats|bw_adept|adept_hat_0000
+DATA|hats|bw_adept|adept_hat_0001
+DATA|hats|bw_adept|adept_hat_0004
+DATA|hats|bw_adept|adept_hat_1003
+DATA|hats|dr_engineer|engineer_hat_0000
+DATA|hats|dr_engineer|engineer_hat_1001
+DATA|hats|dr_engineer|engineer_hat_0001
+DATA|hats|dr_engineer|engineer_hat_1002
+DATA|hats|es_questingknight|questing_knight_hat_0001
+DATA|hats|es_questingknight|questing_knight_hat_0000
+DATA|hats|es_questingknight|questing_knight_hat_0003
+DATA|hats|es_questingknight|questing_knight_hat_1001
+DATA|hats|wh_captain|witchhunter_hat_0000
+DATA|hats|wh_captain|witchhunter_hat_0001
+DATA|hats|wh_captain|witchhunter_hat_0006
+DATA|hats|wh_captain|witchhunter_hat_0007
+DATA|hats|wh_captain|witchhunter_hat_0002
+DATA|hats|wh_captain|witchhunter_hat_0003
+DATA|hats|wh_captain|witchhunter_hat_0008
+DATA|hats|wh_captain|witchhunter_hat_0009
+DATA|hats|wh_captain|witchhunter_hat_1001
+DATA|hats|wh_captain|witchhunter_hat_1004
+DATA|hats|wh_captain|witchhunter_hat_0004
+DATA|hats|wh_captain|witchhunter_hat_0005
+DATA|hats|wh_captain|witchhunter_hat_1003
+DATA|hats|wh_captain|witchhunter_hat_0010
+DATA|hats|bw_necromancer|bw_necromancer_hat_0000
+DATA|hats|bw_necromancer|bw_necromancer_hat_0002
+DATA|hats|bw_necromancer|bw_necromancer_hat_0003
+DATA|hats|bw_necromancer|bw_necromancer_hat_1010
+DATA|hats|bw_necromancer|bw_necromancer_hat_0001
+DATA|hats|we_waywatcher|waywatcher_hat_0007
+DATA|hats|we_waywatcher|waywatcher_hat_0006
+DATA|hats|we_waywatcher|waywatcher_hat_0001
+DATA|hats|we_waywatcher|waywatcher_hat_0000
+DATA|hats|we_waywatcher|waywatcher_hat_0011
+DATA|hats|we_waywatcher|waywatcher_hat_0003
+DATA|hats|we_waywatcher|waywatcher_hat_0010
+DATA|hats|we_waywatcher|waywatcher_hat_1005
+DATA|hats|we_waywatcher|waywatcher_hat_1004
+DATA|hats|we_waywatcher|waywatcher_hat_1001
+DATA|hats|we_waywatcher|waywatcher_hat_0009
+DATA|hats|we_waywatcher|waywatcher_hat_0002
+DATA|hats|we_waywatcher|waywatcher_hat_0008
+DATA|hats|we_waywatcher|waywatcher_hat_0005
+DATA|hats|we_waywatcher|waywatcher_hat_1010
+DATA|hats|we_waywatcher|waywatcher_hat_0004
+DATA|hats|wh_priest|priest_hat_0002
+DATA|hats|wh_priest|priest_hat_0000
+DATA|hats|wh_priest|priest_hat_1001
+DATA|hats|wh_priest|priest_hat_0001
+DATA|hats|wh_priest|priest_hat_0003
+DATA|hats|wh_priest|priest_hat_0004
+DATA|hats|dr_ranger|ranger_hat_0014
+DATA|hats|dr_ranger|ranger_hat_0008
+DATA|hats|dr_ranger|ranger_hat_1006
+DATA|hats|dr_ranger|ranger_hat_0001
+DATA|hats|dr_ranger|ranger_hat_0011
+DATA|hats|dr_ranger|ranger_hat_0005
+DATA|hats|dr_ranger|ranger_hat_0015
+DATA|hats|dr_ranger|ranger_hat_0002
+DATA|hats|dr_ranger|ranger_hat_0012
+DATA|hats|dr_ranger|ranger_hat_0000
+DATA|hats|dr_ranger|ranger_hat_1001
+DATA|hats|dr_ranger|ranger_hat_0009
+DATA|hats|dr_ranger|ranger_hat_0013
+DATA|hats|dr_ranger|ranger_hat_0006
+DATA|hats|dr_ranger|ranger_hat_0010
+DATA|hats|dr_ranger|ranger_hat_0007
+DATA|hats|dr_ranger|ranger_hat_1005
+DATA|hats|dr_ranger|ranger_hat_0004
+DATA|hats|dr_ranger|ranger_hat_0003
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0000
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1002
+DATA|hats|wh_bountyhunter|wh_hat_0008
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0009
+DATA|hats|wh_bountyhunter|wh_hat_0009
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0008
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0005
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1004
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0007
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1001
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0004
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1005
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0006
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0002
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0003
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0001
+DATA|hats|wh_zealot,wh_bountyhunter,wh_captain|wh_hat_0000
+DATA|hats|wh_zealot,wh_bountyhunter,wh_captain|wh_hat_0001
+DATA|hats|wh_zealot,wh_bountyhunter,wh_captain|wh_hat_0003
+DATA|hats|we_thornsister|thornsister_hat_0003
+DATA|hats|we_thornsister|thornsister_hat_0000
+DATA|hats|we_thornsister|thornsister_hat_0001
+DATA|hats|we_thornsister|thornsister_hat_0002
+DATA|hats|we_thornsister|thornsister_hat_1010
+DATA|hats|es_huntsman,es_knight,es_mercenary,es_questingknight|huntsman_hat_1010
+DATA|hats|dr_slayer|dr_slayer_hair_0002
+DATA|hats|dr_slayer|slayer_hat_0007
+DATA|hats|dr_slayer|slayer_hat_0008
+DATA|hats|dr_slayer|slayer_hat_0009
+DATA|hats|dr_slayer|slayer_hat_1005
+DATA|hats|dr_slayer|slayer_hat_0003
+DATA|hats|dr_slayer|slayer_hat_1001
+DATA|hats|dr_slayer|slayer_hat_1002
+DATA|hats|dr_slayer|slayer_hat_0005
+DATA|hats|dr_slayer|slayer_hat_1010
+DATA|hats|dr_slayer|slayer_hat_0010
+DATA|hats|dr_slayer|slayer_hat_0006
+DATA|hats|dr_slayer|slayer_hat_0011
+DATA|hats|dr_slayer|slayer_hat_0012
+DATA|hats|dr_slayer|slayer_hat_0001
+DATA|hats|dr_slayer|slayer_hat_0000
+DATA|hats|dr_slayer|slayer_hat_0002
+DATA|hats|dr_slayer|slayer_hat_0004
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1004
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0008
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0009
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0006
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0007
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0004
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0005
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1002
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0003
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1005
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1001
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0012
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0000
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0013
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0001
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0010
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0002
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0011
+DATA|hats|es_knight|knight_hat_0002
+DATA|hats|es_knight|knight_hat_0001
+DATA|hats|es_knight|knight_hat_0008
+DATA|hats|es_knight|knight_hat_1002
+DATA|hats|es_knight|knight_hat_0009
+DATA|hats|es_knight|knight_hat_0007
+DATA|hats|es_knight|knight_hat_1003
+DATA|hats|es_knight|knight_hat_0004
+DATA|hats|es_knight|knight_hat_0006
+DATA|hats|es_knight|knight_hat_1001
+DATA|hats|es_knight|knight_hat_0010
+DATA|hats|es_knight|knight_hat_0003
+DATA|hats|es_knight|knight_hat_0000
+DATA|hats|es_knight|knight_hat_0005
+DATA|hats|es_knight|knight_hat_0011
+DATA|hats|we_shade|shade_hat_0008
+DATA|hats|we_shade|shade_hat_0009
+DATA|hats|we_shade|shade_hat_0004
+DATA|hats|we_shade|shade_hat_0005
+DATA|hats|we_shade|shade_hat_1001
+DATA|hats|we_shade|shade_hat_1002
+DATA|hats|we_shade|shade_hat_1003
+DATA|hats|we_shade|shade_hat_0006
+DATA|hats|we_shade|shade_hat_1010
+DATA|hats|we_shade|shade_hat_0007
+DATA|hats|we_shade|shade_hat_1004
+DATA|hats|we_shade|shade_hat_0000
+DATA|hats|we_shade|shade_hat_0001
+DATA|hats|we_shade|shade_hat_0002
+DATA|hats|we_shade|shade_hat_0003
+DATA|hats|we_shade|shade_hat_0010
+DATA|hats|dr_ironbreaker,dr_ranger,dr_engineer|ranger_hat_1010
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0005
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0011
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0008
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0003
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0002
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0001
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0000
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1012
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1013
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1004
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1008
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1001
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1002
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1017
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1014
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1003
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1015
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1018
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1010
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1007
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1006
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1005
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1011
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1009
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0002
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0000
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0004
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0001
+DATA|hats|wh_bountyhunter,wh_captain,wh_priest|bountyhunter_hat_1010
+DATA|hats|bw_scholar|scholar_hat_0003
+DATA|hats|bw_scholar|scholar_hat_1001
+DATA|hats|bw_scholar|scholar_hat_0000
+DATA|hats|bw_scholar|scholar_hat_0009
+DATA|hats|bw_scholar|scholar_hat_0006
+DATA|hats|bw_scholar|scholar_hat_0007
+DATA|hats|bw_scholar|scholar_hat_0011
+DATA|hats|bw_scholar|scholar_hat_1003
+DATA|hats|bw_scholar|scholar_hat_1002
+DATA|hats|bw_scholar|scholar_hat_0008
+DATA|hats|bw_scholar|scholar_hat_0012
+DATA|hats|bw_scholar|scholar_hat_0001
+DATA|hats|bw_scholar|scholar_hat_1004
+DATA|hats|bw_scholar|scholar_hat_0010
+DATA|hats|bw_scholar|scholar_hat_0002
+DATA|hats|bw_scholar|scholar_hat_0004
+DATA|hats|bw_scholar|scholar_hat_0005
+DATA|hats|es_huntsman|huntsman_hat_0004
+DATA|hats|es_huntsman|huntsman_hat_0005
+DATA|hats|es_huntsman|huntsman_hat_0008
+DATA|hats|es_huntsman|huntsman_hat_1001
+DATA|hats|es_huntsman|huntsman_hat_1002
+DATA|hats|es_huntsman|huntsman_hat_0007
+DATA|hats|es_huntsman|huntsman_hat_1003
+DATA|hats|es_huntsman|huntsman_hat_0002
+DATA|hats|es_huntsman|huntsman_hat_1005
+DATA|hats|es_huntsman|huntsman_hat_0003
+DATA|hats|es_huntsman|huntsman_hat_0000
+DATA|hats|es_huntsman|huntsman_hat_0009
+DATA|hats|es_huntsman|huntsman_hat_0001
+DATA|hats|es_huntsman|huntsman_hat_0006
+DATA|hats|wh_zealot|zealot_hat_1010
+DATA|hats|wh_zealot|wh_hat_0007
+DATA|hats|wh_zealot|zealot_hat_0002
+DATA|hats|wh_zealot|zealot_hat_1001
+DATA|hats|wh_zealot|zealot_hat_0008
+DATA|hats|wh_zealot|zealot_hat_0007
+DATA|hats|wh_zealot|zealot_hat_0004
+DATA|hats|wh_zealot|zealot_hat_1007
+DATA|hats|wh_zealot|zealot_hat_0010
+DATA|hats|wh_zealot|zealot_hat_1002
+DATA|hats|wh_zealot|zealot_hat_1003
+DATA|hats|wh_zealot|zealot_hat_0000
+DATA|hats|wh_zealot|zealot_hat_0005
+DATA|hats|wh_zealot|zealot_hat_0011
+DATA|hats|wh_zealot|zealot_hat_0006
+DATA|hats|wh_zealot|zealot_hat_0009
+DATA|hats|wh_zealot|zealot_hat_0003
+DATA|hats|wh_zealot|zealot_hat_0001
+DATA|skins|we_thornsister,we_shade,we_maidenguard,we_waywatcher|skin_ww_thornsister_1001
+DATA|skins|bw_unchained|skin_bw_unchained_1002
+DATA|skins|bw_unchained|skin_bw_unchained_ash
+DATA|skins|bw_unchained|skin_bw_unchained
+DATA|skins|bw_unchained|skin_bw_unchained_white
+DATA|skins|bw_unchained|skin_bw_unchained_bronze
+DATA|skins|bw_unchained|skin_bw_unchained_1001
+DATA|skins|bw_unchained|skin_bw_unchained_ostermark
+DATA|skins|bw_unchained|skin_bw_unchained_brown_and_white
+DATA|skins|bw_unchained|skin_bw_unchained_black_and_gold
+DATA|skins|we_shade|skin_ww_shade_1001
+DATA|skins|we_shade|skin_ww_shade_black_and_gold
+DATA|skins|we_shade|skin_ww_shade_1002
+DATA|skins|we_shade|skin_ww_shade_white
+DATA|skins|we_shade|skin_ww_shade_emerald
+DATA|skins|we_shade|skin_ww_shade
+DATA|skins|we_shade|skin_ww_shade_midnight
+DATA|skins|we_shade|skin_ww_shade_ash
+DATA|skins|we_shade|skin_ww_shade_crimson
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000_krizzor_01
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000_kreepus_01
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_1001
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000_ektrik_01
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_1001
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000_kreepus_01
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000_ektrik_01
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000_krizzor_01
+DATA|skins|bw_adept|skin_bw_adept_ostermark
+DATA|skins|bw_adept|skin_bw_adept_white
+DATA|skins|bw_adept|skin_bw_default
+DATA|skins|bw_adept|skin_bw_adept_ash
+DATA|skins|bw_adept|skin_bw_adept_helmgart
+DATA|skins|bw_adept|skin_bw_adept
+DATA|skins|bw_adept|skin_bw_adept_1002
+DATA|skins|bw_adept|skin_bw_adept_ostland
+DATA|skins|bw_adept|skin_bw_adept_brown_and_yellow
+DATA|skins|bw_adept|skin_bw_adept_black_and_gold
+DATA|skins|bw_adept|skin_bw_adept_1001
+DATA|skins|vs_chaos_troll|chaos_troll_skin_0000
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000_kreepus_01
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_1001
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000_krizzor_01
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000_ektrik_01
+DATA|skins|wh_captain|skin_wh_captain_black_and_gold
+DATA|skins|wh_captain|skin_wh_captain
+DATA|skins|wh_captain|skin_wh_default
+DATA|skins|wh_captain|skin_wh_captain_helmgart
+DATA|skins|wh_captain|skin_wh_captain_ostermark
+DATA|skins|wh_captain|skin_wh_captain_ostland
+DATA|skins|wh_captain|skin_wh_captain_1001
+DATA|skins|wh_captain|skin_wh_captain_white
+DATA|skins|wh_captain|skin_wh_captain_grey_and_yellow
+DATA|skins|wh_captain|skin_wh_captain_middenland
+DATA|skins|wh_captain|skin_wh_captain_1002
+DATA|skins|bw_necromancer|skin_bw_necromancer_0002
+DATA|skins|bw_necromancer|skin_bw_necromancer_0001_a
+DATA|skins|bw_necromancer|skin_bw_necromancer
+DATA|skins|bw_necromancer|skin_bw_necromancer_0001
+DATA|skins|bw_necromancer|skin_bw_necromancer_white
+DATA|skins|we_waywatcher|skin_ww_waywatcher_tirsyth
+DATA|skins|we_waywatcher|skin_ww_waywatcher_black_and_gold
+DATA|skins|we_waywatcher|skin_ww_waywatcher_anmyr
+DATA|skins|we_waywatcher|skin_ww_waywatcher_cythral
+DATA|skins|we_waywatcher|skin_ww_waywatcher_1001
+DATA|skins|we_waywatcher|skin_ww_waywatcher_helmgart
+DATA|skins|we_waywatcher|skin_ww_waywatcher_1002
+DATA|skins|we_waywatcher|skin_ww_waywatcher_white
+DATA|skins|we_waywatcher|skin_ww_waywatcher
+DATA|skins|we_waywatcher|skin_ww_default
+DATA|skins|we_waywatcher|skin_ww_waywatcher_atylwyth
+DATA|skins|wh_priest|skin_wh_priest_white
+DATA|skins|wh_priest|skin_wh_priest_0002_a
+DATA|skins|wh_priest|skin_wh_priest_0002
+DATA|skins|wh_priest|skin_wh_priest
+DATA|skins|wh_priest|skin_wh_priest_1001
+DATA|skins|dr_ranger|skin_dr_ranger_zhufbar
+DATA|skins|dr_ranger|skin_dr_ranger_white
+DATA|skins|dr_ranger|skin_dr_ranger_black_and_gold
+DATA|skins|dr_ranger|skin_dr_ranger
+DATA|skins|dr_ranger|skin_dr_ranger_helmgart
+DATA|skins|dr_ranger|skin_dr_ranger_1001
+DATA|skins|dr_ranger|skin_dr_ranger_1002
+DATA|skins|dr_ranger|skin_dr_default
+DATA|skins|dr_ranger|skin_dr_ranger_barak_varr
+DATA|skins|dr_ranger|skin_dr_ranger_brown_and_yellow
+DATA|skins|dr_ranger|skin_dr_ranger_karak_norn
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_white
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_middenland
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_black_and_gold
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_brown_and_white
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_yellow_and_red
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_1003
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_1001
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_1002
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_green_and_yellow
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000_krizzor_01
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000_ektrik_01
+DATA|skins|vs_packmaster|skaven_pack_master_skin_1001
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000_kreepus_01
+DATA|skins|dr_engineer|skin_dr_engineer_black_and_gold
+DATA|skins|dr_engineer|skin_dr_engineer_1001
+DATA|skins|dr_engineer|skin_dr_engineer_white
+DATA|skins|dr_engineer|skin_dr_engineer_brown_and_iron
+DATA|skins|dr_engineer|skin_dr_engineer_blue_and_gold
+DATA|skins|dr_engineer|skin_dr_engineer
+DATA|skins|dr_engineer|skin_dr_engineer_purple_and_copper
+DATA|skins|es_questingknight|skin_es_questingknight_black_and_gold
+DATA|skins|es_questingknight|skin_es_questingknight_black_and_yellow
+DATA|skins|es_questingknight|skin_es_questingknight_blue_and_white
+DATA|skins|es_questingknight|skin_es_questingknight_1001
+DATA|skins|es_questingknight|skin_es_questingknight
+DATA|skins|es_questingknight|skin_es_questingknight_white
+DATA|skins|es_questingknight|skin_es_questingknight_yellow_and_white
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_black_and_gold
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_green
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_crimson
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_white
+DATA|skins|dr_ironbreaker|skin_dr_irondrake
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_1001
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_blue
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_iron
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker
+DATA|skins|vs_rat_ogre|skaven_rat_ogre_skin_0000
+DATA|skins|es_knight|skin_es_knight_red
+DATA|skins|es_knight|skin_es_knight_black_and_gold
+DATA|skins|es_knight|skin_es_knight_bronze
+DATA|skins|es_knight|skin_es_knight_1002
+DATA|skins|es_knight|skin_es_knight_white
+DATA|skins|es_knight|skin_es_knight
+DATA|skins|es_knight|skin_es_knight_1001
+DATA|skins|es_knight|skin_es_knight_green
+DATA|skins|es_knight|skin_es_knight_middenland
+DATA|skins|dr_slayer|skin_dr_slayer_skaven
+DATA|skins|dr_slayer|skin_dr_slayer_1002
+DATA|skins|dr_slayer|skin_dr_slayer_dragon
+DATA|skins|dr_slayer|skin_dr_slayer_wing
+DATA|skins|dr_slayer|skin_dr_slayer_runes
+DATA|skins|dr_slayer|skin_dr_slayer_1003
+DATA|skins|dr_slayer|skin_dr_slayer_white
+DATA|skins|dr_slayer|skin_dr_slayer_1001
+DATA|skins|dr_slayer|skin_dr_slayer
+DATA|skins|dr_slayer|skin_dr_slayer_skull
+DATA|skins|dr_slayer|skin_dr_slayer_axe
+DATA|skins|we_maidenguard|skin_ww_maidenguard_caledor
+DATA|skins|we_maidenguard|skin_ww_maidenguard_1002
+DATA|skins|we_maidenguard|skin_ww_maidenguard_1001
+DATA|skins|we_maidenguard|skin_ww_moonmantle
+DATA|skins|we_maidenguard|skin_ww_maidenguard_red_and_yellow
+DATA|skins|we_maidenguard|skin_ww_maidenguard_white
+DATA|skins|we_maidenguard|skin_ww_maidenguard
+DATA|skins|we_maidenguard|skin_ww_maidenguard_black_and_gold
+DATA|skins|we_maidenguard|skin_ww_maidenguard_elyrion
+DATA|skins|we_maidenguard|skin_ww_maidenguard_white_and_gold
+DATA|skins|es_huntsman|skin_es_huntsman_black_and_gold
+DATA|skins|es_huntsman|skin_es_huntsman_yellow_and_green
+DATA|skins|es_huntsman|skin_es_huntsman_ostermark
+DATA|skins|es_huntsman|skin_es_longshark
+DATA|skins|es_huntsman|skin_es_huntsman_1001
+DATA|skins|es_huntsman|skin_es_huntsman_white
+DATA|skins|es_huntsman|skin_es_huntsman_middenland
+DATA|skins|es_huntsman|skin_es_huntsman_red_and_white
+DATA|skins|es_huntsman|skin_es_huntsman
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000_krizzor_01
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_1001
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000_kreepus_01
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000_ektrik_01
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000
+DATA|skins|bw_scholar,bw_necromancer|skin_bw_scholar_1003
+DATA|skins|we_thornsister|skin_ww_thornsister
+DATA|skins|we_thornsister|skin_ww_thornsister_redblack
+DATA|skins|we_thornsister|skin_ww_thornsister_black_and_gold
+DATA|skins|we_thornsister|skin_ww_thornsister_blue
+DATA|skins|we_thornsister|skin_ww_thornsister_green
+DATA|skins|we_thornsister|skin_ww_thornsister_white
+DATA|skins|bw_scholar|skin_bw_scholar_1002
+DATA|skins|bw_scholar|skin_bw_scholar_ostermark
+DATA|skins|bw_scholar|skin_bw_scholar_brown_and_white
+DATA|skins|bw_scholar|skin_bw_scholar_ash
+DATA|skins|bw_scholar|skin_bw_scholar_black_and_gold
+DATA|skins|bw_scholar|skin_bw_scholar_bronze
+DATA|skins|bw_scholar|skin_bw_scholar_1001
+DATA|skins|bw_scholar|skin_bw_scholar_white
+DATA|skins|bw_scholar|skin_bw_myrmidia
+DATA|skins|bw_scholar|skin_bw_scholar
+DATA|skins|es_mercenary|skin_es_mercenary_ostermark
+DATA|skins|es_mercenary|skin_es_default
+DATA|skins|es_mercenary|skin_es_mercenary
+DATA|skins|es_mercenary|skin_es_mercenary_1002
+DATA|skins|es_mercenary|skin_es_mercenary_1001
+DATA|skins|es_mercenary|skin_es_mercenary_1003
+DATA|skins|es_mercenary|skin_es_mercenary_white
+DATA|skins|es_mercenary|skin_es_mercenary_helmgart
+DATA|skins|es_mercenary|skin_es_mercenary_middenland
+DATA|skins|es_mercenary|skin_es_mercenary_ostland
+DATA|skins|es_mercenary|skin_es_mercenary_black_and_gold
+DATA|skins|es_mercenary|skin_es_mercenary_carroburg
+DATA|skins|wh_zealot|skin_wh_zealot_middenland
+DATA|skins|wh_zealot|skin_wh_zealot_crimson
+DATA|skins|wh_zealot|skin_wh_zealot_pure
+DATA|skins|wh_zealot|skin_wh_zealot_1001
+DATA|skins|wh_zealot|skin_wh_flagellant
+DATA|skins|wh_zealot|skin_wh_zealot_white
+DATA|skins|wh_zealot|skin_wh_zealot
+DATA|skins|wh_zealot|skin_wh_zealot_green_and_yellow
+DATA|skins|wh_zealot|skin_wh_zealot_black_and_gold
+DATA|hats|we_maidenguard|maidenguard_hat_0003
+DATA|hats|we_maidenguard|maidenguard_hat_0007
+DATA|hats|we_maidenguard|maidenguard_hat_0000
+DATA|hats|we_maidenguard|maidenguard_hat_0001
+DATA|hats|we_maidenguard|maidenguard_hat_0002
+DATA|hats|we_maidenguard|maidenguard_hat_1001
+DATA|hats|we_maidenguard|maidenguard_hat_1002
+DATA|hats|we_maidenguard|maidenguard_hat_0005
+DATA|hats|we_maidenguard|maidenguard_hat_0006
+DATA|hats|we_maidenguard|maidenguard_hat_0010
+DATA|hats|we_maidenguard|maidenguard_hat_0004
+DATA|hats|we_maidenguard|maidenguard_hat_0008
+DATA|hats|we_maidenguard|maidenguard_hat_1010
+DATA|hats|we_maidenguard|maidenguard_hat_0009
+DATA|hats|we_maidenguard|maidenguard_hat_1004
+DATA|hats|we_maidenguard|maidenguard_hat_1005
+DATA|hats|bw_unchained|unchained_hat_0009
+DATA|hats|bw_unchained|unchained_hat_0000
+DATA|hats|bw_unchained|unchained_hat_0002
+DATA|hats|bw_unchained|unchained_hat_0001
+DATA|hats|bw_unchained|unchained_hat_0004
+DATA|hats|bw_unchained|unchained_hat_1001
+DATA|hats|bw_unchained|unchained_hat_1004
+DATA|hats|bw_unchained|unchained_hat_0003
+DATA|hats|bw_unchained|unchained_hat_0006
+DATA|hats|bw_unchained|unchained_hat_1003
+DATA|hats|bw_unchained|unchained_hat_0005
+DATA|hats|bw_unchained|unchained_hat_0008
+DATA|hats|bw_unchained|unchained_hat_0007
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0007
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0008
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0006
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0000
+DATA|hats|bw_scholar,bw_adept,bw_unchained|bw_gate_0001
+DATA|hats|bw_adept,bw_scholar,bw_unchained|adept_hat_1010
+DATA|hats|es_mercenary|mercenary_hat_0007
+DATA|hats|es_mercenary|mercenary_hat_0006
+DATA|hats|es_mercenary|mercenary_hat_0009
+DATA|hats|es_mercenary|mercenary_hat_1003
+DATA|hats|es_mercenary|mercenary_hat_0008
+DATA|hats|es_mercenary|mercenary_hat_0003
+DATA|hats|es_mercenary|mercenary_hat_0002
+DATA|hats|es_mercenary|mercenary_hat_0005
+DATA|hats|es_mercenary|mercenary_hat_0004
+DATA|hats|es_mercenary|mercenary_hat_1002
+DATA|hats|es_mercenary|mercenary_hat_1001
+DATA|hats|es_mercenary|mercenary_hat_0001
+DATA|hats|es_mercenary|mercenary_hat_0000
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_helmet_0003
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0000
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0001
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0002
+DATA|hats|es_huntsman,es_knight,es_mercenary|es_hat_0003
+DATA|hats|bw_adept|adept_hat_0005
+DATA|hats|bw_adept|adept_hat_0008
+DATA|hats|bw_adept|adept_hat_0009
+DATA|hats|bw_adept|adept_hat_0002
+DATA|hats|bw_adept|adept_hat_0010
+DATA|hats|bw_adept|adept_hat_1001
+DATA|hats|bw_adept|adept_hat_0003
+DATA|hats|bw_adept|adept_hat_0006
+DATA|hats|bw_adept|adept_hat_1005
+DATA|hats|bw_adept|adept_hat_0007
+DATA|hats|bw_adept|adept_hat_1002
+DATA|hats|bw_adept|adept_hat_0000
+DATA|hats|bw_adept|adept_hat_0001
+DATA|hats|bw_adept|adept_hat_0004
+DATA|hats|bw_adept|adept_hat_1003
+DATA|hats|dr_engineer|engineer_hat_0000
+DATA|hats|dr_engineer|engineer_hat_1001
+DATA|hats|dr_engineer|engineer_hat_0001
+DATA|hats|dr_engineer|engineer_hat_1002
+DATA|hats|es_questingknight|questing_knight_hat_0001
+DATA|hats|es_questingknight|questing_knight_hat_0000
+DATA|hats|es_questingknight|questing_knight_hat_0003
+DATA|hats|es_questingknight|questing_knight_hat_1001
+DATA|hats|wh_captain|witchhunter_hat_0000
+DATA|hats|wh_captain|witchhunter_hat_0001
+DATA|hats|wh_captain|witchhunter_hat_0006
+DATA|hats|wh_captain|witchhunter_hat_0007
+DATA|hats|wh_captain|witchhunter_hat_0002
+DATA|hats|wh_captain|witchhunter_hat_0003
+DATA|hats|wh_captain|witchhunter_hat_0008
+DATA|hats|wh_captain|witchhunter_hat_0009
+DATA|hats|wh_captain|witchhunter_hat_1001
+DATA|hats|wh_captain|witchhunter_hat_1004
+DATA|hats|wh_captain|witchhunter_hat_0004
+DATA|hats|wh_captain|witchhunter_hat_0005
+DATA|hats|wh_captain|witchhunter_hat_1003
+DATA|hats|wh_captain|witchhunter_hat_0010
+DATA|hats|bw_necromancer|bw_necromancer_hat_0000
+DATA|hats|bw_necromancer|bw_necromancer_hat_0002
+DATA|hats|bw_necromancer|bw_necromancer_hat_0003
+DATA|hats|bw_necromancer|bw_necromancer_hat_1010
+DATA|hats|bw_necromancer|bw_necromancer_hat_0001
+DATA|hats|we_waywatcher|waywatcher_hat_0007
+DATA|hats|we_waywatcher|waywatcher_hat_0006
+DATA|hats|we_waywatcher|waywatcher_hat_0001
+DATA|hats|we_waywatcher|waywatcher_hat_0000
+DATA|hats|we_waywatcher|waywatcher_hat_0011
+DATA|hats|we_waywatcher|waywatcher_hat_0003
+DATA|hats|we_waywatcher|waywatcher_hat_0010
+DATA|hats|we_waywatcher|waywatcher_hat_1005
+DATA|hats|we_waywatcher|waywatcher_hat_1004
+DATA|hats|we_waywatcher|waywatcher_hat_1001
+DATA|hats|we_waywatcher|waywatcher_hat_0009
+DATA|hats|we_waywatcher|waywatcher_hat_0002
+DATA|hats|we_waywatcher|waywatcher_hat_0008
+DATA|hats|we_waywatcher|waywatcher_hat_0005
+DATA|hats|we_waywatcher|waywatcher_hat_1010
+DATA|hats|we_waywatcher|waywatcher_hat_0004
+DATA|hats|wh_priest|priest_hat_0002
+DATA|hats|wh_priest|priest_hat_0000
+DATA|hats|wh_priest|priest_hat_1001
+DATA|hats|wh_priest|priest_hat_0001
+DATA|hats|wh_priest|priest_hat_0003
+DATA|hats|wh_priest|priest_hat_0004
+DATA|hats|dr_ranger|ranger_hat_0014
+DATA|hats|dr_ranger|ranger_hat_0008
+DATA|hats|dr_ranger|ranger_hat_1006
+DATA|hats|dr_ranger|ranger_hat_0001
+DATA|hats|dr_ranger|ranger_hat_0011
+DATA|hats|dr_ranger|ranger_hat_0005
+DATA|hats|dr_ranger|ranger_hat_0015
+DATA|hats|dr_ranger|ranger_hat_0002
+DATA|hats|dr_ranger|ranger_hat_0012
+DATA|hats|dr_ranger|ranger_hat_0000
+DATA|hats|dr_ranger|ranger_hat_1001
+DATA|hats|dr_ranger|ranger_hat_0009
+DATA|hats|dr_ranger|ranger_hat_0013
+DATA|hats|dr_ranger|ranger_hat_0006
+DATA|hats|dr_ranger|ranger_hat_0010
+DATA|hats|dr_ranger|ranger_hat_0007
+DATA|hats|dr_ranger|ranger_hat_1005
+DATA|hats|dr_ranger|ranger_hat_0004
+DATA|hats|dr_ranger|ranger_hat_0003
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0000
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1002
+DATA|hats|wh_bountyhunter|wh_hat_0008
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0009
+DATA|hats|wh_bountyhunter|wh_hat_0009
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0008
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0005
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1004
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0007
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1001
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0004
+DATA|hats|wh_bountyhunter|bountyhunter_hat_1005
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0006
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0002
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0003
+DATA|hats|wh_bountyhunter|bountyhunter_hat_0001
+DATA|hats|wh_zealot,wh_bountyhunter,wh_captain|wh_hat_0000
+DATA|hats|wh_zealot,wh_bountyhunter,wh_captain|wh_hat_0001
+DATA|hats|wh_zealot,wh_bountyhunter,wh_captain|wh_hat_0003
+DATA|hats|we_thornsister|thornsister_hat_0003
+DATA|hats|we_thornsister|thornsister_hat_0000
+DATA|hats|we_thornsister|thornsister_hat_0001
+DATA|hats|we_thornsister|thornsister_hat_0002
+DATA|hats|we_thornsister|thornsister_hat_1010
+DATA|hats|es_huntsman,es_knight,es_mercenary,es_questingknight|huntsman_hat_1010
+DATA|hats|dr_slayer|dr_slayer_hair_0002
+DATA|hats|dr_slayer|slayer_hat_0007
+DATA|hats|dr_slayer|slayer_hat_0008
+DATA|hats|dr_slayer|slayer_hat_0009
+DATA|hats|dr_slayer|slayer_hat_1005
+DATA|hats|dr_slayer|slayer_hat_0003
+DATA|hats|dr_slayer|slayer_hat_1001
+DATA|hats|dr_slayer|slayer_hat_1002
+DATA|hats|dr_slayer|slayer_hat_0005
+DATA|hats|dr_slayer|slayer_hat_1010
+DATA|hats|dr_slayer|slayer_hat_0010
+DATA|hats|dr_slayer|slayer_hat_0006
+DATA|hats|dr_slayer|slayer_hat_0011
+DATA|hats|dr_slayer|slayer_hat_0012
+DATA|hats|dr_slayer|slayer_hat_0001
+DATA|hats|dr_slayer|slayer_hat_0000
+DATA|hats|dr_slayer|slayer_hat_0002
+DATA|hats|dr_slayer|slayer_hat_0004
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1004
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0008
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0009
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0006
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0007
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0004
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0005
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1002
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0003
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1005
+DATA|hats|dr_ironbreaker|ironbreaker_hat_1001
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0012
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0000
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0013
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0001
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0010
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0002
+DATA|hats|dr_ironbreaker|ironbreaker_hat_0011
+DATA|hats|es_knight|knight_hat_0002
+DATA|hats|es_knight|knight_hat_0001
+DATA|hats|es_knight|knight_hat_0008
+DATA|hats|es_knight|knight_hat_1002
+DATA|hats|es_knight|knight_hat_0009
+DATA|hats|es_knight|knight_hat_0007
+DATA|hats|es_knight|knight_hat_1003
+DATA|hats|es_knight|knight_hat_0004
+DATA|hats|es_knight|knight_hat_0006
+DATA|hats|es_knight|knight_hat_1001
+DATA|hats|es_knight|knight_hat_0010
+DATA|hats|es_knight|knight_hat_0003
+DATA|hats|es_knight|knight_hat_0000
+DATA|hats|es_knight|knight_hat_0005
+DATA|hats|es_knight|knight_hat_0011
+DATA|hats|we_shade|shade_hat_0008
+DATA|hats|we_shade|shade_hat_0009
+DATA|hats|we_shade|shade_hat_0004
+DATA|hats|we_shade|shade_hat_0005
+DATA|hats|we_shade|shade_hat_1001
+DATA|hats|we_shade|shade_hat_1002
+DATA|hats|we_shade|shade_hat_1003
+DATA|hats|we_shade|shade_hat_0006
+DATA|hats|we_shade|shade_hat_1010
+DATA|hats|we_shade|shade_hat_0007
+DATA|hats|we_shade|shade_hat_1004
+DATA|hats|we_shade|shade_hat_0000
+DATA|hats|we_shade|shade_hat_0001
+DATA|hats|we_shade|shade_hat_0002
+DATA|hats|we_shade|shade_hat_0003
+DATA|hats|we_shade|shade_hat_0010
+DATA|hats|dr_ironbreaker,dr_ranger,dr_engineer|ranger_hat_1010
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0005
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0011
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0008
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0003
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0002
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0001
+DATA|hats|dr_ironbreaker,dr_ranger|dr_helmet_0000
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1012
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1013
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1004
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1008
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1001
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1002
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1017
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1014
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1003
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1015
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1018
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1010
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1007
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1006
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1005
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1011
+DATA|hats|we_shade,we_maidenguard,we_waywatcher|test_item_1009
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0002
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0000
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0004
+DATA|hats|we_maidenguard,we_waywatcher|ww_hood_0001
+DATA|hats|wh_bountyhunter,wh_captain,wh_priest|bountyhunter_hat_1010
+DATA|hats|bw_scholar|scholar_hat_0003
+DATA|hats|bw_scholar|scholar_hat_1001
+DATA|hats|bw_scholar|scholar_hat_0000
+DATA|hats|bw_scholar|scholar_hat_0009
+DATA|hats|bw_scholar|scholar_hat_0006
+DATA|hats|bw_scholar|scholar_hat_0007
+DATA|hats|bw_scholar|scholar_hat_0011
+DATA|hats|bw_scholar|scholar_hat_1003
+DATA|hats|bw_scholar|scholar_hat_1002
+DATA|hats|bw_scholar|scholar_hat_0008
+DATA|hats|bw_scholar|scholar_hat_0012
+DATA|hats|bw_scholar|scholar_hat_0001
+DATA|hats|bw_scholar|scholar_hat_1004
+DATA|hats|bw_scholar|scholar_hat_0010
+DATA|hats|bw_scholar|scholar_hat_0002
+DATA|hats|bw_scholar|scholar_hat_0004
+DATA|hats|bw_scholar|scholar_hat_0005
+DATA|hats|es_huntsman|huntsman_hat_0004
+DATA|hats|es_huntsman|huntsman_hat_0005
+DATA|hats|es_huntsman|huntsman_hat_0008
+DATA|hats|es_huntsman|huntsman_hat_1001
+DATA|hats|es_huntsman|huntsman_hat_1002
+DATA|hats|es_huntsman|huntsman_hat_0007
+DATA|hats|es_huntsman|huntsman_hat_1003
+DATA|hats|es_huntsman|huntsman_hat_0002
+DATA|hats|es_huntsman|huntsman_hat_1005
+DATA|hats|es_huntsman|huntsman_hat_0003
+DATA|hats|es_huntsman|huntsman_hat_0000
+DATA|hats|es_huntsman|huntsman_hat_0009
+DATA|hats|es_huntsman|huntsman_hat_0001
+DATA|hats|es_huntsman|huntsman_hat_0006
+DATA|hats|wh_zealot|zealot_hat_1010
+DATA|hats|wh_zealot|wh_hat_0007
+DATA|hats|wh_zealot|zealot_hat_0002
+DATA|hats|wh_zealot|zealot_hat_1001
+DATA|hats|wh_zealot|zealot_hat_0008
+DATA|hats|wh_zealot|zealot_hat_0007
+DATA|hats|wh_zealot|zealot_hat_0004
+DATA|hats|wh_zealot|zealot_hat_1007
+DATA|hats|wh_zealot|zealot_hat_0010
+DATA|hats|wh_zealot|zealot_hat_1002
+DATA|hats|wh_zealot|zealot_hat_1003
+DATA|hats|wh_zealot|zealot_hat_0000
+DATA|hats|wh_zealot|zealot_hat_0005
+DATA|hats|wh_zealot|zealot_hat_0011
+DATA|hats|wh_zealot|zealot_hat_0006
+DATA|hats|wh_zealot|zealot_hat_0009
+DATA|hats|wh_zealot|zealot_hat_0003
+DATA|hats|wh_zealot|zealot_hat_0001
+DATA|skins|we_thornsister,we_shade,we_maidenguard,we_waywatcher|skin_ww_thornsister_1001
+DATA|skins|bw_unchained|skin_bw_unchained_1002
+DATA|skins|bw_unchained|skin_bw_unchained_ash
+DATA|skins|bw_unchained|skin_bw_unchained
+DATA|skins|bw_unchained|skin_bw_unchained_white
+DATA|skins|bw_unchained|skin_bw_unchained_bronze
+DATA|skins|bw_unchained|skin_bw_unchained_1001
+DATA|skins|bw_unchained|skin_bw_unchained_ostermark
+DATA|skins|bw_unchained|skin_bw_unchained_brown_and_white
+DATA|skins|bw_unchained|skin_bw_unchained_black_and_gold
+DATA|skins|we_shade|skin_ww_shade_1001
+DATA|skins|we_shade|skin_ww_shade_black_and_gold
+DATA|skins|we_shade|skin_ww_shade_1002
+DATA|skins|we_shade|skin_ww_shade_white
+DATA|skins|we_shade|skin_ww_shade_emerald
+DATA|skins|we_shade|skin_ww_shade
+DATA|skins|we_shade|skin_ww_shade_midnight
+DATA|skins|we_shade|skin_ww_shade_ash
+DATA|skins|we_shade|skin_ww_shade_crimson
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000_krizzor_01
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000_kreepus_01
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_1001
+DATA|skins|vs_gutter_runner|skaven_gutter_runner_skin_0000_ektrik_01
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_1001
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000_kreepus_01
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000_ektrik_01
+DATA|skins|vs_warpfire_thrower|skaven_warpfire_thrower_skin_0000_krizzor_01
+DATA|skins|bw_adept|skin_bw_adept_ostermark
+DATA|skins|bw_adept|skin_bw_adept_white
+DATA|skins|bw_adept|skin_bw_default
+DATA|skins|bw_adept|skin_bw_adept_ash
+DATA|skins|bw_adept|skin_bw_adept_helmgart
+DATA|skins|bw_adept|skin_bw_adept
+DATA|skins|bw_adept|skin_bw_adept_1002
+DATA|skins|bw_adept|skin_bw_adept_ostland
+DATA|skins|bw_adept|skin_bw_adept_brown_and_yellow
+DATA|skins|bw_adept|skin_bw_adept_black_and_gold
+DATA|skins|bw_adept|skin_bw_adept_1001
+DATA|skins|vs_chaos_troll|chaos_troll_skin_0000
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000_kreepus_01
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_1001
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000_krizzor_01
+DATA|skins|vs_poison_wind_globadier|skaven_wind_globadier_skin_0000_ektrik_01
+DATA|skins|wh_captain|skin_wh_captain_black_and_gold
+DATA|skins|wh_captain|skin_wh_captain
+DATA|skins|wh_captain|skin_wh_default
+DATA|skins|wh_captain|skin_wh_captain_helmgart
+DATA|skins|wh_captain|skin_wh_captain_ostermark
+DATA|skins|wh_captain|skin_wh_captain_ostland
+DATA|skins|wh_captain|skin_wh_captain_1001
+DATA|skins|wh_captain|skin_wh_captain_white
+DATA|skins|wh_captain|skin_wh_captain_grey_and_yellow
+DATA|skins|wh_captain|skin_wh_captain_middenland
+DATA|skins|wh_captain|skin_wh_captain_1002
+DATA|skins|bw_necromancer|skin_bw_necromancer_0002
+DATA|skins|bw_necromancer|skin_bw_necromancer_0001_a
+DATA|skins|bw_necromancer|skin_bw_necromancer
+DATA|skins|bw_necromancer|skin_bw_necromancer_0001
+DATA|skins|bw_necromancer|skin_bw_necromancer_white
+DATA|skins|we_waywatcher|skin_ww_waywatcher_tirsyth
+DATA|skins|we_waywatcher|skin_ww_waywatcher_black_and_gold
+DATA|skins|we_waywatcher|skin_ww_waywatcher_anmyr
+DATA|skins|we_waywatcher|skin_ww_waywatcher_cythral
+DATA|skins|we_waywatcher|skin_ww_waywatcher_1001
+DATA|skins|we_waywatcher|skin_ww_waywatcher_helmgart
+DATA|skins|we_waywatcher|skin_ww_waywatcher_1002
+DATA|skins|we_waywatcher|skin_ww_waywatcher_white
+DATA|skins|we_waywatcher|skin_ww_waywatcher
+DATA|skins|we_waywatcher|skin_ww_default
+DATA|skins|we_waywatcher|skin_ww_waywatcher_atylwyth
+DATA|skins|wh_priest|skin_wh_priest_white
+DATA|skins|wh_priest|skin_wh_priest_0002_a
+DATA|skins|wh_priest|skin_wh_priest_0002
+DATA|skins|wh_priest|skin_wh_priest
+DATA|skins|wh_priest|skin_wh_priest_1001
+DATA|skins|dr_ranger|skin_dr_ranger_zhufbar
+DATA|skins|dr_ranger|skin_dr_ranger_white
+DATA|skins|dr_ranger|skin_dr_ranger_black_and_gold
+DATA|skins|dr_ranger|skin_dr_ranger
+DATA|skins|dr_ranger|skin_dr_ranger_helmgart
+DATA|skins|dr_ranger|skin_dr_ranger_1001
+DATA|skins|dr_ranger|skin_dr_ranger_1002
+DATA|skins|dr_ranger|skin_dr_default
+DATA|skins|dr_ranger|skin_dr_ranger_barak_varr
+DATA|skins|dr_ranger|skin_dr_ranger_brown_and_yellow
+DATA|skins|dr_ranger|skin_dr_ranger_karak_norn
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_white
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_middenland
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_black_and_gold
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_brown_and_white
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_yellow_and_red
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_1003
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_1001
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_1002
+DATA|skins|wh_bountyhunter|skin_wh_bountyhunter_green_and_yellow
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000_krizzor_01
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000_ektrik_01
+DATA|skins|vs_packmaster|skaven_pack_master_skin_1001
+DATA|skins|vs_packmaster|skaven_pack_master_skin_0000_kreepus_01
+DATA|skins|dr_engineer|skin_dr_engineer_black_and_gold
+DATA|skins|dr_engineer|skin_dr_engineer_1001
+DATA|skins|dr_engineer|skin_dr_engineer_white
+DATA|skins|dr_engineer|skin_dr_engineer_brown_and_iron
+DATA|skins|dr_engineer|skin_dr_engineer_blue_and_gold
+DATA|skins|dr_engineer|skin_dr_engineer
+DATA|skins|dr_engineer|skin_dr_engineer_purple_and_copper
+DATA|skins|es_questingknight|skin_es_questingknight_black_and_gold
+DATA|skins|es_questingknight|skin_es_questingknight_black_and_yellow
+DATA|skins|es_questingknight|skin_es_questingknight_blue_and_white
+DATA|skins|es_questingknight|skin_es_questingknight_1001
+DATA|skins|es_questingknight|skin_es_questingknight
+DATA|skins|es_questingknight|skin_es_questingknight_white
+DATA|skins|es_questingknight|skin_es_questingknight_yellow_and_white
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_black_and_gold
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_green
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_crimson
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_white
+DATA|skins|dr_ironbreaker|skin_dr_irondrake
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_1001
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_blue
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker_iron
+DATA|skins|dr_ironbreaker|skin_dr_ironbreaker
+DATA|skins|vs_rat_ogre|skaven_rat_ogre_skin_0000
+DATA|skins|es_knight|skin_es_knight_red
+DATA|skins|es_knight|skin_es_knight_black_and_gold
+DATA|skins|es_knight|skin_es_knight_bronze
+DATA|skins|es_knight|skin_es_knight_1002
+DATA|skins|es_knight|skin_es_knight_white
+DATA|skins|es_knight|skin_es_knight
+DATA|skins|es_knight|skin_es_knight_1001
+DATA|skins|es_knight|skin_es_knight_green
+DATA|skins|es_knight|skin_es_knight_middenland
+DATA|skins|dr_slayer|skin_dr_slayer_skaven
+DATA|skins|dr_slayer|skin_dr_slayer_1002
+DATA|skins|dr_slayer|skin_dr_slayer_dragon
+DATA|skins|dr_slayer|skin_dr_slayer_wing
+DATA|skins|dr_slayer|skin_dr_slayer_runes
+DATA|skins|dr_slayer|skin_dr_slayer_1003
+DATA|skins|dr_slayer|skin_dr_slayer_white
+DATA|skins|dr_slayer|skin_dr_slayer_1001
+DATA|skins|dr_slayer|skin_dr_slayer
+DATA|skins|dr_slayer|skin_dr_slayer_skull
+DATA|skins|dr_slayer|skin_dr_slayer_axe
+DATA|skins|we_maidenguard|skin_ww_maidenguard_caledor
+DATA|skins|we_maidenguard|skin_ww_maidenguard_1002
+DATA|skins|we_maidenguard|skin_ww_maidenguard_1001
+DATA|skins|we_maidenguard|skin_ww_moonmantle
+DATA|skins|we_maidenguard|skin_ww_maidenguard_red_and_yellow
+DATA|skins|we_maidenguard|skin_ww_maidenguard_white
+DATA|skins|we_maidenguard|skin_ww_maidenguard
+DATA|skins|we_maidenguard|skin_ww_maidenguard_black_and_gold
+DATA|skins|we_maidenguard|skin_ww_maidenguard_elyrion
+DATA|skins|we_maidenguard|skin_ww_maidenguard_white_and_gold
+DATA|skins|es_huntsman|skin_es_huntsman_black_and_gold
+DATA|skins|es_huntsman|skin_es_huntsman_yellow_and_green
+DATA|skins|es_huntsman|skin_es_huntsman_ostermark
+DATA|skins|es_huntsman|skin_es_longshark
+DATA|skins|es_huntsman|skin_es_huntsman_1001
+DATA|skins|es_huntsman|skin_es_huntsman_white
+DATA|skins|es_huntsman|skin_es_huntsman_middenland
+DATA|skins|es_huntsman|skin_es_huntsman_red_and_white
+DATA|skins|es_huntsman|skin_es_huntsman
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000_krizzor_01
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_1001
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000_kreepus_01
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000_ektrik_01
+DATA|skins|vs_ratling_gunner|skaven_ratling_gunner_skin_0000
+DATA|skins|bw_scholar,bw_necromancer|skin_bw_scholar_1003
+DATA|skins|we_thornsister|skin_ww_thornsister
+DATA|skins|we_thornsister|skin_ww_thornsister_redblack
+DATA|skins|we_thornsister|skin_ww_thornsister_black_and_gold
+DATA|skins|we_thornsister|skin_ww_thornsister_blue
+DATA|skins|we_thornsister|skin_ww_thornsister_green
+DATA|skins|we_thornsister|skin_ww_thornsister_white
+DATA|skins|bw_scholar|skin_bw_scholar_1002
+DATA|skins|bw_scholar|skin_bw_scholar_ostermark
+DATA|skins|bw_scholar|skin_bw_scholar_brown_and_white
+DATA|skins|bw_scholar|skin_bw_scholar_ash
+DATA|skins|bw_scholar|skin_bw_scholar_black_and_gold
+DATA|skins|bw_scholar|skin_bw_scholar_bronze
+DATA|skins|bw_scholar|skin_bw_scholar_1001
+DATA|skins|bw_scholar|skin_bw_scholar_white
+DATA|skins|bw_scholar|skin_bw_myrmidia
+DATA|skins|bw_scholar|skin_bw_scholar
+DATA|skins|es_mercenary|skin_es_mercenary_ostermark
+DATA|skins|es_mercenary|skin_es_default
+DATA|skins|es_mercenary|skin_es_mercenary
+DATA|skins|es_mercenary|skin_es_mercenary_1002
+DATA|skins|es_mercenary|skin_es_mercenary_1001
+DATA|skins|es_mercenary|skin_es_mercenary_1003
+DATA|skins|es_mercenary|skin_es_mercenary_white
+DATA|skins|es_mercenary|skin_es_mercenary_helmgart
+DATA|skins|es_mercenary|skin_es_mercenary_middenland
+DATA|skins|es_mercenary|skin_es_mercenary_ostland
+DATA|skins|es_mercenary|skin_es_mercenary_black_and_gold
+DATA|skins|es_mercenary|skin_es_mercenary_carroburg
+DATA|skins|wh_zealot|skin_wh_zealot_middenland
+DATA|skins|wh_zealot|skin_wh_zealot_crimson
+DATA|skins|wh_zealot|skin_wh_zealot_pure
+DATA|skins|wh_zealot|skin_wh_zealot_1001
+DATA|skins|wh_zealot|skin_wh_flagellant
+DATA|skins|wh_zealot|skin_wh_zealot_white
+DATA|skins|wh_zealot|skin_wh_zealot
+DATA|skins|wh_zealot|skin_wh_zealot_green_and_yellow
+DATA|skins|wh_zealot|skin_wh_zealot_black_and_gold
+NAME|adept_hat_0005|Adept's Torchgate
+NAME|bountyhunter_hat_0000|Faceless Judgement
+NAME|bountyhunter_hat_1002|Friedhelm's Flamboyance
+NAME|ww_hood_0002|Mask of the Sentinel
+NAME|ranger_hat_0014|Karakiaz Brynklad
+NAME|test_item_1012|<test_item_1012>
+NAME|witchhunter_hat_0000|Dread Deliverance
+NAME|waywatcher_hat_0007|Ambusher's Hood
+NAME|knight_hat_0002|Militia Pot-Helm
+NAME|ironbreaker_hat_1004|Gungasti
+NAME|mercenary_hat_0007|Courtier's Crest
+NAME|zealot_hat_1010|Obese Megalodon
+NAME|witchhunter_hat_0001|Scribe's Watchtower
+NAME|unchained_hat_0009|Kadra's Deathmask
+NAME|test_item_1013|<test_item_1013>
+NAME|waywatcher_hat_0006|Gladewatcher's Half-Mask
+NAME|bw_gate_0007|Crown of Cremation
+NAME|ranger_hat_0008|Horrstub
+NAME|huntsman_hat_0004|Marksman's Bonnet
+NAME|huntsman_hat_1010|Obese Megalodon
+NAME|knight_hat_0001|Knight's Muster Helm
+NAME|scholar_hat_0003|Stalwart's Candlegate
+NAME|scholar_hat_1001|Fulminator's Crown
+NAME|waywatcher_hat_0001|Horns of Kurnous
+NAME|mercenary_hat_0006|Stirland Tri-plume
+NAME|dr_helmet_0005|Galar Konk
+NAME|ranger_hat_1006|Ranger's Tattered Patch
+NAME|ranger_hat_1010|Obese Megalodon
+NAME|shade_hat_0008|Dreadmask
+NAME|dr_slayer_hair_0002|<dr_slayer_hair_0002>
+NAME|ww_hood_0000|Waywatcher Hood
+NAME|bw_gate_0008|Fangs of the Hydra
+NAME|wh_hat_0007|Cult of Sigmar
+NAME|huntsman_hat_0005|Reikland Brim
+NAME|thornsister_hat_0003|Bitterbloom Circlet
+NAME|waywatcher_hat_0000|Stalker's Hood
+NAME|adept_hat_0008|Illuminator's Collar
+NAME|scholar_hat_0000|Flamevigil Collar
+NAME|mercenary_hat_0009|Veteran's Scars
+NAME|zealot_hat_0002|Band of Zeal
+NAME|ranger_hat_0001|Kladkap
+NAME|witchhunter_hat_0006|Skullcrest Watchtower
+NAME|shade_hat_0009|Contest Helm
+NAME|ironbreaker_hat_0008|Bolgbrynazkap
+NAME|maidenguard_hat_0003|Eagle Crest
+NAME|scholar_hat_0009|Worshipful Candlegate
+NAME|bw_necromancer_hat_0000|Flesh-Stitched Collar
+NAME|shade_hat_0004|Naggarond Spike
+NAME|dr_helmet_0011|Nuf Boga
+NAME|questing_knight_hat_0001|Pureheart Helm
+NAME|mercenary_hat_1003|Wolverheart Crown
+NAME|wh_hat_0008|Reikwald Hat
+NAME|mercenary_hat_0008|Rakish Leatherbrim
+NAME|adept_hat_0009|The Five-Fold Flame
+NAME|waywatcher_hat_0011|Evercrown
+NAME|slayer_hat_0007|Angkonk
+NAME|knight_hat_0008|Roaring Crest
+NAME|witchhunter_hat_0007|Tyrant's Bicorne
+NAME|waywatcher_hat_0003|Living Leafcrown
+NAME|test_item_1004|<test_item_1004>
+NAME|maidenguard_hat_0007|Gilded Shame
+NAME|ironbreaker_hat_0009|Zulunbakiaz Goruzgorm
+NAME|adept_hat_0002|Keymaster's Torchgate
+NAME|ironbreaker_hat_0006|Grungazad's Brynkap
+NAME|bountyhunter_hat_0009|The Blazing Skull
+NAME|adept_hat_0010|The Smouldering Towers
+NAME|slayer_hat_0008|Brynzandawazbak
+NAME|zealot_hat_1001|Stolen Swine 
+NAME|scholar_hat_0006|Grand Candlegate
+NAME|questing_knight_hat_0000|Helm of the Worthy
+NAME|zealot_hat_0008|Sollenkrux
+NAME|wh_hat_0009|Reikwald Hat
+NAME|waywatcher_hat_0010|Kurnous' Herald
+NAME|shade_hat_0005|Eldrazor's Crown
+NAME|ranger_hat_0011|Rhynchufdrongol
+NAME|maidenguard_hat_0000|Protector's Circlet
+NAME|huntsman_hat_0008|Kossar's Muffler
+NAME|mercenary_hat_0003|Plumed Horseshoe
+NAME|adept_hat_1001|Memento Furioso
+NAME|shade_hat_1001|Executioner's Helm
+NAME|bw_necromancer_hat_0002|Ritual Crown
+NAME|slayer_hat_0009|Uzkulkonk
+NAME|scholar_hat_0007|Enduring Candlegate
+NAME|adept_hat_0003|Flamekeeper's Torchgate
+NAME|witchhunter_hat_0002|Warrant-Keeper's Watchtower
+NAME|scholar_hat_0011|Gilded Candlegate
+NAME|maidenguard_hat_0001|Warmaid's Barbute
+NAME|slayer_hat_1005|Ritual Hearth Tattoo
+NAME|priest_hat_0002|Circlet of Purity
+NAME|engineer_hat_0000|Outcast's Skullcap
+NAME|unchained_hat_0000|Mask of the Condemned
+NAME|ironbreaker_hat_0007|Zulunbakiaz Gorogkap
+NAME|mercenary_hat_0002|Lucky Horseshoe
+NAME|shade_hat_1002|Mask of the Shadow-Slayer
+NAME|bw_necromancer_hat_0003|Ill-Hallowed Hood
+NAME|test_item_1008|<test_item_1008>
+NAME|ironbreaker_hat_0004|Bryngormkap
+NAME|witchhunter_hat_0003|Candlewick Watchtower
+NAME|shade_hat_1003|Drakira's Grin
+NAME|maidenguard_hat_0002|Crown of Lileath
+NAME|ranger_hat_0005|Karakiaz Chufdrongol
+NAME|bountyhunter_hat_0008|The Iron Reaper
+NAME|dr_helmet_0008|Rilar Ghalklad
+NAME|mercenary_hat_0005|Sellsword's Twinplume
+NAME|engineer_hat_1001|Boki Smedniri
+NAME|ironbreaker_hat_0005|Wrothklad
+NAME|thornsister_hat_0000|Thornmaiden's Crown
+NAME|scholar_hat_1003|Scholar's Lantern Helm
+NAME|slayer_hat_0003|Drengivar
+NAME|slayer_hat_1001|The Iron Mohawk
+NAME|maidenguard_hat_1001|Wildrunner's Helm
+NAME|bountyhunter_hat_0005|Old Iron Jaw
+NAME|zealot_hat_0007|Reckoner's Mark
+NAME|priest_hat_0000|Priest's Sky Helm
+NAME|mercenary_hat_0004|Morr's Mask
+NAME|waywatcher_hat_1005|Atylwyth Crown
+NAME|bw_gate_0006|Gates of Fulmination
+NAME|unchained_hat_0002|Iron Crown
+NAME|knight_hat_1002|Myrmidia's Gaze
+NAME|huntsman_hat_1001|Trophy of the Gave
+NAME|shade_hat_0006|The Faceless Killer
+NAME|thornsister_hat_0001|Thornmaven's Crown
+NAME|slayer_hat_1002|Long Drong's Favourite Hat
+NAME|shade_hat_1010|Obese Megalodon
+NAME|ranger_hat_0015|Karakiaz Grobklad
+NAME|zealot_hat_0004|Zealot's Prayer Band
+NAME|adept_hat_0006|Seer's Torchgate
+NAME|questing_knight_hat_0003|Hippogryph Helm
+NAME|unchained_hat_0001|Witch's Mask
+NAME|knight_hat_0009|Scarred Close-Helm
+NAME|maidenguard_hat_1002|Chracian Lion Helm
+NAME|zealot_hat_1007|Ratechism
+NAME|huntsman_hat_1002|Kossar's Crown
+NAME|ironbreaker_hat_1002|Bakbok
+NAME|es_helmet_0003|Blucher's Helmet
+NAME|knight_hat_0007|Myrmidia's Crown
+NAME|witchhunter_hat_0008|Battered Tricorne
+NAME|priest_hat_1001|Headband of Huss (Almost Certainly)
+NAME|zealot_hat_0010|Hammerkine
+NAME|questing_knight_hat_1001|Crown of the True King (Possibly Genuine)
+NAME|adept_hat_1005|Gormann's Cindercage (Salvaged)
+NAME|engineer_hat_0001|Cogboki
+NAME|adept_hat_0007|Regal Torchgate
+NAME|waywatcher_hat_1004|Forebear's Helm
+NAME|knight_hat_1003|Griffon Crown
+NAME|priest_hat_0001|Penitent's Band
+NAME|test_item_1001|<test_item_1001>
+NAME|huntsman_hat_0007|Brigand's Mask
+NAME|shade_hat_0007|Helm of Torment
+NAME|ironbreaker_hat_0003|Ungdringiklad
+NAME|ranger_hat_0002|Gnorlklad
+NAME|bountyhunter_hat_1004|Tax Collector's Cap
+NAME|bw_gate_0000|Bright College Battle Guard
+NAME|slayer_hat_0005|Nadok
+NAME|test_item_1002|<test_item_1002>
+NAME|shade_hat_1004|Gladiatorial Gaze
+NAME|huntsman_hat_1003|Sneaker's Helm
+NAME|ironbreaker_hat_1005|The Lost Helm of Karak-Hirn
+NAME|ranger_hat_0012|Krutskazklad
+NAME|maidenguard_hat_0005|Wingshield Helm
+NAME|ranger_hat_0000|Karakiaz Dawazbakthrund
+NAME|engineer_hat_1002|Angrund Helm (Possibly)
+NAME|knight_hat_0004|Steel Resolve
+NAME|witchhunter_hat_0009|Rakish Bicorne
+NAME|test_item_1017|<test_item_1017>
+NAME|zealot_hat_1002|Manann's Favour
+NAME|bountyhunter_hat_0007|Komet Mark
+NAME|adept_hat_1002|Brazier Crown
+NAME|test_item_1014|<test_item_1014>
+NAME|mercenary_hat_1002|Marshal Ludenwald's Favourite Hat
+NAME|scholar_hat_1002|Candlevane Collar
+NAME|waywatcher_hat_1001|Aspect of Adanhu
+NAME|witchhunter_hat_1001|Purist's Stovepipe
+NAME|knight_hat_0006|Laurel Helm
+NAME|adept_hat_0000|Aqshy Torchgate
+NAME|knight_hat_1001|Scour-Sun Helm
+NAME|mercenary_hat_1001|Marienburg Bicorne
+NAME|ironbreaker_hat_1001|The Anvil of Doom
+NAME|ranger_hat_1001|The Golden Taurox
+NAME|waywatcher_hat_0009|Drassillia's Mask
+NAME|scholar_hat_0008|Sunburst Candlegate
+NAME|bountyhunter_hat_1010|Obese Megalodon
+NAME|ranger_hat_0009|Brugchufdrongol
+NAME|slayer_hat_1010|Obese Megalodon
+NAME|adept_hat_1010|Obese Megalodon
+NAME|zealot_hat_1003|Crown of Purity
+NAME|knight_hat_0010|Ironset Laurels
+NAME|shade_hat_0000|Clar Karond Veil
+NAME|unchained_hat_0004|Tentacle Helm
+NAME|es_hat_0000|Old Companion
+NAME|scholar_hat_0012|Pyrodeus' Candlegate
+NAME|slayer_hat_0010|Wrothdrengi
+NAME|waywatcher_hat_0002|Barkshield Mask
+NAME|slayer_hat_0006|Drongobang
+NAME|bw_gate_0001|Bright College Battle Guard
+NAME|unchained_hat_1001|Incandescent Brand
+NAME|bountyhunter_hat_1001|Deathvigil Mask
+NAME|ranger_hat_0013|Grobskazklad
+NAME|maidenguard_hat_0006|Starlight Helm
+NAME|ironbreaker_hat_0012|Barazaldkap
+NAME|priest_hat_0003|Brass Wreath
+NAME|bountyhunter_hat_0004|One-Eye's Revenge
+NAME|test_item_1003|<test_item_1003>
+NAME|ironbreaker_hat_0000|Dawazbak Naibok
+NAME|bw_necromancer_hat_1010|Obese Megalodon
+NAME|bw_necromancer_hat_0001|Alabaster Locks
+NAME|mercenary_hat_0001|Estalian Conquistador
+NAME|adept_hat_0001|Matriarch's Torchgate
+NAME|zealot_hat_0000|Flagellant's Brand
+NAME|witchhunter_hat_1004|Solstice Warden's Hood
+NAME|waywatcher_hat_0008|Windrush Crest
+NAME|thornsister_hat_0002|Eternos Crown
+NAME|maidenguard_hat_0010|Burning Crown
+NAME|shade_hat_0001|Shadow Mask
+NAME|bountyhunter_hat_1005|Candelight Helm
+NAME|unchained_hat_1004|Flame Within
+NAME|thornsister_hat_1010|Obese Megalodon
+NAME|unchained_hat_0003|Lost Mask
+NAME|ironbreaker_hat_0013|Bryndawazbak
+NAME|knight_hat_0003|Grim Gatekeeper
+NAME|wh_hat_0000|Clay Pipe Hat
+NAME|huntsman_hat_0002|Hunter's Muffler
+NAME|slayer_hat_0011|Angazundi
+NAME|witchhunter_hat_0004|Templar's Watchtower
+NAME|zealot_hat_0005|Sin Shield
+NAME|scholar_hat_0001|Pyromancer's Candlegate
+NAME|witchhunter_hat_0005|Battered Watchtower
+NAME|test_item_1015|<test_item_1015>
+NAME|ranger_hat_0006|Skazkald
+NAME|ranger_hat_0010|Grobchufdrongol
+NAME|dr_helmet_0003|Drakk Goruz
+NAME|scholar_hat_1004|Midwinter Tines
+NAME|mercenary_hat_0000|Reikland Griffonplume
+NAME|unchained_hat_0006|Skullmask of the Exile
+NAME|ironbreaker_hat_0001|Zulunbakiaz Nairikkit
+NAME|zealot_hat_0011|The Heldenmark
+NAME|maidenguard_hat_0004|Bloodgem Crown
+NAME|es_hat_0001|Old Companion
+NAME|shade_hat_0002|City Guard's Helm
+NAME|huntsman_hat_1005|Soothsayer's Skullcap
+NAME|huntsman_hat_0003|Sentry's Hood
+NAME|ww_hood_0004|Horns of Drakira
+NAME|knight_hat_0000|Reikshammer Casque
+NAME|slayer_hat_0012|Angazstump
+NAME|wh_hat_0001|Clay Pipe Hat
+NAME|test_item_1018|<test_item_1018>
+NAME|witchhunter_hat_1003|Beast-Hunter's Hat
+NAME|scholar_hat_0010|Majestic Candlegate
+NAME|ranger_hat_0007|Karakiaz Rikklad
+NAME|ranger_hat_1005|Kahirn
+NAME|dr_helmet_0002|Karak Vlag Grimazul
+NAME|zealot_hat_0006|Blinderkomet
+NAME|priest_hat_0004|Redemptor's Patch
+NAME|unchained_hat_1003|Immolator's Casket
+NAME|bountyhunter_hat_0006|Purity Helm
+NAME|ironbreaker_hat_0010|Zulunbakiaz Bryngorm
+NAME|maidenguard_hat_0008|Mask of the Chaste
+NAME|ironbreaker_hat_0002|Bokiboki
+NAME|shade_hat_0003|Seadrake Helm
+NAME|maidenguard_hat_1010|Obese Megalodon
+NAME|es_hat_0002|Bögenhafen Bonnet
+NAME|huntsman_hat_0000|Fugitive's Hood
+NAME|dr_helmet_0001|Ald Karaki
+NAME|unchained_hat_0005|Inferno Circlet
+NAME|zealot_hat_0009|Morr's Wreath
+NAME|slayer_hat_0001|Drengi Zandawazbak
+NAME|huntsman_hat_0009|Poacher's Hood
+NAME|witchhunter_hat_0010|The Vengeful Peacock
+NAME|ranger_hat_0004|Goruzklad
+NAME|zealot_hat_0003|Prayer Stump
+NAME|maidenguard_hat_0009|Silent Watcher
+NAME|unchained_hat_0008|Mask of the Living Flame
+NAME|ironbreaker_hat_0011|Rikaz Brynkap
+NAME|huntsman_hat_0001|Sunset Bonnet
+NAME|zealot_hat_0001|Nails of Judgement
+NAME|maidenguard_hat_1004|Reaver's Helm
+NAME|waywatcher_hat_0005|Whisperer's Guise
+NAME|test_item_1010|<test_item_1010>
+NAME|slayer_hat_0000|Gurnissonaz Zanghal
+NAME|test_item_1007|<test_item_1007>
+NAME|test_item_1006|<test_item_1006>
+NAME|test_item_1005|<test_item_1005>
+NAME|es_hat_0003|Egret Plume Cavalier
+NAME|wh_hat_0003|Comet Capotain
+NAME|ww_hood_0001|Waywatcher Hood
+NAME|bountyhunter_hat_0002|Diligence
+NAME|slayer_hat_0002|Stumpdrengi
+NAME|waywatcher_hat_1010|Obese Megalodon
+NAME|bountyhunter_hat_0003|Brugheim's Redeemer
+NAME|adept_hat_0004|Brandmaker's Torchgate
+NAME|dr_helmet_0000|Ald Karaki
+NAME|unchained_hat_0007|Crown of Glory
+NAME|adept_hat_1003|Tri-Skull Crown
+NAME|knight_hat_0005|Counterfeit Crown
+NAME|maidenguard_hat_1005|The Crown of Avelorn (Facsimile)
+NAME|waywatcher_hat_0004|Branch Horn
+NAME|test_item_1011|<test_item_1011>
+NAME|test_item_1009|<test_item_1009>
+NAME|huntsman_hat_0006|Outlaw's Crest
+NAME|knight_hat_0011|The Veteran
+NAME|scholar_hat_0002|Eternal Candlegate
+NAME|shade_hat_0010|Filthy Rag
+NAME|bountyhunter_hat_0001|The Watcher
+NAME|slayer_hat_0004|Angazdrengi
+NAME|ranger_hat_0003|Orrudklad
+NAME|scholar_hat_0004|Heavenly Candlegate
+NAME|scholar_hat_0005|Morr's Candlegate
+NAME|skin_wh_zealot_middenland|Midnight Penance Robes
+NAME|skaven_ratling_gunner_skin_0000_krizzor_01|Clan Krizzor Ratling Gunner
+NAME|skin_ww_shade_1001|Naggarond Backstabber
+NAME|skin_bw_necromancer_0002|Chanteuse of the Black Host
+NAME|skin_ww_thornsister|Summertide's Raiment
+NAME|skin_bw_necromancer_0001_a|Sylvanian Vizier
+NAME|skin_es_huntsman_black_and_gold|Nuln Bordermarcher
+NAME|skin_bw_adept_ostermark|Ostermark Bonds-Witch
+NAME|skin_wh_zealot_crimson|Priest of Slaughter
+NAME|skin_wh_captain_black_and_gold|Imperial Chamberlain's Finery
+NAME|skaven_rat_ogre_skin_0000|Fester-Bonded Rat Ogre
+NAME|skin_bw_scholar_1002|Midwinter Flammengarb
+NAME|skin_wh_zealot_pure|Werner Krabb's Holy Armour
+NAME|skin_bw_adept_white|Battle Wizard (Purified)
+NAME|skin_wh_priest_white|Warrior Priest of Sigmar (Purified)
+NAME|skin_es_mercenary_ostermark|Ostermark Sellsword
+NAME|skin_ww_shade_black_and_gold|Clar Karond Royalblood
+NAME|skin_bw_scholar_ostermark|Librarian's Bindings
+NAME|skin_ww_waywatcher_tirsyth|Bleakcloak of Tirsyth
+NAME|skin_es_knight_red|Knights Encarmine
+NAME|skin_ww_waywatcher_black_and_gold|Modryn Nightstalker
+NAME|skin_es_default|Champion of Ubersreik
+NAME|skin_wh_priest_0002_a|Vestments of Glory
+NAME|skin_es_mercenary|Reikland Bodyguard
+NAME|skin_bw_scholar_1003|Isabella von Carstein
+NAME|skin_es_knight_black_and_gold|Livery of the Blazing Sun
+NAME|skaven_gutter_runner_skin_0000_krizzor_01|Clan Krizzor Gutter Runner
+NAME|skin_ww_maidenguard_caledor|Bleakmaiden Guard
+NAME|skin_es_questingknight_black_and_gold|Outcast of Parravon
+NAME|skin_ww_thornsister_1001|Naieth the Prophetess
+NAME|skin_es_huntsman_yellow_and_green|Stirland Poacher
+NAME|skin_ww_waywatcher_anmyr|Anmyr Beaststalker
+NAME|skin_dr_slayer_skaven|Rakidrengirhun
+NAME|skin_wh_bountyhunter_white|Bounty Hunter (Purified)
+NAME|skin_wh_bountyhunter|Bounty Hunter's Gambeson
+NAME|skin_dr_ironbreaker_black_and_gold|Gromdalklad
+NAME|skin_dr_slayer_1002|Protection of the Peaks
+NAME|skin_bw_scholar_brown_and_white|Cinderweaver's Robes
+NAME|skin_bw_unchained_1002|Maven's Cindergarb
+NAME|skin_wh_captain|Captain's Longcoat
+NAME|skin_dr_ranger_zhufbar|Zhufbar Strollazklad
+NAME|skin_ww_maidenguard_1002|High Robes of Isha (Counterfeit)
+NAME|skin_bw_scholar_ash|Ash Queen's Robes
+NAME|skin_dr_ironbreaker_green|Zulunbaki Azamarklad
+NAME|skin_wh_default|Champion of Ubersreik
+NAME|skin_es_mercenary_1002|Wolverheart Furs
+NAME|skin_es_knight_bronze|Order of the Brazen Shield
+NAME|skin_dr_engineer_black_and_gold|Gromthi Endriniklad
+NAME|skin_ww_shade_1002|Dreadguard's Mantle
+NAME|skin_ww_shade_white|Shade (Purified)
+NAME|skin_dr_slayer_dragon|Drakkadrengirhun
+NAME|skin_dr_ironbreaker_crimson|Zulunbaki Azulklad
+NAME|skin_ww_waywatcher_cythral|Spiritward of Cythral
+NAME|skin_ww_waywatcher_1001|Herald of the Weave
+NAME|skin_dr_ranger_white|Dwarf Ranger (Purified)
+NAME|skin_es_questingknight_black_and_yellow|Champion of Parravon
+NAME|skaven_gutter_runner_skin_0000|Gutter Runner
+NAME|skin_wh_bountyhunter_middenland|Middenland Wolfclaw
+NAME|skin_es_huntsman_ostermark|Ostermark Bowman
+NAME|skin_bw_scholar_black_and_gold|Majestic Mantle
+NAME|skin_bw_unchained_ash|The Raging Wind
+NAME|skin_bw_necromancer|Caller of the Dead
+NAME|skaven_ratling_gunner_skin_1001|Putrescent Kin Ratling Gunner
+NAME|skin_dr_slayer_wing|Krodrengirhun
+NAME|skin_dr_ironbreaker_white|Ironbreaker (Purified)
+NAME|skin_bw_unchained|Chains of Purpose
+NAME|skin_es_questingknight_blue_and_white|Wayfarer's Vestments
+NAME|skin_dr_slayer_runes|Alddrengirhun
+NAME|skin_es_knight_1002|Armour of the Blazing Sun
+NAME|skin_wh_bountyhunter_black_and_gold|Drakwald Hunter
+NAME|skin_dr_ranger_black_and_gold|Drungiklad
+NAME|skin_wh_captain_helmgart|Helmgart's Redeemer
+NAME|skin_ww_maidenguard_1001|Chracian Valourguard
+NAME|chaos_troll_skin_0000|Bile Troll
+NAME|skin_ww_waywatcher_helmgart|Helmgart Sentinel
+NAME|skin_es_questingknight_1001|Raiment of the True King (Unverified)
+NAME|skin_wh_bountyhunter_brown_and_white|Ostermark Leveller
+NAME|skin_es_longshark|Herald of King Taal
+NAME|skin_es_questingknight|Gallant of Parravon
+NAME|skin_wh_bountyhunter_yellow_and_red|Blood-Bounty Gambeson
+NAME|skin_es_mercenary_1001|Hellequin's Raiment
+NAME|skin_wh_priest_0002|Vestments of the Confessor
+NAME|skaven_wind_globadier_skin_0000_kreepus_01|Clan Kreepus Globadier
+NAME|skin_wh_zealot_1001|Redemptive One
+NAME|skin_dr_ranger|Strollaz Raggarin
+NAME|skaven_gutter_runner_skin_0000_kreepus_01|Clan Kreepus Gutter Runner
+NAME|skin_ww_thornsister_redblack|Atharti's Handmaiden
+NAME|skin_bw_default|Champion of Ubersreik
+NAME|skin_ww_moonmantle|Daughter of Lileath
+NAME|skin_ww_thornsister_black_and_gold|Sister of the Night Glens
+NAME|skin_dr_irondrake|Valaya's Hearthguard
+NAME|skin_bw_scholar_bronze|Five Hundred Secret Words
+NAME|skin_ww_maidenguard_red_and_yellow|Spirit Talker's Raiment
+NAME|skin_wh_captain_ostermark|Ostermark Constable
+NAME|skin_ww_shade_emerald|Disciple of Anath Raema
+NAME|skin_bw_adept_ash|Robes of the Faded Flame
+NAME|skin_bw_adept_helmgart|Helmgart Maven
+NAME|skaven_pack_master_skin_0000|Packmaster
+NAME|skin_es_huntsman_1001|Wulfhart's Array
+NAME|skin_wh_flagellant|Flagellant of the Twin-Tailed Comet
+NAME|skin_dr_ironbreaker_1001|Galazklad
+NAME|skin_bw_scholar_1001|Seeker's Robes
+NAME|skin_es_knight_white|Foot Knight (Purified)
+NAME|skin_wh_captain_ostland|Sigmar's Executioner
+NAME|skin_wh_bountyhunter_1003|Count Boris Todbringer
+NAME|skin_dr_slayer_1003|Gotrek Gurnisson
+NAME|skin_ww_thornsister_blue|Sister of the Frozen Heart
+NAME|skin_dr_ranger_helmgart|Helmgart Karakiklad
+NAME|skin_es_knight|Reikshammer Plate
+NAME|skin_bw_adept|Robes of the Bright Order
+NAME|skin_dr_engineer_1001|Angrundklad (Perhaps)
+NAME|skin_ww_waywatcher_1002|Atylwyth Chanter's Robe
+NAME|skin_es_mercenary_1003|Felix Jaeger
+NAME|skin_wh_captain_1001|Helhunten's Hauberk
+NAME|skin_es_knight_1001|Knight Griffon
+NAME|skin_dr_ranger_1001|Varagvlag
+NAME|skin_dr_ranger_1002|Ranger's Wilds-Worn Garb
+NAME|skin_dr_ironbreaker_blue|Gromvarrklad
+NAME|skin_bw_unchained_white|Unchained (Purified)
+NAME|skaven_ratling_gunner_skin_0000_kreepus_01|Clan Kreepus Ratling Gunner
+NAME|skin_wh_zealot_white|Zealot (Purified)
+NAME|skin_wh_captain_white|Witch Hunter Captain (Purified)
+NAME|skin_ww_waywatcher_white|Waystalker (Purified)
+NAME|skin_ww_maidenguard_white|Handmaiden (Purified)
+NAME|skin_es_mercenary_white|Mercenary (Purified)
+NAME|skin_es_huntsman_white|Huntsman (Purified)
+NAME|skin_dr_slayer_white|Slayer (Purified)
+NAME|skin_bw_scholar_white|Pyromancer (Purified)
+NAME|skin_dr_slayer_1001|Slayer Pirate's Garb
+NAME|skin_wh_bountyhunter_1001|Gambler's Glamour
+NAME|skin_bw_myrmidia|Judge of Myrmidia
+NAME|skin_es_huntsman_middenland|Middenland Wolf-leathers
+NAME|skin_dr_default|Champion of Ubersreik
+NAME|skin_es_huntsman_red_and_white|Talabecland Hunter
+NAME|skin_dr_slayer|Drengiaz Lankgruntaz
+NAME|skaven_warpfire_thrower_skin_0000|Warpfire Thrower
+NAME|skaven_wind_globadier_skin_0000|Globadier
+NAME|skin_dr_ranger_barak_varr|Barak Varr Kulgurakiklad
+NAME|skin_ww_shade|Shade
+NAME|skaven_warpfire_thrower_skin_1001|Festerblight Warpfire Thrower
+NAME|skin_wh_captain_grey_and_yellow|Seeker's Longcoat
+NAME|skin_bw_necromancer_0001|Wandering Reanimator
+NAME|skin_bw_necromancer_white|Necromancer (Purified)
+NAME|skin_ww_shade_midnight|Herald of the Pale Queen
+NAME|skin_es_mercenary_helmgart|Helmgart Hireling
+NAME|skin_ww_waywatcher|Waywatcher
+NAME|skin_es_knight_green|Hermit Knight's Armour
+NAME|skin_bw_unchained_bronze|All-Consuming Fire
+NAME|skin_es_questingknight_white|Grail Knight (Purified)
+NAME|skin_es_questingknight_yellow_and_white|Paladin of Parravon
+NAME|skin_ww_default|Champion of Ubersreik
+NAME|skaven_pack_master_skin_0000_krizzor_01|Clan Krizzor Packmaster
+NAME|skaven_warpfire_thrower_skin_0000_kreepus_01|Clan Kreepus Warpfire Thrower
+NAME|skaven_warpfire_thrower_skin_0000_ektrik_01|Clan Ektrik Warpfire Thrower
+NAME|skaven_ratling_gunner_skin_0000_ektrik_01|Clan Ektrik Ratling Gunner
+NAME|skaven_pack_master_skin_0000_ektrik_01|Clan Ektrik Packmaster

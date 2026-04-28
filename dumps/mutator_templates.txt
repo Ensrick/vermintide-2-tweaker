@@ -1,0 +1,105 @@
+﻿# MutatorTemplates — Complete Mutator Reference
+# Sources: scripts/settings/mutator_settings.lua + DLC settings
+# Generated: 2026-04-25
+
+=== BASE MUTATORS (32) ===
+# Winds of Magic / Weaves + general gameplay mutators
+  no_ammo
+  no_pickups
+  player_dot
+  instant_death
+  whiterun
+  no_respawn
+  elite_run
+  specials_frequency
+  more_specials
+  same_specials
+  big_specials
+  elite_specials
+  gutter_runner_mayhem
+  chaos_warriors_trickle
+  mixed_horde
+  multiple_bosses
+  hordes_galore
+  powerful_elites
+  shared_health_pool
+  high_intensity
+  wave_of_plague_monks
+  wave_of_berzerkers
+  night_mode
+  life
+  metal
+  heavens
+  light
+  shadow
+  fire
+  death
+  beasts
+  twitch_darkness
+
+=== CHAOS WASTES (MORRIS) MUTATORS (40) ===
+# Curses, blessings, and pacing modifiers for Chaos Wastes
+  no_sorcerers
+  curse_corrupted_flesh
+  curse_skulls_of_fury
+  curse_change_of_tzeentch
+  curse_blood_storm
+  curse_bolt_of_change
+  curse_monophobia
+  curse_empathy
+  curse_rotten_miasma
+  curse_khorne_champions
+  curse_skulking_sorcerer
+  curse_abundance_of_life
+  curse_greed_pinata
+  curse_egg_of_tzeentch
+  blessing_of_shallya
+  blessing_of_grimnir
+  blessing_of_isha
+  blessing_of_ranald
+  blessing_of_abundance
+  increased_grenades
+  increased_deus_potions
+  increased_deus_soft_currency
+  increased_healing
+  deus_more_hordes
+  deus_less_hordes
+  deus_more_monsters
+  deus_less_monsters
+  deus_more_roamers
+  deus_less_roamers
+  deus_more_specials
+  deus_less_specials
+  deus_more_elites
+  deus_less_elites
+  deus_pacing_tweak
+  deus_difficulty_tweak
+  no_roamers
+  easier_packs
+  easier_hordes
+  pacing_frozen
+  escape
+
+=== BE'LAKOR MUTATORS (7) ===
+  challenge_test
+  arena_belakor_script
+  curse_belakors_shadows
+  curse_shadow_daggers
+  curse_shadow_homing_skulls
+  curse_belakor_totems
+  curse_grey_wings
+
+=== GEHEIMNISNACHT 2021 MUTATORS (2) ===
+  geheimnisnacht_2021
+  geheimnisnacht_2021_hard_mode
+
+=== SKULLS 2023 MUTATORS (1) ===
+  skulls_2023
+
+=== SUMMARY ===
+Total mutators: 82
+  Base: 32
+  Chaos Wastes: 40
+  Be'lakor: 7
+  Geheimnisnacht: 2
+  Skulls: 1

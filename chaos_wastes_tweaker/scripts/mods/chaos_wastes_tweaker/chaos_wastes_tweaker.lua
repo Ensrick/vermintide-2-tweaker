@@ -1,6 +1,6 @@
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.2.0-dev"
+local MOD_VERSION = "0.2.3-dev"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -398,4 +398,287 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     end
 
     return unpack(results)
+end)
+
+-- ============================================================
+-- Debug commands
+-- ============================================================
+
+mod:command("dump_spawners", "Dump pickup spawner counts and pickup_settings for the current level", function()
+    if not LevelHelper then
+        mod:echo("LevelHelper not available.")
+        return
+    end
+
+    local current = LevelHelper:current_level_settings()
+    if not current then
+        mod:echo("No level settings found.")
+        return
+    end
+
+    mod:echo("=== Level: " .. tostring(current.display_name or current.level_id or "?") .. " ===")
+
+    local pickup_settings = current.pickup_settings
+    if pickup_settings then
+        for diff_key, diff_data in pairs(pickup_settings) do
+            if type(diff_data) == "table" and diff_data.primary then
+                local p = diff_data.primary
+                local line = string.format("  [%s] weapon_chest=%s cursed_chest=%s ammo=%s",
+                    tostring(diff_key),
+                    tostring(p.deus_weapon_chest or "nil"),
+                    tostring(p.deus_cursed_chest or "nil"),
+                    tostring(p.ammo or "nil"))
+                mod:echo(line)
+                mod:info(line)
+
+                for k, v in pairs(p) do
+                    if k ~= "deus_weapon_chest" and k ~= "deus_cursed_chest" and k ~= "ammo" then
+                        local detail = string.format("    %s = %s", tostring(k), tostring(v))
+                        mod:info(detail)
+                    end
+                end
+            end
+        end
+    else
+        mod:echo("  No pickup_settings found.")
+    end
+
+    if Managers.state and Managers.state.entity then
+        local spawner_count = 0
+        local entity_manager = Managers.state.entity
+        local system = entity_manager:system("pickup_system")
+        if system and system._pickup_spawners then
+            for _ in pairs(system._pickup_spawners) do
+                spawner_count = spawner_count + 1
+            end
+            mod:echo("  Physical pickup spawners: " .. spawner_count)
+        elseif system and system._spawner_units then
+            for _ in pairs(system._spawner_units) do
+                spawner_count = spawner_count + 1
+            end
+            mod:echo("  Physical spawner units: " .. spawner_count)
+        else
+            mod:echo("  Could not count spawners (unknown fields). Check log.")
+            if system then
+                for k, v in pairs(system) do
+                    mod:info("  pickup_system.%s = %s (%s)", tostring(k), tostring(v), type(v))
+                end
+            end
+        end
+    end
+
+    mod:echo("Done. Full details in log.")
+end)
+
+mod:command("dump_boons", "Deep dump of all DeusPowerUpTemplates + buff data to log", function(filter)
+    if not DeusPowerUpTemplates then
+        mod:echo("DeusPowerUpTemplates not loaded (must be in Chaos Wastes).")
+        return
+    end
+
+    local function dump_table(tbl, prefix, lines, depth)
+        if depth > 6 then
+            lines[#lines + 1] = prefix .. "... (max depth)"
+            return
+        end
+        local keys = {}
+        for k in pairs(tbl) do keys[#keys + 1] = k end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        for _, k in ipairs(keys) do
+            local v = tbl[k]
+            local key_str = prefix .. tostring(k)
+            if type(v) == "table" then
+                lines[#lines + 1] = key_str .. " = {"
+                dump_table(v, prefix .. "  ", lines, depth + 1)
+                lines[#lines + 1] = prefix .. "}"
+            elseif type(v) == "function" then
+                lines[#lines + 1] = key_str .. " = [function]"
+            else
+                lines[#lines + 1] = key_str .. " = " .. tostring(v) .. "  (" .. type(v) .. ")"
+            end
+        end
+    end
+
+    local function lookup_buff(name)
+        if not name then return nil end
+        local sources = {
+            { rawget(_G, "DeusPowerUpBuffTemplates"), "DeusPowerUpBuffTemplates" },
+            { rawget(_G, "BuffTemplates"), "BuffTemplates" },
+            { rawget(_G, "NetworkedBuffTemplates"), "NetworkedBuffTemplates" },
+        }
+        for _, src in ipairs(sources) do
+            if src[1] and src[1][name] then
+                return src[1][name], src[2]
+            end
+        end
+        return nil, nil
+    end
+
+    local sorted_keys = {}
+    for key in pairs(DeusPowerUpTemplates) do
+        if not filter or key:find(filter, 1, true) then
+            sorted_keys[#sorted_keys + 1] = key
+        end
+    end
+    table.sort(sorted_keys)
+
+    local count = 0
+    for _, key in ipairs(sorted_keys) do
+        local tpl = DeusPowerUpTemplates[key]
+        local lines = {}
+        lines[#lines + 1] = "========== " .. key .. " =========="
+
+        lines[#lines + 1] = "--- PowerUp Template ---"
+        dump_table(tpl, "  ", lines, 0)
+
+        local buff_name = tpl.buff_template_name or tpl.buff_name
+        if buff_name then
+            local buff_tpl, source = lookup_buff(buff_name)
+            if buff_tpl then
+                lines[#lines + 1] = "--- Buff Template: " .. buff_name .. " (from " .. source .. ") ---"
+                dump_table(buff_tpl, "  ", lines, 0)
+            else
+                lines[#lines + 1] = "--- Buff Template: " .. buff_name .. " NOT FOUND in any buff table ---"
+            end
+        end
+
+        for _, line in ipairs(lines) do
+            mod:info("[DUMP:boon_deep] %s", line)
+        end
+        count = count + 1
+    end
+
+    mod:echo(string.format("dump_boons: %d boons dumped to log%s", count,
+        filter and (" matching '" .. filter .. "'") or ""))
+end)
+
+mod:command("dump_buffs", "Deep dump of all buff templates referenced by boons", function(filter)
+    if not DeusPowerUpTemplates then
+        mod:echo("DeusPowerUpTemplates not loaded (must be in Chaos Wastes).")
+        return
+    end
+
+    local function dump_table(tbl, prefix, lines, depth)
+        if depth > 6 then
+            lines[#lines + 1] = prefix .. "... (max depth)"
+            return
+        end
+        local keys = {}
+        for k in pairs(tbl) do keys[#keys + 1] = k end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        for _, k in ipairs(keys) do
+            local v = tbl[k]
+            local key_str = prefix .. tostring(k)
+            if type(v) == "table" then
+                lines[#lines + 1] = key_str .. " = {"
+                dump_table(v, prefix .. "  ", lines, depth + 1)
+                lines[#lines + 1] = prefix .. "}"
+            elseif type(v) == "function" then
+                lines[#lines + 1] = key_str .. " = [function]"
+            else
+                lines[#lines + 1] = key_str .. " = " .. tostring(v) .. "  (" .. type(v) .. ")"
+            end
+        end
+    end
+
+    local buff_sources = {}
+    local src_names = { "BuffTemplates", "NetworkedBuffTemplates", "DeusPowerUpBuffTemplates", "DeusBuffTemplates" }
+    for _, name in ipairs(src_names) do
+        local tbl = rawget(_G, name)
+        if tbl then buff_sources[name] = tbl end
+    end
+
+    local function lookup_buff(name)
+        for src_name, src_tbl in pairs(buff_sources) do
+            if src_tbl[name] then return src_tbl[name], src_name end
+        end
+        return nil, nil
+    end
+
+    local refs = {}
+    local function collect_refs(tbl, depth)
+        if depth > 6 or type(tbl) ~= "table" then return end
+        for k, v in pairs(tbl) do
+            if type(v) == "string" and (k == "buff_to_add" or k == "buff_to_add_revived"
+                or k == "cooldown_buff" or k == "full_heal_buff" or k == "removal_buff") then
+                refs[v] = true
+            elseif type(v) == "table" then
+                if k == "buff_to_add" or k == "buff_to_add_revived" then
+                    for _, name in pairs(v) do
+                        if type(name) == "string" then refs[name] = true end
+                    end
+                else
+                    collect_refs(v, depth + 1)
+                end
+            end
+        end
+    end
+
+    for _, tpl in pairs(DeusPowerUpTemplates) do
+        collect_refs(tpl, 0)
+    end
+
+    local sorted = {}
+    for name in pairs(refs) do
+        if not filter or name:find(filter, 1, true) then
+            sorted[#sorted + 1] = name
+        end
+    end
+    table.sort(sorted)
+
+    local count = 0
+    for _, name in ipairs(sorted) do
+        local lines = {}
+        local buff_tpl, source = lookup_buff(name)
+        if buff_tpl then
+            lines[#lines + 1] = "========== " .. name .. " (from " .. source .. ") =========="
+            dump_table(buff_tpl, "  ", lines, 0)
+            count = count + 1
+        else
+            lines[#lines + 1] = "========== " .. name .. " NOT FOUND =========="
+        end
+        for _, line in ipairs(lines) do
+            mod:info("[DUMP:buff_deep] %s", line)
+        end
+    end
+
+    mod:echo(string.format("dump_buffs: %d/%d referenced buffs found%s", count, #sorted,
+        filter and (" matching '" .. filter .. "'") or ""))
+end)
+
+mod:command("dump_mutators", "Dump all mutator templates to log", function(filter)
+    local src = rawget(_G, "MutatorTemplates")
+    if not src then
+        mod:echo("MutatorTemplates not loaded.")
+        return
+    end
+
+    local entries = {}
+    for key, tpl in pairs(src) do
+        if not filter or key:find(filter, 1, true) then
+            entries[#entries + 1] = key
+        end
+    end
+    table.sort(entries)
+
+    for _, key in ipairs(entries) do
+        local tpl = src[key]
+        local line = string.format("%-40s display=%s",
+            key, tostring(tpl.display_name or tpl.name or "?"))
+        mod:echo(line)
+        mod:info("[DUMP:mutators] %s", line)
+    end
+
+    mod:echo(string.format("dump_mutators: %d templates", #entries))
+end)
+
+mod:command("cw_status", "Show Chaos Wastes Tweaker state", function()
+    mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
+    mod:echo("  Altars: upgrade=" .. tostring(mod:get("chest_upgrade_count") or 1)
+        .. " melee_swap=" .. tostring(mod:get("chest_swap_melee_count") or 1)
+        .. " ranged_swap=" .. tostring(mod:get("chest_swap_ranged_count") or 1)
+        .. " boon=" .. tostring(mod:get("chest_power_up_count") or 2))
+    mod:echo("  Chests of Trials: " .. tostring(mod:get("cursed_chest_count") or 1))
+    mod:echo("  Arena ammo: " .. tostring(mod:get("arena_ammo_count") or 2))
+    mod:echo("  Campaign potions: " .. tostring(mod:get("enable_campaign_potions") or false))
 end)

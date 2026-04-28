@@ -1,7 +1,7 @@
 local mod = get_mod("gt")
 
 return {
-    name = "General Tweaker",
+    name = "Tweaker: General",
     description = mod:localize("mod_description"),
     is_togglable = true,
 
@@ -40,6 +40,36 @@ return {
                         range         = { -3.0, 3.0 },
                         decimals_number = 1,
                         tooltip       = mod:localize("tp_side_offset_tooltip"),
+                    },
+                },
+            },
+            {
+                setting_id  = "gameplay_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "godmode_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("godmode_enabled_tooltip"),
+                    },
+                    {
+                        setting_id    = "allow_duplicate_careers",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("allow_duplicate_careers_tooltip"),
+                    },
+                },
+            },
+            {
+                setting_id  = "mission_inventory_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "mission_inventory_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("mission_inventory_enabled_tooltip"),
                     },
                 },
             },

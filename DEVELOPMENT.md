@@ -9,7 +9,7 @@ A modular set of Vermintide 2 VMF mods split from the original monolithic **"Twe
 | Chaos Wastes Tweaker | `ct` | `ct <command>` | **3712929235** | Uploaded |
 | Weapon Tweaker | `wt` | `wt <command>` | **3712896117** | Uploaded |
 | General Tweaker | `gt` | `gt <command>` | **3713619122** | Uploaded |
-| Career Tweaker | `crt` | `crt <command>` | TBD | Not started |
+| Career Tweaker | `crt` | `crt <command>` | TBD | Scaffolded |
 | ~~Tweaker (legacy)~~ | `t` | `t <command>` | 3704660429 | Deprecated -- split into above |
 
 ## Directory Structure

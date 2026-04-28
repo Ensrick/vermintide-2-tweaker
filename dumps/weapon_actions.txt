@@ -1,0 +1,1516 @@
+﻿=== bardin_engineer_career_skill_weapon (wield_anim=to_engineer_career_skill) ===
+action_one.base_fire  1P=attack_shoot_charged  3P=-
+action_one.spin  1P=attack_charge  3P=-
+action_one.armor_pierce_fire  1P=attack_shoot_charged  3P=-
+action_one.fast_fire  1P=attack_shoot_charged  3P=-
+action_one.default  1P=attack_charge  3P=-
+action_two.default  1P=attack_charge_loop  3P=-
+action_two.charged  1P=attack_charge_end  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== bardin_engineer_career_skill_weapon_special (wield_anim=to_engineer_career_skill_special) ===
+action_one.base_fire  1P=attack_shoot_charged  3P=-
+action_one.spin  1P=attack_charge  3P=-
+action_one.armor_pierce_fire  1P=attack_shoot_charged  3P=-
+action_one.fast_fire  1P=attack_shoot_charged  3P=-
+action_one.default  1P=attack_charge  3P=-
+action_two.default  1P=attack_charge_loop  3P=-
+action_two.charged  1P=attack_charge_end  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== bardin_engineer_career_skill_weapon_special_vs (wield_anim=to_engineer_career_skill_special) ===
+action_one.base_fire  1P=attack_shoot_charged  3P=-
+action_one.spin  1P=attack_charge  3P=-
+action_one.armor_pierce_fire  1P=attack_shoot_charged  3P=-
+action_one.fast_fire  1P=attack_shoot_charged  3P=-
+action_one.default  1P=attack_charge  3P=-
+action_two.charged  1P=attack_charge_end  3P=-
+action_two.default  1P=attack_charge_loop  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== bardin_engineer_career_skill_weapon_vs (wield_anim=to_engineer_career_skill) ===
+action_one.base_fire  1P=attack_shoot_charged  3P=-
+action_one.spin  1P=attack_charge  3P=-
+action_one.armor_pierce_fire  1P=attack_shoot_charged  3P=-
+action_one.fast_fire  1P=attack_shoot_charged  3P=-
+action_one.default  1P=attack_charge  3P=-
+action_two.charged  1P=attack_charge_end  3P=-
+action_two.default  1P=attack_charge_loop  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== bardin_ranger_career_skill_weapon (wield_anim=to_grenade) ===
+action_career_hold.default  1P=veteran_ranger_ability_grenade  3P=-
+action_career_hold.hold  1P=veteran_ranger_ability_grenade_hold  3P=-
+action_two.default  1P=veteran_ranger_ability_grenade_cancel  3P=-
+action_career_release.default  1P=veteran_ranger_ability_grenade_throw  3P=-
+=== bardin_survival_ale (wield_anim=to_potion) ===
+action_one.default  1P=drink  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== bastard_sword_template (wield_anim=to_bastard_sword) ===
+action_one.default_right_pose  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down_right  3P=-
+action_one.default_left_down_pose  1P=attack_swing_charge_down_pose  3P=-
+action_one.default_left_last  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_uppercut  1P=attack_swing_down  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.default_left_uppercut  1P=attack_swing_charge_down_pose  3P=-
+action_one.heavy_attack_down  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_left  1P=attack_swing_up_left  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== bastard_sword_template_vs (wield_anim=to_bastard_sword) ===
+action_one.default_right_pose  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down_right  3P=-
+action_one.default_left_down_pose  1P=attack_swing_charge_down_pose  3P=-
+action_one.default_left_last  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_up_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default_left_uppercut  1P=attack_swing_charge_down_pose  3P=-
+action_one.heavy_attack_down  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_uppercut  1P=attack_swing_down  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== beer_barrel (wield_anim=to_barrel) ===
+action_two.default  1P=attack_push  3P=-
+action_one.default  1P=attack_throw  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== beer_bottle (wield_anim=to_potion) ===
+action_one.default  1P=drink  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== belakor_crystal (wield_anim=to_crystal) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== blunderbuss_template_1 (wield_anim=to_blunderbuss) ===
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_push  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== blunderbuss_template_1_vs (wield_anim=to_blunderbuss) ===
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_push  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== brace_of_drakefirepistols_template_1 (wield_anim=to_drakefire_pistols) ===
+action_one.shoot_charged  1P=attack_shoot_charged  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_charge  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== brace_of_pistols_template_1 (wield_anim=to_dual_pistol) ===
+action_one.fast_shot  1P=attack_shoot_fast  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_one.special_action_shoot  1P=attack_shoot  3P=-
+action_two.default  1P=lock_target  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.default  1P=special_action  3P=-
+=== bw_deus_01_template_1 (wield_anim=to_staff) ===
+action_one.geiser_launch  1P=attack_geiser_placed  3P=-
+action_one.default  1P=attack_shoot_fireball  3P=-
+action_two.default  1P=attack_geiser_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== bw_necromancer_career_skill_weapon (wield_anim=to_necro_command_item) ===
+action_two.default  1P=necro_ability_cancel  3P=-
+action_career_hold.default  1P=necro_ability_start  3P=-
+action_career_hold.spawn_summon_area  1P=necro_ability_cast  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== bw_necromancer_career_utility_weapon (wield_anim=to_necro_command_item) ===
+action_three.default  1P=pet_control_target_command_return  3P=pet_control_target_command
+action_one.cast_stand  1P=pet_control_target_command  3P=-
+action_one.default  1P=pet_control_target_command  3P=-
+action_two.command_stand  1P=pet_control_target  3P=-
+weapon_reload.default  1P=pet_control_sacrifice  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== cannon_ball (wield_anim=to_statue) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== cooldown_reduction_potion (wield_anim=to_potion) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== crossbow_template_1 (wield_anim=to_crossbow_loaded) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== crossbow_template_1_vs (wield_anim=to_crossbow_loaded) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== damage_boost_potion (wield_anim=to_potion) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== deus_rally_flag (wield_anim=to_first_aid) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== deus_relic (wield_anim=to_torch) ===
+action_three.default  1P=attack_throw  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_wield.default  1P=attack_throw  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_stab_02  3P=-
+action_one.default_right  1P=attack_swing_charge_right_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+=== door_stick (wield_anim=to_1h_sword) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== dr_deus_01_template_1 (wield_anim=to_dr_deus_01_loaded) ===
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dr_deus_01_template_1_vs (wield_anim=to_dr_deus_01_loaded) ===
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== drakegun_template_1 (wield_anim=to_drakegun) ===
+action_one.shoot_charged  1P=attack_shoot_charged  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_charge  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== drakegun_template_1_vs (wield_anim=to_drakegun) ===
+action_one.shoot_charged  1P=attack_shoot_charged  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_charge  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_axe_falchion_template (wield_anim=to_dual_axe_sword_wh) ===
+action_one.heavy_attack  1P=attack_swing_heavy_down  3P=-
+action_one.default_down  1P=attack_swing_charge_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.default_down_heavy  1P=attack_swing_charge_down  3P=-
+action_one.light_attack_left_diagonal  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.light_attack_right_diagonal  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_down_left  1P=attack_swing_down_left  3P=-
+action_one.default  1P=attack_swing_charge_down  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_axes_template_1 (wield_anim=to_dual_axes) ===
+action_one.heavy_attack  1P=attack_swing_heavy_right  3P=-
+action_one.default_heavy  1P=attack_swing_charge_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy  3P=-
+action_one.heavy_attack_3  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.default_right  1P=attack_swing_charge_right  3P=-
+action_one.default_right_heavy  1P=attack_swing_charge_right  3P=-
+action_one.default_left  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.light_attack_back_right  1P=attack_swing_left_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default_last  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_back_left  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_daggers_template_1 (wield_anim=to_dual_daggers) ===
+action_one.default_stab  1P=attack_swing_charge_right  3P=-
+action_one.heavy_attack_stab  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_quick_left  1P=attack_swing_down_left  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_one.default_right  1P=attack_swing_charge_left  3P=-
+action_one.heavy_attack  1P=attack_swing_heavy  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_last  1P=attack_swing_down_right  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default_left_last  1P=attack_swing_charge_left  3P=-
+action_one.push_stab  1P=push_stab  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_hammer_sword_template (wield_anim=to_dual_hammer_sword_es) ===
+action_one.heavy_attack  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_left_diagonal  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.default_right  1P=attack_swing_charge_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.light_attack_right_diagonal  1P=attack_swing_right_diagonal  3P=-
+action_one.default_right_heavy  1P=attack_swing_charge_left  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_hammers_priest_template (wield_anim=to_dual_hammers_priest) ===
+action_one.heavy_attack  1P=attack_swing_heavy_down  3P=-
+action_one.default_down  1P=attack_swing_charge_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_stab  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.heavy_attack_3  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_down  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.default_right  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_left_diagonal  1P=attack_swing_left_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_down  1P=attack_swing_down  3P=-
+action_one.light_attack_right_uppercut  1P=attack_swing_up  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_hammers_template (wield_anim=to_dual_hammers) ===
+action_one.heavy_attack  1P=attack_swing_heavy_down  3P=-
+action_one.default_down  1P=attack_swing_charge_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_stab  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.heavy_attack_3  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_down  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.default_right  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_left_diagonal  1P=attack_swing_left_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_down  1P=attack_swing_down  3P=-
+action_one.light_attack_right_uppercut  1P=attack_swing_up  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_sword_dagger_template_1 (wield_anim=to_dual_sword_dagger) ===
+action_one.heavy_attack  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_right_second  1P=attack_swing_right_diagonal  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy  3P=-
+action_one.light_attack_last  1P=attack_swing_stab  3P=-
+action_one.default_right  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_stab_left  1P=attack_swing_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.default_left_last  1P=attack_swing_charge_left  3P=-
+action_one.default_right_2  1P=attack_swing_charge  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right_first  1P=attack_swing_left  3P=-
+action_one.push_stab  1P=push_stab  3P=-
+action_one.default  1P=attack_swing_charge_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== dual_wield_swords_template_1 (wield_anim=to_dual_swords) ===
+action_one.heavy_attack  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.default_last  1P=attack_swing_charge_right  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy_right  3P=-
+action_one.default_right  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_up_left  1P=attack_swing_left  3P=-
+action_one.default_left  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_up_right  1P=attack_swing_right  3P=-
+action_one.push_stab  1P=push_stab  3P=-
+action_one.default  1P=attack_swing_charge_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== engineer_grenade_t1 (wield_anim=to_grenade) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== es_deus_01_template (wield_anim=to_es_deus_01) ===
+action_one.heavy_attack  1P=attack_swing_heavy_left  3P=-
+action_one.heavy_attack_stab  1P=attack_swing_heavy_stab  3P=-
+action_one.light_attack_last  1P=attack_swing_stab  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.default_right  1P=attack_swing_charge_stab  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_down_right  3P=-
+action_one.default_stab_heavy  1P=attack_swing_charge_stab  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_up  3P=-
+action_one.light_attack_stab_postpush  1P=push_stab  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_left  1P=attack_swing_heavy_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.parry_stab  1P=parry_stab  3P=-
+action_three.parry_stab_02  1P=parry_stab_02  3P=-
+=== explosive_barrel (wield_anim=to_barrel) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== explosive_barrel_objective (wield_anim=to_barrel) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== fencing_sword_template_1 (wield_anim=to_fencing_sword) ===
+action_one.heavy_attack  1P=attack_swing_stab  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left  3P=-
+action_one.heavy_attack_charged  1P=attack_swing_stab  3P=-
+action_one.default_right  1P=attack_swing_stab_charge  3P=-
+action_one.default_left  1P=attack_swing_stab_charge  3P=-
+action_one.light_attack_left  1P=attack_swing_right  3P=-
+action_one.light_attack_right  1P=attack_swing_left  3P=-
+action_one.light_attack_left_last  1P=attack_swing_right_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_stab_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+idle.default  1P=front_idle_exit  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.block_shot  1P=attack_shoot  3P=-
+action_three.default  1P=attack_shoot  3P=-
+=== fire_grenade_t1 (wield_anim=to_fire_dot_grenade) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== fire_grenade_t2 (wield_anim=to_fire_dot_grenade) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== first_aid_kit (wield_anim=to_first_aid) ===
+action_two.default  1P=interaction_bandage_team  3P=-
+action_one.default  1P=interaction_bandage_self  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== first_aid_kit_02 (wield_anim=to_first_aid) ===
+action_one.default  1P=interaction_bandage_self  3P=-
+action_two.default  1P=interaction_bandage_team  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== flaming_sword_spell_template_1 (wield_anim=to_1h_weapon_spells) ===
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy  3P=-
+action_one.heavy_attack_spell  1P=attack_swing_right_spell  3P=-
+action_one.default_right  1P=attack_swing_charge  3P=-
+action_one.light_attack_stab  1P=attack_swing_stab  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_right  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+=== flaming_sword_template_1 (wield_anim=to_1h_weapon_spells) ===
+action_one.heavy_attack_left  1P=attack_swing_heavy  3P=-
+action_one.heavy_attack_spell  1P=attack_swing_right_spell  3P=-
+action_one.default_right_heavy  1P=attack_swing_charge  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_stab  1P=attack_swing_stab  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.default_right  1P=attack_swing_charge_right  3P=-
+action_one.default  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== frag_grenade_t1 (wield_anim=to_grenade) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== frag_grenade_t2 (wield_anim=to_grenade) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== friendly_murderer_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== gargoyle_head (wield_anim=to_statue) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== grenade (wield_anim=to_grenade) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== grudge_raker_template_1 (wield_anim=to_grudge_raker) ===
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_push  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== grudge_raker_template_1_vs (wield_anim=to_grudge_raker) ===
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_push  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== handgun_template_1 (wield_anim=to_handgun) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== handgun_template_1_vs (wield_anim=to_handgun) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== handgun_template_2 (wield_anim=to_handgun_dr) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== handgun_template_2_vs (wield_anim=to_handgun_dr) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== healing_draught (wield_anim=to_potion) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== healthkit (wield_anim=to_first_aid) ===
+action_two.default  1P=interaction_bandage_team  3P=-
+action_one.default  1P=interaction_bandage_self  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== heavy_steam_pistol_template_1 (wield_anim=to_steam_pistol) ===
+action_one.fast_shot  1P=attack_shoot_fast  3P=-
+action_one.shoot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_charge  3P=-
+action_two.default  1P=lock_target  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== heavy_steam_pistol_template_1_vs (wield_anim=to_steam_pistol) ===
+action_one.fast_shot  1P=attack_shoot_fast  3P=-
+action_one.shoot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_charge  3P=-
+action_two.default  1P=lock_target  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== hold_my_beer_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== holy_hand_grenade (wield_anim=to_grenade) ===
+action_instant_throw_grenade.instant_throw  1P=attack_throw  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+=== invulnerability_potion (wield_anim=to_potion) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== javelin_template (wield_anim=to_javelin) ===
+action_one.chain_stab_02  1P=attack_swing_right  3P=-
+action_one.heavy_stab  1P=attack_swing_stab_charge  3P=-
+action_one.chain_stab_01  1P=attack_swing_left  3P=-
+action_one.stab_02  1P=attack_swing_stab_02  3P=-
+action_one.stab_01  1P=attack_swing_stab  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.chain_stab_03  1P=attack_swing_up  3P=-
+action_one.default_chain_02  1P=attack_chain_02  3P=-
+action_one.throw_charged  1P=attack_throw  3P=-
+action_one.default_chain_01  1P=attack_chain_01  3P=-
+action_one.default_chain_03  1P=attack_chain_03  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=throw_charge  3P=-
+action_two.charge_from_stab_02  1P=throw_charge  3P=-
+weapon_reload.default  1P=reload  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== javelin_template_vs (wield_anim=to_javelin) ===
+action_one.chain_stab_02  1P=attack_swing_right  3P=-
+action_one.default_chain_02  1P=attack_chain_02  3P=-
+action_one.chain_stab_01  1P=attack_swing_left  3P=-
+action_one.default_chain_03  1P=attack_chain_03  3P=-
+action_one.stab_01  1P=attack_swing_stab  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.chain_stab_03  1P=attack_swing_up  3P=-
+action_one.heavy_stab  1P=attack_swing_stab_charge  3P=-
+action_one.throw_charged  1P=attack_throw  3P=-
+action_one.default_chain_01  1P=attack_chain_01  3P=-
+action_one.stab_02  1P=attack_swing_stab_02  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.charge_from_stab_02  1P=throw_charge  3P=-
+action_two.default  1P=throw_charge  3P=-
+weapon_reload.default  1P=reload  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== kerillian_waywatcher_career_skill_weapon (wield_anim=to_longbow) ===
+action_career_hold.default  1P=waywatcher_trueflight_ability_charge  3P=-
+action_career_hold.hold  1P=waywatcher_trueflight_ability_hold  3P=-
+action_two.default  1P=waywatcher_trueflight_ability_cancel  3P=-
+action_career_release.default  1P=waywatcher_trueflight_ability_shoot  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== kerillian_waywatcher_career_skill_weapon_piercing_shot (wield_anim=to_longbow) ===
+action_career_hold.default  1P=waywatcher_trueflight_ability_charge  3P=-
+action_career_hold.hold  1P=waywatcher_trueflight_ability_hold  3P=-
+action_two.default  1P=waywatcher_trueflight_ability_cancel  3P=-
+action_career_release.default  1P=waywatcher_trueflight_ability_shoot  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== killer_in_the_shadows_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== lamp_oil (wield_anim=to_barrel) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== liquid_bravado_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== longbow_empire_template (wield_anim=to_es_longbow) ===
+action_one.default  1P=attack_shoot_fast  3P=-
+action_one.shoot_charged  1P=attack_shoot  3P=-
+action_one.shoot_charged_heavy  1P=attack_shoot  3P=-
+action_two.default  1P=draw_bow  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== longbow_empire_tutorial_template (wield_anim=to_es_longbow) ===
+action_one.default  1P=attack_shoot_fast  3P=-
+action_one.shoot_charged  1P=attack_shoot  3P=-
+action_one.shoot_charged_heavy  1P=attack_shoot  3P=-
+action_two.default  1P=draw_bow  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== longbow_template_1 (wield_anim=to_longbow) ===
+action_one.default  1P=attack_shoot_fast  3P=-
+action_one.shoot_charged  1P=attack_shoot  3P=-
+action_one.shoot_special_charged  1P=attack_shoot  3P=-
+action_two.default  1P=draw_bow  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== magic_barrel (wield_anim=to_barrel) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== magic_crystal (wield_anim=to_crystal) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== markus_questingknight_career_skill_weapon (wield_anim=to_bastard_sword) ===
+action_career_hold.default_1  1P=questing_knight_ability_base_charge  3P=-
+action_career_hold.default_3  1P=questing_knight_ability_double_activation_charge  3P=-
+action_career_hold.default_2  1P=questing_knight_ability_tank_charge  3P=-
+action_two.default  1P=questing_knight_ability_cancel_01  3P=-
+action_career_release.smiter_combo_1  1P=questing_knight_ability_double_activation_attack_01  3P=-
+action_career_release.default_smiter  1P=questing_knight_ability_base_attack  3P=-
+action_career_release.smiter_combo_2  1P=questing_knight_ability_double_activation_attack_02  3P=-
+action_career_release.default_tank  1P=questing_knight_ability_tank_attack  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== markus_questingknight_career_skill_weapon_vs (wield_anim=to_bastard_sword) ===
+action_career_hold.default_2  1P=questing_knight_ability_tank_charge  3P=-
+action_career_hold.default_1  1P=questing_knight_ability_base_charge  3P=-
+action_career_hold.default_3  1P=questing_knight_ability_double_activation_charge  3P=-
+action_two.default  1P=questing_knight_ability_cancel_01  3P=-
+action_career_release.smiter_combo_1  1P=questing_knight_ability_double_activation_attack_01  3P=-
+action_career_release.default_tank  1P=questing_knight_ability_tank_attack  3P=-
+action_career_release.smiter_combo_2  1P=questing_knight_ability_double_activation_attack_02  3P=-
+action_career_release.default_smiter  1P=questing_knight_ability_base_attack  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== moot_milk_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== mutator_statue_01 (wield_anim=to_statue) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== mutator_torch (wield_anim=to_torch) ===
+action_three.default  1P=attack_throw  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_wield.default  1P=attack_throw  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_stab_02  3P=-
+action_one.default_right  1P=attack_swing_charge_right_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+=== one_hand_axe_shield_template_1 (wield_anim=to_1h_axe_shield) ===
+action_one.heavy_attack  1P=attack_swing_heavy  3P=-
+action_one.light_attack_last  1P=attack_swing_down  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_up_left  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.default_right_heavy  1P=attack_swing_charge_right_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_one.default_right  1P=attack_swing_charge_right_pose  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_hand_axe_template_1 (wield_anim=to_1h_axe) ===
+action_one.light_attack_last  1P=attack_swing_left  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down_right  3P=-
+action_one.default_right  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_down_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_hand_axe_template_2 (wield_anim=to_1h_axe) ===
+action_one.light_attack_last  1P=attack_swing_left  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down_right  3P=-
+action_one.default_right  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_down_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_hand_falchion_template_1 (wield_anim=to_1h_sword) ===
+action_one.heavy_attack  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.default_down  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.light_attack_bopp  1P=attack_swing_up  3P=-
+action_one.heavy_attack_2  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.default_right  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_down  1P=attack_swing_down  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_crowbill (wield_anim=to_1h_crowbill) ===
+action_one.heavy_attack  1P=attack_swing_heavy_left_up  3P=-
+action_one.default_last  1P=attack_swing_charge_left_pose  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_right  3P=-
+action_one.light_attack_bopp  1P=attack_swing_up_left  3P=attack_swing_left
+action_one.heavy_attack_right_up  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.default_right  1P=attack_swing_charge_left_pose  3P=-
+action_one.default_left  1P=attack_swing_charge_right_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_upper  1P=attack_swing_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_last  1P=attack_swing_down  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_left  1P=attack_swing_stab  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_daggers_template_1 (wield_anim=to_1h_dagger) ===
+action_one.default_last  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_one.default_right  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.light_attack_last  1P=attack_swing_left  3P=-
+action_one.light_attack_stab  1P=attack_swing_stab  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.default_right_heavy  1P=attack_swing_charge_left  3P=-
+action_one.push_stab  1P=attack_swing_stab  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_flail_shield_template (wield_anim=to_1h_flail_shield) ===
+action_one.light_attack_02  1P=attack_swing_heavy_down  3P=-
+action_one.default_charge  1P=attack_swing_charge  3P=-
+action_one.default_charge_2  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_02  1P=attack_swing_heavy_left  3P=-
+action_one.light_attack_04  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_03  1P=attack_slam  3P=-
+action_one.default_06  1P=attack_swing_charge_pose  3P=-
+action_one.light_attack_05  1P=attack_swing_right_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_02_pose  1P=attack_swing_down_right  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left  3P=-
+action_one.default_03  1P=attack_swing_charge  3P=-
+action_one.light_attack_05_removed_shield_slam  1P=attack_slam  3P=-
+action_one.default_02  1P=attack_swing_charge  3P=-
+action_one.heavy_attack  1P=attack_swing_left  3P=-
+action_one.light_attack_01  1P=attack_swing_down  3P=-
+action_one.default_03_pose  1P=attack_swing_charge_down_pose  3P=-
+action_one.default_04  1P=attack_swing_charge  3P=-
+action_one.default_05  1P=attack_swing_charge_pose  3P=-
+action_one.default_02_pose  1P=attack_swing_charge_pose  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_flail_template_1 (wield_anim=to_1h_flail) ===
+action_one.heavy_attack  1P=attack_swing_left  3P=-
+action_one.default_last  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left  3P=-
+action_one.light_attack_bopp  1P=attack_swing_right  3P=-
+action_one.default_charge  1P=attack_swing_charge  3P=-
+action_one.default_charge_2  1P=attack_swing_charge  3P=-
+action_one.default_right  1P=attack_swing_charge  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_last  1P=attack_swing_down  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_down  1P=attack_swing_down_right  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_flails_flaming_template (wield_anim=to_1h_flail) ===
+action_one.heavy_attack  1P=attack_swing_heavy_down  3P=-
+action_one.default_last  1P=attack_swing_charge_down  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left  3P=-
+action_one.light_attack_bopp  1P=attack_swing_right  3P=attack_swing_right_diagonal
+action_one.default_charge  1P=attack_swing_charge_down  3P=-
+action_one.default_charge_2  1P=attack_swing_charge  3P=attack_swing_charge_left
+action_one.default_right  1P=attack_swing_charge_down  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=attack_swing_charge_left
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_last  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_down  1P=attack_swing_down_right  3P=attack_swing_right_diagonal
+action_one.light_attack_left  1P=attack_swing_left  3P=attack_swing_left_diagonal
+action_one.default  1P=attack_swing_charge_down  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_hammer_book_priest_preview_template (wield_anim=to_1h_hammer_book) ===
+action_one.heavy_attack_stab_charged  1P=attack_swing_heavy_stab  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_01_pose  1P=attack_swing_right_diagonal_axe  3P=-
+action_one.push_attack  1P=attack_swing_up_left  3P=-
+action_one.default_right  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.default_pose  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_01  1P=attack_swing_right_diagonal  3P=-
+action_one.heavy_attack_stab  1P=attack_swing_stab  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.heavy_attack_left_charged  1P=attack_swing_left_diagonal_last  3P=-
+action_one.light_attack_02  1P=attack_swing_left_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_stab  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.default  1P=spell_pose  3P=-
+=== one_handed_hammer_book_priest_template (wield_anim=to_1h_hammer_book) ===
+action_one.heavy_attack_stab_charged  1P=attack_swing_heavy_stab  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_01_pose  1P=attack_swing_right_diagonal_axe  3P=-
+action_one.push_attack  1P=attack_swing_up_left  3P=-
+action_one.default_right  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.default_pose  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_01  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_02  1P=attack_swing_left_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.heavy_attack_left_charged  1P=attack_swing_left_diagonal_last  3P=-
+action_one.heavy_attack_stab  1P=attack_swing_stab  3P=-
+action_one.default  1P=attack_swing_charge_stab  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.default  1P=spell_pose  3P=-
+=== one_handed_hammer_priest_template (wield_anim=to_1h_hammer) ===
+action_one.light_attack_02  1P=attack_swing_right_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default_03  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.heavy_attack_02  1P=attack_swing_heavy_down_right  3P=-
+action_one.default_02  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.light_attack_bopp  1P=attack_swing_right  3P=-
+action_one.light_attack_01  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_03  1P=attack_swing_left_diagonal_last  3P=-
+action_one.default_04  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.heavy_attack_01  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_04  1P=attack_swing_down_right  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_hammer_shield_priest_template (wield_anim=to_1h_hammer_shield_priest) ===
+action_one.heavy_attack  1P=attack_swing_heavy  3P=-
+action_one.default_right_bopp  1P=attack_swing_charge_pose  3P=-
+action_one.default_combo  1P=attack_swing_charge_left_pose  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge_pose  3P=-
+action_one.default_right  1P=attack_swing_charge_left_pose  3P=-
+action_one.default_left  1P=attack_swing_charge_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_last  1P=attack_swing_up_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_hammer_shield_template_1 (wield_anim=to_1h_hammer_shield) ===
+action_one.heavy_attack  1P=attack_swing_heavy  3P=-
+action_one.default_right_bopp  1P=attack_swing_charge_pose  3P=-
+action_one.default_combo  1P=attack_swing_charge_left_pose  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge_pose  3P=-
+action_one.default_right  1P=attack_swing_charge_left_pose  3P=-
+action_one.default_left  1P=attack_swing_charge_pose  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_last  1P=attack_swing_up_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_hammer_shield_template_2 (wield_anim=to_1h_hammer_shield) ===
+action_one.heavy_attack  1P=attack_swing_heavy  3P=-
+action_one.default_right_bopp  1P=attack_swing_charge_pose  3P=-
+action_one.default_combo  1P=attack_swing_charge_left_pose  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge_pose  3P=-
+action_one.default_right  1P=attack_swing_charge_left_pose  3P=-
+action_one.default_left  1P=attack_swing_charge_pose  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_last  1P=attack_swing_up_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start_2  3P=-
+=== one_handed_hammer_template_1 (wield_anim=to_1h_hammer) ===
+action_one.default_last  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_right  3P=-
+action_one.default_right  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_down_right  3P=-
+action_one.default_left  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_last  1P=attack_swing_left_diagonal_last  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_down  1P=attack_swing_down_right  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_hammer_template_2 (wield_anim=to_1h_hammer) ===
+action_one.default_last  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_right  3P=-
+action_one.default_right  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_down_right  3P=-
+action_one.default_left  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_last  1P=attack_swing_left_diagonal_last  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_down  1P=attack_swing_down_right  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start_2  3P=-
+=== one_handed_hammer_wizard_template_1 (wield_anim=to_brw_hammer) ===
+action_one.heavy_attack  1P=attack_swing_heavy_down  3P=-
+action_one.default_last  1P=attack_swing_charge_left_pose  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_right_up  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left  3P=-
+action_one.heavy_attack_right_up  1P=attack_swing_heavy_left_up  3P=-
+action_one.default_right  1P=attack_swing_charge_left_pose  3P=-
+action_one.default_left  1P=attack_swing_charge_right_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_upper  1P=attack_swing_left_diagonal_last  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_last  1P=attack_swing_down  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_spears_shield_template (wield_anim=to_1h_spear_shield) ===
+action_one.heavy_attack  1P=attack_swing_heavy_left  3P=-
+action_one.heavy_attack_stab  1P=attack_swing_heavy_stab  3P=-
+action_one.light_attack_last  1P=attack_swing_heavy_left  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge_right_diagonal_pose  3P=-
+action_one.default_right  1P=attack_swing_charge_left  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_down_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.default_stab_heavy  1P=attack_swing_charge_stab  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_stab_lh  3P=-
+action_one.light_attack_stab_postpush  1P=push_stab  3P=-
+action_one.light_attack_left  1P=attack_swing_stab  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_sword_shield_template_1 (wield_anim=to_1h_sword_shield) ===
+action_one.heavy_attack  1P=attack_swing_heavy  3P=-
+action_one.heavy_attack_stab  1P=attack_swing_heavy_stab  3P=-
+action_one.light_attack_last  1P=attack_swing_left  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge_right_pose  3P=-
+action_one.default_right  1P=attack_swing_charge_stab  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_right_pose  3P=-
+action_one.default_stab_heavy  1P=attack_swing_charge_stab  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.light_attack_stab_postpush  1P=attack_swing_stab  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_sword_shield_template_2 (wield_anim=to_1h_sword_shield_breton) ===
+action_one.heavy_attack  1P=attack_swing_heavy_down  3P=-
+action_one.heavy_attack_stab  1P=attack_swing_heavy_stab  3P=-
+action_one.default_left_heavy  1P=attack_swing_charge  3P=-
+action_one.light_attack_shield  1P=attack_swing_heavy_breton  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.default_stab_heavy  1P=attack_swing_charge_stab  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_down_right  3P=-
+action_one.light_attack_stab_postpush  1P=attack_swing_stab  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_up_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_swords_template_1 (wield_anim=to_1h_sword) ===
+action_one.light_attack_last  1P=attack_swing_down  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy  3P=-
+action_one.light_attack_bopp  1P=attack_swing_right_diagonal  3P=-
+action_one.default_right  1P=attack_swing_charge_right_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_pose  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_throwing_axes_template (wield_anim=to_throwing_axe) ===
+action_one.throw_charged  1P=attack_throw  3P=-
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=throw_charge  3P=-
+weapon_reload.catch  1P=reload_last  3P=-
+weapon_reload.default  1P=reload  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== one_handed_throwing_axes_template_vs (wield_anim=to_throwing_axe) ===
+action_one.throw_charged  1P=attack_throw  3P=-
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=throw_charge  3P=-
+weapon_reload.catch  1P=reload_last  3P=-
+weapon_reload.default  1P=reload  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== packmaster_claw (wield_anim=to_packmaster_claw) ===
+=== pockets_full_of_bombs_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== poison_proof_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== repeating_crossbow_elf_template (wield_anim=to_repeating_crossbow_elf) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== repeating_crossbow_elf_template_vs (wield_anim=to_repeating_crossbow_elf) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== repeating_crossbow_template_1 (wield_anim=to_repeating_crossbow) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== repeating_crossbow_template_1_vs (wield_anim=to_repeating_crossbow) ===
+action_one.zoomed_shot  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=to_zoom  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== repeating_handgun_template_1 (wield_anim=to_repeating_handgun) ===
+action_one.default  1P=attack_shoot  3P=-
+action_one.bullet_spray  1P=attack_shoot_fast  3P=-
+action_two.spray_loop  1P=lock_target_loop  3P=-
+action_two.default  1P=lock_target  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== repeating_pistol_template_1 (wield_anim=to_repeater_pistol) ===
+action_one.default  1P=attack_shoot  3P=-
+action_one.bullet_spray  1P=attack_shoot  3P=-
+action_two.default  1P=lock_target  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== repeating_pistol_template_1_vs (wield_anim=to_repeater_pistol) ===
+action_one.bullet_spray  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=lock_target  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== sack (wield_anim=to_sack) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== shadow_flare (wield_anim=to_grenade) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.throw  1P=attack_throw  3P=-
+action_one.cancel  1P=grenade_charge_cancel  3P=-
+action_one.default  1P=grenade_charge  3P=-
+action_two.give_item  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== shadow_gargoyle_head (wield_anim=to_statue) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== shadow_torch (wield_anim=to_torch) ===
+action_three.default  1P=attack_throw  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_wield.default  1P=attack_throw  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_stab_02  3P=-
+action_one.default_right  1P=attack_swing_charge_right_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+=== shortbow_hagbane_template_1 (wield_anim=to_shortbow) ===
+action_one.shoot_charged  1P=attack_shoot  3P=-
+action_one.default  1P=attack_shoot_fast  3P=-
+action_two.default  1P=draw_bow  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== shortbow_template_1 (wield_anim=to_shortbow) ===
+action_one.default  1P=attack_shoot_fast  3P=-
+action_one.shoot_charged  1P=attack_shoot  3P=-
+action_one.shoot_special_charged  1P=attack_shoot  3P=-
+action_two.default  1P=draw_bow  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== sienna_scholar_career_skill_weapon (wield_anim=to_staff) ===
+action_career_hold.default  1P=scholar_burning_head_ability_charge  3P=-
+action_two.default  1P=scholar_burning_head_ability_cancel  3P=-
+action_career_release.default  1P=scholar_burning_head_ability_shoot  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== speed_boost_potion (wield_anim=to_potion) ===
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_blast_beam_template_1 (wield_anim=to_staff) ===
+action_one.shoot_charged  1P=attack_shoot_sparks  3P=-
+action_one.default  1P=attack_shoot_beam_start  3P=-
+action_two.default  1P=flamethrower_charge_start  3P=-
+action_two.charged_beam  1P=attack_shoot_beam_spark  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_blast_beam_template_1_vs (wield_anim=to_staff) ===
+action_one.shoot_charged  1P=attack_shoot_sparks  3P=-
+action_one.default  1P=attack_shoot_beam_start  3P=-
+action_two.charged_beam  1P=attack_shoot_beam_spark  3P=-
+action_two.default  1P=flamethrower_charge_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_death (wield_anim=to_necro_staff) ===
+action_one.default_02  1P=chain_attack_02  3P=-
+action_one.default  1P=chain_attack  3P=-
+action_one.soul_rip_cooldown  1P=soul_rip_pop  3P=-
+action_one.soul_rip  1P=soul_rip_attack  3P=-
+action_two.default  1P=soul_rip_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_death_vs (wield_anim=to_necro_staff) ===
+action_one.default_02  1P=chain_attack_02  3P=-
+action_one.soul_rip  1P=soul_rip_attack  3P=-
+action_one.soul_rip_cooldown  1P=soul_rip_pop  3P=-
+action_one.default  1P=chain_attack  3P=-
+action_two.default  1P=soul_rip_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_fireball_fireball_template_1 (wield_anim=to_staff) ===
+action_one.shoot_charged  1P=attack_shoot_fireball_charged  3P=-
+action_one.default  1P=attack_shoot_fireball  3P=-
+action_two.default  1P=attack_charge_fireball  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_fireball_fireball_template_1_vs (wield_anim=to_staff) ===
+action_one.shoot_charged  1P=attack_shoot_fireball_charged  3P=-
+action_one.default  1P=attack_shoot_fireball  3P=-
+action_two.default  1P=attack_charge_fireball  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_fireball_geiser_template_1 (wield_anim=to_staff) ===
+action_one.geiser_launch  1P=attack_geiser_placed  3P=-
+action_one.default  1P=attack_shoot_fireball  3P=-
+action_two.default  1P=attack_geiser_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_fireball_geiser_template_1_vs (wield_anim=to_staff) ===
+action_one.geiser_launch  1P=attack_geiser_placed  3P=-
+action_one.default  1P=attack_shoot_fireball  3P=-
+action_two.default  1P=attack_geiser_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_flamethrower_template (wield_anim=to_staff) ===
+action_one.shoot_charged  1P=attack_shoot_flamethrower_charged  3P=-
+action_one.default  1P=attack_shoot_flamethrower  3P=-
+action_two.default  1P=flamethrower_charge_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_flamethrower_template_vs (wield_anim=to_staff) ===
+action_one.shoot_charged  1P=attack_shoot_flamethrower_charged  3P=-
+action_one.default  1P=attack_shoot_flamethrower  3P=-
+action_two.default  1P=flamethrower_charge_start  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_life (wield_anim=to_life_staff) ===
+action_one.cast_vortex  1P=attack_shoot_fireball_charged  3P=-
+action_one.default_chain  1P=attack_shoot_last  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_two.default  1P=attack_charge_fireball  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_life_vs (wield_anim=to_life_staff) ===
+action_one.cast_vortex  1P=attack_shoot_fireball_charged  3P=-
+action_one.default  1P=attack_shoot  3P=-
+action_one.default_chain  1P=attack_shoot_last  3P=-
+action_two.default  1P=attack_charge_fireball  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_necromancy (wield_anim=to_necro_staff) ===
+action_one.shoot_fast_counterclockwise  1P=attack_shoot_rapid_right  3P=-
+action_one.shoot_charged  1P=attack_shoot_charged  3P=-
+action_one.default_counterclockwise  1P=attack_charge  3P=-
+action_one.shoot_charged_counterclockwise  1P=attack_shoot_charged  3P=-
+action_one.shoot_fast  1P=attack_shoot_rapid_left  3P=-
+action_one.default  1P=attack_charge  3P=-
+action_two.detonate_all  1P=attack_detonate_all  3P=-
+action_two.detonate_one  1P=attack_detonate_one_02  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.default_base  1P=attack_detonate_one  3P=-
+=== staff_scythe (wield_anim=to_quarter_staff_wield) ===
+action_one.light_attack_bopp  1P=attack_swing_left_diagonal_last  3P=-
+action_one.light_attack_04  1P=attack_swing_right  3P=-
+action_one.heavy_attack_04  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_02  1P=attack_swing_up_right  3P=-
+action_one.heavy_attack_01  1P=attack_swing_heavy  3P=-
+action_one.default_03  1P=attack_swing_charge_left_diagonal  3P=-
+action_one.heavy_attack_02  1P=attack_swing_heavy_right  3P=-
+action_one.default_02  1P=attack_swing_charge_right  3P=-
+action_one.default_04  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_01  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_03  1P=attack_swing_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_bopp_02  1P=attack_swing_up_right  3P=-
+action_one.heavy_attack_03  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_three.default  1P=special_action  3P=-
+action_three.special_action_attack  1P=special_action_02  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_spark_spear_template_1 (wield_anim=to_staff) ===
+action_one.shoot_charged_3  1P=attack_shoot_spear_charged  3P=-
+action_one.shoot_charged  1P=attack_shoot_spear_charged  3P=-
+action_one.rapid_left  1P=attack_shoot_rapid_left  3P=-
+action_one.shoot_charged_2  1P=attack_shoot_spear_charged  3P=-
+action_one.default  1P=attack_shoot_rapid_right  3P=-
+action_two.default  1P=attack_charge_spear  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== staff_spark_spear_template_1_vs (wield_anim=to_staff) ===
+action_one.shoot_charged_3  1P=attack_shoot_spear_charged  3P=-
+action_one.shoot_charged  1P=attack_shoot_spear_charged  3P=-
+action_one.rapid_left  1P=attack_shoot_rapid_left  3P=-
+action_one.shoot_charged_2  1P=attack_shoot_spear_charged  3P=-
+action_one.default  1P=attack_shoot_rapid_right  3P=-
+action_two.default  1P=attack_charge_spear  3P=-
+weapon_reload.default  1P=cooldown_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== torch (wield_anim=to_torch) ===
+action_three.default  1P=attack_throw  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_wield.default  1P=attack_throw  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_stab_02  3P=-
+action_one.default_right  1P=attack_swing_charge_right_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left_diagonal_pose  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.default  1P=attack_swing_charge_left_diagonal  3P=-
+=== trail_cog (wield_anim=to_cog) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== training_dummy_armored_bob (wield_anim=to_statue) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== training_dummy_bob (wield_anim=to_statue) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== two_handed_axes_template_1 (wield_anim=to_2h_hammer) ===
+action_one.light_attack_up  1P=attack_swing_up  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left  3P=-
+action_one.default_right  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.default_left  1P=attack_swing_charge_right  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_down_right  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_down_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_axes_template_2 (wield_anim=to_2h_axe_we) ===
+action_one.heavy_attack_down_second  1P=attack_swing_heavy_down  3P=-
+action_one.default_right  1P=attack_swing_charge_down  3P=-
+action_one.light_attack_right_upward  1P=attack_swing_right  3P=-
+action_one.default_left  1P=attack_swing_charge_down  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left_diagonal  3P=-
+action_one.heavy_attack_down_first  1P=attack_swing_heavy_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_left_upward  1P=attack_swing_left  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_billhooks_template (wield_anim=to_2h_billhook) ===
+action_one.default_stab  1P=attack_swing_charge_stab  3P=attack_swing_stab_charge
+action_one.heavy_attack_stab  1P=attack_swing_heavy_stab  3P=-
+action_one.light_attack_stab_2  1P=attack_swing_stab_02  3P=attack_swing_stab
+action_one.default_left  1P=attack_swing_charge_down  3P=attack_swing_charge_left_diagonal
+action_one.default  1P=attack_swing_charge_stab  3P=attack_swing_stab_charge
+action_one.light_attack_bopp  1P=attack_swing_heavy_left  3P=attack_swing_left_diagonal
+action_one.push  1P=attack_push  3P=-
+action_one.heavy_attack_down  1P=attack_swing_heavy_down  3P=attack_swing_heavy_left_diagonal
+action_one.light_attack_stab  1P=attack_swing_stab  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.default  1P=attack_swing_down  3P=-
+=== two_handed_cog_hammers_template_1 (wield_anim=to_cog_hammer) ===
+action_one.light_attack_left_pose  1P=attack_swing_up_pose  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left  3P=-
+action_one.default_right  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_right  1P=attack_swing_down_right  3P=-
+action_one.light_attack_left_charged  1P=attack_swing_heavy  3P=-
+action_one.heavy_attack_right_charged  1P=attack_swing_down_right  3P=-
+action_one.default_charged  1P=attack_swing_charge  3P=-
+action_one.default_last  1P=attack_swing_charge_right_down  3P=-
+action_one.heavy_attack_left  1P=attack_swing_down_left  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_one.default_left_charged  1P=attack_swing_charge_right  3P=-
+action_one.light_attack_last  1P=attack_swing_left_diagonal  3P=-
+action_one.default_normal_pose  1P=attack_swing_charge_pose  3P=-
+action_one.default_left  1P=attack_swing_charge_right_down  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right_charged  1P=attack_swing_heavy_right  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.heavy_attack_left_charged  1P=attack_swing_down_left  3P=-
+action_one.light_attack_up_right_last  1P=attack_swing_up_right  3P=-
+action_one.light_attack_left  1P=attack_swing_up  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_halberds_template_1 (wield_anim=to_polearm) ===
+action_one.heavy_attack_stab  1P=attack_swing_heavy_right  3P=-
+action_one.light_attack_last  1P=attack_swing_down_right  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy  3P=-
+action_one.default_right  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_stab  1P=attack_swing_right  3P=-
+action_one.light_attack_left  1P=attack_swing_down_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_down  1P=attack_swing_down_right  3P=-
+action_one.default_last  1P=attack_swing_charge_right  3P=-
+action_one.default  1P=attack_swing_charge_right  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_hammer_priest_template (wield_anim=to_2h_hammer_priest) ===
+action_one.light_attack_02  1P=attack_swing_up_left  3P=-
+action_one.heavy_attack_03  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.heavy_attack_02  1P=attack_swing_heavy_right  3P=-
+action_one.default_02  1P=attack_swing_charge  3P=-
+action_one.punch  1P=attack_slam  3P=-
+action_one.light_attack_01  1P=attack_swing_down_right  3P=-
+action_one.light_attack_03  1P=attack_swing_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.heavy_attack_01  1P=attack_swing_up  3P=-
+action_one.default_03  1P=attack_swing_charge_right_down  3P=-
+action_one.default  1P=attack_swing_charge_right  3P=-
+action_two.default_from_out_of_screen  1P=parry_pose_02  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+action_three.default_from_offscreen  1P=attack_slam_charge  3P=-
+action_three.default  1P=attack_slam  3P=-
+=== two_handed_hammers_template_1 (wield_anim=to_2h_hammer) ===
+action_one.light_attack_left_up  1P=attack_swing_left  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy  3P=-
+action_one.default_right  1P=attack_swing_charge_left  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right  3P=-
+action_one.default_left  1P=attack_swing_charge_right  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_down_right  3P=-
+action_one.light_attack_push_left_up  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_left  1P=attack_swing_down_left  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_heavy_spears_template (wield_anim=to_polearm) ===
+action_one.heavy_attack_left  1P=attack_swing_heavy_stab  3P=-
+action_one.light_attack_stab_2  1P=attack_swing_stab_02  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default_last_2  1P=attack_swing_charge  3P=-
+action_one.light_attack_bopp  1P=attack_swing_heavy_left  3P=-
+action_one.default_last_1  1P=attack_swing_charge  3P=-
+action_one.light_attack_stab_1  1P=attack_swing_stab_lh  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.light_attack_right  1P=attack_swing_down_left  3P=-
+action_one.default  1P=attack_swing_charge_stab  3P=-
+action_one.heavy_attack_tank  1P=attack_swing_heavy_left  3P=-
+action_one.light_attack_left  1P=attack_swing_right  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_picks_template_1 (wield_anim=to_2h_picks) ===
+action_one.heavy_attack_left  1P=attack_swing_down_left  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left  3P=-
+action_one.default_right  1P=attack_swing_charge_left_down_pose  3P=-
+action_one.heavy_attack_right  1P=attack_swing_down_right  3P=-
+action_one.default_left  1P=attack_swing_charge_right_down  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_one.heavy_attack_left_charged  1P=attack_swing_down_left_axe  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.heavy_attack_right_charged  1P=attack_swing_down_right_axe  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_charge_left_down  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_spears_elf_template_1 (wield_anim=to_spear) ===
+action_one.heavy_attack_stab  1P=attack_swing_heavy  3P=-
+action_one.heavy_attack_left  1P=attack_swing_heavy_right  3P=-
+action_one.light_attack_bopp  1P=push_stab  3P=-
+action_one.default_last_2  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_left  1P=attack_swing_down_right  3P=-
+action_one.default_left  1P=attack_swing_charge_left  3P=-
+action_one.light_attack_stab_2  1P=attack_swing_right  3P=-
+action_one.default_last_1  1P=attack_swing_charge_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_right  1P=attack_swing_down_left  3P=-
+action_one.light_attack_stab_1  1P=attack_swing_down_left_axe  3P=-
+action_one.default  1P=attack_swing_charge_right  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_swords_executioner_template_1 (wield_anim=to_2h_sword) ===
+action_one.heavy_attack_left  1P=attack_swing_down_left  3P=-
+action_one.default_left_diagonal_other_left  1P=attack_swing_charge_right_down  3P=-
+action_one.default_right  1P=attack_swing_charge_right_down  3P=-
+action_one.heavy_attack_right  1P=attack_swing_down_right  3P=-
+action_one.light_attack_left  1P=attack_swing_left  3P=-
+action_one.light_attack_bopp  1P=attack_swing_left_diagonal  3P=-
+action_one.default_left_diagonal  1P=attack_swing_charge_left_down  3P=-
+action_one.light_attack_right  1P=attack_swing_right  3P=-
+action_one.light_attack_left_diagonal  1P=attack_swing_left_diagonal_last  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.default  1P=attack_swing_charge_left_down  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_swords_template_1 (wield_anim=to_2h_sword) ===
+action_one.heavy_attack_left  1P=attack_swing_heavy_left_diagonal  3P=-
+action_one.light_attack_bopp  1P=attack_swing_down_right  3P=-
+action_one.default_right  1P=attack_swing_charge_diagonal_right  3P=-
+action_one.heavy_attack_right  1P=attack_swing_heavy_right_diagonal  3P=-
+action_one.default_left  1P=attack_swing_charge_diagonal_left  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_left  1P=attack_swing_left_diagonal  3P=-
+action_one.light_attack_right  1P=attack_swing_right_diagonal  3P=-
+action_one.default  1P=attack_swing_charge_diagonal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== two_handed_swords_wood_elf_template (wield_anim=to_2h_sword_we) ===
+action_one.light_attack_bopp  1P=attack_swing_right  3P=-
+action_one.default_right  1P=attack_swing_charge  3P=-
+action_one.light_attack_right_upward  1P=attack_swing_right  3P=-
+action_one.default_left  1P=attack_swing_charge  3P=-
+action_one.heavy_attack_down_first  1P=attack_swing_heavy  3P=-
+action_one.push  1P=attack_push  3P=-
+action_one.light_attack_left_upward  1P=attack_swing_left  3P=-
+action_one.heavy_attack_down_second  1P=attack_swing_heavy_right  3P=-
+action_one.default  1P=attack_swing_charge  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== vampiric_draught_potion (wield_anim=to_potion) ===
+action_one.default  1P=attack_heal  3P=-
+action_two.default  1P=parry_pose  3P=-
+action_instant_drink_potion.instant_drink  1P=attack_heal  3P=-
+action_instant_give_item.instant_give  1P=parry_pose  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== victor_bountyhunter_career_skill_weapon (wield_anim=bounty_hunter_ability_draw) ===
+action_career_hold.default  1P=bounty_hunter_ability_draw  3P=-
+action_career_hold.hold  1P=bounty_hunter_ability_hold  3P=-
+action_two.default  1P=bounty_hunter_ability_cancel  3P=-
+action_career_release.default  1P=bounty_hunter_ability_shoot  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== victor_bountyhunter_career_skill_weapon_vs (wield_anim=bounty_hunter_ability_draw) ===
+action_career_hold.hold  1P=bounty_hunter_ability_hold  3P=-
+action_career_hold.default  1P=bounty_hunter_ability_draw  3P=-
+action_two.default  1P=bounty_hunter_ability_cancel  3P=-
+action_career_release.default  1P=bounty_hunter_ability_shoot  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== vs_chaos_troll_axe (wield_anim=to_1h_axe) ===
+dark_pact_action_one.attack_shove  1P=attack_shove  3P=-
+dark_pact_action_one.attack_cleave  1P=attack_cleave  3P=-
+dark_pact_action_one.default_2  1P=attack_cleave_charge  3P=-
+dark_pact_action_one.attack_sweep_1  1P=attack_sweep  3P=-
+dark_pact_action_one.default  1P=attack_cleave_charge  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== vs_gutter_runner_claws (wield_anim=idle) ===
+=== vs_packmaster_claw (wield_anim=idle) ===
+=== vs_poison_wind_globadier_orb (wield_anim=idle) ===
+=== vs_rat_ogre_hands (wield_anim=to_1h_axe) ===
+dark_pact_action_one.attack_swing_right  1P=attack_swing_right  3P=-
+dark_pact_action_one.default_2  1P=attack_ogre_slam_charge  3P=-
+dark_pact_action_one.attack_slam  1P=attack_slam  3P=-
+dark_pact_action_one.attack_swing_left  1P=attack_swing_left  3P=-
+dark_pact_action_one.default  1P=attack_ogre_slam_charge  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== vs_ratling_gunner_gun (wield_anim=idle) ===
+dark_pact_action_one.default  1P=attack_shoot_start  3P=-
+dark_pact_reload.default  1P=wind_up_start  3P=-
+=== vs_warpfire_thrower_gun (wield_anim=idle) ===
+dark_pact_action_one.fire  1P=attack_shoot_start  3P=-
+dark_pact_action_one.default  1P=attack_shoot_start  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+dark_pact_reload.default  1P=wind_up_start  3P=-
+=== waystone_piece (wield_anim=to_statue) ===
+action_one.default  1P=attack_throw  3P=-
+action_two.default  1P=attack_push  3P=-
+action_dropped.default  1P=attack_throw  3P=-
+=== we_deus_01_template_1 (wield_anim=to_longbow) ===
+action_one.default  1P=attack_shoot_fast  3P=-
+action_one.shoot_charged  1P=attack_shoot  3P=-
+action_one.shoot_special_charged  1P=attack_shoot  3P=-
+action_two.default  1P=draw_bow  3P=-
+action_inspect.action_inspect_hold  1P=inspect_start  3P=-
+=== we_one_hand_axe_template (wield_anim=to_1h_axe) ===

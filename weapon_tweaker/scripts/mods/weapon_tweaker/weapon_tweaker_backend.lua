@@ -31,6 +31,28 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
         return false
     end
 
+    M._filter_dirty = false
+
+    function M.refresh_on_setting_change(mod)
+        if Managers.backend and Managers.backend._interfaces["items"] then
+            local items_interface = Managers.backend:get_interface("items")
+            for career_name, slots in pairs(mod.loadout_cache) do
+                for slot_name, backend_id in pairs(slots) do
+                    local item = items_interface:get_item_from_id(backend_id)
+                    local weapon_key = item and (item.key or (item.data and item.data.key))
+                    if not weapon_key or not is_mod_unlocked_weapon(career_name, weapon_key) then
+                        slots[slot_name] = nil
+                    end
+                end
+                if not next(slots) then
+                    mod.loadout_cache[career_name] = nil
+                end
+            end
+        end
+
+        M._filter_dirty = true
+    end
+
     local function get_cached_backend_item(items_interface, career_name, slot_name)
         local slots = mod.loadout_cache[career_name]
         local backend_id = slots and slots[slot_name]
@@ -121,39 +143,44 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     end
 
     mod:hook(ItemGridUI, "_on_category_index_change", function(func, self, index, keep_page_index)
-        local results = { func(self, index, keep_page_index) }
-        if not feature_enabled(mod, "enable_weapon_ui_hooks", true) then
-            return unpack(results)
-        end
-
-        local settings = self._category_settings[index]
-        if settings then
-            local career_name = self._career_name
-            local weapon_map = weapon_unlock_map[career_name]
-
-            if settings._base_item_filter then
-                settings.item_filter = settings._base_item_filter
-            end
-
-            if (settings.item_filter == "( slot_type == melee ) and item_rarity ~= magic" or settings.item_filter == "( slot_type == ranged ) and item_rarity ~= magic") and weapon_map then
-                local extra_filter = ""
-                for _, weapon_key in ipairs(weapon_map) do
-                    if mod:get("unlock_" .. career_name .. "_" .. weapon_key) then
-                        extra_filter = extra_filter .. " or item_key == \"" .. weapon_key .. "\""
+        if feature_enabled(mod, "enable_weapon_ui_hooks", true) then
+            if M._filter_dirty and self._category_settings then
+                for _, s in ipairs(self._category_settings) do
+                    if s._base_item_filter then
+                        s.item_filter = s._base_item_filter
+                        s._base_item_filter = nil
                     end
                 end
+                M._filter_dirty = false
+            end
 
-                if extra_filter ~= "" then
-                    if feature_enabled(mod, "enable_weapon_debug_logging", false) then
-                        mod:info("ItemGridUI: Patching filter for %s: %s", tostring(career_name), tostring(extra_filter))
+            local settings = self._category_settings and self._category_settings[index]
+            if settings then
+                local career_name = self._career_name
+                local weapon_map = weapon_unlock_map[career_name]
+
+                if settings._base_item_filter then
+                    settings.item_filter = settings._base_item_filter
+                end
+
+                local base_filter = settings.item_filter
+                if (base_filter == "( slot_type == melee ) and item_rarity ~= magic" or base_filter == "( slot_type == ranged ) and item_rarity ~= magic") and weapon_map then
+                    local extra_filter = ""
+                    for _, weapon_key in ipairs(weapon_map) do
+                        if mod:get("unlock_" .. career_name .. "_" .. weapon_key) then
+                            extra_filter = extra_filter .. " or item_key == \"" .. weapon_key .. "\""
+                        end
                     end
-                    settings._base_item_filter = settings.item_filter
-                    settings.item_filter = "(" .. settings.item_filter .. ")" .. extra_filter
+
+                    if extra_filter ~= "" then
+                        settings._base_item_filter = base_filter
+                        settings.item_filter = "(" .. base_filter .. ")" .. extra_filter
+                    end
                 end
             end
         end
 
-        return unpack(results)
+        return func(self, index, keep_page_index)
     end)
 end
 

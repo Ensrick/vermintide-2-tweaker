@@ -1,0 +1,203 @@
+﻿# DeusPowerUpTemplates — Complete Boon Reference
+# Source: scripts/settings/dlcs/morris/deus_power_up_settings.lua
+# Rarity from DeusPowerUpRarityPool (lines 5501-6921)
+# Generated: 2026-04-25
+#
+# Columns: key | rarity | max_amount | is_talent | talent_tier.index | display_name | icon
+
+=== RARE (86 boons) ===
+  ability_cooldown_reduction                         rarity=rare     max=1   talent=-        display=properties_ability_cooldown_reduction_plain             icon=icon_property_activated_cdr
+  attack_speed                                       rarity=rare     max=1   talent=-        display=properties_attack_speed_plain                           icon=icon_property_attack_speed
+  barkskin                                           rarity=rare     max=1   talent=-        display=trait_necklace_damage_taken_reduction_on_heal           icon=necklace_damage_taken_reduction_on_heal
+  block_cost                                         rarity=rare     max=2   talent=-        display=properties_block_cost_plain                             icon=icon_property_block_cost_reduction
+  boon_aoe_02                                        rarity=rare     max=1   talent=-        display=display_name_boon_aoe_02                                icon=deus_icon_aoe_02
+  boon_aoe_03                                        rarity=rare     max=1   talent=-        display=display_name_boon_aoe_03                                icon=deus_icon_aoe_03
+  boon_aura_01                                       rarity=rare     max=1   talent=-        display=display_name_boon_aura_01                               icon=deus_icon_aura_01
+  boon_aura_02                                       rarity=rare     max=1   talent=-        display=display_name_boon_aura_02                               icon=deus_icon_aura_02
+  boon_bomb_heavy_01                                 rarity=rare     max=1   talent=-        display=display_name_boon_bomb_heavy_01                         icon=deus_icon_boon_bomb_heavy_01
+  boon_careerskill_01                                rarity=rare     max=1   talent=-        display=display_name_boon_careerskill_01                        icon=deus_icon_careerskill_01
+  boon_careerskill_02                                rarity=rare     max=1   talent=-        display=display_name_boon_careerskill_02                        icon=deus_icon_careerskill_02
+  boon_careerskill_03                                rarity=rare     max=1   talent=-        display=display_name_boon_careerskill_03                        icon=deus_icon_careerskill_03
+  boon_careerskill_04                                rarity=rare     max=1   talent=-        display=display_name_boon_careerskill_04                        icon=deus_icon_careerskill_04
+  boon_careerskill_07                                rarity=rare     max=1   talent=-        display=display_name_boon_careerskill_07                        icon=deus_icon_careerskill_07
+  boon_deus_coins_greed                              rarity=rare     max=1   talent=-        display=properties_deus_coins_greed                             icon=bardin_ironbreaker_gromril_armour
+  boon_dot_burning_01                                rarity=rare     max=1   talent=-        display=display_name_boon_dot_burning_01                        icon=deus_icon_dot_burning_01
+  boon_meta_01                                       rarity=rare     max=1   talent=-        display=display_name_boon_meta_01                               icon=deus_icon_meta_01
+  boon_range_02                                      rarity=rare     max=1   talent=-        display=display_name_boon_range_02                              icon=deus_icon_ranged_02
+  boon_supportbomb_concentration_01                  rarity=rare     max=1   talent=-        display=display_name_boon_supportbomb_concentration_01          icon=deus_icon_supportbomb_concentration_01
+  boon_supportbomb_speed_01                          rarity=rare     max=1   talent=-        display=display_name_boon_supportbomb_speed_01                  icon=deus_icon_supportbomb_speed_01
+  boon_teamaura_02                                   rarity=rare     max=1   talent=-        display=display_name_boon_teamaura_02                           icon=deus_icon_teamaura_02
+  boon_weaponrarity_01                               rarity=rare     max=1   talent=-        display=display_name_boon_weaponrarity_01                       icon=deus_icon_weaponrarity_01
+  boonset_drone_part2                                rarity=rare     max=1   talent=-        display=display_name_boonset_drone_part2                        icon=deus_icon_drone_part2
+  cluster_barrel                                     rarity=rare     max=1   talent=-        display=display_name_cluster_barrel                             icon=deus_icon_cluster_barrel
+  comradery                                          rarity=rare     max=1   talent=-        display=display_name_comradery                                  icon=deus_icon_comradery
+  crit_boost                                         rarity=rare     max=1   talent=-        display=properties_crit_boost_plain                             icon=icon_property_crit_boost
+  crit_chance                                        rarity=rare     max=1   talent=-        display=properties_crit_chance_plain                            icon=icon_property_crit_chance
+  decanter                                           rarity=rare     max=1   talent=-        display=trait_ring_potion_duration                              icon=charm_potion_duration_increased
+  deus_ammo_pickup_heal                              rarity=rare     max=1   talent=-        display=display_name_deus_ammo_pickup_heal                      icon=deus_icon_ammo_pickup_heal
+  deus_cooldown_regen                                rarity=rare     max=1   talent=-        display=display_name_deus_cooldown_regen                        icon=deus_icon_cooldown_regen
+  deus_damage_reduction_on_incapacitated             rarity=rare     max=1   talent=-        display=display_name_deus_damage_reduction_on_incapacitated     icon=deus_icon_damage_reduction_on_incapacitated
+  deus_extra_stamina                                 rarity=rare     max=1   talent=-        display=display_name_deus_extra_stamina                         icon=deus_icon_extra_stamina
+  deus_more_head_less_body_damage                    rarity=rare     max=1   talent=-        display=display_name_deus_more_head_less_body_damage            icon=deus_more_head_less_body_damage
+  deus_revive_regen                                  rarity=rare     max=1   talent=-        display=display_name_deus_revive_regen                          icon=deus_revive_regen
+  deus_skill_on_special_kill                         rarity=rare     max=1   talent=-        display=display_name_deus_skill_on_special_kill                 icon=deus_skill_on_special_kill
+  deus_standing_still_damage_reduction               rarity=rare     max=1   talent=-        display=display_name_deus_standing_still_damage_reduction       icon=deus_standing_still_damage_reduction
+  explosive_ordinance                                rarity=rare     max=1   talent=-        display=trait_trinket_increase_grenade_radius                   icon=trinket_increase_grenade_radius
+  fatigue_regen                                      rarity=rare     max=2   talent=-        display=properties_fatigue_regen_plain                          icon=icon_property_speed_stamina_regen
+  focused_accuracy                                   rarity=rare     max=1   talent=-        display=display_name_focused_accuracy                           icon=deus_icon_focussed_accuracy
+  friendly_cooldown_on_ability                       rarity=rare     max=1   talent=-        display=display_name_friendly_cooldown_on_ability               icon=friendly_cooldown_on_ability
+  grenadier                                          rarity=rare     max=1   talent=-        display=trait_trinket_not_consume_grenade                       icon=trait_trinket_not_consume_grenade
+  hand_of_shallya                                    rarity=rare     max=1   talent=-        display=trait_necklace_heal_self_on_heal_other                  icon=necklace_heal_self_on_heal_other
+  healers_touch                                      rarity=rare     max=1   talent=-        display=trait_necklace_not_consume_healing                      icon=necklace_not_consume_healing
+  health                                             rarity=rare     max=1   talent=-        display=properties_health_plain                                 icon=icon_property_health_increase
+  health_orbs                                        rarity=rare     max=1   talent=-        display=display_name_health_orbs                                icon=deus_icon_health_orbs
+  hidden_escape                                      rarity=rare     max=1   talent=-        display=display_name_hidden_escape                              icon=deus_icon_hidden_escape
+  home_brewer                                        rarity=rare     max=1   talent=-        display=trait_ring_not_consume_potion                           icon=charm_not_consume_potion
+  lucky                                              rarity=rare     max=1   talent=-        display=display_name_lucky                                      icon=deus_icon_lucky
+  missing_health_power_up                            rarity=rare     max=1   talent=-        display=display_name_missing_health_power_up                    icon=deus_icon_missing_health_power_up
+  money_magnet                                       rarity=rare     max=1   talent=-        display=display_name_money_magnet                               icon=deus_icon_money_magnet
+  movespeed                                          rarity=rare     max=2   talent=-        display=properties_movespeed_plain                              icon=icon_property_movement_speed
+  natural_bond                                       rarity=rare     max=1   talent=-        display=trait_necklace_no_healing_health_regen                  icon=necklace_no_healing_health_regen
+  pent_up_anger                                      rarity=rare     max=1   talent=-        display=display_name_pent_up_anger                              icon=deus_icon_pent_up_anger
+  power_up_of_shallya                                rarity=rare     max=1   talent=-        display=trait_necklace_increased_healing_received               icon=necklace_increased_healing_received
+  power_vs_armoured                                  rarity=rare     max=1   talent=-        display=properties_power_vs_armoured_plain                      icon=icon_property_power_armoured
+  power_vs_chaos                                     rarity=rare     max=1   talent=-        display=properties_power_vs_chaos_plain                         icon=icon_property_power_chaos
+  power_vs_frenzy                                    rarity=rare     max=1   talent=-        display=properties_power_vs_frenzy_plain                        icon=icon_property_power_frenzy
+  power_vs_large                                     rarity=rare     max=1   talent=-        display=properties_power_vs_large_plain                         icon=icon_property_power_large
+  power_vs_skaven                                    rarity=rare     max=1   talent=-        display=properties_power_vs_skaven_plain                        icon=icon_property_power_skaven
+  power_vs_unarmoured                                rarity=rare     max=1   talent=-        display=properties_power_vs_unarmoured_plain                    icon=icon_property_power_unarmoured
+  protection_aoe                                     rarity=rare     max=1   talent=-        display=properties_protection_aoe_plain                         icon=icon_property_dmg_reduction_aoe
+  protection_chaos                                   rarity=rare     max=1   talent=-        display=properties_protection_chaos_plain                       icon=icon_property_dmg_reduction_chaos
+  protection_orbs                                    rarity=rare     max=1   talent=-        display=display_name_protection_orbs                            icon=deus_icon_protection
+  protection_skaven                                  rarity=rare     max=1   talent=-        display=properties_protection_skaven_plain                      icon=icon_property_dmg_reduction_skaven
+  push_block_arc                                     rarity=rare     max=1   talent=-        display=properties_push_block_arc_plain                         icon=icon_property_block_arc
+  resolve                                            rarity=rare     max=1   talent=-        display=display_name_resolve                                    icon=deus_icon_resolve
+  respawn_speed                                      rarity=rare     max=1   talent=-        display=properties_respawn_speed_plain                          icon=icon_property_speed_respawn
+  revive_speed                                       rarity=rare     max=1   talent=-        display=properties_revive_speed_plain                           icon=icon_property_speed_revive
+  sharing_is_caring                                  rarity=rare     max=1   talent=-        display=display_name_sharing_is_caring                          icon=deus_icon_sharing_is_caring
+  shrapnel                                           rarity=rare     max=1   talent=-        display=trait_trinket_grenade_damage_taken                      icon=trinket_reduce_radius_by_50_increase_power_by_50
+  speed_over_stamina                                 rarity=rare     max=1   talent=-        display=display_name_speed_over_stamina                         icon=deus_icon_speed_over_stamina
+  staggering_force                                   rarity=rare     max=1   talent=-        display=display_name_staggering_force                           icon=deus_icon_staggering_force
+  stamina                                            rarity=rare     max=1   talent=-        display=properties_stamina_plain                                icon=icon_property_stamina
+  surprise_strike                                    rarity=rare     max=1   talent=-        display=display_name_surprise_strike                            icon=deus_icon_surprise_strike
+  talent_2_1                                         rarity=rare     max=1   talent=T2.1     display=?                                                       icon=?
+  talent_2_2                                         rarity=rare     max=1   talent=T2.2     display=?                                                       icon=?
+  talent_2_3                                         rarity=rare     max=1   talent=T2.3     display=?                                                       icon=?
+  talent_4_1                                         rarity=rare     max=1   talent=T4.1     display=?                                                       icon=?
+  talent_4_2                                         rarity=rare     max=1   talent=T4.2     display=?                                                       icon=?
+  talent_4_3                                         rarity=rare     max=1   talent=T4.3     display=?                                                       icon=?
+  talent_5_1                                         rarity=rare     max=1   talent=T5.1     display=?                                                       icon=?
+  talent_5_2                                         rarity=rare     max=1   talent=T5.2     display=?                                                       icon=?
+  talent_5_3                                         rarity=rare     max=1   talent=T5.3     display=?                                                       icon=?
+  tenacious                                          rarity=rare     max=1   talent=-        display=display_name_tenacious                                  icon=deus_icon_tenacious
+  triple_melee_headshot_power                        rarity=rare     max=1   talent=-        display=display_name_triple_melee_headshot_power                icon=triple_melee_headshot_power
+  wolfpack                                           rarity=rare     max=1   talent=-        display=display_name_wolfpack                                   icon=deus_icon_wolfpack
+
+=== EXOTIC (48 boons) ===
+  attack_speed_per_cooldown                          rarity=exotic   max=1   talent=-        display=display_name_attack_speed_per_cooldown                  icon=deus_icon_attack_speed_per_cooldown
+  blazing_revenge                                    rarity=exotic   max=1   talent=-        display=display_name_blazing_revenge                            icon=deus_icon_blazing_revenge
+  boon_aura_03                                       rarity=exotic   max=1   talent=-        display=display_name_boon_aura_03                               icon=deus_icon_aura_03
+  boon_range_01                                      rarity=exotic   max=1   talent=-        display=display_name_boon_range_01                              icon=deus_icon_range_01
+  boon_supportbomb_crit_01                           rarity=exotic   max=1   talent=-        display=display_name_boon_supportbomb_crit_01                   icon=deus_icon_supportbomb_crit_01
+  boon_supportbomb_healing_01                        rarity=exotic   max=1   talent=-        display=display_name_boon_supportbomb_healing_01                icon=deus_icon_supportbomb_healing_01
+  boon_supportbomb_strenght_01                       rarity=exotic   max=1   talent=-        display=display_name_boon_supportbomb_strenght_01               icon=deus_icon_supportbomb_strenght_01
+  boon_teamaura_01                                   rarity=exotic   max=1   talent=-        display=display_name_boon_teamaura_01                           icon=deus_icon_teamaura_01
+  boon_weaponrarity_02                               rarity=exotic   max=1   talent=-        display=display_name_boon_weaponrarity_02                       icon=deus_icon_weaponrarity_02
+  boonset_drone_part1                                rarity=exotic   max=1   talent=-        display=display_name_boonset_drone_part1                        icon=deus_icon_drone_part1
+  boonset_drone_part3                                rarity=exotic   max=1   talent=-        display=display_name_boonset_drone_part3                        icon=deus_icon_drone_part3
+  boulder_bro                                        rarity=exotic   max=1   talent=-        display=display_name_boulder_bro                                icon=deus_icon_boulder_bro
+  cooldown_on_friendly_ability                       rarity=exotic   max=1   talent=-        display=display_name_cooldown_on_friendly_ability               icon=deus_icon_cooldown_on_friendly_ability
+  detect_weakness                                    rarity=exotic   max=1   talent=-        display=display_name_detect_weakness                            icon=deus_icon_kill_the_marked
+  deus_barrel_power                                  rarity=exotic   max=1   talent=-        display=display_name_deus_barrel_power                          icon=deus_icon_barrel_power
+  deus_block_procs_parry                             rarity=exotic   max=1   talent=-        display=display_name_deus_block_procs_parry                     icon=deus_icon_block_procs_parry
+  deus_cooldown_reg_not_hit                          rarity=exotic   max=1   talent=-        display=display_name_deus_cooldown_reg_not_hit                  icon=deus_icon_cooldown_reg_not_hit
+  deus_crit_on_damage_taken                          rarity=exotic   max=1   talent=-        display=display_name_deus_crit_on_damage_taken                  icon=deus_icon_crit_on_damage_taken
+  deus_free_potion_use_on_ability                    rarity=exotic   max=1   talent=-        display=display_name_deus_free_potion_use_on_ability            icon=deus_icon_free_potion_use_on_ability
+  deus_guard_aura_check                              rarity=exotic   max=1   talent=-        display=display_name_deus_guard_aura_check                      icon=deus_icon_guard_aura_check
+  deus_health_regeneration                           rarity=exotic   max=1   talent=-        display=display_name_deus_health_regeneration                   icon=deus_icon_health_regeneration
+  deus_increased_healing_taken                       rarity=exotic   max=1   talent=-        display=display_name_deus_increased_healing_taken               icon=deus_increased_healing_taken
+  deus_infinite_dodges                               rarity=exotic   max=1   talent=-        display=display_name_deus_infinite_dodges                       icon=deus_infinite_dodges
+  deus_max_health                                    rarity=exotic   max=1   talent=-        display=display_name_deus_max_health                            icon=deus_max_health
+  deus_power_up_quest_granted_test_01                rarity=exotic   max=1   talent=-        display=display_name_deus_power_up_quest_granted_test_01        icon=melee_killing_spree_speed
+  deus_powerup_attack_speed                          rarity=exotic   max=1   talent=-        display=display_name_deus_powerup_attack_speed                  icon=deus_powerup_attack_speed
+  deus_push_charge                                   rarity=exotic   max=1   talent=-        display=display_name_deus_push_charge                           icon=deus_push_charge
+  deus_push_cost_reduction                           rarity=exotic   max=1   talent=-        display=display_name_deus_push_cost_reduction                   icon=deus_push_cost_reduction
+  deus_second_wind                                   rarity=exotic   max=1   talent=-        display=display_name_deus_second_wind                           icon=deus_second_wind
+  deus_target_full_health_damage_mult                rarity=exotic   max=1   talent=-        display=display_name_deus_target_full_health_damage_mult        icon=deus_target_full_health_damage_mult
+  deus_uninterruptable_attacks                       rarity=exotic   max=1   talent=-        display=display_name_deus_uninterruptable_attacks               icon=deus_uninterruptable_attacks
+  explosive_kills_on_elite_kills                     rarity=exotic   max=1   talent=-        display=display_name_explosive_kills_on_elite_kills             icon=explosive_kills_on_elite_kills
+  heal_on_dot_damage_dealt                           rarity=exotic   max=1   talent=-        display=display_name_heal_on_dot_damage_dealt                   icon=heal_on_dot_damage_dealt
+  invigorating_strike                                rarity=exotic   max=1   talent=-        display=display_name_invigorating_strike                        icon=deus_icon_invigorating_strike
+  last_player_standing_power_reg                     rarity=exotic   max=1   talent=-        display=display_name_last_player_standing_power_reg             icon=last_player_standing_power_reg
+  melee_wave                                         rarity=exotic   max=1   talent=-        display=display_name_melee_wave                                 icon=deus_icon_melee_wave
+  movement_speed_on_active_ability_use               rarity=exotic   max=1   talent=-        display=display_name_movement_speed_on_active_ability_use       icon=movement_speed_on_active_ability_use
+  pyrotechnical_echo                                 rarity=exotic   max=1   talent=-        display=display_name_pyrotechnical_echo                         icon=deus_icon_pyrotechnical_echo
+  pyrrhic_strength                                   rarity=exotic   max=1   talent=-        display=display_name_pyrrhic_strength                           icon=deus_icon_pyrrhic_strength
+  skill_by_block                                     rarity=exotic   max=1   talent=-        display=display_name_skill_by_block                             icon=deus_icon_skill_by_block
+  static_blade                                       rarity=exotic   max=1   talent=-        display=display_name_static_blade                               icon=deus_icon_static_blade
+  static_charge                                      rarity=exotic   max=1   talent=-        display=display_name_static_charge                              icon=deus_icon_static_charge
+  talent_1_1                                         rarity=exotic   max=1   talent=T1.1     display=?                                                       icon=?
+  talent_1_2                                         rarity=exotic   max=1   talent=T1.2     display=?                                                       icon=?
+  talent_1_3                                         rarity=exotic   max=1   talent=T1.3     display=?                                                       icon=?
+  talent_3_1                                         rarity=exotic   max=1   talent=T3.1     display=?                                                       icon=?
+  talent_3_2                                         rarity=exotic   max=1   talent=T3.2     display=?                                                       icon=?
+  talent_3_3                                         rarity=exotic   max=1   talent=T3.3     display=?                                                       icon=?
+
+=== UNIQUE (18 boons) ===
+  bad_breath                                         rarity=unique   max=1   talent=-        display=display_name_bad_breath                                 icon=deus_icon_bad_breath
+  boon_careerskill_06                                rarity=unique   max=1   talent=-        display=display_name_boon_careerskill_06                        icon=deus_icon_careerskill_06
+  boonset_crit_set_bonus                             rarity=unique   max=1   talent=-        display=display_name_boonset_crit_set_bonus                     icon=deus_icon_crit_set_bonus
+  boonset_drone_part4                                rarity=unique   max=1   talent=-        display=display_name_boonset_drone_part4                        icon=deus_icon_drone_part4
+  curative_empowerment                               rarity=unique   max=1   talent=-        display=display_name_curative_empowerment                       icon=deus_icon_curative_empowerment
+  deus_grenade_multi_throw                           rarity=unique   max=1   talent=-        display=display_name_deus_grenade_multi_throw                   icon=deus_icon_grenade_multi_throw
+  deus_knockdown_damage_immunity_aura                rarity=unique   max=1   talent=-        display=display_name_deus_knockdown_damage_immunity_aura        icon=deus_knockdown_damage_immunity_aura
+  deus_parry_damage_immune                           rarity=unique   max=1   talent=-        display=display_name_deus_parry_damage_immune                   icon=deus_parry_damage_immune
+  deus_push_increased_cleave                         rarity=unique   max=1   talent=-        display=display_name_deus_push_increased_cleave                 icon=deus_push_increased_cleave
+  deus_reckless_swings                               rarity=unique   max=1   talent=-        display=display_name_deus_reckless_swings                       icon=deus_reckless_swings
+  drop_item_on_ability_use                           rarity=unique   max=1   talent=-        display=display_name_drop_item_on_ability_use                   icon=drop_item_on_ability_use
+  indomitable                                        rarity=unique   max=1   talent=-        display=display_name_indomitable                                icon=deus_icon_indomitable
+  melee_killing_spree_speed                          rarity=unique   max=1   talent=-        display=display_name_melee_killing_spree_speed                  icon=melee_killing_spree_speed
+  talent_6_1                                         rarity=unique   max=1   talent=T6.1     display=?                                                       icon=?
+  talent_6_2                                         rarity=unique   max=1   talent=T6.2     display=?                                                       icon=?
+  talent_6_3                                         rarity=unique   max=1   talent=T6.3     display=?                                                       icon=?
+  thorn_skin                                         rarity=unique   max=1   talent=-        display=display_name_thorn_skin                                 icon=deus_icon_thorn_skin
+  transfer_temp_health_at_full                       rarity=unique   max=1   talent=-        display=display_name_transfer_temp_health_at_full               icon=transfer_temp_health_at_full
+
+=== EVENT (10 boons) ===
+  boon_skulls_01                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_01                             icon=boon_skulls_01
+  boon_skulls_02                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_02                             icon=boon_skulls_02
+  boon_skulls_03                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_03                             icon=boon_skulls_03
+  boon_skulls_04                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_04                             icon=boon_skulls_04
+  boon_skulls_05                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_05                             icon=boon_skulls_05
+  boon_skulls_06                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_06                             icon=boon_skulls_06
+  boon_skulls_07                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_07                             icon=boon_skulls_07
+  boon_skulls_08                                     rarity=event    max=1   talent=-        display=display_name_boon_skulls_08                             icon=boon_skulls_08
+  boon_skulls_set_bonus_01                           rarity=event    max=1   talent=-        display=display_name_boon_skulls_set_bonus_01                   icon=boon_skulls_set_bonus_01
+  boon_skulls_set_bonus_02                           rarity=event    max=1   talent=-        display=display_name_boon_skulls_set_bonus_02                   icon=boon_skulls_set_bonus_02
+
+=== NOT IN RARITY POOL (10 boons — not obtainable normally) ===
+  curse_resistance                                   rarity=none     max=1   talent=-        display=properties_curse_resistance_plain                       icon=icon_property_grimoire_resistance
+  deus_ammo_pickup_give_allies_ammo                  rarity=none     max=1   talent=-        display=display_name_deus_ammo_pickup_give_allies_ammo          icon=deus_icon_ammo_pickup_give_allies_ammo
+  deus_coin_pickup_regen                             rarity=none     max=1   talent=-        display=display_name_deus_coin_pickup_regen                     icon=deus_healing
+  deus_large_ammo_pickup_infinite_ammo               rarity=none     max=1   talent=-        display=display_name_deus_large_ammo_pickup_infinite_ammo       icon=deus_offense
+  deus_larger_clip                                   rarity=none     max=1   talent=-        display=display_name_deus_larger_clip                           icon=deus_offense
+  deus_throw_speed_increase                          rarity=none     max=1   talent=-        display=display_name_deus_throw_speed_increase                  icon=deus_utils
+  deus_timed_block_free_shot                         rarity=none     max=1   talent=-        display=display_name_deus_timed_block_free_shot                 icon=deus_utils
+  deus_transmute_into_coins                          rarity=none     max=1   talent=-        display=display_name_deus_transmute_into_coins                  icon=icons_placeholder
+  explosive_pushes_on_damage_taken                   rarity=none     max=1   talent=-        display=display_name_explosive_pushes_on_damage_taken           icon=icons_placeholder
+  squats                                             rarity=none     max=1   talent=-        display=display_name_squats                                     icon=deus_icon_squats
+
+=== SUMMARY ===
+Total templates: 172
+In rarity pool: 162
+  rare: 86
+  exotic: 48
+  unique: 18
+  event: 10
+Not in pool: 10
+
+=== BOON SETS ===
+Set 1 (Crit): pent_up_anger(rare) + deus_crit_on_damage_taken(exotic) + boon_supportbomb_crit_01(exotic) -> boonset_crit_set_bonus(unique)
+Set 2 (Drone): boonset_drone_part1(exotic) + boonset_drone_part2(rare) + boonset_drone_part3(exotic) + boon_careerskill_07(rare) -> boonset_drone_part4(unique)
+Set 3 (Skulls 1): boon_skulls_01-05(event) -> boon_skulls_set_bonus_01(event)
+Set 4 (Skulls 2): boon_skulls_06-08(event) -> boon_skulls_set_bonus_02(event)
