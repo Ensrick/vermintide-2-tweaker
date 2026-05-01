@@ -1,6 +1,6 @@
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.2.8-dev"
+local MOD_VERSION = "0.3.0-dev"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -212,12 +212,12 @@ mod:hook("DeusRunController", "get_deus_weapon_chest_type", function(func, self)
     local distribution = self._deus_weapon_chest_distribution
 
     if (not distribution or #distribution == 0) and DEUS_CHEST_TYPES then
-        local upgrade = mod:get("chest_upgrade_count")
-        local swap_melee = mod:get("chest_swap_melee_count")
-        local swap_ranged = mod:get("chest_swap_ranged_count")
-        local power_up = mod:get("chest_power_up_count")
+        local upgrade = mod:get("chest_upgrade_count") or 0
+        local swap_melee = mod:get("chest_swap_melee_count") or 0
+        local swap_ranged = mod:get("chest_swap_ranged_count") or 0
+        local power_up = mod:get("chest_power_up_count") or 0
 
-        local is_custom = upgrade ~= 1 or swap_melee ~= 1 or swap_ranged ~= 1 or power_up ~= 2
+        local is_custom = upgrade > 0 or swap_melee > 0 or swap_ranged > 0 or power_up > 0
         if is_custom then
             local new_distribution = {}
             for _ = 1, upgrade do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.upgrade end
@@ -371,15 +371,15 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
         return func(self, ...)
     end
 
-    local altar_total = (mod:get("chest_upgrade_count") or 1)
-        + (mod:get("chest_swap_melee_count") or 1)
-        + (mod:get("chest_swap_ranged_count") or 1)
-        + (mod:get("chest_power_up_count") or 2)
+    local altar_total = (mod:get("chest_upgrade_count") or 0)
+        + (mod:get("chest_swap_melee_count") or 0)
+        + (mod:get("chest_swap_ranged_count") or 0)
+        + (mod:get("chest_power_up_count") or 0)
     local cursed_count = mod:get("cursed_chest_count") or 1
     local arena_ammo = mod:get("arena_ammo_count") or 2
     local potions_on = mod:get("enable_campaign_potions")
 
-    local altar_custom = altar_total ~= 5
+    local altar_custom = altar_total > 0
     local cursed_custom = cursed_count ~= 1
     local ammo_custom = arena_ammo ~= 2
 
@@ -420,9 +420,24 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
 
     local added_potions = {}
     if potions_on and Pickups and Pickups.deus_potions and Pickups.potions then
+        -- Pick a representative weight from existing CW potions. Engine-startup normalization in
+        -- pickups.lua sums spawn_weightings within each group separately, so a Pickups.potions
+        -- entry's weight (~0.33) doesn't fit into Pickups.deus_potions (~0.125 per entry). Sharing
+        -- the reference made the random sampler skip campaign potions in practice.
+        local sample_weight
+        for _, settings in pairs(Pickups.deus_potions) do
+            if settings and settings.spawn_weighting then
+                sample_weight = settings.spawn_weighting
+                break
+            end
+        end
         for _, name in ipairs({ "damage_boost_potion", "speed_boost_potion", "cooldown_reduction_potion" }) do
             if Pickups.potions[name] and not Pickups.deus_potions[name] then
-                Pickups.deus_potions[name] = Pickups.potions[name]
+                local clone = table.clone(Pickups.potions[name])
+                if sample_weight then
+                    clone.spawn_weighting = sample_weight
+                end
+                Pickups.deus_potions[name] = clone
                 added_potions[#added_potions + 1] = name
             end
         end
@@ -875,10 +890,11 @@ end)
 
 mod:command("cw_status", "Show Chaos Wastes Tweaker state", function()
     mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
-    mod:echo("  Altars: upgrade=" .. tostring(mod:get("chest_upgrade_count") or 1)
-        .. " melee_swap=" .. tostring(mod:get("chest_swap_melee_count") or 1)
-        .. " ranged_swap=" .. tostring(mod:get("chest_swap_ranged_count") or 1)
-        .. " boon=" .. tostring(mod:get("chest_power_up_count") or 2))
+    mod:echo("  Altars: upgrade=" .. tostring(mod:get("chest_upgrade_count") or 0)
+        .. " melee_swap=" .. tostring(mod:get("chest_swap_melee_count") or 0)
+        .. " ranged_swap=" .. tostring(mod:get("chest_swap_ranged_count") or 0)
+        .. " boon=" .. tostring(mod:get("chest_power_up_count") or 0)
+        .. " (0=vanilla)")
     mod:echo("  Chests of Trials: " .. tostring(mod:get("cursed_chest_count") or 1))
     mod:echo("  Arena ammo: " .. tostring(mod:get("arena_ammo_count") or 2))
     mod:echo("  Campaign potions: " .. tostring(mod:get("enable_campaign_potions") or false))

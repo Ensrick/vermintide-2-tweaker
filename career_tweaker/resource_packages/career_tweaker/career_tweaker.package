@@ -1,0 +1,11 @@
+mod = [
+	"career_tweaker"
+]
+
+package = [
+	"resource_packages/career_tweaker/career_tweaker"
+]
+
+lua = [
+	"scripts/mods/career_tweaker/*"
+]

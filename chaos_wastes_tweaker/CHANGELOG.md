@@ -1,5 +1,19 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.3.0-dev (2026-05-01)
+
+### Fixed: Campaign potions in CW now actually spawn
+
+The `enable_campaign_potions` toggle never produced visible results because the patch shared the campaign potion settings tables by reference. Engine-startup normalization (in `pickups.lua`) divides each entry's `spawn_weighting` by the sum of its group, so campaign-potion entries had weights ~3× the CW potions. The random sampler iterates with `pairs()` and breaks on the first cumulative weight that hits the random value (in `[0,1)`); the CW potions consistently exhausted that range first, so campaign potions never got picked. Fix: clone the entries and override their `spawn_weighting` to match the CW potion scale.
+
+### Fixed: Boon labeled as "Reckless Swings" is actually called "Khaine's Fury"
+
+Renamed the modified-boon toggle to "Tweak: Khaine's Fury" to match the in-game display name.
+
+### Changed: Altar count defaults are now 0 = vanilla random
+
+`chest_upgrade_count`, `chest_swap_melee_count`, `chest_swap_ranged_count`, and `chest_power_up_count` now default to 0 (leave vanilla distribution untouched). Range expanded from 0–8 to 0–9. Setting any of the four to a non-zero value still replaces the entire chest distribution; types still at 0 produce no altars of that type.
+
 ## 0.2.5-dev (2026-04-28)
 
 ### Added: Disabled Boons

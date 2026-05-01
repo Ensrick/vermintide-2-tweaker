@@ -30,6 +30,14 @@ M.unit_path_to_clones   = {}  -- vanilla unit path -> list of our backend_ids ta
 M.armoury_to_backend    = {}  -- reverse: LA key -> our backend_id (for debug)
 M.localization          = {}  -- display_name_key -> human-readable string
 
+-- Shield/offhand options derived from LA SKIN_LIST entries with
+-- swap_hand="left_hand_unit". Grouped by character prefix (Kruber/
+-- Kerillian/Bardin) so the main file can fan them out across all of
+-- that character's shield weapon types per the no-cross-character /
+-- yes-cross-career-within-character rule.
+--   { Kruber = { {name=..., armoury_key=..., vanilla_skin=...}, ... }, ... }
+M.la_offhand_options_by_character = {}
+
 local function la()  return get_mod("Loremasters-Armoury") end
 local function mil() return get_mod("MoreItemsLibrary") end
 
@@ -73,13 +81,13 @@ local function pick_vanilla_key(la_variant, unit_index)
     return nil
 end
 
-local function build_clone_entry(vanilla_key, la_key, suffix_id)
+local function build_clone_entry(vanilla_key, la_key, suffix_id, name_override)
     local original = ItemMasterList[vanilla_key]
     if not original then return nil end
     local entry = table.clone(original)
 
     entry.key = suffix_id
-    entry.name = suffix_id
+    entry.name = name_override or suffix_id
     entry.cos_la_armoury_key = la_key
     entry.cos_la_vanilla_key = vanilla_key
 
@@ -102,6 +110,112 @@ local function build_clone_entry(vanilla_key, la_key, suffix_id)
     return entry, suffix_id
 end
 
+-- Parse `swap_hand="left_hand_unit"` entries into per-character lists.
+-- We group by the character prefix in the LA key (Kruber/Kerillian/Bardin)
+-- so the main file can fan each character's pool across all of that
+-- character's shield-bearing weapon types — implementing the no-cross-
+-- character / yes-cross-career-within-character rule.
+--
+-- We extract a representative vanilla skin key from the variant's `icons`
+-- table to use as LA's `skin` arg when calling apply_new_skin_from_texture.
+-- Diagnostic snapshot of how each LA shield variant resolved its target mesh.
+M._la_offhand_resolution = {}
+
+-- LA's SKIN_LIST entries explicitly declare their target shield mesh in
+-- `variant.new_units[1]`. That's the SOURCE OF TRUTH — texture-path parsing
+-- and icon-key heuristics are unreliable. For `kind="texture"` variants (the
+-- vast majority of shields), `new_units[1]` is the vanilla mesh LA paints
+-- textures onto. For `kind="unit"` variants, `new_units[1]` is LA's own
+-- custom-authored mesh.
+local function _resolve_intended_unit(la_key, variant, sorted_icons)
+    if type(variant.new_units) == "table" and variant.new_units[1] then
+        return variant.new_units[1], "new_units"
+    end
+    -- Pure-texture variant (no new_units): don't override the mesh. LA's
+    -- diffuse will paint onto whichever shield the user's current illusion
+    -- spawns. Works fine for Bret variants (all GK-family shields), and
+    -- safer than guessing — the lex-first-icon heuristic produced visibly
+    -- wrong results in earlier versions.
+    return nil, "no_override"
+end
+
+-- Decide whether an LA variant is safe to expose in our offhand picker.
+-- `kind="unit"` variants point to LA's custom-authored mesh files (e.g.
+-- `units/empire_shield/Kruber_Empire_shield01_mesh`) that have no
+-- standalone package the LootItemUnitPreviewer can load on demand —
+-- spawning one crashes with "Unit not found". LA's normal pipeline
+-- pre-loads them via `Managers.package:load(...)` from its own bootstrap.
+-- For now, restrict to `kind="texture"` variants, which paint onto a
+-- vanilla mesh that the engine already has packaged.
+--
+-- For `kind="texture"` variants:
+--   * if `new_units[1]` exists AND `is_vanilla_unit == true`, that's the
+--     vanilla mesh LA expects to paint onto -> use it as `intended_unit`
+--   * else (pure-texture variant, no mesh swap) -> `intended_unit = nil`,
+--     leaving the user's current shield in place; LA paints over it.
+local function _is_supported_variant(variant)
+    if variant.kind ~= "texture" then return false end
+    -- Defensive: if a variant declares new_units but isn't marked as
+    -- vanilla, treat it as a custom mesh and skip — the previewer would
+    -- crash trying to spawn it.
+    if variant.new_units and not variant.is_vanilla_unit then return false end
+    return true
+end
+
+local function build_offhand_options()
+    M.la_offhand_options_by_character = {}
+    M._la_offhand_resolution = {}
+    local SKIN_LIST = la().SKIN_LIST
+    for la_key, variant in pairs(SKIN_LIST) do
+        if variant.swap_hand == "left_hand_unit" and _is_supported_variant(variant) then
+            local character = la_key:match("^([A-Z][a-z]+)_")
+            if character and _character_prefixes[character] then
+                local sorted_icons = {}
+                if type(variant.icons) == "table" then
+                    for icon_key, _ in pairs(variant.icons) do
+                        sorted_icons[#sorted_icons + 1] = icon_key
+                    end
+                    table.sort(sorted_icons)
+                end
+                local vanilla_skin_key = sorted_icons[1]
+                local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
+                M._la_offhand_resolution[la_key] = {
+                    intended_unit = intended_unit,
+                    source        = source,
+                    texture_path  = (variant.textures and variant.textures[1]) or nil,
+                    icon_keys     = sorted_icons,
+                }
+                local list = M.la_offhand_options_by_character[character]
+                if not list then list = {}; M.la_offhand_options_by_character[character] = list end
+                list[#list + 1] = {
+                    name          = humanize_armoury_key(la_key),
+                    armoury_key   = la_key,
+                    vanilla_skin  = vanilla_skin_key,
+                    intended_unit = intended_unit,
+                }
+            end
+        end
+    end
+end
+
+-- Diagnostic: dump LA shield variant -> resolved intended_unit mapping, with
+-- the source (texture_hint vs first_icon) and the texture path. Use this to
+-- find variants whose intended_unit is wrong and add new patterns to
+-- _texture_mesh_hints (or a manual override table).
+function M.dump_offhand_resolution()
+    if not M._la_offhand_resolution then mod:echo("no resolution data"); return end
+    mod:echo("[LA bridge] offhand resolution:")
+    for la_key, info in pairs(M._la_offhand_resolution) do
+        mod:info("  %-50s -> %s [%s]  tex=%s",
+            la_key,
+            tostring(info.intended_unit),
+            tostring(info.source),
+            tostring(info.texture_path))
+    end
+    mod:echo("[LA bridge] %d variants — see log for full mapping",
+        (function() local n = 0; for _ in pairs(M._la_offhand_resolution) do n = n + 1 end; return n end)())
+end
+
 function M.register_all()
     if M.registered then return end
     if not la() or not mil() then
@@ -119,16 +233,28 @@ function M.register_all()
         local hand = variant.swap_hand
         if hand == "hat" or hand == "armor" then
             local vanilla_key, unit_path = pick_vanilla_key(variant, unit_index)
+
+            if not vanilla_key and hand == "armor" and variant.cosmetic_key then
+                vanilla_key = variant.cosmetic_key
+                if not rawget(ItemMasterList, vanilla_key) then vanilla_key = nil end
+                if vanilla_key and variant.new_units and variant.new_units[1] then
+                    unit_path = variant.new_units[1]
+                end
+            end
+
             if vanilla_key then
                 local backend_id = vanilla_key .. "_LA_" .. la_key
-                local entry = build_clone_entry(vanilla_key, la_key, backend_id)
+                local name_override = (hand == "armor") and vanilla_key or nil
+                local entry = build_clone_entry(vanilla_key, la_key, backend_id, name_override)
                 if entry then
                     table.insert(entries_to_register, entry)
                     M.backend_to_armoury[backend_id] = la_key
                     M.backend_to_vanilla[backend_id] = vanilla_key
                     M.armoury_to_backend[la_key]     = backend_id
-                    M.unit_path_to_clones[unit_path] = M.unit_path_to_clones[unit_path] or {}
-                    table.insert(M.unit_path_to_clones[unit_path], backend_id)
+                    if unit_path then
+                        M.unit_path_to_clones[unit_path] = M.unit_path_to_clones[unit_path] or {}
+                        table.insert(M.unit_path_to_clones[unit_path], backend_id)
+                    end
                     registered = registered + 1
                 end
             else
@@ -150,6 +276,11 @@ function M.register_all()
                 end
             end
         end
+    end
+
+    build_offhand_options()
+    for character, list in pairs(M.la_offhand_options_by_character) do
+        mod:info("[LA bridge] %s offhand pool: %d entries", character, #list)
     end
 
     M.registered = true
@@ -254,6 +385,84 @@ function M.queue_unit_direct(world, unit, backend_id)
     local vanilla_key = M.backend_to_vanilla[backend_id]
     if not armoury_key then return false end
     return apply_direct(world, unit, armoury_key, vanilla_key, backend_id)
+end
+
+-- Texture slot hashes for shields (swap_hand="left_hand_unit"). Mirrors
+-- LA's funcs.lua local constants — kept inline here so we never need to
+-- call LA's `apply_new_skin_from_texture`, which has destructive side
+-- effects (mutates `WeaponSkins.skins[skin].inventory_icon` and
+-- `ItemMasterList[skin].inventory_icon` globally) that leaked LA icons
+-- into vanilla weapons across the inventory UI.
+local SHIELD_DIFF_SLOT = "texture_map_c0ba2942"
+local SHIELD_PACK_SLOT = "texture_map_0205ba86"
+local SHIELD_NORM_SLOT = "texture_map_59cd86b9"
+
+-- Local re-implementation of LA's `apply_texture_to_all_world_units` for
+-- shields only. Touches ONLY the supplied unit's mesh materials. No
+-- WeaponSkins / ItemMasterList writes. Safe to call on preview spawns.
+local function _paint_offhand_textures_locally(unit, variant)
+    if not unit or type(unit) ~= "userdata" then return false end
+    if not Unit.alive(unit) then return false end
+    if type(variant.textures) ~= "table" then return false end
+
+    local diff = variant.textures[1]
+    local pack = variant.textures[2]
+    local norm = variant.textures[3]
+    local skip_meshes = variant.skip_meshes or {}
+    local textures_other_mesh = variant.textures_other_mesh
+    local special_textures = variant.special_textures
+    local mat_to_skip = variant.mat_to_skip or {}
+
+    local num_meshes = Unit.num_meshes(unit)
+    for i = 0, num_meshes - 1 do
+        local skip_key = "skip" .. tostring(i)
+        local mesh_diff, mesh_pack, mesh_norm = diff, pack, norm
+        local skip_this = false
+        if skip_meshes[skip_key] then
+            local override = textures_other_mesh and textures_other_mesh[skip_key]
+            if override then
+                if override[1] then mesh_diff = override[1] end
+                if override[2] then mesh_pack = override[2] end
+                if override[3] then mesh_norm = override[3] end
+            else
+                skip_this = true
+            end
+        end
+        if not skip_this then
+            local mesh = Unit.mesh(unit, i)
+            local num_mats = Mesh.num_materials(mesh)
+            for j = 0, num_mats - 1 do
+                local mat = Mesh.material(mesh, j)
+                if mesh_diff then Material.set_texture(mat, SHIELD_DIFF_SLOT, mesh_diff) end
+                if mesh_pack then Material.set_texture(mat, SHIELD_PACK_SLOT, mesh_pack) end
+                if mesh_norm then Material.set_texture(mat, SHIELD_NORM_SLOT, mesh_norm) end
+                if special_textures and not mat_to_skip["skip" .. tostring(j)] then
+                    for _, tx in ipairs(special_textures) do
+                        if tx.slot and tx.texture then
+                            Material.set_texture(mat, tx.slot, tx.texture)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return true
+end
+
+-- Apply an LA offhand variant to a specific shield unit. Used by the
+-- two-row offhand UI to paint LA heraldics onto the player's left-hand
+-- (shield) unit after it spawns. We DO NOT call LA's
+-- `apply_new_skin_from_texture` because that mutates global WeaponSkins
+-- and ItemMasterList icon fields. Local paint only.
+function M.apply_offhand_to_unit(world, unit, armoury_key, vanilla_skin)
+    if not armoury_key then return false end
+    local LA = la()
+    if not LA or type(LA.SKIN_LIST) ~= "table" then return false end
+    local variant = LA.SKIN_LIST[armoury_key]
+    if not variant then return false end
+    local ok = _paint_offhand_textures_locally(unit, variant)
+    if M.trace then mod:info("[LA bridge]   offhand local paint %s ok=%s", armoury_key, tostring(ok)) end
+    return ok
 end
 
 function M.suppress_orphan(unit)

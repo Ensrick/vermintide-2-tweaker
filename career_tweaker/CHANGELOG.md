@@ -1,5 +1,11 @@
 # Career Tweaker Changelog
 
+## 0.2.4-dev (2026-05-01)
+
+### Changed: Migrated to VMB build pipeline
+
+Moved from the raw Stingray SDK build (`crt.mod`, `settings.ini`, `lua_preprocessor_defines.config`, `.build/OUT/`) to VMB (`career_tweaker.mod`, `itemV2.cfg`, `bundleV2/`). Workshop ID `3716286199` and internal mod ID `"crt"` preserved — existing user settings are unaffected. `visibility` remains `"private"`.
+
 ## 0.2.3-dev (2026-04-29)
 
 ### Fixed: Dropdown options showing <<>> brackets

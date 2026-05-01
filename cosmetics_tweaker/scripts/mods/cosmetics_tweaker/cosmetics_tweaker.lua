@@ -2,7 +2,7 @@ local mod = get_mod("cosmetics_tweaker")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 
-local MOD_VERSION = "0.7.65"
+local MOD_VERSION = "0.7.83-dev"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 
@@ -59,6 +59,230 @@ end
 mod:command("flush_log", "Force-flush the engine console log to disk", function()
     _flush_log()
     mod:echo("[flush_log] attempted")
+end)
+
+-- Dump every weapon skin that has a material_settings_name (a glow template),
+-- grouped by template name, with the localized display name. Goal: map in-game
+-- names ("Weavebound", "Stylish", "Exotic", etc.) to the underlying glow
+-- templates so cosmetics_tweaker can offer per-style toggles/recolors. Output
+-- is pipe-delimited under [DUMP:glows] so it's easy to grep out of the log.
+mod:command("dump_glows", "Dump glow-tagged weapon skins grouped by material_settings_name", function()
+    if not WeaponSkins or not WeaponSkins.skins then
+        mod:echo("WeaponSkins not loaded yet")
+        return
+    end
+
+    local L = rawget(_G, "Localize")
+    local function loc(key)
+        if not key then return "" end
+        if not L then return "(no Localize)" end
+        local ok, v = pcall(L, key)
+        return (ok and v) or "(loc fail)"
+    end
+
+    local buckets = {}
+    local total_skins, total_with_glow = 0, 0
+    for skin_key, data in pairs(WeaponSkins.skins) do
+        total_skins = total_skins + 1
+        if type(data) == "table" and data.material_settings_name then
+            total_with_glow = total_with_glow + 1
+            local tpl = data.material_settings_name
+            buckets[tpl] = buckets[tpl] or {}
+            table.insert(buckets[tpl], {
+                key = skin_key,
+                display_name = data.display_name,
+                description = data.description,
+                rarity = data.rarity,
+                icon = data.inventory_icon,
+                right = data.right_hand_unit,
+                left = data.left_hand_unit,
+            })
+        end
+    end
+
+    mod:info("[DUMP:glows] === %d/%d weapon skins have material_settings_name ===", total_with_glow, total_skins)
+
+    -- Emit RGB values for each template that's actually in use, so the colors
+    -- sit right next to the items that use them in the log.
+    if MaterialSettingsTemplates then
+        mod:info("[DUMP:glows] --- MaterialSettingsTemplates RGB ---")
+        for name in pairs(buckets) do
+            local tpl = MaterialSettingsTemplates[name]
+            if tpl then
+                local parts = {}
+                for var, d in pairs(tpl) do
+                    if d.type == "vector3" then
+                        parts[#parts+1] = string.format("%s=(%s,%s,%s)", var, tostring(d.x), tostring(d.y), tostring(d.z))
+                    else
+                        parts[#parts+1] = string.format("%s[%s]", var, tostring(d.type))
+                    end
+                end
+                mod:info("[DUMP:glows] TEMPLATE|%s|%s", name, table.concat(parts, " "))
+            else
+                mod:info("[DUMP:glows] TEMPLATE|%s|<missing>", name)
+            end
+        end
+    end
+
+    local tpl_names = {}
+    for n in pairs(buckets) do tpl_names[#tpl_names+1] = n end
+    table.sort(tpl_names)
+
+    for _, tpl in ipairs(tpl_names) do
+        local entries = buckets[tpl]
+        table.sort(entries, function(a, b) return a.key < b.key end)
+        mod:info("[DUMP:glows] === %s (%d skins) ===", tpl, #entries)
+        for _, e in ipairs(entries) do
+            mod:info("[DUMP:glows] SKIN|%s|name=%q|desc=%q|rarity=%s|icon=%s|right=%s|left=%s|key=%s",
+                tpl,
+                tostring(loc(e.display_name)),
+                tostring(loc(e.description)),
+                tostring(e.rarity),
+                tostring(e.icon),
+                tostring(e.right),
+                tostring(e.left),
+                tostring(e.key)
+            )
+        end
+    end
+
+    _flush_log()
+    mod:echo("[dump_glows] %d glow skins dumped to log (search [DUMP:glows])", total_with_glow)
+end)
+
+-- Dump every weapon skin grouped by rarity, with rarity display labels resolved
+-- via Localize, and per-rarity counts of skins with/without material_settings_name.
+-- Goal: settle which rarity-tier corresponds to which user-facing label
+-- ("Veteran", "Weave-Forged", "Stylish") and find the white_glow item.
+-- Per-section _flush_log() avoids the truncation we hit on /dump_glows where
+-- ~36 lines were dropped from a 350-line burst.
+mod:command("dump_skin_rarities", "Dump WeaponSkins.skins grouped by rarity with localized rarity labels and template stats", function()
+    if not WeaponSkins or not WeaponSkins.skins then
+        mod:echo("WeaponSkins not loaded yet")
+        return
+    end
+
+    local L = rawget(_G, "Localize")
+    local function loc(key)
+        if not key then return "" end
+        if not L then return "(no Localize)" end
+        local ok, v = pcall(L, key)
+        return (ok and v) or "(loc fail)"
+    end
+
+    -- 1. Rarity display labels.
+    --    Resolve via RaritySettings if available; also probe a few extra keys
+    --    that might exist (veteran/weave_forged/stylish/champion) to catch
+    --    label variants the user has mentioned.
+    mod:info("[DUMP:rarity] === rarity display labels ===")
+    local rarity_keys = {}
+    if rawget(_G, "RaritySettings") then
+        for k, v in pairs(RaritySettings) do
+            rarity_keys[k] = v.display_name or ("rarity_display_name_" .. k)
+        end
+    end
+    -- Always probe these too (some are referenced in ORDER_RARITY but not RaritySettings).
+    for _, name in ipairs({"plentiful","common","rare","exotic","unique","magic","event","promo","veteran","weave_forged","stylish","champion","loot"}) do
+        rarity_keys[name] = rarity_keys[name] or ("rarity_display_name_" .. name)
+    end
+    for rarity, key in pairs(rarity_keys) do
+        mod:info("[DUMP:rarity] LABEL|%s|key=%s|loc=%q", rarity, key, tostring(loc(key)))
+    end
+    _flush_log()
+
+    -- 2. Bucket every skin by rarity. Count with/without material_settings_name,
+    --    and tally which template each rarity uses.
+    local by_rarity = {}
+    local total = 0
+    for skin_key, data in pairs(WeaponSkins.skins) do
+        if type(data) == "table" then
+            total = total + 1
+            local r = data.rarity or "<nil>"
+            by_rarity[r] = by_rarity[r] or {
+                with_template = 0, without_template = 0,
+                templates = {}, samples_with = {}, samples_without = {},
+            }
+            local b = by_rarity[r]
+            local tpl = data.material_settings_name
+            if tpl then
+                b.with_template = b.with_template + 1
+                b.templates[tpl] = (b.templates[tpl] or 0) + 1
+                if #b.samples_with < 8 then
+                    table.insert(b.samples_with, { key = skin_key, name = loc(data.display_name), tpl = tpl, units = (data.right_hand_unit or data.left_hand_unit or "?") })
+                end
+            else
+                b.without_template = b.without_template + 1
+                if #b.samples_without < 8 then
+                    table.insert(b.samples_without, { key = skin_key, name = loc(data.display_name), units = (data.right_hand_unit or data.left_hand_unit or "?") })
+                end
+            end
+        end
+    end
+    local rarity_count = 0
+    for _ in pairs(by_rarity) do rarity_count = rarity_count + 1 end
+    mod:info("[DUMP:rarity] === %d total weapon skins, %d distinct rarities ===", total, rarity_count)
+    _flush_log()
+
+    -- 3. Per-rarity report.
+    local rarity_names = {}
+    for r in pairs(by_rarity) do rarity_names[#rarity_names+1] = r end
+    table.sort(rarity_names)
+    for _, r in ipairs(rarity_names) do
+        local b = by_rarity[r]
+        local tpl_parts = {}
+        for t, c in pairs(b.templates) do tpl_parts[#tpl_parts+1] = string.format("%s=%d", t, c) end
+        table.sort(tpl_parts)
+        mod:info("[DUMP:rarity] === %s | label=%q | total=%d | with_tpl=%d | without_tpl=%d | tpls={%s} ===",
+            r, tostring(loc(rarity_keys[r] or ("rarity_display_name_" .. r))),
+            b.with_template + b.without_template, b.with_template, b.without_template,
+            table.concat(tpl_parts, ", "))
+        for _, s in ipairs(b.samples_with) do
+            mod:info("[DUMP:rarity] WITH|%s|tpl=%s|name=%q|key=%s|unit=%s", r, s.tpl, tostring(s.name), s.key, tostring(s.units))
+        end
+        for _, s in ipairs(b.samples_without) do
+            mod:info("[DUMP:rarity] WITHOUT|%s|name=%q|key=%s|unit=%s", r, tostring(s.name), s.key, tostring(s.units))
+        end
+        _flush_log()
+    end
+
+    -- 4. Find the white_glow referrer.
+    mod:info("[DUMP:rarity] === white_glow referrers (template is NOT registered in MaterialSettingsTemplates) ===")
+    local white_count = 0
+    for skin_key, data in pairs(WeaponSkins.skins) do
+        if type(data) == "table" and data.material_settings_name == "white_glow" then
+            white_count = white_count + 1
+            mod:info("[DUMP:rarity] WHITE|key=%s|rarity=%s|name=%q|desc=%q|right=%s|left=%s|icon=%s",
+                skin_key, tostring(data.rarity), tostring(loc(data.display_name)),
+                tostring(loc(data.description)),
+                tostring(data.right_hand_unit), tostring(data.left_hand_unit),
+                tostring(data.inventory_icon))
+        end
+    end
+    mod:info("[DUMP:rarity] white_glow item count: %d", white_count)
+    _flush_log()
+
+    -- 5. _runed_01 vs _runed_02 sibling pairs.
+    --    This is what we expect to differentiate "stylish" (no tpl) from
+    --    "weave-forged" (purple_glow tpl).
+    mod:info("[DUMP:rarity] === _runed_01 vs _runed_02 sibling pairs (max 30) ===")
+    local pairs_found = 0
+    for skin_key_02, data_02 in pairs(WeaponSkins.skins) do
+        if pairs_found < 30 and type(data_02) == "table" and string.find(skin_key_02, "_runed_02$") then
+            local skin_key_01 = string.gsub(skin_key_02, "_runed_02$", "_runed_01")
+            local data_01 = WeaponSkins.skins[skin_key_01]
+            if data_01 then
+                pairs_found = pairs_found + 1
+                mod:info("[DUMP:rarity] PAIR|01_name=%q|01_tpl=%s|01_rarity=%s|02_name=%q|02_tpl=%s|02_rarity=%s|prefix=%s",
+                    tostring(loc(data_01.display_name)), tostring(data_01.material_settings_name), tostring(data_01.rarity),
+                    tostring(loc(data_02.display_name)), tostring(data_02.material_settings_name), tostring(data_02.rarity),
+                    string.gsub(skin_key_02, "_runed_02$", ""))
+            end
+        end
+    end
+    mod:info("[DUMP:rarity] sibling pairs sampled: %d", pairs_found)
+
+    _flush_log()
+    mod:echo("[dump_skin_rarities] %d skins across %d rarities dumped (search [DUMP:rarity])", total, rarity_count)
 end)
 
 -- Diagnostic: probe whether vmf_atlas is loaded on the active screen Guis.
@@ -285,6 +509,15 @@ local _PORTRAIT_MATERIALS = {
     "materials/ui/portrait_kruber_mercenary_hat_1002",
     "materials/ui/medium_portrait_kruber_mercenary_hat_1002",
     "materials/ui/small_portrait_kruber_mercenary_hat_1002",
+    "materials/ui/portrait_kruber_mercenary_hat_1003",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_1003",
+    "materials/ui/small_portrait_kruber_mercenary_hat_1003",
+    "materials/ui/portrait_kruber_mercenary_hat_0006",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_0006",
+    "materials/ui/small_portrait_kruber_mercenary_hat_0006",
+    "materials/ui/portrait_kruber_mercenary_hat_0007",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_0007",
+    "materials/ui/small_portrait_kruber_mercenary_hat_0007",
 }
 
 local _hat_portrait_map = {
@@ -292,6 +525,16 @@ local _hat_portrait_map = {
         hud    = "portrait_kruber_mercenary_hat_0004",
         medium = "medium_portrait_kruber_mercenary_hat_0004",
         small  = "small_portrait_kruber_mercenary_hat_0004",
+    },
+    mercenary_hat_0006 = {
+        hud    = "portrait_kruber_mercenary_hat_0006",
+        medium = "medium_portrait_kruber_mercenary_hat_0006",
+        small  = "small_portrait_kruber_mercenary_hat_0006",
+    },
+    mercenary_hat_0007 = {
+        hud    = "portrait_kruber_mercenary_hat_0007",
+        medium = "medium_portrait_kruber_mercenary_hat_0007",
+        small  = "small_portrait_kruber_mercenary_hat_0007",
     },
     mercenary_hat_0009 = {
         hud    = "portrait_kruber_mercenary_hat_0009",
@@ -308,13 +551,21 @@ local _hat_portrait_map = {
         medium = "medium_portrait_kruber_mercenary_hat_1002",
         small  = "small_portrait_kruber_mercenary_hat_1002",
     },
+    mercenary_hat_1003 = {
+        hud    = "portrait_kruber_mercenary_hat_1003",
+        medium = "medium_portrait_kruber_mercenary_hat_1003",
+        small  = "small_portrait_kruber_mercenary_hat_1003",
+    },
 }
+
+local _skin_portrait_map = {}
 
 local _portrait_materials_ready = false
 local _portrait_settings_active = false
 local _original_portrait_image = nil
 local _original_picking_image = nil
 local _last_known_hat_key = nil
+local _last_known_skin_key = nil
 
 -- ============================================================
 -- Hot-reload / missing-material safety net
@@ -450,33 +701,70 @@ local function _get_hat_item_key_for_unit(player_unit)
     return nil
 end
 
-local function _get_local_player_hat_key()
+local function _get_kruber_merc_hat_key()
     local pm = Managers.player
-    if not pm then return nil end
-    local local_player = pm:local_player()
-    if not local_player then return nil end
+    if not pm then return _last_known_hat_key end
 
     if CosmeticUtils and CosmeticUtils.get_cosmetic_slot then
-        local ok, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, local_player, "slot_hat")
-        if ok and hat_data and hat_data.item_name then
-            return hat_data.item_name
-        end
-    end
-
-    if BackendUtils and BackendUtils.get_loadout_item then
-        local career = nil
-        pcall(function() career = local_player:career_name() end)
-        if not career then pcall(function() career = local_player.career_name end) end
-        if career then
-            local ok, item = pcall(BackendUtils.get_loadout_item, career, "slot_hat")
-            if ok and item then
-                local key = item.key or (item.data and item.data.key)
-                if key then return key end
+        for _, player in pairs(pm:players()) do
+            local career_name = nil
+            pcall(function() career_name = player:career_name() end)
+            if not career_name then pcall(function() career_name = player.career_name end) end
+            if career_name == "es_mercenary" then
+                local ok, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_hat")
+                if ok and hat_data and hat_data.item_name then
+                    _last_known_hat_key = hat_data.item_name
+                    return hat_data.item_name
+                end
             end
         end
     end
 
-    return nil
+    if BackendUtils and BackendUtils.get_loadout_item then
+        local ok, item = pcall(BackendUtils.get_loadout_item, "es_mercenary", "slot_hat")
+        if ok and item then
+            local key = item.key or (item.data and item.data.key)
+            if key then
+                _last_known_hat_key = key
+                return key
+            end
+        end
+    end
+
+    return _last_known_hat_key
+end
+
+local function _get_kruber_merc_skin_key()
+    local pm = Managers.player
+    if not pm then return _last_known_skin_key end
+
+    if CosmeticUtils and CosmeticUtils.get_cosmetic_slot then
+        for _, player in pairs(pm:players()) do
+            local career_name = nil
+            pcall(function() career_name = player:career_name() end)
+            if not career_name then pcall(function() career_name = player.career_name end) end
+            if career_name == "es_mercenary" then
+                local ok, skin_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_skin")
+                if ok and skin_data and skin_data.item_name then
+                    _last_known_skin_key = skin_data.item_name
+                    return skin_data.item_name
+                end
+            end
+        end
+    end
+
+    if BackendUtils and BackendUtils.get_loadout_item then
+        local ok, item = pcall(BackendUtils.get_loadout_item, "es_mercenary", "slot_skin")
+        if ok and item then
+            local key = item.key or (item.data and item.data.key)
+            if key then
+                _last_known_skin_key = key
+                return key
+            end
+        end
+    end
+
+    return _last_known_skin_key
 end
 
 local function _restore_portrait_settings()
@@ -508,8 +796,12 @@ local function _sync_portrait_settings()
 
     if not _check_portrait_materials_ready() then return end
 
-    local hat_key = _get_local_player_hat_key()
+    local hat_key = _get_kruber_merc_hat_key()
     local portraits = hat_key and _hat_portrait_map[hat_key]
+    if not portraits then
+        local skin_key = _get_kruber_merc_skin_key()
+        portraits = skin_key and _skin_portrait_map[skin_key]
+    end
     if portraits then
         career.portrait_image = portraits.hud
         career.picking_image = portraits.medium
@@ -568,7 +860,7 @@ mod:command("portrait_diag", "Diagnose portrait texture registration + hat state
     end
 
     -- Hat detection
-    local hat_key = _get_local_player_hat_key()
+    local hat_key = _get_kruber_merc_hat_key()
     emit("local hat key: %s", tostring(hat_key))
 
     -- Material probe: check if our individual portrait materials are on active GUIs
@@ -1359,6 +1651,68 @@ end)
 -- weapon model; this row independently swaps the left-hand (shield)
 -- model. Only shown for weapons that have a left_hand_unit.
 
+-- Preload the unit packages backing an offhand override, so when the
+-- in-game body re-spawns under a different illusion the engine can still
+-- find our chosen shield mesh. The 1p and 3p meshes are SEPARATE packages
+-- in vanilla VT2 — LA's own bootstrap loads both halves explicitly, and
+-- WeaponUtils.get_weapon_packages confirms it (`unit_name` AND
+-- `unit_name .. "_3p"` are queued separately). The in-game body spawns
+-- BOTH halves; the customization previewer only spawns 3p. Load both.
+--
+-- SYNCHRONOUS load (async=false): the previous async preload had a fatal
+-- timing race — if the user clicked Apply before the async load finished,
+-- BackendUtils.get_item_units returned an override path the engine
+-- couldn't spawn yet, and it asserted in `world.spawn_unit`. Sync loads
+-- block briefly (one shield package is small) and guarantee the package
+-- is ready when the hook fires.
+local _preloaded_offhand_packages = {}
+local function _preload_one(package_path)
+    if not package_path or package_path == "" then return end
+    if _preloaded_offhand_packages[package_path] then return end
+    if not Managers or not Managers.package then return end
+    if Managers.package:has_loaded(package_path) then
+        _preloaded_offhand_packages[package_path] = true
+        return
+    end
+    -- Sync (async=false / omitted). pcall to swallow "package not found"
+    -- on paths that don't exist (some optional shield variants may be
+    -- unpackaged for users without the relevant DLC).
+    local ok, err = pcall(function()
+        Managers.package:load(package_path, "cosmetics_tweaker", nil, false)
+    end)
+    if ok then
+        _preloaded_offhand_packages[package_path] = true
+        mod:info("[offhand] preloaded package %s (sync)", package_path)
+    else
+        mod:info("[offhand] preload FAILED for %s: %s", package_path, tostring(err))
+    end
+end
+
+local function _preload_offhand_package(unit_path)
+    _preload_one(unit_path)
+    if unit_path and unit_path ~= "" then
+        _preload_one(unit_path .. "_3p")
+    end
+end
+
+local function _preload_offhand_for_option(opt)
+    if not opt then return end
+    if opt.unit then _preload_offhand_package(opt.unit) end
+    if opt.intended_unit then _preload_offhand_package(opt.intended_unit) end
+end
+
+-- Returns true only when both the 1p and 3p packages are fully loaded
+-- and ready for World.spawn_unit. Use as a safety gate before applying
+-- a left_hand_unit override: even with sync preload, a defensive check
+-- here prevents future regressions / unknown-paths from crashing.
+local function _override_package_ready(unit_path)
+    if not unit_path or unit_path == "" then return false end
+    if not Managers or not Managers.package then return false end
+    if not Managers.package:has_loaded(unit_path) then return false end
+    if not Managers.package:has_loaded(unit_path .. "_3p") then return false end
+    return true
+end
+
 local _offhand_options = {
     es_1h_sword_shield = {
         { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
@@ -1373,8 +1727,6 @@ local _offhand_options = {
         { name = "GK Shield (Blessed)",    unit = "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01" },
         { name = "Deus Shield (Ornate)",   unit = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02" },
         { name = "Deus Shield (Plumed)",   unit = "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03" },
-        { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
-        { name = "Elven Shield (Exotic)",  unit = "units/weapons/player/wpn_we_shield_02/wpn_we_shield_02" },
         { name = "WP Shield",              unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1" },
     },
     we_1h_spears_shield = {
@@ -1386,16 +1738,104 @@ local _offhand_options = {
         { name = "Deus Shield (Ornate)",   unit = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02" },
         { name = "Deus Shield (Plumed)",   unit = "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03" },
     },
+    dr_1h_axe_shield = {
+        { name = "Dwarf Shield 1",         unit = "units/weapons/player/wpn_dw_shield_01_t1/wpn_dw_shield_01" },
+        { name = "Dwarf Shield 2",         unit = "units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_shield_02" },
+        { name = "Dwarf Shield 2 (Runed)", unit = "units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_shield_02_runed_01" },
+        { name = "Dwarf Shield 3",         unit = "units/weapons/player/wpn_dw_shield_03_t1/wpn_dw_shield_03" },
+        { name = "Dwarf Shield 4",         unit = "units/weapons/player/wpn_dw_shield_04_t1/wpn_dw_shield_04" },
+        { name = "Dwarf Shield 4 (Magic)", unit = "units/weapons/player/wpn_dw_shield_04_t1/wpn_dw_shield_04_magic_01" },
+        { name = "Dwarf Shield 5",         unit = "units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05" },
+        { name = "Dwarf Shield 5 (Runed)", unit = "units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05_runed_01" },
+        { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
+        { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
+        { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
+        { name = "WP Shield",              unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1" },
+    },
+    wh_flail_shield = {
+        { name = "WP Shield",              unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1" },
+        { name = "WP Shield (Runed)",      unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed" },
+        { name = "WP Shield (Magic)",      unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_magic" },
+        { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
+        { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
+        { name = "GK Shield (Blue)",       unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03" },
+        { name = "GK Shield (Red)",        unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02" },
+        { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
+        { name = "Dwarf Shield",           unit = "units/weapons/player/wpn_dw_shield_01_t1/wpn_dw_shield_01" },
+    },
 }
 _offhand_options.es_1h_mace_shield          = _offhand_options.es_1h_sword_shield
 _offhand_options.es_1h_sword_shield_breton  = _offhand_options.es_1h_sword_shield
 _offhand_options.es_deus_01                 = _offhand_options.es_1h_sword_shield
+_offhand_options.dr_1h_hammer_shield        = _offhand_options.dr_1h_axe_shield
+_offhand_options.wh_hammer_shield           = _offhand_options.wh_flail_shield
 
+-- _offhand_selection[weapon_key] = option_table (the same object stored in
+-- _offhand_options[weapon_key]). Vanilla entries have only `unit`; LA-bridge
+-- entries have `la_armoury_key` + `vanilla_skin` (no `unit` — LA paints onto
+-- whatever shield mesh the user's vanilla illusion provides).
 local _offhand_selection = {}
+
+-- Fan-out: each character's LA shield pool gets attached to all of that
+-- character's vanilla shield-bearing weapon types. Implements the
+-- "no cross-character, yes cross-career-within-character" rule.
+local _la_character_weapon_pools = {
+    Kruber    = { "es_1h_sword_shield", "es_1h_mace_shield", "es_1h_sword_shield_breton", "es_deus_01" },
+    Kerillian = { "we_1h_spears_shield" },
+    Bardin    = { "dr_1h_axe_shield", "dr_1h_hammer_shield" },
+    Saltzpyre = { "wh_flail_shield", "wh_hammer_shield" },
+}
+
+local _la_offhand_merged = false
+
+local function _merge_la_offhand_options()
+    if _la_offhand_merged then return end
+    if not LA_BRIDGE.registered then return end
+    if type(LA_BRIDGE.la_offhand_options_by_character) ~= "table" then return end
+    -- Track which option-list tables we've already appended to (the
+    -- existing _offhand_options aliases share table references), so a
+    -- character's pool only lands in each physical list once.
+    local seen_lists = {}
+    for character, la_pool in pairs(LA_BRIDGE.la_offhand_options_by_character) do
+        local weapon_keys = _la_character_weapon_pools[character]
+        if weapon_keys then
+            for _, weapon_key in ipairs(weapon_keys) do
+                local target = _offhand_options[weapon_key]
+                if not target then target = {}; _offhand_options[weapon_key] = target end
+                if not seen_lists[target] then
+                    seen_lists[target] = true
+                    for _, la_opt in ipairs(la_pool) do
+                        target[#target + 1] = {
+                            name            = la_opt.name .. " (LA)",
+                            la_armoury_key  = la_opt.armoury_key,
+                            vanilla_skin    = la_opt.vanilla_skin,
+                            -- mesh the LA texture was authored for; swapped
+                            -- in via BackendUtils.get_item_units so LA paints
+                            -- onto the right shield shape (not whatever shield
+                            -- the user's vanilla weapon happens to use).
+                            intended_unit   = la_opt.intended_unit,
+                            rarity          = "promo",
+                        }
+                    end
+                end
+            end
+        end
+    end
+    _la_offhand_merged = true
+    mod:info("[offhand] merged LA shield options into _offhand_options")
+end
 
 local function _get_offhand_options(item_key)
     return _offhand_options[item_key]
 end
+
+mod:command("la_offhand_dump", "Dump LA offhand variant -> intended_unit resolution", function()
+    if LA_BRIDGE and LA_BRIDGE.dump_offhand_resolution then
+        LA_BRIDGE.dump_offhand_resolution()
+    else
+        mod:echo("[LA bridge] dump_offhand_resolution unavailable")
+    end
+end)
 
 mod:command("offhand_debug", "Dump offhand system state", function()
     mod:echo("[offhand] _offhand_options keys:")
@@ -1404,7 +1844,8 @@ mod:command("offhand_debug", "Dump offhand system state", function()
     end
     mod:echo("[offhand] _offhand_selection:")
     for k, v in pairs(_offhand_selection) do
-        mod:echo("  %s -> %s", k, v)
+        local label = v.la_armoury_key and ("LA:" .. v.la_armoury_key) or tostring(v.unit)
+        mod:echo("  %s -> %s", k, label)
     end
     mod:echo("[offhand] BackendUtils hooked: %s", tostring(BackendUtils ~= nil))
     mod:echo("[offhand] UIWidget available: %s", tostring(UIWidget ~= nil))
@@ -1483,10 +1924,69 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
         x_offset = x_offset + width + spacing
     end
 
+    -- Determine the shield mesh currently rendered for this item. Priority:
+    --   1. backend's stored skin (`item.skin`) -> WeaponSkins.skins[skin].left_hand_unit
+    --   2. ItemMasterList's get_skin lookup by backend_id (covers items where
+    --      .skin is nil but the player has an illusion applied via the live
+    --      backend — the situation user reported on a vanilla-crafted weapon)
+    --   3. item_data.left_hand_unit (template default)
+    local current_left_unit
+    local skin_resolved = item.skin
+    if not skin_resolved and item.backend_id and Managers and Managers.backend then
+        local items_iface = Managers.backend:get_interface("items")
+        if items_iface and items_iface.get_skin then
+            skin_resolved = items_iface:get_skin(item.backend_id)
+        end
+    end
+    if skin_resolved and WeaponSkins and WeaponSkins.skins
+            and WeaponSkins.skins[skin_resolved] then
+        current_left_unit = WeaponSkins.skins[skin_resolved].left_hand_unit
+    end
+    if not current_left_unit then
+        current_left_unit = item_data.left_hand_unit
+    end
+    mod:info("[offhand] auto-select: weapon_key=%s item.skin=%s skin_resolved=%s current_left_unit=%s options=%d",
+        tostring(weapon_key), tostring(item.skin), tostring(skin_resolved),
+        tostring(current_left_unit), #options)
+
+    -- The picker should always reflect what's actually rendered. If the
+    -- stored selection is stale (e.g. user switched weapons / illusions
+    -- since last pick) and doesn't match the current shield, prefer the
+    -- match against the current shield. The user's previous explicit pick
+    -- is preserved only when its mesh still matches what's visible.
     local current_sel = _offhand_selection[weapon_key]
     if current_sel then
+        local sel_mesh = current_sel.unit or current_sel.intended_unit
+        if sel_mesh ~= current_left_unit then
+            current_sel = nil  -- stale; fall through to fresh auto-select
+        end
+    end
+
+    if not current_sel and current_left_unit then
+        for _, opt in ipairs(options) do
+            local opt_mesh = opt.unit or opt.intended_unit
+            if opt_mesh == current_left_unit then
+                _offhand_selection[weapon_key] = opt
+                current_sel = opt
+                mod:info("[offhand] auto-selected: %s", tostring(opt.name))
+                break
+            end
+        end
+        if not current_sel then
+            mod:info("[offhand] no option matched current_left_unit=%s — leaving picker unhighlighted",
+                tostring(current_left_unit))
+        end
+    end
+
+    -- Make the override mesh available to the in-game spawn path. Without
+    -- this preload, applying a NEW illusion (whose package chain doesn't
+    -- include our override mesh) crashes with "Unit not found" the moment
+    -- GearUtils.create_equipment fires on the new skin.
+    if current_sel then _preload_offhand_for_option(current_sel) end
+
+    if current_sel then
         for i, widget in ipairs(widgets) do
-            if options[i] and options[i].unit == current_sel then
+            if options[i] == current_sel then
                 widget.content.button_hotspot.is_selected = true
                 widget.content.equipped = true
                 self._ct_selected_offhand_index = i
@@ -1535,7 +2035,8 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
     local opt = options and options[index]
     if not opt then return end
 
-    _offhand_selection[weapon_key] = opt.unit
+    _offhand_selection[weapon_key] = opt
+    _preload_offhand_for_option(opt)
 
     for i, w in ipairs(widgets) do
         local is_sel = (i == index)
@@ -1547,7 +2048,21 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
 
     local item = self:_get_item(self._item_backend_id)
     if item then
-        local skin_key = item.skin or (item.data and WeaponSkins.default_skins[item.key])
+        -- Vanilla-crafted weapons (e.g. Bret sword + shield) sometimes have
+        -- the equipped illusion stored only in the backend and `item.skin`
+        -- is nil. Fall through items_iface:get_skin(backend_id) before
+        -- giving up — without this the respawn was skipped entirely for
+        -- Bret weapons and clicking the offhand picker had no visible effect.
+        local skin_key = item.skin
+        if not skin_key and item.backend_id and Managers and Managers.backend then
+            local items_iface = Managers.backend:get_interface("items")
+            if items_iface and items_iface.get_skin then
+                skin_key = items_iface:get_skin(item.backend_id)
+            end
+        end
+        if not skin_key and item.data and item.key then
+            skin_key = WeaponSkins.default_skins[item.key]
+        end
         local skin_data = skin_key and WeaponSkins.skins[skin_key]
         if skin_data then
             local preview_item = {
@@ -1563,9 +2078,29 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
 end
 
 if BackendUtils then
-    mod:hook(BackendUtils, "get_item_units", function(func, item_data, ...)
-        local result = func(item_data, ...)
+    mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
+        local result = func(item_data, backend_id, skin, career_name)
         if not result then return result end
+
+        -- Resolve the actual skin: caller may pass nil and rely on backend
+        -- lookup. Mirror BackendUtils' own resolution so we can decide
+        -- whether to apply the override.
+        local resolved_skin = skin
+        if not resolved_skin and backend_id and Managers and Managers.backend then
+            local backend_items = Managers.backend:get_interface("items")
+            if backend_items and backend_items.get_skin then
+                resolved_skin = backend_items:get_skin(backend_id)
+            end
+        end
+
+        -- HARD GATE: only override when an illusion (skin) is actually
+        -- present. The base weapon template has no skin and the user's
+        -- expectation is that we ADD options on top of illusions, never
+        -- mutate the base/template visuals. Without this gate, picking
+        -- an LA option on a skinned weapon also leaks the LA mesh+texture
+        -- onto the base weapon (same item_type) in inventory and other
+        -- spawns. See user report 2026-05-01.
+        if not resolved_skin or resolved_skin == "" then return result end
 
         local item_type = item_data and item_data.item_type
         if item_type == "weapon_skin" and item_data.matching_item_key then
@@ -1576,9 +2111,25 @@ if BackendUtils then
         end
         if not item_type then return result end
 
-        local override_unit = _offhand_selection[item_type]
-        if override_unit then
+        local sel = _offhand_selection[item_type]
+        local override_unit
+        if sel and sel.unit then
+            override_unit = sel.unit
+        elseif sel and sel.intended_unit then
+            -- LA offhand: swap to the mesh the LA texture was authored for.
+            override_unit = sel.intended_unit
+        end
+
+        -- Safety gate: only override if the package is fully loaded. The
+        -- engine asserts in `world.spawn_unit` when the resource manager
+        -- can't find the unit. With sync preload at click/auto-select time
+        -- this should always pass for live selections, but protects against
+        -- preload races / future regressions.
+        if override_unit and _override_package_ready(override_unit) then
             result.left_hand_unit = override_unit
+        elseif override_unit then
+            mod:info("[offhand] SKIP override %s -> %s (package not ready)",
+                tostring(item_type), tostring(override_unit))
         end
 
         return result
@@ -1654,6 +2205,45 @@ local function _local_career_name()
     return ok and name or nil
 end
 
+-- Resolve a weapon's item_type, walking weapon_skin -> matching weapon if needed.
+local function _resolve_item_type(item_data)
+    if not item_data then return nil end
+    local item_type = item_data.item_type
+    if item_type == "weapon_skin" and item_data.matching_item_key and ItemMasterList then
+        local wd = ItemMasterList[item_data.matching_item_key]
+        if wd then item_type = wd.item_type end
+    end
+    return item_type
+end
+
+-- If an LA offhand is selected for the given weapon item_type, paint LA
+-- heraldic textures onto each provided shield unit. Vanilla offhand
+-- selections (with `unit` set) are handled earlier in get_item_units;
+-- LA selections are handled here, after the vanilla shield unit spawned.
+--
+-- `has_skin` MUST be true (a non-empty skin key/equipped illusion) — the
+-- paint is gated to skinned items only, mirroring the BackendUtils.get_item_units
+-- override gate. Painting the base weapon template would surprise users
+-- ("base template can't have illusions applied").
+local function _apply_la_offhand_to_units(world, item_data, units, has_skin)
+    if not LA_BRIDGE.registered then mod:info("[LA paint] skip: bridge not registered"); return end
+    if not world or not item_data then mod:info("[LA paint] skip: world/item_data nil"); return end
+    if not has_skin then mod:info("[LA paint] skip: has_skin=false"); return end
+    local item_type = _resolve_item_type(item_data)
+    if not item_type then mod:info("[LA paint] skip: no item_type"); return end
+    local sel = _offhand_selection[item_type]
+    if not sel then mod:info("[LA paint] skip: no _offhand_selection for %s", tostring(item_type)); return end
+    if not sel.la_armoury_key then return end  -- vanilla selection, nothing for us to paint
+    mod:info("[LA paint] painting %s on %d units (item_type=%s)",
+        tostring(sel.la_armoury_key), #units, tostring(item_type))
+    for _, u in ipairs(units) do
+        if u and _is_unit(u) then
+            local ok = LA_BRIDGE.apply_offhand_to_unit(world, u, sel.la_armoury_key, sel.vanilla_skin)
+            mod:info("[LA paint]   unit=%s ok=%s", tostring(u), tostring(ok))
+        end
+    end
+end
+
 -- In-game keep / mission body
 mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
     local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
@@ -1666,6 +2256,8 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
             local u = result[field]
             if u then _maybe_tint(weapon_key, u) end
         end
+        local has_skin = result.skin ~= nil and result.skin ~= ""
+        _apply_la_offhand_to_units(world, item_data, { result.left_unit_3p, result.left_unit_1p }, has_skin)
     end
     return result
 end)
@@ -1698,6 +2290,32 @@ end)
 
 local function _spawn_item_post(self, item_name, spawn_data)
     if not spawn_data then return end
+
+    -- LA offhand paint: independent of scaling, runs whenever the
+    -- previewed weapon has an LA offhand selected.
+    if item_name and ItemMasterList then
+        local item_data = ItemMasterList[item_name]
+        local world = self._world or self.world
+        if world and item_data then
+            local equip_units = self._equipment_units
+            if equip_units then
+                local left_units = {}
+                for _, slot in pairs(equip_units) do
+                    if type(slot) == "table" and slot.left then
+                        left_units[#left_units + 1] = slot.left
+                    end
+                end
+                if #left_units > 0 then
+                    -- Inventory preview path: only weapon_skin items carry an
+                    -- illusion context. Base weapons here would just be
+                    -- displayed as-is without our override.
+                    local has_skin = item_data.item_type == "weapon_skin"
+                    _apply_la_offhand_to_units(world, item_data, left_units, has_skin)
+                end
+            end
+        end
+    end
+
     local career_name = self._character_name or (self._profile and self._profile.name) or _local_career_name()
     if not career_name then return end
 
@@ -1757,12 +2375,31 @@ mod:hook("HeroPreviewer", "_spawn_item", _spawn_item_wrapper)
 mod:hook("MenuWorldPreviewer", "_spawn_item", _spawn_item_wrapper)
 
 -- Illusion/skin browser preview (LootItemUnitPreviewer)
-mod:hook_safe("LootItemUnitPreviewer", "spawn_units", function(self, spawn_data)
+-- NOTE: must use mod:hook (not hook_safe) so we can capture the returned
+-- `units` array. The caller (`_on_packages_loaded`) only assigns
+-- `self._spawned_units = units` AFTER spawn_units returns, so reading
+-- `self._spawned_units` from inside a hook_safe sees stale or nil data.
+mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
+    local units = func(self, spawn_data)
+
     local item = self._item
-    if not item then return end
+    if not item then return units end
     local item_data = item.data
     local weapon_key = (item_data and item_data.key) or item.key
-    if not weapon_key then return end
+    if not weapon_key then return units end
+
+    -- LA offhand paint: spawn order is left (shield) = index 1, right (weapon) = index 2.
+    -- Use the freshly-returned `units` array, not self._spawned_units (not yet assigned).
+    -- Only paint when the previewed item carries an illusion context (it's a
+    -- weapon_skin entry, OR the previewer was given a skin via item.skin).
+    do
+        local world = self._background_world or self._world or self.world
+        local has_skin = (item.skin and item.skin ~= "")
+                or (item_data and item_data.item_type == "weapon_skin")
+        if has_skin and world and item_data and units and units[1] then
+            _apply_la_offhand_to_units(world, item_data, { units[1] }, true)
+        end
+    end
 
     -- Skin keys (e.g. "es_bastard_sword_skin_01") won't match — resolve to weapon key
     local overrides = _weapon_scale_overrides[weapon_key]
@@ -1773,14 +2410,14 @@ mod:hook_safe("LootItemUnitPreviewer", "spawn_units", function(self, spawn_data)
             overrides = _weapon_scale_overrides[weapon_key]
         end
     end
-    if not overrides then return end
+    if not overrides then return units end
 
     local career_name = self._career_name_override or _local_career_name()
     local scale_factor = _resolve_for_career(overrides, career_name)
-    if not scale_factor then return end
+    if not scale_factor then return units end
     if type(scale_factor) == "function" then
         scale_factor = scale_factor(function(id) return mod:get(id) end)
-        if not scale_factor then return end
+        if not scale_factor then return units end
     end
     local scale
     if type(scale_factor) == "table" then
@@ -1790,11 +2427,10 @@ mod:hook_safe("LootItemUnitPreviewer", "spawn_units", function(self, spawn_data)
     end
 
     local fields = overrides._fields
-    local spawned = self._spawned_units
-    if not spawned then return end
+    if not units then return units end
 
     if not fields then
-        for _, unit in ipairs(spawned) do
+        for _, unit in ipairs(units) do
             if _is_unit(unit) then pcall(Unit.set_local_scale, unit, 0, scale) end
         end
     else
@@ -1804,14 +2440,16 @@ mod:hook_safe("LootItemUnitPreviewer", "spawn_units", function(self, spawn_data)
         end
         -- spawn order: left (shield) = index 1, right (weapon) = index 2
         if right_only and spawn_data and #spawn_data >= 2 then
-            local unit = spawned[2]
+            local unit = units[2]
             if unit and _is_unit(unit) then pcall(Unit.set_local_scale, unit, 0, scale) end
         else
-            for _, unit in ipairs(spawned) do
+            for _, unit in ipairs(units) do
                 if _is_unit(unit) then pcall(Unit.set_local_scale, unit, 0, scale) end
             end
         end
     end
+
+    return units
 end)
 
 -- ============================================================
@@ -1837,13 +2475,14 @@ local function _install_skin_loadout_safety()
     local items_iface = Managers.backend:get_interface("items")
 
     mod:hook(BackendUtils, "set_loadout_item", function(func, backend_id, career_name, slot_name)
-        if slot_name == "slot_skin" or (slot_name == "slot_hat" and LA_BRIDGE.backend_to_armoury[backend_id]) then
+        local is_clone = LA_BRIDGE.backend_to_armoury[backend_id]
+        if is_clone and (slot_name == "slot_hat" or slot_name == "slot_skin") then
             mod.loadout_cache[career_name] = mod.loadout_cache[career_name] or {}
             mod.loadout_cache[career_name][slot_name] = backend_id
             mod:info("[loadout] CACHED %s %s = %s", career_name, slot_name, backend_id)
             return
         end
-        if slot_name == "slot_hat" and mod.loadout_cache[career_name] then
+        if (slot_name == "slot_hat" or slot_name == "slot_skin") and mod.loadout_cache[career_name] then
             mod:info("[loadout] CLEARED cache %s %s (vanilla bid=%s)", career_name, slot_name, backend_id)
             mod.loadout_cache[career_name][slot_name] = nil
         end
@@ -1900,6 +2539,17 @@ local function _install_skin_loadout_safety()
         return raw
     end)
 
+    mod:hook(items_iface, "get_item_rarity", function(func, self, backend_id)
+        local la_key = LA_BRIDGE.backend_to_armoury[backend_id]
+        if la_key then
+            if la_key:match("_white$") or la_key:match("_Purified$") then
+                return "unique"
+            end
+            return "promo"
+        end
+        return func(self, backend_id)
+    end)
+
     local function _fixup_server_clones()
         local all_items = items_iface:get_all_backend_items()
         if not all_items then return end
@@ -1938,6 +2588,7 @@ mod.update = function(dt)
            and get_mod("MoreItemsLibrary") then
             LA_BRIDGE.register_all()
             LA_BRIDGE.install_apply_gate()
+            _merge_la_offhand_options()
             _la_bridge_init_done = true
         end
     end

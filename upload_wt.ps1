@@ -1,20 +1,24 @@
-# upload_wt.ps1 — Upload Weapon Tweaker to Steam Workshop
-# Uses the proven SDK staging method (see ANTIGRAVITY.md)
-$sdk  = 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\ugc_uploader'
+# upload_wt.ps1 - Upload Weapon Tweaker to Steam Workshop (VMB layout)
+# itemV2.cfg currently has visibility = "private" — DO NOT change to "public" without explicit
+# user direction. A prior automated change to public got the mod flagged/removed-from-community,
+# which is irreversible.
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$mod  = Join-Path $root 'weapon_tweaker\upload'
+$cfg  = Join-Path $root 'weapon_tweaker\itemV2.cfg'
+$tool = 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\ugc_uploader\ugc_tool.exe'
 
-$staging = Join-Path $sdk 'sample_item'
+if (-not (Test-Path $cfg))  { throw "itemV2.cfg not found at $cfg" }
+if (-not (Test-Path $tool)) { throw "ugc_tool.exe not found at $tool" }
 
-# Stage content into SDK sample_item
-Remove-Item "$staging\content\*" -Force -ErrorAction SilentlyContinue
-Copy-Item "$mod\content\*" "$staging\content\" -Force
-Copy-Item "$mod\preview.jpg" "$staging\preview.jpg" -Force
-Copy-Item "$mod\item.cfg" "$staging\item.cfg" -Force
+$bundle = Join-Path $root 'weapon_tweaker\bundleV2'
+if (-not (Test-Path $bundle) -or -not (Get-ChildItem $bundle -Filter '*.mod_bundle' -ErrorAction SilentlyContinue)) {
+    throw "No bundleV2 output found at $bundle - run VMB build first"
+}
 
-Write-Host "Staged weapon_tweaker into SDK sample_item:" -ForegroundColor Cyan
-Get-ChildItem "$staging\content" | ForEach-Object { Write-Host "  $($_.Name)  ($($_.Length) bytes)" }
+# Sanity-check visibility before pushing — bash echo y|ugc_tool will commit whatever's in the cfg.
+$cfgContent = Get-Content $cfg -Raw
+if ($cfgContent -match 'visibility\s*=\s*"public"') {
+    throw "itemV2.cfg has visibility = `"public`". Aborting upload. Confirm with user first."
+}
 
-# Upload
-Set-Location $sdk
-'Y' | & .\ugc_tool.exe -c sample_item\item.cfg -x
+Write-Host "Uploading weapon_tweaker via $tool" -ForegroundColor Cyan
+& bash -c "echo y | '$($tool -replace '\\','/')' -c '$($cfg -replace '\\','/')' -x"

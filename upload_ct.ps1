@@ -1,20 +1,18 @@
-# upload_ct.ps1 — Upload Chaos Wastes Tweaker to Steam Workshop
-# Uses the proven SDK staging method (see ANTIGRAVITY.md)
-$sdk  = 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\ugc_uploader'
+# upload_ct.ps1 - Upload Chaos Wastes Tweaker to Steam Workshop (VMB layout)
+# Reads itemV2.cfg directly; PowerShell's & does not pipe stdin reliably for the EULA prompt,
+# so we shell out to bash to use `echo y |` (matches the workaround in reference_vmb_new_mod.md).
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$mod  = Join-Path $root 'chaos_wastes_tweaker\upload'
+$cfg  = Join-Path $root 'chaos_wastes_tweaker\itemV2.cfg'
+$tool = 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\ugc_uploader\ugc_tool.exe'
 
-$staging = Join-Path $sdk 'sample_item'
+if (-not (Test-Path $cfg))  { throw "itemV2.cfg not found at $cfg" }
+if (-not (Test-Path $tool)) { throw "ugc_tool.exe not found at $tool" }
 
-# Stage content into SDK sample_item
-Remove-Item "$staging\content\*" -Force -ErrorAction SilentlyContinue
-Copy-Item "$mod\content\*" "$staging\content\" -Force
-Copy-Item "$mod\preview.jpg" "$staging\preview.jpg" -Force
-Copy-Item "$mod\item.cfg" "$staging\item.cfg" -Force
+# Sanity: make sure the build output exists before uploading
+$bundle = Join-Path $root 'chaos_wastes_tweaker\bundleV2'
+if (-not (Test-Path $bundle) -or -not (Get-ChildItem $bundle -Filter '*.mod_bundle' -ErrorAction SilentlyContinue)) {
+    throw "No bundleV2 output found at $bundle - run VMB build first"
+}
 
-Write-Host "Staged chaos_wastes_tweaker into SDK sample_item:" -ForegroundColor Cyan
-Get-ChildItem "$staging\content" | ForEach-Object { Write-Host "  $($_.Name)  ($($_.Length) bytes)" }
-
-# Upload
-Set-Location $sdk
-'Y' | & .\ugc_tool.exe -c sample_item\item.cfg -x
+Write-Host "Uploading chaos_wastes_tweaker via $tool" -ForegroundColor Cyan
+& bash -c "echo y | '$($tool -replace '\\','/')' -c '$($cfg -replace '\\','/')' -x"

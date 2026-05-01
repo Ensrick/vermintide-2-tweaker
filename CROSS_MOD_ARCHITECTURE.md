@@ -120,6 +120,119 @@ No hard dependencies. Each mod's core features work standalone.
 
 ---
 
+## Loremaster's Armoury Bridge (cosmetics_tweaker ↔ LA)
+
+Exposes Loremaster's Armoury (LA) cosmetic recolors as separate equippable items in VT2's native inventory, so the player can have "Pureheart Red" and "Pureheart White" selectable side-by-side without LA's normal mode (which silently overrides a vanilla item's textures based on a VMF settings dropdown).
+
+**Dependencies:** Loremaster's Armoury, MoreItemsLibrary (MIL). Both optional — bridge is a no-op if either is missing.
+
+**Files:**
+- `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua` — clone registration, apply gate, texture routing
+- `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua` — loadout hooks, preview hooks, diagnostic commands (search for "LA bridge" / "la_bridge" / "loadout" sections)
+
+### How it works end-to-end
+
+#### 1. Clone Registration (boot time, `_la_bridge.lua:register_all`)
+
+Iterates `LA.SKIN_LIST`, filters for `swap_hand == "hat" or "armor"`, matches each variant's `new_units[1]` to a vanilla `ItemMasterList` key via a unit-path index, then clones the IML entry:
+
+```
+backend_id = vanilla_key .. "_LA_" .. la_key
+   e.g. "questing_knight_hat_0001_LA_Kruber_Pureheart_helm_red"
+```
+
+Clone entry modifications (`build_clone_entry`):
+- `entry.key = suffix_id` — unique IML key
+- `entry.name = suffix_id` — **critical**: the game's `parse_item_master_list()` sets `.name = key` on all IML entries at boot. Clones created after boot inherit the vanilla `.name` via `table.clone()`. If `.name` isn't overridden, `HeroWindowCharacterPreview._populate_loadout` thinks vanilla and clone are the same item and skips preview updates.
+- `entry.display_name = suffix_id .. "_name"` — localization key, resolved via `_G.Localize` hook to "Human Readable (LA)"
+- `entry.rarity = "exotic"` — orange border in the grid
+- `entry.cos_la_armoury_key = la_key` — LA's internal key for texture lookup
+- `entry.cos_la_vanilla_key = vanilla_key` — original hat key
+
+Clones are registered with MIL via `mil():add_mod_items_to_local_backend(entries, "cosmetics_tweaker")` and added to `NetworkLookup.item_names` to prevent network-lookup crashes.
+
+**Lookup tables** (all on the `M` module table):
+| Table | Key → Value | Purpose |
+|-------|-------------|---------|
+| `backend_to_armoury` | clone backend_id → LA armoury_key | Identify which LA variant a clone represents |
+| `backend_to_vanilla` | clone backend_id → vanilla IML key | Find the original hat for server-redirect and LA's `skin` arg |
+| `armoury_to_backend` | LA armoury_key → clone backend_id | Gate: block LA from self-applying managed keys |
+| `unit_path_to_clones` | vanilla unit path → list of clone backend_ids | In-game hook: detect when a clone's unit spawns |
+
+#### 2. Apply Gate (`_la_bridge.lua:install_apply_gate`)
+
+Raw function replacement on `LA.apply_new_skin_from_texture`. When a managed armoury_key fires AND `M._bridge_active` is false, the call is blocked. This prevents LA's own hooks (which watch loadout changes and queue texture swaps) from overriding vanilla hats with LA textures.
+
+When the bridge itself wants to apply a texture, it sets `M._bridge_active = true`, calls the original function, then sets it back to false.
+
+#### 3. Loadout Cache (cosmetics_tweaker.lua, `_install_skin_loadout_safety`)
+
+Clone backend_ids must NEVER reach the PlayFab server — vanilla clients would crash on unknown ids. Pattern borrowed from AllHats mod (lines 38-71).
+
+**Write hook** (`BackendUtils.set_loadout_item`):
+- Clone equip → cache locally, do NOT call original (server never sees the clone id)
+- Vanilla equip → clear cache entry, call original (server gets the vanilla id)
+
+**CRITICAL**: Hook must be on `BackendUtils.set_loadout_item` (table-form), NOT on `items_iface.set_loadout_item`. The game's `_set_loadout_item` calls `BackendUtils.set_loadout_item()`, which dispatches via `Managers.backend:get_loadout_interface_by_slot(slot_name)` — this returns a DIFFERENT interface than `Managers.backend:get_interface("items")`. Hooking the items interface misses cosmetic slot writes entirely.
+
+**Read hooks** (`items_iface.get_loadout`, `items_iface.get_loadout_item_id`):
+- Merge cache into loadout reads so the game sees the clone as equipped
+- Redirect any server-stored clone backend_ids to vanilla (defense against pre-hook leak)
+
+**Startup fixup** (`_fixup_server_clones`):
+- Reads raw server loadout (temporarily disabling cache), finds leaked clone ids, replaces them with vanilla via `get_loadout_interface_by_slot().set_loadout_item()` directly
+
+#### 4. Preview Hooks (cosmetics_tweaker.lua)
+
+**`MenuWorldPreviewer.equip_item` wrapping hook:**
+When the cosmetics grid selects a clone, the game calls `equip_item(item_name, slot, backend_id)` where `item_name` is the vanilla key (from `item.data.name` which the game resolves from the backend item). The hook detects clone backend_ids and swaps `item_name` to the clone's `suffix_id`, so `ItemMasterList[suffix_id]` is used for spawn data (custom display name, custom rarity).
+
+**`HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` wrapping hook:**
+Sets `self._cos_la_spawning = backend_id` during clone spawns so downstream hooks (e.g. `_spawn_item_unit`) know to apply LA textures.
+
+**Preview update mechanism** (`HeroWindowCharacterPreview._populate_loadout`):
+The game compares `item.data.name` against the previewer's stored `item_name_by_slot_type()` to decide whether to re-equip. Since our clones have `entry.name = suffix_id` (unique per clone), switching between vanilla and any clone always triggers the re-equip.
+
+#### 5. In-Game Texture Application
+
+**`AttachmentUtils.link` hook** and **`HeroPreviewer._spawn_item_unit` hook_safe:**
+When a hat unit spawns whose unit path matches a clone in `unit_path_to_clones`, the bridge checks whether that clone is equipped (via `find_active_clone_for_unit_path`). If so, it calls `apply_direct()` which:
+1. Sets `M._bridge_active = true` (gate pass)
+2. Calls `LA.apply_new_skin_from_texture(armoury_key, world, vanilla_key, unit)` directly
+3. Sets `M._bridge_active = false`
+4. Suppresses LA's queues for that unit to prevent double-application
+
+If the vanilla hat is equipped (no clone), the bridge suppresses any LA queue entry for that unit.
+
+### Diagnostic Commands
+
+| Command | Purpose |
+|---------|---------|
+| `cos la_dump` | Registry contents: all clone backend_ids and their armoury_keys |
+| `cos la_hats` | All hats for current career with VANILLA/CLONE labels, rarity, equipped status, cache state, raw server value |
+| `cos la_trace 1/0` | Per-hook tracing of every equip_item, _spawn_item, AttachmentUtils.link firing |
+| `cos la_force <key>` | Bypass detection, apply an LA variant directly to the player's spawned hat unit |
+| `cos la_loadout` | Dump loadout_cache contents |
+| `cos la_dump_attachments` | Walk player unit's attachment tree, dump unit_name/skin/hand per node |
+
+### Lessons Learned (for future AI agents)
+
+1. **`parse_item_master_list()` sets `.name = key`** on all IML entries at boot. Any entries added after boot (by MIL or direct IML insert) must set `.name` manually, or the preview system will treat them as identical to their clone source.
+
+2. **`BackendUtils.set_loadout_item` ≠ `items_iface:set_loadout_item`**. The game dispatches loadout writes via `get_loadout_interface_by_slot()` which returns slot-specific interfaces. Hooking the items interface only catches weapon/trinket slots; cosmetic slots go through a different interface. Always hook `BackendUtils` directly for universal interception.
+
+3. **Clone backend_ids MUST NOT reach the server.** Cache locally, merge into reads. If they leak (from sessions before hooks were installed), detect and replace on startup.
+
+4. **LA's own hooks watch loadout changes and queue texture swaps autonomously.** The apply gate must block ALL managed armoury_keys by default, only opening for bridge-initiated calls via the `_bridge_active` flag.
+
+5. **MIL does not propagate `rarity` for cosmetic items.** Setting `entry.rarity = "exotic"` and `mod_data.CustomData.rarity = "exotic"` on the clone entry does not guarantee the grid shows an orange border. The rarity may still read as "default" from the backend. Visual distinction relies primarily on the "(LA)" display name suffix.
+
+6. **The preview character model is a separate `MenuWorldPreviewer` world**, not the in-game keep character. Hat changes in-game go through `attachment_extension:create_attachment_in_slot` on the player unit. Preview hat changes go through `MenuWorldPreviewer.equip_item` → `_spawn_item` → `_spawn_item_unit`.
+
+7. **`_populate_loadout` only calls `equip_item` for items where `item.data.name ~= current_item_name`.** For melee/ranged, the condition is bypassed (`item_slot_type == "melee"` always passes). For hats/cosmetics, the `.name` check is the sole gate. This is why setting `.name = suffix_id` is critical.
+
+---
+
 ## Multiplayer Compatibility Matrix
 
 | Scenario | Visual Result |
@@ -127,6 +240,7 @@ No hard dependencies. Each mod's core features work standalone.
 | All players have character_weapon_variants | Everyone sees correct models — real items sync via network |
 | Host has character_weapon_variants, client doesn't | Client sees missing/unknown item — **mod required for all players** |
 | Player A has cosmetics_tweaker, Player B doesn't | Offhand swaps are client-local only (player A sees their choice, player B sees vanilla) |
+| Player A has cosmetics_tweaker + LA bridge, Player B doesn't | LA clone textures are client-local. Clone backend_ids never reach the server (loadout cache), so Player B sees the vanilla hat |
 | Player A has weapon_tweaker, Player B doesn't | Cross-career weapons visible to both (items exist in backend), but animations may look wrong to player B |
 
 ---

@@ -1,8 +1,25 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.25-dev"
+local MOD_VERSION = "0.1.54-dev"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
+
+-- ============================================================
+-- Cross-character weapon analogues (public API)
+-- ============================================================
+-- Vanilla weapon items that are mechanically analogous and may share
+-- cosmetic/visual assets when this mod is loaded. Other mods (e.g.
+-- cosmetics_tweaker) read this to expand cosmetic targeting beyond a
+-- single character.
+
+mod.weapon_analogues = {
+	es_2h_sword = { "wh_2h_sword" },
+	wh_2h_sword = { "es_2h_sword" },
+}
+
+function mod.get_analogues(item_key)
+	return mod.weapon_analogues[item_key] or {}
+end
 
 -- ============================================================
 -- Variant weapon definitions
@@ -56,6 +73,7 @@ local _variant_definitions = {
 		skin_display_name = "Sword and Shield",
 		rarity          = "default",
 		power_level     = 5,
+		template        = "elven_sword_shield_template",
 	},
 	{
 		item_key        = "cwv_we_sword_shield_veteran",
@@ -72,6 +90,7 @@ local _variant_definitions = {
 		rarity          = "unique",
 		traits          = { "melee_counter_push_power" },
 		properties      = { block_cost = 1, power_vs_skaven = 1 },
+		template        = "elven_sword_shield_template",
 	},
 	{
 		item_key        = "cwv_es_longsword",
@@ -80,14 +99,15 @@ local _variant_definitions = {
 		description     = "An imperial longsword — lighter and faster than the Bretonnian variety.",
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
-		right_hand_unit = "units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1",
-		inventory_icon  = "icon_wpn_emp_sword_02_t1",
+		right_hand_unit = "units/weapons/player/wpn_empire_2h_sword_04_t1/wpn_2h_sword_04_t1",
+		inventory_icon  = "icon_wpn_empire_2h_sword_04_t1",
 		hud_icon        = "weapon_generic_icon_sword",
 		skin_display_name = "Recruit Longsword",
 		rarity          = "default",
 		power_level     = 5,
 		template        = "imperial_longsword_template",
-		right_hand_scale = { 1.0, 1.0, 1.15 },
+		item_type       = "cwv_imperial_longsword",
+		right_hand_scale = { 1.0, 1.0, 1.0 },
 	},
 	{
 		item_key        = "cwv_es_longsword_veteran",
@@ -100,9 +120,27 @@ local _variant_definitions = {
 		inventory_icon  = "icon_wpn_empire_2h_sword_03_t2",
 		hud_icon        = "weapon_generic_icon_sword",
 		skin_display_name = "Halfling Splitter",
+		rarity          = "unique",
+		template        = "imperial_longsword_template",
+		item_type       = "cwv_imperial_longsword",
+		right_hand_scale = { 1.0, 1.0, 1.0 },
+	},
+	{
+		item_key        = "cwv_es_longsword_helmgart",
+		base_weapon     = "es_bastard_sword",
+		display_name    = "Helmgart Watchsword",
+		description     = "An imperial longsword in the Helmgart watch pattern.",
+		character       = "empire_soldier",
+		careers         = _es_all_careers,
+		right_hand_unit = "units/weapons/player/wpn_greatsword/wpn_greatsword",
+		inventory_icon  = "icon_wpn_greatsword",
+		hud_icon        = "weapon_generic_icon_sword",
+		skin_display_name = "Helmgart Watchsword",
 		rarity          = "exotic",
 		template        = "imperial_longsword_template",
-		right_hand_scale = { 0.65, 1.0, 0.85 },
+		item_type       = "cwv_imperial_longsword",
+		skin_only       = true,
+		right_hand_scale = { 1.0, 1.0, 1.0 },
 	},
 }
 
@@ -116,13 +154,17 @@ local _IL_SPEED_MULT   = 1.15
 local _IL_CLEAVE_MULT  = 1.15
 local _IL_STAGGER_MULT = 0.85
 
-local function _clone_damage_profile(source_name, prefix)
+local function _clone_damage_profile(source_name, prefix, mults)
 	if not DamageProfileTemplates then return source_name end
 	local source = DamageProfileTemplates[source_name]
 	if not source then return source_name end
 
 	local new_name = prefix .. source_name
 	if DamageProfileTemplates[new_name] then return new_name end
+
+	local dmg_mult = mults.damage or 1
+	local stg_mult = mults.stagger or 1
+	local clv_mult = mults.cleave or 1
 
 	local clone = table.clone(source, true)
 
@@ -133,8 +175,8 @@ local function _clone_damage_profile(source_name, prefix)
 			local new_key = prefix .. key
 			if not PowerLevelTemplates[new_key] then
 				local c = table.clone(src, true)
-				if c.attack then c.attack = c.attack * _IL_CLEAVE_MULT end
-				if c.impact then c.impact = c.impact * _IL_CLEAVE_MULT end
+				if c.attack then c.attack = c.attack * clv_mult end
+				if c.impact then c.impact = c.impact * clv_mult end
 				PowerLevelTemplates[new_key] = c
 			end
 			clone.cleave_distribution = new_key
@@ -149,8 +191,8 @@ local function _clone_damage_profile(source_name, prefix)
 			if not PowerLevelTemplates[new_key] then
 				local c = table.clone(src, true)
 				if c.power_distribution then
-					if c.power_distribution.attack then c.power_distribution.attack = c.power_distribution.attack * _IL_DAMAGE_MULT end
-					if c.power_distribution.impact then c.power_distribution.impact = c.power_distribution.impact * _IL_STAGGER_MULT end
+					if c.power_distribution.attack then c.power_distribution.attack = c.power_distribution.attack * dmg_mult end
+					if c.power_distribution.impact then c.power_distribution.impact = c.power_distribution.impact * stg_mult end
 				end
 				PowerLevelTemplates[new_key] = c
 			end
@@ -167,8 +209,8 @@ local function _clone_damage_profile(source_name, prefix)
 				local c = table.clone(src, true)
 				for _, target in ipairs(c) do
 					if target.power_distribution then
-						if target.power_distribution.attack then target.power_distribution.attack = target.power_distribution.attack * _IL_DAMAGE_MULT end
-						if target.power_distribution.impact then target.power_distribution.impact = target.power_distribution.impact * _IL_STAGGER_MULT end
+						if target.power_distribution.attack then target.power_distribution.attack = target.power_distribution.attack * dmg_mult end
+						if target.power_distribution.impact then target.power_distribution.impact = target.power_distribution.impact * stg_mult end
 					end
 				end
 				PowerLevelTemplates[new_key] = c
@@ -185,8 +227,8 @@ local function _clone_damage_profile(source_name, prefix)
 			if not PowerLevelTemplates[new_key] then
 				local c = table.clone(src, true)
 				if c.power_distribution then
-					if c.power_distribution.attack then c.power_distribution.attack = c.power_distribution.attack * _IL_DAMAGE_MULT end
-					if c.power_distribution.impact then c.power_distribution.impact = c.power_distribution.impact * _IL_STAGGER_MULT end
+					if c.power_distribution.attack then c.power_distribution.attack = c.power_distribution.attack * dmg_mult end
+					if c.power_distribution.impact then c.power_distribution.impact = c.power_distribution.impact * stg_mult end
 				end
 				PowerLevelTemplates[new_key] = c
 			end
@@ -195,6 +237,14 @@ local function _clone_damage_profile(source_name, prefix)
 	end
 
 	DamageProfileTemplates[new_name] = clone
+
+	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, new_name) then
+		local tbl = NetworkLookup.damage_profiles
+		local idx = #tbl + 1
+		rawset(tbl, idx, new_name)
+		rawset(tbl, new_name, idx)
+	end
+
 	return new_name
 end
 
@@ -216,7 +266,9 @@ local function _create_imperial_longsword_template()
 							sub_action.anim_time_scale = sub_action.anim_time_scale * _IL_SPEED_MULT
 						end
 						if sub_action.damage_profile then
-							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_il_")
+							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_il_", {
+								damage = _IL_DAMAGE_MULT, stagger = _IL_STAGGER_MULT, cleave = _IL_CLEAVE_MULT,
+							})
 						end
 					end
 				end
@@ -230,6 +282,83 @@ local function _create_imperial_longsword_template()
 end
 
 _create_imperial_longsword_template()
+
+-- ============================================================
+-- Elven Sword+Shield template (modified one_handed_sword_shield_template_1)
+-- +15% speed, -15% stagger
+-- ============================================================
+
+local _ESS_SPEED_MULT   = 1.15
+local _ESS_STAGGER_MULT = 0.85
+
+local _ess_anim_remap = {
+	attack_swing_left_diagonal     = "attack_swing_left",
+	attack_swing_charge            = "attack_swing_charge_stab",
+	attack_swing_heavy             = "attack_push",
+	attack_swing_heavy_right       = "attack_swing_heavy_down_right",
+	attack_swing_charge_right_pose = "attack_swing_charge_right_diagonal_pose",
+}
+
+local function _create_elven_sword_shield_template()
+	if not Weapons or not Weapons.one_handed_sword_shield_template_1 then
+		mod:warning("one_handed_sword_shield_template_1 not found — Elven Sword+Shield stat modifications unavailable")
+		return
+	end
+	if Weapons.elven_sword_shield_template then return end
+
+	local template = table.clone(Weapons.one_handed_sword_shield_template_1, true)
+
+	if template.actions then
+		for _, action_group in pairs(template.actions) do
+			if type(action_group) == "table" then
+				for _, sub_action in pairs(action_group) do
+					if type(sub_action) == "table" then
+						if sub_action.anim_time_scale then
+							sub_action.anim_time_scale = sub_action.anim_time_scale * _ESS_SPEED_MULT
+						end
+						if sub_action.damage_profile then
+							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_ess_", {
+								stagger = _ESS_STAGGER_MULT,
+							})
+						end
+						if sub_action.anim_event and _ess_anim_remap[sub_action.anim_event] then
+							sub_action.anim_event_3p = _ess_anim_remap[sub_action.anim_event]
+						end
+					end
+				end
+			end
+		end
+	end
+
+	template.wield_anim_3p = "to_1h_spear_shield"
+	template.wield_anim_career_3p = {
+		we_waywatcher  = "to_1h_spear_shield",
+		we_maidenguard = "to_1h_spear_shield",
+		we_shade       = "to_1h_spear_shield",
+		we_thornsister = "to_1h_spear_shield",
+	}
+
+	Weapons.elven_sword_shield_template = template
+
+	local elf_wield_3p = {
+		we_waywatcher  = "to_1h_spear_shield",
+		we_maidenguard = "to_1h_spear_shield",
+		we_shade       = "to_1h_spear_shield",
+		we_thornsister = "to_1h_spear_shield",
+	}
+	local base = Weapons.one_handed_sword_shield_template_1
+	if base then
+		base.wield_anim_career_3p = base.wield_anim_career_3p or {}
+		for k, v in pairs(elf_wield_3p) do
+			base.wield_anim_career_3p[k] = v
+		end
+	end
+
+	mod:info("Created elven_sword_shield_template (spd=%.0f%% stagger=%.0f%%, %d 3p anim remaps, wield_3p=to_1h_spear_shield) + patched base template career_3p table for elf careers",
+		_ESS_SPEED_MULT * 100, _ESS_STAGGER_MULT * 100, 5)
+end
+
+_create_elven_sword_shield_template()
 
 -- ============================================================
 -- Optional mod detection
@@ -260,6 +389,9 @@ for _, def in ipairs(_variant_definitions) do
 	_display_names[def.item_key .. "_description"] = def.description
 	if def.skin_display_name then
 		_display_names[def.item_key .. "_skin_name"] = def.skin_display_name
+	end
+	if def.item_type then
+		_display_names[def.item_type] = def.item_type:gsub("^cwv_", ""):gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
 	end
 end
 
@@ -343,6 +475,33 @@ local function _register_variant_skins()
 end
 
 _register_variant_skins()
+
+local function _register_cwv_skin_combinations()
+	if not WeaponSkins or not WeaponSkins.skin_combinations then return end
+
+	local imperial_longsword_skins = {
+		default   = {},
+		plentiful = {},
+		common    = {},
+		rare      = {},
+		exotic    = {},
+		unique    = {},
+	}
+	for _, def in ipairs(_variant_definitions) do
+		if def.item_type == "cwv_imperial_longsword" then
+			local skin_key = def.item_key .. "_skin"
+			local rarity = def.rarity or "exotic"
+			local tier = imperial_longsword_skins[rarity]
+			if tier then
+				tier[#tier + 1] = skin_key
+			end
+		end
+	end
+	WeaponSkins.skin_combinations.cwv_imperial_longsword_skins = imperial_longsword_skins
+	mod:info("Registered cwv_imperial_longsword_skins skin_combination_table")
+end
+
+_register_cwv_skin_combinations()
 
 -- ============================================================
 -- Cross-character greatsword illusions
@@ -485,6 +644,12 @@ local function _build_entry(def, backend_id)
 
 	local entry = table.clone(base, true)
 
+	-- Clobber inherited name/key from base; otherwise other mods' weapon-key
+	-- lookups (cosmetics_tweaker._weapon_scale_overrides, _weapon_grip_offsets)
+	-- match against the base weapon and scale/offset our variant.
+	entry.name = def.item_key
+	entry.key = def.item_key
+
 	entry.display_name = def.item_key .. "_name"
 	entry.description = def.item_key .. "_description"
 
@@ -505,6 +670,12 @@ local function _build_entry(def, backend_id)
 	end
 	if def.template then
 		entry.template = def.template
+	end
+	if def.item_type then
+		entry.item_type = def.item_type
+	end
+	if def.item_type == "cwv_imperial_longsword" then
+		entry.skin_combination_table = "cwv_imperial_longsword_skins"
 	end
 	entry.required_dlc = nil
 
@@ -650,6 +821,7 @@ local function _auto_register_all()
 	local entries = {}
 	local pending_defs = {}
 	for _, def in ipairs(_variant_definitions) do
+		if def.skin_only then goto continue end
 		local backend_id = def.item_key .. "_001"
 		if not _registered_keys[def.item_key] then
 			local entry = _build_entry(def, backend_id)
@@ -659,6 +831,7 @@ local function _auto_register_all()
 				_registered_keys[def.item_key] = backend_id
 			end
 		end
+		::continue::
 	end
 
 	if #entries > 0 then
@@ -703,159 +876,139 @@ mod:hook_safe("StateInGameRunning", "on_enter", function()
 	_auto_register_all()
 end)
 
--- ============================================================
--- Animation remapping (weapon-scoped)
--- ============================================================
-
-local _cwv_sword_shield_keys = {
-	cwv_we_sword_shield = true,
-	cwv_we_sword_shield_veteran = true,
-}
-
-local _local_fp_unit = nil
-local _current_cwv_weapon = nil
-
-local function _get_career_name(unit)
-	if not Managers or not Managers.player then return nil end
-	local player = Managers.player:owner(unit)
-	if not player then return nil end
-	local profile_index = player:profile_index()
-	local career_index = player:career_index()
-	if not profile_index or not career_index then return nil end
-	local profile = SPProfiles and SPProfiles[profile_index]
-	if not profile or not profile.careers then return nil end
-	local career = profile.careers[career_index]
-	return career and career.name
-end
-
-mod:hook_safe("ActionWield", "client_owner_start_action", function(self)
-	_local_fp_unit = self.first_person_unit
-
-	local inventory_extension = self.inventory_extension
-	if inventory_extension then
-		local equipment = inventory_extension:equipment()
-		local new_slot = self.new_slot
-		if equipment and equipment.slots and new_slot then
-			local slot_data = equipment.slots[new_slot]
-			if slot_data then
-				local item_data = slot_data.item_data
-				local item_key = item_data and item_data.key
-				if item_key and _cwv_sword_shield_keys[item_key] then
-					_current_cwv_weapon = item_key
-				else
-					_current_cwv_weapon = nil
-				end
-			end
-		end
-	end
-end)
-
-local _we_careers = {
-	we_waywatcher = true,
-	we_maidenguard = true,
-	we_shade = true,
-	we_thornsister = true,
-}
-
-local _wield_redirect = {
-	to_1h_sword_shield = { target = "to_1h_spear_shield", careers = _we_careers },
-}
-
-local _suffix_redirect = {
-	["_1h_sword_shield"] = { target = "_1h_spear_shield", careers = _we_careers },
-}
-
-local _weapon_remap = {
-	attack_swing_charge_right_pose = "attack_swing_charge_right_diagonal_pose",
-}
-
-mod:hook(Unit, "animation_event", function(func, unit, event_name)
-	if _local_fp_unit and unit == _local_fp_unit then
-		return func(unit, event_name)
-	end
-
-	local redir = _wield_redirect[event_name]
-	if redir then
-		local career = _get_career_name(unit)
-		if career and redir.careers[career] then
-			return func(unit, redir.target)
-		end
-	end
-
-	for suffix, data in pairs(_suffix_redirect) do
-		if event_name:sub(-#suffix) == suffix then
-			local career = _get_career_name(unit)
-			if career and data.careers[career] then
-				local base = event_name:sub(1, -(#suffix + 1))
-				return func(unit, base .. data.target)
-			end
-		end
-	end
-
-	if _current_cwv_weapon and _cwv_sword_shield_keys[_current_cwv_weapon] then
-		local target = _weapon_remap[event_name]
-		if target and target ~= event_name then
-			return func(unit, target)
-		end
-	end
-
-	return func(unit, event_name)
-end)
+-- Animation remapping handled entirely via template:
+-- anim_event_3p overrides in elven_sword_shield_template (attack anims)
+-- wield_anim_3p = "to_1h_spear_shield" (wield anim)
+-- 1P animations remain unchanged from Kruber's sword+shield
 
 -- ============================================================
--- Model scaling (per-variant right_hand_scale / left_hand_scale)
+-- Model scaling and grip offsets
 -- ============================================================
 
-local _scale_map = {}
+local _transform_map = {}
+local _skin_transform_map = {}
 for _, def in ipairs(_variant_definitions) do
-	if def.right_hand_scale or def.left_hand_scale then
-		_scale_map[def.item_key] = def
+	if def.right_hand_scale or def.left_hand_scale or def.right_hand_offset or def.left_hand_offset then
+		_transform_map[def.item_key] = def
+		if not def.no_skin then
+			_skin_transform_map[def.item_key .. "_skin"] = def
+		end
 	end
 end
 
 local function _is_unit(v) return type(v) == "userdata" and pcall(Unit.alive, v) end
 
-local function _apply_scale_to_unit(unit, scale_tbl)
+local function _apply_scale(unit, scale_tbl)
 	if not unit or not _is_unit(unit) then return end
 	pcall(Unit.set_local_scale, unit, 0, Vector3(scale_tbl[1], scale_tbl[2], scale_tbl[3]))
 end
 
+local function _apply_offset(unit, offset_tbl)
+	if not unit or not _is_unit(unit) then return end
+	if not Unit.alive(unit) then return end
+	local current = Unit.local_position(unit, 0)
+	local cx, cy, cz = Vector3.to_elements(current)
+	Unit.set_local_position(unit, 0, Vector3(cx + offset_tbl[1], cy + offset_tbl[2], cz + offset_tbl[3]))
+	mod:info("Applied offset [%.2f, %.2f, %.2f] to unit", offset_tbl[1], offset_tbl[2], offset_tbl[3])
+end
+
+local function _transform_unit(unit, scale_tbl, offset_tbl)
+	if scale_tbl then _apply_scale(unit, scale_tbl) end
+	if offset_tbl then _apply_offset(unit, offset_tbl) end
+end
+
+local function _resolve_cwv_def(item_data, skin)
+	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin] end
+	if not item_data then return nil end
+	local bid = item_data.backend_id
+	if bid then
+		local cwv_key = bid:match("^(cwv_.-)_001$")
+		if cwv_key and _transform_map[cwv_key] then return _transform_map[cwv_key] end
+	end
+	local key = item_data.key or item_data.name
+	if key and _transform_map[key] then return _transform_map[key] end
+	return nil
+end
+
 mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 	local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
-	if not result or not item_data then return result end
+	if not result then return result end
 
-	local weapon_key = item_data.key or item_data.name
-	local def = _scale_map[weapon_key]
+	local def = _resolve_cwv_def(item_data, result.skin)
 	if not def then return result end
 
-	if def.right_hand_scale then
-		_apply_scale_to_unit(result.right_unit_1p, def.right_hand_scale)
-		_apply_scale_to_unit(result.right_unit_3p, def.right_hand_scale)
-	end
-	if def.left_hand_scale then
-		_apply_scale_to_unit(result.left_unit_1p, def.left_hand_scale)
-		_apply_scale_to_unit(result.left_unit_3p, def.left_hand_scale)
-	end
+	mod:info("Applying transforms (slot=%s, skin=%s, item_key=%s)", tostring(slot_name), tostring(result.skin), def.item_key)
+
+	_transform_unit(result.right_unit_1p, def.right_hand_scale, def.right_hand_offset)
+	_transform_unit(result.right_unit_3p, def.right_hand_scale, def.right_hand_offset)
+	_transform_unit(result.left_unit_1p, def.left_hand_scale, def.left_hand_offset)
+	_transform_unit(result.left_unit_3p, def.left_hand_scale, def.left_hand_offset)
 
 	return result
 end)
 
+local function _find_preview_slot_info(self, item_name)
+	if not self._item_info_by_slot then return nil, nil end
+	for slot_id, info in pairs(self._item_info_by_slot) do
+		if info and info.name == item_name then
+			return slot_id, info
+		end
+	end
+	return nil, nil
+end
+
+local function _resolve_preview_def(self, item_name)
+	local _, info = _find_preview_slot_info(self, item_name)
+	local skin = info and info.skin_name
+	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info end
+
+	if info and info.backend_id then
+		local matched = info.backend_id:match("^(cwv_.-)_001$")
+		if matched and _transform_map[matched] then return _transform_map[matched], info end
+	end
+	if _transform_map[item_name] then return _transform_map[item_name], info end
+	return nil, info
+end
+
 local function _cwv_spawn_item_post(self, item_name)
-	local def = _scale_map[item_name]
+	local def, info = _resolve_preview_def(self, item_name)
 	if not def then return end
+
+	mod:info("Preview transform for %s (item_name=%s, skin=%s)",
+		def.item_key, tostring(item_name), tostring(info and info.skin_name))
 
 	local equip_units = self._equipment_units
 	if not equip_units then return end
 
-	for _, slot in pairs(equip_units) do
-		if type(slot) == "table" then
-			if def.right_hand_scale and slot.right and _is_unit(slot.right) then
-				_apply_scale_to_unit(slot.right, def.right_hand_scale)
-			end
-			if def.left_hand_scale and slot.left and _is_unit(slot.left) then
-				_apply_scale_to_unit(slot.left, def.left_hand_scale)
+	-- Find the slot whose units match this item; only transform that slot
+	local target_slot_id
+	if info then
+		for slot_id, _ in pairs(equip_units) do
+			if self._item_info_by_slot[slot_id] == info then
+				target_slot_id = slot_id
+				break
 			end
 		end
+	end
+	if not target_slot_id then
+		-- Fall back: match by package_names slot (use first matching item_name)
+		for slot_id, sinfo in pairs(self._item_info_by_slot) do
+			if sinfo and sinfo.name == item_name then
+				target_slot_id = slot_id
+				break
+			end
+		end
+	end
+	if not target_slot_id then return end
+
+	local slot = equip_units[target_slot_id]
+	if type(slot) ~= "table" then return end
+
+	if slot.right and _is_unit(slot.right) then
+		_transform_unit(slot.right, def.right_hand_scale, def.right_hand_offset)
+	end
+	if slot.left and _is_unit(slot.left) then
+		_transform_unit(slot.left, def.left_hand_scale, def.left_hand_offset)
 	end
 end
 
@@ -878,16 +1031,17 @@ mod:hook_safe("LootItemUnitPreviewer", "spawn_units", function(self)
 	local weapon_key = (item_data and item_data.key) or item.key
 	if not weapon_key then return end
 
-	local def = _scale_map[weapon_key]
+	local def = _skin_transform_map[weapon_key] or _transform_map[weapon_key]
 	if not def then return end
 
 	local spawned = self._spawned_units
 	if not spawned then return end
 
 	local scale = def.right_hand_scale or def.left_hand_scale
-	if scale then
+	local offset = def.right_hand_offset or def.left_hand_offset
+	if scale or offset then
 		for _, unit in ipairs(spawned) do
-			_apply_scale_to_unit(unit, scale)
+			_transform_unit(unit, scale, offset)
 		end
 	end
 end)
@@ -910,6 +1064,32 @@ mod:command("cwv", "Character Weapon Variants status", function()
 		local status = _registered_keys[d.item_key] and "registered" or "not registered"
 		mod:echo("    %s — %s (%s)", d.item_key, d.display_name, status)
 	end
+end)
+
+mod:command("cwv_probe_skins", "Dump skin keys + localized names matching a weapon: cwv_probe_skins <matching_item_key>", function(matching_item_key)
+	if not matching_item_key or matching_item_key == "" then
+		mod:echo("Usage: cwv_probe_skins <matching_item_key>  (e.g. es_2h_sword, es_bastard_sword)")
+		return
+	end
+	if not ItemMasterList then mod:echo("ItemMasterList not loaded") return end
+	local results = {}
+	for key, item in pairs(ItemMasterList) do
+		if item.item_type == "weapon_skin" and item.matching_item_key == matching_item_key then
+			results[#results + 1] = key
+		end
+	end
+	table.sort(results)
+	mod:info("=== Skins for matching_item_key='%s' (%d) ===", matching_item_key, #results)
+	for _, key in ipairs(results) do
+		local item = ItemMasterList[key]
+		local name = key
+		if item.display_name then
+			local ok, loc = pcall(Localize, item.display_name)
+			if ok and loc then name = loc end
+		end
+		mod:info("%s | %s | %s | rarity=%s", key, name, tostring(item.right_hand_unit or "?"), tostring(item.rarity or "?"))
+	end
+	mod:echo("Dumped %d skins to log (search for 'Skins for')", #results)
 end)
 
 mod:command("cwv_give", "Give a variant weapon: cwv_give <item_key>", function(item_key)

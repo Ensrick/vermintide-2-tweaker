@@ -1,6 +1,0 @@
-lua = [
-    "scripts/mods/weapon_tweaker/weapon_tweaker"
-    "scripts/mods/weapon_tweaker/weapon_tweaker_backend"
-    "scripts/mods/weapon_tweaker/weapon_tweaker_data"
-    "scripts/mods/weapon_tweaker/weapon_tweaker_localization"
-]

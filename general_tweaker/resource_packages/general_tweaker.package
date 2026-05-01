@@ -1,5 +1,0 @@
-lua = [
-    "scripts/mods/general_tweaker/general_tweaker"
-    "scripts/mods/general_tweaker/general_tweaker_data"
-    "scripts/mods/general_tweaker/general_tweaker_localization"
-]

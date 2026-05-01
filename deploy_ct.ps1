@@ -1,21 +1,3 @@
-# deploy_ct.ps1 - Deploy Chaos Wastes Tweaker build output to upload/content
+# deploy_ct.ps1 - Deploy Chaos Wastes Tweaker (VMB build) to Workshop content folder
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$out     = Join-Path $root 'chaos_wastes_tweaker\.build\OUT'
-$content = Join-Path $root 'chaos_wastes_tweaker\upload\content'
-
-if (-not (Test-Path $out)) { throw "Build output not found at $out - run _run_build.bat first" }
-
-New-Item -ItemType Directory -Force -Path $content | Out-Null
-Remove-Item "$content\*" -Force -ErrorAction SilentlyContinue
-
-# Copy .mod file
-Copy-Item "$out\ct.mod" $content -Force
-
-# Copy bundle files (no extension in build output, add .mod_bundle)
-Get-ChildItem $out -File | Where-Object { $_.Extension -eq '' } | ForEach-Object {
-    $dest = Join-Path $content ($_.Name + '.mod_bundle')
-    Copy-Item $_.FullName $dest -Force
-}
-
-Write-Host "=== chaos_wastes_tweaker upload/content ==="
-Get-ChildItem $content | Format-Table Name, Length -AutoSize
+& "$root\deploy_all.ps1" -Mods @("chaos_wastes_tweaker")

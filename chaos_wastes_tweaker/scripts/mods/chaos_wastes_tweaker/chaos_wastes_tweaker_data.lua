@@ -1,5 +1,18 @@
 local mod = get_mod("ct")
 
+local altar_count_options = {
+    { text = "altar_count_default", value = 0 },
+    { text = "1", value = 1 },
+    { text = "2", value = 2 },
+    { text = "3", value = 3 },
+    { text = "4", value = 4 },
+    { text = "5", value = 5 },
+    { text = "6", value = 6 },
+    { text = "7", value = 7 },
+    { text = "8", value = 8 },
+    { text = "9", value = 9 },
+}
+
 return {
     name = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
@@ -12,10 +25,10 @@ return {
             { setting_id = "chest_boon_count", type = "numeric", default_value = 3, range = { 1, 5 }, decimals_number = 0 },
             { setting_id = "force_belakor", type = "checkbox", default_value = false },
             { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0 },
-            { setting_id = "chest_upgrade_count", type = "numeric", default_value = 1, range = { 0, 8 }, decimals_number = 0 },
-            { setting_id = "chest_swap_melee_count", type = "numeric", default_value = 1, range = { 0, 8 }, decimals_number = 0 },
-            { setting_id = "chest_swap_ranged_count", type = "numeric", default_value = 1, range = { 0, 8 }, decimals_number = 0 },
-            { setting_id = "chest_power_up_count", type = "numeric", default_value = 2, range = { 0, 8 }, decimals_number = 0 },
+            { setting_id = "chest_upgrade_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
+            { setting_id = "chest_swap_melee_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
+            { setting_id = "chest_swap_ranged_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
+            { setting_id = "chest_power_up_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
             { setting_id = "cursed_chest_count", type = "numeric", default_value = 1, range = { 0, 10 }, decimals_number = 0 },
             { setting_id = "arena_ammo_count", type = "numeric", default_value = 2, range = { 0, 10 }, decimals_number = 0 },
             { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },

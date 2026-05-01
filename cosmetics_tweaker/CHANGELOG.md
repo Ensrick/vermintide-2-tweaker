@@ -1,5 +1,117 @@
 # Cosmetics Tweaker — Changelog
 
+## [2026-05-01 v0.7.82-dev]
+### Fixed
+- **Crash on Apply (still happening after v0.7.81 preload)**: the v0.7.81 preload only loaded the base unit path. Vanilla VT2 packages the 1p and 3p meshes in SEPARATE packages — LA's own bootstrap proves it (`Managers.package:load("...wpn_X", "global")` AND `Managers.package:load("...wpn_X_3p", "global")`). The in-game body spawns both halves; the customization previewer only spawns 3p. Now preload both `<unit_path>` and `<unit_path>_3p` for every offhand override.
+- **Bret offhand picker had no visible effect (clicks did nothing)**: vanilla-crafted Bret weapons sometimes have their equipped illusion stored only in the backend, with `item.skin` nil on the BackendItem object. The respawn-after-click branch in `_ct_on_offhand_pressed` was checking `item.skin or WeaponSkins.default_skins[item.key]` — both nil → no respawn, click was a no-op. Now falls through to `items_iface:get_skin(item.backend_id)` before giving up, mirroring the auto-select resolution path.
+
+### Kruber LA shield count
+13 Kruber LA shield variants total in `swap_hand="left_hand_unit"`. 7 currently exposed in the picker:
+- 5 Bret/GK pure-texture (Bastonne02, Reynard01, Luidhard01, Lothar01, Alberic01)
+- 2 Empire heroic texture (Ostermark01, Kotbs01)
+
+The other 6 are LA's `kind="unit"` Empire basic variants (basic1, basic1_Ostermark01, basic2, basic2_Kotbs01, basic2_Middenheim, basic3_Middenheim01) with custom-authored mesh paths under `units/empire_shield/`. They're filtered out for now — restoring them needs LA's custom-mesh packages preloaded via `Managers.package:load`, which I haven't added yet.
+
+## [2026-05-01 v0.7.81-dev]
+### Fixed
+- **Crash on Apply: "Unit not found" / `world.spawn_unit` assertion** — different cause from v0.7.80. Each vanilla weapon-skin's package chain bundles only its OWN `left_hand_unit`. Our override pointed `result.left_hand_unit` to a different shield mesh whose package was never part of the newly-applied skin's chain, so on re-equip the engine asserted. Fix: preload the override mesh's package via `Managers.package:load(unit_path, "cosmetics_tweaker", nil, true)` whenever the offhand selection changes. Wired into both `_setup_illusions` (auto-select on screen open) and `_ct_on_offhand_pressed` (manual click). Packages stay resident under the `cosmetics_tweaker` reference name for the rest of the session — small per-shield cost, ~one shield package per option the user has touched.
+
+## [2026-05-01 v0.7.80-dev]
+### Fixed
+- **Crash: "Unit not found" / `world.spawn_unit` assertion** — v0.7.79's `new_units[1]` mesh resolution started forwarding LA's `kind="unit"` variants too. Those variants point to LA's custom-authored mesh files (e.g. `units/empire_shield/Kruber_Empire_shield01_mesh`) that ship without standalone packages — `LootItemUnitPreviewer:load_package` can't fetch them, and the engine asserts on `world.resource_manager().can_get(unit_type, unit_name)` when we set `result.left_hand_unit` to one of those paths. Filter LA's offhand pool to `kind="texture"` variants only (those paint onto a vanilla mesh the engine already has). LA's custom-mesh variants (`kind="unit"`) are excluded — supporting them would require loading LA's packages via `Managers.package:load`, which we'd need to add separately.
+- **Pure-texture LA variants** (the Bret heraldic shields with no `new_units` field): no longer fall back to a guessed mesh from the first lex-sorted icon key. With `intended_unit = nil`, we leave the user's currently-equipped shield in place and let LA paint onto it — which is what LA's normal flow does, and matches the user-confirmed "Bret shields look fine" outcome.
+
+### Known limitation
+- LA's custom-mesh shield variants (e.g. `Kruber_empire_shield_basic1`-`basic3`, `Kerillian_elf_shield_basic_Avelorn01_mesh`, etc.) are not exposed in the picker yet. Restoring them requires hooking into LA's package-load bootstrap so the engine can spawn them. Tracked separately.
+
+## [2026-05-01 v0.7.79-dev]
+### Fixed
+- **LA shield model resolution was wrong for Imperial heroic shields**: every LA `swap_hand="left_hand_unit"` SKIN_LIST entry explicitly declares its target mesh in `variant.new_units[1]`. The previous resolution path (texture-path regex + lex-sorted first-icon-key) was unreliable and assumed mesh hints from filenames; it routed Empire heroic shields like `Kruber_empire_shield_hero1_Ostermark01` and `_Kotbs01` to wrong meshes. Replaced both heuristics with a direct `variant.new_units[1]` lookup. Texture variants get the vanilla mesh LA paints onto; unit variants get LA's custom-authored mesh. Falls back to the first-icon heuristic only if `new_units` is missing (doesn't appear in current LA skin_list.lua).
+- **Picker not highlighting the current shield for officially-crafted weapons**: `_setup_illusions` now resolves the equipped illusion via `items_iface:get_skin(item.backend_id)` when `item.skin` is nil (vanilla-crafted weapons sometimes hit this path), then falls back to `item_data.left_hand_unit`. Also discards stale `_offhand_selection` entries whose mesh no longer matches the rendered shield, so the picker always reflects what's visible — not whatever the user last clicked. Added diagnostic logging (`mod:info` to log) for `weapon_key`, `item.skin`, resolved skin, current `left_hand_unit`, and the auto-selected option.
+
+## [2026-05-01 v0.7.78-dev]
+### Fixed
+- **LA paint leaking into vanilla inventory icons & base weapon visuals** ("blazing sun on the mace and shield", "default Bret longsword shows LA reskin"): two distinct leaks both addressed.
+  1. **Global state mutation** — `LA.apply_new_skin_from_texture` permanently writes `WeaponSkins.skins[skin].inventory_icon` and `ItemMasterList[skin].inventory_icon` whenever it runs. Before v0.7.74 this never fired (stale `_spawned_units` short-circuited our call). Once v0.7.74 fixed the hook timing, every preview leaked LA icons globally. Replaced the LA-apply call with a local `_paint_offhand_textures_locally` reimplementation in `_la_bridge.lua` that only touches the supplied unit's mesh materials — no `WeaponSkins` / `ItemMasterList` writes.
+  2. **Override leaking onto base weapon template** — `_offhand_selection` is keyed by `item_type`, so an LA pick on a skinned Bret weapon also overrode the unrelated base Bret weapon (same `item_type`). Added a hard gate: the `BackendUtils.get_item_units` override and the LA paint both require an active skin (illusion). Base weapon spawns with no `skin` arg fall through to vanilla. Mirrors LA's own behavior — illusions can be customized; the base template can't.
+- **Note:** existing icon pollution from prior sessions (where the previous code path leaked) only clears on game restart. Fresh sessions on v0.7.78+ will not leak.
+
+### Added
+- **`cos la_offhand_dump` command** — dumps each LA shield variant -> resolved `intended_unit` mapping with the source (`texture_hint` / `first_icon` / `unresolved`) and the variant's texture path. Use this to identify variants whose intended mesh is wrong and refine `_texture_mesh_hints` in `_la_bridge.lua`.
+- **Texture-path hint parser** in `_la_bridge.lua` — `_texture_mesh_hints` table maps LA folder-name patterns (e.g. `Grail_Knight_shield(%d+)`, `bret_shield_`, `Knight_shield_(%d+)`) to canonical vanilla shield unit paths. Replaces the previous nondeterministic "first key from `pairs(variant.icons)`" heuristic that could pick different shields on different runs. Falls back to the lex-sorted first icon key when no pattern matches.
+
+## [2026-05-01 v0.7.77-dev]
+### Fixed
+- **Cycling main-hand illusions visually swapped the shield too**: when no offhand had been explicitly chosen, the previewer fell back to each illusion's default `left_hand_unit`, so cycling skins changed BOTH the weapon and the shield even though the offhand picker exists. Now `_setup_illusions` auto-selects the offhand option whose `unit` matches the currently-equipped illusion's `left_hand_unit` (resolved via `WeaponSkins.skins[item.skin].left_hand_unit`, falling back to `item_data.left_hand_unit`). Once auto-selected, the existing `BackendUtils.get_item_units` hook locks the shield mesh, so cycling main-hand illusions only changes the weapon. The user can still pick any other shield from the offhand picker explicitly.
+
+## [2026-05-01 v0.7.76-dev]
+### Fixed
+- **LA shields painting onto the wrong shield mesh** ("skin wrapped around the wrong model"): each LA `swap_hand="left_hand_unit"` variant in `mod.SKIN_LIST` is authored against a *specific* shield mesh — the one used by any skin listed in its `icons` table. Previously we left `result.left_hand_unit` alone and let LA paint on top of whatever shield the user's vanilla weapon happened to spawn (e.g. the Bret sword + shield's default mesh), which produced visibly wrong UVs whenever the LA texture was authored for a different shield (round Empire, GK, etc.). Now `_la_bridge.build_offhand_options` resolves the first `icons` key to `WeaponSkins.skins[k].left_hand_unit` and stores it as `intended_unit`. The `BackendUtils.get_item_units` hook swaps `result.left_hand_unit` to that intended mesh before LA paints, so the heraldic texture lands on the mesh it was authored for.
+
+## [2026-05-01 v0.7.75-dev]
+### Changed
+- **Restored WP Shield to Kruber's offhand pool** (kept removed: Elven / Elven Exotic). Kruber now has 13 vanilla offhand options: 5 Empire + 5 GK + 2 Deus + WP Shield.
+
+## [2026-05-01 v0.7.74-dev]
+### Fixed
+- **LA offhand paint never applied in the customization-screen preview**: the `LootItemUnitPreviewer.spawn_units` hook was using `mod:hook_safe` and reading `self._spawned_units`, but that field is only assigned by the *caller* (`_on_packages_loaded`) AFTER `spawn_units` returns — so inside `hook_safe` it was nil or stale. Switched to `mod:hook` and capture the returned `units` array directly. The same fix applies to the weapon-scale override path that runs in the same hook.
+- Used `self._background_world` (the field actually set on `LootItemUnitPreviewer`) as the primary world lookup, with the previous `self._world`/`self.world` as fallbacks.
+
+### Changed
+- **Trimmed Kruber's vanilla offhand pool**: removed Elven Shield / Elven Shield (Exotic) / WP Shield. Kruber now sees only Imperial-themed shields (5 Empire variants, 5 GK variants, 2 Deus variants) — matches "imperial weapon and Bretonnian shields" intent.
+
+## [2026-05-01 v0.7.73-dev]
+### Added
+- **Independent offhand swap for all shield-bearing weapons**: extended `_offhand_options` to cover Bardin's `dr_1h_axe_shield` and `dr_1h_hammer_shield`, plus Saltzpyre Warrior Priest's `wh_flail_shield` and `wh_hammer_shield`. Each pool includes the character's native shield models (5 dwarf shield families with runed/magic variants; WP shield + runed/magic variants) plus a curated cross-character set (Empire/GK/Elven/Dwarf/WP) for consistency with the Kruber and Kerillian pools.
+- **`_la_character_weapon_pools.Saltzpyre`**: added `wh_flail_shield` / `wh_hammer_shield` mapping so any future Loremaster's Armoury Saltzpyre/WP heraldic shields automatically appear in the second-row picker. No-op until LA bridge populates a Saltzpyre entry.
+
+## [2026-05-01 v0.7.72-dev]
+### Added
+- **LA shields in the two-row offhand picker**: Loremaster's Armoury heraldic shield variants are now selectable from the second row on the weapon customization screen, alongside the existing vanilla shield options. Per-character pool with cross-career fan-out: all Kruber shield heraldics (Bret + Empire) appear on every Kruber shield-bearing weapon (`es_1h_sword_shield`, `es_1h_mace_shield`, `es_1h_sword_shield_breton`, `es_deus_01`); Kerillian Elf heraldics on `we_1h_spears_shield`; Bardin Dwarf heraldics on `dr_1h_axe_shield` / `dr_1h_hammer_shield`. No cross-character.
+- **`_la_bridge.la_offhand_options_by_character`** — bridge now parses LA SKIN_LIST entries with `swap_hand="left_hand_unit"` and groups them by character prefix.
+- **`_la_bridge.apply_offhand_to_unit(world, unit, armoury_key, vanilla_skin)`** — paints LA heraldic textures onto a vanilla shield unit after spawn. Wired into `GearUtils.create_equipment` (in-game body), `_spawn_item_post` (HeroPreviewer/MenuWorldPreviewer inventory preview), and `LootItemUnitPreviewer.spawn_units` (illusion browser preview).
+
+### Changed
+- **`_offhand_selection[weapon_key]` now stores the option table itself** (was a unit-path string). Vanilla entries: `{ name, unit }`. LA entries: `{ name, la_armoury_key, vanilla_skin, rarity }`. The `BackendUtils.get_item_units` hook only overrides `result.left_hand_unit` for vanilla selections; LA selections leave the vanilla mesh in place so LA can paint heraldics on top at spawn time.
+
+## [2026-04-30 v0.7.70-dev]
+### Added
+- **Armor clone support**: LA bridge now registers armor/outfit recolors (e.g. Kruber KOTBS, Kerillian Autumn Weave) as separate selectable items in the skin grid. Armor entries use `cosmetic_key` fallback when `new_units` unit-path matching fails, since armor `new_units` point to body meshes not found in IML `.unit` fields.
+- **Rarity background colors**: LA clone items now show red "unique" rarity backgrounds in the cosmetics grid instead of gray "default". Hooked `items_iface:get_item_rarity` to return `"unique"` for any backend_id in `LA_BRIDGE.backend_to_armoury`.
+
+### Fixed
+- **`set_loadout_item` caching ALL slot_skin writes**: The hook was caching every `slot_skin` write, preventing vanilla skin equips from reaching the server. Narrowed condition to only cache writes where `LA_BRIDGE.backend_to_armoury[backend_id]` is truthy.
+- **Armor clone `.name` handling**: Armor clones must keep `entry.name = vanilla_cosmetic_key` (not `suffix_id`) because `_load_hero_unit` does `Cosmetics[item.data.name]` lookup for skin spawning. Added `name_override` parameter to `build_clone_entry`; armor entries pass the vanilla key as override.
+
+## [2026-04-30 v0.7.61-dev]
+### Fixed
+- **LA clone preview not updating when switching from vanilla hat**: `_populate_loadout` in `HeroWindowCharacterPreview` compares `item.data.name` against the previewer's stored `current_item_name` to decide whether to call `equip_item`. The game's `parse_item_master_list()` sets `item.name = key` on every IML entry at boot, but our clones were created after boot via `table.clone(original)` — inheriting the vanilla key as `.name`. Since vanilla hat and all its clones shared the same `.name`, the previewer thought nothing changed and skipped the re-equip. Fix: set `entry.name = suffix_id` in `build_clone_entry` so each clone has a unique `.name`.
+
+## [2026-04-30 v0.7.60-dev]
+### Fixed
+- **Server-stored clone backend_ids persisting across sessions**: Clone backend_ids leaked to the PlayFab server in sessions before the `set_loadout_item` hook was properly installed (v0.7.58). On subsequent startups, `get_loadout_item_id` returned the server's stale clone id, which the cosmetics grid showed as "equipped" even when the user had switched to vanilla. Three-layer defense:
+  1. **Startup fixup** (`_fixup_server_clones`): On mod init, reads raw server loadout (bypassing cache), finds any career/slot with a clone backend_id, and replaces it with the corresponding vanilla backend_id via `get_loadout_interface_by_slot().set_loadout_item()`.
+  2. **Read-time redirect** (`get_loadout_item_id` hook): If the server returns a clone backend_id and no cache entry exists, finds and returns the vanilla backend_id instead.
+  3. **Loadout-table redirect** (`get_loadout` hook): Same redirect applied to the full loadout table before cache merge.
+
+### Changed
+- **`la_hats` diagnostic enhanced**: Now shows cache state, raw server value, and gate status for each hat item, making clone-vs-vanilla debugging trivial.
+
+## [2026-04-30 v0.7.59-dev]
+### Changed
+- **`la_hats` diagnostic command expanded**: Shows VANILLA vs CLONE labels, rarity, equipped status, and cache entries per career for the current hat slot.
+
+## [2026-04-30 v0.7.58-dev (LA bridge)]
+### Fixed
+- **`set_loadout_item` hook never firing for hat equips**: The hook was installed on `items_iface` (the items backend interface), but `BackendUtils.set_loadout_item` dispatches via `Managers.backend:get_loadout_interface_by_slot(slot_name)` which returns a DIFFERENT interface for cosmetic slots. Moved the hook to `BackendUtils.set_loadout_item` directly (table-form hook on the BackendUtils table) so it intercepts ALL loadout writes regardless of which interface handles the slot.
+
+### Added
+- **Loadout cache system** (mirrors AllHats pattern): Clone backend_ids are cached locally in `mod.loadout_cache[career_name][slot_name]` instead of being written to the server. This prevents vanilla clients from crashing on unknown backend_ids. Cache is merged into `get_loadout` and `get_loadout_item_id` reads so the game sees the clone as equipped. Clearing the cache (by equipping a vanilla hat) restores the server-side vanilla backend_id.
+
+## [2026-04-30 v0.7.57-dev]
+### Added
+- **`la_hats` diagnostic command**: Lists all hat items for the current career with VANILLA/CLONE labels, backend_id, rarity, and equipped status. Essential for debugging clone registration and loadout cache behavior.
+
 ## [2026-04-30 v0.7.62-dev]
 ### Changed
 - **Portrait system rewritten: career_settings source-level swap** (confirmed working). Instead of per-widget per-frame content swapping (which only caught the HUD unit frame), the mod now modifies `SPProfiles[5].careers[1].portrait_image` directly at the source. Every UI surface that reads the career portrait — HUD, hero selection, ESC menu, tab overlay, end-of-round — gets the custom portrait automatically because they all read from `career_settings.portrait_image` and dynamically prefix `"medium_"` / `"small_"`.

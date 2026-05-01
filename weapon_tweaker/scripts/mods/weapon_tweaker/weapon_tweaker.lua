@@ -1,9 +1,19 @@
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.11.2-dev"
+local MOD_VERSION = "0.11.8-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
+
+local NL = rawget(_G, "NetworkLookup")
+if NL and NL.rarities then
+    local t = NL.rarities
+    if not rawget(t, "promo") then
+        local idx = #t + 1
+        t[idx] = "promo"
+        rawset(t, "promo", idx)
+    end
+end
 
 local weapon_unlock_map = {
     -- Kruber
@@ -2246,6 +2256,36 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
     end
 
     self:_populate_list(weapon_layout)
+
+    -- Strip weave-specific "Magic Level: 100" and "1800" power text from each entry; this is just a crafting template list.
+    local scrollbar_data = self._scrollbars and self._scrollbars.weapons
+    local list_widgets = scrollbar_data and scrollbar_data.list_widgets
+    if list_widgets then
+        for _, widget in ipairs(list_widgets) do
+            local c = widget.content
+            c.level_title = ""
+            c.power_text = ""
+            c.power_title = ""
+            c.magic_level = 0
+            c.level_progress = 0
+        end
+    end
+end)
+
+-- Keep the level/power fields blank — vanilla `_sync_backend_loadout` repopulates them every refresh.
+mod:hook("HeroWindowWeaveForgeWeapons", "_sync_backend_loadout", function(func, self)
+    func(self)
+    if not _custom_forge_active then return end
+    local scrollbar_data = self._scrollbars and self._scrollbars.weapons
+    local list_widgets = scrollbar_data and scrollbar_data.list_widgets
+    if list_widgets then
+        for _, widget in ipairs(list_widgets) do
+            local c = widget.content
+            c.level_title = ""
+            c.power_text = ""
+            c.power_title = ""
+        end
+    end
 end)
 
 -- --- Weapon select: present item without locked/essence state ---
@@ -2356,7 +2396,7 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         ItemInstanceId = new_backend_id,
         CustomData = {
             power_level = "300",
-            rarity = "exotic",
+            rarity = "promo",
         },
     }
 
@@ -2367,6 +2407,11 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         return
     end
 
+    local stored = backend_mirror._inventory_items and backend_mirror._inventory_items[new_backend_id]
+    local stored_rarity = stored and stored.rarity or "<nil>"
+    local stored_cd_rarity = stored and stored.CustomData and stored.CustomData.rarity or "<nil>"
+    mod:info("[craft] post-add rarity=%s CustomData.rarity=%s", tostring(stored_rarity), tostring(stored_cd_rarity))
+
     local career_name = self._career_name
     local slot_name = self._selected_slot_name
     local backend_items = Managers.backend:get_interface("items")
@@ -2375,7 +2420,7 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         mod:echo("Equip failed: " .. tostring(err2))
     end
 
-    mod:echo("Crafted: " .. tostring(Localize(ItemMasterList[item_key].display_name)) .. " [" .. new_backend_id .. "]")
+    mod:echo("Crafted: " .. tostring(Localize(ItemMasterList[item_key].display_name)) .. " [" .. tostring(stored_rarity) .. "]")
 
     self:_sync_backend_loadout()
     self._equip_pulse_duration = 0.5
@@ -2680,6 +2725,103 @@ mod:command("forge_dump_backend", "Dump forge backend hook returns to log", func
     mod:info("  get_essence: %s", tostring(weaves:get_essence()))
     mod:info("=== END FORGE BACKEND DUMP ===")
     mod:echo("Backend dump written to log")
+end)
+
+-- Dump everything relevant to the equipped melee/ranged so we can reason about rarity/icons together.
+mod:command("craft_dump", "Dump equipped item + rarity/localization/network data", function()
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    local weaves = Managers.backend and Managers.backend:get_interface("weaves")
+    local mirror = Managers.backend and Managers.backend:get_backend_mirror()
+    if not items or not mirror then
+        mod:echo("Backend not ready")
+        return
+    end
+    local player = Managers.player:local_player()
+    local profile_index = player:profile_index()
+    local profile = SPProfiles[profile_index]
+    local career_index = player:career_index()
+    local career = profile.careers[career_index]
+    local career_name = career.name
+
+    local NL = rawget(_G, "NetworkLookup")
+    local nl_rarities = NL and NL.rarities
+    local nl_promo_idx = nl_rarities and rawget(nl_rarities, "promo")
+
+    mod:info("=== CRAFT DUMP career=%s ===", career_name)
+    mod:info("[NetworkLookup] rarities.promo index = %s", tostring(nl_promo_idx))
+    mod:info("[UISettings.item_rarity_textures]")
+    if UISettings and UISettings.item_rarity_textures then
+        for _, r in ipairs({"plentiful","common","rare","exotic","unique","magic","promo","default"}) do
+            mod:info("  [%s] = %s", r, tostring(UISettings.item_rarity_textures[r]))
+        end
+    end
+    mod:info("[RaritySettings]")
+    local RS = rawget(_G, "RaritySettings")
+    if RS then
+        for _, r in ipairs({"plentiful","common","rare","exotic","unique","magic","promo"}) do
+            local entry = rawget(RS, r)
+            mod:info("  [%s] exists=%s display=%s", r, tostring(entry ~= nil),
+                entry and tostring(entry.display_name) or "<nil>")
+        end
+    end
+
+    for _, slot in ipairs({"slot_melee","slot_ranged"}) do
+        mod:info("--- slot=%s ---", slot)
+        local items_bid = items:get_loadout_item_id(career_name, slot)
+        local weaves_bid = weaves and weaves:get_loadout_item_id(career_name, slot)
+        mod:info("  items.get_loadout_item_id  = %s", tostring(items_bid))
+        mod:info("  weaves.get_loadout_item_id = %s", tostring(weaves_bid))
+        local item = items_bid and items:get_item_from_id(items_bid)
+        if item then
+            local data = item.data or ItemMasterList[item.key] or {}
+            mod:info("  item.key       = %s", tostring(item.key))
+            mod:info("  item.ItemId    = %s", tostring(item.ItemId))
+            mod:info("  item.rarity    = %s", tostring(item.rarity))
+            mod:info("  data.rarity    = %s", tostring(data.rarity))
+            mod:info("  display_name   = %s -> %s", tostring(data.display_name), tostring(Localize(data.display_name or "")))
+            mod:info("  inventory_icon = %s", tostring(data.inventory_icon))
+            mod:info("  power_level    = %s", tostring(item.power_level))
+            local resolved_bg = UISettings and UISettings.item_rarity_textures and UISettings.item_rarity_textures[item.rarity]
+            mod:info("  -> rarity_bg lookup = %s", tostring(resolved_bg))
+            if item.CustomData then
+                for k, v in pairs(item.CustomData) do
+                    mod:info("  CustomData[%s] = %s", tostring(k), tostring(v))
+                end
+            else
+                mod:info("  CustomData = nil")
+            end
+            if item.properties then
+                for k, v in pairs(item.properties) do
+                    mod:info("  properties[%s] = %s", tostring(k), tostring(v))
+                end
+            else
+                mod:info("  properties = nil")
+            end
+            if item.traits then
+                for i, t in ipairs(item.traits) do
+                    mod:info("  traits[%d] = %s", i, tostring(t))
+                end
+            else
+                mod:info("  traits = nil")
+            end
+        else
+            mod:info("  no item resolved for backend_id=%s", tostring(items_bid))
+        end
+    end
+
+    mod:info("--- recently-added items (rarity=promo) ---")
+    local inv = mirror._inventory_items or {}
+    local count = 0
+    for bid, it in pairs(inv) do
+        if it and it.rarity == "promo" then
+            count = count + 1
+            mod:info("  [%s] key=%s rarity=%s pl=%s", tostring(bid), tostring(it.key), tostring(it.rarity), tostring(it.power_level))
+            if count >= 10 then mod:info("  ...truncated"); break end
+        end
+    end
+    if count == 0 then mod:info("  (none found)") end
+    mod:info("=== END CRAFT DUMP ===")
+    mod:echo(string.format("Craft dump written. promo items: %d, NL.rarities.promo idx: %s", count, tostring(nl_promo_idx)))
 end)
 
 mod:command("forge", "Start forging a weapon (usage: wt forge <weapon_key>)", function(item_key)

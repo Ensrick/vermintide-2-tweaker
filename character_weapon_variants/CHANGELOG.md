@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.46–0.1.54-dev (2026-05-01)
+
+Iterative dev bumps not documented individually here. See `git log -- character_weapon_variants/` for the actual history. Going forward, please add a heading per substantive change set.
+
+## 0.1.45-dev (2026-05-01)
+- Added: `mod.weapon_analogues` table + `mod.get_analogues(item_key)` getter — public API exposing vanilla weapon items that are mechanically analogous and can share cosmetics. Initial mapping: `es_2h_sword ↔ wh_2h_sword` (Kruber Greatsword ↔ Saltzpyre Falchion). Consumed by cosmetics_tweaker's LA bridge to widen cross-character cosmetic targeting when this mod is loaded.
+
 ## 0.1.25-dev (2026-05-01)
 - Added: Imperial Longsword — `cwv_es_longsword` (default, power 5) and `cwv_es_longsword_veteran` ("Halfling Splitter", exotic rarity). Uses `bastard_sword_template` as base with a custom `imperial_longsword_template` clone: -15% damage, +15% speed (anim_time_scale), +15% cleave, -15% stagger. Available on all Kruber careers.
 - Added: `imperial_longsword_template` — runtime clone of `bastard_sword_template` with modified stat multipliers. Clones all 6 melee damage profiles (`DamageProfileTemplates` + `PowerLevelTemplates`) with `cwv_il_` prefix, modifying `power_distribution.attack` (damage), `power_distribution.impact` (stagger), and `cleave_distribution` values. Multiplies `anim_time_scale` on all sub-actions for speed.

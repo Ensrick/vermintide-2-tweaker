@@ -4,80 +4,83 @@
 
 A modular set of Vermintide 2 VMF mods split from the original monolithic **"Tweaker"**.
 
-| Mod | Internal ID | VMF Console Prefix | Workshop ID | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| Chaos Wastes Tweaker | `ct` | `ct <command>` | **3712929235** | Uploaded |
-| Weapon Tweaker | `wt` | `wt <command>` | **3712896117** | Uploaded |
-| General Tweaker | `gt` | `gt <command>` | **3713619122** | Uploaded |
-| Career Tweaker | `crt` | `crt <command>` | TBD | Scaffolded |
-| ~~Tweaker (legacy)~~ | `t` | `t <command>` | 3704660429 | Deprecated -- split into above |
+| Mod | Internal ID | VMF Console Prefix | Workshop ID | Visibility | Build Pipeline |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Chaos Wastes Tweaker | `ct` | `ct <command>` | **3712929235** | public | VMB |
+| Weapon Tweaker | `wt` | `wt <command>` | **3712896117** | private | VMB |
+| General Tweaker | `gt` | `gt <command>` | **3713619122** | private | VMB |
+| Career Tweaker | `crt` | `crt <command>` | **3716286199** | private | VMB |
+| Cosmetics Tweaker | `cosmetics_tweaker` | `cos <command>` | **3715714222** | private | VMB |
+| Enemy Tweaker | `enemy_tweaker` | (n/a) | **3716780252** | private | VMB |
+| Character Weapon Variants | `character_weapon_variants` | (n/a) | (unpublished) | n/a | VMB |
+| ~~Tweaker (legacy)~~ | `t` | `t <command>` | 3704660429 | n/a | SDK (kept as reference) |
 
 ## Directory Structure
 
 ```
 vermintide-2-tweaker/
-├── weapon_tweaker/                 <- Weapon Tweaker mod source
-│   ├── wt.mod                      <- VMF entry point (internal ID: "wt")
-│   ├── settings.ini
+├── weapon_tweaker/                 <- Weapon Tweaker mod source (VMB layout)
+│   ├── weapon_tweaker.mod          <- VMF entry point (still calls new_mod("wt", ...))
+│   ├── itemV2.cfg                  <- Workshop upload config (read directly by ugc_tool)
+│   ├── preview.jpg                 <- Workshop preview image
 │   ├── resource_packages/
-│   │   └── weapon_tweaker.package
+│   │   └── weapon_tweaker/
+│   │       └── weapon_tweaker.package   <- VMB-syntax package (mod / package / lua blocks)
 │   ├── scripts/mods/weapon_tweaker/
 │   │   ├── weapon_tweaker.lua
 │   │   ├── weapon_tweaker_backend.lua
 │   │   ├── weapon_tweaker_data.lua
 │   │   └── weapon_tweaker_localization.lua
-│   ├── upload/
-│   │   ├── item.cfg                <- Workshop upload config (NOT used directly -- see Upload section)
-│   │   ├── preview.jpg
-│   │   └── content/               <- deploy target for built bundles
-│   └── .build/OUT/                 <- compiler output (generated)
-├── chaos_wastes_tweaker/           <- Chaos Wastes Tweaker mod source (same structure as above)
-├── general_tweaker/                <- General Tweaker mod source (same structure as above)
-├── career_tweaker/                 <- Career Tweaker (future)
-├── tweaker/                        <- LEGACY -- original monolithic mod (deprecated)
-├── upload/                         <- LEGACY -- original tweaker's upload staging
-├── _run_build.bat                  <- primary build script
-├── build.bat                       <- alternate build script
-├── deploy.ps1                      <- legacy deploy (tweaker only)
-├── deploy_all.ps1                  <- deploys all mods to Workshop folders + upload/content
-├── upload.ps1                      <- legacy upload (tweaker only)
-├── upload_all.ps1                  <- uploads all mods to Workshop (NEEDS FIX)
-└── install_local.bat               <- local install without Workshop
+│   └── bundleV2/                   <- VMB build output (generated)
+├── chaos_wastes_tweaker/           <- same VMB layout as above
+├── general_tweaker/                <- same VMB layout as above
+├── career_tweaker/                 <- same VMB layout as above
+├── cosmetics_tweaker/              <- same VMB layout (also has materials/, gui/ for cosmetic textures)
+├── enemy_tweaker/                  <- same VMB layout
+├── character_weapon_variants/      <- same VMB layout
+├── tweaker/                        <- LEGACY -- original monolithic mod, kept as reference (still SDK)
+├── old-backup/                     <- pre-VMB SDK build/upload scripts and artifacts
+├── deploy_all.ps1                  <- deploys all mods to Workshop content folders (auto-detects VMB vs SDK)
+├── deploy_ct.ps1, deploy_wt.ps1    <- per-mod wrappers around deploy_all.ps1
+└── upload_ct.ps1, upload_wt.ps1    <- per-mod uploaders (call ugc_tool with itemV2.cfg directly)
 ```
 
-## Dev Workflow: Build -> Deploy -> Hot Reload
+## Dev Workflow: Build -> Deploy -> Restart
 
 The game loads mods from the real Workshop content folder (`552500/<workshop_id>`).
-Fake local IDs (e.g. `9000000002` via `install_local.bat`) do NOT work for separately-published Workshop mods.
 
 ### Quick iteration loop
 
 ```powershell
-# 1. Build
+# 1. Build via VMB (Stingray compiler is wrapped by VMB)
 Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-echo "Y" | cmd /c ".\build.bat weapon_tweaker"
+node C:/Users/danjo/source/repos/vmb/vmb.js build weapon_tweaker --no-workshop --cwd
 
-# 2. Deploy to Workshop folder + upload/content
-powershell -ExecutionPolicy Bypass -File deploy_all.ps1 -Mods "weapon_tweaker"
+# 2. Deploy to Workshop content folder (cleans stale .mod / .mod_bundle first)
+& .\deploy_all.ps1 -Mods @("weapon_tweaker")
 
-# 3. Hot reload in-game (Ctrl+Shift+R or toggle mod off/on in F4 menu)
+# 3. Restart the game
+#    Hot-reload (Ctrl+Shift+R) is NOT safe for weapon_tweaker or cosmetics_tweaker -- see Important Constraints in CLAUDE.md
 ```
 
 ### Build
 
 ```powershell
-powershell -Command "& 'C:\Users\danjo\source\repos\vermintide-2-tweaker\_run_build.bat'"
+node C:/Users/danjo/source/repos/vmb/vmb.js build <mod_name> --no-workshop --cwd
 ```
 
-Output goes to `<mod>\.build\OUT\`.
+Output goes to `<mod>\bundleV2\`. The `--no-workshop` flag allows building without an existing Workshop ID; itemV2.cfg's `published_id` is what the eventual upload targets.
 
 ### Deploy
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "C:\Users\danjo\source\repos\vermintide-2-tweaker\deploy_all.ps1"
+& .\deploy_all.ps1                                              # all configured mods
+& .\deploy_all.ps1 -Mods @("weapon_tweaker", "general_tweaker") # selected mods
+& .\deploy_ct.ps1                                                # convenience wrapper for chaos_wastes_tweaker
+& .\deploy_wt.ps1                                                # convenience wrapper for weapon_tweaker
 ```
 
-Copies bundles to each mod's `upload\content\` directory (with `.mod_bundle` extension) AND directly to the Workshop content folder for hot reload.
+`deploy_all.ps1` auto-detects whether the mod is VMB (`bundleV2/` exists) or legacy SDK (`.build/OUT/` exists) and handles each accordingly. It also runs `Clean-StaleBundles` against the Workshop content folder before copying — important because the Lua bundle hash changes between SDK and VMB builds, and leaving an old bundle alongside the new one would cause duplicate `new_mod()` registration crashes.
 
 ### Verifying the right build is running
 
@@ -85,56 +88,49 @@ Each mod logs its version on init:
 ```
 [MOD][wt][INFO] Weapon Tweaker v0.2.1-dev loaded
 ```
-And echoes it to in-game chat. If you don't see the expected version after hot reload, the deploy didn't land -- check the Workshop folder file sizes match the build output.
+And echoes it to in-game chat. Always bump `MOD_VERSION` before every build so the running version is visually verifiable.
 
-## Workshop Upload -- THE PROVEN METHOD
+## Workshop Upload (VMB pipeline)
 
-> **CRITICAL**: The ugc_tool resolves relative paths from the **config file's parent directory**, but ONLY when the tool's working directory is the SDK's `ugc_uploader` folder. This is the single most important fact about uploading.
+After the 2026-05-01 migration, every active mod uploads via `ugc_tool` reading `itemV2.cfg` directly from the mod's source folder. No SDK staging is needed; the ugc_tool resolves `content` and `preview` paths relative to the config file's parent directory.
 
-### Step-by-step (proven working 2026-04-23):
+### Per-mod itemV2.cfg
 
-1. **Stage files** into the SDK's sample_item directory:
-   ```powershell
-   $sdk = 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\ugc_uploader\sample_item'
-   Remove-Item "$sdk\content\*" -Force
-   Copy-Item 'weapon_tweaker\upload\content\*' "$sdk\content\" -Force
-   ```
+```ini
+title = "Tweaker: Weapons";
+description = "Weapon unlock and runtime experimentation for Vermintide 2. Requires VMF.";
+preview = "preview.jpg";
+content = "bundleV2";
+language = "english";
+visibility = "private";
+published_id = 3712896117L;
+apply_for_sanctioned_status = false;
+tags = [ ];
+```
 
-2. **Write the item.cfg** in the SDK's sample_item folder:
-   ```ini
-   title = "Weapon Tweaker";
-   description = "Weapon unlock and runtime experimentation for Vermintide 2. Requires VMF.";
-   preview = "preview.jpg";
-   content = "content";
-   language = "english";
-   visibility = "public";
-   published_id = 3712896117L;
-   apply_for_sanctioned_status = false;
-   ```
-   - `preview` and `content` are **relative** to the config file location
-   - `published_id` uses the `L` suffix (64-bit integer literal)
-   - Semicolons required on every line (parsed by `libconfig.dll`)
-   - For a **new** item, set `published_id = 0L;` -- the tool will populate it after creation
+- `preview` and `content` are **relative to the cfg file's parent directory**.
+- `content = "bundleV2"` points at VMB's build output folder.
+- `published_id` uses the `L` suffix (64-bit integer literal).
+- Semicolons required on every line (parsed by `libconfig.dll`).
+- **`visibility`**: do NOT set or change without explicit user direction. Two mods were once flipped to `"public"` by an automated change; both got flagged and "removed from community", which is irreversible. Default new mods to `"private"`. Per-mod intended visibility is recorded in `feedback_workshop_metadata_user_dictates.md` in memory.
+- For a **new** Workshop item, set `published_id = 0L;` — the tool populates it on first upload.
 
-3. **Run the upload** from the SDK directory:
-   ```powershell
-   Set-Location 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\ugc_uploader'
-   'Y' | & .\ugc_tool.exe -c sample_item\item.cfg -x
-   ```
+### Convenience scripts
 
-4. **Verify** on the Workshop page that **File Size is non-zero** (~1.3 MB expected).
+```powershell
+& .\upload_ct.ps1   # uploads chaos_wastes_tweaker (visibility=public, intentional)
+& .\upload_wt.ps1   # uploads weapon_tweaker (aborts if itemV2.cfg has visibility="public")
+```
 
-### Why this works (and nothing else did)
+For other mods, run ugc_tool directly via bash so the `echo y |` EULA workaround works (PowerShell `&` does not pipe stdin reliably to ugc_tool):
 
-- The tool loads `libconfig.dll` and `steam_api.dll` from its own directory. It must be run with the SDK folder as its working directory.
-- Relative paths in the config are resolved from the config file's parent directory -- but only when the above condition is met.
-- Absolute paths from other directories fail silently with misleading `0x9` errors.
-- Previously-deleted Workshop item IDs become permanently invalid -- always use `published_id = 0L;` for new items.
-- The tool adds `tags = [ ];` automatically after a successful upload -- do NOT add it manually.
+```bash
+cd "<mod_dir>" && echo y | "/c/Program Files (x86)/Steam/steamapps/common/Vermintide 2 SDK/ugc_uploader/ugc_tool.exe" -c "<absolute path to itemV2.cfg>" -x
+```
 
 ### ALWAYS verify after uploading
 
-After every upload, check the Workshop page and confirm the **File Size is non-zero** (~1.3 MB expected). ugc_tool prints "Upload finished" even when content fails to transfer -- the only reliable confirmation is the file size shown on the Workshop item page. A 0-byte item means subscribers get nothing.
+ugc_tool prints "Upload finished" even when content fails to transfer. The only reliable confirmation is the **File Size** shown on the Workshop item page (~1.3 MB expected). A 0-byte item means subscribers get nothing. Compare against the local `bundleV2/` total bytes.
 
 ## Weapon Unlocks
 
@@ -458,7 +454,7 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 - `tags = [ ];` is added automatically by the tool -- do NOT add it manually before first upload
 - Semicolons are REQUIRED on every line in item.cfg (parsed by libconfig)
 - The `L` suffix is REQUIRED on `published_id` (64-bit integer literal)
-- Build output files have no extension but the game requires `.mod_bundle` -- deploy scripts handle the rename
+- VMB build output (`bundleV2/`) already includes the `.mod_bundle` extension; only the legacy SDK pipeline produced extensionless files that `deploy_all.ps1` had to rename
 
 ## Known Errors & Fixes
 
@@ -539,7 +535,7 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 ### Mod shows in launcher but not in VMF F4 menu -- "not found in the workshop folder"
 
 - **Cause:** Workshop item is pending Steam's automated review. Steam hasn't synced the download yet, so `mod.bin` and `mod.cer` (EAC certificates required by ModManager) are missing from the Workshop folder. Manually placing bundle files there is not enough.
-- **Fix:** Use `install_local.bat` (fake ID `9000000001`, bypasses certificate check via `developer_mode`). Once Steam review clears and the item is downloadable, unsubscribe + re-subscribe to get a clean certified download.
+- **Fix:** Wait for Steam review to clear, then unsubscribe + re-subscribe to get a clean certified download. (Historical workaround `install_local.bat` was moved to `old-backup/` during the VMB migration; it relied on the now-retired SDK pipeline.)
 
 ### Game crash: bundle hash not found (e.g. `05a4cebb8c3c93bf.mod_bundle not found`)
 
@@ -557,20 +553,18 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 
 The `cosmetics_tweaker` mod (Workshop 3715714222, internal ID `cosmetics_tweaker`) handles visual-only weapon modifications: per-axis scaling, grip offsets, hat tinting, cosmetic unlocks, and shield model swaps. It is built with **VMB** (not the raw Stingray compiler used by the other mods).
 
-### Build & Deploy (different from other mods)
+### Build & Deploy
 
 ```powershell
 # Build (from vermintide-2-tweaker/ root)
 Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
 node C:/Users/danjo/source/repos/vmb/vmb.js build cosmetics_tweaker --no-workshop --cwd
 
-# Deploy to Workshop folder
-$wsDir = "C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3715714222"
-$bundleV2 = "C:\Users\danjo\source\repos\vermintide-2-tweaker\cosmetics_tweaker\bundleV2"
-Get-ChildItem $bundleV2 -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $wsDir $_.Name) -Force }
+# Deploy
+& .\deploy_all.ps1 -Mods @("cosmetics_tweaker")
 ```
 
-Output goes to `cosmetics_tweaker/bundleV2/` (NOT `.build/OUT/`). The `deploy_all.ps1` script does NOT handle cosmetics_tweaker automatically — deploy manually as shown above.
+Output goes to `cosmetics_tweaker/bundleV2/`. The `deploy_all.ps1` script auto-detects the VMB layout (after the 2026-05-01 migration of all Stingray-SDK mods to VMB, the auto-detection covers cosmetics_tweaker too).
 
 **Hot-reload crashes (Ctrl+Shift+R):** weapon_tweaker and cosmetics_tweaker are NOT safe to hot-reload. Both hook unit creation paths (`GearUtils.create_equipment`, `BackendUtils.get_item_units`), and cosmetics_tweaker bundles non-Lua resources (materials/textures). The Stingray engine holds C++-level locks on spawned unit and material resources that cannot be released from Lua — `Mod.release_resource_package` triggers `ensure_unlocked` and crashes. Attempted workarounds (hooking `ModManager.unload_mod`, clearing `loaded_packages` in `on_reload`) either failed to fire (VMF's mod object is not `mod.object` in ModManager) or caused worse cascading failures (wiping third-party atlas handles, increasing lock counts). **Always do a full game restart** after deploying weapon_tweaker or cosmetics_tweaker changes. chaos_wastes_tweaker, general_tweaker, and career_tweaker are Lua-only and may survive hot-reload, but a restart is safest.
 
@@ -701,6 +695,6 @@ When browsing illusions in `LootItemUnitPreviewer`, `self._item.data.key` is the
 
 - **Game Logs**: `%APPDATA%\Fatshark\Vermintide 2\console_logs`
 - **Workshop Content**: `C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\`
-- **Local Mod Folder**: `C:\Program Files (x86)\Steam\steamapps\common\Warhammer Vermintide 2\mods` (used by `install_local.bat`)
+- **Local Mod Folder**: `C:\Program Files (x86)\Steam\steamapps\common\Warhammer Vermintide 2\mods` (used by the legacy `install_local.bat` flow, now in `old-backup/`)
 - **SDK**: `C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\`
 - **AnyWeapon reference mod**: `C:\Users\danjo\source\repos\vermintide-mods\AnyWeapon\` (reference for weapon unlock pattern)

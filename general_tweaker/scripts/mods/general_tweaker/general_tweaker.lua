@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.9-dev"
+local MOD_VERSION = "0.2.10-dev"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
