@@ -1,0 +1,5 @@
+lua = [
+	"scripts/mods/character_weapon_variants/character_weapon_variants"
+	"scripts/mods/character_weapon_variants/character_weapon_variants_data"
+	"scripts/mods/character_weapon_variants/character_weapon_variants_localization"
+]

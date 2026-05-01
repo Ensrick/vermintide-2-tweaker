@@ -1,6 +1,36 @@
 local mod = get_mod("wt")
 
-return {
+local _has_cwv = false
+if Managers and Managers.mod and Managers.mod._mods then
+    for i = 1, #Managers.mod._mods do
+        local m = Managers.mod._mods[i]
+        if m and m.name == "character_weapon_variants" then
+            _has_cwv = true
+            break
+        end
+    end
+end
+
+local _cwv_managed_settings = {
+    ["unlock_es_mercenary_wh_1h_axe"] = true,
+    ["unlock_es_huntsman_wh_1h_axe"] = true,
+    ["unlock_es_knight_wh_1h_axe"] = true,
+    ["unlock_es_questingknight_wh_1h_axe"] = true,
+}
+
+local function _strip_cwv_widgets(widgets)
+    if not widgets then return end
+    for i = #widgets, 1, -1 do
+        local w = widgets[i]
+        if _cwv_managed_settings[w.setting_id] then
+            table.remove(widgets, i)
+        elseif w.sub_widgets then
+            _strip_cwv_widgets(w.sub_widgets)
+        end
+    end
+end
+
+local data = {
     name = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
     is_togglable = true,
@@ -18,7 +48,6 @@ return {
                                 setting_id = "melee_es_mercenary",
                                 type = "group",
                                 sub_widgets = {
-                                    { setting_id = "unlock_es_mercenary_dr_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_dr_2h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_dr_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_dr_1h_hammer", type = "checkbox", default_value = false },
@@ -44,7 +73,6 @@ return {
                                     { setting_id = "unlock_es_mercenary_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_es_1h_flail", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_mercenary_wh_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_bw_1h_crowbill", type = "checkbox", default_value = false },
@@ -80,7 +108,6 @@ return {
                                     { setting_id = "unlock_es_huntsman_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_es_1h_flail", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_huntsman_wh_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_bw_1h_crowbill", type = "checkbox", default_value = false },
@@ -116,7 +143,6 @@ return {
                                     { setting_id = "unlock_es_knight_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_es_1h_flail", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_knight_wh_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_bw_1h_crowbill", type = "checkbox", default_value = false },
@@ -153,7 +179,6 @@ return {
                                     { setting_id = "unlock_es_questingknight_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_es_1h_flail", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_questingknight_wh_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_bw_1h_crowbill", type = "checkbox", default_value = false },
@@ -417,7 +442,6 @@ return {
                                     { setting_id = "unlock_wh_captain_we_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_captain_we_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_captain_we_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_wh_captain_es_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_captain_es_halberd", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_captain_es_1h_mace", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_captain_es_1h_sword", type = "checkbox", default_value = false },
@@ -447,7 +471,6 @@ return {
                                     { setting_id = "unlock_wh_bountyhunter_we_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_bountyhunter_we_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_bountyhunter_we_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_wh_bountyhunter_es_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_bountyhunter_es_halberd", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_bountyhunter_es_1h_mace", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_bountyhunter_es_1h_sword", type = "checkbox", default_value = false },
@@ -477,7 +500,6 @@ return {
                                     { setting_id = "unlock_wh_zealot_we_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_zealot_we_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_zealot_we_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_wh_zealot_es_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_zealot_es_halberd", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_zealot_es_1h_mace", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_zealot_es_1h_sword", type = "checkbox", default_value = false },
@@ -921,7 +943,14 @@ return {
                 setting_id = "forge_group",
                 type = "group",
                 sub_widgets = {
-                    { setting_id = "forge_enabled", type = "checkbox", default_value = true },
+                    {
+                        setting_id = "forge_hotkey",
+                        type = "keybind",
+                        default_value = {"b"},
+                        keybind_trigger = "pressed",
+                        keybind_type = "function_call",
+                        function_name = "open_forge",
+                    },
                 },
             },
             {
@@ -935,3 +964,9 @@ return {
         },
     },
 }
+
+if _has_cwv then
+    _strip_cwv_widgets(data.options.widgets)
+end
+
+return data

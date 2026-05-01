@@ -1,0 +1,11 @@
+mod = [
+	"enemy_tweaker"
+]
+
+package = [
+	"resource_packages/enemy_tweaker/enemy_tweaker"
+]
+
+lua = [
+	"scripts/mods/enemy_tweaker/*"
+]

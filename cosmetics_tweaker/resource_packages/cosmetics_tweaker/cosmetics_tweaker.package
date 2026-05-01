@@ -9,3 +9,33 @@ package = [
 lua = [
 	"scripts/mods/cosmetics_tweaker/*"
 ]
+
+material = [
+	"materials/ui/portrait_kruber_mercenary_hat_1002"
+	"materials/ui/medium_portrait_kruber_mercenary_hat_1002"
+	"materials/ui/small_portrait_kruber_mercenary_hat_1002"
+	"materials/ui/portrait_kruber_mercenary_hat_0004"
+	"materials/ui/medium_portrait_kruber_mercenary_hat_0004"
+	"materials/ui/small_portrait_kruber_mercenary_hat_0004"
+	"materials/ui/portrait_kruber_mercenary_hat_1001"
+	"materials/ui/medium_portrait_kruber_mercenary_hat_1001"
+	"materials/ui/small_portrait_kruber_mercenary_hat_1001"
+	"materials/ui/portrait_kruber_mercenary_hat_0009"
+	"materials/ui/medium_portrait_kruber_mercenary_hat_0009"
+	"materials/ui/small_portrait_kruber_mercenary_hat_0009"
+]
+
+texture = [
+	"gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_1002"
+	"gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_1002"
+	"gui/1080p/single_textures/custom_portraits/small_portrait_kruber_mercenary_hat_1002"
+	"gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_0004"
+	"gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_0004"
+	"gui/1080p/single_textures/custom_portraits/small_portrait_kruber_mercenary_hat_0004"
+	"gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_1001"
+	"gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_1001"
+	"gui/1080p/single_textures/custom_portraits/small_portrait_kruber_mercenary_hat_1001"
+	"gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_0009"
+	"gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_0009"
+	"gui/1080p/single_textures/custom_portraits/small_portrait_kruber_mercenary_hat_0009"
+]

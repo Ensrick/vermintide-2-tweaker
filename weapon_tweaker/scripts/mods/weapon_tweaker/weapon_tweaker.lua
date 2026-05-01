@@ -1,16 +1,16 @@
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.10.0-dev"
+local MOD_VERSION = "0.11.2-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
 local weapon_unlock_map = {
     -- Kruber
-    es_mercenary      = { "dr_1h_axe", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun" },
-    es_huntsman       = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun" },
-    es_knight         = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun" },
-    es_questingknight = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun" },
+    es_mercenary      = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun" },
+    es_huntsman       = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun" },
+    es_knight         = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun" },
+    es_questingknight = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun" },
     -- Bardin
     dr_ranger         = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_1h_sword", "es_2h_hammer", "wh_1h_axe", "wh_dual_hammer", "wh_1h_falchion", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_sword", "dr_2h_pick", "dr_crossbow", "dr_rakegun", "dr_handgun", "es_handgun", "dr_steam_pistol", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
     dr_ironbreaker    = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_1h_sword", "es_2h_hammer", "wh_1h_axe", "wh_dual_hammer", "wh_1h_falchion", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_sword", "dr_2h_pick", "dr_crossbow", "dr_drake_pistol", "dr_drakegun", "dr_rakegun", "dr_handgun", "es_handgun", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
@@ -22,15 +22,22 @@ local weapon_unlock_map = {
     we_shade          = { "dr_1h_axe", "dr_1h_hammer", "we_dual_wield_daggers", "we_dual_wield_swords", "we_1h_axe", "we_2h_axe", "we_2h_sword", "es_2h_sword", "es_halberd", "es_1h_mace", "es_deus_01", "es_1h_sword", "es_2h_heavy_spear", "wh_1h_axe", "wh_1h_falchion", "wh_2h_sword", "wh_1h_hammer", "bw_1h_crowbill", "bw_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "we_dual_wield_sword_dagger", "we_shortbow_hagbane", "we_javelin", "es_longbow", "we_longbow", "we_deus_01", "wh_crossbow_repeater", "we_shortbow", "we_crossbow_repeater" },
     we_thornsister    = { "dr_1h_axe", "dr_1h_hammer", "we_dual_wield_daggers", "we_dual_wield_swords", "we_1h_axe", "we_2h_axe", "we_2h_sword", "es_2h_sword", "es_halberd", "es_1h_mace", "es_deus_01", "es_1h_sword", "es_2h_heavy_spear", "wh_1h_axe", "wh_1h_falchion", "wh_2h_sword", "wh_1h_hammer", "bw_1h_crowbill", "bw_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "we_dual_wield_sword_dagger", "we_life_staff", "we_shortbow_hagbane", "we_javelin", "es_longbow", "we_longbow", "we_deus_01", "wh_crossbow_repeater", "we_shortbow", "we_crossbow_repeater" },
     -- Saltzpyre
-    wh_captain        = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "dr_1h_axe", "dr_dual_wield_hammers", "dr_1h_hammer", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_2h_sword", "we_spear", "we_1h_sword", "es_2h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "dr_crossbow", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater" },
-    wh_bountyhunter   = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "dr_1h_axe", "dr_dual_wield_hammers", "dr_1h_hammer", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_2h_sword", "we_spear", "we_1h_sword", "es_2h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "dr_crossbow", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater" },
-    wh_zealot         = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "dr_1h_axe", "dr_dual_wield_hammers", "dr_1h_hammer", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_2h_sword", "we_spear", "we_1h_sword", "es_2h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "dr_crossbow", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater" },
+    wh_captain        = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "dr_1h_axe", "dr_dual_wield_hammers", "dr_1h_hammer", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_2h_sword", "we_spear", "we_1h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "dr_crossbow", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater" },
+    wh_bountyhunter   = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "dr_1h_axe", "dr_dual_wield_hammers", "dr_1h_hammer", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_2h_sword", "we_spear", "we_1h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "dr_crossbow", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater" },
+    wh_zealot         = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "dr_1h_axe", "dr_dual_wield_hammers", "dr_1h_hammer", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_2h_sword", "we_spear", "we_1h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "dr_crossbow", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater" },
     wh_priest         = { "wh_1h_axe", "dr_1h_axe", "dr_dual_wield_hammers", "dr_1h_hammer", "dr_shield_hammer", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_flail_shield", "wh_1h_hammer", "wh_hammer_shield", "wh_hammer_book", "wh_2h_hammer", "we_spear", "we_1h_sword", "es_halberd", "es_1h_mace", "es_mace_shield", "es_1h_sword", "es_2h_heavy_spear", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "we_crossbow_repeater" },
     -- Sienna
     bw_adept          = { "dr_1h_axe", "dr_1h_hammer", "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "we_1h_sword", "es_1h_mace", "es_1h_sword", "bw_1h_mace", "wh_1h_axe", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_skullstaff_flamethrower" },
     bw_scholar        = { "dr_1h_axe", "dr_1h_hammer", "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "we_1h_sword", "es_1h_mace", "es_1h_sword", "bw_1h_mace", "wh_1h_axe", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_skullstaff_flamethrower" },
     bw_unchained      = { "dr_1h_axe", "dr_1h_hammer", "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "we_1h_sword", "es_1h_mace", "es_1h_sword", "bw_1h_mace", "wh_1h_axe", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_skullstaff_flamethrower" },
     bw_necromancer    = { "dr_1h_axe", "dr_1h_hammer", "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "we_1h_sword", "es_1h_mace", "es_1h_sword", "bw_1h_mace", "wh_1h_axe", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_necromancy_staff" },
+}
+
+local _cwv_managed = {
+    es_mercenary      = { wh_1h_axe = true },
+    es_huntsman       = { wh_1h_axe = true },
+    es_knight         = { wh_1h_axe = true },
+    es_questingknight = { wh_1h_axe = true },
 }
 
 local function feature_enabled(setting_id, default_value)
@@ -42,14 +49,19 @@ end
 local function apply_weapon_unlocks()
     if not ItemMasterList then return end
 
+    local has_cwv = get_mod("character_weapon_variants") ~= nil
+
     -- Strip all mod-managed careers from can_wield
     for career, weapons in pairs(weapon_unlock_map) do
+        local cwv_skip = has_cwv and _cwv_managed[career]
         for _, weapon_key in ipairs(weapons) do
-            local item = ItemMasterList[weapon_key]
-            if item and item.can_wield then
-                for i = #item.can_wield, 1, -1 do
-                    if item.can_wield[i] == career then
-                        table.remove(item.can_wield, i)
+            if not (cwv_skip and cwv_skip[weapon_key]) then
+                local item = ItemMasterList[weapon_key]
+                if item and item.can_wield then
+                    for i = #item.can_wield, 1, -1 do
+                        if item.can_wield[i] == career then
+                            table.remove(item.can_wield, i)
+                        end
                     end
                 end
             end
@@ -58,17 +70,20 @@ local function apply_weapon_unlocks()
 
     -- Add back only enabled ones
     for career, weapons in pairs(weapon_unlock_map) do
+        local cwv_skip = has_cwv and _cwv_managed[career]
         for _, weapon_key in ipairs(weapons) do
-            if mod:get("unlock_" .. career .. "_" .. weapon_key) then
-                local item = ItemMasterList[weapon_key]
-                if item then
-                    if not item.can_wield then item.can_wield = {} end
-                    local already = false
-                    for _, value in ipairs(item.can_wield) do
-                        if value == career then already = true; break end
-                    end
-                    if not already then
-                        item.can_wield[#item.can_wield + 1] = career
+            if not (cwv_skip and cwv_skip[weapon_key]) then
+                if mod:get("unlock_" .. career .. "_" .. weapon_key) then
+                    local item = ItemMasterList[weapon_key]
+                    if item then
+                        if not item.can_wield then item.can_wield = {} end
+                        local already = false
+                        for _, value in ipairs(item.can_wield) do
+                            if value == career then already = true; break end
+                        end
+                        if not already then
+                            item.can_wield[#item.can_wield + 1] = career
+                        end
                     end
                 end
             end
@@ -159,6 +174,7 @@ local _career_anim_redirect = {
                                          overrides = { wh_priest = "to_1h_hammer" } },
     to_1h_crowbill                   = { alt = "to_1h_sword",                   prefix = "bw_",
                                          overrides = { wh_priest = "to_1h_hammer" } },
+    to_1h_hammer                     = { alt = "to_1h_sword",                   prefix = "we_", invert = true },
     to_1h_hammer_shield_priest       = { alt = "to_1h_hammer_shield",           prefix = "wh_priest" },
     to_1h_spear_shield               = { alt = "to_es_deus_01",                 prefix = "we_",
                                          overrides = { wh_priest = "to_1h_hammer_shield" } },
@@ -172,6 +188,7 @@ local _career_anim_redirect = {
                                          overrides = { es_mercenary = "to_polearm", es_huntsman = "to_polearm", es_knight = "to_polearm", es_questingknight = "to_polearm",
                                                        we_waywatcher = "to_spear", we_maidenguard = "to_spear", we_shade = "to_spear", we_thornsister = "to_spear",
                                                        wh_priest = "to_1h_hammer" } },
+    to_2h_sword                      = { alt = "to_2h_sword_we",                prefix = "we_", invert = true },
     to_2h_sword_we                   = { alt = "to_bastard_sword",              prefix = "we_",
                                          overrides = { wh_priest = "to_1h_hammer",
                                                        wh_captain = "to_1h_sword", wh_bountyhunter = "to_1h_sword", wh_zealot = "to_1h_sword" } },
@@ -300,7 +317,6 @@ local _3p_remap_spear_shield_to_deus = {
 
 local _3p_remap_deus_to_spear_shield = {
     attack_swing_up                  = "attack_swing_stab_lh",
-    attack_swing_heavy_down_right    = "attack_swing_heavy_down",
 }
 
 -- Career-aware remap triggers: event → { career_prefix = remap_table, ... }
@@ -348,6 +364,18 @@ local _3p_weapon_remap = nil
 -- Key: weapon template name. Value: { career_prefix = remap_table, ... }
 -- A nil value for a prefix means no remap needed (native character).
 local _3p_template_remaps = {
+    two_handed_swords_template_1 = {
+        we_ = {
+            attack_swing_charge_diagonal       = "attack_swing_charge",
+            attack_swing_charge_diagonal_right = "attack_swing_charge",
+            attack_swing_charge_diagonal_left  = "attack_swing_charge",
+            attack_swing_heavy_left_diagonal   = "attack_swing_left",
+            attack_swing_heavy_right_diagonal  = "attack_swing_heavy_right",
+            attack_swing_left_diagonal         = "attack_swing_left",
+            attack_swing_right_diagonal        = "attack_swing_right",
+            attack_swing_down_right            = "attack_swing_heavy",
+        },
+    },
     two_handed_axes_template_1 = {
         dr_ = false,
         _default = {
@@ -919,7 +947,8 @@ local _weapon_scale_overrides = {
     bw_1h_crowbill = { es_ = 1.10, wh_ = 1.10, dr_ = 1.05 },
     we_2h_sword    = { es_ = 1.15 },
     dr_2h_axe      = { es_ = {1, 1.15, 1}, wh_ = {1, 1.15, 1}, we_ = {1, 1.15, 1}, bw_ = {1, 1.15, 1} },
-    dr_1h_axe      = { we_ = {0.85, 0.85, 1} },  -- Kerillian: thinner X/Y so the haft fits her grip
+    dr_1h_axe      = { we_ = {0.85, 0.85, 1} },
+    dr_1h_hammer   = { we_ = {0.85, 0.85, 1} },
 }
 
 local _scale_field_probe_logged = {}
@@ -974,14 +1003,19 @@ local function _scale_weapon_units(slot_data, weapon_key, career_name)
 end
 
 -- Grip offset: shift weapon along its local axes to adjust hand position.
--- Values are {x, y, z} in the weapon's local space. Which axis is "along the
--- blade" varies per weapon — test empirically. Same dual-path note as scale
--- (above): in-game and menu preview both apply via the same helper.
+-- Values are {x, y, z} in the weapon's local space. +z = grip lower on weapon.
+-- Optional `hand` field: "right" or "left" restricts to one hand (default both).
+-- Same dual-path note as scale (above): in-game and menu preview both apply
+-- via the same helper.
 local _weapon_grip_offsets = {
-    we_1h_sword   = { dr_ = {0, 0, 0.05} },  -- Bardin's grip too high on elf sword
-    bw_sword      = { dr_ = {0, 0, 0.05} },  -- same issue on Sienna's sword
-    es_1h_sword   = { dr_ = {0, 0, 0.05} },  -- same issue on Kruber's sword
-    wh_dual_hammer = { dr_ = {0, 0, 0.15} }, -- Bardin's grip on Saltzpyre's dual hammers
+    we_1h_sword    = { dr_ = {0, 0, 0.05} },
+    bw_sword       = { dr_ = {0, 0, 0.05} },
+    es_1h_sword    = { dr_ = {0, 0, 0.05} },
+    wh_dual_hammer = { dr_ = {0, 0, 0.15} },
+    wh_1h_hammer   = { es_ = {0, 0, 0.15} },
+    wh_hammer_shield = { es_ = {0, 0, 0.15, hand = "right"} },
+    es_2h_sword    = { we_ = {0, 0, -0.085} },
+    wh_2h_sword    = { we_ = {0, 0, -0.085} },
 }
 
 local function _offset_weapon_units(slot_data, weapon_key, career_name)
@@ -1000,7 +1034,15 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
     if not offset then return end
 
     local pos = Vector3(offset[1], offset[2], offset[3])
-    local unit_fields = { "left_unit_1p", "right_unit_1p", "left_unit_3p", "right_unit_3p" }
+    local hand = offset.hand
+    local unit_fields
+    if hand == "right" then
+        unit_fields = { "right_unit_1p", "right_unit_3p" }
+    elseif hand == "left" then
+        unit_fields = { "left_unit_1p", "left_unit_3p" }
+    else
+        unit_fields = { "left_unit_1p", "right_unit_1p", "left_unit_3p", "right_unit_3p" }
+    end
     for _, field in ipairs(unit_fields) do
         local unit = slot_data[field]
         if unit then
@@ -1008,11 +1050,26 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
             pcall(Unit.set_local_position, unit, 0, current + pos)
         end
     end
-    mod:info("Offset %s on %s by {%.3f, %.3f, %.3f}", weapon_key, career_name, offset[1], offset[2], offset[3])
+    mod:info("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(hand or "both"))
 end
 
+-- INVESTIGATION: CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
+-- Unit hash 877616b4d5c71f36 = wpn_bw_ghost_scythe_01_3p (base/Necromancer variant). Unchained
+-- should resolve to _fire_3p via right_hand_unit_override, so the base variant being requested
+-- implies career_name was nil at spawn time. All vanilla code paths look correct; suspected
+-- timing issue during CW level transitions where bot career data isn't resolved yet.
+-- pcall guard prevents hard crash; diagnostic logging captures the actual state for next repro.
 mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
-    local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+    local ok, result = pcall(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+    if not ok then
+        local weapon_key = item_data and item_data.name or "unknown"
+        local has_override = item_data and item_data.right_hand_unit_override and "yes" or "no"
+        local rhu = item_data and item_data.right_hand_unit or "nil"
+        mod:error("create_equipment CRASHED: weapon=%s slot=%s career=%s is_bot=%s rhu=%s has_override=%s err=%s",
+            tostring(weapon_key), tostring(slot_name), tostring(career_name),
+            tostring(is_bot), tostring(rhu), has_override, tostring(result))
+        return nil
+    end
     if result and item_data then
         local weapon_key = item_data.name
         _scale_weapon_units(result, weapon_key, career_name)
@@ -1130,11 +1187,11 @@ mod:hook_safe("MenuWorldPreviewer", "_spawn_item_unit", function(self, unit, slo
     local map = _mwp_pending_keys[self]
     local weapon_key = map and map[slot_type]
     if not weapon_key then return end
-    local career_name = self._character_name or (self._profile and self._profile.name)
-                        or _local_career_name()
+    local career_name = _local_career_name() or self._character_name
+                        or (self._profile and self._profile.name)
     if not career_name then return end
 
-    local fake_slot = { right_unit_3p = unit, right_unit_1p = unit, left_unit_3p = unit, left_unit_1p = unit }
+    local fake_slot = { right_unit_3p = unit }
     _scale_weapon_units(fake_slot, weapon_key, career_name)
     _offset_weapon_units(fake_slot, weapon_key, career_name)
 end)
@@ -1432,6 +1489,1199 @@ mod:hook_safe("BackendManagerPlayFab", "_create_interfaces", function()
     mod:info("Forge: restored %d forged weapons", count)
 end)
 
+-- ============================================================
+-- Weapon Forge (Phase 2 — Athanor UI Hooks)
+-- ============================================================
+local _custom_forge_active = false
+local _forge_loadout = {}
+local _forge_item_props = {}
+local _forge_panel_styled = false
+local _forge_bg_colored = false
+
+mod.open_forge = function()
+    if not Managers.ui then
+        mod:echo("Forge: UI not available")
+        return
+    end
+    local ingame_ui = Managers.ui._ingame_ui
+    if not ingame_ui then
+        mod:echo("Forge: not in game")
+        return
+    end
+    if ingame_ui:pending_transition() then return end
+    _custom_forge_active = true
+    _forge_loadout = {}
+    _forge_item_props = {}
+    ingame_ui:transition_with_fade("hero_view_force", {
+        menu_state_name = "weave_forge",
+    })
+end
+
+mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
+    _custom_forge_active = false
+    _forge_loadout = {}
+    _forge_item_props = {}
+    _forge_panel_styled = false
+    _forge_bg_colored = false
+end)
+
+-- --- Forge UI polish (runs each frame while forge is open) ---
+
+local function _forge_get_widget(window, widget_name)
+    local wbn = window and window._widgets_by_name
+    return wbn and wbn[widget_name]
+end
+
+local function _forge_hide_widget(window, widget_name)
+    local w = _forge_get_widget(window, widget_name)
+    if w and w.content then w.content.visible = false end
+end
+
+local function _forge_set_text(window, widget_name, text)
+    local w = _forge_get_widget(window, widget_name)
+    if w and w.content then w.content.text = text end
+end
+
+local function _forge_set_style_color(window, widget_name, style_key, color)
+    local w = _forge_get_widget(window, widget_name)
+    if w and w.style and w.style[style_key] then
+        w.style[style_key].color = color
+    end
+end
+
+local function _forge_is_hovered(widget)
+    if not widget or not widget.content then return false end
+    local hs = widget.content.button_hotspot or widget.content.hotspot
+    return hs and hs.is_hover
+end
+
+local function _forge_populate_item_panels(overview, item)
+    if not item then return end
+    local ow = overview._wt_overview_widget
+    local pw = overview._wt_properties_widget
+    local tw = overview._wt_trait_widget
+
+    if ow then
+        local inventory_icon, display_name = UIUtils.get_ui_information_from_item(item)
+        local item_data = item.data
+        local rarity = item.rarity or (item_data and item_data.rarity)
+        local rarity_bg = UISettings.item_rarity_textures[rarity]
+        local c = ow.content
+        c.input_text = Localize(display_name or "")
+        c.sub_title = item_data and Localize(item_data.slot_type or "") or ""
+        c.icon_texture = inventory_icon or "icons_placeholder"
+        c.icon_bg = rarity_bg or "icons_placeholder"
+        c.item = item
+        c.visible = true
+    end
+
+    if pw then
+        local c = pw.content
+        local count = 0
+        if item.properties then
+            for prop_key, prop_value in pairs(item.properties) do
+                count = count + 1
+                if count <= 2 then
+                    local text = UIUtils.get_property_description(prop_key, prop_value)
+                    c["button_hotspot_" .. count].disable_button = false
+                    c["option_text_" .. count] = text or prop_key
+                end
+            end
+        end
+        for i = count + 1, 2 do
+            c["button_hotspot_" .. i].disable_button = true
+        end
+        c.visible = true
+    end
+
+    if tw then
+        local c = tw.content
+        if item.traits and #item.traits > 0 then
+            local trait_key = item.traits[1]
+            local WeaponTraits = rawget(_G, "WeaponTraits")
+            local trait_data = WeaponTraits and WeaponTraits.traits and WeaponTraits.traits[trait_key]
+            if trait_data then
+                c.icon_texture = trait_data.icon or "icons_placeholder"
+                c.input_text = Localize(trait_data.display_name or "")
+                c.sub_title = UIUtils.get_trait_description(trait_key) or ""
+                c.locked = false
+            end
+        else
+            c.locked = true
+            c.input_text = ""
+            c.sub_title = ""
+        end
+        c.visible = true
+    end
+end
+
+local function _forge_hide_item_panels(overview)
+    if overview._wt_overview_widget then overview._wt_overview_widget.content.visible = false end
+    if overview._wt_properties_widget then overview._wt_properties_widget.content.visible = false end
+    if overview._wt_trait_widget then overview._wt_trait_widget.content.visible = false end
+end
+
+local function _forge_apply_ui_polish(forge_state)
+    local windows = forge_state._active_windows
+    if not windows then return end
+
+    local overview = nil
+    local panel = nil
+    local background = nil
+    for _, win in pairs(windows) do
+        local name = win.NAME
+        if name == "HeroWindowWeaveForgeOverview" then overview = win
+        elseif name == "HeroWindowWeaveForgePanel" then panel = win
+        elseif name == "HeroWindowWeaveForgeBackground" then background = win
+        end
+    end
+
+    -- === OVERVIEW: hide Athanor level, hide weapon level, fix power ===
+    if overview then
+        _forge_hide_widget(overview, "forge_level_title")
+        _forge_hide_widget(overview, "forge_level_text")
+        _forge_hide_widget(overview, "upgrade_button")
+        _forge_hide_widget(overview, "upgrade_text")
+        _forge_hide_widget(overview, "upgrade_bg")
+        _forge_hide_widget(overview, "top_hdr_background_write_mask")
+
+        for i = 1, 3 do
+            _forge_hide_widget(overview, "viewport_level_title_" .. i)
+            _forge_hide_widget(overview, "viewport_level_value_" .. i)
+            _forge_hide_widget(overview, "viewport_panel_divider_" .. i)
+
+            local highlight = _forge_get_widget(overview, "viewport_button_text_highlight_" .. i)
+            if highlight and highlight.style then
+                if highlight.style.background_top then
+                    highlight.style.background_top.color = {255, 123, 123, 123}
+                end
+                if highlight.style.background_bottom then
+                    highlight.style.background_bottom.color = {255, 123, 123, 123}
+                end
+                if highlight.style.background_top_light then
+                    highlight.style.background_top_light.color = {200, 123, 123, 123}
+                end
+                if highlight.style.background_bottom_light then
+                    highlight.style.background_bottom_light.color = {200, 123, 123, 123}
+                end
+            end
+
+            local btn_highlight = _forge_get_widget(overview, "viewport_button_highlight_" .. i)
+            if btn_highlight and btn_highlight.style then
+                for sk, sv in pairs(btn_highlight.style) do
+                    if type(sv) == "table" and sv.color then
+                        sv.color = {sv.color[1], 123, 123, 123}
+                    end
+                end
+            end
+        end
+
+        local items_backend = Managers.backend and Managers.backend:get_interface("items")
+        if items_backend then
+            local player = Managers.player and Managers.player:local_player()
+            if player then
+                local profile_index = player:profile_index()
+                local profile = SPProfiles[profile_index]
+                local career_index = player:career_index()
+                local career = profile.careers[career_index]
+                local career_name = career.name
+                local slot_map = {[1] = "slot_melee", [3] = "slot_ranged"}
+                for vp_idx, slot_name in pairs(slot_map) do
+                    local bid = items_backend:get_loadout_item_id(career_name, slot_name)
+                    if bid then
+                        local item = items_backend:get_item_from_id(bid)
+                        if item then
+                            _forge_set_text(overview, "viewport_power_value_" .. vp_idx, tostring(item.power_level or 300))
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- === VIEWPORT 2 (amulet): hide and show item detail panels on hover ===
+    if overview then
+        _forge_hide_widget(overview, "viewport_2")
+        _forge_hide_widget(overview, "viewport_button_2")
+        _forge_hide_widget(overview, "viewport_button_highlight_2")
+        _forge_hide_widget(overview, "viewport_button_text_highlight_2")
+        _forge_hide_widget(overview, "viewport_title_2")
+        _forge_hide_widget(overview, "viewport_sub_title_2")
+        _forge_hide_widget(overview, "viewport_power_title_2")
+        _forge_hide_widget(overview, "viewport_power_value_2")
+        _forge_hide_widget(overview, "change_button_2")
+        _forge_hide_widget(overview, "panel_level_2")
+        _forge_hide_widget(overview, "panel_power_2")
+
+        if not overview._wt_panels_init then
+            overview._wt_panels_init = true
+            local UIWidgets = rawget(_G, "UIWidgets")
+            local UIWidget = rawget(_G, "UIWidget")
+            if UIWidgets and UIWidget and UIWidgets.create_item_option_overview then
+                local panel_w = 430
+                local ok1, ow_def = pcall(UIWidgets.create_item_option_overview, "viewport_panel_2", {panel_w, 130})
+                local ok2, pw_def = pcall(UIWidgets.create_item_option_properties, "viewport_panel_2", {panel_w, 160})
+                local ok3, tw_def = pcall(UIWidgets.create_item_option_trait, "viewport_panel_2", {panel_w, 160})
+
+                if ok1 and ow_def then
+                    local ok, ow = pcall(UIWidget.init, ow_def)
+                    if ok and ow then
+                        ow.offset = {10, 740, 20}
+                        if ow.style then
+                            if ow.style.icon_texture then ow.style.icon_texture.offset[2] = -20 end
+                            if ow.style.icon_bg then ow.style.icon_bg.offset[2] = -20 end
+                            if ow.style.input_text then ow.style.input_text.offset[2] = -53 end
+                            if ow.style.input_text_shadow then ow.style.input_text_shadow.offset[2] = -55 end
+                        end
+                        ow.content.visible = false
+                        overview._wt_overview_widget = ow
+                    else
+                        ok1 = false; ow_def = tostring(ow)
+                    end
+                end
+                if ok2 and pw_def then
+                    local ok, pw = pcall(UIWidget.init, pw_def)
+                    if ok and pw then
+                        pw.offset = {10, 500, 20}
+                        if pw.style then
+                            for _, suffix in ipairs({"option_text_", "option_text_shadow_", "option_text_disabled_", "option_text_disabled_shadow_", "icon_", "icon_disabled_"}) do
+                                for i = 1, 2 do
+                                    local s = pw.style[suffix .. i]
+                                    if s and s.offset then s.offset[2] = s.offset[2] - 10 end
+                                end
+                            end
+                        end
+                        pw.content.visible = false
+                        overview._wt_properties_widget = pw
+                    else
+                        ok2 = false; pw_def = tostring(pw)
+                    end
+                end
+                if ok3 and tw_def then
+                    local ok, tw = pcall(UIWidget.init, tw_def)
+                    if ok and tw then
+                        tw.offset = {10, 310, 20}
+                        tw.content.visible = false
+                        overview._wt_trait_widget = tw
+                    else
+                        ok3 = false; tw_def = tostring(tw)
+                    end
+                end
+
+                local ow = overview._wt_overview_widget
+                local pw = overview._wt_properties_widget
+                local tw = overview._wt_trait_widget
+                if overview._top_widgets then
+                    if ow then overview._top_widgets[#overview._top_widgets + 1] = ow end
+                    if pw then overview._top_widgets[#overview._top_widgets + 1] = pw end
+                    if tw then overview._top_widgets[#overview._top_widgets + 1] = tw end
+                end
+
+                local created = (ok1 and "O" or "!O") .. (ok2 and "P" or "!P") .. (ok3 and "T" or "!T")
+                mod:echo("Forge panels: " .. created)
+                if not ok1 then mod:echo("Overview err: " .. tostring(ow_def)) end
+                if not ok2 then mod:echo("Props err: " .. tostring(pw_def)) end
+                if not ok3 then mod:echo("Trait err: " .. tostring(tw_def)) end
+            else
+                mod:echo("Forge panels: UIWidgets factory not available")
+            end
+        end
+
+        local hovered_vp = nil
+        local vp1_btn = _forge_get_widget(overview, "viewport_button_1")
+        local vp3_btn = _forge_get_widget(overview, "viewport_button_3")
+        if _forge_is_hovered(vp1_btn) then
+            hovered_vp = 1
+        elseif _forge_is_hovered(vp3_btn) then
+            hovered_vp = 3
+        end
+
+        if hovered_vp then
+            local slot_name = (hovered_vp == 1) and "slot_melee" or "slot_ranged"
+            local items_backend = Managers.backend and Managers.backend:get_interface("items")
+            local player = Managers.player and Managers.player:local_player()
+            if player and items_backend then
+                local profile_index = player:profile_index()
+                local profile = SPProfiles[profile_index]
+                local career_index = player:career_index()
+                local career = profile.careers[career_index]
+                local career_name = career.name
+                local bid = items_backend:get_loadout_item_id(career_name, slot_name)
+                local item = bid and items_backend:get_item_from_id(bid)
+                if item then
+                    _forge_populate_item_panels(overview, item)
+                else
+                    _forge_hide_item_panels(overview)
+                end
+            else
+                _forge_hide_item_panels(overview)
+            end
+        else
+            _forge_hide_item_panels(overview)
+        end
+    end
+
+    -- === PANEL: hide essence, wheel rings, rebrand header ===
+    if panel then
+        _forge_hide_widget(panel, "essence_icon")
+        _forge_hide_widget(panel, "essence_text")
+        _forge_hide_widget(panel, "essence_panel")
+        _forge_hide_widget(panel, "essence_tooltip")
+        _forge_hide_widget(panel, "loadout_power_title")
+        _forge_hide_widget(panel, "loadout_power_tooltip")
+
+        local power_w = _forge_get_widget(panel, "loadout_power_text")
+        if power_w and power_w.content then
+            power_w.content.text = "MOD WEAPON CRAFTING"
+            power_w.content.visible = true
+            if power_w.style and power_w.style.text then
+                power_w.style.text.font_size = 28
+                power_w.style.text.text_color = {255, 255, 255, 255}
+            end
+            if power_w.style and power_w.style.text_shadow then
+                power_w.style.text_shadow.font_size = 28
+            end
+        end
+
+        _forge_hide_widget(panel, "background_wheel_1")
+        _forge_hide_widget(panel, "hdr_background_wheel_1")
+        for i = 1, 3 do
+            _forge_hide_widget(panel, "wheel_ring_1_" .. i)
+            _forge_hide_widget(panel, "wheel_ring_2_" .. i)
+            _forge_hide_widget(panel, "hdr_wheel_ring_1_" .. i)
+            _forge_hide_widget(panel, "hdr_wheel_ring_2_" .. i)
+        end
+
+        _forge_set_style_color(panel, "top_glow_smoke_1", "texture_id", {200, 180, 20, 10})
+    end
+
+    -- === BACKGROUND: change smoke colors to deep red ===
+    if background and not _forge_bg_colored then
+        _forge_set_style_color(background, "bottom_glow_smoke_1", "texture_id", {200, 180, 20, 10})
+        _forge_set_style_color(background, "bottom_glow_smoke_2", "texture_id", {255, 200, 30, 10})
+        _forge_set_style_color(background, "bottom_glow_smoke_3", "texture_id", {200, 180, 25, 15})
+        _forge_set_style_color(background, "bottom_glow_embers_1", "texture_id", {130, 255, 60, 20})
+        _forge_set_style_color(background, "bottom_glow_embers_3", "texture_id", {130, 255, 60, 20})
+        _forge_bg_colored = true
+    end
+
+    -- === PROPERTIES sub-menu: hide level/mastery, fix power ===
+    local properties_win = nil
+    for _, win in pairs(windows) do
+        if win.NAME == "HeroWindowWeaveProperties" then properties_win = win end
+    end
+    if properties_win then
+        _forge_hide_widget(properties_win, "viewport_level_title")
+        _forge_hide_widget(properties_win, "viewport_level_value")
+        _forge_hide_widget(properties_win, "viewport_panel_divider")
+        _forge_hide_widget(properties_win, "mastery_text")
+        _forge_hide_widget(properties_win, "mastery_title_text")
+        _forge_hide_widget(properties_win, "mastery_icon")
+        _forge_hide_widget(properties_win, "mastery_tooltip")
+        _forge_hide_widget(properties_win, "upgrade_button")
+        _forge_hide_widget(properties_win, "upgrade_bg")
+        _forge_hide_widget(properties_win, "upgrade_text")
+        _forge_hide_widget(properties_win, "upgrade_essence_warning")
+        _forge_hide_widget(properties_win, "background_wheel")
+        _forge_hide_widget(properties_win, "hdr_background_wheel")
+        for i = 1, 3 do
+            _forge_hide_widget(properties_win, "wheel_ring_" .. i)
+            _forge_hide_widget(properties_win, "hdr_wheel_ring_" .. i)
+        end
+
+        _forge_set_style_color(properties_win, "cluster_background_effect_1", "texture_id", {200, 180, 20, 10})
+
+        local params = properties_win._params
+        local sel_item = params and params.selected_item
+        if sel_item and sel_item.backend_id then
+            local items_backend = Managers.backend and Managers.backend:get_interface("items")
+            if items_backend then
+                local item = items_backend:get_item_from_id(sel_item.backend_id)
+                if item then
+                    _forge_set_text(properties_win, "viewport_power_value", tostring(item.power_level or 300))
+                end
+            end
+        end
+    end
+end
+
+mod:hook_safe("HeroViewStateWeaveForge", "update", function(self, dt, t)
+    if _custom_forge_active then
+        _forge_apply_ui_polish(self)
+    end
+end)
+
+-- --- Backend safety hooks (prevent crashes for non-weave items) ---
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_forge_level", function(func, self)
+    if _custom_forge_active then return 999 end
+    return func(self)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_essence", function(func, self)
+    if _custom_forge_active then return 999999 end
+    return func(self)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_maximum_essence", function(func, self)
+    if _custom_forge_active then return 999999 end
+    return func(self)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_total_essence", function(func, self)
+    if _custom_forge_active then return 999999 end
+    return func(self)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_property_required_forge_level", function(func, self, property_name)
+    if _custom_forge_active then return 0 end
+    return func(self, property_name)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_property_mastery_costs", function(func, self, property_name)
+    if _custom_forge_active then return {0, 0, 0, 0, 0} end
+    return func(self, property_name)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_trait_required_forge_level", function(func, self, trait_key)
+    if _custom_forge_active then return 0 end
+    return func(self, trait_key)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_trait_mastery_cost", function(func, self, trait_key)
+    if _custom_forge_active then return 0 end
+    return func(self, trait_key)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_talent_mastery_cost", function(func, self, talent_name)
+    if _custom_forge_active then return 0 end
+    return func(self, talent_name)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_career_magic_level", function(func, self, career_name)
+    if _custom_forge_active then return 999 end
+    local ok, result = pcall(func, self, career_name)
+    if ok then return result end
+    return 0
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_item_magic_level", function(func, self, item_backend_id)
+    if _custom_forge_active then return 999 end
+    local ok, result = pcall(func, self, item_backend_id)
+    if ok then return result end
+    return 0
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "max_magic_level", function(func, self)
+    if _custom_forge_active then return 999 end
+    return func(self)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "forge_magic_level_cap", function(func, self)
+    if _custom_forge_active then return 999 end
+    return func(self)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "magic_item_cost", function(func, self, item_key)
+    if _custom_forge_active then return 0 end
+    return func(self, item_key)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_average_power_level", function(func, self, career_name)
+    if _custom_forge_active then return 300 end
+    local ok, result = pcall(func, self, career_name)
+    if ok then return result end
+    return 300
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "magic_item_upgrade_cost", function(func, self, num_levels, item_backend_id)
+    if _custom_forge_active then return 0 end
+    local ok, result = pcall(func, self, num_levels, item_backend_id)
+    if ok then return result end
+    return 0
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "career_upgrade_cost", function(func, self, num_levels, career_name)
+    if _custom_forge_active then return 0 end
+    local ok, result = pcall(func, self, num_levels, career_name)
+    if ok then return result end
+    return 0
+end)
+
+-- --- Forge loadout (redirect weave loadout to our own table) ---
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_item_id", function(func, self, career_name, slot_name)
+    if _custom_forge_active then
+        local loadout = _forge_loadout[career_name]
+        if loadout and loadout[slot_name] then
+            return loadout[slot_name]
+        end
+        local items_backend = Managers.backend:get_interface("items")
+        if items_backend then
+            local ok, bid = pcall(items_backend.get_loadout_item_id, items_backend, career_name, slot_name)
+            if ok then return bid end
+        end
+        return nil
+    end
+    return func(self, career_name, slot_name)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_item", function(func, self, item_backend_id, career_name, slot_name)
+    if _custom_forge_active then
+        _forge_loadout[career_name] = _forge_loadout[career_name] or {}
+        _forge_loadout[career_name][slot_name] = item_backend_id
+        return true
+    end
+    return func(self, item_backend_id, career_name, slot_name)
+end)
+
+-- --- Property/trait/talent storage (redirect to our own data) ---
+
+local function _forge_seed_item(career_name, item_backend_id)
+    local key = (career_name or "") .. "|" .. (item_backend_id or "")
+    if _forge_item_props[key] then return _forge_item_props[key] end
+
+    local props = {}
+    local traits = {}
+
+    if item_backend_id then
+        local items_backend = Managers.backend:get_interface("items")
+        local item = items_backend and items_backend:get_item_from_id(item_backend_id)
+        if item then
+            if item.properties then
+                local wp = rawget(_G, "WeaveProperties")
+                local wp_props = wp and wp.properties
+                local num_slots = 5
+                local next_slot = 1
+                for prop_key, value in pairs(item.properties) do
+                    local weave_key = "weave_" .. prop_key
+                    if wp_props and wp_props[weave_key] then
+                        local filled = math.max(1, math.ceil(value * num_slots))
+                        local indices = {}
+                        for i = 1, filled do
+                            indices[i] = next_slot
+                            next_slot = next_slot + 1
+                        end
+                        props[weave_key] = indices
+                    else
+                        mod:info("Forge seed: no weave mapping for prop '%s' (tried '%s')", prop_key, weave_key)
+                    end
+                end
+            end
+            if item.traits then
+                local wt = rawget(_G, "WeaveTraits")
+                local wt_traits = wt and wt.traits
+                for i, trait_key in ipairs(item.traits) do
+                    local weave_key = "weave_" .. trait_key
+                    if wt_traits and wt_traits[weave_key] then
+                        traits[weave_key] = i
+                    else
+                        mod:info("Forge seed: no weave mapping for trait '%s' (tried '%s')", trait_key, weave_key)
+                    end
+                end
+            end
+        end
+    end
+
+    _forge_item_props[key] = {properties = props, traits = traits}
+    return _forge_item_props[key]
+end
+
+local function _forge_apply_to_item(career_name, item_backend_id)
+    if not item_backend_id then return end
+    local items_backend = Managers.backend:get_interface("items")
+    local item = items_backend and items_backend:get_item_from_id(item_backend_id)
+    if not item then return end
+
+    local data = _forge_seed_item(career_name, item_backend_id)
+    local num_slots = 5
+
+    local new_props = {}
+    for weave_key, slots in pairs(data.properties) do
+        local prop_key = weave_key:gsub("^weave_", "")
+        local value = #slots / num_slots
+        new_props[prop_key] = math.min(value, 1.0)
+    end
+    item.properties = new_props
+
+    local new_traits = {}
+    for weave_key, _ in pairs(data.traits) do
+        local trait_key = weave_key:gsub("^weave_", "")
+        new_traits[#new_traits + 1] = trait_key
+    end
+    item.traits = new_traits
+
+    local cjson_mod = rawget(_G, "cjson")
+    if cjson_mod and item.CustomData then
+        item.CustomData.properties = cjson_mod.encode(new_props)
+        item.CustomData.traits = cjson_mod.encode(new_traits)
+    end
+end
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_properties", function(func, self, career_name, item_backend_id)
+    if _custom_forge_active then
+        local data = _forge_seed_item(career_name, item_backend_id)
+        return data.properties
+    end
+    return func(self, career_name, item_backend_id)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_traits", function(func, self, career_name, item_backend_id)
+    if _custom_forge_active then
+        local data = _forge_seed_item(career_name, item_backend_id)
+        return data.traits
+    end
+    return func(self, career_name, item_backend_id)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_talents", function(func, self, career_name)
+    if _custom_forge_active then return {} end
+    return func(self, career_name)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "get_mastery", function(func, self, career_name, item_backend_id)
+    if _custom_forge_active then return 0, 0 end
+    local ok, a, b = pcall(func, self, career_name, item_backend_id)
+    if ok then return a, b end
+    return 0, 0
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func, self, career_name, property_key, slot_index, item_backend_id)
+    if _custom_forge_active then
+        local data = _forge_seed_item(career_name, item_backend_id)
+        local props = data.properties
+        if not props[property_key] then
+            props[property_key] = {}
+        end
+        props[property_key][#props[property_key] + 1] = slot_index
+        _forge_apply_to_item(career_name, item_backend_id)
+        return
+    end
+    return func(self, career_name, property_key, slot_index, item_backend_id)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "remove_loadout_property", function(func, self, career_name, property_key, slot_index, item_backend_id)
+    if _custom_forge_active then
+        local data = _forge_seed_item(career_name, item_backend_id)
+        local slots = data.properties[property_key]
+        if slots then
+            for i, s in ipairs(slots) do
+                if s == slot_index then
+                    table.remove(slots, i)
+                    break
+                end
+            end
+            if #slots == 0 then
+                data.properties[property_key] = nil
+            end
+        end
+        _forge_apply_to_item(career_name, item_backend_id)
+        return
+    end
+    return func(self, career_name, property_key, slot_index, item_backend_id)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_trait", function(func, self, career_name, trait_key, slot_index, item_backend_id)
+    if _custom_forge_active then
+        local data = _forge_seed_item(career_name, item_backend_id)
+        data.traits[trait_key] = slot_index
+        _forge_apply_to_item(career_name, item_backend_id)
+        return
+    end
+    return func(self, career_name, trait_key, slot_index, item_backend_id)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "remove_loadout_trait", function(func, self, career_name, trait_key, item_backend_id)
+    if _custom_forge_active then
+        local data = _forge_seed_item(career_name, item_backend_id)
+        data.traits[trait_key] = nil
+        _forge_apply_to_item(career_name, item_backend_id)
+        return
+    end
+    return func(self, career_name, trait_key, item_backend_id)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_talent", function(func, self, career_name, talent_key, slot_index)
+    if _custom_forge_active then return end
+    return func(self, career_name, talent_key, slot_index)
+end)
+
+mod:hook("BackendInterfaceWeavesPlayFab", "remove_loadout_talent", function(func, self, career_name, talent_key)
+    if _custom_forge_active then return end
+    return func(self, career_name, talent_key)
+end)
+
+mod:hook("BackendManagerPlayFab", "commit", function(func, self, skip_queue, commit_complete_callback)
+    if _custom_forge_active then return end
+    return func(self, skip_queue, commit_complete_callback)
+end)
+
+-- --- Weapon list: show ALL weapons, not just weave "magic" rarity ---
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, self)
+    if not _custom_forge_active then return func(self) end
+
+    local backend_items = Managers.backend:get_interface("items")
+    local selected_slot_name = self._selected_slot_name
+    local career_name = self._career_name
+    local career_settings = CareerSettings[career_name]
+    local item_slot_types = career_settings.item_slot_types_by_slot_name[selected_slot_name]
+    local weapon_layout = {}
+
+    for key, item_data in pairs(ItemMasterList) do
+        local slot_type = item_data.slot_type
+        if slot_type and table.contains(item_slot_types, slot_type) then
+            local can_wield = item_data.can_wield
+            if can_wield and table.contains(can_wield, career_name) then
+                if item_data.item_type ~= "weapon_skin" and item_data.rarity ~= "magic" then
+                    local item = backend_items:get_item_from_key(key)
+                    weapon_layout[#weapon_layout + 1] = {
+                        key = key,
+                        item_data = item_data,
+                        backend_id = item and item.backend_id,
+                    }
+                end
+            end
+        end
+    end
+
+    self:_populate_list(weapon_layout)
+end)
+
+-- --- Weapon select: present item without locked/essence state ---
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_present_item", function(func, self, item_key, activate_spin)
+    if not _custom_forge_active then return func(self, item_key, activate_spin) end
+
+    local viewport_data = self._viewport_data
+    if viewport_data and viewport_data.item_previewer then
+        viewport_data.item_previewer:destroy()
+        viewport_data.item_previewer = nil
+    end
+
+    local backend_items = Managers.backend:get_interface("items")
+    local item = backend_items:get_item_from_key(item_key)
+    local display_item = item
+
+    if not display_item then
+        local item_data = table.clone(ItemMasterList[item_key])
+        item_data.key = item_key
+        display_item = { data = item_data, key = item_key }
+    end
+
+    local viewport_widget = viewport_data.widget
+    local item_previewer = self:_create_item_previewer(viewport_widget, display_item, activate_spin)
+    viewport_data.item_previewer = item_previewer
+    viewport_data.item = display_item
+
+    local item_data = display_item.data
+    local power_level = display_item.power_level or 300
+
+    local widgets_by_name = self._widgets_by_name
+    widgets_by_name.viewport_level_value.content.visible = false
+    widgets_by_name.viewport_level_title.content.visible = false
+    widgets_by_name.viewport_power_value.content.text = tostring(power_level)
+    widgets_by_name.viewport_power_title.content.visible = true
+    widgets_by_name.viewport_power_value.content.visible = true
+    widgets_by_name.viewport_title.content.text = Localize(item_data.display_name)
+    widgets_by_name.viewport_sub_title.content.text = Localize(item_data.item_type)
+
+    self:_set_presentation_locked_state(false)
+    self._selected_item_locked = false
+    self:_setup_weapon_stats(display_item)
+
+    return item_key
+end)
+
+-- --- Weapon select: never show locked/unlock UI in custom forge ---
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_set_presentation_locked_state", function(func, self, locked)
+    if not _custom_forge_active then return func(self, locked) end
+    func(self, false)
+end)
+
+-- --- Weapon select: "CRAFT" button instead of "Equip" ---
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_update_equip_button_status", function(func, self, equipable_item, is_item_equipped)
+    if not _custom_forge_active then return func(self, equipable_item, is_item_equipped) end
+
+    local viewport_data = self._viewport_data
+    if viewport_data then
+        local equip_button = viewport_data.equip_button
+        equip_button.content.button_hotspot.disable_button = not self._selected_item_id
+        equip_button.content.title_text = "CRAFT"
+    end
+end)
+
+-- --- Weapon select: on_list_index_selected — always enable craft button ---
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_on_list_index_selected", function(func, self, index)
+    if not _custom_forge_active then return func(self, index) end
+
+    local scrollbars = self._scrollbars
+    local scrollbar_data = scrollbars.weapons
+    local list_widgets = scrollbar_data.list_widgets
+
+    for i, widget in ipairs(list_widgets) do
+        local content = widget.content
+        local hotspot = content.button_hotspot
+        local is_selected = i == index
+
+        hotspot.is_selected = is_selected
+
+        if is_selected then
+            self._selected_backend_id = self:_present_item(content.key)
+            self._selected_item_id = content.key
+        end
+    end
+
+    self._selected_list_index = index
+    self:_update_equip_button_status(true, false)
+end)
+
+-- --- Weapon select: craft item on equip press ---
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, backend_id_or_key)
+    if not _custom_forge_active then return func(self, backend_id_or_key) end
+
+    local item_key = self._selected_item_id
+    if not item_key then
+        mod:echo("Craft failed: no weapon selected")
+        return
+    end
+
+    local new_backend_id = Application.guid()
+    local item = {
+        ItemId = item_key,
+        ItemInstanceId = new_backend_id,
+        CustomData = {
+            power_level = "300",
+            rarity = "exotic",
+        },
+    }
+
+    local backend_mirror = Managers.backend:get_backend_mirror()
+    local ok, err = pcall(backend_mirror.add_item, backend_mirror, new_backend_id, item)
+    if not ok then
+        mod:echo("Craft failed: " .. tostring(err))
+        return
+    end
+
+    local career_name = self._career_name
+    local slot_name = self._selected_slot_name
+    local backend_items = Managers.backend:get_interface("items")
+    local ok2, err2 = pcall(backend_items.set_loadout_item, backend_items, new_backend_id, career_name, slot_name)
+    if not ok2 then
+        mod:echo("Equip failed: " .. tostring(err2))
+    end
+
+    mod:echo("Crafted: " .. tostring(Localize(ItemMasterList[item_key].display_name)) .. " [" .. new_backend_id .. "]")
+
+    self:_sync_backend_loadout()
+    self._equip_pulse_duration = 0.5
+end)
+
+-- --- Overview: hide amulet, hide level, show real power ---
+
+mod:hook("HeroWindowWeaveForgeOverview", "_initialize_viewports", function(func, self)
+    if _custom_forge_active then
+        self.amulet_introduced = false
+    end
+    return func(self)
+end)
+
+-- --- DIAGNOSTIC: dump forge UI widget data ---
+
+local function _forge_dump_widgets(window_name, win)
+    local w = win._widgets_by_name
+    if not w then
+        mod:info("DUMP [%s] _widgets_by_name=nil, checking fields:", window_name)
+        for k, v in pairs(win) do
+            if type(v) == "table" and k:find("widget") then
+                mod:info("  field: %s (table, #%d)", k, #v)
+            elseif type(v) ~= "function" then
+                mod:info("  field: %s = %s", k, tostring(v))
+            end
+        end
+        return
+    end
+    mod:info("=== DUMP [%s] ===", window_name)
+    for name, widget in pairs(w) do
+        local parts = {}
+        if widget.content then
+            for k, v in pairs(widget.content) do
+                if type(v) == "string" and #v < 60 then
+                    parts[#parts + 1] = k .. '="' .. v .. '"'
+                elseif type(v) == "boolean" or type(v) == "number" then
+                    parts[#parts + 1] = k .. "=" .. tostring(v)
+                end
+            end
+        end
+        local sparts = {}
+        if widget.style then
+            for sk, sv in pairs(widget.style) do
+                if type(sv) == "table" then
+                    if sv.color then
+                        local c = sv.color
+                        sparts[#sparts + 1] = sk .. ".color={" .. tostring(c[1]) .. "," .. tostring(c[2]) .. "," .. tostring(c[3]) .. "," .. tostring(c[4]) .. "}"
+                    end
+                    if sv.text_color then
+                        local c = sv.text_color
+                        sparts[#sparts + 1] = sk .. ".text_color={" .. tostring(c[1]) .. "," .. tostring(c[2]) .. "," .. tostring(c[3]) .. "," .. tostring(c[4]) .. "}"
+                    end
+                    if sv.font_size then
+                        sparts[#sparts + 1] = sk .. ".font_size=" .. tostring(sv.font_size)
+                    end
+                end
+            end
+        end
+        mod:info("  [%s] content: %s", name, table.concat(parts, ", "))
+        if #sparts > 0 then
+            mod:info("    style: %s", table.concat(sparts, ", "))
+        end
+    end
+    mod:info("=== END [%s] ===", window_name)
+end
+
+mod:command("forge_dump", "Dump all forge window widget names to log", function()
+    if not _custom_forge_active then
+        mod:echo("Open the forge first (B key), then run this command")
+        return
+    end
+    local ingame_ui = Managers.ui and Managers.ui._ingame_ui
+    if not ingame_ui then
+        mod:echo("No ingame_ui")
+        return
+    end
+    local view_name = ingame_ui.current_view
+    if not view_name then
+        mod:echo("No current_view")
+        return
+    end
+    local hero_view = ingame_ui.views and ingame_ui.views[view_name]
+    if not hero_view then
+        mod:echo("No view object for: " .. tostring(view_name))
+        return
+    end
+    mod:info("=== FORGE UI DUMP ===")
+    mod:info("current_view = %s", tostring(view_name))
+
+    local forge_state = nil
+    if hero_view._machine and hero_view._machine._state then
+        forge_state = hero_view._machine._state
+        mod:info("forge_state via _machine._state: %s (NAME=%s)", tostring(forge_state), tostring(forge_state.NAME))
+    end
+    if not forge_state then
+        mod:echo("Could not find forge state on hero_view._machine._state")
+        return
+    end
+
+    mod:info("--- forge_state fields ---")
+    for k, v in pairs(forge_state) do
+        if type(v) ~= "function" then
+            local vstr = tostring(v)
+            if type(v) == "table" then
+                local count = 0
+                for _ in pairs(v) do count = count + 1 end
+                vstr = "table(" .. count .. ")"
+            end
+            mod:info("  state.%s = %s (%s)", k, vstr, type(v))
+        end
+    end
+
+    local found = 0
+    local active_windows = forge_state._active_windows
+    if active_windows then
+        mod:info("--- _active_windows ---")
+        for idx, win in pairs(active_windows) do
+            local win_name = win.NAME or win.__class_name or tostring(win)
+            mod:info("Window[%s]: %s", tostring(idx), tostring(win_name))
+            _forge_dump_widgets(tostring(idx) .. "_" .. tostring(win_name), win)
+            found = found + 1
+        end
+    else
+        mod:info("_active_windows is nil, scanning forge_state for _widgets_by_name:")
+        for k, v in pairs(forge_state) do
+            if type(v) == "table" and rawget(v, "_widgets_by_name") then
+                mod:info("  Found _widgets_by_name on state.%s", k)
+                _forge_dump_widgets(k, v)
+                found = found + 1
+            end
+        end
+    end
+    mod:info("=== END FORGE UI DUMP (found %d windows) ===", found)
+    mod:echo("Dump written to log (" .. found .. " windows found)")
+end)
+
+mod:command("forge_dump_props", "Dump properties sub-menu widgets and seed data", function()
+    if not _custom_forge_active then
+        mod:echo("Open the forge first (B key)")
+        return
+    end
+    local ingame_ui = Managers.ui and Managers.ui._ingame_ui
+    if not ingame_ui then mod:echo("No ingame_ui") return end
+    local view_name = ingame_ui.current_view
+    local hero_view = ingame_ui.views and ingame_ui.views[view_name]
+    if not hero_view or not hero_view._machine then mod:echo("No hero_view") return end
+    local forge_state = hero_view._machine._state
+    if not forge_state then mod:echo("No forge_state") return end
+    local windows = forge_state._active_windows
+    if not windows then mod:echo("No _active_windows") return end
+
+    mod:echo("Layout: " .. tostring(forge_state._selected_layout_name))
+    local found_props = false
+    for idx, win in pairs(windows) do
+        mod:echo("Window[" .. tostring(idx) .. "]: " .. tostring(win.NAME))
+        if win.NAME == "HeroWindowWeaveProperties" then
+            found_props = true
+            local wbn = win._widgets_by_name
+            if wbn then
+                local names = {}
+                for name, widget in pairs(wbn) do
+                    local info = name
+                    if widget.content then
+                        if widget.content.text then
+                            info = info .. "=" .. tostring(widget.content.text)
+                        end
+                        if widget.content.visible == false then
+                            info = info .. " [HIDDEN]"
+                        end
+                    end
+                    names[#names + 1] = info
+                end
+                table.sort(names)
+                for _, n in ipairs(names) do
+                    mod:echo("  " .. n)
+                end
+            end
+            mod:echo("_item_backend_id: " .. tostring(win._item_backend_id))
+            mod:echo("_career_name: " .. tostring(win._career_name))
+            local p = win._params
+            if p then
+                mod:echo("params.selected_item: " .. tostring(p.selected_item))
+                if p.selected_item then
+                    mod:echo("  .key: " .. tostring(p.selected_item.key or p.selected_item.data and p.selected_item.data.key))
+                    mod:echo("  .backend_id: " .. tostring(p.selected_item.backend_id))
+                end
+                mod:echo("params.selected_unit_name: " .. tostring(p.selected_unit_name))
+                mod:echo("params.selected_slot_name: " .. tostring(p.selected_slot_name))
+            end
+            mod:echo("_viewport_widget: " .. tostring(win._viewport_widget))
+            mod:echo("_viewport_widget_definition: " .. tostring(win._viewport_widget_definition))
+            mod:echo("_item_previewer: " .. tostring(win._item_previewer))
+            mod:echo("_unit_previewer: " .. tostring(win._unit_previewer))
+            mod:echo("_previewer_initialized: " .. tostring(win._previewer_initialized))
+        end
+    end
+    if not found_props then
+        mod:echo("HeroWindowWeaveProperties not active — click a weapon first")
+    end
+
+    local items_backend = Managers.backend and Managers.backend:get_interface("items")
+    if items_backend then
+        local player = Managers.player and Managers.player:local_player()
+        if player then
+            local pi = player:profile_index()
+            local profile = SPProfiles[pi]
+            local ci = player:career_index()
+            local career_name = profile.careers[ci].name
+            for _, slot in ipairs({"slot_melee", "slot_ranged"}) do
+                local bid = items_backend:get_loadout_item_id(career_name, slot)
+                if bid then
+                    local item = items_backend:get_item_from_id(bid)
+                    if item then
+                        mod:echo(slot .. ": " .. tostring(item.key) .. " power=" .. tostring(item.power_level))
+                        if item.properties then
+                            for pk, pv in pairs(item.properties) do
+                                local wk = "weave_" .. pk
+                                local wp = rawget(_G, "WeaveProperties")
+                                local mapped = wp and wp.properties and wp.properties[wk] and "YES" or "NO"
+                                mod:echo("  prop: " .. pk .. "=" .. tostring(pv) .. " -> " .. wk .. " mapped=" .. mapped)
+                            end
+                        end
+                        if item.traits then
+                            for i, tk in ipairs(item.traits) do
+                                local wk = "weave_" .. tk
+                                local wt = rawget(_G, "WeaveTraits")
+                                local mapped = wt and wt.traits and wt.traits[wk] and "YES" or "NO"
+                                mod:echo("  trait: " .. tk .. " -> " .. wk .. " mapped=" .. mapped)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+mod:command("forge_dump_backend", "Dump forge backend hook returns to log", function()
+    if not _custom_forge_active then
+        mod:echo("Open the forge first (B key)")
+        return
+    end
+    local weaves = Managers.backend and Managers.backend:get_interface("weaves")
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    if not weaves or not items then
+        mod:echo("Backend not available")
+        return
+    end
+    local player = Managers.player:local_player()
+    local profile_index = player:profile_index()
+    local profile = SPProfiles[profile_index]
+    local career_index = player:career_index()
+    local career = profile.careers[career_index]
+    local career_name = career.name
+    mod:info("=== FORGE BACKEND DUMP career=%s ===", career_name)
+    for _, slot in ipairs({"slot_melee", "slot_ranged"}) do
+        local bid = weaves:get_loadout_item_id(career_name, slot)
+        mod:info("  get_loadout_item_id(%s, %s) = %s", career_name, slot, tostring(bid))
+        if bid then
+            local item = items:get_item_from_id(bid)
+            mod:info("  item from backend: %s", item and tostring(item.key) or "nil")
+            if item then
+                mod:info("    power_level: %s", tostring(item.power_level))
+                mod:info("    rarity: %s", tostring(item.rarity))
+                if item.properties then
+                    for pk, pv in pairs(item.properties) do
+                        mod:info("    prop: %s = %s", pk, tostring(pv))
+                    end
+                else
+                    mod:info("    properties: nil")
+                end
+                if item.traits then
+                    for i, t in ipairs(item.traits) do
+                        mod:info("    trait[%d]: %s", i, tostring(t))
+                    end
+                else
+                    mod:info("    traits: nil")
+                end
+            end
+            local props = weaves:get_loadout_properties(career_name, bid)
+            mod:info("  get_loadout_properties result:")
+            if props then
+                for pk, pv in pairs(props) do
+                    mod:info("    %s = %s", pk, tostring(pv))
+                end
+            else
+                mod:info("    nil")
+            end
+            local traits = weaves:get_loadout_traits(career_name, bid)
+            mod:info("  get_loadout_traits result:")
+            if traits then
+                for tk, tv in pairs(traits) do
+                    mod:info("    %s = %s", tostring(tk), tostring(tv))
+                end
+            else
+                mod:info("    nil")
+            end
+        end
+    end
+    mod:info("  get_forge_level: %s", tostring(weaves:get_forge_level()))
+    mod:info("  get_essence: %s", tostring(weaves:get_essence()))
+    mod:info("=== END FORGE BACKEND DUMP ===")
+    mod:echo("Backend dump written to log")
+end)
+
 mod:command("forge", "Start forging a weapon (usage: wt forge <weapon_key>)", function(item_key)
     if not item_key then
         mod:echo("Usage: wt forge <weapon_key>")
@@ -1650,3 +2900,4 @@ end)
 -- Install basic backend hooks (UI filtering and can_wield override)
 weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks)
 mod.weapon_unlock_map = weapon_unlock_map
+

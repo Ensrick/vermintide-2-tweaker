@@ -1,0 +1,14 @@
+portrait_kruber_mercenary_hat_0004 = {
+	material_contexts = {
+		surface_material = ""
+	}
+
+	shader = "gui:DIFFUSE_MAP"
+
+	textures = {
+		diffuse_map = "gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_0004"
+	}
+
+	variables = {
+	}
+}

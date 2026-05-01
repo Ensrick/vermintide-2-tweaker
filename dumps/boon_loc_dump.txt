@@ -1,0 +1,172 @@
+ability_cooldown_reduction	+%.1f%% Cooldown Reduction	Reduces cooldown of career skill
+attack_speed	+%.1f%% Attack Speed	Increases speed of melee and ranged attacks by %.1f
+attack_speed_per_cooldown	Loec's Wardance	Gain up to %d%% Attack Speed based on your missing Ability Bar.
+bad_breath	Sigmar's Intervention	Every %d seconds, if you are disabled a bolt of lightning knocks the disabler back.
+barkskin	Barkskin	Taking damage reduces the damage you take from subsequent sources by %.1f%% for %d seconds. This effect can only trigger every %d seconds.
+blazing_revenge	Addaioth's Embrace	A halo of fire damages enemies around as long as you are downed.
+block_cost	+%.1f%% Block Cost Reduction	Reduces the stamina required to block enemy attacks
+boon_aoe_02	Ranald's Spiteful Plunder	When a Chest of Trials is activated, creates consecrated ground that grants you %d%% Damage for %d seconds.
+boon_aoe_03	Ranald's Hearty Plunder	When a Chest of Trials is activated, creates consecrated ground that grants you %d%% Cooldown rate for %d seconds.
+boon_aura_01	Ulric's Valour	Enemies close to you take %d%% damage from teammates.
+boon_aura_02	Valaya's Boozy Grant	Enemies close to you take %d%% Stagger from teammates.
+boon_aura_03	Taal's Roar	Periodically send out a shockwave that staggers nearby enemies. Cooldown decreases with missing health.
+boon_bomb_heavy_01	Grungni's Bombardment	Bombs have %d%% reduced range, but have +%d%% explosion radius and Damage.
+boon_careerskill_01	Mathlann's Storm-Strike	Your Career Skill also calls down lightning on nearby enemies.
+boon_careerskill_02	Myrmidia's Cleansing Flame	Your Career Skill also Burns nearby enemies for damage over time.
+boon_careerskill_03	Atharti's Venomous Affection	Your Career Skill also inflicts Poison on nearby enemies for damage over time.
+boon_careerskill_04	Drakira's Flensing	Your Career Skill also inflicts Bleed on nearby enemies.
+boon_careerskill_06	Lileath's Blessed Destiny	Increases your Career Skill maximum charge by %d.
+boon_careerskill_07	Hekarti's Prophetic Bolt	Your Career Skill also spawns %d projectiles that seeks out enemies.
+boon_deus_coins_greed	Pilgrim's Coins +%.1f%%	Increases the number of Pilgrim's Coins you receive.
+boon_dot_burning_01	Myrmidia's Wildfire	An enemy that dies while Burning inflicts a Burning to nearby enemies, causing damage over time.
+boon_meta_01	Lileath's Favour	Gain %d%% Damage and %d%% Attack Speed per active Boon.
+boon_range_01	Anath Raema's Cruel Volley	Ranged attacks inflict +%d%% Damage, but use +%d%% ammo or Overcharge.
+boon_range_02	Taal's Crippling Shot	Enemies hit with your Ranged Weapon take +%d%% damage from you for %d seconds.
+boon_skulls_01	Righteous Frenzy	%d%% Attack Speed on hit (stacks %d times). Upon %d stacks, gain a further %d%% Attack Speed for %d seconds and refresh the duration of other Skull Boons.
+boon_skulls_02	Righteous Strength	%d%% Power Level for each kill. Upon killing %d enemies, gain a further %d%% Power Level for %d seconds and refresh the duration of other Skull Boons.
+boon_skulls_03	Righteous Finesse	Parrying an enemy inflicts a powerful Knockback and refreshes other Skull Boons. %d seconds Cooldown.
+boon_skulls_04	Righteous Regeneration	Your Attacks consume up to %d Temporary Health. Upon consuming %d Temporary Health, gain a buff that provides %d Temporary Health per second, %.f%% Cooldown Regen for %d seconds and refreshes other Skull Boons.
+boon_skulls_05	Righteous Smiting	Gain %.f%% stacking Power Level for %d seconds on charged Melee Attacks. Upon reaching %d Stacks, all Stacks are consumed, granting %.f%% Power Level for %d seconds and refreshing the duration of all other Skulls Boons.
+boon_skulls_06	Skulls Power Boon	+%.1f%% power for every active Daemon Skull buff.
+boon_skulls_07	Skulls Pilgrim's Coin Boon	Party members gain %d Pilgrim's Coins when a Daemon Skull is picked up.
+boon_skulls_08	Skulls Cooldown Boon	Picking up a Daemon Skull refreshes %.f%% of your Ability Bar.
+boon_skulls_set_bonus_01	Skulls Slaughter Boon Set	Amplifies Set Effects by %d%%. Increases duration of Set Buffs by %d%%.
+boon_skulls_set_bonus_02	Skulls Pick Up Daemon Skull Boon Set	Amplifies Set Effects by %d%%. Increases duration of Daemon Skull Buffs by %d%%.
+boon_supportbomb_concentration_01	Bomb of Alchemical Concentration	Your Bombs consecrate the ground for %d seconds on impact. Players within the consecrated ground gain %d%% Career Skill Cooldown rate.
+boon_supportbomb_crit_01	Bomb of Alchemical Lethality	Your Bombs consecrate the ground for %d seconds on impact. Players within the consecrated ground gain %d%% Critical Strike Chance.
+boon_supportbomb_healing_01	Bomb of Alchemical Rejuvenation	Your Bombs consecrate the ground for %d seconds on impact. Players within the consecrated ground gain %d healing per second.
+boon_supportbomb_speed_01	Bomb of Alchemical Alacrity	Your Bombs consecrate the ground for %d seconds on impact. Players within the consecrated ground gain %d%% Attack Speed.
+boon_supportbomb_strenght_01	Bomb of Alchemical Strength	Your Bombs consecrate the ground for %d seconds on impact. Players within the consecrated ground gain %d%% Power.
+boon_teamaura_01	Eldrazor's Avenger	You gain %d%% Damage against enemies near to allies.
+boon_teamaura_02	Vaul's Disruptor	You gain %d%% Stagger against enemies near to allies.
+boon_weaponrarity_01	Ranald's Hasty Gamble	You gain %d%% Cooldown rate, decreased by %d%% per Rarity Level of your Highest Rarity Weapon.
+boon_weaponrarity_02	Ranald's Mighty Gamble	You gain %d%% Critical Hit Chance, decreased by %d%% per Rarity Level of your Currently Equipped Weapon.
+boonset_crit_set_bonus	Divine Grant of Immortal Might	All Heavy Attacks cause Critical Hits
+boonset_drone_part1	Harrying Boon of Anath Raema's Precision	Headshots spawn %d projectiles that seek out enemies
+boonset_drone_part2	Harrying Boon of Anath Raema's Deflection	Parries spawn %d projectiles that seek out enemies
+boonset_drone_part3	Harrying Boon of Anath Raema's Perfection	Critical Hits spawn %d projectiles that seek out enemies
+boonset_drone_part4	Grand Boon of Anath Raema	Increases the number of projectiles spawned by the set's boons by %d
+boulder_bro	Khsar's Uplift	When hanging from a ledge, automatically recover.
+cluster_barrel	Ranald's Explosive Surprise	When you trigger a barrel explosion, the barrel spawns smaller barrels. These explode after a short time.
+comradery	Valaya's Heart	Gain %d%% Melee Power for each nearby ally.
+cooldown_on_friendly_ability	Hekarti's Jealousy	Each time a nearby ally uses their Career Skill you replenish %d%% of your Ability Bar.
+crit_boost	+%.1f%% Crit Power	Increases the power of critical strikes by %.1f%%
+crit_chance	+%.1f%% Crit Chance	Increases chance of triggering a critical attack
+curative_empowerment	Atharti's Vigour	Healing an ally with a health pack grants both of you %d%% Power for %d seconds.
+curse_resistance	+%.1f%% Curse Resistance	Reduces the negative effect of holding cursed items
+decanter	Decanter	Increases the duration of potions by %.1f%%.
+detect_weakness	Taal's Hunt	When you kill enemies marked as Taal's quarry, you gain +%d%% Power for %ds
+deus_ammo_pickup_give_allies_ammo	Mathlann's Bounty	When you pick up ammunition nearby party members regain %d%% of their ammo.
+deus_ammo_pickup_heal	Ualapt's Cunning	Picking up ammunition grants %d health.
+deus_barrel_power	Ranald's Surprise	Powder Barrels you ignite deal %d%% increased damage.
+deus_block_procs_parry	Hoeth's Sword-craft	Every block counts as a parry.
+deus_coin_pickup_regen	Bögenauer's Prosperity	When you pick up Pilgrims' Coins, receive a moderate health regen for %d seconds.
+deus_cooldown_reg_not_hit	Ladrielle's Meditation	Each %d seconds not getting hit increases your Career Skill regeneration by %d%%. Max stacks %d.
+deus_cooldown_regen	Verena's Inspiration	Increases Ability Bar cooldown rate by %d%%.
+deus_crit_on_damage_taken	Caxuatn's Frenzy	Taking damage grants you guaranteed critical hits for %d seconds.
+deus_damage_reduction_on_incapacitated	Estreuth's Abstinence	Taking damage while incapacitated grants you %d%% damage reduction for %d seconds.
+deus_extra_stamina	Quetzl's Protection	Gain %d stamina shields.
+deus_free_potion_use_on_ability	Valaya's Brew	Using your Career Skill has a %d%% chance of granting you the effect of the potion you are currently carrying.
+deus_grenade_multi_throw	Sigmar's Comet	Throwing a bomb throws one additional bomb (of the same type).
+deus_guard_aura_check	The Lady of the Lake's Vigil	When you are above %d%% Health you take half of the damage inflicted on nearby allies instead of them.
+deus_health_regeneration	Shallya's Rejuvenation	Regenerate %d health every %d seconds.
+deus_increased_healing_taken	Isha's Embrace	Increase healing received by %d%%.
+deus_infinite_dodges	Lileath's Grace	Removes the limit on dodging efficiently.
+deus_knockdown_damage_immunity_aura	Morr's Protection	Downed friends near you are invulnerable.
+deus_large_ammo_pickup_infinite_ammo	Nethu's Relentlessness	Picking up ammunition or using a crate grants infinite ammo and makes reloading unnecessary for %d seconds.
+deus_larger_clip	Grungni's Gift	Increase the number of shots you make before reloading by %d%%.
+deus_max_health	Ursun's Fortitude	Max health increased by %d%%.
+deus_more_head_less_body_damage	Kurnous' Precision	Increases headshot damage by %d%%. Lowers non-headshot damage by %d%%.
+deus_parry_damage_immune	Eldrazor's Deflection	Parrying an attack makes you immune to damage for the next %d seconds.
+deus_power_up_quest_granted_test_01		
+deus_powerup_attack_speed	Khsar's Speed	Gain %d%% Attack Speed.
+deus_push_charge	Gork's (or Mork's?) Might	Pushing an enemy makes you do a short charge forwards.
+deus_push_cost_reduction	Hukon's Strength	Reduce push cost by %d%%.
+deus_push_increased_cleave	Geheb's Brawn	Pushing increases Cleave by %d%% for %d seconds.
+deus_reckless_swings	Khaine's Fury	While above 25% Health, gain 25% Power but take 1 damage on each melee hit.
+deus_revive_regen	Esmerelda's Solace	Reviving a teammate grants both of you health regeneration for %d seconds.
+deus_second_wind	Grimnir's Implacability	Falling below %d%% health grants you %d%% Attack Speed and Movement Speed and prevents incoming damage for %d seconds.
+deus_skill_on_special_kill	Drakira's Thirst	Killing a Special replenishes %d%% of your Ability Bar.
+deus_standing_still_damage_reduction	Ptra's Endurance	Standing still grants you %d%% damage reduction.
+deus_target_full_health_damage_mult	Ellinill's Withering	Attacks against full health enemies deal %d%% more damage.
+deus_throw_speed_increase	Hashut's Greeting	Throw objects with double speed.
+deus_timed_block_free_shot	Atharti's Sting	Parrying an attack makes your next shot not cost any ammunition.
+deus_transmute_into_coins	Smednir's Transmutation	Charged melee headshots have low chance of transmuting the target into a bag of coins.
+deus_uninterruptable_attacks	Ulric's Grim Resolve	Your attacks cannot be interrupted.
+drop_item_on_ability_use	Kalita's Barter	Using your Career Skill will drop a duplicate of one of your inventory items. Cooldown of this effect depends on the strength of the item.
+explosive_kills_on_elite_kills	Dazh's Peculiar Mirth	After killing an elite with a melee attack the next enemy you kill will explode.
+explosive_ordinance	Explosive Ordnance	Increases grenade explosion radius by %.1f%%.
+explosive_pushes_on_damage_taken	Chotec's Touch	Taking damage makes pushes explosive for %d seconds.
+fatigue_regen	+%.1f%% Stamina Recovery	Increases the rate at which stamina is recovered
+focused_accuracy	Nethu's Harvest	Every %d seconds, when you inflict a headshot on an enemy, spawn an Essence Orb at their location. The Essence Orb grants increased Cooldown Regeneration for %.1f seconds.
+friendly_cooldown_on_ability	Xokha's Duty	Using your Career Skill returns %d%% of nearby allies' Ability Bars.
+grenadier	Grenadier	%.1f%% chance to not consume grenade on use.
+hand_of_shallya	Hand of Shallya	Healing yourself with a First Aid Kit or a Healing Draught also heals your nearby allies for %.1f%% of their maximum health. Clears any wounds.
+heal_on_dot_damage_dealt	Atharti's Malice	Damaging enemies with damage over time effects grants %.2f health.
+healers_touch	Healers Touch	%.1f%% chance to not consume healing item on use.
+health	+%.1f%% Health	Increases max health
+health_orbs	Caxuatan's Boiling Blood	Spawn a Blood Orb for every %d Health (or Temporary Health) damage taken. Each Blood Orb grants %d Temporary Health.
+hidden_escape	Ladrielle's Veil	Every %d seconds, taking damage grants invisibility for %ds. Attacking removes the invisibility.
+home_brewer	Home Brewer	%.1f%% chance to not consume potion on use.
+indomitable	Djaf's Rejection	You will always be downed, rather than be killed outright. (You can still bleed out.)
+invigorating_strike	Grimnir's Mettle	Every %d seconds your next attack grants you Temporary Health. The amount of Temporary Health gains depends on the damage inflicted.
+last_player_standing_power_reg	Ereth Khial's Pride	Gain %d%% Power and rapid health regeneration for %d seconds when all your allies are downed.
+lucky	Hoeth's Method	Each Attack that doesn't causes a Critical Hit adds %d%% Critical Chance to the next Attack. These bonuses stack, and reset after making a Critical Hit.
+melee_killing_spree_speed	Stromfels' Savagery	Killing %d enemies with melee attacks in quick succession grants %d%% attack speed and movement speed for %d seconds.
+melee_wave	Hukon's Sundering	After using your Career Skill your next %d Melee Attacks launch a shockwave that damages and stagger enemies.
+missing_health_power_up	Khaine's Thirst	%d%% Damage Reduction for every %d Health lost. Stacks up to %d times.
+money_magnet	Smednir's Wealth	Auto-pickup Pilgrim's Coins in a %dm radius.
+movement_speed_on_active_ability_use	Mork's (or Gork's?) Onslaught	Using your career skill grants %d%% movement speed for %d seconds.
+movespeed	+%.1f%% Movement Speed	Increases the speed of passive movement
+natural_bond	Natural Bond	Passively regenerates %d health every %d seconds. Healing from First Aid Kits and Healing Draughts are converted to temporary health.
+pent_up_anger	Myrmidia's Justice	You gain a stack of Justice each time you Block an Attack. Once you have %d stacks, your next Attack is automatically a Critical Hit and all stacks are lost.
+power_up_of_shallya	Boon of Shallya	Increases effectiveness of healing on you by %.1f%%.
+power_vs_armoured	+%.1f%% Power vs Armoured	Increases Hero Power when attacking Armoured enemies
+power_vs_chaos	+%.1f%% Power vs Chaos	Increase Hero Power when attacking Chaos enemies by %.1f
+power_vs_frenzy	+%.1f%% Power vs Berserkers	Increases Hero Power when attacking Frenzied enemies
+power_vs_large	+%.1f%% Power vs Monsters	Increases Hero Power when attacking Large enemies
+power_vs_skaven	+%.1f%% Power vs Skaven	Increases Hero Power when attacking Skaven enemies by %.1f
+power_vs_unarmoured	+%.1f%% Power vs Infantry	Increases Hero Power when attacking Unarmoured enemies by %.1f
+protection_aoe	+%.1f%% Damage Reduction vs Area Damage	Reduces damage taken from area attacks
+protection_chaos	+%.1f%% Damage Reduction vs Chaos	Reduces damage taken from Chaos enemies
+protection_orbs	Ptra's Protection	Every %d seconds, a Perfect Parry spawns an Orb that reduces Damage taken by %d%% for %d seconds.
+protection_skaven	+%.1f%% Damage Reduction vs Skaven	Reduces damage taken from Skaven enemies
+push_block_arc	+%.1f%% Push/Block Angle	Increases the angle of your melee weapon push attack
+pyrotechnical_echo	Hashut's Echo	Your grenades explode a second time (after a short delay).
+pyrrhic_strength	Khaine's Might	Gain %d%% Power, but %d%% Curse.
+resolve	Isha's Gift	You revive with full Health. %d second Cooldown.
+respawn_speed	+%.1f%% Respawn Speed	Reduces time it takes to respawn in the mission after getting knocked out.
+revive_speed	+%.1f%% Revive Speed	Increases the speed at which you help up knocked down allies
+sharing_is_caring	Esmerelda's Generosity	On drinking a Potion spawn an Orb that grants the same effect.
+shrapnel	Shrapnel	Grenades cause hit enemies to take %.1f%% increased damage for %.1f seconds.
+skill_by_block	Neru's Patience	Blocking enemy attacks reduces Career Skill Cooldown.
+speed_over_stamina	Eldrazor's Revenge	When your Block is broken you gain %d%% Attack Speed for %ds.
+squats		
+staggering_force	Estreuth's Roar	Staggering %d enemies at once grants %d%% Power for %d seconds.
+stamina	+%.1f Stamina	Increases max stamina
+static_blade	Stromfels' Retribution	Every %d seconds, Parrying an Attack triggers a lightning strike against the attacking enemy.
+static_charge	Mathlann's Spark	Spawns a static charge Orb every %d kills. The Orb Damages and Staggers nearby enemies for %d seconds.
+surprise_strike	Morai-Heg's Doom	For %d seconds after leaving invisibility, all Attacks are automatically Critical Hits.
+talent_1_1		
+talent_1_2		
+talent_1_3		
+talent_2_1		
+talent_2_2		
+talent_2_3		
+talent_3_1		
+talent_3_2		
+talent_3_3		
+talent_4_1		
+talent_4_2		
+talent_4_3		
+talent_5_1		
+talent_5_2		
+talent_5_3		
+talent_6_1		
+talent_6_2		
+talent_6_3		
+tenacious	The Great Maw's Resurgence	Gain %d Health each second if below %d%% Health.
+thorn_skin	Drakira's Malice	Taking damage deals damage to nearby enemies.
+transfer_temp_health_at_full	Salyak's Charity	Gaining temporary health while at full health will give the temporary health to the nearest ally instead.
+triple_melee_headshot_power	Djaf's Reaping	Landing %d Melee headshots in a row grants %d%% increased Melee Power for %d seconds.
+wolfpack	Ulric's Pack	Gain %d%% bonus to Power. This is multiplied by the number of allies with the Boon.

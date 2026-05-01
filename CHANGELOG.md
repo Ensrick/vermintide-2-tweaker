@@ -1,5 +1,43 @@
 # Changelog
 
+## [2026-04-29] cosmetics_tweaker v0.7.0-dev
+### Added
+- Unlock All Portrait Frames toggle (modded only, DLC ownership respected)
+
+## [2026-04-29] cosmetics_tweaker v0.6.38-dev
+### Added
+- DLC ownership gate — skins requiring unowned DLC stay locked even with Unlock All Illusions enabled
+- Full modded-realm illusion unlock/apply pipeline (5 hook points, up from 3)
+
+### Fixed
+- Locked illusions not applying — missing fake backend IDs, UI locked flag, craft button eac-untrusted gate
+- Applied skins stripped on backend refresh — `bypass_skin_ownership_check` now set on local craft
+
+## [2026-04-29] weapon_tweaker v0.10.6-dev
+### Added
+- Grip offset for Kruber wielding Saltzpyre's Skullsplitter (`wh_1h_hammer`, z +0.15)
+- Grip offset for Kruber wielding Saltzpyre's Skullsplitter & Shield (`wh_hammer_shield`, right hand only, z +0.15)
+- Per-hand grip offset support — offset entries can specify `hand = "right"` or `hand = "left"` to target one hand only (default both)
+
+### Fixed
+- Menu preview grip offsets not applying — `MenuWorldPreviewer._spawn_item_unit` resolved `self._character_name` (hero name like `empire_soldier`) before `_local_career_name()` (career name like `es_mercenary`), so the `es_` prefix never matched
+- Menu preview grip offsets applied 4x — `fake_slot` pointed all four unit fields at the same unit, causing the additive offset to quadruple
+- `BackendInterfaceWeavesPlayFab.commit` hook error — `commit` method doesn't exist on that class; moved hook to `BackendManagerPlayFab.commit`
+
+## [2026-04-28] cosmetics_tweaker v0.6.19-dev
+### Added
+- Modded-realm illusion swap — Apply button re-enabled, craft calls intercepted locally instead of PlayFab
+- Custom illusion injection system — new weapon skins appear as selectable illusions in the vanilla browser
+- "Mace & Bretonnian Shield" custom illusion (Empire mace + GK Bretonnian shield)
+- Unlock All Weapon Illusions toggle (modded only)
+- Bretonnian Sword & Shield thickness fix (sword only, shield unaffected)
+- Loremaster's Armoury bridge toggle
+
+### Fixed
+- Craft button sound loop caused by stale `is_held` hotspot flag after fast local craft completion
+- Inventory preview scaling both sword and shield on Bretonnian weapons (now right-hand only via `_fields`)
+- Illusion browser not applying scale overrides (skin key resolution via `matching_item_key`)
+
 ## [2026-04-24 v0.4.0-dev]
 ### Added
 - Two-tier animation redirect system: career-aware redirects for phantom events + standard `has_animation_event` fallback

@@ -2,4 +2,5 @@ lua = [
     "scripts/mods/career_tweaker/career_tweaker"
     "scripts/mods/career_tweaker/career_tweaker_data"
     "scripts/mods/career_tweaker/career_tweaker_localization"
+    "scripts/mods/career_tweaker/career_tweaker_balance"
 ]

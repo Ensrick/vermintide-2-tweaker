@@ -3,18 +3,12 @@ return {
         en = "Tweaker: Careers",
     },
     mod_description = {
-        en = "Swap talents and abilities between careers, allow melee weapons in ranged slots, and inject career actions on unlocked weapons.",
+        en = "Swap talents and abilities between careers, and toggle talent balance changes.",
     },
     -- ============================================================
-    -- Settings labels
-    -- ============================================================
-    allow_melee_in_ranged_slot              = { en = "Allow Melee in Ranged Slot" },
-    enable_career_action_injection          = { en = "Career Action Injection" },
-    -- ============================================================
-    -- Talents -- group labels
+    -- Career swapping
     -- ============================================================
     career_swapping_group                   = { en = "Career Ability & Talent Swapping" },
-    -- Dropdown labels (one per career row)
     talent_swap_dr_ironbreaker              = { en = "Ironbreaker" },
     talent_swap_dr_slayer                   = { en = "Slayer" },
     talent_swap_dr_ranger                   = { en = "Ranger" },
@@ -35,26 +29,13 @@ return {
     talent_swap_bw_adept                    = { en = "Pyromancer" },
     talent_swap_bw_unchained                = { en = "Unchained" },
     talent_swap_bw_necromancer              = { en = "Necromancer" },
-    -- Dropdown option display names (shared across all career dropdowns)
-    talent_source_none                      = { en = "None (default)" },
-    cname_dr_ironbreaker                    = { en = "Ironbreaker (Bardin)" },
-    cname_dr_slayer                         = { en = "Slayer (Bardin)" },
-    cname_dr_ranger                         = { en = "Ranger (Bardin)" },
-    cname_dr_engineer                       = { en = "Engineer (Bardin)" },
-    cname_es_huntsman                       = { en = "Huntsman (Markus)" },
-    cname_es_knight                         = { en = "Foot Knight (Markus)" },
-    cname_es_mercenary                      = { en = "Mercenary (Markus)" },
-    cname_es_questingknight                 = { en = "Grail Knight (Markus)" },
-    cname_we_shade                          = { en = "Shade (Kerillian)" },
-    cname_we_maidenguard                    = { en = "Handmaiden (Kerillian)" },
-    cname_we_waywatcher                     = { en = "Waystalker (Kerillian)" },
-    cname_we_thornsister                    = { en = "Sister of the Thorn (Kerillian)" },
-    cname_wh_zealot                         = { en = "Zealot (Victor)" },
-    cname_wh_bountyhunter                   = { en = "Bounty Hunter (Victor)" },
-    cname_wh_captain                        = { en = "Witch Hunter Captain (Victor)" },
-    cname_wh_priest                         = { en = "Warrior Priest (Victor)" },
-    cname_bw_scholar                        = { en = "Battle Wizard (Sienna)" },
-    cname_bw_adept                          = { en = "Pyromancer (Sienna)" },
-    cname_bw_unchained                      = { en = "Unchained (Sienna)" },
-    cname_bw_necromancer                    = { en = "Necromancer (Sienna)" },
+    -- ============================================================
+    -- Talent Balance Changes
+    -- ============================================================
+    talent_balance_group                    = { en = "Talent Balance Changes" },
+    -- Balance mod toggles
+    balance_zealot_merc_allow_random_crits             = { en = "Zealot/Merc: Allow random crits with guaranteed crit talent" },
+    balance_zealot_merc_allow_random_crits_description = { en = "The 'crit every 5 hits' talent on Zealot and Mercenary normally disables all natural random crits. This removes that restriction so you can still get lucky crits between the guaranteed ones." },
+    balance_whc_parry_extended_window                  = { en = "WHC: Parry crit talent doubles parry window" },
+    balance_whc_parry_extended_window_description      = { en = "Doubles the parry timing window from 0.5s to 1.0s when enabled. Makes the Witch Hunter Captain's parry-crit talent easier to use." },
 }

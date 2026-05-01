@@ -11,7 +11,8 @@ $workshopIds = @{
     "weapon_tweaker"       = "3712896117"
     "general_tweaker"      = "3713619122"
     "cosmetics_tweaker"    = "3715714222"
-    "career_tweaker"       = $null  # TBD
+    "career_tweaker"       = "3716286199"
+    "enemy_tweaker"        = "3716780252"
 }
 
 function Deploy-ToDir($sourceDir, $targetDir) {

@@ -1,6 +1,6 @@
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.2.3-dev"
+local MOD_VERSION = "0.2.8-dev"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -10,6 +10,7 @@ local FINALE_GODS = { "nurgle", "tzeentch", "khorne", "slaanesh" }
 
 local granting_starting_coins = false
 local all_trait_combos_cache = nil
+local sync_reckless_swings
 
 local function is_curse_disabled(curse_name)
     if type(curse_name) ~= "string" or not curse_name:find("^curse_") then
@@ -67,7 +68,50 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
         end
     end
 
-    return func(unpack(args))
+    local removed_main = {}
+    local removed_rarity = {}
+
+    if DeusPowerUpsArray then
+        for i = #DeusPowerUpsArray, 1, -1 do
+            local boon = DeusPowerUpsArray[i]
+            local key = boon and boon.name and ("disable_boon_" .. boon.name)
+            if key and mod:get(key) then
+                table.remove(DeusPowerUpsArray, i)
+                removed_main[#removed_main + 1] = { index = i, boon = boon }
+            end
+        end
+        if DeusPowerUpsArrayByRarity then
+            for rarity, arr in pairs(DeusPowerUpsArrayByRarity) do
+                removed_rarity[rarity] = {}
+                for i = #arr, 1, -1 do
+                    local boon = arr[i]
+                    local key = boon and boon.name and ("disable_boon_" .. boon.name)
+                    if key and mod:get(key) then
+                        table.remove(arr, i)
+                        removed_rarity[rarity][#removed_rarity[rarity] + 1] = { index = i, boon = boon }
+                    end
+                end
+            end
+        end
+    end
+
+    local new_seed, new_power_ups = func(unpack(args))
+
+    for i = #removed_main, 1, -1 do
+        local e = removed_main[i]
+        table.insert(DeusPowerUpsArray, e.index, e.boon)
+    end
+    for rarity, removed in pairs(removed_rarity) do
+        local arr = DeusPowerUpsArrayByRarity[rarity]
+        for i = #removed, 1, -1 do
+            local e = removed[i]
+            table.insert(arr, e.index, e.boon)
+        end
+    end
+
+    sync_reckless_swings()
+
+    return new_seed, new_power_ups
 end)
 
 local function fix_arc_nan(widgets)
@@ -401,6 +445,122 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
 end)
 
 -- ============================================================
+-- Starting Boons
+-- ============================================================
+
+mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer_id, local_player_id, profile_index, career_index)
+    local run_state = self._run_state
+    local own_peer_id = run_state and run_state:get_own_peer_id()
+
+    if not run_state:is_server() and peer_id ~= own_peer_id then return end
+    if not DeusPowerUpsArray or not DeusPowerUpUtils then return end
+
+    local extra = {}
+    for _, entry in ipairs(DeusPowerUpsArray) do
+        local name = entry.name
+        if name and mod:get("start_boon_" .. name) then
+            extra[#extra + 1] = DeusPowerUpUtils.generate_specific_power_up(name, entry.rarity)
+        end
+    end
+
+    if #extra == 0 then return end
+
+    local skip_metatable = true
+    local existing = run_state:get_player_power_ups(peer_id, local_player_id, profile_index, career_index)
+    local new_power_ups = table.clone(existing, skip_metatable)
+    table.append(new_power_ups, extra)
+    run_state:set_player_power_ups(peer_id, local_player_id, profile_index, career_index, new_power_ups)
+    mod:echo(string.format("Granted %d starting boon(s).", #extra))
+end)
+
+-- ============================================================
+-- Modified Boons
+-- ============================================================
+
+local reckless_swings_originals = nil
+
+local function apply_reckless_swings_tweak()
+    if reckless_swings_originals then
+        return
+    end
+
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local buff_tpls = rawget(_G, "DeusPowerUpBuffTemplates")
+    if not power_up or not power_up.deus_reckless_swings then
+        return
+    end
+
+    local tpl = power_up.deus_reckless_swings
+    local buff_entry = buff_tpls and buff_tpls.deus_reckless_swings_buff
+
+    reckless_swings_originals = {
+        health_threshold = tpl.buff_template.buffs[1].health_threshold,
+        desc_1_value = tpl.description_values[1].value,
+        desc_3_value = tpl.description_values[3].value,
+        buff_damage = buff_entry and buff_entry.buffs[1].damage_to_deal,
+    }
+
+    tpl.buff_template.buffs[1].health_threshold = 0.25
+    tpl.description_values[1].value = 0.25
+    tpl.description_values[3].value = 1
+
+    if buff_entry then
+        buff_entry.buffs[1].damage_to_deal = 1
+    end
+end
+
+local function revert_reckless_swings_tweak()
+    if not reckless_swings_originals then
+        return
+    end
+
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local buff_tpls = rawget(_G, "DeusPowerUpBuffTemplates")
+    if not power_up or not power_up.deus_reckless_swings then
+        reckless_swings_originals = nil
+        return
+    end
+
+    local tpl = power_up.deus_reckless_swings
+    local buff_entry = buff_tpls and buff_tpls.deus_reckless_swings_buff
+
+    tpl.buff_template.buffs[1].health_threshold = reckless_swings_originals.health_threshold
+    tpl.description_values[1].value = reckless_swings_originals.desc_1_value
+    tpl.description_values[3].value = reckless_swings_originals.desc_3_value
+
+    if buff_entry and reckless_swings_originals.buff_damage then
+        buff_entry.buffs[1].damage_to_deal = reckless_swings_originals.buff_damage
+    end
+
+    reckless_swings_originals = nil
+end
+
+local RECKLESS_SWINGS_DESC_OVERRIDE = "While above 25% Health, gain 25% Power but take 1 damage on each melee hit."
+
+mod:hook(_G, "Localize", function(func, key, ...)
+    if key == "description_deus_reckless_swings" and reckless_swings_originals then
+        return RECKLESS_SWINGS_DESC_OVERRIDE
+    end
+    return func(key, ...)
+end)
+
+sync_reckless_swings = function()
+    if mod:get("tweak_reckless_swings") then
+        apply_reckless_swings_tweak()
+    else
+        revert_reckless_swings_tweak()
+    end
+end
+
+sync_reckless_swings()
+
+mod.on_setting_changed = function(setting_id)
+    if setting_id == "tweak_reckless_swings" then
+        sync_reckless_swings()
+    end
+end
+
+-- ============================================================
 -- Debug commands
 -- ============================================================
 
@@ -468,6 +628,47 @@ mod:command("dump_spawners", "Dump pickup spawner counts and pickup_settings for
     end
 
     mod:echo("Done. Full details in log.")
+end)
+
+mod:command("dump_boon_loc", "Dump resolved display names and descriptions for all boons", function()
+    if not DeusPowerUpTemplates or not DeusPowerUpsArray then
+        mod:echo("DeusPowerUpTemplates not loaded (must be in Chaos Wastes).")
+        return
+    end
+
+    local sorted_keys = {}
+    for key in pairs(DeusPowerUpTemplates) do
+        sorted_keys[#sorted_keys + 1] = key
+    end
+    table.sort(sorted_keys)
+
+    local count = 0
+    for _, key in ipairs(sorted_keys) do
+        local tpl = DeusPowerUpTemplates[key]
+        local display_key = tpl.display_name
+        local desc_key = tpl.advanced_description
+
+        local display_text = ""
+        if display_key then
+            local raw = Localize(display_key)
+            if raw ~= "<" .. display_key .. ">" then
+                display_text = raw
+            end
+        end
+
+        local desc_text = ""
+        if desc_key then
+            local raw = Localize(desc_key)
+            if raw ~= "<" .. desc_key .. ">" then
+                desc_text = raw
+            end
+        end
+
+        mod:info("[DUMP:boon_loc] %s\t%s\t%s", key, display_text, desc_text)
+        count = count + 1
+    end
+
+    mod:echo(string.format("dump_boon_loc: %d boons dumped to log. Check console log for tab-separated output.", count))
 end)
 
 mod:command("dump_boons", "Deep dump of all DeusPowerUpTemplates + buff data to log", function(filter)

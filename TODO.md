@@ -6,8 +6,8 @@
 - [x] Toggle individual curse modifiers on/off (14 curses, all CW curses covered)
 - [x] Allow up to 5 boon options per shrine and per chest
 - [x] Toggle friendly fire
-- [x] Disable specific boons from appearing at shrines/chests/altars/Belakor's Temple (117 boon checkboxes)
-- [x] Set starting boons (117 boon checkboxes; bypasses disabled-boons list; all players receive host's configured boons)
+- [x] Disable specific boons from appearing at shrines/chests/altars/Belakor's Temple (all 172 boons, organized in 6 sub-groups)
+- [x] Set starting boons (all 172 boons, 6 sub-groups; bypasses disabled-boons list; all players receive host's configured boons)
 - [x] Configure altar type distribution (upgrade / melee swap / ranged swap / boon altars — 0–8 each; sum capped ~5–6 by map spawner slots)
 - [x] Configure number of Chests of Trials per mission (slider 0–10)
 - [x] Enable campaign potions (strength/speed/ability) in Chaos Wastes
@@ -21,7 +21,7 @@
 - [x] `t dump_boons` command — log boon IDs from next shrine/chest roll
 - [x] Allow duplicate careers (host-only setting — multiple players can share the same hero/career)
 
-- [ ] **Investigate Elf native weapon crash** — Native weapons like Glaive (`we_2h_axe`) and Dual Daggers (`we_dual_wield_daggers`) are causing engine assertion failures in `spawn_unit`. Added aggressive logging and runtime guards to help isolate the cause.
+- [ ] **Investigate CW ghost scythe 3P spawn crash** — `spawn_unit` assertion on unit hash `877616b4d5c71f36` = `wpn_bw_ghost_scythe_01_3p` (base/Necromancer 3P model). Crash occurs during CW level transitions with an Unchained bot wielding the Ensorcelled Reaper (crashify://77917479-d053-4d34-b6b9-629878a7e6ec, crashify://e4062589-...). Unchained should resolve to `_fire_3p` via `right_hand_unit_override`, so the base variant being requested implies `career_name` was nil at spawn time. Reproduces WITHOUT cross-career weapons enabled. All vanilla code paths pass career_name correctly; suspected timing issue where bot `SimpleInventoryExtension._career_name` is nil during CW unit recreation. **Mitigated** in v0.10.14 with pcall guard + diagnostic logging in `create_equipment` hook — next crash will log weapon key, career_name, and override state to identify the exact failure. Vanilla bug also found: `deus_chest_preload_extension.lua:106-107` calls `get_weapon_packages` without `career_name` for upgrade altar preloads (benign — preload path only). See `CROSS_CAREER_PACKAGE_FIX.md` for earlier analysis (partially obsolete — original cross-career theory was wrong).
 - [ ] **Verify Settings Sync** — Ensure `weapon_tweaker` settings are correctly applied on the client for non-host players.
 - [ ] **Complete weapon_tweaker_data.lua** — Add the missing career weapon checkboxes to the new modular project.
 
@@ -37,7 +37,7 @@
 - [ ] **Make new Chaos Wastes curses from existing mutators** (e.g. expose campaign mutators as selectable curses)
 
 ## Boons
-- [ ] **Reduce self-damage on "25% power vs chaos" boon** — boon deals 3 damage to self on each swing; change to 1. Requires finding the buff/mutator that drives the self-hit and overriding the damage value.
+- [x] **Modified Boons: Reckless Swings tweak** — reduces self-damage from 3→1, lowers health threshold from 50%→25%, tooltip updates dynamically
 - [ ] Reduce spawn rarity of specific boons (per-boon percentage weight)
 - [ ] Allow customizing how many boons per Chest of Trials
 - [ ] Increase the pool/range of available boons (e.g. allow boons/talents normally excluded from Chaos Wastes)
@@ -58,22 +58,12 @@
 ## Weapons
 - [ ] **GiveWeapon command** — give any weapon by item key (integrate from Shazbot/Vermintide-Mods)
 - [x] **AnyWeapon** — allow any weapon regardless of career restrictions (implemented in weapon_tweaker)
-- [ ] **Modded-realm crafting** — hook the in-game crafting menu to allow crafting weapons only in modded realm, bypassing normal restrictions
+- [x] **Modded-realm crafting** — Athanor forge repurposed as Mod Weapon Crafting UI (B hotkey). Shows all career weapons, creates items client-side via `backend_mirror:add_item()`. Property/trait editing via weave bubble grid. Session-only items (lost on restart). TODO: persistence, max rarity crafting
 - [ ] **Weapon illusion/cosmetic swapper** — change weapon illusions and cosmetics in modded realm only, using the existing crafting UI
+- [x] **Character Weapon Variants mod** — new standalone mod (`character_weapon_variants`, Workshop 3716869446) for cross-character weapon combinations. See `character_weapon_variants/TODO.md` and `CROSS_MOD_ARCHITECTURE.md` for details.
 
 ## Multiplayer
 - [ ] **Settings sync review** — decide which settings should be host-authoritative (curse disabling, boon filtering, altar counts, Belakor override, friendly fire, potions, ammo) and enforce them for clients that affect shared game state.
-
-## Cosmetics
-- [ ] **Cosmetic unlocks** — enable cosmetics (hats, skins) across careers within the same character (no cross-character; skip wh_priest), like weapon_tweaker unlocks weapons by patching `can_wield`/item filters. **In progress in `cosmetics_tweaker` mod (Workshop 3715714222, private).** Started v0.2.0 with `cos probe_cosmetics` runtime probe to enumerate items + native career allow-lists; next pass populates static unlock maps and the nested settings UI.
-- [ ] **Per-hat character portraits (future)** — when the cosmetic-unlocks UI is in, layer a portrait-override system on top: for every hat a character can wear, generate a matching character portrait via Photoshop + AI character-consistency tools so the lobby/HUD portrait swaps to match the equipped hat. Static asset pipeline (one portrait per hat × character), runtime side just patches the active portrait based on equipped hat.
-- [ ] **Cross-character hat unlocks (investigation)** — figure out which hat→character combos are skeleton-compatible. Currently `cosmetics_tweaker` is intra-character only because cross-character would crash on skeleton-attachment-node mismatch (e.g. Kruber wearing Kerillian's hat). Some pairs may share enough headpiece rigging to work — needs per-pair empirical testing.
-- [ ] **Cloned + recolored cosmetics ("matching hats")** — generate new hat (and sometimes outfit) variants by cloning an existing item and tinting its materials to match a specific outfit's palette, where vanilla provides no matching combo. Concrete example: Grail Knight's white purified Chaos Wastes outfit has no white hat to pair with; clone a GK hat and tint it white. Two-part task:
-  1. **Item cloning** — register a new entry in `ItemMasterList` at boot that copies an existing item's `unit`, `slot_type`, `can_wield`, etc., with a new unique key/display_name. Verify it shows up in inventory and equips.
-  2. **Per-clone color override** — apply tint via `Material.set_color`/`set_vector3` on the spawned unit, only for the cloned variant (so the original hat stays vanilla). Use `Material.get_color` (or equivalent getter) to sample the target outfit's color so the recolor automatically matches; alternatively expose RGB sliders per clone.
-  Requires confirming Stingray exposes BOTH getters and setters on material parameters, and that we can spawn a per-unit material instance so tinting one player's hat doesn't tint everyone else's.
-- [ ] **Free weapon illusion/skin swap from inventory** — let the inventory menu pick any illusion/skin available to the weapon type without going through Okri's "apply illusion" flow (and without consuming a one-time illusion). Show all illusions for that weapon as selectable options inline on the weapon card.
-- [ ] **3rd person mod** — enable 3rd person camera view so players can see their character model and cosmetics in gameplay
 
 ## Audio
 - [ ] **Skip/disable character voiceovers** — option to silence or suppress specific character voices and voiceover lines during missions.
@@ -82,9 +72,29 @@
 - [ ] **Chief Krench from VT1** — port Chief Krench boss from Vermintide 1 into VT2 via modding (pending Fatshark permission — not just community manager approval)
 - [ ] **Lords as monster spawns** — allow a selection of lord/boss enemies to spawn in place of regular monsters (e.g. Bodvarr, Skarrik, Rasknitt, Nurgloth as random monster replacements)
 
+## Enemy Tweaker (New Mod)
+- [ ] **Horde composition overrides** — replace the breed mix in hordes via `HordeCompositionsPacing` table patching. Settings UI lets the player pick which enemy types appear in hordes (e.g. all Chaos Warriors, mixed Skaven+Chaos, Beastmen-only on Helmgart maps). Hook `compose_horde_spawn_list()` or patch composition tables at mod load.
+- [ ] **Breed substitution** — global breed-swap map (e.g. every `skaven_slave` → `skaven_storm_vermin`). Hook `HordeSpawner.spawn_unit()` where `Breeds[breed_name]` is resolved, or intercept `ConflictDirector.spawn_queued_unit()` to replace the breed before queuing.
+- [ ] **Custom horde presets** — predefined "fun" compositions players can toggle: "All Elites", "Beastmen Invasion" (Beastmen on non-Beastmen maps), "Chaos Patrol Hordes", "Mixed Faction Hordes" (Skaven + Chaos + Beastmen together). Each preset patches `HordeCompositionsPacing` entries with custom breed lists and weights.
+- [ ] **Horde size multiplier** — slider to scale total enemy count per horde (0.5x–3.0x). Multiply the `{min, max}` range in each composition variant's breed entries.
+- [ ] **Special/elite spawn rate** — adjust how frequently specials and elites appear in ambient spawns. Hook `ConflictDirector` pacing or modify `breed_packs` weights.
+- [ ] **Boss/monster frequency** — slider to change how often monsters spawn during a level. Modify terror event intervals or monster pacing settings.
+- [ ] **Per-faction toggle** — enable/disable entire factions (Skaven, Chaos, Beastmen) from spawning, or force a single faction for all spawns on any map.
+- [ ] **Difficulty-independent breed stats** — override individual breed fields (`run_speed`, `health`, `threat_value`, `stagger_resist`) regardless of difficulty setting, using `Breeds[name]` table patching at mod load.
+
 ## Careers
 - [x] Allow duplicate careers — multiple players can pick the same hero/career (host setting)
 - [ ] Change the Power Bonus talent
 - [ ] Adjust Temporary HP (THP) talents
 - [ ] **Talent/ability transplant** — swap one career's full talent tree and career ability with another's (e.g. give Battle Wizard all of Grail Knight's talents and passive/active ability). Purely data-driven: patch the career's `talents` table and `career_ability_template` at game-state init. No model or animation changes — the character looks the same but plays like a different career.
 - [ ] **Per-talent overrides** — replace individual talent slots across any career (e.g. swap one THP talent for a different character's talent)
+
+## Cosmetics
+- [ ] **Remove dirt/stains from outfits (shader toggle)** — the outfit shader has built-in `dirt_threshold` and `dirt_variation` scalar variables on `mtr_outfit` (and `mtr_skin`/`mtr_body`). Found in `unit_variation_settings.lua` — enemies use these for randomized weathering (e.g. chaos_fanatic: `dirt_threshold` range 80–100 scaled ×0.01 = 0.8–1.0, `dirt_variation` range 0–3). Player outfits use the same `mtr_outfit` material/shader (`cosmetic_utils.lua:6`), so the variable should be present.
+  - **Simplest approach (try first):** After the player's outfit unit spawns, iterate meshes for `mtr_outfit`, and call `Material.set_scalar(material, "dirt_threshold", 1.0)` to push the threshold above all dirt mask values. This should hide all dirt with zero asset work — pure Lua, no dependencies. Also set on `mtr_skin`/`mtr_body` if those exist on the unit.
+  - **Hook point:** `PlayerUnitCosmeticExtension.init` (after `change_skin_materials` / `change_skin_material_settings` apply), or `GearUtils.create_equipment`, or `CosmeticUtils.color_tint_unit` — whichever fires after the mesh unit is fully set up.
+  - **Settings UI:** Toggle per-character or global "Clean outfit" checkbox. Could also expose a `dirt_threshold` slider (0.0 = maximum dirt, 1.0 = spotless) for fine control.
+  - **Validation needed:** Confirm the shader variable exists on player outfit materials at runtime. If `Material.set_scalar` silently fails (no error but no effect), the variable may not be compiled into the player material variant. In that case, fall back to texture replacement via Material-Hijack (see below).
+  - **Fallback (if shader toggle doesn't work):** Extract vanilla diffuse textures via `vt2_bundle_unpacker`, edit out dirt in Photoshop, package as new textures, swap via Material-Hijack `Material.set_texture()`. Same pipeline as "Cloned + recolored cosmetics" item. Dependencies: Material-Hijack, MoreItemsLibrary.
+  - **Loremaster's Armoury does NOT do this.** Repo cloned to `c:\Users\danjo\source\repos\Loremasters-Armoury` ([GitHub](https://github.com/dalokraff/Loremasters-Armoury)). It has "Clean" shield variants (custom heraldry shields without battle damage) but does not touch character body outfit textures.
+  - **Reference:** `unit_variation_settings.lua:293-312` (dirt_threshold/dirt_variation definitions), `cosmetic_utils.lua:5-26` (color_tint_unit targets mtr_outfit), `player_unit_cosmetic_extension.lua:75-94` (skin init flow with material_changes → material_settings → color_tint).

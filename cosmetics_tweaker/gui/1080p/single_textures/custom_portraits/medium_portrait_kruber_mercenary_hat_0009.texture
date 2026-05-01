@@ -1,0 +1,19 @@
+common = {
+	input = {
+		filename = "gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_0009"
+	}
+	output = {
+		apply_processing = true
+		category = ""
+		cut_alpha_threshold = 0.5
+		enable_cut_alpha_threshold = false
+		format = "DXT5"
+		mipmap_filter = "kaiser"
+		mipmap_filter_wrap_mode = "mirror"
+		mipmap_keep_original = false
+		mipmap_num_largest_steps_to_discard = 0
+		mipmap_num_smallest_steps_to_discard = 0
+		srgb = true
+		streamable = false
+	}
+}

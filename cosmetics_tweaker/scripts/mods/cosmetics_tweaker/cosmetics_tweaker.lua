@@ -1,7 +1,8 @@
 local mod = get_mod("cosmetics_tweaker")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
+local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 
-local MOD_VERSION = "0.6.5-dev"
+local MOD_VERSION = "0.7.65"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 
@@ -13,6 +14,29 @@ mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 -- the tinted variant is a separate equippable item.
 
 local _is_unit_alive = function(u) return type(u) == "userdata" and pcall(Unit.alive, u) and Unit.alive(u) end
+
+-- Returns true if the given Gui has the named material loaded.
+--
+-- IMPORTANT: `Gui.material(gui, name)` does NOT throw on missing materials in
+-- this VT2 build — it returns nil silently. So pcall alone is NOT a reliable
+-- probe; we MUST inspect the return value too. (An earlier version of this
+-- function returned `ok` only and silently always reported "true", which made
+-- the VMFOptionsView pre-check useless.)
+local function _gui_has_material(gui, material_name)
+    if not gui or not Gui or not Gui.material then return false end
+    local ok, mat = pcall(Gui.material, gui, material_name)
+    return ok and mat ~= nil
+end
+
+-- DLC ownership gate. Used across the unlock paths to refuse skins whose
+-- ItemMasterList entry has `required_dlc` set when the player doesn't own
+-- that DLC. Defined early because several hooks below reference it.
+local function _skin_requires_unowned_dlc(skin_key)
+    local item_data = rawget(ItemMasterList, skin_key)
+    if not item_data or not item_data.required_dlc then return false end
+    if not Managers.unlock then return false end
+    return not Managers.unlock:is_dlc_unlocked(item_data.required_dlc)
+end
 
 -- Force-flush the engine console log so command output is on disk before the
 -- user navigates anywhere. Stingray buffers writes; menu transitions flush
@@ -35,6 +59,40 @@ end
 mod:command("flush_log", "Force-flush the engine console log to disk", function()
     _flush_log()
     mod:echo("[flush_log] attempted")
+end)
+
+-- Diagnostic: probe whether vmf_atlas is loaded on the active screen Guis.
+-- Use this BEFORE opening VMF options view to verify the material check
+-- works. If vmf_atlas reports "missing" here, opening options will crash.
+-- Output goes to BOTH chat (mod:echo) and log file (mod:info), then flushes.
+mod:command("check_vmf", "Check vmf_atlas presence on active Guis", function()
+    local function emit(fmt, ...)
+        mod:echo(fmt, ...)
+        mod:info("[check_vmf] " .. fmt, ...)
+    end
+
+    local function probe(name, gui)
+        if not gui then emit("  %s: nil", name); return end
+        local ok, mat = pcall(Gui.material, gui, "vmf_atlas")
+        emit("  %s: ok=%s mat=%s", name, tostring(ok), tostring(mat))
+    end
+
+    emit("=== check_vmf ===")
+    local found = false
+    for _, mgr_name in ipairs({"ui", "matchmaking", "transition"}) do
+        local mgr = Managers[mgr_name]
+        for _, field in ipairs({"ui_renderer", "_ui_renderer", "renderer"}) do
+            if mgr and mgr[field] then
+                found = true
+                local r = mgr[field]
+                emit("Managers.%s.%s:", mgr_name, field)
+                probe("gui_immediate", r.gui)
+                probe("gui_retained",  r.gui_retained)
+            end
+        end
+    end
+    if not found then emit("no UI renderer found via Managers") end
+    _flush_log()
 end)
 
 -- Tint config: which hats to tint, and to what color. Toggle-gated.
@@ -115,35 +173,23 @@ mod:command("probe_hat", "Dump materials of player's equipped hat", function()
                             local ok_mat, mat = pcall(Mesh.material, mesh, j)
                             mod:info("%s     Mesh.material(%d) -> %s", prefix, j, tostring(ok_mat and mat or "err"))
                             if ok_mat and mat and Material then
-                                -- Enumerate ALL parameters if the API exists in this build.
-                                local got_enum = false
-                                local ok_np, np = pcall(Material.num_parameters, mat)
-                                mod:info("%s       Material.num_parameters -> %s", prefix, tostring(ok_np and np or "err"))
-                                if ok_np and type(np) == "number" then
-                                    got_enum = true
-                                    for pi = 0, np - 1 do
-                                        local ok_pn, pn = pcall(Material.parameter_name, mat, pi)
-                                        local ok_pt, pt = pcall(Material.parameter_type, mat, pi)
-                                        mod:info("%s         param[%d] name=%s type=%s",
-                                                 prefix, pi,
-                                                 tostring(ok_pn and pn),
-                                                 tostring(ok_pt and pt))
-                                    end
-                                end
-                                -- Fallback: brute-force more candidate names if enum API missing.
-                                if not got_enum then
-                                    for _, pname in ipairs({
-                                        "tint_color", "color_tint", "albedo_color", "color",
-                                        "diffuse_color", "main_color", "tint_color_a", "base_color_tint",
-                                        "albedo", "_albedo", "_color", "_tint", "tint", "tint_a", "tint_b", "tint_c",
-                                        "color_variation_mask", "pattern_color_a", "pattern_color_b",
-                                        "metallic_value", "emissive", "emissive_color", "team_color_a",
-                                    }) do
-                                        local r, v = pcall(Material.get_color, mat, pname)
-                                        if r and v then mod:info("%s         %s.color=%s", prefix, pname, tostring(v)) end
-                                        local r2, v2 = pcall(Material.get_vector3, mat, pname)
-                                        if r2 and v2 then mod:info("%s         %s.v3=%s", prefix, pname, tostring(v2)) end
-                                    end
+                                -- DO NOT call Material.num_parameters / parameter_name /
+                                -- parameter_type here — they trigger a Stingray
+                                -- resource_manager.cpp:245 fault that's not pcall-recoverable
+                                -- and crashes the game. Brute-force param names instead.
+                                for _, pname in ipairs({
+                                    "tint_color", "color_tint", "albedo_color", "color",
+                                    "diffuse_color", "main_color", "tint_color_a", "base_color_tint",
+                                    "albedo", "_albedo", "_color", "_tint", "tint", "tint_a", "tint_b", "tint_c",
+                                    "color_variation_mask", "pattern_color_a", "pattern_color_b", "pattern_color_c",
+                                    "skin_color", "primary_color", "secondary_color", "outfit_color",
+                                    "metallic_value", "emissive", "emissive_color", "team_color_a",
+                                    "fresnel_color", "rim_color", "metalness_color",
+                                }) do
+                                    local r, v = pcall(Material.get_color, mat, pname)
+                                    if r and v then mod:info("%s         %s.color=%s", prefix, pname, tostring(v)) end
+                                    local r2, v2 = pcall(Material.get_vector3, mat, pname)
+                                    if r2 and v2 then mod:info("%s         %s.v3=%s", prefix, pname, tostring(v2)) end
                                 end
                             end
                         end
@@ -218,6 +264,535 @@ mod:command("probe_hat", "Dump materials of player's equipped hat", function()
 end)
 
 -- ============================================================
+-- Dynamic Character Portraits (hat-dependent)
+-- ============================================================
+
+-- Custom portrait textures: each portrait size has its own .material file so
+-- that Stingray creates a Gui material whose name matches the texture name
+-- (file-based naming). No UIAtlasHelper hooks needed — standalone textures
+-- bypass atlas lookup and the UI uses Gui.bitmap with the material name.
+
+local _PORTRAIT_MATERIALS = {
+    "materials/ui/portrait_kruber_mercenary_hat_0004",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_0004",
+    "materials/ui/small_portrait_kruber_mercenary_hat_0004",
+    "materials/ui/portrait_kruber_mercenary_hat_0009",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_0009",
+    "materials/ui/small_portrait_kruber_mercenary_hat_0009",
+    "materials/ui/portrait_kruber_mercenary_hat_1001",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_1001",
+    "materials/ui/small_portrait_kruber_mercenary_hat_1001",
+    "materials/ui/portrait_kruber_mercenary_hat_1002",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_1002",
+    "materials/ui/small_portrait_kruber_mercenary_hat_1002",
+}
+
+local _hat_portrait_map = {
+    mercenary_hat_0004 = {
+        hud    = "portrait_kruber_mercenary_hat_0004",
+        medium = "medium_portrait_kruber_mercenary_hat_0004",
+        small  = "small_portrait_kruber_mercenary_hat_0004",
+    },
+    mercenary_hat_0009 = {
+        hud    = "portrait_kruber_mercenary_hat_0009",
+        medium = "medium_portrait_kruber_mercenary_hat_0009",
+        small  = "small_portrait_kruber_mercenary_hat_0009",
+    },
+    mercenary_hat_1001 = {
+        hud    = "portrait_kruber_mercenary_hat_1001",
+        medium = "medium_portrait_kruber_mercenary_hat_1001",
+        small  = "small_portrait_kruber_mercenary_hat_1001",
+    },
+    mercenary_hat_1002 = {
+        hud    = "portrait_kruber_mercenary_hat_1002",
+        medium = "medium_portrait_kruber_mercenary_hat_1002",
+        small  = "small_portrait_kruber_mercenary_hat_1002",
+    },
+}
+
+local _portrait_materials_ready = false
+local _portrait_settings_active = false
+local _original_portrait_image = nil
+local _original_picking_image = nil
+local _last_known_hat_key = nil
+
+-- ============================================================
+-- Hot-reload / missing-material safety net
+-- ============================================================
+-- When a mod's atlas isn't on the active Gui (LA reload, VMF options view
+-- with vmf_atlas not injected, etc.), the next draw fatals the engine with
+-- "Material 'X' not found in Gui". ui_passes.lua captures
+-- UIRenderer.draw_texture as a file-local at load time so we can't intercept
+-- there. But UIRenderer.draw_widget is called via the global table from many
+-- callers (vmf_options_view, NewsFeedUI per-widget, etc.) — hooking it
+-- catches the most common surfaces.
+-- VMFOptionsView safety hook removed: Gui.material() does not reliably detect
+-- materials loaded via VMF's resource packages, so the pre-check was blocking
+-- the VMF options menu from rendering entirely. VMF handles its own draw
+-- lifecycle — cosmetics_tweaker should not guard it.
+
+local _hot_reload_purges = 0
+-- Replace the original draw entirely (mod:hook_origin) so we control the pass
+-- lifecycle. Per-widget pcall lets us skip a stale widget without leaving
+-- begin_pass/end_pass unbalanced (which crashed world_marker_ui post_update).
+-- ALSO purge any active_news entries whose widget references a missing
+-- material BEFORE begin_pass — pcall'ing draw_widget AFTER begin_pass still
+-- works (the renderer pcall scope is per-widget, end_pass always runs), but
+-- a pre-check is cheaper and avoids per-frame log spam.
+mod:hook_origin("NewsFeedUI", "draw", function(self, dt)
+    local ui_renderer    = self.ui_renderer
+    local ui_scenegraph  = self.ui_scenegraph
+    local input_service  = self.input_manager:get_service("ingame_menu")
+
+    UIRenderer.begin_pass(ui_renderer, ui_scenegraph, input_service, dt)
+
+    local active_news = self._active_news
+    local stale_indices
+    for i = 1, #active_news do
+        local widget = active_news[i].widget
+        if widget then
+            local ok, err = pcall(UIRenderer.draw_widget, ui_renderer, widget)
+            if not ok then
+                stale_indices = stale_indices or {}
+                stale_indices[#stale_indices + 1] = i
+                if _hot_reload_purges < 5 then
+                    mod:info("[hot-reload-safety] news widget %d draw failed: %s", i, tostring(err))
+                end
+            end
+        end
+    end
+
+    UIRenderer.end_pass(ui_renderer)
+
+    -- Purge dead widgets after the pass closes. Iterate descending so indices stay valid.
+    if stale_indices then
+        for j = #stale_indices, 1, -1 do
+            local i = stale_indices[j]
+            local data = active_news[i]
+            local widget = data and data.widget
+            table.remove(active_news, i)
+            if widget and self._unused_news_widgets then
+                table.insert(self._unused_news_widgets, widget)
+            end
+        end
+        _hot_reload_purges = _hot_reload_purges + #stale_indices
+    end
+end)
+
+-- Collect ALL gui handles from every UIRenderer we can find.
+local function _collect_all_guis()
+    local guis = {}
+    local function add(label, renderer)
+        if not renderer then return end
+        for _, gf in ipairs({"gui", "gui_retained"}) do
+            if renderer[gf] then
+                guis[#guis + 1] = { label = label .. "." .. gf, gui = renderer[gf] }
+            end
+        end
+    end
+    for _, mgr_name in ipairs({"ui", "matchmaking", "transition"}) do
+        local mgr = Managers[mgr_name]
+        if mgr then
+            for _, field in ipairs({"ui_renderer", "_ui_renderer", "renderer"}) do
+                if mgr[field] then add("Managers." .. mgr_name .. "." .. field, mgr[field]) end
+            end
+        end
+    end
+    local ingame_ui = Managers.ui and Managers.ui._ingame_ui
+    if ingame_ui then
+        for _, field in ipairs({"ui_renderer", "_ui_renderer"}) do
+            if ingame_ui[field] then add("ingame_ui." .. field, ingame_ui[field]) end
+        end
+    end
+    local hud = ingame_ui and ingame_ui._hud
+    if hud then
+        for _, field in ipairs({"ui_renderer", "_ui_renderer"}) do
+            if hud[field] then add("hud." .. field, hud[field]) end
+        end
+    end
+    local unit_frames = hud and (hud._unit_frames_handler or hud.unit_frames_handler)
+    if unit_frames then
+        for _, field in ipairs({"ui_renderer", "_ui_renderer"}) do
+            if unit_frames[field] then add("unit_frames." .. field, unit_frames[field]) end
+        end
+    end
+    return guis
+end
+
+local function _check_portrait_materials_ready()
+    if _portrait_materials_ready then return true end
+    local guis = _collect_all_guis()
+    for _, entry in ipairs(guis) do
+        if _gui_has_material(entry.gui, "portrait_kruber_mercenary_hat_1002") then
+            _portrait_materials_ready = true
+            mod:info("[portrait] materials confirmed on %s", entry.label)
+            return true
+        end
+    end
+    return false
+end
+
+local function _get_hat_item_key_for_unit(player_unit)
+    if not player_unit then return nil end
+    local pm = Managers.player
+    if not pm then return nil end
+    for _, player in pairs(pm:players()) do
+        if player.player_unit == player_unit then
+            if CosmeticUtils and CosmeticUtils.get_cosmetic_slot then
+                local hat_data = CosmeticUtils.get_cosmetic_slot(player, "slot_hat")
+                if hat_data and hat_data.item_name then
+                    return hat_data.item_name
+                end
+            end
+            break
+        end
+    end
+    return nil
+end
+
+local function _get_local_player_hat_key()
+    local pm = Managers.player
+    if not pm then return nil end
+    local local_player = pm:local_player()
+    if not local_player then return nil end
+
+    if CosmeticUtils and CosmeticUtils.get_cosmetic_slot then
+        local ok, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, local_player, "slot_hat")
+        if ok and hat_data and hat_data.item_name then
+            return hat_data.item_name
+        end
+    end
+
+    if BackendUtils and BackendUtils.get_loadout_item then
+        local career = nil
+        pcall(function() career = local_player:career_name() end)
+        if not career then pcall(function() career = local_player.career_name end) end
+        if career then
+            local ok, item = pcall(BackendUtils.get_loadout_item, career, "slot_hat")
+            if ok and item then
+                local key = item.key or (item.data and item.data.key)
+                if key then return key end
+            end
+        end
+    end
+
+    return nil
+end
+
+local function _restore_portrait_settings()
+    if not _portrait_settings_active then return end
+    if not SPProfiles then return end
+    local career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    if career and _original_portrait_image then
+        career.portrait_image = _original_portrait_image
+        career.picking_image = _original_picking_image
+        _portrait_settings_active = false
+        mod:info("[portrait] restored career_settings to '%s'", _original_portrait_image)
+    end
+end
+
+local function _sync_portrait_settings()
+    if not SPProfiles then return end
+    local career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    if not career then return end
+
+    if not _original_portrait_image then
+        _original_portrait_image = career.portrait_image
+        _original_picking_image = career.picking_image
+    end
+
+    if not mod:get("dynamic_portraits") then
+        _restore_portrait_settings()
+        return
+    end
+
+    if not _check_portrait_materials_ready() then return end
+
+    local hat_key = _get_local_player_hat_key()
+    local portraits = hat_key and _hat_portrait_map[hat_key]
+    if portraits then
+        career.portrait_image = portraits.hud
+        career.picking_image = portraits.medium
+        if not _portrait_settings_active then
+            mod:info("[portrait] swapped career_settings to '%s'", portraits.hud)
+        end
+        _portrait_settings_active = true
+    else
+        _restore_portrait_settings()
+    end
+end
+
+-- Diagnostic: check if VMF registered our custom portrait textures
+mod:command("portrait_diag", "Diagnose portrait texture registration + hat state", function()
+    local function emit(fmt, ...)
+        mod:echo(fmt, ...)
+        mod:info("[portrait_diag] " .. fmt, ...)
+    end
+
+    local ready = _check_portrait_materials_ready()
+    emit("settings_active=%s dynamic_portraits=%s materials_ready=%s",
+        tostring(_portrait_settings_active), tostring(mod:get("dynamic_portraits")),
+        tostring(ready))
+    local career = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    if career then
+        emit("career_settings.portrait_image='%s' picking_image='%s'",
+            tostring(career.portrait_image), tostring(career.picking_image))
+    end
+
+    -- Check UIAtlasHelper — use the CORRECT VMF-hooked function names
+    local tex_names = {
+        "portrait_kruber_mercenary_hat_1002",
+        "medium_portrait_kruber_mercenary_hat_1002",
+        "small_portrait_kruber_mercenary_hat_1002",
+    }
+    if UIAtlasHelper then
+        emit("UIAtlasHelper functions: has_atlas=%s get_atlas=%s has_tex=%s",
+            tostring(UIAtlasHelper.has_atlas_settings_by_texture_name ~= nil),
+            tostring(UIAtlasHelper.get_atlas_settings_by_texture_name ~= nil),
+            tostring(UIAtlasHelper.has_texture_by_name ~= nil))
+        for _, tex_name in ipairs(tex_names) do
+            local has_atlas = false
+            if UIAtlasHelper.has_atlas_settings_by_texture_name then
+                local ok, val = pcall(UIAtlasHelper.has_atlas_settings_by_texture_name, tex_name)
+                has_atlas = ok and val
+            end
+            local get_result = "nil"
+            if UIAtlasHelper.get_atlas_settings_by_texture_name then
+                local ok, val = pcall(UIAtlasHelper.get_atlas_settings_by_texture_name, tex_name)
+                if ok then get_result = tostring(val) end
+            end
+            emit("  '%s': has_atlas=%s get_atlas=%s", tex_name, tostring(has_atlas), get_result)
+        end
+    else
+        emit("UIAtlasHelper not available")
+    end
+
+    -- Hat detection
+    local hat_key = _get_local_player_hat_key()
+    emit("local hat key: %s", tostring(hat_key))
+
+    -- Material probe: check if our individual portrait materials are on active GUIs
+    local material_probes = {
+        "portrait_kruber_mercenary_hat_1002",
+        "medium_portrait_kruber_mercenary_hat_1002",
+        "small_portrait_kruber_mercenary_hat_1002",
+    }
+    local guis = _collect_all_guis()
+    emit("found %d gui handles", #guis)
+    for _, entry in ipairs(guis) do
+        for _, mat_name in ipairs(material_probes) do
+            local ok, mat = pcall(Gui.material, entry.gui, mat_name)
+            if ok and mat then
+                emit("FOUND: %s has '%s' -> %s", entry.label, mat_name, tostring(mat))
+            end
+        end
+    end
+
+    -- Check VMF's UIRenderer injection table
+    if UIRenderer and UIRenderer._injected_material_sets then
+        emit("_injected_material_sets count: %d", #UIRenderer._injected_material_sets)
+        for i, v in ipairs(UIRenderer._injected_material_sets) do
+            emit("  [%d] = %s", i, tostring(v))
+        end
+    else
+        emit("UIRenderer._injected_material_sets: %s", tostring(UIRenderer and UIRenderer._injected_material_sets))
+    end
+
+    _flush_log()
+end)
+
+-- Deep dump of ALL portrait widgets across every UI surface.
+-- Run this in the keep, during hero selection, and at end-of-round to map
+-- all portrait locations, their content keys, pass types, and mask fields.
+mod:command("portrait_dump", "Dump ALL portrait widgets from every UI surface", function()
+    local function emit(fmt, ...)
+        mod:echo(fmt, ...)
+        mod:info("[portrait_dump] " .. fmt, ...)
+    end
+
+    local MASK_FIELDS = {
+        "masked", "texture_mask", "mask_texture", "alpha_mask",
+        "circular_mask", "use_mask", "mask", "mask_alpha",
+    }
+
+    local function dump_widget(source_label, wname, widget)
+        emit("=== %s / %s ===", source_label, tostring(wname))
+        if widget.content then
+            local port = widget.content.character_portrait or widget.content.portrait
+            emit("  portrait: %s", tostring(port))
+            local ckeys = {}
+            for k, v in pairs(widget.content) do
+                ckeys[#ckeys + 1] = tostring(k) .. "=" .. tostring(v)
+            end
+            table.sort(ckeys)
+            for _, s in ipairs(ckeys) do emit("  c: %s", s) end
+        end
+        if widget.style then
+            for sk, sv in pairs(widget.style) do
+                if type(sv) == "table" then
+                    local extras = {}
+                    for _, tf in ipairs({"texture_id", "texture", "texture_name", "material_name"}) do
+                        if sv[tf] then extras[#extras + 1] = tf .. "=" .. tostring(sv[tf]) end
+                    end
+                    for _, mf in ipairs(MASK_FIELDS) do
+                        if sv[mf] ~= nil then extras[#extras + 1] = mf .. "=" .. tostring(sv[mf]) end
+                    end
+                    if sv.texture_size then
+                        extras[#extras + 1] = "size=" .. tostring(sv.texture_size[1]) .. "x" .. tostring(sv.texture_size[2])
+                    end
+                    if #extras > 0 then emit("  s.%s: %s", tostring(sk), table.concat(extras, ", ")) end
+                end
+            end
+        end
+        local element = widget.element
+        if element then
+            local passes = element.passes or element.pass_data
+            if passes and type(passes) == "table" then
+                emit("  passes (%d):", #passes)
+                for pi, pass in ipairs(passes) do
+                    local pkeys = {}
+                    for k, v in pairs(pass) do
+                        pkeys[#pkeys + 1] = tostring(k) .. "=" .. tostring(v)
+                    end
+                    table.sort(pkeys)
+                    emit("    [%d] %s", pi, table.concat(pkeys, ", "))
+                end
+            end
+        end
+    end
+
+    local function scan_widgets(source_label, widgets)
+        if not widgets or type(widgets) ~= "table" then return 0 end
+        local found = 0
+        for wname, widget in pairs(widgets) do
+            if type(widget) == "table" and widget.content then
+                if widget.content.character_portrait or widget.content.portrait then
+                    dump_widget(source_label, wname, widget)
+                    found = found + 1
+                end
+            end
+        end
+        return found
+    end
+
+    local found = 0
+    local ingame_ui = Managers.ui and Managers.ui._ingame_ui
+    local hud = ingame_ui and ingame_ui._hud
+
+    -- 1. HUD unit frames
+    local uf_handler = hud and (hud._unit_frames_handler or hud.unit_frames_handler)
+    if uf_handler then
+        local frames = uf_handler._unit_frames or uf_handler.unit_frames
+        if frames then
+            for i, frame in ipairs(frames) do
+                if frame then
+                    for _, wf in ipairs({"_widgets", "widgets", "_default_widgets", "_portrait_widgets"}) do
+                        found = found + scan_widgets("hud.frame[" .. i .. "]." .. wf, frame[wf])
+                    end
+                end
+            end
+        end
+    else
+        emit("unit_frames_handler: NOT FOUND")
+    end
+
+    -- 2. Hero view (if open)
+    local hero_view = ingame_ui and (ingame_ui._hero_view or ingame_ui.hero_view)
+    if hero_view then
+        emit("-- hero_view found --")
+        for _, wf in ipairs({"_widgets", "widgets", "_static_widgets"}) do
+            local ok_w, widgets = pcall(function() return hero_view[wf] end)
+            if ok_w and widgets then
+                found = found + scan_widgets("hero_view." .. wf, widgets)
+            end
+        end
+        local ok_wins, windows = pcall(function() return hero_view._windows or hero_view.windows end)
+        if ok_wins and windows then
+            for wkey, window in pairs(windows) do
+                if type(window) == "table" then
+                    for _, wf in ipairs({"_widgets", "widgets", "_static_widgets"}) do
+                        local ok_w, widgets = pcall(function() return window[wf] end)
+                        if ok_w and widgets then
+                            found = found + scan_widgets("hero_view.win[" .. tostring(wkey) .. "]." .. wf, widgets)
+                        end
+                    end
+                end
+            end
+        end
+    else
+        emit("hero_view: not active")
+    end
+
+    -- 3. End-of-round views
+    for _, vname in ipairs({"_end_screen_view", "end_screen_view", "_game_over_view"}) do
+        local ok_v, view = pcall(function() return ingame_ui and ingame_ui[vname] end)
+        if ok_v and view then
+            emit("-- %s found --", vname)
+            for _, wf in ipairs({"_widgets", "widgets", "_static_widgets", "_player_widgets"}) do
+                local ok_w, widgets = pcall(function() return view[wf] end)
+                if ok_w and widgets then
+                    found = found + scan_widgets(vname .. "." .. wf, widgets)
+                end
+            end
+        end
+    end
+
+    -- 4. Brute-force: walk all ingame_ui fields for portrait widgets
+    -- pcall each access because some fields are strict tables that error on unknown keys
+    if ingame_ui then
+        emit("-- brute-force ingame_ui scan --")
+        for field_name, field_val in pairs(ingame_ui) do
+            if type(field_val) == "table" and field_name ~= "_hud" then
+                for _, wf in ipairs({"_widgets", "widgets", "_static_widgets", "_player_widgets"}) do
+                    local ok, widgets = pcall(function() return field_val[wf] end)
+                    if ok and widgets then
+                        local n = scan_widgets("ingame_ui." .. tostring(field_name) .. "." .. wf, widgets)
+                        found = found + n
+                    end
+                end
+            end
+        end
+    end
+
+    -- 5. HUD sub-elements
+    if hud then
+        local elements = hud._hud_elements or hud.hud_elements or hud._elements
+        if elements and type(elements) == "table" then
+            for ek, el in pairs(elements) do
+                if type(el) == "table" then
+                    for _, wf in ipairs({"_widgets", "widgets", "_static_widgets"}) do
+                        local ok_w, widgets = pcall(function() return el[wf] end)
+                        if ok_w and widgets then
+                            found = found + scan_widgets("hud.el[" .. tostring(ek) .. "]." .. wf, widgets)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    emit("=== portrait_dump complete: %d portrait widgets found ===", found)
+    _flush_log()
+end)
+
+-- Manual test: force career_settings swap and report state
+mod:command("test_portrait", "Force portrait career_settings swap", function()
+    _sync_portrait_settings()
+    local career = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    mod:echo("[test_portrait] active=%s portrait_image='%s'",
+        tostring(_portrait_settings_active),
+        career and tostring(career.portrait_image) or "nil")
+    _flush_log()
+end)
+
+-- Sync portrait career_settings on each UnitFrameUI draw so the swap
+-- activates as soon as materials are ready and hat is detected. Once
+-- _portrait_settings_active is true, this is a cheap no-op.
+mod:hook_safe("UnitFrameUI", "draw", function(self, dt)
+    _sync_portrait_settings()
+end)
+
+-- ============================================================
 -- Cosmetic unlocks (per-career within character)
 -- ============================================================
 -- Mirrors weapon_tweaker's apply_weapon_unlocks: strips mod-managed careers
@@ -266,11 +841,21 @@ local function apply_cosmetic_unlocks()
     end
 end
 
-mod.on_game_state_changed = function() apply_cosmetic_unlocks() end
+mod.on_game_state_changed = function()
+    apply_cosmetic_unlocks()
+    _sync_portrait_settings()
+end
 mod.on_setting_changed = function(setting_id)
     if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
         apply_cosmetic_unlocks()
     end
+    if setting_id == "dynamic_portraits" then
+        _sync_portrait_settings()
+    end
+end
+mod.on_unload = function()
+    _restore_portrait_settings()
+    mod:info("[unload] cosmetics_tweaker unloading")
 end
 
 -- ============================================================
@@ -379,6 +964,628 @@ local _weapon_scale_overrides = {
 local _weapon_grip_offsets = {}
 
 -- ============================================================
+-- Custom Weapon Illusions (shield/weapon model combos)
+-- ============================================================
+-- Each entry creates a new selectable illusion for an existing weapon,
+-- injected into ItemMasterList, WeaponSkins.skins, and skin_combinations.
+
+local _custom_illusions = {
+    {
+        skin_key         = "ct_es_mace_gk_shield_01",
+        matching_weapon  = "es_mace_shield",
+        display_name     = "Mace & Bretonnian Shield",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_emp_mace_02_t2/wpn_emp_mace_02_t2",
+        left_hand_unit   = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03",
+        display_unit     = "units/weapons/weapon_display/display_shield_hammer",
+        template         = "one_handed_hammer_shield_template_1",
+        can_wield        = { "es_mercenary", "es_knight", "es_huntsman", "es_questingknight" },
+    },
+
+    -- Kruber spear & shield skins on Kerillian's spear & shield
+    {
+        skin_key         = "ct_we_spear_shield_es_01",
+        matching_weapon  = "we_1h_spears_shield",
+        display_name     = "Empire Spear & Shield",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01",
+        left_hand_unit   = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02",
+        display_unit     = "units/weapons/weapon_display/display_shield_spear",
+        template         = "one_handed_spears_shield_template",
+        can_wield        = { "we_maidenguard" },
+    },
+    {
+        skin_key         = "ct_we_spear_shield_es_02",
+        matching_weapon  = "we_1h_spears_shield",
+        display_name     = "Empire Spear & Shield (Ornate)",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_es_deus_spear_02/wpn_es_deus_spear_02",
+        left_hand_unit   = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02",
+        display_unit     = "units/weapons/weapon_display/display_shield_spear",
+        template         = "one_handed_spears_shield_template",
+        can_wield        = { "we_maidenguard" },
+    },
+    {
+        skin_key         = "ct_we_spear_shield_es_03",
+        matching_weapon  = "we_1h_spears_shield",
+        display_name     = "Empire Spear & Shield (Plumed)",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_es_deus_spear_03/wpn_es_deus_spear_03",
+        left_hand_unit   = "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03",
+        display_unit     = "units/weapons/weapon_display/display_shield_spear",
+        template         = "one_handed_spears_shield_template",
+        can_wield        = { "we_maidenguard" },
+    },
+
+    -- Spear & Shield spear models on Tuskgor Spear (right hand only, no shield)
+    {
+        skin_key         = "ct_es_heavy_spear_deus_01",
+        matching_weapon  = "es_2h_heavy_spear",
+        display_name     = "Spear & Shield Spear",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01",
+        display_unit     = "units/weapons/weapon_display/display_2h_heavy_spears",
+        template         = "two_handed_heavy_spears_template",
+        can_wield        = { "es_mercenary", "es_knight", "es_huntsman", "es_questingknight" },
+    },
+    {
+        skin_key         = "ct_es_heavy_spear_deus_02",
+        matching_weapon  = "es_2h_heavy_spear",
+        display_name     = "Spear & Shield Spear (Ornate)",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_es_deus_spear_02/wpn_es_deus_spear_02",
+        display_unit     = "units/weapons/weapon_display/display_2h_heavy_spears",
+        template         = "two_handed_heavy_spears_template",
+        can_wield        = { "es_mercenary", "es_knight", "es_huntsman", "es_questingknight" },
+    },
+    {
+        skin_key         = "ct_es_heavy_spear_deus_03",
+        matching_weapon  = "es_2h_heavy_spear",
+        display_name     = "Spear & Shield Spear (Plumed)",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_es_deus_spear_03/wpn_es_deus_spear_03",
+        display_unit     = "units/weapons/weapon_display/display_2h_heavy_spears",
+        template         = "two_handed_heavy_spears_template",
+        can_wield        = { "es_mercenary", "es_knight", "es_huntsman", "es_questingknight" },
+    },
+
+    -- Kerillian spear & shield skins on Kruber's spear & shield
+    {
+        skin_key         = "ct_es_deus_we_01",
+        matching_weapon  = "es_deus_01",
+        display_name     = "Elven Spear & Shield",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_we_spear_01/wpn_we_spear_01",
+        left_hand_unit   = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01",
+        display_unit     = "units/weapons/weapon_display/display_shield_sword",
+        template         = "es_deus_01_template",
+        can_wield        = { "es_huntsman", "es_knight", "es_mercenary" },
+    },
+    {
+        skin_key         = "ct_es_deus_we_02",
+        matching_weapon  = "es_deus_01",
+        display_name     = "Elven Spear & Shield (Exotic)",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_we_spear_02/wpn_we_spear_02",
+        left_hand_unit   = "units/weapons/player/wpn_we_shield_02/wpn_we_shield_02",
+        display_unit     = "units/weapons/weapon_display/display_shield_sword",
+        template         = "es_deus_01_template",
+        can_wield        = { "es_huntsman", "es_knight", "es_mercenary" },
+    },
+}
+
+local _custom_skin_keys = {}
+
+local function _register_custom_illusions()
+    if not ItemMasterList or not WeaponSkins then return end
+
+    for _, illusion in ipairs(_custom_illusions) do
+        local skin_key = illusion.skin_key
+        if _custom_skin_keys[skin_key] then goto continue end
+
+        ItemMasterList[skin_key] = {
+            item_type         = "weapon_skin",
+            slot_type         = "weapon_skin",
+            matching_item_key = illusion.matching_weapon,
+            rarity            = illusion.rarity,
+            display_name      = skin_key .. "_name",
+            description       = skin_key .. "_description",
+            display_unit      = illusion.display_unit,
+            hud_icon          = "weapon_generic_icon_staff_3",
+            inventory_icon    = "icon_wpn_empire_shield_01_t1_mace",
+            information_text  = "information_weapon_skin",
+            right_hand_unit   = illusion.right_hand_unit,
+            left_hand_unit    = illusion.left_hand_unit,
+            template          = illusion.template,
+            can_wield         = illusion.can_wield,
+        }
+
+        WeaponSkins.skins[skin_key] = {
+            description     = skin_key .. "_description",
+            display_name    = skin_key .. "_name",
+            display_unit    = illusion.display_unit,
+            hud_icon        = "weapon_generic_icon_staff_3",
+            inventory_icon  = "icon_wpn_empire_shield_01_t1_mace",
+            rarity          = illusion.rarity,
+            right_hand_unit = illusion.right_hand_unit,
+            left_hand_unit  = illusion.left_hand_unit,
+            template        = illusion.template,
+        }
+
+        local weapon_data = ItemMasterList[illusion.matching_weapon]
+        if weapon_data and weapon_data.skin_combination_table then
+            local combos = WeaponSkins.skin_combinations[weapon_data.skin_combination_table]
+            if combos then
+                local tier = combos[illusion.rarity] or combos.exotic or combos.common
+                if tier then
+                    tier[#tier + 1] = skin_key
+                end
+            end
+        end
+
+        if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, skin_key) then
+            local tbl = NetworkLookup.weapon_skins
+            tbl[#tbl + 1] = skin_key
+            tbl[skin_key] = #tbl
+        end
+
+        _custom_skin_keys[skin_key] = true
+        mod:info("Registered custom illusion: %s -> %s", skin_key, illusion.matching_weapon)
+        ::continue::
+    end
+end
+
+_register_custom_illusions()
+
+mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", function(self)
+    local mirror = self._backend_mirror
+    if not mirror or not mirror._unlocked_weapon_skins then return end
+    for skin_key, _ in pairs(_custom_skin_keys) do
+        mirror._unlocked_weapon_skins[skin_key] = true
+    end
+    if mod:get("unlock_all_illusions") and script_data["eac-untrusted"] and WeaponSkins then
+        for skin_key, _ in pairs(WeaponSkins.skins) do
+            if not _skin_requires_unowned_dlc(skin_key) then
+                mirror._unlocked_weapon_skins[skin_key] = true
+            end
+        end
+    end
+end)
+
+local _custom_loc = {}
+for _, illusion in ipairs(_custom_illusions) do
+    _custom_loc[illusion.skin_key .. "_name"] = illusion.display_name
+    _custom_loc[illusion.skin_key .. "_description"] = illusion.display_name
+end
+
+mod:hook(_G, "Localize", function(func, key, ...)
+    local custom = _custom_loc[key]
+    if custom then return custom end
+    local la_loc = LA_BRIDGE.localization[key]
+    if la_loc then return la_loc end
+    return func(key, ...)
+end)
+
+-- ============================================================
+-- Unlock All Portrait Frames (modded realm only)
+-- ============================================================
+-- Injects all frame-type items from ItemMasterList into the
+-- _unlocked_cosmetics table so they appear as equippable in the
+-- cosmetics loadout UI. Hooked on PlayFabMirrorBase so it fires
+-- during mirror init (before _create_fake_inventory_items runs),
+-- ensuring fake backend items are generated for each frame.
+-- DLC ownership is respected via required_dlc checks.
+
+mod:hook_safe("PlayFabMirrorBase", "get_unlocked_cosmetics", function(self)
+    if not mod:get("unlock_all_frames") or not script_data["eac-untrusted"] then return end
+    local cosmetics = self._unlocked_cosmetics
+    if not cosmetics then return end
+    for key, data in pairs(ItemMasterList) do
+        if data.item_type == "frame" and not cosmetics[key] then
+            if not _skin_requires_unowned_dlc(key) then
+                cosmetics[key] = true
+            end
+        end
+    end
+end)
+
+-- ============================================================
+-- Modded-realm illusion swap (bypass server-side craft block)
+-- ============================================================
+-- In modded realm the "Apply" button for weapon illusions is disabled
+-- (HeroWindowItemCustomization._enable_craft_button force-sets enable=false
+-- when script_data["eac-untrusted"]) and the server rejects craftingApplySkin2.
+--
+-- We intercept three points:
+--   1. _enable_craft_button — temporarily clear eac-untrusted so the Apply
+--      button is usable for illusion swaps. On disable, force-clear the
+--      hotspot's is_held/input_pressed flags to prevent re-trigger: the
+--      engine hotspot (ui_passes.lua:4386) only clears is_held on mouse
+--      release, NOT when disable_button is set, so a fast craft completion
+--      while the user is still holding the mouse causes an infinite
+--      craft→complete→re-craft sound loop.
+--   2. get_weapon_skin_from_skin_key — return synthetic backend IDs for
+--      skins the player doesn't "own" in their backend inventory, so the
+--      illusion browser can reference them. For vanilla locked skins this
+--      is needed because get_weapon_skin_from_skin_key only searches
+--      _fake_items (unlocked skins), not all known skins.
+--   3. craft + update — when in modded and applying a weapon skin, write
+--      item.skin directly on the local backend mirror instead of sending to
+--      PlayFab. Result is deferred one frame via the update hook to match
+--      the vanilla async timing and avoid same-frame completion artifacts.
+--   4. _on_illusion_index_pressed — force content.locked = false so the
+--      Apply button enables for skins the player hasn't earned.
+--   5. _update_state_craft_button — temporarily clear eac-untrusted so the
+--      craft button's disable_button flag doesn't bake in the modded check.
+--
+-- DLC ownership is respected: skins with a required_dlc field in
+-- ItemMasterList are only unlockable if the player owns that DLC
+-- (checked via Managers.unlock:is_dlc_unlocked). This prevents the mod
+-- from bypassing paid cosmetic DLC paywalls.
+
+local _fake_skin_backend_ids = {}
+
+mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", function(func, self, skin_key)
+    local id, item = func(self, skin_key)
+    if id then return id, item end
+
+    if _custom_skin_keys[skin_key] or (script_data["eac-untrusted"] and ItemMasterList[skin_key] and not _skin_requires_unowned_dlc(skin_key)) then
+        local fake_id = "ct_fake_" .. skin_key
+        _fake_skin_backend_ids[fake_id] = skin_key
+        local fake_item = {
+            skin = skin_key,
+            ItemId = skin_key,
+            data = ItemMasterList[skin_key],
+            key = skin_key,
+            rarity = ItemMasterList[skin_key] and ItemMasterList[skin_key].rarity or "exotic",
+        }
+        return fake_id, fake_item
+    end
+end)
+
+mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, self, enable, disable_edges)
+    if enable and script_data["eac-untrusted"] and self._current_recipe_name == "apply_weapon_skin" then
+        local saved = script_data["eac-untrusted"]
+        script_data["eac-untrusted"] = false
+        func(self, enable, disable_edges)
+        script_data["eac-untrusted"] = saved
+        return
+    end
+    func(self, enable, disable_edges)
+    if not enable and self._current_recipe_name == "apply_weapon_skin" then
+        local widget = self._widgets_by_name and self._widgets_by_name.craft_button
+        if widget and widget.content and widget.content.button_hotspot then
+            widget.content.button_hotspot.is_held = false
+            widget.content.button_hotspot.input_pressed = false
+        end
+    end
+end)
+
+mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(func, self, index, ignore_item_spawn, mark_as_equipped)
+    if script_data["eac-untrusted"] and not ignore_item_spawn then
+        local widget = self._illusion_widgets and self._illusion_widgets[index]
+        if widget and widget.content then
+            local skin_key = widget.content.skin_key
+            if not _skin_requires_unowned_dlc(skin_key) then
+                widget.content.locked = false
+            end
+        end
+    end
+    return func(self, index, ignore_item_spawn, mark_as_equipped)
+end)
+
+mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
+    if script_data["eac-untrusted"] and recipe_name == "apply_weapon_skin" then
+        local saved = script_data["eac-untrusted"]
+        script_data["eac-untrusted"] = false
+        local result = func(self, recipe_name, ...)
+        script_data["eac-untrusted"] = saved
+        return result
+    end
+    return func(self, recipe_name, ...)
+end)
+
+local _pending_local_craft = nil
+
+mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career_name, item_backend_ids, recipe_override)
+    if not script_data["eac-untrusted"] then
+        return func(self, career_name, item_backend_ids, recipe_override)
+    end
+
+    local backend_items = Managers.backend:get_interface("items")
+    local weapon_backend_id, skin_key
+
+    for _, bid in ipairs(item_backend_ids) do
+        if _fake_skin_backend_ids[bid] then
+            skin_key = _fake_skin_backend_ids[bid]
+        else
+            local item = backend_items:get_item_from_id(bid)
+            if not item then
+                local fake_items = backend_items:get_all_fake_backend_items()
+                item = fake_items and fake_items[bid]
+            end
+            if item then
+                local slot_type = item.data and item.data.slot_type
+                if slot_type == "melee" or slot_type == "ranged" then
+                    weapon_backend_id = bid
+                elseif slot_type == "weapon_skin" then
+                    skin_key = item.skin or item.key
+                end
+            end
+        end
+    end
+
+    if not weapon_backend_id or not skin_key then
+        return func(self, career_name, item_backend_ids, recipe_override)
+    end
+
+    if _skin_requires_unowned_dlc(skin_key) then
+        mod:echo("Cannot apply illusion — requires DLC you don't own.")
+        return func(self, career_name, item_backend_ids, recipe_override)
+    end
+
+    local mirror = self._backend_mirror
+    local weapon_item = mirror._inventory_items and mirror._inventory_items[weapon_backend_id]
+    if not weapon_item then
+        return func(self, career_name, item_backend_ids, recipe_override)
+    end
+
+    weapon_item.skin = skin_key
+    weapon_item.bypass_skin_ownership_check = true
+    if weapon_item.CustomData then
+        weapon_item.CustomData.skin = skin_key
+    end
+
+    local id = self:_new_id()
+    _pending_local_craft = { interface = self, id = id }
+
+    mod:info("Applied illusion '%s' locally (modded realm bypass)", skin_key)
+    return id, { name = "apply_weapon_skin" }
+end)
+
+mod:hook_safe("BackendInterfaceCraftingPlayfab", "update", function(self, dt)
+    if _pending_local_craft and _pending_local_craft.interface == self then
+        self._craft_requests[_pending_local_craft.id] = {}
+        Managers.backend:dirtify_interfaces()
+        _pending_local_craft = nil
+    end
+end)
+
+-- ============================================================
+-- Independent offhand (shield) illusion system
+-- ============================================================
+-- Adds a second row of illusion buttons below the main row on the
+-- weapon customization screen. The main row swaps the right-hand
+-- weapon model; this row independently swaps the left-hand (shield)
+-- model. Only shown for weapons that have a left_hand_unit.
+
+local _offhand_options = {
+    es_1h_sword_shield = {
+        { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
+        { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
+        { name = "Empire Shield (Ornate)", unit = "units/weapons/player/wpn_empire_shield_03/wpn_emp_shield_03" },
+        { name = "Empire Shield (Plated)", unit = "units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04" },
+        { name = "Empire Shield (Gold)",   unit = "units/weapons/player/wpn_empire_shield_05/wpn_emp_shield_05" },
+        { name = "GK Shield (Blue)",       unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03" },
+        { name = "GK Shield (Red)",        unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02" },
+        { name = "GK Shield (Green)",      unit = "units/weapons/player/wpn_emp_gk_shield_04/wpn_emp_gk_shield_04" },
+        { name = "GK Shield (White)",      unit = "units/weapons/player/wpn_emp_gk_shield_05/wpn_emp_gk_shield_05" },
+        { name = "GK Shield (Blessed)",    unit = "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01" },
+        { name = "Deus Shield (Ornate)",   unit = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02" },
+        { name = "Deus Shield (Plumed)",   unit = "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03" },
+        { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
+        { name = "Elven Shield (Exotic)",  unit = "units/weapons/player/wpn_we_shield_02/wpn_we_shield_02" },
+        { name = "WP Shield",              unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1" },
+    },
+    we_1h_spears_shield = {
+        { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
+        { name = "Elven Shield (Exotic)",  unit = "units/weapons/player/wpn_we_shield_02/wpn_we_shield_02" },
+        { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
+        { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
+        { name = "GK Shield (Blue)",       unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03" },
+        { name = "Deus Shield (Ornate)",   unit = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02" },
+        { name = "Deus Shield (Plumed)",   unit = "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03" },
+    },
+}
+_offhand_options.es_1h_mace_shield          = _offhand_options.es_1h_sword_shield
+_offhand_options.es_1h_sword_shield_breton  = _offhand_options.es_1h_sword_shield
+_offhand_options.es_deus_01                 = _offhand_options.es_1h_sword_shield
+
+local _offhand_selection = {}
+
+local function _get_offhand_options(item_key)
+    return _offhand_options[item_key]
+end
+
+mod:command("offhand_debug", "Dump offhand system state", function()
+    mod:echo("[offhand] _offhand_options keys:")
+    for k, v in pairs(_offhand_options) do
+        mod:echo("  %s -> %d options", k, #v)
+    end
+    mod:echo("[offhand] _offhand_selection:")
+    for k, v in pairs(_offhand_selection) do
+        mod:echo("  %s -> %s", k, v)
+    end
+    mod:echo("[offhand] BackendUtils hooked: %s", tostring(BackendUtils ~= nil))
+    mod:echo("[offhand] UIWidget available: %s", tostring(UIWidget ~= nil))
+    mod:echo("[offhand] UIWidgets available: %s", tostring(UIWidgets ~= nil))
+    mod:echo("[offhand] UIRenderer available: %s", tostring(UIRenderer ~= nil))
+    mod:echo("[offhand] Colors available: %s", tostring(Colors ~= nil))
+end)
+
+local function _has_offhand(item_data)
+    return item_data and item_data.left_hand_unit ~= nil
+end
+
+local function _get_weapon_key_from_item(item)
+    if not item then return nil end
+    local data = item.data or (ItemMasterList and ItemMasterList[item.key])
+    if data and data.item_type then return data.item_type end
+    return item.key
+end
+
+mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self, item)
+    func(self, item)
+
+    self._ct_offhand_widgets = nil
+    self._ct_offhand_title_widget = nil
+    self._ct_offhand_name_widget = nil
+    self._ct_offhand_divider_widget = nil
+    self._ct_selected_offhand_index = nil
+
+    mod:info("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
+
+    if not item then mod:info("[offhand] no item, bailing"); return end
+    local item_data = item.data or (ItemMasterList and ItemMasterList[item.key])
+    mod:info("[offhand] item_data=%s, left_hand_unit=%s", tostring(item_data ~= nil), tostring(item_data and item_data.left_hand_unit))
+    if not _has_offhand(item_data) then mod:info("[offhand] no offhand, bailing"); return end
+
+    local weapon_key = _get_weapon_key_from_item(item)
+    mod:info("[offhand] weapon_key=%s", tostring(weapon_key))
+    local options = _get_offhand_options(weapon_key)
+    if not options or #options == 0 then mod:info("[offhand] no options for key=%s, bailing", tostring(weapon_key)); return end
+    mod:info("[offhand] found %d offhand options", #options)
+
+    local definitions = local_require("scripts/ui/views/hero_view/windows/definitions/hero_window_item_customization_definitions")
+    local create_btn = definitions.create_illusion_button
+    mod:info("[offhand] create_btn=%s", tostring(create_btn))
+
+    local width = 51
+    local spacing = -5
+    local total_width = -spacing
+    local widgets = {}
+
+    for i, opt in ipairs(options) do
+        local widget_def = create_btn()
+        local widget = UIWidget.init(widget_def)
+        local rarity = opt.rarity or "exotic"
+        local icon_texture = "button_illusion_" .. rarity
+        if UIAtlasHelper and UIAtlasHelper.has_texture_by_name and not UIAtlasHelper.has_texture_by_name(icon_texture) then
+            icon_texture = "button_illusion_default"
+        end
+        widget.content.skin_key = "__offhand_" .. i
+        widget.content.icon_texture = icon_texture
+        widget.content.offhand_index = i
+        widget.content.offhand_unit = opt.unit
+        widget.content.offhand_name = opt.name
+        widget.content.locked = false
+        widget.content.rarity = rarity
+        widgets[#widgets + 1] = widget
+        total_width = total_width + spacing + width
+    end
+
+    local offhand_y = 95
+    local x_offset = width / 2
+    for _, widget in ipairs(widgets) do
+        widget.offset = widget.offset or { 0, 0, 0 }
+        widget.offset[1] = -total_width / 2 + x_offset
+        widget.offset[2] = offhand_y
+        x_offset = x_offset + width + spacing
+    end
+
+    local current_sel = _offhand_selection[weapon_key]
+    if current_sel then
+        for i, widget in ipairs(widgets) do
+            if options[i] and options[i].unit == current_sel then
+                widget.content.button_hotspot.is_selected = true
+                widget.content.equipped = true
+                self._ct_selected_offhand_index = i
+            end
+        end
+    end
+
+    self._ct_offhand_widgets = widgets
+    self._ct_offhand_weapon_key = weapon_key
+    self._ct_offhand_options = options
+end)
+
+mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, self, ui_renderer, dt)
+    func(self, ui_renderer, dt)
+
+    local offhand_widgets = self._ct_offhand_widgets
+    if not offhand_widgets or #offhand_widgets == 0 then return end
+
+    if not ui_renderer or not ui_renderer.ui_scenegraph then return end
+    local sg = ui_renderer.ui_scenegraph
+
+    for _, widget in ipairs(offhand_widgets) do
+        if sg[widget.scenegraph_id] then
+            UIRenderer.draw_widget(ui_renderer, widget)
+        end
+    end
+
+    for i, widget in ipairs(offhand_widgets) do
+        local hotspot = widget.content.button_hotspot
+        if hotspot and hotspot.on_pressed then
+            self:_ct_on_offhand_pressed(i)
+            break
+        end
+    end
+end)
+
+HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
+    local widgets = self._ct_offhand_widgets
+    if not widgets then return end
+
+    local widget = widgets[index]
+    if not widget then return end
+
+    local options = self._ct_offhand_options
+    local weapon_key = self._ct_offhand_weapon_key
+    local opt = options and options[index]
+    if not opt then return end
+
+    _offhand_selection[weapon_key] = opt.unit
+
+    for i, w in ipairs(widgets) do
+        local is_sel = (i == index)
+        w.content.button_hotspot.is_selected = is_sel
+        w.content.equipped = is_sel
+    end
+
+    self._ct_selected_offhand_index = index
+
+    local item = self:_get_item(self._item_backend_id)
+    if item then
+        local skin_key = item.skin or (item.data and WeaponSkins.default_skins[item.key])
+        local skin_data = skin_key and WeaponSkins.skins[skin_key]
+        if skin_data then
+            local preview_item = {
+                data = item.data,
+                skin = skin_key,
+            }
+            self:_spawn_item_unit(preview_item, true)
+        end
+    end
+
+    self:_enable_craft_button(true, true)
+    self:_play_sound("play_gui_equipment_equip")
+end
+
+if BackendUtils then
+    mod:hook(BackendUtils, "get_item_units", function(func, item_data, ...)
+        local result = func(item_data, ...)
+        if not result then return result end
+
+        local item_type = item_data and item_data.item_type
+        if item_type == "weapon_skin" and item_data.matching_item_key then
+            local weapon_data = ItemMasterList[item_data.matching_item_key]
+            if weapon_data then
+                item_type = weapon_data.item_type
+            end
+        end
+        if not item_type then return result end
+
+        local override_unit = _offhand_selection[item_type]
+        if override_unit then
+            result.left_hand_unit = override_unit
+        end
+
+        return result
+    end)
+end
+
+-- ============================================================
 -- Helpers (parallel to weapon_tweaker; consolidate into a shared
 -- module if a third mod ever needs them)
 -- ============================================================
@@ -466,24 +1673,434 @@ end)
 -- Inventory preview (new menu)
 local _mwp_pending_keys = setmetatable({}, { __mode = "k" })
 
-mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_key, slot, backend_id)
-    if type(item_key) ~= "string" then return end
-    local slot_name = (type(slot) == "table" and slot.name) or (type(slot) == "string" and slot)
-    if not slot_name then return end
-    local map = _mwp_pending_keys[self]
-    if not map then map = {}; _mwp_pending_keys[self] = map end
-    map[slot_name:gsub("^slot_", "")] = item_key
+mod:hook("MenuWorldPreviewer", "equip_item", function(func, self, item_key, slot, backend_id, skin, skip_wield_anim)
+    local slot_name = (type(slot) == "table" and slot.name) or tostring(slot)
+    mod:info("[LA preview] equip_item key=%s slot=%s bid=%s is_clone=%s",
+        tostring(item_key), tostring(slot_name), tostring(backend_id),
+        tostring(LA_BRIDGE.backend_to_armoury[backend_id] ~= nil))
+
+    if type(item_key) == "string" then
+        local sn = (type(slot) == "table" and slot.name) or (type(slot) == "string" and slot)
+        if sn then
+            local map = _mwp_pending_keys[self]
+            if not map then map = {}; _mwp_pending_keys[self] = map end
+            map[sn:gsub("^slot_", "")] = item_key
+        end
+    end
+
+    if LA_BRIDGE.registered and backend_id and LA_BRIDGE.backend_to_armoury[backend_id] then
+        mod:info("[LA preview] equip_item swapping key %s -> %s for clone", tostring(item_key), tostring(backend_id))
+        return func(self, backend_id, slot, backend_id, skin, skip_wield_anim)
+    end
+
+    return func(self, item_key, slot, backend_id, skin, skip_wield_anim)
 end)
 
-mod:hook_safe("MenuWorldPreviewer", "_spawn_item_unit", function(self, unit, slot_type, item_data, ...)
-    if not unit or not _is_unit(unit) then return end
-    local map = _mwp_pending_keys[self]
-    local weapon_key = map and map[slot_type]
-    if not weapon_key then return end
+local function _spawn_item_post(self, item_name, spawn_data)
+    if not spawn_data then return end
     local career_name = self._character_name or (self._profile and self._profile.name) or _local_career_name()
     if not career_name then return end
-    local fake_slot = { right_unit_3p = unit, right_unit_1p = unit, left_unit_3p = unit, left_unit_1p = unit }
-    _scale_units(fake_slot, weapon_key, career_name)
-    _offset_units(fake_slot, weapon_key, career_name)
-    _maybe_tint(weapon_key, unit)
+
+    local weapon_key = item_name
+    local overrides = _weapon_scale_overrides[weapon_key]
+    if not overrides then return end
+
+    local scale_factor = _resolve_for_career(overrides, career_name)
+    if not scale_factor then return end
+    if type(scale_factor) == "function" then
+        scale_factor = scale_factor(function(id) return mod:get(id) end)
+        if not scale_factor then return end
+    end
+    local scale
+    if type(scale_factor) == "table" then
+        scale = Vector3(scale_factor[1], scale_factor[2], scale_factor[3])
+    else
+        scale = Vector3(scale_factor, scale_factor, scale_factor)
+    end
+
+    local fields = overrides._fields
+    local right_only = false
+    if fields then
+        for _, f in ipairs(fields) do
+            if f:find("right") then right_only = true; break end
+        end
+    end
+
+    local equip_units = self._equipment_units
+    if not equip_units then return end
+    for slot_idx, slot in pairs(equip_units) do
+        if type(slot) == "table" then
+            if not right_only and slot.left and _is_unit(slot.left) then
+                pcall(Unit.set_local_scale, slot.left, 0, scale)
+            end
+            if slot.right and _is_unit(slot.right) then
+                pcall(Unit.set_local_scale, slot.right, 0, scale)
+            end
+        end
+    end
+end
+
+local function _spawn_item_wrapper(func, self, item_name, spawn_data)
+    local is_direct_clone = LA_BRIDGE.registered and item_name and LA_BRIDGE.backend_to_armoury[item_name]
+    mod:info("[LA preview] _spawn_item name=%s direct=%s", tostring(item_name), tostring(is_direct_clone ~= nil))
+    if is_direct_clone then
+        self._cos_la_spawning = item_name
+        mod:info("[LA preview]   -> spawning clone %s", item_name)
+    end
+    local result = func(self, item_name, spawn_data)
+    self._cos_la_spawning = nil
+    _spawn_item_post(self, item_name, spawn_data)
+    return result
+end
+
+mod:hook("HeroPreviewer", "_spawn_item", _spawn_item_wrapper)
+mod:hook("MenuWorldPreviewer", "_spawn_item", _spawn_item_wrapper)
+
+-- Illusion/skin browser preview (LootItemUnitPreviewer)
+mod:hook_safe("LootItemUnitPreviewer", "spawn_units", function(self, spawn_data)
+    local item = self._item
+    if not item then return end
+    local item_data = item.data
+    local weapon_key = (item_data and item_data.key) or item.key
+    if not weapon_key then return end
+
+    -- Skin keys (e.g. "es_bastard_sword_skin_01") won't match — resolve to weapon key
+    local overrides = _weapon_scale_overrides[weapon_key]
+    if not overrides and ItemMasterList then
+        local master = ItemMasterList[weapon_key]
+        if master and master.matching_item_key then
+            weapon_key = master.matching_item_key
+            overrides = _weapon_scale_overrides[weapon_key]
+        end
+    end
+    if not overrides then return end
+
+    local career_name = self._career_name_override or _local_career_name()
+    local scale_factor = _resolve_for_career(overrides, career_name)
+    if not scale_factor then return end
+    if type(scale_factor) == "function" then
+        scale_factor = scale_factor(function(id) return mod:get(id) end)
+        if not scale_factor then return end
+    end
+    local scale
+    if type(scale_factor) == "table" then
+        scale = Vector3(scale_factor[1], scale_factor[2], scale_factor[3])
+    else
+        scale = Vector3(scale_factor, scale_factor, scale_factor)
+    end
+
+    local fields = overrides._fields
+    local spawned = self._spawned_units
+    if not spawned then return end
+
+    if not fields then
+        for _, unit in ipairs(spawned) do
+            if _is_unit(unit) then pcall(Unit.set_local_scale, unit, 0, scale) end
+        end
+    else
+        local right_only = false
+        for _, f in ipairs(fields) do
+            if f:find("right") then right_only = true; break end
+        end
+        -- spawn order: left (shield) = index 1, right (weapon) = index 2
+        if right_only and spawn_data and #spawn_data >= 2 then
+            local unit = spawned[2]
+            if unit and _is_unit(unit) then pcall(Unit.set_local_scale, unit, 0, scale) end
+        else
+            for _, unit in ipairs(spawned) do
+                if _is_unit(unit) then pcall(Unit.set_local_scale, unit, 0, scale) end
+            end
+        end
+    end
+end)
+
+-- ============================================================
+-- Loremaster's Armoury bridge (Phase 1)
+-- ============================================================
+-- Registers LA's recolored cosmetics as separate inventory items via MIL,
+-- and queues their texture swap into LA's existing apply pipeline. See
+-- _la_bridge.lua for details.
+
+local _la_bridge_init_done       = false
+local _la_skin_safety_done       = false
+mod.loadout_cache                = mod.loadout_cache or {}
+
+-- Mirrors AllHats lines 38-71: cache custom slot_skin loadouts locally so
+-- they're never synced to other clients (vanilla clients crash on unknown
+-- skin backend_ids).
+local function _install_skin_loadout_safety()
+    if _la_skin_safety_done then return end
+    if not (Managers.backend and Managers.backend._interfaces and Managers.backend._interfaces["items"]) then return end
+    if not BackendUtils then return end
+    _la_skin_safety_done = true
+
+    local items_iface = Managers.backend:get_interface("items")
+
+    mod:hook(BackendUtils, "set_loadout_item", function(func, backend_id, career_name, slot_name)
+        if slot_name == "slot_skin" or (slot_name == "slot_hat" and LA_BRIDGE.backend_to_armoury[backend_id]) then
+            mod.loadout_cache[career_name] = mod.loadout_cache[career_name] or {}
+            mod.loadout_cache[career_name][slot_name] = backend_id
+            mod:info("[loadout] CACHED %s %s = %s", career_name, slot_name, backend_id)
+            return
+        end
+        if slot_name == "slot_hat" and mod.loadout_cache[career_name] then
+            mod:info("[loadout] CLEARED cache %s %s (vanilla bid=%s)", career_name, slot_name, backend_id)
+            mod.loadout_cache[career_name][slot_name] = nil
+        end
+        return func(backend_id, career_name, slot_name)
+    end)
+
+    mod:hook(items_iface, "get_loadout", function(func, self)
+        local loadout = func(self)
+        if LA_BRIDGE.registered then
+            local all_items = nil
+            for career_name, slots in pairs(loadout) do
+                if type(slots) == "table" then
+                    for slot_name, bid in pairs(slots) do
+                        if LA_BRIDGE.backend_to_armoury[bid] and not (mod.loadout_cache[career_name] and mod.loadout_cache[career_name][slot_name]) then
+                            all_items = all_items or items_iface:get_all_backend_items()
+                            local vanilla_key = LA_BRIDGE.backend_to_vanilla[bid]
+                            for vbid, item in pairs(all_items or {}) do
+                                if item.key == vanilla_key and not LA_BRIDGE.backend_to_armoury[vbid] then
+                                    slots[slot_name] = vbid
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        for career_name, slots in pairs(mod.loadout_cache) do
+            loadout[career_name] = loadout[career_name] or {}
+            for slot_name, backend_id in pairs(slots) do
+                loadout[career_name][slot_name] = backend_id
+            end
+        end
+        return loadout
+    end)
+
+    mod:hook(items_iface, "get_loadout_item_id", function(func, self, career_name, slot_name)
+        if mod.loadout_cache[career_name] and mod.loadout_cache[career_name][slot_name] then
+            return mod.loadout_cache[career_name][slot_name]
+        end
+        local raw = func(self, career_name, slot_name)
+        if raw and LA_BRIDGE.registered and LA_BRIDGE.backend_to_armoury[raw] then
+            local vanilla_key = LA_BRIDGE.backend_to_vanilla[raw]
+            if vanilla_key then
+                local all_items = items_iface:get_all_backend_items()
+                for bid, item in pairs(all_items or {}) do
+                    if item.key == vanilla_key and not LA_BRIDGE.backend_to_armoury[bid] then
+                        mod:info("[loadout] redirected server clone %s -> vanilla %s (%s)", raw, bid, vanilla_key)
+                        return bid
+                    end
+                end
+            end
+        end
+        return raw
+    end)
+
+    local function _fixup_server_clones()
+        local all_items = items_iface:get_all_backend_items()
+        if not all_items then return end
+        local raw_loadout = (function()
+            local save = mod.loadout_cache; mod.loadout_cache = {}
+            local l = items_iface:get_loadout(); mod.loadout_cache = save; return l
+        end)()
+        for career_name, slots in pairs(raw_loadout or {}) do
+            if type(slots) == "table" then
+                for slot_name, bid in pairs(slots) do
+                    if LA_BRIDGE.backend_to_armoury[bid] then
+                        local vanilla_key = LA_BRIDGE.backend_to_vanilla[bid]
+                        for vbid, item in pairs(all_items) do
+                            if item.key == vanilla_key and not LA_BRIDGE.backend_to_armoury[vbid] then
+                                mod:info("[loadout] fixup server: %s %s clone %s -> vanilla %s", career_name, slot_name, bid, vbid)
+                                local orig_hook = BackendUtils.set_loadout_item
+                                local iface = Managers.backend:get_loadout_interface_by_slot(slot_name)
+                                if iface then iface:set_loadout_item(vbid, career_name, slot_name) end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    _fixup_server_clones()
+end
+
+-- VMF calls mod.update once per frame.
+mod.update = function(dt)
+    if not _la_bridge_init_done then
+        if mod:get("la_bridge_enable")
+           and ItemMasterList
+           and get_mod("Loremasters-Armoury")
+           and get_mod("MoreItemsLibrary") then
+            LA_BRIDGE.register_all()
+            LA_BRIDGE.install_apply_gate()
+            _la_bridge_init_done = true
+        end
+    end
+    if _la_bridge_init_done then _install_skin_loadout_safety() end
+end
+
+-- Spawn pipeline: detect units that match one of our cloned items and push
+-- them into LA's queue. AttachmentUtils is a global table so we hook with
+-- table form (string form would never resolve).
+if rawget(_G, "AttachmentUtils") then
+    mod:hook_safe(AttachmentUtils, "link", function(world, source, target, node_linking)
+        if not LA_BRIDGE.registered then return end
+        if type(target) ~= "userdata" then return end
+        if not Unit.has_data(target, "unit_name") then return end
+        LA_BRIDGE.maybe_queue_unit(world, target, Unit.get_data(target, "unit_name"))
+    end)
+end
+
+-- LA hooks World.link_unit too — some hats are linked via the lower-level
+-- World API rather than AttachmentUtils. Cover both. World.link_unit signature:
+-- World.link_unit(world, child_unit, child_node, parent_unit, parent_node)
+if rawget(_G, "World") and World.link_unit then
+    mod:hook_safe(World, "link_unit", function(world, child_unit, child_node, parent_unit, parent_node)
+        if not LA_BRIDGE.registered then return end
+        if type(child_unit) ~= "userdata" then return end
+        if not Unit.alive(child_unit) then return end
+        if not Unit.has_data(child_unit, "unit_name") then return end
+        LA_BRIDGE.maybe_queue_unit(world, child_unit, Unit.get_data(child_unit, "unit_name"))
+    end)
+end
+
+local function _spawn_item_unit_la_hook(self, unit)
+    if not LA_BRIDGE.registered then return end
+    if type(unit) ~= "userdata" then return end
+
+    local world = self._world or self.world
+    local spawning = self._cos_la_spawning
+    mod:info("[LA preview] _spawn_item_unit spawning=%s world=%s", tostring(spawning), tostring(world))
+    if spawning then
+        local ok = LA_BRIDGE.queue_unit_direct(world, unit, spawning)
+        mod:info("[LA preview]   queue_unit_direct result=%s", tostring(ok))
+        return
+    end
+
+    if Unit.has_data(unit, "unit_name") then
+        LA_BRIDGE.maybe_queue_unit(world, unit, Unit.get_data(unit, "unit_name"))
+    else
+        LA_BRIDGE.suppress_orphan(unit)
+    end
+end
+
+mod:hook_safe("HeroPreviewer", "_spawn_item_unit", _spawn_item_unit_la_hook)
+mod:hook_safe("MenuWorldPreviewer", "_spawn_item_unit", _spawn_item_unit_la_hook)
+
+mod:command("la_dump", "List LA-bridge cloned items", function() LA_BRIDGE.debug_dump() end)
+
+mod:command("la_trace", "Toggle LA-bridge hook tracing (1/0)", function(arg)
+    LA_BRIDGE.trace = (arg == "1" or arg == "on" or arg == "true")
+    mod:echo("[la_bridge] trace = " .. tostring(LA_BRIDGE.trace))
+end)
+
+mod:command("la_force", "Force-apply LA variant to equipped hat. Usage: cos la_force <armoury_key>", function(armoury_key)
+    if not armoury_key then mod:echo("usage: cos la_force <armoury_key>"); return end
+    LA_BRIDGE.force_apply(armoury_key)
+end)
+
+mod:command("la_attach", "Dump player attachments (unit_name/skin_name/hand_unit per node)", function()
+    LA_BRIDGE.dump_player_attachments()
+end)
+
+mod:command("la_loadout", "Dump current loadout for diagnostic", function()
+    if not Managers.backend then mod:echo("no backend"); return end
+    local items_iface = Managers.backend:get_interface("items")
+    if not items_iface then mod:echo("no items iface"); return end
+
+    mod:echo("[la_loadout] gate_installed=%s bridge_active=%s registered=%s",
+        tostring(LA_BRIDGE._gate_installed), tostring(LA_BRIDGE._bridge_active), tostring(LA_BRIDGE.registered))
+    mod:echo("[la_loadout] loadout_cache entries: %d", (function()
+        local n = 0; for _ in pairs(mod.loadout_cache) do n = n + 1 end; return n end)())
+
+    local loadout = items_iface:get_loadout()
+    for career, slots in pairs(loadout or {}) do
+        if type(slots) == "table" and slots.slot_hat then
+            local hat_id = slots.slot_hat
+            local is_clone = LA_BRIDGE.backend_to_armoury[hat_id] ~= nil
+            mod:echo("  %s slot_hat = %s (clone=%s)", career, tostring(hat_id), tostring(is_clone))
+            if is_clone then
+                mod:echo("    -> armoury=%s vanilla=%s", tostring(LA_BRIDGE.backend_to_armoury[hat_id]), tostring(LA_BRIDGE.backend_to_vanilla[hat_id]))
+            end
+        end
+    end
+
+    local n_clones = 0
+    for _ in pairs(LA_BRIDGE.backend_to_armoury) do n_clones = n_clones + 1 end
+    mod:echo("[la_loadout] %d clones registered", n_clones)
+
+    local LA = get_mod("Loremasters-Armoury")
+    if LA then
+        local pq, aq, lq = 0, 0, 0
+        if LA.preview_queue then for _ in pairs(LA.preview_queue) do pq = pq + 1 end end
+        if LA.armory_preview_queue then for _ in pairs(LA.armory_preview_queue) do aq = aq + 1 end end
+        if LA.level_queue then for _ in pairs(LA.level_queue) do lq = lq + 1 end end
+        mod:echo("[la_loadout] LA queues: preview=%d armory=%d level=%d", pq, aq, lq)
+    end
+end)
+
+mod:command("la_hats", "List all hat items for the current career (vanilla vs clone)", function()
+    if not Managers.backend then mod:echo("no backend"); return end
+    local items_iface = Managers.backend:get_interface("items")
+    if not items_iface then mod:echo("no items iface"); return end
+
+    local career_name = _local_career_name()
+    mod:echo("[la_hats] career=%s", tostring(career_name))
+
+    local all_items = items_iface:get_all_backend_items()
+    if not all_items then mod:echo("[la_hats] no items"); return end
+
+    local equipped_hat_bid = nil
+    if items_iface.get_loadout_item_id then
+        equipped_hat_bid = items_iface:get_loadout_item_id(career_name, "slot_hat")
+    end
+
+    local n_vanilla, n_clone = 0, 0
+    for bid, item in pairs(all_items) do
+        local data = item.data or (ItemMasterList and rawget(ItemMasterList, item.key or bid))
+        if data and data.slot_type == "hat" then
+            local can = data.can_wield
+            local wieldable = false
+            if can then
+                for _, c in ipairs(can) do
+                    if c == career_name then wieldable = true; break end
+                end
+            end
+            if wieldable then
+                local is_clone = LA_BRIDGE.backend_to_armoury[bid] ~= nil
+                local rarity = item.rarity or (data and data.rarity) or "?"
+                local key = item.key or "?"
+                local eq = (bid == equipped_hat_bid) and " [EQUIPPED]" or ""
+                if is_clone then
+                    n_clone = n_clone + 1
+                    mod:echo("  CLONE  bid=%s rarity=%s ak=%s%s", bid, rarity, tostring(LA_BRIDGE.backend_to_armoury[bid]), eq)
+                else
+                    n_vanilla = n_vanilla + 1
+                    mod:echo("  VANILLA bid=%s key=%s rarity=%s%s", bid, key, rarity, eq)
+                end
+                mod:info("[la_hats] bid=%s key=%s rarity=%s clone=%s eq=%s", bid, key, rarity, tostring(is_clone), eq)
+            end
+        end
+    end
+    mod:echo("[la_hats] %d vanilla + %d clones for %s", n_vanilla, n_clone, tostring(career_name))
+
+    local cache_hat = mod.loadout_cache[career_name] and mod.loadout_cache[career_name]["slot_hat"]
+    mod:echo("[la_hats] cache slot_hat=%s (is_clone=%s)", tostring(cache_hat), tostring(cache_hat and LA_BRIDGE.backend_to_armoury[cache_hat] ~= nil))
+    mod:echo("[la_hats] gate_installed=%s", tostring(LA_BRIDGE._gate_installed))
+
+    local raw_bid = nil
+    if items_iface.get_loadout_item_id then
+        local save = mod.loadout_cache
+        mod.loadout_cache = {}
+        raw_bid = items_iface:get_loadout_item_id(career_name, "slot_hat")
+        mod.loadout_cache = save
+    end
+    mod:echo("[la_hats] raw server slot_hat=%s", tostring(raw_bid))
+
+    _flush_log()
 end)

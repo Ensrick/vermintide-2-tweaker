@@ -291,7 +291,9 @@ end
 
 ## Cross-Career Weapon Animation Status
 
-Tracks which weapons have been tested cross-career and what animation workarounds are in place. Every enabled cross-career weapon should appear here. **Untested** = unlockable but animations not verified in-game.
+**Moved to [WEAPON_CATALOG.md](WEAPON_CATALOG.md)** — comprehensive per-weapon reference with attack chains, animation events, cross-career status tables, and data collection gaps.
+
+The tables below are kept for historical reference but **WEAPON_CATALOG.md is the authoritative source**.
 
 Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Remap** = 3P remap table built | **Untested** = needs in-game verification
 
@@ -310,8 +312,8 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 | Halberd | `es_halberd` | Saltzpyre (Priest) | **Untested** | No redirect yet |
 | Billhook | `wh_2h_billhook` | Kruber (all) | **Redirect only** | `to_2h_billhook`→`to_polearm`. Untested |
 | Billhook | `wh_2h_billhook` | Saltzpyre (Priest) | **Redirect only** | `to_2h_billhook`→`to_1h_hammer`. Untested |
-| Elf Spear & Shield | `we_1h_spears_shield` | Kruber (all) | **Untested** | No redirect yet. Crashes hero previewer on non-elf |
-| Kruber Spear & Shield | `es_deus_01` | Kerillian (all) | **Untested** | No redirect yet |
+| Elf Spear & Shield | `we_1h_spears_shield` | Kruber (all) | **Redirect + Remap** | `to_1h_spear_shield`→`to_es_deus_01`. Crashes hero previewer on non-elf |
+| Kruber Spear & Shield | `es_deus_01` | Kerillian (all) | **OK — Redirect + Remap** | `to_es_deus_01`→`to_1h_spear_shield`. H2 works natively. v0.10.21 |
 
 ### Greatswords
 
@@ -320,9 +322,9 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 | Elf Greatsword | `we_2h_sword` | Kruber (all) | **Untested** | Elf uses different anims than es/wh. Redirect expected to work |
 | Elf Greatsword | `we_2h_sword` | Saltzpyre (WHC/BH/Zealot) | **Untested** | Same as above |
 | Kruber Greatsword | `es_2h_sword` | Saltzpyre (WHC/BH/Zealot) | **Untested** | es/wh share anims — may just work |
-| Kruber Greatsword | `es_2h_sword` | Kerillian (all) | **Untested** | Elf stance differs — needs redirect |
+| Kruber Greatsword | `es_2h_sword` | Kerillian (all) | **OK — Redirect + Remap** | `to_2h_sword`→`to_2h_sword_we`, template remap for diagonals + push. Grip `-0.085`. v0.10.16+ |
 | Saltzpyre Greatsword | `wh_2h_sword` | Kruber (all) | **Untested** | es/wh share anims — may just work |
-| Saltzpyre Greatsword | `wh_2h_sword` | Kerillian (all) | **Untested** | Elf stance differs — needs redirect |
+| Saltzpyre Greatsword | `wh_2h_sword` | Kerillian (all) | **OK — Redirect + Remap** | Same as es_2h_sword. v0.10.16+ |
 
 ### Greataxe / Greathammers
 
@@ -356,9 +358,12 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 
 | Weapon | Key | On Career(s) | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| Bardin Hammer | `dr_1h_hammer` | Kruber (all), Kerillian (all), Saltzpyre (all) | **Untested** | |
-| Kruber Mace | `es_1h_mace` | Bardin (all), Kerillian (all), Saltzpyre (all), Sienna (all) | **Untested** | |
-| Saltzpyre Hammer | `wh_1h_hammer` | Kruber (all), Bardin (all), Kerillian (all), Sienna (all) | **Untested** | |
+| Bardin Hammer | `dr_1h_hammer` | Kerillian (all) | **OK** — Redirect | `to_1h_hammer`→`to_1h_sword`. No attack remap needed. v0.10.10 |
+| Bardin Hammer | `dr_1h_hammer` | Kruber (all), Saltzpyre (all) | **Untested** | `to_1h_hammer` native on es/wh skeletons |
+| Kruber Mace | `es_1h_mace` | Kerillian (all) | **OK** — Redirect | Same `to_1h_hammer` redirect. Confirmed working v0.10.10 |
+| Kruber Mace | `es_1h_mace` | Bardin (all), Saltzpyre (all), Sienna (all) | **Untested** | Same `to_1h_hammer` wield_anim |
+| Saltzpyre Hammer | `wh_1h_hammer` | Kerillian (all) | **OK** — Redirect | Same `to_1h_hammer` redirect. Confirmed working v0.10.10 |
+| Saltzpyre Hammer | `wh_1h_hammer` | Kruber (all), Bardin (all), Sienna (all) | **Untested** | Same `to_1h_hammer` wield_anim |
 
 ### Falchion / Crowbill
 
@@ -487,6 +492,16 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 - **Cause:** Remap was targeting the wrong unit. `player_unit` (tagged "1P" in animlog) is actually the 3P body. The remap was running on `not is_local` (1P hands) instead of `is_local` (3P body). Also, remap values used `anim_event` names instead of `anim_event_3p` names.
 - **Fix:** Flip to `is_local` and use target weapon's `anim_event_3p` values. Use `wt dump_actions` to find correct values.
 
+### ItemMasterList crashify on unknown keys
+
+- **Cause:** `ItemMasterList` has a `__index` metamethod that calls `crashify` (engine crash reporter) for any key not in the table. Doing `ItemMasterList[key]` on a key from another source (e.g. `WeaponSkins.skins` which includes Loremaster's Armoury entries) triggers a crash exception.
+- **Fix:** Always use `rawget(ItemMasterList, key)` when the key might not exist. Same applies to `NetworkLookup.weapon_skins` and similar guarded tables.
+
+### VMF localization crash: `Invalid string format for string "..."`
+
+- **Cause:** VMF runs `string.format` on localization strings. A literal `%` followed by a non-format character (e.g. `"Horde Size (%)"`) is an invalid format specifier in Lua.
+- **Fix:** Escape percent signs as `%%` in localization strings: `"Horde Size (%%)"`.
+
 ### VMF setting slider shows `<x>` / localization failure
 
 - **Cause:** `unit_text = "x"` is treated as a localization key by VMF and fails lookup.
@@ -535,6 +550,152 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 
 - **Cause:** PowerShell 5.1 scoping -- variables defined outside a `foreach` loop can be clobbered or invisible inside it.
 - **Fix:** Refactor into a function (`Deploy-ToDir`) so variables are passed as parameters rather than relying on outer scope.
+
+## Cosmetics Tweaker — Weapon Model & Shield Swap System
+
+### Overview
+
+The `cosmetics_tweaker` mod (Workshop 3715714222, internal ID `cosmetics_tweaker`) handles visual-only weapon modifications: per-axis scaling, grip offsets, hat tinting, cosmetic unlocks, and shield model swaps. It is built with **VMB** (not the raw Stingray compiler used by the other mods).
+
+### Build & Deploy (different from other mods)
+
+```powershell
+# Build (from vermintide-2-tweaker/ root)
+Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
+node C:/Users/danjo/source/repos/vmb/vmb.js build cosmetics_tweaker --no-workshop --cwd
+
+# Deploy to Workshop folder
+$wsDir = "C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3715714222"
+$bundleV2 = "C:\Users\danjo\source\repos\vermintide-2-tweaker\cosmetics_tweaker\bundleV2"
+Get-ChildItem $bundleV2 -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $wsDir $_.Name) -Force }
+```
+
+Output goes to `cosmetics_tweaker/bundleV2/` (NOT `.build/OUT/`). The `deploy_all.ps1` script does NOT handle cosmetics_tweaker automatically — deploy manually as shown above.
+
+**Hot-reload crashes (Ctrl+Shift+R):** weapon_tweaker and cosmetics_tweaker are NOT safe to hot-reload. Both hook unit creation paths (`GearUtils.create_equipment`, `BackendUtils.get_item_units`), and cosmetics_tweaker bundles non-Lua resources (materials/textures). The Stingray engine holds C++-level locks on spawned unit and material resources that cannot be released from Lua — `Mod.release_resource_package` triggers `ensure_unlocked` and crashes. Attempted workarounds (hooking `ModManager.unload_mod`, clearing `loaded_packages` in `on_reload`) either failed to fire (VMF's mod object is not `mod.object` in ModManager) or caused worse cascading failures (wiping third-party atlas handles, increasing lock counts). **Always do a full game restart** after deploying weapon_tweaker or cosmetics_tweaker changes. chaos_wastes_tweaker, general_tweaker, and career_tweaker are Lua-only and may survive hot-reload, but a restart is safest.
+
+**`UIRenderer._injected_material_sets` poisoning:** Adding a custom material to `UIRenderer._injected_material_sets` is DANGEROUS. If the engine can't resolve the material path when `UIRenderer.create` runs, it silently poisons the **entire** Gui material loading pass — ALL materials (including VMF's `vmf_atlas` and other mods' atlases) fail to load on every UIRenderer created after that. Symptoms: VMF options crash with `Material 'vmf_atlas' not found in Gui`, NewsFeedUI crash with `armoury_atlas not found`, blank settings panel. The poisoning persists for the entire session. Do NOT inject materials into `_injected_material_sets` unless the resource package is confirmed loaded and the material is verified resolvable. Prefer per-renderer injection over global injection.
+
+### Shield & Weapon Unit Architecture
+
+VT2 shield weapons use **two independent units**:
+- **Right hand** (`right_unit_1p` / `right_unit_3p`): the weapon (sword, mace, axe, etc.)
+- **Left hand** (`left_unit_1p` / `left_unit_3p`): the shield
+
+They are spawned separately, attached to different skeleton nodes (`j_rightweaponattach` / `j_leftweaponattach`), and can be scaled, offset, or swapped independently.
+
+### Three Rendering Paths
+
+Any visual override must cover **all three** places weapon units are rendered:
+
+| Path | Hook Target | What It Renders | How Units Are Accessed |
+| :--- | :--- | :--- | :--- |
+| **In-game** (keep/mission) | `GearUtils.create_equipment` | Actual gameplay model | `result.left_unit_1p`, `result.right_unit_1p`, `result.left_unit_3p`, `result.right_unit_3p` — separate unit objects per hand |
+| **Inventory character preview** | `HeroPreviewer._spawn_item` | Full character in inventory screen | `self._equipment_units[slot_idx].left` / `.right` — separate unit objects per hand |
+| **Illusion/skin browser** | `LootItemUnitPreviewer.spawn_units` | Weapon close-up in skin selection UI | `self._spawned_units` array — left (shield) at index 1, right (weapon) at index 2. Spawn order matches `_load_item_units` which always appends left then right |
+
+Key differences:
+- `GearUtils` and `HeroPreviewer` provide explicit left/right separation
+- `LootItemUnitPreviewer` uses spawn order (left=1, right=2) — identified via `spawn_data` entries
+- The old `MenuWorldPreviewer._spawn_item_unit` hook is **NOT usable** for per-hand targeting — it fires once per unit with no hand indicator. Use `HeroPreviewer._spawn_item` instead (MenuWorldPreviewer extends HeroPreviewer)
+
+### Weapon Scale Overrides (`_weapon_scale_overrides`)
+
+```lua
+local _weapon_scale_overrides = {
+    es_bastard_sword = {
+        _default = _breton_sword_thiccc,  -- function(get) -> {x,y,z} or nil
+    },
+    es_sword_shield_breton = {
+        _default = _breton_sword_thiccc,
+        _fields = { "right_unit_1p", "right_unit_3p" },  -- only scale the sword, not the shield
+    },
+}
+```
+
+Each entry maps a weapon key to career-prefix overrides. Special keys:
+- `_default`: fallback when no career prefix matches
+- `_fields`: restricts which unit fields receive the scale (defaults to all four if omitted). Used to target only right-hand (weapon) or left-hand (shield) independently.
+
+Values can be:
+- A number (uniform scale)
+- A `{x, y, z}` table (per-axis scale)
+- A `function(get) -> number|{x,y,z}|nil` (dynamic, reads mod settings via `get`)
+
+### Shield Model Swaps (`_shield_swap_map` + `BackendUtils.get_item_units` hook)
+
+```lua
+local _shield_swap_map = {
+    es_mace_shield = {
+        setting_id = "es_mace_shield_gk_shield",
+        left_hand_unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03",
+    },
+}
+```
+
+The swap hooks `BackendUtils.get_item_units` to replace `left_hand_unit` in the returned table **before** the unit is spawned. This is the cleanest approach because:
+1. It runs before package loading — the game loads the correct package for the swapped unit
+2. It covers all three rendering paths automatically (they all call `BackendUtils.get_item_units`)
+3. No destroy/respawn complexity
+
+**Important:** Hook `BackendUtils` by table reference (`mod:hook(BackendUtils, "get_item_units", ...)`), NOT by string name (`mod:hook("BackendUtils", ...)`). Guard with a nil check since `BackendUtils` may not be loaded at mod init time on some code paths.
+
+### Available Shield Unit Paths
+
+| Shield | Unit Path (under `units/weapons/player/`) |
+| :--- | :--- |
+| Empire (Kruber default) | `wpn_empire_shield_01_t1/wpn_emp_shield_01_t1` |
+| Empire round (Deus) | `wpn_empire_shield_02/wpn_emp_shield_02` |
+| Bretonnian GK (base) | `wpn_emp_gk_shield_03/wpn_emp_gk_shield_03` |
+| Bretonnian GK (skin 01) | `wpn_emp_gk_shield_02/wpn_emp_gk_shield_02` |
+| Bretonnian GK (skin 04) | `wpn_emp_gk_shield_04/wpn_emp_gk_shield_04` |
+| Bretonnian GK (skin 05) | `wpn_emp_gk_shield_05/wpn_emp_gk_shield_05` |
+| Bardin | `wpn_dw_shield_01_t1/wpn_dw_shield_01` |
+| Kerillian | `wpn_we_shield_02/wpn_we_shield_02` |
+| Warrior Priest | `wpn_wh_shield_01/wpn_wh_shield_01_t1` |
+| Deus round | `wpn_es_deus_shield_02/wpn_es_deus_shield_02` |
+| Deus alt | `wpn_es_deus_shield_03/wpn_es_deus_shield_03` |
+
+Most also have `_runed_01`, `_runed_02`, and `_magic_01` variants. GK shields require the `lake` DLC package to be available.
+
+### Shield Weapons (all weapons with a left-hand shield)
+
+| Weapon Key | Character | Default Shield |
+| :--- | :--- | :--- |
+| `es_sword_shield` | Kruber | Empire |
+| `es_sword_shield_breton` | Kruber (GK) | Bretonnian GK |
+| `es_mace_shield` | Kruber | Empire |
+| `es_deus_01` | Kruber | Empire round |
+| `dr_shield_hammer` | Bardin | Bardin |
+| `dr_shield_axe` | Bardin | Bardin |
+| `we_1h_spears_shield` | Kerillian | Kerillian |
+| `wh_hammer_shield` | Saltzpyre (WP) | Warrior Priest |
+| `wh_flail_shield` | Saltzpyre (WP) | Warrior Priest |
+
+### Illusion Browser: Resolving Skin Keys
+
+When browsing illusions in `LootItemUnitPreviewer`, `self._item.data.key` is the **skin key** (e.g. `es_bastard_sword_skin_01`), not the weapon key. To find the weapon key for scale overrides, resolve via `ItemMasterList[skin_key].matching_item_key`.
+
+### Adding a New Shield Swap
+
+1. Add an entry to `_shield_swap_map` in `cosmetics_tweaker.lua`:
+   ```lua
+   es_sword_shield = {
+       setting_id = "es_sword_shield_gk_shield",
+       left_hand_unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03",
+   },
+   ```
+2. Add a checkbox widget in `cosmetics_tweaker_data.lua` under `weapon_model_group`
+3. Add localization entries (`<setting_id>` and `<setting_id>_tooltip`) in `cosmetics_tweaker_localization.lua`
+4. Build with VMB, deploy to Workshop folder, full game restart (no hot-reload)
+
+### Adding a New Weapon Scale Override
+
+1. Add an entry to `_weapon_scale_overrides` in `cosmetics_tweaker.lua`
+2. Use `_fields` if only one hand should be affected (e.g. sword but not shield)
+3. Use a function value if it should be toggle-gated by a mod setting
+4. Add the corresponding setting, widget, and localization entries
+5. Build, deploy, restart
 
 ## Useful Paths
 

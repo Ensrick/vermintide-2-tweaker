@@ -3,32 +3,32 @@ local mod = get_mod("crt")
 -- Shared option list for every talent-swap dropdown (all 20 careers + "none").
 -- Each option's text key is looked up in career_tweaker_localization.lua.
 local talent_swap_options = {
-    { text = "talent_source_none",              value = "none"              },
+    { text = "None (default)",                  value = "none"              },
     -- Bardin
-    { text = "cname_dr_ironbreaker",            value = "dr_ironbreaker"    },
-    { text = "cname_dr_slayer",                 value = "dr_slayer"         },
-    { text = "cname_dr_ranger",                 value = "dr_ranger"         },
-    { text = "cname_dr_engineer",               value = "dr_engineer"       },
+    { text = "Ironbreaker (Bardin)",            value = "dr_ironbreaker"    },
+    { text = "Slayer (Bardin)",                 value = "dr_slayer"         },
+    { text = "Ranger (Bardin)",                 value = "dr_ranger"         },
+    { text = "Engineer (Bardin)",               value = "dr_engineer"       },
     -- Markus
-    { text = "cname_es_huntsman",               value = "es_huntsman"       },
-    { text = "cname_es_knight",                 value = "es_knight"         },
-    { text = "cname_es_mercenary",              value = "es_mercenary"      },
-    { text = "cname_es_questingknight",         value = "es_questingknight" },
+    { text = "Huntsman (Markus)",               value = "es_huntsman"       },
+    { text = "Foot Knight (Markus)",            value = "es_knight"         },
+    { text = "Mercenary (Markus)",              value = "es_mercenary"      },
+    { text = "Grail Knight (Markus)",           value = "es_questingknight" },
     -- Kerillian
-    { text = "cname_we_shade",                  value = "we_shade"          },
-    { text = "cname_we_maidenguard",            value = "we_maidenguard"    },
-    { text = "cname_we_waywatcher",             value = "we_waywatcher"     },
-    { text = "cname_we_thornsister",            value = "we_thornsister"    },
+    { text = "Shade (Kerillian)",               value = "we_shade"          },
+    { text = "Handmaiden (Kerillian)",          value = "we_maidenguard"    },
+    { text = "Waystalker (Kerillian)",          value = "we_waywatcher"     },
+    { text = "Sister of the Thorn (Kerillian)", value = "we_thornsister"    },
     -- Victor
-    { text = "cname_wh_zealot",                 value = "wh_zealot"         },
-    { text = "cname_wh_bountyhunter",           value = "wh_bountyhunter"   },
-    { text = "cname_wh_captain",                value = "wh_captain"        },
-    { text = "cname_wh_priest",                 value = "wh_priest"         },
+    { text = "Zealot (Victor)",                 value = "wh_zealot"         },
+    { text = "Bounty Hunter (Victor)",          value = "wh_bountyhunter"   },
+    { text = "Witch Hunter Captain (Victor)",   value = "wh_captain"        },
+    { text = "Warrior Priest (Victor)",         value = "wh_priest"         },
     -- Sienna
-    { text = "cname_bw_scholar",                value = "bw_scholar"        },
-    { text = "cname_bw_adept",                  value = "bw_adept"          },
-    { text = "cname_bw_unchained",              value = "bw_unchained"      },
-    { text = "cname_bw_necromancer",            value = "bw_necromancer"    },
+    { text = "Battle Wizard (Sienna)",          value = "bw_scholar"        },
+    { text = "Pyromancer (Sienna)",             value = "bw_adept"          },
+    { text = "Unchained (Sienna)",              value = "bw_unchained"      },
+    { text = "Necromancer (Sienna)",            value = "bw_necromancer"    },
 }
 
 return {
@@ -37,20 +37,6 @@ return {
     is_togglable      = true,
     options = {
         widgets = {
-            {
-                setting_id = "allow_melee_in_ranged_slot",
-                type = "checkbox",
-                default_value = false,
-                title = "Allow Melee Weapons in Ranged Slots",
-                tooltip = "Allows all careers to equip any of their enabled melee weapons in the ranged slot, similar to Slayer and Grail Knight. Note: Using two melee weapons on a career not designed for it may disable their ability to deal with distant specials.",
-            },
-            {
-                setting_id = "enable_career_action_injection",
-                type = "checkbox",
-                default_value = true,
-                title = "Inject Career Actions on Unlocked Weapons",
-                tooltip = "Injects career ability actions into non-native weapon templates so the career ability button works. Requires weapon_tweaker to be loaded. Known issue: BH action_career input binding is not wired for non-native ranged weapons.",
-            },
             -- ============================================================
             -- Career Ability & Talent Swapping
             -- ============================================================
@@ -83,6 +69,17 @@ return {
                     { setting_id = "talent_swap_bw_adept",          type = "dropdown", default_value = "none", options = talent_swap_options },
                     { setting_id = "talent_swap_bw_unchained",      type = "dropdown", default_value = "none", options = talent_swap_options },
                     { setting_id = "talent_swap_bw_necromancer",    type = "dropdown", default_value = "none", options = talent_swap_options },
+                },
+            },
+            -- ============================================================
+            -- Talent Balance Changes
+            -- ============================================================
+            {
+                setting_id = "talent_balance_group",
+                type       = "group",
+                sub_widgets = {
+                    { setting_id = "balance_zealot_merc_allow_random_crits", type = "checkbox", default_value = false },
+                    { setting_id = "balance_whc_parry_extended_window", type = "checkbox", default_value = false },
                 },
             },
         },
