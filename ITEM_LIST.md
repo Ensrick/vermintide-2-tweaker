@@ -1,4 +1,10 @@
-﻿# Vermintide 2 Item Reference List
+﻿<!--
+REVIEW (2026-05-01): Static dump of ItemMasterList keys grouped by item_type. Generation date
+not noted in this file — recommend prepending a "Generated YYYY-MM-DD via /tweaker dump_items"
+header so future readers know how stale it is. dumps/README.txt is dated 2026-04-25; this file
+predates that (mtime Apr 21). Re-dump if it diverges from current ItemMasterList contents.
+-->
+# Vermintide 2 Item Reference List
 
 > [!NOTE]
 > This is a catalog of every item found in your ItemMasterList. It includes weapons, hats, skins, and more.

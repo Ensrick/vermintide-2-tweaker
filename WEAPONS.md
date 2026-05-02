@@ -1,3 +1,15 @@
+<!--
+REVIEW (2026-05-01): Reference content (career codes, native ownership, phantom events,
+cross-character compat matrix) is consistent with WEAPON_CATALOG.md and WORK_ITEMS.md. No
+build/upload references in this file.
+
+The "Known Working Cross-Character Combinations" table is a high-level summary that overlaps
+with WEAPON_CATALOG.md's status columns. Consider noting which is authoritative: WEAPON_CATALOG.md
+labels itself as "the authoritative source" (DEVELOPMENT.md confirms this).
+
+Suggest adding a one-line cross-reference at top: "See WEAPON_CATALOG.md for per-weapon attack
+chain detail and remap-table identity; this file is a high-level compatibility summary."
+-->
 # Weapon & Animation Compatibility Reference
 
 ## Character Models

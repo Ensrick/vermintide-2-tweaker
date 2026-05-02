@@ -2,6 +2,10 @@
 # itemV2.cfg currently has visibility = "private" — DO NOT change to "public" without explicit
 # user direction. A prior automated change to public got the mod flagged/removed-from-community,
 # which is irreversible.
+# REVIEW: Visibility=public abort guard at line ~19 is correct. Note: there are no equivalent
+# upload_*.ps1 scripts for general_tweaker, career_tweaker, cosmetics_tweaker, enemy_tweaker,
+# or character_weapon_variants. If created, each should follow this same pattern (abort on
+# unexpected visibility) since their intended visibility is also private.
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cfg  = Join-Path $root 'weapon_tweaker\itemV2.cfg'
 $tool = 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\ugc_uploader\ugc_tool.exe'

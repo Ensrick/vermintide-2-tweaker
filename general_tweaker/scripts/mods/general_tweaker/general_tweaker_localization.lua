@@ -10,7 +10,7 @@ return {
         en = "Enable Third-Person Camera",
     },
     tp_camera_enabled_tooltip = {
-        en = "Toggle third-person camera view. Can also be toggled in-game with the 't tp' chat command.",
+        en = "Toggle third-person camera view. Can also be toggled in-game with the 'gt tp' chat command.",
     },
     tp_distance = {
         en = "Camera Distance",

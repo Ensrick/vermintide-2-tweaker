@@ -1,3 +1,12 @@
+REVIEW (2026-05-01): This is the SDK-shipped generic readme — it's NOT specific to this repo.
+References to "streamable_resources/.build/OUT", `compile_streamable_resources.bat`, and the
+SDK `sample_item` upload staging are SDK boilerplate, not how this repo's active mods build.
+For repo-specific build/deploy instructions, see DEVELOPMENT.md and CLAUDE.md.
+
+Recommendation: rename this file to readme_sdk_reference.txt or move it to old-backup/ to
+prevent confusion with repo-level docs. Leaving it in place at root is harmless but
+unintentionally suggests it's a project README.
+
 Example mod, options_injector.mod in mod_data folder.
 
 Basic Setup

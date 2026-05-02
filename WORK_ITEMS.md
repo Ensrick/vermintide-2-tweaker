@@ -1,3 +1,21 @@
+<!--
+REVIEW (2026-05-01):
+- "Last updated: 2026-04-27" — predates the 2026-05-01 VMB migration. CHANGELOG.md and
+  per-mod CHANGELOG entries from 2026-04-29 to 2026-05-01 have not been reflected here.
+  Bump this to 2026-05-01 and audit:
+  - "weapon_tweaker (v0.9.57-dev)" — CHANGELOG.md root has v0.10.6-dev entries, so the
+    version sticker here is stale by ~1 minor.
+  - "general_tweaker (v0.2.8-dev)" — confirm current dev version.
+  - "chaos_wastes_tweaker (v0.2.1-dev)" — confirm.
+  - "career_tweaker (v0.1.0-dev)" — confirm.
+  Should the per-mod CHANGELOG.md (root + per-mod) be the authoritative version and this
+  file just track features w/o per-mod version badges? Otherwise these go stale silently.
+- Cosmetics_tweaker, enemy_tweaker, character_weapon_variants are entirely missing from
+  the "Confirmed Working" sections. The cosmetics_tweaker DLC unlock pipeline (v0.6.38, v0.7.0
+  per CHANGELOG) and the LA Bridge belong here.
+- Sample-check: "Cross-Character 3P Animation Status" content is consistent with
+  WEAPON_CATALOG.md.
+-->
 # Tweaker — Work Items
 
 Last updated: 2026-04-27

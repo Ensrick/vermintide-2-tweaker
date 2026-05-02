@@ -61,6 +61,8 @@ local function humanize_armoury_key(la_key)
 end
 
 -- Build vanilla unit-path -> ItemMasterList key index
+-- CLARIFY: pairs() iteration on ItemMasterList does NOT trigger __index, so
+-- this is safe (the crashify metamethod only fires on missing-key reads).
 local function build_unit_index()
     local idx = {}
     for key, entry in pairs(ItemMasterList) do
@@ -82,7 +84,10 @@ local function pick_vanilla_key(la_variant, unit_index)
 end
 
 local function build_clone_entry(vanilla_key, la_key, suffix_id, name_override)
-    local original = ItemMasterList[vanilla_key]
+    -- rawget: ItemMasterList __index crashifies on missing keys. vanilla_key
+    -- is normally validated by pick_vanilla_key, but using rawget here keeps
+    -- the function safe if a future caller forwards an unvalidated key.
+    local original = rawget(ItemMasterList, vanilla_key)
     if not original then return nil end
     local entry = table.clone(original)
 
@@ -127,15 +132,16 @@ M._la_offhand_resolution = {}
 -- vast majority of shields), `new_units[1]` is the vanilla mesh LA paints
 -- textures onto. For `kind="unit"` variants, `new_units[1]` is LA's own
 -- custom-authored mesh.
+-- DIAGNOSTIC PHASE (v0.7.92): re-enabled mesh swap to reproduce the crash
+-- under the World.spawn_unit trace. The previous "always nil" workaround
+-- silently sidestepped the bug instead of identifying it. With this and
+-- the [SPAWN_TRACE] hook in cosmetics_tweaker.lua active, the LAST
+-- spawn_unit log line before the assertion will be the unit name we
+-- couldn't decode from the hash.
 local function _resolve_intended_unit(la_key, variant, sorted_icons)
     if type(variant.new_units) == "table" and variant.new_units[1] then
         return variant.new_units[1], "new_units"
     end
-    -- Pure-texture variant (no new_units): don't override the mesh. LA's
-    -- diffuse will paint onto whichever shield the user's current illusion
-    -- spawns. Works fine for Bret variants (all GK-family shields), and
-    -- safer than guessing — the lex-first-icon heuristic produced visibly
-    -- wrong results in earlier versions.
     return nil, "no_override"
 end
 
@@ -454,6 +460,10 @@ end
 -- (shield) unit after it spawns. We DO NOT call LA's
 -- `apply_new_skin_from_texture` because that mutates global WeaponSkins
 -- and ItemMasterList icon fields. Local paint only.
+-- REVIEW: parameters `world` and `vanilla_skin` are unused — local paint
+-- only touches the unit's own materials. Could be dropped, but keeping for
+-- API parity with apply_direct() / queue_unit_direct() in case the call
+-- path ever needs to fall back to LA's queue system.
 function M.apply_offhand_to_unit(world, unit, armoury_key, vanilla_skin)
     if not armoury_key then return false end
     local LA = la()
@@ -564,6 +574,11 @@ function M.force_apply(armoury_key)
 
     if not found then mod:echo("[la_force] no unit matched; see log for full attachment dump"); return end
 
+    -- REVIEW: the surrounding code path goes through level_queue (not
+    -- apply_direct), so the apply gate's _bridge_active flag is bypassed.
+    -- For diagnostics that's fine. But this is the only place LA's queues
+    -- are still touched directly; if the gate were to be tightened to
+    -- block queue-based applies as well, this command would silently fail.
     local world = Managers.world:world("level_world")
     -- LA needs `skin` arg to identify which IML/WeaponSkins icon to swap; pass
     -- the vanilla key derived from the unit_name index.

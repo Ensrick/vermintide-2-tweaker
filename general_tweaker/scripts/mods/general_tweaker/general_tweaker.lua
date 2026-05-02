@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.10-dev"
+local MOD_VERSION = "0.2.11-dev"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -34,31 +34,68 @@ mod:echo("General Tweaker v" .. MOD_VERSION)
 local _tp_enabled = false
 local _tp_reapply_timer = nil
 
+-- Vanilla over_shoulder uses x=0.75, y=0.65, z=0 (camera_settings.lua:273-278).
+-- We override y (negative pulls camera back), z (height), and x (side offset).
+-- Zoom variants are scaled at fixed ratios from the main slider so the
+-- transition between unzoomed / zoom / increased_zoom remains perceptually
+-- consistent — full distance for the wide view, ~60% for zoom, ~40% for
+-- increased_zoom.
+local _camera_snapshots = nil
+
+local function _find_camera_node(tree, name)
+    if type(tree) ~= "table" then return nil end
+    if tree._node and tree._node.name == name then return tree._node end
+    for _, child in ipairs(tree) do
+        local found = _find_camera_node(child, name)
+        if found then return found end
+    end
+    return nil
+end
+
+-- Snapshot vanilla offsets before any mutation so on_disabled can restore.
+local function _snapshot_camera_offsets()
+    if _camera_snapshots or not CameraSettings or not CameraSettings.first_person then return end
+    _camera_snapshots = {}
+    for _, name in ipairs({ "over_shoulder", "zoom_in_third_person", "increased_zoom_in_third_person" }) do
+        local node = _find_camera_node(CameraSettings.first_person, name)
+        if node and node.offset_position then
+            _camera_snapshots[name] = {
+                x = node.offset_position.x,
+                y = node.offset_position.y,
+                z = node.offset_position.z,
+            }
+        end
+    end
+end
+
 local function _patch_camera_offset()
     if not CameraSettings or not CameraSettings.first_person then return end
-    local function find_node(tree, name)
-        if type(tree) ~= "table" then return nil end
-        if tree._node and tree._node.name == name then return tree._node end
-        for _, child in ipairs(tree) do
-            local found = find_node(child, name)
-            if found then return found end
+    _snapshot_camera_offsets()
+    local distance = mod:get("tp_distance") or 3.0
+    local height   = mod:get("tp_height")   or 1.0
+    local side     = mod:get("tp_side_offset") or 0.8
+    local function set_node(name, dist_mul, height_mul)
+        local node = _find_camera_node(CameraSettings.first_person, name)
+        if node and node.offset_position then
+            node.offset_position.x = side
+            node.offset_position.y = -distance * dist_mul
+            node.offset_position.z = height * height_mul
         end
-        return nil
     end
-    local node = find_node(CameraSettings.first_person, "over_shoulder")
-    if node and node.offset_position then
-        node.offset_position.y = -2.5
-        node.offset_position.z = 0.5
-    end
-    local zoom_node = find_node(CameraSettings.first_person, "zoom_in_third_person")
-    if zoom_node and zoom_node.offset_position then
-        zoom_node.offset_position.y = -1.5
-        zoom_node.offset_position.z = 0.3
-    end
-    local zoom2_node = find_node(CameraSettings.first_person, "increased_zoom_in_third_person")
-    if zoom2_node and zoom2_node.offset_position then
-        zoom2_node.offset_position.y = -1.0
-        zoom2_node.offset_position.z = 0.3
+    set_node("over_shoulder",                  1.00, 1.00)
+    set_node("zoom_in_third_person",           0.60, 0.60)
+    set_node("increased_zoom_in_third_person", 0.40, 0.60)
+end
+
+local function _restore_camera_offset()
+    if not _camera_snapshots or not CameraSettings or not CameraSettings.first_person then return end
+    for name, snap in pairs(_camera_snapshots) do
+        local node = _find_camera_node(CameraSettings.first_person, name)
+        if node and node.offset_position then
+            node.offset_position.x = snap.x
+            node.offset_position.y = snap.y
+            node.offset_position.z = snap.z
+        end
     end
 end
 
@@ -87,6 +124,10 @@ mod:hook("PlayerUnitFirstPerson", "set_first_person_mode", function(func, self, 
     return func(self, active, override, unarmed)
 end)
 
+-- CLARIFY: On player spawn we temporarily flip OFF tp (clear third_person_mode,
+-- force 1P) so the FP system can finish initialization, then re-enable tp 30
+-- ticks later via the timer below. Without this defer, set_first_person_mode
+-- can run before extensions are wired up and leave the camera in a half-state.
 mod:hook("PlayerUnitFirstPerson", "extensions_ready", function(func, self, world, unit, ...)
     local result = func(self, world, unit, ...)
     if mod:get("tp_camera_enabled") then
@@ -95,14 +136,18 @@ mod:hook("PlayerUnitFirstPerson", "extensions_ready", function(func, self, world
             Development._hardcoded_dev_params.third_person_mode = nil
         end
         pcall(self.set_first_person_mode, self, true, true)
-        _tp_reapply_timer = 30
+        _tp_reapply_timer = 0.5
     end
     return result
 end)
 
+-- _tp_reapply_timer is a time-based countdown (seconds). The 0.5s delay lets
+-- PlayerUnitFirstPerson finish its post-extension setup before we flip the
+-- third_person_mode flag again — flipping too early leaves the camera in a
+-- half-initialised state.
 mod.update = function(dt)
     if _tp_reapply_timer then
-        _tp_reapply_timer = _tp_reapply_timer - 1
+        _tp_reapply_timer = _tp_reapply_timer - (dt or 0)
         if _tp_reapply_timer <= 0 then
             _tp_reapply_timer = nil
             _apply_tp(true)
@@ -110,6 +155,11 @@ mod.update = function(dt)
     end
 end
 
+-- REVIEW: redundant `_apply_tp` call. `mod:set(...)` triggers
+-- `on_setting_changed` (defined below), which already calls
+-- `_apply_tp(mod:get("tp_camera_enabled"))`. So the explicit call here causes
+-- _apply_tp to run twice with the same value. Pick one path; the
+-- on_setting_changed path is sufficient.
 mod:command("tp", "Toggle third-person camera", function()
     local new_val = not mod:get("tp_camera_enabled")
     mod:set("tp_camera_enabled", new_val)
@@ -124,19 +174,83 @@ end)
 -- only lists inn/inn_deus/inn_vs. Patch it to include adventure
 -- (and survival/deus for good measure) so the hero view initializes
 -- its loadout panel during missions.
+--
+-- The full unlock requires TWO patches:
+--   (1) InventorySettings.inventory_loadout_access_supported_game_modes — without this,
+--       hero_view.lua:323 early-returns on adventure/deus and the loadout panel never inits.
+--   (2) menu_layouts.in_game.{alone,host,client} — without this, the in-mission ESC menu has
+--       only Return/Options/Leave/Quit; no button to actually open the inventory exists.
+-- The legacy memory entry blamed `game_mode:menu_access_allowed_in_state()` in ingame_ui.lua,
+-- but that method only exists on GameModeVersus and doesn't gate adventure/deus.
+local _INVENTORY_BUTTON_ENTRY = {
+    display_name = "interact_open_inventory_chest",
+    fade = true,
+    requires_player_unit = true,
+    transition = "hero_view_force",
+    transition_state = "overview",
+}
+
+local function _get_in_game_layouts()
+    -- ingame_view_menu_layout is local_require'd, so its return table lives in
+    -- package.loaded. Mutating that shared table affects the layouts seen by
+    -- subsequently-created IngameView instances.
+    local pkg = package and package.loaded
+    local defs = pkg and pkg["scripts/ui/views/ingame_view_menu_layout"]
+    return defs and defs.menu_layouts and defs.menu_layouts.in_game
+end
+
+local function _has_inventory_entry(layout)
+    if type(layout) ~= "table" then return false end
+    for _, entry in ipairs(layout) do
+        if entry and entry.display_name == _INVENTORY_BUTTON_ENTRY.display_name then
+            return true
+        end
+    end
+    return false
+end
+
+local function _patch_in_game_menu(enabled)
+    local in_game = _get_in_game_layouts()
+    if not in_game then return end
+    for _, key in ipairs({ "alone", "host", "client" }) do
+        local layout = in_game[key]
+        if type(layout) == "table" then
+            local has = _has_inventory_entry(layout)
+            if enabled and not has then
+                -- Insert just before "options_menu_button_name" (slot 2 in vanilla in_game
+                -- layouts) so the order matches the lobby layout: Return, Inventory, Options...
+                table.insert(layout, 2, table.clone(_INVENTORY_BUTTON_ENTRY))
+            elseif (not enabled) and has then
+                for i = #layout, 1, -1 do
+                    if layout[i] and layout[i].display_name == _INVENTORY_BUTTON_ENTRY.display_name then
+                        table.remove(layout, i)
+                    end
+                end
+            end
+        end
+    end
+end
 
 local function _patch_inventory_access()
-    if not InventorySettings then return end
-    local modes = InventorySettings.inventory_loadout_access_supported_game_modes
-    if not modes then return end
-    local enabled = mod:get("mission_inventory_enabled")
-    modes.adventure = enabled or nil
-    modes.survival = enabled or nil
-    modes.deus = enabled or nil
+    local enabled = mod:get("mission_inventory_enabled") and true or false
+    if InventorySettings then
+        local modes = InventorySettings.inventory_loadout_access_supported_game_modes
+        if modes then
+            modes.adventure = enabled or nil
+            modes.survival  = enabled or nil
+            modes.deus      = enabled or nil
+        end
+    end
+    _patch_in_game_menu(enabled)
 end
 
 _patch_inventory_access()
 
+-- CLARIFY: tp is forcibly cleared on every state change (level transition,
+-- etc.) because the engine reinitializes the FP system. The
+-- PlayerUnitFirstPerson.extensions_ready hook above will re-arm tp on the
+-- next player spawn if tp_camera_enabled is on. _patch_inventory_access is
+-- re-applied here in case InventorySettings was reloaded.
 mod.on_game_state_changed = function(status, state_name)
     _tp_enabled = false
     if Development._hardcoded_dev_params then
@@ -152,7 +266,13 @@ mod.on_setting_changed = function(setting_id)
         _apply_tp(mod:get("tp_camera_enabled"))
     elseif setting_id == "godmode_enabled" then
         _godmode = mod:get("godmode_enabled") or false
+    elseif setting_id == "tp_distance" or setting_id == "tp_height" or setting_id == "tp_side_offset" then
+        _patch_camera_offset()
     end
+end
+
+mod.on_disabled = function()
+    _restore_camera_offset()
 end
 
 -- ============================================================
@@ -257,6 +377,9 @@ mod:command("dump_cosmetics", "Dump all hats, skins, and frames from ItemMasterL
                 careers = table.concat(wield, ", ")
             end
             if not filter or key:find(filter, 1, true) or careers:find(filter, 1, true) then
+                -- REVIEW: `icon` is captured but never written to output (the
+                -- inner formatter below only uses key + careers). Remove this
+                -- field or include it in the dump line.
                 slot_types[st][#slot_types[st] + 1] = {
                     key = key,
                     careers = careers,
@@ -329,16 +452,26 @@ mod:command("god", "Toggle godmode (invincibility)", function()
     mod:echo("Godmode " .. (_godmode and "ON" or "OFF"))
 end)
 
+-- Both DamageUtils paths must be blocked for full invincibility:
+--   * add_damage_network         — used by direct damage sources (most attacks)
+--   * add_damage_network_player  — used by player-vs-player damage profiles
+--                                  (area effects, certain weapon profiles)
+-- Both are static functions (called with `.`), so the hook signatures
+-- intentionally omit `self`.
+local function _is_local_player_unit(unit)
+    local pm = Managers.player
+    local player = pm and pm:local_player()
+    return player and player.player_unit == unit
+end
+
 mod:hook("DamageUtils", "add_damage_network", function(func, attacked_unit, ...)
-    if _godmode then
-        local pm = Managers.player
-        local player = pm and pm:local_player()
-        local local_unit = player and player.player_unit
-        if local_unit and attacked_unit == local_unit then
-            return 0
-        end
-    end
+    if _godmode and _is_local_player_unit(attacked_unit) then return 0 end
     return func(attacked_unit, ...)
+end)
+
+mod:hook("DamageUtils", "add_damage_network_player", function(func, damage_profile, target_index, power_level, attacked_unit, ...)
+    if _godmode and _is_local_player_unit(attacked_unit) then return 0 end
+    return func(damage_profile, target_index, power_level, attacked_unit, ...)
 end)
 
 -- ============================================================
@@ -369,6 +502,8 @@ mod:hook("ProfileSynchronizer", "try_reserve_profile_for_peer", function(func, s
     return false
 end)
 
+-- CLARIFY: `is_free_in_lobby` is a STATIC function (no `self` arg — see
+-- profile_synchronizer.lua:860). Hook signature intentionally omits self.
 mod:hook("ProfileSynchronizer", "is_free_in_lobby", function(func, profile_index, lobby_data, optional_party_id)
     if mod:get("allow_duplicate_careers") then return true end
     return func(profile_index, lobby_data, optional_party_id)

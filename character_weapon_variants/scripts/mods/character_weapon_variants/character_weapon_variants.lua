@@ -1,6 +1,6 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.54-dev"
+local MOD_VERSION = "0.1.66-dev"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 
@@ -12,6 +12,11 @@ mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- cosmetics_tweaker) read this to expand cosmetic targeting beyond a
 -- single character.
 
+-- CLARIFY: Public API consumed by cosmetics_tweaker (CHANGELOG v0.1.45).
+-- Contract: mod.weapon_analogues : { [vanilla_item_key:string] = { vanilla_item_key:string, ... } }
+-- Returned arrays should NOT include the input key itself.
+-- mod.get_analogues(key) returns a freshly-allocated empty table on miss; callers
+-- must not mutate the returned table (it may be the live mod.weapon_analogues entry).
 mod.weapon_analogues = {
 	es_2h_sword = { "wh_2h_sword" },
 	wh_2h_sword = { "es_2h_sword" },
@@ -99,14 +104,24 @@ local _variant_definitions = {
 		description     = "An imperial longsword — lighter and faster than the Bretonnian variety.",
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
+		-- QUESTION: model is from two_handed_swords_template_1 (Kruber greatsword) but
+		-- this entry uses imperial_longsword_template (cloned from bastard_sword_template).
+		-- Mismatched model+moveset is intentional per CHANGELOG v0.1.25, but worth
+		-- documenting in DEVELOPMENT.md.
 		right_hand_unit = "units/weapons/player/wpn_empire_2h_sword_04_t1/wpn_2h_sword_04_t1",
 		inventory_icon  = "icon_wpn_empire_2h_sword_04_t1",
 		hud_icon        = "weapon_generic_icon_sword",
 		skin_display_name = "Recruit Longsword",
 		rarity          = "default",
+		-- CLARIFY: power_level = 5 is intentional (a "blacksmith template" item per
+		-- CHANGELOG v0.1.25), not a typo for 300. Properties roll on power_level.
 		power_level     = 5,
 		template        = "imperial_longsword_template",
 		item_type       = "cwv_imperial_longsword",
+		-- REVIEW: identity scale {1,1,1} is a no-op. CHANGELOG v0.1.25 lists
+		-- {1.0, 1.0, 1.15} (Z+15%); current value implies the scale was reverted
+		-- but the field kept. Either restore the v0.1.25 value or drop the field
+		-- (and the corresponding _transform_map entry) to avoid confusion.
 		right_hand_scale = { 1.0, 1.0, 1.0 },
 	},
 	{
@@ -123,7 +138,49 @@ local _variant_definitions = {
 		rarity          = "unique",
 		template        = "imperial_longsword_template",
 		item_type       = "cwv_imperial_longsword",
+		-- REVIEW: identity scale {1,1,1}. CHANGELOG v0.1.25 listed {0.65, 1.0, 0.85}
+		-- (X 0.65 + Z -15% to "thin" the greatsword). Same status as Recruit above —
+		-- either restore or drop to keep code in sync with documented intent.
 		right_hand_scale = { 1.0, 1.0, 1.0 },
+	},
+	{
+		-- Kruber javelin variant: uses we_javelin's throwing moveset (template,
+		-- slot_type=ranged, item_type=we_javelin) but swaps the held model to
+		-- the Tuskgor Spear (wpn_emp_boar_spear_01). Javelin model lives on
+		-- left_hand_unit (right_hand_unit is invisible during the wield pose);
+		-- placing the spear on left_hand_unit matches that attachment so the
+		-- throw animation drives the visible model.
+		-- Stat-modifying clone via `tuskgor_javelin_template` (defined below):
+		--   * 15-shot finite stack — vanilla auto-catch reload disabled
+		--   * Vanilla ammo pickups refill (block_ammo_pickup=false,
+		--     unique_ammo_type=false)
+		--   * 2x damage on melee stabs and the throw projectile
+		--   * 0.5x speed (slower wind-up + slower throw recovery)
+		--
+		-- Known caveats:
+		--   * Thrown projectile is still the slim javelin model
+		--     (Projectiles.javelin) — the held model is the boar spear, but
+		--     mid-air it shows as a javelin. Fixing requires cloning the
+		--     projectile config + a custom prj_*_3ps unit; the boar spear
+		--     package doesn't ship a projectile variant.
+		--   * Kruber's skeleton may lack elf throw events (attack_throw,
+		--     throw_charge). If anims are missing in 3P, add remaps in
+		--     weapon_tweaker (_career_anim_redirect / _suffix_career_map).
+		item_key        = "cwv_es_javelin",
+		base_weapon     = "we_javelin",
+		display_name    = "Tuskgor Javelin",
+		description     = "A heavy boar-spear, balanced for the throw. Hits like a kicking mule but takes both hands to wind up — and the supply runs out.",
+		character       = "empire_soldier",
+		careers         = _es_all_careers,
+		right_hand_unit = "units/weapons/player/wpn_invisible_weapon",
+		left_hand_unit  = "units/weapons/player/wpn_emp_boar_spear_01/wpn_emp_boar_spear_01",
+		inventory_icon  = "icon_emp_boar_spear_01",
+		hud_icon        = "weapon_generic_icon_falken",
+		skin_display_name = "Tuskgor Javelin",
+		rarity          = "exotic",
+		template        = "tuskgor_javelin_template",
+		traits          = { "ranged_replenish_ammo_headshot" },
+		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 	},
 	{
 		item_key        = "cwv_es_longsword_helmgart",
@@ -139,8 +196,70 @@ local _variant_definitions = {
 		rarity          = "exotic",
 		template        = "imperial_longsword_template",
 		item_type       = "cwv_imperial_longsword",
+		-- skin_only = true means this entry is registered for skin/illusion purposes
+		-- only — it never gets handed to the player as a real inventory item via
+		-- _auto_register_all (skipped at line 830). It still produces a custom skin
+		-- entry in _register_variant_skins (which checks def.no_skin, not skin_only).
 		skin_only       = true,
+		-- REVIEW: identity scale (see notes on the other longsword entries).
 		right_hand_scale = { 1.0, 1.0, 1.0 },
+	},
+	{
+		item_key        = "cwv_dr_priest_greathammer",
+		base_weapon     = "wh_2h_hammer",
+		display_name    = "Sigmarite Greathammer",
+		description     = "A Sigmarite warrior-priest's greathammer in the form of a familiar dwarf two-hander. Charge it up and bring Sigmar's wrath crashing down.",
+		character       = "dwarf_ranger",
+		careers         = { "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer" },
+		right_hand_unit = "units/weapons/player/wpn_dw_2h_hammer_01_t1/wpn_dw_2h_hammer_01_t1",
+		inventory_icon  = "icon_wpn_dw_2h_hammer_01_t1",
+		hud_icon        = "weapon_generic_icon_hammer2h",
+		skin_display_name = "Sigmarite Greathammer",
+		rarity          = "exotic",
+		traits          = { "melee_attack_speed_on_crit" },
+		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
+		-- TODO(anim): cloned moveset = two_handed_hammer_priest_template, authored
+		-- for Saltzpyre's skeleton. Dwarf 3P/1P anim event coverage NOT yet
+		-- verified or remapped — see CHANGELOG 0.1.61 known issues.
+	},
+	{
+		item_key        = "cwv_es_priest_greathammer",
+		base_weapon     = "wh_2h_hammer",
+		display_name    = "Sigmarite Greathammer",
+		description     = "A Sigmarite warrior-priest's greathammer in the form of a familiar Reikland two-hander. Charge it up and bring Sigmar's wrath crashing down.",
+		character       = "empire_soldier",
+		careers         = _es_all_careers,
+		right_hand_unit = "units/weapons/player/wpn_empire_2h_hammer_01_t1/wpn_2h_hammer_01_t1",
+		inventory_icon  = "icon_wpn_empire_2h_hammer_01_t1",
+		hud_icon        = "weapon_generic_icon_hammer2h",
+		skin_display_name = "Sigmarite Greathammer",
+		rarity          = "exotic",
+		traits          = { "melee_attack_speed_on_crit" },
+		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
+		-- TODO(anim): cloned moveset = two_handed_hammer_priest_template, authored
+		-- for Saltzpyre's skeleton. Saltzpyre and Kruber are both empire-human
+		-- skeletons so most events likely overlap, but coverage NOT yet verified
+		-- — see CHANGELOG 0.1.61 known issues.
+	},
+	{
+		item_key        = "cwv_es_dual_swords",
+		base_weapon     = "we_dual_wield_swords",
+		display_name    = "Imperial Dual Swords",
+		description     = "Two Reikland arming swords wielded in tandem. Heavier and slower than the elven dance, but each blow lands with imperial weight.",
+		character       = "empire_soldier",
+		careers         = _es_all_careers,
+		right_hand_unit = "units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1",
+		left_hand_unit  = "units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1",
+		inventory_icon  = "icon_wpn_emp_sword_02_t1",
+		hud_icon        = "weapon_generic_icon_dual_elf_sword",
+		skin_display_name = "Imperial Dual Swords",
+		rarity          = "exotic",
+		template        = "imperial_dual_swords_template",
+		traits          = { "melee_attack_speed_on_crit" },
+		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
+		-- Y axis -20% (sword models 20% slimmer along depth).
+		right_hand_scale = { 1.0, 0.80, 1.0 },
+		left_hand_scale  = { 1.0, 0.80, 1.0 },
 	},
 }
 
@@ -154,6 +273,15 @@ local _IL_SPEED_MULT   = 1.15
 local _IL_CLEAVE_MULT  = 1.15
 local _IL_STAGGER_MULT = 0.85
 
+-- CLARIFY: Damage-profile clone. Each cwv template clone calls this once per
+-- sub-action's damage_profile string; the function is idempotent (early-return
+-- on existing clone) so the same source profile shared across multiple
+-- sub-actions is cloned only once.
+-- Prefix-collision risk: prefixes are tied to the specific multiplier set
+-- ("cwv_il_" = imperial longsword, "cwv_ess_" = elven sword+shield). DO NOT
+-- reuse a prefix with different `mults` — the second caller will reuse the
+-- first caller's already-mutated PowerLevelTemplates entry and silently inherit
+-- the wrong multipliers.
 local function _clone_damage_profile(source_name, prefix, mults)
 	if not DamageProfileTemplates then return source_name end
 	local source = DamageProfileTemplates[source_name]
@@ -255,8 +383,18 @@ local function _create_imperial_longsword_template()
 	end
 	if Weapons.imperial_longsword_template then return end
 
+	-- CLARIFY: table.clone(t, true) is recursive (deep clone) per
+	-- foundation/scripts/util/table.lua — it walks every nested table value.
+	-- skip_metatable=true is required because Weapon templates contain functions
+	-- (anim_end_event_condition_func) which would otherwise trip the metatable
+	-- assertion. Sub-tables (action_one.default.allowed_chain_actions, buff_data,
+	-- weapon_sway_settings, etc.) are all freshly-allocated copies, so mutating
+	-- this clone is safe for the original bastard_sword_template.
 	local template = table.clone(Weapons.bastard_sword_template, true)
 
+	-- CLARIFY: Two-level loop is sufficient. anim_time_scale and damage_profile
+	-- live at the sub-action level (template.actions.action_one.default.*), not
+	-- in deeper structures like allowed_chain_actions.
 	if template.actions then
 		for _, action_group in pairs(template.actions) do
 			if type(action_group) == "table" then
@@ -340,6 +478,12 @@ local function _create_elven_sword_shield_template()
 
 	Weapons.elven_sword_shield_template = template
 
+	-- CLARIFY: Per memory note feedback_cwv_previewer_template_lookup.md, the
+	-- inventory previewer resolves item templates via item_data.name (= base
+	-- weapon key for cwv items), so it reads one_handed_sword_shield_template_1
+	-- NOT our elven_sword_shield_template. Patch the BASE template's
+	-- wield_anim_career_3p so the menu preview pose is correct for elf careers.
+	-- Scoped to elf careers only — Kruber/etc. fall through to original behavior.
 	local elf_wield_3p = {
 		we_waywatcher  = "to_1h_spear_shield",
 		we_maidenguard = "to_1h_spear_shield",
@@ -353,12 +497,267 @@ local function _create_elven_sword_shield_template()
 			base.wield_anim_career_3p[k] = v
 		end
 	end
+	-- QUESTION: Attack-event remaps from _ess_anim_remap are only applied to the
+	-- cloned template. The previewer reads the BASE template (see comment above),
+	-- so previewer attack animations would NOT pick up the remap. Currently this
+	-- is fine because the previewer doesn't fire attack events — only the
+	-- wield_anim. If that changes, the attack remaps must also be patched onto
+	-- the base template (probably via career_anim_event tables).
 
 	mod:info("Created elven_sword_shield_template (spd=%.0f%% stagger=%.0f%%, %d 3p anim remaps, wield_3p=to_1h_spear_shield) + patched base template career_3p table for elf careers",
 		_ESS_SPEED_MULT * 100, _ESS_STAGGER_MULT * 100, 5)
 end
 
 _create_elven_sword_shield_template()
+
+-- ============================================================
+-- Imperial Dual Swords template (modified dual_wield_swords_template_1)
+-- -20% speed, +10% damage, +10% stagger
+-- 3P anim redirect to Kruber's dual_wield_hammer_sword_template
+-- ============================================================
+
+local _IDS_SPEED_MULT   = 0.80
+local _IDS_DAMAGE_MULT  = 1.10
+local _IDS_STAGGER_MULT = 1.10
+
+-- Elf dual-swords events that have no 1:1 counterpart on Kruber's
+-- dual_wield_hammer_sword_template — remap to the closest Kruber mace+sword
+-- equivalent so 3P plays a valid empire-skeleton anim. Same-named events
+-- (attack_swing_left, attack_swing_right, attack_swing_left_diagonal, etc.)
+-- need no remap because Kruber's mace+sword template uses those same names
+-- and they're already authored on the empire-soldier skeleton.
+local _ids_anim_remap = {
+	attack_swing_charge_diagonal = "attack_swing_charge_left",
+	attack_swing_heavy_right     = "attack_swing_heavy_right_diagonal",
+	push_stab                    = "attack_push",
+}
+
+local function _create_imperial_dual_swords_template()
+	if not Weapons or not Weapons.dual_wield_swords_template_1 then
+		mod:warning("dual_wield_swords_template_1 not found — Imperial Dual Swords stat modifications unavailable")
+		return
+	end
+	if Weapons.imperial_dual_swords_template then return end
+
+	local template = table.clone(Weapons.dual_wield_swords_template_1, true)
+
+	if template.actions then
+		for _, action_group in pairs(template.actions) do
+			if type(action_group) == "table" then
+				for _, sub_action in pairs(action_group) do
+					if type(sub_action) == "table" then
+						if sub_action.anim_time_scale then
+							sub_action.anim_time_scale = sub_action.anim_time_scale * _IDS_SPEED_MULT
+						end
+						if sub_action.damage_profile then
+							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_eds_", {
+								damage = _IDS_DAMAGE_MULT, stagger = _IDS_STAGGER_MULT,
+							})
+						end
+						if sub_action.anim_event and _ids_anim_remap[sub_action.anim_event] then
+							sub_action.anim_event_3p = _ids_anim_remap[sub_action.anim_event]
+						end
+					end
+				end
+			end
+		end
+	end
+
+	template.wield_anim_3p = "to_dual_hammer_sword_es"
+	template.wield_anim_career_3p = {
+		es_mercenary      = "to_dual_hammer_sword_es",
+		es_huntsman       = "to_dual_hammer_sword_es",
+		es_knight         = "to_dual_hammer_sword_es",
+		es_questingknight = "to_dual_hammer_sword_es",
+	}
+
+	Weapons.imperial_dual_swords_template = template
+
+	-- Same patch pattern as _create_elven_sword_shield_template: the inventory
+	-- previewer reads the BASE template (dual_wield_swords_template_1), not our
+	-- clone, so patch the base template's wield_anim_career_3p for Kruber careers
+	-- to keep the menu preview pose correct. Scoped to es_* only — elf careers
+	-- fall through to the original wield anim.
+	local kruber_wield_3p = {
+		es_mercenary      = "to_dual_hammer_sword_es",
+		es_huntsman       = "to_dual_hammer_sword_es",
+		es_knight         = "to_dual_hammer_sword_es",
+		es_questingknight = "to_dual_hammer_sword_es",
+	}
+	local base = Weapons.dual_wield_swords_template_1
+	if base then
+		base.wield_anim_career_3p = base.wield_anim_career_3p or {}
+		for k, v in pairs(kruber_wield_3p) do
+			base.wield_anim_career_3p[k] = v
+		end
+	end
+
+	mod:info("Created imperial_dual_swords_template (dmg=%.0f%% spd=%.0f%% stagger=%.0f%%, 3p anim redirect to mace+sword, wield_3p=to_dual_hammer_sword_es)",
+		_IDS_DAMAGE_MULT * 100, _IDS_SPEED_MULT * 100, _IDS_STAGGER_MULT * 100)
+end
+
+_create_imperial_dual_swords_template()
+
+-- ============================================================
+-- Tuskgor Javelin template (modified javelin_template)
+-- 15 max ammo, no auto-catch reload, ammo pickups refill, 2x damage, 0.5x speed
+-- ============================================================
+--
+-- Differs from the longsword/sword+shield clones in two important ways:
+--
+-- 1. Ammo system: vanilla javelin uses `unique_ammo_type=true` + a custom
+--    auto-replenish action (`weapon_reload.default` with `kind="catch"`) that
+--    magically refills the player's javelin stack to max whenever they're
+--    below it. We override `condition_func`/`chain_condition_func` to always
+--    return false, which keeps the action defined for state-machine/network
+--    purposes but prevents it from ever firing — turning the weapon into a
+--    finite-stack thrown weapon. Combined with `block_ammo_pickup=false` and
+--    `unique_ammo_type=false`, vanilla ammo crates refill it like any other
+--    Kruber ranged weapon (handgun/blunderbuss/longbow style).
+--
+-- 2. Damage profile shape: the throw projectile uses `thrown_javelin`, which
+--    is an INLINE damage profile (`default_target.power_distribution_near.attack`
+--    is a literal number) — NOT the PowerLevelTemplates string-key indirection
+--    used by melee weapons. The shared `_clone_damage_profile` helper assumes
+--    the string-key shape, so we use a dedicated `_clone_inline_throw_profile`
+--    for the throw and reuse `_clone_damage_profile` for the melee stab
+--    sub-actions (which DO use the string-key shape).
+--
+-- The "half speed" axis multiplies `total_time` and `minimum_hold_time` on
+-- `kind="thrown_projectile"` sub-actions, plus `attack_meta_data.minimum_charge_time`
+-- (the wind-up). Most javelin sub-actions don't carry `anim_time_scale`, so
+-- the longsword-style anim_time_scale multiplication is mostly a no-op here —
+-- timing fields are the actual lever.
+
+local _TJ_DAMAGE_MULT = 2.0
+local _TJ_SPEED_MULT  = 0.5  -- half speed = 2x duration
+local _TJ_MAX_AMMO    = 15
+
+local function _clone_inline_throw_profile(source_name, prefix, damage_mult)
+	if not DamageProfileTemplates then return source_name end
+	local source = DamageProfileTemplates[source_name]
+	if not source then return source_name end
+
+	local new_name = prefix .. source_name
+	if DamageProfileTemplates[new_name] then return new_name end
+
+	local clone = table.clone(source, true)
+
+	-- thrown_javelin shape (verified against
+	-- damage_profile_templates_dlc_woods.lua:263): default_target carries
+	-- power_distribution_near / power_distribution_far, each with .attack
+	-- (damage) and .impact (stagger). We multiply only .attack so "double
+	-- damage" doesn't accidentally amp stagger too. Also handle the generic
+	-- power_distribution case in case a future thrown profile uses it.
+	local function scale_target(target)
+		if type(target) ~= "table" then return end
+		if target.power_distribution_near and target.power_distribution_near.attack then
+			target.power_distribution_near.attack = target.power_distribution_near.attack * damage_mult
+		end
+		if target.power_distribution_far and target.power_distribution_far.attack then
+			target.power_distribution_far.attack = target.power_distribution_far.attack * damage_mult
+		end
+		if target.power_distribution and target.power_distribution.attack then
+			target.power_distribution.attack = target.power_distribution.attack * damage_mult
+		end
+	end
+
+	scale_target(clone.default_target)
+	if type(clone.targets) == "table" then
+		for _, t in ipairs(clone.targets) do scale_target(t) end
+	end
+
+	DamageProfileTemplates[new_name] = clone
+
+	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, new_name) then
+		local tbl = NetworkLookup.damage_profiles
+		local idx = #tbl + 1
+		rawset(tbl, idx, new_name)
+		rawset(tbl, new_name, idx)
+	end
+
+	return new_name
+end
+
+-- Module-scope so it can't be re-created per call (Lua closure identity matters
+-- for VMF hook bookkeeping, and the function is small enough to share).
+local function _always_false() return false end
+
+local function _create_tuskgor_javelin_template()
+	if not Weapons or not Weapons.javelin_template then
+		mod:warning("javelin_template not found — Tuskgor Javelin stat modifications unavailable")
+		return
+	end
+	if Weapons.tuskgor_javelin_template then return end
+
+	local template = table.clone(Weapons.javelin_template, true)
+
+	-- Ammo system rewrite: finite 15-shot stack, vanilla pickups refill.
+	if template.ammo_data then
+		template.ammo_data.max_ammo            = _TJ_MAX_AMMO
+		template.ammo_data.block_ammo_pickup   = false
+		template.ammo_data.unique_ammo_type    = false
+		-- Keep ammo_per_clip / ammo_per_reload at 1 (vanilla) — those control
+		-- how many javelins are "drawn" per reload anim, not pickup behaviour.
+	end
+
+	-- Disable the magic auto-catch reload (vanilla refills on-demand).
+	if template.actions.weapon_reload and template.actions.weapon_reload.default then
+		template.actions.weapon_reload.default.condition_func       = _always_false
+		template.actions.weapon_reload.default.chain_condition_func = _always_false
+	end
+
+	-- Half throw speed: extend wind-up before the projectile fires.
+	if template.attack_meta_data and template.attack_meta_data.minimum_charge_time then
+		template.attack_meta_data.minimum_charge_time =
+			template.attack_meta_data.minimum_charge_time * (1 / _TJ_SPEED_MULT)
+	end
+
+	for _, action_group in pairs(template.actions) do
+		if type(action_group) == "table" then
+			for _, sub_action in pairs(action_group) do
+				if type(sub_action) == "table" then
+					-- anim_time_scale (mostly a no-op for javelin — kept for parity
+					-- with the other template clones in case a sub-action does set it)
+					if sub_action.anim_time_scale then
+						sub_action.anim_time_scale = sub_action.anim_time_scale * _TJ_SPEED_MULT
+					end
+					-- Slow the throw action: total_time + minimum_hold_time.
+					-- fire_time stays put — moving it would desync the projectile
+					-- spawn point on the animation.
+					if sub_action.kind == "thrown_projectile" then
+						if sub_action.total_time and sub_action.total_time ~= math.huge then
+							sub_action.total_time = sub_action.total_time * (1 / _TJ_SPEED_MULT)
+						end
+						if sub_action.minimum_hold_time then
+							sub_action.minimum_hold_time = sub_action.minimum_hold_time * (1 / _TJ_SPEED_MULT)
+						end
+					end
+					-- Melee stab damage profiles use the PowerLevelTemplates
+					-- string-key indirection — existing helper handles those.
+					if sub_action.damage_profile then
+						sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_tj_", {
+							damage = _TJ_DAMAGE_MULT,
+						})
+					end
+					-- Throw projectile damage profile is INLINE — needs the
+					-- inline-clone helper, not the string-key one.
+					if sub_action.impact_data and sub_action.impact_data.damage_profile then
+						sub_action.impact_data.damage_profile = _clone_inline_throw_profile(
+							sub_action.impact_data.damage_profile, "cwv_tj_", _TJ_DAMAGE_MULT
+						)
+					end
+				end
+			end
+		end
+	end
+
+	Weapons.tuskgor_javelin_template = template
+	mod:info("Created tuskgor_javelin_template (max_ammo=%d, ammo_pickups=on, no auto-catch, %.0f%% dmg, %.0f%% speed)",
+		_TJ_MAX_AMMO, _TJ_DAMAGE_MULT * 100, _TJ_SPEED_MULT * 100)
+end
+
+_create_tuskgor_javelin_template()
 
 -- ============================================================
 -- Optional mod detection
@@ -391,6 +790,10 @@ for _, def in ipairs(_variant_definitions) do
 		_display_names[def.item_key .. "_skin_name"] = def.skin_display_name
 	end
 	if def.item_type then
+		-- CLARIFY: Multiple variants share def.item_type (e.g. all three Imperial
+		-- Longsword entries share "cwv_imperial_longsword"). The last iteration
+		-- wins for the title-cased item_type localization. Currently all three
+		-- produce the same string ("Imperial Longsword") so it's harmless.
 		_display_names[def.item_type] = def.item_type:gsub("^cwv_", ""):gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
 	end
 end
@@ -445,24 +848,53 @@ _apply_weapon_unlocks()
 -- Custom skin registration
 -- ============================================================
 
+-- QUESTION: skin_only entries (e.g. cwv_es_longsword_helmgart) are NOT skipped
+-- here — only def.no_skin gates skin registration. That's deliberate: skin_only
+-- entries exist precisely to provide a selectable cosmetic skin without giving
+-- the player the inventory item itself. Documented for clarity.
 local function _register_variant_skins()
 	if not WeaponSkins then return end
 	for _, def in ipairs(_variant_definitions) do
 		if def.no_skin then goto skip_skin end
 		local skin_key = def.item_key .. "_skin"
-		if not WeaponSkins.skins[skin_key] then
-			WeaponSkins.skins[skin_key] = {
-				display_name = def.item_key .. "_skin_name",
-				description = def.item_key .. "_description",
-				rarity = def.rarity or "exotic",
-				right_hand_unit = def.right_hand_unit,
-				left_hand_unit = def.left_hand_unit,
-				hud_icon = def.hud_icon or "weapon_generic_icon_axe1h",
-				inventory_icon = def.inventory_icon or "icon_wpn_dw_shield_01_axe",
-				template = nil,
-			}
-			mod:info("Registered custom skin: %s", skin_key)
-		end
+		-- ALWAYS overwrite (no `if not WeaponSkins.skins[skin_key]` guard) so
+		-- partial reloads or earlier mod versions don't leave a stale skin entry
+		-- without our newer fields (e.g. ammo_unit added in 0.1.60).
+		--
+		-- For ammo weapons (e.g. javelin variants) we MUST mirror ammo_unit
+		-- into the skin entry. BackendUtils.get_item_units overwrites
+		-- units.ammo_unit with skin_template.ammo_unit unconditionally when a
+		-- skin is set, so an absent field on the skin nukes the inherited
+		-- value from the base ItemMasterList entry. Downstream the previewer
+		-- does `left_hand_unit = ammo_unit` for is_ammo_weapon items and then
+		-- concatenates "_3p" — nil ammo_unit crashes that line. Fall back to
+		-- def.left_hand_unit (the held model) when ammo_unit isn't set so the
+		-- spear/javelin/etc. swap still drives the held + thrown visual.
+		-- Defense in depth: BackendUtils.get_item_units overwrites a whole set
+		-- of fields from skin_template, not just ammo_unit. Mirror them all from
+		-- the base ItemMasterList entry when the variant doesn't override —
+		-- prevents the throw projectile / pickup spawn paths from getting nil
+		-- once the held-model crash is past.
+		local base = (ItemMasterList and ItemMasterList[def.base_weapon]) or {}
+		local ammo_unit = def.ammo_unit or def.left_hand_unit
+		WeaponSkins.skins[skin_key] = {
+			display_name              = def.item_key .. "_skin_name",
+			description               = def.item_key .. "_description",
+			rarity                    = def.rarity or "exotic",
+			right_hand_unit           = def.right_hand_unit,
+			left_hand_unit            = def.left_hand_unit,
+			ammo_unit                 = ammo_unit,
+			ammo_unit_3p              = def.ammo_unit_3p or base.ammo_unit_3p,
+			projectile_units_template = def.projectile_units_template or base.projectile_units_template,
+			pickup_template_name      = def.pickup_template_name or base.pickup_template_name,
+			link_pickup_template_name = def.link_pickup_template_name or base.link_pickup_template_name,
+			hud_icon                  = def.hud_icon or "weapon_generic_icon_axe1h",
+			inventory_icon            = def.inventory_icon or "icon_wpn_dw_shield_01_axe",
+			template                  = nil,
+		}
+		mod:info("Registered custom skin: %s (ammo_unit=%s, projectile=%s)",
+			skin_key, tostring(ammo_unit),
+			tostring(def.projectile_units_template or base.projectile_units_template))
 
 		if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, skin_key) then
 			local idx = #NetworkLookup.weapon_skins + 1
@@ -600,6 +1032,15 @@ local function _register_custom_illusions()
 			end
 		end
 
+		-- REVIEW: NetworkLookup.weapon_skins has an error-throwing __index per
+		-- CHANGELOG v0.1.12 — `tbl[#tbl + 1] = ...` and `tbl[skin_key] = ...` set
+		-- new keys, which goes through __newindex (not __index) and is fine. But
+		-- `tbl[skin_key] = #tbl` reads `#tbl` AFTER the previous assignment, so
+		-- the reverse-lookup index points at the just-written entry — correct,
+		-- but slightly fragile. Pattern at line 467-471 uses an explicit `idx`
+		-- variable; using rawset there matches CHANGELOG guidance. Consider
+		-- aligning these two code paths to use the same rawset-with-explicit-idx
+		-- form.
 		if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, skin_key) then
 			local tbl = NetworkLookup.weapon_skins
 			tbl[#tbl + 1] = skin_key
@@ -644,11 +1085,21 @@ local function _build_entry(def, backend_id)
 
 	local entry = table.clone(base, true)
 
-	-- Clobber inherited name/key from base; otherwise other mods' weapon-key
-	-- lookups (cosmetics_tweaker._weapon_scale_overrides, _weapon_grip_offsets)
-	-- match against the base weapon and scale/offset our variant.
-	entry.name = def.item_key
-	entry.key = def.item_key
+	-- `cwv_variant` is the cross-mod marker contract. Sibling mods
+	-- (cosmetics_tweaker, weapon_tweaker, future) check `item_data.cwv_variant`
+	-- in their hooks and SKIP item-name-keyed overrides when it's truthy. This
+	-- exists because the clone inherits `entry.name` from the base weapon
+	-- (e.g. cwv_es_longsword.name == "es_bastard_sword"), which would
+	-- otherwise spuriously match a sibling mod's `_weapon_grip_offsets[name]`
+	-- or `_breton_sword_thiccc` lookup.
+	--
+	-- WHY NOT just clobber entry.name/.key to def.item_key? Because vanilla
+	-- code (e.g. world_hero_previewer.lua's equip_item at line 674) does
+	-- `item_data = ItemMasterList[item.name]` for fallback lookups. Setting
+	-- name = cwv_key meant the lookup returned nil and the equip path
+	-- crashed in BackendUtils.get_item_units. See
+	-- `feedback_cwv_clone_name_clobber.md` for the full incident log.
+	entry.cwv_variant = true
 
 	entry.display_name = def.item_key .. "_name"
 	entry.description = def.item_key .. "_description"
@@ -677,6 +1128,15 @@ local function _build_entry(def, backend_id)
 	if def.item_type == "cwv_imperial_longsword" then
 		entry.skin_combination_table = "cwv_imperial_longsword_skins"
 	end
+	-- CLARIFY: Clear required_dlc so non-DLC users (e.g. no "lake" DLC for
+	-- bastard_sword-derived variants) can equip the variant. The actual model
+	-- assets (wpn_empire_2h_sword_*, wpn_emp_gk_*) live in the base inventory
+	-- package list, not in DLC-only packages, so the unit paths still resolve.
+	-- POTENTIAL BUG: this is verified for the Empire greatsword units and
+	-- es_sword_shield variants but NOT the Bretonnian units (wpn_emp_gk_shield_*)
+	-- which DO require the lake DLC package to load. A non-lake-DLC user equipping
+	-- a variant whose left/right unit lives only in lake's package would see the
+	-- model fail to load.
 	entry.required_dlc = nil
 
 	local traits = def.traits or {}
@@ -750,11 +1210,23 @@ local function _register_item(def, backend_id)
 
 	mil:add_mod_items_to_local_backend({entry}, "character_weapon_variants")
 
-	local key = entry.key or entry.name
-	if key and NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, key) then
+	-- MIL stores items in its private local-backend table, NOT in
+	-- ItemMasterList. But vanilla `HeroPreviewer.equip_item`
+	-- (world_hero_previewer.lua:674) does `item_data = ItemMasterList[item_name]`
+	-- and then passes the result to `BackendUtils.get_item_units(item_data, ...)`
+	-- — if item_data is nil the next line indexes nil and the game crashes.
+	-- Mirror our entries into ItemMasterList so equip_item resolves them.
+	-- Guarded with `not ItemMasterList[key]` to avoid clobbering anything
+	-- another mod registered (or a previous session's entry that still lives
+	-- across hot-reloads).
+	if ItemMasterList and not ItemMasterList[def.item_key] then
+		ItemMasterList[def.item_key] = entry
+	end
+
+	if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, def.item_key) then
 		local idx = #NetworkLookup.item_names + 1
-		rawset(NetworkLookup.item_names, idx, key)
-		rawset(NetworkLookup.item_names, key, idx)
+		rawset(NetworkLookup.item_names, idx, def.item_key)
+		rawset(NetworkLookup.item_names, def.item_key, idx)
 	end
 
 	_registered_keys[def.item_key] = backend_id
@@ -837,10 +1309,32 @@ local function _auto_register_all()
 	if #entries > 0 then
 		mil:add_mod_items_to_local_backend(entries, "character_weapon_variants")
 
+		-- See _register_item: HeroPreviewer.equip_item needs ItemMasterList[key]
+		-- to be non-nil. MIL only stores in its private backend; mirror into
+		-- ItemMasterList so vanilla equip paths can resolve our items.
+		if ItemMasterList then
+			for _, pending in ipairs(pending_defs) do
+				local key = pending.def.item_key
+				if not ItemMasterList[key] then
+					-- find this entry in `entries` (parallel to pending_defs order)
+					for _, e in ipairs(entries) do
+						if e.mod_data and e.mod_data.backend_id == pending.backend_id then
+							ItemMasterList[key] = e
+							break
+						end
+					end
+				end
+			end
+		end
+
+		-- CLARIFY: Per CHANGELOG v0.1.24, MIL.add_mod_items_to_local_backend does
+		-- NOT inject into NetworkLookup.item_names (only add_mod_items_to_masterlist
+		-- does). Without this manual injection, network serialization crashes when
+		-- the item is referenced over the wire.
 		if NetworkLookup and NetworkLookup.item_names then
-			for _, entry in ipairs(entries) do
-				local key = entry.key or entry.name
-				if key and not rawget(NetworkLookup.item_names, key) then
+			for _, pending in ipairs(pending_defs) do
+				local key = pending.def.item_key
+				if not rawget(NetworkLookup.item_names, key) then
 					local idx = #NetworkLookup.item_names + 1
 					rawset(NetworkLookup.item_names, idx, key)
 					rawset(NetworkLookup.item_names, key, idx)
@@ -872,6 +1366,14 @@ local function _auto_register_all()
 	_auto_registered = true
 end
 
+-- CLARIFY: StateInGameRunning.on_enter fires on entering the keep AND on every
+-- mission load. _auto_register_all() guards via _auto_registered flag so it
+-- runs at most once per session. Backend is guaranteed live by this state per
+-- DEVELOPMENT.md / CHANGELOG v0.1.17.
+-- QUESTION: If a user joins a friend's lobby BEFORE entering the keep (e.g. via
+-- direct lobby join), does StateInGameRunning fire? In practice the keep is
+-- always the first state, so this should be fine — flagged here in case the
+-- assumption breaks for future game-state changes.
 mod:hook_safe("StateInGameRunning", "on_enter", function()
 	_auto_register_all()
 end)
@@ -903,9 +1405,18 @@ local function _apply_scale(unit, scale_tbl)
 	pcall(Unit.set_local_scale, unit, 0, Vector3(scale_tbl[1], scale_tbl[2], scale_tbl[3]))
 end
 
+-- _apply_offset is additive (current + offset). MenuWorldPreviewer extends
+-- HeroPreviewer and its _spawn_item super-calls the parent, so both hooks fire
+-- per spawn for MenuWorldPreviewer instances and would double the offset. Guard
+-- with a weak-keyed set so the second invocation is a no-op; the table cleans
+-- itself up when the unit is GC'd. Scale is idempotent so it doesn't need this.
+local _offset_applied = setmetatable({}, { __mode = "k" })
+
 local function _apply_offset(unit, offset_tbl)
 	if not unit or not _is_unit(unit) then return end
 	if not Unit.alive(unit) then return end
+	if _offset_applied[unit] then return end
+	_offset_applied[unit] = true
 	local current = Unit.local_position(unit, 0)
 	local cx, cy, cz = Vector3.to_elements(current)
 	Unit.set_local_position(unit, 0, Vector3(cx + offset_tbl[1], cy + offset_tbl[2], cz + offset_tbl[3]))
@@ -920,11 +1431,18 @@ end
 local function _resolve_cwv_def(item_data, skin)
 	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin] end
 	if not item_data then return nil end
+	-- CLARIFY: backend_id resolution is the canonical path for cwv items per
+	-- memory note feedback_cwv_backend_id_lookup.md — item_data.key/.name return
+	-- the BASE weapon key, never the cwv_* key.
 	local bid = item_data.backend_id
 	if bid then
 		local cwv_key = bid:match("^(cwv_.-)_001$")
 		if cwv_key and _transform_map[cwv_key] then return _transform_map[cwv_key] end
 	end
+	-- REVIEW: This fallback is dead code for cwv items (see comment above);
+	-- key/name will resolve to the base weapon key. Kept for the hypothetical
+	-- case of registering a non-cwv-prefixed transform. Consider dropping if
+	-- the prefix is enforced.
 	local key = item_data.key or item_data.name
 	if key and _transform_map[key] then return _transform_map[key] end
 	return nil
@@ -1018,6 +1536,12 @@ mod:hook("HeroPreviewer", "_spawn_item", function(func, self, item_name, spawn_d
 	return result
 end)
 
+-- REVIEW: MenuWorldPreviewer extends HeroPreviewer and its _spawn_item override
+-- calls MenuWorldPreviewer.super._spawn_item (= HeroPreviewer._spawn_item), so
+-- the HeroPreviewer hook above already fires for MenuWorldPreviewer instances.
+-- This separate MenuWorldPreviewer hook causes _cwv_spawn_item_post to run
+-- twice per spawn for that subclass. Harmless for set_local_scale (idempotent)
+-- but doubles offsets — see POTENTIAL BUG note above _apply_offset.
 mod:hook("MenuWorldPreviewer", "_spawn_item", function(func, self, item_name, spawn_data)
 	local result = func(self, item_name, spawn_data)
 	_cwv_spawn_item_post(self, item_name)
@@ -1031,7 +1555,19 @@ mod:hook_safe("LootItemUnitPreviewer", "spawn_units", function(self)
 	local weapon_key = (item_data and item_data.key) or item.key
 	if not weapon_key then return end
 
+	-- For cwv_* items, item_data.key returns the BASE weapon key (e.g.
+	-- "es_bastard_sword"), NOT "cwv_es_longsword". Always resolve the cwv key
+	-- from the backend_id (pattern documented in feedback_cwv_backend_id_lookup.md).
+	-- The cwv-keyed transform map then takes precedence over the base-key map so
+	-- variant-specific scales/offsets apply correctly.
 	local def = _skin_transform_map[weapon_key] or _transform_map[weapon_key]
+	local bid = item.backend_id
+	if bid then
+		local cwv_key = bid:match("^(cwv_.-)_001$")
+		if cwv_key then
+			def = _transform_map[cwv_key] or _skin_transform_map[cwv_key] or def
+		end
+	end
 	if not def then return end
 
 	local spawned = self._spawned_units

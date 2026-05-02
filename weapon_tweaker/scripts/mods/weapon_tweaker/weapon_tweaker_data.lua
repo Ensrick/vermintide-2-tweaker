@@ -1,5 +1,16 @@
 local mod = get_mod("wt")
 
+-- CLARIFY: detects whether character_weapon_variants is also installed at the
+-- moment _data.lua is required by VMF. If yes, strip widgets for cross-career
+-- (career, weapon) pairs that CWV manages so the user only sees one toggle
+-- per pair. The runtime mirror of this is `_cwv_managed` + `has_cwv` check
+-- in apply_weapon_unlocks (weapon_tweaker.lua ~L62).
+-- QUESTION: poll order — _data.lua is loaded by VMF very early. Whether the
+-- character_weapon_variants mod is registered into Managers.mod._mods by the
+-- time this code runs depends on Workshop subscription order and the global
+-- mod load sequence. If CWV is loaded AFTER weapon_tweaker, _has_cwv is false
+-- here and the duplicate widgets remain. The widget set is stable per session,
+-- so this is "first one wins". User can reorder mods if it matters.
 local _has_cwv = false
 if Managers and Managers.mod and Managers.mod._mods then
     for i = 1, #Managers.mod._mods do
@@ -207,10 +218,7 @@ local data = {
                                     { setting_id = "unlock_dr_ranger_dr_shield_hammer", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_dr_ranger_dr_2h_pick", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_dr_ranger_we_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_ranger_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_ranger_es_mace_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ranger_es_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_ranger_es_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ranger_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ranger_wh_dual_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ranger_wh_1h_falchion", type = "checkbox", default_value = false },
@@ -235,10 +243,7 @@ local data = {
                                     { setting_id = "unlock_dr_ironbreaker_dr_shield_hammer", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_dr_ironbreaker_dr_2h_pick", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_dr_ironbreaker_we_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_ironbreaker_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_ironbreaker_es_mace_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ironbreaker_es_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_ironbreaker_es_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ironbreaker_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ironbreaker_wh_dual_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_ironbreaker_wh_1h_falchion", type = "checkbox", default_value = false },
@@ -263,10 +268,7 @@ local data = {
                                     { setting_id = "unlock_dr_slayer_dr_shield_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_slayer_dr_2h_pick", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_dr_slayer_we_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_slayer_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_slayer_es_mace_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_slayer_es_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_slayer_es_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_slayer_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_slayer_wh_dual_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_slayer_wh_1h_falchion", type = "checkbox", default_value = false },
@@ -291,10 +293,7 @@ local data = {
                                     { setting_id = "unlock_dr_engineer_dr_shield_hammer", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_dr_engineer_dr_2h_pick", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_dr_engineer_we_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_engineer_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_engineer_es_mace_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_engineer_es_1h_sword", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_dr_engineer_es_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_engineer_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_engineer_wh_dual_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_dr_engineer_wh_1h_falchion", type = "checkbox", default_value = false },
@@ -563,7 +562,6 @@ local data = {
                                     { setting_id = "unlock_bw_adept_dr_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_adept_we_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_adept_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_bw_adept_es_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_adept_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_adept_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_adept_es_1h_flail", type = "checkbox", default_value = false },
@@ -585,7 +583,6 @@ local data = {
                                     { setting_id = "unlock_bw_scholar_dr_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_scholar_we_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_scholar_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_bw_scholar_es_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_scholar_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_scholar_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_scholar_es_1h_flail", type = "checkbox", default_value = false },
@@ -607,7 +604,6 @@ local data = {
                                     { setting_id = "unlock_bw_unchained_dr_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_unchained_we_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_unchained_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_bw_unchained_es_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_unchained_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_unchained_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_unchained_es_1h_flail", type = "checkbox", default_value = false },
@@ -629,7 +625,6 @@ local data = {
                                     { setting_id = "unlock_bw_necromancer_dr_1h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_necromancer_we_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_necromancer_es_1h_mace", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_bw_necromancer_es_1h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_necromancer_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_necromancer_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_bw_necromancer_es_1h_flail", type = "checkbox", default_value = false },
@@ -953,6 +948,22 @@ local data = {
                     },
                 },
             },
+            -- POTENTIAL BUG (LOW): the following user-facing toggle widgets
+            -- are advertised in the localization file but NEVER referenced by
+            -- mod:get() in the code:
+            --   enable_weapon_unlocks_core
+            --   enable_weapon_runtime_guards
+            --   enable_weapon_wield_slot_guard
+            --   enable_weapon_create_equipment_guard
+            --   enable_weapon_career_action_injection
+            --   force_bretonnian_shield_unlock
+            -- These are leftover localization keys from the legacy monolithic
+            -- "Tweaker" mod. Either add widget entries (if these toggles should
+            -- still exist) or remove the orphan localization entries.
+            -- CLARIFY: the `debug` and `enable_weapon_debug_logging` widgets
+            -- below are NEVER read either — they're dead settings, kept here
+            -- because users may have them set from old versions and removing
+            -- a widget surfaces stale values. Cleanup candidate.
             {
                 setting_id = "debug_group",
                 type = "group",

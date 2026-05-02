@@ -1,3 +1,8 @@
+# REVIEW: Default $Mods list omits cosmetics_tweaker, career_tweaker, enemy_tweaker, and
+# character_weapon_variants. They are still deployable via -Mods @("...") and are present in
+# $workshopIds, but a bare "& .\deploy_all.ps1" with no args won't touch them. Consider
+# documenting this default behavior at the top of the file (or expanding default to include all
+# active mods, accepting the warning if Workshop folder doesn't exist for one).
 param(
     [string[]]$Mods = @("chaos_wastes_tweaker", "weapon_tweaker", "general_tweaker")
 )
@@ -6,6 +11,8 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $workshopBase = "C:\Program Files (x86)\Steam\steamapps\workshop\content\552500"
 
 # Map mod names to their Workshop IDs
+# REVIEW: All seven IDs match itemV2.cfg published_id values. character_weapon_variants is
+# 3716869446 here; CLAUDE.md and DEVELOPMENT.md mod tables incorrectly say "(unpublished)".
 $workshopIds = @{
     "chaos_wastes_tweaker" = "3712929235"
     "weapon_tweaker"       = "3712896117"
@@ -36,6 +43,10 @@ function Deploy-VmbOut($sourceDir, $targetDir) {
 function Clean-StaleBundles($targetDir) {
     # Remove old *.mod and *.mod_bundle so a renamed .mod or new bundle hash
     # doesn't sit alongside the old one (would cause duplicate new_mod() registration).
+    # REVIEW: Stale extensionless bundle files from old SDK builds (matching the 16-hex pattern
+    # in .gitignore, e.g. "209fb8c3c0a8c3a4") are NOT cleaned here. They will accumulate if a
+    # legacy SDK build was previously deployed, then a VMB build replaces it. Currently moot
+    # since nothing here builds SDK output to a Workshop folder anymore, but worth flagging.
     Get-ChildItem $targetDir -File -Filter "*.mod" -ErrorAction SilentlyContinue | Remove-Item -Force
     Get-ChildItem $targetDir -File -Filter "*.mod_bundle" -ErrorAction SilentlyContinue | Remove-Item -Force
 }

@@ -1,3 +1,16 @@
+<!--
+REVIEW (2026-05-01): Per-weapon table content is detailed and clearly labeled with version
+markers (e.g. "v0.10.10", "v0.10.16+", "v0.10.21"). Spot-checks vs DEVELOPMENT.md and
+WORK_ITEMS.md show these are consistent. Sample-checks vs the per-mod weapon_tweaker code
+(weapon_tweaker.lua's _3p_remap_* tables, _career_anim_redirect, _weapon_scale_overrides)
+appear coherent — not exhaustively re-verified by this reviewer.
+
+Caveat: the "Status: Untested" entries are numerous. They're tracked here AND in
+"Untested Cross-Career Combinations (Priority)" at the bottom. Whether to keep them all in
+this catalog vs trim is up to the maintainer; presently both lists must be kept in sync.
+
+No stale build/upload references found in this file — content is purely about animations.
+-->
 # Weapon Catalog — Cross-Career Animation Reference
 
 Per-weapon reference for attack chains, animation events, and cross-career status. Use this to plan and track animation work.

@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.2.2-dev"
+local MOD_VERSION = "0.2.3-dev"
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Enemy Tweaker v" .. MOD_VERSION)
 
@@ -8,6 +8,11 @@ mod:echo("Enemy Tweaker v" .. MOD_VERSION)
 -- Breed catalog
 -- ============================================================
 
+-- REVIEW: FACTION_* tables are defined but never read anywhere in the file.
+-- Either wire them into the breed_options dropdown (currently hard-coded in
+-- enemy_tweaker_data.lua) or delete. They drift out of sync with the dropdown
+-- list (e.g. chaos_vortex_sorcerer / chaos_corruptor_sorcerer here, missing
+-- from the data-side dropdown).
 local FACTION_SKAVEN = {
     "skaven_slave",
     "skaven_clan_rat",
@@ -141,6 +146,20 @@ local function _register_skeleton_breeds()
 
         PACKAGE_REDIRECT[def.name] = def.source_model
 
+        -- Append to NetworkLookup.breeds (forward + reverse mapping).
+        -- network_lookup.lua:267 builds this from Breeds at game-boot before VMF mods
+        -- load, then init() at line 2340 sets a __index metatable that errors on missing
+        -- string keys. Adding entries via direct assignment here doesn't trigger __index
+        -- (that fires on GET only), so it's safe to extend post-finalization. Without
+        -- this, any network serialization of et_*_skeleton (e.g. unit-spawn extractors
+        -- in game_object_initializers_extractors.lua) crashes on the host or client.
+        local nl_breeds = rawget(_G, "NetworkLookup") and NetworkLookup.breeds
+        if nl_breeds and not nl_breeds[def.name] then
+            local idx = #nl_breeds + 1
+            nl_breeds[idx] = def.name
+            nl_breeds[def.name] = idx
+        end
+
         mod:info("Registered skeleton breed: %s (model from %s)", def.name, def.source_model)
 
         ::continue::
@@ -153,6 +172,9 @@ end
 -- threat_values table (built at file-load time by iterating Breeds)
 -- includes our custom breeds. Registering during ConflictDirector.init
 -- is too late — threat_values is already frozen.
+-- NetworkLookup.breeds is also extended inside _register_skeleton_breeds
+-- (forward + reverse mapping) so multiplayer serialization of et_*_skeleton
+-- doesn't trip the strict-lookup metatable.
 _register_skeleton_breeds()
 
 -- ============================================================
@@ -162,6 +184,16 @@ _register_skeleton_breeds()
 -- _breed_package_name. Our cloned breeds have no package of their
 -- own — redirect to the source breed's package.
 
+-- QUESTION: _breed_package_name caches paths in self._breed_to_package_name_cache
+-- keyed by the breed_name argument. Our hook redirects et_necro_skeleton ->
+-- pet_skeleton, but that means *both* breeds end up resolving to the same
+-- package name. EnemyPackageLoader._load_package asserts
+-- "Attempted to load same breed twice" against _session_breed_map (keyed by
+-- breed_name not package), so the breed-level guard still works — but ref
+-- counting in package_manager:load/unload will be doubled if both breeds
+-- ever go live in the same session, and unloading one may yank the package
+-- from under the other. Verify by spawning et_necro_skeleton + a vanilla
+-- summoned pet_skeleton in the same mission.
 mod:hook("EnemyPackageLoader", "_breed_package_name", function(func, self, breed_name)
     local redirect = PACKAGE_REDIRECT[breed_name]
     if redirect then
@@ -427,13 +459,30 @@ local function _apply_size_multiplier(composition, multiplier)
     end
 end
 
+-- HordeCompositionsPacing entries each carry a `loaded_probs` field built from
+-- variant weights via LoadedDice.create at conflict_settings file-load time
+-- (see scripts/settings/conflict_settings.lua:636). horde_spawner.lua reads
+-- composition.loaded_probs at lines 139/243/349/743 — losing it crashes
+-- LoadedDice.roll_easy on the next horde. We rebuild it here so replacement
+-- compositions remain spawnable.
+local function _build_loaded_probs(variants)
+    local LD = rawget(_G, "LoadedDice")
+    if not LD or not LD.create then return nil end
+    local weights = {}
+    for i, v in ipairs(variants) do
+        weights[i] = (v and v.weight) or 1
+    end
+    return { LD.create(weights) }
+end
+
 local function _apply_preset_to_pacing_keys(keys, preset_variants)
     for _, key in ipairs(keys) do
         if HordeCompositionsPacing[key] then
             local sound = HordeCompositionsPacing[key].sound_settings
             local new_variants = _deep_copy(preset_variants)
+            new_variants.sound_settings = sound
+            new_variants.loaded_probs = _build_loaded_probs(new_variants)
             HordeCompositionsPacing[key] = new_variants
-            HordeCompositionsPacing[key].sound_settings = sound
         end
     end
 end
@@ -461,6 +510,11 @@ local function _apply_horde_preset()
         end
     end
 
+    -- POTENTIAL BUG: when preset == "off" we early-return at the top of this
+    -- function, so the size multiplier never applies on its own. Users who
+    -- set "Horde Size 200%" with no preset get vanilla hordes. If multiplier
+    -- is meant to be independent of preset selection, lift this block above
+    -- the early return.
     if multiplier ~= 1.0 then
         for key, comp in pairs(HordeCompositionsPacing) do
             if type(comp) == "table" and #comp > 0 then
@@ -524,18 +578,36 @@ mod:hook("ConflictDirector", "init", function(func, self, ...)
     return result
 end)
 
-mod:hook("HordeSpawner", "compose_horde_spawn_list", function(func, self, composition, ...)
+-- compose_blob_horde_spawn_list returns (spawn_list, num_to_spawn) — a real list,
+-- so in-place breed swap on the list works.
+mod:hook("HordeSpawner", "compose_blob_horde_spawn_list", function(func, self, composition, ...)
     return _apply_breed_swap(func(self, composition, ...))
 end)
 
-mod:hook("HordeSpawner", "compose_blob_horde_spawn_list", function(func, self, composition, ...)
-    return _apply_breed_swap(func(self, composition, ...))
+-- compose_horde_spawn_list returns (sum, sum_a, sum_b) — three integers, NOT
+-- a list. Breed names live in file-local upvalues spawn_list_a/_b inside
+-- horde_spawner.lua and are popped per-spawn by spawn_unit. So the only place
+-- to substitute ambush breeds reliably is at the per-unit spawn site:
+-- HordeSpawner.spawn_unit(self, hidden_spawn, breed_name, goal_pos, horde).
+mod:hook("HordeSpawner", "spawn_unit", function(func, self, hidden_spawn, breed_name, goal_pos, horde)
+    if breed_name and _breed_swap_map[breed_name] then
+        local replacement = _breed_swap_map[breed_name]
+        if rawget(_G, "Breeds") and Breeds[replacement] then
+            breed_name = replacement
+        end
+    end
+    return func(self, hidden_spawn, breed_name, goal_pos, horde)
 end)
 
 -- ============================================================
 -- Settings change handler
 -- ============================================================
 
+-- QUESTION: not host-gated. Clients changing settings will mutate their
+-- local HordeCompositionsPacing even though spawn decisions are
+-- host-authoritative — harmless to actual spawns, but a confused client
+-- might think their preset is in effect. Consider adding a host-only
+-- guard with mod:echo telling clients their setting has no effect.
 mod.on_setting_changed = function(setting_id)
     if _original_compositions_pacing then
         _restore_compositions()
@@ -551,6 +623,13 @@ mod.on_disabled = function()
     mod:echo("Enemy Tweaker disabled — compositions restored")
 end
 
+-- QUESTION: re-enabling mid-session calls _register_skeleton_breeds again,
+-- but the ConflictDirector.init hook (which calls set_threat_value for the
+-- skeleton breeds) only runs at level transition. So enabling mid-mission
+-- adds breeds to Breeds without registering their threat values; the loop
+-- over activated_per_breed in ConflictDirector.calculate_threat_value
+-- will index threat_values[skeleton] = nil and arithmetic will crash. Worth
+-- gating on `Managers.state.conflict` and calling set_threat_value here.
 mod.on_enabled = function()
     _register_skeleton_breeds()
     if _original_compositions_pacing then
@@ -646,6 +725,11 @@ mod:command("et_status", "Show current Enemy Tweaker state", function()
     end
 
     mod:echo("Skeleton breeds registered: %s", tostring(_skeleton_breeds_registered))
+    -- POTENTIAL BUG: prints #SKELETON_BREEDS (constant 6) whenever the redirect
+    -- table is non-empty, regardless of how many redirects actually exist.
+    -- If a source breed was missing at registration time, fewer entries are in
+    -- PACKAGE_REDIRECT than 6. Replace with a real count:
+    --   local n = 0; for _ in pairs(PACKAGE_REDIRECT) do n = n + 1 end
     mod:echo("Package redirects: %d", next(PACKAGE_REDIRECT) and #SKELETON_BREEDS or 0)
 end)
 

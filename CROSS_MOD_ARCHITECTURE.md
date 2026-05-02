@@ -1,3 +1,14 @@
+<!--
+REVIEW (2026-05-01): Content is conceptually accurate post-VMB migration (this file is mostly
+about runtime cross-mod detection patterns, which don't change with the build pipeline).
+Two minor points:
+1. Mod 3 ("character_weapon_variants") line below says it has Workshop ID — should be cross-checked.
+   itemV2.cfg has published_id = 3716869446L; deploy_all.ps1 maps "character_weapon_variants" to
+   "3716869446". CLAUDE.md and DEVELOPMENT.md still say "(unpublished)" — those are wrong.
+2. The detection pattern uses get_mod("wt") and get_mod("character_weapon_variants") — both correct.
+3. The LA Bridge section is detailed and accurate as far as the LA-clone backend pattern goes
+   (matches feedback_cwv_backend_id_lookup.md).
+-->
 # Cross-Mod Architecture — Weapon Sharing & Cosmetics
 
 ## Overview

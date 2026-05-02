@@ -1,3 +1,20 @@
+<!--
+REVIEW (2026-05-01):
+- File title says "Chaos Wastes Tweaker" but content covers MULTIPLE mods (chaos_wastes_tweaker,
+  weapon_tweaker, career_tweaker, enemy_tweaker, cosmetics_tweaker). Title is misleading.
+  Recommend renaming to "Tweaker Project — Master Feature To-Do" or splitting per-mod sections
+  more explicitly (most per-mod TODOs already live in <mod>/TODO.md anyway).
+- "Implemented" section lists `t unstuck`, `t god`, `t win`, `t dump_boons` with the LEGACY
+  prefix `t`. These commands are now in chaos_wastes_tweaker under the `ct` prefix
+  (or general_tweaker / weapon_tweaker as applicable). Update prefixes to match current bindings.
+- "Investigate CW ghost scythe 3P spawn crash" entry references CROSS_CAREER_PACKAGE_FIX.md as
+  "partially obsolete — original cross-career theory was wrong" — that doc should get its banner
+  updated to match (see review marker in that file).
+- "Character Weapon Variants mod" entry says "Workshop 3716869446" — consistent with itemV2.cfg.
+  But CLAUDE.md and DEVELOPMENT.md say "(unpublished)". CLAUDE.md and DEVELOPMENT.md are wrong.
+- The "Audio" / "Skip/disable character voiceovers" entry — confirm whether this is in scope for
+  general_tweaker or a new mod; unclear ownership.
+-->
 # Chaos Wastes Tweaker — Feature To-Do
 
 ## Implemented

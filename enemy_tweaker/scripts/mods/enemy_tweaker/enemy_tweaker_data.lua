@@ -1,5 +1,14 @@
 local mod = get_mod("enemy_tweaker")
 
+-- REVIEW: this list is hand-maintained and drifts vs FACTION_* tables in
+-- enemy_tweaker.lua (e.g. chaos_vortex_sorcerer / chaos_corruptor_sorcerer
+-- in FACTION_CHAOS are missing here, and skaven_stormfiend appears here but
+-- has no equivalent grouping in code). The skeleton et_* breeds are
+-- intentionally absent because they're added at runtime, but that means
+-- the breed-swap UI can't target them — only set up vanilla->vanilla swaps.
+-- CLARIFY: the dropdown displays the raw breed key as the label (no
+-- localization). Probably intentional for transparency, but tooltip should
+-- say so explicitly.
 local breed_options = {
     { text = "off",                                    value = "off" },
     { text = "skaven_slave",                           value = "skaven_slave" },

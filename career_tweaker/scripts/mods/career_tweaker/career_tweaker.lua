@@ -1,9 +1,12 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.2.4-dev"
+local MOD_VERSION = "0.2.5-dev"
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Career Tweaker v" .. MOD_VERSION)
 
+-- Safe-stub fallback (CHANGELOG 0.2.2): if dofile fails we substitute no-op
+-- functions so on_game_state_changed / on_setting_changed / on_disabled
+-- (which all call balance.apply / balance.restore) don't crash.
 local ok, balance = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_balance")
 if not ok then
     mod:error("Failed to load balance module: %s", tostring(balance))
@@ -30,6 +33,12 @@ local _WEAPON_ABILITY_CAREERS = {
     es_questingknight = true,
 }
 
+-- Tracked HeroWindowTalents instance, set by on_enter and cleared by on_exit.
+-- Used so apply_talent_swaps() can force the inventory talent picker to
+-- re-read swapped trees when the user changes a setting while the menu is open.
+-- QUESTION: HeroWindowTalentsConsole (controller-mode UI) has its own
+-- _update_talent_sync but isn't tracked here — controller users won't get the
+-- live refresh. Acceptable if controller UI is out of scope.
 local _talent_window_instance = nil
 
 mod:hook_safe("HeroWindowTalents", "on_enter", function(self)
@@ -42,6 +51,8 @@ end)
 
 local function refresh_talent_ui()
     if _talent_window_instance then
+        -- pcall guards against the window being torn down between the on_exit
+        -- hook firing late and the refresh attempting to access it.
         pcall(function()
             _talent_window_instance:_update_talent_sync(false)
         end)
@@ -51,7 +62,10 @@ end
 local function apply_talent_swaps()
     if not CareerSettings or not TalentTrees then return end
 
-    -- Restore all previous overrides to their originals
+    -- Restore step: revert any prior swap by re-binding the saved original
+    -- tree/ability into the destination career's slot. Restores rebind only
+    -- (no mutation of inner tree contents), so this stays correct as long as
+    -- nothing else mutates TalentTrees[profile][index] in place.
     for career_name, orig in pairs(_talent_swap_originals) do
         local cs = CareerSettings[career_name]
         if cs then
@@ -110,6 +124,8 @@ mod.on_game_state_changed = function(status, state_name)
 end
 
 mod.on_setting_changed = function(setting_id)
+    -- REVIEW: This echo fires in chat for EVERY setting toggle. Likely debug
+    -- output left in. Consider downgrading to mod:info or removing.
     mod:echo("Setting changed: " .. tostring(setting_id))
 
     if setting_id:find("^talent_swap_") then
@@ -126,8 +142,12 @@ mod.on_disabled = function()
 end
 
 -- ============================================================
--- Console command: crt status
+-- Console command: ct_status (typed literally; VMF commands are flat, not prefixed)
 -- ============================================================
+-- REVIEW: Comment said "crt status" but the command is named "ct_status" —
+-- mismatch fixed in this comment. Note "ct_" prefix is shared with
+-- chaos_wastes_tweaker convention; consider renaming to "crt_status" to
+-- disambiguate from chaos_wastes_tweaker commands (none currently collide).
 
 mod:command("ct_status", "Show Career Tweaker version and active swaps/balance mods", function()
     mod:echo("Career Tweaker v" .. MOD_VERSION)

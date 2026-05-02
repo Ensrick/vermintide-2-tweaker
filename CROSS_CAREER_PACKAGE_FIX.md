@@ -1,3 +1,12 @@
+<!--
+REVIEW (2026-05-01): TODO.md flags this doc as "partially obsolete — original cross-career
+theory was wrong" with reference to the v0.10.14 mitigation. Specifically: the actual crash
+was traced to bots wielding the Necromancer ghost scythe even WITHOUT cross-career unlocks,
+implying career_name was nil at spawn time (not a package-loading issue). Recommend adding
+a banner at top: "STATUS: Original analysis disproven. See TODO.md 'Investigate CW ghost
+scythe 3P spawn crash' for current diagnostic state. Some ideas (persisting loadout_cache,
+hooking get_loadout_item early) may still be useful but the root cause is different."
+-->
 # Fix Plan: Cross-Career Weapon Resource Package Crash
 
 ## Problem

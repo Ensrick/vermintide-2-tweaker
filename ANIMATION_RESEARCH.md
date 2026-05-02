@@ -1,3 +1,24 @@
+<!--
+REVIEW (2026-05-01): Content is mostly historical research notes (which approaches were tried
+and rejected). Still useful as a record of dead ends. Two stale points:
+
+1. "Commands for Discovery" table lists `t probe_3p`, `t dump_templates`, `t dump_crossbow`,
+   `t dump_chest_view` — the `t` prefix is the LEGACY monolithic mod. Current weapon_tweaker
+   commands use the `wt` prefix (`wt animlog`, `wt dump_actions`, `wt force3p`, etc.). Either:
+   (a) update commands to `wt`/`gt`/etc., OR
+   (b) note that commands shown here were captured under the old all-in-one `tweaker` mod and
+       equivalents may exist under the new prefixes.
+
+2. "Status: Kept, trimmed to only confirmed-useful entries" and the fallback table reflect the
+   pre-split architecture. WORK_ITEMS.md is now the authoritative source of "what works" for
+   animations and supersedes most of this file's status claims.
+
+3. The Chest of Trials UI tracked issue at the bottom is now in TODO.md / WORK_ITEMS.md too.
+
+RECOMMENDATION: Either prepend "STATUS: Historical research record. See WORK_ITEMS.md for
+current status; WEAPON_CATALOG.md for per-weapon animation reference." or merge into one of
+those and delete this file.
+-->
 # 3P Animation Research — Cross-Career Weapons
 
 ## Weapon Template Keys (confirmed from source)

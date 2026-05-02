@@ -20,3 +20,20 @@ ANTIGRAVITY.md
 # Steam SDK artifact
 upload/steam_appid.txt
 .temp/
+
+# REVIEW (2026-05-01):
+# - bundleV2/ is INTENTIONALLY tracked (so other devs / git bisect can see the built bundle
+#   that was deployed at each commit). Confirm with maintainer; if accidentally tracked, add
+#   `**/bundleV2/` here.
+# - .vmbrc is tracked at repo root and contains absolute path to vmb tools — fine for solo
+#   dev but if this repo is ever shared, would need a per-user override pattern.
+# - bundleHistory.dat is tracked at repo root (binary, mtime old). Confirm intentional.
+# - The 16-hex glob pattern correctly catches loose extensionless bundle artifacts but ALSO
+#   catches any file with a 16-hex name in any directory (including bundleV2/ — but since
+#   actual bundle files in bundleV2 have .mod_bundle extension, this is harmless).
+# - dumps/ is tracked. Confirm intentional — these are large reference files generated from
+#   in-game commands. Maybe `dumps/*.txt` should be ignored except a curated set?
+# - launcher_screenshot.png (1MB) at repo root is tracked. Should it be moved to a docs/
+#   subfolder?
+# Sensitive paths check: no .env or credentials.json patterns ignored, but none exist in repo
+# either. ugc_tool authenticates via Steam session, no token files written here.

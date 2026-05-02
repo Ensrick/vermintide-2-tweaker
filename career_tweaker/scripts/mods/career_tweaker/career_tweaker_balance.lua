@@ -18,6 +18,12 @@ local mod = get_mod("crt")
 -- Hook-based mods check their setting via mod:get() on every call,
 -- so they activate/deactivate without needing apply/restore cycles.
 
+-- REVIEW: Both registered mods rely on hook-based behavior (see hooks below)
+-- and have empty patches{}. The patches/custom_apply/custom_restore engine
+-- below is therefore currently dead code — apply_balance_mods does no
+-- BuffTemplates mutation. Keep the framework if patch-based balance changes
+-- are planned, otherwise the apply/restore engine and _originals table can
+-- be deleted. The `character`/`career` fields are also never read.
 local BALANCE_MODS = {
     balance_zealot_merc_allow_random_crits = {
         character = "victor/markus",
@@ -39,6 +45,10 @@ local BALANCE_MODS = {
 -- and forces is_crit = false, bypassing normal crit RNG.
 -- This hook suppresses that perk so natural crits can still proc.
 
+-- Idempotent and reversible: the hook always reads the current setting via
+-- mod:get, so toggling the checkbox takes effect on the very next call to
+-- has_talent_perk (which is per-attack via ActionUtils.is_critical_strike).
+-- No state to clean up on disable beyond what mod.on_disabled already does.
 mod:hook("TalentExtension", "has_talent_perk", function(func, self, perk)
     if perk == "no_random_crits" and mod:get("balance_zealot_merc_allow_random_crits") then
         return false
@@ -52,6 +62,9 @@ end)
 -- The parry window is hardcoded to 0.5s in ActionBlock and ActionMeleeStart.
 -- This doubles it to 1.0s when the toggle is enabled.
 
+-- ActionBlock.client_owner_start_action sets `status_extension.timed_block = t + 0.5`
+-- (action_block.lua:45). hook_safe runs AFTER the original, so we overwrite
+-- to t + 1.0. Correct.
 mod:hook_safe("ActionBlock", "client_owner_start_action", function(self, new_action, t)
     if mod:get("balance_whc_parry_extended_window") then
         local status_extension = self._status_extension
@@ -61,9 +74,14 @@ mod:hook_safe("ActionBlock", "client_owner_start_action", function(self, new_act
     end
 end)
 
-mod:hook_safe("ActionMeleeStart", "client_owner_start_action", function(self, new_action, t)
+-- ActionMeleeStart's charge-block is set in client_owner_post_update (action_melee_start.lua:42)
+-- via `status_extension.timed_block = t + 0.5`. We hook_safe the same method so our +1.0
+-- write lands AFTER the original on every tick that the charge-block branch fires.
+-- Note: ActionMeleeStart inherits from ActionDummy and stores its extension as
+-- `self.status_extension` (no underscore — action_dummy.lua:9), unlike ActionBlock above.
+mod:hook_safe("ActionMeleeStart", "client_owner_post_update", function(self, dt, t, world)
     if mod:get("balance_whc_parry_extended_window") then
-        local status_extension = self._status_extension
+        local status_extension = self.status_extension
         if status_extension and status_extension.timed_block then
             status_extension.timed_block = t + 1.0
         end
@@ -73,6 +91,9 @@ end)
 -- ============================================================
 -- Field-patch apply/restore engine
 -- ============================================================
+-- REVIEW: Currently unused — both registered BALANCE_MODS have empty
+-- patches{} and rely on hooks above. _originals will always be empty after
+-- apply, and restore is a no-op. Keep if patch-based mods are planned.
 
 local _originals = {}
 

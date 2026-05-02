@@ -1,5 +1,28 @@
 # Weapon Tweaker Changelog
 
+## 0.11.17-dev (2026-05-02) — Dual axes: distinct light chain animations
+v0.11.15's light remaps collapsed L1, L3, L4 onto the same dual_hammers `attack_swing_left` (L1 swing), making 3 of the 5 lights look identical. Spread them across all 5 dual_hammers light anim_events instead:
+- L2 release `attack_swing_right_diagonal` → `attack_swing_left` (dual_hammers L1)
+- L3 release `attack_swing_left` → `attack_swing_down` (dual_hammers L2)
+- L4 release `attack_swing_right` → `attack_swing_up` (dual_hammers L4)
+- L5 release `attack_swing_down` → `attack_swing_stab` (dual_hammers L5)
+- L1 release `attack_swing_left_diagonal` left native — plays as dual_hammers L3 swing.
+
+Heavy chain unchanged (user confirmed perfect in v0.11.15).
+
+## 0.11.15-dev (2026-05-01) — Dual axes: per-attack remaps to dual-hammers SM
+Animlog from v0.11.13 dr_ranger play showed all attack events firing without `[MISSING]` tags but several producing no visible 3P animation — the dual-hammers SM (loaded by the wield redirect) doesn't have transitions for dual-axe-specific events. Added template-based remaps in `_3p_template_remaps[dual_wield_axes_template_1]` for the 5 problematic events:
+- `attack_swing_charge_diagonal` → `attack_swing_charge_left` (L3 + H3 charge windup)
+- `attack_swing_heavy_right` → `attack_swing_heavy_right_diagonal` (H1 release)
+- `attack_swing_heavy` → `attack_swing_heavy_down` (H2 release)
+- `attack_swing_right_diagonal` → `attack_swing_left_diagonal` (L2)
+- `attack_swing_right` → `attack_swing_left` (L4)
+
+Per-career entries for `dr_ironbreaker` / `dr_ranger` / `dr_engineer`; `dr_slayer` has no entry so `_resolve_template_remap` returns nil and native dual-axes animations play. Targets are the dual_hammers template's anim_events — `Unit.has_animation_event` was TRUE on the original events too (per memory rule), so visual confirmation is the only test that matters.
+
+## 0.11.13-dev (2026-05-01) — Dual axes on Bardin's non-Slayer careers
+- Added `to_dual_axes` → `to_dual_hammers` redirect for non-`dr_slayer` careers. `dr_dual_wield_axes` is already unlocked for Ironbreaker/Ranger/Engineer in `weapon_unlock_map`, but `to_dual_axes` is the Slayer-only wield event — without this redirect, the 3P SM stays in idle on the other Bardin careers and no attack animations play. Mirrors the v0.9.116 pattern used for `to_dual_hammers_priest`. Slayer is unaffected (matches the prefix and skips the redirect). Per-attack remaps may follow once `wt animlog` reveals which dual-axe-specific events (`attack_swing_charge_diagonal`, `attack_swing_heavy_right`, `attack_swing_heavy`, `attack_swing_right_diagonal`, `attack_swing_right`) don't animate on the dual-hammers SM.
+
 ## 0.11.8-dev (2026-05-01) — Migrated to VMB build pipeline
 
 Moved from the raw Stingray SDK build (`wt.mod`, `settings.ini`, `lua_preprocessor_defines.config`, `.build/OUT/`) to VMB (`weapon_tweaker.mod`, `itemV2.cfg`, `bundleV2/`). Workshop ID `3712896117` and internal mod ID `"wt"` preserved — existing user settings are unaffected. `itemV2.cfg` set to `visibility = "private"`.

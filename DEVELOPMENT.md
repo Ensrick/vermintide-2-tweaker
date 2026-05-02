@@ -11,8 +11,9 @@ A modular set of Vermintide 2 VMF mods split from the original monolithic **"Twe
 | General Tweaker | `gt` | `gt <command>` | **3713619122** | private | VMB |
 | Career Tweaker | `crt` | `crt <command>` | **3716286199** | private | VMB |
 | Cosmetics Tweaker | `cosmetics_tweaker` | `cos <command>` | **3715714222** | private | VMB |
-| Enemy Tweaker | `enemy_tweaker` | (n/a) | **3716780252** | private | VMB |
-| Character Weapon Variants | `character_weapon_variants` | (n/a) | (unpublished) | n/a | VMB |
+| Enemy Tweaker | `enemy_tweaker` | `enemy_tweaker et_*` | **3716780252** | private | VMB |
+<!-- REVIEW: character_weapon_variants is published. itemV2.cfg published_id = 3716869446L; deploy_all.ps1 lists 3716869446. Update both Workshop ID and Visibility (visibility="private" per cfg). -->
+| Character Weapon Variants | `character_weapon_variants` | (n/a) | **3716869446** | private | VMB |
 | ~~Tweaker (legacy)~~ | `t` | `t <command>` | 3704660429 | n/a | SDK (kept as reference) |
 
 ## Directory Structure
@@ -121,6 +122,10 @@ tags = [ ];
 & .\upload_ct.ps1   # uploads chaos_wastes_tweaker (visibility=public, intentional)
 & .\upload_wt.ps1   # uploads weapon_tweaker (aborts if itemV2.cfg has visibility="public")
 ```
+
+<!-- REVIEW: There is no upload_*.ps1 for general_tweaker, career_tweaker, cosmetics_tweaker, enemy_tweaker, or character_weapon_variants. The "For other mods, run ugc_tool directly via bash" paragraph below covers this, but consider adding a one-liner here pointing to the bash workaround (or warning that "creating an upload_<x>.ps1 must include the visibility=public abort guard for any mod whose intended visibility is private"). -->
+<!-- REVIEW: STEAM REMOVAL WARNING. Two mods were once flipped to "public" by an automated change; both got flagged and "removed from community", which is irreversible (per memory feedback_workshop_metadata_user_dictates.md). The DEVELOPMENT.md note in the itemV2.cfg section captures this, but the irreversibility deserves bolder emphasis here in the upload section since this is where it bites. -->
+
 
 For other mods, run ugc_tool directly via bash so the `echo y |` EULA workaround works (PowerShell `&` does not pipe stdin reliably to ugc_tool):
 
@@ -449,6 +454,7 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 - SDK: `C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\`
 - ugc_tool: `{SDK}\ugc_uploader\ugc_tool.exe`
 - Build compiler: `{SDK}\bin\stingray_win64_dev_x64.exe`
+<!-- REVIEW: Upload staging is now obsolete for active mods. ugc_tool reads itemV2.cfg directly from the per-mod source dir; content="bundleV2" resolves relative to the cfg parent. Only the legacy /tweaker mod still uses sample_item staging (and it's effectively frozen). The line below is fine as a "where the SDK puts its sample" note, but should be marked legacy. -->
 - Upload staging: `{SDK}\ugc_uploader\sample_item\` (the tool's native staging area)
 - `apply_for_sanctioned_status = false` is valid and should be kept
 - `tags = [ ];` is added automatically by the tool -- do NOT add it manually before first upload
@@ -593,28 +599,37 @@ Key differences:
 - `LootItemUnitPreviewer` uses spawn order (left=1, right=2) — identified via `spawn_data` entries
 - The old `MenuWorldPreviewer._spawn_item_unit` hook is **NOT usable** for per-hand targeting — it fires once per unit with no hand indicator. Use `HeroPreviewer._spawn_item` instead (MenuWorldPreviewer extends HeroPreviewer)
 
-### Weapon Scale Overrides (`_weapon_scale_overrides`)
+### Weapon Scale Overrides (`_unit_path_scale_overrides`)
+
+cosmetics_tweaker scales weapon models based on the **resolved unit path** (the actual model the engine loads), not on the item template key. This way a custom item that uses a base weapon's template but a different model (e.g. character_weapon_variants Imperial Longsword on `bastard_sword_template` with `wpn_2h_sword_*` model) is correctly ignored, while ANY item — vanilla or modded — that loads a flagged model gets scaled.
 
 ```lua
-local _weapon_scale_overrides = {
-    es_bastard_sword = {
-        _default = _breton_sword_thiccc,  -- function(get) -> {x,y,z} or nil
-    },
-    es_sword_shield_breton = {
-        _default = _breton_sword_thiccc,
-        _fields = { "right_unit_1p", "right_unit_3p" },  -- only scale the sword, not the shield
+local _unit_path_scale_overrides = {
+    {
+        pattern = "wpn_emp_gk_sword_",   -- substring match (string.find ..., 1, true)
+        factor  = _breton_sword_thiccc,  -- function(get) | {x,y,z} | number
+        hand    = "right",                -- "right" | "left" | nil (both)
     },
 }
 ```
 
-Each entry maps a weapon key to career-prefix overrides. Special keys:
-- `_default`: fallback when no career prefix matches
-- `_fields`: restricts which unit fields receive the scale (defaults to all four if omitted). Used to target only right-hand (weapon) or left-hand (shield) independently.
+Schema:
+- **`pattern`**: literal substring matched against the unit path returned by `BackendUtils.get_item_units`. If the equipped item has a skin, the skin's `right_hand_unit` is checked; otherwise `item_data.right_hand_unit`.
+- **`factor`**: a `function(get)` returning `{x,y,z}|number|nil` (toggle off → return nil), a literal `{x,y,z}` table, or a uniform number. Functions are called every apply, so live setting toggles take effect on next equip.
+- **`hand`**: restricts to one hand. `"right"` only scales the weapon hand (used to keep paired shields at native scale); `"left"` only the shield/offhand; `nil` scales both.
 
-Values can be:
-- A number (uniform scale)
-- A `{x, y, z}` table (per-axis scale)
-- A `function(get) -> number|{x,y,z}|nil` (dynamic, reads mod settings via `get`)
+#### Coverage across the three rendering paths
+
+The scale system runs in **all three** hooks (see "Three Rendering Paths" above):
+1. `GearUtils.create_equipment` — `_scale_units(result, item_data, result.skin)`
+2. `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` — `_spawn_item_post` walks `self._item_info_by_slot`, looks up `slot_index` from each entry's `spawn_data[1]`, and calls `_apply_unit_path_scale_hand` per slot
+3. `LootItemUnitPreviewer.spawn_units` — applies to spawn-order indices `units[2]` (right) and `units[1]` (left)
+
+The two menu paths (#2, #3) additionally gate on `not item_data.cwv_variant` for defence-in-depth. The in-game path doesn't — its unit-path matching alone is sufficient.
+
+#### Grip-offset overrides (`_weapon_grip_offsets`)
+
+Separate table, **item-name-keyed** (NOT unit-path). Currently empty; kept as the extension point for future grip tweaks. Z is along the blade — sign convention per `feedback_grip_offset_sign.md` (+Z lowers grip toward the hilt, -Z raises grip toward the blade tip). Grip-offset runs only in the in-game `GearUtils` hook by intentional design — preview paths show the un-offset weapon.
 
 ### Shield Model Swaps (`_shield_swap_map` + `BackendUtils.get_item_units` hook)
 
@@ -668,7 +683,9 @@ Most also have `_runed_01`, `_runed_02`, and `_magic_01` variants. GK shields re
 
 ### Illusion Browser: Resolving Skin Keys
 
-When browsing illusions in `LootItemUnitPreviewer`, `self._item.data.key` is the **skin key** (e.g. `es_bastard_sword_skin_01`), not the weapon key. To find the weapon key for scale overrides, resolve via `ItemMasterList[skin_key].matching_item_key`.
+When browsing illusions in `LootItemUnitPreviewer`, `self._item.data` is the skin's ItemMasterList entry (e.g. `es_bastard_sword_skin_01`), not the weapon. For the new unit-path scale system this doesn't need resolution — the skin's `right_hand_unit` IS the model being rendered, so `_resolve_render_unit_path(item_data, skin, "right_hand_unit")` reads it directly and pattern-matches.
+
+The historic resolution `ItemMasterList[skin_key].matching_item_key → base_weapon_key` is still relevant for any system that genuinely needs the weapon-template identity (e.g. LA offhand selection). Use `rawget(ItemMasterList, key)` per CLAUDE.md.
 
 ### Adding a New Shield Swap
 
@@ -685,11 +702,14 @@ When browsing illusions in `LootItemUnitPreviewer`, `self._item.data.key` is the
 
 ### Adding a New Weapon Scale Override
 
-1. Add an entry to `_weapon_scale_overrides` in `cosmetics_tweaker.lua`
-2. Use `_fields` if only one hand should be affected (e.g. sword but not shield)
-3. Use a function value if it should be toggle-gated by a mod setting
-4. Add the corresponding setting, widget, and localization entries
-5. Build, deploy, restart
+1. Identify the **unit path substring** that uniquely matches the model family you want to scale. Substrings should be specific enough to NOT collide (e.g. `wpn_emp_gk_sword_` is safe; `wpn_emp_` would also catch Empire shields and is too broad).
+2. Append to `_unit_path_scale_overrides` in `cosmetics_tweaker.lua`:
+   ```lua
+   { pattern = "wpn_xxx_yyy_", factor = _my_factor_fn, hand = "right" }
+   ```
+3. If the scale should be toggle-gated, define a `function(get) -> {x,y,z}|nil` factor that reads the setting and returns nil when off (mirroring `_breton_sword_thiccc`).
+4. Add the corresponding setting widget in `cosmetics_tweaker_data.lua` and localization entries in `cosmetics_tweaker_localization.lua`.
+5. Build, deploy, restart. No code changes needed in the hooks — they all read this table.
 
 ## Useful Paths
 
