@@ -1,7 +1,28 @@
+--[[
+weapon_tweaker — cross-career weapon unlocks, animation remapping, and visual tweaks.
+
+Major sections (search by name to jump):
+  * weapon_unlock_map / apply_weapon_unlocks       — which careers can wield which weapons
+  * patch_career_actions_on_weapons                — keep career abilities working on cross-career weapons
+  * _anim_redirect / _career_anim_redirect / _3p_weapon_remap
+                                                   — three-layer animation system (see DEVELOPMENT.md)
+  * _suffix_career_map / _try_suffix_redirect      — suffix-based event swaps (e.g. *_2h_billhook)
+  * _weapon_scale_overrides / _weapon_grip_offsets — per-career scale & grip-position tweaks
+  * Forge subsystem (mod:command "wt forge*")      — runtime weapon crafting via MoreItemsLibrary
+  * 3P state-machine probe / dump_actions / animlog — debug commands
+  * Lifecycle: on_game_state_changed (re-applies unlocks per state), on_setting_changed,
+                on_disabled (strip-only revert).
+
+Key conventions (also in CLAUDE.md):
+  * NEVER hook BackendUtils.can_wield_item — modify ItemMasterList[*].can_wield directly.
+  * rawget(ItemMasterList, k) when k might not exist (DLC ownership, save-data drift).
+  * Lua 5.1 — locals are not hoisted; verify forward references before using a name.
+]]
+
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.11.17-dev"
+local MOD_VERSION = "0.11.18-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
@@ -1419,6 +1440,47 @@ mod.on_game_state_changed = function()
     patch_career_actions_on_weapons()
 end
 
+-- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
+-- and every ability action it injected into Weapons[*].actions. Without this, disabling the mod
+-- via VMF would leave cross-career unlocks active on every affected weapon until game restart.
+-- The restore-and-mutate phases of apply_weapon_unlocks / patch_career_actions_on_weapons already
+-- handle the strip step on every call, so we just clear the management state and re-call: every
+-- mod:get("unlock_*") read returns nil/false post-disable, so the add-back phase contributes nothing.
+local function clear_weapon_unlocks()
+    if not ItemMasterList then return end
+    for career, weapons in pairs(weapon_unlock_map) do
+        for _, weapon_key in ipairs(weapons) do
+            local item = rawget(ItemMasterList, weapon_key)
+            if item and item.can_wield then
+                for i = #item.can_wield, 1, -1 do
+                    if item.can_wield[i] == career then
+                        table.remove(item.can_wield, i)
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function clear_career_action_injections()
+    if not Weapons then return end
+    for tmpl_key, actions in pairs(_career_action_injections) do
+        local tmpl = Weapons[tmpl_key]
+        if tmpl and tmpl.actions then
+            for action_name in pairs(actions) do
+                tmpl.actions[action_name] = nil
+            end
+        end
+    end
+    _career_action_injections = {}
+end
+
+mod.on_disabled = function()
+    clear_weapon_unlocks()
+    clear_career_action_injections()
+    mod:info("Weapon Tweaker disabled — cross-career unlocks and ability action injections reverted")
+end
+
 mod.on_setting_changed = function(setting_id)
     if setting_id and (setting_id:find("^unlock_") or setting_id == "debug") then
         apply_weapon_unlocks()
@@ -1613,12 +1675,10 @@ end
 local function _forge_create_item(weapon_data, backend_id)
     if not ItemMasterList then return nil end
     local item_key = weapon_data.item_key
-    -- POTENTIAL BUG (LOW): per CLAUDE.md, ItemMasterList has a __index that
-    -- calls `crashify` on unknown keys. `item_key` here comes from save data
-    -- (`forged_weapons` setting) and could be stale if the user un-installed
-    -- a DLC that defined the weapon. Use `rawget(ItemMasterList, item_key)`
-    -- to defensively avoid the crashify path.
-    local master = ItemMasterList[item_key]
+    -- rawget: ItemMasterList __index crashifies on unknown keys (CLAUDE.md). item_key
+    -- comes from the `forged_weapons` save data and could be stale if the user
+    -- un-installed a DLC that defined the weapon.
+    local master = rawget(ItemMasterList, item_key)
     if not master then
         mod:echo("Forge: unknown weapon key '" .. tostring(item_key) .. "'")
         return nil
@@ -2567,15 +2627,15 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_present_item", function(func, self, it
     local display_item = item
 
     if not display_item then
-        -- POTENTIAL BUG (LOW): unguarded ItemMasterList[item_key] read.
-        -- item_key here comes from the weapon list populated in
-        -- _setup_weapon_list (~L2241) which iterates `pairs(ItemMasterList)` so
-        -- the key IS guaranteed to exist — so this is technically safe today.
-        -- But fragile against future code changes (e.g. populating from a
-        -- different source). Prefer `rawget(ItemMasterList, item_key)`.
-        local item_data = table.clone(ItemMasterList[item_key])
-        item_data.key = item_key
-        display_item = { data = item_data, key = item_key }
+        -- rawget: defensive — keeps the lookup safe if a future caller hands us a
+        -- key that didn't come from the validated `pairs(ItemMasterList)` iteration in
+        -- _setup_weapon_list (e.g. user-typed forge command).
+        local entry = rawget(ItemMasterList, item_key)
+        if entry then
+            local item_data = table.clone(entry)
+            item_data.key = item_key
+            display_item = { data = item_data, key = item_key }
+        end
     end
 
     local viewport_widget = viewport_data.widget
@@ -2740,11 +2800,10 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         mod:echo("Equip failed: " .. tostring(err2))
     end
 
-    -- POTENTIAL BUG (LOW): two unguarded reads — `ItemMasterList[item_key]`
-    -- and chained `.display_name` access. item_key reaches here only after
-    -- successful selection from the weapon list (which iterates pairs over
-    -- ItemMasterList) so it's guaranteed to exist. Same caveat as line ~2307.
-    mod:echo("Crafted & saved: " .. tostring(Localize(ItemMasterList[item_key].display_name)) .. " [" .. tostring(weapon_data.rarity) .. "]")
+    -- rawget: safe even if item_key drifts away from the validated weapon list source.
+    local _master = rawget(ItemMasterList, item_key)
+    local _name = (_master and _master.display_name) or item_key
+    mod:echo("Crafted & saved: " .. tostring(Localize(_name)) .. " [" .. tostring(weapon_data.rarity) .. "]")
 
     self:_sync_backend_loadout()
     self._equip_pulse_duration = 0.5
@@ -3097,7 +3156,7 @@ mod:command("craft_dump", "Dump equipped item + rarity/localization/network data
         mod:info("  weaves.get_loadout_item_id = %s", tostring(weaves_bid))
         local item = items_bid and items:get_item_from_id(items_bid)
         if item then
-            local data = item.data or ItemMasterList[item.key] or {}
+            local data = item.data or (item.key and rawget(ItemMasterList, item.key)) or {}
             mod:info("  item.key       = %s", tostring(item.key))
             mod:info("  item.ItemId    = %s", tostring(item.ItemId))
             mod:info("  item.rarity    = %s", tostring(item.rarity))
@@ -3286,7 +3345,7 @@ mod:command("forge_confirm", "Create the forged weapon", function()
         }
         _forge_save()
 
-        local master = ItemMasterList[_forge_pending.item_key]
+        local master = rawget(ItemMasterList, _forge_pending.item_key)
         local display = _forge_pending.item_key
         if master and master.display_name then
             local ok, loc = pcall(Localize, master.display_name)
@@ -3302,8 +3361,9 @@ mod:command("forge_list", "List all forged weapons", function()
     for bid, w in pairs(_forged_weapons) do
         count = count + 1
         local display = w.item_key
-        if ItemMasterList and ItemMasterList[w.item_key] and ItemMasterList[w.item_key].display_name then
-            local ok, loc = pcall(Localize, ItemMasterList[w.item_key].display_name)
+        local _entry = ItemMasterList and rawget(ItemMasterList, w.item_key)
+        if _entry and _entry.display_name then
+            local ok, loc = pcall(Localize, _entry.display_name)
             if ok and loc then display = loc end
         end
         local parts = { display }

@@ -823,7 +823,9 @@ local _weapon_unlocks = {
 
 local function _apply_weapon_unlocks()
 	for _, unlock in ipairs(_weapon_unlocks) do
-		local item = ItemMasterList[unlock.item_key]
+		-- rawget: ItemMasterList __index crashifies on missing keys; defensive against
+		-- future _weapon_unlocks entries referencing DLC-gated items the user lacks.
+		local item = rawget(ItemMasterList, unlock.item_key)
 		if item and item.can_wield then
 			local existing = {}
 			for _, career in ipairs(item.can_wield) do
@@ -1077,7 +1079,10 @@ end)
 local _registered_keys = {}
 
 local function _build_entry(def, backend_id)
-	local base = ItemMasterList[def.base_weapon]
+	-- rawget: every variant declares a base_weapon key that's expected to exist, but the
+	-- crashify metamethod on a missing key would surface as an opaque crash here. Failing
+	-- soft with a warning lets the mod skip variants whose base weapon isn't installed.
+	local base = rawget(ItemMasterList, def.base_weapon)
 	if not base then
 		mod:warning("Base weapon '%s' not found in ItemMasterList", def.base_weapon)
 		return nil

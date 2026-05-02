@@ -59,23 +59,24 @@ end)
 -- ============================================================
 -- Hook: Extend parry window when WHC parry-crit talent toggle is on
 -- ============================================================
--- The parry window is hardcoded to 0.5s in ActionBlock and ActionMeleeStart.
--- This doubles it to 1.0s when the toggle is enabled.
+-- Vanilla parry window is 0.5s (hardcoded in ActionBlock and ActionMeleeStart).
+-- Extended window doubles it to 1.0s when the toggle is enabled.
+local _PARRY_WINDOW_EXTENDED_S = 1.0
 
 -- ActionBlock.client_owner_start_action sets `status_extension.timed_block = t + 0.5`
--- (action_block.lua:45). hook_safe runs AFTER the original, so we overwrite
--- to t + 1.0. Correct.
+-- (action_block.lua:45). hook_safe runs AFTER the original, so our overwrite to
+-- t + _PARRY_WINDOW_EXTENDED_S lands last and wins.
 mod:hook_safe("ActionBlock", "client_owner_start_action", function(self, new_action, t)
     if mod:get("balance_whc_parry_extended_window") then
         local status_extension = self._status_extension
         if status_extension and status_extension.timed_block then
-            status_extension.timed_block = t + 1.0
+            status_extension.timed_block = t + _PARRY_WINDOW_EXTENDED_S
         end
     end
 end)
 
 -- ActionMeleeStart's charge-block is set in client_owner_post_update (action_melee_start.lua:42)
--- via `status_extension.timed_block = t + 0.5`. We hook_safe the same method so our +1.0
+-- via `status_extension.timed_block = t + 0.5`. We hook_safe the same method so our extended
 -- write lands AFTER the original on every tick that the charge-block branch fires.
 -- Note: ActionMeleeStart inherits from ActionDummy and stores its extension as
 -- `self.status_extension` (no underscore — action_dummy.lua:9), unlike ActionBlock above.
@@ -83,7 +84,7 @@ mod:hook_safe("ActionMeleeStart", "client_owner_post_update", function(self, dt,
     if mod:get("balance_whc_parry_extended_window") then
         local status_extension = self.status_extension
         if status_extension and status_extension.timed_block then
-            status_extension.timed_block = t + 1.0
+            status_extension.timed_block = t + _PARRY_WINDOW_EXTENDED_S
         end
     end
 end)

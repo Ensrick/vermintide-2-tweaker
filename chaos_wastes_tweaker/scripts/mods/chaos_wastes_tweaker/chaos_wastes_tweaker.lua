@@ -1,6 +1,30 @@
+--[[
+chaos_wastes_tweaker — Chaos Wastes ("deus" mode) run modifiers.
+
+Major sections (search by name to jump):
+  * Coin economy           — coin_multiplier hook on DeusRunController.on_soft_currency_picked_up,
+                             starting_coins via setup_run.
+  * Boon counts            — generate_random_power_ups hook intercepts shrine (4) and chest (3) defaults.
+  * Disabled boons         — save-and-restore mutation of DeusPowerUpsArray / *ByRarity around the roll.
+  * Curses                 — disable_curse_* setting reads, gating MutatorHandler._activate_mutator,
+                             DeusMechanism.get_current_node_curse, and node theme/curse fields.
+  * Run config overrides   — _setup_run hook (host-only): force_belakor, finale_dominant_god.
+  * Pickups & altars       — populate_pickups hook patches deus_weapon_chest / deus_cursed_chest /
+                             ammo counts AND injects campaign potions into Pickups.deus_potions
+                             with full-group renormalization (see also: DEVELOPMENT.md).
+  * Chest-type distribution — get_deus_weapon_chest_type override; "Default" sentinel = 0.
+  * Starting boons         — _add_initial_power_ups hook (host-only) grants toggled boons.
+  * Banned weapon traits   — apply_weapon_trait_filter / restore_weapon_trait_filter wraps
+                             DeusWeaponGeneration calls.
+  * Khaine's Fury tweak    — apply_reckless_swings_tweak / revert_reckless_swings_tweak +
+                             sync_reckless_swings (forward-declared; called from boon roll).
+  * Lifecycle              — on_setting_changed re-syncs Khaine's Fury; on_disabled reverts the
+                             persistent DeusPowerUpTemplates mutation.
+]]
+
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.3.4-dev"
+local MOD_VERSION = "0.3.5-dev"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -754,6 +778,14 @@ mod.on_setting_changed = function(setting_id)
     if setting_id == "tweak_reckless_swings" then
         sync_reckless_swings()
     end
+end
+
+-- Clean disable: revert the persistent DeusPowerUpTemplates.deus_reckless_swings mutation so
+-- toggling the mod off via VMF doesn't leave Khaine's Fury in its tweaked state until restart.
+-- All other mutations in this mod are scoped (save-and-restore inside hooks); only the reckless
+-- swings tweak persists across hook calls.
+mod.on_disabled = function()
+    revert_reckless_swings_tweak()
 end
 
 -- ============================================================

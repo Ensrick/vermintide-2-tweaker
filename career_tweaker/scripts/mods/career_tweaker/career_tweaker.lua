@@ -1,6 +1,6 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.2.5-dev"
+local MOD_VERSION = "0.2.6-dev"
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Career Tweaker v" .. MOD_VERSION)
 
