@@ -13,9 +13,11 @@
 # Preprocessor output
 *.lua.processed
 
-# Claude Code context (contains local machine paths)
-CLAUDE.md
-ANTIGRAVITY.md
+# NOTE: CLAUDE.md and ANTIGRAVITY.md are intentionally TRACKED so AI-assistant
+# context travels with the repo (maintainer request 2026-05-02). They contain
+# absolute Windows paths under C:\Users\danjo\... — clones on other machines
+# will need to adapt those paths. If you fork this repo, consider rewriting
+# the path-bearing sections to your own layout.
 
 # Steam SDK artifact
 upload/steam_appid.txt
