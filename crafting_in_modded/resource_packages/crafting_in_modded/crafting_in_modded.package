@@ -1,0 +1,11 @@
+mod = [
+	"crafting_in_modded"
+]
+
+package = [
+	"resource_packages/crafting_in_modded/crafting_in_modded"
+]
+
+lua = [
+	"scripts/mods/crafting_in_modded/*"
+]

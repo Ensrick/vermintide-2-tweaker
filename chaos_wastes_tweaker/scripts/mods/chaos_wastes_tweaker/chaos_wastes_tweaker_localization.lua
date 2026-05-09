@@ -16,6 +16,8 @@ local loc = {
     altar_count_tooltip = { en = "Default = leave vanilla random distribution untouched. 1-9 = force this many altars of this type per chest. If any altar setting is non-default, the entire distribution is replaced — types still at Default will not appear." },
     altar_count_default = { en = "Default" },
     cursed_chest_count = { en = "Chests of Trials per Mission" },
+    respawn_on_chest_complete = { en = "Revive Team on Chest Completion" },
+    respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials encounter is completed successfully:\n• Knocked-down players (not held by a disabler) are revived.\n• Dead players are respawned, get the wounded condition (above Recruit), and start with 50%% THP.\nHost-only setting — the lobby host's value applies to everyone." },
     arena_ammo_count = { en = "Arena Ammo Boxes" },
     enable_campaign_potions = { en = "Enable Strength/Speed/Ability Potions" },
     any_trait_any_weapon = { en = "Any Trait on Any Weapon" },

@@ -1,5 +1,12 @@
 # Character Weapon Variants Code Review (2026-05-01)
 
+> **STALE — point-in-time at v0.1.56-dev. Mod is now at v0.1.159+.**
+> Use as historical context only. For current state see `RECIPES.md`
+> (procedural how-to) and `DEVELOPMENT.md` (architectural reference).
+> Resolved items below carry a `RESOLVED` annotation; everything else
+> may or may not still apply — verify against current code before
+> acting on it.
+
 Reviewer pass over `character_weapon_variants/` (every file except `bundleV2/`).
 Reviewed against MOD_VERSION `0.1.56-dev`. ~16 inline `--` comments added; no
 functional changes. Counts: 1 confirmed bug, 1 latent bug, plus several
@@ -20,7 +27,7 @@ so it doesn't fire today).
 
 ## Confirmed bugs / potential bugs
 
-1. **`LootItemUnitPreviewer.spawn_units` hook — missing backend_id resolution**
+1. **[RESOLVED in v0.1.127] `LootItemUnitPreviewer.spawn_units` hook — missing backend_id resolution**
    (`character_weapon_variants.lua:1051`).
    `weapon_key = item_data.key or item.key` returns the BASE weapon key for
    cwv items (e.g. `es_bastard_sword`), NEVER `cwv_es_longsword`. Both
@@ -113,13 +120,17 @@ so it doesn't fire today).
 
 ## Doc/code mismatches
 
-- **CHANGELOG v0.1.25 vs current code**: changelog states base longsword has
+- **[RESOLVED in v0.1.78] CHANGELOG v0.1.25 vs current code**: changelog states base longsword has
   `right_hand_scale = {1.0, 1.0, 1.15}` and veteran has `{0.65, 1.0, 0.85}`.
   Current code has all three Imperial Longsword variants at `{1.0, 1.0, 1.0}`
   (identity / no-op). Either revert the change (if the scaling broke
   something) or drop the field entirely so `_transform_map` doesn't pick up
   empty-effect entries. Either way, CHANGELOG should be amended in a future
   bump to reflect what shipped.
+  **v0.1.78 update:** the per-variant scale fields were removed and the
+  family-wide tune was migrated to `_type_transforms.cwv_imperial_longsword
+  = { right_hand_scale = {1.0, 0.8, 0.9}, right_hand_offset = {0, 0, -0.065} }`.
+  All three variants pick up the type-level entry via `_resolve_field`.
 - **DEVELOPMENT.md > Registration Timing** says "hook `StateInGameRunning.on_enter`
   using `hook_safe`" — code does this correctly. ✓
 - **DEVELOPMENT.md > Skin System** says "do NOT clear `skin_combination_table`"

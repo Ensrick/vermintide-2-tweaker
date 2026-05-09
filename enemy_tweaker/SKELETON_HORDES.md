@@ -87,6 +87,37 @@ We also need to ensure our breeds are added to `EnemyPackageLoader._session_bree
 3. **Animation compatibility** — does the necromancer skeleton model play `marauder` behavior animations correctly? The existing `chaos_skeleton` uses `marauder` with a different skeleton model. If the necromancer model has the same animation events (which is expected since they share the skeleton rig), it should work.
 4. **Shield unit_template** — for shield-bearing clones, we may need `ai_unit_skeleton_with_shield` instead of `ai_unit_skeleton`
 
+## NetworkLookup registration (gotcha)
+
+`NetworkLookup.breeds` is built from the `Breeds` table at boot, then a
+strict `__index` metatable is installed that errors on any unknown-key
+GET. VMF mods load AFTER finalization, so our `et_*_skeleton` names are
+absent unless we extend the table ourselves. As soon as the engine
+network-serializes a custom breed (AI unit spawn extractors etc.), it
+calls `NetworkLookup.breeds[breed_name]` and crashes with:
+
+```
+[NetworkLookup.lua] Table breeds does not contain key: et_necro_skeleton
+```
+
+Direct assignment into the table is safe (newindex doesn't trip
+`__index`), so the fix is just to extend it after registering each
+breed:
+
+```lua
+local nl_breeds = rawget(_G, "NetworkLookup") and NetworkLookup.breeds
+if nl_breeds and not rawget(nl_breeds, def.name) then  -- rawget, not nl_breeds[def.name]
+    local idx = #nl_breeds + 1
+    nl_breeds[idx] = def.name
+    nl_breeds[def.name] = idx
+end
+```
+
+The existence check **must** use `rawget`. Plain `nl_breeds[def.name]`
+is a GET and itself trips the metatable before the new key gets written
+— that crash shipped in 0.2.2 and 0.2.3 and was the load-time error fixed
+in 0.2.4-dev. See `enemy_tweaker.lua:_register_skeleton_breeds`.
+
 ## Risk Assessment
 
 | Risk | Likelihood | Impact | Mitigation |

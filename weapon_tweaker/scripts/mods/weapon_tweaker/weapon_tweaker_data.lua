@@ -934,20 +934,6 @@ local data = {
                     },
                 },
             },
-            {
-                setting_id = "forge_group",
-                type = "group",
-                sub_widgets = {
-                    {
-                        setting_id = "forge_hotkey",
-                        type = "keybind",
-                        default_value = {"b"},
-                        keybind_trigger = "pressed",
-                        keybind_type = "function_call",
-                        function_name = "open_forge",
-                    },
-                },
-            },
             -- POTENTIAL BUG (LOW): the following user-facing toggle widgets
             -- are advertised in the localization file but NEVER referenced by
             -- mod:get() in the code:

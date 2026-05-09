@@ -1,0 +1,11 @@
+mod = [
+	"la_prefix_patch"
+]
+
+package = [
+	"resource_packages/la_prefix_patch/la_prefix_patch"
+]
+
+lua = [
+	"scripts/mods/la_prefix_patch/*"
+]

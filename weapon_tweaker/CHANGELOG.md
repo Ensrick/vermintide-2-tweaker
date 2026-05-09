@@ -1,5 +1,28 @@
 # Weapon Tweaker Changelog
 
+## 0.12.0-dev (2026-05-05) — Crafting subsystem split out into Crafting in Modded mod
+The entire Athanor crafting subsystem (~1800 lines: NetworkLookup patch, forge persistence, Athanor UI hooks, BackendInterfaceWeavesPlayFab redirects, HeroWindowWeaveForgeWeapons hooks, `wt forge*` console commands, `wt craft_dump` command, `forge_hotkey` keybind) has been moved into a new sibling mod, `crafting_in_modded` (internal ID `cim`). Weapon Tweaker now focuses solely on cross-career weapon unlocks, animation remapping, and scale/offset.
+
+Migration note: weapons crafted under prior versions of `wt` are saved under the `wt` namespace and will not be migrated to `cim`. They are session-only artifacts and will be lost on the upgrade.
+
+## 0.11.20-dev (2026-05-05) — Deduplicate crafting weapon list
+- Crafting menu now deduplicates entries by `display_name` — no more duplicate weapons in the list.
+- Excluded `promo` rarity items (player's own crafted weapons) from appearing as craft templates.
+- Removed `backend_id` lookup from list population (unnecessary for a craft template catalogue).
+
+## 0.11.19-dev (2026-05-05) — Fix startup rehook warnings
+- Merged duplicate `HeroPreviewer.equip_item` hook_safe registrations into one (removed dead debug probe).
+- Merged duplicate `BackendManagerPlayFab._create_interfaces` hook_safe registrations via forward-declared `_athanor_inject_all`.
+- Eliminates two `[WARNING] Attempting to rehook active hook` messages on startup.
+
+## 0.11.18-dev (2026-05-05) — Fix crafted items treated as MIL templates
+- Crafted (promo) weapons now inject via `backend_mirror:add_item()` instead of MoreItemsLibrary. Fixes: template-style gray background, blocked cosmetic editing.
+- Added `_athanor_inject_item` / `_athanor_inject_all` functions for promo item lifecycle.
+- `_forge_inject_all` now skips promo items (handled by Athanor path instead).
+- Persistence: `_forge_save` now stores `rarity` and `traits` array.
+- Weapon list: cleared "Magic Level" / "1800" power text from craft template entries.
+- Added `wt craft_dump` diagnostic command for rarity/localization/backend debugging.
+
 ## 0.11.17-dev (2026-05-02) — Dual axes: distinct light chain animations
 v0.11.15's light remaps collapsed L1, L3, L4 onto the same dual_hammers `attack_swing_left` (L1 swing), making 3 of the 5 lights look identical. Spread them across all 5 dual_hammers light anim_events instead:
 - L2 release `attack_swing_right_diagonal` → `attack_swing_left` (dual_hammers L1)

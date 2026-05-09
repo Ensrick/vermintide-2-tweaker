@@ -8,11 +8,9 @@
 - [x] **Cross-character greatsword illusions** — Saltzpyre's greatsword models available as illusions on Kruber's greatsword and vice versa.
 - [x] **Imperial Longsword** — `cwv_es_longsword` (base, power 5) and `cwv_es_longsword_veteran` ("Halfling Splitter", exotic). Custom `imperial_longsword_template` with -15% damage, +15% speed, +15% cleave, -15% stagger. Model scaling: 1h sword Z+15%, greatsword X=0.65 Z-15%.
 
-## Tuskgor Javelin polish (cwv_es_javelin)
-- [ ] **Make thrown javelins stick + be pickable like throwing axes** — currently the throw projectile uses `Projectiles.javelin` (link/wall_nail behaviour from javelin_template's `throw_charged.impact_data`). Want the same "throwing axe" pickup loop: spear lands, sticks in surface/corpse, player can walk up and re-grab it for ammo back.
-  - Investigate `Projectiles.throwing_axe` (or whichever DLC weapon does this — bounty hunter's throwing axe career skill, dual-axes throw, etc.) to see what `flow_event_*`, `link`, `pickup_template_name`, `link_pickup_template_name` combo enables the pickup-on-stick.
-  - Likely needs a custom `Projectiles.cwv_tuskgor_javelin` clone + a `pickup_template` entry that grants 1 ammo back to the character on use.
-  - May also need a `prj_emp_boar_spear_*_3ps` projectile model unit if we want the stuck spear to look right (anvil package only ships the held `_3p` variant — see `feedback_cwv_ammo_unit_required.md`).
+## Tuskgor Javelin polish (cwv_es_javelin / cwv_wh_javelin)
+- [x] **Thrown javelins stick + be pickable like throwing axes** (v0.1.70) — `tuskgor_javelin_template` clone now strips javelin's `link/wall_nail/flow_event_on_walls=teleport_out` from `throw_charged.impact_data` and substitutes throwing-axe's `link_pickup = true` + `pickup_settings = { use_weapon_skin, link_hit_zones }`. No custom `Projectiles.*` clone needed — `Projectiles.javelin` and `Projectiles.throwing_axe` are nearly identical (both `static_impact_type = "raycast"`); the difference lives entirely in the action's impact_data.
+- [ ] **Stuck/in-flight projectile model** — still uses the slim elf javelin model (`projectile_units_template = "javelin"`). Anvil package ships only the held `_3p` boar spear unit, no `prj_*_3ps`. To get a boar-spear-shaped projectile in flight + stuck, need to author/inject a `prj_emp_boar_spear_*_3ps` model unit. Low priority.
 
 ## Weapon Variants (Planned)
 - [ ] **Enumerate all viable cross-character combos** — catalog which weapon+shield combinations across characters make sense as curated variants, case-by-case.

@@ -3,12 +3,6 @@ local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 
 local widgets = {
     {
-        setting_id    = "dynamic_portraits",
-        type          = "checkbox",
-        default_value = true,
-        tooltip       = mod:localize("dynamic_portraits_tooltip"),
-    },
-    {
         setting_id    = "unlock_all_illusions",
         type          = "checkbox",
         default_value = false,
@@ -54,6 +48,31 @@ local widgets = {
                     },
                 },
             },
+            {
+                setting_id  = "glow_override_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "glow_override_enable",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("glow_override_enable_tooltip"),
+                    },
+                    {
+                        setting_id    = "glow_override_preset",
+                        type          = "dropdown",
+                        default_value = "purple_glow",
+                        options       = {
+                            { text = "glow_preset_purple", value = "purple_glow"  },
+                            { text = "glow_preset_gold",   value = "golden_glow"  },
+                            { text = "glow_preset_red",    value = "deep_crimson" },
+                            { text = "glow_preset_green",  value = "life_green"   },
+                            { text = "glow_preset_blue",   value = "lileath"      },
+                        },
+                        tooltip = mod:localize("glow_override_preset_tooltip"),
+                    },
+                },
+            },
         },
     },
 }
@@ -65,69 +84,10 @@ for _, w in ipairs(U.widgets) do
     widgets[#widgets + 1] = w
 end
 
-local data = {
+return {
     name = "Tweaker: Cosmetics",
     description = mod:localize("mod_description"),
     is_togglable = true,
 
     options = { widgets = widgets },
-
-    custom_gui_textures = {
-        textures = {
-            "portrait_kruber_mercenary_hat_0004",
-            "medium_portrait_kruber_mercenary_hat_0004",
-            "small_portrait_kruber_mercenary_hat_0004",
-            "portrait_kruber_mercenary_hat_0009",
-            "medium_portrait_kruber_mercenary_hat_0009",
-            "small_portrait_kruber_mercenary_hat_0009",
-            "portrait_kruber_mercenary_hat_1001",
-            "medium_portrait_kruber_mercenary_hat_1001",
-            "small_portrait_kruber_mercenary_hat_1001",
-            "portrait_kruber_mercenary_hat_1002",
-            "medium_portrait_kruber_mercenary_hat_1002",
-            "small_portrait_kruber_mercenary_hat_1002",
-            "portrait_kruber_mercenary_hat_1003",
-            "medium_portrait_kruber_mercenary_hat_1003",
-            "small_portrait_kruber_mercenary_hat_1003",
-            "portrait_kruber_mercenary_hat_0007",
-            "medium_portrait_kruber_mercenary_hat_0007",
-            "small_portrait_kruber_mercenary_hat_0007",
-            "portrait_kruber_mercenary_hat_0006",
-            "medium_portrait_kruber_mercenary_hat_0006",
-            "small_portrait_kruber_mercenary_hat_0006",
-        },
-        ui_renderer_injections = {
-            {
-                "ingame_ui",
-                "materials/ui/portrait_kruber_mercenary_hat_0004",
-                "materials/ui/medium_portrait_kruber_mercenary_hat_0004",
-                "materials/ui/small_portrait_kruber_mercenary_hat_0004",
-                "materials/ui/portrait_kruber_mercenary_hat_0009",
-                "materials/ui/medium_portrait_kruber_mercenary_hat_0009",
-                "materials/ui/small_portrait_kruber_mercenary_hat_0009",
-                "materials/ui/portrait_kruber_mercenary_hat_1001",
-                "materials/ui/medium_portrait_kruber_mercenary_hat_1001",
-                "materials/ui/small_portrait_kruber_mercenary_hat_1001",
-                "materials/ui/portrait_kruber_mercenary_hat_1002",
-                "materials/ui/medium_portrait_kruber_mercenary_hat_1002",
-                "materials/ui/small_portrait_kruber_mercenary_hat_1002",
-                "materials/ui/portrait_kruber_mercenary_hat_1003",
-                "materials/ui/medium_portrait_kruber_mercenary_hat_1003",
-                "materials/ui/small_portrait_kruber_mercenary_hat_1003",
-                "materials/ui/portrait_kruber_mercenary_hat_0007",
-                "materials/ui/medium_portrait_kruber_mercenary_hat_0007",
-                "materials/ui/small_portrait_kruber_mercenary_hat_0007",
-                "materials/ui/portrait_kruber_mercenary_hat_0006",
-                "materials/ui/medium_portrait_kruber_mercenary_hat_0006",
-                "materials/ui/small_portrait_kruber_mercenary_hat_0006",
-            },
-        },
-    },
 }
-
-mod:info("[data] returning with custom_gui_textures=%s, textures=%d, injections=%d",
-    tostring(data.custom_gui_textures ~= nil),
-    data.custom_gui_textures and #data.custom_gui_textures.textures or 0,
-    data.custom_gui_textures and #data.custom_gui_textures.ui_renderer_injections or 0)
-
-return data

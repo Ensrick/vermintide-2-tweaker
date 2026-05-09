@@ -24,7 +24,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.3.5-dev"
+local MOD_VERSION = "0.3.8-dev"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -620,6 +620,135 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     end
 
     return unpack(results)
+end)
+
+-- ============================================================
+-- Respawn / Revive on Chest of Trials Completion
+-- ============================================================
+
+-- CLARIFY: STATES.OPEN = 3 in deus_cursed_chest_extension.lua. State transitions to OPEN at line
+-- 174 of that file ONLY on the server, and ONLY when the curse encounter's terror event has ended
+-- successfully. Hot-join clients enter HOTJOIN_OPEN (= 4) instead, so they do not trigger here.
+local CURSED_CHEST_STATE_OPEN = 3
+-- CLARIFY: DifficultyMapping["normal"] = "recruit" (difficulty_settings.lua:424). The string the
+-- engine uses internally is "normal"; "recruit" is only the display name.
+local DIFFICULTY_RECRUIT = "normal"
+-- CLARIFY: peer_id -> true marker, set by the chest hook for any player whose health_state was
+-- "dead" at the moment the chest opened. Consumed by the sync_health_state hook (THP override)
+-- and the _respawn_player hook (wounded). Cleared in _respawn_player so a future Chest of Trials
+-- in the same run can re-mark the same peer.
+local pending_chest_respawn = {}
+
+mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
+    if state ~= CURSED_CHEST_STATE_OPEN then
+        return
+    end
+    if not mod:get("respawn_on_chest_complete") then
+        return
+    end
+    if not Managers.player or not Managers.player.is_server then
+        return
+    end
+
+    local game_mode = Managers.state and Managers.state.game_mode
+    if not game_mode then
+        return
+    end
+
+    local side = Managers.state.side and Managers.state.side:get_side_from_name("heroes")
+    local party = side and side.party
+    local occupied_slots = party and party.occupied_slots
+
+    if occupied_slots then
+        for i = 1, #occupied_slots do
+            local status = occupied_slots[i]
+            local data = status.game_mode_data
+            local peer_id = status.peer_id
+            local local_player_id = status.local_player_id
+
+            if peer_id and local_player_id then
+                local player = Managers.player:player(peer_id, local_player_id)
+                local unit = player and player.player_unit
+
+                -- CLARIFY: Revive any knocked-down player who isn't being held by a disabler.
+                -- is_disabled_by_pact_sworn (generic_status_extension.lua:2154) returns true for
+                -- pack-master / hook / tentacle / chaos-spawn / vortex / corruptor / pounce —
+                -- skipping those avoids yanking someone out of an in-progress disabler interaction
+                -- (which would desync the disabler's animation and is unrecoverable). The engine's
+                -- own revive can_interact (interactions.lua:181-191) uses an equivalent check.
+                -- set_revived_network alone is sufficient: PlayerUnitHealthExtension.update sees
+                -- state="knocked_down" + is_revived() and runs _revive(), which clears
+                -- knocked_down, sets wounded(reason="revived"), and restores percent-on-revive
+                -- health + 50% THP from difficulty settings (player_unit_health_extension.lua:273).
+                if unit and Unit.alive(unit) then
+                    local status_ext = ScriptUnit.has_extension(unit, "status_system")
+                    if status_ext and status_ext.is_knocked_down and status_ext:is_knocked_down()
+                        and not (status_ext.is_disabled_by_pact_sworn and status_ext:is_disabled_by_pact_sworn())
+                    then
+                        StatusUtils.set_revived_network(unit, true, nil)
+                    end
+                end
+
+                -- CLARIFY: Mark dead-state players for the post-respawn THP/wounded overrides.
+                -- This is captured at chest-open time, not at spawn time, so we know exactly which
+                -- respawns came from this feature (vs. the standard 30s timer respawn that may
+                -- have completed earlier in the same level).
+                if data and data.health_state == "dead" then
+                    pending_chest_respawn[peer_id] = true
+                end
+            end
+        end
+    end
+
+    if game_mode.force_respawn_dead_players then
+        game_mode:force_respawn_dead_players()
+    end
+end)
+
+-- CLARIFY: THP override on the dead-respawn path. sync_health_state reads
+-- status.game_mode_data.temporary_health_percentage (player_unit_health_extension.lua:111), which
+-- the engine sets from difficulty.respawn.temporary_health_percentage at respawn_handler.lua:358
+-- (0 on Recruit/Veteran/Champion, 0.25 on Legend). Mutating to 0.5 just before sync reads it
+-- means the spawn applies 50% of max-health THP without us touching the network game object
+-- ourselves. The is_dead-at-chest-open guard means this only fires for our feature's respawns.
+mod:hook("PlayerUnitHealthExtension", "sync_health_state", function(func, self)
+    local player = self.player
+    local peer_id = player and player.network_id and player:network_id()
+
+    if peer_id and pending_chest_respawn[peer_id] then
+        local status = Managers.party:get_player_status(peer_id, player:local_player_id())
+        if status and status.game_mode_data and status.game_mode_data.health_state == "respawning" then
+            status.game_mode_data.temporary_health_percentage = 0.5
+        end
+    end
+
+    func(self)
+end)
+
+-- CLARIFY: Apply wounded (1 wound) on dead-respawn above Recruit. Mirrors the engine's own
+-- post-revive wound at player_unit_health_extension.lua:277 — same reason string ("revived"),
+-- which is one of the four valid entries in NetworkLookup.set_wounded_reasons. Recruit is skipped
+-- because it has 5 max wounds and no real wounded mechanic in player perception. The flag is
+-- cleared here so a subsequent dead-respawn (different chest, same run) re-arms via the chest
+-- hook above instead of double-applying.
+mod:hook_safe("RespawnHandler", "_respawn_player", function(self, player, profile_index, career_index, respawn_unit, ...)
+    local peer_id = player and player.network_id and player:network_id()
+    if not peer_id or not pending_chest_respawn[peer_id] then
+        return
+    end
+    pending_chest_respawn[peer_id] = nil
+
+    if Managers.state.difficulty:get_difficulty() == DIFFICULTY_RECRUIT then
+        return
+    end
+
+    local unit = player.player_unit
+    if not unit or not Unit.alive(unit) then
+        return
+    end
+
+    local t = Managers.time:time("game")
+    StatusUtils.set_wounded_network(unit, true, "revived", t)
 end)
 
 -- ============================================================

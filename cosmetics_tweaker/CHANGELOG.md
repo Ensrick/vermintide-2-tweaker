@@ -1,5 +1,230 @@
 # Cosmetics Tweaker — Changelog
 
+> **Note:** the dynamic-portrait system (v0.7.0–v0.7.102 development line)
+> was split out into the `dynamic_cosmetic_portraits` mod on 2026-05-06.
+> Pre-split entries below remain the historical record of how the system
+> was researched and stabilised; ongoing portrait work lives in
+> `dynamic_cosmetic_portraits/CHANGELOG.md`.
+
+## [2026-05-08 v0.8.23-dev]
+### Changed
+- **Focus gate at picker-display time.** Per the "one shield at a time" working policy: registration data (icon parsing, `_LA_EXTRA_WEAPON_TYPES`, `_LA_WEAPON_TYPE_ALIAS`) stays intact for every LA shield, but `_merge_la_offhand_options` only surfaces shields whose `armoury_key` is in `_LA_FOCUS_KEYS`. Currently set to `{ Kruber_empire_shield_hero1_Ostermark01 = true }`. Widening to the next focus shield (or removing the gate entirely once all are verified) is a one-line edit at the top of `_merge_la_offhand_options` in `cosmetics_tweaker.lua`. Set to nil/empty table to surface every LA shield.
+- This intentionally preserves all the v0.8.19/v0.8.21/v0.8.22 fanout fixes (icon-driven, item_type alias, manual extras) — those are background plumbing that needs to be correct so that flipping the focus gate exposes a working picker. The gate just controls *visibility*, not the underlying routing.
+
+### Test plan
+- Restart VT2.
+- Equip Kruber Bret longsword+shield → cosmetics menu → expect ONLY `Empire Shield Hero1 Ostermark01 (LA)` in the LA section. Nothing else from the LA bridge.
+- Equip Kruber mace+shield → same: only Ostermark01 from LA. (Vanilla offhands are unaffected.)
+- Apply Ostermark01 on Bret → expect the deus shield mesh + Ostermark texture combo, identical to mace+shield.
+
+## [2026-05-08 v0.8.22-dev]
+### Fixed
+- **Bret-weapon LA shields were silently invisible.** Dump showed `es_sword_shield_breton offhand pool: 7 entries`, but the in-game log showed `[LA paint] skip: no _offhand_selection for es_1h_sword_shield_breton`. Naming gap: LA's icon keys use `es_sword_shield_breton_skin_*` (no `_1h_` infix) but the game's actual `ItemMasterList[item].item_type` for the Bret weapon is `es_1h_sword_shield_breton`. v0.8.19's icon-driven fanout bucketed every Bret LA shield (Bastonne, Reynard, Luidhard, Lothar, Alberic, plus the v0.8.21 Ostermark/Kotbs extras) into a pool the game never queried. The picker showed only vanilla Bret shield options because the LA pool was unreachable.
+- Added `_LA_WEAPON_TYPE_ALIAS` in `_la_bridge.lua` to translate LA's icon-derived weapon_type to the game's item_type. Currently one entry: `es_sword_shield_breton -> es_1h_sword_shield_breton`. Applied via `_normalize_weapon_type()` in both the icon-driven fanout AND the `_LA_EXTRA_WEAPON_TYPES` map (which I already updated to use the canonical game item_type, but the alias is the safety net so future entries can use either form).
+- Re-running `cos la_offhand_dump` after this build should show `es_1h_sword_shield_breton` (with `_1h_`) as the pool key, with all 7 entries (5 Bret-authored + Ostermark + Kotbs).
+
+### Test plan
+- Restart VT2 fully.
+- Equip Kruber Bret longsword+shield → cosmetics menu → expect to see all 7 LA shields in the picker now: Bastonne02, Reynard01, Luidhard01, Lothar01, Alberic01, Ostermark01, Kotbs01.
+- Apply Bastonne02 / Reynard01 / etc. (pure-paint Bret shields) → expect Bret shield silhouette + Bret-authored heraldry texture.
+- Apply Ostermark01 / Kotbs01 → expect deus shield mesh + Empire heraldry texture (same combo as on mace+shield).
+- If something is still wrong, name the exact LA shield + skin combo and what you see.
+
+## [2026-05-08 v0.8.21-dev]
+### Added
+- **`_LA_EXTRA_WEAPON_TYPES` map (`_la_bridge.lua`)** for opting individual LA shields into weapon types that aren't in their `icons` table. v0.8.19's icon-driven fanout was correct as a default but excluded Ostermark from Bret longsword+shield, which the user explicitly wants — they want the LA combo (deus shield mesh + Ostermark texture) on the Bret weapon, the same combo as on mace+shield. The map is a per-variant additive override.
+- Initial entries:
+  - `Kruber_empire_shield_hero1_Ostermark01 = { es_sword_shield_breton = true }`
+  - `Kruber_empire_shield_hero1_Kotbs01     = { es_sword_shield_breton = true }`
+- These two LA shields will now also appear on Bret longsword+shield. Their `intended_unit = wpn_es_deus_shield_03` triggers the BackendUtils.get_item_units mesh-override path so the deus shield mesh is rendered (matching the texture's UVs) instead of the Bret shield mesh. The texture binds via the v0.8.18 per-unit `Unit.set_texture_for_materials` path so there's no shared-material leak onto adjacent shields.
+- Adding more LA shields to other weapon types is one entry per shield in this map, on a one-shield-at-a-time basis as we walk the catalogue and decide what should appear where.
+
+### Test plan (this build, on a fresh game restart)
+- Restart VT2 to clear any shared-material residue.
+- Equip Kruber's Bret longsword+shield → cosmetics menu → expect Ostermark01 and Kotbs01 in the LA section alongside the Bret-authored variants (Bastonne02, Reynard01, Luidhard01, Lothar01, Alberic01).
+- Apply Ostermark01 → expect deus shield mesh + Ostermark texture, no magenta, no leak onto adjacent shields. Same combo as on mace+shield.
+- Run `cos la_offhand_dump` and confirm `Kruber_empire_shield_hero1_Ostermark01` lists `es_sword_shield_breton` in its weapons column alongside `es_1h_mace_shield`, `es_1h_sword_shield`, `es_deus_01`.
+
+## [2026-05-08 v0.8.19-dev]
+### Changed (architectural)
+- **No more whitelist. No more per-character LA fan-out. LA shields appear ONLY on the weapon types LA's own `icons` table actually authored them for.** This was the structural mistake under the "Ostermark wraps wrong on Bret" report. The previous fan-out (`_la_character_weapon_pools`) gave Kruber's whole LA pool to every shield-bearing weapon Kruber has, which painted Empire-shield textures (UVs authored for `wpn_es_deus_shield_03`) onto Bret shield UVs and produced the wrong-wrap.
+- New flow in `_la_bridge.lua`:
+  - For each LA SKIN_LIST entry with `swap_hand="left_hand_unit"`, parse its `icons` table. Each icon key is a vanilla skin key of form `<weapon_type>_skin_<...>` (e.g. `es_1h_mace_shield_skin_03`, `es_sword_shield_breton_skin_01`). The prefix before `_skin_` is the weapon type LA targeted.
+  - The variant joins `M.la_offhand_options_by_weapon_type[wt]` for each weapon type in its icons table — and only those.
+  - LA SKIN_LIST entries WITHOUT an `icons` table are skipped (no authoring metadata to drive routing).
+- New flow in `cosmetics_tweaker.lua`:
+  - `_la_character_weapon_pools` and the `_LA_KEY_WHITELIST` are gone.
+  - `_offhand_options.es_1h_mace_shield`, `es_1h_sword_shield_breton`, `es_deus_01`, `dr_1h_hammer_shield`, `wh_hammer_shield` are now SHALLOW COPIES of their alias targets, not the same table reference. LA fan-out can append per-weapon-type without bleeding across.
+  - `_merge_la_offhand_options` reads `LA_BRIDGE.la_offhand_options_by_weapon_type[weapon_key]` directly. No character-level indirection, no `seen_lists` dedupe.
+  - The Bret-mesh guard in `BackendUtils.get_item_units` is removed. It was a bandaid for the cross-pollination that this build prevents at the source: LA Empire shields (Ostermark, Kotbs) won't appear on Bret weapons at all, so we never need to drop their `intended_unit` override.
+- The v0.8.18 per-unit `Unit.set_texture_for_materials` paint primitive stays in place — it kills the shared-material leak class.
+- `cos la_offhand_dump` now prints each variant's `weapon_types` list so you can verify which weapon types each LA shield will surface in.
+- `kind="unit"` LA variants remain filtered (separate problem; needs LA `swap_units_new` integration with `rawget`/`rawset` accessors per `feedback_la_custom_mesh_unsupported.md`).
+
+### Test plan (this build, on a fresh game restart)
+- Restart VT2 to clear shared-material residue from earlier sessions.
+- Kruber mace+shield → expect Ostermark01, Kotbs01, and other Empire LA shields whose `icons` include `es_1h_mace_shield_skin_*`. The deus-shield mesh is correct.
+- Kruber Bret longsword+shield → expect Bastonne02, Reynard01, Luidhard01, Lothar01, Alberic01 (Bret-authored pure-paint variants). Bret silhouette stays, Bret-authored UVs.
+- Kruber sword+shield → Empire LA pool again (Ostermark, Kotbs, etc.).
+- Pick an LA option on weapon A → in-game shield only changes on weapon A. Adjacent shields in inventory should not magenta or wrong-texture. Pick Default → re-equip yields a clean vanilla shield.
+- If something is still wrong, name the exact weapon type + LA shield + skin combo so we can pinpoint.
+
+## [2026-05-08 v0.8.18-dev]
+### Fixed (root cause)
+- **Switched LA shield paint from shared-material `Material.set_texture` to per-unit `Unit.set_texture_for_materials`.** This was the architectural mistake underlying every "magenta-on-default" / "wrong texture on a different shield" report since LA bridge integration began. The old path called `Material.set_texture(mat, slot, path)` against materials returned by `Mesh.material(unit_mesh, j)` — those materials are the SHARED material instances baked into the vanilla shield's compiled bundle, so painting one shield's LA texture actually rebound the slot for every unit referencing that material (other shield illusions, the inventory mannequin, the customization preview). One click leaked across the entire UI, and once an LA texture was unloaded (or any package reload occurred) every leaked binding flipped to the engine's missing-asset magenta. The fix uses the same primitive vanilla VT2 uses everywhere it does per-cosmetic texture binding (`gear_utils.lua:150`, `cosmetic_utils.lua:72`, `flow_callbacks_foundation.lua:939`, `outline_system.lua:666`): `Unit.set_texture_for_materials(unit, slot_name, texture_path)`. The engine sets up a per-unit material override; the shared material is never written to. When the unit is destroyed (next re-equip) the override drops with it.
+- **Limitation:** `Unit.set_texture_for_materials` doesn't have a per-mesh exclusion equivalent of LA's `skip_meshes` / `textures_other_mesh`. The new `_paint_offhand_textures_locally` logs a warning when those nuance fields are set on the variant. The first focused-triage candidate (`Kruber_empire_shield_hero1_Ostermark01`) has empty `skip_meshes`, so this isn't a problem for the current round; if a later LA shield in the whitelist has skip_meshes we'll need a per-mesh fallback path. Old per-mesh implementation kept inline as `_legacy_paint_offhand_textures_via_shared_material` for reference (delete after verification).
+- **No code change required for selecting Default to "revert".** Because each spawn now applies its overrides per-unit (or doesn't, when no LA option is selected), the next re-equip naturally produces a clean unit with no leftover LA binding. The vanilla material itself was never mutated.
+
+### Test plan (this build, on a fresh game restart)
+- **Restart VT2 fully** so the shared-material state from earlier sessions is wiped out. Without a clean restart you'll see leaked magenta from prior versions even though this build never writes to a shared material.
+- Equip Kruber's mace+shield → cosmetics menu → ONE LA option visible ("Empire Shield Hero1 Ostermark01 (LA)") + all vanilla mace+shield options.
+- Apply Ostermark01 on a vanilla Empire mace skin → expect deus-shield mesh + Ostermark heraldry texture, no magenta.
+- Equip Kruber's Bret longsword+shield → same ONE LA option visible.
+- Apply Ostermark01 on a Bret skin → expect Bret silhouette + Ostermark texture overlay (UV-imperfect, since LA authored the texture for deus shield UVs).
+- After applying, click Default → re-equip should produce a clean vanilla shield. No magenta on Default. No magenta on any other shield in the inventory mannequin or illusion browser.
+- If still seeing magenta, capture the precise combination (which mace skin / which shield it leaked onto) so we can pinpoint whether it's a different leak or the shared-material residue.
+
+## [2026-05-07 v0.8.16-dev]
+### Fixed
+- **Glow override now lands on FIRST PERSON weapons.** Verified in-game by user. v0.8.4–v0.8.15 reliably painted 3p but never visually changed 1p, even though the v0.8.5 `[GLOW-trace]` proved every `Unit.set_vector3_for_materials` call returned `ok=true` on the 1p unit. User confirmed vanilla 1P glow IS paintable (deep_crimson skin glows red in 1P with override off), so it wasn't a 1P-shader-doesn't-have-the-variable limit. Switched mechanism from "let vanilla apply, then overlay" (`hook_safe`) to "mutate the global `MaterialSettingsTemplates[name]` table BEFORE vanilla reads it, restore after" (`hook` with template mutation). Same trick NoGlow uses to zero emissive. Vanilla itself becomes the only writer to the unit's materials, so whatever was rejecting our second write on 1p is no longer in play. Applies to all three apply_material_settings copies (`GearUtils`, `_G`, `CosmeticUtils`). User must apply a new cosmetic / re-equip the weapon to trigger a respawn for the override to take effect — live re-paint was removed in v0.8.10 because walking spawned units to repaint destabilised adjacent unit state.
+
+### Changed
+- **Focused-triage scope: one LA shield at a time.** Per user request, the LA picker is now narrowed to a single shield until each is fully verified. v0.8.15's broad exposure caused too many simultaneous failure modes (mesh-wrapping issues, magenta from shared-material texture leaks, sticky paint from previous selections) for any of them to be diagnosed in isolation.
+- Whitelist in `_la_bridge.lua`: `_LA_KEY_WHITELIST` set to `{ Kruber_empire_shield_hero1_Ostermark01 = true }`. Build_offhand_options now requires the LA key to be in this set in addition to passing `_is_supported_variant`. Other LA keys are excluded from the picker but the iteration code is intact — adding the next shield is a one-line edit.
+- Kruber fan-out narrowed to `{ "es_1h_mace_shield", "es_1h_sword_shield_breton" }`. `es_1h_sword_shield` and `es_deus_01` excluded for this round even though Ostermark01's `icons` table covers them; we'll re-enable once mace+breton is verified.
+- Other characters' (Kerillian/Bardin/Saltzpyre) fan-out tables unchanged in shape, but the whitelist filter empties their LA pools too — so their pickers show vanilla offhands only this round.
+- The Bret-mesh wrapping guard from v0.8.13 (drop the `intended_unit` override when `resolved_skin` matches `_breton_` AND selection has `la_armoury_key`) stays in place.
+### Test plan (this build, on a fresh game restart)
+- **Restart VT2 fully.** The shared-material texture leak documented in `reference_la_offhand_paint.md` persists across in-session reloads — only a fresh game start clears stale LA texture bindings. Without this, you'll see leaked magenta from earlier sessions and won't be able to attribute behaviour to this build.
+- Equip Kruber's mace+shield → cosmetics menu → expect ONE LA option labeled "Empire Shield Hero1 Ostermark01 (LA)" (or similar) plus all vanilla mace+shield options. Confirm vanilla options still all present and unchanged.
+- Apply Ostermark01 on a vanilla Empire mace skin → expect a deus-shield-shape painted with Ostermark heraldry (`is_vanilla_unit=true` swaps the mesh to `wpn_es_deus_shield_03`).
+- Equip Kruber's Bret longsword+shield → cosmetics menu → expect the same ONE LA option to appear here too.
+- Apply Ostermark01 on a Bret skin → expect the Bret shield silhouette with Ostermark texture overlaid (UV fit imperfect because LA authored the texture for the deus shield UVs, but the Bret silhouette is correct).
+- Click Default after applying → expect to revert to whatever the underlying skin's native shield is.
+- Document anything else (magenta, missing textures, wrong mesh) in detail per combo so we can fix surgically.
+
+## [2026-05-07 v0.8.15-dev]
+### Reverted
+- **`kind="unit"` LA custom-mesh shields filtered out again; `re_apply_illusion` integration removed.** The v0.8.13 attempt to invoke LA's `re_apply_illusion` from our offhand handler crashed at `network_lookup.lua:2514` with `Table inventory_packages does not contain key: units/empire_shield/Kruber_Empire_shield02_mesh_3p` (user crash 60180105-bd15-49f2-9fa6-9f70dd851846). Two architectural barriers, neither fixable by surface-level patching:
+  1. **State-machine race with LA's `mod.update` loop.** LA iterates `SKIN_CHANGED` every frame and calls `re_apply_illusion(mod:get(skin), skin, unit)` on each entry. If our setting and LA's persisted setting disagree, our `swap_units_new` and LA's `swap_units_old` (or vice-versa) interleave with stale `changed_model` flags, leaving `WeaponSkins.skins[skin][hand]` pointing at an LA path that wasn't aliased on this run. The next `swap_units_new` call (ours OR theirs) reads `inventory_packages[<la_path>.."_3p"]` and crashes against the strict `__index`.
+  2. **`NetworkLookup.inventory_packages.__index` is fatal on miss.** Every LA call path that goes through `swap_units_new`/`swap_units_old` does naked reads against this table. Per `feedback_vt2_strict_lookup_rawget.md`, anything we do to that table must use `rawget`/`rawset`. Calling LA's pre-existing helpers means we can't swap in safe accessors without wrapping each helper.
+- A safe integration would need to either (a) take ownership of LA's update loop for the affected skins (suspend its `re_apply_illusion` calls while ours are in flight), or (b) replicate `swap_units_new` end-to-end with our own state machine and `rawget`/`rawset` accessors. Both are substantial; deferred until there's a focused session for it.
+- The Bret-skin mesh-wrapping fix from v0.8.13 is preserved (`kind="texture"` Empire variants still drop the mesh swap on Bret skins; LA's paint overlay handles the texture).
+- `cos la_offhand_dump` retains the `1p=<bool> 3p=<bool> pkg=<bool>` triage columns from v0.8.12.
+
+## [2026-05-07 v0.8.13-dev]
+### Fixed
+- **Bret skin no longer wraps LA texture onto the wrong shield mesh.** LA's `kind="texture"` Empire-shield variants (Ostermark, Kotbs, etc.) declare `new_units = wpn_es_deus_shield_03` AND list `es_sword_shield_breton_skin_*` keys in their `icons` table, meaning LA expects them to apply on Bret skins as well — but the mesh swap forces the Bret weapon to render the deus-shield model with LA heraldry painted onto it. User reported the texture wraps incorrectly. Added a guard in `BackendUtils.get_item_units`: when the resolved skin contains `_breton_` AND the selection has an `la_armoury_key` (so this is one of our LA bridge entries, not a vanilla swap), drop the mesh override. The LA paint pass still runs, overlaying the texture on whatever Bret shield the skin already provides. UV fit isn't perfect (LA authored the texture for the deus shield), but the silhouette is now correctly Bretonian.
+### Added
+- **`kind="unit"` LA shields integrate with LA's swap pipeline.** v0.8.11+ exposed LA's custom-mesh shields in the picker, but they rendered magenta because our override path (just rewriting `result.left_hand_unit`) skipped LA's `swap_units_new` step that aliases `NetworkLookup.inventory_packages` and mutates `WeaponSkins.skins[skin][hand]` — the bookkeeping the engine relies on to bind LA's compiled materials. Added `_ct_apply_la_unit_swap` (file-local, forward-defined per `feedback_lua_forward_reference.md`): when the user clicks a `kind="unit"` LA option, we call `LA.re_apply_illusion(armoury_key, skin, original_unit)` which internally invokes `swap_units_new` + `re_equip_weapons`. Tracking table `_la_active_unit_swap_by_skin` records the active swap per skin so a subsequent click on a different option (texture variant or default) issues a `re_apply_illusion("default", ...)` revert before installing the new one — prevents LA's `changed_model` flag from blocking re-application and keeps `WeaponSkins` mutations balanced. Texture-only and default options remain on the existing override path (no LA pipeline call needed).
+
+## [2026-05-07 v0.8.12-dev]
+### Fixed
+- **LA custom-mesh shields now actually render in the customization preview.** v0.8.11 made `kind="unit"` LA variants appear in the picker, but selecting one showed "no model at all" — the slot went empty. Root cause: vanilla shields ship as standalone `units/.../wpn_xxx.package` files, so `LootItemUnitPreviewer.load_package` -> `Managers.package:load(unit_path_3p, ...)` succeeds and fires `_on_load_complete`, flipping `self._loaded_packages[path] = true`. The previewer's spawn gate (`loot_item_unit_previewer.lua:511`) only proceeds to `World.spawn_unit` after that flag flips. LA bundles every custom shield mesh into one big `resource_packages/Loremasters-Armoury/Loremasters-Armoury` package — there is no per-unit standalone `.package`. So `Managers.package:load("units/Kerillian_elf_shield/<...>_3p", ...)` phantom-succeeds without firing the callback, the gate stays closed forever, and `World.spawn_unit` never runs. VMF auto-loads each mod's main package on register, so LA's custom meshes ARE engine-resident — just not via the `package`-id lookup the previewer is doing. Fix: hook `LootItemUnitPreviewer.load_package`; when `Application.can_get("unit", path)` is true AND `Application.can_get("package", path)` is false (engine has the unit, but there's no standalone package), short-circuit by setting `_packages_to_load[path] = true` and `_loaded_packages[path] = true` so `_spawn_items` proceeds straight to `World.spawn_unit`. The unit spawn then resolves against LA's globally-loaded resource package. Vanilla weapons are unaffected because their paths satisfy both can_get checks; we only short-circuit the bundled-into-larger-package case. Also extended `cos la_offhand_dump` to print per-variant `1p=<bool> 3p=<bool> pkg=<bool>` so future "no model" reports can be triaged in one command.
+
+## [2026-05-07 v0.8.11-dev]
+### Added
+- **Custom-mesh LA shields now appear in the picker.** Previously `_la_bridge._is_supported_variant` rejected every `kind="unit"` SKIN_LIST entry — LA's own authored 3D shield meshes (Caledor, Chrace, Eaglegate, Eataine, Griffongate, KarakNorn, Kotbs/Ostermark spear+round variants, etc.) — because an early "Unit not found" crash in v0.7.92 made me skip them wholesale. Re-enabled them: LA's resource_package includes `unit = ["units/*"]` so all of LA's `.unit` files are engine-resident as soon as LA finishes loading, and the runtime gate in `BackendUtils.get_item_units` (`_override_package_ready` -> `Application.can_get("unit", path)` AND its `_3p` sibling) will silently skip the override for any mesh the engine genuinely can't spawn. So we get every custom-mesh shield exposed, with a per-spawn safety net for the rare case where one isn't actually engine-resident. For `kind="unit"` variants without a `textures` table, LA's `apply_new_skin_from_texture` early-outs at the `if mod.SKIN_LIST[Armoury_key].textures` check, so no paint is applied — the visual change comes purely from the mesh swap, which is the right behaviour for a custom-mesh variant.
+
+## [2026-05-07 v0.8.10-dev]
+### Removed
+- **Live glow re-paint reverted.** v0.8.7's `mod._refresh_glow` (and the v0.8.9 `cos repaint_glow` chat command) walked `ScriptUnit.extension(local_player_unit, "inventory_system")._equipment.slots` and painted every `right_unit_1p / right_unit_3p / left_unit_1p / left_unit_3p`. Worked for the wielded slot but destabilised adjacent units — user reported that after running the repaint, pressing X (inspect) made hand meshes disappear and 1P state break, only recoverable by switching characters. Root cause not pinned (likely the engine doesn't tolerate `set_vector3_for_materials` on currently-invisible / sheathed 1P units), and I don't have enough data to fix it safely. Removed the function, the command, and the `mod.on_setting_changed` glow dispatch. The hook on `GearUtils.apply_material_settings` (v0.8.4+) is unaffected and still paints any newly-spawned weapon at equip time. Net effect for the user: changing the override or preset now takes effect on the NEXT weapon equip / spawn rather than instantly. To re-add live updates safely, the future approach is to hook the wield event and paint only the weapon at the moment it becomes visible.
+
+## [2026-05-07 v0.8.8-dev]
+### Changed
+- **Glow override presets renamed to plain colors.** Settings dropdown now reads "Purple / Gold / Red / Green / Blue" instead of the lore names ("Weave-Forged / Geheimnisnacht Dawn / Skulls / Sister of the Thorn / Bitter Dreams"). Underlying preset keys (`purple_glow`, `golden_glow`, `deep_crimson`, `life_green`, `lileath`) unchanged so saved user settings carry over. The Versus / Shyish-Infused preset (5-channel `color_glow_high/low`, `color_smoke_high/low`, `color_dots`) was REMOVED from the dropdown — it drives a different shader path and the user reports it doesn't visibly affect Shyish-Infused weapons via the rune-emissive overlay. Tracked: Weavebound (`magic` rarity, `_magic_01` mesh, baked swirl shader) and Shyish-Infused (`versus` template) likely need their own toggle / probe-driven approach if they're tunable at all. The `versus` entry in `_GLOW_PRESETS` is left in place so the code can still be invoked from a future per-skin UI; it's just not user-facing right now.
+
+### Fixed
+- **Apply now works when only the offhand was changed.** Previously, clicking an LA shield without first changing the primary illusion enabled the Apply button but did nothing — the user had to make a primary-row change to "kick" Apply into running. Root cause: vanilla's craft loop (`_handle_input` → `_craft(self._material_items, ...)`) is a no-op when `_material_items` is empty, and `_ct_on_offhand_pressed` never seeded it. Fix: when handling an offhand click, if `_material_items` is empty, look up the currently-effective skin's backend id via `Managers.backend:get_interface("items"):get_weapon_skin_from_skin_key(...)` (which will mint a fake id via our existing `_fake_skin_backend_ids` machinery if the skin isn't in the player's owned set) and push it into `_material_items`. Also flip `_skin_dirty = true` so the post-craft state transition runs `_present_item`. The craft itself is a no-op skin re-apply (same skin in, same skin out), but the ensuing `_apply_weapon_skin_craft_complete → _set_loadout_item` path triggers a weapon re-spawn — and that re-spawn is what our `BackendUtils.get_item_units` hook needs to pull in the new offhand selection.
+
+## [2026-05-07 v0.8.7-dev]
+### Added
+- **Live glow override re-paint.** Toggling `glow_override_enable` or switching `glow_override_preset` now immediately repaints the local player's currently-spawned weapon units — no re-equip needed. Mechanism: `mod.on_setting_changed` dispatches into `mod._refresh_glow`, which walks `ScriptUnit.extension(local_player_unit, "inventory_system")._equipment.slots` (same access pattern as `cos probe_hat`), and for each `right_unit_1p` / `right_unit_3p` / `left_unit_1p` / `left_unit_3p` slot field either overlays the chosen preset or, when the toggle has just been turned OFF, restores the skin's native template via vanilla `GearUtils.apply_material_settings(unit, WeaponSkins.skins[skin_key].material_settings_name)`. Stylish (`_runed_01`, no template) skins can't be restored — but they also weren't being painted, so that's a no-op. New chat command `cos repaint_glow` triggers the same walk manually for diagnostics. Forward-reference safety: `_refresh_glow` is attached to `mod` rather than declared as a bare local so the early `mod.on_setting_changed` callback can dispatch through a runtime table lookup (per `feedback_lua_forward_reference.md`). Husks (other players' 3p weapons) NOT covered yet — they live on a different inventory extension. Tracked as follow-up.
+
+## [2026-05-06 v0.8.6-dev]
+### Changed
+- **Glow override 1P verified working; stripped diagnostic logging.** v0.8.5 added a `[GLOW-trace]` line per `GearUtils.apply_material_settings` call (~6 lines per equip). With user testing on console-2026-05-07-00.25.35.log: every call lands on a live `userdata` unit (alive_ok=true, alive=true) for both 3p and 1p paths, and `Unit.set_vector3_for_materials` returns `ok=true` for each. The hook works as designed. v0.8.6 keeps the hook-safe overlay but gates the trace behind `mod:get("glow_trace")` (off by default; same pattern as `cos_thiccc_trace` and `apply_trace`). User confirmed 1P glow now follows the chosen preset.
+
+## [2026-05-06 v0.8.5-dev]
+### Added
+- **`[GLOW-trace]` diagnostic logging** on every `GearUtils.apply_material_settings` invocation — unconditional in this build to investigate the "1P glow override doesn't paint" report after v0.8.4. Logs template name, unit type, `Unit.alive` status, and per-variable `set_vector3_for_materials` ok/err. Verified the hook pipeline is sound; trace gated behind toggle in v0.8.6.
+
+## [2026-05-06 v0.8.0] — Dynamic portraits split out
+### Removed
+- The dynamic-portrait system moved into the standalone
+  `dynamic_cosmetic_portraits` mod (Workshop 3721036701, private). Removed
+  ~570 lines covering `_PORTRAIT_MATERIALS`, `_hat_portrait_map`,
+  `_skin_portrait_map`, state vars, `_collect_all_guis`,
+  `_check_portrait_materials_ready`, `_get_kruber_merc_*_key`,
+  `_restore/_sync_portrait_settings`, the `portrait_diag` /
+  `portrait_dump` / `test_portrait` commands, and the `UnitFrameUI:draw`
+  hook. The orphan `_get_hat_item_key_for_unit` helper was deleted.
+- Removed the `dynamic_portraits` setting widget + `custom_gui_textures`
+  block from `cosmetics_tweaker_data.lua`, plus the matching localization
+  entries.
+- Removed 30 portrait `material =` and 30 `texture =` declarations from
+  `cosmetics_tweaker.package`.
+- Moved 90 asset files (30 `.material` + 30 `.png` + 30 `.texture`) and
+  `CHARACTER_COSMETIC_CATALOG.md` into the new mod.
+
+### Kept
+- The `NewsFeedUI:draw` hot-reload safety hook stayed here — it protects
+  illusion / LA bridge atlases, not portrait materials.
+
+## [2026-05-06 v0.8.4-dev]
+### Fixed
+- **Glow override now lands on first-person weapons.** v0.8.1's `create_equipment` post-hook only painted 3p reliably; 1p stayed the template's original color. Replaced the post-spawn paint with a `hook_safe` on `GearUtils.apply_material_settings` itself — vanilla calls this for both 3p AND 1p weapon units inside `spawn_inventory_unit` (gear_utils.lua:198 + 270), as well as ammo units, projectile dummies, pickups, and the loot-item previewer. Same trick `NoGlow` uses to zero out emissive. Verified test path: equipping a Veteran skin with `purple_glow` then switching the override preset to Crimson now turns BOTH the keep mannequin's blade and the wielded first-person blade red on the next equip. Known caveat (separate issue): skins that don't already have a `material_settings_name` (Stylish `_runed_01` items) still don't take the override — vanilla never calls `apply_material_settings` on them, so this hook never fires for them. Fix path is to also paint at spawn time when no template was set, but that requires understanding why our v0.8.1 post-spawn paint silently no-ops on Stylish materials — separate investigation.
+
+## [2026-05-06 v0.8.3-dev]
+### Changed
+- **Gated `[apply-trace]` logging behind `mod:get("apply_trace")` toggle.** v0.8.2 added per-event trace lines on `_enable_craft_button` and `_on_illusion_index_pressed` to investigate the "Apply doesn't update the weapon" report. The trace did its job (verified Apply now commits correctly — 4 successful `Applied illusion` events in console-2026-05-06-19.06.33), but at ~50 lines per customization session it drowns out other diagnostics. Now off by default; enable via mod settings file when needed. No widget — same pattern as `cos_thiccc_trace`.
+
+## [2026-05-06 v0.8.2-dev]
+### Added
+- **`[apply-trace]` diagnostic logging** on `_enable_craft_button` and `_on_illusion_index_pressed` to investigate user report "the weapon doesn't get updated when I hit apply". Pre-fix log analysis (console-2026-05-06-18.50.02 covering 3 customization sessions): zero `Applied illusion` events, backend-resolved skin remained `skin_01` throughout, suggesting Apply was either greyed-out at click time OR never clicked. Trace will surface: every craft-button enable/disable transition with `_skin_dirty` + `_current_recipe_name` + `eac-untrusted` state; every illusion pick with `picked_skin` vs `current_skin`/`default_skin` and the `differs` boolean that gates vanilla's `_skin_dirty = true`. Once the user repros, this pinpoints whether Apply was greyed (no `enable=true` log) or fired without committing (enable=true but no `Applied illusion`).
+
+## [2026-05-06 v0.8.1-dev]
+### Added
+- **Weapon Glow Override (Phase 1)** — new settings group under "Weapon & Item Appearance". Master toggle `glow_override_enable` plus a 6-option preset dropdown (Purple / Gold / Crimson / Green / Lileath / Versus). When enabled, every spawned weapon has the chosen preset's material variables applied — `rune_emissive_color` (vector3) for the 5 rune templates, or the 5-channel `color_glow_high/low`, `color_smoke_high/low`, `color_dots` set for Versus. Templates verbatim from `weapon_material_settings_templates.lua`. Engine silently no-ops on materials that don't expose the variable, so the override is safe to call universally — only runed/versus-capable meshes change visually. Hooked into all three render paths (`GearUtils.create_equipment` for in-game, `HeroPreviewer/MenuWorldPreviewer._spawn_item` for inventory mannequin, `LootItemUnitPreviewer.spawn_units` for the illusion browser). Phase 1 is global only — per-skin customization comes in Phase 2 once Phase 1 proves the substrate.
+
+## [2026-05-06 v0.7.102-dev]
+### Fixed
+- **Pending row-1 illusion was reverted to the last-Applied skin every time the user clicked a shield in row-2.** `_ct_on_offhand_pressed` re-resolved the skin via `self:_get_item(backend_id)` → `item.skin` / `items_iface:get_skin(backend_id)` / `WeaponSkins.default_skins`. All three return the BACKEND-stored skin — i.e. the LAST APPLIED illusion. So if the user picked a new row-1 illusion (which only updates `_skin_dirty` and the customization-preview previewer, not the backend) and then clicked a shield in row-2, our respawn discarded the pending row-1 pick and re-rendered with the previously-Applied illusion. **Fix:** read `self._previewer._item.data` and `._previewer._item.skin` first (vanilla `_on_illusion_index_pressed` writes the pending selection there) and only fall back to backend resolution when the previewer isn't initialized yet.
+
+## [2026-05-06 v0.7.101-dev]
+### Fixed
+- **Crash on Apply with runed/glowy Bret illusion (`Unit not found #ID[f3ec09a279311ac8]` at `world.spawn_unit`)** — GUID 1a7b27db-e813-467d-87f3-6bc0efd9c472. Root cause: `BackendUtils.get_item_units` is called from `GearUtils.create_equipment` with `backend_id=nil, skin=nil` and relies on `item_data.backend_id` (which vanilla stamps onto item_data during loadout resync) to internally resolve the equipped illusion. **Our hook only consulted the explicit `backend_id` arg**, so it bailed at the `has_skin=false` gate for every in-game equip — the user's row-2 selection never applied to the player body, AND we never had a chance to redirect away from a runed-shield path whose package the engine hadn't preloaded. Fix: mirror vanilla's resolution chain — check `item_data.backend_id` as a third fallback after the explicit args. With this, in-game spawns now consistently see the user's offhand selection and route to a preloaded shield mesh, eliminating the `_runed_01` resource-not-found crash. Crash trace verified at console-2026-05-06-04.53.08 line 6926: trying to spawn `wpn_emp_gk_shield_02_runed_01_3p` AFTER LootItemUnitPreviewer had unloaded that package at 05:11:25.073, while `_offhand_selection["es_1h_sword_shield_breton"] = "Empire Shield (Gold)"` (`unit = wpn_emp_gk_shield_05`, both 1p+3p preloaded at 05:11:30) was sitting unused.
+
+### Documented limitations (carry-forward)
+- **LA texture paint is invisible on `_magic_*` / `_runed_*` Bret illusions** — confirmed empirically via the v0.7.99 log. The glow-emissive material variants don't expose the standard shield diffuse slot hash (`texture_map_c0ba2942`), so `Material.set_texture` returns `ok=true` but no pixel changes — every LA option visually looks identical to the equipped shield. LA's own `icons` table enumerates compatibility per LA variant (e.g. `Reynard01.icons.es_sword_shield_breton_skin_03_runed_01` = a *bluegrlow* icon variant); we currently don't honor it. To restore visible paint on glow shields we'd need to either (a) filter LA options by `icons` compatibility, (b) force a mesh swap to a compatible non-glow vanilla shield before painting (re-introducing the v0.7.86-disabled override path with safer mesh choices), or (c) drive a per-frame re-paint loop the way LA's normal mode does. Not in this release.
+- **LA paint "sticks" across shield changes — switching to a different shield (vanilla or LA) keeps showing the previous LA texture.** This is the shared-material-instance problem: VT2/Stingray's `Material.set_texture` mutates the material asset in place, and shield meshes that share a material file inherit the override globally. We can't reset textures from Lua (no `Material.reset_texture` in VT2), and we can't snapshot originals (no `Material.get_texture` either). LA itself "solves" this by re-painting every shield in the world every frame — we don't, and only paint at spawn time. Future fix candidates: per-frame re-paint loop; per-unit material cloning via `World.create_material`; or restore-on-deselect by remembering a known vanilla diffuse texture per shield mesh. Not in this release.
+
+### UX clarification on Apply for row-2-only changes
+- **Apply only commits row-1 (illusion) changes** — that's vanilla `HeroWindowItemCustomization._skin_dirty` behaviour gating `_apply_weapon_skin_craft_complete`. Row-2 offhand selections are stored in `_offhand_selection` the moment the button is clicked and apply on the next item spawn (in-game equip, mannequin re-render). With v0.7.101's `item_data.backend_id` fix, the in-game body and mannequin now reliably reflect row-2 changes on the next spawn — but **Apply itself doesn't trigger a respawn for row-2-only changes**. Forcing an immediate mannequin refresh from row-2 click would require reaching the parent HeroView's previewer instance from inside `HeroWindowItemCustomization`. Tracked as TODO. Workaround for now: close customization (Back) → mannequin re-renders with the new row-2 selection.
+
+## [2026-05-06 v0.7.100-dev]
+### Fixed
+- **`Unlock All Portrait Frames` toggle never injected anything** (silent no-op since the feature shipped in v0.7.0-dev). Root cause: the hook targeted `PlayFabMirrorBase` but the runtime instance is `PlayFabMirrorAdventure`. VT2's foundation `class()` helper at `foundation/scripts/util/class.lua:51-57` defines inheritance by **copying** parent methods into the child table at class-definition time — there is no `__index` chain to the base. So `mod:hook("PlayFabMirrorBase", "_create_fake_inventory_items", ...)` registered correctly but wrapped a function value the runtime instance never dispatches to. Verified empirically against `console-2026-05-06-02.40.42.log`: VMF logged `Hooking '_create_fake_inventory_items' from [PlayFabMirrorBase]` at mod load (02:41:12.686), well before PlayFab login at 02:41:22, but the in-game `cos frames_status` diagnostic reported `inject hook fired 0 time(s)` even with the toggle on and modded realm detected. **Fix:** re-targeted both hooks to `PlayFabMirrorAdventure`. Added a more reliable pre-hook on `_create_fake_inventory_items` that mutates the `fake_inventory_items` parameter to inject all frame keys *before* the original mints fake backend IDs — this is the actual gate that registers items into `_inventory_items` (the table the UI's `get_filtered_items("slot_type == frame")` reads). The companion safe hook on `get_unlocked_cosmetics` keeps the table in sync for later UI re-queries. DLC ownership still respected via `_skin_requires_unowned_dlc`. Toggle still requires a full restart to take effect (the gate runs once at PlayFab login). Memory note: `feedback_vt2_class_hook_derived.md`. Diagnostic command `cos frames_status` retained.
+- **LA shield paint not visible on the inventory loadout mannequin for vanilla-crafted Bretonnian sword & shield** ("Apply seems to do nothing", "all LA shield options look like the equipped shield"). Root cause: vanilla `equip_item` is called with `skin=nil` for vanilla-crafted Bret weapons because the applied illusion is stored only on the backend `BackendItem` object, not passed through the call chain. Vanilla relies on `BackendUtils.get_item_units` to resolve the skin internally during spawn — but our `_store_equip_skin` hook was caching the literal `nil` arg, so `_spawn_item_post`'s `has_skin` gate failed and LA paint was skipped on the mannequin. **Fix:** `_store_equip_skin` now falls back to `Managers.backend:get_interface("items"):get_skin(backend_id)` when the passed `skin` is nil, mirroring the same resolution chain `_setup_illusions` and `_ct_on_offhand_pressed` already use. Now logs `[LA preview] backend-resolved skin for X: Y` whenever the fallback fires, so future regressions are visible. The customization-screen preview (`LootItemUnitPreviewer`) and in-game body (`GearUtils.create_equipment`) were already painting correctly — only the inventory mannequin path was broken. Verified against console-2026-05-06-02.40.42 log: `[LA paint] skip: has_skin=false` repeating after `equip_item key=es_sword_shield_breton ... skin=nil`.
+
+### Note on Apply button UX
+The `Apply` button in the customization screen only commits the row-1 (illusion) selection — that's vanilla behaviour, not a bug. Row-2 offhand selections are stored in `_offhand_selection` the moment the button is clicked and applied on the next item spawn (mannequin re-render, in-game equip). Before this fix, the user-facing symptom on Bret weapons was that the mannequin re-rendered after Apply but never showed the LA paint, making it look like Apply ignored the shield change. With the backend-resolve fix the mannequin now paints correctly on the first re-render after Apply, so the row-1+row-2 changes appear together as the user expects.
+
+## [2026-05-05 v0.7.98-dev]
+### Fixed
+- **Imperial Longsword (cwv) was being thinned in the inventory character preview** despite the v0.7.87 unit-path migration and the v0.7.90 `cwv_variant` gate. Root cause: the menu hook resolved per-hand paths via `item_data.right_hand_unit` + a separate `info.skin_name` -> `WeaponSkins.skins[skin].right_hand_unit` lookup, which was redundant with what vanilla `equip_item` had already computed. Vanilla calls `BackendUtils.get_item_units` once and stores the resolved per-hand path on each `spawn_data` entry as `unit_name` — that's the only truth source for "what unit IS rendered in this slot right now". Switched both menu hooks (`HeroPreviewer/MenuWorldPreviewer._spawn_item` and `LootItemUnitPreviewer.spawn_units`) to read paths straight from `spawn_data[i].unit_name`. Side-effects: dropped the `cwv_variant` defence-in-depth gate (no longer needed — a cwv item's `unit_name` is always its variant model and can't accidentally match a base-weapon pattern); dropped the now-unused skin-resolution branch on the LootItem path. The GearUtils in-game hook keeps `_resolve_render_unit_path` because it doesn't have a pre-resolved spawn_data array — it gets `result.skin` from the spawn result and looks up the rendered path itself.
+
+## [2026-05-05 v0.7.95-dev]
+### Removed
+- **"Elven Spear" / "Elven Spear (Exotic)" cosmetic options on Kruber's spear & shield** (`ct_es_deus_we_01/02`). Cross-character (Wood Elf models on a Kruber weapon) — same no-cross-character rule that drove the v0.7.94 Kerillian-side removal.
+
+## [2026-05-05 v0.7.94-dev]
+### Removed
+- **"Empire Spear & Shield" cosmetic options on Kerillian's spear & shield** (`ct_we_spear_shield_es_01/02/03`). These violated the no-cross-character rule (Empire models on a Wood Elf weapon). Reverting per user.
+
+### Changed
+- **"Elven Spear & Shield" illusions on Kruber's spear & shield (`ct_es_deus_we_01/02`) now swap only the spear**, not the shield. Removed `left_hand_unit` from both entries and renamed to "Elven Spear" / "Elven Spear (Exotic)". Picking one in the row-1 illusion picker leaves the shield untouched, so the user's row-2 offhand selection (or the base weapon's default shield) stays in place. Fixes the "equipping the spear model also changes the shield" report — the bundled `left_hand_unit` was forcing both swaps in one click.
+
 ## [2026-05-01 v0.7.90-dev]
 ### Fixed
 - **Bretonian thiccc was leaking onto cwv Imperial Longsword in the inventory character preview** (regression introduced by v0.7.87's unit-path migration plus the `_spawn_item_post` slot-walk bug fixed in v0.7.88). Added an explicit `not item_data.cwv_variant` gate to `_spawn_item_post` AND to the `LootItemUnitPreviewer.spawn_units` hook for symmetry with the GearUtils path. Unit-path matching alone *should* exclude cwv variants (their models don't contain `wpn_emp_gk_sword_`), but the gate is defence-in-depth — guarantees no future model collision can cause cwv items to be scaled by a base-weapon override even accidentally.

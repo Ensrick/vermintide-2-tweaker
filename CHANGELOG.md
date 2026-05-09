@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026-05-06] dynamic_cosmetic_portraits v0.1.0 — split from cosmetics_tweaker
+### Added
+- New standalone mod (Workshop ID `3721036701`, private) wrapping the
+  hat/outfit-aware HUD & hero-select character portrait system that
+  previously shipped inside `cosmetics_tweaker`.
+- 10 portrait sets at split (8 Kruber Mercenary hats + Felix outfit + VT1
+  Champion of Ubersreik outfit). v0.1.1 added Plumed Horseshoe (11 total).
+- `CHARACTER_COSMETIC_CATALOG.md` moved into the new mod (it's exclusively a
+  portrait-authoring reference). The catalog still sources from
+  `cosmetics_tweaker/_cos_probe.txt`.
+- Per-mod docs: `dynamic_cosmetic_portraits/{CHANGELOG,DEVELOPMENT,TODO}.md`.
+
+### Changed (cosmetics_tweaker → v0.8.0)
+- Removed the dynamic-portrait subsystem (~570 lines of Lua, the
+  `dynamic_portraits` setting, the `custom_gui_textures` block, 60 package
+  declarations, and 90 asset files). The `NewsFeedUI:draw` hot-reload
+  safety hook stayed — it protects illusion / LA bridge atlases, not
+  portrait materials. See `cosmetics_tweaker/CHANGELOG.md` v0.8.0 entry
+  for the per-file delta.
+
 ## [2026-04-29] cosmetics_tweaker v0.7.0-dev
 ### Added
 - Unlock All Portrait Frames toggle (modded only, DLC ownership respected)

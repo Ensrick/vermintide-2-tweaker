@@ -6,9 +6,6 @@ local loc = {
         en = "Cosmetic tweaks: per-career hat/skin unlocks within each character, plus per-weapon scale and grip-offset overrides.",
     },
 
-    dynamic_portraits = {
-        en = "New Dynamic Character Portraits for Hats",
-    },
     unlock_all_illusions = {
         en = "Unlock All Weapon Illusions (Modded Only)",
     },
@@ -26,9 +23,6 @@ local loc = {
     },
     la_bridge_enable_tooltip = {
         en = "Adds every Loremaster's Armoury hat/skin recolor as its OWN inventory item (e.g. Pureheart Helm shows up four times — yellow, white, red, black — instead of LA silently overwriting the vanilla one). Requires Loremaster's Armoury and More Items Library subscribed and enabled. Restart after toggling.",
-    },
-    dynamic_portraits_tooltip = {
-        en = "Swaps character HUD portraits to match equipped headgear. Currently supported: Kruber Mercenary with Marshal Ludenwald's Favourite Hat.",
     },
 
     appearance_group = {
@@ -53,6 +47,27 @@ local loc = {
     es_bastard_sword_thiccc_tooltip = {
         en = "Reduces the Bretonian Longsword's X-axis width to 65%% of vanilla so it looks like a proper longsword instead of a slab. Also applies to the sword in Bretonian Sword and Shield (shield unaffected). Affects all wielders.",
     },
+
+    glow_override_group = {
+        en = "Weapon Glow Override",
+    },
+    glow_override_enable = {
+        en = "Override Weapon Glow Color",
+    },
+    glow_override_enable_tooltip = {
+        en = "Repaints rune-emissive runes/edges on weapons that already have a glow. Takes effect on the next weapon spawn — re-apply a cosmetic / re-equip in the loadout to see a new color on a currently-equipped weapon. Weavebound (Winds of Magic) and Shyish-Infused weapons use different shaders and are NOT affected by this setting — they may need a separate option later.",
+    },
+    glow_override_preset = {
+        en = "Glow Color",
+    },
+    glow_override_preset_tooltip = {
+        en = "Color applied to glow-capable weapons when the override above is enabled.",
+    },
+    glow_preset_purple = { en = "Purple" },
+    glow_preset_gold   = { en = "Gold"   },
+    glow_preset_red    = { en = "Red"    },
+    glow_preset_green  = { en = "Green"  },
+    glow_preset_blue   = { en = "Blue"   },
 
     ct_es_mace_gk_shield_01_name = {
         en = "Mace & Bretonnian Shield",

@@ -1,42 +1,42 @@
 # Character Weapon Variants — Development Guide
 
-## Adding a New Variant Weapon
+> **Adding a new variant?** Start with **`RECIPES.md`** — that's the
+> procedural how-to (decision tree + per-archetype copy-paste recipes
+> + pre-deploy checklist + verification matrix). This file is the
+> reference: rarity system, skin system, scale system, animation
+> architecture, base-weapon catalog. Cross-link from RECIPES.md as
+> needed.
+>
+> **3P animation work?** See **`ANIMATION_FIX_PLAYBOOK.md`** — the
+> 9-step closed-vocabulary procedure. The "Animation: System B" and
+> "Animation: cross-access" sections later in this file are the
+> architectural reference for that playbook.
+>
+> **Dual-wield variant?** Read the post-mortem in
+> **`J_LEFTWEAPONATTACH_INVESTIGATION.md`** once. It explains why the
+> `_force_display_unit` rule exists.
 
-### Overview
+## Adding a New Variant Weapon — Quick Index
 
-A variant weapon is a new inventory item that uses an existing weapon template (moveset, stats, attack chains) but with different visual models. The system clones a base weapon's `ItemMasterList` entry, overrides the unit paths, registers a custom skin, injects it into `NetworkLookup`, and registers it via MoreItemsLibrary.
+The full procedural how-to lives in `RECIPES.md`. This section is a
+short index pointing back into this file's reference content.
 
-### Step 1: Define the variant
+| Question | Where to look |
+|---|---|
+| What kind of variant am I making? | `RECIPES.md` — Decision tree |
+| Which fields go in the def? | `RECIPES.md` — per-archetype recipe |
+| What does each rarity tier mean? | This file — Rarity |
+| When is `rarity = "default"` correct? | This file — Blacksmith Template Pattern |
+| How do skins, illusions, and `display_unit` fit together? | This file — Skin System |
+| What goes in `inventory_icon` vs `hud_icon`? | This file — Icon Systems |
+| Which traits and properties are valid? | This file — Properties and Traits |
+| When does mod registration actually run? | This file — Registration Timing |
+| Custom moveset / stat changes? | This file — Animation: System B + Custom Templates |
+| Cross-access (`can_wield` expansion)? | This file — Animation: cross-access |
+| Per-perspective scale (`_1p` / `_3p`)? | This file — Model Scaling and Grip Offsets |
+| What's the base weapon's IML key? | Top-level `ITEM_LIST.md` |
 
-Add an entry to `_variant_definitions` in `character_weapon_variants.lua`:
-
-```lua
-{
-    item_key        = "cwv_es_axe_shield_exotic",   -- unique key, prefix with cwv_
-    base_weapon     = "dr_shield_axe",              -- ItemMasterList key to clone
-    display_name    = "Imperial Axe and Shield",    -- shown in inventory
-    description     = "A battle-hardened hatchet...",
-    character       = "empire_soldier",             -- sp_profiles display_name
-    careers         = { "es_mercenary", "es_huntsman", "es_knight" },
-    right_hand_unit = "units/weapons/player/wpn_axe_hatchet_t2/wpn_axe_hatchet_t2_magic_01",
-    left_hand_unit  = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02_magic",
-    inventory_icon  = "icon_wpn_dw_shield_01_axe",  -- menu icon (icon_wpn_* atlas)
-    hud_icon        = "weapon_generic_icon_axe_and_sheild", -- in-game HUD (weapon_generic_icon_* atlas)
-    skin_display_name = "Imperial Axe and Shield",  -- shown in cosmetics menu
-    rarity          = "unique",                     -- see Rarity section
-    traits          = { "melee_counter_push_power" },
-    properties      = { block_cost = 1, power_vs_skaven = 1 },
-}
-```
-
-### Step 2: Localization
-
-Localization is automatic. The Localize hook maps:
-- `<item_key>_name` → `display_name`
-- `<item_key>_description` → `description`
-- `<item_key>_skin_name` → `skin_display_name`
-
-### Step 3: Build and deploy
+### Build and deploy
 
 ```powershell
 Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
@@ -45,6 +45,10 @@ node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no
 $wsDir = "C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3716869446"
 Get-ChildItem "character_weapon_variants\bundleV2" -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $wsDir $_.Name) -Force }
 ```
+
+Bump `MOD_VERSION` (line 3 of `character_weapon_variants.lua`) on every
+build. Hot-reload is unsafe — full game restart after every deploy. See
+`feedback_version_bump.md` and `feedback_hot_reload_unfixable.md`.
 
 ## Rarity
 
@@ -61,7 +65,7 @@ VT2 rarity values and their display:
 
 ### Critical: Rarity Registration Pattern
 
-Items must be registered with `rarity = "default"` in `entry.rarity`, `mod_data.rarity`, and `mod_data.CustomData.rarity`. The actual display rarity is set **after** registration by modifying the live backend item:
+Items must be registered with `rarity = "default"` in `entry.rarity`, `mod_data.rarity`, and `mod_data.CustomData.rarity`. The actual display rarity is then set **after** registration by modifying the live backend item — but **only if `def.rarity ~= "default"`** (`_auto_register_all` skips the upgrade for blacksmith templates):
 
 ```lua
 -- During registration (in _build_entry):
@@ -70,13 +74,69 @@ entry.mod_data.rarity = "default"
 entry.mod_data.CustomData.rarity = "default"
 
 -- After add_mod_items_to_local_backend + _refresh():
+-- Skipped entirely when def.rarity == "default"
 local item = backend_items:get_item_from_id(backend_id)
 item.rarity = "unique"        -- display rarity
 item.data.rarity = "unique"   -- data-level rarity
 item.CustomData.rarity = "unique"  -- serialized rarity
 ```
 
-If you set rarity directly on the entry (not `"default"`), the item renders as a template/blacksmith item with no rarity color, no cosmetics menu, and grey text.
+`def.rarity = "default"` is the "blacksmith template" path — see the next section. Any other value goes through the upgrade.
+
+## Blacksmith Template Pattern
+
+A "blacksmith template" is the unlocked white/grey starter weapon that the forge will let the player re-roll properties on, salvage, and apply illusions to — same UX as vanilla `es_bastard_sword`'s default-rarity drop from a commendation chest. CWV's `cwv_es_longsword` (Recruit Longsword) and `cwv_es_axe_shield` are examples.
+
+### Def fields
+
+```lua
+{
+    item_key      = "cwv_<weapon>",
+    base_weapon   = "es_bastard_sword",     -- vanilla weapon to clone
+    rarity        = "default",              -- blacksmith template tier
+    power_level   = 5,                      -- low; properties will roll
+    right_hand_unit = "...",                -- the variant's DEFAULT model
+    left_hand_unit  = "...",                -- (same)
+    -- traits / properties intentionally omitted: forge rolls them
+}
+```
+
+### What `_build_entry` does for a default-rarity variant
+
+1. `entry = table.clone(base, true)` — entry inherits the base weapon's `name`, `key`, and `right_hand_unit`. Do NOT clobber `name` / `key` (per `feedback_cwv_clone_name_clobber.md`); inherited values are needed for downstream lookups not to crash.
+2. `entry.right_hand_unit = def.right_hand_unit` — overrides the base mesh with the variant's chosen default model. **This is the variant's permanent default model, not an illusion.**
+3. `entry.cwv_variant = true` — cross-mod marker.
+4. `entry.skin_combination_table = "<type>_skins"` — so the cosmetic menu knows which illusions are available for this item type.
+5. **NO `mod_data.CustomData.skin` set** (gated by `def.rarity ~= "default"`). Vanilla blacksmith templates have a nil skin field, and the forge requires that to treat the item as unlocked. Pre-applying any skin makes the forge lock the item ("locked variant" UI).
+
+### Why the variant's mesh still renders without a pre-applied skin
+
+The CWV mod hooks `BackendUtils.get_item_units`. When the resolution returns no skin and the `backend_id` matches the `cwv_<key>_001` pattern, the hook forces `result.right_hand_unit` and `result.left_hand_unit` to the def's overrides. This compensates for the upstream code path where vanilla `BackendUtils.get_item_units` reads `item_data.right_hand_unit` from whatever item_data was passed in — and that path can land on the BASE entry (whose `right_hand_unit` is the base mesh) because CWV entries inherit `entry.name` from the clone.
+
+When the user later applies a different illusion via the cosmetic menu, `result.skin` becomes non-nil and the hook leaves the result alone — user-selected illusions win over the def's default.
+
+### Skin entry handling
+
+`_register_variant_skins` still creates a `cwv_<key>_skin` entry in `WeaponSkins.skins`, in `WeaponSkins.skin_combinations[<type>_skins]`, and in `ItemMasterList[skin_key]`. That's so OTHER variants of the same item_type can apply this variant's look as an illusion via the cosmetic menu. The variant itself doesn't reference its own skin — its base model already IS that look.
+
+**`matching_item_key` on the ItemMasterList skin entry MUST be `def.base_weapon`, not `def.item_key`.** Vanilla `_apply_skin_to_item` does `ItemHelper.get_template_by_item_name(matching_item_key)`. For `skin_only` variants (e.g. `cwv_es_longsword_nordland`) the def's `item_key` is NOT mirrored into ItemMasterList by `_auto_register_all` (skin-only entries are deliberately not handed to the player as inventory items), so a lookup against `def.item_key` returns nil and crashes. The `def.base_weapon` (e.g. `es_bastard_sword`) is always present in `ItemMasterList` with a real template — see CHANGELOG v0.1.95.
+
+### Forge interactions verified
+
+- Re-roll properties: works (default-rarity items show the property roll UI).
+- Apply illusion: works post-v0.1.91 (the skin-side `ItemMasterList[skin_key]` entry is now registered) and post-v0.1.95 (`matching_item_key` correctly points at the base weapon).
+- Salvage: works.
+- Inventory display: white border, no rarity glow — same as a vanilla blacksmith template.
+
+### Common bugs (and the fixes that landed them)
+
+| Symptom | Root cause | Fixed in |
+|---|---|---|
+| Forge says "locked variant", no re-roll | `mod_data.CustomData.skin` was pre-applied | v0.1.87: gate skin pre-apply on `def.rarity ~= "default"` |
+| Inventory preview renders BASE weapon mesh | `BackendUtils.get_item_units` fell back to base entry's `right_hand_unit` | v0.1.93: `BackendUtils.get_item_units` hook forces the cwv override when no skin applied |
+| Grip offset doesn't apply on inventory preview | `_cwv_spawn_item_post` looked up `_equipment_units[<string slot_type>]`, table is numeric-keyed | v0.1.84: bridge via `info.spawn_data[1].slot_index` |
+| Illusion picker crashes opening | `ItemMasterList[skin_key]` was nil | v0.1.91: register weapon_skin entry in ItemMasterList |
+| "Requested template ... does not exist" on illusion swap | `matching_item_key = def.item_key`, but skin_only variants aren't in ItemMasterList | v0.1.95: use `def.base_weapon` instead |
 
 ## Skin System
 
@@ -97,11 +157,185 @@ end
 ```
 
 ### 3. `mod_data.CustomData.skin` and `mod_data.skin`
-Set on the item entry so the backend resolves to the custom skin.
+
+Set on the item entry so the backend resolves to the variant's skin **as the curated default cosmetic**. Done ONLY for non-default-rarity variants — see "Blacksmith Template Pattern" above.
+
+- **Curated exotic / unique variants** (e.g. Black Guard Blade, Imperial Axe and Shield): pre-apply the skin. They ship with their illusion baked in as part of their identity.
+- **Default-rarity blacksmith templates** (e.g. Recruit Longsword): leave both fields nil. The mesh comes from `entry.right_hand_unit` directly via the `BackendUtils.get_item_units` cwv-override hook. Pre-applying a skin would make the forge treat the item as a locked illusion variant.
+
+`_build_entry` gates the pre-apply on `def.rarity ~= "default"`.
 
 ### `skin_combination_table`
 
 Do **NOT** clear `skin_combination_table` on the cloned entry. The cosmetics/illusion menu reads this field to determine available skins. Keeping the base weapon's table means vanilla illusions for that weapon type appear in the cosmetics gear menu.
+
+### Dual-wield variants — display rig requirements
+
+When adding a dual-wield variant (or any variant where `def.left_hand_unit` is set), the cosmetic illusion picker requires the skin entry to use a **dual-attach display rig**. Picking the wrong rig crashes the previewer with `[Script Error]: j_leftweaponattach` the moment the menu opens or a thumbnail is clicked.
+
+**The three requirements:**
+
+1. **Use a dual-attach `display_unit`.** Single-sword rigs (`display_1h_swords`, `display_1h_weapon`) only author `j_rightweaponattach`. Dual rigs author both nodes. Pick by mesh family:
+
+   | Variant flavor | Required `display_unit` | Vanilla precedent |
+   |---|---|---|
+   | Identical-mesh swords (e.g. `cwv_es_dual_swords`) | `units/weapons/weapon_display/display_dual_weapons` | `we_dual_sword_skin_01` (`weapon_skins.lua:5750`) |
+   | Identical-mesh axes (e.g. `cwv_es_dual_axes`) | `units/weapons/weapon_display/display_dual_axes` | `dr_dual_wield_axes` skins |
+   | Identical-mesh hammers (e.g. `cwv_es_dual_maces`) | `units/weapons/weapon_display/display_dual_hammers` | `dr_dual_wield_hammers` skins |
+   | Identical-mesh daggers | `units/weapons/weapon_display/display_dual_daggers` | `we_dual_wield_daggers` skins |
+   | Mixed mesh (axe + falchion) | `units/weapons/weapon_display/dual_wield_axe_falchion` | `wh_dual_wield_axe_falchion` skins |
+
+   When in doubt, find the vanilla weapon with the same model layout and copy its `display_unit` (it's typically on the `weapon_template.display_unit` field in `scripts/settings/equipment/weapon_templates/<template>.lua`).
+
+2. **Set `left_hand_unit` on the skin entry**, typically `= right_hand_unit` for identical-mesh dual-wield. If left is nil, vanilla `BackendUtils.get_item_units` returns nil for left, the previewer skips left attach, and only the right weapon renders — single-sword preview regression.
+
+3. **Set both fields on BOTH layers**: the `WeaponSkins.skins[skin_key]` entry AND the `ItemMasterList[skin_key]` weapon_skin entry. The previewer reads them via two different chains (`LootItemUnitPreviewer._spawn_link_unit:467-477` and `BackendUtils.get_item_units` from `_load_item_units:270`). Setting them on only one layer is a v0.1.99/0.1.103 latent bug — silently picks up a wrong-rig fallback.
+
+**Cross-character illusions:** when registering vanilla skins from a different weapon family as illusions on a cwv dual-wield variant (e.g. Kruber 1h-sword skins on `cwv_es_dual_swords`), do NOT inherit `source.display_unit` from the source skin. The source skin's rig is for its native weapon family (likely a single-sword rig like `display_1h_swords`) and won't have `j_leftweaponattach`. Force the dual-wield rig on the cloned skin entry instead. See `_register_kruber_1h_sword_dual_illusions` for the canonical pattern.
+
+**Why this is non-obvious:** the constraint is invisible at registration time — the runtime crash only fires when the previewer attempts to attach. The exact rig requirement comes from the engine's `Unit.node()` lookup against the spawned display unit, which has no Lua-visible schema. The investigation that surfaced this rule cost ~20 versions (v0.1.122 → v0.1.145); see `J_LEFTWEAPONATTACH_INVESTIGATION.md` for the full post-mortem and the false-negative trap that masked it for so long.
+
+## Naming flow for cwv variants
+
+VT2 displays a weapon's name through multiple keys depending on the UI element. Get any one of them wrong and the user sees a mismatched label. The flow:
+
+| UI surface | Reads | For our cwv items |
+|---|---|---|
+| Inventory tile name | `UIUtils.get_ui_information_from_item(item)` → branches on `item.skin` | When skin pre-applied (exotic): `WeaponSkins.skins[skin].display_name` (= `<item_key>_skin_name` → mapped via `_display_names`). When no skin (default rarity): `item.data.display_name` (= `<item_key>_name`). Both flow through our Localize hook. ✓ |
+| Cosmetics customization title | `UIUtils.get_ui_information_from_item` (same as above) | Same. ✓ |
+| Cosmetics inventory header / loot drop banner / crafting subtitle | `Localize(item_data.item_type)` directly | **Trap.** If `entry.item_type` is inherited from the clone (e.g. `bw_dagger`), this returns "Dagger" — the BASE weapon's localized name — even though the illusion shows "Shortsword". Must override `entry.item_type` to a cwv-prefixed key and map it in `_display_names`. |
+| Skin picker thumbnail name | `Localize(skin_template.display_name)` | Set per skin via `<item_key>_skin_name` in `_register_variant_skins` and per illusion via the source skin's `display_name` plus `_register_custom_illusions`. ✓ |
+| Weapon-type localization elsewhere | Various `Localize(item_data.<key>)` paths read miscellaneous fields | The `cwv_variant` boolean on `entry` is the cross-mod marker — sibling mods (cosmetics_tweaker, weapon_tweaker) gate name-keyed lookups on this. |
+
+**The critical rule** (added v0.1.173): `_build_entry` ALWAYS sets `entry.item_type = def.item_type or def.item_key`. The fallback to `def.item_key` is what fixes the "Dagger" leak — without it, variants that don't declare `def.item_type` inherit the base weapon's item_type from the clone (per `feedback_cwv_clone_name_clobber.md` we deliberately keep `entry.name` / `entry.key` inherited, but item_type is safe to override since vanilla code mostly checks for marker strings like `"weapon_skin"`, not specific weapon types).
+
+**Localization registration** is centralized at the bottom of `_variant_definitions` iteration:
+
+```lua
+for _, def in ipairs(_variant_definitions) do
+    _display_names[def.item_key .. "_name"]        = def.display_name
+    _display_names[def.item_key .. "_description"] = def.description
+    if def.skin_display_name then
+        _display_names[def.item_key .. "_skin_name"] = def.skin_display_name
+    end
+    -- The item_type → display_name binding is what fixes the "Dagger"
+    -- inheritance bug. Always register, with the same fallback rule
+    -- _build_entry uses for entry.item_type.
+    _display_names[def.item_type or def.item_key] = def.display_name
+end
+```
+
+Symptom to watch for: if you add a new variant and the inventory tile / cosmetics title shows the right name but a header / drop banner / sort label shows the BASE weapon's name, the variant probably didn't get its `item_type` registered correctly. Verify with a `Localize("<your_item_key>")` test in the console.
+
+## Attachment node linking — character-specific bone names
+
+A subtler trap in the same family as the j_leftweaponattach saga, surfaced v0.1.169:
+
+Cross-character template clones inherit the source template's `right_hand_attachment_node_linking` and `left_hand_attachment_node_linking`. These linkings carry **wielded** AND **unwielded** node names. The unwielded node is where the weapon sheaths to the character's body when not held — and some templates use **character-specific bone names** for unwielded.
+
+Concrete case: `one_handed_hammer_wizard_template_1` (Sienna's 1H mace) uses `AttachmentNodeLinking.brw_hammer`, which sets `unwielded.source = "a_unwielded_brw_mace"` — a bone authored only on Sienna's empire-female 3P body skeleton. When `cwv_es_maul` clones this template for Kruber and the player unequips, `Unit.node()` looks for `a_unwielded_brw_mace` on Kruber's skeleton, doesn't find it, and crashes (same shape as `j_leftweaponattach` errors — `[Script Error]: a_unwielded_brw_mace`).
+
+**The rule:** when cloning a template across characters, override the inherited attachment node linking to a **generic** linking that uses common-skeleton bone names:
+
+| Source template uses | Override to | Generic unwielded bone |
+|---|---|---|
+| `AttachmentNodeLinking.brw_hammer` (Sienna 1H mace) | `AttachmentNodeLinking.one_handed_melee_weapon.right` (1H) or `.two_handed_melee_weapon` (2H silhouette) | `a_unwielded_1h_right` / `a_unwielded_2h` |
+| Other character-specific linkings | Same — pick `one_handed_melee_weapon` or `two_handed_melee_weapon` based on the variant's visual class | Generic |
+
+**How to identify a character-specific linking**: grep `attachment_node_linking.lua` for `a_unwielded_<character_prefix>_*` source names. Anything with `brw_`, `dr_`, `we_`, `wh_` prefix in the bone name is character-specific.
+
+The fix in `_create_<variant>_template`:
+
+```lua
+-- Override character-specific linking inherited from clone source.
+if AttachmentNodeLinking and AttachmentNodeLinking.two_handed_melee_weapon then
+    template.right_hand_attachment_node_linking = AttachmentNodeLinking.two_handed_melee_weapon
+end
+```
+
+See `_create_maul_template` for the canonical example. The fix happens AFTER the table.clone since clone preserves the original linking reference.
+
+## BASE template patching for previewer compatibility
+
+The inventory previewer (`world_hero_previewer.lua` `equip_item`) calls `ItemHelper.get_template_by_item_name(item_name)` where `item_name` is the BASE weapon's name (cwv variants inherit `entry.name` per `feedback_cwv_clone_name_clobber.md`). This means the previewer reads the **BASE template**, NOT our cwv clone. Two consequences:
+
+**1. Per-career wield events** — see `feedback_cwv_previewer_template_lookup.md`. If you set `wield_anim_career_3p` on your cloned template for Kruber routing, the previewer ignores it. Patch the BASE template's `wield_anim_career_3p` too (scoped to your cwv careers; vanilla wielders fall through unchanged).
+
+**2. Hand-attachment fields** (added v0.1.181) — when a variant's hand layout differs from the base weapon's, the BASE template's `right_hand_attachment_node_linking` / `left_hand_attachment_node_linking` may be missing for the variant's used hand. Concrete case: `cwv_es_outrider_grenade_launcher` clones from `dr_deus_01` (Bardin trollhammer, left-hand-mount, base template only sets `left_hand_attachment_node_linking`). Our variant mounts the gun on the right hand (blunderbuss model), so the previewer hits the right-hand path → reads `item_template.right_hand_attachment_node_linking.third_person` on the BASE template → crashes (nil index, crash GUID `c847908d`).
+
+**The rule:** when your variant uses a hand the base weapon doesn't, patch the BASE template at the end of your `_create_<variant>_template` function:
+
+```lua
+-- BASE template patch — previewer ignores our clone's right_hand_attachment_node_linking,
+-- so add it here too. Bardin's right_hand_unit stays nil natively, so the previewer's
+-- right-hand path never fires for him → harmless side effect for vanilla wielders.
+if Weapons.<base_template_name> and AttachmentNodeLinking and AttachmentNodeLinking.<linking_name> then
+    Weapons.<base_template_name>.right_hand_attachment_node_linking = AttachmentNodeLinking.<linking_name>
+end
+```
+
+See `_create_outrider_grenade_launcher_template` (the trollhammer-template-on-blunderbuss-model variant) for the canonical example. Same pattern as the v0.1.84 elven sword shield wield-routing fix.
+
+## Cross-template Frankenstein weapons (visual ≠ behavior)
+
+Sometimes you want a variant that looks and animates like one vanilla weapon but behaves and sounds like another — e.g. `cwv_es_outrider_grenade_launcher` is Kruber's blunderbuss visually (model + 1P/3P state machine + wield anims) but Bardin Engineer's Trollhammer Torpedo behaviorally (single-shot grenade-thrower projectile, charge-and-release, blast damage, trollhammer sounds).
+
+**The structural pattern:**
+
+1. **Pick the BEHAVIOR side as the source for the template clone.** Cloning the trollhammer template gives us its `actions`, `ammo_data`, `attack_meta_data`, `default_loaded_projectile_settings`, `wwise_dep_*` — all the mechanical knobs.
+2. **Override the visual layer fields** at the end of the clone:
+   - `state_machine` → the visual weapon's 1P state machine path
+   - `wield_anim` (and `_no_ammo`, `_not_loaded` variants) → visual weapon's wield events
+   - `display_unit` → visual weapon's preview rig
+   - `right_hand_attachment_node_linking` / `left_hand_attachment_node_linking` → match the visual weapon's hand mount
+3. **Verify anim_event compatibility.** The behavior-side template's `actions` reference per-action `anim_event` strings (e.g. `"attack_shoot"`). For the swap to play correctly, those event names must EXIST in the visual-side state machine. If the source uses unique events that the visual SM doesn't have, you'll need a per-sub-action `anim_event` remap (same pattern as cross-character anim work).
+4. **Hand-mount swap.** If the behavior template's weapon was mounted on a different hand than the visual:
+   - Iterate `template.actions.action_one` and any sub-actions; flip `weapon_action_hand`
+   - Flip `template.ammo_data.ammo_hand`
+   - Move `template.wwise_dep_left_hand` → `template.wwise_dep_right_hand` (or vice versa)
+   - Clear `template.left_hand_unit` / `left_hand_attachment_node_linking` (or right) so the inherited mount slot doesn't fight the new one
+   - Set the variant def's `no_left_hand = true` (or future `no_right_hand`) so `_build_entry` clears the inherited model on that side
+5. **Patch the BASE template** for previewer compatibility (see "BASE template patching" above).
+
+**Tunings** (per-action stat tweaks): apply at the same time as the visual swap. Common: projectile speed, reload time multiplier on `ammo_data.reload_time`, damage profile clone with multipliers via `_clone_damage_profile`, `attack_meta_data.max_range`. See `_create_outrider_grenade_launcher_template` for the canonical example.
+
+**Known limitation:** action timing fields (`fire_time`, `total_time`, `damage_window_start/end`) come from the BEHAVIOR side. They won't necessarily match the VISUAL state machine's anim length. Result: visual desync (e.g. character finishes the shoot anim before/after the projectile actually fires). Acceptable trade-off in most cases; tune if it reads wrong.
+
+## `no_left_hand` / `no_right_hand` def flag
+
+`_build_entry` supports a `def.no_left_hand = true` flag (added v0.1.181). When set, it explicitly nils out `entry.left_hand_unit` after the clone, even if the base weapon had one.
+
+**Why this is distinct from `def.left_hand_unit = nil`:** the existing override gate is `if def.left_hand_unit then entry.left_hand_unit = def.left_hand_unit end`, so a `nil` value just means "don't override → inheritance kicks in". The flag explicitly clears it.
+
+**When to use it:** when your variant inherits a hand-mounted model from the base that the variant doesn't want — typically when moving from left-mount to right-mount or vice versa (see Frankenstein recipe above). Without the flag, the variant renders BOTH the inherited base model AND the new mount — visually a Frankenstein two-weapon appearance.
+
+Symmetrical `def.no_right_hand` not yet implemented because no current variant needs it — the trollhammer-side is the only "wrong-hand-mount" base weapon we've cloned. Add when needed; pattern is one line in `_build_entry`.
+
+## Skin entry fallbacks — gate on base presence
+
+`_register_variant_skins` mirrors several fields from the variant def into the `WeaponSkins.skins` entry, with fallbacks to either the base weapon or related def fields. **Some fallbacks must be gated on the base weapon actually having the field** — otherwise you force a value into a slot the base never used, which trips downstream assertions.
+
+**The `ammo_unit` trap (v0.1.184, crash GUID `2df233ae`):**
+
+The original code:
+
+```lua
+local ammo_unit = def.ammo_unit or def.left_hand_unit  -- WRONG
+```
+
+Worked for thrown ammo variants (`cwv_es_javelin`, base `we_javelin`) where `we_javelin` IML has `ammo_unit` set — the fallback to `def.left_hand_unit` mirrored the held mesh as the throw projectile. Same fallback **broke** non-ammo-projectile variants whose base weapon's template has `ammo_data` (so `GearUtils.spawn_inventory_unit` checks `ammo_data.ammo_hand`) but no `ammo_unit` (nothing visually attached to the body).
+
+Concrete case: `cwv_es_brace_repeater` (base `wh_brace_of_pistols`). The brace template has `ammo_data.ammo_hand = "right"`. Vanilla doesn't set `ammo_unit` so the gate `if ammo_data and ammo_data.ammo_hand == hand and ammo_unit_name then` doesn't fire. Our cwv variant force-set `ammo_unit = def.left_hand_unit` (the pistol mesh) → gate fires → `fassert(ammo_unit_attachment_node_linking, ...)` fails because the brace template never defines `ammo_unit_attachment_node_linking`.
+
+**The fix:**
+
+```lua
+local ammo_unit = def.ammo_unit or (base.ammo_unit and def.left_hand_unit)
+```
+
+Only inherits the held mesh as ammo_unit when the base weapon already uses one.
+
+**The general rule** (apply when adding new fallbacks in `_register_variant_skins` or similar): if your fallback assumes the base behaves a certain way, GATE it on `base.<assumed_field>` existing. Don't force a value into a field the base never used — vanilla downstream code probably doesn't tolerate it.
 
 ## Icon Systems
 
@@ -223,7 +457,239 @@ Same as variant weapons — VMB build, copy to Workshop folder, full game restar
 
 ### Animation considerations
 
-Cross-character illusions only swap the 3D model. If both weapons share the same `template` (e.g., `two_handed_swords_template_1` for all greatswords), no animation work is needed. If the templates differ, you'll need animation remapping in weapon_tweaker.
+Cross-character illusions only swap the 3D model. If both weapons share the same `template` (e.g., `two_handed_swords_template_1` for all greatswords), no animation work is needed.
+
+For **new variant weapons** (separate items, not just illusions), animation work belongs in this mod via the template-clone path — see "Animation: System B" below. The `weapon_tweaker` runtime hook is the right tool only for vanilla items unlocked on new careers and for husk fixes; CWV variants own their template and should bake the redirects directly into the clone.
+
+## Animation: System B (template-clone path)
+
+Variant weapons that need 3P animation fixes (cross-character moveset, missing clips on the target body) handle that work **here**, not in `weapon_tweaker`. The pattern is to clone the source template at mod load, rewrite the animation fields we care about, and store the clone as a new entry in the `Weapons` global. The variant's `template` field points at the clone, so the engine spawns it with our edits.
+
+This complements the runtime-hook path in `weapon_tweaker` (System A). See the top-level `DEVELOPMENT.md` "Two parallel systems" table for when each applies. Short version: System B is the right tool whenever we own the item.
+
+### The 1P/3P rule (load-bearing)
+
+**1P animations are universal across all six characters.** The `first_person_base` unit is shared, so any weapon's 1P clips and state machine play correctly on any character's first-person view. Never override `anim_event` (1P), `wield_anim` (1P), `state_machine`, or `anim_event_1p` per character. All System B work targets the **3P body** via `anim_event_3p`, `wield_anim_3p`, and `wield_anim_career_3p`.
+
+The character-specific 3P body skeletons (empire-soldier, wood-elf, dwarf, witch-hunter, bright-wizard, undead) each have their own authored event vocabulary. When a cross-character variant's clip names don't exist on the target skeleton, that's the failure mode we're fixing.
+
+### Engine resolution
+
+Per-sub-action lookup (`Vermintide-2-Source-Code/scripts/unit_extensions/weapons/weapon_unit_extension.lua:512`):
+
+```lua
+local event_3p = get_action_anim_event(..., "anim_event_3p") or event
+```
+
+The 3P body plays `sub_action.anim_event_3p` if set, else falls back to `sub_action.anim_event`. The fallback is the failure mode for cross-character clones — the elf event name might not exist on Kruber's body. Our fix is to write `anim_event_3p` per sub-action so the body plays a clip that *does* exist.
+
+The lookup is dumb: no career branch, no skin branch beyond `weapon_skin_anim_overrides[skin].anim_event_3p`. So career-conditional sub-action behavior isn't reachable from a single template — if you need that, ship per-career variant items (which is the whole CWV approach).
+
+### The pattern
+
+Every System B template clone follows the same shape (see `_create_imperial_dual_swords_template`, `_create_elven_sword_shield_template`):
+
+1. **Guard.** Bail if the source template isn't loaded yet, or if our clone already exists.
+   ```lua
+   if not Weapons or not Weapons.dual_wield_swords_template_1 then return end
+   if Weapons.imperial_dual_swords_template then return end
+   ```
+
+2. **Deep clone.** Always pass `true` to `table.clone` so nested action tables aren't aliased back to vanilla.
+   ```lua
+   local template = table.clone(Weapons.dual_wield_swords_template_1, true)
+   ```
+
+3. **Walk `template.actions[*][*]` and rewrite `anim_event_3p`.** Use a small flat remap table keyed on the source's `anim_event` value. Only target events that are missing or visually wrong on the target skeleton — same-named events that exist on both bodies need no entry.
+   ```lua
+   local _ids_anim_remap = {
+       attack_swing_charge_diagonal = "attack_swing_charge_left",
+       attack_swing_heavy_right     = "attack_swing_heavy_right_diagonal",
+       push_stab                    = "attack_push",
+   }
+   for _, action_group in pairs(template.actions) do
+       if type(action_group) == "table" then
+           for _, sub_action in pairs(action_group) do
+               if type(sub_action) == "table" and sub_action.anim_event
+                  and _ids_anim_remap[sub_action.anim_event] then
+                   sub_action.anim_event_3p = _ids_anim_remap[sub_action.anim_event]
+               end
+           end
+       end
+   end
+   ```
+   Never touch `sub_action.anim_event` — that's the 1P field. Only write `anim_event_3p`.
+
+4. **Override the wield pose.** Set `template.wield_anim_3p` (default for any career) and optionally `template.wield_anim_career_3p` (per-career overrides keyed by career name).
+   ```lua
+   template.wield_anim_3p = "to_dual_hammer_sword_es"
+   template.wield_anim_career_3p = {
+       es_mercenary = "to_dual_hammer_sword_es",
+       es_huntsman  = "to_dual_hammer_sword_es",
+       -- ...
+   }
+   ```
+
+5. **Register the clone.**
+   ```lua
+   Weapons.imperial_dual_swords_template = template
+   ```
+   The variant definition then sets `template = "imperial_dual_swords_template"` and `_build_entry` writes that onto the cloned `ItemMasterList` entry.
+
+6. **Patch the BASE template's `wield_anim_career_3p` for the inventory previewer.** This is the non-obvious step. The character previewer (`HeroPreviewer._spawn_item`) reads the **base** template's `wield_anim_career_3p`, not our clone — because at preview time the system resolves through the original template chain. Without this patch, the in-keep menu shows the wrong wield pose. Scope the patch tightly to the variant's careers so unrelated careers fall through to vanilla.
+   ```lua
+   local base = Weapons.dual_wield_swords_template_1
+   if base then
+       base.wield_anim_career_3p = base.wield_anim_career_3p or {}
+       base.wield_anim_career_3p.es_mercenary      = "to_dual_hammer_sword_es"
+       base.wield_anim_career_3p.es_huntsman       = "to_dual_hammer_sword_es"
+       base.wield_anim_career_3p.es_knight         = "to_dual_hammer_sword_es"
+       base.wield_anim_career_3p.es_questingknight = "to_dual_hammer_sword_es"
+   end
+   ```
+   Do **not** clobber `wield_anim_career_3p` wholesale — merge keys.
+
+7. **Call the function at file load** (after the `Weapons` global is populated by VMF).
+   ```lua
+   _create_imperial_dual_swords_template()
+   ```
+
+### What you can change beyond clip names
+
+System B owns the entire sub-action object, not just the event name. Inside the same `for sub_action in pairs(action_group)` loop you can also rewrite:
+
+| Field | Effect |
+| :--- | :--- |
+| `total_time` | Action duration (the engine waits this long before the action ends) |
+| `damage_window_start` / `_end` | When hits register, in seconds from action start |
+| `anim_time_scale` | Speed multiplier on the played clip — useful when the substitute clip is shorter or longer than the source |
+| `kind` | `sweep`, `stab`, `push`, etc. — selects the hit-detection routine |
+| `range_mod` | Hit reach |
+| `dedicated_target_range` | Target lock-on distance |
+| `damage_profile` / `damage_profile_left` / `damage_profile_right` | Per-action damage data (clone via `_clone_damage_profile` if you need to scale) |
+| `allowed_chain_actions` | Combo chain — what this sub-action can transition into |
+| `anim_event_from_chain` | Substitute clip when this sub-action was reached *via* a specific previous chain link (so H2 can look different depending on what preceded it) |
+
+The most common authoring drift: you swap `anim_event_3p` to a clip that's a different length than the source, and `damage_window_*` is now misaligned. Rewrite the timing fields when this happens.
+
+### When to override more than the event name
+
+- **Substitute clip is shorter/longer than source** → adjust `total_time`, `damage_window_*`, `anim_time_scale` together. The animation plays through `total_time`; if it ends earlier the body T-poses, if it ends later the next action stalls.
+- **Visual swing direction differs** (e.g. source's right-handed horizontal becomes a diagonal on target body) → either accept it, pick a different clip, or rebuild the chain so the visible motion makes combo sense.
+- **Charge wind-up direction doesn't match release direction** → MAY look incoherent. Source templates pair specific charge sub-actions with specific release sub-actions via the chain graph; remapping each independently can break the visual pairing (charge cocks left, release strikes right). Whether the disconnect reads as wrong is SM-specific — empire-soldier 3P (Kruber) shows it on the first heavy from idle; wood-elf 3P (Kerillian) often blends through it. If a heavy combo's *first* swing from idle looks wrong, walk the source template's `default → heavy_attack` chain and confirm your charge remap target leaves the wind-up direction matching the release direction. (See `_create_imperial_dual_swords_template` for a worked example: H1's charge had to be re-routed to `attack_swing_charge_right` after the H1 release was swapped to `attack_swing_heavy_right_diagonal`.)
+- **No clip on the target skeleton matches the source intent at all** → restructure the sub-action: change `kind`, `range_mod`, `damage_window`, and pick a clip that makes the new motion read correctly.
+- **Chain context matters** (H2 should look different if it followed a left vs right H1) → use `anim_event_from_chain[action_name][sub_action_name].anim_event_3p`.
+
+### Reaching clips that live in a different SM sub-graph
+
+The 3P body's master state machine is organised into sub-graphs per weapon type. `wield_anim_3p = "to_<sm>"` puts the body in that sub-graph; from there, only events the sub-graph has *visible* transitions for will play a clip. A clip authored in `1h_sword_shield` (e.g. `attack_swing_stab`) is generally NOT reachable from the `dual_hammer_sword` sub-graph just by firing the event name — `force3p` may report `exists=true` because the master SM knows the event, but the destination state may be a stub that produces no visible animation.
+
+Two realistic options when a clip lives elsewhere:
+
+1. **Commit the wield to the SM that owns the clip.** Set `template.wield_anim_3p = "to_<that_sm>"` and re-author your action set against that SM's vocabulary. The 3P body permanently uses that sub-graph's idle / walk / block / wield poses while this weapon is equipped. **Reference pattern: Peregrinaje's `markus_torch_and_shield`** — they set `wield_anim = "to_1h_axe_shield"` and authored every sub-action's `anim_event` against 1h_axe_shield's vocabulary. Trade-off: the body's posture follows the SM, so the model has to fit. A torch fits axe+shield; two swords don't fit sword+shield without looking like "sword + improvised shield."
+2. **Accept the clip is unreachable** and pick the closest-matching clip from the wield SM's authored vocabulary.
+
+#### What does NOT work
+
+- **`pre_action_anim_event` SM-switch graft** — firing `to_<other_sm>` as `pre_action_anim_event`, the cross-SM clip as `anim_event_3p`, and `to_<original_sm>` as `anim_end_event_3p` does NOT cleanly route a single action through a foreign sub-graph. Two failure modes confirmed in v0.1.89:
+  - The wield-change clip from `to_<other_sm>` plays visibly and eats the action's damage window before the target clip can play.
+  - `anim_end_event_condition_func` on most release sub-actions returns false on `action_complete`, gating ALL end events including the return transition — the body gets permanently stuck in the new sub-graph for every subsequent action.
+- **Just firing the cross-SM event name as `anim_event_3p`** — `force3p exists=true` is necessary but not sufficient. Watch the body during force3p; only "the body visibly animated" counts as confirmation.
+
+### Hard limits
+
+System B can't author new clips. We pick from what the target skeleton's state machine already has. If Kruber's empire-soldier body genuinely lacks any clip that depicts the visual the source weapon needs, the best we can do is the closest existing clip in the wield SM's vocabulary — there's no path to ship new animation files from a workshop mod, and (per the section above) cross-sub-graph grafting via `pre_action_anim_event` is not a clean alternative.
+
+### Discovery commands
+
+- `wt dump_actions <pattern>` dumps every `Weapons` template's `actions[*][*]` with both `anim_event` and `anim_event_3p` for each sub-action — use this to read the source template you're cloning from and to find candidate substitute clips on related templates.
+- `wt animlog` toggles per-event logging tagged 1P / 3P-body / 3P-husk with `[MISSING]` / `REDIR` / `REMAP` markers — use this to verify the clone's `anim_event_3p` values actually exist on the target body and that no event is hitting the engine fallback path.
+- `wt force3p <event>` fires an event on the last-seen 3P unit so you can preview a candidate clip without rebuilding. **`exists=true` in the output is not the same as visible playback.** It comes from `Unit.has_animation_event`, which returns true whenever the master SM knows the event name — but the destination state in the current sub-graph may be a stub that animates nothing. Always watch the 3P body during the test. Only "the body visibly moved" counts as confirmation that the clip will play during real action firing.
+
+### Common mistakes
+
+- **Touching `anim_event` (1P).** Always write `anim_event_3p` only. The 1P side is shared and self-corrects.
+- **Forgetting the base-template patch.** The clone has the right wield pose in-game but the menu preview is wrong. Step 6 above.
+- **Shallow clone.** Without `table.clone(..., true)`, mutations leak into vanilla actions. Always deep-clone.
+- **Wholesale `wield_anim_career_3p = {...}` on the base template.** Clobbers any keys other careers added. Merge per-key instead.
+- **Adding a remap entry that was already same-named on the target body.** No-op at best, masks problems at worst (you start "fixing" things that weren't broken). Verify with `wt dump_actions` on the target's native template first.
+- **Chain action references that don't exist.** If you delete a sub-action, also delete `allowed_chain_actions` entries elsewhere that pointed at it.
+- **Trusting `force3p exists=true` as proof a clip plays.** It only proves the SM has a transition; the destination may be a stub. Always verify visually.
+- **Trying to graft a single cross-SM clip via `pre_action_anim_event` SM-switch.** See "Reaching clips that live in a different SM sub-graph" above — both failure modes are reproducible. Use the wield-commit pattern (Peregrinaje-style) if you need cross-SM clips, or accept the closest in-SM clip.
+- **Remapping charge and release independently and breaking their direction pairing.** When you swap a heavy release, also walk the source's chain graph to find which charge sub-actions feed it, and remap those charges so the wind-up direction matches the new strike. Direction-mismatch isn't always visible (Kerillian's wood-elf 3P often blends through it) but Kruber's empire-soldier 3P will surface it on the first heavy from idle.
+
+## Animation: cross-access weapons (career-specific runtime remap)
+
+System B (template clone) is the right tool when CWV ships a new item with a custom template. It is **not** the right tool when CWV expands `can_wield` on a vanilla item so a foreign career can equip the existing weapon (the "cross-access" pattern). For that case the vanilla item points at the vanilla template, which is shared with the native wielder — mutating that template's per-action `anim_event_3p` to fix the foreign wielder's animations also changes them for the native wielder, which is wrong.
+
+The engine has no per-career `anim_event_3p` resolution at the sub-action level (`weapon_unit_extension.lua:512` reads `current_action_settings.anim_event_3p` directly with no career context). So the only correct way to do per-career per-action remaps on a shared vanilla template is at the **animation-event-firing** layer: hook `Unit.animation_event` and rewrite the event when the target unit is a player 3P body whose career has a remap entry for the wielded weapon. This is the same primitive `weapon_tweaker` uses for cross-career weapon unlocks; CWV's version is scoped only to its cross-access entries.
+
+### Where it lives
+
+Code: `character_weapon_variants.lua` → "Cross-character per-action 3P anim event remap" section. Three pieces:
+
+1. **Per-(item, career) remap tables** — `_kruber_axe_falchion_remap`, etc. — and the dispatch table `_cross_access_action_remap[item_key][career_name] = remap`.
+2. **Wield tracker** — `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` updates `_cross_access_local_weapon_key` and `_cross_access_local_career` when the local player swaps melee weapons. Cheap state for the hot-path lookup.
+3. **The hook itself** — `mod:hook("Unit", "animation_event", ...)` does five early-exits before doing real work: no event name → bypass; no tracked weapon/career → bypass; weapon not in remap → bypass; career not in remap → bypass; event has no substitute → bypass; finally, unit is not the local 3P body → bypass. Only after all five does it call the original function with the rewritten event.
+
+### How to add a new cross-access remap
+
+Concrete example (axe+falchion on Kruber):
+
+```lua
+local _kruber_axe_falchion_remap = {
+    -- H1 chain (charge_down → heavy_down): no overhead clip on dual_hammer_sword,
+    -- route to right-side heavy. Charge AND release both swap to keep direction
+    -- pairing coherent.
+    attack_swing_charge_down = "attack_swing_charge_right",
+    attack_swing_heavy_down  = "attack_swing_heavy_right_diagonal",
+    -- H2 release (heavy_left): preserve LEFT direction.
+    attack_swing_heavy_left  = "attack_swing_heavy_left_diagonal",
+    -- Light + push variants.
+    attack_swing_down_left   = "attack_swing_left_diagonal",
+    attack_push              = "attack_swing_left_diagonal",
+}
+
+local _cross_access_action_remap = {
+    wh_dual_wield_axe_falchion = {
+        es_mercenary      = _kruber_axe_falchion_remap,
+        es_huntsman       = _kruber_axe_falchion_remap,
+        es_knight         = _kruber_axe_falchion_remap,
+        es_questingknight = _kruber_axe_falchion_remap,
+    },
+}
+```
+
+Procedure:
+
+1. **Identify source events.** Run `wt dump_actions <pattern>` (or grep the source template's `anim_event` values) for the item's template. Note which sub-action each event belongs to and what role it plays (light, heavy, charge, push).
+2. **Identify the foreign body's wield SM.** The wielder's `wield_anim_career_3p` should already route them into a sub-graph that exists on their body — this is set up in `_cross_access_template_wield_3p` above.
+3. **Map source events to substitutes authored on the foreign wield SM.** Use the same vocabulary the foreign body's native templates author. `wt force3p <event>` with the cross-access weapon equipped is the verification: watch the body, "exists=true" alone is meaningless.
+4. **Walk the chain graph for direction coherence.** When you remap a heavy release, look at which charge sub-actions chain into it (in the source template's `allowed_chain_actions`) and remap those charges to a wind-up that matches the new release direction. Kruber's empire-soldier 3P body surfaces direction-mismatch at the cold start of a heavy combo; other bodies sometimes blend through it but assume they will not.
+5. **Add the (item, career) entries.** Reuse the same remap table for sibling careers when they share a body (all 4 Kruber careers, all 4 Saltzpyre careers, etc.) — keep one `local _<wielder>_<weapon>_remap` table and assign by reference.
+
+### What's NOT remapped
+
+- **1P events.** Universal across characters; the hook is gated to fire only on the local 3P body unit. Per the load-bearing rule from "Animation: System B," never write `anim_event` (1P), `wield_anim` (1P), or `state_machine` per character.
+- **Husks of remote players.** The hook tracks only the local player's career and weapon. A remote Kruber wielding the axe+falchion will, on your client, still play the unmapped Saltzpyre events on his husk body. Mechanics are unaffected; only visual fidelity for husks suffers. weapon_tweaker has a per-unit career resolver (`_unit_career_name`) that solves this for its own remaps; if husk fidelity matters here, port that resolver.
+- **Native wielders.** A career that's not a key in `_cross_access_action_remap[item_key]` falls through every event unchanged — that's why Saltzpyre's native axe+falchion animations are unaffected even though the same template still reads the event.
+- **Cross-SM clips.** This hook just rewrites event names. The substitute event still has to be authored in whichever sub-graph the foreign body is currently in (set by the wield redirect). Cross-SM grafting (firing a clip from a different sub-graph) is documented as a dead-end in "Reaching clips that live in a different SM sub-graph."
+
+### Common mistakes (specific to this pattern)
+
+- **Mutating the base template's `anim_event_3p` to "fix" Kruber.** Affects Saltzpyre too. Use the runtime hook instead. (This bug shipped in v0.1.133 → v0.1.139 before the runtime hook was added in v0.1.140.)
+- **Forgetting the local-3P-body filter.** The hook fires on every `Unit.animation_event` call in the entire game (1P, 3P body, husks, NPCs, menu units). All five early-exits matter for both correctness (don't rewrite events on non-applicable units) and performance (cheap bypass for the 99% case).
+- **Tracking weapon at every hook fire instead of via wield hook.** Querying the player's current weapon on every anim event is expensive. Track once on `SimpleInventoryExtension.wield` and read the cached value.
+- **Career-name typos.** Career names are exact strings (`es_mercenary`, not `es_meercenary`). No prefix matching in this pattern — if you want all Kruber careers, list all four.
+
+### When to use which animation pattern
+
+| Situation | Pattern |
+| :--- | :--- |
+| New CWV variant item with custom template | **System B** (template clone) — own the template, edit `anim_event_3p` on sub-actions directly. |
+| Cross-access via `can_wield` expansion, wield works but specific actions don't read right on foreign body | **Cross-access runtime remap** (this section) |
+| Cross-access via `can_wield`, wield itself reads wrong (wrong sub-graph on foreign body) | `wield_anim_career_3p` patch on base template (career-keyed natively by engine — see `_cross_access_template_wield_3p`) |
+| Vanilla weapon unlocked for new career via `weapon_tweaker.weapon_unlock_map` | **System A** (weapon_tweaker's own runtime hooks) |
 
 ## Custom Templates (Stat Modifications)
 
@@ -265,23 +731,76 @@ DamageProfileTemplates["heavy_slashing_axe_linesman"] = {
 
 Each string key resolves into `PowerLevelTemplates[key]` which has the actual values (`power_distribution.attack`, `power_distribution.impact`, etc.).
 
-## Model Scaling
+## Model Scaling and Grip Offsets
 
-Variant definitions support `right_hand_scale = {x, y, z}` and `left_hand_scale = {x, y, z}`. These apply `Unit.set_local_scale` across all three rendering paths:
+Two layers, in precedence order:
 
-1. **In-game**: Hook `GearUtils.create_equipment` → scale `result.right_unit_1p`, `.right_unit_3p`, etc.
-2. **Inventory preview**: Hook `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` → scale `self._equipment_units[slot].right` / `.left`
-3. **Illusion browser**: Hook `LootItemUnitPreviewer.spawn_units` → scale `self._spawned_units`
+1. **Per-variant fields on the def** — `right_hand_scale`, `right_hand_offset`, `left_hand_scale`, `left_hand_offset`. Use these only when a specific variant deviates from its weapon type.
+2. **Type-level entry** — `_type_transforms[item_type] = { right_hand_scale = ..., right_hand_offset = ..., ... }`. **This is the primary way to tune a weapon type.** Each `cwv_*` `item_type` defines a new conceptual weapon (e.g. `cwv_imperial_longsword`); changes at the type level cascade to every variant sharing that type.
 
-Cosmetics_tweaker has its own `_weapon_scale_overrides` system using the same hook points. Both mods' hooks stack via VMF — no conflicts as long as they target different item keys.
+### Per-perspective overrides (`_1p` / `_3p`)
+
+The unified scale/offset fields cascade to both 1P (held first-person view) and 3P (third-person body, what other players see). To target one perspective only, suffix the field name with `_1p` or `_3p`:
+
+| Field | Effect |
+| :--- | :--- |
+| `right_hand_scale_1p` | Override 1P right-hand scale only; 3P keeps the unified value (or its `_3p` override if set) |
+| `right_hand_scale_3p` | Override 3P right-hand scale only; 1P keeps the unified value (or its `_1p` override if set) |
+| `left_hand_scale_1p` / `_3p` | Same, left hand |
+| `right_hand_offset_1p` / `_3p` | Same pattern for grip offset |
+| `left_hand_offset_1p` / `_3p` | Same pattern for grip offset |
+
+Resolution at apply time: the per-perspective field is checked first, fallback to the unified field, fallback to the type-level entry.
+
+Use case: a weapon's model reads correctly in 3P but looks small/large in the held first-person view. Set just the unified field for normal cross-perspective tuning; reach for `_1p` / `_3p` only when 1P and 3P need to differ. Example from `cwv_es_dual_swords`: the right/left swords needed +10% in first person to feel right in the held view but stayed at 1.0 in 3P, since the 3P body's grip and posture were already authored for the model size.
+
+`scale_3p_only = true` is the older mechanism for "skip 1P entirely." That still works (and is functionally equivalent to setting `*_scale_1p = {1, 1, 1}` when the unified is non-1.0). Use `scale_3p_only` when you want to OPT-OUT of 1P scaling entirely; use `_1p` overrides when you want a *different* 1P scale than 3P.
+
+The resolution helper:
+```lua
+local function _resolve_field(def, field)
+    if def[field] ~= nil then return def[field] end
+    local tt = def.item_type and _type_transforms[def.item_type]
+    return tt and tt[field] or nil
+end
+```
+
+Used at all four transform-application sites: `GearUtils.create_equipment`, `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` (inside `_cwv_spawn_item_post`), and `LootItemUnitPreviewer.spawn_units`. The `_transform_map` registration loop also goes through `_resolve_field` so variants with no per-variant transform still get registered when their type contributes one.
+
+The three rendering paths each call `Unit.set_local_scale` / `Unit.set_local_position` with the resolved values:
+1. **In-game**: `GearUtils.create_equipment` → `result.right_unit_1p`, `.right_unit_3p`, `.left_unit_1p`, `.left_unit_3p`. Honors `def.scale_3p_only` to skip 1P units.
+2. **Inventory preview**: `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` → `self._equipment_units[slot_index].right` / `.left`. **Critical bridge**: `_resolve_preview_def` returns `info` from `self._item_info_by_slot`, which is keyed by string `slot_type` ("melee"/"ranged"); but `_equipment_units` is keyed by NUMERIC `slot_index`. Cross via `info.spawn_data[1].slot_index` (vanilla `equip_item` populates that field per spawn at `world_hero_previewer.lua:704/728`). Looking up `equip_units[slot_type_string]` returns nil and the entire apply path silently no-ops — fixed in v0.1.84 after diagnostic logs caught it; same bridge bug cosmetics_tweaker hit in v0.7.88. Don't refactor this lookup back to a string-keyed loop.
+3. **Illusion browser**: `LootItemUnitPreviewer.spawn_units` → `self._spawned_units`.
+
+### Adding a New Weapon Type
+
+When the mod is creating a brand-new conceptual weapon (which is the whole point of CWV), declare it at the type level:
+```lua
+_type_transforms.cwv_<weapon_name> = {
+    right_hand_scale  = { x, y, z },
+    right_hand_offset = { x, y, z },
+    -- left_hand_* if dual-handed
+}
+```
+Then on each variant of that type, set `item_type = "cwv_<weapon_name>"` and leave the scale/offset fields off. A future "make all <weapon_name> variants thinner" tweak is one edit at the type entry.
+
+### Per-Variant Override
+
+When a single variant uses a model with different axis conventions than the rest of its type family (e.g. `cwv_es_longsword_nordland` uses `wpn_greatsword`, distinct from the Empire `wpn_empire_2h_sword_*` family the rest of the Imperial Longsword type uses), set the per-variant field on that def specifically. It'll take precedence over the type entry without affecting siblings.
+
+### Companion Mod Coordination
+
+Cosmetics_tweaker has its own scale system (`_unit_path_scale_overrides`, model-path-keyed via `string.find` against the resolved `spawn_data[i].unit_name`) — see `cosmetics_tweaker/DEVELOPMENT.md` "Weapon Scale Overrides". Both mods' hooks stack via VMF; CWV's transforms are item-type-keyed (cwv items only) and cosmetics' are model-path-keyed (any item using a flagged model), so they don't collide as long as the type-level CWV tune doesn't deliberately mimic a model the cosmetics path is also scaling.
 
 ### Axis reference (Stingray/VT2)
 
-| Axis | Effect |
-|------|--------|
-| X | Width/thickness (0.65 = thin bret longsword) |
-| Y | Depth (rarely modified) |
-| Z | Length (blade length along the weapon) |
+| Axis | Effect | Notes |
+|------|--------|-------|
+| X | Width/thickness | Bretonian longsword's wide axis (`_breton_sword_thiccc = {0.65, 1, 1}` thins X) |
+| Y | Width/thickness | Imperial greatsword's wide axis (Imperial Longsword type uses Y for thinning) |
+| Z | Length | Blade length along the weapon. `+Z` grip offset lowers grip toward hilt; `-Z` raises toward blade tip (`feedback_grip_offset_sign.md`) |
+
+The "wide axis" is model-specific: different unit authoring rotates the mesh differently, so X-vs-Y for "width" needs to be checked per family. Length (Z) is consistent across the families surveyed so far.
 
 ## Reference: Base Weapon Keys
 

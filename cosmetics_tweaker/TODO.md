@@ -1,42 +1,53 @@
 # Cosmetics Tweaker — Feature To-Do
 
 ## Open investigation
-- [ ] **`unlock_all_frames` toggle reported broken** (user, 2026-05-02). Hook lives at `cosmetics_tweaker.lua:1550-1561`:
-  ```lua
-  mod:hook_safe("PlayFabMirrorBase", "get_unlocked_cosmetics", function(self)
-      if not mod:get("unlock_all_frames") or not script_data["eac-untrusted"] then return end
-      local cosmetics = self._unlocked_cosmetics
-      if not cosmetics then return end
-      for key, data in pairs(ItemMasterList) do
-          if data.item_type == "frame" and not cosmetics[key] then
-              if not _skin_requires_unowned_dlc(key) then
-                  cosmetics[key] = true
-              end
-          end
-      end
-  end)
-  ```
-  Setting registered correctly in `cosmetics_tweaker_data.lua:18` and `_localization.lua:18`. Code path traced and looks correct on paper:
-  - `playfab_mirror_base.lua:1470` calls `self:get_unlocked_cosmetics()` → returns `self._unlocked_cosmetics` (table reference).
-  - VMF `hook_safe` fires after the original returns and mutates `self._unlocked_cosmetics` in place. Local `unlocked_cosmetics` shares the reference, so mutations are visible.
-  - `playfab_mirror_base.lua:1479` passes the (now-mutated) table to `_create_fake_inventory_items(cosmetics)`. That generates fake `_inventory_items` + `_fake_inventory_items` entries with new GUIDs.
-  - `BackendInterfaceItemPlayfab._refresh_items` later refreshes `self._items` from `_inventory_items` — fakes survive.
-  - UI filter chain: `available_in_current_mechanism` (passes — frames are cosmetic), `can_wield_by_current_hero` (passes — IML frames have `can_wield = CanWieldAllItemTemplates`), `slot_type == frame` (passes).
-  - DLC gate (`_skin_requires_unowned_dlc`) defined at `cosmetics_tweaker.lua:37` — uses `rawget` and `Managers.unlock:is_dlc_unlocked`, fine.
-  - `unlock_all_illusions` uses a different hook target (`BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins`) — fires every time the illusion UI opens, so toggling at runtime works there. `unlock_all_frames` depends on `_create_fake_inventory_items` which only runs once at PlayFab login, so toggling at runtime does NOTHING without a full restart. CHANGELOG v0.7.0-dev: "Requires restart after toggling."
-  - Deployed bundles at `C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3715714222` match `bundleV2/` build output (timestamps 2026-05-01 22:16) — not a stale-deploy issue.
+- [x] **`unlock_all_frames` toggle was broken — fix shipped in v0.7.100-dev, verified working 2026-05-06.** (filed 2026-05-02, root caused 2026-05-05, verified 2026-05-06)
 
-  **Most likely failure modes (need user repro detail):**
-  1. User toggled at runtime without full game restart (Ctrl+Shift+R won't pick it up — cosmetics_tweaker is in the hot-reload-unsafe list).
-  2. User in Official realm — `script_data["eac-untrusted"]` early return swallows the hook.
-  3. Mod-load ordering — cosmetics_tweaker loads after PlayFab mirror init for the first call. Subsequent `get_unlocked_cosmetics` calls re-fire but `_create_fake_inventory_items` doesn't re-run, so no fake items get made.
+  ### What we KNOW
+  Empirical, from v0.7.99 in-game diagnostic at 03:02:45 on 2026-05-05:
+  - Toggle on, modded realm detected (gates pass).
+  - `ItemMasterList` has **239 frames**, **0 DLC-locked** for this user.
+  - `_unlocked_cosmetics` had **159 frame entries** (the user's actually-owned baseline).
+  - `get_filtered_items("slot_type == frame")` returned 159 — matches `_unlocked_cosmetics` 1:1, so the UI filter chain is *not* dropping items.
+  - VMF log confirms the v0.7.99 base-class hook **registered** at 02:41:12.686, before PlayFab login at 02:41:22. Despite registration, it **fired 0 times**.
 
-  **Next-session checklist before changing code:**
-  1. Confirm with user: full restart? In modded realm? What does the Frames inventory tab actually show (empty / vanilla-only / partial)?
-  2. If user confirms restart + modded but still broken: add a one-line `mod:info` at top of the hook to verify it's firing, and at bottom to log how many keys were added. Repro and read `Console.log`.
-  3. If hook fires but frames don't appear: walk forward — log `_unlocked_cosmetics` size, `_inventory_items` size after init, `get_filtered_items` result for the frames category. The issue is downstream of the hook.
-  4. If failure mode 3 (mod-load ordering): switch hook target to something the cosmetics inventory UI calls every time it opens (analogous to how `unlock_all_illusions` works), or call `_create_fake_inventory_items` ourselves on first frame after init when the toggle is on.
-  5. Consider making the toggle work without restart by re-running `_create_fake_inventory_items({"cosmetics"})` on `on_setting_changed("unlock_all_frames")` — but verify it doesn't break vanilla cosmetics that already have fake IDs assigned.
+  From source code:
+  - `boot.lua:1647` instantiates `PlayFabMirrorAdventure` for client play (not the base).
+  - `foundation/scripts/util/class.lua:51-57` defines inheritance by **copying** parent methods into the child table at class-definition time — there is no `__index` chain to the base. Runtime instance holds its OWN copy of `_create_fake_inventory_items` and `get_unlocked_cosmetics`.
+  - These two facts together explain why the base-class hook never fired.
+
+  ### Fix in v0.7.100
+  - Re-targeted both hooks to `PlayFabMirrorAdventure`.
+  - Pre-hook on `_create_fake_inventory_items` mutates the `fake_inventory_items` parameter to inject all frame keys before fake backend IDs are minted.
+  - Companion safe hook on `get_unlocked_cosmetics` keeps the table in sync for later UI re-queries.
+  - Memory entry: `feedback_vt2_class_hook_derived.md` — "hook the derived class, not the base" applies to all VT2 method hooks.
+  - Diagnostic command `cos frames_status` retained in source.
+
+  ### What we INFER but have NOT verified
+  - **The fix actually works.** Strongly implied by theory + the empirical hook-never-fired evidence, but no in-game retest yet on v0.7.100.
+  - **All 239 frames will display** once injected. The 159↔159 match between `_unlocked_cosmetics` and `get_filtered_items` is reassuring (no current downstream filter rejects valid frames), but new fake entries could conceivably trip something we haven't seen.
+  - **DLC handling is correct.** Only checked for this user (0 DLC-locked). Untested for someone without all cosmetic DLCs.
+
+  ### What we DON'T know
+  1. **Does v0.7.100 actually populate to 239?** Single biggest open question. Needs a full restart + `cos frames_status` re-run to close.
+  2. **Runtime toggling still requires restart.** The pre-hook only fires inside `inventory_request_cb` (one shot at PlayFab login). Toggling off→on mid-session won't add frames without a restart. CHANGELOG already notes this; v0.7.100 doesn't change it.
+  3. **Other class-copy victims across the mod suite are not yet audited.** Grepped `vermintide-2-tweaker/` for `mod:hook("PlayFabMirror...` — only the two we just fixed. **Did NOT** sweep other inheritance hierarchies (`BackendInterface*`, `GearUtils`, UI window classes, weapon templates). Same generic class-system bug likely hides in at least one other hook somewhere. → **follow-up task below**.
+  4. **Whether the safe hook on `get_unlocked_cosmetics` is doing anything useful** now that the pre-hook handles the load-time path. Probably defensive/redundant; harmless either way. Could be deleted on cleanup.
+  5. **Whether 239 is the "right" target.** Some frames may be event-only or otherwise hidden from the player by intent; would surface only on visual inspection of the populated grid.
+
+  ### Verification checklist (next session)
+  1. User restarts VT2 with v0.7.100 loaded.
+  2. With toggle ON, run `cos frames_status` in chat.
+  3. Expected: `inject hook fired ≥ 1 time(s); last added=80`, `_unlocked_cosmetics contains 239 frame entries`, `get_filtered_items returned 239 items`.
+  4. Open Cosmetics Inventory → Frames tab; visually confirm population looks right (not corrupted, not duplicated, etc).
+  5. If all green: close this item, mark resolved, optionally delete the safe `get_unlocked_cosmetics` hook on cleanup.
+
+- [ ] **Sweep mod suite for other base-class hooks that may silently never fire.** (filed 2026-05-05, follow-up from `unlock_all_frames` root cause.) The `class.lua:51-57` parent-method-copy means any `mod:hook("BaseClass", ...)` where the runtime instance is a derived class is broken. Candidates to audit across `weapon_tweaker`, `chaos_wastes_tweaker`, `general_tweaker`, `cosmetics_tweaker`, `character_weapon_variants`, `enemy_tweaker`, `career_tweaker`:
+  - `BackendInterfaceItemPlayfab` vs `BackendInterfaceItem` parent
+  - `BackendInterfaceCraftingPlayfab` vs `BackendInterfaceCrafting`
+  - Any UI window class with `*_console` or platform-specific subclass
+  - `GearUtils`-adjacent class hierarchies
+  Quick pattern: `Grep` for `mod:hook(\_safe)?\(\s*"[A-Z]\w+"` then for each match, search the source for `<ClassName> = class(<ClassName>, <Parent>)` and a separate `<DerivedName> = class(<DerivedName>, <ClassName>)` line. If found, the hook should target the derived class.
 
 - [ ] **Decode crash unit hash `9405eeb80a227a76` and re-enable LA Imperial Hero mesh swap.** Crashed `World.spawn_unit` consistently across v0.7.81–v0.7.85 when the user clicked an Imperial LA shield (e.g. `Kruber_empire_shield_hero1_Ostermark01`, `_Kotbs01`) on a Bret sword + shield in the customization menu. Workaround in v0.7.86: `_la_bridge._resolve_intended_unit` always returns `nil`, so LA textures paint onto the user's current shield mesh — Imperial LA UVs land on Bret GK shields imperfectly but it doesn't crash. **Diagnostic build (v0.7.92-dev)** added a `[SPAWN_TRACE]` hook on `World.spawn_unit` and re-enabled the mesh swap to capture the failing unit name in `Console.log`. **Next step:** ask user to repro on v0.7.92, share the last 10–20 `[SPAWN_TRACE]` lines around the crash. The actual unit name (decoded from the hash) will tell us whether to:
   - preload the resource_package that contains the failing unit (likely some weapons-bundle, NOT `wastes_common` as v0.7.85 assumed), or
@@ -53,7 +64,7 @@
 
 ## Cosmetic Unlocks
 - [ ] **Cosmetic unlocks** — enable cosmetics (hats, skins) across careers within the same character (no cross-character; skip wh_priest), like weapon_tweaker unlocks weapons by patching `can_wield`/item filters. **In progress in `cosmetics_tweaker` mod (Workshop 3715714222, private).** Started v0.2.0 with `cos probe_cosmetics` runtime probe to enumerate items + native career allow-lists; next pass populates static unlock maps and the nested settings UI.
-- [ ] **Per-hat character portraits (future)** — when the cosmetic-unlocks UI is in, layer a portrait-override system on top: for every hat a character can wear, generate a matching character portrait via Photoshop + AI character-consistency tools so the lobby/HUD portrait swaps to match the equipped hat. Static asset pipeline (one portrait per hat × character), runtime side just patches the active portrait based on equipped hat.
+- [x] **Per-hat character portraits** — shipped in `dynamic_cosmetic_portraits` (Workshop 3721036701, private). Split out of cosmetics_tweaker on 2026-05-06; see `dynamic_cosmetic_portraits/{CHANGELOG,DEVELOPMENT,TODO}.md`.
 - [ ] **Cross-character hat unlocks (investigation)** — figure out which hat→character combos are skeleton-compatible. Currently `cosmetics_tweaker` is intra-character only because cross-character would crash on skeleton-attachment-node mismatch (e.g. Kruber wearing Kerillian's hat). Some pairs may share enough headpiece rigging to work — needs per-pair empirical testing.
 
 ## Recolored / Cleaned Cosmetics
@@ -91,13 +102,26 @@
 - [ ] **Free weapon illusion/skin swap from inventory** — let the inventory menu pick any illusion/skin available to the weapon type without going through Okri's "apply illusion" flow (and without consuming a one-time illusion). Show all illusions for that weapon as selectable options inline on the weapon card.
 
 ## Glow Maps
-- [ ] **Glow map control for weapon illusions** — VT2 weapons have two distinct glow systems, both controlled via `material_settings_name` on weapon skins (NOT automatic by rarity):
-  - **Type 1: Rune/emissive glow** — per-skin named templates in `weapon_material_settings_templates.lua`. Uses `rune_emissive_color` (vector3 RGB, values >1 for HDR bloom). Predefined templates: `"purple_glow"` ({3,1,9}), `"golden_glow"` ({8,5,1.5}), `"deep_crimson"` ({7,0,0.1}), `"life_green"` ({7,9,0.1}), `"lileath"` ({5.8,6.3,9}).
-  - **Type 2: Weave-forged (Winds of Magic)** — `rarity = "magic"` skins in `weapon_skins_lake.lua`. Cyan/turquoise glow ({0,211,178}). Also uses `material_settings_name` — just a different template.
-  - **Application path:** `GearUtils.apply_material_settings()` (gear_utils.lua:107-152) loops through `MaterialSettingsTemplates[name]` and calls `Unit.set_vector3_for_materials()` / `Unit.set_color_for_materials()` / `Unit.set_scalar_for_materials()`. Also applied via `PlayerUnitCosmeticExtension.change_skin_material_settings()` for 1P/3P.
-  - **UI rarity glow colors** (in `hero_view_state_loot.lua` `glow_rarity_colors` table) are loot-chest-presentation-only, NOT applied to 3D weapon models.
-  - **Goal:** Add an RGB color picker widget and enable/disable toggle on the weapon customization screen. At runtime, call `Unit.set_vector3_for_materials(unit, "rune_emissive_color", Vector3(r, g, b))` on the spawned weapon unit to apply custom glow. Need to hook all three render paths (in-game, inventory preview, illusion browser). Also add a dropdown to select from predefined glow presets (purple, gold, crimson, green, lileath, weave) or "Custom RGB".
-  - **Versus glow** uses additional params: `color_glow_high`, `color_glow_low`, `color_smoke_high`, `color_smoke_low`, `color_dots` — potentially useful for more dramatic effects.
+
+### Phase 1 — DONE (v0.8.6 → v0.8.16)
+- Master toggle + plain-color preset dropdown (Purple / Gold / Red / Green / Blue) under "Weapon & Item Appearance"
+- Hook all three `apply_material_settings` copies (`GearUtils`, `_G`, `CosmeticUtils`) using TEMPLATE MUTATION (mutate `MaterialSettingsTemplates[name].x/y/z` to preset values, call vanilla, restore). 1P + 3P + ammo + projectiles + pickups + previewer all painted via vanilla's own write path.
+- 1P verified working empirically (v0.8.16). Earlier hook_safe-overlay approach (v0.8.4-v0.8.15) only painted 3p reliably; 1p silently rejected the second write.
+- Documented in `memory/reference_vt2_weapon_glow_system.md` as the verified canonical pattern
+- Limitation: requires re-applying a cosmetic / re-equipping the weapon to take effect on currently-equipped weapons. Live re-paint not implemented.
+
+### Open
+- [ ] **Live re-paint** (toggle on/off and preset switches take effect immediately on already-equipped weapons). v0.8.7-v0.8.9 attempted a walk over `inventory_system._equipment.slots`; that worked for the wielded slot but corrupted hand-mesh visibility on inspect (X) and 1P state, only recoverable by switching characters. Reverted in v0.8.10. Suspected cause: `Unit.set_vector3_for_materials` on currently-invisible (sheathed) 1P units leaves the engine in a bad state. **Safer approach for next attempt:** hook the wield event (e.g. `SimpleInventoryExtension.wield` / `SimpleInventoryExtension._wield_slot`) so we only paint the unit at the moment it becomes visible, then we never touch sheathed units. Also try template-mutation approach combined with a manual `apply_material_settings` re-call on visible units only.
+
+### Open
+- [ ] **Weavebound + Shyish-Infused need separate handling.** They use different shader paths and the rune_emissive override doesn't visibly affect them. Investigation steps before any UI work:
+  - Run a Lua probe that calls `Unit.set_vector3_for_materials` on a `_magic_01` (Weavebound) unit with a list of plausible variable names (`emissive_color`, `glow_color`, `tint_color`, `gradient_color_a/b`, `swirl_color`, `wind_color`, `color_a`, `color_b`) at high-contrast HDR values. Watch for any visible change.
+  - For Shyish-Infused (`_magic_02`, `versus` template), our overlay of the 5-channel `color_glow_high/low`, `color_smoke_high/low`, `color_dots` set IS landing (verified via [GLOW-trace] in v0.8.5) but didn't produce a visible color change matching the chosen single-color preset. Either the channels need to be co-tuned (you can't set just one to a single color) or the visual is dominated by other shader inputs we haven't found.
+  - If probe finds nothing, extract `wpn_*_magic_01.material` and `wpn_*_magic_02.material` via `vt2_bundle_unpacker` (`C:\Tools\vt2_bundle_unpacker`) and read the actual shader-variable declarations.
+  - Result determines: separate toggle? Custom RGB picker per channel? Or document as untunable?
+- [ ] **Stylish (`_runed_01`, no `material_settings_name`)** doesn't take the override either. Vanilla never calls `apply_material_settings` on these, so our hook never fires. Direct post-spawn `Unit.set_vector3_for_materials` paint also no-ops visibly. Open question: is `_runed_01` genuinely a different material than `_runed_02`, or does the variable just need vanilla's "first apply" to bind? Probe needed to determine whether Stylish weapons can ever be made to glow.
+- [ ] **Husks (other players' 3p weapons in coop)** not covered by live re-paint — they live on `simple_husk_inventory_extension`. Easy follow-up: walk all peer player_units and look up their husk inventory.
+- [ ] **Per-skin / custom-RGB UI** (Phase 2): per-weapon glow settings on the customization screen with a color picker, persistence keyed by skin or weapon_key. Build on top of the verified substrate.
 
 ## Other
 - [ ] **3rd person mod** — enable 3rd person camera view so players can see their character model and cosmetics in gameplay

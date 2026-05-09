@@ -431,3 +431,46 @@ See `reference_3p_anim_fix_process.md` for the step-by-step workflow. Key points
 2. `wt force3p <event>` → visually verify candidate targets
 3. TRUE in skeleton probe ≠ visible animation — always verify visually
 4. When animlog is insufficient, compile event list from template file and have user test with `wt force3p`
+
+---
+
+## Character Weapon Variants (CWV) — Variant Status
+
+Tracks animation / cosmetic-picker / forge status for variants shipped
+by the `character_weapon_variants` mod. Recipes for adding new ones
+live in `character_weapon_variants/RECIPES.md`. Animation fixes use
+`character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md`.
+
+| Variant | Archetype | Base | Wielders | Anim status | Notes |
+|---|---|---|---|---|---|
+| `cwv_es_axe_shield` | Shield (default) | `dr_shield_axe` | Kruber (Merc/Hunt/FK) | Native (Bardin moveset on Kruber) | Default-rarity blacksmith template |
+| `cwv_es_axe_shield_veteran` | Shield (unique) | `dr_shield_axe` | Kruber (Merc/Hunt/FK) | Native | Opportunist, block_cost, vs_skaven |
+| `cwv_we_sword_shield` | Shield (default) | `es_sword_shield` | Kerillian (all) | **Remap** + `wield_anim_3p = "to_1h_spear_shield"` (`elven_sword_shield_template`) | 5 attack-event remaps + base-template wield patch for previewer |
+| `cwv_we_sword_shield_veteran` | Shield (unique) | `es_sword_shield` | Kerillian (all) | Same as above | |
+| `cwv_es_longsword` | 2H melee (default) | `es_bastard_sword` | Kruber (all) | Native | `imperial_longsword_template` stat-clone |
+| `cwv_es_longsword_blackguard` | 2H melee (unique) | `es_bastard_sword` | Kruber (all) | Native | Same template as Recruit Longsword |
+| `cwv_es_longsword_nordland` | Skin-only | `es_bastard_sword` | Kruber (all) | n/a (skin only) | Surfaces `wpn_greatsword` mesh as illusion option |
+| `cwv_es_javelin` | Ranged ammo | `we_javelin` | Kruber (all) | **Remap** (`_tj_anim_remap`) + per-career wield routing (`to_es_deus_01`) | `tuskgor_javelin_template`; custom `Pickups.ammo` + `ProjectileUnits` registration |
+| `cwv_wh_javelin` | Ranged ammo | `we_javelin` | Saltzpyre (all) | Same as above; `wh_priest → to_1h_hammer_shield`, others `→ to_1h_sword_shield` | |
+| `cwv_dr_priest_greathammer` | 2H melee | `wh_2h_hammer` | Bardin (all) | **Untested** — Bardin 3P body coverage of `two_handed_hammer_priest_template` not verified | Risk: dwarf skeleton vs human-authored moveset |
+| `cwv_es_priest_greathammer` | 2H melee | `wh_2h_hammer` | Kruber (all) | **Untested** — Kruber/Saltzpyre share empire-human skeleton, likely most events overlap | |
+| `cwv_es_warpriest_hammer` | 1H melee | `wh_1h_hammer` | Kruber (all) | **Untested** — same caveat as priest greathammer | `one_handed_hammer_priest_template` |
+| `cwv_es_dual_swords` | Dual-wield (identical) | `we_dual_wield_swords` | Kruber (all) | **Remap** + `wield_anim_3p = "to_dual_hammer_sword_es"` (`imperial_dual_swords_template`) | `display_dual_weapons` rig forced |
+| `cwv_es_sword_and_mace` | Dual-wield (mixed inverse) | `es_dual_wield_hammer_sword` | Kruber (all) | Native (animations unchanged) | `sword_and_mace_template` swaps damage/sound by `weapon_action_hand` |
+| `cwv_es_cudgel` | 1H melee (stat) | `es_1h_mace` | Kruber (all) | Native | `cudgel_template` +20% spd −15% pwr |
+| `cwv_es_shortsword` | 1H melee (stat + DoT removal) | `bw_dagger` | Kruber (all) | **Cross-character** — Sienna dagger moveset on empire-soldier 3P body; remap path open (`_cross_access_action_remap[bw_dagger]`) if specific events stub-play | `shortsword_template`; fire DoT scrubbed via 3-step damage-profile + FX swap |
+| `cwv_es_dual_axes` | Dual-wield (identical) | `dr_dual_wield_axes` | Kruber (all) | Routed via `_cross_access_template_wield_3p[dual_wield_axes_template_1] → to_dual_hammer_sword_es` + `_kruber_dual_axes_remap` | `display_dual_axes` rig forced |
+| `cwv_wh_dual_axes` | Dual-wield (identical) | `dr_dual_wield_axes` | Saltzpyre (all) | Native (Saltzpyre routes to `to_dual_axe_sword_wh`) | `display_dual_axes` rig forced |
+| `cwv_es_dual_maces` | Dual-wield (identical) | `dr_dual_wield_hammers` | Kruber (all) | Routed via `_cross_access_template_wield_3p[dual_wield_hammers_template] → to_dual_hammer_sword_es` | `display_dual_hammers` rig forced |
+| `cwv_wh_dual_maces` | Dual-wield (identical) | `dr_dual_wield_hammers` | Saltzpyre (all) | `wh_priest → to_dual_hammers_priest`, others `→ to_dual_hammers` | `display_dual_hammers` rig forced |
+| `cwv_es_maul` | 2H melee (stat + fire scrub) | `bw_1h_mace` | Kruber (all) | **Remap** + `wield_anim_3p = "to_2h_hammer"` (`maul_template`); base-template wield patch for previewer | Type-level scale `{1.4, 1.4, 2.0}`. Single-entry damage-profile swap removes burn from H1 heavy. Curated illusions: every `es_1h_mace_skin_*`. **TODO custom icons (placeholder).** |
+| `cwv_es_poleaxe` | 2H melee (stat) | `dr_2h_axe` | Kruber (all) | **Remap** only — source template already wields to `to_2h_hammer` natively (`poleaxe_template`) | Type-level scale `{1.0, 1.0, 0.65}` (Z-shortened halberd). Curated illusions: every `es_halberd_skin_*`. **TODO custom icons (placeholder).** |
+
+### Cross-access (no new item, just expanded `can_wield`)
+
+| Vanilla item | Now equippable by | 3P routing | Per-action remap |
+|---|---|---|---|
+| `wh_1h_falchion` | Kruber (all) | (none currently) | (none) |
+| `wh_dual_wield_axe_falchion` | Kruber (all) | `to_dual_hammer_sword_es` | `_kruber_axe_falchion_remap` (4 entries) |
+| `es_dual_wield_hammer_sword` | Saltzpyre (all) | (none currently) | (none) |
+| `dr_dual_wield_axes` | Kruber (all), Saltzpyre (all) | Kruber → mace+sword; Saltzpyre → axe+falchion | `_kruber_dual_axes_remap` for Kruber |

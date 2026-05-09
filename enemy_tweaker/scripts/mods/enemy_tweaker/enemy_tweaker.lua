@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.2.3-dev"
+local MOD_VERSION = "0.2.5-dev"
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Enemy Tweaker v" .. MOD_VERSION)
 
@@ -147,14 +147,14 @@ local function _register_skeleton_breeds()
         PACKAGE_REDIRECT[def.name] = def.source_model
 
         -- Append to NetworkLookup.breeds (forward + reverse mapping).
-        -- network_lookup.lua:267 builds this from Breeds at game-boot before VMF mods
-        -- load, then init() at line 2340 sets a __index metatable that errors on missing
-        -- string keys. Adding entries via direct assignment here doesn't trigger __index
-        -- (that fires on GET only), so it's safe to extend post-finalization. Without
-        -- this, any network serialization of et_*_skeleton (e.g. unit-spawn extractors
-        -- in game_object_initializers_extractors.lua) crashes on the host or client.
+        -- network_lookup.lua:267 builds this from Breeds at game-boot, then init() at
+        -- ~2354 installs a __index metatable that errors on any missing-key GET. Use
+        -- rawget for the existence check so we don't trip the metatable before the
+        -- key is written. Direct assignment (newindex) is fine. Without these entries,
+        -- any network serialization of et_*_skeleton (e.g. unit-spawn extractors in
+        -- game_object_initializers_extractors.lua) crashes on host or client.
         local nl_breeds = rawget(_G, "NetworkLookup") and NetworkLookup.breeds
-        if nl_breeds and not nl_breeds[def.name] then
+        if nl_breeds and not rawget(nl_breeds, def.name) then
             local idx = #nl_breeds + 1
             nl_breeds[idx] = def.name
             nl_breeds[def.name] = idx
@@ -581,7 +581,8 @@ end)
 -- compose_blob_horde_spawn_list returns (spawn_list, num_to_spawn) — a real list,
 -- so in-place breed swap on the list works.
 mod:hook("HordeSpawner", "compose_blob_horde_spawn_list", function(func, self, composition, ...)
-    return _apply_breed_swap(func(self, composition, ...))
+    local spawn_list, num_to_spawn = func(self, composition, ...)
+    return _apply_breed_swap(spawn_list), num_to_spawn
 end)
 
 -- compose_horde_spawn_list returns (sum, sum_a, sum_b) — three integers, NOT

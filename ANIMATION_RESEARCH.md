@@ -1,25 +1,19 @@
-<!--
-REVIEW (2026-05-01): Content is mostly historical research notes (which approaches were tried
-and rejected). Still useful as a record of dead ends. Two stale points:
+> **STATUS: Historical research record.** This file captures approaches tried and rejected during the pre-split monolithic-`tweaker` era. It does **not** reflect the current architecture.
+>
+> For the current animation system, read in this order:
+> 1. `DEVELOPMENT.md` → "Animation System Architecture" — the two-systems decision rule and System A (runtime hook) details.
+> 2. `character_weapon_variants/DEVELOPMENT.md` → "Animation: System B" — template-clone path for new variants we own.
+> 3. `WEAPON_CATALOG.md` — per-weapon cross-career status and remap tables.
+> 4. `WORK_ITEMS.md` — current "what works" for animations.
+>
+> Caveats when reading the content below:
+> - Command examples use the legacy `t` prefix (monolithic `tweaker` mod). Current equivalents are under `wt` (`wt animlog`, `wt dump_actions`, `wt force3p`, etc.).
+> - Status claims and fallback tables predate the mod split; trust `WORK_ITEMS.md` and `WEAPON_CATALOG.md` over anything here.
+> - The Chest of Trials UI item at the bottom has moved to `TODO.md` / `WORK_ITEMS.md`.
+>
+> Kept on disk because the dead-end records (what was tried and *why it failed*) still save investigation time. Treat as a graveyard, not a guide.
 
-1. "Commands for Discovery" table lists `t probe_3p`, `t dump_templates`, `t dump_crossbow`,
-   `t dump_chest_view` — the `t` prefix is the LEGACY monolithic mod. Current weapon_tweaker
-   commands use the `wt` prefix (`wt animlog`, `wt dump_actions`, `wt force3p`, etc.). Either:
-   (a) update commands to `wt`/`gt`/etc., OR
-   (b) note that commands shown here were captured under the old all-in-one `tweaker` mod and
-       equivalents may exist under the new prefixes.
-
-2. "Status: Kept, trimmed to only confirmed-useful entries" and the fallback table reflect the
-   pre-split architecture. WORK_ITEMS.md is now the authoritative source of "what works" for
-   animations and supersedes most of this file's status claims.
-
-3. The Chest of Trials UI tracked issue at the bottom is now in TODO.md / WORK_ITEMS.md too.
-
-RECOMMENDATION: Either prepend "STATUS: Historical research record. See WORK_ITEMS.md for
-current status; WEAPON_CATALOG.md for per-weapon animation reference." or merge into one of
-those and delete this file.
--->
-# 3P Animation Research — Cross-Career Weapons
+# 3P Animation Research — Cross-Career Weapons (HISTORICAL)
 
 ## Weapon Template Keys (confirmed from source)
 

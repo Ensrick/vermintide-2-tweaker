@@ -23,12 +23,14 @@ Two distinct features in one mod:
    (B3) which is likely a hard crash on first spawn).
 
 No forward-reference bugs. No localization escape bugs. Hooks use string-form
-correctly. Settings IDs match between data and localization. The single
-biggest concern is **(B3): NetworkLookup.breeds metatable error on custom
-breed serialization** — needs in-game verification before this mod is shipped.
+correctly. Settings IDs match between data and localization. **(B3) is
+resolved as of 0.2.4-dev** — the existence check on `NetworkLookup.breeds`
+was switched to `rawget` so it no longer trips the strict-lookup metatable.
+Multiplayer smoke test still pending.
 
-Health: dev-quality v0.2.2, two confirmed code defects, one architectural
-risk. Not ready for public release.
+Health: dev-quality v0.2.4, two confirmed code defects (B1, B2), B3
+resolved in 0.2.4-dev (rawget existence check). Not ready for public
+release.
 
 ## Confirmed bugs / potential bugs
 
@@ -59,32 +61,26 @@ effect: ambush hordes are never breed-swapped, only vector-blob hordes are.
 Hook `HordeSpawner.spawn_unit` (line 1228) and substitute the `breed_name`
 argument before the original runs.
 
-**(B3) NetworkLookup.breeds metatable error on custom skeletons —
-`enemy_tweaker.lua:156` (the unconditional `_register_skeleton_breeds()`
-call) — annotated POTENTIAL BUG**
+**(B3) NetworkLookup.breeds metatable error on custom skeletons — FIXED in
+0.2.4-dev**
 `scripts/network_lookup/network_lookup.lua` builds `NetworkLookup.breeds`
 from `Breeds` then runs an `init` finalizer that (a) builds the reverse
 `name -> index` map and (b) installs `__index = function(_, key) error(...) end`
 that raises on any unknown key. VMF mods load AFTER network_lookup
-finalization, so our `et_necro_skeleton`, `et_ghost_skeleton_*` etc. are
-absent from both directions of the lookup. Any code path that does
-`NetworkLookup.breeds[breed.name]` for these breeds (e.g.
-`scripts/network/game_object_initializers_extractors.lua:178` and 17 other
-sites in that file when serializing AI husk creation across the network)
-will crash with `[NetworkLookup.lua] Table breeds does not contain key: et_necro_skeleton`.
+finalization.
 
-This needs in-game verification — hosting solo with `et_necro_skeleton` set
-as a breed_swap target may avoid network sync briefly, but as soon as a
-client joins (or the host sends an `ai_unit_spawned` RPC) it will crash.
+The earlier review proposed three workarounds (visual-only swap; pre-init
+injection; metatable replacement). All overcomplicated — option (b) actually
+works for the read side too: direct ASSIGNMENT bypasses `__index`, so we
+can extend the table post-finalization. The crash that shipped in 0.2.2/0.2.3
+was caused by the existence check itself: `if not nl_breeds[def.name] then`
+is a GET, which trips the metatable before the new key gets written. Switched
+to `rawget(nl_breeds, def.name)` and the registration runs cleanly. SETs
+into the table do not invoke `__index`, so subsequent indexes from the
+network layer find the new entries normally. See `enemy_tweaker.lua:156`.
 
-Possible mitigations (in order of likelihood-to-work):
-- (a) Use existing `chaos_skeleton` breed name and swap base_unit + inventory
-  on the spawned unit (visual-only) — keeps NetworkLookup happy.
-- (b) Inject our names into `NetworkLookup.breeds` BEFORE the metatable is
-  installed — likely impossible from a VMF mod since network_lookup runs
-  during boot.
-- (c) Hook the network init or replace the metatable post-hoc with a
-  permissive one — fragile, may break sync.
+In-game multiplayer verification (host RPC of et_*_skeleton to a client
+that also has the mod) is still pending.
 
 **(B4) `et_status` reports stale redirect count — `enemy_tweaker.lua:649`
 annotated POTENTIAL BUG**

@@ -21,6 +21,10 @@ $workshopIds = @{
     "career_tweaker"       = "3716286199"
     "enemy_tweaker"        = "3716780252"
     "character_weapon_variants" = "3716869446"
+    "dynamic_cosmetic_portraits" = "3721036701"
+    "crafting_in_modded"   = "3721038774"
+    "la_prefix_patch"      = "3721067411"
+    "event_tweaker"        = "3721290755"
 }
 
 function Deploy-SdkOut($sourceDir, $targetDir) {

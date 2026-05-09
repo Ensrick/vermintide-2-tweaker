@@ -83,15 +83,9 @@ If you pick up this codebase later, start by reading the per-area documents — 
 - v0.1.55: `entry.cwv_variant = true` cross-mod marker contract.
 - v0.1.56: mirror cwv entries into `ItemMasterList[def.item_key]` to fix `world_hero_previewer.lua:674` nil-`item_data` crash on equip.
 
-### Open issues (post-third-pass)
+### Resolved issues (post-third-pass)
 
-**character_weapon_variants — Imperial Longsword still appears thinned in the inventory character preview** despite the v0.7.87 unit-path migration and the v0.7.90 cwv_variant gate. Symptoms:
-- In-game (GearUtils path): correct — Imperial Longsword shows at native width, Bretonian Longsword shows thinned.
-- Inventory character preview (HeroPreviewer / MenuWorldPreviewer path): Bretonian thinned (correct) BUT Imperial also appears thinned (incorrect).
-
-**Likely culprit:** cosmetics_tweaker's `es_bastard_sword_thiccc` setting still leaks onto the Imperial cwv variant via some path the audit hasn't isolated. Theories: (1) the Imperial's resolved unit path somehow contains the bret pattern in a context we haven't traced, (2) a shared package or mesh substitution swaps the Imperial render to a bret model in the menu only, (3) a different code path (not the three known hooks) applies the scale. The `cos_thiccc_trace` toggle in v0.7.90 will print the resolved paths the menu hook sees — running with that enabled is the next diagnostic step.
-
-**Next steps:** enable `cos_thiccc_trace`, equip Imperial Longsword, open inventory, capture the `[thiccc] preview name=… skin=… right=… left=…` log line. If `right_path` does NOT contain `wpn_emp_gk_sword_`, scaling is coming from outside the audited paths. If it DOES, the resolution chain is producing a wrong path for the cwv item — investigate whether `WeaponSkins.skins[cwv_skin].right_hand_unit` was overwritten somewhere.
+**Imperial Longsword thinning in the inventory character preview — fixed in v0.7.98.** Root cause: the menu hook resolved per-hand paths via `item_data.right_hand_unit` + a separate `info.skin_name` -> `WeaponSkins.skins[skin].right_hand_unit` lookup, which was redundant with what vanilla `equip_item` had already computed. Vanilla calls `BackendUtils.get_item_units` once and stores the resolved per-hand path on each `spawn_data` entry as `unit_name`. Switched both menu hooks (`HeroPreviewer/MenuWorldPreviewer._spawn_item` and `LootItemUnitPreviewer.spawn_units`) to read paths straight from `spawn_data[i].unit_name` — the only truth source for "what unit IS rendered in this slot right now". Side-effects: dropped the `cwv_variant` defence-in-depth gate on both menu hooks (no longer needed — a cwv item's `unit_name` is always its variant model and can't accidentally match a base-weapon pattern); dropped the now-unused skin-resolution branch on the LootItem path. The GearUtils in-game hook keeps `_resolve_render_unit_path` because it has no pre-resolved spawn_data array.
 
 ### Second-pass documentation fixes
 

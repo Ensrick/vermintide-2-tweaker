@@ -177,6 +177,23 @@ DLC weapons sometimes use `<prefix>_deus_01` (Chaos Wastes / "grass" DLC) instea
 
 ## Animation System Architecture
 
+### Two parallel systems — pick by use case
+
+The repo has two independent approaches for getting 3P animations to play correctly. They solve different problems and don't overlap.
+
+| System | Lives in | Trigger | Use when |
+| :--- | :--- | :--- | :--- |
+| **A — Runtime hook** | `weapon_tweaker.lua` | `Unit.animation_event` is intercepted for every event on every unit | A vanilla weapon item is unlocked for a new career (`ItemMasterList[k].can_wield`) and we need to translate event names on the fly. Also the only path that reaches **husks** of remote players in coop. |
+| **B — Template clone** | `character_weapon_variants.lua` | `table.clone` of `Weapons.<base_template>` at mod load; `anim_event_3p` rewritten per sub-action; clone stored as `Weapons.<variant_template>` | A new variant item we own end-to-end (e.g. `cwv_es_dual_swords`) where we control which template the item points at. |
+
+**Decision rule:**
+- New CWV variant → **System B**. Mechanics in `character_weapon_variants/DEVELOPMENT.md` ("Animation: System B").
+- Vanilla item unlocked for a new career → **System A**.
+- Husks of remote players → **System A** regardless (we can't clone a template they own).
+- Deeper template control needed (timing, chain, sub-action restructure) → only System B can reach those — they're sub-action fields, not animation events.
+
+The rest of this section documents System A. System B is documented at `character_weapon_variants/DEVELOPMENT.md`.
+
 ### The Two Units: Understanding 1P vs 3P
 
 VT2 uses two separate units for the local player:
@@ -614,18 +631,18 @@ local _unit_path_scale_overrides = {
 ```
 
 Schema:
-- **`pattern`**: literal substring matched against the unit path returned by `BackendUtils.get_item_units`. If the equipped item has a skin, the skin's `right_hand_unit` is checked; otherwise `item_data.right_hand_unit`.
+- **`pattern`**: literal substring matched against the resolved per-hand unit path. The two menu paths read this from `spawn_data[i].unit_name` (the truth-source path that vanilla `equip_item` / `_load_item_units` got back from `BackendUtils.get_item_units` and queued for spawn). The in-game path resolves it itself via `_resolve_render_unit_path(item_data, skin, hand_field)` because `GearUtils.create_equipment` doesn't expose a pre-resolved spawn_data array.
 - **`factor`**: a `function(get)` returning `{x,y,z}|number|nil` (toggle off → return nil), a literal `{x,y,z}` table, or a uniform number. Functions are called every apply, so live setting toggles take effect on next equip.
 - **`hand`**: restricts to one hand. `"right"` only scales the weapon hand (used to keep paired shields at native scale); `"left"` only the shield/offhand; `nil` scales both.
 
 #### Coverage across the three rendering paths
 
 The scale system runs in **all three** hooks (see "Three Rendering Paths" above):
-1. `GearUtils.create_equipment` — `_scale_units(result, item_data, result.skin)`
-2. `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` — `_spawn_item_post` walks `self._item_info_by_slot`, looks up `slot_index` from each entry's `spawn_data[1]`, and calls `_apply_unit_path_scale_hand` per slot
-3. `LootItemUnitPreviewer.spawn_units` — applies to spawn-order indices `units[2]` (right) and `units[1]` (left)
+1. `GearUtils.create_equipment` — `_scale_units(result, item_data, result.skin)` resolves paths via `_resolve_render_unit_path`.
+2. `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` — `_spawn_item_post` walks `self._item_info_by_slot`, bridges to `_equipment_units` via `info.spawn_data[1].slot_index`, then reads `right_path`/`left_path` directly from `info.spawn_data[i].unit_name` (looking for `sd.right_hand` / `sd.left_hand` flags). No item_data lookup, no skin-resolution chain.
+3. `LootItemUnitPreviewer.spawn_units` — reads paths from the `spawn_data` argument (`spawn_data[1].unit_name` = left, `spawn_data[2].unit_name` = right; spawn order is fixed by `_load_item_units`). No item_data lookup either.
 
-The two menu paths (#2, #3) additionally gate on `not item_data.cwv_variant` for defence-in-depth. The in-game path doesn't — its unit-path matching alone is sufficient.
+**No `cwv_variant` gate is needed on the menu paths** because a cwv variant's `spawn_data.unit_name` is always its variant model, never the base weapon's path. The truth-source approach makes the gate redundant — see `feedback_cwv_clone_name_clobber.md`. The in-game `GearUtils` path also doesn't need the scale gate (unit-path matching alone is sufficient there too); but it DOES still gate offset/tint/LA-paint on `not item_data.cwv_variant` because those are item-name-keyed and a cwv item inherits the base's `name`.
 
 #### Grip-offset overrides (`_weapon_grip_offsets`)
 
@@ -683,9 +700,9 @@ Most also have `_runed_01`, `_runed_02`, and `_magic_01` variants. GK shields re
 
 ### Illusion Browser: Resolving Skin Keys
 
-When browsing illusions in `LootItemUnitPreviewer`, `self._item.data` is the skin's ItemMasterList entry (e.g. `es_bastard_sword_skin_01`), not the weapon. For the new unit-path scale system this doesn't need resolution — the skin's `right_hand_unit` IS the model being rendered, so `_resolve_render_unit_path(item_data, skin, "right_hand_unit")` reads it directly and pattern-matches.
+When browsing illusions in `LootItemUnitPreviewer`, `self._item.data` is the skin's ItemMasterList entry (e.g. `es_bastard_sword_skin_01`), not the weapon. The scale hook doesn't need to resolve anything from `item.data`: vanilla `_load_item_units` already called `BackendUtils.get_item_units` and queued the resolved unit paths on the `spawn_data` argument we hook. We just read `spawn_data[1].unit_name` (left) / `spawn_data[2].unit_name` (right) and pattern-match.
 
-The historic resolution `ItemMasterList[skin_key].matching_item_key → base_weapon_key` is still relevant for any system that genuinely needs the weapon-template identity (e.g. LA offhand selection). Use `rawget(ItemMasterList, key)` per CLAUDE.md.
+The historic resolution `ItemMasterList[skin_key].matching_item_key → base_weapon_key` is still relevant for any system that genuinely needs the weapon-template identity (e.g. LA offhand selection, which still reads `item.data.item_type`). Use `rawget(ItemMasterList, key)` per CLAUDE.md.
 
 ### Adding a New Shield Swap
 

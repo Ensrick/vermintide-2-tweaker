@@ -663,9 +663,6 @@ return {
     enable_weapon_create_equipment_guard = { en = "Enable Create Equipment Guard" },
     enable_weapon_career_action_injection = { en = "Enable Career Action Injection" },
     force_bretonnian_shield_unlock = { en = "Force Bretonnian Shield Unlock" },
-    -- Forge
-    forge_group = { en = "Weapon Forge" },
-    forge_hotkey = { en = "Open Weapon Forge" },
     -- Debug
     debug_group = { en = "Debug" },
     debug = { en = "Debug Mode" },

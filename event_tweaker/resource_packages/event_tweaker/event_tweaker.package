@@ -1,0 +1,11 @@
+mod = [
+	"event_tweaker"
+]
+
+package = [
+	"resource_packages/event_tweaker/event_tweaker"
+]
+
+lua = [
+	"scripts/mods/event_tweaker/*"
+]

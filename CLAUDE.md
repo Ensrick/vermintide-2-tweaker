@@ -14,10 +14,14 @@ A modular set of **Vermintide 2** VMF (Vermintide Mod Framework) mods written in
 | chaos_wastes_tweaker | `ct` | 3712929235 | **VMB** | CW economy, curses, boons, altars, traits |
 | general_tweaker | `gt` | 3713619122 | **VMB** | 3rd person camera, debug/data dumps |
 | cosmetics_tweaker | `cosmetics_tweaker` | 3715714222 | **VMB** | Hat/skin unlocks, weapon model tweaks, shield swaps, custom illusions |
+| dynamic_cosmetic_portraits | `dynamic_cosmetic_portraits` | 3721036701 | **VMB** | Hat/outfit-aware HUD & hero-select character portraits (split from cosmetics_tweaker 2026-05-06) |
 | career_tweaker | `crt` | 3716286199 | **VMB** | Talent/ability swapping (scaffolded) |
 | enemy_tweaker | `enemy_tweaker` | 3716780252 | **VMB** | Enemy spawns, horde compositions, breed substitution |
 <!-- REVIEW: character_weapon_variants is actually PUBLISHED (Workshop ID 3716869446). itemV2.cfg has published_id = 3716869446L; deploy_all.ps1 maps it; reference_build_deploy.md memory lists it. Update to 3716869446 (private). -->
 | character_weapon_variants | `character_weapon_variants` | 3716869446 | **VMB** | New weapon items grafted from cross-character models (MoreItemsLibrary) |
+| crafting_in_modded | `cim` | 3721038774 | **VMB** | Modded crafting menus — Athanor forge UI for crafting any career-eligible weapon. Split from `wt` 2026-05-05 |
+| la_prefix_patch | `la_prefix_patch` | 3721067411 | **VMB** | Loads above Loremaster's Armoury and silently drops its three duplicate hook registrations to keep startup chat clean |
+| event_tweaker | `event_tweaker` | 3721290755 | **VMB** | Host-side mutator picker (Workshop title "Tweaker: Events"). VMF dropdown for canonical event presets (Geheimnisnacht / Skulls — drives mutator + active_events string + keep-level swap) plus checkbox-per-mutator across difficulty / specials / hordes / atmosphere / objectives / winds / raw event categories. Three hooks: `BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`. Scaffolded 2026-05-06 |
 | tweaker (legacy) | `t` | 3704660429 | Stingray SDK | Deprecated — split into above mods |
 
 <!-- REVIEW: This entire SDK block is now relevant ONLY for the legacy /tweaker source. After the 2026-05-01 VMB migration, every active mod (wt/ct/gt/crt/cosmetics_tweaker/enemy_tweaker/character_weapon_variants) is built via VMB. Consider collapsing this section to a single line ("legacy /tweaker only — see old-backup/ scripts") and putting the VMB block first. As-is, an AI agent skimming this file will see the SDK commands and may assume they apply to active mods. -->
@@ -73,6 +77,9 @@ node C:/Users/danjo/source/repos/vmb/vmb.js build chaos_wastes_tweaker --no-work
 node C:/Users/danjo/source/repos/vmb/vmb.js build weapon_tweaker --no-workshop --cwd
 node C:/Users/danjo/source/repos/vmb/vmb.js build general_tweaker --no-workshop --cwd
 node C:/Users/danjo/source/repos/vmb/vmb.js build career_tweaker --no-workshop --cwd
+node C:/Users/danjo/source/repos/vmb/vmb.js build crafting_in_modded --no-workshop --cwd
+node C:/Users/danjo/source/repos/vmb/vmb.js build dynamic_cosmetic_portraits --no-workshop --cwd
+node C:/Users/danjo/source/repos/vmb/vmb.js build event_tweaker --no-workshop --cwd
 ```
 
 Output goes to `<mod>/bundleV2/`. Internal mod IDs preserved (`"ct"`, `"wt"`, `"gt"`, `"crt"`) so existing user settings are unaffected. `deploy_all.ps1` auto-detects VMB vs SDK layout.
@@ -169,11 +176,13 @@ Shield weapons use **two independent units**: right hand (weapon) and left hand 
 
 ### Animation Remapping (weapon_tweaker)
 
-VT2 uses two separate units for the local player:
-- `player.player_unit` = **3P body** (receives `anim_event_3p`)
-- Separate non-player unit = **1P hands** (receives `anim_event`)
+**Load-bearing rule:** **1P animations are universal across all six characters and never need cross-character remapping.** The `first_person_base` unit is shared, so any weapon's 1P state machine and clips play correctly on any character's first-person view by default. Only the **3P body** is character-specific and needs remap work. Never override `anim_event` (1P), `wield_anim` (1P), or `state_machine` per character. See `feedback_1p_animations_universal.md` and `feedback_animation_remap_rules.md`.
 
-Cross-career weapons need animation redirects because different character skeletons have different state machines. The system uses three layers:
+VT2 uses two separate units for the local player:
+- `player.player_unit` = **3P body** (receives `anim_event_3p`) — character-specific skeleton, this is where remap work lives
+- Separate non-player unit = **1P hands** (receives `anim_event`) — universal across characters, never touched
+
+Cross-career weapons need animation redirects on the **3P side only** because different character 3P body skeletons have different event vocabularies. The system uses three layers:
 1. **`_anim_redirect`**: global event renames
 2. **`_career_anim_redirect`**: career-prefix-aware redirects
 3. **`_suffix_career_map`**: suffix-based event swaps
@@ -211,7 +220,19 @@ Then hook `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` to mark cu
 - `ITEM_LIST.md` — full weapon key catalog from ItemMasterList
 - `ANIMATION_RESEARCH.md` — skeleton event probe results
 - `CROSS_MOD_ARCHITECTURE.md` — weapon sharing & cosmetics architecture across weapon_tweaker, cosmetics_tweaker, and character_weapon_variants
-- `character_weapon_variants/CHANGELOG.md` — version history for the Character Weapon Variants mod
-- `character_weapon_variants/DEVELOPMENT.md` — how to add variant weapons (rarity pattern, skin system, icon atlases, traits/properties, registration timing)
+- `character_weapon_variants/RECIPES.md` — **READ THIS BEFORE ADDING A NEW VARIANT.** Decision tree (single-melee / 2H / shield / identical-mesh dual / mixed-mesh dual / ranged-ammo / skin-only / cross-access / custom illusion) plus per-archetype copy-paste recipes referencing shipped variants as canon, plus pre-deploy checklist and verification matrix. Each archetype has its own gotchas (dual-wield needs `_force_display_unit`, ranged ammo needs full skin-mirror + custom Pickups + projectile init hook, fire-DoT removal is a 3-step swap, etc.) — the recipes spell them out so you don't rediscover them.
+- `character_weapon_variants/DEVELOPMENT.md` — architectural reference for variant creation: rarity system, blacksmith template pattern, skin system, icon atlases, properties/traits, registration timing, custom templates / stat modifications, model scaling, base-weapon catalog. Cross-references RECIPES.md and ANIMATION_FIX_PLAYBOOK.md.
+- `character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md` — 9-step closed-vocabulary procedure for fixing 3P animations on cross-character variants. Read before touching `anim_event_3p`, `wield_anim_3p`, or any `_cross_access_action_remap` entry.
+- `character_weapon_variants/J_LEFTWEAPONATTACH_INVESTIGATION.md` — post-mortem for the ~20-version dual-wield rig saga. Read once before adding any dual-wield variant.
+- `character_weapon_variants/CHANGELOG.md` — version history for the Character Weapon Variants mod. Best source of "why we do X" — most recipes have a CHANGELOG entry behind every load-bearing rule.
+- `character_weapon_variants/CODE_REVIEW.md` — STALE point-in-time review at v0.1.56-dev. Historical context only.
 - `character_weapon_variants/TODO.md` — feature roadmap for cross-character weapon variants
 - `cosmetics_tweaker/TODO.md` — feature roadmap for cosmetics-specific work
+- `dynamic_cosmetic_portraits/CLAUDE.md` — **READ THIS BEFORE TOUCHING PORTRAITS.** Workflow guardrails + the canonical asset-generation script.
+- `dynamic_cosmetic_portraits/tools/add_portrait.ps1` — the only correct way to generate a new portrait's `.png` / `.texture` / `.material` files. Call it as `.\tools\add_portrait.ps1 -SourcePng "<110x130 PNG>" -HatKey "kruber_<key>"`. Free-handing the assets has broken multiple shipped versions; do not skip the script.
+- `dynamic_cosmetic_portraits/CHANGELOG.md` — version history. v0.1.0 → v0.1.3 documents every variant of the asset-pipeline mistake — read before reinventing.
+- `dynamic_cosmetic_portraits/DEVELOPMENT.md` — full portrait-authoring workflow + career_settings swap architecture + dead ends not to retry.
+- `dynamic_cosmetic_portraits/TODO.md` — portrait roadmap (which hats/careers/characters are next).
+- `dynamic_cosmetic_portraits/CHARACTER_COSMETIC_CATALOG.md` — every `slot_hat`/`slot_skin` item key → in-game display name across all 5 characters (sourced from `cosmetics_tweaker/_cos_probe.txt`). **Consult this whenever wiring a new portrait — it's the only reliable mapping from a key to a player-facing name.**
+- `event_tweaker/CHANGELOG.md` — version history for the Tweaker: Events mod.
+- `event_tweaker/DEVELOPMENT.md` — architecture (3 hooks: `get_special_events` / `get_active_events` / `get_level_variation_data`), how to add a new mutator or preset, sharp edges (special_events `name` field, hub-skip in `append_live_event_mutators`, keep-reload caveat).

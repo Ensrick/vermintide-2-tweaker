@@ -1,5 +1,18 @@
 # Cosmetics Tweaker Code Review (2026-05-01)
 
+> **Note (2026-05-06):** the dynamic-portrait system has since been split
+> out into the `dynamic_cosmetic_portraits` mod (Workshop 3721036701).
+> Sections of this review that discuss `_PORTRAIT_MATERIALS`,
+> `_hat_portrait_map`, `_skin_portrait_map`, `_check_portrait_materials_ready`,
+> `_sync_portrait_settings`, the `portrait_*` commands, and the
+> `dynamic_portraits` setting refer to code that no longer lives in
+> cosmetics_tweaker. Treat those parts as historical context. The
+> "UIRenderer._injected_material_sets safety" note about VMF
+> `custom_gui_textures` still applies — cosmetics_tweaker just doesn't
+> declare any portrait textures itself anymore. The "NewsFeedUI hot-reload
+> safety hook" stayed in cosmetics_tweaker because it protects illusion /
+> LA bridge atlases, not portrait materials.
+
 ## Summary
 
 The cosmetics_tweaker mod is the largest and most architecturally complex

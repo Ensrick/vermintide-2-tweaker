@@ -34,6 +34,7 @@ return {
             { setting_id = "chest_swap_ranged_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
             { setting_id = "chest_power_up_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
             { setting_id = "cursed_chest_count", type = "numeric", default_value = 1, range = { 0, 10 }, decimals_number = 0 },
+            { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },
             { setting_id = "arena_ammo_count", type = "numeric", default_value = 2, range = { 0, 10 }, decimals_number = 0 },
             { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
             { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false },

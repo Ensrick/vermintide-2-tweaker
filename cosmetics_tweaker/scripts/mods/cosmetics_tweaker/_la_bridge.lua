@@ -31,12 +31,14 @@ M.armoury_to_backend    = {}  -- reverse: LA key -> our backend_id (for debug)
 M.localization          = {}  -- display_name_key -> human-readable string
 
 -- Shield/offhand options derived from LA SKIN_LIST entries with
--- swap_hand="left_hand_unit". Grouped by character prefix (Kruber/
--- Kerillian/Bardin) so the main file can fan them out across all of
--- that character's shield weapon types per the no-cross-character /
--- yes-cross-career-within-character rule.
---   { Kruber = { {name=..., armoury_key=..., vanilla_skin=...}, ... }, ... }
-M.la_offhand_options_by_character = {}
+-- swap_hand="left_hand_unit". Indexed by VANILLA WEAPON TYPE (the prefix
+-- of each `icons` table key, e.g. `es_1h_mace_shield`, `es_sword_shield_breton`).
+-- LA authors each shield's texture for specific weapon UVs and lists those
+-- weapons in the variant's `icons` table; the picker should mirror that
+-- authoring exactly so we never paint a texture meant for one shield
+-- silhouette onto a different one.
+--   { es_1h_mace_shield = { {name=..., armoury_key=..., vanilla_skin=...}, ... }, ... }
+M.la_offhand_options_by_weapon_type = {}
 
 local function la()  return get_mod("Loremasters-Armoury") end
 local function mil() return get_mod("MoreItemsLibrary") end
@@ -146,43 +148,105 @@ local function _resolve_intended_unit(la_key, variant, sorted_icons)
 end
 
 -- Decide whether an LA variant is safe to expose in our offhand picker.
--- `kind="unit"` variants point to LA's custom-authored mesh files (e.g.
--- `units/empire_shield/Kruber_Empire_shield01_mesh`) that have no
--- standalone package the LootItemUnitPreviewer can load on demand —
--- spawning one crashes with "Unit not found". LA's normal pipeline
--- pre-loads them via `Managers.package:load(...)` from its own bootstrap.
--- For now, restrict to `kind="texture"` variants, which paint onto a
--- vanilla mesh that the engine already has packaged.
 --
--- For `kind="texture"` variants:
---   * if `new_units[1]` exists AND `is_vanilla_unit == true`, that's the
---     vanilla mesh LA expects to paint onto -> use it as `intended_unit`
---   * else (pure-texture variant, no mesh swap) -> `intended_unit = nil`,
---     leaving the user's current shield in place; LA paints over it.
+-- Variant categories handled here:
+--   * `kind="texture"` + no `new_units`           -> pure paint-over (intended_unit nil).
+--   * `kind="texture"` + `new_units` + is_vanilla -> paint onto a vanilla mesh.
+--   * `kind="texture"` + `new_units` + !vanilla   -> custom mesh; FILTERED.
+--   * `kind="unit"`    + `new_units`              -> custom mesh; FILTERED.
+--
+-- v0.8.11–v0.8.13 attempted to expose custom-mesh shields. Two failure modes
+-- defeated each attempt:
+--   1. The engine spawns LA's compiled .unit but can't bind its materials —
+--      magenta "missing texture" indicator. LA's resource_package globs
+--      `unit/material/texture = ["*/*"]`, so the assets ARE loaded, but the
+--      engine's material binding for these meshes only works after LA's
+--      `swap_units_new` has aliased `NetworkLookup.inventory_packages` and
+--      mutated `WeaponSkins.skins[skin][hand]`.
+--   2. Calling LA's `re_apply_illusion` from outside its update loop
+--      conflicts with the loop's own iteration — LA reads `mod:get(skin)`
+--      every tick and re-runs the same path with whatever the LA setting
+--      currently holds. Combined with LA's strict
+--      `NetworkLookup.inventory_packages.__index` (which `error()`s on
+--      missing key), even one stale flag (`changed_model=true` when our
+--      revert raced with LA's tick) crashes with `does not contain key:
+--      <la_path>_3p` (user crash 60180105-bd15-49f2-9fa6-9f70dd851846).
+-- A safe integration would need to take ownership of LA's update loop or
+-- replicate `swap_units_new` with our own state machine using rawget/rawset
+-- to bypass the strict __index. Out of scope for now. Filtered until then.
 local function _is_supported_variant(variant)
     if variant.kind ~= "texture" then return false end
-    -- Defensive: if a variant declares new_units but isn't marked as
-    -- vanilla, treat it as a custom mesh and skip — the previewer would
-    -- crash trying to spawn it.
     if variant.new_units and not variant.is_vanilla_unit then return false end
     return true
 end
 
+-- Build per-weapon-type LA shield pools.
+--
+-- For each LA SKIN_LIST entry with `swap_hand = "left_hand_unit"`, parse the
+-- `icons` table — its keys are vanilla skin keys of the form
+-- `<weapon_type>_skin_<...>` (e.g. `es_1h_mace_shield_skin_03`,
+-- `es_sword_shield_breton_skin_01`). The prefix before `_skin_` is the
+-- weapon type LA authored that texture for. We add the variant to those
+-- weapon types' pools.
+--
+-- The `_LA_EXTRA_WEAPON_TYPES` map below adds extra weapon types per
+-- variant — used when the user wants an LA shield to appear on a weapon
+-- type LA didn't include in its `icons` table. The shield still displays
+-- with LA's authored mesh + texture combo (e.g. Ostermark on a Bret weapon
+-- still renders the deus shield + Ostermark texture, the same combo as on
+-- mace+shield). This is the path for "I want this LA shield available on
+-- THIS weapon too" decisions made one shield at a time as we walk the list.
+local _LA_EXTRA_WEAPON_TYPES = {
+    -- Ostermark + Kotbs are authored for Empire mace/sword/deus UVs but the
+    -- player wants them available on Bret longsword+shield as well; the
+    -- mesh swaps to deus_shield_03 (matches the texture's UVs) so it
+    -- displays as the LA combo rather than wrapping onto Bret UVs.
+    Kruber_empire_shield_hero1_Ostermark01 = { es_1h_sword_shield_breton = true },
+    Kruber_empire_shield_hero1_Kotbs01     = { es_1h_sword_shield_breton = true },
+}
+
+-- LA's icon keys sometimes use a different name than the game's actual
+-- `ItemMasterList[item].item_type` value. The picker queries the table by
+-- item_type at runtime, so a key mismatch here = the LA pool builds under
+-- the wrong key and the picker shows nothing.
+--
+-- Known cases:
+--   * `es_sword_shield_breton_skin_*` (LA icon key) -> `es_1h_sword_shield_breton`
+--     (game item_type). LA omitted the `_1h_` infix that the game uses for
+--     this family. Without this alias, every Bret-authored LA shield
+--     (Bastonne, Reynard, Luidhard, Lothar, Alberic) silently builds into
+--     a pool the game never queries.
+local _LA_WEAPON_TYPE_ALIAS = {
+    es_sword_shield_breton = "es_1h_sword_shield_breton",
+}
+
+local function _normalize_weapon_type(wt)
+    return _LA_WEAPON_TYPE_ALIAS[wt] or wt
+end
+
 local function build_offhand_options()
-    M.la_offhand_options_by_character = {}
+    M.la_offhand_options_by_weapon_type = {}
     M._la_offhand_resolution = {}
     local SKIN_LIST = la().SKIN_LIST
     for la_key, variant in pairs(SKIN_LIST) do
-        if variant.swap_hand == "left_hand_unit" and _is_supported_variant(variant) then
+        if variant.swap_hand == "left_hand_unit"
+            and _is_supported_variant(variant)
+            and type(variant.icons) == "table"
+        then
             local character = la_key:match("^([A-Z][a-z]+)_")
             if character and _character_prefixes[character] then
+                local weapon_types = {}
                 local sorted_icons = {}
-                if type(variant.icons) == "table" then
-                    for icon_key, _ in pairs(variant.icons) do
-                        sorted_icons[#sorted_icons + 1] = icon_key
-                    end
-                    table.sort(sorted_icons)
+                for icon_key, _ in pairs(variant.icons) do
+                    sorted_icons[#sorted_icons + 1] = icon_key
+                    local wt = icon_key:match("^(.-)_skin_")
+                    if wt then weapon_types[_normalize_weapon_type(wt)] = true end
                 end
+                local extras = _LA_EXTRA_WEAPON_TYPES[la_key]
+                if extras then
+                    for wt, _ in pairs(extras) do weapon_types[_normalize_weapon_type(wt)] = true end
+                end
+                table.sort(sorted_icons)
                 local vanilla_skin_key = sorted_icons[1]
                 local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
                 M._la_offhand_resolution[la_key] = {
@@ -190,15 +254,19 @@ local function build_offhand_options()
                     source        = source,
                     texture_path  = (variant.textures and variant.textures[1]) or nil,
                     icon_keys     = sorted_icons,
+                    weapon_types  = weapon_types,
                 }
-                local list = M.la_offhand_options_by_character[character]
-                if not list then list = {}; M.la_offhand_options_by_character[character] = list end
-                list[#list + 1] = {
+                local opt = {
                     name          = humanize_armoury_key(la_key),
                     armoury_key   = la_key,
                     vanilla_skin  = vanilla_skin_key,
                     intended_unit = intended_unit,
                 }
+                for wt, _ in pairs(weapon_types) do
+                    local list = M.la_offhand_options_by_weapon_type[wt]
+                    if not list then list = {}; M.la_offhand_options_by_weapon_type[wt] = list end
+                    list[#list + 1] = opt
+                end
             end
         end
     end
@@ -211,12 +279,24 @@ end
 function M.dump_offhand_resolution()
     if not M._la_offhand_resolution then mod:echo("no resolution data"); return end
     mod:echo("[LA bridge] offhand resolution:")
+    local can_get = Application and Application.can_get
     for la_key, info in pairs(M._la_offhand_resolution) do
-        mod:info("  %-50s -> %s [%s]  tex=%s",
+        local u = info.intended_unit
+        local has_1p = (u and can_get) and can_get("unit", u) or false
+        local has_3p = (u and can_get) and can_get("unit", u .. "_3p") or false
+        local has_pkg = (u and can_get) and can_get("package", u) or false
+        local wt_list = {}
+        if info.weapon_types then
+            for wt, _ in pairs(info.weapon_types) do wt_list[#wt_list + 1] = wt end
+            table.sort(wt_list)
+        end
+        mod:info("  %-55s 1p=%s 3p=%s pkg=%s -> %s  weapons=[%s]",
             la_key,
-            tostring(info.intended_unit),
-            tostring(info.source),
-            tostring(info.texture_path))
+            tostring(has_1p),
+            tostring(has_3p),
+            tostring(has_pkg),
+            tostring(u),
+            table.concat(wt_list, ","))
     end
     mod:echo("[LA bridge] %d variants — see log for full mapping",
         (function() local n = 0; for _ in pairs(M._la_offhand_resolution) do n = n + 1 end; return n end)())
@@ -285,8 +365,8 @@ function M.register_all()
     end
 
     build_offhand_options()
-    for character, list in pairs(M.la_offhand_options_by_character) do
-        mod:info("[LA bridge] %s offhand pool: %d entries", character, #list)
+    for weapon_type, list in pairs(M.la_offhand_options_by_weapon_type) do
+        mod:info("[LA bridge] %s offhand pool: %d entries", weapon_type, #list)
     end
 
     M.registered = true
@@ -403,10 +483,72 @@ local SHIELD_DIFF_SLOT = "texture_map_c0ba2942"
 local SHIELD_PACK_SLOT = "texture_map_0205ba86"
 local SHIELD_NORM_SLOT = "texture_map_59cd86b9"
 
--- Local re-implementation of LA's `apply_texture_to_all_world_units` for
--- shields only. Touches ONLY the supplied unit's mesh materials. No
--- WeaponSkins / ItemMasterList writes. Safe to call on preview spawns.
+-- Paint LA's textures onto a single unit using `Unit.set_texture_for_materials`,
+-- the same per-unit primitive vanilla VT2 uses for `MaterialSettingsTemplates`
+-- (`gear_utils.lua:150`, `cosmetic_utils.lua:72`, `flow_callbacks_foundation.lua:939`).
+--
+-- Why this and not `Material.set_texture` (the previous implementation):
+-- `Material.set_texture(mat, slot, path)` mutates the SHARED material — the
+-- same one referenced by every other shield unit using that vanilla mesh, in
+-- the world AND in the inventory mannequin AND in the illusion browser. So
+-- one click leaked the LA texture onto every other shield, and a subsequent
+-- "Default" pick or texture unload turned them all magenta. Per-unit
+-- bindings via `Unit.set_texture_for_materials` are intercepted by the
+-- engine before the shared material is touched, so unit destruction (e.g.
+-- next re-equip) implicitly drops the override and the shared material is
+-- never modified.
+--
+-- LIMITATION: `Unit.set_texture_for_materials` applies to ALL materials on
+-- the unit that have a slot of the given variable name. The previous
+-- implementation supported `skip_meshes` (per-mesh exclusion) and
+-- `textures_other_mesh` (per-mesh override) — finer granularity than this
+-- API offers. For shields whose `skip_meshes` is empty (e.g. the first
+-- focused-triage candidate `Kruber_empire_shield_hero1_Ostermark01`) this
+-- doesn't matter; if a future LA shield uses skip_meshes we'll need a
+-- per-mesh fallback. We log a warning when we drop those overrides so the
+-- regression is visible.
 local function _paint_offhand_textures_locally(unit, variant)
+    if not unit or type(unit) ~= "userdata" then return false end
+    if not Unit.alive(unit) then return false end
+    if type(variant.textures) ~= "table" then return false end
+
+    local diff = variant.textures[1]
+    local pack = variant.textures[2]
+    local norm = variant.textures[3]
+
+    if (variant.skip_meshes and next(variant.skip_meshes)) or variant.textures_other_mesh then
+        if M.trace then
+            mod:info("[LA bridge] WARN: variant has skip_meshes/textures_other_mesh; per-unit paint skips that nuance")
+        end
+    end
+
+    local can_get = Application and Application.can_get
+    if diff and (not can_get or can_get("texture", diff)) then
+        Unit.set_texture_for_materials(unit, SHIELD_DIFF_SLOT, diff)
+    end
+    if pack and (not can_get or can_get("texture", pack)) then
+        Unit.set_texture_for_materials(unit, SHIELD_PACK_SLOT, pack)
+    end
+    if norm and (not can_get or can_get("texture", norm)) then
+        Unit.set_texture_for_materials(unit, SHIELD_NORM_SLOT, norm)
+    end
+
+    if variant.special_textures then
+        for _, tx in ipairs(variant.special_textures) do
+            if tx.slot and tx.texture and (not can_get or can_get("texture", tx.texture)) then
+                Unit.set_texture_for_materials(unit, tx.slot, tx.texture)
+            end
+        end
+    end
+
+    return true
+end
+
+-- Dead code retained for reference; the function above now handles painting.
+-- Marked as `_legacy_*` so a grep for `_paint_offhand_textures_locally`
+-- yields only the active implementation. Safe to delete after the focused-
+-- triage Ostermark01 round confirms the new path works end-to-end.
+local function _legacy_paint_offhand_textures_via_shared_material(unit, variant)
     if not unit or type(unit) ~= "userdata" then return false end
     if not Unit.alive(unit) then return false end
     if type(variant.textures) ~= "table" then return false end
