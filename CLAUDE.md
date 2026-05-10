@@ -20,7 +20,7 @@ A modular set of **Vermintide 2** VMF (Vermintide Mod Framework) mods written in
 <!-- REVIEW: character_weapon_variants is actually PUBLISHED (Workshop ID 3716869446). itemV2.cfg has published_id = 3716869446L; deploy_all.ps1 maps it; reference_build_deploy.md memory lists it. Update to 3716869446 (private). -->
 | character_weapon_variants | `character_weapon_variants` | 3716869446 | **VMB** | New weapon items grafted from cross-character models (MoreItemsLibrary) |
 | crafting_in_modded | `cim` | 3721038774 | **VMB** | Modded crafting menus — Athanor forge UI for crafting any career-eligible weapon. Split from `wt` 2026-05-05 |
-| la_prefix_patch | `la_prefix_patch` | 3721067411 | **VMB** | Loads above Loremaster's Armoury and silently drops its three duplicate hook registrations to keep startup chat clean |
+| la_prefix_patch | `la_prefix_patch` | 3721067411 | **VMB** | Loads above Loremaster's Armoury: silently drops its three duplicate hook registrations to keep startup chat clean, and offers VMF toggles to suppress LA's quest markers and unread-letter notifications |
 | event_tweaker | `event_tweaker` | 3721290755 | **VMB** | Host-side mutator picker (Workshop title "Tweaker: Events"). VMF dropdown for canonical event presets (Geheimnisnacht / Skulls — drives mutator + active_events string + keep-level swap) plus checkbox-per-mutator across difficulty / specials / hordes / atmosphere / objectives / winds / raw event categories. Three hooks: `BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`. Scaffolded 2026-05-06 |
 | tweaker (legacy) | `t` | 3704660429 | Stingray SDK | Deprecated — split into above mods |
 

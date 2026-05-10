@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.2.5-dev"
+local MOD_VERSION = "0.3.1-dev"
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Enemy Tweaker v" .. MOD_VERSION)
 
@@ -489,32 +489,29 @@ end
 
 local function _apply_horde_preset()
     local preset = _get_preset()
-    if not preset then return end
-
-    local comps = preset.compositions
     local multiplier = (mod:get("horde_size_multiplier") or 100) / 100
 
-    if comps.all then
-        _apply_preset_to_pacing_keys(PACING_KEYS_SKAVEN, comps.all)
-        _apply_preset_to_pacing_keys(PACING_KEYS_CHAOS, comps.all)
-        _apply_preset_to_pacing_keys(PACING_KEYS_BEASTMEN, comps.all)
-    else
-        if comps.skaven then
-            _apply_preset_to_pacing_keys(PACING_KEYS_SKAVEN, comps.skaven)
-        end
-        if comps.chaos then
-            _apply_preset_to_pacing_keys(PACING_KEYS_CHAOS, comps.chaos)
-        end
-        if comps.beastmen then
-            _apply_preset_to_pacing_keys(PACING_KEYS_BEASTMEN, comps.beastmen)
+    if preset then
+        local comps = preset.compositions
+        if comps.all then
+            _apply_preset_to_pacing_keys(PACING_KEYS_SKAVEN, comps.all)
+            _apply_preset_to_pacing_keys(PACING_KEYS_CHAOS, comps.all)
+            _apply_preset_to_pacing_keys(PACING_KEYS_BEASTMEN, comps.all)
+        else
+            if comps.skaven then
+                _apply_preset_to_pacing_keys(PACING_KEYS_SKAVEN, comps.skaven)
+            end
+            if comps.chaos then
+                _apply_preset_to_pacing_keys(PACING_KEYS_CHAOS, comps.chaos)
+            end
+            if comps.beastmen then
+                _apply_preset_to_pacing_keys(PACING_KEYS_BEASTMEN, comps.beastmen)
+            end
         end
     end
 
-    -- POTENTIAL BUG: when preset == "off" we early-return at the top of this
-    -- function, so the size multiplier never applies on its own. Users who
-    -- set "Horde Size 200%" with no preset get vanilla hordes. If multiplier
-    -- is meant to be independent of preset selection, lift this block above
-    -- the early return.
+    -- Size multiplier applies independently of preset selection so users
+    -- can scale vanilla hordes too.
     if multiplier ~= 1.0 then
         for key, comp in pairs(HordeCompositionsPacing) do
             if type(comp) == "table" and #comp > 0 then
@@ -599,6 +596,160 @@ mod:hook("HordeSpawner", "spawn_unit", function(func, self, hidden_spawn, breed_
     end
     return func(self, hidden_spawn, breed_name, goal_pos, horde)
 end)
+
+-- ============================================================
+-- Special spawns — per-difficulty
+-- ============================================================
+-- The user configures Max Specials Active, Max Same Type, per-special spawn
+-- weight, and per-special disabled toggle independently for each difficulty
+-- (Recruit / Veteran / Champion / Legend / Cataclysm 1/2/3). Defaults pulled
+-- from VT2's SpecialDifficultyOverrides so unmodified sliders match vanilla.
+--
+-- Three SpecialsPacing hooks:
+--   1) instance specials_by_slots — no override needed currently (cooldowns
+--      not exposed in v0.3.1 UI), but the hook is in place for future use.
+--   2) setup_functions.specials_by_slots — overrides CurrentSpecialsSettings
+--      .max_specials and filters .breeds via per-breed disabled toggles,
+--      restored after the original returns.
+--   3) select_breed_functions.get_random_breed — applies weighted selection
+--      and max_of_same override per the active difficulty.
+--
+-- Setting key convention (defined in enemy_tweaker_data.lua):
+--   et_diff_<difficulty>_max_total
+--   et_diff_<difficulty>_max_same
+--   et_diff_<difficulty>_weight_<breed>
+--   et_diff_<difficulty>_disabled_<breed>
+
+local _setting_key = mod._setting_key or function(diff_key, suffix, breed)
+    if breed then return string.format("et_diff_%s_%s_%s", diff_key, suffix, breed) end
+    return string.format("et_diff_%s_%s", diff_key, suffix)
+end
+
+local function _active_difficulty()
+    -- Returns the current mission difficulty key (normal/hard/.../cataclysm_3)
+    -- or "normal" if the manager isn't ready (mod load before any mission).
+    local m = rawget(_G, "Managers")
+    if not m or not m.state or not m.state.difficulty then return "normal" end
+    local diff = m.state.difficulty:get_difficulty()
+    return diff or "normal"
+end
+
+local function _enabled_specials_for(diff_key, source_breeds)
+    -- Filter source_breeds by per-breed disabled toggle for the given difficulty.
+    -- Always returns a fresh list — never mutates source.
+    local out = {}
+    for i = 1, #source_breeds do
+        local name = source_breeds[i]
+        if not mod:get(_setting_key(diff_key, "disabled", name)) then
+            out[#out + 1] = name
+        end
+    end
+    return out
+end
+
+if rawget(_G, "SpecialsPacing") then
+    -- (1) Per-update hook — reserved for future cooldown overrides; currently no-op.
+
+    -- (2) Setup-time: max_specials override + breeds filter.
+    if SpecialsPacing.setup_functions and SpecialsPacing.setup_functions.specials_by_slots then
+        mod:hook(SpecialsPacing.setup_functions, "specials_by_slots", function(func, t, slots, method_data, state_data)
+            local CSS = rawget(_G, "CurrentSpecialsSettings")
+            if not CSS then
+                return func(t, slots, method_data, state_data)
+            end
+
+            local diff_key = _active_difficulty()
+            local saved_breeds = CSS.breeds
+            local saved_max    = CSS.max_specials
+
+            local user_max = mod:get(_setting_key(diff_key, "max_total"))
+            if user_max then CSS.max_specials = user_max end
+            CSS.breeds = _enabled_specials_for(diff_key, saved_breeds)
+
+            local ok, err = pcall(func, t, slots, method_data, state_data)
+
+            CSS.breeds       = saved_breeds
+            CSS.max_specials = saved_max
+
+            if not ok then error(err) end
+        end)
+    end
+
+    -- (3) Per-pick: weighted selection + max_of_same override.
+    if SpecialsPacing.select_breed_functions and SpecialsPacing.select_breed_functions.get_random_breed then
+        mod:hook(SpecialsPacing.select_breed_functions, "get_random_breed", function(func, slots, specials_settings, method_data, state_data, ...)
+            -- Preserve vanilla coordinated-attack override (set up in setup_functions
+            -- when method_data.always_coordinated + same_breeds). Skipping this
+            -- breaks coordinated attacks.
+            if state_data and state_data.override_breed_name then
+                return func(slots, specials_settings, method_data, state_data, ...)
+            end
+
+            local diff_key = _active_difficulty()
+            local pool = _enabled_specials_for(diff_key, specials_settings.breeds)
+            if #pool == 0 then
+                return func(slots, specials_settings, method_data, state_data, ...)
+            end
+
+            -- Weighted selection. Default weight is 1 → uniform random, matching
+            -- vanilla. Setting any weight to 0 effectively disables that breed (same
+            -- as the disabled checkbox, just a softer route).
+            local total = 0
+            local weights = {}
+            for i, name in ipairs(pool) do
+                local w = mod:get(_setting_key(diff_key, "weight", name)) or 1
+                weights[i] = w
+                total = total + w
+            end
+            if total <= 0 then
+                -- All weights zero — fall back to uniform pick from the pool.
+                return pool[math.random(1, #pool)]
+            end
+
+            -- Apply max_of_same override before the weighted pick so the loop respects it.
+            local user_max_same = mod:get(_setting_key(diff_key, "max_same"))
+            local max_same = user_max_same or method_data.max_of_same or 1
+            if #pool == 1 then
+                -- Only one eligible breed: skip the max_of_same constraint or we softlock.
+                local r = math.random() * total
+                local acc = 0
+                for i, name in ipairs(pool) do
+                    acc = acc + weights[i]
+                    if r <= acc then return name end
+                end
+                return pool[#pool]
+            end
+
+            -- Count current alive-per-breed for max_of_same enforcement.
+            local count = {}
+            for i = 1, #slots do
+                local b = slots[i].breed
+                count[b] = (count[b] or 0) + 1
+            end
+
+            local max_tries = 20
+            for _ = 1, max_tries do
+                local r = math.random() * total
+                local acc = 0
+                for i, name in ipairs(pool) do
+                    acc = acc + weights[i]
+                    if r <= acc then
+                        if (count[name] or 0) < max_same then
+                            return name
+                        end
+                        break
+                    end
+                end
+            end
+
+            -- Last resort: return first eligible (max-of-same not yet hit), else first in pool.
+            for _, name in ipairs(pool) do
+                if (count[name] or 0) < max_same then return name end
+            end
+            return pool[1]
+        end)
+    end
+end
 
 -- ============================================================
 -- Settings change handler

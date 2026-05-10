@@ -141,6 +141,13 @@ local function _result_for_modified(backend_id)
 end
 
 -- ---- salvage: destroy each input item ----
+-- The result table must contain PRODUCED MATERIALS (vanilla salvage returns
+-- scrap / dust bids), NOT the consumed weapon bids. The salvage page's
+-- `on_craft_completed` iterates the result and calls `_set_reward_material_by_index`
+-- which internally does `item_interface:get_key(backend_id)` → unguarded
+-- `item.key` access; passing a just-removed weapon bid crashes the game.
+-- We don't produce any materials in modded, so the result is empty.
+--
 -- For vanilla items: removal is session-only (PlayFab restores them on restart
 -- because the commit-block prevented us from telling the server). For modded
 -- items registered via `_cim_register_craft`: also unregister from the save
@@ -148,7 +155,6 @@ end
 -- entry that points to the salvaged backend_id.
 synth.salvage = function(self, item_backend_ids)
     local mirror = self._backend_mirror
-    local result = {}
     local unregistered = 0
     for i, bid in ipairs(item_backend_ids) do
         mirror:remove_item(bid)
@@ -159,11 +165,10 @@ synth.salvage = function(self, item_backend_ids)
         if mod._cim_clear_modded_loadout_for_bid then
             mod._cim_clear_modded_loadout_for_bid(bid)
         end
-        result[i] = { bid, [3] = 1 }
     end
     mod:echo("[cim] Salvaged " .. tostring(#item_backend_ids) .. " item(s)" ..
              (unregistered > 0 and (" (" .. unregistered .. " modded crafts unregistered)") or ""))
-    return result
+    return {}
 end
 
 -- ---- apply_weapon_skin: weapon = item[1], skin = item[2]; set weapon.skin ----
@@ -296,6 +301,12 @@ synth.reroll_weapon_properties = _reroll_properties
 synth.reroll_jewellery_properties = _reroll_properties
 
 -- ---- reroll_weapon_traits / reroll_jewellery_traits ----
+-- CONTRACT WITH weapon_tweaker: this function reads the trait pool from
+-- `WeaponTraits.combinations[master.trait_table_name]` at roll time. Do NOT
+-- inline a hardcoded trait list or pre-filter the pool elsewhere — weapon_tweaker
+-- mutates that table in place when the user toggles trait checkboxes (adventure
+-- and Chaos Wastes), and any layer of indirection breaks the toggle. Same
+-- contract applies to `_make_craft_synth` further down.
 local function _reroll_traits(self, item_backend_ids)
     local mirror = self._backend_mirror
     local item_interface = Managers.backend:get_interface("items")

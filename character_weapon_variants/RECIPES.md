@@ -1292,6 +1292,126 @@ bindings for their pistol mesh. Mutating the base would break them.
 Hit by `cwv_es_rapier` v0.1.183 → fixed v0.1.187. Crash GUID
 `acb910d1-a625-49b1-b899-86d48d27462d`.
 
+### Same hazard, ILLUSIONS edition: omit `left_hand_unit` on cross-character illusions
+
+The clone-template override (above) handles the variant's IN-GAME equip:
+the cloned template's stripped linking is used when the engine spawns the
+invisible left mesh. But COSMETIC ILLUSIONS hit a different code path
+(`LootItemUnitPreviewer._load_item_units`) that reads
+`item_units.left_hand_unit` from the SKIN entry, then spawns + attaches
+using the BASE template's linking (the BASE still has the full pistol
+component bindings).
+
+If the illusion entry sets `left_hand_unit = "wpn_invisible_weapon"`,
+the previewer will:
+
+1. Append `_3p` → spawn `wpn_invisible_weapon_3p`
+2. Look up `item_template.left_hand_attachment_node_linking.third_person.display`
+   on the BASE template (still has full pistol bindings)
+3. Call `GearUtils.link` which iterates the bindings, calling
+   `Unit.node(display_unit, source)` and `Unit.node(weapon_unit, target)`
+   for each
+4. Crash on the first node that doesn't resolve (we hit `j_leftweaponattach`
+   in v0.1.191; component lookups would also fail)
+
+**Fix: don't set `left_hand_unit` on the illusion entries at all.** Per
+`BackendUtils.get_item_units` line 174, the function unconditionally
+overwrites `item_units.left_hand_unit` from the skin entry's value
+(including nil). With nil, the previewer's `if left_hand_unit then`
+branch (line 281 of `loot_item_unit_previewer.lua`) skips the left-hand
+spawn entirely. No spawn → no node lookup → no crash.
+
+```lua
+-- WRONG — crashes the cosmetic picker
+local iml_entry = {
+    -- ...
+    left_hand_unit = "units/weapons/player/wpn_invisible_weapon",
+    -- ...
+}
+local ws_entry = {
+    -- ...
+    left_hand_unit = "units/weapons/player/wpn_invisible_weapon",
+    -- ...
+}
+
+-- RIGHT — picker skips left-hand spawn entirely
+local iml_entry = {
+    -- ...
+    -- left_hand_unit DELIBERATELY omitted
+    -- ...
+}
+local ws_entry = {
+    -- ...
+    -- left_hand_unit DELIBERATELY omitted
+    -- ...
+}
+```
+
+The variant's DEFAULT skin (no illusion applied) can still carry
+`left_hand_unit = invisible_pistol` via the variant's own IML entry — so
+the no-pistol identity is enforced there. Only the illusion entries omit
+it. With an illusion applied: no left mesh at all, and since the
+intended look was invisible anyway, no visible difference.
+
+Hit by `cwv_es_rapier` v0.1.191 → fixed v0.1.192. Crash GUID
+`962fe355-a0d4-43fd-9a29-bd64fca6a0ac`.
+
+### Same hazard, BODY-skeleton edition: cross-character `unwielded` bones
+
+The rapier crash above was about WEAPON-MESH nodes (`lock_hammer` on
+the pistol unit). The same `Unit.node` failure mode also fires the
+other way — when the linking references a BODY-SKELETON bone that
+exists only on the source character's body but not on the wielder's.
+
+**Canon:** `cwv_es_maul` v0.1.188. Sienna's wizard hammer template
+uses `AttachmentNodeLinking.brw_hammer.third_person.unwielded.source =
+"a_unwielded_brw_mace"` — a custom bone authored on her 3P body for
+the holstered-mace pose. Kruber's body doesn't have it; opening the
+inventory on a Kruber career carrying the Maul crashed with
+`[Script Error]: a_unwielded_brw_mace`.
+
+The cloned-template override (recipe above) only fixes the in-game
+equip path. The **inventory previewer reads the BASE template**, not
+our clone (`feedback_cwv_previewer_template_lookup.md`), and bypasses
+the override. To fix the previewer too you need to also patch the
+BASE template's linking — but scoped tightly so native wielders
+aren't broken.
+
+**Pattern: patch only the offending unwielded slot on the base.**
+
+```lua
+local base = Weapons.<base_template_name>
+if base and base.right_hand_attachment_node_linking
+        and base.right_hand_attachment_node_linking.third_person then
+    base.right_hand_attachment_node_linking.third_person.unwielded = {
+        { source = "j_hips", target = 0 },
+    }
+end
+```
+
+`wielded` and `first_person` typically use universal bones
+(`j_rightweaponattach`, `j_leftweaponattach`, `j_hips`) that exist on
+all 6 character bodies, so leaving them intact preserves the native
+wielder's in-hand behavior. Only the unwielded (holstered) pose
+changes — to a standard hip attachment instead of the
+character-specific bone. Small visual regression for the native
+wielder; fixes the cwv variant's previewer crash.
+
+**Before patching the base, verify the linking entry isn't shared
+with other weapon templates.** Grep `AttachmentNodeLinking.<key>`
+across `Vermintide-2-Source-Code/scripts/`. If only ONE template
+references it, the patch is well-scoped. If multiple do, you'd be
+affecting weapons unrelated to your variant — choose a different
+approach (per-variant runtime hook, or accept the previewer crash and
+warn the user not to preview).
+
+### Decision rule
+
+| Failure node lives on | Patch the CLONE | Patch the BASE | Notes |
+|---|---|---|---|
+| Weapon mesh (e.g. `lock_hammer`, `trigger`) | ✓ Required | ✗ Don't | Native wielder's mesh has the node; only your invisible/swapped mesh lacks it |
+| Body skeleton (e.g. `a_unwielded_brw_mace`) | ✓ Required (in-game) | ✓ Required (previewer), scoped to unwielded | Kruber/Bardin/etc. lack the source character's custom bone |
+
 ---
 
 ## Cosmetic harvesting from a different weapon's skin pool

@@ -103,25 +103,46 @@
 
 ## Glow Maps
 
-### Phase 1 — DONE (v0.8.6 → v0.8.16)
+### Phase 1 — DONE (v0.8.6 → v0.8.37)
+**All 4 weapon glow families fully working through one UI** (verified empirically v0.8.37):
+- `_runed_02..06` themed Veteran (purple/gold/red/green/blue): rune_emissive_color via template mutation
+- `_runed_01` Stylish loot-chest white-glow (~160 weapons): rune_emissive_color via custom-template injection at spawn_inventory_unit
+- `_magic_02` Shyish-Infused (Versus rewards): 5 versus channels via template mutation on `versus`
+- `_magic_01` Weavebound (WoM Athanor): 5 versus channels via custom-template injection (no vanilla template)
+
+**Settings UI**:
+- Override toggle [checkbox]
+- Glow Color [dropdown: Default / White / Purple / Gold / Red / Green / Blue]
+- Advanced: Per-Channel (Magic family)
+  - Master Brightness ×
+  - Use Per-Channel Colors [checkbox]
+  - Lower Gradient Color, Upper Gradient Color, Dots Color (each Default + 6 colors)
+  - 6 per-channel brightness multipliers (× 0.0–5.0; 0 SKIPS that channel)
+
+**"Default" preset** = SKIP that variable, vanilla's native value passes through. New default for all 4 dropdowns so enabling the override doesn't change anything until the user picks a color.
+
+### Old Phase 1 — DONE (v0.8.6 → v0.8.16)
 - Master toggle + plain-color preset dropdown (Purple / Gold / Red / Green / Blue) under "Weapon & Item Appearance"
 - Hook all three `apply_material_settings` copies (`GearUtils`, `_G`, `CosmeticUtils`) using TEMPLATE MUTATION (mutate `MaterialSettingsTemplates[name].x/y/z` to preset values, call vanilla, restore). 1P + 3P + ammo + projectiles + pickups + previewer all painted via vanilla's own write path.
 - 1P verified working empirically (v0.8.16). Earlier hook_safe-overlay approach (v0.8.4-v0.8.15) only painted 3p reliably; 1p silently rejected the second write.
 - Documented in `memory/reference_vt2_weapon_glow_system.md` as the verified canonical pattern
 - Limitation: requires re-applying a cosmetic / re-equipping the weapon to take effect on currently-equipped weapons. Live re-paint not implemented.
 
-### Open
-- [ ] **Live re-paint** (toggle on/off and preset switches take effect immediately on already-equipped weapons). v0.8.7-v0.8.9 attempted a walk over `inventory_system._equipment.slots`; that worked for the wielded slot but corrupted hand-mesh visibility on inspect (X) and 1P state, only recoverable by switching characters. Reverted in v0.8.10. Suspected cause: `Unit.set_vector3_for_materials` on currently-invisible (sheathed) 1P units leaves the engine in a bad state. **Safer approach for next attempt:** hook the wield event (e.g. `SimpleInventoryExtension.wield` / `SimpleInventoryExtension._wield_slot`) so we only paint the unit at the moment it becomes visible, then we never touch sheathed units. Also try template-mutation approach combined with a manual `apply_material_settings` re-call on visible units only.
+### Probe results (v0.8.22-dev `cos glow_scan` — for reference)
+
+| Mesh family | Status | Working variable(s) | Channel role |
+|---|---|---|---|
+| `_runed_02..06` (Veteran themed: purple/gold/red/green/blue) | ✅ Shipped | `rune_emissive_color` (probe #8) | Single channel drives the rune emission |
+| `_magic_02` (Shyish-Infused, Versus rewards) | ✅ Shipped | versus 5-channel set (probe #50-54) | 4 main channels (glow_high/low + smoke_high/low) drive gradient; color_dots controls particles |
+| `_magic_01` (Weavebound, WoM Athanor) | ✅ Shipped | SAME versus 5-channel set | 50+51 (`color_glow_*`) = lower gradient; 52+53 (`color_smoke_*`) = upper gradient; 54 (`color_dots`) = particles |
+| `_runed_01` (Stylish, loot-chest white-glow Veteran) | ✅ Shipped | `rune_emissive_color` (probe #8) | Same variable as themed; "white" IS that variable set to white HDR |
 
 ### Open
-- [ ] **Weavebound + Shyish-Infused need separate handling.** They use different shader paths and the rune_emissive override doesn't visibly affect them. Investigation steps before any UI work:
-  - Run a Lua probe that calls `Unit.set_vector3_for_materials` on a `_magic_01` (Weavebound) unit with a list of plausible variable names (`emissive_color`, `glow_color`, `tint_color`, `gradient_color_a/b`, `swirl_color`, `wind_color`, `color_a`, `color_b`) at high-contrast HDR values. Watch for any visible change.
-  - For Shyish-Infused (`_magic_02`, `versus` template), our overlay of the 5-channel `color_glow_high/low`, `color_smoke_high/low`, `color_dots` set IS landing (verified via [GLOW-trace] in v0.8.5) but didn't produce a visible color change matching the chosen single-color preset. Either the channels need to be co-tuned (you can't set just one to a single color) or the visual is dominated by other shader inputs we haven't found.
-  - If probe finds nothing, extract `wpn_*_magic_01.material` and `wpn_*_magic_02.material` via `vt2_bundle_unpacker` (`C:\Tools\vt2_bundle_unpacker`) and read the actual shader-variable declarations.
-  - Result determines: separate toggle? Custom RGB picker per channel? Or document as untunable?
-- [ ] **Stylish (`_runed_01`, no `material_settings_name`)** doesn't take the override either. Vanilla never calls `apply_material_settings` on these, so our hook never fires. Direct post-spawn `Unit.set_vector3_for_materials` paint also no-ops visibly. Open question: is `_runed_01` genuinely a different material than `_runed_02`, or does the variable just need vanilla's "first apply" to bind? Probe needed to determine whether Stylish weapons can ever be made to glow.
-- [ ] **Husks (other players' 3p weapons in coop)** not covered by live re-paint — they live on `simple_husk_inventory_extension`. Easy follow-up: walk all peer player_units and look up their husk inventory.
-- [ ] **Per-skin / custom-RGB UI** (Phase 2): per-weapon glow settings on the customization screen with a color picker, persistence keyed by skin or weapon_key. Build on top of the verified substrate.
+
+- [ ] **Live re-paint / faster refresh** — settings changes currently require re-equipping the weapon, sometimes a full unequip-and-different-weapon-swap to fully refresh stale visuals. v0.8.7-v0.8.9 tried walking spawned units; that destabilized hand-mesh visibility on inspect and 1P state. Reverted in v0.8.10. **Safer approach for next attempt:** hook the wield event (`SimpleInventoryExtension.wield` / `_wield_slot`) so we re-apply only at the moment a unit becomes visible — never touching sheathed units that are in some half-bound state. Could combine with re-calling `apply_material_settings` (vanilla) on visible units only, leveraging the same template-mutation hook that already does the safe write.
+- [ ] **"Add glow to non-glowy weapons"** — user asked if we can enable glow on weapons that don't have it natively. Answer: not from Lua alone. The emissive shader uniforms only produce visible output if the weapon's mesh material exposes them, and that's defined in the .unit/.material asset, not at runtime. `Unit.set_vector3_for_materials` silently no-ops on non-glow meshes (verified via `cos glow_scan`). **Practical workaround**: every Veteran weapon has a `_runed_01` Stylish mesh variant — equipping that illusion + the override gives the same effect. Could automate via a "Make Glowy" toggle in `_register_custom_illusions` that surfaces the `_runed_01` mesh as a one-click toggle on every weapon (already accessible via vanilla's illusion picker if owned, but a one-click would be nicer). Won't help for weapons whose family doesn't have a `_runed_01` Stylish variant authored — those need new asset work.
+- [ ] **Husks (other players' 3p weapons in coop)** not covered — they live on `simple_husk_inventory_extension`. Walk peer player_units, look up their husk inventory, paint the same way.
+- [ ] **Per-skin custom RGB picker** (Phase 2 UI): rather than a single global color, let users set per-weapon-key colors on the customization screen. Persistence in mod settings keyed by `skin_key`. Build on top of the verified substrate.
 
 ## Other
 - [ ] **3rd person mod** — enable 3rd person camera view so players can see their character model and cosmetics in gameplay

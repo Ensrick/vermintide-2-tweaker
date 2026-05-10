@@ -1,5 +1,16 @@
 # LA Prefix Patch Changelog
 
+## 0.3.0-dev (2026-05-08)
+
+### Added: Quiet Mode toggles for LA quest markers and notifications
+
+Two opt-in VMF checkboxes under "Loremaster's Armoury Quiet Mode":
+
+- **Hide quest markers** — every LA waypoint funnels through `LA.render_marker` (board, scrolls, pickups, sword shrine). Wrapped via monkey-patch in `mod.on_all_mods_loaded`; toggle is read live inside the closure so changes take effect on the next frame without re-patching.
+- **Hide unread-letter notifications** — LA's `NewsFeedUI.init` hook injects an `LA_unread_letter` template into `NewsFeedTemplates`. Because la_prefix_patch is loaded first, our `NewsFeedUI.init` hook is innermost in the chain — by the time our wrapper runs, LA has already inserted the template (LA does its insert *before* calling `func`). We post-wrap `condition_func` to short-circuit when the toggle is on.
+
+Both default to `false` (LA behaves as shipped). Quest progress is unaffected — only the visual reminders are hidden.
+
 ## 0.2.0-dev (2026-05-06)
 
 ### Initial release: suppress Loremaster's Armoury duplicate-hook warnings

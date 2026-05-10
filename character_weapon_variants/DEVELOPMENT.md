@@ -802,6 +802,84 @@ Cosmetics_tweaker has its own scale system (`_unit_path_scale_overrides`, model-
 
 The "wide axis" is model-specific: different unit authoring rotates the mesh differently, so X-vs-Y for "width" needs to be checked per family. Length (Z) is consistent across the families surveyed so far.
 
+## Bayonet / fixed-attachment child units (linked-mesh decorations)
+
+A weapon variant can carry an extra mesh "welded" onto its main rifle/sword/etc. — a bayonet on a musket, a tassel on a sword, a chain on an axe. The mechanism is `World.link_unit`, the same Stingray pattern the Tuskgor Javelin uses for its carrier visual. Compared to baking the decoration into a custom `.unit` file (which would mean shipping a binary asset), the linked-unit approach uses only existing vanilla units + Lua glue.
+
+### Setup pattern
+
+1. **Pick the decoration unit.** Any vanilla `units/weapons/player/<name>` unit works as the child. Both the 1P (`<name>`) and 3P (`<name>_3p`) variants need to exist (verify in `scripts/network_lookup/inventory_package_list.lua`).
+
+2. **Force-load both packages at mod init** via `Managers.package:load(unit_path, ref, nil, async=true, prioritize=true)`. The decoration unit lives in a vanilla package that may not be loaded for this character (e.g. a Kerillian sword used as a Kruber bayonet). Without force-load, the spawn crashes "Resource not loaded" — same family of issue as `feedback_cwv_cross_character_unit_packages.md`. The 3P variant is a **separate package** at `<unit_path>_3p`; load both.
+
+3. **Hook `GearUtils.spawn_inventory_unit`**, gate on the parent's template (template-table reference comparison: `item_template == Weapons.<your_template>`, NOT `item_data.name` — cwv variants inherit base weapon name per `feedback_cwv_clone_name_clobber.md`). The hook is called once per hand on every weapon spawn; gate on `hand == "right"` (or whatever) and on the template.
+
+4. **Spawn the child unit**, then call `World.link_unit(world, child, 0, parent, 0)` to lock the child to the parent's root node. After link, set `Unit.set_local_position`, `Unit.set_local_rotation`, and `Unit.set_local_scale` on the child to position it relative to the parent.
+
+5. **Track the parent → child pair in a weak-keyed table** so visibility and cleanup hooks can find the child later. Also stash via `Unit.set_data(parent, "<key>", child)` for the cleanup hook to find without iterating the table.
+
+6. **Visibility sync**: `World.link_unit` propagates **transforms** but NOT visibility. When the player swaps weapons, vanilla calls `Unit.set_unit_visibility(parent, false)` on the unwielded units (it doesn't destroy them — they're just hidden). The linked child stays fully visible floating in space unless we mirror visibility. Hook `mod:hook_safe("SimpleInventoryExtension", "_wield_slot")` and walk the tracked-pairs table; for each pair, set the child's visibility based on whether the parent matches `equipment.right_hand_wielded_unit` (or `_3p`).
+
+7. **Cleanup**: hook `GearUtils.destroy_wielded` to read the data slot and `Managers.state.unit_spawner:mark_for_deletion(child)`. Important: `mark_for_deletion` is **async** (queues for end-of-next-frame). Call `Unit.set_unit_visibility(child, false)` BEFORE marking for deletion or the child renders for one extra frame at its last world position (the "floating bayonet" symptom).
+
+8. **Idempotent attach**: the spawn hook can fire twice on the same parent unit (e.g. cosmetic application that refreshes equipment without going through `destroy_wielded`). Make `_attach` skip if a child is already tracked for the parent — otherwise the second attach orphans the first child. Also have the visibility-sync hook destroy "orphan" children (parent dead, child alive) as a defensive cleanup.
+
+### Axis convention notes (from the musket bayonet saga)
+
+For Kruber's empire-handgun rifle (`wpn_empire_handgun_t1`) the local axes are:
+- **+Y** = barrel direction (the axis the rifle's `_type_transforms` Y-scale stretches along)
+- **+Z** = "up" perpendicular (positive Z places the child above the rifle)
+- **+X** = side perpendicular
+
+For Empire 1H sword meshes (`wpn_emp_sword_*`), the blade extends along the model's **+Y**. Mounting the blade along the rifle's barrel needs `Quaternion.axis_angle(Vector3(1, 0, 0), -π/2)` (rotate -90° about local X — swings model +Y to point along rifle +Y... wait, see history below for the actual finding).
+
+The right convention is empirically derived per mesh family — there's no universal rule. The musket bayonet went through 5+ iterations before landing on `position {0, 0.76, 0.025}` + `rotation axis_angle(X, -π/2)` for the held pose.
+
+## Stance toggle via runtime template swap
+
+The musket variant has TWO templates registered on `Weapons.*`:
+- `musket_template` — ranged (handgun shoot)
+- `musket_template_melee` — clone of a melee template (Kruber's tuskgor spear in this case)
+
+Pressing the special key (action_three) swaps the player's wielded weapon between the two templates. Vanilla doesn't natively support stance toggling, so we implement it by **destroying and re-creating the slot's equipment** with a different template returned from a `BackendUtils.get_item_template` hook.
+
+### Components
+
+1. **Per-item stance flag** at `item_data.mod_data.cwv_<variant>_stance` ("ranged" / "melee"). Stored on the IML entry's `mod_data` (a CWV convention used by `_build_entry`); persists across wield/unwield because the IML entry isn't recreated.
+
+2. **`action_three.default`** on each template: `kind = "dummy"`, `total_time = ~0.4`, with an `enter_function` that calls a stance-toggle helper. The helper:
+   - Reads + flips the stance flag on `item_data.mod_data`
+   - **Captures current ammo** via `ammo_extension:total_ammo_fraction()` BEFORE destroying the slot (otherwise the new spawn refills to max — every toggle = free reload)
+   - Calls `inv:destroy_slot(slot, true)` → `inv:add_equipment(slot, item_data, nil, nil, ammo_fraction)` → `inv:wield(slot)`. The 5th arg to `add_equipment` is the ammo percent passed through to the new equipment.
+
+3. **`BackendUtils.get_item_template` hook**: when `add_equipment` re-runs `create_equipment`, it calls `BackendUtils.get_item_template(item_data)` to look up the template. Our hook intercepts: if the item is the variant AND `mod_data.<stance> == "melee"`, return `Weapons.<variant>_melee`; otherwise return the ranged template. The recreated weapon spawns with the swapped moveset.
+
+4. **`lookup_data` attach** on every sub-action of the cloned templates. Vanilla `weapons.lua:305-312` walks every action.sub_action of every `Weapons[<key>]` entry at boot and attaches `lookup_data = { item_template_name, action_name, sub_action_name }`. Our mod-loaded templates miss that pass — without the manual attach, the chain selector's `resolve_action_selector` crashes "attempt to index field 'lookup_data' (a nil value)" the first time the template is touched.
+
+5. **Force-load alternate template's state machine**. The melee template's state_machine path (e.g. `units/beings/player/first_person_base/state_machines/melee/polearm`) is loaded for the character only when their loadout includes a weapon using it. Add it to `inventory_package_list.lua` to verify the path is loadable, then `Managers.package:load` at mod init. State machines DO load via the per-asset synthetic package mechanism, same as units.
+
+6. **Override `display_unit` on the alternate template** to a Kruber-loaded rig (e.g. `display_1h_handguns`). The cloned template's inherited `display_unit` may live in another character's package and isn't always loadable as a standalone path (verified via `inventory_package_list.lua`). The previewer's job is to spin the wielded mesh on a stage; any rig that's loaded works visually.
+
+### Per-template runtime overrides (rotation, position, scale)
+
+The cloned melee template uses a different `attachment_node_linking` than the ranged template (e.g. `polearm` vs `pistol.right`), so the rifle ends up in a different orientation when wielded in melee mode. Apply corrections in the `GearUtils.spawn_inventory_unit` hook, gated on `item_template == Weapons.<melee_template>`:
+
+- **Rotation**: `Quaternion.axis_angle(...)` to rotate the rifle so the receiver/stock face the right way. Compose with multiple axes via `Quaternion.multiply(q1, q2)` (q2 applied first in local frame, then q1 on top). For Kruber's polearm grip the musket needs `q_y * q_z` where both are `+π/2`.
+- **Position**: read current local position (set by attachment_node_linking), ADD a delta, set back. Compose-friendly so the polearm offset isn't fought.
+- **1P-only scale-down**: handheld view often reads too large in a polearm grip. Apply additional scale to `v_w1p` only, by reading current scale (set by the type-level transform at `GearUtils.create_equipment` hook time) and multiplying. 3P stays at the type-level scale so other players see the normal-sized weapon.
+
+All three apply AFTER the type-level CWV transforms run (CWV transforms fire from `create_equipment`; our overrides fire from the later `spawn_inventory_unit`), so they compose correctly without fighting the existing scale logic.
+
+### Floating-bayonet failure modes (and fixes)
+
+Three distinct ways the bayonet can render where it shouldn't:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Bayonet visible after weapon swap | `Unit.set_unit_visibility` on parent doesn't propagate to linked child | `_wield_slot` post-hook: walk tracked pairs, set child visibility per parent |
+| One-frame "floating bayonet" after stance toggle | `mark_for_deletion` is async; child renders at last world position for one frame | Call `Unit.set_unit_visibility(child, false)` BEFORE `mark_for_deletion` |
+| Extra bayonet on ranged equip ("orphan") | A code path bypasses `destroy_wielded` (cosmetic application, equipment refresh) and re-fires our spawn hook on the same parent → second bayonet attached, first orphans | (a) Make `_attach` idempotent: skip if pair already tracked for the rifle. (b) `_wield_slot` post-hook also destroys orphans (parent dead, child alive) as defensive cleanup |
+
 ## Reference: Base Weapon Keys
 
 Use `ItemMasterList` keys (not `item_type`):

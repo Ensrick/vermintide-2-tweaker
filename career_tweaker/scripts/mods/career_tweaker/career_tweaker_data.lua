@@ -80,6 +80,8 @@ return {
                 sub_widgets = {
                     { setting_id = "balance_zealot_merc_allow_random_crits", type = "checkbox", default_value = false },
                     { setting_id = "balance_whc_parry_extended_window", type = "checkbox", default_value = false },
+                    { setting_id = "balance_stagger_thp_rework", type = "checkbox", default_value = false },
+                    { setting_id = "balance_thp_breed_normalize", type = "checkbox", default_value = false },
                 },
             },
         },

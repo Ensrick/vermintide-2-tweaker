@@ -55,7 +55,7 @@ local loc = {
         en = "Override Weapon Glow Color",
     },
     glow_override_enable_tooltip = {
-        en = "Repaints rune-emissive runes/edges on weapons that already have a glow. Takes effect on the next weapon spawn — re-apply a cosmetic / re-equip in the loadout to see a new color on a currently-equipped weapon. Weavebound (Winds of Magic) and Shyish-Infused weapons use different shaders and are NOT affected by this setting — they may need a separate option later.",
+        en = "Repaints emissive runes/edges/animated glow on weapons. Covers rune-glow Veteran weapons (themed AND loot-chest white-glow), Weavebound (Winds of Magic), and Shyish-Infused (Versus rewards) — all routed through the same color picker. Takes effect on the next weapon spawn — re-apply a cosmetic / re-equip in the loadout to see a new color on a currently-equipped weapon.",
     },
     glow_override_preset = {
         en = "Glow Color",
@@ -63,11 +63,83 @@ local loc = {
     glow_override_preset_tooltip = {
         en = "Color applied to glow-capable weapons when the override above is enabled.",
     },
-    glow_preset_purple = { en = "Purple" },
-    glow_preset_gold   = { en = "Gold"   },
-    glow_preset_red    = { en = "Red"    },
-    glow_preset_green  = { en = "Green"  },
-    glow_preset_blue   = { en = "Blue"   },
+    glow_preset_default = { en = "Default (no override)" },
+    glow_preset_white   = { en = "White"  },
+    glow_preset_purple  = { en = "Purple" },
+    glow_preset_gold    = { en = "Gold"   },
+    glow_preset_red     = { en = "Red"    },
+    glow_preset_green   = { en = "Green"  },
+    glow_preset_blue    = { en = "Blue"   },
+
+    glow_advanced_group = {
+        en = "Advanced: Per-Channel (Magic family)",
+    },
+    glow_mult_master = {
+        en = "Master Brightness ×",
+    },
+    glow_mult_master_tooltip = {
+        en = "Multiplier applied to ALL channels' brightness (1.0 = no change). Set above 1 to brighten everything, below 1 to dim. Useful for taming over-bright bloom on multi-channel weapons.",
+    },
+    glow_per_channel_color_enable = {
+        en = "Use Per-Channel Colors (Magic family)",
+    },
+    glow_per_channel_color_enable_tooltip = {
+        en = "When OFF (default), magic-family weapons (Weavebound + Shyish-Infused) use the main Glow Color above for all channels. When ON, the three pickers below drive each visual element separately: Lower Gradient (color_glow_high+low), Upper Gradient (color_smoke_high+low), and Dots (color_dots). Standard rune-family glowy weapons always use the main Glow Color regardless of this toggle — they only have one channel.",
+    },
+    glow_color_lower_gradient = {
+        en = "Lower Gradient Color",
+    },
+    glow_color_lower_gradient_tooltip = {
+        en = "Color for the LOWER part of the visible gradient on Weavebound (`_magic_01`) and Shyish-Infused (`_magic_02`) weapons (drives color_glow_high + color_glow_low). Only takes effect when 'Use Per-Channel Colors' is enabled.",
+    },
+    glow_color_upper_gradient = {
+        en = "Upper Gradient Color",
+    },
+    glow_color_upper_gradient_tooltip = {
+        en = "Color for the UPPER part of the visible gradient on `_magic_*` weapons (drives color_smoke_high + color_smoke_low). Only takes effect when 'Use Per-Channel Colors' is enabled.",
+    },
+    glow_color_dots = {
+        en = "Dots Color",
+    },
+    glow_color_dots_tooltip = {
+        en = "Color for the dots/particle layer on `_magic_*` weapons (drives color_dots). Only takes effect when 'Use Per-Channel Colors' is enabled AND Dots Brightness × is above 0.",
+    },
+    glow_mult_rune = {
+        en = "Rune Emissive (themed + Stylish) ×",
+    },
+    glow_mult_rune_tooltip = {
+        en = "Brightness multiplier for `rune_emissive_color`. Drives the glow on themed Veteran weapons (`_runed_02..06`) AND Stylish loot-chest white-glow weapons (`_runed_01`). Set to 0 to skip — leaves whatever vanilla wrote (or the mesh's baked default for Stylish).",
+    },
+    glow_mult_glow_high = {
+        en = "Glow High (Magic — lower gradient) ×",
+    },
+    glow_mult_glow_high_tooltip = {
+        en = "Brightness multiplier for `color_glow_high`. Drives the LOWER part of the visible gradient on Weavebound (`_magic_01`) and Shyish-Infused (`_magic_02`) weapons (per probe v0.8.22). Set to 0 to skip.",
+    },
+    glow_mult_glow_low = {
+        en = "Glow Low (Magic — lower gradient) ×",
+    },
+    glow_mult_glow_low_tooltip = {
+        en = "Brightness multiplier for `color_glow_low`. Pairs with Glow High to drive the lower gradient on `_magic_*` weapons. Set to 0 to skip.",
+    },
+    glow_mult_smoke_high = {
+        en = "Smoke High (Magic — upper gradient) ×",
+    },
+    glow_mult_smoke_high_tooltip = {
+        en = "Brightness multiplier for `color_smoke_high`. Drives the UPPER part of the visible gradient on `_magic_*` weapons (per probe v0.8.22). Set to 0 to skip.",
+    },
+    glow_mult_smoke_low = {
+        en = "Smoke Low (Magic — upper gradient) ×",
+    },
+    glow_mult_smoke_low_tooltip = {
+        en = "Brightness multiplier for `color_smoke_low`. Pairs with Smoke High to drive the upper gradient on `_magic_*` weapons. Set to 0 to skip.",
+    },
+    glow_mult_dots = {
+        en = "Dots Particles (Magic — experimental) ×",
+    },
+    glow_mult_dots_tooltip = {
+        en = "Brightness multiplier for `color_dots`. Probe (v0.8.22) showed this channel DARKENS Weavebound when set high and has unclear effect on Shyish-Infused. Default 0 (skip — preserves vanilla's value on Shyish, no effect on Weavebound). Set above 0 to experiment.",
+    },
 
     ct_es_mace_gk_shield_01_name = {
         en = "Mace & Bretonnian Shield",

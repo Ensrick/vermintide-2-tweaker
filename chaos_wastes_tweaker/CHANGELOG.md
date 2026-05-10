@@ -1,5 +1,9 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.3.9-dev (2026-05-09)
+
+Version bump for batch deploy. No behaviour changes since 0.3.4-dev — the gap reflects internal version increments during cross-mod work that didn't land separate CW changes.
+
 ## 0.3.4-dev (2026-05-01)
 
 ### Fixed: Banned Weapon Traits list

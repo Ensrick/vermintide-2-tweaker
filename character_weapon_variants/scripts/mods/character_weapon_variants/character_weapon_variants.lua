@@ -1,6 +1,6 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.187-dev"
+local MOD_VERSION = "0.1.247-dev"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- In-game chat echo so version is visible without opening console.log —
@@ -353,6 +353,44 @@ local _variant_definitions = {
 		item_type       = "cwv_es_outrider_grenade_launcher",
 	},
 	{
+		-- Musket: Kruber's vanilla rifle (`es_handgun` / `handgun_template_1`)
+		-- on a long-barrel, slow-reload tune. Visually the rifle stretched
+		-- 1.35x along Y (length axis) for a "long musket" silhouette via
+		-- type-level scale. A bayonet (Kruber's 1H sword `wpn_emp_sword_02_t1`,
+		-- thinned and shortened) is spawned and link-attached to the rifle
+		-- unit at equip time — see `_attach_musket_bayonet` below.
+		--
+		-- Stat changes (in `musket_template`):
+		--   * Damage profile: clone of `shot_sniper` with attack and impact
+		--     both 2x. Dropoff curve preserved (vanilla flintlocks were
+		--     accurate-ish at close range, increasingly bad past 25m, which
+		--     reads correctly through shot_sniper's `armor_modifier_far`
+		--     and `power_distribution_far` curves).
+		--   * Reload time: 2x vanilla (1.5s → 3.0s ammo_data.reload_time).
+		--   * Max ammo: 12 (vanilla 16).
+		--   * Alert range: 25m (vanilla 10m) — broadcasts the shot to a
+		--     blunderbuss-equivalent radius. Black-powder boom.
+		--
+		-- TODO(v2): bayonet melee mode bound to action_three (special key)
+		-- using a slowed-down clone of Kerillian's spear (`we_spear`,
+		-- template `two_handed_spears_elf_template_1`). v1 ships ranged-only.
+		item_key        = "cwv_es_musket",
+		base_weapon     = "es_handgun",
+		display_name    = "Musket",
+		description     = "A long-barrel imperial musket — heavier and slower than the standard rifle, but harder-hitting and fitted with a fixed bayonet for close work. The Reikland regiments who carry these prefer one good shot to a flurry of mediocre ones.",
+		character       = "empire_soldier",
+		careers         = _es_all_careers,
+		right_hand_unit = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1",
+		inventory_icon  = "icon_wpn_empire_handgun_t1",
+		hud_icon        = "weapon_generic_icon_units/weapons/weapon_display/display_rifle",
+		skin_display_name = "Musket",
+		rarity          = "exotic",
+		template        = "musket_template",
+		traits          = { "ranged_increase_power_level_vs_armour_crit" },
+		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
+		item_type       = "cwv_es_musket",
+	},
+	{
 		item_key        = "cwv_es_longsword_nordland",
 		base_weapon     = "es_bastard_sword",
 		display_name    = "Nordland Claymore",
@@ -556,7 +594,18 @@ local _variant_definitions = {
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
 		right_hand_unit = "units/weapons/player/wpn_fencingsword_01_t1/wpn_fencingsword_01_t1",
-		left_hand_unit  = "units/weapons/player/wpn_invisible_weapon",
+		-- Single-handed: NO left mesh at all. Sentinel `no_left_hand = true`
+		-- tells `_build_entry` to nil out the inherited `left_hand_unit` from
+		-- the base fencing-sword IML entry (which has the pistol). With
+		-- entry.left_hand_unit = nil, vanilla's
+		-- `if item_units.left_hand_unit then ... end` skips the entire
+		-- left-hand spawn pipeline (in-game equip + cosmetic picker BOTH).
+		-- Replaces the v0.1.187 invisible-pistol approach which crashed the
+		-- cosmetic picker on default-skin render (crash GUIDs
+		-- 962fe355-... and 77e636ee-...). Picker no longer tries to
+		-- attach anything at j_leftweaponattach because there's nothing
+		-- to attach.
+		no_left_hand    = true,
 		-- TODO icon: placeholder uses vanilla fencing-sword icon. Variant
 		-- is NOT complete until proper inventory_icon + hud_icon are
 		-- authored.
@@ -569,61 +618,6 @@ local _variant_definitions = {
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 		item_type       = "cwv_es_rapier",
 		-- Scale lives at type level: _type_transforms.cwv_es_rapier.
-	},
-	{
-		-- Brace-Repeater: experimental variant with DIFFERENT 1P and 3P
-		-- meshes. Saltzpyre's `wh_brace_of_pistols` template cloned for
-		-- all 4 Kruber careers. From the player's first-person view,
-		-- looks and animates like the brace of pistols (cross-arm fire,
-		-- two-handed reload). To other players (3P body) and in the
-		-- inventory preview, it renders as Kruber's repeating handgun
-		-- and plays his 3P repeater animations.
-		--
-		-- Per-perspective unit-swap mechanism (NEW for CWV):
-		--   right_hand_unit / left_hand_unit  → 1P meshes (the brace pistols)
-		--   right_hand_unit_3p_override        → 3P mesh (the repeater)
-		--   left_hand_unit_3p_override = false → no left-hand 3P unit
-		-- The new `_cwv_3p_unit_override_swap` hook on
-		-- `GearUtils.spawn_inventory_unit` handles the swap. Same hook
-		-- fires on husk spawns (remote players' view of you), so
-		-- third-party observers also see the repeater.
-		--
-		-- Animation: 3P wield routes to `to_repeating_handgun`. Source
-		-- and target templates share most event names (attack_shoot,
-		-- attack_shoot_fast, lock_target) so the per-action remap is
-		-- minimal — only `special_action` (brace's "fire all 8 pistols"
-		-- finisher) needs a substitute.
-		--
-		-- Caveats: 1P brace reload anim and 3P repeater reload anim have
-		-- different durations; gameplay timing follows 1P. Visual desync
-		-- between the two perspectives is expected.
-		item_key        = "cwv_es_brace_repeater",
-		base_weapon     = "wh_brace_of_pistols",
-		display_name    = "Repeater Brace",
-		description     = "Eight pistols loaded into the action of a reikland repeater handgun — a duellist's volley, fed through a soldier's chamber. Looks like a clutch of pistols in the hand; reads as a volley gun on the field.",
-		character       = "empire_soldier",
-		careers         = _es_all_careers,
-		-- 1P meshes: the brace of pistols (right + left hand pistol).
-		right_hand_unit = "units/weapons/player/wpn_emp_pistol_01_t1/wpn_emp_pistol_01_t1",
-		left_hand_unit  = "units/weapons/player/wpn_emp_pistol_01_t1/wpn_emp_pistol_01_t1",
-		-- 3P override: repeater for right hand, nothing for left.
-		-- See `_cwv_3p_unit_override_swap` (file scope, registered on
-		-- GearUtils.spawn_inventory_unit) for the swap mechanism.
-		-- The override path is the FULL 3P unit path (suffix already
-		-- applied) — vanilla appends `_3p` to the regular right_hand_unit,
-		-- but we bypass that and supply the exact unit name.
-		right_hand_unit_3p_override = "units/weapons/player/wpn_emp_handgun_repeater_t1/wpn_emp_handgun_repeater_t1_3p",
-		left_hand_unit_3p_override  = false,
-		-- TODO icon: placeholder uses vanilla brace icon. Variant is NOT
-		-- complete until proper inventory_icon + hud_icon are authored.
-		inventory_icon  = "icon_wpn_emp_pistol_01_t1",
-		hud_icon        = "weapon_generic_icon_brace_of_pistol",
-		skin_display_name = "Repeater Brace",
-		rarity          = "exotic",
-		template        = "brace_repeater_template",
-		traits          = { "ranged_replenish_ammo_headshot" },
-		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
-		item_type       = "cwv_es_brace_repeater",
 	},
 	{
 		item_key        = "cwv_es_dual_swords",
@@ -682,14 +676,19 @@ local _variant_definitions = {
 		item_type       = "cwv_es_sword_and_mace",
 	},
 	{
-		-- Cudgel: Kruber's mace moveset (one_handed_hammer_template_1) with a
-		-- stat-clone (cudgel_template) — +20% speed, −15% power. Visual model
-		-- is the Empire mace from his mace+sword (`wpn_emp_mace_04_t2`),
-		-- visually distinct from the vanilla `es_1h_mace` mace.
+		-- Cudgel: Saltzpyre's falchion moveset (one_hand_falchion_template_1)
+		-- with every cutting hit converted to a crushing one — slashing damage
+		-- profiles → blunt cousins, axe/sword hit effects → hammer effects,
+		-- slashing impact sounds → blunt thuds. See `cudgel_template` clone
+		-- below. Visual model stays the Empire mace from Kruber's mace+sword
+		-- (`wpn_emp_mace_04_t2`), so it reads as a heavier baton with the
+		-- charge-and-release tempo of a falchion. Cross-character moveset
+		-- (falchion is wh_1h_falchion's native template) — Kruber's 3P body
+		-- already plays falchion anims via WT's `wh_1h_falchion` cross-access.
 		item_key        = "cwv_es_cudgel",
 		base_weapon     = "es_1h_mace",
 		display_name    = "Cudgel",
-		description     = "A lighter, faster Reikland mace. Less crushing weight, more swings per breath.",
+		description     = "A heavy iron baton swung with a duellist's tempo — wind up, snap through, follow with a crushing overhead.",
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
 		right_hand_unit = "units/weapons/player/wpn_emp_mace_04_t2/wpn_emp_mace_04_t2",
@@ -1160,25 +1159,38 @@ local _kruber_dual_axes_remap = {
 -- attack_swing_right_diagonal) are NOT remapped — they play natively. Only
 -- events missing from the closed list need entries below.
 local _kruber_axe_falchion_remap = {
-	-- H1 chain: source charge_down → heavy_down (overhead). Kruber's
-	-- dual_hammer_sword has no overhead in its closed list — route to right-side
-	-- heavy so H1 cocks-right and strikes-right (direction-coherent pair).
-	attack_swing_charge_down = "attack_swing_charge_right",
-	attack_swing_heavy_down  = "attack_swing_heavy_right_diagonal",
-	-- H2 release: source heavy_left → left-diagonal (preserves left direction).
-	-- H2's charge `attack_swing_charge_left` is already in the closed list, so
-	-- no charge remap needed.
-	attack_swing_heavy_left  = "attack_swing_heavy_left_diagonal",
-	-- Light variant: source down_left → left_diagonal (both left-side).
+	-- ===== HEAVY CHAIN — chain-context rule =====
+	-- The body's clip selection depends on chain STATE, not just event name.
+	-- An event in the closed vocab can still produce no animation if the
+	-- body's current chain state has no clip mapped for it. Native Kruber's
+	-- mace+sword heavy chain from IDLE (per dual_wield_hammer_sword.lua):
+	--   H1 from idle:   `action_one.default`             → charge_left  → heavy_left_diagonal
+	--   H2 (chained):   `action_one.default_right_heavy` → charge_left  → heavy_right_diagonal
+	-- The body's "from idle" state has clips for charge_left and
+	-- heavy_left_diagonal. It does NOT have clips for charge_right or
+	-- heavy_right_diagonal from idle — those reachable only after the chain
+	-- has advanced. v0.1.158-v0.1.192 mapped H1 to charge_right +
+	-- heavy_right_diagonal; result was the body stood still on H1 because
+	-- those clips aren't reachable from idle.
+	--
+	-- Fix: H1 mirrors Kruber's idle-heavy chain (left-diagonal). H2 maps to
+	-- Kruber's H2 chain (right-diagonal). Source's H2 charge is already
+	-- attack_swing_charge_left and matches Kruber's H2 charge natively, so
+	-- no charge remap is needed for H2.
+	attack_swing_charge_down = "attack_swing_charge_left",          -- H1 charge
+	attack_swing_heavy_down  = "attack_swing_heavy_left_diagonal",  -- H1 release (Kruber idle H1)
+	attack_swing_heavy_left  = "attack_swing_heavy_right_diagonal", -- H2 release (Kruber chained H2)
+
+	-- ===== LIGHT VARIANT =====
+	-- Source down_left → left_diagonal. Lights chain from idle and
+	-- left_diagonal is in the idle-light vocab; plays correctly.
 	attack_swing_down_left   = "attack_swing_left_diagonal",
-	-- Push-attack (source `light_attack_bopp` fires `attack_swing_down`).
-	-- attack_swing_down IS in the closed list (target's own light_attack_bopp),
-	-- but the target clip is a downward mace chop (right-hand). User wants a
-	-- left-hand (falchion) swing for the push-attack visual. Remap to
-	-- `attack_swing_left` — target's light_attack_left, the closest left-hand
-	-- horizontal swing in the closed vocab. Refinement of the closed-vocab
-	-- rule: "in target vocab" is necessary but not sufficient; the target's
-	-- clip for that event must also match the visual intent.
+
+	-- ===== PUSH-ATTACK =====
+	-- Source `light_attack_bopp` fires `attack_swing_down`. In target vocab
+	-- but plays a right-hand mace chop. User wants a left-hand falchion
+	-- swing — remap to attack_swing_left (Kruber's light_attack_left).
+	-- "In vocab" is necessary but not sufficient; the clip must match intent.
 	attack_swing_down        = "attack_swing_left",
 }
 
@@ -1634,45 +1646,78 @@ end
 _create_imperial_dual_swords_template()
 
 -- ============================================================
--- Cudgel template (modified one_handed_hammer_template_1)
--- +20% attack speed, −15% power (damage + stagger), −0.05 reach on every sweep.
--- Native template applies natively on Kruber's body — no anim work needed.
+-- Cudgel template (one_hand_falchion_template_1 — recoloured to blunt)
 -- ============================================================
+-- Saltzpyre's falchion moveset (charge-and-release light combo, smiter
+-- heavy) but every cutting hit becomes a crushing one. Cosmetic stays
+-- the empire mace mesh — only the moveset, damage_type, and impact
+-- effects/sounds change.
+--
+-- Damage profile swap: the falchion uses one of three slashing profile
+-- families across its sweeps. Each maps to a vanilla blunt cousin with
+-- the same cleave/range/stagger shape:
+--
+--   light_slashing_axe_linesman       → light_blunt_tank_diag    (light combo sweeps)
+--   light_slashing_axe_linesman_upper → light_blunt_tank_upper   (light upper variants)
+--   medium_slashing_smiter_1h         → medium_blunt_smiter_1h   (heavy attack)
+--
+-- All three blunt targets are vanilla DamageProfileTemplates entries
+-- (see damage_profile_templates.lua:253+ / 430+). Push profiles
+-- (medium_push / light_push) are universal and stay untouched.
+--
+-- Effects/sounds: hit_effect → melee_hit_hammers_1h, slashing_hit
+-- swoosh/impact → blunt_hit (and _armour). display_unit and block-arc
+-- sound also swapped so the inventory rig and parry foley match a
+-- mace, not a falchion.
+local _CUDGEL_DAMAGE_PROFILE_SWAP = {
+	light_slashing_axe_linesman       = "light_blunt_tank_diag",
+	light_slashing_axe_linesman_upper = "light_blunt_tank_upper",
+	medium_slashing_smiter_1h         = "medium_blunt_smiter_1h",
+}
 
-local _CUDGEL_SPEED_MULT = 1.20
-local _CUDGEL_POWER_MULT = 0.85
--- Reach: lighter mace = shorter haft / shorter wrist arc. Subtracted from
--- whatever the inherited es_1h_mace sub-action authored, so light attacks
--- (1h_hammers light_attack range_mod = 1.2) become 1.15 and heavies
--- (one heavy at 1.3) become 1.25 — uniform −0.05 across every sweep that
--- already has a range_mod authored. Push / block etc. lack range_mod so
--- they're naturally untouched (the guard skips them).
-local _CUDGEL_RANGE_DELTA = -0.05
+local _CUDGEL_HIT_EFFECT_SWAP = {
+	melee_hit_axes_1h  = "melee_hit_hammers_1h",
+	melee_hit_sword_1h = "melee_hit_hammers_1h",
+}
+
+local _CUDGEL_IMPACT_SOUND_SWAP = {
+	slashing_hit         = "blunt_hit",
+	slashing_hit_armour  = "blunt_hit_armour",
+}
 
 local function _create_cudgel_template()
-	if not Weapons or not Weapons.one_handed_hammer_template_1 then
-		mod:warning("one_handed_hammer_template_1 not found — Cudgel template unavailable")
+	if not Weapons or not Weapons.one_hand_falchion_template_1 then
+		mod:warning("one_hand_falchion_template_1 not found — Cudgel template unavailable")
 		return
 	end
 	if Weapons.cudgel_template then return end
 
-	local template = table.clone(Weapons.one_handed_hammer_template_1, true)
+	local template = table.clone(Weapons.one_hand_falchion_template_1, true)
 
+	local swapped, hit_swapped, sound_swapped = 0, 0, 0
 	if template.actions then
 		for _, action_group in pairs(template.actions) do
 			if type(action_group) == "table" then
 				for _, sub_action in pairs(action_group) do
 					if type(sub_action) == "table" then
-						if sub_action.anim_time_scale then
-							sub_action.anim_time_scale = sub_action.anim_time_scale * _CUDGEL_SPEED_MULT
+						local dp = sub_action.damage_profile
+						if dp and _CUDGEL_DAMAGE_PROFILE_SWAP[dp] then
+							sub_action.damage_profile = _CUDGEL_DAMAGE_PROFILE_SWAP[dp]
+							swapped = swapped + 1
 						end
-						if sub_action.damage_profile then
-							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_cudgel_", {
-								damage = _CUDGEL_POWER_MULT, stagger = _CUDGEL_POWER_MULT,
-							})
+						local hit = sub_action.hit_effect
+						if hit and _CUDGEL_HIT_EFFECT_SWAP[hit] then
+							sub_action.hit_effect = _CUDGEL_HIT_EFFECT_SWAP[hit]
+							hit_swapped = hit_swapped + 1
 						end
-						if sub_action.range_mod then
-							sub_action.range_mod = sub_action.range_mod + _CUDGEL_RANGE_DELTA
+						local imp = sub_action.impact_sound_event
+						if imp and _CUDGEL_IMPACT_SOUND_SWAP[imp] then
+							sub_action.impact_sound_event = _CUDGEL_IMPACT_SOUND_SWAP[imp]
+							sound_swapped = sound_swapped + 1
+						end
+						local nd = sub_action.no_damage_impact_sound_event
+						if nd and _CUDGEL_IMPACT_SOUND_SWAP[nd] then
+							sub_action.no_damage_impact_sound_event = _CUDGEL_IMPACT_SOUND_SWAP[nd]
 						end
 					end
 				end
@@ -1680,9 +1725,15 @@ local function _create_cudgel_template()
 		end
 	end
 
+	-- Inventory / preview shows on a hammer display rig (mace mesh sits in
+	-- the hammer cradle), not the falchion's. Block-arc swoosh swapped
+	-- to the wood-block blunt foley used by 1h hammers.
+	template.display_unit = "units/weapons/weapon_display/display_1h_hammer"
+	template.sound_event_block_within_arc = "weapon_foley_blunt_1h_block_wood"
+
 	Weapons.cudgel_template = template
-	mod:info("Created cudgel_template (spd=%.0f%% power=%.0f%% range=%+.2f)",
-		_CUDGEL_SPEED_MULT * 100, _CUDGEL_POWER_MULT * 100, _CUDGEL_RANGE_DELTA)
+	mod:info("Created cudgel_template (one_hand_falchion_template_1 → blunt: %d damage profiles, %d hit effects, %d impact sounds swapped)",
+		swapped, hit_swapped, sound_swapped)
 end
 
 _create_cudgel_template()
@@ -2068,6 +2119,27 @@ local function _create_maul_template()
 		end
 	end
 
+	-- Patch the BASE template's right_hand_attachment_node_linking too.
+	-- Reason: the inventory previewer reads BASE template attachments,
+	-- not our clone (per `feedback_cwv_previewer_template_lookup.md`).
+	-- Without this, opening the inventory on a Kruber career carrying
+	-- the Maul triggers `[Script Error]: a_unwielded_brw_mace` on the
+	-- preview body. Crash GUID `258c5f1c-dbe0-4ebd-8ef6-0b43d95c3b9d`,
+	-- v0.1.187. Replace ONLY the `third_person.unwielded` binding —
+	-- `wielded` uses the universal `j_rightweaponattach` (all bodies
+	-- have it), so leaving it alone preserves Sienna's native
+	-- in-hand behavior. Cost: Sienna's holstered-mace pose now sits on
+	-- standard hips instead of her dedicated mace-bone — small visual
+	-- regression for her, fixes Kruber crash. AttachmentNodeLinking.brw_hammer
+	-- is referenced by ONLY this one weapon template (verified via
+	-- source-wide grep), so the patch is well-scoped.
+	if base and base.right_hand_attachment_node_linking
+			and base.right_hand_attachment_node_linking.third_person then
+		base.right_hand_attachment_node_linking.third_person.unwielded = {
+			{ source = "j_hips", target = 0 },
+		}
+	end
+
 	mod:info("Created maul_template (burn scrub: %d profile swap, 3p anim remap: %d entries, wield_3p=to_2h_hammer)",
 		1, 9)
 end
@@ -2344,6 +2416,887 @@ local function _create_outrider_grenade_launcher_template()
 end
 
 _create_outrider_grenade_launcher_template()
+
+-- ============================================================
+-- Musket template (modified handgun_template_1)
+-- ============================================================
+-- Kruber's vanilla rifle moveset, with stats tuned for an "imperial
+-- long musket": slower reload, heavier per-shot damage, smaller ammo
+-- pool, much louder report. Visual is the rifle stretched 1.35x along
+-- Y (handled at type level — see `_type_transforms.cwv_es_musket`).
+--
+--   damage profile: clone of `shot_sniper` with default_target's
+--                   power_distribution_{near,far}.attack and .impact
+--                   both 2x. Dropoff curve preserved (matches the
+--                   user-confirmed v1 spec — handgun-near damage at
+--                   close, ~80% at far).
+--   reload time:    2x (1.5s → 3.0s) on `ammo_data.reload_time`,
+--                   plus 2x on per-action `total_time_secondary`
+--                   (the secondary timing the reload anim runs against).
+--   max ammo:       12 (vanilla 16). ammo_per_clip and ammo_per_reload
+--                   stay at 1 (handgun's bolt-action style).
+--   alert range:    25m (vanilla 10m) on `alert_sound_range_fire`
+--                   for every firing sub-action — matches the
+--                   blunderbuss's audible radius. Black-powder boom.
+
+local _MUSKET_DAMAGE_MULT      = 2.0
+local _MUSKET_RELOAD_MULT      = 2.0
+local _MUSKET_MAX_AMMO         = 12
+local _MUSKET_ALERT_RANGE_FIRE = 25
+
+-- Bayonet thrust (action_three / special key F). Clone of Kerillian's spear
+-- heavy stab (`heavy_slashing_smiter_stab_polearm`) with the user-requested
+-- "slowed down + boosted stagger" tune: attack × 0.85 (lighter per-thrust
+-- punch), impact × 1.5 (much harder enemies-stagger). Slot in as a melee
+-- sweep on action_three. Single-press F triggers one thrust; player can
+-- spam F for repeated thrusts. NOT a true stance toggle (vanilla doesn't
+-- support runtime template swapping cleanly) — for full "switch to spear
+-- moveset on F" behavior, see the v3 TODO note above the variant def.
+local _MUSKET_BAYONET_DAMAGE_MULT  = 0.85
+local _MUSKET_BAYONET_STAGGER_MULT = 1.5
+
+local function _create_cwv_musket_damage_profile()
+	if not DamageProfileTemplates then return "shot_sniper" end
+	local source = DamageProfileTemplates.shot_sniper
+	if not source then return "shot_sniper" end
+	local key = "cwv_musket_shot"
+	if DamageProfileTemplates[key] then return key end
+
+	local clone = table.clone(source, true)
+
+	-- shot_sniper carries near/far variants on default_target.power_distribution.
+	-- Multiply BOTH attack (damage) and impact (stagger) on each variant by
+	-- the musket damage multiplier. Per memory `feedback_cwv_*` the dropoff
+	-- curve and shield_break flag inherited from shot_sniper are preserved
+	-- by the deep clone above.
+	if clone.default_target then
+		local function _scale(pd)
+			if not pd then return end
+			if pd.attack then pd.attack = pd.attack * _MUSKET_DAMAGE_MULT end
+			if pd.impact then pd.impact = pd.impact * _MUSKET_DAMAGE_MULT end
+		end
+		_scale(clone.default_target.power_distribution_near)
+		_scale(clone.default_target.power_distribution_far)
+		_scale(clone.default_target.power_distribution)  -- defensive (some profiles use the un-near/un-far shape)
+	end
+
+	-- targets[] (per-target overrides, e.g. headshot vs body) — same scale.
+	if type(clone.targets) == "table" then
+		for _, target in ipairs(clone.targets) do
+			if target.power_distribution_near then
+				if target.power_distribution_near.attack then target.power_distribution_near.attack = target.power_distribution_near.attack * _MUSKET_DAMAGE_MULT end
+				if target.power_distribution_near.impact then target.power_distribution_near.impact = target.power_distribution_near.impact * _MUSKET_DAMAGE_MULT end
+			end
+			if target.power_distribution_far then
+				if target.power_distribution_far.attack then target.power_distribution_far.attack = target.power_distribution_far.attack * _MUSKET_DAMAGE_MULT end
+				if target.power_distribution_far.impact then target.power_distribution_far.impact = target.power_distribution_far.impact * _MUSKET_DAMAGE_MULT end
+			end
+			if target.power_distribution then
+				if target.power_distribution.attack then target.power_distribution.attack = target.power_distribution.attack * _MUSKET_DAMAGE_MULT end
+				if target.power_distribution.impact then target.power_distribution.impact = target.power_distribution.impact * _MUSKET_DAMAGE_MULT end
+			end
+		end
+	end
+
+	DamageProfileTemplates[key] = clone
+
+	-- Register in NetworkLookup.damage_profiles so multiplayer hit RPCs can
+	-- serialize the new key. Without this, any networked damage event
+	-- referencing cwv_musket_shot crashes the client with "Table
+	-- damage_profiles does not contain key" — same family of issue as the
+	-- weapon_skins / item_names lookups (crash GUID a8094388, hit on first
+	-- musket fire).
+	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, key) then
+		local tbl = NetworkLookup.damage_profiles
+		local idx = #tbl + 1
+		rawset(tbl, idx, key)
+		rawset(tbl, key, idx)
+	end
+
+	return key
+end
+
+-- Bayonet thrust damage profile: clone Kerillian spear's heavy stab profile
+-- with attack scaled down (slower per-thrust damage to balance the always-
+-- ready melee on a ranged weapon) and impact scaled up (heavier stagger,
+-- per the user's "use it like his 1h spear, slow it down and add more
+-- stagger" spec).
+local function _create_cwv_musket_bayonet_damage_profile()
+	if not DamageProfileTemplates then return "heavy_slashing_smiter_stab_polearm" end
+	local source = DamageProfileTemplates.heavy_slashing_smiter_stab_polearm
+	if not source then return "heavy_slashing_smiter_stab_polearm" end
+	local key = "cwv_musket_bayonet_thrust"
+	if DamageProfileTemplates[key] then return key end
+
+	local clone = table.clone(source, true)
+
+	-- Spear stab profile uses the simpler `power_distribution` shape (no near/far
+	-- variants — melee distance is uniform). Scale attack and impact independently.
+	local function _scale(pd)
+		if not pd then return end
+		if pd.attack then pd.attack = pd.attack * _MUSKET_BAYONET_DAMAGE_MULT end
+		if pd.impact then pd.impact = pd.impact * _MUSKET_BAYONET_STAGGER_MULT end
+	end
+	if clone.default_target then
+		_scale(clone.default_target.power_distribution)
+		_scale(clone.default_target.power_distribution_near)
+		_scale(clone.default_target.power_distribution_far)
+	end
+	if type(clone.targets) == "table" then
+		for _, target in ipairs(clone.targets) do
+			_scale(target.power_distribution)
+			_scale(target.power_distribution_near)
+			_scale(target.power_distribution_far)
+		end
+	end
+
+	DamageProfileTemplates[key] = clone
+
+	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, key) then
+		local tbl = NetworkLookup.damage_profiles
+		local idx = #tbl + 1
+		rawset(tbl, idx, key)
+		rawset(tbl, key, idx)
+	end
+
+	return key
+end
+
+-- ============================================================
+-- Musket stance toggle helpers (forward-declared for closure capture)
+-- ============================================================
+-- The action_three.enter_function below references this helper. In Lua 5.1
+-- a closure resolves upvalues at function-creation time; declaring this
+-- BEFORE `_create_musket_template` and `_create_musket_template_melee`
+-- ensures the binding exists when the action_three closure is built.
+
+local function _toggle_musket_stance_and_rewield(player_unit)
+	if not player_unit or not Unit.alive(player_unit) then return end
+	local ok_inv, inv = pcall(ScriptUnit.extension, player_unit, "inventory_system")
+	if not ok_inv or not inv then return end
+	local equipment = inv:equipment()
+	if not equipment then return end
+	local wielded_slot = equipment.wielded_slot
+	if not wielded_slot then return end
+	local slot_data = equipment.slots[wielded_slot]
+	if not slot_data or not slot_data.item_data then return end
+	local item_data = slot_data.item_data
+
+	-- Gate: only operate on cwv_es_musket items. Detect via the item's
+	-- current template name OR the backend_id pattern (defensive — backend
+	-- may not have template field on all paths).
+	local is_musket = (item_data.template == "musket_template" or item_data.template == "musket_template_melee")
+	if not is_musket then
+		local bid = item_data.backend_id
+		if not bid or not bid:match("^cwv_es_musket_") then return end
+	end
+
+	-- Stance flag stored on the IML item_data's mod_data. mod_data is
+	-- mutable across the whole equip lifecycle; survives wield+unwield.
+	item_data.mod_data = item_data.mod_data or {}
+	local current = item_data.mod_data.cwv_musket_stance or "ranged"
+	local next_stance = (current == "ranged") and "melee" or "ranged"
+	item_data.mod_data.cwv_musket_stance = next_stance
+
+	-- Capture current ammo as a fraction BEFORE destroy_slot — we'll pass
+	-- it to add_equipment so the new weapon spawns with the same ammo
+	-- count instead of being refilled to full. Without this, every stance
+	-- toggle is a free reload.
+	local ammo_fraction = nil
+	local rifle_unit_for_ammo = equipment.right_hand_wielded_unit or equipment.right_hand_wielded_unit_3p
+	if rifle_unit_for_ammo and Unit.alive(rifle_unit_for_ammo)
+			and ScriptUnit.has_extension(rifle_unit_for_ammo, "ammo_system") then
+		local ok_ammo, ext = pcall(ScriptUnit.extension, rifle_unit_for_ammo, "ammo_system")
+		if ok_ammo and ext and ext.total_ammo_fraction then
+			pcall(function() ammo_fraction = ext:total_ammo_fraction() end)
+		end
+	end
+
+	-- Force a destroy + add + wield cycle on the slot so the new template
+	-- (resolved by the BackendUtils.get_item_template hook below) takes
+	-- effect. Vanilla `wield()` and `rewield_wielded_slot()` only show/hide
+	-- existing units — they don't respawn with a new template. We have to
+	-- destroy the slot's units explicitly and re-add the equipment.
+	local slot_name = wielded_slot
+	mod:info("[cwv musket] stance: %s → %s (rewielding %s, ammo_fraction=%s)",
+		current, next_stance, slot_name, tostring(ammo_fraction))
+	local ok_destroy, err_destroy = pcall(function() inv:destroy_slot(slot_name, true) end)
+	if not ok_destroy then
+		mod:warning("[cwv musket] destroy_slot failed: %s", tostring(err_destroy))
+		return
+	end
+	-- add_equipment(slot_name, item_name, unit_template, extra_extension_data, ammo_percent)
+	-- Pass the captured ammo fraction so the new equipment preserves the
+	-- player's ammo count instead of refilling to max.
+	local ok_add, err_add = pcall(function() inv:add_equipment(slot_name, item_data, nil, nil, ammo_fraction) end)
+	if not ok_add then
+		mod:warning("[cwv musket] add_equipment failed: %s", tostring(err_add))
+		return
+	end
+	local ok_wield, err_wield = pcall(function() inv:wield(slot_name) end)
+	if not ok_wield then
+		mod:warning("[cwv musket] wield failed: %s", tostring(err_wield))
+	end
+end
+
+local function _create_musket_template()
+	if not Weapons or not Weapons.handgun_template_1 then
+		mod:warning("handgun_template_1 not found — Musket template unavailable")
+		return
+	end
+	if Weapons.musket_template then return end
+
+	local template = table.clone(Weapons.handgun_template_1, true)
+	local damage_key = _create_cwv_musket_damage_profile()
+
+	-- Walk every sub-action; swap damage_profile (when shot_sniper) and
+	-- bump alert_sound_range_fire on any firing sub-action that has one.
+	if template.actions then
+		for _, action_group in pairs(template.actions) do
+			if type(action_group) == "table" then
+				for _, sub_action in pairs(action_group) do
+					if type(sub_action) == "table" then
+						if sub_action.damage_profile == "shot_sniper" then
+							sub_action.damage_profile = damage_key
+						end
+						if sub_action.alert_sound_range_fire then
+							sub_action.alert_sound_range_fire = _MUSKET_ALERT_RANGE_FIRE
+						end
+					end
+				end
+			end
+		end
+	end
+
+	if template.ammo_data then
+		template.ammo_data.reload_time = (template.ammo_data.reload_time or 1.5) * _MUSKET_RELOAD_MULT
+		template.ammo_data.max_ammo = _MUSKET_MAX_AMMO
+	end
+
+	-- ============================================================
+	-- BAYONET STANCE TOGGLE (action_three / special key, F or C)
+	-- ============================================================
+	-- The musket carries TWO templates registered on `Weapons`:
+	--
+	--   `musket_template`        — ranged moveset (this template; handgun shoot)
+	--   `musket_template_melee`  — Kerillian spear moveset, slowed + boosted
+	--                              stagger (built below `_create_musket_template`)
+	--
+	-- F press triggers a hidden destroy_slot + add_equipment + wield cycle
+	-- on the musket's slot. Per-item stance flag stored at
+	-- `item_data.mod_data.cwv_musket_stance`. The
+	-- `BackendUtils.get_item_template` hook (further down) reads the flag
+	-- and returns the matching template, so the recreated weapon spawns
+	-- with the correct moveset.
+	--
+	-- This is the "runtime template swap" approach — true unequip+equip
+	-- with template swap, not the v0.1.203-204 chain-conditional dual-
+	-- sub-action experiment (which crashed lookup_data + sweep target,
+	-- and didn't actually switch movesets in practice).
+	--
+	-- Stance toggle action is shared verbatim with `musket_template_melee`
+	-- so the player can press F from either stance to toggle back.
+
+	template.actions.action_three = {
+		default = {
+			kind = "dummy",
+			anim_event = "reload",
+			anim_end_event = "attack_finished",
+			total_time = 0.4,
+			anim_end_event_condition_func = function (unit, end_reason)
+				return end_reason ~= "new_interupting_action"
+			end,
+			enter_function = function (attacker_unit, input_extension)
+				_toggle_musket_stance_and_rewield(attacker_unit)
+			end,
+			allowed_chain_actions = {},
+		},
+	}
+
+	-- Attach lookup_data on every sub_action, including our new ones.
+	-- Vanilla `weapons.lua:305-312` does this during `Weapons[]` init at
+	-- boot but our mod-loaded additions miss it and crash on first touch.
+	for action_name, sub_actions in pairs(template.actions) do
+		if type(sub_actions) == "table" then
+			for sub_action_name, sub_action_data in pairs(sub_actions) do
+				if type(sub_action_data) == "table" then
+					sub_action_data.lookup_data = sub_action_data.lookup_data or {
+						item_template_name = "musket_template",
+						action_name        = action_name,
+						sub_action_name    = sub_action_name,
+					}
+				end
+			end
+		end
+	end
+
+	Weapons.musket_template = template
+	mod:info("Created musket_template (damage×%.1f, reload×%.1f, max_ammo=%d, alert_range=%dm, bayonet stance toggle on F: damage×%.2f, stagger×%.2f)",
+		_MUSKET_DAMAGE_MULT, _MUSKET_RELOAD_MULT, _MUSKET_MAX_AMMO, _MUSKET_ALERT_RANGE_FIRE,
+		_MUSKET_BAYONET_DAMAGE_MULT, _MUSKET_BAYONET_STAGGER_MULT)
+end
+
+_create_musket_template()
+
+-- ============================================================
+-- Musket melee template (Kruber's native heavy spear, slow + stagger)
+-- ============================================================
+-- v0.1.206: switched from `two_handed_spears_elf_template_1` (Kerillian
+-- spear) to `two_handed_heavy_spears_template` (Kruber's tuskgor spear).
+-- The elf spear's state_machine, display_unit, and other assets live in
+-- Kerillian's package and aren't loaded for Kruber, which crashed with
+-- "Resource not loaded" (GUID 1363574c) on stance toggle. Kruber's
+-- native heavy spear template uses
+-- `units/beings/player/first_person_base/state_machines/melee/polearm`
+-- and other Kruber-loaded resources — no cross-character package issue.
+--
+-- Functionally similar to the elf spear (polearm thrust moveset), and
+-- since the user originally suggested heavy_spear as one option, this
+-- is acceptable behavior. If we later want elf-spear flavor specifically,
+-- we'd need to force-load the elf spear's package via Managers.package
+-- per the cross-character pattern.
+--
+-- Damage tuning (per user "slow it down + add stagger"):
+--   * attack power × 0.85 on every sub-action with a damage_profile
+--   * impact (stagger) × 1.5 on the same
+--   * anim_time_scale × 0.85 on every sub-action that has it
+--     (makes swings 15% slower; tuskgor spear is already measured —
+--      this leans into "musket-bayonet drilling" feel)
+--
+-- Visual: NO override of right_hand_unit etc. — the IML inheritance
+-- system uses item_data.right_hand_unit (the rifle mesh) regardless
+-- of which template is active, so the rifle stays the wielded mesh.
+-- The bayonet child-link also persists (it's spawned by the
+-- GearUtils.spawn_inventory_unit hook below, which fires for either
+-- template since the gate is on item_template family, not specific
+-- template).
+
+local _MUSKET_MELEE_DAMAGE_MULT     = 0.85
+local _MUSKET_MELEE_STAGGER_MULT    = 1.5
+local _MUSKET_MELEE_ANIM_TIME_SCALE = 0.85  -- swings ~15% slower
+
+local function _scale_melee_damage_profile(profile_name)
+	if not DamageProfileTemplates then return profile_name end
+	local source = DamageProfileTemplates[profile_name]
+	if not source then return profile_name end
+	local key = "cwv_musket_melee_" .. profile_name
+	if DamageProfileTemplates[key] then return key end
+
+	local clone = table.clone(source, true)
+	local function _scale(pd)
+		if not pd then return end
+		if pd.attack then pd.attack = pd.attack * _MUSKET_MELEE_DAMAGE_MULT end
+		if pd.impact then pd.impact = pd.impact * _MUSKET_MELEE_STAGGER_MULT end
+	end
+	if clone.default_target then
+		_scale(clone.default_target.power_distribution)
+		_scale(clone.default_target.power_distribution_near)
+		_scale(clone.default_target.power_distribution_far)
+	end
+	if type(clone.targets) == "table" then
+		for _, target in ipairs(clone.targets) do
+			_scale(target.power_distribution)
+			_scale(target.power_distribution_near)
+			_scale(target.power_distribution_far)
+		end
+	end
+
+	DamageProfileTemplates[key] = clone
+
+	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, key) then
+		local tbl = NetworkLookup.damage_profiles
+		local idx = #tbl + 1
+		rawset(tbl, idx, key)
+		rawset(tbl, key, idx)
+	end
+
+	return key
+end
+
+local function _create_musket_template_melee()
+	if not Weapons or not Weapons.two_handed_heavy_spears_template then
+		mod:warning("two_handed_heavy_spears_template not found — Musket melee template unavailable")
+		return
+	end
+	if Weapons.musket_template_melee then return end
+
+	local template = table.clone(Weapons.two_handed_heavy_spears_template, true)
+
+	-- v0.1.227: per user "make it have it's normal speed and melee values" —
+	-- DO NOT apply damage scaling or anim_time_scale changes. Vanilla
+	-- tuskgor spear stats are kept verbatim. Previously v0.1.220-226
+	-- applied attack ×0.85, stagger ×1.5, anim_time ×0.85; reverted.
+	--
+	-- v0.1.243: per user "make the range_mod 1.2" — override every
+	-- sub-action's range_mod to 1.2 (vanilla tuskgor uses 1.35 on every
+	-- attack). Bayonet shouldn't reach as far as a full polearm haft.
+	-- range_mod_add (the additive component, varies 0.25-1.0 per
+	-- sub-action) kept vanilla.
+	local _MELEE_RANGE_MOD = 1.2
+	if template.actions then
+		for _, action_group in pairs(template.actions) do
+			if type(action_group) == "table" then
+				for _, sub_action in pairs(action_group) do
+					if type(sub_action) == "table" and sub_action.range_mod then
+						sub_action.range_mod = _MELEE_RANGE_MOD
+					end
+				end
+			end
+		end
+	end
+
+	-- Stance toggle back to ranged on action_three. Mirrors the one on
+	-- musket_template; the toggle helper handles both directions.
+	template.actions = template.actions or {}
+	template.actions.action_three = {
+		default = {
+			kind = "dummy",
+			-- No anim_event: dummy action just toggles stance, no visual needed.
+			-- Polearm SM has its own anim vocabulary; using the wrong event
+			-- would crash. Vanilla state machines fall through cleanly when
+			-- anim_event is omitted (the current pose holds for total_time).
+			total_time = 0.4,
+			enter_function = function (attacker_unit, input_extension)
+				_toggle_musket_stance_and_rewield(attacker_unit)
+			end,
+			allowed_chain_actions = {},
+		},
+	}
+
+	-- Same lookup_data attach as musket_template — vanilla weapons.lua's
+	-- init pass doesn't run on our mod-loaded template.
+	for action_name, sub_actions in pairs(template.actions) do
+		if type(sub_actions) == "table" then
+			for sub_action_name, sub_action_data in pairs(sub_actions) do
+				if type(sub_action_data) == "table" then
+					sub_action_data.lookup_data = sub_action_data.lookup_data or {
+						item_template_name = "musket_template_melee",
+						action_name        = action_name,
+						sub_action_name    = sub_action_name,
+					}
+				end
+			end
+		end
+	end
+
+	-- Override display_unit to handgun rig. v0.1.227: tuskgor spear's
+	-- display_unit `display_2h_polearm` should also be loaded for Kruber
+	-- (his native weapon) but using the handgun rig is safe + idempotent.
+	template.display_unit = "units/weapons/weapon_display/display_1h_handguns"
+
+	Weapons.musket_template_melee = template
+	mod:info("Created musket_template_melee (Kruber tuskgor spear clone, vanilla stats — no damage/speed scaling)")
+end
+
+_create_musket_template_melee()
+
+-- ============================================================
+-- Musket template-swap hook (BackendUtils.get_item_template)
+-- ============================================================
+-- Reads the per-item stance flag on item_data.mod_data and returns the
+-- appropriate template. Without this hook, vanilla returns
+-- musket_template (the one set on the variant def) regardless of stance.
+-- The toggle helper above flips the flag and forces a destroy+add+wield
+-- cycle, which makes vanilla call get_item_template again, which we
+-- intercept here to return musket_template_melee on melee stance.
+
+mod:hook("BackendUtils", "get_item_template", function(func, item_data, backend_id)
+	local template = func(item_data, backend_id)
+	if not item_data then return template end
+
+	-- Gate: only intervene for cwv_es_musket items. Detect via the
+	-- item's template field OR the backend_id pattern (defensive — same
+	-- check as the toggle helper).
+	local is_musket_ranged = (item_data.template == "musket_template")
+	local is_musket_melee  = (item_data.template == "musket_template_melee")
+	if not (is_musket_ranged or is_musket_melee) then
+		local bid = item_data.backend_id or backend_id
+		if not bid or type(bid) ~= "string" or not bid:match("^cwv_es_musket_") then
+			return template
+		end
+	end
+
+	-- Read stance from mod_data; default to ranged.
+	local stance = item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged"
+	if stance == "melee" and Weapons.musket_template_melee then
+		return Weapons.musket_template_melee
+	end
+	if Weapons.musket_template then
+		return Weapons.musket_template
+	end
+	return template
+end)
+
+-- ============================================================
+-- Musket bayonet — child-link a scaled 1H sword to the rifle unit
+-- ============================================================
+-- The musket carries a fixed bayonet visual: a copy of Kruber's 1H
+-- sword (`wpn_emp_sword_02_t1`), scaled thin/short, spawned as its
+-- own unit and `World.link_unit`'d to the rifle unit so it inherits
+-- the rifle's transform (any animation, swap, holster motion etc.
+-- carries the bayonet along). Two units total — one linked to the 1P
+-- rifle (player's first-person view) and one to the 3P rifle (other
+-- players + previewer + Versus opponents). Both spawned in the
+-- `GearUtils.spawn_inventory_unit` post-hook below.
+--
+-- Lifetime: each bayonet is tracked on the rifle's unit data via
+-- `Unit.set_data(rifle, "cwv_musket_bayonet", bayonet_unit)`. When
+-- vanilla destroys the rifle (weapon swap, pickup drop, level end),
+-- the `GearUtils.destroy_wielded` hook below reads that data slot,
+-- destroys the bayonet, and falls through to vanilla. Without this
+-- the bayonet would orphan as a free-floating world unit.
+--
+-- Position/scale tuning: the rifle .unit's local +Y is barrel-forward
+-- (verified by visual reference to Kruber's vanilla wield pose), so
+-- the bayonet sits at +Y 0.55m relative to the rifle root and is
+-- scaled to a thin spike. These two constants are the tuning knobs —
+-- if the bayonet floats off the muzzle or reads too thick/long, edit
+-- _MUSKET_BAYONET_LOCAL_TRANSLATION and _MUSKET_BAYONET_SCALE.
+--
+-- Cross-character package note: the rifle's package is auto-loaded
+-- by inventory (right_hand_unit), but the sword unit isn't part of
+-- that chain. Force-load the sword via `Managers.package:load`
+-- (Tuskgor Javelin pup pattern, per `feedback_cwv_cross_character_unit_packages.md`).
+
+-- v0.1.212: switched to wpn_emp_sword_03_t1 — the "Soldier's Longsword"
+-- cosmetic skin for `es_1h_sword` (verified via cosmetics_tweaker/
+-- VETERAN_SKIN_CATALOG.md:900). v0.1.211's wpn_emp_sword_04_t1 turned
+-- out to be the falchion mesh (matching_item_key = "wh_1h_falchion"
+-- in item_master_list_weapon_skins.lua:5185), not a real es_1h_sword
+-- variant — explains "that's the falchion model". The new path is a
+-- proper Kruber 1H sword distinct from the default skin_01 mesh.
+local _MUSKET_BAYONET_UNIT_1P    = "units/weapons/player/wpn_emp_sword_03_t1/wpn_emp_sword_03_t1"
+local _MUSKET_BAYONET_UNIT_3P    = "units/weapons/player/wpn_emp_sword_03_t1/wpn_emp_sword_03_t1_3p"
+-- {x, y, z} relative to rifle root. v0.1.206: re-deduced axis convention
+-- from the user's prior "elongate the rifle on the Y axis" hint — rifle's
+-- local +Y IS the barrel direction (which is why scaling Y stretches the
+-- rifle along its length). v0.1.204's {0, 0, 0.55} placed the bayonet
+-- 0.55m along rifle's local +Z, which must be the perpendicular "up"
+-- axis — explains "floating above". v0.1.205 went MORE along Z (worse).
+-- v0.1.206 puts the bayonet along +Y (toward muzzle) with zero Z offset:
+--   * X 0    (centered on the barrel)
+--   * Y 1.0  (push 1.0m toward the muzzle along the barrel)
+--   * Z 0    (no vertical offset; bayonet sits AT barrel level)
+-- TUNABLE — if the bayonet is still misplaced, edit these and rebuild.
+-- Orientation rotation below is per v0.1.204 user confirmation; don't
+-- touch the rotation constants.
+local _MUSKET_BAYONET_LOCAL_TRANSLATION = { 0, 0.8, 0.025 }
+-- Rotation: the sword model's blade extends along +Y (1H sword convention).
+-- Rotate -90° about X to align the blade with the rifle's barrel direction.
+-- v0.1.204 user confirmed this orientation is correct. Don't change unless
+-- the rifle .unit's local axis convention is empirically different.
+local _MUSKET_BAYONET_LOCAL_ROTATION_AXIS  = { 1, 0, 0 }
+local _MUSKET_BAYONET_LOCAL_ROTATION_ANGLE = -math.pi / 2
+-- Scale: applied in the bayonet's MODEL space (before rotation). Y is the
+-- blade-length axis; X/Z thin the blade cross-section.
+local _MUSKET_BAYONET_SCALE = { 0.35, 0.6, 0.2 }
+
+local _MUSKET_BAYONET_DATA_KEY = "cwv_musket_bayonet"
+
+-- Weak-keyed table mapping rifle units to their bayonet child units. Used
+-- by the visibility-sync hook below (vanilla wield doesn't propagate
+-- visibility to linked child units, so when a player holsters the rifle
+-- the bayonet stays visible floating in space). Weak rifle keys = entries
+-- auto-cleared when the rifle is GC'd.
+local _musket_bayonet_pairs = setmetatable({}, { __mode = "k" })
+
+local function _force_load_musket_bayonet_units()
+	if not (Managers and Managers.package) then return end
+	local function _load(unit_path, ref)
+		local ok, err = pcall(function()
+			Managers.package:load(unit_path, ref, nil, true, true)
+		end)
+		if ok then
+			mod:info("[cwv musket-bayonet] force-loaded %s (ref=%s)", unit_path, ref)
+		else
+			mod:warning("[cwv musket-bayonet] failed to force-load %s: %s", unit_path, tostring(err))
+		end
+	end
+	_load(_MUSKET_BAYONET_UNIT_1P, "cwv_musket_bayonet_1p")
+	_load(_MUSKET_BAYONET_UNIT_3P, "cwv_musket_bayonet_3p")
+end
+
+_force_load_musket_bayonet_units()
+
+-- ============================================================
+-- Musket melee template — force-load polearm state machine
+-- ============================================================
+-- v0.1.227: reverted from Kerillian's elf spear back to Kruber's NATIVE
+-- tuskgor spear (`two_handed_heavy_spears_template`) per user direction.
+-- The elf spear's animations didn't read well on the rifle, and the
+-- display_unit caused load issues. Tuskgor is Kruber-native; only the
+-- polearm state machine needs force-loading (vanilla loads it for
+-- Kruber only when his loadout includes es_2h_heavy_spear).
+
+local _MUSKET_MELEE_STATE_MACHINE = "units/beings/player/first_person_base/state_machines/melee/polearm"
+
+local function _force_load_musket_melee_assets()
+	if not (Managers and Managers.package) then return end
+	local ok, err = pcall(function()
+		Managers.package:load(_MUSKET_MELEE_STATE_MACHINE, "cwv_musket_melee_sm", nil, true, true)
+	end)
+	if ok then
+		mod:info("[cwv musket-melee] force-loaded %s (ref=%s)", _MUSKET_MELEE_STATE_MACHINE, "cwv_musket_melee_sm")
+	else
+		mod:warning("[cwv musket-melee] failed to force-load %s: %s", _MUSKET_MELEE_STATE_MACHINE, tostring(err))
+	end
+end
+
+_force_load_musket_melee_assets()
+
+local function _spawn_and_link_musket_bayonet(world, rifle_unit, bayonet_unit_path, package_ref)
+	if not world or not rifle_unit or not Unit.alive(rifle_unit) then return nil end
+	if not (Managers and Managers.package and Managers.package:has_loaded(bayonet_unit_path, package_ref)) then
+		-- Package not ready yet — bail silently; bayonet will be missing on
+		-- this equip. Player can re-equip after the load completes (rare race
+		-- only at first equip immediately after mod load).
+		return nil
+	end
+	local pos = Unit.world_position(rifle_unit, 0)
+	local rot = Unit.world_rotation(rifle_unit, 0)
+	local ok_spawn, bayonet = pcall(World.spawn_unit, world, bayonet_unit_path, pos, rot)
+	if not ok_spawn or not bayonet then
+		mod:warning("[cwv musket-bayonet] spawn failed: %s", tostring(bayonet))
+		return nil
+	end
+
+	-- Link to root node. The child inherits the parent's full transform
+	-- (translation + rotation + scale). Subsequent local_position/scale
+	-- ops override the inherited translation/scale at composition time.
+	pcall(World.link_unit, world, bayonet, 0, rifle_unit, 0)
+
+	local t = _MUSKET_BAYONET_LOCAL_TRANSLATION
+	pcall(Unit.set_local_position, bayonet, 0, Vector3(t[1], t[2], t[3]))
+	local r_axis = _MUSKET_BAYONET_LOCAL_ROTATION_AXIS
+	local r_ang  = _MUSKET_BAYONET_LOCAL_ROTATION_ANGLE
+	pcall(Unit.set_local_rotation, bayonet, 0, Quaternion.axis_angle(Vector3(r_axis[1], r_axis[2], r_axis[3]), r_ang))
+	local s = _MUSKET_BAYONET_SCALE
+	pcall(Unit.set_local_scale, bayonet, 0, Vector3(s[1], s[2], s[3]))
+
+	return bayonet
+end
+
+local function _attach_musket_bayonets(world, rifle_3p, rifle_1p)
+	-- Idempotent: skip per-rifle if a bayonet is already tracked for it.
+	-- Without this, a code path that re-fires our spawn hook on the same
+	-- rifle (e.g. cosmetic application that refreshes equipment without
+	-- going through destroy_wielded) would attach a SECOND bayonet,
+	-- leaving the first as an orphan tracked-but-not-cleaned-up unit.
+	local skipped_3p, skipped_1p = false, false
+	if rifle_3p and Unit.alive(rifle_3p) and not _musket_bayonet_pairs[rifle_3p] then
+		local bayonet_3p = _spawn_and_link_musket_bayonet(world, rifle_3p, _MUSKET_BAYONET_UNIT_3P, "cwv_musket_bayonet_3p")
+		if bayonet_3p then
+			pcall(Unit.set_data, rifle_3p, _MUSKET_BAYONET_DATA_KEY, bayonet_3p)
+			_musket_bayonet_pairs[rifle_3p] = bayonet_3p
+		end
+	elseif rifle_3p then
+		skipped_3p = true
+	end
+	if rifle_1p and Unit.alive(rifle_1p) and not _musket_bayonet_pairs[rifle_1p] then
+		local bayonet_1p = _spawn_and_link_musket_bayonet(world, rifle_1p, _MUSKET_BAYONET_UNIT_1P, "cwv_musket_bayonet_1p")
+		if bayonet_1p then
+			pcall(Unit.set_data, rifle_1p, _MUSKET_BAYONET_DATA_KEY, bayonet_1p)
+			_musket_bayonet_pairs[rifle_1p] = bayonet_1p
+		end
+	elseif rifle_1p then
+		skipped_1p = true
+	end
+	-- Diagnostic log: counts pairs after each attach so duplicate-attach
+	-- bugs are visible in mod log. v0.1.239 added to debug user-reported
+	-- "floating bayonet on both melee and ranged".
+	local pair_count = 0
+	for _ in pairs(_musket_bayonet_pairs) do pair_count = pair_count + 1 end
+	mod:info("[cwv musket-bayonet] attach: 3p=%s 1p=%s (skipped: 3p=%s 1p=%s) total_pairs=%d",
+		tostring(rifle_3p ~= nil), tostring(rifle_1p ~= nil),
+		tostring(skipped_3p), tostring(skipped_1p), pair_count)
+end
+
+local function _detach_musket_bayonet(world, rifle_unit)
+	if not world or not rifle_unit then return end
+	local has_data = false
+	local ok_check = pcall(function() has_data = Unit.has_data(rifle_unit, _MUSKET_BAYONET_DATA_KEY) end)
+	if not ok_check or not has_data then return end
+	local bayonet
+	pcall(function() bayonet = Unit.get_data(rifle_unit, _MUSKET_BAYONET_DATA_KEY) end)
+	if not bayonet then return end
+	-- Hide the bayonet IMMEDIATELY before queuing for deletion. mark_for_deletion
+	-- runs at the end of the next frame; without the visibility flag, the
+	-- bayonet stays rendered for that frame at its last world position
+	-- (frozen where the rifle was when destroyed). User reported this as
+	-- a "floating bayonet" after stance toggle — the old bayonet flickered
+	-- visible while the new rifle's bayonet was already attached.
+	pcall(Unit.set_unit_visibility, bayonet, false)
+	if Managers and Managers.state and Managers.state.unit_spawner then
+		pcall(function() Managers.state.unit_spawner:mark_for_deletion(bayonet) end)
+	else
+		pcall(World.destroy_unit, world, bayonet)
+	end
+end
+
+mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+	local v_w3p, v_a3p, v_w1p, v_a1p =
+		func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+
+	-- Gate: only attach for the musket variant on its right-hand spawn.
+	-- IMPORTANT: cwv variants inherit `entry.name` from the base weapon
+	-- (per `feedback_cwv_clone_name_clobber.md` — clobbering crashes equip),
+	-- so `item_data.name` for cwv_es_musket is "es_handgun", not the cwv key.
+	-- Compare the template-table reference instead. v0.1.205: the musket
+	-- has TWO templates (ranged + melee for stance toggle); fire for both.
+	if hand ~= "right" then
+		return v_w3p, v_a3p, v_w1p, v_a1p
+	end
+	if not item_template or not Weapons then
+		return v_w3p, v_a3p, v_w1p, v_a1p
+	end
+	if item_template ~= Weapons.musket_template and item_template ~= Weapons.musket_template_melee then
+		return v_w3p, v_a3p, v_w1p, v_a1p
+	end
+
+	-- pcall outer: bayonet failure should never break the equip itself.
+	pcall(_attach_musket_bayonets, world, v_w3p, v_w1p)
+
+	-- v0.1.220: in melee mode (musket_template_melee), the polearm
+	-- attachment_node_linking holds the rifle perpendicular to its
+	-- intended orientation. Apply rotations to correct it. v0.1.226
+	-- composes Y barrel-spin + Z. v0.1.227: melee template is back to
+	-- Kruber's tuskgor spear (also AttachmentNodeLinking.polearm) so
+	-- same correction applies.
+	if item_template == Weapons.musket_template_melee then
+		-- v0.1.241: per user "rotate along z-axis about 90 degrees more",
+		-- bump outermost q_z2 from π to 3π/2 (adds another 90° at the
+		-- outermost composition position).
+		-- Total composition: `q_z2(3π/2) * q_y(-π/2) * q_z(π/2) * q_x(π)`.
+		local q_y  = Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2)
+		local q_z  = Quaternion.axis_angle(Vector3(0, 0, 1), math.pi / 2)
+		local q_x  = Quaternion.axis_angle(Vector3(1, 0, 0), math.pi)
+		local q_z2 = Quaternion.axis_angle(Vector3(0, 0, 1), math.pi * 1.5)
+		local q    = Quaternion.multiply(q_z2, Quaternion.multiply(Quaternion.multiply(q_y, q_z), q_x))
+		if v_w3p and Unit.alive(v_w3p) then
+			pcall(Unit.set_local_rotation, v_w3p, 0, q)
+		end
+		if v_w1p and Unit.alive(v_w1p) then
+			pcall(Unit.set_local_rotation, v_w1p, 0, q)
+		end
+
+		-- v0.1.227: per user, scale the rifle DOWN in 1st person ONLY
+		-- when in melee mode (3P stays at the type-level scale so other
+		-- players see the normal-sized musket-bayonet). Multiply the
+		-- existing local scale by the factor below — the type-level
+		-- {0.9, 1.35, 0.9} is already applied by the
+		-- GearUtils.create_equipment hook by the time we get here.
+		-- Reading current scale and multiplying composes correctly
+		-- regardless of pre-existing scale.
+		-- v0.1.247: per-axis scale factors per user "0.8x and 0.8y"
+		-- (Z unchanged). Was uniform 0.85 across all axes.
+		local _MELEE_1P_SCALE_FACTOR = { 0.8, 0.8, 1.0 }  -- TUNABLE per-axis
+		if v_w1p and Unit.alive(v_w1p) then
+			pcall(function()
+				local current = Unit.local_scale(v_w1p, 0)
+				local cx, cy, cz = Vector3.to_elements(current)
+				local f = _MELEE_1P_SCALE_FACTOR
+				Unit.set_local_scale(v_w1p, 0, Vector3(cx * f[1], cy * f[2], cz * f[3]))
+			end)
+		end
+
+		-- v0.1.229: melee grip height/forward offset. After the rotation
+		-- correction the rifle sits too low and slightly back from where
+		-- a polearm grip should hold it. Apply a translation delta on
+		-- top of vanilla's attachment_node_linking offset (read current
+		-- local position, ADD our delta, set back). Compose-friendly so
+		-- it doesn't fight the polearm attachment offset.
+		--   Y +0.1 — push slightly forward along the rifle's barrel axis
+		--   Z -0.3 — drop the grip height
+		-- Applied to BOTH 1P and 3P so the held view and other players
+		-- see the same pose. TUNABLE constants.
+		local _MELEE_LOCAL_OFFSET = { 0, 0.06, -0.3 }
+		local function _apply_melee_offset(unit)
+			if not unit or not Unit.alive(unit) then return end
+			pcall(function()
+				local current = Unit.local_position(unit, 0)
+				local cx, cy, cz = Vector3.to_elements(current)
+				Unit.set_local_position(unit, 0, Vector3(
+					cx + _MELEE_LOCAL_OFFSET[1],
+					cy + _MELEE_LOCAL_OFFSET[2],
+					cz + _MELEE_LOCAL_OFFSET[3]))
+			end)
+		end
+		_apply_melee_offset(v_w3p)
+		_apply_melee_offset(v_w1p)
+	end
+
+	return v_w3p, v_a3p, v_w1p, v_a1p
+end)
+
+-- ============================================================
+-- Musket bayonet visibility sync
+-- ============================================================
+-- VT2's wield system DOESN'T destroy the rifle's units when the player
+-- swaps to a different weapon — it just hides them via
+-- Unit.set_unit_visibility(rifle, false). The bayonet is a separate
+-- World.link_unit'd unit that doesn't inherit the rifle's visibility
+-- flag (Stingray links transforms, not visibility), so it stays visible
+-- floating in space when the rifle is hidden.
+--
+-- Fix: track all spawned bayonet pairs in a weak-keyed table. Hook the
+-- inventory paths that change wielded state (`_wield_slot` runs whenever
+-- the player switches weapons). After each, walk the table and set each
+-- bayonet's visibility based on whether its rifle is the currently-
+-- wielded weapon. When player wields the rifle: bayonet shows. When they
+-- swap to a different slot: bayonet hides.
+
+-- (_musket_bayonet_pairs declared above near the bayonet constants so
+-- _attach_musket_bayonets can register entries directly.)
+
+-- Sync visibility of all tracked bayonets based on current wielded state.
+-- Also opportunistically destroys ORPHAN bayonets (rifle is dead but
+-- bayonet still alive — happens when a code path bypasses our
+-- destroy_wielded cleanup hook, e.g. cosmetic application or any
+-- equipment refresh that swaps the rifle without firing destroy_wielded).
+local function _sync_all_bayonets_visibility(equipment)
+	if not equipment then return end
+	local wielded_3p = equipment.right_hand_wielded_unit_3p
+	local wielded_1p = equipment.right_hand_wielded_unit
+	local orphans, shown, hidden = 0, 0, 0
+	for rifle, bayonet in pairs(_musket_bayonet_pairs) do
+		if not Unit.alive(rifle) then
+			-- Orphan: rifle gone but bayonet lingers. Hide and destroy.
+			if Unit.alive(bayonet) then
+				pcall(Unit.set_unit_visibility, bayonet, false)
+				if Managers and Managers.state and Managers.state.unit_spawner then
+					pcall(function() Managers.state.unit_spawner:mark_for_deletion(bayonet) end)
+				end
+			end
+			_musket_bayonet_pairs[rifle] = nil
+			orphans = orphans + 1
+		elseif Unit.alive(bayonet) then
+			local should_show = (rifle == wielded_3p) or (rifle == wielded_1p)
+			pcall(Unit.set_unit_visibility, bayonet, should_show)
+			if should_show then shown = shown + 1 else hidden = hidden + 1 end
+		end
+	end
+	if orphans + shown + hidden > 0 then
+		mod:info("[cwv musket-bayonet] sync: orphans=%d shown=%d hidden=%d", orphans, shown, hidden)
+	end
+end
+
+-- Hook the wield path. After vanilla wield_slot runs, sync bayonet
+-- visibility against the new wielded state.
+mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
+	_sync_all_bayonets_visibility(self._equipment or equipment)
+end)
+
+-- Cleanup: when the rifle is destroyed (weapon swap, holster, level end),
+-- destroy any bayonet linked to it. Run BEFORE vanilla so we still have a
+-- live unit handle to read get_data from.
+mod:hook("GearUtils", "destroy_wielded", function(func, world, wielded_unit)
+	if wielded_unit and Unit.alive(wielded_unit) then
+		-- Also clear any tracking entry to avoid using a dead key.
+		_musket_bayonet_pairs[wielded_unit] = nil
+		_detach_musket_bayonet(world, wielded_unit)
+	end
+	return func(world, wielded_unit)
+end)
 
 -- ============================================================
 -- Shortsword and Shield template (modified one_handed_hammer_shield_template_1)
@@ -2663,7 +3616,7 @@ local function _register_tuskgor_javelin_assets()
 			ammo_kind            = "thrown",
 			consumable_item      = true,
 			debug_pickup_category = "throwing_weapons",
-			hud_description      = "interaction_ammunition_axe",  -- reuse axe string; no localization for tuskgor javelin
+			hud_description      = "cwv_interaction_ammunition_javelin",  -- v0.1.183: own loc string (was "interaction_ammunition_axe" — wrong text)
 			local_pickup_sound   = true,
 			only_once            = true,
 			outline_distance     = "small_pickup",
@@ -3041,9 +3994,16 @@ local function _attach_carrier_visual(self)
 	-- Edge case: javelins stuck in moving enemies won't have visual follow;
 	-- revisit if that materializes in practice.
 
-	-- Shrink the throwing axe parent so it's effectively invisible while
-	-- keeping its physics actors active for interactor detection.
-	pcall(Unit.set_local_scale, parent, 0, Vector3(0.001, 0.001, 0.001))
+	-- v0.1.183: switched from scale-to-tiny hide to Unit.set_unit_visibility.
+	-- Scale-to-0.001 also shrunk the OutlineExtension's silhouette target,
+	-- killing the white tagged-pickup outline. Visibility is a render flag
+	-- independent of physics — actors still detect interaction, mesh isn't
+	-- drawn, and the outline shader may still compute on the hidden mesh
+	-- (the shader's target rect is per-unit metadata, not directly tied to
+	-- the rendered pass). If the outline is STILL missing after this change,
+	-- the OutlineExtension genuinely needs a visible mesh and we'll need to
+	-- attach it to the boar spear visual instead.
+	pcall(Unit.set_unit_visibility, parent, false)
 
 	self._cwv_visual_unit = visual
 	self._cwv_world       = world
@@ -3474,79 +4434,10 @@ end
 
 _create_rapier_template()
 
--- ============================================================
--- Brace-Repeater template (modified brace_of_pistols_template_1)
--- 1P keeps the brace of pistols visual + animation; 3P body wields
--- the repeating handgun (separate model swap handled at unit-spawn
--- time by `_cwv_3p_unit_override_swap`, registered later).
---
--- Source brace events (`attack_shoot`, `attack_shoot_fast`, `lock_target`)
--- are already authored on `to_repeating_handgun` SM — no remap needed
--- for those. Brace-only `special_action` (the fire-all-8 finisher)
--- routes to `attack_shoot_fast` (closest repeater clip).
---
--- ANIM ADDENDUM: 3P-only. 1P universal — see top-of-file ANIMATION
--- ARCHITECTURE.
--- ============================================================
-
-local _BRACE_REPEATER_ANIM_REMAP_3P = {
-	special_action = "attack_shoot_fast",
-}
-
-local _brace_repeater_kruber_wield_3p = {
-	es_mercenary      = "to_repeating_handgun",
-	es_huntsman       = "to_repeating_handgun",
-	es_knight         = "to_repeating_handgun",
-	es_questingknight = "to_repeating_handgun",
-}
-
-local function _create_brace_repeater_template()
-	if not Weapons or not Weapons.brace_of_pistols_template_1 then
-		mod:warning("brace_of_pistols_template_1 not found — Brace-Repeater template unavailable")
-		return
-	end
-	if Weapons.brace_repeater_template then return end
-
-	local template = table.clone(Weapons.brace_of_pistols_template_1, true)
-
-	if template.actions then
-		for _, action_group in pairs(template.actions) do
-			if type(action_group) == "table" then
-				for _, sub_action in pairs(action_group) do
-					if type(sub_action) == "table"
-							and sub_action.anim_event
-							and _BRACE_REPEATER_ANIM_REMAP_3P[sub_action.anim_event] then
-						sub_action.anim_event_3p = _BRACE_REPEATER_ANIM_REMAP_3P[sub_action.anim_event]
-					end
-				end
-			end
-		end
-	end
-
-	template.wield_anim_3p = "to_repeating_handgun"
-	template.wield_anim_career_3p = template.wield_anim_career_3p or {}
-	for k, v in pairs(_brace_repeater_kruber_wield_3p) do
-		template.wield_anim_career_3p[k] = v
-	end
-
-	Weapons.brace_repeater_template = template
-
-	-- BASE-template wield-patch for the inventory previewer (HeroPreviewer
-	-- reads BASE template, not our clone — see
-	-- `feedback_cwv_previewer_template_lookup.md`). Scoped to es_*; the
-	-- Saltzpyre native fall-through is preserved.
-	local base = Weapons.brace_of_pistols_template_1
-	if base then
-		base.wield_anim_career_3p = base.wield_anim_career_3p or {}
-		for k, v in pairs(_brace_repeater_kruber_wield_3p) do
-			base.wield_anim_career_3p[k] = v
-		end
-	end
-
-	mod:info("Created brace_repeater_template (3p wield=to_repeating_handgun for es_*, %d 3p anim remaps)", 1)
-end
-
-_create_brace_repeater_template()
+-- NOTE: brace_repeater_template + cwv_es_brace_repeater variant moved to
+-- weapon_tweaker in v0.1.187 (CWV-side). The functionality lives there
+-- now as a 3P unit swap on Kruber's vanilla wh_brace_of_pistols
+-- cross-access — no separate inventory item.
 
 -- ============================================================
 -- Optional mod detection
@@ -3596,9 +4487,22 @@ for _, def in ipairs(_variant_definitions) do
 	_display_names[effective_item_type] = def.display_name
 end
 
+-- Pickup HUD popup strings. Vanilla pickup interaction code calls Localize()
+-- on `pickup_settings.hud_description` (interactions.lua:1572 →
+-- interaction_ui.lua:684). VMF's per-mod _localization.lua strings are
+-- exposed via mod:localize(), NOT auto-registered into the global Localize —
+-- so unrecognized keys come back as `<key>` from vanilla Localize. Translate
+-- directly in this hook for any pickup loc key the mod defines.
+local _pickup_hud_strings = {
+	cwv_interaction_ammunition_javelin = "Tuskgor Javelin",
+}
+
 mod:hook(_G, "Localize", function(func, key)
 	if _display_names[key] then
 		return _display_names[key]
+	end
+	if _pickup_hud_strings[key] then
+		return _pickup_hud_strings[key]
 	end
 	-- Vanilla mace+sword rename — gated on the user-facing toggle. The
 	-- inventory/cosmetics UI uses the APPLIED SKIN's display_name key (not
@@ -3941,8 +4845,8 @@ local function _register_cwv_skin_combinations()
 		cwv_es_maul                    = "cwv_es_maul_skins",
 		cwv_es_poleaxe                 = "cwv_es_poleaxe_skins",
 		cwv_es_rapier                  = "cwv_es_rapier_skins",
-		cwv_es_brace_repeater          = "cwv_es_brace_repeater_skins",
 		cwv_es_outrider_grenade_launcher = "cwv_es_outrider_grenade_launcher_skins",
+		cwv_es_musket                    = "cwv_es_musket_skins",
 	}
 
 	local seeded = {}
@@ -4045,14 +4949,14 @@ local _custom_illusions = {
 	-- across `es_1h_mace`, `es_mace_shield`, and `es_dual_wield_hammer_sword`
 	-- (with off-hand overrides to preserve the shield / sword). v0.1.154 moved
 	-- them onto the new dedicated variant per user request.
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_01",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_01",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_02",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_02",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_03",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_03",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_04",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_04",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_04_runed_01", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_04_runed_01", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_04_runed_02", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_06",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_06_runed_01", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_01",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_01",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_02",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_02",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_03",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_03",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_04",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_04",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_04_runed_01", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_04_runed_01", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_04_runed_02", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_06",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_06_runed_01", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
 
 	-- Same 8 greathammer sources mirrored onto cwv_es_dual_warpriest_hammers
 	-- (dual Skullsplitters). `mirror_to_left = true` mirrors the source's
@@ -4062,28 +4966,28 @@ local _custom_illusions = {
 	-- would crash on left attach — see J_LEFTWEAPONATTACH_INVESTIGATION.md).
 	-- Scale and offset applied to both hands; matching_weapon = wh_dual_hammer
 	-- so vanilla _apply_skin_to_item resolves to dual_wield_hammers_priest_template.
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_01",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_01",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_02",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_02",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_03",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_03",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_04",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_04",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_04_runed_01", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_04_runed_01", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_04_runed_02", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_06",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_06_runed_01", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.75, 0.75, 0.575 }, left_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, left_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_01",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_01",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_02",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_02",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_03",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_03",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_04",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_04",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_04_runed_01", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_04_runed_01", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_04_runed_02", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_06",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_06_runed_01", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.25 }, left_hand_offset = { 0, 0, -0.3 }, can_wield = _es_careers },
 
 	-- Same 8 greathammer sources on cwv_es_warpriest_hammer_shield (Skullsplitter
 	-- and Shield). Right hand = source greathammer mesh; left hand = Empire shield
 	-- (preserved via override since the source skins have no left_hand_unit set).
 	-- `display_unit_override = display_shield_hammer` matches the variant's
 	-- forced rig and the vanilla wh_hammer_shield template default.
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_01",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_01",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_02",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_02",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_03",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_03",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_04",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_04",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_04_runed_01", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_04_runed_01", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_04_runed_02", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_06",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
-	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_06_runed_01", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.75, 0.75, 0.575 }, right_hand_offset = { 0, 0, -0.04 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_01",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_01",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_02",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_02",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_03",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_03",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_04",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_04",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_04_runed_01", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_04_runed_01", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_04_runed_02", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_06",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
+	{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_06_runed_01", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
 }
 
 local _custom_skin_keys = {}
@@ -4824,7 +5728,22 @@ _register_halberd_poleaxe_illusions()
 local function _register_rapier_illusions()
 	if not ItemMasterList or not WeaponSkins then return end
 
-	local invisible_pistol = "units/weapons/player/wpn_invisible_weapon"
+	-- Illusions DELIBERATELY do not set `left_hand_unit`. Reason: the
+	-- cosmetic picker's `_load_item_units` (line 281) only spawns a
+	-- left-hand unit when `item_units.left_hand_unit` is truthy. With
+	-- left_hand_unit nil on the illusion's skin entry,
+	-- `BackendUtils.get_item_units` overwrites the inherited brace pistol
+	-- with nil (line 174 of `backend_utils.lua` — the overwrite is
+	-- unconditional, including nil), so the picker skips left-hand spawn
+	-- entirely. No spawn → no `j_leftweaponattach` lookup → no crash.
+	-- Crash GUID `962fe355-a0d4-43fd-9a29-bd64fca6a0ac` (v0.1.191).
+	--
+	-- The variant's DEFAULT skin (cwv_es_rapier_skin, set on equip when
+	-- no illusion is applied) still carries `left_hand_unit = invisible_pistol`
+	-- via the variant's IML entry — that's where the no-pistol identity is
+	-- enforced. When an illusion IS applied, both the picker AND in-game
+	-- skip the left spawn entirely (no invisible pistol attached, no
+	-- visible difference since it was invisible anyway).
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
@@ -4858,7 +5777,7 @@ local function _register_rapier_illusions()
 			inventory_icon    = source.inventory_icon,
 			information_text  = "information_weapon_skin",
 			right_hand_unit   = source.right_hand_unit,
-			left_hand_unit    = invisible_pistol,
+			-- left_hand_unit DELIBERATELY omitted (see comment above).
 			template          = source.template,
 			can_wield         = _es_all_careers,
 		}
@@ -4875,7 +5794,7 @@ local function _register_rapier_illusions()
 			inventory_icon  = source.inventory_icon,
 			rarity          = source.rarity,
 			right_hand_unit = source.right_hand_unit,
-			left_hand_unit  = invisible_pistol,
+			-- left_hand_unit DELIBERATELY omitted (see comment above).
 			template        = source.template,
 		}
 		if source.material_settings_name then
@@ -5193,6 +6112,289 @@ end
 
 _register_imperial_longsword_shield_illusions()
 
+-- ============================================================
+-- Musket cosmetic illusions (alternate handgun meshes)
+-- ============================================================
+-- Two cosmetic options for `cwv_es_musket`:
+--   * Aunty Bessie — wpn_empire_handgun_t3 (es_handgun_skin_05)
+--   * Von Meinkopt's Single-Shooter — wpn_empire_handgun_t2 (es_handgun_skin_04)
+-- Both are vanilla `es_handgun` cosmetic skins. The variant ships with
+-- the default rifle (wpn_empire_handgun_t1, "Reikland Repeater Rifle"
+-- equivalent at base rarity); these illusions let the player swap to
+-- the t2 / t3 silhouettes via the cosmetics picker.
+--
+-- Force-load the alternate handgun unit packages at mod init — same
+-- Tuskgor pattern. Kruber's es_handgun loadout only auto-loads the t1
+-- mesh; t2/t3 variants are skin-pool meshes that may not be in memory.
+-- Without force-load, applying the illusion in-game would crash
+-- "Resource not loaded" on first equip.
+
+local _MUSKET_ILLUSIONS = {
+	{
+		key             = "cwv_es_musket_aunty_bessie",
+		display_name    = "Aunty Bessie",  -- TODO: localize via mod display_names
+		right_hand_unit = "units/weapons/player/wpn_empire_handgun_t3/wpn_empire_handgun_t3",
+		inventory_icon  = "icon_wpn_empire_handgun_t3",
+		rarity          = "exotic",
+		source_skin     = "es_handgun_skin_05",
+	},
+	{
+		key             = "cwv_es_musket_von_meinkopt_single_shooter",
+		display_name    = "Von Meinkopt's Single-Shooter",
+		right_hand_unit = "units/weapons/player/wpn_empire_handgun_t2/wpn_empire_handgun_t2",
+		inventory_icon  = "icon_wpn_empire_handgun_t2",
+		rarity          = "exotic",
+		source_skin     = "es_handgun_skin_04",
+	},
+}
+
+local function _force_load_musket_illusion_units()
+	if not (Managers and Managers.package) then return end
+	for _, illusion in ipairs(_MUSKET_ILLUSIONS) do
+		local ok, err = pcall(function()
+			Managers.package:load(illusion.right_hand_unit, "cwv_musket_illusion_" .. illusion.key, nil, true, true)
+		end)
+		if ok then
+			mod:info("[cwv musket-illusion] force-loaded %s", illusion.right_hand_unit)
+		else
+			mod:warning("[cwv musket-illusion] failed to force-load %s: %s", illusion.right_hand_unit, tostring(err))
+		end
+		-- Also force-load _3p variant — handgun meshes have separate 3P units.
+		local unit_3p = illusion.right_hand_unit .. "_3p"
+		pcall(function()
+			Managers.package:load(unit_3p, "cwv_musket_illusion_" .. illusion.key .. "_3p", nil, true, true)
+		end)
+	end
+end
+
+_force_load_musket_illusion_units()
+
+local function _register_musket_handgun_illusions()
+	if not ItemMasterList or not WeaponSkins then return end
+
+	local display_unit = "units/weapons/weapon_display/display_1h_handguns"
+	local registered = 0
+	for _, illusion in ipairs(_MUSKET_ILLUSIONS) do
+		local new_key = illusion.key
+		if _custom_skin_keys[new_key] then goto continue end
+
+		local iml_entry = {
+			key               = new_key,
+			name              = new_key,
+			item_type         = "weapon_skin",
+			slot_type         = "weapon_skin",
+			matching_item_key = "cwv_es_musket",
+			rarity            = illusion.rarity,
+			-- Per-illusion display name — registered into _display_names
+			-- below so the inventory shows "Aunty Bessie" / "Von Meinkopt's
+			-- Single-Shooter" instead of the variant's generic name.
+			display_name      = new_key .. "_name",
+			description       = "cwv_es_musket_description",
+			display_unit      = display_unit,
+			hud_icon          = "weapon_generic_icon_units/weapons/weapon_display/display_rifle",
+			inventory_icon    = illusion.inventory_icon,
+			information_text  = "information_weapon_skin",
+			right_hand_unit   = illusion.right_hand_unit,
+			template          = "musket_template",
+			can_wield         = _es_all_careers,
+		}
+		ItemMasterList[new_key] = iml_entry
+
+		WeaponSkins.skins[new_key] = {
+			description     = "cwv_es_musket_description",
+			display_name    = new_key .. "_name",
+			display_unit    = display_unit,
+			hud_icon        = "weapon_generic_icon_units/weapons/weapon_display/display_rifle",
+			inventory_icon  = illusion.inventory_icon,
+			rarity          = illusion.rarity,
+			right_hand_unit = illusion.right_hand_unit,
+			template        = "musket_template",
+		}
+
+		-- Register display name so `Localize(<key>_name)` returns the
+		-- human-readable name. The Localize hook earlier in the file reads
+		-- _display_names[key].
+		_display_names[new_key .. "_name"] = illusion.display_name
+
+		local combos = WeaponSkins.skin_combinations.cwv_es_musket_skins
+		if combos then
+			local tier = combos[illusion.rarity]
+			if tier then
+				tier[#tier + 1] = new_key
+			end
+		end
+
+		if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, new_key) then
+			local tbl = NetworkLookup.weapon_skins
+			local idx = #tbl + 1
+			rawset(tbl, idx, new_key)
+			rawset(tbl, new_key, idx)
+		end
+
+		if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, new_key) then
+			local tbl = NetworkLookup.item_names
+			local idx = #tbl + 1
+			rawset(tbl, idx, new_key)
+			rawset(tbl, new_key, idx)
+		end
+
+		_custom_skin_keys[new_key] = true
+		registered = registered + 1
+		::continue::
+	end
+
+	mod:info("Registered %d musket handgun illusions on cwv_es_musket (Aunty Bessie + Von Meinkopt's Single-Shooter)", registered)
+end
+
+_register_musket_handgun_illusions()
+
+-- ============================================================
+-- Empire 1h sword + 1h mace → cwv_es_sword_and_mace illusions
+-- ============================================================
+-- Variant `cwv_es_sword_and_mace` is the inverse of vanilla mace+sword
+-- (sword right, mace left). Cosmetic options pair each vanilla
+-- `es_1h_sword` skin's mesh on the right hand with an `es_1h_mace`
+-- skin's mesh on the left hand.
+--
+-- Both source pools have 8 skins each. We sort each by rarity
+-- (common→plentiful→rare→exotic→unique→magic) then zip by index. The
+-- distributions don't perfectly match (sword has 3 unique + 1 exotic,
+-- mace has 2 unique + 2 exotic), so one pair (index 5) ends up
+-- mismatched (sword unique × mace exotic). All 8 pair cleanly otherwise.
+--
+-- Display rig: `display_dual_weapons` is forced via the existing
+-- `_force_display_unit[cwv_es_sword_and_mace]` entry on the variant's
+-- auto-generated default skin. Each illusion clone here also explicitly
+-- sets `display_unit` to `display_dual_weapons` (set on both IML and
+-- WeaponSkins.skins entries — the previewer reads it via two chains and
+-- needs it on both layers, per `feedback_cwv_dual_wield_display_rig.md`).
+
+local _RARITY_ORDER = {
+	common = 1, plentiful = 2, rare = 3, exotic = 4, unique = 5, magic = 6,
+}
+
+local function _register_sword_and_mace_illusions()
+	if not ItemMasterList or not WeaponSkins then return end
+
+	-- Collect both source pools. We capture (skin_key, mesh, rarity) and
+	-- sort by (rarity_priority, skin_key) for deterministic pairing order.
+	local function _gather(matching_key)
+		local pool = {}
+		for skin_key, entry in pairs(ItemMasterList) do
+			if type(entry) == "table"
+					and entry.item_type == "weapon_skin"
+					and entry.matching_item_key == matching_key
+					and entry.right_hand_unit then
+				pool[#pool + 1] = {
+					skin_key = skin_key,
+					mesh     = entry.right_hand_unit,  -- es_1h_mace stores mesh as right_hand_unit even though we put it on the left
+					rarity   = entry.rarity or "exotic",
+				}
+			end
+		end
+		table.sort(pool, function(a, b)
+			local ra, rb = _RARITY_ORDER[a.rarity] or 99, _RARITY_ORDER[b.rarity] or 99
+			if ra ~= rb then return ra < rb end
+			return a.skin_key < b.skin_key
+		end)
+		return pool
+	end
+
+	local swords = _gather("es_1h_sword")
+	local maces  = _gather("es_1h_mace")
+
+	-- Zip by index. If counts differ (currently both 8, but defensive
+	-- against future vanilla DLC adding skins to one but not the other),
+	-- iterate the smaller of the two; surplus on either side stays
+	-- unpaired.
+	local n = math.min(#swords, #maces)
+	if n == 0 then return end
+
+	local display_unit = "units/weapons/weapon_display/display_dual_weapons"
+
+	local registered = 0
+	for i = 1, n do
+		local sword = swords[i]
+		local mace  = maces[i]
+		-- Compose a stable key from both source paths' mesh tail components.
+		-- Pattern: cwv_es_sword_and_mace_<sword_mesh_tail>_<mace_mesh_tail>.
+		local sword_tail = sword.mesh:match("([^/]+)/[^/]+$") or sword.mesh
+		local mace_tail  = mace.mesh:match("([^/]+)/[^/]+$") or mace.mesh
+		local new_key = "cwv_es_sword_and_mace_" .. sword_tail .. "_" .. mace_tail
+		if _custom_skin_keys[new_key] then goto continue end
+
+		-- Picker rarity inherits the sword's rarity (the right-hand "primary"
+		-- of the pair). Mace rarity may differ for mismatched index pairs;
+		-- sword's reads as the headline cosmetic.
+		local rarity = sword.rarity
+
+		local iml_entry = {
+			key               = new_key,
+			name              = new_key,
+			item_type         = "weapon_skin",
+			slot_type         = "weapon_skin",
+			matching_item_key = "cwv_es_sword_and_mace",
+			rarity            = rarity,
+			-- Display name / description fall through to a generic
+			-- "Sword and Mace" — auto-populated from the variant def's
+			-- skin_display_name / description via _display_names registration.
+			display_name      = "cwv_es_sword_and_mace_skin_name",
+			description       = "cwv_es_sword_and_mace_description",
+			display_unit      = display_unit,
+			hud_icon          = "weapon_generic_icon_falken",
+			inventory_icon    = "icon_es_dual_wield_hammer_sword_01",
+			information_text  = "information_weapon_skin",
+			right_hand_unit   = sword.mesh,
+			left_hand_unit    = mace.mesh,
+			template          = "sword_and_mace_template",
+			can_wield         = _es_all_careers,
+		}
+		ItemMasterList[new_key] = iml_entry
+
+		WeaponSkins.skins[new_key] = {
+			description     = "cwv_es_sword_and_mace_description",
+			display_name    = "cwv_es_sword_and_mace_skin_name",
+			display_unit    = display_unit,
+			hud_icon        = "weapon_generic_icon_falken",
+			inventory_icon  = "icon_es_dual_wield_hammer_sword_01",
+			rarity          = rarity,
+			right_hand_unit = sword.mesh,
+			left_hand_unit  = mace.mesh,
+			template        = "sword_and_mace_template",
+		}
+
+		local combos = WeaponSkins.skin_combinations.cwv_es_sword_and_mace_skins
+		if combos then
+			local tier = combos[rarity]
+			if tier then
+				tier[#tier + 1] = new_key
+			end
+		end
+
+		if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, new_key) then
+			local tbl = NetworkLookup.weapon_skins
+			local idx = #tbl + 1
+			rawset(tbl, idx, new_key)
+			rawset(tbl, new_key, idx)
+		end
+
+		if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, new_key) then
+			local tbl = NetworkLookup.item_names
+			local idx = #tbl + 1
+			rawset(tbl, idx, new_key)
+			rawset(tbl, new_key, idx)
+		end
+
+		_custom_skin_keys[new_key] = true
+		registered = registered + 1
+		::continue::
+	end
+
+	mod:info("Registered %d sword+mace illusion pairs on cwv_es_sword_and_mace (1h sword right × 1h mace left, rarity-sorted zip)", registered)
+end
+
+_register_sword_and_mace_illusions()
+
 mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", function(self)
 	local mirror = self._backend_mirror
 	if not mirror or not mirror._unlocked_weapon_skins then return end
@@ -5298,8 +6500,8 @@ local function _build_entry(def, backend_id)
 		cwv_es_maul                    = "cwv_es_maul_skins",
 		cwv_es_poleaxe                 = "cwv_es_poleaxe_skins",
 		cwv_es_rapier                  = "cwv_es_rapier_skins",
-		cwv_es_brace_repeater          = "cwv_es_brace_repeater_skins",
 		cwv_es_outrider_grenade_launcher = "cwv_es_outrider_grenade_launcher_skins",
+		cwv_es_musket                    = "cwv_es_musket_skins",
 	}
 	if def.item_type and _item_type_to_skin_table[def.item_type] then
 		entry.skin_combination_table = _item_type_to_skin_table[def.item_type]
@@ -5607,6 +6809,27 @@ local _type_transforms = {
 		-- "+Z = grip lower" rule — per-model authoring axes can invert it).
 		right_hand_offset = { 0, 0, -0.065 },
 	},
+	-- Longsword + Shield: same right-hand sword mesh as the 2H Imperial
+	-- Longsword family (`wpn_empire_2h_sword_04_t1`), per-perspective
+	-- scaled. 3P body shows the smaller-feeling sword (better silhouette
+	-- next to a shield, where a 2H greatsword reads too oversized),
+	-- while 1P keeps the original 2H family scale because the held view
+	-- looked too small at the shrunk values. Tuning history:
+	--   v0.1.197 unified {1.0, 0.8, 0.9} — matches 2H family
+	--   v0.1.206 unified {0.85, 0.65, 0.75} — −0.15 on every axis
+	--   v0.1.210 SPLIT — 1P back to {1.0, 0.8, 0.9}, 3P stays at {0.85, 0.65, 0.75}
+	-- Resolution: `_1p`/`_3p` variants override the unified field for
+	-- that perspective only (per `_resolve_field`). Grip offset is
+	-- unified — same Z=-0.065 works for both perspectives. Left hand
+	-- (the shield) is untouched. Variant uses its own item_type (not
+	-- cwv_imperial_longsword) so it can carry its own curated
+	-- shield-illusion picker — that's why this is a separate entry
+	-- rather than sharing the 2H family's type.
+	cwv_es_longsword_shield = {
+		right_hand_scale_1p = { 1.0, 0.8, 0.9 },     -- 1P held view: full 2H family scale
+		right_hand_scale_3p = { 0.85, 0.65, 0.75 },  -- 3P body: shrunk for shield pairing
+		right_hand_offset   = { 0, 0, -0.065 },
+	},
 	-- Maul: scale Kruber's 1H mace meshes (mace+sword mace + es_1h_mace
 	-- skins) up to a 2H silhouette. User-tuned to {1.075, 1.075, 1.4}
 	-- v0.1.171 (was {1.4, 1.4, 2.0} in v0.1.168 — too big). The lighter
@@ -5614,11 +6837,13 @@ local _type_transforms = {
 	-- length to read as a 2H maul. Type-level so default + every illusion
 	-- in cwv_es_maul_skins picker inherit.
 	cwv_es_maul = {
-		right_hand_scale  = { 1.075, 1.075, 1.4 },
-		-- Grip offset Z+0.5 lowers Kruber's hand toward the haft (grip was
-		-- riding too high — hand on the head of the mace). Per
-		-- `feedback_grip_offset_sign.md`, +Z lowers grip.
-		right_hand_offset = { 0, 0, 0.5 },
+		right_hand_scale  = { 1.0, 1.0, 1.6 },
+		-- Grip offset Z lowers Kruber's hand toward the haft. Per
+		-- `feedback_grip_offset_sign.md`, +Z lowers grip on this family.
+		-- Tuning history: 0.5 (v0.1.176) → 0.35 (v0.1.213) — the original
+		-- pulled the hand too far toward the bottom of the haft; this is
+		-- a more moderate drop.
+		right_hand_offset = { 0, 0, 0.2 },
 	},
 	-- Poleaxe: shrink Kruber's halberd Z so it reads as a shorter
 	-- polearm instead of a full halberd. Grip offset Z+0.5 lowers the
@@ -5627,16 +6852,29 @@ local _type_transforms = {
 	-- `feedback_grip_offset_sign.md`, +Z lowers grip). Type-level so the
 	-- default mesh + every es_halberd_skin_* illusion in
 	-- cwv_es_poleaxe_skins inherits.
-	-- Rapier: broaden the fencing-sword mesh on X (+10%) and Y (+25%) for
-	-- a basket-hilt feel. Z stays native (length is fine). Type-level so
-	-- the default mesh + every wh_fencing_sword_skin_* illusion in
-	-- cwv_es_rapier_skins inherits.
+	-- Rapier: lightly broaden the fencing-sword mesh — X +5%, Y +15%,
+	-- Z native. Tuning history:
+	--   v0.1.187 {1.1, 1.25, 1.0} initial basket-hilt feel
+	--   v0.1.191 {1.1, 1.45, 1.0} Y bump
+	--   v0.1.196 {1.0, 1.75, 1.0} maximal Y for broadsword silhouette
+	--   v0.1.212 {1.05, 1.15, 1.0} restored to a subtler bump per user —
+	--     v0.1.196's 1.75 read as exaggerated; this is a lighter touch.
+	-- Type-level so the default mesh + every wh_fencing_sword_skin_*
+	-- illusion in cwv_es_rapier_skins inherits.
 	cwv_es_rapier = {
-		right_hand_scale = { 1.1, 1.25, 1.0 },
+		right_hand_scale = { 1.05, 1.15, 1.0 },
 	},
 	cwv_es_poleaxe = {
-		right_hand_scale  = { 1.0, 1.0, 0.65 },
+		right_hand_scale  = { 0.9, 0.9, 0.65 },
 		right_hand_offset = { 0, 0, 0.5 },
+	},
+	-- Musket: stretch Kruber's rifle 1.35x along Y (length axis) and
+	-- thin to 0.9x on X and Z (barrel/cross-section). Together they read
+	-- as a long-and-slender musket silhouette — slightly longer than a
+	-- standard rifle, noticeably thinner barrel/stock. Type-level so
+	-- default + any future skin illusions inherit.
+	cwv_es_musket = {
+		right_hand_scale = { 0.9, 1.35, 0.9 },
 	},
 }
 
@@ -5883,139 +7121,13 @@ if BackendUtils then
 	end)
 end
 
--- ============================================================
--- Per-perspective unit-swap (NEW for CWV)
--- ============================================================
--- Variants can declare `right_hand_unit_3p_override` / `left_hand_unit_3p_override`
--- on their def to swap the 3P body's mesh for a totally different unit
--- than what 1P shows. Vanilla derives the 3P unit path by appending `_3p`
--- to `right_hand_unit` (`gear_utils.lua:189`) — same mesh family for 1P
--- and 3P, just LOD-swapped. This hook intercepts at
--- `GearUtils.spawn_inventory_unit` (used by both local equip AND husk
--- spawn paths), lets vanilla spawn the 1P + default 3P units, then
--- destroys the just-spawned 3P unit and replaces it with the override.
---
--- `_3p_override = false` means "no 3P unit at all for this hand"
--- (used when the 3P weapon is single-handed but the 1P weapon is dual).
--- Any other string value is treated as a full 3P unit path (including
--- the `_3p` suffix already applied — caller supplies the exact name).
---
--- Husks: same hook fires because remote-player spawn flows through the
--- same GearUtils.spawn_inventory_unit. Only owner_unit_1p is nil for
--- husks; the 3P spawn path is identical.
---
--- Caveat: the swap depends on `item_data.backend_id` matching
--- `cwv_<key>_001` — bot weapons may bypass this (no backend_id). They
--- fall through to vanilla behavior and just see the 1P mesh in 3P.
--- Acceptable trade.
-
-local function _resolve_3p_override(item_data, hand)
-	if not item_data then return nil end
-	local bid = item_data.backend_id
-	if type(bid) ~= "string" then return nil end
-	local cwv_key = bid:match("^(cwv_.-)_001$")
-	if not cwv_key then return nil end
-	-- Inline lookup — _find_def is defined later in the file. Iterate
-	-- _variant_definitions directly. Variant count is small (~25); the
-	-- linear scan runs at most a few times per equip and the entire
-	-- chain is gated on backend_id pattern match (cwv items only).
-	for _, def in ipairs(_variant_definitions) do
-		if def.item_key == cwv_key then
-			return def[hand .. "_hand_unit_3p_override"], def
-		end
-	end
-	return nil
-end
-
--- Setting toggle. Default OFF — the swap mechanism crashed on first
--- attempt (GUID 3c05218c). Until we identify the root cause, the variant
--- ships as a regular Saltzpyre brace of pistols on Kruber. Flip the
--- VMF setting "cwv_3p_swap_enabled" ON to test the swap.
-local function _3p_swap_enabled()
-	if not mod.get then return false end
-	local v = mod:get("cwv_3p_swap_enabled")
-	if v == nil then return false end
-	return v
-end
-
-mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
-	-- Always call vanilla first. We never replace the call — only
-	-- post-process its result. If anything in our post-process fails,
-	-- we return vanilla's results unchanged so the equip can't break.
-	local v_w3p, v_a3p, v_w1p, v_a1p =
-		func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
-
-	local override, def = _resolve_3p_override(item_data, hand)
-	if override == nil or not _3p_swap_enabled() then
-		return v_w3p, v_a3p, v_w1p, v_a1p
-	end
-
-	local pcall_ok, swap_result = pcall(function()
-		if override == false then
-			if v_w3p then
-				Managers.state.unit_spawner:mark_for_deletion(v_w3p)
-			end
-			mod:info("[cwv 3p-swap] %s hand: no 3P unit (override=false) for %s", hand, def.item_key)
-			return { unit = false }
-		end
-
-		if not v_w3p then return { unit = nil } end
-
-		local node_linking_settings = item_template[hand .. "_hand_attachment_node_linking"]
-		if not node_linking_settings or not node_linking_settings.third_person then
-			mod:warning("[cwv 3p-swap] %s hand: missing node_linking_settings.third_person; aborting", hand)
-			return { unit = nil }
-		end
-
-		local unit_template_3p_name = item_data.third_person_extension_template
-			or item_template.third_person_extension_template
-			or "weapon_unit_3p"
-		if owner_unit_1p then unit_template_3p_name = "weapon_unit_3p" end
-
-		local extension_init_data_3p = {
-			weapon_system = {
-				item_template = item_template,
-				item_name = item_data.name,
-				owner_unit = owner_unit_3p,
-				world = world,
-			},
-		}
-
-		-- Spawn override BEFORE destroying vanilla. If spawn fails we
-		-- still have vanilla's unit to fall back to.
-		local new_unit = Managers.state.unit_spawner:spawn_local_unit_with_extensions(
-			override, unit_template_3p_name, extension_init_data_3p)
-		if not new_unit then
-			mod:warning("[cwv 3p-swap] %s hand: spawn returned nil for '%s'", hand, tostring(override))
-			return { unit = nil }
-		end
-
-		Managers.state.unit_spawner:mark_for_deletion(v_w3p)
-
-		local attachment_node_linking_3p = node_linking_settings.third_person.wielded
-		GearUtils.link(world, attachment_node_linking_3p, {}, owner_unit_3p, new_unit)
-
-		local mat = material_settings_name or item_template.material_settings_name
-		if mat then GearUtils.apply_material_settings(new_unit, mat) end
-
-		Unit.set_unit_visibility(new_unit, false)
-
-		mod:info("[cwv 3p-swap] %s hand: swapped 3P unit to '%s' for %s (husk=%s)",
-			hand, override, def.item_key, tostring(owner_unit_1p == nil))
-
-		return { unit = new_unit }
-	end)
-
-	if not pcall_ok then
-		mod:warning("[cwv 3p-swap] %s hand: pcall ERROR (def=%s): %s — keeping vanilla unit",
-			hand, def and def.item_key or "?", tostring(swap_result))
-		return v_w3p, v_a3p, v_w1p, v_a1p
-	end
-
-	if swap_result.unit == false then return nil, nil, v_w1p, v_a1p end
-	if swap_result.unit == nil   then return v_w3p, v_a3p, v_w1p, v_a1p end
-	return swap_result.unit, v_a3p, v_w1p, v_a1p
-end)
+-- NOTE: the per-perspective 1P/3P unit swap mechanism (previously used
+-- for cwv_es_brace_repeater) was moved to weapon_tweaker in v0.1.187 —
+-- it now hooks `GearUtils.spawn_inventory_unit` for vanilla
+-- `wh_brace_of_pistols` on Kruber careers, swapping the 3P unit to
+-- the repeater. No CWV variant currently uses the override mechanism;
+-- if a future variant needs different 1P vs 3P meshes, restore the
+-- hook here from git history.
 
 mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 	local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)

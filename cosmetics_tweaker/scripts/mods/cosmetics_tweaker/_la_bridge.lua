@@ -153,31 +153,52 @@ end
 --   * `kind="texture"` + no `new_units`           -> pure paint-over (intended_unit nil).
 --   * `kind="texture"` + `new_units` + is_vanilla -> paint onto a vanilla mesh.
 --   * `kind="texture"` + `new_units` + !vanilla   -> custom mesh; FILTERED.
---   * `kind="unit"`    + `new_units`              -> custom mesh; FILTERED.
+--   * `kind="unit"`    + `new_units` + engine-resident -> custom mesh.
 --
--- v0.8.11–v0.8.13 attempted to expose custom-mesh shields. Two failure modes
--- defeated each attempt:
---   1. The engine spawns LA's compiled .unit but can't bind its materials —
---      magenta "missing texture" indicator. LA's resource_package globs
---      `unit/material/texture = ["*/*"]`, so the assets ARE loaded, but the
---      engine's material binding for these meshes only works after LA's
---      `swap_units_new` has aliased `NetworkLookup.inventory_packages` and
---      mutated `WeaponSkins.skins[skin][hand]`.
---   2. Calling LA's `re_apply_illusion` from outside its update loop
---      conflicts with the loop's own iteration — LA reads `mod:get(skin)`
---      every tick and re-runs the same path with whatever the LA setting
---      currently holds. Combined with LA's strict
---      `NetworkLookup.inventory_packages.__index` (which `error()`s on
---      missing key), even one stale flag (`changed_model=true` when our
---      revert raced with LA's tick) crashes with `does not contain key:
---      <la_path>_3p` (user crash 60180105-bd15-49f2-9fa6-9f70dd851846).
--- A safe integration would need to take ownership of LA's update loop or
--- replicate `swap_units_new` with our own state machine using rawget/rawset
--- to bypass the strict __index. Out of scope for now. Filtered until then.
+-- The `kind="unit"` path was filtered until v0.8.25 because v0.8.11-v0.8.13
+-- attempts went through LA's `re_apply_illusion`, which races with LA's
+-- `mod.update` loop and crashes against `NetworkLookup.inventory_packages`'s
+-- strict __index when `<la_path>_3p` isn't registered (crash GUID
+-- 60180105-bd15-49f2-9fa6-9f70dd851846).
+--
+-- Now we own the path entirely: never call LA helpers, register the LA
+-- mesh paths in `NetworkLookup.inventory_packages` ourselves via `rawset`
+-- at registration time (so vanilla code that reads the table for sync
+-- doesn't trip the __index), and gate exposure on
+-- `Application.can_get("unit", ...)` for both the 1p and _3p halves so
+-- we never expose a path the engine can't actually spawn.
 local function _is_supported_variant(variant)
-    if variant.kind ~= "texture" then return false end
-    if variant.new_units and not variant.is_vanilla_unit then return false end
-    return true
+    if variant.kind == "texture" then
+        if variant.new_units and not variant.is_vanilla_unit then return false end
+        return true
+    end
+    if variant.kind == "unit" then
+        if not variant.new_units or not variant.new_units[1] or not variant.new_units[2] then return false end
+        local can_get = Application and Application.can_get
+        if not can_get then return false end
+        if not can_get("unit", variant.new_units[1]) then return false end
+        if not can_get("unit", variant.new_units[2]) then return false end
+        return true
+    end
+    return false
+end
+
+-- Register an LA mesh path in `NetworkLookup.inventory_packages` so vanilla
+-- VT2 code that reads the table during inventory sync / serialization
+-- doesn't trip the strict `__index` metamethod (which `error()`s on missing
+-- key). LA's compiled `.unit` files have NetworkLookup IDs assigned at
+-- compile time but they aren't merged into the runtime NetworkLookup
+-- bootstrap, so we add bidirectional entries (string→idx, idx→string)
+-- using `rawset` to bypass the strict __index. Idempotent; safe to call
+-- on every variant during build_offhand_options.
+local function _register_la_path_in_network_lookup(path)
+    if not path or path == "" then return end
+    if not NetworkLookup or not NetworkLookup.inventory_packages then return end
+    local ip = NetworkLookup.inventory_packages
+    if rawget(ip, path) then return end
+    local idx = #ip + 1
+    rawset(ip, idx, path)
+    rawset(ip, path, idx)
 end
 
 -- Build per-weapon-type LA shield pools.
@@ -203,6 +224,9 @@ local _LA_EXTRA_WEAPON_TYPES = {
     -- displays as the LA combo rather than wrapping onto Bret UVs.
     Kruber_empire_shield_hero1_Ostermark01 = { es_1h_sword_shield_breton = true },
     Kruber_empire_shield_hero1_Kotbs01     = { es_1h_sword_shield_breton = true },
+    -- Empire shield 01 mesh (Reiland-style). Custom kind="unit" mesh; same
+    -- "show LA's authored shape on Bret weapon" rationale as Ostermark.
+    Kruber_empire_shield_basic1            = { es_1h_sword_shield_breton = true },
 }
 
 -- LA's icon keys sometimes use a different name than the game's actual
@@ -249,6 +273,15 @@ local function build_offhand_options()
                 table.sort(sorted_icons)
                 local vanilla_skin_key = sorted_icons[1]
                 local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
+                -- For kind="unit" custom-mesh variants, register both new_units
+                -- entries (1p and _3p) in NetworkLookup.inventory_packages so
+                -- vanilla code reading the table for sync doesn't crash on the
+                -- strict __index. kind="texture" variants point to vanilla
+                -- meshes that are already in the table.
+                if variant.kind == "unit" and variant.new_units then
+                    _register_la_path_in_network_lookup(variant.new_units[1])
+                    _register_la_path_in_network_lookup(variant.new_units[2])
+                end
                 M._la_offhand_resolution[la_key] = {
                     intended_unit = intended_unit,
                     source        = source,
@@ -483,6 +516,27 @@ local SHIELD_DIFF_SLOT = "texture_map_c0ba2942"
 local SHIELD_PACK_SLOT = "texture_map_0205ba86"
 local SHIELD_NORM_SLOT = "texture_map_59cd86b9"
 
+-- Texture-fallback map for `kind="unit"` LA shields whose textures live in
+-- the source `.unit` file's `colors / normals / MABs` fields (which LA's
+-- compiled bundle reads but the vanilla previewer's resource scope doesn't
+-- bind reliably). We extract them manually and paint per-unit via
+-- `Unit.set_texture_for_materials` at spawn time. The customization preview
+-- world doesn't drag in vanilla shield package dependencies (only the LA
+-- mesh is in scope), so the compiled material's references go unbound and
+-- the shield renders mesh-only-no-texture there. Painting explicitly per
+-- unit fixes it because the textures themselves are in LA's globally-
+-- loaded resource_package.
+--
+-- Source for these paths: `units/empire_shield/<la_mesh>.unit` `colors`,
+-- `normals`, `MABs` keys at slot1.
+local _LA_KIND_UNIT_TEXTURES = {
+    Kruber_empire_shield_basic1 = {
+        diff = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_diffuse",
+        norm = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_normal",
+        pack = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_combined",
+    },
+}
+
 -- Paint LA's textures onto a single unit using `Unit.set_texture_for_materials`,
 -- the same per-unit primitive vanilla VT2 uses for `MaterialSettingsTemplates`
 -- (`gear_utils.lua:150`, `cosmetic_utils.lua:72`, `flow_callbacks_foundation.lua:939`).
@@ -507,14 +561,42 @@ local SHIELD_NORM_SLOT = "texture_map_59cd86b9"
 -- doesn't matter; if a future LA shield uses skip_meshes we'll need a
 -- per-mesh fallback. We log a warning when we drop those overrides so the
 -- regression is visible.
-local function _paint_offhand_textures_locally(unit, variant)
+local function _paint_offhand_textures_locally(unit, variant, armoury_key)
     if not unit or type(unit) ~= "userdata" then return false end
     if not Unit.alive(unit) then return false end
-    if type(variant.textures) ~= "table" then return false end
 
-    local diff = variant.textures[1]
-    local pack = variant.textures[2]
-    local norm = variant.textures[3]
+    -- v0.8.37: skip painting for kind="unit" variants to test whether the
+    -- post-spawn texture painting (Unit.set_texture_for_materials on a
+    -- bundled-mesh unit whose materials may not be fully bound yet) is
+    -- the source of the C++ AV (GUID a739e6e5). Was also tried in v0.8.36
+    -- but only by skipping the override entirely; this version lets the
+    -- mesh spawn and tests just the paint hypothesis.
+    if variant.kind == "unit" then
+        if M.trace then
+            mod:info("[LA bridge] skip paint for kind=unit %s (texture-painting disabled for bundled meshes)",
+                tostring(armoury_key))
+        end
+        return false
+    end
+
+    -- Resolution order for textures:
+    --   1. variant.textures (LA's SKIN_LIST entry; populated for kind="texture" variants)
+    --   2. _LA_KIND_UNIT_TEXTURES[armoury_key] (manual extraction from the
+    --      source `.unit` file for `kind="unit"` variants whose SKIN_LIST
+    --      lacks a textures array)
+    --   3. nothing — the mesh is responsible for its own texture binding
+    local diff, pack, norm
+    if type(variant.textures) == "table" then
+        diff = variant.textures[1]
+        pack = variant.textures[2]
+        norm = variant.textures[3]
+    end
+    local fallback = armoury_key and _LA_KIND_UNIT_TEXTURES[armoury_key]
+    if fallback then
+        if not diff then diff = fallback.diff end
+        if not pack then pack = fallback.pack end
+        if not norm then norm = fallback.norm end
+    end
 
     if (variant.skip_meshes and next(variant.skip_meshes)) or variant.textures_other_mesh then
         if M.trace then
@@ -541,7 +623,7 @@ local function _paint_offhand_textures_locally(unit, variant)
         end
     end
 
-    return true
+    return (diff or pack or norm or variant.special_textures) ~= nil
 end
 
 -- Dead code retained for reference; the function above now handles painting.
@@ -612,7 +694,7 @@ function M.apply_offhand_to_unit(world, unit, armoury_key, vanilla_skin)
     if not LA or type(LA.SKIN_LIST) ~= "table" then return false end
     local variant = LA.SKIN_LIST[armoury_key]
     if not variant then return false end
-    local ok = _paint_offhand_textures_locally(unit, variant)
+    local ok = _paint_offhand_textures_locally(unit, variant, armoury_key)
     if M.trace then mod:info("[LA bridge]   offhand local paint %s ok=%s", armoury_key, tostring(ok)) end
     return ok
 end

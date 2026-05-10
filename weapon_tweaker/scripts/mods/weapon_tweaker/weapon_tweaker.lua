@@ -21,16 +21,16 @@ Key conventions (also in CLAUDE.md):
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.12.1-dev"
+local MOD_VERSION = "0.12.14-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
 local weapon_unlock_map = {
     -- Kruber
-    es_mercenary      = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun" },
-    es_huntsman       = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun" },
-    es_knight         = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun" },
-    es_questingknight = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "dr_handgun", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun" },
+    es_mercenary      = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun", "wh_brace_of_pistols" },
+    es_huntsman       = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols" },
+    es_knight         = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_repeating_handgun", "wh_brace_of_pistols" },
+    es_questingknight = { "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_sword", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols" },
     -- Bardin
     dr_ranger         = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_axe", "wh_dual_hammer", "wh_1h_falchion", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_sword", "dr_2h_pick", "dr_crossbow", "dr_rakegun", "dr_handgun", "es_handgun", "dr_steam_pistol", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
     dr_ironbreaker    = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_axe", "wh_dual_hammer", "wh_1h_falchion", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_sword", "dr_2h_pick", "dr_crossbow", "dr_drake_pistol", "dr_drakegun", "dr_rakegun", "dr_handgun", "es_handgun", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
@@ -1315,6 +1315,566 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
     return result
 end)
 
+-- ============================================================
+-- Brace of Pistols on Kruber → 3P unit swap to repeating handgun
+-- ============================================================
+-- Migrated from character_weapon_variants v0.1.187 (CWV's
+-- `cwv_es_brace_repeater` variant + `_cwv_3p_unit_override_swap` hook).
+-- WT exposes `wh_brace_of_pistols` to all 4 Kruber careers via the
+-- unlock map at the top of this file. When Kruber actually equips it,
+-- this hook swaps the 3P body unit from the brace pistol mesh to the
+-- Empire repeating handgun mesh. The 1P side stays as the brace
+-- (cross-arm fire animation is what makes it visually distinct).
+--
+-- Anim plumbing:
+--   * `_BRACE_REPEATER_BASE_WIELD_3P` patches the base brace template's
+--     `wield_anim_career_3p` for Kruber → `to_repeating_handgun` (Kruber's
+--     vanilla repeater wield SM, authored on his empire-soldier 3P body).
+--     Saltzpyre native wielders fall through (their careers aren't keyed
+--     here), so vanilla brace 3P wield is unaffected for them.
+--   * `_BRACE_REPEATER_ANIM_REMAP_3P`: the brace's `special_action`
+--     (the fire-all-8-pistols finisher) doesn't exist on the repeater
+--     SM. Substitute with `attack_shoot_fast` (closest repeater clip).
+--     All other brace events (`attack_shoot`, `attack_shoot_fast`,
+--     `lock_target`) ARE authored on the repeater SM and don't need a
+--     remap.
+--
+-- Husks: same hook fires because remote-player spawn flows through the
+-- same `GearUtils.spawn_inventory_unit`. Only `owner_unit_1p` is nil for
+-- husks; the 3P spawn path is identical → other players see the
+-- repeater on Kruber's body too.
+
+local _BRACE_REPEATER_3P_UNIT = "units/weapons/player/wpn_emp_handgun_repeater_t1/wpn_emp_handgun_repeater_t1_3p"
+
+-- Force-load the repeater rifle 3P unit at mod init. Vanilla packages for the
+-- brace's right_hand_unit don't include the repeater unit (different weapon),
+-- so when the swap below tries to spawn it via Managers.state.unit_spawner,
+-- the resource manager has no entry → "Unit not found" assertion (crash GUID
+-- d9e1d3d3 — the very crash this block is here to prevent).
+--
+-- Same fix CWV uses for the Tuskgor Javelin pup unit
+-- (`character_weapon_variants.lua:2638` — Managers.package:load(unit_path,
+-- ref, nil, async=true, prioritize=true)). Per VT2's pickup_package_loader
+-- convention, the engine generates a per-unit synthetic package at the unit
+-- path so calling :load with a unit path works as a "load this single unit's
+-- assets" request. Load is async but fires at mod init, long before any
+-- equip path runs — by the time the brace hook spawns, the unit is ready.
+-- Documented in `feedback_cwv_cross_character_unit_packages.md` (pattern
+-- known from Tuskgor v0.1.118 and now applied to Brace-Repeater).
+local function _force_load_brace_repeater_3p_unit()
+    if not (Managers and Managers.package) then return end
+    local ok, err = pcall(function()
+        Managers.package:load(_BRACE_REPEATER_3P_UNIT, "wt_brace_repeater_3p", nil, true, true)
+    end)
+    if ok then
+        mod:info("[wt brace-3p-swap] force-loaded repeater 3P unit: %s", _BRACE_REPEATER_3P_UNIT)
+    else
+        mod:warning("[wt brace-3p-swap] failed to force-load repeater 3P unit: %s", tostring(err))
+    end
+end
+
+_force_load_brace_repeater_3p_unit()
+
+local _BRACE_REPEATER_BASE_WIELD_3P = {
+    es_mercenary      = "to_repeating_handgun",
+    es_huntsman       = "to_repeating_handgun",
+    es_knight         = "to_repeating_handgun",
+    es_questingknight = "to_repeating_handgun",
+}
+
+local _BRACE_REPEATER_ANIM_REMAP_3P = {
+    special_action = "attack_shoot_fast",
+}
+
+local function _patch_brace_template_for_kruber()
+    if not Weapons or not Weapons.brace_of_pistols_template_1 then return end
+    local tpl = Weapons.brace_of_pistols_template_1
+
+    -- Wield event per-career override.
+    tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
+    for k, v in pairs(_BRACE_REPEATER_BASE_WIELD_3P) do
+        tpl.wield_anim_career_3p[k] = v
+    end
+
+    -- Per-action anim_event_3p remap for events the repeater SM doesn't
+    -- author. Sets a sibling anim_event_3p alongside anim_event so the
+    -- 3P body fires the substitute while 1P keeps the original.
+    if tpl.actions then
+        for _, action_group in pairs(tpl.actions) do
+            if type(action_group) == "table" then
+                for _, sub_action in pairs(action_group) do
+                    if type(sub_action) == "table"
+                            and sub_action.anim_event
+                            and _BRACE_REPEATER_ANIM_REMAP_3P[sub_action.anim_event] then
+                        sub_action.anim_event_3p = _BRACE_REPEATER_ANIM_REMAP_3P[sub_action.anim_event]
+                    end
+                end
+            end
+        end
+    end
+end
+
+_patch_brace_template_for_kruber()
+
+-- ============================================================
+-- Authentic Brace of Pistols — toggleable flintlock-style override
+-- ============================================================
+-- Patches `Weapons.brace_of_pistols_template_1` in place when the
+-- `authentic_brace_of_pistols` VMF setting is ON at mod init. Five
+-- changes, all toggleable via the one setting:
+--
+--   1. Damage: every firing sub-action's `impact_data.damage_profile`
+--      switches from `shot_carbine` (vanilla brace) to a clone of
+--      `shot_sniper` (Kruber's handgun) with the near→far dropoff
+--      flattened AND cleave_distribution halved (≈2x penetration:
+--      from ~3 targets → ~6). Plus `ignore_shield_hit = true` on the
+--      sub-action, which is what lets the handgun ignore shields.
+--      Combined effect: armor-piercing, shield-breaking, full damage at
+--      all ranges, passes through ~6 enemies.
+--   2. Right-click → handgun-style zoom. Vanilla brace `action_two.default`
+--      is a `kind = "dummy"` action playing the `lock_target` anim and
+--      gating fast_shot. We mutate it in place into a `kind = "aim"` action
+--      with no `default_zoom` (engine defaults to "zoom_in", which has 1P
+--      AND 3P camera nodes) and no anim_event, so right-click triggers a
+--      clean FOV pull-in (same one the handgun uses) with no shoulder-up
+--      animation. The fast_shot chain is unreachable — action_two no longer
+--      leads to it.
+--   3. Manual reload disabled: `weapon_reload.default` condition_funcs
+--      return false. Pressing R does nothing. The `auto_reload` chain
+--      (auto_chain = true) still fires from action_one and refills the
+--      chamber after each shot — exactly like throwing axes.
+--   4. Ammo: `ammo_per_clip = 8`, `ammo_per_reload = 8`, `max_ammo = 8`.
+--      Whole 8-round pool sits in the clip. No reserve, no per-shot reload
+--      animation — the player clicks/fires repeatedly until the clip is dry.
+--      (Vanilla: clip 12 / reload 2 / max 30.) The 8-round cap matches the
+--      brace's "fire all 8 pistols" cosmetic intuition.
+--   6. Kill fast_shot rapid-fire: walk every sub-action's chain table and
+--      rewrite `sub_action = "fast_shot"` → `"default"`. fast_shot's own
+--      self-loop is the worst offender (start_time 0.25 → 0.125 with 2x
+--      speed = ~8 shots/sec); breaking it ensures any path that reaches
+--      fast_shot fires one shot and falls back to single-shot mode.
+--   7. Action speed: every weapon-template sub-action runs at 2x speed.
+--      Walks `tpl.actions[*][*]` and halves `total_time`,
+--      `total_time_secondary`, `fire_time`, `minimum_hold_time`, `cooldown`,
+--      `reload_time`, and every chain `start_time`. 0/math.huge are
+--      skipped. Applied last so the aim-action fields from step (2) (the
+--      0.3s minimum_hold_time and 0.3s cooldown) get halved too.
+--   5. Spread: a clone of `SpreadTemplates.brace_of_pistols` with every
+--      max_pitch / max_yaw / immediate_pitch / immediate_yaw scaled by
+--      1.087 (~8% wider = ~8% less accurate). Set as the template's
+--      `default_spread_template`.
+--
+-- All five patches are template-level globals so the change applies
+-- to every wielder (Saltzpyre native + Kruber via WT cross-access).
+-- A restart is required to toggle off because the in-place patches
+-- can't be cleanly reverted without snapshotting + restoring vanilla.
+
+local function _wt_clone_shot_sniper_no_dropoff()
+    if not DamageProfileTemplates then return nil end
+    local source = DamageProfileTemplates.shot_sniper
+    if not source then return nil end
+    local key = "wt_authentic_pistol"
+    if DamageProfileTemplates[key] then return key end
+
+    local clone = table.clone(source, true)
+
+    -- Flatten near/far dropoff: mirror near values to far so range no
+    -- longer reduces damage. shot_sniper has separate `armor_modifier_near`
+    -- vs `armor_modifier_far` and per-target `power_distribution_near`
+    -- vs `power_distribution_far`.
+    if clone.armor_modifier_near then
+        clone.armor_modifier_far = table.clone(clone.armor_modifier_near, true)
+    end
+    if clone.default_target then
+        if clone.default_target.power_distribution_near then
+            clone.default_target.power_distribution_far = table.clone(clone.default_target.power_distribution_near, true)
+        end
+        -- range_modifier_settings is the curve that interpolates between
+        -- near and far. With both endpoints equal we don't strictly need
+        -- to remove it, but clearing it makes the no-dropoff intent
+        -- explicit.
+        clone.default_target.range_modifier_settings = nil
+    end
+
+    -- Double penetration. `cleave_distribution.attack` / `.impact` is the
+    -- fraction of cleave power consumed per target hit; halving each value
+    -- lets projectiles pass through ~2x as many enemies before running
+    -- out of cleave. shot_sniper vanilla is 0.3/0.3 (≈3 targets);
+    -- wt_authentic_pistol becomes 0.15/0.15 (≈6 targets).
+    if clone.cleave_distribution then
+        if type(clone.cleave_distribution.attack) == "number" then
+            clone.cleave_distribution.attack = clone.cleave_distribution.attack / 2
+        end
+        if type(clone.cleave_distribution.impact) == "number" then
+            clone.cleave_distribution.impact = clone.cleave_distribution.impact / 2
+        end
+    end
+
+    DamageProfileTemplates[key] = clone
+
+    -- Register in NetworkLookup.damage_profiles. The lookup is built once at
+    -- game load (network_lookup.lua:2203) and frozen with an __index metatable
+    -- that errors on missing keys. PlayerProjectileUnitExtension (line 92)
+    -- looks up `NetworkLookup.damage_profiles[impact_data.damage_profile]` at
+    -- projectile spawn — without this registration every brace shot crashes
+    -- with "Table damage_profiles does not contain key: wt_authentic_pistol",
+    -- which is exactly what made v0.12.6 silently no-op. Same pattern CWV uses
+    -- for its custom damage-profile clones (character_weapon_variants.lua:1364).
+    if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, key) then
+        local tbl = NetworkLookup.damage_profiles
+        local idx = #tbl + 1
+        rawset(tbl, idx, key)
+        rawset(tbl, key, idx)
+    end
+
+    return key
+end
+
+local _AUTHENTIC_BRACE_SPREAD_MULT = 1.087  -- 8% wider = ~8% less accurate
+
+local function _wt_clone_brace_spread_wider()
+    if not SpreadTemplates then return nil end
+    local source = SpreadTemplates.brace_of_pistols
+    if not source then return nil end
+    local key = "wt_authentic_brace_of_pistols_spread"
+    if SpreadTemplates[key] then return key end
+
+    local clone = table.clone(source, true)
+    -- Scale every numeric leaf by the spread multiplier. Brace spread
+    -- template is nested two levels deep (continuous/immediate →
+    -- still/moving/etc → max_pitch/max_yaw/immediate_pitch/immediate_yaw).
+    local function _scale(t)
+        for k, v in pairs(t) do
+            if type(v) == "table" then
+                _scale(v)
+            elseif type(v) == "number" then
+                t[k] = v * _AUTHENTIC_BRACE_SPREAD_MULT
+            end
+        end
+    end
+    _scale(clone)
+
+    SpreadTemplates[key] = clone
+    return key
+end
+
+local function _disable_action()
+    return false
+end
+
+local function _apply_authentic_brace_mode()
+    if not Weapons or not Weapons.brace_of_pistols_template_1 then
+        mod:warning("[wt authentic-brace] brace_of_pistols_template_1 not found — patch skipped")
+        return
+    end
+    local tpl = Weapons.brace_of_pistols_template_1
+
+    -- 1) Damage profile + shield/armor piercing on all firing sub-actions.
+    local damage_profile_key = _wt_clone_shot_sniper_no_dropoff()
+    if not damage_profile_key then
+        mod:warning("[wt authentic-brace] failed to clone shot_sniper — bailing")
+        return
+    end
+    if tpl.actions and tpl.actions.action_one then
+        for _, sub_name in ipairs({ "default", "fast_shot", "special_action_shoot" }) do
+            local sub = tpl.actions.action_one[sub_name]
+            if sub then
+                if sub.impact_data then
+                    sub.impact_data.damage_profile = damage_profile_key
+                end
+                sub.ignore_shield_hit = true
+            end
+        end
+    end
+
+    -- 2) Convert right-click from lock-target dummy → handgun-style optical
+    -- zoom. Vanilla brace.action_two.default is `kind = "dummy"` playing the
+    -- `lock_target` anim and gating the fast_shot chain. We mutate fields
+    -- on the existing table (rather than replacing it) so the engine-attached
+    -- `lookup_data` from `weapons.lua:312` (and any other implicit metadata)
+    -- stays intact — `ActionUtils.resolve_action_selector` (action_utils.lua:834)
+    -- dereferences `action.lookup_data.action_name`, so a fresh table without
+    -- it crashes on first right-click.
+    -- `kind = "aim"` triggers `status_extension:set_zooming(true, default_zoom)`
+    -- (action_aim.lua:134); `default_zoom = "first_person_node"` is the
+    -- handgun-style FOV pull-in. anim_event / anim_end_event are cleared
+    -- because the brace's state machine doesn't have to_zoom/to_unzoom
+    -- events and we want no animation anyway.
+    if tpl.actions and tpl.actions.action_two and tpl.actions.action_two.default then
+        local a = tpl.actions.action_two.default
+        -- Strip dummy/lock-target fields
+        a.anim_event = nil
+        a.anim_end_event = nil
+        a.anim_end_event_condition_func = nil
+        a.spread_template_override = nil
+        a.buff_data = nil
+        -- Reconfigure as zoom-only aim action
+        a.kind = "aim"
+        a.can_abort_reload = false
+        a.cooldown = 0.3
+        -- Don't set default_zoom. The engine's default is "zoom_in", which has
+        -- both 1P and 3P (zoom_in_third_person) camera nodes defined in
+        -- camera_settings.lua. Setting it to "first_person_node" makes
+        -- generic_status_extension.set_zooming (:1518) construct
+        -- "first_person_node_third_person" in 3P mode, which doesn't exist
+        -- in the camera tree → CameraManager.set_camera_node crashes when
+        -- it tries to dereference next_node.node (camera_manager.lua:387).
+        -- Vanilla handgun also omits this field, for the same reason.
+        a.default_zoom = nil
+        a.keep_buffer = true
+        a.zoom_condition_function = function() return true end
+        a.unzoom_condition_function = function(end_reason)
+            return end_reason ~= "new_interupting_action"
+        end
+        a.condition_func = function(unit, input_extension, ammo_extension)
+            if ammo_extension and ammo_extension:total_remaining_ammo() <= 0 then
+                return false
+            end
+            return true
+        end
+        a.allowed_chain_actions = {
+            { action = "action_wield",  input = "action_wield",    start_time = 0, sub_action = "default" },
+            { action = "action_one",    input = "action_one",      start_time = 0, sub_action = "default" },
+            { action = "action_one",    input = "action_one_hold", start_time = 0, sub_action = "default" },
+            { action = "weapon_reload", input = "weapon_reload",   start_time = 0, sub_action = "default" },
+        }
+        -- allow_hold_toggle, ammo_requirement, hold_input, minimum_hold_time,
+        -- total_time, lookup_data — all preserved from the original.
+    end
+
+    -- 3) Disable manual reload. weapon_reload.default has both
+    -- condition_func and chain_condition_func — clobber both so neither
+    -- player input nor chain auto-fire can trigger a manual reload.
+    -- weapon_reload.auto_reload is left alone — its condition_func is
+    -- "ammo_count == 0 and can_reload" which is exactly the auto-load-
+    -- next-shot behavior we want.
+    if tpl.actions and tpl.actions.weapon_reload and tpl.actions.weapon_reload.default then
+        tpl.actions.weapon_reload.default.condition_func = _disable_action
+        tpl.actions.weapon_reload.default.chain_condition_func = _disable_action
+    end
+
+    -- 4) Ammo: full mag, no per-shot reload. The whole 8-round pool sits in
+    -- the clip (clip == max_ammo, reserve = 0). `weapon_reload.auto_reload`
+    -- condition_func gates on `ammo_count() == 0 AND can_reload()`
+    -- (brace_of_pistols.lua:475), so as long as the clip has anything in it
+    -- the auto-reload chain — though still wired in action_one.default — is
+    -- a no-op and no animation plays. Player just clicks, fires, clicks,
+    -- fires until empty. (At empty, auto_reload condition (1) is true but
+    -- can_reload() is false because reserve=0, so even the final shot
+    -- doesn't trigger an animation.)
+    if tpl.ammo_data then
+        tpl.ammo_data.ammo_per_clip = 8
+        tpl.ammo_data.ammo_per_reload = 8
+        tpl.ammo_data.max_ammo = 8
+    end
+
+    -- 6) Eliminate the `fast_shot` rapid-fire path. Vanilla brace's
+    -- `action_one.fast_shot` self-chains at start_time = 0.25 (halved to
+    -- 0.125 by step 7 → ~8 shots/sec). It's reachable from action_two's
+    -- vanilla chain (we replaced that in step 2), but the user reported
+    -- rapid-fire surfacing after reload/some-actions — there's at least
+    -- one path we haven't accounted for. Defensive fix: walk every
+    -- sub-action's chain table and rewrite any entry pointing to
+    -- "fast_shot" → "default". Even if some path lands the player in
+    -- fast_shot, after a single shot the chains lead back to default and
+    -- the loop is broken. Touches `action_one.fast_shot`'s own self-loop,
+    -- `action_one.special_action_shoot`'s chains, and (for safety) every
+    -- other sub-action.
+    if tpl.actions then
+        for _, sub_actions in pairs(tpl.actions) do
+            for _, sub in pairs(sub_actions) do
+                if type(sub) == "table" and sub.allowed_chain_actions then
+                    for _, chain in ipairs(sub.allowed_chain_actions) do
+                        if chain.sub_action == "fast_shot" then
+                            chain.sub_action = "default"
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 7) Action speed: every weapon action runs at 2x speed. Walk every
+    -- sub-action of every action and halve total_time, fire_time,
+    -- minimum_hold_time, cooldown, reload_time, and every chain
+    -- start_time. Skip 0/math.huge — halving an "instant" or "infinite
+    -- hold" action breaks neither concept. Done last so it scales the
+    -- aim-action fields we set in step (2) too (zoom snaps in faster).
+    local _ACTION_SPEED_MULT = 0.5
+    local function _scale_time(field)
+        if type(field) ~= "number" then return field end
+        if field == 0 or field == math.huge then return field end
+        return field * _ACTION_SPEED_MULT
+    end
+    if tpl.actions then
+        for _, sub_actions in pairs(tpl.actions) do
+            for _, sub in pairs(sub_actions) do
+                if type(sub) == "table" then
+                    sub.total_time           = _scale_time(sub.total_time)
+                    sub.total_time_secondary = _scale_time(sub.total_time_secondary)
+                    sub.fire_time            = _scale_time(sub.fire_time)
+                    sub.minimum_hold_time    = _scale_time(sub.minimum_hold_time)
+                    sub.cooldown             = _scale_time(sub.cooldown)
+                    sub.reload_time          = _scale_time(sub.reload_time)
+                    if sub.allowed_chain_actions then
+                        for _, chain in ipairs(sub.allowed_chain_actions) do
+                            chain.start_time = _scale_time(chain.start_time)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 5) Spread: 8% wider = 8% less accurate.
+    local spread_key = _wt_clone_brace_spread_wider()
+    if spread_key then
+        tpl.default_spread_template = spread_key
+    end
+
+    mod:info("[wt authentic-brace] applied: damage=%s, spread=%s, ammo=8/8 (no per-shot reload), right-click=zoom-only, manual_reload disabled, all-action-speed=2x",
+        damage_profile_key, tostring(spread_key))
+end
+
+if mod:get("authentic_brace_of_pistols") then
+    _apply_authentic_brace_mode()
+end
+
+-- Hook GearUtils.spawn_inventory_unit. Always call vanilla first, capture
+-- all 4 returns (v_w3p, v_a3p, v_w1p, v_a1p), then attempt the swap inside
+-- a pcall so any failure returns vanilla's units unchanged. Equipping
+-- never fails because of this swap.
+mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+    local v_w3p, v_a3p, v_w1p, v_a1p =
+        func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+
+    -- Gate: only apply swap when wielding a brace, on the right hand
+    -- (where the brace's "main pistol" mounts), and the wielder is a
+    -- Kruber career. _local_career_name() is defined earlier in this file;
+    -- it returns the locally-wielded unit's career_name. For husks, fall
+    -- back to checking `owner_unit_3p` via _unit_career_name (also
+    -- defined earlier).
+    if not item_data or item_data.name ~= "wh_brace_of_pistols" then
+        return v_w3p, v_a3p, v_w1p, v_a1p
+    end
+    if hand ~= "right" then
+        return v_w3p, v_a3p, v_w1p, v_a1p
+    end
+    -- Career detection: prefer owner_unit_3p (always present, both local
+    -- and husk paths). _unit_career_name reads the inventory extension's
+    -- career name from the unit.
+    local career_name = _unit_career_name(owner_unit_3p)
+    if not career_name or career_name:sub(1, 3) ~= "es_" then
+        return v_w3p, v_a3p, v_w1p, v_a1p
+    end
+
+    if not v_w3p then return v_w3p, v_a3p, v_w1p, v_a1p end
+
+    -- Package readiness check: the async force-load at mod init usually
+    -- completes well before any equip flow, but guard the spawn anyway. A
+    -- not-yet-loaded package would cause `spawn_local_unit_with_extensions`
+    -- to throw the C++ "Unit not found" assertion (crash GUID d9e1d3d3).
+    -- If unloaded here, just return vanilla's brace 3P unit — Kruber sees
+    -- the brace mesh briefly until the next equip fires the swap.
+    if Managers and Managers.package and Managers.package.has_loaded
+            and not Managers.package:has_loaded(_BRACE_REPEATER_3P_UNIT, "wt_brace_repeater_3p") then
+        return v_w3p, v_a3p, v_w1p, v_a1p
+    end
+
+    local pcall_ok, swap_result = pcall(function()
+        local node_linking_settings = item_template[hand .. "_hand_attachment_node_linking"]
+        if not node_linking_settings or not node_linking_settings.third_person then
+            mod:warning("[wt brace-3p-swap] missing node_linking_settings.third_person; aborting")
+            return nil
+        end
+
+        local unit_template_3p_name = item_data.third_person_extension_template
+            or item_template.third_person_extension_template
+            or "weapon_unit_3p"
+        if owner_unit_1p then unit_template_3p_name = "weapon_unit_3p" end
+
+        local extension_init_data_3p = {
+            weapon_system = {
+                item_template = item_template,
+                item_name = item_data.name,
+                owner_unit = owner_unit_3p,
+                world = world,
+            },
+        }
+
+        -- Spawn the repeater 3P unit FIRST. If spawn fails we still have
+        -- vanilla's brace 3P unit to fall back to.
+        local new_unit = Managers.state.unit_spawner:spawn_local_unit_with_extensions(
+            _BRACE_REPEATER_3P_UNIT, unit_template_3p_name, extension_init_data_3p)
+        if not new_unit then
+            mod:warning("[wt brace-3p-swap] spawn returned nil for '%s'", _BRACE_REPEATER_3P_UNIT)
+            return nil
+        end
+
+        -- Now safe to destroy vanilla's brace 3P unit.
+        Managers.state.unit_spawner:mark_for_deletion(v_w3p)
+
+        local attachment_node_linking_3p = node_linking_settings.third_person.wielded
+        GearUtils.link(world, attachment_node_linking_3p, {}, owner_unit_3p, new_unit)
+
+        local mat = material_settings_name or item_template.material_settings_name
+        if mat then GearUtils.apply_material_settings(new_unit, mat) end
+
+        Unit.set_unit_visibility(new_unit, false)
+
+        mod:info("[wt brace-3p-swap] swapped 3P brace → repeater on career=%s (husk=%s)",
+            career_name, tostring(owner_unit_1p == nil))
+
+        return new_unit
+    end)
+
+    if not pcall_ok then
+        mod:warning("[wt brace-3p-swap] pcall ERROR: %s — keeping vanilla unit", tostring(swap_result))
+        return v_w3p, v_a3p, v_w1p, v_a1p
+    end
+
+    if swap_result then
+        return swap_result, v_a3p, v_w1p, v_a1p
+    end
+    return v_w3p, v_a3p, v_w1p, v_a1p
+end)
+
+-- Hide the left-hand brace pistol on Kruber. The brace template renders TWO
+-- pistols (one per hand) — the right-hand spawn_inventory_unit hook above
+-- swaps the right-hand mesh to the Empire repeater, but the left-hand pistol
+-- stays vanilla and clips through the repeater's body. We can't just hide it
+-- in the spawn hook because `SimpleInventoryExtension.show_third_person_inventory`
+-- (simple_inventory_extension.lua:1014-1075) sets visibility back to `show`
+-- on every wield/unwield. So post-hook that function and re-hide the
+-- left-hand 3P unit specifically when (a) the wielded item is the brace AND
+-- (b) the wielder is a Kruber career.
+mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory", function(self, show)
+    if not show then return end
+    local equipment = self._equipment
+    if not equipment then return end
+    local left_unit = equipment.left_hand_wielded_unit_3p
+    if not left_unit or not Unit.alive(left_unit) then return end
+
+    local wielded_slot = equipment.wielded_slot
+    if not wielded_slot then return end
+    local slot_data = equipment.slots and equipment.slots[wielded_slot]
+    local item_data = slot_data and slot_data.item_data
+    if not item_data or item_data.name ~= "wh_brace_of_pistols" then return end
+
+    local owner_unit = self._unit
+    local career_name = owner_unit and _unit_career_name(owner_unit)
+    if not career_name or career_name:sub(1, 3) ~= "es_" then return end
+
+    -- Force the left brace pistol invisible. Mirror the visibility-group
+    -- branching that vanilla `show_third_person_inventory` uses so we hit
+    -- whichever path the unit was rendered through.
+    if Unit.has_visibility_group(left_unit, "normal") then
+        Unit.set_visibility(left_unit, "normal", false)
+    else
+        Unit.set_unit_visibility(left_unit, false)
+    end
+end)
+
 -- Apply scale/offset to the inventory character preview.
 -- The new (post-WoM) inventory uses MenuWorldPreviewer instead of HeroPreviewer.
 -- We probe both classes; whichever class owns the visible weapon should fire.
@@ -1354,6 +1914,205 @@ mod:hook_safe("MenuWorldPreviewer", "_spawn_item_unit", function(self, unit, slo
     _offset_weapon_units(fake_slot, weapon_key, career_name)
 end)
 
+--[[
+WEAPON-TRAIT POOL FILTERING
+---------------------------
+Lets the user enable/disable individual weapon traits from the VMF settings.
+Adventure traits default ON (vanilla behaviour); Chaos Wastes traits default
+OFF and only show in the UI when the `crafting_in_modded` mod is installed.
+
+Mechanism: rewrite `WeaponTraits.combinations[pool]` (the table that
+`crafting_in_modded` reads when rolling a trait on a crafted/rerolled weapon).
+Every CW trait already lives in `WeaponTraits.traits` and `BuffTemplates`
+because `weapon_traits_morris.lua` merges them in at load — they only fail to
+appear in adventure because the vanilla `combinations.melee` / `.ranged_*`
+pools don't list them. Adding them to those pools is sufficient.
+
+`crafting_in_modded` does NOT hardcode any trait keys; it picks from
+`WeaponTraits.combinations[master.trait_table_name]` at runtime
+(see standard_forge.lua _reroll_traits + _make_craft_synth). So mutating
+those tables here propagates to cim's reroll/craft UI automatically.
+
+NOTE on file ordering: this block must come BEFORE the lifecycle callbacks
+(`on_game_state_changed`, `on_setting_changed`, `on_disabled`) below — Lua 5.1
+locals aren't hoisted, so a callback declared above us couldn't see these
+local functions and would resolve to a nil global lookup at call time.
+]]
+
+-- Trait-key membership per pool. The toggle for a trait controls every pool
+-- it can appear in. CW-cross-pool traits (headhunter, stagger_aoe_on_crit,
+-- shield_splinters, deus_crit_chain_lightning) are listed once per pool they
+-- belong to so the rebuilder can pick them up; the user-facing widget is a
+-- single checkbox under whichever group is most natural.
+local _trait_pool_sources = {
+    melee = {
+        vanilla = {
+            "melee_attack_speed_on_crit",
+            "melee_timed_block_cost",
+            "melee_counter_push_power",
+            "melee_increase_damage_on_block",
+            "melee_reduce_cooldown_on_crit",
+            "melee_shield_on_assist",
+        },
+        cw = {
+            "stagger_aoe_on_crit",
+            "armor_breaker",
+            "shield_of_isha",
+            "bloodthirst",
+            "headhunter",
+            "home_run",
+            "shield_splinters",
+            "serrated_blade",
+            "crescendo_strike",
+            "follow_up",
+            "always_blocking",
+            "deus_big_swing_stagger",
+            "deus_crit_chain_lightning",
+            "deus_collateral_damage_on_melee_killing_blow",
+            "melee_heal_on_crit",
+        },
+    },
+    ranged_ammo = {
+        vanilla = {
+            "ranged_restore_stamina_headshot",
+            "ranged_replenish_ammo_headshot",
+            "ranged_reduce_cooldown_on_crit",
+            "ranged_replenish_ammo_on_crit",
+            "ranged_increase_power_level_vs_armour_crit",
+            "ranged_consecutive_hits_increase_power",
+        },
+        cw = {
+            "headhunter",
+            "stagger_aoe_on_crit",
+            "shield_splinters",
+            "refilling_shot",
+            "piercing_projectiles",
+            "deus_extra_shot",
+            "deus_crit_chain_lightning",
+            "deus_ranged_crit_explosion",
+            "deus_ammo_pickup_reload_speed",
+        },
+    },
+    ranged_heat = {
+        vanilla = {
+            "ranged_restore_stamina_headshot",
+            "ranged_reduced_overcharge",
+            "ranged_reduce_cooldown_on_crit",
+            "ranged_remove_overcharge_on_crit",
+            "ranged_increase_power_level_vs_armour_crit",
+            "ranged_consecutive_hits_increase_power",
+        },
+        cw = {
+            "headhunter",
+            "stagger_aoe_on_crit",
+            "shield_splinters",
+            "piercing_projectiles",
+            "deus_extra_shot",
+            "deus_crit_chain_lightning",
+            "deus_ranged_crit_explosion",
+        },
+    },
+    trollhammer_torpedo = {
+        vanilla = {
+            "ranged_restore_stamina_headshot",
+            "ranged_reduce_cooldown_on_crit",
+            "ranged_increase_power_level_vs_armour_crit",
+            "ranged_consecutive_hits_increase_power",
+            "melee_timed_block_cost",
+            "melee_increase_damage_on_block",
+        },
+        cw = {
+            "headhunter",
+            "stagger_aoe_on_crit",
+            "shield_splinters",
+            "refilling_shot",
+            "piercing_projectiles",
+            "deus_extra_shot",
+            "deus_crit_chain_lightning",
+            "deus_ranged_crit_explosion",
+            "deus_ammo_pickup_reload_speed",
+        },
+    },
+}
+
+-- Snapshot of vanilla pools. Captured the first time apply_trait_filters runs
+-- (so DLC/morris additions are already merged in). Used to revert on
+-- on_disabled and to detect "no managed pool yet" cases.
+local _initial_trait_pools = nil
+
+local function _snapshot_trait_pools()
+    if _initial_trait_pools then return end
+    if not WeaponTraits or not WeaponTraits.combinations then return end
+    _initial_trait_pools = {}
+    for pool_key, _ in pairs(_trait_pool_sources) do
+        local existing = WeaponTraits.combinations[pool_key]
+        if existing then
+            local copy = {}
+            for i, entry in ipairs(existing) do
+                copy[i] = { entry[1] }
+            end
+            _initial_trait_pools[pool_key] = copy
+        end
+    end
+end
+
+local function _trait_enabled(trait_key, is_cw)
+    local prefix = is_cw and "cw_trait_" or "trait_"
+    return mod:get(prefix .. trait_key) == true
+end
+
+local function apply_trait_filters()
+    if not WeaponTraits or not WeaponTraits.combinations then return end
+    _snapshot_trait_pools()
+    if not _initial_trait_pools then return end
+
+    for pool_key, sources in pairs(_trait_pool_sources) do
+        local current = WeaponTraits.combinations[pool_key]
+        if current then
+            local seen = {}
+            local rebuilt = {}
+            local function _push(trait_key, is_cw)
+                if seen[trait_key] then return end
+                if not _trait_enabled(trait_key, is_cw) then return end
+                if not WeaponTraits.traits[trait_key] then return end
+                seen[trait_key] = true
+                rebuilt[#rebuilt + 1] = { trait_key }
+            end
+            for _, t in ipairs(sources.vanilla) do _push(t, false) end
+            for _, t in ipairs(sources.cw) do _push(t, true) end
+
+            -- Empty pool → fall back to vanilla snapshot to avoid "no traits
+            -- to roll" stalls in cim. Users who want zero traits can disable
+            -- the mod outright.
+            if #rebuilt == 0 and _initial_trait_pools[pool_key] then
+                for i, entry in ipairs(_initial_trait_pools[pool_key]) do
+                    rebuilt[i] = { entry[1] }
+                end
+            end
+
+            -- Mutate in place so any code holding a reference to the pool
+            -- table sees the new contents.
+            for i = #current, 1, -1 do current[i] = nil end
+            for i, entry in ipairs(rebuilt) do current[i] = entry end
+        end
+    end
+end
+
+local function revert_trait_pools()
+    if not _initial_trait_pools then return end
+    if not WeaponTraits or not WeaponTraits.combinations then return end
+    for pool_key, snapshot in pairs(_initial_trait_pools) do
+        local current = WeaponTraits.combinations[pool_key]
+        if current then
+            for i = #current, 1, -1 do current[i] = nil end
+            for i, entry in ipairs(snapshot) do current[i] = { entry[1] } end
+        end
+    end
+end
+
+mod._apply_trait_filters = apply_trait_filters
+mod._revert_trait_pools = revert_trait_pools
+
 -- CLARIFY: VMF lifecycle callback. Fires on every game state transition
 -- (StateLoading -> StateIngame, etc.) — re-applies the can_wield mutations
 -- in case some other mod or game code reset ItemMasterList between states.
@@ -1362,6 +2121,7 @@ mod.on_game_state_changed = function()
     mod:info("Weapon Tweaker: Baseline Active")
     apply_weapon_unlocks()
     patch_career_actions_on_weapons()
+    apply_trait_filters()
 end
 
 -- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
@@ -1402,7 +2162,8 @@ end
 mod.on_disabled = function()
     clear_weapon_unlocks()
     clear_career_action_injections()
-    mod:info("Weapon Tweaker disabled — cross-career unlocks and ability action injections reverted")
+    revert_trait_pools()
+    mod:info("Weapon Tweaker disabled — cross-career unlocks, ability action injections, and trait-pool filters reverted")
 end
 
 mod.on_setting_changed = function(setting_id)
@@ -1410,6 +2171,8 @@ mod.on_setting_changed = function(setting_id)
         apply_weapon_unlocks()
         patch_career_actions_on_weapons()
         weapon_backend.refresh_on_setting_change(mod)
+    elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
+        apply_trait_filters()
     end
 end
 
@@ -1549,4 +2312,8 @@ end)
 -- Install basic backend hooks (UI filtering and can_wield override)
 weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks)
 mod.weapon_unlock_map = weapon_unlock_map
+
+-- Run trait-pool filtering once at module load. on_game_state_changed will
+-- re-run later if pools weren't ready yet (e.g. WeaponTraits not loaded).
+apply_trait_filters()
 

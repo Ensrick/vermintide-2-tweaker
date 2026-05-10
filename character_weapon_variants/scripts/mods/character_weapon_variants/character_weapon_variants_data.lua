@@ -11,11 +11,6 @@ return {
 				type          = "checkbox",
 				default_value = true,
 			},
-			{
-				setting_id    = "cwv_3p_swap_enabled",
-				type          = "checkbox",
-				default_value = true,
-			},
 		},
 	},
 }

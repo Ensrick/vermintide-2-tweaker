@@ -1,5 +1,261 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.247-dev (2026-05-09) — Musket melee Y offset 0.05→0.06, 1P thinner X/Y
+- Tuned: melee Y grip offset `0.05 → 0.06`. Full vector now `{ 0, 0.06, -0.3 }`.
+- Switched 1P melee scale-down from uniform `0.85` to per-axis factors `{ 0.8, 0.8, 1.0 }` per user "0.8x and 0.8y" (Z unchanged). Renamed constant `_MELEE_1P_SCALE_DOWN` → `_MELEE_1P_SCALE_FACTOR`.
+
+## 0.1.246-dev (2026-05-09) — Musket melee Y offset 0 → 0.05
+
+## 0.1.245-dev (2026-05-09) — Musket melee grip offset Y=0, Z restored
+- Restored Z=-0.3 (per v0.1.230) — v0.1.244 zeroed all three by misinterpretation. Now `_MELEE_LOCAL_OFFSET = { 0, 0, -0.3 }`: no Y offset (per "no offset again"), Z grip-height drop preserved.
+
+## 0.1.244-dev (2026-05-09) — Musket melee grip offset zeroed
+- Zeroed `_MELEE_LOCAL_OFFSET` to `{ 0, 0, 0 }` per user "let's try no offset again". Vanilla polearm `attachment_node_linking` offset alone now positions the rifle.
+
+## 0.1.243-dev (2026-05-09) — Musket melee range_mod 1.35 → 1.2
+- Tuned: every melee sub-action's `range_mod` overridden to 1.2 (vanilla tuskgor uses 1.35). Bayonet now reaches less than a full polearm haft. `range_mod_add` (the per-sub-action additive component, 0.25-1.0) kept vanilla.
+
+## 0.1.242-dev (2026-05-09) — Musket melee Y grip offset 0.1 → -0.08
+
+## 0.1.241-dev (2026-05-09) — Musket melee: outermost Z π → 3π/2
+- Tuned: outermost Z rotation bumped from π to 3π/2 (adds another 90°). Total melee rotation: `q_z2(3π/2) * q_y(-π/2) * q_z(π/2) * q_x(π)`.
+
+## 0.1.240-dev (2026-05-09) — Musket bayonet Y 0.76 → 0.8
+
+## 0.1.239-dev (2026-05-09) — Musket bayonet diagnostic logging
+- Added: log lines in `_attach_musket_bayonets` (counts pairs after each attach, flags skips) and in `_sync_all_bayonets_visibility` (counts orphans destroyed + shown + hidden). Helps diagnose user-reported "floating bayonet on both melee and ranged" — the existing idempotent attach + orphan cleanup defenses should prevent this, but if it's still happening the logs will show whether attach is firing twice, which rifle the orphan is bound to, etc.
+
+## 0.1.238-dev (2026-05-09) — Musket melee: add outermost Z=π
+- Per user "needs to be rotated 180 about z" after v0.1.235 fixed direction. Added `q_z2 = π` at outermost composition position. Total: `q_z2(π) * q_y(-π/2) * q_z(π/2) * q_x(π)`.
+
+## 0.1.237-dev (2026-05-09)
+- Tuned: `cwv_es_maul` X/Y `1.075 → 1.0` per user (drop the 7.5% width bump, native X/Y). Scale now `{1.0, 1.0, 1.6}` — pure Z lengthening, no width thickening. Z still 60% longer than native.
+
+## 0.1.236-dev (2026-05-09)
+- Tuned: `cwv_es_maul` grip offset `{0, 0, 0.35} → {0, 0, 0.2}` per user. Z still positive (lowers grip on this family), but reduced — hand sits less far down the haft.
+
+## 0.1.235-dev (2026-05-09) — Musket melee: add X=π
+- Per user "off by 180 on the X axis", add `q_x = π` on top of v0.1.234's composition. Total: `q_y(-π/2) * q_z(π/2) * q_x(π)`.
+
+## 0.1.234-dev (2026-05-09) — Musket melee: flip Y sign
+- Reverted v0.1.233's Z=π. Adding rotations on every axis hasn't worked. Trying a sign flip on the existing Y instead: `+π/2 → -π/2`. Total composition: `q_y(-π/2) * q_z(π/2)`.
+
+## 0.1.233-dev (2026-05-09) — Musket melee: revert X, try Z=π
+- Reverted v0.1.232's -X attempt (X axis attempts in both directions have been wrong). Bumping Z from π/2 to π instead. Total composition: `q_y(π/2) * q_z(π)`.
+
+## 0.1.232-dev (2026-05-09) — Musket melee: revert Y, try -X
+- Reverted v0.1.231's Y bump (π → back to π/2). User reports Y was the wrong axis. Added `q_x = -π/2` instead — opposite direction from v0.1.225's +π/2 X attempt that was also wrong. Total composition: `q_y(π/2) * q_z(π/2) * q_x(-π/2)`. If still wrong, next iterations: flip sign of any of the three, or try removing one axis.
+
+## 0.1.231-dev (2026-05-09) — Musket melee Y rotation π/2 → π
+- Tuned: melee Y-axis rotation bumped from `π/2` (90°) to `π` (180°) per user "rifle is upside down — add another 90° CCW about Y". The composed rotation is now `q_y(π) * q_z(π/2)`. Z component unchanged.
+
+## 0.1.230-dev (2026-05-09) — Musket melee grip offset
+- Added: `_MELEE_LOCAL_OFFSET = { 0, 0.1, -0.3 }` translation delta applied to BOTH 1P and 3P rifle units in melee mode. Reads current local position (set by vanilla's polearm `attachment_node_linking`), adds the delta, sets back — compose-friendly so it doesn't fight the attachment offset. Y +0.1 pushes slightly forward along the barrel; Z -0.3 drops the grip height. Applied alongside the existing Y+Z 90° rotation correction.
+
+## 0.1.229-dev (2026-05-09)
+- Tuned: `cwv_es_maul` Z scale `1.4 → 1.6` per user — longer haft (60% longer than native, was 40%).
+- Tuned: greathammer-on-1H-hammer illusions across `cwv_es_warpriest_hammer`, `cwv_es_warpriest_hammer_shield`, and `cwv_es_dual_warpriest_hammers` — Z grip offsets HALVED per user (grip was too high on the rescaled mesh):
+  - Skullsplitter (1H) right offset `-0.55 → -0.275` (8 entries)
+  - Shield variant right offset `-0.55 → -0.275` (8 entries)
+  - Dual variant right offset `-0.5 → -0.25`, left offset `-0.6 → -0.3` (8 entries each)
+- Tuned: greathammer-on-1H-hammer illusion scales BUMPED +0.1 on every axis per user — `{0.75, 0.75, 0.575}` → `{0.85, 0.85, 0.675}`. Applied to all 32 hand-scale fields (24 right + 8 left) across all three variants. Negative offsets on the dual variant remain asymmetric (right=-0.25, left=-0.3) as before.
+
+## 0.1.228-dev (2026-05-09) — Musket bayonet: idempotent attach + orphan cleanup
+- Fixed: extra floating bayonet on ranged equip (user report). Two defensive fixes:
+  - `_attach_musket_bayonets` now skips per-rifle if a bayonet is already tracked for it. Without this, any code path that re-fires our `GearUtils.spawn_inventory_unit` hook on the same rifle (e.g. cosmetic application that refreshes equipment without going through `destroy_wielded`) would attach a SECOND bayonet, leaving the first as an orphan tracked-but-not-cleaned unit.
+  - `_sync_all_bayonets_visibility` (runs after every `_wield_slot`) now opportunistically destroys orphan bayonets (rifle dead but bayonet alive). Cleans up after any code path that bypasses `destroy_wielded`.
+
+## 0.1.227-dev (2026-05-09) — Musket melee back to tuskgor spear (vanilla stats) + 1P scale-down
+- Reverted: melee template clones `Weapons.two_handed_heavy_spears_template` (Kruber's tuskgor spear) again per user "elf spear animations don't match up nicely". Force-load swap: `state_machines/melee/spear` → `state_machines/melee/polearm`. Both spear templates use `AttachmentNodeLinking.polearm` so the existing rotation correction (Y+Z 90°) still applies.
+- Removed: damage and speed scaling per user "make it have its normal speed and melee values". The `_scale_melee_damage_profile` clone-and-multiply is no longer called; vanilla tuskgor spear stats kept verbatim. (Helper function and constants left in source for easy re-enabling if desired.)
+- Added: 1P-only scale-down for the rifle when in melee mode. Reads the existing local scale (set by the `GearUtils.create_equipment` hook from the type-level transform `{0.9, 1.35, 0.9}`) and multiplies by `_MELEE_1P_SCALE_DOWN = 0.85`. 3P unit kept at the original scale so other players see the full-size musket-bayonet. Tunable via the constant.
+
+## 0.1.226-dev (2026-05-09) — Musket melee rotation: swap X for Z axis
+- Reverted v0.1.225's +90° X rotation per user "wrong axis was rotated". Now composing +90° Y + +90° Z. Z is the third orthogonal local axis; if direction is reversed, flip the Z sign to -90°.
+
+## 0.1.225-dev (2026-05-09) — Musket melee rotation += +90° X, bayonet position
+- Added: second rotation axis on the rifle in melee mode. v0.1.220's single +90° Y (barrel axis) wasn't enough — the rifle was still held at a wrong pitch in the spear-grip pose. Now composes `q = q_y * q_x` where both quaternions are +90° axis-angle rotations (Y barrel + X pitch up). Order: X applied first in local frame, then Y on top. If the resulting pose still reads wrong, easy to flip order to `q_x * q_y` or flip signs.
+- Bayonet position: `{0, 0.72, 0.05}` → `{0, 0.76, 0.025}` per user direction. Y +0.04 (closer to muzzle), Z -0.025 (slightly lower).
+
+## 0.1.224-dev (2026-05-09) — Musket: drop bad display_unit force-load, override on melee template
+- Fixed: "Resource not found" crash at mod load (GUID 52f91814). v0.1.220 force-loaded `units/weapons/weapon_display/display_2h_spears_wood_elf` via `Managers.package:load`, but that path is NOT in `scripts/network_lookup/inventory_package_list.lua` — it's bundled inside another package, not a loadable per-asset path. Stingray returned a hard "Resource not found" because no synthetic per-asset package exists at that path.
+- Removed: the `display_2h_spears_wood_elf` force-load. Only the elf spear's state machine is force-loaded now (verified present at `inventory_package_list.lua:280`).
+- Added: explicit `template.display_unit = "units/weapons/weapon_display/display_1h_handguns"` override on `musket_template_melee` so the inventory previewer doesn't try to spawn the unloadable spear display unit when the cosmetics menu opens for the musket in melee mode. The handgun's display rig is already loaded for Kruber and visually serves the same purpose (spins the rifle mesh on a stage).
+
+## 0.1.223-dev (2026-05-09) — Musket bayonet scale tweak
+- Tuned: `_MUSKET_BAYONET_SCALE` from `{0.25, 0.7, 0.25}` to `{0.35, 0.6, 0.2}`. X bumped (slightly thicker side profile), Y dropped (shorter blade), Z dropped (thinner cross-section).
+
+## 0.1.222-dev (2026-05-09) — Musket cosmetic illusions (Aunty Bessie + Single-Shooter)
+- Added: two cosmetic illusion options for `cwv_es_musket`:
+  - **Aunty Bessie** — `wpn_empire_handgun_t3` (cloned from vanilla `es_handgun_skin_05`)
+  - **Von Meinkopt's Single-Shooter** — `wpn_empire_handgun_t2` (cloned from vanilla `es_handgun_skin_04`)
+- New `_register_musket_handgun_illusions()` registers both as `weapon_skin` IML entries with `matching_item_key = "cwv_es_musket"`, mirrors them into `WeaponSkins.skins`, appends to the variant's exotic-tier `cwv_es_musket_skins` combo table, and injects keys into `NetworkLookup.weapon_skins` + `item_names`. Display names registered via `_display_names[<key>_name] = "..."` so the inventory shows the human-readable label instead of the variant's generic name.
+- Force-load `wpn_empire_handgun_t2/_t3` (1P + 3P) at mod init via `Managers.package:load` — Kruber's es_handgun loadout only auto-loads the t1 mesh, so applying these illusions without pre-load would crash "Resource not loaded" (same Tuskgor pattern).
+- Both illusions inherit the type-level scale `{0.9, 1.35, 0.9}` (musket stretch + thinning), keep all musket stat changes (doubled damage, 2x reload, 12 ammo, 25m alert), and the bayonet child-link still attaches since the spawn-hook gate is on `item_template == Weapons.musket_template`.
+
+## 0.1.221-dev (2026-05-09) — Musket stance toggle: ammo persistence + floating bayonet fix
+- Fixed: every stance toggle was a free reload. The destroy_slot + add_equipment cycle spawned the new weapon at full ammo, ignoring the ammo count the player had at toggle time. Now `_toggle_musket_stance_and_rewield` reads the rifle's `ammo_system` extension and calls `:total_ammo_fraction()` BEFORE `destroy_slot`, then passes the fraction as the 5th arg to `add_equipment(slot, item_data, nil, nil, ammo_fraction)`. The new weapon spawns with the same proportional ammo.
+- Fixed: floating bayonet visible for one frame after stance toggle. `Managers.state.unit_spawner:mark_for_deletion(bayonet)` is async — it queues the unit for end-of-next-frame destruction. While queued the bayonet still rendered at its last world position (frozen where the rifle was when destroyed). New behavior: `_detach_musket_bayonet` calls `Unit.set_unit_visibility(bayonet, false)` BEFORE marking for deletion, so the bayonet is invisible for the frame between mark and destroy.
+
+## 0.1.220-dev (2026-05-09) — Musket melee = elf spear + 90° Y rotation in melee mode
+- Reverted: `musket_template_melee` clones `Weapons.two_handed_spears_elf_template_1` (Kerillian's elf spear) again per user direction, instead of v0.1.207's Kruber-native heavy spear. The elf spear is the originally-intended moveset.
+- Force-load: pre-load the elf spear's state machine (`units/beings/player/first_person_base/state_machines/melee/spear`) AND display unit (`units/weapons/weapon_display/display_2h_spears_wood_elf`) at mod init via `Managers.package:load`. Without this, Kruber crashes "Resource not loaded" on stance toggle because Kerillian's package isn't in his memory. Same Tuskgor-pup pattern.
+- Added: 90° rotation about the rifle's local +Y axis (barrel axis) when in melee mode. The elf spear's polearm `attachment_node_linking` holds the rifle perpendicular to its intended orientation; the spawn-hook applies `Unit.set_local_rotation(rifle, 0, Quaternion.axis_angle(Vector3(0,1,0), π/2))` after vanilla mounts the rifle, spinning the receiver/stock to face the right way. Counter-clockwise per user direction; if visually wrong, flip the sign to `-π/2`.
+
+## 0.1.219-dev (2026-05-09) — Musket bayonet Y 0.8 → 0.72, Z 0 → 0.05
+- Tuned: `_MUSKET_BAYONET_LOCAL_TRANSLATION` Y from 0.8 to 0.72 (closer to muzzle) and Z from 0 to 0.05 (small upward bump from barrel level) per user direction.
+
+## 0.1.218-dev (2026-05-09) — Musket bayonet Y offset 0.9 → 0.8
+- Tuned: `_MUSKET_BAYONET_LOCAL_TRANSLATION` Y from 0.9 to 0.8 per user direction. Bayonet sits slightly closer to the muzzle.
+
+## 0.1.217-dev (2026-05-09) — Musket bayonet model fix (Soldier's Longsword)
+- Fixed: bayonet model was using `wpn_emp_sword_04_t1`, which is actually the FALCHION mesh (matching_item_key = "wh_1h_falchion" in `item_master_list_weapon_skins.lua:5185`), not a Kruber 1H sword. v0.1.211's "use the 2nd 1h sword model" interpretation picked it because of numerical proximity — wrong path.
+- Switched to `wpn_emp_sword_03_t1` — the "Soldier's Longsword" cosmetic skin for `es_1h_sword` (verified via `cosmetics_tweaker/VETERAN_SKIN_CATALOG.md:900`). Both 1P and 3P unit paths updated, with corresponding force-load constants pointing at the new mesh.
+
+## 0.1.216-dev (2026-05-09)
+- Tuned: `cwv_es_poleaxe` scale X/Y `0.75 → 0.9` per user (v0.1.215's 0.75 was a bit too thin). Now `{0.9, 0.9, 0.65}` — light X/Y thinning, Z still 35% shorter than native.
+
+## 0.1.215-dev (2026-05-09)
+- Tuned: `cwv_es_poleaxe` scale `{1.0, 1.0, 0.65}` → `{0.75, 0.75, 0.65}` per user. Halberd mesh was reading too elongated on the Y axis at native 1.0 — now thinned 25% on both X and Y to match each other while Z (length) stays at 0.65. Type-level so default + every `es_halberd_skin_*` illusion in `cwv_es_poleaxe_skins` inherits.
+
+## 0.1.214-dev (2026-05-09)
+- Tuned: rescaled-greathammer illusions on `cwv_es_warpriest_hammer` (1H Skullsplitter) and `cwv_es_warpriest_hammer_shield` (Skullsplitter + shield) — Z grip offset `-0.5 → -0.55` per user (grip a bit too high; pulled hand 0.05 further down the haft). All 16 entries (8 + 8) updated. Negative Z lowers grip on this rescaled-greathammer mesh family (per-model authoring axis flipped from the general +Z = lower convention). Surgical replace targeted the `right_hand_offset = ..., can_wield` pattern, which excludes the 8 dual-warpriest-hammers entries (those have `left_hand_offset` between the offset and `can_wield`). Dual variant grip unchanged at right=-0.5, left=-0.6 (asymmetric per earlier).
+
+## 0.1.213-dev (2026-05-09)
+- Tuned: `cwv_es_maul` grip offset Z `0.5 → 0.35` per user. v0.1.176's value pulled the hand too far toward the bottom of the haft; this is a more moderate drop. +Z still lowers grip on this model family per `feedback_grip_offset_sign.md`.
+
+## 0.1.212-dev (2026-05-09)
+- Tuned: `cwv_es_rapier` scale `{1.0, 1.75, 1.0}` → `{1.05, 1.15, 1.0}` per user. v0.1.196's max-Y broadsword silhouette read as exaggerated; restoring a lighter touch — small X bump for slight side-profile thickening, modest Y bump for cup-guard depth, Z native.
+
+## 0.1.211-dev (2026-05-09) — Musket polearm SM force-load + bayonet swap
+- Fixed: `Resource not loaded` crash on weapon special key (GUID 46e89cd8). v0.1.207's `musket_template_melee` clones Kruber's NATIVE heavy-spear template, but its state machine `units/beings/player/first_person_base/state_machines/melee/polearm` is only loaded for Kruber when his current loadout includes `es_2h_heavy_spear`. If no career has the heavy spear equipped, the polearm SM isn't in memory and the stance toggle's wield path crashes when it tries to spawn a weapon with that SM.
+- Fix: force-load the polearm state machine at mod init via `Managers.package:load(_MUSKET_MELEE_STATE_MACHINE, "cwv_musket_melee_sm", nil, true, true)` — same Tuskgor-pup pattern. Stingray treats per-asset paths as synthetic packages.
+- Bayonet model swap: `wpn_emp_sword_02_t1` → `wpn_emp_sword_04_t1` (1P + 3P) per user "use the 2nd 1h sword model". `sword_04_t1` is the next distinct 1H sword mesh in vanilla's Empire sword catalog (`sword_02_t2` is just a t2 reskin of the same model, `sword_03` is magic-only). Force-load constants updated to point at the new mesh paths.
+- Bayonet position: `{0, 1.0, 0}` → `{0, 0.9, 0}` per user spec ("at 0.9y"). Slightly closer to the muzzle (0.9 instead of 1.0 along the rifle's barrel-forward Y axis).
+
+## 0.1.210-dev (2026-05-09)
+- Tuned: `cwv_es_longsword_shield` split right-hand scale per perspective. v0.1.206's unified `{0.85, 0.65, 0.75}` made the 3P silhouette read right next to a shield but the 1P held view came out too small. Now 1P uses `{1.0, 0.8, 0.9}` (back to the 2H Imperial Longsword family scale, which is what the held view was tuned to before the shrink), and 3P keeps `{0.85, 0.65, 0.75}`. Grip offset stays unified at `{0, 0, -0.065}` (works for both perspectives). Pattern: `right_hand_scale_1p` / `right_hand_scale_3p` override the unified field per `_resolve_field`. Same approach used by `cwv_es_dual_swords`'s 1P-only +10% bump.
+
+## 0.1.209-dev (2026-05-09)
+- Tuned: rescaled greathammer illusions on `cwv_es_warpriest_hammer` — Z grip offset `-0.6 → -0.5` per user. Hand was sitting too high on the haft (toward the head); pulled grip back down 0.1 units. All 8 entries (`cwv_es_warpriest_hammer_2h_hammer_01/02/03/04/04_runed_01/04_runed_02/06/06_runed_01`) updated. Scale unchanged at `{0.75, 0.75, 0.575}`.
+
+## 0.1.208-dev (2026-05-09) — Musket bayonet visibility sync
+- Fixed: bayonet stayed visible when the rifle was unwielded (player swapped to a different weapon — bayonet floated alone in space). VT2's wield system hides the rifle's units via `Unit.set_unit_visibility(rifle, false)` instead of destroying them, and Stingray's `World.link_unit` only propagates transforms to child units, NOT visibility. So the bayonet kept rendering with full opacity while its parent rifle was hidden.
+- Fix: track all spawned bayonet pairs in a weak-keyed `_musket_bayonet_pairs[rifle] = bayonet` table. New `mod:hook_safe("SimpleInventoryExtension", "_wield_slot")` runs after every weapon swap, walks the table, and sets each bayonet's `Unit.set_unit_visibility(bayonet, should_show)` based on whether its rifle is the currently-wielded weapon (`equipment.right_hand_wielded_unit` / `_3p`). When the player wields the musket → bayonet shows. When they swap to another slot → bayonet hides.
+- The existing `GearUtils.destroy_wielded` cleanup hook also clears the tracking entry so we don't try to read visibility off a dead key.
+
+## 0.1.207-dev (2026-05-09) — Musket melee template switch + bayonet axis fix
+- Fixed: `Resource not loaded` crash on weapon special (GUID 1363574c). v0.1.205's `musket_template_melee` cloned `Weapons.two_handed_spears_elf_template_1` (Kerillian's elf spear), which references state_machine `units/beings/player/first_person_base/state_machines/melee/spear` and display_unit `display_2h_spears_wood_elf` — both live in Kerillian's package and aren't loaded for Kruber. Switched to `Weapons.two_handed_heavy_spears_template` (Kruber's NATIVE tuskgor spear), which uses `units/beings/player/first_person_base/state_machines/melee/polearm` and other Kruber-loaded resources. No cross-character package issue.
+- Damage tuning preserved (attack ×0.85, stagger ×1.5, anim_time ×0.85). Functionally a polearm thrust moveset like the elf spear; visually plays Kruber's heavy-spear animations on the rifle. If we want elf-spear flavor specifically later, it'd require force-loading the elf spear's package via `Managers.package` per the cross-character pattern.
+- Bayonet position: `{0, -0.2, 1.0}` → `{0, 1.0, 0}`. Re-deduced axis convention from the user's prior "elongate the rifle on the Y axis" — rifle's local +Y IS the barrel direction (which is why scaling Y stretches it lengthwise). v0.1.205's Z=1.0 pushed the bayonet 1m along the perpendicular "up" axis (hence "still floating up high"). v0.1.207 puts it 1m along +Y (toward the muzzle) with zero Z offset (no vertical shift).
+- Action_three on melee template no longer specifies an `anim_event` — vanilla state machines fall through cleanly when omitted (current pose holds for total_time). Was attempting `to_unwield` which the polearm SM doesn't author cleanly.
+
+## 0.1.206-dev (2026-05-09)
+- Tuned: `cwv_es_longsword_shield` right-hand sword scale `{1.0, 0.8, 0.9}` → `{0.85, 0.65, 0.75}` (−0.15 on every axis) per user direction. The 2H Imperial Longsword family's mesh felt too big when paired with a shield; the shrunk-down version reads better as a one-handed longsword. Left hand (the shield) untouched; grip offset `{0, 0, -0.065}` preserved.
+
+## 0.1.205-dev (2026-05-09) — Musket runtime template swap + bayonet position tweak
+- Replaced the v0.1.203-204 dual-sub-action stance toggle (which crashed `action_sweep.lua: bad argument #4 to 'immediate_raycast'`, GUID e0c52d77, because the musket sweep sub-action lacked `dedicated_target_range` and other sweep-required fields the action-sweep code path expected) with a true runtime template swap, per user direction.
+- New: `Weapons.musket_template_melee` — full clone of `Weapons.two_handed_spears_elf_template_1` (Kerillian's spear). Damage tuning per user spec ("slow it down + add stagger"): every sub-action's damage_profile is cloned with attack ×0.85, impact (stagger) ×1.5, and `anim_time_scale` ×0.85 (15% slower swings). The cloned profiles are registered in `NetworkLookup.damage_profiles` so MP hit RPCs serialize correctly.
+- New stance toggle mechanism: F (action_three) on either template runs `_toggle_musket_stance_and_rewield(player_unit)` which:
+  1. Reads `item_data.mod_data.cwv_musket_stance` (per-item flag, persists across wield/unwield)
+  2. Flips the flag (`ranged ↔ melee`)
+  3. Calls `inventory_extension:destroy_slot(slot, true)` then `add_equipment(slot, item_data)` then `wield(slot)` — full unequip+equip cycle
+- New hook `BackendUtils.get_item_template`: when the cycle re-creates the slot, this hook reads the (now-flipped) stance flag and returns `Weapons.musket_template_melee` instead of `musket_template`. The recreated weapon spawns with the correct moveset.
+- Bayonet child-link hook now fires for BOTH `Weapons.musket_template` and `Weapons.musket_template_melee` (was: only `musket_template`), so the bayonet stays attached when the player toggles stance.
+- Bayonet position tweak: from `{0, 0, 0.55}` to `{0, -0.2, 1.0}` — push further forward along the barrel (Z 0.55 → 1.0) and add downward shift (Y 0 → -0.2) to bring it from "floating above" to muzzle level. Tunable via `_MUSKET_BAYONET_LOCAL_TRANSLATION` constant — iterate as needed. Rotation unchanged (user confirmed correct in v0.1.204).
+- The `lookup_data` attach (v0.1.204 fix) is preserved on both templates so neither crashes on first chain-resolve.
+- ANIMATION CAVEAT: musket_template_melee uses Kerillian's spear's state_machine, which means in melee stance the player holds the rifle in a 2H polearm grip and swings spear-style animations. Visually plausible for a musket-bayonet drilling stance, but not a perfect rifle-pose-with-thrust. Iteration territory.
+
+## 0.1.204-dev (2026-05-09) — Musket crash fix + bayonet rotation + RMB aim restore
+- Fixed: crash on first chain resolve through any musket sub-action — `action_utils.lua: attempt to index field 'lookup_data' (a nil value)` (crash GUID ec072975). Vanilla `weapons.lua:305-312` attaches `lookup_data` to every sub-action when `Weapons[<key>]` is initialized at boot. Sub-actions added at mod load time miss this pass. Now we manually attach `lookup_data = { item_template_name, action_name, sub_action_name }` to every entry on the musket template after all our additions/clones land — idempotent so vanilla sub-actions are safely re-set.
+- Fixed: right-click no longer fires the gun. v0.1.203's `_augment_chain` was called on `action_two.default` and stripped the vanilla `{action="action_one", sub_action="zoomed_shot"}` chain entry, leaving only our prepended dual `default` entries — so RMB→aim→LMB became RMB→aim→regular shot, plus the strip-and-prepend reordering broke the chain selector. v0.1.204 leaves action_two's chain untouched (vanilla zoom and zoomed_shot intact). The `_augment_chain` strategy switched from "strip-and-prepend" to "just prepend" everywhere — original entries are preserved and only act as fallbacks if our dual entries fail their conditions.
+- Fixed: bayonet now points along the rifle's barrel instead of perpendicular. Two corrections:
+  - **Position**: `_MUSKET_BAYONET_LOCAL_TRANSLATION` from `{0, 0.55, 0}` (Y-forward) to `{0, 0, 0.55}` (Z-forward). The rifle's barrel-forward is its local +Z, not +Y as v0.1.200 assumed.
+  - **Rotation**: new `_MUSKET_BAYONET_LOCAL_ROTATION_AXIS = {1, 0, 0}` and `_ANGLE = -π/2`. The 1H sword model's blade extends along its local +Y; rotating -90° about X swings the blade to point along world Z (the rifle's barrel direction). Without this rotation the bayonet's blade was perpendicular to the rifle (sticking out the side).
+  - Both constants are still tunable for fine-grained position/rotation/scale adjustments.
+
+## 0.1.203-dev (2026-05-09) — Musket bayonet visibility fix + true stance toggle + thinner rifle
+- Fixed: bayonet wasn't appearing in-game. The `GearUtils.spawn_inventory_unit` hook was checking `item_data.name == "cwv_es_musket"`, but per `feedback_cwv_clone_name_clobber.md` cwv variants inherit the BASE weapon's name (so `item_data.name` was always `"es_handgun"`). Switched to `item_template == Weapons.musket_template` (reference-identity comparison on the template table) — bulletproof and doesn't depend on string fields that get clobbered.
+- Changed: rifle scale from `{ 1.0, 1.35, 1.0 }` to `{ 0.9, 1.35, 0.9 }`. X and Z (barrel cross-section / stock width) thinned by 10% so the musket reads as long-and-slender, not just stretched. Y stretch unchanged.
+- Replaced single-press bayonet thrust (v0.1.202) with a true stance toggle:
+  - F (action_three) toggles between `"ranged"` and `"melee"` stance, stored on the wielded musket unit's data via `Unit.set_data(rifle, "cwv_musket_stance", ...)`. Default stance is ranged on each fresh wield.
+  - In ranged stance: LMB fires the rifle (vanilla `action_one.default`), right-click zooms (vanilla `action_two`).
+  - In melee stance: LMB swings the bayonet (`action_one.default_melee`, `kind = "sweep"` with the slowed/stagger-boosted `cwv_musket_bayonet_thrust` damage profile), right-click does nothing (zoom disabled).
+  - F (action_three) is a `kind = "dummy"` no-damage action that just plays a brief `reload` anim and runs the toggle in `enter_function`.
+- Mechanism: every chain entry that targets `action_one` is duplicated into TWO parallel entries — one with `sub_action = "default"` (gated by `chain_condition_func` returning true in ranged stance) and one with `sub_action = "default_melee"` (gated on melee). The chain selector iterates entries in order and picks the first whose chain_condition passes, so the right sub-action fires for the current stance. Parallel pairs are wired into action_one.default, action_one.zoomed_shot, action_one.default_melee, action_two.default, action_three.default, plus cloned wield/reload action chains. Wield + reload are CLONED off the global `ActionTemplates.wield` / `.reload` (which have empty allowed_chain_actions and are shared by every weapon — modifying them in place would affect Bardin's handgun etc).
+- ANIMATION CAVEAT: handgun state machine doesn't author melee swing events. Bayonet uses `anim_event = "reload"` as a stand-in (forward arm motion). Damage delivery is independent of animation, so the actual hit register works correctly even if the visual is awkward.
+
+## 0.1.202-dev (2026-05-09) — Musket bayonet thrust on special key
+- Added: `cwv_es_musket` action_three (special key F) is now a single-press bayonet melee thrust. Uses `cwv_musket_bayonet_thrust` damage profile (clone of Kerillian spear's `heavy_slashing_smiter_stab_polearm` with attack × 0.85 and impact × 1.5 — slowed per-thrust damage but heavier stagger, per the user "use it like his 1h spear, slow down + add stagger" spec).
+- Wiring: action_three subaction added to musket template; `_add_bayonet_chain_to` helper appends an `{action_three, input=action_three}` chain entry to `action_one.default`, `action_one.zoomed_shot`, and `action_two.default` allowed_chain_actions so F is reachable from any handgun state.
+- Damage profile: `kind = "sweep"` runs a melee damage-window collision (window 0.15-0.45 of total_time 1.4s), `range_mod = 1.5` for long bayonet reach, hit_effect/sounds taken from spear stab (`stab_hit`, `stab_hit_armour`).
+- Animation note: handgun state machine doesn't author melee swing events, so `anim_event = "reload"` is used as a stand-in (forward arm motion that vaguely reads as a thrust). The actual damage delivery is independent of animation. Visual fidelity is the v3 pursuit — full template-swap stance toggle would require runtime mechanism vanilla doesn't natively support.
+- NetworkLookup: bayonet damage profile registered in `NetworkLookup.damage_profiles` (mirrors the v0.1.201 fix for the ranged shot profile).
+
+## 0.1.201-dev (2026-05-09) — Musket NetworkLookup fix
+- Fixed: firing the musket crashed with `[NetworkLookup.lua] Table damage_profiles does not contain key: cwv_musket_shot` (crash GUID a8094388). The cloned damage profile was registered into `DamageProfileTemplates` but not into `NetworkLookup.damage_profiles`, so the hit-event RPC serialization couldn't resolve it. Added the same `rawset(tbl, idx, key) / rawset(tbl, key, idx)` injection used by `_clone_damage_profile` in `_create_cwv_musket_damage_profile`.
+
+## 0.1.200-dev (2026-05-09) — Musket variant (cwv_es_musket)
+- Added: new Kruber ranged variant `cwv_es_musket` ("Musket"). Available to all four Kruber careers as an exotic-rarity item alongside the vanilla rifle.
+- Visual: vanilla rifle mesh (`wpn_empire_handgun_t1`) stretched 1.35x along Y (length axis) via type-level `_type_transforms.cwv_es_musket.right_hand_scale = { 1.0, 1.35, 1.0 }`. Long-musket silhouette without changing barrel thickness.
+- Bayonet: a thinned-and-shortened copy of Kruber's 1H sword (`wpn_emp_sword_02_t1`) is spawned and `World.link_unit`'d to the rifle unit at equip time (one for 1P, one for 3P). Tracking via `Unit.set_data(rifle, "cwv_musket_bayonet", ...)`; cleanup hook on `GearUtils.destroy_wielded` destroys the bayonet when the rifle is destroyed (weapon swap, level end). Bayonet position/scale tunable via `_MUSKET_BAYONET_LOCAL_TRANSLATION = { 0, 0.55, 0 }` and `_MUSKET_BAYONET_SCALE = { 0.25, 0.7, 0.25 }` constants.
+- Damage: `cwv_musket_shot` damage profile — clone of Kruber's handgun's `shot_sniper` with `power_distribution_{near,far}.attack` and `.impact` both 2x on default_target and per-target overrides. Dropoff curve, shield_break flag, and armor modifiers all preserved (close-range hits land hardest, far-range still penetrates armor but at reduced damage).
+- Reload: `ammo_data.reload_time = 3.0` (vanilla 1.5).
+- Ammo: `ammo_data.max_ammo = 12` (vanilla 16). `ammo_per_clip` and `ammo_per_reload` stay at vanilla 1 — bolt-action rhythm, one shot per chamber.
+- Loudness: `alert_sound_range_fire = 25` on every firing sub-action (vanilla 10) — matches blunderbuss's audible radius. Black-powder boom broadcasts the wielder's position to a much wider area than the standard rifle.
+- Cross-character package: bayonet sword units (1P + 3P) force-loaded at mod init via `Managers.package:load`, mirroring the Tuskgor Javelin pup pattern (per `feedback_cwv_cross_character_unit_packages.md`). The rifle's package auto-loads via inventory; the sword unit doesn't, so without this the bayonet spawn would assert `Unit not found`.
+- TODO(v2): bayonet melee mode bound to the special key. Plan: clone Kerillian's spear moveset (`two_handed_spears_elf_template_1`) and swap the entire weapon template at runtime when the player presses F. Substantial new infrastructure (template-swap state machine; vanilla doesn't natively support stance-toggling weapons), so deferred until v1 ships and stabilizes.
+
+## 0.1.198-dev (2026-05-09)
+- Fixed: grip on the scaled-down greathammer cosmetic illusions (es_2h_hammer_skin_*) was sitting too low on the haft for all three Warrior-Priest hammer variants. Bumped `right_hand_offset` Z from `-0.04` to `-0.6` (and matching `left_hand_offset` on the dual variant) on every greathammer illusion entry — 8 single, 8 dual (16 hands), 8 hammer+shield. Per `feedback_grip_offset_sign.md`: -Z raises the grip up the haft, so a more-negative value lifts Kruber's hand higher up the weapon. Skullsplitter (`wpn_wh_1h_hammer_01`) default mesh untouched — it has its own def-level `right_hand_offset = { 0, 0, 0.15 }` for the priest-hammer-on-empire-soldier-bone correction and is unaffected by this change.
+
+## 0.1.197-dev (2026-05-09)
+- Fixed: `cwv_es_longsword_shield` right-hand sword mesh wasn't getting the same scale + grip treatment the 2H Imperial Longsword family receives. The variant uses its own `item_type = "cwv_es_longsword_shield"` (so it can carry its own curated shield illusions), so it didn't inherit `_type_transforms.cwv_imperial_longsword`. Added a new `_type_transforms.cwv_es_longsword_shield = { right_hand_scale = {1.0, 0.8, 0.9}, right_hand_offset = {0, 0, -0.065} }` mirroring the 2H family's right-hand values. Sword mesh now matches the longsword silhouette across both 2H and shield variants. Shield (left_hand_unit) untouched.
+
+## 0.1.196-dev (2026-05-08)
+- Fixed: `cwv_es_rapier` cosmetic browsing STILL crashed with `[Script Error]: j_leftweaponattach` (crash GUID `77e636ee-f81c-4683-9aae-1f290f4483cd`) — v0.1.192's fix only handled the illusion entries, not the variant's auto-generated DEFAULT skin (`cwv_es_rapier_skin`). Opening the cosmetic picker renders the CURRENT skin first (the default), and the default skin still carried `left_hand_unit = invisible_pistol` from `_register_variant_skins`. The default skin's `matching_item_key = wh_fencing_sword` (per `_register_variant_skins`'s base-weapon convention), so the previewer read the BASE template's full pistol attachment chain and crashed before the user even clicked an illusion.
+- Fix: rapier def now declares `no_left_hand = true` (the existing v0.1.179 sentinel from `cwv_es_outrider_grenade_launcher`) and removes the `left_hand_unit = "wpn_invisible_weapon"` line. Effect: `_build_entry` nils `entry.left_hand_unit` on the variant's IML entry; `_register_variant_skins` reads `def.left_hand_unit = nil` and writes `nil` to BOTH the WeaponSkins entry AND the IML weapon_skin entry. The default skin (and combined with v0.1.192, every illusion) has no `left_hand_unit`. Both equip and picker skip the left-hand spawn entirely. No spawn → no node lookup → no crash.
+- Tuned: `cwv_es_rapier` Y scale `1.45 → 1.75`, X reverted `1.1 → 1.0`, Z stays at 1.0 — concentrate the broadsword broadening on the depth axis only (cup/basket guard silhouette), no side-profile thickening.
+
+## 0.1.195-dev (2026-05-08)
+- Changed: `cwv_es_cudgel` now rides Saltzpyre's falchion moveset (`one_hand_falchion_template_1`) instead of being a stat-tweaked clone of Kruber's mace. Charge-and-release light combo, smiter heavy — but every cutting hit is converted to a crushing one. Same name ("Cudgel"), same Empire mace mesh.
+- Damage type swap done by template clone-and-rewrite: each sub-action's slashing damage profile is replaced with its blunt cousin (`light_slashing_axe_linesman` → `light_blunt_tank_diag`, `light_slashing_axe_linesman_upper` → `light_blunt_tank_upper`, `medium_slashing_smiter_1h` → `medium_blunt_smiter_1h`). All three blunt targets are vanilla `DamageProfileTemplates` entries with matching cleave/range/stagger shape.
+- Effects/sounds remapped to match: `hit_effect = melee_hit_hammers_1h`, `impact_sound_event = blunt_hit` (and `blunt_hit_armour` for armoured targets), `display_unit = display_1h_hammer` (so the inventory rig holds it like a mace, not a falchion), `sound_event_block_within_arc = weapon_foley_blunt_1h_block_wood`.
+- Cross-character anim coverage: falchion is `wh_1h_falchion`'s native template and Kruber already gets cross-access to it via WT, so 3P body anims play correctly without new remap entries.
+- Removed the old +20% speed / −15% power / −0.05 reach stat tweaks — the falchion's vanilla pacing is now what defines the weapon's feel.
+
+## 0.1.194-dev (2026-05-08)
+- Added: cosmetic illusion options on `cwv_es_sword_and_mace`. Each vanilla `es_1h_sword` skin's mesh is paired with a vanilla `es_1h_mace` skin's mesh — sword on the right hand, mace on the left, matching the variant's inverse-of-vanilla-mace+sword layout. Both source pools have 8 skins; sorted by rarity (common→plentiful→rare→exotic→unique→magic) then zipped by index. 8 illusion entries registered.
+- Tier alignment: rarity distributions don't perfectly match (sword has 3 unique + 1 exotic, mace has 2 unique + 2 exotic), so 7 of the 8 pairs share a rarity; one mid-list pair (sword unique × mace exotic) is mismatched. Picker rarity inherits the sword's tier (the right-hand "primary"). Sufficient parity for a clean picker presentation.
+- Display rig: `display_dual_weapons` forced on each illusion's IML + WeaponSkins.skins entry (matches the variant's `_force_display_unit` setting; the picker reads display_unit via two paths and needs it on both, per `feedback_cwv_dual_wield_display_rig.md`).
+
+## 0.1.190-dev (2026-05-08)
+- Tuskgor Javelin pickup polish (the two cosmetic regressions after v0.1.174 carrier-unit landed):
+  - Pickup popup text was showing "Pickup Throwing Axe" (we'd reused `hud_description = "interaction_ammunition_axe"` as a placeholder). Added `cwv_interaction_ammunition_javelin` localization key with text "Tuskgor Javelin" and switched `hud_description` to point at it. Popup now reads correctly.
+  - White outline on tagged pickup was missing. Carrier visibility was being toggled via `Unit.set_local_scale(parent, 0, Vector3(0.001, 0.001, 0.001))` which probably also shrank the OutlineExtension's silhouette target. Switched to `Unit.set_unit_visibility(parent, false)` — visibility is a render flag independent of physics actors (interaction stays active because actors aren't affected) and the outline shader may still compute on hidden meshes (the shader's target rect is per-unit metadata, not directly tied to the rendered mesh pass). If outline is still missing after this, the OutlineExtension genuinely needs a visible mesh and we'd need to attach it to the boar spear visual instead.
+- Documentation: published `reference_cwv_thrown_weapon_recipe.md` consolidating the v0.1.65 → v0.1.190 Tuskgor Javelin debugging arc into a 7-layer fix stack with end-to-end checklist for adding new cwv thrown weapons. Indexed in MEMORY.md.
+
+## 0.1.193-dev (2026-05-08)
+- Fixed: H1 (and consequently H2) of axe+falchion on Kruber didn't play any animation — body stood still on heavy attack. Root cause: chain-context mismatch. The cross-access remap was rewriting H1 to `attack_swing_charge_right` + `attack_swing_heavy_right_diagonal`, but Kruber's mace+sword body has no clips for those events from the **idle** chain state. Per `dual_wield_hammer_sword.lua` (lines 11, 233), Kruber's native idle-heavy chain is `action_one.default` → `charge_left` → `heavy_left_diagonal`; charge_right + heavy_right_diagonal are reachable only via `action_one.default_right_heavy`, the H2 chain state. Body in idle + event the SM "knows but has no clip for in this state" = no animation rendered.
+- Fix: swapped H1 and H2 targets in `_kruber_axe_falchion_remap`. H1 now mirrors Kruber's idle-heavy chain (`charge_left` + `heavy_left_diagonal`), H2 mirrors Kruber's chained H2 (`heavy_right_diagonal`). Source axe+falchion's H2 charge is already `attack_swing_charge_left` natively, matching Kruber's H2 charge — no charge remap needed for H2.
+- Documented: chain-context rule. The closed-vocabulary rule is necessary but still not sufficient — even an in-vocab event can produce no animation if the body's current chain state has no clip mapped for it. Native chain progression (idle → H1 → H2) drives clip availability.
+
+## 0.1.192-dev (2026-05-08)
+- Fixed: `cwv_es_rapier` cosmetic illusion change crashed with `[Script Error]: j_leftweaponattach` (crash GUID `962fe355-a0d4-43fd-9a29-bd64fca6a0ac`). Root cause: `_register_rapier_illusions` set `left_hand_unit = invisible_pistol` on every illusion's IML + WeaponSkins entries. When the player clicked an illusion, the loot previewer's `_load_item_units` saw a non-nil `item_units.left_hand_unit` (per `BackendUtils.get_item_units` line 174 unconditionally overwriting from skin) and tried to spawn `wpn_invisible_weapon_3p` and attach it to the display rig via the BASE template's `pistol.left.third_person.display` linking — and the path crashed in `Unit.node` for `j_leftweaponattach`.
+- Fix: `_register_rapier_illusions` now DELIBERATELY omits `left_hand_unit` on illusion entries. With nil left_hand_unit, `BackendUtils.get_item_units` returns nil for left, the previewer's `if left_hand_unit then` branch skips the left-hand spawn entirely (no spawn → no node lookup → no crash). The variant's DEFAULT skin (no illusion picked) still carries `left_hand_unit = invisible_pistol` via the variant's own IML entry — so the no-pistol identity holds on equip with no illusion. With an illusion applied: no left unit at all, and since the pistol was invisible anyway, no visible difference.
+
+## 0.1.191-dev (2026-05-08)
+- Tuned: `cwv_es_rapier` Y-axis scale bumped `1.25 → 1.45` (`_type_transforms.cwv_es_rapier`). Per user direction — broaden the depth axis further so the rapier reads as a 17th/18th-century basket-hilt broadsword (chunkier cup/basket guard silhouette) instead of a thin reikland duellist's blade. X stays at +10%, Z native. Type-level so default + every `wh_fencing_sword_skin_*` illusion inherits.
+
+## 0.1.189-dev (2026-05-08)
+- Removed: `cwv_es_brace_repeater` variant (Repeater Brace) and the entire 3P-unit-override mechanism it required (`right_hand_unit_3p_override` / `left_hand_unit_3p_override` def fields, `_resolve_3p_override` lookup helper, `_3p_swap_enabled` setting gate, `cwv_3p_swap_enabled` toggle, the `GearUtils.spawn_inventory_unit` hook). Per user direction, the brace-on-Kruber idea moved to weapon_tweaker — now lives there as a 3P unit swap on Kruber's vanilla `wh_brace_of_pistols` cross-access. No separate inventory item; the player wields the standard brace on Kruber and the 3P body shows the repeater. See `weapon_tweaker` v0.12.2 for the receiving end.
+- Removed bits also dropped from `_seed_targets`, `_item_type_to_skin_table`, `_create_brace_repeater_template`, `_BRACE_REPEATER_*` constants, and the `cwv_3p_swap_enabled` setting from `_data.lua` + `_localization.lua`.
+- Migration breadcrumbs: short comments left at the variant-def site and the swap-hook site pointing at weapon_tweaker for anyone reading old code.
+
+## 0.1.188-dev (2026-05-08)
+- Fixed: `cwv_es_maul` crashed on inventory open / preview with `[Script Error]: a_unwielded_brw_mace` (crash GUID `258c5f1c-dbe0-4ebd-8ef6-0b43d95c3b9d`). Same family as the v0.1.187 rapier `lock_hammer` crash but on the BODY skeleton this time — `a_unwielded_brw_mace` is a bone authored ONLY on Sienna's 3P body for her holstered-mace pose. v0.1.167 already overrode the CLONED template's `right_hand_attachment_node_linking` for in-game equip; missing piece was the inventory previewer, which reads the BASE template per `feedback_cwv_previewer_template_lookup.md`.
+- Fix: `_create_maul_template` now also patches the BASE `one_handed_hammer_wizard_template_1.right_hand_attachment_node_linking.third_person.unwielded` to `j_hips → 0`. Wielded slot left untouched (uses universal `j_rightweaponattach`), so Sienna's in-hand mace behavior is unchanged. Cost: Sienna's holstered-mace pose now sits on standard hips instead of her dedicated mace bone — minor visual regression on her side, fixes Kruber preview crash. Verified via source-wide grep that `AttachmentNodeLinking.brw_hammer` is referenced by only this one template, so the patch is well-scoped.
+
 ## 0.1.187-dev (2026-05-08)
 - Fixed: `cwv_es_rapier` crashed on equip with `[Script Error]: lock_hammer` (GUID `acb910d1-a625-49b1-b899-86d48d27462d`). Root cause: `fencing_sword_template_1.left_hand_attachment_node_linking = AttachmentNodeLinking.pistol.left`, which has component bindings for `lock_hammer`, `trigger`, `lock_lid` — node names that exist on `wpn_emp_pistol_01_t1` (Saltzpyre's pistol) but NOT on `wpn_invisible_weapon` (our variant's left mesh, since we removed the pistol). Vanilla `Unit.node(invisible_weapon, "lock_hammer")` crashes hard on missing nodes.
 - Fix: `_create_rapier_template` now overrides `template.left_hand_attachment_node_linking` to a minimal binding (`j_leftweaponattach → 0` for first/third person wielded, `j_hips → 0` for unwielded). No component lookups, no crash. Patch is on the CLONE only — base `fencing_sword_template_1` keeps its full pistol bindings intact for native Saltzpyre wielders.

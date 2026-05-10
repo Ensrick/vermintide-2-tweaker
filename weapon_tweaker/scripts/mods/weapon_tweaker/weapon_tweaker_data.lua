@@ -12,12 +12,35 @@ local mod = get_mod("wt")
 -- here and the duplicate widgets remain. The widget set is stable per session,
 -- so this is "first one wins". User can reorder mods if it matters.
 local _has_cwv = false
+local _has_cim = false
 if Managers and Managers.mod and Managers.mod._mods then
     for i = 1, #Managers.mod._mods do
         local m = Managers.mod._mods[i]
         if m and m.name == "character_weapon_variants" then
             _has_cwv = true
-            break
+        elseif m and m.name == "crafting_in_modded" then
+            _has_cim = true
+        end
+    end
+end
+
+-- Setting IDs of the top-level CW trait groups; stripped from the widget tree
+-- when crafting_in_modded isn't installed (the runtime in weapon_tweaker.lua
+-- still respects whatever values are stored, but the toggles only do anything
+-- visible to the player when cim is around to surface them in its forge).
+local _cim_gated_groups = {
+    cw_melee_traits = true,
+    cw_ranged_traits = true,
+}
+
+local function _strip_cim_widgets(widgets)
+    if not widgets then return end
+    for i = #widgets, 1, -1 do
+        local w = widgets[i]
+        if _cim_gated_groups[w.setting_id] then
+            table.remove(widgets, i)
+        elseif w.sub_widgets then
+            _strip_cim_widgets(w.sub_widgets)
         end
     end
 end
@@ -654,8 +677,8 @@ local data = {
                                 setting_id = "ranged_es_mercenary",
                                 type = "group",
                                 sub_widgets = {
-                                    { setting_id = "unlock_es_mercenary_dr_handgun", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_we_longbow", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_wh_brace_of_pistols", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_es_blunderbuss", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_mercenary_es_handgun", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_mercenary_es_repeating_handgun", type = "checkbox", default_value = true },
@@ -665,8 +688,8 @@ local data = {
                                 setting_id = "ranged_es_huntsman",
                                 type = "group",
                                 sub_widgets = {
-                                    { setting_id = "unlock_es_huntsman_dr_handgun", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_we_longbow", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_huntsman_wh_brace_of_pistols", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_es_blunderbuss", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_huntsman_es_handgun", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_huntsman_es_longbow", type = "checkbox", default_value = true },
@@ -677,8 +700,8 @@ local data = {
                                 setting_id = "ranged_es_knight",
                                 type = "group",
                                 sub_widgets = {
-                                    { setting_id = "unlock_es_knight_dr_handgun", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_we_longbow", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_wh_brace_of_pistols", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_es_blunderbuss", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_handgun", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_repeating_handgun", type = "checkbox", default_value = true },
@@ -688,8 +711,8 @@ local data = {
                                 setting_id = "ranged_es_questingknight",
                                 type = "group",
                                 sub_widgets = {
-                                    { setting_id = "unlock_es_questingknight_dr_handgun", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_we_longbow", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_wh_brace_of_pistols", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_es_blunderbuss", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_es_handgun", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_es_longbow", type = "checkbox", default_value = false },
@@ -934,6 +957,70 @@ local data = {
                     },
                 },
             },
+            {
+                setting_id = "weapon_traits",
+                type = "group",
+                sub_widgets = {
+                    {
+                        setting_id = "adventure_melee_traits",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "trait_melee_attack_speed_on_crit",     type = "checkbox", default_value = true },
+                            { setting_id = "trait_melee_timed_block_cost",         type = "checkbox", default_value = true },
+                            { setting_id = "trait_melee_counter_push_power",       type = "checkbox", default_value = true },
+                            { setting_id = "trait_melee_increase_damage_on_block", type = "checkbox", default_value = true },
+                            { setting_id = "trait_melee_reduce_cooldown_on_crit",  type = "checkbox", default_value = true },
+                            { setting_id = "trait_melee_shield_on_assist",         type = "checkbox", default_value = true },
+                        },
+                    },
+                    {
+                        setting_id = "adventure_ranged_traits",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "trait_ranged_restore_stamina_headshot",            type = "checkbox", default_value = true },
+                            { setting_id = "trait_ranged_replenish_ammo_headshot",             type = "checkbox", default_value = true },
+                            { setting_id = "trait_ranged_replenish_ammo_on_crit",              type = "checkbox", default_value = true },
+                            { setting_id = "trait_ranged_reduce_cooldown_on_crit",             type = "checkbox", default_value = true },
+                            { setting_id = "trait_ranged_increase_power_level_vs_armour_crit", type = "checkbox", default_value = true },
+                            { setting_id = "trait_ranged_consecutive_hits_increase_power",     type = "checkbox", default_value = true },
+                            { setting_id = "trait_ranged_reduced_overcharge",                  type = "checkbox", default_value = true },
+                            { setting_id = "trait_ranged_remove_overcharge_on_crit",           type = "checkbox", default_value = true },
+                        },
+                    },
+                    {
+                        setting_id = "cw_melee_traits",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "cw_trait_stagger_aoe_on_crit",                          type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_armor_breaker",                                type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_shield_of_isha",                               type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_bloodthirst",                                  type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_headhunter",                                   type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_home_run",                                     type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_shield_splinters",                             type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_serrated_blade",                               type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_crescendo_strike",                             type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_follow_up",                                    type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_always_blocking",                              type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_deus_big_swing_stagger",                       type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_deus_crit_chain_lightning",                    type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_deus_collateral_damage_on_melee_killing_blow", type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_melee_heal_on_crit",                           type = "checkbox", default_value = false },
+                        },
+                    },
+                    {
+                        setting_id = "cw_ranged_traits",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "cw_trait_refilling_shot",                type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_piercing_projectiles",          type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_deus_extra_shot",               type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_deus_ranged_crit_explosion",    type = "checkbox", default_value = false },
+                            { setting_id = "cw_trait_deus_ammo_pickup_reload_speed", type = "checkbox", default_value = false },
+                        },
+                    },
+                },
+            },
             -- POTENTIAL BUG (LOW): the following user-facing toggle widgets
             -- are advertised in the localization file but NEVER referenced by
             -- mod:get() in the code:
@@ -951,6 +1038,13 @@ local data = {
             -- because users may have them set from old versions and removing
             -- a widget surfaces stale values. Cleanup candidate.
             {
+                setting_id = "weapon_overrides",
+                type = "group",
+                sub_widgets = {
+                    { setting_id = "authentic_brace_of_pistols", type = "checkbox", default_value = false },
+                },
+            },
+            {
                 setting_id = "debug_group",
                 type = "group",
                 sub_widgets = {
@@ -964,6 +1058,10 @@ local data = {
 
 if _has_cwv then
     _strip_cwv_widgets(data.options.widgets)
+end
+
+if not _has_cim then
+    _strip_cim_widgets(data.options.widgets)
 end
 
 return data

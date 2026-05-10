@@ -1,5 +1,44 @@
 # Crafting in Modded Changelog
 
+## 0.5.6-dev (2026-05-09) — Fix amulet slot index mapping (charm/necklace were inverted)
+The user reported necklace data displayed at the top of the amulet view but the picker (the menu where you choose properties / traits) was showing CHARM options. Root cause: vanilla `WeaveCareerProgression` orders the amulet's 3 slots by accessory POOL:
+
+- slot 1 = `offence_accessory` → **charm**
+- slot 2 = `defence_accessory` → **necklace**
+- slot 3 = `utility_accessory` → **trinket**
+
+`HeroWindowWeaveProperties._setup_menu_options` reads the `category` field on each progression entry and renders the matching property/trait pool in the picker. I'd assigned necklace=1, charm=2, trinket=3 — exactly inverted for slots 1 and 2 — so the necklace's data went into a slot whose picker rendered charm options.
+
+Fixed `_AMULET_SLOT_BY_INDEX` to match `WeaveCareerProgression`. Both `_forge_seed_item` and `_forge_apply_to_amulet` iterate the same table, so the apply path is consistent.
+
+## 0.5.5-dev (2026-05-09) — Adventure talents wired into the amulet's talent picker
+The amulet UI's talent picker shows the player's career talent tree from `WeaveLoadoutSettings[career].talent_tree` — which is set to `TalentTrees[profile][index]` (see `weave_loadout_settings_*.lua`), i.e. exactly the same 6×3 tree adventure mode uses. So the talents the player sees ARE adventure talents.
+
+Wired three hooks for read/write:
+
+- **`get_loadout_talents`**: reads the player's adventure picks via `Managers.backend:get_interface("talents"):get_talents(career)` (returns array of 6 column picks 1..3), maps each row's pick to its talent name via `TalentTrees[profile][index][row][pick]`, returns `{[talent_name] = row}` — the format the bubble grid expects.
+- **`set_loadout_talent(career, talent_name, row)`**: finds which column in that row owns `talent_name`, calls `talents:set_talents(career, picks)` with the updated array. Write-through to vanilla: the player's actual career talents change immediately and persist via the regular adventure save layer.
+- **`remove_loadout_talent`**: no-op. The bubble grid emits remove→set pairs on each swap; we commit the new pick directly in `set_loadout_talent`, no need to model the intermediate state because adventure rows always have one talent.
+
+Now opening the amulet should show your current talent picks highlighted, and changing them in the picker writes through to your actual career.
+
+## 0.5.4-dev (2026-05-09) — Fix amulet slot names (charm + trinket weren't populating)
+The amulet seed/apply was reading `slot_charm` and `slot_trinket`, but VT2's `career_settings` names them `slot_ring` (legacy) and `slot_trinket_1`. `get_loadout_item_id(career, "slot_charm")` returned nil, so the seed silently dropped both items — only the necklace populated the bubble grid.
+
+Centralized the slot list in `_AMULET_SLOT_BY_INDEX = { [1] = "slot_necklace", [2] = "slot_ring", [3] = "slot_trinket_1" }` and updated both `_forge_seed_item` and `_forge_apply_to_amulet` to iterate it. Charm and trinket should now populate (and apply correctly to the right items on edit).
+
+Talents (the 6 talent slots in the amulet layout) still aren't populated — that needs translating adventure talent picks (numeric 1-3 per row) into the weave-talent name format the bubble grid expects, which is a separate integration.
+
+## 0.5.3-dev (2026-05-09) — Surface modded items in salvage regardless of equip state
+The salvage filter post-hook was respecting vanilla's "no equipped, no in-loadout, no favorited" rule for modded items. That hid every freshly-crafted modded item — we auto-equip on craft via `set_loadout_item`, so the new item is immediately considered equipped + in-loadout, making it un-salvageable.
+
+Modded crafts are throwaway by design — the user owns their lifecycle and should be able to scrap them at will. Relaxed the post-hook to add modded items unconditionally (still slot-typed to weapons/jewellery only). Vanilla items keep the original guards.
+
+## 0.5.2-dev (2026-05-08) — Fix salvage crash on UI reward presentation
+Salvage was crashing the game with `backend_interface_item_playfab.lua:354: attempt to index local 'item' (a nil value)`. The salvage page's `on_craft_completed` iterates the craft result and calls `_set_reward_material_by_index(backend_id, amount)` → `item_interface:get_key(backend_id)` → unguarded `item.key`. Vanilla's salvage result contains produced-material bids (scrap / dust); our synth was incorrectly putting the consumed weapon bids in there, and those bids were already removed from the mirror by the time the UI processed them → nil item → crash.
+
+Fix: salvage synth now returns an empty result `{}` (we don't produce materials in modded). The UI iterates nothing, no nil access. The actual removal + unregister + loadout-clear logic is unchanged.
+
 ## 0.5.1-dev (2026-05-08) — Amulet bubble seed + apply for properties & traits
 Wired the seed/apply chain for the amulet's 3-item case:
 

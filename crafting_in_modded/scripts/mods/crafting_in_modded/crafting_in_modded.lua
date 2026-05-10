@@ -17,7 +17,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("cim")
 
-local MOD_VERSION = "0.5.1-dev"
+local MOD_VERSION = "0.5.6-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 mod:echo("Crafting in Modded v" .. MOD_VERSION)
 
@@ -400,19 +400,20 @@ mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, f
     local backend_items = Managers.backend and Managers.backend:get_interface("items")
     if not backend_items then return result end
 
+    -- Surface modded items in salvage REGARDLESS of equip / loadout / favorite
+    -- state. Vanilla excludes equipped items so players don't accidentally
+    -- destroy their gear, but modded crafts are throwaway by design — the user
+    -- crafted them and wants the option to delete them. Auto-equipping after
+    -- a craft (which we do via `set_loadout_item`) would otherwise immediately
+    -- hide every craft from the scrap list.
     for _, item in ipairs(items) do
         local bid = item and item.backend_id
         if bid and not seen[bid]
            and mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(bid) then
             local slot_type = item.data and item.data.slot_type
             if _SALVAGE_SLOT_TYPES[slot_type] then
-                local equipped_careers = backend_items.equipped_by and backend_items:equipped_by(bid) or {}
-                local loadouts = backend_items.is_equipped_by_any_loadout and backend_items:is_equipped_by_any_loadout(bid) or {}
-                local is_favorited = ItemHelper and ItemHelper.is_favorite_backend_id and ItemHelper.is_favorite_backend_id(bid, item)
-                if #equipped_careers == 0 and #loadouts == 0 and not is_favorited then
-                    result[#result + 1] = item
-                    seen[bid] = true
-                end
+                result[#result + 1] = item
+                seen[bid] = true
             end
         end
     end
@@ -910,13 +911,22 @@ end)
 -- --- Property/trait/talent storage (redirect to our own data) ---
 
 -- Maps amulet trait-slot index → adventure jewellery slot. The amulet layout
--- has 3 trait slots and 3 property layers; we assign necklace=1, charm=2,
--- trinket=3. Each property layer holds 10 slot indices: layer 1 = 1..10,
--- layer 2 = 11..20, layer 3 = 21..30.
+-- has 3 trait slots and 3 property layers; vanilla `WeaveCareerProgression`
+-- (`weave_loadout_settings.lua:282-295`) orders them by accessory POOL:
+--   slot 1 = offence_accessory (CHARM)
+--   slot 2 = defence_accessory (NECKLACE)
+--   slot 3 = utility_accessory (TRINKET)
+-- The picker for slot N reads its `category` from that table and renders the
+-- matching property/trait pool, so we MUST seed/apply against the same order
+-- or the bubble grid shows charm options where the player sees necklace data.
+--
+-- VT2's career_settings names the charm slot `slot_ring` (legacy) and the
+-- trinket slot `slot_trinket_1` (note the suffix). `slot_charm`/`slot_trinket`
+-- return nil from `get_loadout_item_id`.
 local _AMULET_SLOT_BY_INDEX = {
-    [1] = "slot_necklace",
-    [2] = "slot_charm",
-    [3] = "slot_trinket",
+    [1] = "slot_ring",         -- offence_accessory → charm
+    [2] = "slot_necklace",     -- defence_accessory → necklace
+    [3] = "slot_trinket_1",    -- utility_accessory → trinket
 }
 local _AMULET_INDEX_BY_SLOT = {}
 for idx, slot in pairs(_AMULET_SLOT_BY_INDEX) do _AMULET_INDEX_BY_SLOT[slot] = idx end
@@ -973,7 +983,7 @@ local function _forge_seed_item(career_name, item_backend_id)
     elseif items_backend and career_name then
         -- Amulet case: aggregate the three equipped accessories into one
         -- bubble grid (necklace=layer 1, charm=layer 2, trinket=layer 3).
-        for slot_index, slot_name in ipairs({ "slot_necklace", "slot_charm", "slot_trinket" }) do
+        for slot_index, slot_name in ipairs(_AMULET_SLOT_BY_INDEX) do
             local bid = items_backend:get_loadout_item_id(career_name, slot_name)
             local item = bid and items_backend:get_item_from_id(bid)
             _seed_one_item(item, props, traits, slot_index)
@@ -1025,7 +1035,7 @@ local function _forge_apply_to_amulet(career_name)
     end
 
     -- Apply to each accessory
-    for slot_index, slot_name in ipairs({ "slot_necklace", "slot_charm", "slot_trinket" }) do
+    for slot_index, slot_name in ipairs(_AMULET_SLOT_BY_INDEX) do
         local bid = items_backend:get_loadout_item_id(career_name, slot_name)
         local item = bid and items_backend:get_item_from_id(bid)
         if item then
@@ -1110,9 +1120,38 @@ mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_traits", function(func, s
     return func(self, career_name, item_backend_id)
 end)
 
+-- Adventure-talent helpers. The amulet UI's talent picker runs against the
+-- weave talent system, but `WeaveLoadoutSettings[career].talent_tree` is
+-- literally `TalentTrees[profile][index]` (see weave_loadout_settings_*.lua),
+-- i.e. the same tree adventure mode uses. So we can map the player's
+-- adventure picks (numeric column 1..3 per row) into the
+-- `{[talent_name] = row}` shape the bubble grid expects.
+local function _get_career_talent_tree(career_name)
+    local cs = CareerSettings[career_name]
+    if not cs then return nil end
+    local TalentTrees = rawget(_G, "TalentTrees")
+    if not TalentTrees then return nil end
+    local tree = TalentTrees[cs.profile_name]
+    return tree and tree[cs.talent_tree_index]
+end
+
 mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_talents", function(func, self, career_name)
-    if _custom_forge_active then return {} end
-    return func(self, career_name)
+    if not _custom_forge_active then return func(self, career_name) end
+    local talents_iface = Managers.backend and Managers.backend:get_interface("talents")
+    if not talents_iface then return {} end
+    local picks = talents_iface:get_talents(career_name)
+    if not picks then return {} end
+    local tree = _get_career_talent_tree(career_name)
+    if not tree then return {} end
+
+    local result = {}
+    for row, pick in ipairs(picks) do
+        local row_talents = tree[row]
+        if row_talents and pick and row_talents[pick] then
+            result[row_talents[pick]] = row
+        end
+    end
+    return result
 end)
 
 mod:hook("BackendInterfaceWeavesPlayFab", "get_mastery", function(func, self, career_name, item_backend_id)
@@ -1178,13 +1217,37 @@ mod:hook("BackendInterfaceWeavesPlayFab", "remove_loadout_trait", function(func,
 end)
 
 mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_talent", function(func, self, career_name, talent_key, slot_index)
-    if _custom_forge_active then return end
-    return func(self, career_name, talent_key, slot_index)
+    if not _custom_forge_active then return func(self, career_name, talent_key, slot_index) end
+    local tree = _get_career_talent_tree(career_name)
+    local row_talents = tree and tree[slot_index]
+    if not row_talents then return end
+
+    -- Find which column in row `slot_index` this talent_key is.
+    local column
+    for c, t_name in ipairs(row_talents) do
+        if t_name == talent_key then column = c; break end
+    end
+    if not column then return end
+
+    local talents_iface = Managers.backend and Managers.backend:get_interface("talents")
+    if not talents_iface then return end
+
+    local picks = talents_iface:get_talents(career_name)
+    if not picks then picks = {} end
+    -- Adventure expects 6 picks; default missing rows to column 1 to avoid
+    -- nil entries when serialized.
+    for i = 1, 6 do
+        if not picks[i] then picks[i] = 1 end
+    end
+    picks[slot_index] = column
+    talents_iface:set_talents(career_name, picks)
 end)
 
 mod:hook("BackendInterfaceWeavesPlayFab", "remove_loadout_talent", function(func, self, career_name, talent_key)
-    if _custom_forge_active then return end
-    return func(self, career_name, talent_key)
+    if not _custom_forge_active then return func(self, career_name, talent_key) end
+    -- No-op: the bubble grid emits remove → set on each pick swap. We commit
+    -- the new pick in `set_loadout_talent` directly; vanilla expected pair
+    -- semantics aren't needed because adventure rows always have one talent.
 end)
 
 -- CLARIFY: while either forge is open, suppress backend commits entirely so the

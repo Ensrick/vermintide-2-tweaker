@@ -1,6 +1,6 @@
 local mod = get_mod("la_prefix_patch")
 
-local MOD_VERSION = "0.2.0-dev"
+local MOD_VERSION = "0.3.0-dev"
 mod:info("LA Prefix Patch v%s loaded", MOD_VERSION)
 mod:echo("LA Prefix Patch v" .. MOD_VERSION)
 
@@ -48,3 +48,62 @@ if rawget(_G, "VMFMod") then
 else
     mod:warning("VMFMod prototype not found; LA dupe filter NOT installed.")
 end
+
+-- Quiet-mode toggles: gate LA's quest markers and unread-letter notifications
+-- on VMF settings so the user can disable the loremaster overlay without
+-- removing LA. Both toggles default to false (LA behaves as shipped).
+--
+-- Markers: every LA waypoint draw — board, scrolls, pickups, sword shrine —
+-- funnels through `LA.render_marker`. We monkey-patch it in
+-- on_all_mods_loaded (the earliest point at which get_mod returns LA's
+-- instance) and gate on the toggle inside the closure, so flipping the
+-- setting takes effect on the next frame without re-patching.
+--
+-- Notifications: LA's `NewsFeedUI.init` hook injects an `LA_unread_letter`
+-- entry into `NewsFeedTemplates` with a `condition_func` that returns true
+-- whenever a quest letter is unread. Since la_prefix_patch loads first, our
+-- hook is innermost in the chain — when our wrapper runs, LA has already
+-- registered the template (LA does its insert *before* calling func). We
+-- post-wrap `condition_func` to short-circuit when the toggle is on.
+mod.on_all_mods_loaded = function()
+    local LA = get_mod("Loremasters-Armoury")
+    if not LA then
+        return
+    end
+    if type(LA.render_marker) == "function" and not LA._la_prefix_patch_marker_wrapped then
+        local orig_render = LA.render_marker
+        LA.render_marker = function(...)
+            if mod:get("suppress_la_quest_markers") then
+                return
+            end
+            return orig_render(...)
+        end
+        LA._la_prefix_patch_marker_wrapped = true
+        mod:info("Wrapped LA.render_marker for quest-marker suppression toggle.")
+    end
+end
+
+mod:hook("NewsFeedUI", "init", function(func, self, parent, ingame_ui_context)
+    local result = func(self, parent, ingame_ui_context)
+    local find_idx = rawget(_G, "FindNewsTemplateIndex")
+    local templates = rawget(_G, "NewsFeedTemplates")
+    if find_idx and templates then
+        local idx = find_idx("LA_unread_letter")
+        local tmpl = idx and templates[idx]
+        if tmpl and not tmpl._la_prefix_patch_notif_wrapped then
+            local orig_cond = tmpl.condition_func
+            tmpl.condition_func = function(params)
+                if mod:get("suppress_la_notifications") then
+                    return false
+                end
+                if orig_cond then
+                    return orig_cond(params)
+                end
+                return false
+            end
+            tmpl._la_prefix_patch_notif_wrapped = true
+            mod:info("Wrapped LA_unread_letter condition_func for notification suppression toggle.")
+        end
+    end
+    return result
+end)

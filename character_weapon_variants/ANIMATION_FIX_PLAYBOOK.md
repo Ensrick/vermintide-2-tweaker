@@ -12,13 +12,15 @@ This entire playbook is about **third-person body animations**. First-person ani
 
 If a remap, template clone, or hook in this codebase appears to touch `anim_event` (1P), `wield_anim` (1P), `state_machine`, `anim_event_1p`, or any per-character 1P field, that's a bug — back it out.
 
-## Two non-negotiable rules
+## Three non-negotiable rules
 
 1. **1P animations are universal — never touch.** First-person hands share `first_person_base` across every character; any weapon's 1P state machine plays correctly on every character's first-person view by default. Only `anim_event_3p`, `wield_anim_3p`, `wield_anim_career_3p` are in scope. Touching `anim_event` / `wield_anim` / `state_machine` per character is harmful, not just unnecessary. The `Unit.animation_event` hook in CWV's cross-access remap is gated to fire only on the local 3P body via five early-exits — 1P calls never enter the remap path.
 
 2. **Closed-vocabulary rule (3P).** Every 3P remap target MUST be a string already present in the `anim_event` column of the target body's wield-SM-matching template. The skeleton-events probe (`wt sm_probe`) and `Unit.has_animation_event` only report whether the master state machine knows the name; the destination state in the current sub-graph may be a stub that animates nothing. The only safe candidate universe is the target template's authored event set. There is no parallel "1P closed list" — 1P doesn't need one.
 
-If you remember nothing else, remember those two.
+3. **Chain-context rule.** Closed-vocab is necessary but still not sufficient. The body's clip selection depends on **chain state**, not just event name. An in-vocab event can produce zero animation if the body's current chain state has no clip mapped for that event. Pick a target event that the target's NATIVE template fires from a chain position equivalent to the source action's chain position (source H1 from idle → target's idle-H1 event; source H2 after H1 → target's H2 event). Read the source template Lua at `Vermintide-2-Source-Code/scripts/settings/equipment/weapon_templates/<target>.lua` — the action sub-tables show which event each chain position fires.
+
+If you remember nothing else, remember those three.
 
 ---
 

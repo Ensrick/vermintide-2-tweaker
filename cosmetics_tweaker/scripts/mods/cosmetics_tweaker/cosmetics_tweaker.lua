@@ -2,7 +2,7 @@
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 
-local MOD_VERSION = "0.8.23-dev"
+local MOD_VERSION = "0.8.38-dev"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 
@@ -962,6 +962,151 @@ end
 
 _register_custom_illusions()
 
+-- ============================================================
+-- LA Shield Skin Injection (Phase 1)
+-- ============================================================
+-- LA shields registered as first-class VT2 skins per (LA shield × weapon
+-- type) pair. Each combo becomes a real entry in ItemMasterList,
+-- WeaponSkins.skins, and the appropriate skin_combinations table — same
+-- pipeline `_register_custom_illusions` already uses for the existing
+-- `ct_*` cross-character illusions.
+--
+-- Why this replaces the older runtime-override approach:
+--   1. PER-WEAPON-INSTANCE. Vanilla's `craftingApplySkin2` writes
+--      `item.skin = skin_key` onto the specific backend item. Selection
+--      no longer leaks across weapons that share `item_type` (e.g.
+--      modded CWV imperial sword+shield no longer renders Reiland just
+--      because the user picked Reiland on a different Bret weapon).
+--   2. STANDARD APPLY UI. Skins appear in the row-1 illusion grid; user
+--      picks them like any other illusion. No separate row-2 widget,
+--      no parallel "_offhand_selection" state machine.
+--   3. CUSTOMIZATION PREVIEW USES VANILLA SPAWN PATH. Vanilla apply →
+--      previewer respawn with the skin's `left_hand_unit` and
+--      `right_hand_unit` — the same code path that successfully renders
+--      every other custom illusion. Our v0.8.12 short-circuit handles
+--      LA-bundled paths in the load_package gate.
+--
+-- Each spec needs: skin_key (must be unique), matching_weapon (a vanilla
+-- weapon item_type), left_hand_unit (LA's mesh path), display_name_key
+-- (looked up via _custom_loc by the Localize hook). right_hand_unit,
+-- display_unit, template, and can_wield are inherited from the vanilla
+-- weapon's default skin so the right side of the weapon is preserved.
+
+local _la_shield_skin_specs = {
+    -- Phase 1 PROOF: Reiland (Empire shield 01 mesh) on the Bret
+    -- longsword+shield. Verify this displays correctly across all four
+    -- spawn paths (in-game body, inventory mannequin, customization
+    -- preview, illusion browser) before extending to all 4 weapon types
+    -- and the rest of the LA shield catalogue.
+    {
+        skin_key         = "la_kruber_empire_shield_basic1_breton",
+        matching_weapon  = "es_1h_sword_shield_breton",
+        left_hand_unit   = "units/empire_shield/Kruber_Empire_shield01_mesh",
+        display_name     = "Empire Shield 01 (LA)",
+        rarity           = "exotic",
+    },
+}
+
+local function _get_weapon_default_skin(weapon_key)
+    if not WeaponSkins or not WeaponSkins.default_skins then return nil end
+    local default_skin_key = WeaponSkins.default_skins[weapon_key]
+    if not default_skin_key then return nil end
+    return WeaponSkins.skins and WeaponSkins.skins[default_skin_key] or nil
+end
+
+local function _register_la_shield_skin(spec)
+    if not ItemMasterList or not WeaponSkins then return end
+    local skin_key = spec.skin_key
+    if _custom_skin_keys[skin_key] then return end
+
+    local weapon_data = rawget(ItemMasterList, spec.matching_weapon)
+    if not weapon_data then
+        mod:info("[LA skin] missing weapon %s; cannot register %s",
+            spec.matching_weapon, skin_key)
+        return
+    end
+
+    -- Inherit everything from the weapon's default skin EXCEPT left_hand_unit
+    -- (LA's mesh) so the weapon's right side is unchanged.
+    local default_skin = _get_weapon_default_skin(spec.matching_weapon)
+    local right_hand_unit = (default_skin and default_skin.right_hand_unit)
+                            or weapon_data.right_hand_unit
+    local display_unit = (default_skin and default_skin.display_unit)
+                         or weapon_data.display_unit
+    local template = (default_skin and default_skin.template)
+                     or weapon_data.template
+    local can_wield = weapon_data.can_wield
+
+    local rarity = spec.rarity or "exotic"
+    local description_key = skin_key .. "_description"
+
+    ItemMasterList[skin_key] = {
+        item_type         = "weapon_skin",
+        slot_type         = "weapon_skin",
+        matching_item_key = spec.matching_weapon,
+        rarity            = rarity,
+        display_name      = skin_key .. "_name",
+        description       = description_key,
+        display_unit      = display_unit,
+        hud_icon          = "weapon_generic_icon_staff_3",
+        inventory_icon    = spec.inventory_icon or "icon_wpn_empire_shield_01_t1_mace",
+        information_text  = "information_weapon_skin",
+        right_hand_unit   = right_hand_unit,
+        left_hand_unit    = spec.left_hand_unit,
+        template          = template,
+        can_wield         = can_wield,
+    }
+
+    WeaponSkins.skins[skin_key] = {
+        description     = description_key,
+        display_name    = skin_key .. "_name",
+        display_unit    = display_unit,
+        hud_icon        = "weapon_generic_icon_staff_3",
+        inventory_icon  = spec.inventory_icon or "icon_wpn_empire_shield_01_t1_mace",
+        rarity          = rarity,
+        right_hand_unit = right_hand_unit,
+        left_hand_unit  = spec.left_hand_unit,
+        template        = template,
+    }
+
+    if weapon_data.skin_combination_table then
+        local combos = WeaponSkins.skin_combinations[weapon_data.skin_combination_table]
+        if combos then
+            local tier = combos[rarity] or combos.exotic or combos.common
+            if tier then
+                tier[#tier + 1] = skin_key
+            end
+        end
+    end
+
+    if NetworkLookup and NetworkLookup.weapon_skins
+        and not rawget(NetworkLookup.weapon_skins, skin_key)
+    then
+        local tbl = NetworkLookup.weapon_skins
+        tbl[#tbl + 1] = skin_key
+        tbl[skin_key] = #tbl
+    end
+
+    _custom_skin_keys[skin_key] = true
+    mod:info("[LA skin] registered %s for %s -> mesh=%s right=%s",
+        skin_key, spec.matching_weapon, spec.left_hand_unit, tostring(right_hand_unit))
+end
+
+local function _register_all_la_shield_skins()
+    for _, spec in ipairs(_la_shield_skin_specs) do
+        _register_la_shield_skin(spec)
+    end
+end
+
+-- v0.8.31 REVERT: skin injection put LA shields in the row-1 illusion
+-- grid where applying them swaps the WHOLE weapon visual (left+right
+-- bundled). User wants row-2 offhand picker behavior — shield
+-- independent of main weapon. Skin injection collapses that distinction.
+-- The registration code stays here for future reference / a different
+-- design but is not invoked. Row-2 picker (`_merge_la_offhand_options`)
+-- is restored as the LA surface.
+-- _register_all_la_shield_skins()
+
 mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", function(self)
     local mirror = self._backend_mirror
     if not mirror or not mirror._unlocked_weapon_skins then return end
@@ -978,6 +1123,9 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", fu
 end)
 
 local _custom_loc = {}
+for _, spec in ipairs(_la_shield_skin_specs) do
+    _custom_loc[spec.skin_key .. "_name"] = spec.display_name
+end
 for _, illusion in ipairs(_custom_illusions) do
     _custom_loc[illusion.skin_key .. "_name"] = illusion.display_name
     -- Don't shadow the `_description` entries written in
@@ -1476,17 +1624,16 @@ _offhand_options.wh_hammer_shield           = _shallow_copy(_offhand_options.wh_
 -- _offhand_options[weapon_key]). Vanilla entries have only `unit`; LA-bridge
 -- entries have `la_armoury_key` + `vanilla_skin` (no `unit` — LA paints onto
 -- whatever shield mesh the user's vanilla illusion provides).
+--
+-- v0.8.32 KEYING CHANGE: this table is now keyed by `backend_id`, not by
+-- `item_type`. Item_type-keying caused selection to leak across all
+-- weapons of the same type (Reiland on Bret weapon also showed up on a
+-- modded CWV imperial sword+shield because both share `es_1h_sword_shield`
+-- patterns through CWV's clone path). Backend_id is per-instance and
+-- stable for the weapon's lifetime, so each weapon gets its own selection.
+-- In-memory only this round; disk persistence via mod settings is a
+-- follow-up. Variable name preserved to keep diffs minimal.
 local _offhand_selection = {}
-
--- Track which backend_id a weapon_key's selection was set for. When the
--- customization screen reopens for the same weapon (e.g. after Apply re-
--- crafts the same item with a new skin), backend_id is unchanged — we
--- preserve the user's explicit pick. When it opens for a DIFFERENT item
--- of the same item_type (different backend_id), we drop the stale pick
--- so auto-select can run fresh. Without this, applying a new skin reset
--- the user's LA selection because the auto-select stale-mesh check fired
--- (the new skin's left_hand_unit doesn't match the LA intended_unit).
-local _offhand_selection_backend_id = {}
 
 -- LA pool merge: each weapon_type pulls the LA shields whose `icons` table
 -- specifically targets that weapon_type. The bridge does the icon-driven
@@ -1501,6 +1648,13 @@ local _offhand_selection_backend_id = {}
 -- one-line edit here. Set to nil/empty to surface every LA shield.
 local _LA_FOCUS_KEYS = {
     Kruber_empire_shield_hero1_Ostermark01 = true,
+    Kruber_empire_shield_hero1_Kotbs01     = true,
+    -- v0.8.25: first kind="unit" custom-mesh shield. NetworkLookup pre-
+    -- registration in _la_bridge.lua makes the LA mesh path safe for
+    -- vanilla sync reads. If this displays correctly on all 4 Kruber
+    -- shield weapons, the same approach extends to the rest of the
+    -- Empire custom-mesh family (basic2, Middenheim, etc.).
+    Kruber_empire_shield_basic1            = true,
 }
 
 local _la_offhand_merged = false
@@ -1670,21 +1824,17 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     -- user still wants their LA / vanilla offhand selection to apply on
     -- top of the new skin.
     local current_backend_id = item.backend_id
-    local stored_backend_id = _offhand_selection_backend_id[weapon_key]
-    if current_backend_id and stored_backend_id and stored_backend_id ~= current_backend_id then
-        _offhand_selection[weapon_key] = nil
-        _offhand_selection_backend_id[weapon_key] = nil
-        mod:info("[offhand] dropped stale selection (different backend_id): %s -> %s",
-            tostring(stored_backend_id), tostring(current_backend_id))
-    end
-    local current_sel = _offhand_selection[weapon_key]
+    -- v0.8.32: keyed by backend_id directly; no separate stale-tracking
+    -- needed since each weapon instance has its own selection slot.
+    local current_sel = current_backend_id and _offhand_selection[current_backend_id]
 
     if not current_sel and current_left_unit then
         for _, opt in ipairs(options) do
             local opt_mesh = opt.unit or opt.intended_unit
             if opt_mesh == current_left_unit then
-                _offhand_selection[weapon_key] = opt
-                _offhand_selection_backend_id[weapon_key] = current_backend_id
+                if current_backend_id then
+                    _offhand_selection[current_backend_id] = opt
+                end
                 current_sel = opt
                 mod:info("[offhand] auto-selected: %s (backend_id=%s)",
                     tostring(opt.name), tostring(current_backend_id))
@@ -1766,8 +1916,10 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
     local opt = options and options[index]
     if not opt then return end
 
-    _offhand_selection[weapon_key] = opt
-    _offhand_selection_backend_id[weapon_key] = self._item_backend_id
+    -- v0.8.32: key selection by backend_id (per-weapon-instance).
+    if self._item_backend_id then
+        _offhand_selection[self._item_backend_id] = opt
+    end
     _preload_offhand_for_option(opt)
 
     for i, w in ipairs(widgets) do
@@ -1821,6 +1973,24 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
             local preview_item = {
                 data = pending_data or item.data,
                 skin = pending_skin,
+                -- v0.8.33: stamp the user's actual backend_id onto the
+                -- preview item so `BackendUtils.get_item_units` can resolve
+                -- our per-backend-id offhand selection. Without this the
+                -- preview_item.backend_id is nil, our hook bails out, and
+                -- the preview falls back to whatever the SKIN resolves to
+                -- — the user observed the model in the customization
+                -- preview not updating when clicking a different shield
+                -- option, only changing in-game after Apply.
+                -- v0.8.37: stamp backend_id unconditionally; the v0.8.34
+                -- crash hypothesis is now that post-spawn texture painting
+                -- (Unit.set_texture_for_materials on a kind="unit" bundled
+                -- mesh) was the AV trigger, not the spawn itself. Painting
+                -- is now skipped for kind="unit" in `_paint_offhand_textures_locally`.
+                -- If Reiland's preview now spawns the mesh (possibly
+                -- magenta / un-bound textures) and doesn't crash, the
+                -- texture paint was indeed the culprit. If it still
+                -- crashes, the spawn itself is unsafe and we'll revert.
+                backend_id = self._item_backend_id,
             }
             self:_spawn_item_unit(preview_item, true)
         end
@@ -1905,7 +2075,10 @@ if BackendUtils then
         end
         if not item_type then return result end
 
-        local sel = _offhand_selection[item_type]
+        -- v0.8.32: read selection by backend_id (per-weapon-instance), not
+        -- by item_type. effective_backend_id resolved earlier in this hook
+        -- via the (skin arg | backend_id arg | item_data.backend_id) chain.
+        local sel = effective_backend_id and _offhand_selection[effective_backend_id]
         local override_unit
         if sel and sel.unit then
             override_unit = sel.unit
@@ -2023,44 +2196,152 @@ local function _scale_units(result, item_data, skin)
     _apply_unit_path_scale_hand(result.left_unit_3p,  result.left_unit_1p,  left_path,  "left")
 end
 
--- Glow override (Phase 1: master toggle + preset). Applies the chosen
--- preset's vector3 material vars to every passed unit. Engine silently no-ops
--- on units whose materials don't expose the variable, so it's safe to call
--- universally — only runed/versus-capable meshes change visually.
--- Templates verbatim from `weapon_material_settings_templates.lua`.
-local _GLOW_PRESETS = {
-    purple_glow  = { rune_emissive_color = { 3,   1,   9   } },
-    golden_glow  = { rune_emissive_color = { 8,   5,   1.5 } },
-    deep_crimson = { rune_emissive_color = { 7,   0,   0.1 } },
-    life_green   = { rune_emissive_color = { 7,   9,   0.1 } },
-    lileath      = { rune_emissive_color = { 5.8, 6.3, 9   } },
-    versus       = {
-        color_glow_high  = { 2.5,  2,    4    },
-        color_glow_low   = { 0.7,  0.3,  1    },
-        color_smoke_high = { 0.06, 0.15, 0.22 },
-        color_smoke_low  = { 0.06, 0.03, 0.03 },
-        color_dots       = { 8.35, 3.5,  7    },
-    },
+-- Glow override (v0.8.23-dev: redesigned per-family routing).
+--
+-- Decouples "user color choice" from "shader variable to write". The user picks
+-- one RGB; we write it to whichever shader variables actually drive emissive on
+-- the target weapon. Variables that don't exist on a given mesh silently no-op
+-- via Unit.set_vector3_for_materials (verified empirically by `cos glow_scan`).
+--
+-- Probe-confirmed paintable variables per mesh family:
+--   * `_runed_*` (themed Veteran AND Stylish loot-chest white) → `rune_emissive_color`
+--   * `_magic_01` (Weavebound, no template) → 4 versus channels
+--   * `_magic_02` (Shyish-Infused, `versus` template) → same 4 versus channels
+-- We write all 5 candidate variables on every unit; only the relevant ones land.
+-- color_dots intentionally omitted — probe showed minimal visible color
+-- contribution and possibly drives particle behaviour we shouldn't perturb.
+local _COLOR_PRESETS = {
+    -- Preset keys preserved from older builds for user-save compatibility.
+    -- HDR values >1 produce bloom; rune RGBs match the source-defined templates
+    -- (weapon_material_settings_templates.lua), white is a new bright-bloom value.
+    purple_glow  = { 3,    1,    9    },
+    golden_glow  = { 8,    5,    1.5  },
+    deep_crimson = { 7,    0,    0.1  },
+    life_green   = { 7,    9,    0.1  },
+    lileath      = { 5.8,  6.3,  9    },
+    white_glow   = { 10,   10,   10   },
 }
 
-local function _apply_glow_to_unit(unit, vars)
+-- Variables to write per unit, with each variable's typical max brightness.
+-- Writing user RGB scaled to that brightness preserves the natural visual
+-- structure of multi-channel templates (versus has 5 channels at very
+-- different brightness levels — writing them all to user RGB uniformly
+-- caused the v0.8.29 over-bright bug on Shyish-Infused weapons).
+-- Brightness reference values come from the source-defined templates
+-- (versus channels at gear_utils.lua's MaterialSettingsTemplates.versus,
+-- rune_emissive_color from the rune-family templates max=9 from lileath).
+-- A weapon's mesh exposes only the variables for its own family; the rest
+-- silently no-op via Unit.set_vector3_for_materials.
+-- Each entry: native brightness + per-channel multiplier setting + visual
+-- group. The "group" maps to a per-channel COLOR picker when the user
+-- enables `glow_per_channel_color_enable`, so multi-channel magic-family
+-- weapons can have different colors per gradient/dots element.
+-- Visual groups (per probe v0.8.22 on Weavebound Bret longsword):
+--   "rune"  → drives rune_emissive_color (themed + Stylish meshes only)
+--   "lower" → drives lower part of gradient on `_magic_*` (glow_high + glow_low)
+--   "upper" → drives upper part of gradient on `_magic_*` (smoke_high + smoke_low)
+--   "dots"  → drives the dot particles (color_dots)
+local _GLOW_VAR_BRIGHTNESS = {
+    rune_emissive_color = { brightness = 9,    setting = "glow_mult_rune",       group = "rune"  },
+    color_glow_high     = { brightness = 4,    setting = "glow_mult_glow_high",  group = "lower" },
+    color_glow_low      = { brightness = 1,    setting = "glow_mult_glow_low",   group = "lower" },
+    color_smoke_high    = { brightness = 0.22, setting = "glow_mult_smoke_high", group = "upper" },
+    color_smoke_low     = { brightness = 0.06, setting = "glow_mult_smoke_low",  group = "upper" },
+    color_dots          = { brightness = 8.35, setting = "glow_mult_dots",       group = "dots"  },
+}
+
+-- Maps visual group → VMF setting key holding the chosen preset for that
+-- group. Only consulted when `glow_per_channel_color_enable` is true.
+-- "rune" intentionally absent: rune-family weapons only have one channel,
+-- so per-channel separation is meaningless — they always use the main color.
+local _GLOW_GROUP_COLOR_SETTING = {
+    lower = "glow_color_lower_gradient",
+    upper = "glow_color_upper_gradient",
+    dots  = "glow_color_dots",
+}
+
+local function _glow_master_mult()
+    local v = mod:get("glow_mult_master")
+    return type(v) == "number" and v or 1.0
+end
+
+local function _glow_var_mult(setting)
+    if not setting then return 1.0 end
+    local v = mod:get(setting)
+    return type(v) == "number" and v or 1.0
+end
+
+local function _glow_override_enabled()
+    return mod:get("glow_override_enable") == true
+end
+
+-- Resolves a preset key to RGB. The special key "default" (and unknown keys)
+-- return nil — caller treats nil as "don't override this channel, leave
+-- vanilla's value in place".
+local function _resolve_preset_rgb(key)
+    if not key or key == "default" then return nil end
+    return _COLOR_PRESETS[key]
+end
+
+local function _glow_main_rgb()
+    if not _glow_override_enabled() then return nil end
+    return _resolve_preset_rgb(mod:get("glow_override_preset"))
+end
+
+-- RGB to use for a given variable. When per-channel is enabled, the magic-
+-- family groups (lower/upper/dots) consult their own dropdowns; rune-family
+-- always uses the main picker (only one channel — per-channel split would be
+-- meaningless). Returns nil when:
+--   * override toggle is OFF, or
+--   * the relevant dropdown is set to "default" — meaning this specific
+--     variable should NOT be overridden, vanilla's value stays.
+local function _glow_rgb_for_var(var_name)
+    if not _glow_override_enabled() then return nil end
+    local info = _GLOW_VAR_BRIGHTNESS[var_name]
+    local group = info and info.group
+    if mod:get("glow_per_channel_color_enable") then
+        local setting = group and _GLOW_GROUP_COLOR_SETTING[group]
+        if setting then
+            local key = mod:get(setting)
+            -- Per-channel dropdown drives this variable. "default" → skip.
+            -- Any concrete preset → use it. Unknown key → fall through to main.
+            if key == "default" then return nil end
+            local rgb = _resolve_preset_rgb(key)
+            if rgb then return rgb end
+        end
+    end
+    -- Fallback: main color picker (also returns nil if main is "default")
+    return _glow_main_rgb()
+end
+
+local function _apply_glow_to_unit(unit)
     if not unit or not _is_unit(unit) then return end
-    for var_name, rgb in pairs(vars) do
-        pcall(Unit.set_vector3_for_materials, unit, var_name, Vector3(rgb[1], rgb[2], rgb[3]))
+    if not _glow_override_enabled() then return end
+    -- Per-variable: skip if rgb is nil (main = "default" AND no per-channel
+    -- color set for this var's group), else write user RGB scaled to native
+    -- brightness × master × per-channel multiplier. mult=0 also skips.
+    local master_mult = _glow_master_mult()
+    for var_name, info in pairs(_GLOW_VAR_BRIGHTNESS) do
+        local rgb = _glow_rgb_for_var(var_name)
+        if rgb then
+            local var_mult = _glow_var_mult(info.setting)
+            if var_mult > 0 then
+                local user_max = math.max(rgb[1], rgb[2], rgb[3], 0.0001)
+                local effective = info.brightness * var_mult * master_mult
+                local s = effective / user_max
+                pcall(Unit.set_vector3_for_materials, unit, var_name,
+                    Vector3(rgb[1] * s, rgb[2] * s, rgb[3] * s))
+            end
+        end
     end
 end
 
-local function _glow_preset_vars()
-    if not mod:get("glow_override_enable") then return nil end
-    local preset_key = mod:get("glow_override_preset")
-    if not preset_key then return nil end
-    return _GLOW_PRESETS[preset_key]
-end
+-- Backward-compatible alias used by the existing call site at create_equipment.
+local function _glow_preset_rgb() return _glow_main_rgb() end
 
 local function _apply_glow_override(units)
-    local vars = _glow_preset_vars()
-    if not vars then return end
-    for _, u in ipairs(units) do _apply_glow_to_unit(u, vars) end
+    if not _glow_override_enabled() then return end
+    for _, u in ipairs(units) do _apply_glow_to_unit(u) end
 end
 
 -- Glow override (v0.8.16-dev): TEMPLATE MUTATION approach.
@@ -2085,8 +2366,7 @@ mod._glow_hooks_installed = { gear = false, flow = false, cosmetic = false }
 local function _hook_apply_with_template_mutation(class_id, label)
     mod:hook(class_id, "apply_material_settings", function(func, unit, material_settings_name)
         mod._glow_call_counts[label] = (mod._glow_call_counts[label] or 0) + 1
-        local vars = _glow_preset_vars()
-        if not vars then
+        if not _glow_override_enabled() then
             if mod:get("glow_trace") then
                 mod:info("[GLOW] %s call template=%s (override OFF, passthrough)", label, tostring(material_settings_name))
             end
@@ -2102,15 +2382,26 @@ local function _hook_apply_with_template_mutation(class_id, label)
         if mod:get("glow_trace") then
             mod:info("[GLOW] %s mutate template=%s", label, tostring(material_settings_name))
         end
-        -- Save originals only for the variables we plan to overwrite that
-        -- already exist on the template. Variables not present on the template
-        -- (e.g. versus channels on a purple_glow template) are left alone.
+        -- Mutate per-variable. Skip variables whose color resolves to nil
+        -- (= "Default" preset OR main is "Default" with no per-channel color
+        -- for this variable's group) — the template's vanilla value passes
+        -- through to the spawn unchanged. Skip variables whose mult is 0.
+        -- Color and brightness come from _glow_rgb_for_var (respects per-
+        -- channel-color toggle) and the var's mult setting.
+        local master_mult = _glow_master_mult()
         local saved = {}
-        for var_name, rgb in pairs(vars) do
-            local entry = template[var_name]
-            if entry and entry.type == "vector3" then
-                saved[var_name] = { x = entry.x, y = entry.y, z = entry.z }
-                entry.x, entry.y, entry.z = rgb[1], rgb[2], rgb[3]
+        for var_name, entry in pairs(template) do
+            if entry.type == "vector3" then
+                local var_rgb = _glow_rgb_for_var(var_name)
+                local info = _GLOW_VAR_BRIGHTNESS[var_name]
+                local var_mult = info and _glow_var_mult(info.setting) or 1.0
+                if var_rgb and var_mult > 0 then
+                    saved[var_name] = { x = entry.x, y = entry.y, z = entry.z }
+                    local orig_max = math.max(entry.x, entry.y, entry.z, 0.0001)
+                    local user_max = math.max(var_rgb[1], var_rgb[2], var_rgb[3], 0.0001)
+                    local s = (orig_max * var_mult * master_mult) / user_max
+                    entry.x, entry.y, entry.z = var_rgb[1] * s, var_rgb[2] * s, var_rgb[3] * s
+                end
             end
         end
         local ok, err = pcall(func, unit, material_settings_name)
@@ -2136,6 +2427,55 @@ else
     mod:info("[GLOW] CosmeticUtils.apply_material_settings nil at hook time")
 end
 
+-- Custom template + spawn-time injection for non-templated meshes.
+--
+-- Stylish (`_runed_01`) loot-chest white-glow weapons and Weavebound (`_magic_01`)
+-- WoM Athanor weapons have NO `material_settings_name` on their skins. Vanilla
+-- never calls `apply_material_settings` on them, so our template-mutation hook
+-- never fires. The previous direct post-spawn paint at `create_equipment`
+-- (`_apply_glow_override`) writes via `Unit.set_vector3_for_materials` BUT
+-- doesn't bind on 1P units (same engine-internal rejection that bit themed
+-- weapons in v0.8.4-v0.8.15 before we switched to template mutation).
+--
+-- Solution: register our own template containing every variable these meshes
+-- might expose, then hook `GearUtils.spawn_inventory_unit` to inject the
+-- template name when the override is on AND the weapon's mesh suffix matches
+-- a non-templated paintable family. Vanilla then calls apply_material_settings
+-- with our template, our template-mutation hook fires, mutates per-variable
+-- to user RGB, vanilla writes via the trusted path that DOES bind 1P. Solves
+-- both problems with the same mechanism that fixed themed weapons.
+--
+-- Initial values are the typical brightness per variable; the mutation hook's
+-- per-variable scaling preserves these magnitudes when applying user RGB.
+if rawget(_G, "MaterialSettingsTemplates") then
+    MaterialSettingsTemplates._cosmetics_tweaker_glow = {
+        rune_emissive_color = { type = "vector3", x = 9,    y = 9,    z = 9    },
+        color_glow_high     = { type = "vector3", x = 4,    y = 4,    z = 4    },
+        color_glow_low      = { type = "vector3", x = 1,    y = 1,    z = 1    },
+        color_smoke_high    = { type = "vector3", x = 0.22, y = 0.22, z = 0.22 },
+        color_smoke_low     = { type = "vector3", x = 0.06, y = 0.06, z = 0.06 },
+        -- color_dots included so users can experiment with it on Weavebound /
+        -- Stylish meshes via the advanced multiplier. Per-channel mult defaults
+        -- to 0 (skip) so the channel is inert by default — probe (v0.8.22)
+        -- showed it darkens Weavebound when set high.
+        color_dots          = { type = "vector3", x = 8.35, y = 8.35, z = 8.35 },
+    }
+end
+
+mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+    -- Only inject when override is on AND the weapon currently has no native template.
+    if material_settings_name == nil and mod:get("glow_override_enable") and item_units then
+        local mesh = item_units[hand .. "_hand_unit"]
+        if mesh and (mesh:find("_runed_01$") or mesh:find("_magic_01$")) then
+            material_settings_name = "_cosmetics_tweaker_glow"
+            if mod:get("glow_trace") then
+                mod:info("[GLOW] inject template for mesh=%s hand=%s", tostring(mesh), tostring(hand))
+            end
+        end
+    end
+    return func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+end)
+
 mod:command("glow_status", "Report glow override state, hook health, and per-hook call counts since session start", function()
     local enable = mod:get("glow_override_enable")
     local preset = mod:get("glow_override_preset")
@@ -2149,8 +2489,10 @@ mod:command("glow_status", "Report glow override state, hook health, and per-hoo
             mod._glow_call_counts[label] or 0))
     end
     -- Sanity-check the preset has a valid entry
-    local preset_entry = preset and _GLOW_PRESETS and _GLOW_PRESETS[preset]
-    mod:echo(string.format("[glow_status] preset table entry exists=%s", tostring(preset_entry ~= nil)))
+    local preset_entry = preset and _COLOR_PRESETS and _COLOR_PRESETS[preset]
+    mod:echo(string.format("[glow_status] preset table entry exists=%s rgb=%s",
+        tostring(preset_entry ~= nil),
+        preset_entry and string.format("(%s,%s,%s)", tostring(preset_entry[1]), tostring(preset_entry[2]), tostring(preset_entry[3])) or "n/a"))
 end)
 
 mod:command("glow_trace", "Toggle per-call glow trace logging (on/off). No arg toggles; pass 1/0 to set.", function(arg)
@@ -2221,17 +2563,19 @@ end
 -- paint is gated to skinned items only, mirroring the BackendUtils.get_item_units
 -- override gate. Painting the base weapon template would surprise users
 -- ("base template can't have illusions applied").
-local function _apply_la_offhand_to_units(world, item_data, units, has_skin)
+local function _apply_la_offhand_to_units(world, item_data, units, has_skin, backend_id_arg)
     if not LA_BRIDGE.registered then mod:info("[LA paint] skip: bridge not registered"); return end
     if not world or not item_data then mod:info("[LA paint] skip: world/item_data nil"); return end
     if not has_skin then mod:info("[LA paint] skip: has_skin=false"); return end
-    local item_type = _resolve_item_type(item_data)
-    if not item_type then mod:info("[LA paint] skip: no item_type"); return end
-    local sel = _offhand_selection[item_type]
-    if not sel then mod:info("[LA paint] skip: no _offhand_selection for %s", tostring(item_type)); return end
+    -- v0.8.32: read selection by backend_id. Resolve from arg first, then
+    -- from item_data.backend_id (vanilla stamps this on equipment resync).
+    local bid = backend_id_arg or (item_data and item_data.backend_id)
+    if not bid then mod:info("[LA paint] skip: no backend_id"); return end
+    local sel = _offhand_selection[bid]
+    if not sel then mod:info("[LA paint] skip: no _offhand_selection for backend_id=%s", tostring(bid)); return end
     if not sel.la_armoury_key then return end  -- vanilla selection, nothing for us to paint
-    mod:info("[LA paint] painting %s on %d units (item_type=%s)",
-        tostring(sel.la_armoury_key), #units, tostring(item_type))
+    mod:info("[LA paint] painting %s on %d units (backend_id=%s)",
+        tostring(sel.la_armoury_key), #units, tostring(bid))
     for _, u in ipairs(units) do
         if u and _is_unit(u) then
             local ok = LA_BRIDGE.apply_offhand_to_unit(world, u, sel.la_armoury_key, sel.vanilla_skin)
@@ -2320,12 +2664,22 @@ local function _store_equip_skin(previewer, item_name, skin, backend_id)
     end
     local map = _equip_skin_by_item[previewer]
     if not map then map = {}; _equip_skin_by_item[previewer] = map end
-    map[item_name] = skin
+    -- v0.8.32: store both skin and backend_id so per-backend-id offhand
+    -- selection can be resolved in _spawn_item_post (which doesn't have
+    -- backend_id in scope but does have item_name → previewer).
+    map[item_name] = { skin = skin, backend_id = backend_id }
 end
 local function _get_equip_skin(previewer, item_name)
     if not previewer or not item_name then return nil end
     local map = _equip_skin_by_item[previewer]
-    return map and map[item_name] or nil
+    local entry = map and map[item_name]
+    return entry and entry.skin or nil
+end
+local function _get_equip_backend_id(previewer, item_name)
+    if not previewer or not item_name then return nil end
+    local map = _equip_skin_by_item[previewer]
+    local entry = map and map[item_name]
+    return entry and entry.backend_id or nil
 end
 
 mod:hook("MenuWorldPreviewer", "equip_item", function(func, self, item_key, slot, backend_id, skin, skip_wield_anim)
@@ -2399,9 +2753,10 @@ local function _spawn_item_post(self, item_name, spawn_data)
                     -- "we add options on top of illusions, never mutate
                     -- base templates" rule.
                     local stored_skin = _get_equip_skin(self, item_name)
+                    local stored_bid  = _get_equip_backend_id(self, item_name)
                     local has_skin = (item_data.item_type == "weapon_skin")
                             or (stored_skin and stored_skin ~= "")
-                    _apply_la_offhand_to_units(world, item_data, left_units, has_skin)
+                    _apply_la_offhand_to_units(world, item_data, left_units, has_skin, stored_bid)
                 end
             end
         end
@@ -2485,6 +2840,17 @@ mod:hook("MenuWorldPreviewer", "_spawn_item", _spawn_item_wrapper)
 -- We detect that case and immediately mark the previewer's gate flags
 -- so `_spawn_items` proceeds to call `World.spawn_unit`, which succeeds
 -- against the globally-loaded resource package.
+-- v0.8.26 + v0.8.27 attempted to take a per-previewer reference on LA's
+-- main package (async then sync) so its materials/textures would bind into
+-- the previewer's scope. v0.8.26 (async) didn't fix the texture-less
+-- preview; v0.8.27 (sync) crashed with `Resource '#ID[3ac73385950a26ea]'
+-- was not found` (GUID 930aff6f-7e47-4f72-a661-b8222e862fc2). Reverted to
+-- the plain v0.8.12 short-circuit. kind="unit" LA shields render mesh
+-- correctly in-game and on the inventory mannequin but are texture-less
+-- in the customization preview specifically. Documented limitation; needs
+-- a different approach (likely related to the LA compiled `.unit` referencing
+-- vanilla material paths that aren't in scope when only the shield is in
+-- the preview world).
 mod:hook("LootItemUnitPreviewer", "load_package", function(func, self, package_name)
     if package_name and Application and Application.can_get
         and Application.can_get("unit", package_name)
@@ -2518,7 +2884,7 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
         local has_skin = (item.skin and item.skin ~= "")
                 or (item_data and item_data.item_type == "weapon_skin")
         if has_skin and world and item_data and units and units[1] then
-            _apply_la_offhand_to_units(world, item_data, { units[1] }, true)
+            _apply_la_offhand_to_units(world, item_data, { units[1] }, true, item.backend_id)
         end
     end
 
@@ -2684,6 +3050,13 @@ mod.update = function(dt)
            and get_mod("MoreItemsLibrary") then
             LA_BRIDGE.register_all()
             LA_BRIDGE.install_apply_gate()
+            -- v0.8.31 REVERT: skin injection (v0.8.29-30) didn't match
+            -- the user's "shield and main weapon are changed separately"
+            -- mental model. Restore the row-2 LA merge so LA shields
+            -- show up in the offhand picker again. Cross-weapon leak +
+            -- preview-texture issues remain known limitations to address
+            -- under a different design (likely per-backend_id selection
+            -- + backend-mirror persistence).
             _merge_la_offhand_options()
             _la_bridge_init_done = true
         end

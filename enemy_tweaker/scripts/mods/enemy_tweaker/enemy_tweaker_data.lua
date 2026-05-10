@@ -1,56 +1,243 @@
 local mod = get_mod("enemy_tweaker")
 
--- REVIEW: this list is hand-maintained and drifts vs FACTION_* tables in
--- enemy_tweaker.lua (e.g. chaos_vortex_sorcerer / chaos_corruptor_sorcerer
--- in FACTION_CHAOS are missing here, and skaven_stormfiend appears here but
--- has no equivalent grouping in code). The skeleton et_* breeds are
--- intentionally absent because they're added at runtime, but that means
--- the breed-swap UI can't target them — only set up vanilla->vanilla swaps.
--- CLARIFY: the dropdown displays the raw breed key as the label (no
--- localization). Probably intentional for transparency, but tooltip should
--- say so explicitly.
-local breed_options = {
-    { text = "off",                                    value = "off" },
-    { text = "skaven_slave",                           value = "skaven_slave" },
-    { text = "skaven_clan_rat",                        value = "skaven_clan_rat" },
-    { text = "skaven_clan_rat_with_shield",            value = "skaven_clan_rat_with_shield" },
-    { text = "skaven_storm_vermin",                    value = "skaven_storm_vermin" },
-    { text = "skaven_storm_vermin_with_shield",        value = "skaven_storm_vermin_with_shield" },
-    { text = "skaven_storm_vermin_commander",           value = "skaven_storm_vermin_commander" },
-    { text = "skaven_plague_monk",                     value = "skaven_plague_monk" },
-    { text = "skaven_gutter_runner",                   value = "skaven_gutter_runner" },
-    { text = "skaven_pack_master",                     value = "skaven_pack_master" },
-    { text = "skaven_poison_wind_globadier",           value = "skaven_poison_wind_globadier" },
-    { text = "skaven_ratling_gunner",                  value = "skaven_ratling_gunner" },
-    { text = "skaven_warpfire_thrower",                value = "skaven_warpfire_thrower" },
-    { text = "skaven_rat_ogre",                        value = "skaven_rat_ogre" },
-    { text = "skaven_stormfiend",                      value = "skaven_stormfiend" },
-    { text = "chaos_fanatic",                          value = "chaos_fanatic" },
-    { text = "chaos_marauder",                         value = "chaos_marauder" },
-    { text = "chaos_marauder_with_shield",             value = "chaos_marauder_with_shield" },
-    { text = "chaos_berzerker",                        value = "chaos_berzerker" },
-    { text = "chaos_raider",                           value = "chaos_raider" },
-    { text = "chaos_warrior",                          value = "chaos_warrior" },
-    { text = "chaos_bulwark",                          value = "chaos_bulwark" },
-    { text = "chaos_spawn",                            value = "chaos_spawn" },
-    { text = "chaos_troll",                            value = "chaos_troll" },
-    { text = "beastmen_ungor",                         value = "beastmen_ungor" },
-    { text = "beastmen_ungor_archer",                  value = "beastmen_ungor_archer" },
-    { text = "beastmen_gor",                           value = "beastmen_gor" },
-    { text = "beastmen_bestigor",                      value = "beastmen_bestigor" },
-    { text = "beastmen_minotaur",                      value = "beastmen_minotaur" },
-    { text = "beastmen_standard_bearer",               value = "beastmen_standard_bearer" },
+-- ============================================================
+-- Breed display-name resolution
+-- ============================================================
+-- Use VT2's Localize() to map breed keys → in-game readable names
+-- (skaven_storm_vermin → "Stormvermin"). Localize returns "<key>"
+-- when the string isn't found, so we fall back to a humanized key.
+-- A few names lack VT2 localizations and need explicit overrides.
+
+local _BREED_NAME_OVERRIDES = {
+    chaos_corruptor_sorcerer = "Lifeleech Sorcerer",
+    chaos_vortex_sorcerer    = "Blightstormer",
+    et_necro_skeleton        = "Skeleton Warrior",
+    et_necro_skeleton_armored = "Skeleton Warrior (Armored)",
+    et_necro_skeleton_dual_wield = "Skeleton Warrior (Dual)",
+    et_necro_skeleton_shield = "Skeleton Warrior (Shield)",
+    et_ghost_skeleton_hammer = "Ghost Skeleton (Hammer)",
+    et_ghost_skeleton_shield = "Ghost Skeleton (Shield)",
 }
 
+local function _humanize(breed_name)
+    local s = breed_name
+        :gsub("^skaven_", "")
+        :gsub("^chaos_", "")
+        :gsub("^beastmen_", "")
+        :gsub("^et_", "")
+        :gsub("_with_shield", " (Shield)")
+        :gsub("_", " ")
+    return (s:gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end))
+end
+
+local function _breed_label(breed_name)
+    local override = _BREED_NAME_OVERRIDES[breed_name]
+    if override then return override end
+    local L = rawget(_G, "Localize")
+    if L then
+        local ok, str = pcall(L, breed_name)
+        if ok and type(str) == "string" and str ~= "" and not str:match("^<.+>$") then
+            return str
+        end
+    end
+    return _humanize(breed_name)
+end
+
+-- ============================================================
+-- Breed lists (built at data-file-load time)
+-- ============================================================
+-- Breeds is normally available by the time _data.lua runs, but guard
+-- against early load (returns hard-coded fallback list in that case).
+
+local _SKAVEN_BREEDS = {
+    "skaven_slave", "skaven_clan_rat", "skaven_clan_rat_with_shield",
+    "skaven_storm_vermin", "skaven_storm_vermin_with_shield",
+    "skaven_storm_vermin_commander", "skaven_plague_monk",
+    "skaven_gutter_runner", "skaven_pack_master",
+    "skaven_poison_wind_globadier", "skaven_ratling_gunner",
+    "skaven_warpfire_thrower", "skaven_rat_ogre", "skaven_stormfiend",
+}
+
+local _CHAOS_BREEDS = {
+    "chaos_fanatic", "chaos_marauder", "chaos_marauder_with_shield",
+    "chaos_berzerker", "chaos_raider", "chaos_warrior", "chaos_bulwark",
+    "chaos_spawn", "chaos_troll", "chaos_vortex_sorcerer",
+    "chaos_corruptor_sorcerer",
+}
+
+local _BEASTMEN_BREEDS = {
+    "beastmen_ungor", "beastmen_ungor_archer", "beastmen_gor",
+    "beastmen_bestigor", "beastmen_minotaur", "beastmen_standard_bearer",
+}
+
+local _SKELETON_BREEDS = {
+    "et_necro_skeleton", "et_necro_skeleton_armored",
+    "et_necro_skeleton_dual_wield", "et_necro_skeleton_shield",
+    "et_ghost_skeleton_hammer", "et_ghost_skeleton_shield",
+}
+
+-- Specials = breed.special == true. Built from Breeds at runtime when
+-- available; otherwise a curated fallback covering vanilla specials.
+local _SPECIALS_FALLBACK = {
+    "skaven_gutter_runner", "skaven_pack_master",
+    "skaven_poison_wind_globadier", "skaven_ratling_gunner",
+    "skaven_warpfire_thrower",
+    "chaos_vortex_sorcerer", "chaos_corruptor_sorcerer",
+}
+
+local function _collect_specials_from_breeds()
+    if not rawget(_G, "Breeds") then return _SPECIALS_FALLBACK end
+    local out = {}
+    for name, b in pairs(Breeds) do
+        if type(b) == "table" and b.special and not b.boss
+                and not name:find("_tutorial") and not name:find("_dummy") then
+            out[#out + 1] = name
+        end
+    end
+    if #out == 0 then return _SPECIALS_FALLBACK end
+    table.sort(out)
+    return out
+end
+
+local _SPECIALS = _collect_specials_from_breeds()
+mod._SPECIALS = _SPECIALS  -- expose to enemy_tweaker.lua
+
+local function _build_breed_options()
+    local out = { { text = mod:localize("breed_swap_off"), value = "off" } }
+    local groups = {
+        { label = "Skaven",   list = _SKAVEN_BREEDS },
+        { label = "Chaos",    list = _CHAOS_BREEDS },
+        { label = "Beastmen", list = _BEASTMEN_BREEDS },
+        { label = "Undead",   list = _SKELETON_BREEDS },
+    }
+    for _, g in ipairs(groups) do
+        for _, breed_name in ipairs(g.list) do
+            out[#out + 1] = {
+                text  = string.format("%s — %s", g.label, _breed_label(breed_name)),
+                value = breed_name,
+            }
+        end
+    end
+    return out
+end
+
+local _BREED_OPTIONS = _build_breed_options()
+
+-- ============================================================
+-- Per-difficulty Specials configuration
+-- ============================================================
+-- Each difficulty gets its own slate of: max_specials_active,
+-- max_same_type, per-special spawn weight, per-special disabled toggle.
+-- Defaults pulled from VT2's SpecialDifficultyOverrides (conflict_settings.lua)
+-- so the UI shows the same values vanilla uses out of the box.
+
+local _DIFFICULTIES = {
+    { key = "normal",      label = "Recruit",     max_total = 2, max_same = 1 },
+    { key = "hard",        label = "Veteran",     max_total = 3, max_same = 2 },
+    { key = "harder",      label = "Champion",    max_total = 3, max_same = 2 },
+    { key = "hardest",     label = "Legend",      max_total = 4, max_same = 2 },
+    { key = "cataclysm",   label = "Cataclysm 1", max_total = 5, max_same = 3 },
+    { key = "cataclysm_2", label = "Cataclysm 2", max_total = 6, max_same = 3 },
+    { key = "cataclysm_3", label = "Cataclysm 3", max_total = 6, max_same = 3 },
+}
+mod._DIFFICULTIES = _DIFFICULTIES  -- expose to enemy_tweaker.lua
+
+local function _setting_key(diff_key, suffix, breed)
+    if breed then
+        return string.format("et_diff_%s_%s_%s", diff_key, suffix, breed)
+    end
+    return string.format("et_diff_%s_%s", diff_key, suffix)
+end
+mod._setting_key = _setting_key
+
+local function _build_diff_weights(diff_key)
+    local out = {}
+    for _, breed_name in ipairs(_SPECIALS) do
+        out[#out + 1] = {
+            setting_id    = _setting_key(diff_key, "weight", breed_name),
+            type          = "numeric",
+            text          = _breed_label(breed_name),
+            tooltip       = string.format("Relative spawn weight for %s. 0 = never spawns. Higher = more frequent. Default 1 (uniform random, vanilla behavior).", _breed_label(breed_name)),
+            range         = { 0, 20 },
+            default_value = 1,
+        }
+    end
+    return out
+end
+
+local function _build_diff_disabled(diff_key)
+    local out = {}
+    for _, breed_name in ipairs(_SPECIALS) do
+        out[#out + 1] = {
+            setting_id    = _setting_key(diff_key, "disabled", breed_name),
+            type          = "checkbox",
+            text          = _breed_label(breed_name),
+            tooltip       = string.format("Prevent %s from being eligible to spawn as a special on this difficulty.", _breed_label(breed_name)),
+            default_value = false,
+        }
+    end
+    return out
+end
+
+local function _build_difficulty_block(diff)
+    return {
+        setting_id = "et_diff_" .. diff.key .. "_group",
+        type       = "group",
+        sub_widgets = {
+            {
+                setting_id    = _setting_key(diff.key, "max_total"),
+                type          = "numeric",
+                text          = mod:localize("specials_max_total"),
+                tooltip       = string.format("Max specials alive at once on %s. Vanilla = %d.", diff.label, diff.max_total),
+                range         = { 0, 20 },
+                default_value = diff.max_total,
+            },
+            {
+                setting_id    = _setting_key(diff.key, "max_same"),
+                type          = "numeric",
+                text          = mod:localize("specials_max_same"),
+                tooltip       = string.format("Max specials of the same breed alive at once on %s. Vanilla = %d.", diff.label, diff.max_same),
+                range         = { 0, 20 },
+                default_value = diff.max_same,
+            },
+            {
+                setting_id  = _setting_key(diff.key, "weights_group"),
+                type        = "group",
+                sub_widgets = _build_diff_weights(diff.key),
+            },
+            {
+                setting_id  = _setting_key(diff.key, "disabled_group"),
+                type        = "group",
+                sub_widgets = _build_diff_disabled(diff.key),
+            },
+        },
+    }
+end
+
+local function _build_special_spawns_block()
+    local subs = {}
+    for _, diff in ipairs(_DIFFICULTIES) do
+        subs[#subs + 1] = _build_difficulty_block(diff)
+    end
+    return {
+        setting_id  = "special_spawns_group",
+        type        = "group",
+        sub_widgets = subs,
+    }
+end
+
 return {
-    name = "Tweaker: Enemies",
+    name        = "Tweaker: Enemies",
     description = mod:localize("mod_description"),
     is_togglable = true,
     options = {
         widgets = {
+            -- ============================================================
+            -- HORDES
+            -- ============================================================
             {
                 setting_id = "horde_group",
-                type = "group",
+                type       = "group",
                 sub_widgets = {
                     {
                         setting_id    = "horde_preset",
@@ -58,15 +245,15 @@ return {
                         default_value = "off",
                         tooltip       = mod:localize("horde_preset_tooltip"),
                         options = {
-                            { text = "Off",              value = "off" },
-                            { text = "All Elites",       value = "all_elites" },
-                            { text = "Beastmen Invasion", value = "beastmen_invasion" },
-                            { text = "Chaos Only",       value = "chaos_only" },
-                            { text = "Skaven Only",      value = "skaven_only" },
-                            { text = "Mixed Factions",   value = "mixed_factions" },
-                            { text = "Necromancer Skeletons", value = "necro_skeletons" },
-                            { text = "Ghost Skeletons",  value = "ghost_skeletons" },
-                            { text = "All Skeletons Mixed", value = "skeleton_mix" },
+                            { text = mod:localize("preset_off"),               value = "off" },
+                            { text = mod:localize("preset_skaven_only"),       value = "skaven_only" },
+                            { text = mod:localize("preset_chaos_only"),        value = "chaos_only" },
+                            { text = mod:localize("preset_beastmen_invasion"), value = "beastmen_invasion" },
+                            { text = mod:localize("preset_mixed_factions"),    value = "mixed_factions" },
+                            { text = mod:localize("preset_all_elites"),        value = "all_elites" },
+                            { text = mod:localize("preset_necro_skeletons"),   value = "necro_skeletons" },
+                            { text = mod:localize("preset_ghost_skeletons"),   value = "ghost_skeletons" },
+                            { text = mod:localize("preset_skeleton_mix"),      value = "skeleton_mix" },
                         },
                     },
                     {
@@ -74,27 +261,43 @@ return {
                         type          = "numeric",
                         default_value = 100,
                         range         = { 25, 300 },
+                        unit_text     = "%",
                         tooltip       = mod:localize("horde_size_multiplier_tooltip"),
                     },
                 },
             },
+
+            -- ============================================================
+            -- ENEMY SPAWNS (per-difficulty controls)
+            -- ============================================================
+            {
+                setting_id  = "enemy_spawns_group",
+                type        = "group",
+                sub_widgets = {
+                    _build_special_spawns_block(),
+                },
+            },
+
+            -- ============================================================
+            -- BREED SUBSTITUTION
+            -- ============================================================
             {
                 setting_id = "breed_swap_group",
-                type = "group",
+                type       = "group",
                 sub_widgets = {
                     {
                         setting_id    = "breed_swap_from",
                         type          = "dropdown",
                         default_value = "off",
                         tooltip       = mod:localize("breed_swap_from_tooltip"),
-                        options       = breed_options,
+                        options       = _BREED_OPTIONS,
                     },
                     {
                         setting_id    = "breed_swap_to",
                         type          = "dropdown",
                         default_value = "off",
                         tooltip       = mod:localize("breed_swap_to_tooltip"),
-                        options       = breed_options,
+                        options       = _BREED_OPTIONS,
                     },
                 },
             },

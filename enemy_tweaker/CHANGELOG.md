@@ -1,5 +1,19 @@
 # Enemy Tweaker Changelog
 
+## 0.3.1-dev (2026-05-08) — Per-difficulty Special Spawns
+
+- **Specials UI restructured.** Replaced the Default/Disable/Customize dropdown with a nested layout: Enemy Spawns → Special Spawns → one collapsible per difficulty (Recruit, Veteran, Champion, Legend, Cataclysm 1, Cataclysm 2, Cataclysm 3). Each difficulty gets its own Max Specials Active, Max Specials of Same Type, Spawn Weights (per-special collapsible), Disabled Specials (per-special collapsible).
+- **Defaults pre-populated from VT2's `SpecialDifficultyOverrides`** (conflict_settings.lua), so untouched sliders match vanilla numbers per difficulty (e.g. Cataclysm = 5 max, Legend = 4 max).
+- **Hooks now read the active difficulty** at spawn time via `Managers.state.difficulty:get_difficulty()` and look up `et_diff_<key>_*` settings. Always-on (no global toggle); leaving values at defaults preserves vanilla behavior.
+- Dropped the spawn cooldown min/max controls and the Use Spawn Weights toggle. Weights are always applied; default of 1 across the board produces uniform random selection (vanilla equivalent).
+
+## 0.3.0-dev (2026-05-08) — Specials control, localized breed names, reorganized horde UI
+
+- **Specials group** (new): Default / Disable / Customize dropdown plus controls for max specials alive, max same type alive, spawn cooldown min/max, per-special enable/disable, and per-special spawn weights. Built on three `SpecialsPacing` hooks (`specials_by_slots` instance, `setup_functions.specials_by_slots`, `select_breed_functions.get_random_breed`) — no-op when mode = Default.
+- **Localized breed dropdowns**: breed-swap from/to now show "Stormvermin" instead of `skaven_storm_vermin`. Resolved at runtime via `Localize()` with a humanized-key fallback and explicit overrides for the names VT2 doesn't ship strings for (Lifeleech Sorcerer, Blightstormer, custom skeletons).
+- **Horde preset dropdown reorganized**: items now prefixed `Faction:` (Skaven / Chaos / Beastmen / Mixed) vs `Theme:` (All Elites / Necromancer Skeletons / Ghost Skeletons / All Skeletons Mixed) so the two concepts no longer mix in one flat list.
+- **Bugfix**: horde size multiplier now applies whether or not a preset is selected (was previously gated behind the preset early-return — users who set "200%" with no preset got vanilla hordes).
+
 ## 0.2.4-dev (2026-05-06) — Fix init crash on NetworkLookup strict-lookup
 
 - Mod failed to load with `[NetworkLookup.lua] Table breeds does not contain key: et_necro_skeleton`. The existence check `not nl_breeds[def.name]` was itself a GET that tripped the strict `__index` metatable before the key got written. Switched to `rawget` for the check; direct assignment is unchanged.

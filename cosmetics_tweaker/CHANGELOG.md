@@ -6,6 +6,189 @@
 > was researched and stabilised; ongoing portrait work lives in
 > `dynamic_cosmetic_portraits/CHANGELOG.md`.
 
+## [2026-05-09 v0.8.38-dev]
+### Experimental
+- **Hypothesis: the v0.8.34 click-Reiland AV crash was post-spawn texture painting, not the spawn itself.** Logic: LA's own design only hooks `HeroPreviewer` for its painting queue (inventory mannequin), NOT `LootItemUnitPreviewer` (customization preview). LA relies on `swap_units_new`'s global `WeaponSkins.skins` mutation + NetworkLookup aliasing + the compiled `.unit`'s baked materials for the preview to render. Our path skipped `swap_units_new` to avoid the global side effects, but ALSO added our own per-unit `Unit.set_texture_for_materials` paint via the v0.8.32 `_LA_KIND_UNIT_TEXTURES` map. That paint may be the C++ AV trigger when the bundled mesh's materials aren't fully bound.
+- v0.8.38 isolates the test: stamp `backend_id` unconditionally on `preview_item` (revert v0.8.36's conditional skip) so the previewer actually tries to spawn Reiland — but **skip texture painting for kind="unit" variants entirely** (early return in `_paint_offhand_textures_locally`). Mesh may render magenta or with un-bound textures; either is informative.
+  - If preview now spawns Reiland's mesh without crashing → painting was the culprit; we look for a different paint timing or primitive.
+  - If still crashes → the spawn itself is unsafe in the previewer's world; we revert and pursue a different path (e.g. mirror swap_units_new's NetworkLookup aliasing).
+- Ostermark / Kotbs unchanged (kind="texture" + is_vanilla_unit; their paint still runs and they still display correctly).
+
+## [2026-05-09 v0.8.36-dev]
+### Fixed (regression from v0.8.34)
+- **Clicking Reiland in the row-2 picker no longer C++-AV-crashes the engine.** GUID a739e6e5-0760-4faf-9d4d-266ed64dddc4. Root cause: v0.8.34 unconditionally stamped `backend_id` on `preview_item`, which made our `BackendUtils.get_item_units` hook fire correctly during the customization preview's spawn — for the FIRST TIME for `kind="unit"` LA bundled paths. In-game and inventory mannequin worlds spawn LA bundled meshes fine (broader resource scope, mesh + materials all bind), but `LootItemUnitPreviewer`'s background world can't safely spawn them and the engine null-derefs at C++ level (not Lua-recoverable). Earlier v0.8.32-33 builds didn't crash because the missing `backend_id` made our hook bail in the previewer, so Reiland's mesh was never actually spawned there.
+- Conditional fix: stamp `backend_id` ONLY when the click's `override_unit` has a standalone package (`Application.can_get("package", path)` true). LA bundled meshes (engine-resident via LA's main package only, no standalone) skip the stamp. For those options the previewer's hook bail returns to v0.8.32-33 behaviour — preview shows the vanilla skin's native shield instead of the clicked LA mesh.
+- Vanilla offhand options and `kind="texture" + is_vanilla_unit` LA options (Ostermark/Kotbs — `intended_unit` IS a vanilla mesh with a standalone package) keep the v0.8.34 preview-update behaviour. Clicking them still updates the customization preview live.
+- The override still fires for `kind="unit"` LA shields in-game and on the inventory mannequin; only the customization preview is degraded. User Apply still results in the LA shield correctly equipped.
+- Documented limitation: customization preview can't render `kind="unit"` LA bundled meshes. Investigation needed: probably resource-scope binding for LA's textures/materials in the previewer's world. Outside the safe edit window.
+
+## [2026-05-09 v0.8.34-dev]
+### Fixed
+- **Customization preview now updates when you click a different row-2 shield option.** v0.8.32's per-backend-id keying was correct, but `_ct_on_offhand_pressed` constructed the preview item without `backend_id`, so when `_spawn_item_unit(preview_item, true)` triggered the new previewer, our `BackendUtils.get_item_units` hook got `backend_id=nil` and `item_data.backend_id=nil` (item_data is the IML SKIN entry, not a backend item). Hook bailed → no override → preview rendered the vanilla skin's native shield instead of the clicked option's shield. User observation: "every shield option again looks like the current one." Fix: stamp `self._item_backend_id` onto the preview_item so our hook can resolve the per-backend-id selection set by the click. Vanilla row-1 illusion preview is unaffected — it constructs its own item without backend_id, so our hook still correctly bails for those (showing the illusion's native shield, not the offhand override).
+
+## [2026-05-09 v0.8.32-dev]
+### Fixed
+- **Cross-weapon leak: `_offhand_selection` re-keyed from `item_type` to `backend_id`.** Each weapon instance now has its own selection slot, so applying Reiland on the Bret weapon no longer surfaces it on a CWV imperial sword+shield (or any other weapon sharing the item_type via clone). All seven touch sites updated:
+  - The selection table itself (now keyed by backend_id).
+  - `_setup_illusions` auto-select read/write.
+  - `_ct_on_offhand_pressed` write on click.
+  - `BackendUtils.get_item_units` hook read (uses the existing `effective_backend_id` resolution chain).
+  - `_apply_la_offhand_to_units` LA-paint pipeline read (signature extended to accept `backend_id_arg`; falls back to `item_data.backend_id` which vanilla stamps on equipment resync).
+  - HeroPreviewer / MenuWorldPreviewer call site (now passes `stored_bid` from a new `_get_equip_backend_id` helper that mirrors the existing `_get_equip_skin` tracking).
+  - LootItemUnitPreviewer call site (passes `item.backend_id` directly).
+  - `_offhand_selection_backend_id` (the old stale-tracking map) removed — redundant under per-instance keying.
+- **Customization preview missing texture for kind="unit" LA shields: explicit per-unit texture binding from a manual extraction of the source `.unit` file.** Investigation:
+  1. LA's source `.unit` file (`units/empire_shield/Kruber_Empire_shield01_mesh.unit`) declares textures via `colors / normals / MABs` fields with paths like `textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_diffuse`. These textures live in LA's globally-loaded resource_package.
+  2. LA's `utils/hooks.lua:270-295` hooks `PackageManager.load`/`unload`/`has_loaded` and silently swallows any load attempt for its own mesh paths. The customization preview's per-instance package load is therefore a no-op — LA's package is globally loaded but not per-previewer scoped, so the engine's material binding falls back to default (mesh-only no texture).
+  3. Reiland's SKIN_LIST entry has NO `textures` array (it's `kind="unit"` and the textures are stored in the source `.unit` file only).
+- New `_LA_KIND_UNIT_TEXTURES` table in `_la_bridge.lua` holds the manually-extracted texture paths per LA armoury_key. `_paint_offhand_textures_locally` now accepts `armoury_key` and falls back to this map when the variant's `textures` array is empty. Per-unit `Unit.set_texture_for_materials` (the v0.8.18 primitive) handles the binding regardless of world/scope. First entry: `Kruber_empire_shield_basic1`. As more `kind="unit"` shields are added to the focus gate, each gets one entry in the map (3 lines per shield).
+
+### Test plan (full restart)
+- Equip Kruber Bret longsword+shield → cosmetics menu → row-2 picker → Reiland.
+- Apply. Expect Reiland mesh + textures correctly in:
+  1. Customization preview (the new path — should now work).
+  2. Inventory mannequin.
+  3. In-game body.
+- Equip a DIFFERENT weapon (modded imperial sword+shield, or any other Kruber shield weapon). Expect to NOT see Reiland on that weapon — selection is per-backend-instance now.
+- Equip a SECOND Kruber shield weapon and select Ostermark. Both weapons should hold their own selection independently. Pop back to weapon A → still Reiland. Weapon B → still Ostermark.
+- Note: in-memory only this round; selections lost on game restart. Disk persistence (via mod settings or backend mirror) is the next architectural round.
+
+## [2026-05-09 v0.8.31-dev]
+### Reverted
+- **v0.8.30 LA-shield skin injection rolled back.** It registered LA shields as first-class row-1 skins, but applying a row-1 skin swaps the whole weapon visual (left+right bundled together). The user's "cosmetics_tweaker is where the shield and main weapon are changed separately" model rules that out — they want the row-2 offhand picker (independent shield selection) to keep working. Net of the rollback: `_register_all_la_shield_skins()` is commented out and `_merge_la_offhand_options()` is restored in `mod.update`, so LA shields surface in the offhand picker again. The skin-injection code stays in the file for future reference.
+- The cross-weapon leak (Reiland appearing on a modded imperial weapon that shares item_type) and the customization-preview missing-texture issue both come back with this revert. They need a different design — most likely per-backend_id selection keying with backend-mirror persistence so the offhand pick is scoped to the specific weapon instance the user applied it to. Tracked as the next architectural round.
+
+## [2026-05-09 v0.8.33-dev]
+### Added
+- **Advanced glow submenu (per-channel brightness multipliers).** New "Advanced: Per-Channel Brightness" sub-group under the existing Weapon Glow Override settings, exposing 7 numeric multipliers (range 0.0–5.0):
+  - **Master Brightness ×** (default 1.0) — scales all channels uniformly
+  - **Rune Emissive ×** (default 1.0) — drives themed Veteran (`_runed_02..06`) and Stylish loot-chest (`_runed_01`)
+  - **Glow High ×** + **Glow Low ×** (default 1.0) — drive the lower part of the visible gradient on `_magic_*` weapons (per probe v0.8.22)
+  - **Smoke High ×** + **Smoke Low ×** (default 1.0) — drive the upper part of the gradient
+  - **Dots Particles ×** (default 0.0 / SKIP) — experimental; probe showed `color_dots` darkens Weavebound when high and has unclear effect on Shyish-Infused
+- A multiplier of `0.0` SKIPS that channel entirely (no `Unit.set_vector3` call) — leaves whatever vanilla wrote (or doesn't write at all for non-templated meshes). For Shyish-Infused weapons, default `mult_dots = 0` preserves vanilla's color_dots = (8.35, 3.5, 7).
+- `color_dots` added to the `_cosmetics_tweaker_glow` injected template so users can experiment with it on Weavebound/Stylish via the multiplier. Inert by default (mult 0).
+
+### Math
+- Effective per-channel brightness = `native_magnitude × master_mult × channel_mult`. User RGB is normalized so its max channel hits this effective value, preserving hue and tunable magnitude. Without per-channel scaling, multi-channel templates (versus has 5 channels at very different brightness) over-bloomed when set to a uniform user RGB (v0.8.29 bug).
+
+## [2026-05-09 v0.8.30-dev]
+### Architectural change (Phase 1 of LA-shield skin injection — REVERTED in 0.8.31)
+- **LA shields now inject as first-class VT2 skins instead of runtime offhand-row-2 overrides.** New `_la_shield_skin_specs` table (above `_register_custom_illusions` in `cosmetics_tweaker.lua`) drives `_register_la_shield_skin(spec)`, which writes a real entry into `ItemMasterList`, `WeaponSkins.skins`, the appropriate `WeaponSkins.skin_combinations` tier, and `NetworkLookup.weapon_skins`. Same pipeline `_register_custom_illusions` already uses for the `ct_*` cross-character illusions — point `left_hand_unit` at LA's authored mesh path while inheriting `right_hand_unit / display_unit / template / can_wield` from the matching vanilla weapon's default skin.
+- This eliminates two issues from v0.8.27/v0.8.28 testing:
+  1. **Cross-weapon leak.** `_offhand_selection` was keyed by `item_type`; modded CWV variants sharing an `item_type` with a vanilla weapon picked up Reiland on their 3P body in inventory. Vanilla's apply pipeline writes `item.skin = skin_key` onto a specific backend item — application is per-weapon-instance with zero shared state.
+  2. **Customization preview missing textures.** The previewer's `_load_item_units` calls `Managers.package:load(unit_path_3p, ...)` with the previewer's reference. For a vanilla skin (which the LA-injected skin now IS) this binds the matching weapon's full asset graph into the previewer's scope. The LA mesh still goes through our v0.8.12 `load_package` short-circuit (no standalone `.package` exists for LA's bundled meshes), but the *right hand* package and other matching-weapon assets DO load via the standard path, which drags in shared materials/shaders LA's compiled `.unit` references at compile time.
+- Phase 1 spec: ONE entry — `la_kruber_empire_shield_basic1_breton`, the Reiland mesh registered as a skin for `es_1h_sword_shield_breton`. Validates the architecture across all four spawn paths (in-game body, inventory mannequin, customization preview, illusion browser) before extending to all 4 weapon types and the rest of the LA shield catalogue.
+- Row-2 LA bridge merge (`_merge_la_offhand_options`) intentionally not called — leaving it would surface LA shields in two places simultaneously and re-introduce the cross-weapon leak. The vanilla-only row-2 picker (independent left swap with vanilla shields) still works for users who want it.
+- The runtime `BackendUtils.get_item_units` override path keyed off `_offhand_selection` is still in place but dormant for LA shields (no LA entries are populated there now). It still serves the vanilla offhand picker.
+
+### Test plan (full restart)
+- Equip Kruber Bret longsword+shield → cosmetics menu → row-1 illusion grid should now contain a new entry: `Empire Shield 01 (LA)`.
+- Apply it. Expect the LA mesh + textures to render correctly in:
+  1. Customization preview itself.
+  2. Illusion browser (LootItemUnitPreviewer post-apply).
+  3. Inventory mannequin after returning to the inventory tab.
+  4. In-game once you start a mission.
+- Equip a different weapon (modded imperial sword+shield, or any other Kruber shield weapon). Expect to NOT see Reiland anywhere — the skin is per-weapon-instance, scoped to the specific Bret backend item.
+- Tell me what's wrong if anything still goes wrong (preview / mannequin / in-game / cross-weapon).
+
+## [2026-05-09 v0.8.29-dev]
+### Changed
+- **Glow override redesigned: per-family routing decoupled from color choice.** The user's preset choice now selects an RGB triple; the mod writes that triple to whichever shader variables drive emissive on the target weapon — no separate code paths per family. New design: `_COLOR_PRESETS[preset_key] = { r, g, b }` (just RGB) plus a fixed list of candidate variables (`rune_emissive_color`, `color_glow_high`, `color_glow_low`, `color_smoke_high`, `color_smoke_low`) written on every painted unit. Variables that don't exist on a given mesh silently no-op (verified empirically via `cos glow_scan` in v0.8.22).
+- **Template-mutation hook now mutates EVERY vector3 variable in the template** to user RGB, not just `rune_emissive_color`. Covers any source-defined template — rune family (single channel), versus (5 channels), and any future template — without per-template knowledge.
+- **`color_dots` (versus 5th channel) intentionally omitted** from the direct-paint variable list (probe showed minimal visible color contribution; possibly drives particle behaviour). Template-mutation path still mutates it as part of the versus template — that's fine because the visible contribution is minor.
+
+### Added
+- **"White" preset** in the dropdown (key `white_glow`, RGB {10, 10, 10}). Coverage now: White / Purple / Gold / Red / Green / Blue. Underlying preset keys preserved from older builds for save-data compatibility.
+- **All four glow families now covered by one color picker** (probe-confirmed in v0.8.22):
+  - `_runed_02..06` themed Veteran: rune_emissive_color via template mutation
+  - `_runed_01` Stylish loot-chest white-glow (~160 weapons): rune_emissive_color via direct post-spawn paint
+  - `_magic_02` Shyish-Infused (Versus rewards): 5 versus channels via template mutation on `versus`
+  - `_magic_01` Weavebound (WoM Athanor): 4 versus channels via direct post-spawn paint (no vanilla template — direct write mandatory)
+- `cos glow_status` now reports the active RGB alongside the preset key.
+
+### Tooltip
+- Updated `glow_override_enable` to clarify coverage spans all four glow families through one color picker.
+
+## [2026-05-09 v0.8.22-dev]
+### Added
+- **Glow probe diagnostic suite** (`cos glow_dump`, `cos glow_probe <name>`, `cos glow_scan`, `cos glow_scan_stop`, `cos glow_restore`) — finds what shader uniform controls baked emissive on weapon meshes that don't go through the rune-emissive `MaterialSettingsTemplates` system (specifically Stylish `_runed_01` and Weavebound `_magic_01`). The scan sweeps ~63 candidate variable names with bright HDR red on the wielded weapon's units, flashing red on hit. Works because `Material.num_parameters` / `parameter_name` crashes Stingray (resource_manager.cpp:245, NOT pcall-recoverable) so direct enumeration is impossible — brute force is the only viable approach.
+
+### Fixed
+- **Vector3 frame-allocation gotcha (v0.8.20 → v0.8.22).** The original probe shipped with `local _GLOW_PROBE_HDR = Vector3(15, 0, 0)` cached at module load. Stingray Vector3 is frame-allocated; the storage is invalidated across frames. Every `pcall(Unit.set_vector3_for_materials, unit, name, cached_vec)` returned `false` because the cached Vector3 was no longer a valid argument. Symptom: scan reported `painted=0` on every candidate × every unit. v0.8.22 changed to `local function _probe_red() return Vector3(15, 0, 0) end` and the probe started actually painting. Same gotcha applies to any Stingray vector type — never cache `Vector3()` results across frames; reconstruct per call site.
+
+### Empirical probe results
+- **`_runed_02` (Veteran themed, e.g. purple_glow)**: red glow flash on candidate **#8 = `rune_emissive_color`**. Confirms the existing v0.8.16 template-mutation override pipeline targets the right variable for this family.
+- **`_magic_02` (Shyish-Infused, Versus rewards)**: red glow flash on candidates **#50-53** (uniform red across the visible glow); **#54 (`color_dots`) minimal/unclear visible contribution**. Channels 50-53 are 4 of the 5 source-defined `versus` template channels.
+- **`_magic_01` (Weavebound, WoM Athanor)** — Bretonnian longsword: SAME 5 versus channels respond, with empirically-mapped roles:
+  - **50 `color_glow_high` + 51 `color_glow_low`** → drives the LOWER part of the visible gradient
+  - **52 `color_smoke_high` + 53 `color_smoke_low`** → drives the UPPER part of the visible gradient
+  - **54 `color_dots`** → went dark / minimal contribution (probably the small particle dots; minor color)
+  - **Important consequence:** `_magic_01` mesh materials expose the same uniform names as `_magic_02` even though `_magic_01` has NO source-defined `material_settings_name` — vanilla never paints them, but the variables are there waiting to be written. Earlier I'd assumed Weavebound used a wholly different shader and required asset-level work — wrong; the variables are paintable from Lua, no asset work needed.
+- **`_runed_01` (Stylish loot-chest white-glow)**: red glow flash on candidate **#8 = `rune_emissive_color`**. Clearing to (0,0,0) made the glow vanish entirely → the "white" appearance IS that variable set to a white HDR value, NOT a separate baked-in shader effect. Same variable as the themed `_runed_02..06` family. Earlier docs claimed Stylish "has no template-driven glow" — that was wrong. They have NO `material_settings_name` (so vanilla never paints them), but the mesh material exposes `rune_emissive_color` and the mesh's authored white default lives in there from somewhere (mesh asset default, likely). Our `Unit.set_vector3_for_materials` calls override it cleanly.
+
+### Implementation plan derived from probe
+With the Stylish probe added, all 4 weapon families are now probe-confirmed paintable. The redesign:
+
+1. **Stop conflating "preset key" with "shader variable to write".** Current design: `_GLOW_PRESETS[preset_key] = { var = rgb }` — the user's preset choice (`purple_glow` / `golden_glow` / etc.) determines BOTH the color AND which variable gets written. New design: `_COLOR_PRESETS[preset_key] = { r, g, b }` (just an RGB) plus a per-weapon-family routing layer that decides which shader variable(s) to write. Lets one user choice drive every family appropriately.
+
+2. **Per-family variable routing** (write the chosen RGB into):
+   - **`_runed_02..06` (themed)**: `rune_emissive_color`. Already working via template mutation.
+   - **`_runed_01` (Stylish)**: `rune_emissive_color`. Same variable. Vanilla never calls apply_material_settings here, so use the existing post-spawn `_apply_glow_override` path. Verify it's already firing for these — it should be.
+   - **`_magic_02` (Shyish-Infused)**: 4 channels (`color_glow_high`, `color_glow_low`, `color_smoke_high`, `color_smoke_low`) — leave `color_dots` alone. Use template mutation on `MaterialSettingsTemplates.versus`.
+   - **`_magic_01` (Weavebound)**: SAME 4 channels. No vanilla template — direct post-spawn paint via `_apply_glow_override`, with detection by unit_name suffix.
+
+3. **Detect family per weapon** at paint time. Read the resolved unit_name (already available in `slot_data` and in the create_equipment result) and match the suffix:
+   - `_runed_01` → Stylish
+   - `_runed_02..06` → themed (template-driven)
+   - `_magic_01` → Weavebound (no template, paint directly)
+   - `_magic_02` → Shyish (template-driven via versus)
+   - other → no glow override applies
+
+4. **UI**: keep the simple 5-color dropdown (Purple / Gold / Red / Green / Blue) — the routing is invisible to the user. One color picker drives every weapon family. Add a "white" preset since loot-chest Stylish weapons are natively white and a no-op preset is meaningful for them. Versus preset doesn't need to come back as a separate user-facing choice — same color picker handles it.
+
+### Open follow-ups
+- Verify Stylish post-spawn paint actually fires (the user previously reported it didn't, but probe shows the variable is paintable — gate bug to find).
+- Live re-paint (Phase 2 task — wield-event hook).
+- Husks (Phase 2 task — peer player_units).
+- Per-skin custom RGB picker on customization screen (Phase 2 task).
+
+## [2026-05-09 v0.8.28-dev]
+### Reverted
+- **`LootItemUnitPreviewer.load_package` hook reverted to plain v0.8.12 short-circuit.** v0.8.26 (async per-previewer reference on LA's main package) didn't fix the texture-less customization preview; v0.8.27 (sync) crashed with `[Engine Error]: Resource '#ID[3ac73385950a26ea]' was not found` (GUID 930aff6f-7e47-4f72-a661-b8222e862fc2). The sync load forced the engine to resolve every resource in LA's package up front and one of them (a Stingray hash, undecodable from Lua) isn't actually in the loaded asset graph — async didn't surface it because the lookup never happened.
+- Net state: `kind="unit"` LA shields (Reiland) render mesh+textures correctly **in-game** and on the **inventory mannequin**. The **customization preview** shows the mesh without textures. This is a documented limitation of the current approach; needs a different angle (probably related to the LA compiled `.unit` referencing vanilla material paths that are only in scope when the matching vanilla weapon is loaded). Reiland stays in the focus gate so in-game usage continues to work.
+
+## [2026-05-09 v0.8.27-dev]
+### Changed
+- **`LootItemUnitPreviewer.load_package` hook re-ordered: per-previewer reference on LA's main package taken BEFORE flipping the gate, sync (`async=false`).** v0.8.26 took the reference async and flipped the gate first, so `_spawn_items` could race ahead of the package-scope binding and the unit rendered without textures (user confirmed v0.8.26 fix didn't help). Sync blocks until LA's package is fully bound to the previewer's reference scope before the gate opens. Added `[LA preview-load]` diagnostic gated on `mod:get("la_preview_trace")` so we can see in the log which path the hook took if textures still don't bind. If this still doesn't fix it, the issue is elsewhere (likely the LA compiled `.unit` references vanilla material paths that aren't in scope when only the shield is being previewed) and needs a different approach.
+
+## [2026-05-09 v0.8.26-dev] (superseded by 0.8.27)
+### Fixed (didn't actually fix)
+- **`kind="unit"` LA shield now textures correctly in customization preview.** v0.8.25 wired up Reiland and it rendered correctly in-game and on the inventory mannequin, but the customization/illusion menu preview spawned the mesh without textures (just the bare mesh). Root cause: our `LootItemUnitPreviewer.load_package` short-circuit (added v0.8.12 for "no model at all" fix) flipped the loaded-flag and let the spawn proceed against LA's globally-loaded resource package — which works for the in-game body and the inventory mannequin (different worlds with broader resource scope) but doesn't bind LA's materials/textures into the previewer's per-instance resource scope. Fix: when the short-circuit fires for an LA-bundled path, ALSO call `Managers.package:load(_LA_MAIN_PACKAGE, "LootItemUnitPreviewer<id>", nil, true)` to take a per-previewer reference. Tracked per-previewer in a weak-keyed map so we only register once per previewer instance. The package is already globally loaded by VMF, so this is a refcount bump that ties LA's assets to the previewer's lifetime — the engine then binds materials properly when the unit spawns.
+
+## [2026-05-09 v0.8.25-dev]
+### Added
+- **First `kind="unit"` LA custom-mesh shield: `Kruber_empire_shield_basic1` (Empire shield 01 / Reiland-style).** New architectural class — LA's own authored mesh, not a recolor of a vanilla shield. Three pieces wired in `_la_bridge.lua`:
+  1. `_is_supported_variant` now accepts `kind="unit"` if both halves of `variant.new_units` pass `Application.can_get("unit", path)` (engine-resident check). Anything the engine can't actually spawn still skips silently.
+  2. `_register_la_path_in_network_lookup(path)` adds bidirectional entries (`string→idx, idx→string`) to `NetworkLookup.inventory_packages` via `rawset`, bypassing the strict `__index` that crashed the older integration attempts (GUID 60180105). Called for both `new_units[1]` (1p) and `new_units[2]` (_3p) of every kind="unit" variant during `build_offhand_options`. Idempotent.
+  3. `_LA_EXTRA_WEAPON_TYPES` and `_LA_FOCUS_KEYS` extended to include `Kruber_empire_shield_basic1` (Bret extra + focus). Icons table covers sword/mace/deus already.
+- We don't call any LA helpers in this path. `BackendUtils.get_item_units` returns the LA mesh path; the previewer's package-load short-circuit (v0.8.12) flips the loaded-flag immediately because LA's mesh is engine-resident; the texture binds from the compiled `.unit`'s embedded material slots (Reiland has no `textures` array, so the per-unit paint pass is a no-op).
+
+### Test plan (full restart)
+- Equip Kruber Bret longsword+shield → cosmetics → expect Ostermark01, Kotbs01, AND `Empire Shield Basic1 (LA)` (or however it humanizes).
+- Same for sword+shield, mace+shield, deus spear+shield.
+- Apply Reiland → expect a different shield SHAPE (Empire shield 01 mesh, not deus shield) with its embedded materials. No magenta. No leak onto adjacent shields in the inventory mannequin.
+- `cos la_offhand_dump` after a full equip: Reiland line should show `1p=true 3p=true` (engine-resident).
+- If a sync-time crash hits in MP, capture the GUID + missing-key message and we'll add the relevant rawset for whichever NetworkLookup table it points to.
+
+## [2026-05-08 v0.8.24-dev]
+### Added
+- **Kotbs01 added to focus gate.** `_LA_FOCUS_KEYS` now `{ Ostermark01 = true, Kotbs01 = true }`. Same architecture as Ostermark (kind="texture", is_vanilla_unit=true, intended_unit=`wpn_es_deus_shield_03`); appears on Kruber's sword+shield, mace+shield, deus spear+shield (icon-driven) and Bret longsword+shield (via the v0.8.21 `_LA_EXTRA_WEAPON_TYPES` extras + v0.8.22 alias). No new routing, just visibility.
+
+### Test plan
+- Restart VT2.
+- For each of Kruber's 4 shield weapons (sword+shield, mace+shield, Bret longsword+shield, deus spear+shield): cosmetics menu → expect Ostermark01 AND Kotbs01 both visible. Apply each → expect deus shield mesh + their respective heraldry texture, no magenta, no leak.
+
 ## [2026-05-08 v0.8.23-dev]
 ### Changed
 - **Focus gate at picker-display time.** Per the "one shield at a time" working policy: registration data (icon parsing, `_LA_EXTRA_WEAPON_TYPES`, `_LA_WEAPON_TYPE_ALIAS`) stays intact for every LA shield, but `_merge_la_offhand_options` only surfaces shields whose `armoury_key` is in `_LA_FOCUS_KEYS`. Currently set to `{ Kruber_empire_shield_hero1_Ostermark01 = true }`. Widening to the next focus shield (or removing the gate entirely once all are verified) is a one-line edit at the top of `_merge_la_offhand_options` in `cosmetics_tweaker.lua`. Set to nil/empty table to surface every LA shield.
