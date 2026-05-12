@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.324-dev (2026-05-12) — Tuskgor Javelin: runtime-hide the duplicate 3P spare boar spear
+- After v0.1.321 restored `ammo_unit = boar spear` (mandatory for projectile/pickup paths — see `feedback_cwv_ammo_unit_required.md`), the held mesh renders correctly again, but 3P shows TWO boar spears (held + spare offhand). Per the v0.1.321 TODO entry: fix by runtime-hiding the spawned `left_ammo_unit_3p` instance, not by zeroing the data field.
+- Implementation: extended two existing hooks (no new hook registrations to avoid VMF hook_safe chaining issues per `feedback_vmf_hook_safe_no_chain.md`):
+  1. `SimpleInventoryExtension._wield_slot` POST — catches the explicit `Unit.set_unit_visibility(slot_data.left_ammo_unit_3p, true)` at vanilla `simple_inventory_extension.lua:2153`. After vanilla wields the slot, if backend_id matches `^cwv_e[sw]_javelin_`, set `slot_data.left_ammo_unit_3p` (and `right_ammo_unit_3p` defensively) visibility false.
+  2. `SimpleInventoryExtension.show_third_person_inventory` POST — catches the FP→3P camera-toggle path that re-shows 3P inventory. Same gate, same hide. show=false naturally hides everything, no work needed.
+- 1P offhand spare left visible — user only complained about 3P.
+- Other equip side effects (projectile spawn at throw time, link_pickup respawn, ammo decrement visuals) are untouched because we hide a SPAWNED UNIT INSTANCE, not the underlying data field. Projectile system and pickup system both look up `slot_data.left_hand_unit_name` / `ammo_unit` strings, not the spawned unit refs — so they keep working.
+
 ## 0.1.323-dev (2026-05-12) — Old Musket: ship CC-BY 4.0 attribution
 - Source model "Old Musket" by [Lathander](https://sketchfab.com/Lathander) (Sketchfab) was added in v0.1.272+ without an attribution block. Sketchfab's "Free" download category includes CC-BY 4.0 licensed models, which require credit, a link to the source, a link to the license, and indication of changes made. The mod was shipping without any of these.
 - Added `THIRD_PARTY_NOTICES.md` at the mod root with the full attribution: title, author, source URL, license URL, list of technical conversions applied (DAE→FBX, material rename, PNG retexture). The notices file is the canonical credit; the Workshop description carries an abbreviated version so subscribers see it.

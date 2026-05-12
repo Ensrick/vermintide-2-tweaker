@@ -1,5 +1,42 @@
 # Weapon Tweaker Changelog
 
+## 0.12.25-dev (2026-05-12) — Fix end-of-mission parade crash + consolidate duplicate hooks
+
+**End-of-mission parade crash** (crashify://811e5718-2e04-4995-8a22-0880c44cf44d): `team_previewer.lua:120: attempt to index local 'item_template' (a nil value)`. Triggered when a player has a `character_weapon_variants` cross-character variant in their loadout — CWV variants inherit `entry.name` from the base weapon (per `feedback_cwv_clone_name_clobber.md`), so the level-end verifier looks up the BASE `ItemMasterList` entry whose `can_wield` doesn't include the new career → `BackendInterfaceCommon.can_wield(career, item_data)` returns false → vanilla `LevelEndView._verify_weapon_data` hits a bailout path that assigns `verified_weapon.item_name = career_settings.preview_items[1]`. But `career_settings.preview_items[1]` is now `{ item_name = "..." }` (a table), not a string — Fatshark changed the shape of `preview_items` without updating this bailout path. `team_previewer.cb_hero_unit_spawned_skin_preview` then does `ItemMasterList[that-table]` → crash. Fix: post-hook `LevelEndView._verify_weapon_data` to unwrap the table-shape to its inner `.item_name` string, or clear to nil if unexpected. Reproduced with the user having `we_javelin` (cwv_es_javelin → base we_javelin name) on `es_huntsman`.
+
+**Duplicate-hook warning consolidation** (per memory `feedback_vmf_hook_safe_no_chain` and the user's request):
+
+- `mod:hook("GearUtils", "spawn_inventory_unit", ...)` was registered twice (brace pistols → repeater swap and longbow → crossbow swap). VMF chained these correctly but logged `(hook): Attempting to rehook active hook [spawn_inventory_unit]` each game load. Consolidated: the longbow swap body is now a local helper `_wt_longbow_3p_swap_apply` called from the brace hook's dispatch block. Forward-declared per `feedback_lua_forward_reference`.
+
+- `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)` was registered THREE times (brace preview swap, longbow preview swap, item-key capture for `_spawn_item_unit` lookup). VMF's `hook_safe` does NOT chain duplicates from the same mod — only the LAST registration actually fired, so the brace preview swap and longbow preview swap were silently dead since they were registered. Consolidated all three into one hook_safe that calls two local helpers (`_wt_capture_preview_item_key`, `_wt_longbow_preview_swap_apply`) followed by the inline brace swap. Forward-declared both helpers. Two fixed bugs as a side effect: brace pistols and longbow now show the swapped 3P mesh in the keep inventory previewer again (they didn't on v0.12.24).
+
+**Files changed:**
+- `weapon_tweaker.lua` — version bump, vanilla-bug-fix hook for `LevelEndView._verify_weapon_data` at end of file, two forward declarations + closure-helper conversions for the consolidated hook registrations.
+
+## 0.12.24-dev (2026-05-12) — Pre-resolve per-career `item_units` (fix CW bot crash on bw_ghost_scythe — second attempt)
+
+**Why a second attempt:** v0.12.23 added a `career_name` fallback recovered from `unit_3p`'s `inventory_system._career_name`. The fallback's `mod:warning` log line never fired in the second crash repro (cbcace55), confirming `career_name` was already non-nil at our hook entry. The hook chain still dropped it somewhere between our wrapper (crash-dump frame [12] shows `career_name = "bw_unchained"`) and the unwrapped `gear_utils.create_equipment` (frame [10] shows `nil`). Mechanism unknown — static inspection of the three hook frames (CWV, cosmetics_tweaker, weapon_tweaker) shows clean varargs pass-through.
+
+**Workaround:** instead of trying to fix the lost arg, sidestep the broken path. Vanilla `gear_utils.create_equipment` does `item_units = override_item_units or BackendUtils.get_item_units(item_data, nil, nil, career_name)` — so if we **pre-resolve** `item_units` ourselves (calling `BackendUtils.get_item_units` with the real `career_name`) and pass the result as `override_item_units`, gear_utils uses our version verbatim and never enters the chain-broken code path.
+
+**Gating:** only fires when `item_data` has `right_hand_unit_override[career_name]` or `left_hand_unit_override[career_name]`. Covers the entire Sienna scythe family (`bw_ghost_scythe` / `_magic_01` and their skins) plus any other vanilla weapon with per-career unit overrides. The v0.12.23 `career_name` recovery from `inventory_system` is kept (now feeds this pre-resolve block when arrival is nil).
+
+**Files changed:**
+- `weapon_tweaker.lua` — version bump, added pre-resolve `override_item_units` block to the `create_equipment` hook (≈12 lines).
+
+## 0.12.23-dev (2026-05-12) — Recover lost career_name in `create_equipment` (fix CW bot crash on bw_ghost_scythe)
+
+**Crash:** Chaos Wastes mission start, bot Sienna *Unchained* (`bw_unchained`) spawning with `bw_ghost_scythe` in `slot_melee` — engine fatal `Unit not found #ID[877616b4d5c71f36]` (= `units/weapons/player/wpn_bw_ghost_scythe_01/wpn_bw_ghost_scythe_01_3p`, the Necromancer base mesh) inside `world.spawn_unit`. crashify://77917479-d053-4d34-b6b9-629878a7e6ec.
+
+**Cause:** Vanilla `ItemMasterList.bw_ghost_scythe.right_hand_unit_override.bw_unchained = "..._fire"` should redirect Unchained to the `_fire` variant; the package preloader correctly force-loaded `wpn_bw_ghost_scythe_01_fire_3p` for the bot. But at equip time `BackendUtils.get_item_units` returned the BASE unit because `career_name` was `nil` when `gear_utils.create_equipment` called it (the override block at `backend_utils.lua:159-162` is gated on `career_name`). Crash-dump locals show `career_name = "bw_unchained"` at every modded hook frame (`weapon_tweaker:1313`, `cosmetics_tweaker:2542`, `character_weapon_variants:8488`) yet `nil` at the unwrapped `gear_utils.create_equipment` entry — so the hook chain dropped the arg somewhere on the way down to the original. Engine asserts in `world.spawn_unit` bypass pcall (`feedback_vt2_unit_node_not_pcall_safe.md`), so the existing pcall guard didn't help.
+
+**Fix:** In our `GearUtils.create_equipment` hook, if `career_name` arrives nil but `unit_3p` has an `inventory_system` extension, read `_career_name` from it and pass that to `func`. `SimpleInventoryExtension.init` sets `_career_name` before `extensions_ready` fires our hook (`feedback_vt2_mission_spawn_career_lookup.md`), so this is always populated for player/bot mission spawns. 4 lines, weapon-agnostic — protects every weapon that uses per-career `right_hand_unit_override` (the Sienna scythe family + any future ones).
+
+A `mod:warning` on the fallback path will surface other call sites that hit this so we can root-cause the chain pass-through bug separately.
+
+**Files changed:**
+- `weapon_tweaker.lua` — version bump, fallback block inside `create_equipment` hook.
+
 ## 0.12.22-dev (2026-05-12) — Kruber's Longbow on Saltzpyre with crossbow 3P visuals
 
 New cross-character feature, mirrors the `wh_brace_of_pistols` → repeater pattern from v0.12.2-v0.12.17 but in the opposite direction (Kruber-weapon on Saltzpyre) and with one new wrinkle (LEFT-hand swap + ammo unit swap).

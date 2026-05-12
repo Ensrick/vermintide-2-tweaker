@@ -1,6 +1,6 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.323-dev"
+local MOD_VERSION = "0.1.324-dev"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- In-game chat echo so version is visible without opening console.log —
@@ -4206,6 +4206,25 @@ mod:hook("SimpleInventoryExtension", "_wield_slot", function(orig, self, equipme
 	-- POST — bayonet visibility sync (v0.1.281 behavior, preserved).
 	_sync_all_bayonets_visibility(self._equipment or equipment)
 
+	-- v0.1.322: hide the duplicated 3P offhand spare boar spear for cwv
+	-- javelin variants. Vanilla _wield_slot (simple_inventory_extension.lua:2153)
+	-- sets ammo_unit_3p visible when the weapon is wielded. For our javelin
+	-- the IML's `left_hand_unit` AND the resolved `ammo_unit` both point
+	-- at the boar spear (per v0.1.314 revert — keeping ammo_unit on the
+	-- held mesh is mandatory for projectile/pickup paths). Result: 3P
+	-- renders two boar spears (held + spare offhand). We can't blank
+	-- ammo_unit on the data table without breaking the ammo paths, so we
+	-- runtime-hide the spawned 3P instance instead. 1P offhand left alone.
+	local js_bid = _item_backend_id(slot_data and slot_data.item_data)
+	if js_bid and (js_bid:match("^cwv_es_javelin_") or js_bid:match("^cwv_wh_javelin_")) then
+		if slot_data.left_ammo_unit_3p and Unit.alive(slot_data.left_ammo_unit_3p) then
+			pcall(Unit.set_unit_visibility, slot_data.left_ammo_unit_3p, false)
+		end
+		if slot_data.right_ammo_unit_3p and Unit.alive(slot_data.right_ammo_unit_3p) then
+			pcall(Unit.set_unit_visibility, slot_data.right_ammo_unit_3p, false)
+		end
+	end
+
 	return result
 end)
 
@@ -4237,6 +4256,25 @@ mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory", functio
 		local bayonet = _musket_bayonet_pairs[rifle_3p]
 		if bayonet and Unit.alive(bayonet) then
 			pcall(Unit.set_unit_visibility, bayonet, show)
+		end
+	end
+
+	-- v0.1.322: re-hide cwv javelin 3P spare boar spear when the engine
+	-- toggles 3P inventory visibility to true (camera switch, level start).
+	-- Without this, the _wield_slot-time hide is undone on every FP→3P
+	-- camera flip. show=false naturally hides everything, no work needed.
+	if show then
+		local wielded_slot = equipment.wielded_slot
+		local slot_data = wielded_slot and equipment.slots and equipment.slots[wielded_slot]
+		local item_data = slot_data and slot_data.item_data
+		local bid = _item_backend_id(item_data)
+		if bid and (bid:match("^cwv_es_javelin_") or bid:match("^cwv_wh_javelin_")) then
+			if slot_data.left_ammo_unit_3p and Unit.alive(slot_data.left_ammo_unit_3p) then
+				pcall(Unit.set_unit_visibility, slot_data.left_ammo_unit_3p, false)
+			end
+			if slot_data.right_ammo_unit_3p and Unit.alive(slot_data.right_ammo_unit_3p) then
+				pcall(Unit.set_unit_visibility, slot_data.right_ammo_unit_3p, false)
+			end
 		end
 	end
 end)

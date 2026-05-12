@@ -6,6 +6,22 @@
 > was researched and stabilised; ongoing portrait work lives in
 > `dynamic_cosmetic_portraits/CHANGELOG.md`.
 
+## [2026-05-12 v0.8.48-dev]
+### Fixed (v0.8.47 regression — massive in-game shield)
+- v0.8.47 added `Unit.set_all_materials(unit, handgun_path)` to `_paint_offhand_textures_locally` for `kind="unit"` variants. This **fixed** the customization preview (Reiland renders with textures, mesh just smaller because of the previewer's intrinsic zoom). It also **broke** the in-game render — Reiland appears massive on both 1P and 3P views. Root cause: the function is called from THREE rendering paths via `_apply_la_offhand_to_units`:
+  - `GearUtils.create_equipment` hook (in-game / mission body)
+  - `HeroPreviewer/MenuWorldPreviewer` hook (inventory mannequin)
+  - `LootItemUnitPreviewer.spawn_units` hook (customization preview)
+- The in-game and inventory paths already had the LA mesh bound to the correct material (LA's own hook does this for the inventory mannequin; in-game has correct world-scope resolution). v0.8.47 ran the swap in all three, overwriting the correct binding with the handgun's material, which carries different renderable metadata → massive scale in-game.
+- The inventory mannequin still rendered normally because LA's `HeroPreviewer._spawn_item_unit` hook fires after ours and re-applies the correct binding, masking our damage.
+- **Fix:** threaded a `context` arg through `_apply_la_offhand_to_units` → `LA_BRIDGE.apply_offhand_to_unit` → `_paint_offhand_textures_locally`. Three call sites tagged: `"ingame"`, `"hero_previewer"`, `"loot_previewer"`. The `kind="unit"` material swap + paint now ONLY runs when `context == "loot_previewer"`. For `"ingame"` and `"hero_previewer"`, we early-return (the v0.8.46 safe behavior — vanilla rendering path handles those correctly).
+
+### What this leaves us with
+- In-game: LA mesh renders correctly (v0.8.46 behavior restored — no swap).
+- Inventory mannequin: LA mesh renders correctly (LA's own hook handles paint).
+- Customization preview: LA mesh renders with textures via the v0.8.47 swap+paint mechanism.
+- Future `kind="unit"` LA shields: just add an entry to `M.la_kind_unit_parent_packages[armoury_key]` pointing to whichever vanilla material the LA `.unit`'s `mat_to_use` directive references.
+
 ## [2026-05-12 v0.8.47-dev]
 ### Experimental (material swap via `Unit.set_all_materials`)
 - v0.8.46 API surface dump revealed `Unit.set_all_materials`, `Unit.set_material`, `Unit.set_material_from_id`, `Unit.get_material_resource_id`, and confirmed `Material.set_texture` (signature `Unit.set_material(unit, slot_name, material_path)` from vanilla `keep_decoration_painting_extension.lua:397` and `world_hero_previewer.lua:179`).

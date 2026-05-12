@@ -2,7 +2,7 @@
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 
-local MOD_VERSION = "0.8.47-dev"
+local MOD_VERSION = "0.8.48-dev"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 
@@ -2512,7 +2512,7 @@ end
 -- paint is gated to skinned items only, mirroring the BackendUtils.get_item_units
 -- override gate. Painting the base weapon template would surprise users
 -- ("base template can't have illusions applied").
-local function _apply_la_offhand_to_units(world, item_data, units, has_skin, backend_id_arg)
+local function _apply_la_offhand_to_units(world, item_data, units, has_skin, backend_id_arg, context)
     if not LA_BRIDGE.registered then mod:info("[LA paint] skip: bridge not registered"); return end
     if not world or not item_data then mod:info("[LA paint] skip: world/item_data nil"); return end
     if not has_skin then mod:info("[LA paint] skip: has_skin=false"); return end
@@ -2527,7 +2527,7 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
         tostring(sel.la_armoury_key), #units, tostring(bid))
     for _, u in ipairs(units) do
         if u and _is_unit(u) then
-            local ok = LA_BRIDGE.apply_offhand_to_unit(world, u, sel.la_armoury_key, sel.vanilla_skin)
+            local ok = LA_BRIDGE.apply_offhand_to_unit(world, u, sel.la_armoury_key, sel.vanilla_skin, context)
             mod:info("[LA paint]   unit=%s ok=%s", tostring(u), tostring(ok))
         end
     end
@@ -2557,7 +2557,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         local weapon_key = item_data.name
         _offset_units(result, weapon_key, career_name)
         local has_skin = result.skin ~= nil and result.skin ~= ""
-        _apply_la_offhand_to_units(world, item_data, { result.left_unit_3p, result.left_unit_1p }, has_skin)
+        _apply_la_offhand_to_units(world, item_data, { result.left_unit_3p, result.left_unit_1p }, has_skin, nil, "ingame")
     end
     if result then
         _apply_glow_override({
@@ -2694,7 +2694,7 @@ local function _spawn_item_post(self, item_name, spawn_data)
                     local stored_bid  = _get_equip_backend_id(self, item_name)
                     local has_skin = (item_data.item_type == "weapon_skin")
                             or (stored_skin and stored_skin ~= "")
-                    _apply_la_offhand_to_units(world, item_data, left_units, has_skin, stored_bid)
+                    _apply_la_offhand_to_units(world, item_data, left_units, has_skin, stored_bid, "hero_previewer")
                 end
             end
         end
@@ -2865,7 +2865,7 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
         local has_skin = (item.skin and item.skin ~= "")
                 or (item_data and item_data.item_type == "weapon_skin")
         if has_skin and world and item_data and units and units[1] then
-            _apply_la_offhand_to_units(world, item_data, { units[1] }, true, item.backend_id)
+            _apply_la_offhand_to_units(world, item_data, { units[1] }, true, item.backend_id, "loot_previewer")
         end
     end
 

@@ -714,7 +714,7 @@ local function _probe_la_unit_materials(unit, armoury_key)
     mod:info("[LA probe %s] === end ===", tag)
 end
 
-local function _paint_offhand_textures_locally(unit, variant, armoury_key)
+local function _paint_offhand_textures_locally(unit, variant, armoury_key, context)
     if not unit or type(unit) ~= "userdata" then return false end
     if not Unit.alive(unit) then return false end
 
@@ -730,20 +730,25 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key)
     -- a different binding primitive or replicate LA's swap_units_new
     -- NetworkLookup aliasing for the customization preview path.
     if variant.kind == "unit" then
-        -- v0.8.45 probe: confirmed material[0] = #ID[00000000] (null sentinel)
-        -- in the LootItemUnitPreviewer's world, despite v0.8.39's parent-package
-        -- preload firing 2ms earlier. The package being globally loaded does NOT
-        -- automatically populate the previewer's per-world material binding for
-        -- the LA mesh — the engine binds null at spawn time and caches it.
-        --
-        -- v0.8.47 fix: explicitly Unit.set_all_materials(unit, parent_path)
-        -- where parent_path is the vanilla material the LA `.unit` was
-        -- compiled against (via its `mat_to_use` directive — see
-        -- M.la_kind_unit_parent_packages). This forces an explicit rebind to
-        -- the real, already-package-loaded material instead of relying on the
-        -- engine's implicit resolution. Once material is real, the
-        -- Unit.set_texture_for_materials code below can paint LA's textures
-        -- onto its slots without dereferencing null.
+        -- v0.8.48: ONLY apply the material swap in the LootItemUnitPreviewer
+        -- (customization preview) context. v0.8.47 broke in-game rendering
+        -- (LA mesh became massive) because the swap ran on already-correctly-
+        -- bound units in the in-game and hero-previewer worlds. Those paths
+        -- already render the LA mesh correctly without our intervention;
+        -- the customization preview is the only world where material[0] is
+        -- #ID[00000000] (per v0.8.45 probe). Skip the swap AND the paint
+        -- for non-previewer contexts to keep the v0.8.46 safe-no-paint
+        -- behavior for in-game/inventory (where painting still AVs because
+        -- the *paint texture binding* is what 0x8-faulted, not the swap).
+        if context ~= "loot_previewer" then
+            if M.trace then
+                mod:info("[LA bridge] kind=unit %s context=%s — skipping swap+paint (vanilla path renders correctly)",
+                    tostring(armoury_key), tostring(context))
+            end
+            return false
+        end
+
+        -- Customization-preview context: swap the null material, then paint.
         local parent_path = M.la_kind_unit_parent_packages and M.la_kind_unit_parent_packages[armoury_key]
         if parent_path and Unit.set_all_materials then
             local ok, err = pcall(Unit.set_all_materials, unit, parent_path)
@@ -753,12 +758,8 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key)
             mod:info("[LA fix kind=unit %s] no parent_path or Unit.set_all_materials missing — paint will likely AV",
                 tostring(armoury_key))
         end
-        -- Probe again AFTER the swap so the log shows whether material[0]
-        -- flipped from #ID[00000000] to a real binding.
-        _probe_la_unit_materials(unit, armoury_key)
-        -- Fall through to the texture-painting code below. If set_all_materials
-        -- succeeded, paint binds onto the real handgun material; if it didn't,
-        -- the existing v0.8.34/v0.8.43 AV returns and we revert next version.
+        -- Fall through to the texture-painting code below. The swap should
+        -- have given us a real material slot to paint into.
     end
 
     -- Resolution order for textures:
@@ -870,13 +871,13 @@ end
 -- only touches the unit's own materials. Could be dropped, but keeping for
 -- API parity with apply_direct() / queue_unit_direct() in case the call
 -- path ever needs to fall back to LA's queue system.
-function M.apply_offhand_to_unit(world, unit, armoury_key, vanilla_skin)
+function M.apply_offhand_to_unit(world, unit, armoury_key, vanilla_skin, context)
     if not armoury_key then return false end
     local LA = la()
     if not LA or type(LA.SKIN_LIST) ~= "table" then return false end
     local variant = LA.SKIN_LIST[armoury_key]
     if not variant then return false end
-    local ok = _paint_offhand_textures_locally(unit, variant, armoury_key)
+    local ok = _paint_offhand_textures_locally(unit, variant, armoury_key, context)
     if M.trace then mod:info("[LA bridge]   offhand local paint %s ok=%s", armoury_key, tostring(ok)) end
     return ok
 end

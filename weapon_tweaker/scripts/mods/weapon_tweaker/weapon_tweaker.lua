@@ -21,7 +21,7 @@ Key conventions (also in CLAUDE.md):
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.12.22-dev"
+local MOD_VERSION = "0.12.25-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
@@ -1299,17 +1299,57 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
     mod:info("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(hand or "both"))
 end
 
--- INVESTIGATION: CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
--- Unit hash 877616b4d5c71f36 = wpn_bw_ghost_scythe_01_3p (base/Necromancer variant). Unchained
--- should resolve to _fire_3p via right_hand_unit_override, so the base variant being requested
--- implies career_name was nil at spawn time. All vanilla code paths look correct; suspected
--- timing issue during CW level transitions where bot career data isn't resolved yet.
--- pcall guard prevents hard crash; diagnostic logging captures the actual state for next repro.
--- Rendering-path coverage: this is path 1 (in-game). Path 2 (HeroPreviewer)
--- is hooked at ~L1303. Path 3 (LootItemUnitPreviewer) is intentionally NOT
--- covered — weapon_tweaker shows un-offset weapons in the illusion browser
--- per feedback_grip_offset_sign.md. CWV covers all three.
+-- CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
+-- Unit hash 877616b4d5c71f36 = wpn_bw_ghost_scythe_01_3p (Necromancer base mesh). For
+-- bw_unchained, vanilla `right_hand_unit_override.bw_unchained = "..._fire"` should
+-- redirect to the _fire variant — and the package preloader DID load _fire_3p — but
+-- the equip flow asked for the base. Crash dump shows career_name="bw_unchained" at
+-- every modded hook frame yet nil at the unwrapped GearUtils.create_equipment entry,
+-- so the per-career override at backend_utils.lua:159-162 was skipped. Engine fatal
+-- in world.spawn_unit bypasses pcall (feedback_vt2_unit_node_not_pcall_safe.md), so
+-- the pcall below catches Lua errors only — the real fix is the career_name fallback.
+-- Rendering-path coverage: this is path 1 (in-game). Path 2 (HeroPreviewer) hook
+-- lives below. Path 3 (LootItemUnitPreviewer) is intentionally NOT covered per
+-- feedback_grip_offset_sign.md; CWV covers all three.
 mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+    -- Fallback: if career_name was lost somewhere in the hook chain (observed in
+    -- CW bot spawns), recover it from the spawning unit's inventory extension.
+    -- _career_name is set in SimpleInventoryExtension.init before extensions_ready,
+    -- so it's always available here (feedback_vt2_mission_spawn_career_lookup.md).
+    if career_name == nil and unit_3p and ScriptUnit and ScriptUnit.has_extension
+            and ScriptUnit.has_extension(unit_3p, "inventory_system") then
+        local inv = ScriptUnit.extension(unit_3p, "inventory_system")
+        career_name = inv and inv._career_name or nil
+        if career_name then
+            mod:warning("[create_equipment] recovered nil career_name -> %s (weapon=%s slot=%s is_bot=%s)",
+                tostring(career_name), tostring(item_data and item_data.name), tostring(slot_name), tostring(is_bot))
+        end
+    end
+
+    -- v0.12.24: pre-resolve item_units when item_data has a per-career override.
+    -- The hook chain reliably drops career_name between our wrapper (frame [12]
+    -- in crash dumps shows "bw_unchained") and the unwrapped gear_utils.create_equipment
+    -- (frame [10] shows nil), so its internal `BackendUtils.get_item_units(...,
+    -- career_name)` runs with career_name=nil and the `right_hand_unit_override`
+    -- block at backend_utils.lua:159 is skipped. Result: Sienna's non-Necromancer
+    -- careers get the BASE bw_ghost_scythe 3p unit (not preloaded for them) →
+    -- engine fatal in world.spawn_unit. We resolve item_units here with the
+    -- correct career_name and inject via override_item_units, which gear_utils
+    -- uses verbatim (`item_units = override_item_units or get_item_units(...)`).
+    -- Gated on the item_data actually having a per-career override so we don't
+    -- waste a function call on every spawn.
+    if override_item_units == nil and item_data and career_name and BackendUtils
+            and BackendUtils.get_item_units
+            and ((item_data.right_hand_unit_override and item_data.right_hand_unit_override[career_name])
+              or (item_data.left_hand_unit_override and item_data.left_hand_unit_override[career_name])) then
+        local ok_resolve, resolved = pcall(BackendUtils.get_item_units, item_data, item_data.backend_id, nil, career_name)
+        if ok_resolve and type(resolved) == "table" then
+            override_item_units = resolved
+            mod:info("[create_equipment] pre-resolved item_units for %s on %s (rhu=%s)",
+                tostring(item_data.name), tostring(career_name), tostring(resolved.right_hand_unit))
+        end
+    end
+
     local ok, result = pcall(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
     if not ok then
         local weapon_key = item_data and item_data.name or "unknown"
@@ -1993,6 +2033,12 @@ if mod:get("authentic_brace_of_pistols") then
     _apply_authentic_brace_mode()
 end
 
+-- Forward declaration for the longbow swap helper defined below — the brace
+-- hook closes over it before its `local function` declaration line, so
+-- without this the identifier resolves to a nil global at hook runtime
+-- (feedback_lua_forward_reference).
+local _wt_longbow_3p_swap_apply
+
 -- Hook GearUtils.spawn_inventory_unit. Always call vanilla first, capture
 -- all 4 returns (v_w3p, v_a3p, v_w1p, v_a1p), then attempt the swap inside
 -- a pcall so any failure returns vanilla's units unchanged. Equipping
@@ -2001,13 +2047,23 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
     local v_w3p, v_a3p, v_w1p, v_a1p =
         func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
 
+    -- Dispatch to the appropriate per-weapon swap helper. v0.12.25 consolidated
+    -- the longbow→crossbow hook into this same registration to silence the
+    -- "Attempting to rehook" warning (VMF chained the duplicate registrations
+    -- correctly but logged a warning each load). Brace logic stays inline below.
+    if not item_data then
+        return v_w3p, v_a3p, v_w1p, v_a1p
+    end
+    if item_data.name == "es_longbow" then
+        return _wt_longbow_3p_swap_apply(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
+    end
     -- Gate: only apply swap when wielding a brace, on the right hand
     -- (where the brace's "main pistol" mounts), and the wielder is a
     -- Kruber career. _local_career_name() is defined earlier in this file;
     -- it returns the locally-wielded unit's career_name. For husks, fall
     -- back to checking `owner_unit_3p` via _unit_career_name (also
     -- defined earlier).
-    if not item_data or item_data.name ~= "wh_brace_of_pistols" then
+    if item_data.name ~= "wh_brace_of_pistols" then
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
     if hand ~= "right" then
@@ -2093,8 +2149,17 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 end)
 
 -- ============================================================
--- Saltzpyre Longbow → Crossbow in-game 3P spawn hook
+-- Saltzpyre Longbow → Crossbow in-game 3P spawn (helper, not a hook)
 -- ============================================================
+-- Was a second `mod:hook("GearUtils", "spawn_inventory_unit", ...)` in
+-- v0.12.24 and earlier, which VMF chained but warned about as a duplicate
+-- registration. v0.12.25 consolidated into the brace hook above: the brace
+-- hook calls this helper when item_data.name == "es_longbow". Caller is
+-- responsible for the post-func vanilla return values; signature mirrors
+-- the original hook minus the chain-wrapper bits (no func arg, no
+-- item_units/slot_name/unit_template/extra_extension_data/ammo_percent
+-- because none of the body references them).
+--
 -- Parallel to the brace→repeater hook above. Differences:
 --   * `hand == "left"` (bows/crossbows are left-hand weapons; brace was right)
 --   * Swaps TWO 3P units per spawn: v_w3p (bow→crossbow) AND v_a3p (arrow→bolt).
@@ -2110,13 +2175,7 @@ end)
 -- the bow's nock point on the player body; the crossbow's bolt attaches at
 -- the crossbow's nock groove. Using bow's arrow linking would render the
 -- bolt at the wrong position relative to the (now-crossbow) weapon mesh.
-mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
-    local v_w3p, v_a3p, v_w1p, v_a1p =
-        func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
-
-    if not item_data or item_data.name ~= "es_longbow" then
-        return v_w3p, v_a3p, v_w1p, v_a1p
-    end
+_wt_longbow_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
     if hand ~= "left" then
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
@@ -2215,7 +2274,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
         return swap_result.weapon, (swap_result.ammo or v_a3p), v_w1p, v_a1p
     end
     return v_w3p, v_a3p, v_w1p, v_a1p
-end)
+end
 
 -- Hide the left-hand brace pistol on Kruber. The brace template renders TWO
 -- pistols (one per hand) — the right-hand spawn_inventory_unit hook above
@@ -2253,6 +2312,13 @@ mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory", functio
     end
 end)
 
+-- Forward declarations for the two helper functions defined below, called
+-- from the consolidated `MenuWorldPreviewer.equip_item` hook_safe below.
+-- Without these, the closure resolves the identifiers as nil globals
+-- (feedback_lua_forward_reference).
+local _wt_longbow_preview_swap_apply
+local _wt_capture_preview_item_key
+
 -- Character preview path: swap brace 3P → repeater 3P on Kruber.
 -- The in-game spawn flow goes through GearUtils.spawn_inventory_unit (hooked
 -- above); the keep inventory previewer does NOT — it calls
@@ -2279,7 +2345,21 @@ end)
 -- replaces HeroPreviewer.equip_item but NOT MenuWorldPreviewer.equip_item;
 -- the previewer instance dispatches through the copy and the hook never
 -- fires. See feedback_vt2_class_hook_derived.
+--
+-- v0.12.25 consolidation: this is the ONLY mod:hook_safe registration for
+-- equip_item from this mod. It dispatches to the longbow swap and item-key
+-- capture helpers defined below. Previously each lived in its own hook_safe
+-- registration; only the LAST one actually fired because hook_safe does not
+-- chain on duplicate registrations from the same mod (feedback_vmf_hook_safe_no_chain).
 mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot, backend_id, skin, skip_wield_anim)
+    -- Helper 1: capture item key for the `_spawn_item_unit` hook (below) to
+    -- look up. Always fires (item-name-agnostic).
+    _wt_capture_preview_item_key(self, item_name, slot)
+
+    -- Helper 2: longbow → crossbow preview swap (Saltzpyre careers).
+    _wt_longbow_preview_swap_apply(self, item_name, slot)
+
+    -- Inline body: brace → repeater preview swap (Kruber careers).
     if item_name ~= "wh_brace_of_pistols" then return end
     local career = self._current_career_name
     if not career or career:sub(1, 3) ~= "es_" then return end
@@ -2319,7 +2399,14 @@ end)
 -- left_hand/right_hand entries; ammo_unit isn't fed through the preview
 -- spawn pipeline — see line 689 conditional that's about is_ammo_weapon
 -- THROWN items like javelins, not about arrows on bows).
-mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot, backend_id, skin, skip_wield_anim)
+--
+-- v0.12.25: was its own `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)`
+-- registration; consolidated into the brace hook above because hook_safe
+-- chain does NOT chain on duplicate registrations from the same mod — only
+-- the last one fires (feedback_vmf_hook_safe_no_chain). The brace hook calls
+-- this helper unconditionally on every equip_item; helper short-circuits when
+-- item_name isn't the longbow.
+_wt_longbow_preview_swap_apply = function(self, item_name, slot)
     if item_name ~= "es_longbow" then return end
     local career = self._current_career_name
     if not career or career:sub(1, 3) ~= "wh_" then return end
@@ -2340,7 +2427,7 @@ mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot
     if swapped then
         mod:info("[wt sp-longbow-crossbow preview] swapped preview 3P bow → crossbow on career=%s", career)
     end
-end)
+end
 
 -- Apply scale/offset to the inventory character preview.
 -- The keep inventory uses MenuWorldPreviewer (see notes above the
@@ -2354,8 +2441,9 @@ local function _is_unit(v) return type(v) == "userdata" and pcall(Unit.alive, v)
 -- previewer in memory) at equip time and look it up at spawn.
 local _mwp_pending_keys = setmetatable({}, { __mode = "k" })
 
-mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_key, slot, backend_id, skin, skip_wield_anim)
-    -- Store weapon key for MenuWorldPreviewer._spawn_item_unit lookup
+-- v0.12.25: same hook_safe-no-chain consolidation as the longbow preview
+-- helper above. Called unconditionally from the brace `equip_item` hook.
+_wt_capture_preview_item_key = function(self, item_key, slot)
     if item_key and type(item_key) == "string" then
         local slot_name = (type(slot) == "table" and slot.name) or (type(slot) == "string" and slot)
         if slot_name then
@@ -2365,7 +2453,7 @@ mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_key, slot,
             map[slot_type] = item_key
         end
     end
-end)
+end
 
 mod:hook_safe("MenuWorldPreviewer", "_spawn_item_unit", function(self, unit, slot_type, item_data, ...)
     if not unit or not _is_unit(unit) then return end
@@ -2783,4 +2871,50 @@ mod.weapon_unlock_map = weapon_unlock_map
 -- Run trait-pool filtering once at module load. on_game_state_changed will
 -- re-run later if pools weren't ready yet (e.g. WeaponTraits not loaded).
 apply_trait_filters()
+
+-- ============================================================
+-- Vanilla bug fix: LevelEndView._verify_weapon_data shape mismatch
+-- ============================================================
+-- crashify://811e5718-2e04-4995-8a22-0880c44cf44d. End-of-mission parade
+-- crash: `team_previewer.lua:120: attempt to index local 'item_template'
+-- (a nil value)`. Triggered when a player's loadout has a weapon that
+-- fails `BackendInterfaceCommon.can_wield(career, item_data)` — most
+-- commonly a `character_weapon_variants` cross-character variant, since
+-- CWV variants inherit `entry.name` from their base weapon (per
+-- feedback_cwv_clone_name_clobber.md) so the level-end verifier reads
+-- the BASE entry's `can_wield` which doesn't include the new career.
+--
+-- Vanilla bug: `LevelEndView._verify_weapon_data` (level_end_view_v2.lua)
+-- bails out with `verified_weapon = { item_name = career_settings.preview_items[1] }`.
+-- But `career_settings.preview_items[1]` is itself a table of shape
+-- `{ item_name = "<weapon_key>" }`, not a string. So `verified_weapon.item_name`
+-- ends up holding a table, then `team_previewer.cb_hero_unit_spawned_skin_preview`
+-- does `local item_name = item.item_name; ItemMasterList[item_name]` —
+-- crashes because tables aren't valid ItemMasterList keys. Fatshark must
+-- have changed the shape of `career_settings.preview_items` to a table-of-
+-- tables without updating this code path.
+--
+-- Fix: post-hook the function, walk the returned `verified_weapon.item_name`
+-- and unwrap one level if it's a table whose `.item_name` is a string. No
+-- behavior change for the non-bailout path (verified_weapon.item_name is
+-- assigned the string `weapon.item_name` at line 336 of the vanilla source,
+-- which passes through unchanged).
+if LevelEndView and LevelEndView._verify_weapon_data then
+    mod:hook("LevelEndView", "_verify_weapon_data", function(func, self, player_data, weapon_slot, weapon, weapon_pose_anim)
+        local verified_slot, verified_weapon, verified_pose = func(self, player_data, weapon_slot, weapon, weapon_pose_anim)
+        if verified_weapon and type(verified_weapon.item_name) == "table" then
+            local inner = verified_weapon.item_name.item_name
+            if type(inner) == "string" then
+                mod:info("[verify_weapon_data] unwrapping preview_items table shape: %s -> %s",
+                    tostring(verified_weapon.item_name), inner)
+                verified_weapon.item_name = inner
+            else
+                mod:warning("[verify_weapon_data] verified_weapon.item_name is a table with no string .item_name; clearing to avoid team_previewer crash (table=%s)",
+                    tostring(verified_weapon.item_name))
+                verified_weapon.item_name = nil
+            end
+        end
+        return verified_slot, verified_weapon, verified_pose
+    end)
+end
 
