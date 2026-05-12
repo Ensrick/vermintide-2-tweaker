@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.323-dev (2026-05-12) — Old Musket: ship CC-BY 4.0 attribution
+- Source model "Old Musket" by [Lathander](https://sketchfab.com/Lathander) (Sketchfab) was added in v0.1.272+ without an attribution block. Sketchfab's "Free" download category includes CC-BY 4.0 licensed models, which require credit, a link to the source, a link to the license, and indication of changes made. The mod was shipping without any of these.
+- Added `THIRD_PARTY_NOTICES.md` at the mod root with the full attribution: title, author, source URL, license URL, list of technical conversions applied (DAE→FBX, material rename, PNG retexture). The notices file is the canonical credit; the Workshop description carries an abbreviated version so subscribers see it.
+- Updated `itemV2.cfg` description with a `[h1]Credits[/h1]` section linking author, license, and source.
+- No code changes; no behaviour changes. **DoD:** N/A (asset-license correction, not a new variant).
+
 ## 0.1.322-dev (2026-05-12) — cwv_es_longsword_shield: match Imperial Longsword stat tune on sword swings only
 - User: "I never changed the stats for this weapon did I? Can we make all the non-shield attacks have the same changes as the Imperial Longsword does?" — confirmed `cwv_es_longsword_shield` had no `template` field on the def, so it was running the base `one_handed_sword_shield_template_2` untouched.
 - Added `_create_imperial_longsword_shield_template`: clones the base, walks `template.actions` two levels deep, and applies the same multipliers as `imperial_longsword_template` (-15% damage, +15% speed, +15% cleave, -15% stagger) to every sub-action that isn't a shield action.

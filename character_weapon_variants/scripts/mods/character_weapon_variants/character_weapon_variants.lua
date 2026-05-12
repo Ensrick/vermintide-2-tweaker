@@ -1,6 +1,6 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.322-dev"
+local MOD_VERSION = "0.1.323-dev"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- In-game chat echo so version is visible without opening console.log —
