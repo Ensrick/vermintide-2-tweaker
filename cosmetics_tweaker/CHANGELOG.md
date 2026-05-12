@@ -6,6 +6,105 @@
 > was researched and stabilised; ongoing portrait work lives in
 > `dynamic_cosmetic_portraits/CHANGELOG.md`.
 
+## [2026-05-12 v0.8.47-dev]
+### Experimental (material swap via `Unit.set_all_materials`)
+- v0.8.46 API surface dump revealed `Unit.set_all_materials`, `Unit.set_material`, `Unit.set_material_from_id`, `Unit.get_material_resource_id`, and confirmed `Material.set_texture` (signature `Unit.set_material(unit, slot_name, material_path)` from vanilla `keep_decoration_painting_extension.lua:397` and `world_hero_previewer.lua:179`).
+- User's idea: "Since it loads correctly elsewhere, perhaps there's a way to put one of the elsewhere models into the cosmetic menu in place of whatever we're currently doing." Implemented as a per-unit material swap: don't move the LA mesh to a different world, swap the LA mesh's *broken material binding* with the *vanilla material* it was compiled against.
+- **Change in `_paint_offhand_textures_locally`:** when `variant.kind == "unit"`, BEFORE running the texture-paint, call `Unit.set_all_materials(unit, parent_path)` where `parent_path = M.la_kind_unit_parent_packages[armoury_key]` (the vanilla material from the LA `.unit`'s `mat_to_use` directive — already package-preloaded since v0.8.39). Forces an explicit binding instead of relying on implicit resolution that's caching null.
+- **Removed the v0.8.38 `return false` skip** for `kind="unit"`. Paint now runs after the material swap. If the swap succeeded, the handgun material has the `texture_map_c0ba2942 / 59cd86b9 / 0205ba86` slot vocabulary (LA was designed against this material), so the existing `Unit.set_texture_for_materials` calls bind LA's diff/pack/norm textures onto real slots and Reiland renders with textures in the customization preview.
+- Probe (v0.8.45) STILL runs after the swap so the log shows whether `material[0]` flipped from `#ID[00000000]` to a real binding.
+
+### Pass/fail signal
+- **Pass:** customization preview shows Reiland with textures. Log shows `set_all_materials ok=true` and `material[0]` is no longer `#ID[00000000]`.
+- **AV returns:** the material was swapped (or attempted) but `set_texture_for_materials` still AVed. Means the handgun material loaded into the previewer's world also has a degraded binding — chase that path or accept the limitation.
+- **No crash, no texture:** the swap silently no-op'd (set_all_materials returned ok but didn't actually bind). Log will show this — next step would be `Unit.set_material(unit, "slot1", path)` with a guessed slot name.
+
+## [2026-05-11 v0.8.46-dev]
+### Diagnostic (enumerate engine API surface for Unit/Mesh/Material)
+- v0.8.45 confirmed Reiland's spawned mesh has `material[0] = #ID[00000000]` (null) in the customization preview — and that v0.8.39's parent-package preload IS firing 2ms before the probe but does NOT make the material resident. So the next move is to swap the null material via `Mesh.set_material` (or whichever primitive exists) using a known-loaded vanilla material as the donor.
+- But: we don't know which mutation APIs exist in this engine build. The v0.8.45 probe revealed `Unit.num_nodes` and `Unit.is_visible` are absent — those Stingray method tables are version-specific.
+- New `_dump_api_surface()` helper in `_la_bridge.lua` iterates the global `Unit`, `Mesh`, and `Material` tables via `pcall`'d `pairs()` and logs every method name + value type, chunked 6-per-line. Runs once per process (`_LA_PROBE_API_DUMPED` flag), called from the start of `_probe_la_unit_materials`.
+
+### What we're looking for in the next log
+- Whether `Mesh.set_material` exists (or `Unit.set_material` / `Unit.set_material_for_mesh` / similar).
+- Whether `Material.set_texture` is in the table (we use it already in `_la_bridge.lua:713`, so it should be — but the dump will confirm and may reveal alternate names like `set_texture_for_variable`).
+- Whether `Material.has_variable` / `Material.variable_count` exist (the v0.8.45 probe assumed they did, found neither logs anything; the dump confirms whether they're absent or whether the call signature was wrong).
+- Any non-obvious primitives we haven't considered (e.g., `Unit.set_material`, `Renderable.*`, etc.).
+
+## [2026-05-11 v0.8.45-dev]
+### Diagnostic (probe LA bundled-mesh material state in customization preview)
+- Added `_probe_la_unit_materials(unit, armoury_key)` in `_la_bridge.lua`. Walks the spawned LA unit and logs (all pcall-wrapped):
+  - `Unit.alive`, `Unit.num_actors`, `Unit.num_nodes`, `Unit.is_visible`
+  - `Unit.num_meshes` and for each mesh: `Unit.mesh_name`, `Mesh.num_materials`
+  - For each material: `Material.has_variable(slot)` and `Material.get_texture(slot)` for the three SHIELD slot hashes (diff/pack/norm).
+- Wired into `_paint_offhand_textures_locally` at the `variant.kind == "unit"` branch BEFORE the early return. Probe runs every time the painter is called for a `kind="unit"` variant, paint remains disabled (no AV).
+- Per `cosmetics_tweaker.lua:435-438` memo, the probe avoids `Material.num_parameters / parameter_name / parameter_type` — those raise a Stingray `resource_manager.cpp` fault that pcall doesn't catch.
+
+### What we're looking for
+1. **`num_meshes == 0` or err** → the LA mesh isn't actually loaded into the previewer's world. The fix path is whatever LA does in `swap_units_new` to alias the mesh into the world's reference graph.
+2. **`num_meshes > 0` but `Mesh.num_materials == 0`** → mesh loaded, materials not instantiated. Same fix path roughly.
+3. **`num_materials > 0` but `has_variable(slot)` returns false** → the material exists but the slot variable names we're using don't match the compiled material. We'd need different slot hashes (or to call `Material.set_texture` with the slot names from the mesh's own material file rather than the LA `.unit`'s nominal slot hashes).
+4. **`has_variable(slot)` returns true, `get_texture(slot)` returns a default or empty** → material is fully bound but `Unit.set_texture_for_materials` is faulting for a different reason (binding lifecycle, per-material write protection, etc.).
+
+Each outcome points to a different fix. No code change to in-game / inventory paths; this is preview-only diagnostic.
+
+## [2026-05-11 v0.8.44-dev]
+### Reverted (v0.8.43 hypothesis falsified)
+- v0.8.43 re-enabled `kind="unit"` painting on the assumption that v0.8.39's parent-package preload (`wpn_empire_handgun_02_t2`) would make `Unit.set_texture_for_materials` safe on Reiland's bundled mesh. **Result:** same AV at address 0x8 (GUID 45a2a017-3fb2-419e-aa20-e6f7ea0d3535). Identical crash signature to v0.8.34 (GUID a739e6e5).
+- **What this rules out:** the AV is NOT the LA mesh's compiled material trying to resolve a missing shader graph. The parent package WAS loaded (v0.8.40 confirmed the preload mechanism fires correctly), and the crash signature is identical. The 0x8 dereference is something else — most likely the LA mesh's per-material instance isn't bound in the customization preview's specific render world. Stingray materials are per-world resources; globally-loading a unit package does not automatically scope its materials into every world's reference graph. `LootItemUnitPreviewer` runs its own world.
+- **Restored:** v0.8.38 skip in `_paint_offhand_textures_locally` for `variant.kind == "unit"`. Reiland (and future `kind="unit"` shields) preview as mesh-only-no-texture but DON'T crash. In-game and inventory mannequin remain unaffected (LA's own HeroPreviewer paint hook handles those).
+- **Parent-package preload from v0.8.39 is RETAINED** even though it didn't fix the crash. It may still help with other failure modes; cheap to leave in. If a future investigation removes the need, we can drop it then.
+
+### Investigation path forward (not yet attempted)
+1. **Probe the spawned Reiland unit in the LootItemUnitPreviewer's world**: dump `Unit.num_materials(unit)`, iterate slots, log what's actually bound (or unbound) at paint time. This tells us whether the material is instantiated-but-empty, or not instantiated at all.
+2. **Mirror LA's `swap_units_new` NetworkLookup aliasing for the customization preview**: LA's own mechanism for getting bundled meshes to render relies on aliasing its mesh paths to vanilla unit indices in `NetworkLookup.inventory_packages` and mutating `WeaponSkins.skins` globally. We skipped that path back in v0.8.31 to avoid the global side effects, but it may be the only way to get the previewer's world to scope the bundled meshes correctly.
+3. **Accept the limitation**: document that the customization preview can't render `kind="unit"` LA bundled meshes; in-game and inventory mannequin already work. The cosmetics picker is still functional — user just doesn't get live preview for these specific shields.
+
+## [2026-05-11 v0.8.43-dev]
+### Experimental (re-enable `kind="unit"` paint with parent shader loaded)
+- v0.8.40 confirmed the v0.8.39 parent-package preload mechanism is wired up correctly (no crash, mesh spawns), but Reiland's customization preview is still untextured — because v0.8.38 disabled `_paint_offhand_textures_locally` for `kind="unit"` variants entirely (safety after the v0.8.34 AV crash).
+- **Hypothesis:** the AV at 0x8 was the LA mesh's compiled material trying to bind a shader graph (`mat_to_use = "units/weapons/player/wpn_empire_handgun_02_t2/wpn_empire_handgun_02_t2"`) that wasn't in the previewer's world. With v0.8.39's preload now in place, that parent package IS loaded before paint runs — the material slot pointers should be valid, and `Unit.set_texture_for_materials` should bind without dereferencing nil.
+- **Change:** lifted the v0.8.38 `if variant.kind == "unit" then return false end` guard in `_paint_offhand_textures_locally`. Painter now runs for both `kind="texture"` and `kind="unit"` variants. The `_LA_KIND_UNIT_TEXTURES` fallback table (manual extraction from LA's source `.unit` files) supplies the texture paths for variants whose SKIN_LIST entry has no `textures` array.
+
+### Test plan (full restart required)
+- Full game restart (hot-reload unsafe for cosmetics_tweaker per CLAUDE.md).
+- Equip Kruber Bret longsword+shield → cosmetics menu → row-2 picker → click Reiland.
+- **Pass:** preview now shows Reiland's mesh with textures bound. Ostermark/Kotbs still display correctly (unaffected). Apply still works.
+- **Fail (AV crash returns):** the parent-package load isn't sufficient — paint timing or some other unresolved material reference is the real issue. Revert this change and consider deferring paint until a package-load callback completes (vs the current sync-load that returns immediately).
+
+## [2026-05-10 v0.8.42-dev]
+### Changed
+- **Per-character cosmetic-unlock widgets nested under a single "Cosmetic Availability" group.** The auto-generated per-character/career hat/skin toggle tree from `_cosmetic_unlocks.lua` (~1272 individual widgets across the 5 characters) was previously appended at the top level of the settings list, dominating the main settings view. Now wrapped in one collapsible group at the bottom of the widget list. Same data, same checkboxes, just collapsed by default. Added `cosmetic_availability_group` localization entry ("Cosmetic Availability").
+
+## [2026-05-10 v0.8.41-dev]
+### Removed
+- **"Experimental Tints" settings group and its `tint_pureheart_white` toggle.** The Grail Knight Pureheart Helm white-tint feature didn't visibly work on the hat material (the shader's parameter names don't match any of the candidate names we tried), and the v0.8.32-dev "remove dirt from Purified outfits" TODO outlines the proper Material-Hijack + MoreItemsLibrary asset-pipeline approach for color-changing cosmetics. Cleaned up:
+  - `experimental_tints_group` + `tint_pureheart_white` widgets removed from `cosmetics_tweaker_data.lua`
+  - `experimental_tints_group` / `tint_pureheart_white` / `tint_pureheart_white_tooltip` localization entries removed
+  - `_TINT_PARAM_NAMES`, `_hat_tints` table, `_apply_tint_to_unit`, `_maybe_tint` helpers removed from `cosmetics_tweaker.lua`
+  - Call site inside `GearUtils.create_equipment` post-hook removed (the loop that ran `_maybe_tint` on each hand unit, with its outdated "POTENTIAL BUG" comment about preview-path coverage)
+  - `cos probe_hat` chat command retained — it's still useful for future material introspection work.
+
+## [2026-05-10 v0.8.40-dev]
+### Fixed
+- **Forward-reference crash from v0.8.39.** `register_all` (line 401) called `_build_la_path_to_parent_package` but the local function was declared at line 561 — Lua's `local function` declarations are scoped at parse time, so the name resolved to nil at call time and the global lookup AVed. Per `feedback_lua_forward_reference.md` this is the recurring forward-ref bug class (now 6 incidents — that memory is load-bearing). Fixed by hoisting onto the module table (`M._build_la_path_to_parent_package`) so name resolution is dynamic table-access at call time, decoupled from declaration order. Same defensive pattern we use elsewhere when the call site lives in an earlier function than the declaration.
+- Functionally identical to v0.8.39 once the registration runs successfully — same parent-package preload mechanism. Should now actually fire instead of throwing every frame.
+
+## [2026-05-10 v0.8.39-dev]
+### Experimental (parent-package preload for `kind="unit"` LA shields)
+- v0.8.38 confirmed the v0.8.34 click-Reiland crash was post-spawn texture painting (`Unit.set_texture_for_materials`), not the spawn itself. Paint stays disabled for `kind="unit"` for now.
+- New mechanism: when `LootItemUnitPreviewer.load_package` short-circuits for an LA bundled mesh path, ALSO sync-load the LA mesh's parent vanilla package onto the previewer's reference. The parent is the unit specified by `mat_to_use` in LA's source `.unit` (the shader-graph inheritance pointer used at compile time).
+- Two new fields in `_la_bridge.lua`:
+  - `M.la_kind_unit_parent_packages` — armoury_key → vanilla parent package path. First entry: `Kruber_empire_shield_basic1` → `units/weapons/player/wpn_empire_handgun_02_t2/wpn_empire_handgun_02_t2`.
+  - `M.la_path_to_parent_package` — reverse map (LA mesh path 1p / _3p → parent package), built at register-all time so the previewer hook can look up the parent without knowing the armoury_key.
+- `_la_parent_pkg_ref_by_previewer` (weak-keyed) tracks per-previewer references already taken so we don't sync-load twice for one previewer.
+- Sync load (`async=false`) so the parent is fully bound BEFORE `_spawn_items` runs in the same frame. Wrapped in pcall so a load failure logs but doesn't crash. Vanilla VT2 packages are well-tested so this is much safer than v0.8.27's attempt to sync-load LA's whole main package (which has its own broken references).
+
+### Hypothesis
+If Reiland's customization preview now renders WITH textures: the parent vanilla package was the missing piece — the LA mesh's compiled material couldn't bind its inherited shader graph without it. We extend `la_kind_unit_parent_packages` for every kind="unit" shield as we add them.
+
+If textures STILL don't bind: parent-package-load wasn't enough. Either the actual issue is more nuanced (per-world material caching, or LA's compiled material has additional unresolved references) or the load happened too late despite sync. Next step would be re-enabling the kind="unit" paint with the parent loaded — material may now initialize correctly and accept the texture override without crashing.
+
 ## [2026-05-09 v0.8.38-dev]
 ### Experimental
 - **Hypothesis: the v0.8.34 click-Reiland AV crash was post-spawn texture painting, not the spawn itself.** Logic: LA's own design only hooks `HeroPreviewer` for its painting queue (inventory mannequin), NOT `LootItemUnitPreviewer` (customization preview). LA relies on `swap_units_new`'s global `WeaponSkins.skins` mutation + NetworkLookup aliasing + the compiled `.unit`'s baked materials for the preview to render. Our path skipped `swap_units_new` to avoid the global side effects, but ALSO added our own per-unit `Unit.set_texture_for_materials` paint via the v0.8.32 `_LA_KIND_UNIT_TEXTURES` map. That paint may be the C++ AV trigger when the bundled mesh's materials aren't fully bound.

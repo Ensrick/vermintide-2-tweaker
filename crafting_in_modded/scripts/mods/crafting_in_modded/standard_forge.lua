@@ -460,7 +460,7 @@ local function _make_craft_synth(allowed_slots)
         local cjson_mod = rawget(_G, "cjson")
         local custom_data = {
             power_level = "300",
-            rarity = "promo",
+            rarity = "modded",
         }
         if cjson_mod then
             custom_data.properties = cjson_mod.encode(rolled_props)
@@ -489,7 +489,7 @@ local function _make_craft_synth(allowed_slots)
                 properties = rolled_props,
                 traits = rolled_traits,
                 power_level = 300,
-                rarity = "promo",
+                rarity = "modded",
                 via_mirror = true,
             })
         end

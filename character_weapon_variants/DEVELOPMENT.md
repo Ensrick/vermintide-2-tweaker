@@ -1,11 +1,15 @@
 # Character Weapon Variants — Development Guide
 
+> **Before declaring a variant complete: walk
+> `DEFINITION_OF_DONE.md`.** Universal + trait-gated checklists, plus
+> the `**DoD:**` footer that every variant CHANGELOG entry must end
+> with. This is the gate; the docs below are reference.
+>
 > **Adding a new variant?** Start with **`RECIPES.md`** — that's the
-> procedural how-to (decision tree + per-archetype copy-paste recipes
-> + pre-deploy checklist + verification matrix). This file is the
-> reference: rarity system, skin system, scale system, animation
-> architecture, base-weapon catalog. Cross-link from RECIPES.md as
-> needed.
+> procedural how-to (decision tree + per-archetype copy-paste
+> recipes). This file is the reference: rarity system, skin system,
+> scale system, animation architecture, base-weapon catalog.
+> Cross-link from RECIPES.md as needed.
 >
 > **3P animation work?** See **`ANIMATION_FIX_PLAYBOOK.md`** — the
 > 9-step closed-vocabulary procedure. The "Animation: System B" and

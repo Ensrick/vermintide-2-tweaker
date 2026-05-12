@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.3.1-dev"
+local MOD_VERSION = "0.3.2-dev"
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Enemy Tweaker v" .. MOD_VERSION)
 

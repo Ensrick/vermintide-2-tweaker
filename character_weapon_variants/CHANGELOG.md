@@ -1,5 +1,549 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.322-dev (2026-05-12) — cwv_es_longsword_shield: match Imperial Longsword stat tune on sword swings only
+- User: "I never changed the stats for this weapon did I? Can we make all the non-shield attacks have the same changes as the Imperial Longsword does?" — confirmed `cwv_es_longsword_shield` had no `template` field on the def, so it was running the base `one_handed_sword_shield_template_2` untouched.
+- Added `_create_imperial_longsword_shield_template`: clones the base, walks `template.actions` two levels deep, and applies the same multipliers as `imperial_longsword_template` (-15% damage, +15% speed, +15% cleave, -15% stagger) to every sub-action that isn't a shield action.
+- Skip filter: `kind == "block"` OR `damage_profile` starts with `"shield_"`. Catches the block action and every `shield_slam*` / `shield_push` damage profile. The push baseline (`damage_profile_inner` / `damage_profile_outer` dual-profile sub-action) is naturally skipped since the filter only inspects plain `damage_profile`.
+- Reuses the `cwv_il_` prefix from the 2H template — identical multipliers, no profile-name overlap (bastard sword uses 2H slashing profiles; bret sword+shield uses 1h slashing profiles), and `_clone_damage_profile` is idempotent.
+- Wired via `template = "imperial_longsword_shield_template"` on the variant def.
+
+## 0.1.321-dev (2026-05-12) — Tuskgor Javelin: revert v0.1.259 (broke held mesh) + revert v0.1.258/263 stick depth
+- User: "the javelin is invisible". Root cause confirmed: my v0.1.259 fix setting `ammo_unit = "units/weapons/player/wpn_invisible_weapon"` on both `cwv_es_javelin` and `cwv_wh_javelin` defs (to suppress the 3P offhand spare boar spear) broke the held-mesh rendering. `feedback_cwv_ammo_unit_required.md` explicitly says ammo_unit must mirror the base for ammo weapons — downstream paths (previewer, projectile spawn, pickup respawn) read it for held visuals and throw it as a fallback when the held unit isn't present. Pointing it at the invisible-weapon unit blanked those code paths.
+- Fix: removed `ammo_unit = ...invisible_weapon` from both def entries. The skin-registration fallback at line ~5816 (`ammo_unit = def.ammo_unit or (base.ammo_unit and def.left_hand_unit)`) now resolves to `def.left_hand_unit` = boar spear, same as before v0.1.259.
+- Side effect returning: 3P will show a duplicate boar spear as the offhand spare (the "two boar spears" symptom v0.1.259 was chasing). Captured as a TODO entry under "Tuskgor Javelin polish" — correct fix is to keep ammo_unit pointing at the boar spear and runtime-hide the spawned 3P ammo unit instance via `Unit.set_unit_visibility(false)` in a `GearUtils.spawn_inventory_unit` POST hook, not blanket the data field.
+- Also reverted v0.1.258/0.1.263 pull-back-from-wall fix (`_TJ_VISUAL_PULL_BACK_M = 0.60 → 0`). User reports the math didn't visibly move the stuck-javelin visual out of the wall — `pos - Quaternion.forward(rot) * offset` is either reading the wrong rotation axis or the link_pickup system snaps the visual back to the parent post-spawn. Constant kept (set to 0, no-op) so the offset-math branch is in place to be re-tuned once the right axis/coordinate frame is identified; full debug plan captured as TODO.
+
+## 0.1.320-dev (2026-05-12) — Axe and Shield: curated illusion picker
+- User: "make the axe+shield weapon have illusions too like other CWV weapons".
+- Both cwv_es_axe_shield (blacksmith default) and cwv_es_axe_shield_veteran (unique) now share `item_type = "cwv_es_axe_shield"`, mirroring how cwv_imperial_longsword's default + blackguard variants share a single item_type and skin pool.
+- New `cwv_es_axe_shield_skins` skin_combination_table wired into `_seed_targets` and `_item_type_to_skin_table`. Both variants auto-seed into their respective rarity tiers; the blacksmith default's appearance stays locked by the BackendUtils.get_item_template hook (illusions visually no-op on it, same as every other CWV blacksmith default).
+- `_register_axe_shield_illusions()` mirrors `_register_imperial_longsword_shield_illusions()`: 12 hardcoded (Empire shield mesh × Empire hatchet mesh) pairs across plentiful → magic rarity tiers. Hatchet meshes drawn from the `wh_1h_axe` skin pool (wpn_axe_02 / wpn_axe_03 / wpn_axe_hatchet tiers — Saltzpyre's Empire-style hatchets, same family the default + veteran variants already use). Shields are the same wpn_empire_shield_01..05 + runed/magic set the longsword+shield picker uses.
+- Mesh-path locals wrapped in `do ... end` per the Lua 5.1 200-local main-chunk rule.
+- Variant's `display_unit` set to `display_shield` (generic) — matches vanilla dwarven dr_shield_axe skins; there is no `display_shield_axe`.
+- **DoD:** Universal (item_type wired, skin combos seeded, forward-ref audit clean) + G-CUSTOM-ILLUSION (curated pool, matching_item_key → variant key, can_wield gated to ES careers, NetworkLookup updated). Live verification (in-game preview of the picker + applied skin on veteran instance) deferred to user's next session.
+
+## 0.1.319-dev (2026-05-12) — Old Musket: 3P-RANGED rotation baked
+- User live-tune via `rotmul`: X(-90°) then Z(+90°). Baked the composed quaternion as the new 3P-RANGED default.
+- Position and scale remain identity for 3P-RANGED — user will tune offsets in a subsequent session.
+
+## 0.1.318-dev (2026-05-12) — Old Musket: 3P transform split by stance, MELEE defaults locked in
+- User: "rotation for 3rd person melee should be 0 1 0 -90, pos 0 0.045, 0.1"
+- Split 3P transform state into `_3P_RANGED` and `_3P_MELEE` buckets (mirrors what 1P already had).
+- 3P-MELEE defaults baked: pos `(0, 0.045, 0.1)`, rot axis `(0, 1, 0) @ -90°`, scale identity. 3P-RANGED defaults stay identity (user-confirmed at v0.1.295).
+- New weak-keyed tracking sets `_CWV_OLD_MUSKET_UNITS_3P_RANGED` / `_3P_MELEE`. `_track_old_musket_unit` and `_apply_old_musket_transform` route by `(perspective, mode)` for the 3P side too.
+- Stance toggle in-mission (spawn_inventory_unit hook) already passes `_mode` derived from `item_template`; the 3P unit now picks up the per-stance transform.
+- Inventory previewer (`_cwv_spawn_item_post`) reads `item_data.mod_data.cwv_musket_stance` to determine the displayed mode (default ranged) and applies the matching 3P transform.
+- 10 new/replaced commands replace the single `cwv_om_*_3p` set:
+  - `cwv_om_pos_3p_r / _3p_m <x> <y> <z>`
+  - `cwv_om_rot_3p_r / _3p_m <ax> <ay> <az> <deg>`
+  - `cwv_om_rotmul_3p_r / _3p_m <ax> <ay> <az> <deg>`
+  - `cwv_om_eul_3p_r / _3p_m <x_deg> <y_deg> <z_deg>`
+  - `cwv_om_scale_3p_r / _3p_m <x> <y> <z>`
+  - `cwv_om_show` echoes all four buckets (1P-R / 1P-M / 3P-R / 3P-M).
+
+## 0.1.317-dev (2026-05-12) — Old Musket: fix missing textures in keep inventory 3P preview
+- User: rifle is in the inventory 3P model with no texture. (3P transforms not yet tuned, separate concern.)
+- Researched memory + CLAUDE.md hook-derived-class rule. Confirmed our existing `_cwv_spawn_item_post` IS hooked on both `HeroPreviewer._spawn_item` AND `MenuWorldPreviewer._spawn_item`. Per the new `feedback_inventory_preview_hook_menuworldpreviewer.md` rule, only the MenuWorldPreviewer hook fires for the keep inventory previewer — the HeroPreviewer wrapper is bypassed because MenuWorldPreviewer copies parent methods at class-def time. So the right hook IS registered.
+- **Actual root cause**: `_resolve_preview_def`'s backend_id regex was `"^(cwv_.-)_001$"` — captured ONLY instance suffix `_001`. cwv_es_musket_old ships with `instances = 2` (per the variant def), so instance `_002` failed the regex, returned nil, and `_cwv_spawn_item_post` exited early before reaching the texture binding. Result: the FIRST musket the previewer rendered (e.g. instance _001) had textures; the SECOND (instance _002) was white. Likely also why "I feel I mentioned this quite often" — every variant with `instances > 1` has been affected since v0.1.271 added the multi-instance feature.
+- Fix: regex relaxed to `"^(cwv_.-)_%d%d%d$"` — matches any 3-digit instance suffix.
+
+## 0.1.316-dev (2026-05-12) — Cross-slot: scope back via consolidated post-filter
+- User confirmed v0.1.313's broad behavior works ("all ranged weapons are enabled for melee slots"). Career mutation is reaching CareerSettings successfully now that it's deferred to `on_all_mods_loaded`.
+- Replaced the v0.1.302/306 dual-hook setup (inject + post-filter) with a **single consolidated post-filter** on `BackendInterfaceItemPlayfab.get_filtered_items`. Avoids any chain-order interaction between two hooks on the same method.
+- Hook only runs for the melee-slot filter (`slot_type == melee` substring match). For each item: native melee items (`slot_type ~= "ranged"`) kept as-is; ranged items only kept if `_is_cwv_musket_item` returns true (which iterates `_CWV_CROSS_SLOT_PREFIXES = { "cwv_es_musket", "cwv_es_javelin_shield" }`). Logs kept/dropped counts for diagnostics.
+- Ranged-slot filter untouched — vanilla ranged items continue to appear there naturally.
+
+## 0.1.315-dev (2026-05-11) — Sigmarite Greathammer cosmetics: Kruber + Warrior Priest skins
+
+User: "The 'Sigmarite Greathammer' has no illusions/cosmetics, add all Kruber's normal greathammer cosmetics to it in addition to Saltzpyre's Warrior Priest cosmetic options too. All those."
+
+**Root cause:** `cwv_es_priest_greathammer` had no `item_type` set, so it inherited `skin_combination_table = "wh_2h_hammer_skins"` from its `wh_2h_hammer` clone. The vanilla Warrior Priest combo table was either filtered out by cosmetics_tweaker (mesh mismatch) or simply did not flow into the variant's picker — net result: empty illusion list.
+
+**Fix:** Mirror the `cwv_es_warpriest_hammer` recipe — give the variant its own item_type and dedicated combo table, then seed both Kruber and Warrior Priest greathammer meshes as illusion entries.
+
+- Added `item_type = "cwv_es_priest_greathammer"` to the variant def.
+- Registered `cwv_es_priest_greathammer → "cwv_es_priest_greathammer_skins"` in `_seed_targets` and `_item_type_to_skin_table`.
+- Appended 18 entries to `_custom_illusions` (9 Kruber `es_2h_hammer_skin_*` + 9 Saltzpyre `wh_2h_hammer_skin_*`) with `target_combo = "cwv_es_priest_greathammer_skins"`, `matching_weapon = "wh_2h_hammer"` (so `_apply_skin_to_item` finds `two_handed_hammer_priest_template`), `can_wield = _es_careers`. No scale/offset — both source families are 2H greathammers of comparable size, no rescale needed.
+
+Source skins that aren't defined in `WeaponSkins.skins` at load time (e.g. DLCs the user doesn't own) will warn and skip via `_register_custom_illusions`'s existing guard — no crash.
+
+**DoD:** trait-gated gates not affected; this is purely a cosmetic-pool expansion on an existing variant. Manual verify: enter blacksmith on any Kruber career, view the Sigmarite Greathammer, open the illusion picker, see ~18 entries (or fewer if DLCs missing). Equipping each should swap visuals without breaking the priest moveset.
+
+## 0.1.314-dev (2026-05-11) — Outrider Grenade Launcher reload slowed
+
+Bumped `_OUTRIDER_RELOAD_MULT` from `0.65` → `0.75`. Per-user request to slow the grenade launcher's reload relative to the previous tuning while keeping it faster than the vanilla trollhammer base.
+
+**DoD:** trait-gated gates not affected (single-key constant tweak). Manual verify: load Kruber outrider, fire to empty, observe new reload duration is ~25% faster than trollhammer (was ~35% faster).
+
+## 0.1.313-dev (2026-05-11) — Cross-slot: BACK to broad v0.1.304 behavior + diagnostics, REMOVE post-filter
+- User: "Not available in the melee slot." Both v0.1.311 (custom slot_type) and v0.1.312 (post-filter) failed. Strip everything back to the v0.1.304 approach that we know surfaced items, plus diagnostic logging to confirm the career mutation actually runs.
+- Career-mutation block now iterates ALL of `CareerSettings` (not just a hardcoded Kruber career list) — picks up any career whose `item_slot_types_by_slot_name.slot_melee` is `{"melee"}` and appends `"ranged"`. Also cleans up any `cwv_dual` leftovers from v0.1.311. Uses `mod:echo` to surface the result in the in-game console so the user sees how many careers got extended.
+- **Deferred the mutation via `mod.on_all_mods_loaded`** to guarantee `CareerSettings` is fully populated by then (v0.1.304-312 ran at mod-init time which may be too early).
+- **Post-filter removed.** Until cross-slot is confirmed working at all, every ranged weapon shows in Kruber's melee grid (same as v0.1.304). Once confirmed, will re-add a scoped filter that doesn't break the path.
+
+## 0.1.312-dev (2026-05-11) — Cross-slot: broad career override + scoped post-filter
+- User: "Not available at all, as if it doesn't exist for ranged or melee." v0.1.311's `entry.slot_type = "cwv_dual"` made the items vanish from both grids — MIL or vanilla silently drops items with unrecognized slot_type values.
+- Final architecture: combine the v0.1.304 broad career override (which actually surfaced items in the melee grid — confirmed working) with a post-filter on `get_filtered_items` that removes non-allowlisted ranged items from the melee result. Net effect: only items flagged `def.cross_slot = true` (currently just `cwv_es_musket_old`) appear in both melee and ranged grids; other ranged weapons stay in slot_ranged only.
+- Reverted: `entry.slot_type = "cwv_dual"` (back to inherited "ranged"), the `_get_slot_by_type` alias hook (no longer needed since item keeps a known slot_type), and the v0.1.311 career-extension that added "cwv_dual" to slot lists.
+- Added: `_extend_kruber_melee_slot_with_ranged` cleans up stale "cwv_dual" entries from v0.1.311 attempts AND appends "ranged" to slot_melee (idempotent). Plus a post-filter on `get_filtered_items` for the `slot_type == melee` filter case: keeps native melee items as-is; for ranged items, keeps only those matching `_is_cwv_musket_item` (which itself iterates `_CWV_CROSS_SLOT_PREFIXES`).
+- The post-filter does NOT touch the ranged-slot filter — vanilla ranged items appear there naturally, no scoping needed.
+- Restart required for the broad career mutation to apply cleanly (the v0.1.311 "cwv_dual" entries that may still be in CareerSettings get cleaned up on next init).
+
+## 0.1.311-dev (2026-05-11) — Cross-slot: custom slot_type "cwv_dual" (scoped + reliable)
+- User: "It's now no longer available for melee slot." After v0.1.310 reverted the broad career override and relied purely on the cross-slot inject hook, the musket no longer surfaces in the melee grid. The inject hook is logically correct but evidently doesn't work in the user's live setup; v0.1.268 history shows it once did, so something downstream may have changed.
+- Switched to a **custom slot_type** approach. Best of both: scoped (only cwv variants we flag get it) AND career-filter-level (so the items DO show in the grid).
+  - Variants with `def.cross_slot = true` get `entry.slot_type = "cwv_dual"` (set in `_build_entry`). Currently only `cwv_es_musket_old`.
+  - Kruber's 4 careers (es_mercenary / es_huntsman / es_knight / es_questingknight) have `item_slot_types_by_slot_name.slot_melee` AND `slot_ranged` extended with `"cwv_dual"`. So the melee-slot filter becomes `slot_type == melee or slot_type == cwv_dual`, ranged becomes `slot_type == ranged or slot_type == cwv_dual`. Our flagged items match both; vanilla rifles (`slot_type = "ranged"`) match only ranged.
+  - Block also CLEANS UP any leftover `"ranged"` entry on slot_melee from v0.1.304's mutation (in case the user hasn't restarted yet to revert it).
+  - Hooked `HeroViewStateOverview._get_slot_by_type` to alias `"cwv_dual" → "ranged"` so any no-strict-slot equip path (e.g. cosmetic-loadout sets, loadout reset) resolves to the ranged slot.
+
+## 0.1.310-dev (2026-05-11) — Scope cross-slot to only musket + (future) jav+shield families
+- User: "Other ranged weapons are showing up for use in melee, it's only the musket and the jav+shield that should be right now."
+- **Reverted v0.1.304's career override.** That block extended Kruber's `slot_melee` to accept `"ranged"`, making EVERY ranged weapon (vanilla rifle / blunderbuss / repeater / cwv_es_outrider_grenade_launcher / etc.) appear in the melee inventory grid for all 4 empire careers. Too broad. The `_extend_kruber_melee_slot` block is now an empty placeholder — runtime CareerSettings mutation from v0.1.304 persists for the current session, so a game restart is needed to fully revert.
+- **Switched to a scoped allowlist for cross-slot inject.** New constant `_CWV_CROSS_SLOT_PREFIXES = { "cwv_es_musket", "cwv_es_javelin_shield" }`. `_is_cwv_musket_item` now iterates the allowlist instead of the single hardcoded `"cwv_es_musket"` match. `string.find(key, prefix, 1, true) == 1` is a plain prefix match (covers per-instance backend_ids like `cwv_es_musket_old_001`).
+- The `"cwv_es_javelin_shield"` prefix is kept forward-compat — v0.1.308 reverted that variant but TODO says it'll be re-implemented mirroring the cwv_es_musket_old recipe. When it returns, the cross-slot inject already accepts it without further changes.
+
+## 0.1.309-dev (2026-05-11) — cwv_es_longsword_shield: relax 3P sword shrink by +0.05 per axis
+- User feedback: v0.1.265's 3P shrink `{0.85, 0.65, 0.75}` was too aggressive next to the shield.
+- Bumped `_type_transforms.cwv_es_longsword_shield.right_hand_scale_3p` from `{0.85, 0.65, 0.75}` → `{0.9, 0.7, 0.8}` (+0.05 every axis). 1P unchanged (`{1.0, 0.8, 0.9}`), grip offset unchanged.
+- Affects right-hand sword mesh only; shield (left) still untouched.
+
+## 0.1.308-dev (2026-05-11) — Revert v0.1.288 cwv_es_javelin_shield (broke cwv_es_javelin model rendering)
+- Reverted: variant def `cwv_es_javelin_shield`, templates `cwv_javelin_shield_template_ranged` / `cwv_javelin_shield_template_melee`, toggle helper `_toggle_javelin_shield_stance_and_rewield`, `_attach_stance_toggle_action_three` helper, the `_force_load_javelin_shield_melee_assets` block, and the second `BackendUtils.get_item_template` hook block.
+- User report: after v0.1.288 the existing Tuskgor Javelin (`cwv_es_javelin`) lost its boar-spear left-hand model in both 1P and 3P; 3P showed an unwanted (wrong) left-hand model and no model on the right. Stance toggle on the new variant did nothing visible. Reverting to v0.1.307 baseline to confirm cwv_es_javelin works again, then re-approach by following `cwv_es_musket_old` (the currently-working stance-toggle variant) exactly — a single consolidated `BackendUtils.get_item_template` hook plus a `slot_data.skin`-pattern-aware projectile init hook, instead of a parallel second hook block.
+- TODO entry for `cwv_es_javelin_shield` remains in `character_weapon_variants/TODO.md` — to be re-implemented by mirroring the live `cwv_es_musket_old` recipe rather than the older (commented-out) `cwv_es_musket` recipe in `reference_cwv_stance_toggle_recipe.md`.
+
+## 0.1.307-dev (2026-05-11) — Old Musket: stance-toggle was the actual free-reload exploit (not _wield_slot)
+- User: "None of it works, try again." Traced the exploit precisely — the v0.1.305/306 `_wield_slot` PRE/POST mechanism was correct but **wasn't the right hook**. The real exploit is in **our own** `_toggle_musket_stance_and_rewield` helper, not vanilla wield. Three compounding issues:
+  1. We captured ammo state as `total_ammo_fraction = (current + reserve) / max`. The fraction collapses chamber and reserve into one number. With 0 chambered + 10 reserve, fraction = 10/11. Mid-reload (still 0 + 10), same fraction.
+  2. Passed that fraction as `ammo_percent` to `add_equipment`. Vanilla reconstructs: `_start_ammo = round(0.909 * 11) = 10`, then `_current_ammo = min(ammo_per_clip, start_ammo) = min(1, 10) = 1`. **Always 1 chambered after spawn, regardless of pre-toggle state.** Free chamber refill every stance toggle.
+  3. The stance-toggle path destroys+adds+wields rather than going through `_wield_slot`'s unwield-then-wield flow, so my v0.1.306 PRE-hook never saw the outgoing-reloading state — flag was never set, POST cancellation never fired.
+- Fix: capture `_current_ammo`, `_available_ammo`, `_shots_fired`, and `is_reloading()` SEPARATELY on the outgoing ammo extension. Persist all four on `item_data.mod_data` (so they survive ranged→melee→ranged where the melee unit has no ammo extension). Pass `ammo_percent = 0` to `add_equipment` (so vanilla spawns the unit at 0/0). Then POST-wield, find the new ammo extension and restore the precise captured values. If reloading was in progress at toggle time, also set `cwv_musket_reload_interrupted = true` AND directly call `abort_reload` on the freshly-spawned extension (since vanilla may have auto-started a reload during wield while ammo was momentarily 0).
+- Also re-sync the shared ammo pool from the restored reserve so any other equipped cwv musket sees the same reserve number.
+
+## 0.1.306-dev (2026-05-11) — Old Musket: shared reserve ammo pool + reload-exploit fix (real this time)
+- **Reload-cancel exploit (v0.1.305 fix didn't take).** Root cause: my `_wield_slot` PRE/POST checks used `item_data.backend_id`, but cwv entries store backend_id in `item_data.mod_data.backend_id` (see `_build_entry`). The regex never matched, the flag was never set, the auto-reload-on-wield was never cancelled. Added helper `_item_backend_id(item_data)` that checks both locations (direct field AND mod_data fallback). PRE detects reloading-cwv-musket being unwielded → marks `item_data.mod_data.cwv_musket_reload_interrupted`. POST: if incoming has the flag and vanilla just kicked off auto-reload, abort it and clear the flag (one-shot, manual R works normally afterward).
+- **Shared reserve ammo pool across cwv musket items.** Per user spec: when cwv musket is equipped in both slot_melee and slot_ranged, each item keeps its own CHAMBER (`_current_ammo`, capped by `ammo_per_clip = 1`) but the RESERVE (`_available_ammo`) is pooled. Max reserve per musket = 10 (max_ammo 11 - clip 1). Two equipped = 20 shared reserve + 1+1 separate chambers.
+  - Mechanism: weak-keyed set `_CWV_MUSKET_AMMO_EXTS` tracks registered ammo extensions. Each cwv musket's ammo extension is marked + registered in our existing `GearUtils.spawn_inventory_unit` post-hook for cwv_es_musket_old items.
+  - Sync helper `_cwv_musket_sync_pool(source_ext)` copies the source's `_available_ammo` (capped by `count × 10`) to every other alive pool member.
+  - Hook `GenericAmmoUserExtension.update` POST — when vanilla's reload-completion mutates `_available_ammo` in-place (line 174 of vanilla extension), our hook detects the change and sync's pool members.
+  - Hook `GenericAmmoUserExtension.add_ammo` POST — ammo pickups propagate to pool.
+  - New ext registration inherits the existing pool value (so a freshly-spawned second musket sees pool ammo, not a default reset).
+- New diagnostic command: **`cwv_musket_ammo_diag`** dumps every alive cwv musket ammo extension's `_current_ammo` / `_available_ammo` / `_shots_fired` / `_next_reload_time` plus the pool cap. Use to verify pool behavior at runtime.
+
+## 0.1.305-dev (2026-05-11) — Old Musket: ammo + spread + penetration + anti-swap-exploit
+- **Fix the Lua 200-locals compile error.** v0.1.304 hit the Lua 5.1 main-chunk limit. Wrapped the v0.1.300 / v0.1.301 / v0.1.304 helper blocks in `do ... end` so the locals declared inside don't consume top-level slots.
+- **Tuning per user spec.** All values relative to the **vanilla** rifle, not stacked on the (on-ice) cwv_es_musket modifiers:
+  - Reload time: **1.5x** vanilla (already done in v0.1.300, confirmed)
+  - Max ammo: **11** (vanilla rifle ships with 16)
+  - Hip-fire spread: **1.5x wider cone** via new `SpreadTemplates.cwv_old_musket`. Scaled `continuous.{still,moving,crouch_still,crouch_moving}.max_pitch/max_yaw` only — `zoomed_*` (ironsights / ADS) cones left at vanilla.
+  - Penetration: **cleave_distribution.attack = 1.5** (vanilla shot_sniper = 0.3) so the shot punches through ~6 regular enemies. `impact = 0.6`. Plus `armor_modifier_near.attack[4..6]` and `armor_modifier_far.attack[4..6]` each bumped by +0.2 so the shot reads as "a bit better through armor" on the super-armored / berserker / chaos-warrior tiers, without becoming a tank-deleter.
+- **Anti-exploit: reload-cancel-via-swap.** User report: empty rifle mid-reload → swap to melee → swap back → fully reloaded. Root cause: vanilla `SimpleInventoryExtension._wield_slot:2046-2068` auto-triggers a reload on wield when `ammo_count == 0`. The player could swap-cycle to "fake" a free reload (visually it appeared instantly loaded because the wield animation finished before the reload state was visible).
+  - Fix: replaced the existing v0.1.281 `hook_safe` on `_wield_slot` with a full `mod:hook` wrapper. PRE-wield: detect if the outgoing weapon is a cwv musket variant currently reloading; if so, set `item_data.mod_data.cwv_musket_reload_interrupted = true`. POST-wield: if the incoming weapon is a flagged cwv musket and vanilla just kicked off the auto-reload, call `abort_reload` on it and clear the flag (one-shot — a future manual reload via R works normally).
+  - The bayonet-visibility sync (v0.1.281 behavior) is preserved by running it at the end of the new wrapper.
+
+## 0.1.304-dev (2026-05-11) — Old Musket: extend Kruber's melee slot to accept ranged weapons (canonical fix)
+- Compile error after v0.1.304: `main function has more than 200 local variables`. Lua 5.1 / LuaJIT have a hard limit of 200 locals in any single function (including the top-level chunk). The mod file accumulated past it. Fixed by wrapping the v0.1.300 + v0.1.301 Old Musket template setup blocks in `do ... end` scopes — locals declared inside go out of scope at the `end`, freeing slots back to the main chunk. Same wrap applied to the new v0.1.304 `_extend_kruber_melee_slot` helper.
+- User-spec stat tuning for Old Musket (all relative to **vanilla** rifle baseline, not stacked on the existing cwv_es_musket modifiers):
+  - Reload time: **1.5x** vanilla (confirmed already in place from v0.1.300)
+  - Max ammo: **11** (vanilla rifle has 16)
+  - Hip-fire spread cone: **1.5x** wider via cloned `SpreadTemplates.cwv_old_musket`. Scaled `continuous.{still, moving, crouch_still, crouch_moving}.max_pitch / max_yaw` only — `zoomed_*` (ironsights ADS) left at vanilla so aimed-down-sights stays precise. `template.default_spread_template = "cwv_old_musket"` on `old_musket_template`.
+
+## 0.1.304-dev (2026-05-11) — Old Musket: extend Kruber's melee slot to accept ranged weapons (canonical fix)
+- v0.1.302's cross-slot inject was logically correct but evidently not surfacing the variant in the melee slot for the user. Switched to the **vanilla pattern** Fatshark themselves used for the Outcast Engineer's crank gun: modify the career's `item_slot_types_by_slot_name`. The Engineer's `career_settings_bless.lua:84` lists `slot_ranged = { "melee", "ranged" }` so the ranged slot grid accepts both. Mirroring that for Kruber's melee slot.
+- New `_extend_kruber_melee_slot()` runs at mod init. Walks `CareerSettings.es_mercenary / es_huntsman / es_knight / es_questingknight` and appends `"ranged"` to each career's `item_slot_types_by_slot_name.slot_melee` (idempotent — won't duplicate). The 4 empire careers' melee inventory grid now accepts items with slot_type "melee" OR "ranged". cwv_es_musket_old (slot_type=ranged via inherited es_handgun) is now natively in the melee grid filter.
+- Trade-off: ALL ranged weapons (vanilla rifle / blunderbuss / repeater / cwv_es_outrider_grenade_launcher etc.) ALSO appear in Kruber's melee grid for these 4 careers. Acceptable per user direction ("ENABLED FOR THE MELEE SLOT") and consistent with how the Engineer is set up by Fatshark. If we ever need to scope tighter, the alternative is using a custom slot_type per-variant + adding that custom type to both grids — but that breaks the no-strict-slot equip path (`_get_slot_by_type` returns nil for unknown types).
+- The cross-slot inject hook from v0.1.302 stays in place as a belt-and-braces backup for any UI path that calls `get_filtered_items` with a non-career-derived filter. Not load-bearing anymore.
+
+## 0.1.303-dev (2026-05-11) — Old Musket: diagnostic logging for melee-slot equip + cwv_musket_dump command
+- User report: v0.1.302's cross-slot re-enable didn't actually surface the variant in the melee slot. Hook code looks logically correct; verified deploy bundle contains the new strings; can't reproduce without instrumentation.
+- Added verbose log line on EVERY firing of the `BackendInterfaceItemPlayfab.get_filtered_items` hook for slot-type filters. Prints the exact filter string, count of items vanilla returned, count of cwv musket items considered, count injected, and the list of seen backend_ids. Should reveal whether the hook is firing, whether the items are visible in `all_items`, and whether they got appended.
+- New command `cwv_musket_dump`: walks the player's backend mirror and prints every musket-keyed item with its `slot_type` / `template` / `rarity`. Also prints the `ItemMasterList` entries for `cwv_es_musket_old` / `cwv_es_musket` / `es_handgun` and confirms `Weapons.old_musket_template` / `_melee` are registered.
+
+## 0.1.302-dev (2026-05-11) — Old Musket: enable equip in melee inventory slot (undo v0.1.300 cross-slot exclusion)
+- User report (3rd attempt to make it land): "It needs to be ENABLED FOR THE MELEE SLOT." The earlier instruction in v0.1.300 ("not enabled for usage in the melee slot") was a **report of current state**, not an instruction to remove the variant from the melee grid — the user wanted it added to the melee grid since it wasn't there.
+- Undid the v0.1.300 cross-slot exclusion. The `_is_cwv_musket_item` filter in `BackendInterfaceItemPlayfab.get_filtered_items` now injects cwv_es_musket_old items into both the ranged and melee inventory grids, same as cwv_es_musket would.
+- Stance toggle behavior unchanged (works in either slot — vanilla just sees a single item; the slot it's equipped in is independent of the moveset template).
+
+## 0.1.301-dev (2026-05-11) — Old Musket: restore stance toggle (ranged-slot-only, but special key still flips moveset)
+- User report: "I lost the ability to switch between melee and ranged using the weapon special key." Distinguished v0.1.300 "ranged-only" instruction — the user meant **ranged inventory SLOT only**, NOT no stance toggle. The bayonet-mode behavior (special key swap to polearm moveset) should stay.
+- Added: `Weapons.old_musket_template_melee` — clone of `two_handed_heavy_spears_template` (Tuskgor spear, same base as cwv_es_musket's bayonet stance) with:
+  - **range_mod 1.2** on every sub-action that authors one (absolute, vs vanilla spear's 1.35)
+  - **0.9x attack damage** on cloned damage profiles (keys like `cwv_old_musket_melee_heavy_slashing_smiter_stab_polearm`). Stagger left at vanilla 1.0x (user didn't ask for stagger change). Per user "based on the original rifle" — anchored to vanilla spear baseline, not the existing musket bayonet's modifiers.
+  - Action_three stance toggle → `_toggle_musket_stance_and_rewield` (generalized below)
+  - `display_unit` set to `display_1h_handguns` (mirrors musket_template_melee)
+- Added: `action_three` stance toggle on `old_musket_template` (ranged side). Same dummy-action pattern + `_toggle_musket_stance_and_rewield` call as `musket_template`.
+- Generalized: `_toggle_musket_stance_and_rewield` gate now accepts `old_musket_template / _melee` templates in addition to `musket_template / _melee`. Stance flag (`item_data.mod_data.cwv_musket_stance`) is per-item so no name collision between the two variants — they just share helper code.
+- Generalized: `BackendUtils.get_item_template` hook routes by variant family. cwv_es_musket items → musket_template / _melee; cwv_es_musket_old items → old_musket_template / _melee. Detection via template field OR backend_id prefix (`^cwv_es_musket_old_` is checked BEFORE `^cwv_es_musket_` because the latter is a substring of the former).
+- Extended: `spawn_inventory_unit` hook gate now accepts `Weapons.old_musket_template_melee`. Mode detection (`_mode = ... and "melee" or "ranged"`) now treats either melee template as melee, so 1P-MELEE transform tunings apply correctly when the user toggles into bayonet stance.
+- Bayonet child-unit spawn for old musket stays SUPPRESSED (v0.1.278 gate intact) — the custom mesh has a bayonet baked into the FBX so no extra unit is needed.
+- Cross-slot inventory inject (v0.1.300) still excludes `cwv_es_musket_old` items, so the inventory grid still shows the variant only in the ranged slot.
+
+## 0.1.300-dev (2026-05-11) — Old Musket: ranged-only with dedicated template; original Musket on ice
+- User direction: Old Musket is **ranged-only**. Disable melee slot, drop the stance toggle / bayonet. Stat modifiers (vs vanilla `handgun_template_1`, not stacked on existing musket changes):
+  - Reload time: **1.5x vanilla** (50% slower)
+  - Ranged power: **1.5x vanilla** (+50% via cloned damage profile `cwv_old_musket_shot`)
+- New: `Weapons.old_musket_template` — direct clone of `handgun_template_1` + the two modifiers above. No stance toggle, no bayonet attach. Variant entry switched from `template = "musket_template"` → `template = "old_musket_template"`.
+- cwv_es_musket variant (vanilla rifle + scaling + stance toggle) **put on ice** as a backup idea per user request. Variant entry commented out (not deleted). Supporting code (musket_template / musket_template_melee / bayonet system) is still in place so the variant can be revived by just uncommenting the entry — no code restoration needed.
+- Three call-site updates to keep the new template working with existing infrastructure:
+  1. **spawn_inventory_unit hook gate** now accepts `Weapons.old_musket_template` (in addition to the two musket templates) so texture binding, transform tuning, and FX-proxy spawn still fire for the old musket.
+  2. **BackendUtils.get_item_template hook** short-circuits for `template == "old_musket_template"` and the `^cwv_es_musket_` backend_id pattern now excludes `^cwv_es_musket_old_` — without these, the stance lookup would swap old-musket items back to the on-ice musket_template at every equip.
+  3. **Cross-slot inventory inject** (BackendInterfaceItemPlayfab.get_filtered_items hook) now skips items matching `^cwv_es_musket_old`. Old musket is ranged-only; vanilla's `slot_type == ranged` filter already includes it. Inject would have wrongly placed it in the melee grid too.
+- Description updated to drop melee references. 1P-MELEE transform state still lives in code (and the `cwv_om_*_1p_m` commands still work) but doesn't trigger for the old musket — useful if melee slot is ever reconsidered.
+
+## 0.1.299-dev (2026-05-11) — Old Musket: 1P MELEE transform defaults locked in
+- User-confirmed 1P MELEE values from live-tune: pos `(0, 0.06, 0)`, rot axis `(0, 1, 0) @ -90°` (pure Y-axis), scale identity. Defaults now bake those values via `QuaternionBox(Quaternion.axis_angle(...))`. 3P remains at identity (works without adjustment).
+
+## 0.1.298-dev (2026-05-11) — Old Musket: wrap rotation state in QuaternionBox (cross-frame storage)
+- User report: "We seem to have lost the first person settings for ranged" — gun perpendicular to expected orientation and on its side. v0.1.295's 1P-RANGED rotation values WERE confirmed working in v0.1.296; v0.1.297 inadvertently broke them.
+- Root cause: v0.1.297 stored `Quaternion.axis_angle(...)` directly in a global, but Stingray's `Quaternion` type is a **stack-allocated temporary** valid only within the frame it was created. After the frame ended, the memory got recycled by other Quaternion operations, and our stored value pointed at garbage / a different rotation. Vanilla VT2 pattern (e.g., `bt_attack_action.lua:99`, `ai_bot_group_system.lua:460`): use `QuaternionBox(rotation)` to box for long-term storage, `:unbox()` to retrieve a fresh raw Quaternion when needed.
+- Fix: every place that STORES a rotation now wraps in `QuaternionBox(...)`; every place that READS (apply, show) calls `:unbox()`. Helper `_unbox_or_identity(boxed)` returns `boxed:unbox()` or `Quaternion.identity()` for nil. The mul commands unbox the current state, multiply with the new raw quaternion, and re-box the result.
+- Same rule applies to `Vector3` in principle, but our pos/scale state is stored as Lua tables `{x, y, z}` and converted to `Vector3(...)` at apply time — that's already safe (the Vector3 is created and immediately consumed, no cross-frame storage).
+
+## 0.1.297-dev (2026-05-11) — Old Musket: composable rotations (`rotmul`, `eul`) + Quaternion state
+- Refactored rotation state from `{ax, ay, az, radians}` axis-angle table → `Quaternion` (or nil = identity). Single axis-angle can't represent composed rotations, but Quaternions compose via `Quaternion.multiply`. Defaults preserved: 1P-RANGED still defaults to `Quaternion.axis_angle(Vector3(1,1,-1), -π/2)` from v0.1.295.
+- Three rotation operations per bucket now (1P-RANGED / 1P-MELEE / 3P = 9 commands):
+  - `cwv_om_rot_<bucket> <ax> <ay> <az> <deg>` — SET (replace current with single axis-angle)
+  - `cwv_om_rotmul_<bucket> <ax> <ay> <az> <deg>` — MULTIPLY current rotation by a new axis-angle (compose on top)
+  - `cwv_om_eul_<bucket> <x_deg> <y_deg> <z_deg>` — SET from Euler XYZ degrees
+- `cwv_om_show` now decomposes the rotation via `Quaternion.to_euler_angles_xyz` so the echoed values are readable (`euler_xyz=(x°, y°, z°)`).
+- Composition use case: keep current base orientation (e.g. axis (1,1,-1) @ -90°) and add a barrel roll via `cwv_om_rotmul_1p_r 0 0 1 90` (try X/Y/Z axes — whichever rolls the gun the way you want is the barrel axis after the base rotation).
+
+## 0.1.296-dev (2026-05-11) — Old Musket: FX-proxy linked to player hand (fixes muzzle origin)
+- User report: muzzle FX appeared "under the camera in first person, stomach in 3P".
+- Root cause: v0.1.293–295 linked the FX proxy to `our_unit`'s root via `World.link_unit(world, proxy, 0, our_unit, 0)`. The proxy then inherited our visible mesh's transform chain, including the rotation `(1,1,-1) @ -90°` we applied to align the visible mesh with the player's grip. That rotation flips the rifle's "forward" axis — so the proxy's `fx_muzzle` node (offset forward in the vanilla rifle FBX) ended up pointing toward the camera in 1P or back toward the chest in 3P. Flow events spawned particles at that misaligned muzzle world position.
+- Fix: link the proxy directly to `owner_unit_1p` / `owner_unit_3p` at the `j_rightweaponattach` bone — the same attachment node vanilla `AttachmentNodeLinking.rifles` uses for the rifle's root. The proxy now gets vanilla's natural pose (independent of our visible mesh's reorientation), so its `fx_muzzle` ends up where a vanilla empire-handgun's muzzle would naturally be: in front of the player's hand. Muzzle flash + bullet trail + casing eject all spawn from there.
+- Reset proxy's local transform to identity (`set_local_position/rotation/scale` to identity / 1) after linking, since spawn pos+rot would otherwise be preserved as the local-relative-to-parent transform and shift node positions.
+- Trade-off: FX emission point follows vanilla rifle's silhouette, not our visible mesh's silhouette (longer barrel etc). If the FX visibly mismatches the visible barrel end, we can offset the proxy's local position to shift the muzzle forward. Tunable via a future `cwv_om_fx_offset` command if needed.
+
+## 0.1.295-dev (2026-05-11) — Old Musket: 1P transform locked in for ranged stance; split state by mode
+- User-confirmed 1P ranged values dialed in: pos `(0, 0.62, 0)`, rot axis `(1, 1, -1) @ -90°`, scale `(1, 1.2, 1.4)`. Default 1P-ranged constants now hold those values.
+- Restructured transform state from (1P / 3P) to (1P-RANGED / 1P-MELEE / 3P) since the musket stance toggle switches between `musket_template` (ranged rifle pose) and `musket_template_melee` (polearm pose) with different visual requirements per stance.
+- The spawn_inventory_unit hook reads `item_template` to determine mode (`item_template == Weapons.musket_template_melee → "melee"`, else `"ranged"`) and routes to the correct state bucket via the new `_apply_old_musket_transform(unit, perspective, mode)` signature.
+- 10 commands now (3 ops × 3 buckets + show):
+  - `cwv_om_pos_1p_r / _1p_m / _3p <x> <y> <z>`
+  - `cwv_om_rot_1p_r / _1p_m / _3p <ax> <ay> <az> <degrees>`
+  - `cwv_om_scale_1p_r / _1p_m / _3p <x> <y> <z>`
+  - `cwv_om_show` — echoes all three buckets
+- 1P MELEE state currently identity (placeholder); user will tune live and persist desired values after that.
+
+## 0.1.294-dev (2026-05-11) — Old Musket: FX-proxy fixes — spawn args + flow_event/set_flow_variable hooks
+- User report after v0.1.293: still no sound or visual effects.
+- Investigation:
+  1. `Managers.state.unit_spawner:spawn_local_unit(unit_name, position, rotation, material)` requires position+rotation. v0.1.293 called with no args so `World.spawn_unit(world, name, nil, nil)` likely errored silently inside the pcall. Now passes the parent mesh's current world position/rotation as initial placement (then `World.link_unit` parents to mesh root so it tracks).
+  2. Added diagnostic logging (`[cwv old-musket fx] proxy spawned: ...`) so the next mission load reveals whether spawn succeeded.
+  3. Added hooks on `Unit.flow_event` and `Unit.set_flow_variable` (in addition to `Unit.node` / `Unit.has_node` from v0.1.293). `ActionHandgun:client_owner_post_update` fires `Unit.flow_event(weapon_unit, "lua_bullet_trail")` on the weapon — this drives bullet-trail particles via the rifle's compiled flow graph. Our custom mesh has no flow graph so the call no-ops. Hooks redirect: when the targeted unit is in our proxy table, forward the call to the proxy (which has the full vanilla flow graph baked in).
+- Note: `action_base.lua:5` does `local unit_flow_event = Unit.flow_event` at module load time — captured BEFORE our hook installs, so calls THROUGH that local bypass our hook. But action_base's three `unit_flow_event(...)` callsites all target `owner_unit` or `first_person_unit` (the player's body units), not the weapon. Weapon-targeted flow events come from action_handgun.lua which calls `Unit.flow_event(weapon_unit, ...)` directly through the table — our hook catches those.
+
+## 0.1.293-dev (2026-05-11) — Old Musket: live-tune commands, previewer textures, FX-proxy (approach A)
+- **Live-tune commands** (replacing the v0.1.286-deleted set, now per-perspective):
+  - `cwv_om_pos_1p / cwv_om_pos_3p <x> <y> <z>` — translation
+  - `cwv_om_rot_1p / cwv_om_rot_3p <ax> <ay> <az> <degrees>` — axis-angle rotation
+  - `cwv_om_scale_1p / cwv_om_scale_3p <x> <y> <z>` — local scale
+  - `cwv_om_show` — echo current 1P and 3P values
+  - State stored in module-globals (`_CWV_OLD_MUSKET_POS_1P` etc.) at file top. Weak-keyed tracking sets `_CWV_OLD_MUSKET_UNITS_1P/3P` populated by the GearUtils.spawn_inventory_unit hook so command changes propagate to all currently-spawned instances (including the inventory previewer). Defaults are identity (FBX-authored transform).
+- **HeroPreviewer texture binding**: extended the existing `_cwv_spawn_item_post` callback. When the previewer spawns cwv_es_musket_old, walk the right-hand unit and apply textures (same `_apply_old_musket_textures` helper as the in-mission path). Also tracks for live-tune + applies current transform. Fixes the inventory character-preview UI showing a white mesh.
+- **Approach A — hidden vanilla rifle for sound/VFX**: vanilla actions look up named nodes like `fx_muzzle` / `j_hammer` / `j_trigger` on the weapon unit. Our custom FBX has none of those nodes baked in, so muzzle flash, smoke, casing-eject, and Wwise sound emission all no-op (or error). Fix:
+  1. After our custom mesh spawns, spawn a vanilla `wpn_empire_handgun_t1` 1P + 3P unit via `Managers.state.unit_spawner:spawn_local_unit` (no extensions).
+  2. `World.link_unit` the proxy as a child of our mesh's root, then `Unit.set_unit_visibility(proxy, false)` so it never renders.
+  3. Store `our_unit → proxy_unit` in `_CWV_OLD_MUSKET_FX_PROXY` (weak-keyed).
+  4. Hook `Unit.node` and `Unit.has_node` globally: when the unit being queried is in our proxy table and the requested name doesn't resolve on it, redirect to the proxy's node. Every other Unit.node call in the game is untouched (proxy-table lookup is a fast weak-table read; no proxy entry → straight passthrough).
+  5. Extended `GearUtils.destroy_wielded` hook to call `_destroy_old_musket_fx_proxy` so the hidden rifle is `mark_for_deletion`'d alongside its parent.
+  - Captured the pre-hook `Unit.has_node` reference BEFORE installing the hook so the Unit.node hook can probe-our-mesh-first without re-entering the has_node hook chain (avoids spurious "either has it → use orig on mesh that doesn't have it → engine fatal").
+- Expected behavior: muzzle flash, shot sound, reload click, casing eject, all wired through Unit.node-based action code should now fire from the right world position (our mesh's hand-attached position, since the hidden rifle is linked to its root). Flow-event-driven FX baked into the vanilla rifle's compiled unit also fire normally since the proxy is a real unit. Anything that uses a HARDCODED-by-handle reference to a specific unit ID wouldn't be redirected, but those are rare in VT2 action code.
+
+## 0.1.292-dev (2026-05-11) — Old Musket: bind custom PBR textures at runtime (mesh was white)
+- After v0.1.286's architectural rewrite, mesh attached/rendered correctly but appeared opaque white. Root cause: switching to the LA pattern dropped our custom `.material` file (which had bound our PBR textures at compile time). The engine doesn't auto-resolve `data.mat_to_use` to a material+textures binding — that field is just metadata that LA's runtime code reads. Without a `materials = {}` block AND without runtime texture binding, the FBX-embedded material on our mesh stayed at default white.
+- The textures are already shipped at `textures/cwv_es_musket_custom/` (albedo, normal, metallic, AO, roughness — all PNG+`.texture`). They were referenced by the deleted `.material` file in v0.1.285 and earlier.
+- Fix (mirrors LA's `apply_texture_to_all_world_units` in `utils/funcs.lua:4`): extended the existing `GearUtils.spawn_inventory_unit` hook. When the spawned weapon's `item_data.backend_id` matches `cwv_es_musket_old`, walk both 1P and 3P units via `Unit.num_meshes` → `Unit.mesh` → `Mesh.num_materials` → `Mesh.material`, and call `Material.set_texture(mat, slot_hash, texture_path)` for the three PBR slots:
+  - `texture_map_c0ba2942` (color/albedo) → `cwv_es_musket_custom_albedo`
+  - `texture_map_59cd86b9` (normal) → `cwv_es_musket_custom_normal`
+  - `texture_map_0205ba86` (MAB) → `cwv_es_musket_custom_metallic`
+- Known follow-ups: HeroPreviewer + LootItemUnitPreviewer paths also need this binding for the mesh to appear correctly textured in the inventory UI and skin browser. Adding once in-mission is confirmed via this release.
+
+## 0.1.291-dev (2026-05-11) — Fix: use Unit.has_node (pcall doesn't catch Stingray engine errors)
+- Crash on startup with the same `[Script Error]: j_lock` after v0.1.290's filter was supposed to fix it (GUID e72b504c).
+- Root cause: v0.1.290 used `pcall(Unit.node, target, "j_lock")` to probe whether the target had the node. But Stingray's `Unit.node` raises an **engine-level fatal** when the name doesn't resolve — pcall doesn't catch these. The "j_lock" string in the error is what `Unit.node` threw; the surrounding pcall was bypassed entirely.
+- Fix: replaced the pcall probe with `Unit.has_node(target, name)`, which returns a boolean. Verified pattern in vanilla `ai_bot_group_system.lua:190`: `Unit.has_node(unit, node_name) and Unit.node(unit, node_name) or 0`.
+- Memory updated: LA-pattern recipe Part 4 now uses `Unit.has_node` instead of pcall.
+
+## 0.1.290-dev (2026-05-11) — Old Musket: filter attachment_node_linking for rig-less custom mesh
+- Crash on equip after our mesh appeared briefly (white/no-texture) then `[Script Error]: j_lock` (GUID 5c21d3b1).
+- Root cause: vanilla `GearUtils.link_units` iterates `AttachmentNodeLinking.rifles.first_person.wielded`, which contains 4 entries — 3 link player-hand component bones (`j_rightweaponcomponent1/2/3`) to weapon rig nodes (`j_lock`, `j_hammer`, `j_trigger`). Our FBX has no skeleton (just mesh geometry), so `Unit.node(target, "j_lock")` errors.
+- Fix: hooked `GearUtils.link_units`. Probes the target unit by attempting `Unit.node(target, "j_lock")` — if the call errors, the target is a rig-less mesh (our custom unit) and we filter the linking table to entries whose target resolves on it (always the `target = 0` root-node entry, plus any named-node entries that happen to exist). The root entry is what physically attaches the weapon to the hand; the others are decorative finger-pose links that only matter for vanilla rifles with the full rig.
+- Live verification: weapon should now attach to the right hand without crashing. Finger-on-trigger/hammer pose will be slightly off (the player's component-bones won't be locked to weapon parts), but the weapon will be wielded correctly.
+
+## 0.1.289-dev (2026-05-11) — Fix: drop unloadable `display_shield_spear` force-load
+- Crash on startup: `[Engine Error]: Resource '#ID[3445b9bc494ef8b3]' was not found!` (GUID 84a074da). Hash reverses to `units/weapons/weapon_display/display_shield_spear` (per `reference_vt2_hash_reverse_lookup.md`).
+- Root cause: v0.1.288's `_force_load_javelin_shield_melee_assets` tried to force-load the display unit path via `Managers.package:load`, but display units are bundled INSIDE other packages — not registered as per-asset loadable paths in `scripts/network_lookup/inventory_package_list.lua`. The async load fatals with "Resource not found", which bypasses the surrounding synchronous pcall (engine error, not a Lua error).
+- This is the **same failure mode as v0.1.224** (which dropped `display_2h_spears_wood_elf`). Generalized rule: only force-load paths that appear in `inventory_package_list.lua`. `1h_spear_shield` state machine is on line 252 → loadable. `display_shield_spear` is not in the list → not loadable.
+- Fix: dropped `display_shield_spear` from the force-load list. Only `1h_spear_shield` state machine is force-loaded now.
+
+## 0.1.288-dev (2026-05-11) — New variant: Tuskgor Javelin & Shield (Kruber, stance toggle, v1)
+- Added: `cwv_es_javelin_shield` for Empire Soldier (Kruber, all careers). Ranged stance is identical to `cwv_es_javelin` (Tuskgor Javelin throw — boar spear visual, 10 ammo, sticks-in-walls pickup, etc.). Weapon special key toggles to a 1H spear+shield melee stance with `range_mod = 1.15` (≈0.85x of vanilla 1.35). Same stance-toggle recipe as `cwv_es_musket` (see `reference_cwv_stance_toggle_recipe.md`).
+- Implementation:
+  - Two new templates registered on `Weapons`: `cwv_javelin_shield_template_ranged` (clone of `tuskgor_javelin_template`) and `cwv_javelin_shield_template_melee` (clone of `one_handed_spears_shield_template`). Each replaces `action_three` with the stance-toggle dummy and gets `lookup_data` attached on every sub-action.
+  - Per-item stance flag at `item_data.mod_data.cwv_javelin_shield_stance` ("ranged" | "melee", default ranged). Ammo fraction persisted on `mod_data.cwv_javelin_shield_ammo_fraction` so ranged→melee→ranged keeps the same ammo count.
+  - Toggle helper `_toggle_javelin_shield_stance_and_rewield`: flip flag → capture ammo (or restore from mod_data when wielded slot has no ammo extension) → `destroy_slot` → `add_equipment` (5th arg = ammo fraction) → `wield`.
+  - New `mod:hook("BackendUtils", "get_item_template", ...)` block for the javelin+shield items — separate from the musket hook, both chain via VMF.
+  - Force-loaded `state_machines/melee/1h_spear_shield` and `weapon_display/display_shield_spear` so the first ranged→melee toggle doesn't crash "Resource not loaded" on Kruber's loadout (same pattern as `_force_load_musket_melee_assets`).
+- v1 limitation: shield not visually mounted in melee stance. The IML keeps the Tuskgor rig (`right=invisible, left=boar spear, ammo=invisible`) and IML unit fields win over the melee template's defaults in `GearUtils.create_equipment`. Block mechanics (shield_block, block_angle 120, outer_block_angle 360) inherited from the spear+shield template DO work — just no visible shield mesh. v2 polish: spawn a shield child unit on melee toggle like the bayonet pattern.
+- **DoD:** Universal gate not fully walked (G-RANGED inherited from existing Tuskgor Javelin, G-STANCE matches musket recipe). Live verification needed: equip in modded realm, confirm ranged-stance behaves like vanilla Tuskgor Javelin, press special to toggle to melee, verify spear+shield 1P + 3P animations play on Kruber's skeleton (likely 3P holes — Empire skeleton has spear+shield events natively? requires `force3p` probe). Visible-shield deferred to v2.
+
+## 0.1.287-dev (2026-05-11) — Old Musket: register custom paths in NetworkLookup.inventory_packages
+- Crash on equip: `[NetworkLookup.lua] Table inventory_packages does not contain key: units/cwv_es_musket_custom/cwv_es_musket_custom_3p`.
+- Root cause: vanilla code indexes `NetworkLookup.inventory_packages[unit_path]` during equip to get a network sync index. That table has a strict `__index` metamethod that errors on unknown keys (same family as `NetworkLookup.breeds` per `feedback_vt2_strict_lookup_rawget.md`).
+- Fix: at mod-init time, alias our two custom unit paths to the vanilla rifle's existing network indices via direct table assignment. Forward direction only — we don't hijack the reverse index→path mapping like LA's skin-replacement code does, because cwv variants don't replace vanilla weapons globally.
+- Pattern verified in LA source `utils/funcs.lua:124-128`. Memory `reference_la_custom_mesh_pattern.md` updated with NetworkLookup step as a new mandatory Part 4 of the LA recipe.
+
+## 0.1.286-dev (2026-05-11) — Old Musket: LA-pattern direct mesh spawn (FP rendering fix)
+- Complete architectural rewrite based on Loremaster's Armoury's reference implementation (dalokraff/Loremasters-Armoury). The v0.1.277-285 overlay system (World.spawn_unit + link_unit + force-hide vanilla + visibility sync) is GONE. The new flow:
+  - **`right_hand_unit` is our custom mesh path** (reverted from v0.1.277's vanilla-rifle path). Vanilla GearUtils pipeline spawns it directly, which gives it the engine's first-person rendering pipeline — no shadow in FP, correct depth ordering, draws under the FP hand model.
+  - **`.unit` file rewritten to LA's pattern**: NO `materials = {}` block (which compile-validates against SDK and fails for vanilla paths). Instead a `data = { mat_to_use = "<vanilla material path>", color_slot, norm_slot, MAB_slot, mat_slots }` block. The compiler doesn't validate `data` field paths, but the compiled .unit ends up referencing the vanilla material — proven by extracting our build and finding the vanilla path embedded as a string. 1P uses 1P vanilla material; 3P uses `_3p` variant. `shadow_caster = false` on the 1P (no FP weapon shadow).
+  - **3 PackageManager hooks** (load / unload / has_loaded) scoped to our two unit paths. When the engine tries to package-load `units/cwv_es_musket_custom/...` (no sibling `.package` file exists), our hooks silently no-op (load/unload) or report success (has_loaded). The unit data is already in our master bundle via the `unit = ["units/*"]` glob, so World.spawn_unit can find it by path. This is verbatim LA's mechanism from their utils/hooks.lua.
+- Deleted: `_old_musket_overlay_pairs`, `_attach_old_musket_overlays`, `_spawn_and_link_old_musket`, `_detach_old_musket_overlay`, `_sync_all_old_musket_overlays_visibility`, `_apply_old_musket_transform`, `_reapply_old_musket_transforms_to_all`, `_CWV_OLD_MUSKET_*` constants, `_CWV_OLD_MUSKET_DEBUG_MODE`. Console commands `cwv_om_pos / cwv_om_rot / cwv_om_scale / cwv_om_show / cwv_om_debug / cwv_om_euler` all removed.
+- Deleted on-disk: `units/cwv_es_musket_custom/cwv_es_musket_custom.material` (no longer needed — we reference vanilla material), `cwv_es_musket_custom.package` / `_3p.package` (LA's PackageManager hooks make these unnecessary), stale `0e9fc1f2f551a8e8.mod_bundle` / `fe7ed4530b1ccd6a.mod_bundle` from previous sibling-package experiments.
+- Removed from master `.package`: `material = ["units/*"]` and `package = [...]` blocks. Just `lua`, `unit`, `texture` now.
+- Bayonet suppression for cwv_es_musket_old (v0.1.278) retained — the custom mesh has its own bayonet built in.
+- Side effect: the cwv_es_musket_old model will initially appear with vanilla rifle textures (because we reference the vanilla rifle's material). To use our custom PBR textures, we need to follow LA's full pattern and call `Material.set_texture(mat, color_slot, our_texture)` on the unit's meshes after spawn. That's a follow-up; the rendering fix is the priority.
+
+## 0.1.285-dev (2026-05-11) — Old Musket: debug-mode toggle for FP alignment tuning
+- Added `cwv_om_debug <0|1|2>` console command + `_CWV_OLD_MUSKET_DEBUG_MODE` global. Lets user see the vanilla rifle alongside (mode 2) or instead of (mode 1) the overlay for visual alignment.
+  - mode 0 (default): overlay shown, vanilla hidden — normal
+  - mode 1: overlay hidden, vanilla shown — looks like no mod, reveals where hand+rifle actually are
+  - mode 2: BOTH shown — for tuning overlay transform to match the vanilla rifle's grip/orientation
+- Modified all force-hide-vanilla and overlay-visibility sites (spawn + 3 sync hooks + sync function) to respect the debug-mode flag rather than unconditionally hiding/showing.
+- Why: in 1P FP view, our overlay's render-layer mismatch makes it draw on top of the hand, so the user can't see whether the overlay is positioned correctly relative to the hand. Mode 2 reveals the vanilla rifle position so the user can dial the overlay transform to match.
+
+## 0.1.284-dev (2026-05-11) — Old Musket: bake in 3P-confirmed transform
+- User-confirmed 3P transform baked in as new defaults (works for both melee and ranged slot grips):
+  - `_CWV_OLD_MUSKET_LOCAL_TRANSLATION = { 0, 0.625, -0.01 }`
+  - `_CWV_OLD_MUSKET_LOCAL_ROTATION_AXIS = { 1, 1, -1 }`
+  - `_CWV_OLD_MUSKET_LOCAL_ROTATION_ANGLE = -math.pi / 2`
+- Console commands `cwv_om_pos` / `cwv_om_rot` / `cwv_om_scale` / `cwv_om_show` remain for further live tuning if 1P FP-view needs different values.
+
+## 0.1.283-dev (2026-05-11) — Old Musket: force-hide vanilla rifle on every sync tick
+- User reported the vanilla rifle still rendering alongside our overlay. v0.1.281's `Unit.set_unit_visibility(rifle, false)` at spawn time DID work momentarily, but the game's own wield / show_first_person_inventory / show_third_person_inventory code paths re-enable the rifle's visibility shortly after.
+- Fix: in every sync hook (`show_first_person_inventory`, `show_third_person_inventory`, and `_sync_all_old_musket_overlays_visibility`), after the engine sets the vanilla rifle visible, immediately force-hide it again if it has an overlay attached. Gated on `_old_musket_overlay_pairs[rifle]` being present so only overlay-attached rifles are forced — vanilla cwv_es_musket and other weapons unaffected.
+
+## 0.1.282-dev (2026-05-11) — Old Musket: tunable transform + live-tune commands
+- Added tunable globals: `_CWV_OLD_MUSKET_LOCAL_TRANSLATION`, `_CWV_OLD_MUSKET_LOCAL_ROTATION_AXIS`, `_CWV_OLD_MUSKET_LOCAL_ROTATION_ANGLE`, `_CWV_OLD_MUSKET_LOCAL_SCALE` (starting baseline: zero translation, no rotation, scale 1). Applied to the overlay's LOCAL frame after linking to the vanilla rifle's root node.
+- New helpers: `_apply_old_musket_transform(overlay)` (single-unit) and `_reapply_old_musket_transforms_to_all()` (iterates `_old_musket_overlay_pairs`).
+- Four console commands for live tuning without rebuild:
+  - `cwv_om_pos <x> <y> <z>` — set local translation
+  - `cwv_om_rot <ax> <ay> <az> <degrees>` — set rotation axis + angle
+  - `cwv_om_scale <x> <y> <z>` — set scale
+  - `cwv_om_show` — echo current values
+- After each set-command, transforms are re-applied to all currently-attached overlays so you see the result immediately.
+
+## 0.1.281-dev (2026-05-11) — Old Musket: consolidate visibility-sync hooks + hide 1P by default
+- v0.1.280 spawn succeeded for both 1P and 3P overlays. Log: `World.spawn_unit: ok=true` for both, `link: ok=true`, `hide vanilla: ok=true`. But user reported "two muskets — one through the chest, one floating perpendicular".
+- Root cause #1: VMF's `mod:hook_safe` refuses to register a second callback on the same (Class, method) pair. Log evidence: `WARNING: Attempting to rehook active hook [show_first_person_inventory]` (× 3 for the three hooks). The overlay's three sync hooks were silently shadowed by the bayonet's pre-existing hooks on the same methods. Documented in memory `feedback_vmf_hook_safe_no_chain.md` — I should have remembered this when adding the duplicate hooks.
+- Fix #1: deleted the three overlay sync hooks; extended the bayonet's three callbacks to ALSO sync overlays in the same callback. Now there's exactly one mod:hook_safe per (Class, method).
+- Root cause #2: `_sync_all_old_musket_overlays_visibility` was declared as `local function` BELOW the bayonet's `_wield_slot` callback that now calls it — same forward-ref pattern that bit v0.1.279. Switched to global assignment (`_sync_all_old_musket_overlays_visibility = function(...)`).
+- Root cause #3: 1P overlay defaulted to visible after spawn. In 3P contexts (inventory previewer, other players' camera), the 1P RIFLE isn't rendered but the linked overlay was rendering anyway because nothing was hiding it. Added `Unit.set_unit_visibility(overlay_1p, false)` right after attach so the 1P overlay starts hidden; `show_first_person_inventory(true)` hook reveals it when the local player enters FP view.
+
+## 0.1.280-dev (2026-05-11) — Old Musket: fix forward-reference bug (the actual cause)
+- v0.1.279 diagnostic build pinpointed the real issue. Log: `[cwv old-musket] _attach errored: ...lua:3414: attempt to call global '_attach_old_musket_overlays' (a nil value)`.
+- Classic Lua forward-ref bug — exactly what `feedback_lua_forward_reference.md` warns about. `_attach_old_musket_overlays` and `_spawn_and_link_old_musket` were declared as `local function` BELOW the GearUtils.spawn_inventory_unit hook callback that calls them. Lua parses the file top-down — at the call site (line 3414), no local of that name was in scope yet, so Lua compiled the reference as a GLOBAL access. The later `local function` definition created a local, not a global, so the runtime global lookup returned nil.
+- Fix: switched both definitions from `local function NAME(...)` to `NAME = function(...)` (global). Globals are resolved at runtime each invocation, so they work for forward refs. Matches the existing pattern of `_old_musket_overlay_pairs` and `_detach_old_musket_overlay` which were already globals.
+- v0.1.277 and v0.1.278 both had this bug — every previous "the gate is failing" theory was wrong. The gate ALWAYS passed (v0.1.279 log proved it). The call to `_attach_old_musket_overlays` was failing because the symbol didn't resolve. v0.1.278 wrapped the call in `pcall` which swallowed the error silently — that's why we never saw the failure until v0.1.279 switched to xpcall with traceback.
+- Sanity check: Methodology that actually worked = (1) read log evidence first, (2) form hypothesis from evidence, (3) instrument code to fail loudly, (4) read NEW evidence, (5) apply targeted fix. Steps 1-4 are non-negotiable before fixing.
+
+## 0.1.278-dev (2026-05-11) — Old Musket: fix overlay gate + suppress bayonet
+- Bug from v0.1.277: gated overlay on `item_data.item_type == "cwv_es_musket_old"`. Console log showed bayonet hook fires (so the spawn_inventory_unit callback runs for our variant) but NO `[cwv old-musket] attach` log line — meaning `item_data.item_type` is NOT "cwv_es_musket_old" at the GearUtils spawn callsite. `item_data` passed in is the BASE `es_handgun` IML entry, not our cwv entry — only the backend_id carries the cwv-specific identifier.
+- Switched gate to `item_data.backend_id:match("^cwv_es_musket_old")` — canonical CWV detection per `feedback_cwv_backend_id_lookup.md`. Also added a debug log line so any future gate-failure shows backend_id/item_type/name values for diagnosis.
+- Also suppressed bayonet attach for cwv_es_musket_old: the custom mesh has its own bayonet baked into the model, so the floating vanilla-sword bayonet was incorrect. Gate added BEFORE `_attach_musket_bayonets` call.
+- Honest framing: v0.1.277 was a real bug (wrong field used for detection). Not malicious sleight-of-hand — I drew from `_build_entry` setting `entry.item_type = def.item_type or def.item_key` and assumed that field flowed to the in-mission item_data. It doesn't: MIL preserves item_type on the cwv ENTRY in ItemMasterList, but when the engine resolves a backend item to its IML entry for spawn, it follows entry.name (= "es_handgun" inherited from base) and lands on the base entry. backend_id is the only cwv-specific identifier that survives the lookup chain.
+
+## 0.1.277-dev (2026-05-10) — Old Musket: LA-style vanilla-overlay architecture
+- Re-enabled `cwv_es_musket_old` with `right_hand_unit = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1"` (vanilla rifle). This makes the world previewer / GearUtils package-load calls succeed since they're now hashing a vanilla path that has a vanilla bundle.
+- Added the **custom-mesh overlay system**: at spawn time we hide the vanilla rifle unit (`Unit.set_unit_visibility(rifle, false)`) and spawn `units/cwv_es_musket_custom/cwv_es_musket_custom[_3p]` linked to the rifle's root node so the overlay inherits all transform/animation. Player sees the custom mesh; the vanilla rifle is the invisible "anchor" the game's behaviour systems operate on. Mirrors the bayonet pattern but for the whole weapon mesh.
+- Detection: gate on `item_data.item_type == "cwv_es_musket_old"`. `_build_entry` (line 6532) sets `entry.item_type = def.item_type or def.item_key`, so the explicit `item_type = "cwv_es_musket_old"` on the variant def becomes the IML entry's item_type. cwv_es_musket (different variant) has `item_type = "cwv_es_musket"` and skips the overlay (its vanilla rifle mesh is its intended visual).
+- Visibility sync, orphan prune, destroy_wielded cleanup all mirror the bayonet's structure. Tracked in `_old_musket_overlay_pairs` (weak-keyed by vanilla rifle).
+- The custom unit data is in our master bundle (compiled by `unit = ["units/*"]` glob in the master `.package`). After mod boot, `World.spawn_unit(world, "units/cwv_es_musket_custom/cwv_es_musket_custom", ...)` succeeds by path because the unit resource is in the engine's live resource table — even though `Application.resource_package(<path>)` cannot find a *package* at that path.
+- Inventory previewer (HeroPreviewer) shows the VANILLA rifle for the Old Musket variant; the overlay only fires in-mission. TODO: also overlay in the inventory previewer so the player can tell which musket is which from the inventory grid.
+- Dead-weight cleanup deferred: the two sibling `.package` files (`cwv_es_musket_custom.package` and `_3p.package`) and the `0e9fc1f2f551a8e8.mod_bundle` / `fe7ed4530b1ccd6a.mod_bundle` files are inert but still compiled. Will remove in a follow-up once the overlay is verified working.
+
+## 0.1.276-dev (2026-05-10) — Disable cwv_es_musket_old until vanilla-overlay architecture
+- Commented out the `cwv_es_musket_old` variant entry. Reverted `.mod` `packages = {...}` list back to just the master. Stops the crash.
+- The `units/cwv_es_musket_custom/` files (FBX, unit, material, textures, sibling packages) remain on disk and in the bundle — they're inert dead weight until the variant comes back, but cheap to keep in case we revisit. Players who already have this v0.1.276 deploy lose access to "Old Musket" entirely (no crash, just no item).
+- See "Old Musket crash debugging" log below for the full failure analysis and why this approach was needed. Short version: VT2's `Application.resource_package(path)` only resolves paths that have a bundle file in the game's `bundle/` folder (vanilla), not mod-shipped sibling bundles, and the world previewer hardwires a `package:load(right_hand_unit .. "_3p")` call we can't avoid without per-call hooks.
+
+## Old Musket crash debugging — running log of attempts and failures
+
+The crash `[Engine Error]: Resource '#ID[0e9fc1f2f551a8e8]' was not found!` (hash decodes to `units/cwv_es_musket_custom/cwv_es_musket_custom_3p`) has resisted every fix from v0.1.272 through v0.1.275. Documenting each attempt so I stop re-trying things that didn't work.
+
+| Version | Hypothesis | What I did | Result |
+|---------|-----------|------------|--------|
+| 0.1.272 | FBX-baked material binding was unresolvable | Authored `.material` file cloning standard.material PBR shader graph, bound textures, renamed FBX material to `rifle_mat`, updated `.unit` materials block | Same crash, same hash |
+| 0.1.273 | The hash decodes to `_3p` — engine auto-resolves a 3P sibling unit and it didn't exist | Duplicated `cwv_es_musket_custom.fbx`/`.unit` to `_3p` variants; both ship in bundle | Same crash, same hash |
+| 0.1.274 | The previewer calls `package:load(path)` which expects a `.package` resource at that path, not a `.unit` | Authored `cwv_es_musket_custom.package` and `cwv_es_musket_custom_3p.package` files; added `package = [...]` to master `.package` so they compile | Same crash. .package resources DO compile into bundle (verified: `0E9FC1F2F551A8E8.package` 125 B exists in master bundle). |
+| 0.1.275 | The sibling-package bundles need to be registered via the `.mod` file's `packages = {...}` list, not just compiled. Pattern verified from `MorePlayers2` mod which ships 2 packages | Added the two sibling package paths to `character_weapon_variants.mod` `packages = {...}` | Same crash. Log confirms v0.1.275 booted cold. NO `[PackageManager] Load: units/cwv_es_musket_custom/...` log line at startup, meaning the engine isn't loading them. |
+
+### What we now know (from VT2 source + Autodesk Stingray research)
+- `mod_manager.lua:421` loads `.mod` `packages = {...}` entries via `Mod.resource_package(mod.handle, name)` — a MOD-SCOPED call, takes the mod's handle.
+- `package_manager.lua:81/94/105/109/139` (where the crash fires) uses `Application.resource_package(name)` — a GLOBAL call, no mod handle.
+- These appear to be different resource namespaces. Adding a package to the .mod list registers it as mod-scoped; later code that calls Application.resource_package can't see it.
+- The Loremaster's Armoury mod (ships 104 custom unit resources) does NOT ship sibling `.package` files — it has ONE master `.package` and ONE bundle on disk. Their "custom" unit paths actually REUSE vanilla paths (e.g. `units/weapons/player/wpn_brw_sword_01_t2/wpn_brw_flaming_sword_01_t2_3p`) which already have vanilla bundles in `Vermintide 2/bundle/`. So `Application.resource_package` succeeds because the engine finds the VANILLA bundle for that path. LA never registers a new global package — it piggybacks on existing ones.
+- Our path `units/cwv_es_musket_custom/cwv_es_musket_custom_3p` has NO vanilla counterpart, so `Application.resource_package` has nowhere to find it globally.
+
+### Path forward
+- The simplest working approach is what LA does: don't ship a NEW package path; reuse a vanilla one. But that doesn't give us a custom mesh that the engine renders for free — LA does mesh overrides via World.link_unit / Material.set_texture / unit-visibility tricks layered on a vanilla base unit.
+- Need to either: (a) hook `world_hero_previewer._load_packages` to skip our custom path entirely and rely on the master bundle having pre-loaded the unit, or (b) abandon the custom path and switch to the LA pattern of overlaying on a vanilla unit.
+
+## 0.1.275-dev (2026-05-10) — Old Musket: register sibling packages in the .mod file
+- v0.1.274 authored the sibling `.package` files and shipped them as compiled `.mod_bundle` files in the workshop folder, but the same `Resource '#ID[0e9fc1f2f551a8e8]' not found` crash continued. The compiled `.package` resource WAS in the master bundle; what was missing is bundle DISCOVERY.
+- Hypothesis (still unverified — based on the `MorePlayers2` mod's pattern, which lists 2 packages in its `.mod`): Stingray only discovers `.mod_bundle` files whose paths are listed in the .mod file's `packages = {...}` table. Sibling packages declared via `package = [...]` in the master `.package` get compiled but their on-disk bundle files aren't registered for runtime hash lookup.
+- Added the two sibling package paths to `character_weapon_variants.mod`'s `packages = {...}` list. .mod file size went 606 → 715 bytes (the two entries' overhead).
+- Honest framing: I have NOT verified this fix in-game. The user has hit this exact same crash 4 times across v0.1.271 → v0.1.275 because each "fix" was based on a different inference about what the engine wanted. Each was true in part but didn't lift the crash. If this version still crashes, the next step is to compare a vanilla weapon package's bundle layout against ours, or instrument the engine error path to surface the actual resolution failure (not just the hash).
+
+## 0.1.274-dev (2026-05-10) — Old Musket: ship sibling `.package` files (actual fix for the load-time hash crash)
+- Fixed (actual actual root cause): the v0.1.273 in-game crash. Console log showed `Managers.package:load("units/cwv_es_musket_custom/cwv_es_musket_custom_3p")` called from `world_hero_previewer.lua:1150` — the inventory previewer treats the right_hand_unit string as a PACKAGE path and asks the package manager to load it. Vanilla weapon directories have a sibling `.package` file at the same path as each `.unit`; we shipped the unit but not the package.
+- Engine error format clarification: `[Engine Error]: Resource '#ID[0e9fc1f2f551a8e8]' was not found!` — the hash IS the path hash, but the error means the engine couldn't find a resource of the EXPECTED TYPE at that path. v0.1.273 added the `.unit` resource at hash 0e9fc1f2…; v0.1.274 adds the `.package` resource at the same hash so package loading resolves.
+- Authored `units/cwv_es_musket_custom/cwv_es_musket_custom.package` and `cwv_es_musket_custom_3p.package`. Each lists the unit (1P or 3P), the shared material, and all five PBR textures.
+- Added `package = [ "units/cwv_es_musket_custom/cwv_es_musket_custom", "units/cwv_es_musket_custom/cwv_es_musket_custom_3p" ]` to the master `character_weapon_variants.package` so the sibling packages get compiled into the bundle.
+- Bundle output now includes `0e9fc1f2f551a8e8.mod_bundle` and `fe7ed4530b1ccd6a.mod_bundle` — these are the compiled sibling packages keyed by their path hashes. The master bundle also contains `FE7ED4530B1CCD6A.package` and `0E9FC1F2F551A8E8.package` directly.
+
+## 0.1.273-dev (2026-05-10) — Old Musket: ship the `_3p` unit (real cause of v0.1.271 load crash)
+- Fixed (actual root cause): the v0.1.271/272 `[Engine Error]: Resource '#ID[0e9fc1f2f551a8e8]' was not found!` crash. Hash `0e9fc1f2f551a8e8` murmur-reverses to `units/cwv_es_musket_custom/cwv_es_musket_custom_3p` — the engine auto-resolves a 3rd-person sibling for every right_hand_unit (vanilla naming convention: `<unit>` + `<unit>_3p`), and we never authored one.
+- Duplicated `cwv_es_musket_custom.fbx`/`.unit` to `cwv_es_musket_custom_3p.fbx`/`.unit` so the 3P resource exists. Both 1P and 3P share `cwv_es_musket_custom.material` (already in the bundle).
+- The 1P/3P split bundle now contains 0E9FC1F2F551A8E8.unit (3P, 475 kB) + FE7ED4530B1CCD6A.unit (1P, 475 kB) + FE7ED4530B1CCD6A.material (185 kB). Bundle grew ~310 kB.
+- Debugging method (worth keeping): the engine's hashed-ID errors are decipherable. Compute `murmur hash <candidate-path>` (via the bundle unpacker) and compare against the hash from the crash. Build a candidate list of likely paths (auto-derived names, conventionally-named sidecar units, package paths) and brute-force the hash space. v0.1.272 was a wasted iteration because I assumed material binding without verifying via hash reverse-lookup.
+- v0.1.272's `.material` work was NOT wasted — without our custom .material, the engine would still error on the FBX's baked-in material slot reference once it got past 3P loading. The full fix is both authoring the .material AND shipping the _3p unit.
+
+## 0.1.272-dev (2026-05-10) — Old Musket: custom-mesh PBR material binding (fix load crash)
+- Fixed: load-time crash `[Engine Error]: Resource '#ID[0e9fc1f2f551a8e8]' was not found!` on the v0.1.271 custom-mesh `cwv_es_musket_old` variant. The compiled `.unit` from the user's FBX referenced material slots by names baked in by the FBX importer (the .dae's `01___Default` / `defaultMaterial` slots), which resolved to a resource ID the bundle didn't actually contain.
+- Re-exported `cwv_es_musket_custom.fbx` from the source `.dae` via Blender 4.4 headless, collapsing all materials into one single slot named `rifle_mat` (short, predictable, no FBX truncation). Used `units/cwv_es_musket_custom/rename_material.py` (kept on disk at `Downloads/old-musket/` for future re-exports).
+- Authored `units/cwv_es_musket_custom/cwv_es_musket_custom.material` — clone of the SDK's `core/stingray_renderer/shader_import/standard.material` PBR shader graph with our texture + variable bindings appended:
+  - `textures`: 5 PBR slots (color_map, normal_map, roughness_map, metallic_map, ao_map) pointing at our `textures/cwv_es_musket_custom/cwv_es_musket_custom_*` DXT5 textures from v0.1.271.
+  - `variables`: `use_*_map = 1` for all five so the shader actually samples them (defaults are 0 = off).
+- Updated `units/cwv_es_musket_custom/cwv_es_musket_custom.unit`: explicit `materials = { rifle_mat = "units/cwv_es_musket_custom/cwv_es_musket_custom" }` block binds the FBX's material slot to our new .material file.
+- Added `material = [ "units/*" ]` to the resource package so the .material gets compiled into the bundle.
+- Sharp edges learned: (1) FBX exporter truncates material names ~60 chars — keep slot names SHORT and bind to long paths via `.unit` materials block. (2) Vanilla material paths (e.g. `units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1`) are NOT available at SDK compile time even though they exist at runtime — the .unit compiler resolves materials against the source tree, which only sees what's in the SDK + mod folder. Must ship our own .material. (3) Core SDK materials like `core/units/transparent` ARE available at compile time, but are not PBR-textured.
+
+## 0.1.271-dev (2026-05-10) — Musket: multi-instance variants + Old Musket (custom mesh)
+- Deleted: `cwv_es_musket_polearm` variant entirely. Was redundant — `cwv_es_musket` already alternates between ranged shoot and bayonet melee via the stance toggle, and the cross-slot UI hook makes it equippable in either slot. No reason for a duplicate variant.
+- Added: multi-instance variant support to CWV registration. New `def.instances = N` field creates N backend entries with backend_ids `<key>_001`, `<key>_002`, etc. Optional `def.instance_skins` array pre-applies a different cosmetic skin per instance (nil = the variant's default).
+- Changed: `cwv_es_musket` `instances = 2`, `instance_skins = { nil, "cwv_es_musket_aunty_bessie" }`. Player gets TWO Musket items — first with default rifle mesh, second with Aunty Bessie skin pre-applied. Both equippable in either slot (cross-slot UI hook still active), both have stance toggle.
+- Added: new variant `cwv_es_musket_old` ("Old Musket") using the custom-mesh compiled from the user's FBX (units/cwv_es_musket_custom/). Same musket_template + stance toggle + cross-slot UI hook as cwv_es_musket. `instances = 2` so the player gets two Old Musket items too. Empty `_type_transforms.cwv_es_musket_old` (no scale tweaks — the custom mesh is the right shape natively).
+- Cleaned up the cross-slot filter `_is_cwv_musket_item` to use a single prefix match (`^cwv_es_musket`) covering both variants and all per-instance backend_ids.
+
+## 0.1.270-dev (2026-05-10) — Musket: both variants share display_name "Musket"
+- Renamed: `cwv_es_musket_polearm` `display_name` "Aunty Bessie's Musket" → "Musket" (matching `cwv_es_musket`). Both variants now appear as "Musket" in the inventory — the user clarification was "exact same kind of weapon, but one has a different cosmetic equipped". The two are distinguishable only by inventory icon and wielded mesh (default rifle vs Aunty Bessie t3). Same template, same trait, same description, same stats — they're the same item with different default cosmetics.
+
+## 0.1.269-dev (2026-05-10) — Musket: unify both as ranged-slot items
+- Changed: `cwv_es_musket_polearm` `base_weapon` from `es_2h_heavy_spear` (melee-slot inheritance) to `es_handgun` (ranged-slot inheritance) per user "make them both ranged musket items". Both musket items are now ranged-slot in IML — no "the melee one" and "the ranged one" distinction. The cross-slot UI hook from v0.1.268 makes both appear in BOTH slot inventory grids.
+- Renamed: `display_name` "Bayoneted Musket" → "Aunty Bessie's Musket" (slot-neutral). Both descriptions now mention "Equippable in the melee or ranged slot".
+- The v0.1.260 melee tooltip workaround on `musket_template` (max_fatigue_points etc.) and v0.1.265/267 defensive WeaponSpreadExtension hooks stay in place — harmless if unused, robust if any future variant ends up in a different slot.
+
+## 0.1.268-dev (2026-05-10) — Musket cross-slot inventory: appears in BOTH slot grids
+- Added: both `cwv_es_musket` (declared slot_type ranged) and `cwv_es_musket_polearm` (declared slot_type melee) now appear in BOTH the ranged and melee slot inventory grids. Player can equip either musket in either slot. Single item per design — equipping in one slot consumes it from the other (vanilla inventory behavior).
+- Mechanism: hook `BackendInterfaceItemPlayfab:get_filtered_items`. Vanilla evaluates a filter string ("slot_type == ranged" / "slot_type == melee") against each backend item to populate the slot grid. Hook detects those two filters and APPENDS any cwv musket items the player owns that weren't already in the result. Items keep their declared slot_type in IML — only the UI filter becomes permissive for our muskets.
+- Cross-slot equip itself is unhindered — vanilla's `set_loadout_item` doesn't check slot_type compatibility, just stores the ItemId in the slot. The wielded weapon's behavior is determined by its template (musket_template), not by its slot, so muskets fire identically regardless of which slot they're equipped in.
+
+## 0.1.267-dev (2026-05-10) — Musket: belt-and-suspenders spread fix + ammo persistence
+- Fixed (attempt 2): polearm musket spread crash. v0.1.266's init-only hook fired (per log: two `patched WeaponSpreadExtension` entries before the crash) but the user STILL crashed. Either a fresh spread extension was created without our init hook firing, OR spread_settings became nil post-init. Added a second `mod:hook("WeaponSpreadExtension", "update")` (full wrapper) that runs BEFORE vanilla's update each frame and patches `spread_settings = SpreadTemplates.handgun` if nil. Belt-and-suspenders — even if init misses, update catches every frame.
+- Fixed: ammo refilled to full when the player toggled stance FROM melee TO ranged. Root cause: melee template (musket_template_melee) has no ammo_system extension on its wielded unit, so `total_ammo_fraction()` returned nil during the toggle helper's pre-destroy capture, and we passed nil to `add_equipment` (vanilla treats nil as full ammo). v0.1.267 persists the captured ammo fraction on `item_data.mod_data.cwv_musket_ammo_fraction`. On a melee→ranged toggle where no live ammo can be read, falls back to the persisted value from the previous ranged→melee toggle.
+
+## 0.1.266-dev (2026-05-10) — Polearm musket: enable ranged use + 1P melee Y 1.2 → 1.8
+- Re-enabled the v0.1.257 "identical-to-ranged" design for the polearm variant. Template back to `musket_template`, trait back to `ranged_increase_power_level_vs_armour_crit`, stance toggle works again.
+- Fixed the v0.1.260 spread-extension crash that previously blocked this design. New `mod:hook_safe("WeaponSpreadExtension", "init")` checks for nil `spread_settings` after vanilla init runs and falls back to `SpreadTemplates.handgun`. Vanilla's name-keyed lookup (`ItemMasterList[item_name]`) returns the BASE spear IML for our cwv variant (no `default_spread_template`), so vanilla sets `spread_settings = nil`. Defensive hook patches it. Only fires when the original lookup returned a template without spread settings — vanilla weapons that have proper settings are unaffected.
+- Removed v0.1.260's slot_type gate in toggle helper and exact-match gate in `BackendUtils.get_item_template` hook. Both variants share the same toggle behavior again.
+- 1P melee Y scale: `_MELEE_1P_SCALE_FACTOR.Y` `0.8 → 1.2` per user "1.8y" — composes against type-level 1P Y (1.5) for 1.5 × 1.2 = 1.8 in 1P melee. 3P stays at 1.35.
+
+## 0.1.265-dev (2026-05-10) — Inherit-from-variant pass: LONGEST-prefix match
+- Fixed: `cwv_es_longsword_shield_*` illusions (the new Saltzpyre greatsword pairings from v0.1.254, plus the original Imperial sword pairings) were rendering at the WRONG scale — too big — because the inherit-from-variant pass at line ~6906 matched `cwv_es_longsword` (the 2H variant) as a prefix BEFORE reaching `cwv_es_longsword_shield`. The 2H variant's transform (`{1.0, 0.8, 0.9}` unified) was applied instead of the shield-specific 3P override (`{0.85, 0.65, 0.75}`).
+- Root cause: the loop iterated variants in `_variant_definitions` order and `break`ed on the first prefix match. When `cwv_es_longsword` (shorter prefix) appeared before `cwv_es_longsword_shield` in the list, the shorter one won. Same hazard applies to any variant pair where one item_key is a prefix of another.
+- Fix: walk all variants, track the LONGEST item_key that's a prefix of the skin_key, and apply that one's transform. New: any future variant-pair with prefix overlap (longsword family, dual_swords-vs-dual_swords_anything, etc.) gets the right one automatically.
+
+## 0.1.264-dev (2026-05-10) — Musket bayonet: FP/3P camera-mode visibility sync
+- Fixed: floating bayonet visible in third-person view (and vice versa) when player switched camera modes. v0.1.249 prune logs confirmed our spawn/wield code was clean (only 2 pairs ever tracked, no orphans, no duplicates) — meaning the "extra" bayonet was actually our LEGITIMATE 1P bayonet still rendering in 3P (and the 3P one in 1P). Vanilla `SimpleInventoryExtension.show_first_person_inventory(show)` and `show_third_person_inventory(show)` toggle the rifle units' visibility per camera, but `World.link_unit` doesn't propagate visibility to children, so the linked bayonet kept rendering regardless.
+- Fix: hooks on both `show_first_person_inventory` and `show_third_person_inventory` mirror the called perspective's wielded rifle visibility onto its tracked bayonet via `Unit.set_unit_visibility(bayonet, show)`. Now the 1P bayonet only renders in 1P view; 3P bayonet only in 3P view.
+
+## 0.1.263-dev (2026-05-10) — Tuskgor Javelin: deeper pull-back + suppress 3P offhand spare
+- Tuned: stuck-javelin pull-back `_TJ_VISUAL_PULL_BACK_M` `0.30 → 0.60` per user "still too deep". Visual now spawns 60 cm out along the spear's forward axis from the engine-set contact point.
+- Fixed: 3P showed two boar spears — the wielded `left_hand_unit` and a second one as the offhand spare via `ammo_unit`. Vanilla `we_javelin` ships an `ammo_unit` pointing at the elf javelin (Kerillian carries spare javelins on her body in 3P), and our skin-registration fallback at line ~4638 sets `ammo_unit = base.ammo_unit and def.left_hand_unit` — so an unset `def.ammo_unit` falls through to the boar spear, doubling it on the body.
+- Fix: `def.ammo_unit = "units/weapons/player/wpn_invisible_weapon"` on both `cwv_es_javelin` and `cwv_wh_javelin`. The invisible weapon is a real unit (no crash on `ammo_unit_attachment_node_linking` lookup) but renders nothing — so only the wielded boar spear shows. Affects 1P offhand too. If 1P offhand needs the boar spear back, switch to a hooked GearUtils.create_equipment that hides only the 3P ammo unit instance.
+
+## 0.1.262-dev (2026-05-10) — Bayoneted Musket: revert to melee-only (engine constraint)
+- Reverted v0.1.257's "identical-to-ranged" design. Crashed `weapon_spread_extension.lua: spread_settings nil` (GUID 451895b3) for any player whose loadout included the polearm variant. Root cause: `WeaponSpreadExtension.init` does `ItemMasterList[item_name]` to look up the template — for our cwv variant `item_name` is the inherited base name `es_2h_heavy_spear` (per `feedback_cwv_clone_name_clobber.md`), so the lookup returns the BASE spear IML whose template has no `default_spread_template`. Setting `spread_settings = nil`. First update frame crashes on arithmetic against the nil. Our `BackendUtils.get_item_template` hook can't intercept because the call uses a name-keyed lookup with no cwv marker.
+- Polearm variant is now melee-only: `template = "musket_template_melee"`, `trait = "melee_attack_speed_on_crit"`. No stance toggle. To fire the musket, player wields the ranged-slot `cwv_es_musket` variant.
+- Re-added v0.1.251 gates: `_toggle_musket_stance_and_rewield` short-circuits on `slot_type ~= "ranged"`, and `BackendUtils.get_item_template` only intercepts on exact backend_id `cwv_es_musket_001`.
+- The v0.1.259 melee tooltip fields on `musket_template` (max_fatigue_points etc.) stay — harmless when unused, may help future variants.
+
+## 0.1.261-dev (2026-05-10)
+- Tuned: `cwv_es_outrider_grenade_launcher` projectile visual swapped from the trollhammer torpedo to the hand grenade mesh per user. The in-flight model now uses `ProjectileUnits.grenade` (`wpn_emp_grenade_01_t1_3p`) instead of `wpn_dr_deus_projectile_01_3ps`. Implemented by cloning the vanilla `Projectiles.dr_deus_01` config to `Projectiles.cwv_outrider_grenade_projectile` and swapping just `projectile_units_template = "grenade"` — all other trollhammer projectile physics (gravity, life_time, impact_type, trajectory) preserved. Then in `_create_outrider_grenade_launcher_template`'s `action_one` walk, each sub-action with `projectile_info == Projectiles.dr_deus_01` is re-pointed at the cloned config. Bardin's native trollhammer is unaffected (we cloned + retargeted; never mutated the source).
+
+## 0.1.260-dev (2026-05-10)
+- Tuned: `cwv_es_outrider_grenade_launcher` max_ammo `7 → 10` per user. The cloned `outrider_grenade_launcher_template` inherited `max_ammo = 7` from `dr_deus_01_template_1` (trollhammer base) — no prior override. Added `template.ammo_data.max_ammo = _OUTRIDER_MAX_AMMO` (= 10) inside the existing `if template.ammo_data` block alongside `ammo_hand` and `reload_time`.
+
+## 0.1.259-dev (2026-05-10) — Musket: melee-tooltip fields on ranged template
+- Fixed: equipping the polearm musket variant in the melee slot crashed `ui_passes_tooltips.lua:1636: attempt to perform arithmetic on local 'max_fatigue_points'` (GUID 451895b3). The handgun template our `musket_template` clones from has no `max_fatigue_points` (ranged weapons don't have block stamina), but vanilla's tooltip code does arithmetic on that field for ANY equipped weapon — including a ranged-template weapon equipped in a melee slot.
+- Fix: add defensive defaults for the melee tooltip fields to `musket_template`: `max_fatigue_points = 8`, `dodge_count = 3`, `block_angle = 180`, `outer_block_angle = 360`, `block_fatigue_point_multiplier = 0.5`, `outer_block_fatigue_point_multiplier = 2`. Values mirror the tuskgor spear template; benign when the weapon is wielded in a ranged slot (the fields just sit unread).
+
+## 0.1.258-dev (2026-05-10) — Tuskgor Javelin: pull stuck visual out of wall
+- Tuned: stuck Tuskgor Javelin visual was sitting too deep in surfaces. Added `_TJ_VISUAL_PULL_BACK_M = 0.30` (meters). When `_attach_carrier_visual` spawns the boar spear visual at the parent throwing-axe pup's pose, it now pulls the spawn position back along `Quaternion.forward(rot) * 0.30` so the spear's tip protrudes from the surface instead of disappearing into it. Parent pickup actor stays at the engine-set contact point — only the rendered mesh is offset, so interaction range and outline anchor are unchanged.
+- Easy to retune: bump the constant for less depth (more pulled out), reduce towards 0 for deeper sit. If the visual ever floats off the wall after a different change to projectile orientation, this is the first place to check.
+
+## 0.1.257-dev (2026-05-10) — Bayoneted Musket: identical-to-ranged behavior
+- Per user "the melee version is melee only — should be identical to the ranged weapon": polearm variant now uses `musket_template` (handgun moveset) by default, same as ranged variant. F triggers stance toggle to `musket_template_melee` and back. The polearm variant differs from the ranged ONLY in slot (melee vs ranged) and visual mesh (Aunty Bessie vs default rifle).
+- Reverted v0.1.251 gates: `_toggle_musket_stance_and_rewield` no longer short-circuits on `slot_type ~= "ranged"`, and `BackendUtils.get_item_template` no longer requires exact backend_id `cwv_es_musket_001` — both variants share toggle behavior.
+- Trait swapped to `ranged_increase_power_level_vs_armour_crit` (matches ranged variant) since the default mode is now ranged.
+
+## 0.1.256-dev (2026-05-10) — Musket 1P scale Y 1.35 → 1.5
+- Added `right_hand_scale_1p = { 0.8, 1.5, 0.8 }` to BOTH `cwv_es_musket` and `cwv_es_musket_polearm` type-transforms — Y bumped from 1.35 to 1.5 (+0.15) on the 1P perspective only. 3P stays at the unified `{ 0.8, 1.35, 0.8 }`. Per `_resolve_field` precedence, the `_1p` field overrides the unified one for 1P units only.
+
+## 0.1.255-dev (2026-05-10) — Bayoneted Musket (melee-slot variant)
+- Added: new variant `cwv_es_musket_polearm` ("Bayoneted Musket"). Inherits from `es_2h_heavy_spear` so it occupies the **melee slot** alongside the existing `cwv_es_musket` in the ranged slot — player can wield BOTH at once.
+- Visual: `wpn_empire_handgun_t3` (the "Aunty Bessie" rifle mesh) — distinct from the ranged variant's `wpn_empire_handgun_t1`. Both share the type-level scale `{0.8, 1.35, 0.8}` so they read as the same musket family, just held differently.
+- Template: uses the existing `musket_template_melee` (clone of Kerillian elf spear). The bayonet child-link, polearm rotation correction, melee position offset, and 1P scale-down all apply automatically since the spawn hook gates on `item_template == musket_template_melee`.
+- No stance toggle: the toggle helper now short-circuits when `item_data.slot_type ~= "ranged"`. The polearm variant's action_three still fires the dummy animation but the rewield is skipped — pure melee weapon, no swap to ranged template that wouldn't make sense in a melee slot.
+- BackendUtils.get_item_template hook also gates on exact backend_id match (`cwv_es_musket_001`) so the polearm variant's template is never overridden by the stance-swap logic.
+- Per-item_type skin pool: `cwv_es_musket_polearm_skins` registered separately from `cwv_es_musket_skins`. Future cosmetic illusions for the polearm can target it independently.
+
+## 0.1.254-dev (2026-05-10) — Imperial Longsword + Shield: add Saltzpyre greatsword meshes
+- Added: 7 Saltzpyre greatsword (`wh_2h_sword`) meshes as illusion options on `cwv_es_longsword_shield`. Same wh sword set the 2H `cwv_imperial_longsword` family ships as cross-character illusions per CHANGELOG v0.1.113. All 7 are distinct from the existing Recruit / Nordland / Black Guard mesh family.
+- New entries paired with rotating Empire shields by rarity tier:
+  - wh skin_01 (`wpn_2h_sword_02_t1`, plentiful) + emp_shield_01_t1
+  - wh skin_03 (`wpn_2h_sword_02_t3`, common) + emp_shield_02
+  - wh skin_02 (`wpn_2h_sword_02_t2`, rare) + emp_shield_03
+  - wh skin_04 (`wpn_2h_sword_04_t2`, exotic) + emp_shield_04
+  - wh skin_05 (`wpn_2h_sword_05_t1`, exotic) + emp_shield_05
+  - wh skin_02_runed_01 (`wpn_2h_sword_02_t2_runed_01`, unique) + emp_shield_02_runed_01
+  - wh skin_05_runed_01 (`wpn_2h_sword_05_t1_runed_01`, unique) + emp_shield_03_runed_01
+- Picker now has 15 entries total (8 Imperial + 7 Saltzpyre). Each Empire shield mesh appears 1–2 times paired with different swords.
+- Refactor: pairing entries now carry an optional `suffix` field that disambiguates the skin_key when multiple swords pair against the same shield. Without it, the second registration would collide with the first and silently skip. New key format: `cwv_es_longsword_shield_<shield_tail>__<sword_suffix>`. Pre-existing skin keys CHANGE — players who explicitly picked an illusion will need to re-pick. Acceptable in dev iteration.
+
+## 0.1.253-dev (2026-05-10)
+- Tuned: `cwv_es_dual_warpriest_hammers` greathammer-illusion grip offsets — split per perspective per user. 1P felt too high at the previous unified value; 3P was fine. Both hands now use `_1p = -0.1` / `_3p = -0.35` (replaces unified right=-0.25, left=-0.3). Effect: in held first-person view the grip pulls back closer to native, while the 3P body view drops the grip 0.35 units down the haft. All 8 illusion entries updated. Both hands at the same offset values now (no more right≠left asymmetry).
+
+## 0.1.252-dev (2026-05-10) — Removed cwv_es_shortsword_shield variant
+- Removed: `cwv_es_shortsword_shield` (Shortsword and Shield) variant per user — visual didn't land. The standalone `cwv_es_shortsword` (Sienna dagger moveset on Kruber) is unaffected and stays.
+- Code removed: variant def, `shortsword_shield_template` clone + `_create_shortsword_shield_template` (1.20× speed / 0.90× stagger / mace→slashing damage profile swap), `_force_display_unit["cwv_es_shortsword_shield"] = display_shield_sword`, `_seed_targets`/`_item_type_to_skin_table` entries, and the `_register_shortsword_shield_illusions` curated picker (Empire 1h-sword × es_mace_shield rarity-matched pairings).
+- Caveat: any existing PlayFab inventory items keyed off `cwv_es_shortsword_shield_001` are now orphaned (auto-registration won't re-create them). Equipping a stale entry would crash. Mitigation if it surfaces: re-add the def temporarily and `wt clear_loadout`, or accept that the user has to swap to a different weapon before next launch.
+- **DoD:** Universal walked (forward-ref audit clean — grep'd `shortsword_shield` returns zero hits in the mod source; build hygiene next). Trait gates: N/A (removal). Deferrals: orphan PlayFab cleanup (caveat above).
+
+## 0.1.251-dev (2026-05-10) — Imperial Longsword + Shield: real Empire shields, paired with three sword meshes
+- Fixed: `cwv_es_longsword_shield` cosmetic picker showed elf shields among the options. Root cause: the previous `_register_imperial_longsword_shield_illusions` (v0.1.175 → v0.1.250) scanned `ItemMasterList` for entries with `matching_item_key == "es_sword_shield"` — but that pool also contains the auto-generated skin entries for `cwv_we_sword_shield` / `cwv_we_sword_shield_veteran` (Kerillian's elven sword+shield variants), which clone from the same Empire base for template reasons. The leak put `wpn_we_shield_*` meshes into the picker.
+- Replaced the IML scan with a HARDCODED pairing table: `_IMPERIAL_LONGSWORD_SHIELD_PAIRINGS` lists 8 Empire shield meshes paired with one of three Imperial Longsword sword meshes (Recruit / Nordland / Black Guard). No IML scan, no elf leak.
+- Added 3 sword variations across the 8 illusions (was 1 before):
+  - **Recruit Longsword** (`wpn_2h_sword_04_t1`): `wpn_emp_shield_01_t1` (plentiful), `wpn_emp_shield_02` (plentiful)
+  - **Nordland Claymore** (`wpn_greatsword`): `wpn_emp_shield_03` (rare), `wpn_emp_shield_03_runed_01` (unique)
+  - **Black Guard Blade** (`wpn_2h_sword_03_t2`): `wpn_emp_shield_04` (exotic), `wpn_emp_shield_05` (exotic), `wpn_emp_shield_02_runed_01` (unique), `wpn_emp_shield_04_magic_01` (magic)
+- Pairing rationale (best-effort thematic match without localization access): basic state-issue shields → Recruit Longsword (matching basic Reikland regiment kit); mid-tier coastal-style shields → Nordland Claymore (coastal regiment theme); ornate/runed/magic shields → Black Guard Blade (knightly / Knights of Morr theme). Adjustable per shield by editing the pairing table.
+
+## 0.1.250-dev (2026-05-10) — Musket rifle X/Z 0.9 → 0.8 (both 1P and 3P)
+- Tuned: `_type_transforms.cwv_es_musket.right_hand_scale` X/Z dropped from 0.9 to 0.8 per user "another 0.1 down on X and Z". Y (barrel length) unchanged at 1.35. Affects BOTH 1P and 3P perspectives since type-level transforms apply to both. The melee 1P additional thin (`{0.8, 0.8, 1.0}`) still composes on top, so 1P melee X = 0.8 * 0.8 = 0.64.
+
+## 0.1.249-dev (2026-05-10) — Musket bayonet: aggressive orphan prune on every spawn
+- Added: orphan prune at the START of the `GearUtils.spawn_inventory_unit` hook (before attaching the new bayonet). Walks `_musket_bayonet_pairs`, hides + destroys any bayonet whose rifle is no longer alive, removes the dead-key entry. Catches stale entries from any code path that bypassed our `destroy_wielded` cleanup (world transition, hot-load, equipment re-creation outside `destroy_slot`). Logs `pruned N orphan(s) before new attach` when it cleans up — helps diagnose where the leak comes from. The existing `_wield_slot` orphan cleanup stays as a secondary safety net.
+
+## 0.1.248-dev (2026-05-10) — Tuskgor Javelin: restore tagged-pickup outline
+- Fixed: stuck Tuskgor Javelins were losing their white tagged-pickup outline. Since v0.1.190 the carrier-unit pattern hides the parent throwing-axe pup via `Unit.set_unit_visibility(parent, false)`. That flag excludes the parent from every render pass, including the engine's outline pass — so the OutlineExtension on the parent had nothing to draw onto, and the visible boar spear visual (a separate world unit, no OutlineExtension) was never registered with the outline system.
+- Fix: maintain a weak-keyed `_carrier_visuals[parent_unit] = visual_unit` map (populated in `_attach_carrier_visual`, cleared in `_detach_carrier_visual`) and hook `OutlineSystem.outline_unit` to mirror every call from a tracked parent onto its visual. The visual unit gets the same `flag` / `channel` / `do_outline` / `apply_method` / `outline_settings` arguments, so all outline channels (tag, ping, threat) propagate identically. The original parent call still runs (cheap no-op since the parent is invisible — keeps the engine's internal accounting consistent).
+- Pattern is general: any future variant using the carrier-visual hide-parent trick gets outline forwarding for free as long as it populates `_carrier_visuals`.
+
 ## 0.1.247-dev (2026-05-09) — Musket melee Y offset 0.05→0.06, 1P thinner X/Y
 - Tuned: melee Y grip offset `0.05 → 0.06`. Full vector now `{ 0, 0.06, -0.3 }`.
 - Switched 1P melee scale-down from uniform `0.85` to per-axis factors `{ 0.8, 0.8, 1.0 }` per user "0.8x and 0.8y" (Z unchanged). Renamed constant `_MELEE_1P_SCALE_DOWN` → `_MELEE_1P_SCALE_FACTOR`.

@@ -398,6 +398,7 @@ function M.register_all()
     end
 
     build_offhand_options()
+    M._build_la_path_to_parent_package()
     for weapon_type, list in pairs(M.la_offhand_options_by_weapon_type) do
         mod:info("[LA bridge] %s offhand pool: %d entries", weapon_type, #list)
     end
@@ -537,6 +538,47 @@ local _LA_KIND_UNIT_TEXTURES = {
     },
 }
 
+-- Parent vanilla package per LA `kind="unit"` shield. LA's compiled `.unit`
+-- inherits its shader graph from a vanilla unit (specified by `mat_to_use`
+-- in the source `.unit`); the customization previewer's narrow resource
+-- scope doesn't include that vanilla unit's package by default, so the
+-- material can't fully initialize and textures fall back to magenta /
+-- missing. Loading the parent package onto the previewer's reference
+-- brings the shader into scope.
+--
+-- Source for these mappings: `mat_to_use` field in
+-- `units/.../<la_mesh>.unit` (LA's source repo).
+M.la_kind_unit_parent_packages = {
+    Kruber_empire_shield_basic1 = "units/weapons/player/wpn_empire_handgun_02_t2/wpn_empire_handgun_02_t2",
+}
+
+-- Reverse map (LA mesh path → parent package) built at register-all time
+-- so the previewer's `load_package` hook can look up the parent without
+-- knowing the armoury_key. Keys are both the 1p and _3p forms of the LA
+-- mesh path; the previewer queries the _3p form.
+M.la_path_to_parent_package = {}
+
+-- Hoisted onto M so `register_all` can call it without forward-ref
+-- crashes (per `feedback_lua_forward_reference.md` — local-function
+-- declarations are scoped at parse time, so a `local function` declared
+-- AFTER its caller resolves to nil at call time, not the function body).
+function M._build_la_path_to_parent_package()
+    M.la_path_to_parent_package = {}
+    local SKIN_LIST = la() and la().SKIN_LIST
+    if not SKIN_LIST then return end
+    for armoury_key, parent in pairs(M.la_kind_unit_parent_packages) do
+        local variant = SKIN_LIST[armoury_key]
+        if variant and type(variant.new_units) == "table" then
+            if variant.new_units[1] then
+                M.la_path_to_parent_package[variant.new_units[1]] = parent
+            end
+            if variant.new_units[2] then
+                M.la_path_to_parent_package[variant.new_units[2]] = parent
+            end
+        end
+    end
+end
+
 -- Paint LA's textures onto a single unit using `Unit.set_texture_for_materials`,
 -- the same per-unit primitive vanilla VT2 uses for `MaterialSettingsTemplates`
 -- (`gear_utils.lua:150`, `cosmetic_utils.lua:72`, `flow_callbacks_foundation.lua:939`).
@@ -561,22 +603,162 @@ local _LA_KIND_UNIT_TEXTURES = {
 -- doesn't matter; if a future LA shield uses skip_meshes we'll need a
 -- per-mesh fallback. We log a warning when we drop those overrides so the
 -- regression is visible.
+
+-- v0.8.45 probe: walk the spawned LA mesh and dump material state so we can
+-- diagnose the 0x8 AV in Unit.set_texture_for_materials. All Stingray calls
+-- are pcall-wrapped. Per `cosmetics_tweaker.lua:435-438`, NEVER call
+-- Material.num_parameters / parameter_name / parameter_type — they raise a
+-- C++ resource_manager.cpp fault that bypasses pcall.
+local _LA_PROBE_SLOTS = { SHIELD_DIFF_SLOT, SHIELD_PACK_SLOT, SHIELD_NORM_SLOT }
+
+-- v0.8.46: one-shot enumeration of the engine's introspection / mutation
+-- API surface. We need to know whether Mesh.set_material, Material.set_texture,
+-- and friends actually exist before designing the null-material swap. Runs
+-- once per process (gated by a flag). Pcall around each pairs() call in case
+-- the underlying table is userdata with metamethod side effects.
+local _LA_PROBE_API_DUMPED = false
+local function _dump_api_surface()
+    if _LA_PROBE_API_DUMPED then return end
+    _LA_PROBE_API_DUMPED = true
+    local function dump(name, t)
+        if type(t) ~= "table" then
+            mod:info("[LA probe API] %s is %s, not a table", name, type(t))
+            return
+        end
+        local keys = {}
+        local ok = pcall(function()
+            for k, v in pairs(t) do
+                keys[#keys + 1] = tostring(k) .. ":" .. type(v)
+            end
+        end)
+        if not ok then
+            mod:info("[LA probe API] %s pairs() errored", name)
+            return
+        end
+        table.sort(keys)
+        mod:info("[LA probe API] %s (%d entries):", name, #keys)
+        -- Chunk into groups of 6 per line to keep the log readable.
+        local line = {}
+        for i, k in ipairs(keys) do
+            line[#line + 1] = k
+            if #line >= 6 or i == #keys then
+                mod:info("[LA probe API]   %s", table.concat(line, ", "))
+                line = {}
+            end
+        end
+    end
+    dump("Unit",     _G.Unit)
+    dump("Mesh",     _G.Mesh)
+    dump("Material", _G.Material)
+end
+
+local function _probe_la_unit_materials(unit, armoury_key)
+    _dump_api_surface()
+    local tag = tostring(armoury_key)
+    mod:info("[LA probe %s] === begin ===", tag)
+    if not unit or type(unit) ~= "userdata" then
+        mod:info("[LA probe %s] unit invalid (type=%s)", tag, type(unit))
+        return
+    end
+    local ok_alive, alive = pcall(Unit.alive, unit)
+    mod:info("[LA probe %s] Unit.alive ok=%s val=%s", tag, tostring(ok_alive), tostring(alive))
+    if not (ok_alive and alive) then return end
+
+    local ok_act, n_act = pcall(Unit.num_actors, unit)
+    mod:info("[LA probe %s] Unit.num_actors ok=%s val=%s", tag, tostring(ok_act), tostring(n_act))
+
+    local ok_nodes, n_nodes = pcall(Unit.num_nodes, unit)
+    mod:info("[LA probe %s] Unit.num_nodes ok=%s val=%s", tag, tostring(ok_nodes), tostring(n_nodes))
+
+    local ok_vis, vis = pcall(Unit.is_visible, unit)
+    mod:info("[LA probe %s] Unit.is_visible ok=%s val=%s", tag, tostring(ok_vis), tostring(vis))
+
+    local ok_n, n_meshes = pcall(Unit.num_meshes, unit)
+    mod:info("[LA probe %s] Unit.num_meshes ok=%s val=%s", tag, tostring(ok_n), tostring(n_meshes))
+    if not (ok_n and type(n_meshes) == "number") then
+        mod:info("[LA probe %s] cannot enumerate meshes; aborting probe", tag)
+        return
+    end
+
+    for i = 0, n_meshes - 1 do
+        local ok_m, mesh = pcall(Unit.mesh, unit, i)
+        mod:info("[LA probe %s] mesh[%d] ok=%s val=%s", tag, i, tostring(ok_m), tostring(mesh))
+        if ok_m and mesh and Mesh then
+            local ok_mn, mname = pcall(function() return Unit.mesh_name and Unit.mesh_name(unit, i) end)
+            if ok_mn and mname then mod:info("[LA probe %s]   Unit.mesh_name(%d)=%s", tag, i, tostring(mname)) end
+
+            local ok_nm, n_mats = pcall(Mesh.num_materials, mesh)
+            mod:info("[LA probe %s]   Mesh.num_materials ok=%s val=%s", tag, tostring(ok_nm), tostring(n_mats))
+            if ok_nm and type(n_mats) == "number" then
+                for j = 0, n_mats - 1 do
+                    local ok_mat, mat = pcall(Mesh.material, mesh, j)
+                    mod:info("[LA probe %s]     material[%d] ok=%s val=%s", tag, j, tostring(ok_mat), tostring(mat))
+                    if ok_mat and mat and Material then
+                        for _, slot in ipairs(_LA_PROBE_SLOTS) do
+                            if Material.has_variable then
+                                local okv, has = pcall(Material.has_variable, mat, slot)
+                                mod:info("[LA probe %s]       has_variable(%s) ok=%s val=%s",
+                                    tag, slot, tostring(okv), tostring(has))
+                            end
+                            if Material.get_texture then
+                                local okt, tex = pcall(Material.get_texture, mat, slot)
+                                mod:info("[LA probe %s]       get_texture(%s) ok=%s val=%s",
+                                    tag, slot, tostring(okt), tostring(tex))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    mod:info("[LA probe %s] === end ===", tag)
+end
+
 local function _paint_offhand_textures_locally(unit, variant, armoury_key)
     if not unit or type(unit) ~= "userdata" then return false end
     if not Unit.alive(unit) then return false end
 
-    -- v0.8.37: skip painting for kind="unit" variants to test whether the
-    -- post-spawn texture painting (Unit.set_texture_for_materials on a
-    -- bundled-mesh unit whose materials may not be fully bound yet) is
-    -- the source of the C++ AV (GUID a739e6e5). Was also tried in v0.8.36
-    -- but only by skipping the override entirely; this version lets the
-    -- mesh spawn and tests just the paint hypothesis.
+    -- v0.8.44: REVERTED v0.8.43 re-enable. The hypothesis was that v0.8.39's
+    -- parent-package preload (wpn_empire_handgun_02_t2 for Reiland) would
+    -- make `Unit.set_texture_for_materials` safe on bundled meshes. v0.8.43
+    -- test result: same AV at 0x8 (GUID 45a2a017). The 0x8 dereference is
+    -- not the shader-graph being absent — it's something else (likely the
+    -- LA mesh's compiled material not being instantiated in the customization
+    -- preview's specific world, even though the package is globally loaded).
+    -- Stingray materials are per-world; globally-loaded ≠ scoped to the
+    -- LootItemUnitPreviewer's render world. Staying disabled until we have
+    -- a different binding primitive or replicate LA's swap_units_new
+    -- NetworkLookup aliasing for the customization preview path.
     if variant.kind == "unit" then
-        if M.trace then
-            mod:info("[LA bridge] skip paint for kind=unit %s (texture-painting disabled for bundled meshes)",
+        -- v0.8.45 probe: confirmed material[0] = #ID[00000000] (null sentinel)
+        -- in the LootItemUnitPreviewer's world, despite v0.8.39's parent-package
+        -- preload firing 2ms earlier. The package being globally loaded does NOT
+        -- automatically populate the previewer's per-world material binding for
+        -- the LA mesh — the engine binds null at spawn time and caches it.
+        --
+        -- v0.8.47 fix: explicitly Unit.set_all_materials(unit, parent_path)
+        -- where parent_path is the vanilla material the LA `.unit` was
+        -- compiled against (via its `mat_to_use` directive — see
+        -- M.la_kind_unit_parent_packages). This forces an explicit rebind to
+        -- the real, already-package-loaded material instead of relying on the
+        -- engine's implicit resolution. Once material is real, the
+        -- Unit.set_texture_for_materials code below can paint LA's textures
+        -- onto its slots without dereferencing null.
+        local parent_path = M.la_kind_unit_parent_packages and M.la_kind_unit_parent_packages[armoury_key]
+        if parent_path and Unit.set_all_materials then
+            local ok, err = pcall(Unit.set_all_materials, unit, parent_path)
+            mod:info("[LA fix kind=unit %s] Unit.set_all_materials(%s) ok=%s err=%s",
+                tostring(armoury_key), parent_path, tostring(ok), tostring(err))
+        else
+            mod:info("[LA fix kind=unit %s] no parent_path or Unit.set_all_materials missing — paint will likely AV",
                 tostring(armoury_key))
         end
-        return false
+        -- Probe again AFTER the swap so the log shows whether material[0]
+        -- flipped from #ID[00000000] to a real binding.
+        _probe_la_unit_materials(unit, armoury_key)
+        -- Fall through to the texture-painting code below. If set_all_materials
+        -- succeeded, paint binds onto the real handgun material; if it didn't,
+        -- the existing v0.8.34/v0.8.43 AV returns and we revert next version.
     end
 
     -- Resolution order for textures:

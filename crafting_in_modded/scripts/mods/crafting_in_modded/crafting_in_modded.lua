@@ -17,9 +17,14 @@ Major sections (search by name to jump):
 
 local mod = get_mod("cim")
 
-local MOD_VERSION = "0.5.6-dev"
+local MOD_VERSION = "0.7.0-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 mod:echo("Crafting in Modded v" .. MOD_VERSION)
+
+-- Register the "modded" rarity (and any future custom rarities) BEFORE
+-- anything else loads — sibling modules will create items with this rarity.
+local _ok_rr, _err_rr = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/modded_rarities")
+if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err_rr)) end
 
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left
@@ -27,18 +32,15 @@ mod:echo("Crafting in Modded v" .. MOD_VERSION)
 local _ok_sf, _err_sf = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/standard_forge")
 if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_sf)) end
 
--- CLARIFY: Patch NetworkLookup.rarities at module-load time so the "promo" rarity
--- (used by Athanor-crafted items) round-trips through the network table without
--- crashing on unknown lookup. Idempotent; runs once per script load. Must happen
--- BEFORE any equip path can fire.
+-- Backward-compat: pre-v0.7.0 cim used `rarity = "promo"` for crafts. Keep
+-- "promo" registered in NetworkLookup.rarities too so legacy saved items can
+-- still round-trip through inventory sync until they get re-crafted/migrated.
 local NL = rawget(_G, "NetworkLookup")
-if NL and NL.rarities then
+if NL and NL.rarities and not rawget(NL.rarities, "promo") then
     local t = NL.rarities
-    if not rawget(t, "promo") then
-        local idx = #t + 1
-        t[idx] = "promo"
-        rawset(t, "promo", idx)
-    end
+    local idx = #t + 1
+    t[idx] = "promo"
+    rawset(t, "promo", idx)
 end
 
 -- ============================================================
@@ -84,10 +86,15 @@ local function _forge_load()
     for bid, w in pairs(save_data) do
         -- Backward-compat: legacy entries without `via_mirror` were saved by the
         -- Athanor (rarity=promo, mirror path) or the legacy `cim forge_confirm`
-        -- (rarity=exotic, MIL path). Default via_mirror to true for promo so the
-        -- mirror restore path picks it up.
+        -- (rarity=exotic, MIL path). Default via_mirror to true for promo/modded so
+        -- the mirror restore path picks it up.
         local via_mirror = w.via_mirror
-        if via_mirror == nil then via_mirror = (w.rarity == "promo") end
+        if via_mirror == nil then via_mirror = (w.rarity == "promo" or w.rarity == "modded") end
+        -- v0.7.0 migration: rewrite legacy `promo` saves to `modded` so they get
+        -- the new rarity's behaviors (cog enabled, full customization window) on
+        -- next session.
+        local rarity = w.rarity
+        if rarity == "promo" then rarity = "modded" end
         _forged_weapons[bid] = {
             item_key = w.item_key,
             properties = w.properties or {},
@@ -95,12 +102,13 @@ local function _forge_load()
             traits = w.traits,
             skin = w.skin,
             power_level = w.power_level or 300,
-            rarity = w.rarity,
+            rarity = rarity,
             via_mirror = via_mirror,
             rerolled_props_indices = w.rerolled_props_indices,
             rerolled_trait_indices = w.rerolled_trait_indices,
         }
     end
+    _forge_save() -- persist any rarity migrations
 end
 
 -- Public helper for sibling modules (standard_forge.lua) to register a newly
@@ -146,6 +154,19 @@ mod._cim_is_modded_backend_id = function(backend_id)
     -- Vanilla PlayFab IDs are continuous hex, no dashes.
     if backend_id:find("^%x+%-%x+%-%x+%-%x+%-%x+$") then return true end
     return false
+end
+
+-- Item-level "is this a modded craft?" check. Same as the backend_id check,
+-- plus a rarity-based fallback: any item with our custom rarity ("modded", or
+-- the legacy "promo" we used pre-v0.7.0) is treated as modded regardless of
+-- bid format. The rarity is the load-bearing visual cue we apply to crafts, so
+-- it's a more reliable signal than guessing at bid heuristics — covers crafts
+-- saved by older mod versions whose bid format doesn't match our current
+-- regex, items the player crafted on another machine that synced down, etc.
+mod._cim_is_modded_item = function(item)
+    if not item then return false end
+    if item.rarity == "modded" or item.rarity == "promo" then return true end
+    return mod._cim_is_modded_backend_id(item.backend_id)
 end
 
 local function _forge_create_item(weapon_data, backend_id)
@@ -373,13 +394,15 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
 end)
 
 -- ============================================================
--- Salvage filter override: surface modded promo items in the salvage grid
+-- Salvage filter override: surface modded items in the salvage grid
 -- ============================================================
--- Vanilla `can_salvage` (backend_interface_common.lua:412) explicitly excludes
--- `rarity == "promo"`, which means our modded crafts (always promo for the
--- purple icon) never show in the salvage inventory. Post-hook the filter to
--- add our crafts back when the filter is the salvage recipe's
--- (`can_salvage and not is_equipped and not is_equipped_by_any_loadout`).
+-- Vanilla `can_salvage` (backend_interface_common.lua:412) excludes
+-- `rarity == "promo"` AND equipped items AND items in any loadout. Modded
+-- items skip the rarity exclusion (rarity = "modded", not "promo") but auto-
+-- equip on craft, so they'd still be hidden. Post-hook the filter to add our
+-- crafts back regardless of equip/loadout state when the filter is the
+-- salvage recipe's (`can_salvage and not is_equipped and not
+-- is_equipped_by_any_loadout`). Also catches legacy promo-rarity crafts.
 local _SALVAGE_SLOT_TYPES = { melee = true, ranged = true, ring = true, necklace = true, trinket = true }
 
 local function _is_salvage_filter(filter_infix)
@@ -406,10 +429,14 @@ mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, f
     -- crafted them and wants the option to delete them. Auto-equipping after
     -- a craft (which we do via `set_loadout_item`) would otherwise immediately
     -- hide every craft from the scrap list.
+    --
+    -- Use the item-level check (rarity OR bid heuristic) so promo items from
+    -- earlier sessions / other machines / older mod versions still surface
+    -- even if their bid format doesn't match our current regex.
     for _, item in ipairs(items) do
         local bid = item and item.backend_id
         if bid and not seen[bid]
-           and mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(bid) then
+           and mod._cim_is_modded_item and mod._cim_is_modded_item(item) then
             local slot_type = item.data and item.data.slot_type
             if _SALVAGE_SLOT_TYPES[slot_type] then
                 result[#result + 1] = item
@@ -428,6 +455,11 @@ local _forge_loadout = {}
 local _forge_item_props = {}
 local _forge_panel_styled = false
 local _forge_bg_colored = false
+
+-- Per-amulet-slot dirty tracking. Declared here (above the on_exit hook that
+-- resets it) so the hook closure captures this local rather than reading a
+-- nil global. The actual assignment lives further down with the amulet helpers.
+local _amulet_dirty = { false, false, false }
 
 mod.open_forge = function()
     if not Managers.ui then
@@ -454,6 +486,7 @@ mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
     _forge_item_props = {}
     _forge_panel_styled = false
     _forge_bg_colored = false
+    _amulet_dirty[1], _amulet_dirty[2], _amulet_dirty[3] = false, false, false
 end)
 
 -- --- Forge UI polish (runs each frame while forge is open) ---
@@ -932,6 +965,26 @@ local _AMULET_INDEX_BY_SLOT = {}
 for idx, slot in pairs(_AMULET_SLOT_BY_INDEX) do _AMULET_INDEX_BY_SLOT[slot] = idx end
 local _AMULET_LAYER_SIZE = 10  -- matches amulet_slot_layout's per-layer count
 
+-- Per-slot dirty tracking for the amulet's CRAFT button. The auto-apply
+-- mutates equipped items in-place on every bubble click (session-only for
+-- vanilla), so the user's bubble edits are already applied by the time they
+-- reach CRAFT — but for vanilla items those edits don't survive a restart.
+-- CRAFT solves that by creating a new modded item per dirty slot. We mark a
+-- slot dirty on any property/trait set/remove against the amulet (item_backend_id == nil).
+-- (`_amulet_dirty` is forward-declared near the top of the Athanor section so
+-- the on_exit hook can reset it; the table itself was created there.)
+
+local function _mark_amulet_property_dirty(slot_index)
+    local layer = math.ceil((slot_index or 0) / _AMULET_LAYER_SIZE)
+    if layer >= 1 and layer <= 3 then _amulet_dirty[layer] = true end
+end
+
+local function _mark_amulet_trait_dirty(slot_index)
+    if slot_index and slot_index >= 1 and slot_index <= 3 then
+        _amulet_dirty[slot_index] = true
+    end
+end
+
 local function _seed_one_item(item, props_out, traits_out, slot_index)
     if not item then return end
     local layer_offset = (slot_index - 1) * _AMULET_LAYER_SIZE
@@ -1169,6 +1222,7 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
             props[property_key] = {}
         end
         props[property_key][#props[property_key] + 1] = slot_index
+        if not item_backend_id then _mark_amulet_property_dirty(slot_index) end
         _forge_apply_to_item(career_name, item_backend_id)
         return
     end
@@ -1190,6 +1244,7 @@ mod:hook("BackendInterfaceWeavesPlayFab", "remove_loadout_property", function(fu
                 data.properties[property_key] = nil
             end
         end
+        if not item_backend_id then _mark_amulet_property_dirty(slot_index) end
         _forge_apply_to_item(career_name, item_backend_id)
         return
     end
@@ -1200,6 +1255,7 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_trait", function(func, se
     if _custom_forge_active then
         local data = _forge_seed_item(career_name, item_backend_id)
         data.traits[trait_key] = slot_index
+        if not item_backend_id then _mark_amulet_trait_dirty(slot_index) end
         _forge_apply_to_item(career_name, item_backend_id)
         return
     end
@@ -1209,7 +1265,9 @@ end)
 mod:hook("BackendInterfaceWeavesPlayFab", "remove_loadout_trait", function(func, self, career_name, trait_key, item_backend_id)
     if _custom_forge_active then
         local data = _forge_seed_item(career_name, item_backend_id)
+        local removed_slot = data.traits[trait_key]
         data.traits[trait_key] = nil
+        if not item_backend_id then _mark_amulet_trait_dirty(removed_slot) end
         _forge_apply_to_item(career_name, item_backend_id)
         return
     end
@@ -1450,7 +1508,7 @@ local function _athanor_inject_item(weapon_data, backend_id)
 
     local custom_data = {
         power_level = tostring(weapon_data.power_level or 300),
-        rarity = weapon_data.rarity or "promo",
+        rarity = weapon_data.rarity or "modded",
     }
     if cjson_mod then
         custom_data.properties = cjson_mod.encode(props)
@@ -1472,23 +1530,61 @@ end
 -- Re-add every saved mirror-path craft (Athanor + standard forge) to the live
 -- backend mirror after PlayFab finishes its sync. Items flagged `via_mirror = false`
 -- go through the legacy MIL path via `_forge_inject_all` instead.
+-- Tracks bids whose first injection attempt was skipped (ItemMasterList not
+-- ready). Retried on each subsequent `_create_interfaces` call AND on game
+-- state transitions, so once CWV / other mods finish loading their items,
+-- the saved crafts make it back into the inventory.
+local _pending_inject = {}
+
 _athanor_inject_all = function()
     local count, skipped = 0, 0
+    _pending_inject = {}
     for bid, w in pairs(_forged_weapons) do
         if w.via_mirror then
-            local ok, err = _athanor_inject_item(w, bid)
-            if ok then
+            local mirror = Managers.backend and Managers.backend:get_backend_mirror()
+            -- If the item is already in the mirror (a previous _create_interfaces
+            -- call already injected it), skip the re-add. add_item is idempotent
+            -- but logging extra "restored" lines is misleading.
+            local already_in = mirror and mirror._inventory_items and mirror._inventory_items[bid]
+            if already_in then
                 count = count + 1
             else
-                skipped = skipped + 1
-                mod:info("Skipped saved craft %s: %s", tostring(w.item_key), tostring(err))
+                local ok, err = _athanor_inject_item(w, bid)
+                if ok then
+                    count = count + 1
+                else
+                    skipped = skipped + 1
+                    _pending_inject[bid] = w
+                    mod:info("Skipped saved craft %s: %s", tostring(w.item_key), tostring(err))
+                end
             end
         end
     end
     if count > 0 then mod:info("Restored %d crafted weapons (mirror path)", count) end
     if skipped > 0 then
-        mod:info("%d saved crafts skipped (item_key not registered yet — usually means CWV item without CWV loaded, or stale save)", skipped)
+        mod:echo(string.format("[cim] %d saved crafts deferred (waiting for sibling mods to register their ItemMasterList entries — will retry on next state transition)", skipped))
     end
+end
+
+-- Retry any deferred injections. Called on `_create_interfaces` re-fires and
+-- on game-state changes. Cheap when `_pending_inject` is empty.
+local function _athanor_retry_pending()
+    if not next(_pending_inject) then return end
+    local recovered = 0
+    for bid, w in pairs(_pending_inject) do
+        local ok = _athanor_inject_item(w, bid)
+        if ok then
+            _pending_inject[bid] = nil
+            recovered = recovered + 1
+        end
+    end
+    if recovered > 0 then
+        mod:echo(string.format("[cim] Re-injected %d previously-deferred craft(s)", recovered))
+    end
+end
+
+mod.on_game_state_changed = function()
+    _athanor_retry_pending()
 end
 
 -- --- Weapon select: craft item on equip press ---
@@ -1508,7 +1604,7 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         properties = {},
         traits = {},
         power_level = 300,
-        rarity = "promo",
+        rarity = "modded",
         via_mirror = true,
     }
 
@@ -1569,12 +1665,102 @@ end)
 -- "Craft New" action. Hijack `_upgrade_magic_level` so pressing it instead
 -- creates a new modded item with the player's current bubble-grid edits and
 -- equips it in place of the existing item.
+--
+-- Vanilla's `_set_essence_upgrade_cost` (hero_window_weave_properties.lua:1856)
+-- runs each refresh and sets:
+--   * `button_content.title_text` = "Fully Upgraded" when `essence_amount` is
+--     nil (it always is in modded — our weaves hooks return 0 essence).
+--   * `disable_button = true` when `script_data["eac-untrusted"]` is true
+--     (it always is in modded realm).
+-- Post-hook to overwrite both so the button reads "CRAFT" and is clickable.
+mod:hook_safe("HeroWindowWeaveProperties", "_set_essence_upgrade_cost", function(self, essence_amount, can_afford, magic_cap_reached)
+    if not _custom_forge_active then return end
+    local widgets_by_name = self._widgets_by_name
+    local btn = widgets_by_name and widgets_by_name.upgrade_button
+    if not btn then return end
+    local label = "CRAFT"
+    local item = self:_selected_item()
+    if not item then
+        label = "CRAFT MODDED JEWELLERY"
+    else
+        local slot_type = item.data and item.data.slot_type
+        if slot_type == "melee" or slot_type == "ranged" then
+            label = "CRAFT NEW WEAPON"
+        end
+    end
+    btn.content.title_text = label
+    btn.content.button_hotspot.disable_button = false
+    if btn.style and btn.style.price_icon then btn.style.price_icon.color[1] = 0 end
+    if btn.style and btn.style.price_icon_disabled then btn.style.price_icon_disabled.color[1] = 0 end
+    -- Also clear the "not enough essence" warning that vanilla shows when cap
+    -- is reached — we don't use essence in modded.
+    local warn = widgets_by_name.upgrade_essence_warning
+    if warn and warn.content then warn.content.visible = false end
+end)
+
 mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, self)
     if not _custom_forge_active then return func(self) end
 
     local item = self:_selected_item()
     local item_data = item and item.data
     local item_key = item_data and (item_data.key or item_data.name)
+
+    -- Amulet case: no selected_item. Iterate dirty accessory slots; for each,
+    -- create a new modded item with the current bubble state and equip it.
+    if not item then
+        local backend_items = Managers.backend and Managers.backend:get_interface("items")
+        local career_name = self._career_name
+        if not backend_items or not career_name then
+            mod:echo("[cim] Craft: backend / career not ready")
+            return
+        end
+        local crafted = 0
+        for slot_index, slot_name in ipairs(_AMULET_SLOT_BY_INDEX) do
+            if _amulet_dirty[slot_index] then
+                local src_bid = backend_items:get_loadout_item_id(career_name, slot_name)
+                local src_item = src_bid and backend_items:get_item_from_id(src_bid)
+                local src_key = src_item and (src_item.key or src_item.ItemId)
+                if src_key then
+                    local new_props = {}
+                    if src_item.properties then
+                        for k, v in pairs(src_item.properties) do new_props[k] = v end
+                    end
+                    local new_traits = {}
+                    if src_item.traits then
+                        for i, t in ipairs(src_item.traits) do new_traits[i] = t end
+                    end
+
+                    local new_bid = Application.guid()
+                    local weapon_data = {
+                        item_key = src_key,
+                        properties = new_props,
+                        traits = new_traits,
+                        power_level = 300,
+                        rarity = "modded",
+                        via_mirror = true,
+                    }
+                    local injected, err = _athanor_inject_item(weapon_data, new_bid)
+                    if injected then
+                        if mod._cim_register_craft then mod._cim_register_craft(new_bid, weapon_data) end
+                        pcall(backend_items.set_loadout_item, backend_items,
+                              new_bid, career_name, slot_name)
+                        crafted = crafted + 1
+                        _amulet_dirty[slot_index] = false
+                    else
+                        mod:echo("[cim] Craft " .. slot_name .. " failed: " .. tostring(err))
+                    end
+                end
+            end
+        end
+        if crafted > 0 then
+            mod:echo("[cim] Crafted " .. crafted .. " modded accessor" ..
+                     (crafted == 1 and "y" or "ies"))
+        else
+            mod:echo("[cim] No accessory edits to craft (Apply auto-runs on bubble click)")
+        end
+        return
+    end
+
     if not item_key then
         mod:echo("[cim] Craft: no selected item")
         return
@@ -1604,7 +1790,7 @@ mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, sel
         properties = new_props,
         traits = new_traits,
         power_level = 300,
-        rarity = "promo",
+        rarity = "modded",
         via_mirror = true,
     }
 
@@ -2194,6 +2380,48 @@ mod:command("forge_confirm", "Create the forged weapon", function()
         mod:echo("Forge: created " .. display .. " [" .. backend_id .. "]")
         _forge_pending = nil
     end
+end)
+
+-- Diagnostic for salvage visibility: dumps every saved craft + whether it's
+-- currently in the backend mirror, what rarity the mirror says, what
+-- slot_type it has, and whether our salvage filter would surface it.
+mod:command("salvage_debug", "Why isn't my modded craft showing in salvage?", function()
+    local items_iface = Managers.backend and Managers.backend:get_interface("items")
+    local mirror = Managers.backend and Managers.backend:get_backend_mirror()
+    if not items_iface or not mirror then
+        mod:echo("Backend not ready")
+        return
+    end
+
+    local inv = mirror._inventory_items or {}
+    local saved_count, in_mirror, promo_in_mirror = 0, 0, 0
+    mod:echo("--- saved crafts (_forged_weapons) ---")
+    for bid, w in pairs(_forged_weapons) do
+        saved_count = saved_count + 1
+        local item = inv[bid]
+        local in_inv = item ~= nil
+        if in_inv then in_mirror = in_mirror + 1 end
+        local rarity = item and item.rarity or "<not in mirror>"
+        local slot_type = item and item.data and item.data.slot_type or "<no data>"
+        if rarity == "promo" then promo_in_mirror = promo_in_mirror + 1 end
+        local in_inv_str = in_inv and "Y" or "N"
+        mod:echo(string.format("  inv=%s  rarity=%s  slot=%s  key=%s  bid=%s",
+            in_inv_str, tostring(rarity), tostring(slot_type), tostring(w.item_key), tostring(bid)))
+    end
+    mod:echo(string.format("Saved: %d  In mirror: %d  Promo in mirror: %d",
+        saved_count, in_mirror, promo_in_mirror))
+
+    mod:echo("--- all promo-rarity items in mirror ---")
+    local extra_promo = 0
+    for bid, item in pairs(inv) do
+        if item and item.rarity == "promo" and not _forged_weapons[bid] then
+            extra_promo = extra_promo + 1
+            local slot_type = item.data and item.data.slot_type or "<no data>"
+            mod:echo(string.format("  rarity=promo  slot=%s  key=%s  bid=%s",
+                tostring(slot_type), tostring(item.key or item.ItemId), tostring(bid)))
+        end
+    end
+    if extra_promo == 0 then mod:echo("  (none beyond saved crafts)") end
 end)
 
 mod:command("forge_list", "List all forged weapons", function()

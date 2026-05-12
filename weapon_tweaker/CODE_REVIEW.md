@@ -127,8 +127,8 @@ The first three need widgets added. The last six should have their localization 
 - ✅ `mod:hook("Unit", "animation_event", ...)` — string-form, correct.
 - ✅ `mod:hook("SimpleInventoryExtension", "wield", ...)` — string-form, correct.
 - ✅ `mod:hook("GearUtils", "create_equipment", ...)` — string-form, correct.
-- ✅ `mod:hook_safe("HeroPreviewer", "equip_item", ...)` — fire-and-forget, no return needed, correct use of hook_safe.
-- ⚠️ `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)` — `equip_item` is INHERITED from HeroPreviewer; whether VMF can resolve through metatable depends on its lookup implementation. Likely silently broken. See Confirmed bugs.
+- ✅ `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)` — fire-and-forget, no return needed, correct use of hook_safe. **Hooks the derived class deliberately** — `equip_item` is INHERITED from HeroPreviewer but VT2's `class()` (`foundation/scripts/util/class.lua:51-57`) copies parent methods at class-definition time (no `__index` chain), so the runtime keep inventory previewer's `equip_item` is a separate function reference from `HeroPreviewer.equip_item`. Hooks on HeroPreviewer silently never fire here — confirmed by weapon_tweaker v0.12.16 shipping the bug and v0.12.17 fixing it. See `feedback_vt2_class_hook_derived.md`.
+- ❌ `mod:hook_safe("HeroPreviewer", "equip_item", ...)` — DO NOT add. This is the trap that caused v0.12.16's preview-swap to silently no-op.
 - ✅ `mod:hook_safe("MenuWorldPreviewer", "_spawn_item_unit", ...)` — `_spawn_item_unit` IS directly defined on MenuWorldPreviewer (line 643 of menu_world_previewer.lua). OK.
 - ✅ `mod:hook("BackendInterfaceWeavesPlayFab", ...)` × 22 — all methods exist directly on the class; string-form correct.
 - ✅ `mod:hook("HeroWindowWeaveForgeWeapons", ...)` × 5 — methods exist; string-form correct.
@@ -175,12 +175,11 @@ The remap block runs on `unit` whether it's the 3P body or a husk. Both need cro
 
 | Path | Coverage | Implementation |
 |------|----------|----------------|
-| In-game (GearUtils.create_equipment) | ✅ | scale, grip-offset, animation hooks |
-| Inventory preview (HeroPreviewer.equip_item) | ✅ | scale, grip-offset (via probed slot_data) |
-| Inventory preview (MenuWorldPreviewer) | ⚠️ | scale/offset attempted via `_spawn_item_unit`, but `equip_item` capture hook may be broken (see hook patterns) |
+| In-game (GearUtils.create_equipment / spawn_inventory_unit) | ✅ | scale, grip-offset, animation hooks. Career-gated hooks read career from inventory_system extension (NOT Managers.player) per v0.12.17 fix — see `feedback_vt2_mission_spawn_career_lookup`. |
+| Inventory preview (MenuWorldPreviewer.equip_item) | ✅ | scale + brace-3P swap; hooks correctly target the derived class per v0.12.17 fix — see `feedback_vt2_class_hook_derived` |
 | Illusion browser (LootItemUnitPreviewer) | ❌ INTENTIONAL | per `feedback_grip_offset_sign`, weapon_tweaker does NOT cover this path |
 
-Animation remaps don't go through MenuWorldPreviewer (preview is static, not driven by `Unit.animation_event`), so this asymmetry only affects scale/offset.
+Animation remaps don't go through MenuWorldPreviewer (preview is static, not driven by `Unit.animation_event`), so the only menu-side asymmetry is scale/offset — both reach the visible model via the `MenuWorldPreviewer.equip_item` capture + `MenuWorldPreviewer._spawn_item_unit` apply pair.
 
 ---
 

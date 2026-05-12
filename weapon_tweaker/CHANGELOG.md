@@ -1,5 +1,177 @@
 # Weapon Tweaker Changelog
 
+## 0.12.22-dev (2026-05-12) — Kruber's Longbow on Saltzpyre with crossbow 3P visuals
+
+New cross-character feature, mirrors the `wh_brace_of_pistols` → repeater pattern from v0.12.2-v0.12.17 but in the opposite direction (Kruber-weapon on Saltzpyre) and with one new wrinkle (LEFT-hand swap + ammo unit swap).
+
+**End-user behavior:**
+- Per-career VMF checkboxes for `wh_captain`, `wh_bountyhunter`, `wh_zealot`, `wh_priest` ("Kruber: Longbow", default OFF). Toggle ON to make `es_longbow` equippable on that Saltzpyre career.
+- 1P (the player's first-person view): Saltzpyre wields a longbow, fires arrows. Vanilla longbow gameplay — same actions, same damage, same anim events. Per the universal-1P rule (`feedback_1p_animations_universal`).
+- 3P (other players' view of Saltzpyre, AND the keep inventory character preview): Saltzpyre appears to wield Saltzpyre's **crossbow** with a **bolt** loaded, playing the crossbow wield + fire 3P animations.
+
+**Implementation (`scripts/mods/weapon_tweaker/weapon_tweaker.lua`):**
+- `weapon_unlock_map`: appended `"es_longbow"` to all 4 Saltzpyre career entries.
+- `_force_load_sp_crossbow_3p_units()` at mod init: force-loads `wpn_empire_crossbow_tier1_3p` (the crossbow 3P weapon) and `wpn_crossbow_bolt_3p` (the bolt 3P ammo) under references `wt_sp_crossbow_3p` / `wt_sp_crossbow_bolt_3p`. Same async-load pattern the brace-repeater uses.
+- `_patch_longbow_empire_template_for_saltzpyre()` at mod init: patches `Weapons.longbow_empire_template` in place — sets `wield_anim_career_3p[wh_*] = "to_crossbow"` (3P wield SM transition) and per-action `anim_event_3p` remaps for events the crossbow 3P SM doesn't author identically: `attack_shoot_fast → attack_shoot`, `attack_shoot_fast_last → attack_shoot_last`, `draw_bow → to_zoom`. Per-career keying means Kruber/Kerillian native wielders see no change.
+- New `mod:hook("GearUtils", "spawn_inventory_unit", ...)` parallel to the brace hook. Gates on `item_data.name == "es_longbow"`, `hand == "left"`, career-starts-with-`wh_`. Swaps v_w3p (bow 3P → crossbow 3P) via `Managers.state.unit_spawner:spawn_local_unit_with_extensions` and v_a3p (arrow 3P → bolt 3P) via `GearUtils._attach_ammo_unit`. The bolt attaches using the CROSSBOW template's `ammo_data.ammo_unit_attachment_node_linking.third_person.wielded` (NOT the longbow's arrow linking) so the bolt mounts at the crossbow's nock position. 1P returns left untouched. Full pcall wrap — any failure falls back to vanilla bow/arrow.
+- New `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)` parallel to the brace preview hook. Mutates `info.spawn_data` left_hand entry's `unit_name` → crossbow 3P. No ammo swap in preview (vanilla preview doesn't spawn the bow's arrow). Hooks `MenuWorldPreviewer`, NOT `HeroPreviewer`, per `feedback_inventory_preview_hook_menuworldpreviewer` (the v0.12.17 lesson).
+
+**Files changed:**
+- `weapon_tweaker.lua` — version bump, unlock_map (4 lines), force-load block, template patcher, in-game spawn hook, preview hook.
+- `weapon_tweaker_data.lua` — 4 new VMF checkboxes (one per Saltzpyre career), all default false.
+- `weapon_tweaker_localization.lua` — 4 new "Kruber: Longbow" strings, slotted alphabetically among the existing "Kruber: *" entries.
+
+**Career detection:** uses the v0.12.17 `_unit_career_name` (inventory-extension-first, `Managers.player` fallback) — handles mission-spawn timing correctly. No new helper needed.
+
+**Verification matrix (please test):**
+1. Enable `unlock_wh_zealot_es_longbow` (or any career), equip `es_longbow` on that Saltzpyre career.
+2. Keep inventory preview: Saltzpyre's preview model holds a crossbow (no visible bolt — preview doesn't render ammo on bows). ✅ if crossbow mesh.
+3. Load into a mission: Saltzpyre's 3P body (third-person camera, or another player's view) shows him holding a crossbow with a bolt loaded, playing crossbow wield + fire animations. ✅ if crossbow + bolt + crossbow anims.
+4. First-person view in-game: Saltzpyre's 1P shows a longbow + arrow, fires with longbow draw animation, full longbow gameplay (damage profile = arrow_carbine, charge mechanic etc.). ✅ if 1P unchanged from vanilla longbow.
+5. Other Saltzpyre career equipping the option: same as above. Try `wh_priest` (notable because it has no native ranged weapon).
+
+**If this does NOT work, here's what to check next, in order:**
+- **Crash on equip "Unit not found":** the force-load failed. Look for `[wt sp-longbow-crossbow] force-loaded` in startup log. If absent, the unit paths might be wrong — verify `wpn_empire_crossbow_tier1_3p` and `wpn_crossbow_bolt_3p` resolve. The crossbow unit path was sourced from `wh_crossbow.left_hand_unit + "_3p"` and the bolt from `wh_crossbow.ammo_unit + "_3p"`; if vanilla relies on different package keys for these (unlikely — same code path the brace-repeater uses successfully), use [[reference_vt2_bundle_unpacker]] to brute-hash candidate paths.
+- **Bow still showing in 3P:** check log for `[wt sp-longbow-crossbow] swapped`. If absent, the hook isn't firing — confirm career_name resolution (see `feedback_vt2_mission_spawn_career_lookup`). If hook fires but bow still showing, package readiness check might be failing — early return on line 2150ish — temporarily log `Managers.package:has_loaded(_SP_CROSSBOW_3P_UNIT, "wt_sp_crossbow_3p")` to confirm.
+- **Crossbow rendered but bolt missing / wrong position:** check log for `arrow→bolt(true)` vs `arrow→bolt(false)`. False means `crossbow_template_1.ammo_data.ammo_unit_attachment_node_linking` was nil — global `Weapons` table might not be loaded at mod init yet. Late-bind by deferring the bolt-linking lookup into the swap pcall body (already done — it reads `Weapons` at swap time, not at module load), but if it's still nil there, try `AttachmentNodeLinking.bolt` directly.
+- **Wrong 3P anim:** longbow's per-action `anim_event_3p` overrides might not be enough. Check log for which events fire via the existing `wt animlog` command. Saltzpyre's 3P crossbow SM has event names from `Vermintide-2-Source-Code` skeleton dumps — see `reference_3p_skeleton_events`. If the wield is wrong, try `to_crossbow_loaded` instead of `to_crossbow` in `_SP_LONGBOW_CROSSBOW_WIELD_3P`.
+- **Keep inventory preview unchanged but in-mission works:** identical class-hook trap to v0.12.16; verify the preview hook is registered on `MenuWorldPreviewer`, not `HeroPreviewer`. (Source check: line containing `if item_name ~= "es_longbow" then return end` should be immediately under `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)`.)
+- **In-mission revert (works in keep, breaks on mission load):** same class as v0.12.16 bug #2 — would mean `_unit_career_name` returned nil. v0.12.17 fix should prevent this; if it still happens, see `feedback_vt2_mission_spawn_career_lookup` fallback notes (try `career_system:career_name()` instead).
+
+**Doc updates:** none beyond this CHANGELOG entry. The patterns this feature uses (MenuWorldPreviewer hook, inventory-extension-first career lookup, force-load pattern, base-template wield_anim_career_3p) are already documented in CLAUDE.md / DEVELOPMENT.md / the four memory entries created in v0.12.17. This release is the second user of those patterns — they now have two reference call sites.
+
+## 0.12.21-dev (2026-05-12) — Authentic Brace: reticle jumps to wide on RMB, secondary speed back to vanilla, secondary spread 16×→12×
+
+Three related changes from user feel-testing v0.12.20.
+
+**Reticle two-step jump fixed** — the user observed the crosshair "unnaturally going from small to large" when entering rapid fire. Root cause: vanilla brace sets `spread_template_override = "pistol_special"` on BOTH `action_two.default` (the RMB lock-target / aim action) AND `action_one.fast_shot` (the rapid-fire shot). v0.12.19's spread-clone patch only walked `action_one.[default|fast_shot|special_action_shoot]` and rewrote their overrides to our wider clone; `action_two.default` was missed, so its override still pointed at vanilla `pistol_special` (max_pitch≈1.0). Result was a two-stage reticle expansion: RMB press → reticle jumps to vanilla pistol_special width, then LMB press → action_one.fast_shot triggers, reticle jumps again to the much wider clone.
+- Fix: extended the override-rewrite to walk EVERY action of the template (`for _, sub_actions in pairs(tpl.actions)`), not just `action_one`. Any sub-action with `spread_template_override == "pistol_special"` is rewritten to our wider clone. Now `action_two.default` also uses the wider clone, so the moment RMB is pressed, `WeaponSpreadExtension:override_spread_template()` sets `current_pitch = state_settings.max_pitch` (= 12× the vanilla pistol_special max) and the reticle visually jumps directly to its final wide size with no intermediate stop.
+- This matches the behavior the user described — "when the player first takes aim, the reticle should naturally be large to represent the accuracy, like any normal weapon".
+
+**Secondary fire speed back to vanilla** — `_SLOW_MULT` 2.0 → **1.0**. The user said the v0.12.19-v0.12.20 secondary speed ("50% of vanilla") felt too slow and asked to double it. Doubling the speed = halving the duration multiplier = 1.0, which is the no-scaling identity. Practical effect: rapid fire fires at ~4 shots/sec (vanilla cadence) instead of v0.12.19-v0.12.20's ~2 shots/sec. Primary fire / wield / reload still run at 2× speed (`_FAST_MULT = 0.5`), so secondary is now exactly half the speed of primary at vanilla cadence.
+- The walker logic that branches on FAST vs SLOW per sub-action / per chain is retained verbatim; with `_SLOW_MULT = 1.0` the "slow" branches are no-ops. Keeping the structure means re-tuning to 1.2 / 1.5 / 2.0 later is a one-line constant change.
+
+**Secondary spread 16× → 12×** — `_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT` dialled back per user feel-test ("16 was too high for inaccuracy"). Primary spread mult stays at 3×. Secondary is now 4× the primary multiplier (was ~5.3× in v0.12.20).
+
+**Files changed:** `scripts/mods/weapon_tweaker/weapon_tweaker.lua`
+- Line 24: version bump 0.12.20-dev → 0.12.21-dev.
+- `_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT`: 16.0 → 12.0 (comment updated to note action_two.default coverage).
+- `_SLOW_MULT`: 2.0 → 1.0 (comment updated; walker structure unchanged).
+- Spread-override rewrite loop in step 5: was `for sub_name in ipairs({"default","fast_shot","special_action_shoot"}) do … tpl.actions.action_one[sub_name] …`; now `for _, sub_actions in pairs(tpl.actions) do for _, sub in pairs(sub_actions) do …` — walks every sub-action of every action. New comment explains the two-step reticle jump and why action_two.default needs the rewrite too.
+- Doc-block step (2) updated to reference v0.12.19-v0.12.21 history.
+- Doc-block step (5) updated: secondary mult value 16.0 → 12.0, mention "applied to EVERY sub-action … incl. action_two.default lock-target" so the reticle behavior is documented.
+- Doc-block step (7) updated: speed history (2.0 → 1.0) and the rationale for keeping the split walker structure.
+- Info log: re-worded to print the new values and call out the action_two.default coverage.
+
+**Behavior expectations in-game:**
+- LMB tap single shot: 2× faster than vanilla, 3× spread. Unchanged from v0.12.20.
+- Press RMB (lock-target / aim): reticle jumps directly to the wide secondary size — no two-step expansion, no visible lerp. Spread immediately represents the actual rapid-fire accuracy.
+- Hold RMB then LMB → rapid fire: vanilla cadence (~4 shots/sec, was ~2 in v0.12.20), 12× spread (was 16×). Slower than primary, much less accurate than primary, vanilla pacing.
+- Reload, mag, damage, ammo unchanged from v0.12.19.
+
+## 0.12.20-dev (2026-05-12) — Authentic Brace: spread tuning pass — primary 4×→3×, secondary 8×→16×
+
+Two-constant tune of the v0.12.19 spread split, per user feel-test. Primary fire is now tighter (single-shot LMB rewards aim more than "spray and pray"), and secondary fire is much sprayer (rapid-fire is now firmly a suppression / point-blank mode, not a substitute for aimed shots).
+
+- `_AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT`: 4.0 → **3.0**. Single-shot LMB (action_one.default → default brace spread clone) is ~25% tighter than v0.12.19.
+- `_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT`: 8.0 → **16.0**. Rapid-fire (action_one.fast_shot → pistol_special clone) is 2× wider than v0.12.19, ≈5.3× the primary spread.
+- Doc-block reference values in the step (5) commentary updated to match.
+
+No mechanical changes — speed, ammo, damage, reload all unchanged from v0.12.19. Pure number tune.
+
+## 0.12.19-dev (2026-05-12) — Authentic Brace: split primary/secondary fire, restore manual reload (6/12, 1-at-a-time)
+
+User request: differentiate the brace's primary (LMB single-shot) and secondary (RMB-hold rapid-fire) modes. Secondary should be slower AND less accurate than primary; primary keeps its 2× speed and current accuracy. Plus they've changed their mind on reload — bring manual reload back, with a small mag and shot-by-shot loading.
+
+**Speed split (step 7, formerly a uniform 2× speedup):** introduced `_FAST_MULT = 0.5` (2× speed, applied to primary and everything else) and `_SLOW_MULT = 2.0` (50% of vanilla speed, applied to secondary fire). The walker now branches per-sub-action:
+- `action_one.fast_shot` sub-action itself: SLOW. `total_time` 1 → 2, `reload_time` 0.1 → 0.2 — the rapid-fire shot's own duration doubles vs vanilla.
+- Chain `start_time`s use SLOW when the source sub-action is secondary (so fast_shot's self-loop at `start_time=0.25` becomes 0.5 — rapid-fire cadence drops from ~4 shots/sec to ~2 shots/sec) OR when the chain TARGETS fast_shot (so the RMB-into-rapid-fire chain from `action_two.default` at `start_time=0.25` also becomes 0.5 — entering rapid fire from the lock-target pose takes 2× the vanilla delay).
+- Everything else (primary single shot, reload, wield, action_two's hold-pose mechanics, special_action_shoot) keeps the FAST mult — unchanged from v0.12.18 behavior. `0`/`math.huge` still skipped.
+
+**Spread split (step 5, formerly a single `_AUTHENTIC_BRACE_SPREAD_MULT=4.0`):** split into two constants:
+- `_AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT = 4.0` — applied to the cloned brace default spread (single-shot LMB). Unchanged from v0.12.15-v0.12.18; primary fire stays at the same "dramatic" accuracy it had before.
+- `_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT = 8.0` — applied to the cloned `pistol_special` spread that `fast_shot` uses via `spread_template_override`. Secondary fire is now 2× more inaccurate than primary. `_wt_clone_spread_wider` gained a `mult` parameter; the two clone callsites pass primary / secondary respectively.
+
+**Reload re-enabled, mag/reserve resized (steps 3 + 4):**
+- Step 3 (was: stub `weapon_reload.default.condition_func` / `chain_condition_func` with `_disable_action` to block manual reload): now a no-op. `weapon_reload.default` is left vanilla, so pressing R triggers the normal reload animation. The now-unused `_disable_action` local was deleted.
+- Step 4 ammo (was: `clip=12 / per_reload=12 / max=12`, no-reserve, no-per-shot-reload): now `clip=6 / per_reload=1 / max=12`. Mag holds 6, reserve holds 6, each reload animation loads one round; player can keep tapping R to fill the mag round-by-round or interrupt with a shot at any time. Matches a flintlock-pistol-bandolier feel.
+
+**Files changed (one file):** `scripts/mods/weapon_tweaker/weapon_tweaker.lua`
+- Line 24: version bump 0.12.18-dev → 0.12.19-dev.
+- Lines 1557-1605: doc comment block rewritten (steps 2, 3, 4, 5, 7 all updated to new behavior; step 6 left as historical note).
+- Lines 1668-1717: spread mult split into PRIMARY/SECONDARY constants; `_wt_clone_spread_wider` takes a `mult` parameter; the two callsites pass the right one.
+- Removed: `_disable_action` local (was only used by the old step 3 manual-reload-disable; no callers left after the step 3 update).
+- Step 3 block: now a no-op + explanatory comment (manual reload re-enabled).
+- Step 4 block: `ammo_per_clip = 6`, `ammo_per_reload = 1`, `max_ammo = 12`.
+- Step 7 block: speed pass rewritten with per-sub-action / per-chain mult selection.
+- Info log: now prints primary/secondary spread mults and "primary-speed=2x, secondary-fire-speed=0.5x" separately so the in-game log makes the split visible.
+
+**Behavior expectations in-game:**
+- LMB tap single shot: same as v0.12.18 (2× faster than vanilla, 4× spread).
+- Hold RMB then LMB → rapid fire: now ~2 shots/sec (vs v0.12.18 ~8 shots/sec; vanilla ~4 shots/sec) with 8× spread — slower than vanilla AND much more inaccurate. Effectively a "spray volley" mode.
+- Press R: vanilla manual reload animation runs, loads 1 round. Tap R again, another round, until mag is full or reserve is empty.
+- Mag is 6 rounds; full carry is 12.
+
+**No fast_shot chain rewrite** (the v0.12.13 "rewrite every `sub_action == 'fast_shot'` chain to `default`" defense) — keeping the rapid-fire path reachable is now the explicit design intent, since the user wants it to function (just slower and less accurate). Reverted in v0.12.15, not reintroduced here.
+
+## 0.12.18-dev (2026-05-11) — Kruber Longbow on Mercenary and Foot Knight
+
+Added `es_longbow` (Kruber's Empire longbow) to the unlock pool for `es_mercenary` and `es_knight`. Huntsman has it natively; Questing Knight already had it. New checkboxes default to off so existing users see no change until they opt in.
+
+- `weapon_tweaker.lua`: appended `"es_longbow"` to `weapon_unlock_map.es_mercenary` and `weapon_unlock_map.es_knight`.
+- `weapon_tweaker_data.lua`: added `unlock_es_mercenary_es_longbow` and `unlock_es_knight_es_longbow` checkboxes in the respective `ranged_*` groups (default `false`).
+- `weapon_tweaker_localization.lua`: added the two `"Kruber: Longbow"` strings.
+
+No animation work needed — Mercenary and Foot Knight share Kruber's 3P body skeleton, so the Huntsman longbow event vocabulary applies directly.
+
+## 0.12.17-dev (2026-05-11) — Brace → Repeater swap: fix BOTH preview-path and mission-spawn revert
+Two bugs in the v0.12.16-dev attempt. Both fixed here; both produce the same symptom shape (in-game keep model right, somewhere-else wrong) but have different root causes.
+
+**Bug 1 — Inventory preview unchanged.** v0.12.16 hooked `HeroPreviewer.equip_item`. The keep inventory previewer is `MenuWorldPreviewer` (verified: `hero_window_character_preview.lua:171`, `character_selection_view.lua:52`, every `:new(...)` caller of the inventory). VT2's `foundation/scripts/util/class.lua:51-57` COPIES parent methods into the child at class-definition time (no `__index` chain); when `MenuWorldPreviewer = class(MenuWorldPreviewer, HeroPreviewer)` runs at game load, `MenuWorldPreviewer.equip_item` becomes a *static copy* of `HeroPreviewer.equip_item`. VMF `mod:hook("HeroPreviewer", "equip_item", ...)` replaces `HeroPreviewer.equip_item` with a wrapper, but `MenuWorldPreviewer.equip_item` still points at the original unwrapped function — the hook NEVER FIRES on inventory previewer instances. v0.12.16's inline comment claiming "the parent hook fires for both" was the misconception that kept tripping past agents.
+
+Fix: changed BOTH `mod:hook_safe("HeroPreviewer", "equip_item", ...)` hooks (the brace-3P-preview swap and the scale-capture pending-key) to `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)`. Hook body unchanged. Comment rewritten to call out the class-copy trap and cross-link `feedback_vt2_class_hook_derived`.
+
+**Bug 2 — In-mission 3P reverts to vanilla pistols.** v0.12.16's in-game `GearUtils.spawn_inventory_unit` hook detected Kruber via `_unit_career_name(owner_unit_3p)`, which read `Managers.player:owner(unit):career_name()`. At mission spawn, `SimpleInventoryExtension.extensions_ready` calls `add_equipment_by_category` → `add_equipment` → `GearUtils.create_equipment` → our `spawn_inventory_unit` hook. At THAT moment `Managers.player`'s unit→player reverse association has not yet been re-pointed at the freshly-spawned mission player_unit, so `pm:owner(unit) → nil` and the helper returns nil → hook bails on line 1847 → vanilla brace 3P units returned → Kruber holds the brace in-mission. The keep works because the keep avatar is long-associated.
+
+Fix: rewrote `_unit_career_name` to read `_career_name` from the unit's `inventory_system` extension FIRST. That field is set by `SimpleInventoryExtension.init:47` BEFORE `extensions_ready` fires our hook, so it is always populated by the time the hook runs. `Managers.player` retained as fallback for husk / post-spawn lookups.
+
+**Versions changed:** `MOD_VERSION` 0.12.16-dev → 0.12.17-dev.
+
+**Files changed (one file):** `scripts/mods/weapon_tweaker/weapon_tweaker.lua`
+- Line 24: version bump
+- Lines 841-856: `_unit_career_name` rewritten (inventory-ext-first, Managers.player fallback)
+- Lines 1957-1996: brace-preview hook class swapped + comment rewritten
+- Lines 2027-2050: scale-capture hook class swapped + comment trimmed
+
+**Verification matrix (please report which still fails):**
+1. Equip brace on Kruber in keep → in-keep 3P shows repeater (worked in v0.12.16, should still work).
+2. Open inventory at keep → Kruber preview model shows repeater (NEW — bug 1 fix).
+3. Load into mission → Kruber's in-mission 3P shows repeater (NEW — bug 2 fix).
+4. Other player joins → husk Kruber shows repeater for them (existing path; husks use `simple_husk_inventory_extension` which still routes through the spawn hook — career resolution goes through Managers.player fallback for husks since husk extension key may differ from "inventory_system"; flag if this regresses).
+
+**If this fix does NOT work, here is what to check next, in order:**
+- **Check the in-game log** (`mod:info` messages tagged `[wt brace-3p-swap]` and `[wt brace-3p-swap preview]`) — they print career_name and indicate which path was taken. Silence means the hook didn't fire at all. Non-silence with "kept vanilla unit" means a pcall failed inside the swap body.
+- **If preview still wrong (bug 1 still present):** add `mod:echo` at the top of the `MenuWorldPreviewer.equip_item` hook to confirm it's firing at all. If it's not, the keep inventory might be using a DIFFERENT class derived from `MenuWorldPreviewer` (e.g. a subclass) that copied AGAIN — hook that one instead. Verify with `local cls = getmetatable(self); print(cls.__name or tostring(cls))` inside the hook.
+- **If mission-spawn revert still present (bug 2 still present):** the `_career_name` field on the inventory_system extension might not be named `_career_name` on the active inventory class. Add a printf with `ext._career_name` and `ext.career_name` and `ext.career_extension and ext.career_extension:career_name()` to figure out which field is populated. Alternative source: `ScriptUnit.extension(unit, "career_system"):career_name()` — the career extension is also registered on the player unit before extensions_ready.
+- **Husk path (other players' view of Kruber):** husks use `SimpleHuskInventoryExtension` and might register under a different extension key (`simple_husk_inventory` rather than `inventory_system`). If the husk view shows the wrong thing, expand `_unit_career_name`'s primary probe to also try the husk extension key.
+- **Package not loaded race:** the in-game swap pcall body explicitly bails (`return v_w3p`) when `Managers.package:has_loaded(_BRACE_REPEATER_3P_UNIT, "wt_brace_repeater_3p")` is false. If mission load loses the reference (it shouldn't — the load is under our mod's reference at module init, no level transition releases that), the swap silently no-ops. Look for the `mod:info("force-loaded repeater 3P unit")` line on startup; absence means the force-load failed.
+
+## 0.12.16-dev (2026-05-11) — Brace → Repeater swap: cover inventory character preview path (SUPERSEDED by 0.12.17-dev — see above for why)
+- Fixed: the brace-of-pistols → repeater 3P swap on Kruber didn't apply to the inventory character preview screen — the preview still rendered the brace's two-pistol mesh while in-game 3P (other players' view of your Kruber) correctly showed the Empire repeating handgun. Cause: the v0.1.187 migration hooked `GearUtils.spawn_inventory_unit` for the in-game equip flow (path 1), but `HeroPreviewer` / `MenuWorldPreviewer` use a different code path — they call `World.spawn_unit(world, unit_name)` directly from a precomputed `spawn_data` table built in `HeroPreviewer.equip_item` (path 2, per `CLAUDE.md` "Three Weapon Rendering Paths"). The spawn_inventory_unit hook never fires for the previewer, so the brace mesh shipped through unmodified.
+- Fix: new `mod:hook_safe("HeroPreviewer", "equip_item", ...)` post-hook. When the equipped item is `wh_brace_of_pistols` and `self._current_career_name` starts with `es_` (Kruber career), mutate `self._item_info_by_slot[slot_type].spawn_data` before `_spawn_item` reads it:
+  - Right-hand entry: rewrite `unit_name` → `_BRACE_REPEATER_3P_UNIT` (the same repeater 3P unit path the in-game hook spawns).
+  - Left-hand entry: drop it. Mirrors the existing `show_third_person_inventory` left-pistol-hide hook — the brace's left pistol would otherwise clip through the repeater's body.
+- Package readiness is already taken care of: the repeater 3P unit is force-loaded at mod init via `_force_load_brace_repeater_3p_unit()` (Managers.package:load with prioritize=true), so `World.spawn_unit` in the previewer resolves the resource without needing a per-previewer package load.
+- MenuWorldPreviewer (the post-WoM inventory previewer) inherits from HeroPreviewer and doesn't define its own `equip_item`, so the parent hook fires for both — same pattern the adjacent scale-pending-key hook relies on.
+
+## 0.12.15-dev (2026-05-10) — Authentic Brace: lean into rapid-fire, dramatic spread, 12-round mag
+- Reverted: step 2 (the `action_two.default` mutation that replaced the vanilla lock-target/fast-shot gate with a `kind="aim"` handgun-style zoom) — gone. action_two.default is left untouched. Right-click does the vanilla lock_target + fast_shot rapid-fire chain. Rationale: rapid fire kept surfacing through paths we couldn't fully exorcise (v0.12.10–v0.12.13 chased it through `lookup_data`, the 3P camera tree, the chain rewrite); the user would rather lean in than keep firefighting.
+- Reverted: step 6 (the defensive walk that rewrote every `chain.sub_action == "fast_shot"` to `"default"`) — gone. fast_shot's own self-loop is allowed to function as vanilla intended. Combined with the speed-up that's still in step 7, rapid fire is fast.
+- Changed: `_AUTHENTIC_BRACE_SPREAD_MULT` 1.087 → **4.0**. Every numeric leaf on the cloned `brace_of_pistols` spread template scales 4× (`max_pitch` / `max_yaw` / `immediate_pitch` / `immediate_yaw` across every stance — still / moving / crouch / zoomed). The result is dramatic spread on every single shot.
+- Added: parallel `pistol_special` clone (`wt_authentic_brace_pistol_special_spread`), also 4× scaled. The vanilla `pistol_special` spread is what `action_one.fast_shot` and `action_one.special_action_shoot` use via `spread_template_override` (≈ rapid-fire). Without scaling this one too, the "dramatic" feel only shows on single shots and rapid fire stays at vanilla pistol_special accuracy. Now both modes are equally inaccurate.
+- Reverted: ammo cap 8 → 12. Restores the v0.12.6 cap; per user feedback 8 was too strict. `ammo_per_clip = ammo_per_reload = max_ammo = 12`. No-reserve / no-per-shot-reload behavior unchanged.
+- Updated: description only on the accuracy bullet — "~8% (spread widened proportionally on all stances)" → "DRAMATICALLY reduced — spread widened 4× on every stance (and on rapid-fire / pistol_special too)". Other bullets left as-is per the literal request, including the now-stale "Right-click (aim down sights / rapid-fire mode) is disabled" line (gameplay is back to vanilla on that path; leave as-is unless asked to revise).
+
 ## 0.12.14-dev (2026-05-09) — Authentic Brace: 2x penetration
 - Added: `wt_authentic_pistol` damage profile clone now halves `cleave_distribution.attack` and `cleave_distribution.impact` from shot_sniper's vanilla 0.3/0.3 → 0.15/0.15. Each target consumes half the cleave power, so the projectile passes through roughly twice as many enemies. Vanilla shot_sniper penetrates ~3 targets; Authentic Brace shots now penetrate ~6.
 - Implementation lives in `_wt_clone_shot_sniper_no_dropoff()` alongside the dropoff-flattening pass — runs once at module init when the toggle is on, registered in `NetworkLookup.damage_profiles` like before. No new network surface area.

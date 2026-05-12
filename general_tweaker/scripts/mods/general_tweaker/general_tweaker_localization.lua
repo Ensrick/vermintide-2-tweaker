@@ -30,6 +30,18 @@ return {
     tp_side_offset_tooltip = {
         en = "Horizontal offset (positive = right, negative = left).",
     },
+    tp_disable_zoom_in = {
+        en = "Disable Aim Zoom-In",
+    },
+    tp_disable_zoom_in_tooltip = {
+        en = "When on, aiming or throwing in third-person no longer pulls the camera in close — it stays at the configured distance/height. Useful for watching 3P weapon animations.",
+    },
+    freecam_enabled = {
+        en = "Free Camera (Detached)",
+    },
+    freecam_enabled_tooltip = {
+        en = "Detaches the camera from the player so you can fly around with WASD/mouse and inspect the character/weapon model from any angle. While active, player input is blocked — press F8 to exit. Mainly a dev/inspection tool. Can also be toggled with the 'gt freecam' chat command.",
+    },
 
     gameplay_group = {
         en = "Gameplay",
@@ -46,14 +58,20 @@ return {
     allow_duplicate_careers_tooltip = {
         en = "Allow multiple players to pick the same hero/career in a lobby.",
     },
+    disable_friendly_fire = {
+        en = "Disable Friendly Fire",
+    },
+    disable_friendly_fire_tooltip = {
+        en = "Suppress friendly fire damage from both ranged and melee sources. Champion+ difficulties normally enable ranged FF; this turns it off.",
+    },
 
     mission_inventory_group = {
-        en = "Inventory in Missions",
+        en = "Keep Menus in Missions",
     },
     mission_inventory_enabled = {
-        en = "Enable Inventory Access in Missions",
+        en = "Enable Keep Menu Hotkeys in Missions",
     },
     mission_inventory_enabled_tooltip = {
-        en = "Allow opening the equipment/loadout screen during adventure, survival, and Chaos Wastes missions.",
+        en = "Lets the keep's menu hotkeys (Inventory, Hero, Map, Achievements, Spoils of War, Weave Forge, Weave Play — whatever keys you've rebound them to) open their menus during missions. Also adds an Inventory entry to the in-game ESC menu as a fallback.",
     },
 }

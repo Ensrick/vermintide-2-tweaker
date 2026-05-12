@@ -41,6 +41,18 @@ return {
                         decimals_number = 1,
                         tooltip       = mod:localize("tp_side_offset_tooltip"),
                     },
+                    {
+                        setting_id    = "tp_disable_zoom_in",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("tp_disable_zoom_in_tooltip"),
+                    },
+                    {
+                        setting_id    = "freecam_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("freecam_enabled_tooltip"),
+                    },
                 },
             },
             {
@@ -58,6 +70,12 @@ return {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = mod:localize("allow_duplicate_careers_tooltip"),
+                    },
+                    {
+                        setting_id    = "disable_friendly_fire",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("disable_friendly_fire_tooltip"),
                     },
                 },
             },

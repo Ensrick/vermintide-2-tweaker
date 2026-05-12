@@ -607,14 +607,16 @@ Any visual override must cover **all three** places weapon units are rendered:
 
 | Path | Hook Target | What It Renders | How Units Are Accessed |
 | :--- | :--- | :--- | :--- |
-| **In-game** (keep/mission) | `GearUtils.create_equipment` | Actual gameplay model | `result.left_unit_1p`, `result.right_unit_1p`, `result.left_unit_3p`, `result.right_unit_3p` — separate unit objects per hand |
-| **Inventory character preview** | `HeroPreviewer._spawn_item` | Full character in inventory screen | `self._equipment_units[slot_idx].left` / `.right` — separate unit objects per hand |
+| **In-game** (keep/mission) | `GearUtils.create_equipment` / `GearUtils.spawn_inventory_unit` | Actual gameplay model | `result.left_unit_1p`, `result.right_unit_1p`, `result.left_unit_3p`, `result.right_unit_3p` — separate unit objects per hand |
+| **Inventory character preview** | **`MenuWorldPreviewer._spawn_item` / `MenuWorldPreviewer.equip_item`** (NOT HeroPreviewer — VT2's `class()` copies parent methods at definition time, so hooks on the base silently miss) | Full character in inventory screen | `self._equipment_units[slot_idx].left` / `.right` — separate unit objects per hand |
 | **Illusion/skin browser** | `LootItemUnitPreviewer.spawn_units` | Weapon close-up in skin selection UI | `self._spawned_units` array — left (shield) at index 1, right (weapon) at index 2. Spawn order matches `_load_item_units` which always appends left then right |
 
 Key differences:
-- `GearUtils` and `HeroPreviewer` provide explicit left/right separation
+- `GearUtils` and `MenuWorldPreviewer` provide explicit left/right separation
 - `LootItemUnitPreviewer` uses spawn order (left=1, right=2) — identified via `spawn_data` entries
-- The old `MenuWorldPreviewer._spawn_item_unit` hook is **NOT usable** for per-hand targeting — it fires once per unit with no hand indicator. Use `HeroPreviewer._spawn_item` instead (MenuWorldPreviewer extends HeroPreviewer)
+- The `MenuWorldPreviewer._spawn_item_unit` hook is **NOT usable** for per-hand targeting — it fires once per unit with no hand indicator. Use `MenuWorldPreviewer._spawn_item` instead.
+- Hooks on `HeroPreviewer.equip_item` / `HeroPreviewer._spawn_item` **never fire on the keep inventory previewer instance** — see `feedback_vt2_class_hook_derived.md` + `feedback_inventory_preview_hook_menuworldpreviewer.md`. weapon_tweaker v0.12.16 shipped this bug and v0.12.17 fixed it; do not regress.
+- For in-game `GearUtils.spawn_inventory_unit` career-gated hooks: read career from `ScriptUnit.has_extension(unit, "inventory_system")._career_name`, not `Managers.player:owner(unit):career_name()` — the latter returns nil at mission-spawn timing. See `feedback_vt2_mission_spawn_career_lookup.md`.
 
 ### Weapon Scale Overrides (`_unit_path_scale_overrides`)
 
@@ -639,7 +641,7 @@ Schema:
 
 The scale system runs in **all three** hooks (see "Three Rendering Paths" above):
 1. `GearUtils.create_equipment` — `_scale_units(result, item_data, result.skin)` resolves paths via `_resolve_render_unit_path`.
-2. `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` — `_spawn_item_post` walks `self._item_info_by_slot`, bridges to `_equipment_units` via `info.spawn_data[1].slot_index`, then reads `right_path`/`left_path` directly from `info.spawn_data[i].unit_name` (looking for `sd.right_hand` / `sd.left_hand` flags). No item_data lookup, no skin-resolution chain.
+2. `MenuWorldPreviewer._spawn_item` — `_spawn_item_post` walks `self._item_info_by_slot`, bridges to `_equipment_units` via `info.spawn_data[1].slot_index`, then reads `right_path`/`left_path` directly from `info.spawn_data[i].unit_name` (looking for `sd.right_hand` / `sd.left_hand` flags). No item_data lookup, no skin-resolution chain. **Hook MenuWorldPreviewer directly, NOT HeroPreviewer** — see Three Rendering Paths above for the class-copy reason.
 3. `LootItemUnitPreviewer.spawn_units` — reads paths from the `spawn_data` argument (`spawn_data[1].unit_name` = left, `spawn_data[2].unit_name` = right; spawn order is fixed by `_load_item_units`). No item_data lookup either.
 
 **No `cwv_variant` gate is needed on the menu paths** because a cwv variant's `spawn_data.unit_name` is always its variant model, never the base weapon's path. The truth-source approach makes the gate redundant — see `feedback_cwv_clone_name_clobber.md`. The in-game `GearUtils` path also doesn't need the scale gate (unit-path matching alone is sufficient there too); but it DOES still gate offset/tint/LA-paint on `not item_data.cwv_variant` because those are item-name-keyed and a cwv item inherits the base's `name`.

@@ -1,5 +1,80 @@
 # Crafting in Modded Changelog
 
+## 0.7.0-dev (2026-05-12) — Custom `modded` rarity replaces `promo` for crafts
+Promo rarity blocked customization. Vanilla source has two hard-coded gates that special-case `"promo"` and `"default"`:
+
+- `ui_widgets_honduras.lua:2407` — the inventory cog icon `content_check_function` disables itself when `(rarity == "default" or "promo")` and the slot type isn't in `InventorySettings.customize_default_slot_types_allowed[mechanism]`. In adventure mode that allowlist is `{}`, so the cog was disabled for every promo item — player couldn't even open the customization window.
+- `hero_window_item_customization.lua:179` — `_setup_availble_states` collapses to just `{"item_setting"}` for default/promo, stripping properties, traits, and upgrade tabs.
+
+Fix: register a new rarity `"modded"` that's not in those special-case lists, so both gates fall through to the normal `rarity_rating` chain. With `order = 4` (exotic-level) the cog opens AND all four customization tabs are available.
+
+New file `modded_rarities.lua` exposes a reusable registry — `mod.register_rarity(name, opts)` — that wires a custom rarity into all 6 tables the game reads:
+
+| Table | Purpose |
+|---|---|
+| `UISettings.item_rarity_order` | Sort order + drives `_setup_availble_states` |
+| `UISettings.item_rarities` | Iteration list for rarity-filter UI |
+| `RaritySettings` | `{display_name, color, frame_color, order}` |
+| `RarityIndex` | Mirror of `.order` |
+| `ORDER_RARITY` | Mirrored array (string keys + numeric indices) |
+| `NetworkLookup.rarities` | Required for inventory sync round-trip |
+
+Color is data — pass either an existing palette name (`"exotic"`, `"magic"`, etc.) OR a `{a, r, g, b}` table. Default for `"modded"` is soft pale gold `{255, 248, 237, 197}`. Hooks `_G.Localize` to resolve `rarity_display_name_modded` → "Modded".
+
+All four new-craft paths in `crafting_in_modded.lua` (Athanor weapon equip, Athanor amulet, amulet `_upgrade_magic_level`, `_athanor_inject_item` fallback) plus two in `standard_forge.lua` switched from `rarity = "promo"` to `"modded"`.
+
+Backward compat: `_forge_load` migrates pre-v0.7.0 saved crafts (`rarity == "promo"`) to `"modded"` on load and re-saves. `_cim_is_modded_item` accepts both `"modded"` and `"promo"` so any stragglers still surface in the salvage list. `NetworkLookup.rarities` still includes `"promo"` for legacy roundtripping.
+
+Bumped version 0.6.4-dev → 0.7.0-dev (rarity migration = minor version bump).
+
+## 0.6.4-dev (2026-05-10) — Defer-retry saved crafts that need other mods' ItemMasterList entries
+Most likely root cause of "purple/crafted weapons treated as blacksmith variants" + "not showing in salvage": the v0.4.1 `rawget(ItemMasterList, item_key)` pre-check in `_athanor_inject_item` skips a saved craft whose `item_key` isn't registered yet (typical case: `cwv_*` keys when CWV hasn't finished its `_create_interfaces` hook). The crafted item never enters the mirror this session, so the player sees the blacksmith template in that slot instead.
+
+Three changes:
+
+1. **Skipped injections are now deferred, not lost.** `_athanor_inject_all` tracks skipped bids in `_pending_inject = { [bid] = weapon_data, ... }`.
+2. **Retry on every state change.** New `mod.on_game_state_changed` calls `_athanor_retry_pending()`. Once the sibling mod registers the missing key, the next state transition re-injects the saved craft.
+3. **Skip-already-injected.** When `_create_interfaces` fires multiple times (it does), `_athanor_inject_all` checks the mirror's `_inventory_items[bid]` first — avoids duplicate `add_item` calls and misleading "restored N" log lines.
+
+Also promoted the "skipped N saved crafts" message from `mod:info` to `mod:echo` so it's visible in chat without opening the log.
+
+## 0.6.3-dev (2026-05-10) — Amulet CRAFT button visible + clickable (was "Fully Upgraded" greyed)
+The amulet's `upgrade_button` was rendering as "Fully Upgraded" and disabled. Two vanilla guards in `HeroWindowWeaveProperties._set_essence_upgrade_cost` (`hero_window_weave_properties.lua:1856-1897`):
+
+- Line 1886: when `essence_amount` is nil, button text falls back to `Localize("menu_weave_forge_upgrade_loadout_button_cap")` = "Fully Upgraded". Our weaves hooks always return 0/nil essence so this branch always fires.
+- Line 1895: `disable_button = script_data["eac-untrusted"] or ...` — modded realm sets `eac-untrusted = true`, so the button is permanently disabled.
+
+Post-hooked `_set_essence_upgrade_cost` (runs on every refresh) to override:
+- `button_content.title_text` = "CRAFT MODDED JEWELLERY" (amulet path) or "CRAFT NEW WEAPON" (single-item path)
+- `button_hotspot.disable_button = false`
+- Hides the price-icon alpha + the "not enough essence" warning widget
+
+Combined with the existing `_upgrade_magic_level` hijack (which performs the actual craft on click), the button is now both visible AND functional.
+
+## 0.6.2-dev (2026-05-10) — `cim salvage_debug` diagnostic command
+Adds a focused diagnostic for "why isn't my modded craft showing in salvage?". Dumps every entry in `_forged_weapons` plus whether it's currently in the backend mirror (`inv=Y/N`), the mirror's rarity, the slot_type, the item_key, and the bid. Also dumps any promo-rarity items in the mirror that AREN'T in our save (orphans).
+
+Most likely failure modes the dump reveals:
+- `inv=N` → the saved craft didn't re-inject this session (ItemMasterList key not registered yet — usually a `cwv_*` key with CWV not loaded at our hook time).
+- `rarity != promo` → the item's CustomData didn't round-trip through `_update_data` correctly, so the rarity-based salvage fallback misses it.
+- `slot=<no data>` → the item's `data` field is nil; usually means the ItemMasterList entry is missing.
+
+## 0.6.1-dev (2026-05-10) — Salvage rarity fallback + forward-declare `_amulet_dirty`
+Two fixes:
+
+1. **Salvage now matches by `rarity == "promo"` first.** Added `mod._cim_is_modded_item(item)` — same as the bid-heuristic check, plus an early-return for `item.rarity == "promo"`. Salvage post-hook switched to it. Catches modded crafts whose backend_id format doesn't fit the current regex (older mod versions, items synced from another machine, etc) — the user reported a saved purple-rarity axe+falchion not surfacing.
+
+2. **Forward-declare `_amulet_dirty` at the top of the Athanor section.** v0.6.0 declared it `local` further down (line 959), but the `on_exit` reset at line 474 closed over it as a nil global → indexing `_amulet_dirty[1] = false` would have errored on forge close. Moved the declaration above the hook so both the hook and the helpers see the same upvalue.
+
+## 0.6.0-dev (2026-05-10) — Amulet CRAFT button: per-slot dirty tracking, modded copies on edit
+The amulet's CRAFT button (repurposed `upgrade_button`) now handles the 3-accessory case. When the player edits bubbles or trait slots in the amulet, we mark the matching accessory dirty (`_amulet_dirty[1..3]`); pressing CRAFT iterates the three slots and creates a new modded item only for slots that were edited this session.
+
+For each dirty slot we read the equipped item's current `properties` / `traits` (already mutated in-place by auto-apply on bubble click), clone them into a new modded item via `_athanor_inject_item`, persist via `mod._cim_register_craft`, and equip via `set_loadout_item`. Vanilla items the player edited get a permanent modded counterpart; modded items they edited get a fresh saved snapshot.
+
+Pressing CRAFT with no edits echoes "No accessory edits to craft" and does nothing. Dirty flags reset on `HeroViewStateWeaveForge.on_exit`.
+
+Updated `AMULET_OF_ASHUR.md` with full status, slot-order rationale, data-flow summary, and remaining polish items.
+
 ## 0.5.6-dev (2026-05-09) — Fix amulet slot index mapping (charm/necklace were inverted)
 The user reported necklace data displayed at the top of the amulet view but the picker (the menu where you choose properties / traits) was showing CHARM options. Root cause: vanilla `WeaveCareerProgression` orders the amulet's 3 slots by accessory POOL:
 

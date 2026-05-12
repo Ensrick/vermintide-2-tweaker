@@ -28,20 +28,13 @@ local loc = {
     appearance_group = {
         en = "Weapon & Item Appearance",
     },
+    cosmetic_availability_group = {
+        en = "Cosmetic Availability",
+    },
     weapon_model_group = {
         en = "Weapon Model Tweaks",
     },
-    experimental_tints_group = {
-        en = "Experimental Tints",
-    },
-    tint_pureheart_white = {
-        en = "Pureheart Helm: White Tint (matches GK Purified outfit)",
-    },
-    tint_pureheart_white_tooltip = {
-        en = "Tints Grail Knight's Pureheart Helm white at spawn time. Experimental — depends on which material parameters the hat's shader exposes; if it doesn't visibly change, run `cos probe_hat` and report the material names so the tint param can be adjusted.",
-    },
-
-    es_bastard_sword_thiccc = {
+es_bastard_sword_thiccc = {
         en = "Authentic Bretonian Longsword Thiccccness",
     },
     es_bastard_sword_thiccc_tooltip = {

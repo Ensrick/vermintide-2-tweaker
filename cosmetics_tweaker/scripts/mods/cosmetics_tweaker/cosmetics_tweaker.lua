@@ -2,7 +2,7 @@
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 
-local MOD_VERSION = "0.8.38-dev"
+local MOD_VERSION = "0.8.47-dev"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 
@@ -404,57 +404,6 @@ mod:command("check_vmf", "Check vmf_atlas presence on active Guis", function()
     if not found then emit("no UI renderer found via Managers") end
     _flush_log()
 end)
-
--- Tint config: which hats to tint, and to what color. Toggle-gated.
--- The tint multiplies the material's albedo input — names vary per shader, so
--- we try a list of common parameter names and silently skip ones that don't exist.
-local _TINT_PARAM_NAMES = {
-    "tint_color", "tint_color_a", "color_tint", "color", "albedo_color",
-    "diffuse_color", "base_color_tint", "main_color",
-}
--- key: item_key, value: { rgb = {r, g, b}, setting = "<vmf checkbox>" }
-local _hat_tints = {
-    questing_knight_hat_0001 = {
-        rgb     = { 1.0, 1.0, 1.0 },                 -- white (matches purified Chaos Wastes outfit)
-        setting = "tint_pureheart_white",
-    },
-}
-
-local function _apply_tint_to_unit(unit, rgb)
-    if not _is_unit_alive(unit) then return end
-    local n_mats = 0
-    do local ok, n = pcall(Unit.num_materials, unit); if ok and n then n_mats = n end end
-    local color = Color and Color(255, math.floor(rgb[1]*255), math.floor(rgb[2]*255), math.floor(rgb[3]*255)) or nil
-    local v3 = Vector3 and Vector3(rgb[1], rgb[2], rgb[3]) or nil
-
-    local function try_set(material)
-        if not material then return end
-        for _, pname in ipairs(_TINT_PARAM_NAMES) do
-            -- Try set_color (Color) and set_vector3 (Vector3); ignore failures.
-            if color  then pcall(Material.set_color,   material, pname, color) end
-            if v3     then pcall(Material.set_vector3, material, pname, v3)    end
-            -- Some shaders use set_scalar for an alpha/value channel (uncommon).
-        end
-    end
-
-    -- Iterate every material slot on the unit.
-    for i = 0, n_mats - 1 do
-        local ok, mat = pcall(Unit.material, unit, i)
-        if ok then try_set(mat) end
-    end
-    -- Fallback: some hats have a single named material slot ("default").
-    for _, slot in ipairs({ "default", "main", "primary" }) do
-        local ok, mat = pcall(Unit.material, unit, slot)
-        if ok then try_set(mat) end
-    end
-end
-
-local function _maybe_tint(item_key, unit)
-    if not item_key then return end
-    local cfg = _hat_tints[item_key]
-    if not cfg or not mod:get(cfg.setting) then return end
-    _apply_tint_to_unit(unit, cfg.rgb)
-end
 
 -- Probe: deep-walk attachment_system._attachments and inventory_system._equipment.slots.slot_hat.
 mod:command("probe_hat", "Dump materials of player's equipped hat", function()
@@ -2607,17 +2556,6 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         -- `feedback_cwv_clone_name_clobber.md` for the full rationale.
         local weapon_key = item_data.name
         _offset_units(result, weapon_key, career_name)
-        -- POTENTIAL BUG: hat tint (`_maybe_tint`) is ONLY applied here —
-        -- in-game body. The tint doesn't run on HeroPreviewer._spawn_item or
-        -- on hero-selection / end-of-round previews. So in the keep
-        -- character preview the tint will not appear. The setting is
-        -- "Experimental" per the localization tooltip, so this may be
-        -- intentional, but should be documented or expanded to all paths if
-        -- the Pureheart white tint is meant to ship as a real feature.
-        for _, field in ipairs({ "right_unit_3p", "left_unit_3p", "right_unit_1p", "left_unit_1p" }) do
-            local u = result[field]
-            if u then _maybe_tint(weapon_key, u) end
-        end
         local has_skin = result.skin ~= nil and result.skin ~= ""
         _apply_la_offhand_to_units(world, item_data, { result.left_unit_3p, result.left_unit_1p }, has_skin)
     end
@@ -2851,13 +2789,56 @@ mod:hook("MenuWorldPreviewer", "_spawn_item", _spawn_item_wrapper)
 -- a different approach (likely related to the LA compiled `.unit` referencing
 -- vanilla material paths that aren't in scope when only the shield is in
 -- the preview world).
+-- Tracks per-previewer parent-package references already taken so we
+-- don't sync-load the same vanilla parent twice for one previewer
+-- instance. Weak-keyed by previewer.
+local _la_parent_pkg_ref_by_previewer = setmetatable({}, { __mode = "k" })
+
 mod:hook("LootItemUnitPreviewer", "load_package", function(func, self, package_name)
     if package_name and Application and Application.can_get
         and Application.can_get("unit", package_name)
         and not Application.can_get("package", package_name)
     then
+        -- Existing short-circuit: gate-flip so spawn proceeds.
         self._packages_to_load[package_name] = true
         self._loaded_packages[package_name] = true
+
+        -- v0.8.39: take a per-previewer reference on the LA mesh's parent
+        -- vanilla package. LA's compiled `.unit` inherits its shader graph
+        -- from that vanilla unit (per `mat_to_use` in the source `.unit`).
+        -- Without the parent in the previewer's scope, the shader doesn't
+        -- bind, the material doesn't fully initialize, and Reiland renders
+        -- with missing/magenta textures. Sync load so the parent is fully
+        -- bound before `_spawn_items` runs in the same frame. Vanilla
+        -- packages are well-tested so this is safer than v0.8.27's attempt
+        -- to sync-load LA's whole main package (which has its own broken
+        -- references).
+        local parent_pkg = LA_BRIDGE
+            and LA_BRIDGE.la_path_to_parent_package
+            and LA_BRIDGE.la_path_to_parent_package[package_name]
+        if parent_pkg and Managers and Managers.package then
+            local refs = _la_parent_pkg_ref_by_previewer[self]
+            if not refs then
+                refs = {}
+                _la_parent_pkg_ref_by_previewer[self] = refs
+            end
+            if not refs[parent_pkg] then
+                local reference_name = "LootItemUnitPreviewer"
+                if self._unique_id then
+                    reference_name = reference_name .. tostring(self._unique_id)
+                end
+                local ok, err = pcall(Managers.package.load,
+                    Managers.package, parent_pkg, reference_name, nil, false)
+                if ok then
+                    refs[parent_pkg] = true
+                    mod:info("[LA preview-load] sync-loaded parent %s for %s",
+                        parent_pkg, package_name)
+                else
+                    mod:info("[LA preview-load] FAILED to load parent %s for %s: %s",
+                        parent_pkg, package_name, tostring(err))
+                end
+            end
+        end
         return
     end
     return func(self, package_name)

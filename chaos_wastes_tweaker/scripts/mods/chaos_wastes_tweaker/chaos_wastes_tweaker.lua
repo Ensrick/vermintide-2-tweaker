@@ -18,19 +18,30 @@ Major sections (search by name to jump):
                              DeusWeaponGeneration calls.
   * Khaine's Fury tweak    — apply_reckless_swings_tweak / revert_reckless_swings_tweak +
                              sync_reckless_swings (forward-declared; called from boon roll).
-  * Lifecycle              — on_setting_changed re-syncs Khaine's Fury; on_disabled reverts the
-                             persistent DeusPowerUpTemplates mutation.
+  * Bomb boon balance      — bomb_boon_cooldown override on drop_item_on_ability_use, mutual
+                             exclusivity in generate_random_power_ups via BOMB_BOON_NAMES,
+                             Endless-Bombs-consumes-Morgrim hook on apply_pockets_full_of_bombs_buff,
+                             RV-no-save-Morgrim hook on ActionChargedProjectileUtility.fire_charged_projectile.
+  * Lifecycle              — on_setting_changed re-syncs Khaine's Fury and bomb cooldown;
+                             on_disabled reverts both persistent DeusPowerUpTemplates mutations.
 ]]
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.3.9-dev"
+local MOD_VERSION = "0.4.3-dev"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
 local SHRINE_DEFAULT = 4
 local CHEST_DEFAULT = 3
 local FINALE_GODS = { "nurgle", "tzeentch", "khorne", "slaanesh" }
+
+-- Boons that grant or amplify free bombs/grenades. Used by the bomb-boon mutual-exclusion
+-- toggle (one bomb boon per run) and listed in the localization tooltip.
+local BOMB_BOON_NAMES = {
+    drop_item_on_ability_use = true,
+    deus_grenade_multi_throw = true,
+}
 
 local granting_starting_coins = false
 local all_trait_combos_cache = nil
@@ -40,6 +51,7 @@ local all_trait_combos_cache = nil
 -- global lookup (and silently no-op until the assignment runs) or crash. See
 -- feedback_lua_forward_reference.md (5 prior crashes from this exact bug pattern).
 local sync_reckless_swings
+local sync_bomb_cooldown
 
 local function is_curse_disabled(curse_name)
     if type(curse_name) ~= "string" or not curse_name:find("^curse_") then
@@ -125,13 +137,30 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     local removed_main = {}
     local removed_rarity = {}
 
+    -- Bomb-boon exclusivity: if the toggle is on AND the player already owns any bomb boon, also
+    -- strip the rest from the pool for this roll. existing_power_ups is positionally args[3] in the
+    -- vanilla signature (seed, count, existing_power_ups, ...).
+    local exclude_bomb_boons = false
+    if mod:get("bomb_boon_exclusive") then
+        local existing = args[3]
+        if type(existing) == "table" then
+            for _, pu in ipairs(existing) do
+                if pu and pu.name and BOMB_BOON_NAMES[pu.name] then
+                    exclude_bomb_boons = true
+                    break
+                end
+            end
+        end
+    end
+
     if DeusPowerUpsArray then
         -- CLARIFY: Iterate backwards so table.remove indices stay stable. The saved `index` is the
         -- pre-removal slot, which is the correct insertion point for restoration in reverse order.
         for i = #DeusPowerUpsArray, 1, -1 do
             local boon = DeusPowerUpsArray[i]
-            local key = boon and boon.name and ("disable_boon_" .. boon.name)
-            if key and mod:get(key) then
+            local name = boon and boon.name
+            local key = name and ("disable_boon_" .. name)
+            if (key and mod:get(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
                 table.remove(DeusPowerUpsArray, i)
                 removed_main[#removed_main + 1] = { index = i, boon = boon }
             end
@@ -141,8 +170,9 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
                 removed_rarity[rarity] = {}
                 for i = #arr, 1, -1 do
                     local boon = arr[i]
-                    local key = boon and boon.name and ("disable_boon_" .. boon.name)
-                    if key and mod:get(key) then
+                    local name = boon and boon.name
+                    local key = name and ("disable_boon_" .. name)
+                    if (key and mod:get(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
                         table.remove(arr, i)
                         removed_rarity[rarity][#removed_rarity[rarity] + 1] = { index = i, boon = boon }
                     end
@@ -173,6 +203,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     -- description and damage values stay in effect. on_setting_changed also calls this when the
     -- toggle flips.
     sync_reckless_swings()
+    sync_bomb_cooldown()
 
     return new_seed, new_power_ups
 end)
@@ -903,18 +934,165 @@ end
 -- and the apply silently no-ops; the generate_random_power_ups hook re-runs sync on first roll.
 sync_reckless_swings()
 
-mod.on_setting_changed = function(setting_id)
-    if setting_id == "tweak_reckless_swings" then
-        sync_reckless_swings()
+-- ============================================================
+-- Bomb Boon Cooldown Tweak
+-- ============================================================
+-- The `drop_item_on_ability_use` boon (rally flag / Morgrim's / Endless Bombs) reads its per-item
+-- cooldowns from `buff_template.buffs[1].cooldown_durations` at proc time
+-- (morris_buff_settings.lua:2830). Mutating that table in place lets us uniformly override the
+-- vanilla 180/180/120 with a single configurable value. Mirrors the reckless_swings save-and-
+-- restore pattern: the mutation persists across hook calls within a session, so on_disabled has
+-- to revert it.
+
+local bomb_cooldown_originals = nil
+
+local function apply_bomb_cooldown_tweak()
+    if bomb_cooldown_originals then
+        return
+    end
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local tpl = power_up and power_up.drop_item_on_ability_use
+    local buff_entry = tpl and tpl.buff_template and tpl.buff_template.buffs and tpl.buff_template.buffs[1]
+    local durations = buff_entry and buff_entry.cooldown_durations
+    if not durations then
+        return
+    end
+
+    local override = mod:get("bomb_boon_cooldown")
+    if not override or override <= 0 then
+        return
+    end
+
+    bomb_cooldown_originals = {}
+    for k, v in pairs(durations) do
+        bomb_cooldown_originals[k] = v
+        durations[k] = override
     end
 end
 
--- Clean disable: revert the persistent DeusPowerUpTemplates.deus_reckless_swings mutation so
--- toggling the mod off via VMF doesn't leave Khaine's Fury in its tweaked state until restart.
--- All other mutations in this mod are scoped (save-and-restore inside hooks); only the reckless
--- swings tweak persists across hook calls.
+local function revert_bomb_cooldown_tweak()
+    if not bomb_cooldown_originals then
+        return
+    end
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local tpl = power_up and power_up.drop_item_on_ability_use
+    local buff_entry = tpl and tpl.buff_template and tpl.buff_template.buffs and tpl.buff_template.buffs[1]
+    local durations = buff_entry and buff_entry.cooldown_durations
+    if durations then
+        for k, v in pairs(bomb_cooldown_originals) do
+            durations[k] = v
+        end
+    end
+    bomb_cooldown_originals = nil
+end
+
+sync_bomb_cooldown = function()
+    -- Always revert first so a setting change from one positive value to another re-applies the
+    -- new value (rather than silently no-op'ing because originals are already saved).
+    revert_bomb_cooldown_tweak()
+    local override = mod:get("bomb_boon_cooldown")
+    if override and override > 0 then
+        apply_bomb_cooldown_tweak()
+    end
+end
+
+sync_bomb_cooldown()
+
+-- ============================================================
+-- Endless Bombs Consumes Morgrim's
+-- ============================================================
+-- Vanilla `apply_pockets_full_of_bombs_buff` calls `inventory_extension:drop_level_event_item`
+-- when the player is wielding slot_level_event, which spawns the held item back as a pickup on the
+-- ground. With this toggle the saved Morgrim's Bomb is destroyed instead of dropped — same end
+-- state as if the potion had eaten it.
+-- CLARIFY: hook target is `BuffFunctionTemplates.functions` (the merged table built by
+-- buff_function_templates.lua:5568 via DLCUtils.merge), NOT `BuffFunctionTemplates` directly. The
+-- table-form mod:hook resolves the function value at registration time, so the guard prevents
+-- a nil-table crash if the buff system somehow isn't loaded yet.
+if BuffFunctionTemplates and BuffFunctionTemplates.functions then
+    mod:hook(BuffFunctionTemplates.functions, "apply_pockets_full_of_bombs_buff", function(func, unit, buff, params)
+        if not mod:get("endless_bombs_consumes_morgrim") then
+            return func(unit, buff, params)
+        end
+
+        local inventory_extension = ScriptUnit.has_extension(unit, "inventory_system")
+        if inventory_extension then
+            local slot_data = inventory_extension:get_slot_data("slot_level_event")
+            local item_data = slot_data and slot_data.item_data
+            if item_data and item_data.name == "holy_hand_grenade" then
+                -- destroy_slot is what drop_level_event_item calls at its end; we skip the in-between
+                -- pickup-spawn so the bomb isn't recoverable.
+                inventory_extension:destroy_slot("slot_level_event")
+            end
+        end
+
+        return func(unit, buff, params)
+    end)
+end
+
+-- ============================================================
+-- Block Ranger Veteran from Saving Morgrim's
+-- ============================================================
+-- The `bardin_ranger_passive_consumeable_dupe_grenade` passive applies `not_consume_grenade` as a
+-- proc stat_buff with proc_chance=0.1. When ActionChargedProjectileUtility.fire_charged_projectile
+-- throws a grenade, it queries `apply_buffs_to_value(0, "not_consume_grenade")` to roll the proc
+-- (action_charged_projectile.lua:83). We monkey-patch the buff_extension instance for the duration
+-- of the call so the proc returns false specifically when the grenade is a Morgrim's Bomb. Other
+-- grenades (frag, fire, conflagration) continue to roll normally.
+mod:hook("ActionChargedProjectileUtility", "fire_charged_projectile", function(func, projectile_context, ...)
+    if not mod:get("rv_no_save_morgrim")
+        or not projectile_context
+        or projectile_context.item_name ~= "holy_hand_grenade"
+        or not projectile_context.is_grenade
+        or projectile_context.grenade_thrown
+    then
+        return func(projectile_context, ...)
+    end
+
+    local buff_ext = projectile_context.buff_extension
+    if not buff_ext then
+        return func(projectile_context, ...)
+    end
+
+    -- rawget so we know whether the instance had a pre-existing override (vs. inheriting via
+    -- __index from the class). On restore we either reinstate the override or clear our shim.
+    local had_instance_override = rawget(buff_ext, "apply_buffs_to_value") ~= nil
+    local original = buff_ext.apply_buffs_to_value
+    buff_ext.apply_buffs_to_value = function(self, value, stat_buff_name, ...)
+        if stat_buff_name == "not_consume_grenade" then
+            return value, false
+        end
+        return original(self, value, stat_buff_name, ...)
+    end
+
+    local ok, a, b = pcall(func, projectile_context, ...)
+
+    if had_instance_override then
+        buff_ext.apply_buffs_to_value = original
+    else
+        buff_ext.apply_buffs_to_value = nil
+    end
+
+    if not ok then
+        error(a, 0)
+    end
+    return a, b
+end)
+
+mod.on_setting_changed = function(setting_id)
+    if setting_id == "tweak_reckless_swings" then
+        sync_reckless_swings()
+    elseif setting_id == "bomb_boon_cooldown" then
+        sync_bomb_cooldown()
+    end
+end
+
+-- Clean disable: revert the persistent DeusPowerUpTemplates mutations (Khaine's Fury and bomb-boon
+-- cooldowns) so toggling the mod off via VMF doesn't leave them in a tweaked state until restart.
+-- All other mutations in this mod are scoped (save-and-restore inside hooks).
 mod.on_disabled = function()
     revert_reckless_swings_tweak()
+    revert_bomb_cooldown_tweak()
 end
 
 -- ============================================================

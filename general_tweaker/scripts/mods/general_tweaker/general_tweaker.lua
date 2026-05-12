@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.11-dev"
+local MOD_VERSION = "0.2.15-dev"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -74,6 +74,14 @@ local function _patch_camera_offset()
     local distance = mod:get("tp_distance") or 3.0
     local height   = mod:get("tp_height")   or 1.0
     local side     = mod:get("tp_side_offset") or 0.8
+    -- When enabled, ADS / ranged-aim no longer pulls the 3P camera in close;
+    -- both zoom-in modes use the same multipliers as `over_shoulder` so the
+    -- view stays at the configured distance/height regardless of zoom state.
+    local no_zoom_in = mod:get("tp_disable_zoom_in")
+    local zoom_dist_mul = no_zoom_in and 1.00 or 0.60
+    local zoom_h_mul   = no_zoom_in and 1.00 or 0.60
+    local izoom_dist_mul = no_zoom_in and 1.00 or 0.40
+    local izoom_h_mul   = no_zoom_in and 1.00 or 0.60
     local function set_node(name, dist_mul, height_mul)
         local node = _find_camera_node(CameraSettings.first_person, name)
         if node and node.offset_position then
@@ -83,8 +91,8 @@ local function _patch_camera_offset()
         end
     end
     set_node("over_shoulder",                  1.00, 1.00)
-    set_node("zoom_in_third_person",           0.60, 0.60)
-    set_node("increased_zoom_in_third_person", 0.40, 0.60)
+    set_node("zoom_in_third_person",           zoom_dist_mul,  zoom_h_mul)
+    set_node("increased_zoom_in_third_person", izoom_dist_mul, izoom_h_mul)
 end
 
 local function _restore_camera_offset()
@@ -168,18 +176,89 @@ mod:command("tp", "Toggle third-person camera", function()
 end)
 
 -- ============================================================
--- Inventory Access in Missions
+-- Free Camera (detached fly-cam for inspecting the player model)
 -- ============================================================
--- InventorySettings.inventory_loadout_access_supported_game_modes
--- only lists inn/inn_deus/inn_vs. Patch it to include adventure
--- (and survival/deus for good measure) so the hero view initializes
--- its loadout panel during missions.
+-- VT2 ships a FreeFlightManager in foundation, gated off in release
+-- by `GameSettingsDevelopment.disable_free_flight = true`. We flip
+-- that flag and call _enter_free_flight / _exit_free_flight directly
+-- so the per-player F8-style cam works in mission.
 --
--- The full unlock requires TWO patches:
---   (1) InventorySettings.inventory_loadout_access_supported_game_modes — without this,
---       hero_view.lua:323 early-returns on adventure/deus and the loadout panel never inits.
---   (2) menu_layouts.in_game.{alone,host,client} — without this, the in-mission ESC menu has
---       only Return/Options/Leave/Quit; no button to actually open the inventory exists.
+-- Controls (FreeFlightKeymaps.win32): W/A/S/D move, Q/E down/up,
+-- mouse look, scroll wheel = speed, +/- adjust FOV, Enter teleports
+-- player to cam pos, F8 toggles off.
+--
+-- Free flight blocks player input while active (block_device_except_service),
+-- so attacks/movement won't fire simultaneously. F8 always exits because
+-- the FreeFlight input service stays mapped to keyboard regardless.
+
+local function _freecam_player_data()
+    local ff = Managers.free_flight
+    if not ff or not ff.data then return nil, nil end
+    local pm = Managers.player
+    local player = pm and pm:local_player()
+    if not player then return nil, nil end
+    local id = player:local_player_id()
+    return player, ff.data[id]
+end
+
+local function _apply_freecam(enabled)
+    if not GameSettingsDevelopment then return end
+    if enabled then
+        GameSettingsDevelopment.disable_free_flight = false
+        local player, data = _freecam_player_data()
+        if player and data and not data.active then
+            -- Free flight only renders the local 3P body when third_person_mode is set;
+            -- otherwise the player would be invisible from the detached cam.
+            if Development._hardcoded_dev_params then
+                Development._hardcoded_dev_params.third_person_mode = true
+            end
+            Managers.free_flight:_enter_free_flight(player, data)
+        end
+    else
+        local player, data = _freecam_player_data()
+        if player and data and data.active then
+            Managers.free_flight:_exit_free_flight(player, data)
+        end
+        -- Restore the release-build gate so a stray F8 mid-fight doesn't activate the cam.
+        GameSettingsDevelopment.disable_free_flight = true
+    end
+end
+
+-- Sync the setting back to false when the engine itself exits free flight
+-- (F8 press, level transition, cleanup). The inner data.active guard in
+-- _apply_freecam makes the resulting on_setting_changed call a no-op, so
+-- there's no recursion.
+mod:hook_safe("FreeFlightManager", "_exit_free_flight", function(self, player, data)
+    if mod:get("freecam_enabled") then mod:set("freecam_enabled", false) end
+end)
+
+mod:command("freecam", "Toggle detached free-flight camera", function()
+    local new_val = not mod:get("freecam_enabled")
+    mod:set("freecam_enabled", new_val)
+    mod:echo("Free camera: " .. (new_val
+        and "ON (WASD move, mouse look, Q/E up/down, wheel = speed, F8 to exit)"
+        or "OFF"))
+end)
+
+-- ============================================================
+-- Keep Menus in Missions (inventory, talents, achievements, etc.)
+-- ============================================================
+-- The keep's menu hotkeys (I=inventory, H=hero, M=map, O=achievements,
+-- C=loot, K=weave forge, J=weave play — all rebindable) feed into
+-- `IngameUI.handle_menu_hotkeys`, which is only called with
+-- `hotkeys_enabled = true` when `is_in_inn` is true. We hook the
+-- function and force-flip the flag during missions so whatever key
+-- the player has bound to each hotkey opens its menu in-mission too.
+--
+-- Three patches are needed:
+--   (1) InventorySettings.inventory_loadout_access_supported_game_modes —
+--       hero_view.lua:323 early-returns on adventure/deus and the loadout
+--       panel never inits without this.
+--   (2) IngameUI.handle_menu_hotkeys — flip `hotkeys_enabled` to true so
+--       the I/H/M/O/C hotkeys actually fire transitions during a mission.
+--   (3) menu_layouts.in_game.{alone,host,client} — adds an "Open Inventory"
+--       entry to the ESC menu as a fallback for players who don't recall
+--       the hotkey.
 -- The legacy memory entry blamed `game_mode:menu_access_allowed_in_state()` in ingame_ui.lua,
 -- but that method only exists on GameModeVersus and doesn't gate adventure/deus.
 local _INVENTORY_BUTTON_ENTRY = {
@@ -246,6 +325,19 @@ end
 
 _patch_inventory_access()
 
+-- ingame_ui.lua:660 calls handle_menu_hotkeys with
+-- `enable_hotkeys = is_in_inn and not disable_ingame_ui and not in_score_screen`.
+-- Force the `hotkeys_enabled` arg true so the keep hotkeys (whatever the
+-- player has them bound to) fire during missions too. The function still
+-- bails on a missing player_unit, score-screen, or pending transition,
+-- so end-of-level and respawn states remain protected.
+mod:hook("IngameUI", "handle_menu_hotkeys", function(func, self, dt, input_service, hotkeys_enabled, menu_active)
+    if mod:get("mission_inventory_enabled") then
+        hotkeys_enabled = true
+    end
+    return func(self, dt, input_service, hotkeys_enabled, menu_active)
+end)
+
 -- CLARIFY: tp is forcibly cleared on every state change (level transition,
 -- etc.) because the engine reinitializes the FP system. The
 -- PlayerUnitFirstPerson.extensions_ready hook above will re-arm tp on the
@@ -266,8 +358,10 @@ mod.on_setting_changed = function(setting_id)
         _apply_tp(mod:get("tp_camera_enabled"))
     elseif setting_id == "godmode_enabled" then
         _godmode = mod:get("godmode_enabled") or false
-    elseif setting_id == "tp_distance" or setting_id == "tp_height" or setting_id == "tp_side_offset" then
+    elseif setting_id == "tp_distance" or setting_id == "tp_height" or setting_id == "tp_side_offset" or setting_id == "tp_disable_zoom_in" then
         _patch_camera_offset()
+    elseif setting_id == "freecam_enabled" then
+        _apply_freecam(mod:get("freecam_enabled"))
     end
 end
 
@@ -472,6 +566,22 @@ end)
 mod:hook("DamageUtils", "add_damage_network_player", function(func, damage_profile, target_index, power_level, attacked_unit, ...)
     if _godmode and _is_local_player_unit(attacked_unit) then return 0 end
     return func(damage_profile, target_index, power_level, attacked_unit, ...)
+end)
+
+-- ============================================================
+-- Friendly Fire Toggle
+-- ============================================================
+-- On Champion+, ranged FF is on by default. Hook the two gate
+-- functions that everything else calls through to suppress it.
+
+mod:hook("DamageUtils", "allow_friendly_fire_ranged", function(func, ...)
+    if mod:get("disable_friendly_fire") then return false end
+    return func(...)
+end)
+
+mod:hook("DamageUtils", "allow_friendly_fire_melee", function(func, ...)
+    if mod:get("disable_friendly_fire") then return false end
+    return func(...)
 end)
 
 -- ============================================================

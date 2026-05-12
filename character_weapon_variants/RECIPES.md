@@ -12,6 +12,16 @@ If you're touching dual-wield, also read
 `J_LEFTWEAPONATTACH_INVESTIGATION.md` once. It's the post-mortem for a
 ~20-version saga that produced the `_force_display_unit` rule.
 
+> **Before declaring any variant complete: walk
+> `DEFINITION_OF_DONE.md`.** It is a single page with a universal
+> checklist plus trait-gated sub-checklists (dual-wield, ranged,
+> thrown, cross-character, blacksmith, mesh-family, 3P-anim, stance,
+> custom-illusion). The "Pre-deploy checklist" and "Verification
+> matrix" at the bottom of this file are subsets — DoD supersedes
+> them when there's conflict. The CHANGELOG entry for every variant
+> must end with the `**DoD:**` footer naming gates walked and
+> deferrals.
+
 ---
 
 ## Decision tree — what are you making?
@@ -1619,6 +1629,10 @@ in the inventory until replaced.
 
 # Pre-deploy checklist
 
+> **This is a subset of `DEFINITION_OF_DONE.md`.** Walk that file
+> instead — it covers everything below plus the trait-gated checklists
+> for the specific kind of variant you're shipping.
+
 Before every build:
 
 - [ ] **`MOD_VERSION` bumped** at line 3. Required to confirm the build
@@ -1638,6 +1652,13 @@ Before every build:
 ---
 
 # Verification matrix
+
+> **This is a subset of `DEFINITION_OF_DONE.md` U-9.** Walk that file
+> instead. The DoD adds in-game combat gates (animlog clean,
+> native-wielder regression, husk check) and trait-specific live
+> tests (forge round-trip for blacksmith, both-hands-render for
+> dual-wield, pickup outline for thrown, etc.) that this matrix
+> doesn't cover.
 
 After deploy + restart, walk every applicable cell:
 

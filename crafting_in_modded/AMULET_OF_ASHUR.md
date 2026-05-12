@@ -2,92 +2,120 @@
 
 ## Goal
 
-Repurpose the central viewport of the B-hotkey Athanor (the Amulet-of-Ashur slot, currently hidden) into a unified editor for the player's three adventure-mode accessories (**necklace**, **charm**, **trinket**) plus their adventure-mode **talents**.
+Repurpose the central viewport of the B-hotkey Athanor (the Amulet-of-Ashur slot) into a unified editor for the player's three adventure-mode accessories (**necklace**, **charm**, **trinket**) plus their adventure-mode **talents**.
 
 Modeled on Winds of Magic's Amulet of Ashur, which combines all three accessory slots into one editor for weave runs. Our version is for campaign play.
 
+## Status (as of 2026-05-10)
+
+| Feature | State |
+|---|---|
+| Amulet viewport visible | ✅ |
+| Click → 3-section editor opens | ✅ (vanilla `amulet_slot_layout` renders automatically when `selected_item == nil`) |
+| Bubble grid pre-populates from current accessories | ✅ |
+| Bubble edits auto-apply to equipped items | ✅ (session-only for vanilla, persisted for modded) |
+| Talent picker shows current adventure picks | ✅ |
+| Talent changes write through to vanilla career talents | ✅ |
+| CRAFT button — make new modded items only for edited slots | ✅ |
+
+## Big architectural insight
+
+`HeroWindowWeaveProperties.on_enter` (`hero_window_weave_properties.lua:167-196`) auto-selects between two pre-built layouts based on `_selected_item()`:
+
+| selected_item | Layout used | Bubbles |
+|---|---|---|
+| **non-nil** (a weapon) | `weapon_slot_layout` | 1 trait + 10 properties |
+| **nil** (the amulet) | `amulet_slot_layout` | 3 traits + 30 properties (3 layers) + 6 talents |
+
+The amulet viewport's `data.item` is naturally nil (vanilla never puts an item there), so a click flows through to `weave_properties` with `selected_item = nil` and the WoM-style 3-section UI renders automatically. **We don't override the click anymore** — letting vanilla handle it gives us the right UI for free.
+
+## Slot order (do not change)
+
+`WeaveCareerProgression` (`weave_loadout_settings.lua:282-295`) hardcodes the slot order by accessory pool:
+
+| Amulet slot index | Pool | Adventure slot name | Display name |
+|---|---|---|---|
+| 1 | `offence_accessory` | `slot_ring` | Charm |
+| 2 | `defence_accessory` | `slot_necklace` | Necklace |
+| 3 | `utility_accessory` | `slot_trinket_1` | Trinket |
+
+The picker reads its `category` field per slot from `WeaveCareerProgression`. If we feed slot 1 with necklace data, the picker for slot 1 still renders offence_accessory options — visible mismatch. **Both seed and apply iterate `_AMULET_SLOT_BY_INDEX` so we stay aligned.**
+
+VT2's `career_settings` uses legacy slot names: `slot_ring` (not `slot_charm`) and `slot_trinket_1` (not `slot_trinket`). Using the wrong names returns `nil` from `get_loadout_item_id`.
+
 ## Workflow
 
-Player presses **B** in the Keep → Athanor opens with the central viewport now active → click viewport → sub-window opens with three subsections (necklace, charm, trinket) plus a talent row → edit bubbles / pick trait / pick talents → press **Apply**, **Craft**, or back out.
+Player presses **B** → Athanor opens with the central amulet viewport visible → click amulet → vanilla's `weave_properties` window opens with the 3-section amulet layout → bubbles + traits pre-filled with current accessory state, talent slots show current career picks → player edits.
 
-### Apply button
+### Edits auto-apply on each bubble click
 
-Mutates the **currently equipped** necklace / charm / trinket items in-place via the local backend mirror. Same pattern as the existing weapon-edit Athanor flow:
+`_forge_apply_to_amulet` runs on every property/trait set/remove. It groups bubble fills by layer, computes per-accessory property values, and writes to the equipped item's `item.properties` / `item.traits` in the local mirror. Modded saved crafts also flush to `_forged_weapons`. Talent picks write through to `BackendInterfaceTalentsPlayfab:set_talents`.
 
-- Commit-blocked, so changes never reach PlayFab → reverts on game restart for vanilla items.
-- For modded crafted items (`_forged_weapons`), changes also write through to the save layer so they survive restart.
-- Greyed out / unavailable when **any** of the three equipped jewellery items is non-modded (vanilla or blacksmith template). Rationale: applying changes to a vanilla item is a session-only illusion; the user should `Craft` instead.
-- Only modifies items whose subsection the user actually edited this session.
+This means there is **no separate Apply button** — every bubble click already applies. For modded crafts, the changes persist via the save layer. For vanilla items, they revert on game restart (commit-blocked).
 
-### Craft button
+### CRAFT button (repurposed `upgrade_button`)
 
-Creates new modded items (`promo` rarity) for slots whose subsection was edited, equips them, persists them in `_forged_weapons`. Slots not edited keep their existing items.
+Hijacks `HeroWindowWeaveProperties._upgrade_magic_level`. In the amulet case (no `selected_item`), iterates the three accessory slots and creates a new modded item for each whose bubbles were edited this session. Per-slot dirty tracking lives in `_amulet_dirty = { false, false, false }` — set by hooks on `set_loadout_property` / `remove_loadout_property` / `set_loadout_trait` / `remove_loadout_trait` whenever they fire with `item_backend_id == nil` (the amulet case).
 
-Examples:
-- User edits trinket only → new modded trinket crafted + equipped, necklace and charm untouched.
-- User edits all three → three new modded items.
-- User edits nothing → Craft is a no-op (button could be greyed).
+Workflow:
 
-Available even when the equipped items are non-modded (blacksmith templates / vanilla).
+1. Player edits charm bubbles only → `_amulet_dirty[1] = true`. Necklace and trinket flags stay false.
+2. Player presses CRAFT.
+3. Loop iterates slots 1..3. Only slot 1 is dirty.
+4. We read the equipped charm's current `properties` / `traits` (already mutated by auto-apply).
+5. Create a new modded item with those values, `rarity = promo`, fresh `Application.guid()` backend_id.
+6. Persist via `mod._cim_register_craft`.
+7. `set_loadout_item(new_bid, career, "slot_ring")` — equips it.
+8. `_amulet_dirty[1] = false` — slot now clean.
 
-### Default (back out without Apply or Craft)
+If no slot is dirty, CRAFT echoes "No accessory edits to craft" and does nothing. Pressing CRAFT with all-vanilla equipped accessories that the player edited produces three new modded items. Pressing it after editing only the trinket produces only a new trinket.
 
-No changes applied. Edits discarded.
+`_amulet_dirty` is reset in `HeroViewStateWeaveForge.on_exit`, so closing the forge starts the next session fresh.
 
-## UI shape: three subsections
+## Talent integration
 
-The sub-window stacks three subsections vertically (or in tabs if vertical space is tight):
+The amulet's talent picker runs against the WoM weave talent system, but `WeaveLoadoutSettings[career].talent_tree = TalentTrees[profile][talent_tree_index]` (literally — see `weave_loadout_settings_*.lua`). The talents the player sees in the picker ARE the same 6 rows × 3 columns as adventure mode.
 
-| Subsection | Property pool | Trait pool | Slots (bubbles) |
-|---|---|---|---|
-| **Necklace** | `WeaponProperties.combinations.defence_accessory` | `WeaponTraits.combinations.defence_accessory` | 3 (matches vanilla necklace property count) |
-| **Charm** | `WeaponProperties.combinations.offence_accessory` | `WeaponTraits.combinations.offence_accessory` | 2 |
-| **Trinket** | `WeaponProperties.combinations.utility_accessory` | `WeaponTraits.combinations.utility_accessory` | 2 |
+Three hooks wire read/write:
 
-Each subsection has its own bubble grid, its own trait dropdown/picker, and its own dirty-state flag (`_dirty_necklace`, `_dirty_charm`, `_dirty_trinket`).
+- `get_loadout_talents(career)`: reads adventure picks via `Managers.backend:get_interface("talents"):get_talents(career)` (`{1, 3, 2, 1, 3, 2}` style — column choice per row), maps each row's pick to its talent name via `TalentTrees[profile][index][row][pick]`, returns `{[talent_name] = row}` — the format the bubble grid expects.
+- `set_loadout_talent(career, talent_name, row)`: finds which column in that row owns `talent_name`, calls `talents:set_talents(career, picks)` with the updated array. **Write-through to vanilla** — the player's actual career talents change immediately and persist through the regular adventure save layer.
+- `remove_loadout_talent`: no-op. The bubble grid emits remove→set pairs on each swap, but adventure rows always have one talent active so we just commit the new pick directly in set.
 
-Bubble grid mechanics match the existing weapon editor: click a property → fill that property's bubbles up to its slot count → can mix and match across the available property pool, exactly like WoM weapons are allowed to in this UI.
+## Data flow summary
 
-### Initial population
+**Read (forge open)**:
 
-On sub-window enter, read the player's current equipped necklace / charm / trinket via `backend_items:get_loadout_item_id(career_name, slot_name)`. Pre-fill each subsection's bubble grid + trait selector with the corresponding item's existing properties and traits. If the item is a default-rarity blacksmith template, the subsection starts empty.
+```
+HeroWindowWeaveProperties.on_enter
+  → _selected_item() == nil → amulet_slot_layout
+  → _setup_menu_options reads WeaveCareerProgression for slot category metadata
+  → _sync_backend_loadout calls our hooks:
+      get_loadout_properties(career, nil) → _forge_seed_item → reads 3 accessory items
+      get_loadout_traits(career, nil)     → _forge_seed_item → same
+      get_loadout_talents(career)         → reads BackendInterfaceTalentsPlayfab
+```
 
-## Talent row
+**Write (each bubble / trait / talent click)**:
 
-Reuses the Athanor's existing weave-talent UI structure. Adventure-mode career talents are 6 rows × 3 picks; the existing UI may need to scale to accommodate.
+```
+set_loadout_property(career, prop, slot, nil) → mark_amulet_property_dirty(slot)
+                                              → _forge_apply_to_amulet
+set_loadout_trait(career, trait, slot, nil)   → mark_amulet_trait_dirty(slot)
+                                              → _forge_apply_to_amulet
+set_loadout_talent(career, talent, row)       → BackendInterfaceTalentsPlayfab:set_talents
+```
 
-**Persistence**: write-through to the vanilla `BackendInterfaceTalents`. Picks made here become the player's actual adventure career talents (no separate cim save layer). career_tweaker can still rewrite the *available* talent list above this layer; no conflict.
+**Write (CRAFT button)**:
 
-## Backend hooks
+```
+HeroWindowWeaveProperties._upgrade_magic_level
+  → _selected_item() == nil → amulet branch
+  → for each dirty slot: clone equipped item's state into new modded item, equip
+```
 
-- `BackendInterfaceWeavesPlayFab.get_loadout_item_id` — already hooked. Extend the slot mapping so `slot_necklace`, `slot_charm`, `slot_trinket` resolve via the items interface (same as melee/ranged) when the amulet sub-window is open.
-- `BackendInterfaceWeavesPlayFab.get_loadout_properties` / `get_loadout_traits` — extend `_forge_seed_item` to map the right WeaponProperties/WeaponTraits pool per slot type.
-- `BackendInterfaceWeavesPlayFab.set_loadout_property` / `remove_loadout_property` / `set_loadout_trait` / `remove_loadout_trait` — already wired into `_forge_apply_to_item`; extend to mark the relevant subsection as dirty.
+## Open work
 
-## Edge cases
-
-- **Player has no jewellery equipped**: shouldn't happen — the player always has at least the blacksmith template. If somehow nil, treat the subsection as empty + craftable (Apply unavailable).
-- **CWV jewellery items**: covered as modded (cwv_* prefix), Apply works on them.
-- **Property exists in multiple pools**: e.g. `crit_chance` is in both melee combinations and accessory combinations. Resolved by the subsection: clicking the bubble in the necklace subsection only ever affects the necklace.
-- **Switching career mid-edit**: discards in-progress edits (consistent with vanilla forge behavior).
-
-## Implementation phases
-
-**Phase A** — accessories editor:
-1. Un-hide `viewport_2` / `viewport_button_2` / `viewport_button_highlight_2` widgets in `_forge_apply_ui_polish`.
-2. Wire viewport_2 click to enter a new sub-window (or repurpose the existing weave Properties window with three subsections injected).
-3. Build the three subsections (bubble grids + trait pickers) seeded from current equipped items.
-4. Per-subsection dirty flags.
-5. Apply button (greyed-out logic).
-6. Craft button (per-dirty-slot synthesis via `mirror:add_item` + `_cim_register_craft`).
-7. Equip newly crafted items via `backend_items:set_loadout_item`.
-
-**Phase B** — talents:
-1. Talent row in the same sub-window.
-2. Read current adventure talent picks from `BackendInterfaceTalents`.
-3. Write picks through to `BackendInterfaceTalents:set_talent` on selection.
-4. UI scale-up to 6 rows × 3 picks if needed.
-
-## Open questions
-
-None as of 2026-05-08 — design confirmed with user. Phase A starts next.
+- The CRAFT button text doesn't currently re-label when entering the amulet from the standard weapon path (still says "CRAFT NEW WEAPON" for melee/ranged, "CRAFT" generic for amulet). Could be polished to read "CRAFT NEW JEWELLERY" or per-dirty-slot summary.
+- Apply button greying when any equipped accessory is non-modded — moot in current design because there's no Apply button (auto-apply on click), but worth surfacing the implicit "vanilla accessory edits don't persist past restart" UX hint.
+- Dirty tracking is conservative: any edit (including reverting a bubble back to its initial state) marks the slot dirty. CRAFT will then make a "duplicate" new item even though no net change happened. Acceptable — over-crafting is harmless.

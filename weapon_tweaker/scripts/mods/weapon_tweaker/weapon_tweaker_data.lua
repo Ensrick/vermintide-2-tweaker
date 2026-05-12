@@ -71,6 +71,10 @@ local data = {
     options = {
         widgets = {
             {
+                setting_id = "weapon_availability",
+                type = "group",
+                sub_widgets = {
+            {
                 setting_id = "melee_weapons",
                 type = "group",
                 sub_widgets = {
@@ -681,6 +685,7 @@ local data = {
                                     { setting_id = "unlock_es_mercenary_wh_brace_of_pistols", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_es_blunderbuss", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_mercenary_es_handgun", type = "checkbox", default_value = true },
+                                    { setting_id = "unlock_es_mercenary_es_longbow", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_es_repeating_handgun", type = "checkbox", default_value = true },
                                 },
                             },
@@ -704,6 +709,7 @@ local data = {
                                     { setting_id = "unlock_es_knight_wh_brace_of_pistols", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_es_blunderbuss", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_handgun", type = "checkbox", default_value = true },
+                                    { setting_id = "unlock_es_knight_es_longbow", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_es_repeating_handgun", type = "checkbox", default_value = true },
                                 },
                             },
@@ -858,6 +864,7 @@ local data = {
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "unlock_wh_captain_dr_crossbow", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_captain_es_longbow", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_captain_we_crossbow_repeater", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_captain_wh_brace_of_pistols", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_wh_captain_wh_crossbow", type = "checkbox", default_value = true },
@@ -871,6 +878,7 @@ local data = {
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "unlock_wh_bountyhunter_dr_crossbow", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_bountyhunter_es_longbow", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_bountyhunter_we_crossbow_repeater", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_bountyhunter_wh_brace_of_pistols", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_wh_bountyhunter_wh_crossbow", type = "checkbox", default_value = true },
@@ -884,6 +892,7 @@ local data = {
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "unlock_wh_zealot_dr_crossbow", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_wh_zealot_es_longbow", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_zealot_we_crossbow_repeater", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_zealot_wh_brace_of_pistols", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_wh_zealot_wh_crossbow", type = "checkbox", default_value = true },
@@ -896,6 +905,7 @@ local data = {
                                 setting_id = "ranged_wh_priest",
                                 type = "group",
                                 sub_widgets = {
+                                    { setting_id = "unlock_wh_priest_es_longbow", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_wh_priest_we_crossbow_repeater", type = "checkbox", default_value = false },
                                 },
                             },
@@ -955,6 +965,8 @@ local data = {
                             },
                         },
                     },
+                },
+            },
                 },
             },
             {

@@ -37,18 +37,6 @@ local widgets = {
                 },
             },
             {
-                setting_id  = "experimental_tints_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "tint_pureheart_white",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("tint_pureheart_white_tooltip"),
-                    },
-                },
-            },
-            {
                 setting_id  = "glow_override_group",
                 type        = "group",
                 sub_widgets = {
@@ -212,12 +200,15 @@ local widgets = {
     },
 }
 
--- Append the auto-generated cosmetic-unlock widget tree (Character → Career →
--- Hats/Skins → individual checkboxes). See _cosmetic_unlocks.lua and the python
--- generator that produces it.
-for _, w in ipairs(U.widgets) do
-    widgets[#widgets + 1] = w
-end
+-- Nest the auto-generated per-character cosmetic-unlock widget tree under a
+-- single top-level "Cosmetic Availability" group so it doesn't clutter the
+-- main settings list. The generated tree is Character → Career → Hats/Skins →
+-- individual checkboxes; see _cosmetic_unlocks.lua and the python generator.
+widgets[#widgets + 1] = {
+    setting_id  = "cosmetic_availability_group",
+    type        = "group",
+    sub_widgets = U.widgets,
+}
 
 return {
     name = "Tweaker: Cosmetics",

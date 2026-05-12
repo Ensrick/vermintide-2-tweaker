@@ -1,5 +1,14 @@
 # Enemy Tweaker Changelog
 
+## 0.3.2-dev (2026-05-10) — Fix bracketed widget labels
+
+- **Bug:** widget labels and dropdown options displayed as `<horde_preset>`, `<preset_off>`, `<%>` etc. Root cause: `_data.lua` called `mod:localize(...)` at file-load time before VMF's loc table was registered, so the function returned its `<key>` fallback; that bracketed string then became the literal widget text. Plus `unit_text = "%"` was treated as a loc key (per the user's own DEVELOPMENT.md "Known Errors") and `%` is an invalid format specifier.
+- **Fix:**
+  - Pass raw localization keys (strings) to `text` / `tooltip` / dropdown-option `text` — VMF resolves them at render time, after loc is loaded.
+  - Removed `unit_text`. The `%` is baked into the `Horde Size (%%)` label (with `%%` escape per VMF's `string.format` pass).
+  - Pre-generate every dynamic per-difficulty / per-special loc entry inside `_localization.lua` so widgets can use auto-localization via setting_id with no need for `text` overrides.
+- **Refactor:** moved breed lists, label resolver, difficulty list, and key builder to a new shared module `enemy_tweaker_breeds.lua` so `_data.lua` and `_localization.lua` share one source of truth.
+
 ## 0.3.1-dev (2026-05-08) — Per-difficulty Special Spawns
 
 - **Specials UI restructured.** Replaced the Default/Disable/Customize dropdown with a nested layout: Enemy Spawns → Special Spawns → one collapsible per difficulty (Recruit, Veteran, Champion, Legend, Cataclysm 1, Cataclysm 2, Cataclysm 3). Each difficulty gets its own Max Specials Active, Max Specials of Same Type, Spawn Weights (per-special collapsible), Disabled Specials (per-special collapsible).
