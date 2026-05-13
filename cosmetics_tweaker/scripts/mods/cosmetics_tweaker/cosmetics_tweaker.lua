@@ -2,7 +2,7 @@
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 
-local MOD_VERSION = "0.8.48-dev"
+local MOD_VERSION = "0.8.49-dev"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 

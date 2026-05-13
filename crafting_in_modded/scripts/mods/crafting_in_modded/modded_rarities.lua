@@ -119,6 +119,16 @@ mod.register_rarity = function(rarity_name, opts)
         rawset(t, rarity_name, idx)
     end
 
+    -- 8. UISettings.item_rarity_textures — the icon-tile background sprite
+    --    drawn behind every item icon in the inventory grid. If opts.texture
+    --    isn't supplied, fall back to the vanilla placeholder so the icon at
+    --    least renders (the __index metamethod on item_rarity_textures
+    --    returns "icons_placeholder" by default — we override only if asked).
+    if UISettings and opts.texture then
+        UISettings.item_rarity_textures = UISettings.item_rarity_textures or {}
+        rawset(UISettings.item_rarity_textures, rarity_name, opts.texture)
+    end
+
     _registered[rarity_name] = true
     mod:info("Registered custom rarity '%s' (order=%d, color={%d,%d,%d,%d})",
         rarity_name, order, color[1], color[2], color[3], color[4])
@@ -136,6 +146,7 @@ end)
 
 -- Register the default "modded" rarity.
 mod.register_rarity("modded", {
-    color = MODDED_COLOR,
-    order = MODDED_ORDER,
+    color   = MODDED_COLOR,
+    order   = MODDED_ORDER,
+    texture = "icon_bg_modded",  -- shipped via cim's gui/materials pipeline
 })

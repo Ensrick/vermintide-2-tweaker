@@ -21,7 +21,7 @@ Key conventions (also in CLAUDE.md):
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.12.25-dev"
+local MOD_VERSION = "0.12.26-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
@@ -1736,7 +1736,7 @@ _patch_longbow_empire_template_for_saltzpyre()
 --      widened by `_AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT` (3.0);
 --      `pistol_special` spread (used by RMB lock-target AND rapid-fire
 --      shots) cloned + widened by `_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT`
---      (12.0 = 4× the primary multiplier). Primary clone is set as
+--      (9.0 = 3× the primary multiplier). Primary clone is set as
 --      `default_spread_template`; secondary clone overrides
 --      `spread_template_override` on EVERY sub-action of every action
 --      that pointed to `pistol_special` (action_two.default lock-target
@@ -1817,9 +1817,9 @@ end
 local _AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT = 3.0
 -- Secondary spread mult: applied to pistol_special, which both
 -- action_two.default (lock-target / RMB aim) and action_one.fast_shot
--- (rapid-fire shot) override to via `spread_template_override`. 12×
--- (dialled back from 16× in v0.12.21 per user feel-test).
-local _AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT = 12.0
+-- (rapid-fire shot) override to via `spread_template_override`. 9×
+-- (dialled back from 12× in v0.12.26 — final tune per user).
+local _AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT = 9.0
 
 local function _wt_scale_spread(t, mult)
     for k, v in pairs(t) do

@@ -552,6 +552,18 @@ M.la_kind_unit_parent_packages = {
     Kruber_empire_shield_basic1 = "units/weapons/player/wpn_empire_handgun_02_t2/wpn_empire_handgun_02_t2",
 }
 
+-- Preview-only scale multiplier per `kind="unit"` shield. Applied via
+-- `Unit.set_local_scale(unit, 0, Vector3(s, s, s))` ONLY in the
+-- LootItemUnitPreviewer (customization-preview) context — does NOT
+-- affect in-game or inventory-mannequin rendering. Default 2.0 when
+-- an entry is absent. Custom-mesh LA shields tend to render small in
+-- the previewer's intrinsic zoom; this brings them to a visible size
+-- comparable to vanilla shield illusions.
+M.la_kind_unit_preview_scale_default = 2.0
+M.la_kind_unit_preview_scale = {
+    -- Kruber_empire_shield_basic1 = 2.0,  -- example override
+}
+
 -- Reverse map (LA mesh path → parent package) built at register-all time
 -- so the previewer's `load_package` hook can look up the parent without
 -- knowing the armoury_key. Keys are both the 1p and _3p forms of the LA
@@ -758,6 +770,22 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
             mod:info("[LA fix kind=unit %s] no parent_path or Unit.set_all_materials missing — paint will likely AV",
                 tostring(armoury_key))
         end
+
+        -- v0.8.49: scale up the unit in the customization preview only.
+        -- kind="unit" meshes render visibly smaller than vanilla shield
+        -- illusions in the previewer's intrinsic zoom; this normalizes them
+        -- without affecting in-game or inventory-mannequin rendering (those
+        -- contexts already early-returned above).
+        local scale = (M.la_kind_unit_preview_scale and M.la_kind_unit_preview_scale[armoury_key])
+            or M.la_kind_unit_preview_scale_default or 1.0
+        if scale ~= 1.0 and Unit.set_local_scale and Vector3 then
+            local ok = pcall(Unit.set_local_scale, unit, 0, Vector3(scale, scale, scale))
+            if M.trace then
+                mod:info("[LA fix kind=unit %s] Unit.set_local_scale(0, %sx) ok=%s",
+                    tostring(armoury_key), tostring(scale), tostring(ok))
+            end
+        end
+
         -- Fall through to the texture-painting code below. The swap should
         -- have given us a real material slot to paint into.
     end

@@ -1,5 +1,9 @@
 # Weapon Tweaker Changelog
 
+## 0.12.26-dev (2026-05-12) — Authentic Brace: final secondary-spread tune, 12× → 9×
+
+`_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT` dialled back from 12.0 to **9.0** per user feel-test ("9× and I think that'll do"). Primary spread stays at 3×, so secondary is now exactly 3× the primary multiplier (was 4× in v0.12.21–v0.12.25). The doc-block step (5) reference value updated to match. No other authentic-brace behavior changes — speed, reticle reticle-jump fix, ammo, reload, damage all unchanged.
+
 ## 0.12.25-dev (2026-05-12) — Fix end-of-mission parade crash + consolidate duplicate hooks
 
 **End-of-mission parade crash** (crashify://811e5718-2e04-4995-8a22-0880c44cf44d): `team_previewer.lua:120: attempt to index local 'item_template' (a nil value)`. Triggered when a player has a `character_weapon_variants` cross-character variant in their loadout — CWV variants inherit `entry.name` from the base weapon (per `feedback_cwv_clone_name_clobber.md`), so the level-end verifier looks up the BASE `ItemMasterList` entry whose `can_wield` doesn't include the new career → `BackendInterfaceCommon.can_wield(career, item_data)` returns false → vanilla `LevelEndView._verify_weapon_data` hits a bailout path that assigns `verified_weapon.item_name = career_settings.preview_items[1]`. But `career_settings.preview_items[1]` is now `{ item_name = "..." }` (a table), not a string — Fatshark changed the shape of `preview_items` without updating this bailout path. `team_previewer.cb_hero_unit_spawned_skin_preview` then does `ItemMasterList[that-table]` → crash. Fix: post-hook `LevelEndView._verify_weapon_data` to unwrap the table-shape to its inner `.item_name` string, or clear to nil if unexpected. Reproduced with the user having `we_javelin` (cwv_es_javelin → base we_javelin name) on `es_huntsman`.

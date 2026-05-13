@@ -17,7 +17,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("cim")
 
-local MOD_VERSION = "0.7.0-dev"
+local MOD_VERSION = "0.7.1-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 mod:echo("Crafting in Modded v" .. MOD_VERSION)
 

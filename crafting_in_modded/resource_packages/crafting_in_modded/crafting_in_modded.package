@@ -9,3 +9,11 @@ package = [
 lua = [
 	"scripts/mods/crafting_in_modded/*"
 ]
+
+material = [
+	"materials/ui/icon_bg_modded"
+]
+
+texture = [
+	"gui/1080p/single_textures/cim/icon_bg_modded"
+]

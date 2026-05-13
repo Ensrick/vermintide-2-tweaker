@@ -1,5 +1,20 @@
 # Crafting in Modded Changelog
 
+## 0.7.1-dev (2026-05-12) — Ship `icon_bg_modded` rarity-background texture
+v0.7.0 introduced the `"modded"` rarity but didn't supply an icon background, so every modded item rendered with the vanilla `icons_placeholder` "missing texture" tile in the inventory grid.
+
+Asset pipeline (mirrors `dynamic_cosmetic_portraits`):
+- New 80×80 PNG at `gui/1080p/single_textures/cim/icon_bg_modded.png` (user-authored from extracted `icon_bg_exotic` template, recolored to pale gold)
+- Matching `icon_bg_modded.texture` (DXT5, sRGB) compile definition
+- Matching `icon_bg_modded.material` using `gui:DIFFUSE_MAP` shader
+- `.package` updated with `material = [...]` and `texture = [...]` entries so VMB bundles the asset
+
+VMF wiring in `crafting_in_modded_data.lua`:
+- `custom_gui_textures.textures = { "icon_bg_modded" }`
+- `custom_gui_textures.ui_renderer_injections` covers 10 UI surfaces: `ingame_ui`, `ingame_ui_settings`, `hero_view`, `hero_view_state_loot`, `hero_view_state_store`, `hero_view_state_weave_forge`, `start_game_state_settings_overview`, `level_end_view_base`, `level_end_view_versus`, `ui_manager`. Matches the broad list dynamic_cosmetic_portraits uses, since rarity backgrounds render in identical surfaces.
+
+`modded_rarities.lua` gained step 8 in `register_rarity()`: writes `opts.texture` into `UISettings.item_rarity_textures[name]` so vanilla code resolves the rarity name to our texture. The default `"modded"` registration now sets `texture = "icon_bg_modded"`.
+
 ## 0.7.0-dev (2026-05-12) — Custom `modded` rarity replaces `promo` for crafts
 Promo rarity blocked customization. Vanilla source has two hard-coded gates that special-case `"promo"` and `"default"`:
 

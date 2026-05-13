@@ -1,6 +1,6 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.324-dev"
+local MOD_VERSION = "0.1.328-dev"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- In-game chat echo so version is visible without opening console.log —
@@ -2762,10 +2762,25 @@ local function _toggle_musket_stance_and_rewield(player_unit)
 		mod:warning("[cwv musket] destroy_slot failed: %s", tostring(err_destroy))
 		return
 	end
-	-- v0.1.307: pass ammo_percent = 0 (NOT a fraction). With 0, vanilla
-	-- spawns the unit with current=0, reserve=0. We then restore the EXACT
-	-- captured values below, bypassing the chamber-min-refill behavior.
-	local ok_add, err_add = pcall(function() inv:add_equipment(slot_name, item_data, nil, nil, 0) end)
+	-- v0.1.328: choose `target_percent` so vanilla's wield-animation picker
+	-- in _wield_slot:2050 sees the CORRECT chamber state.
+	-- Vanilla: `_current_ammo = math.min(_ammo_per_clip, _start_ammo)`
+	-- where `_start_ammo = round(percent * max_ammo)`.
+	-- ammo_per_clip = 1 for handgun; so any percent yielding start_ammo >= 1
+	-- gives _current_ammo = 1 (chamber loaded → "loaded" wield anim).
+	-- ammo_percent = 0 always gives _current_ammo = 0 → "not_loaded" anim.
+	-- v0.1.307 passed 0 unconditionally and restored ammo afterward, but
+	-- the anim was already selected → user saw empty-chamber pose even with
+	-- a round chambered. Now pass a percent matching captured state:
+	--   chamber loaded (cap_current >= 1) → fraction = total/max → loaded anim
+	--   chamber empty  (cap_current == 0, mid-reload) → 0 → not-loaded anim
+	-- POST-spawn we still restore precise reserves below.
+	local target_percent = 0
+	if cap_current and cap_current >= 1 then
+		local _MAX_AMMO = 11  -- old_musket_template max_ammo
+		target_percent = math.min(1, ((cap_current or 0) + (cap_reserve or 0)) / _MAX_AMMO)
+	end
+	local ok_add, err_add = pcall(function() inv:add_equipment(slot_name, item_data, nil, nil, target_percent) end)
 	if not ok_add then
 		mod:warning("[cwv musket] add_equipment failed: %s", tostring(err_add))
 		return
@@ -3542,20 +3557,31 @@ local _CWV_CROSS_SLOT_PREFIXES = {
 	"cwv_es_musket",          -- musket family (covers cwv_es_musket and cwv_es_musket_old + backend_ids)
 }
 
+-- v0.1.327: check ALL candidate id fields, not just the first non-nil one.
+-- Earlier `data.key or data.name or item.ItemId or item.backend_id` would
+-- short-circuit on the first non-nil — if `data.name` happened to be the
+-- inherited base name "es_handgun", the function returned false even though
+-- `item.ItemId` was "cwv_es_musket_old_001". Likely root cause of "musket
+-- doesn't appear in melee slot" in v0.1.316+ (post-filter scoping dropped
+-- the item because the gate returned false).
 local function _is_cwv_musket_item(item)
 	if not item then return false end
 	local data = item.data or item.master_item or item
-	if not data then return false end
-	-- Detect via item key OR backend_id pattern. Variant defs use
-	-- item_key as the IML key; backend_id is "<key>_001" per
-	-- `_register_item`. Match either form.
-	local key = data.key or data.name or item.ItemId or item.backend_id
-	if type(key) ~= "string" then return false end
-	for _, prefix in ipairs(_CWV_CROSS_SLOT_PREFIXES) do
-		if string.find(key, prefix, 1, true) == 1 then
-			return true
+	local function _check(key)
+		if type(key) ~= "string" then return false end
+		for _, prefix in ipairs(_CWV_CROSS_SLOT_PREFIXES) do
+			if string.find(key, prefix, 1, true) == 1 then
+				return true
+			end
 		end
+		return false
 	end
+	if _check(data and data.key) then return true end
+	if _check(data and data.name) then return true end
+	if _check(item.ItemId) then return true end
+	if _check(item.backend_id) then return true end
+	if _check(data and data.backend_id) then return true end
+	if _check(data and data.mod_data and data.mod_data.backend_id) then return true end
 	return false
 end
 
@@ -3646,7 +3672,7 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
 	-- Only run for the melee-slot filter.
 	if not string.find(filter, "slot_type == melee", 1, true) then return items end
 
-	local filtered, kept, dropped = {}, 0, 0
+	local filtered, kept, dropped, dropped_examples = {}, 0, 0, {}
 	for _, item in ipairs(items) do
 		local data = item.data or {}
 		local item_slot_type = data.slot_type
@@ -3661,10 +3687,21 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
 				kept = kept + 1
 			else
 				dropped = dropped + 1
+				-- Log first 3 dropped items so we can see if a musket got dropped.
+				if #dropped_examples < 3 then
+					dropped_examples[#dropped_examples + 1] = string.format(
+						"{key=%s name=%s ItemId=%s bid=%s mod_bid=%s}",
+						tostring(data and data.key),
+						tostring(data and data.name),
+						tostring(item.ItemId),
+						tostring(item.backend_id),
+						tostring(data and data.mod_data and data.mod_data.backend_id))
+				end
 			end
 		end
 	end
-	mod:info("[cwv melee-grid filter] kept=%d  dropped_ranged=%d", kept, dropped)
+	mod:info("[cwv melee-grid filter] kept=%d  dropped_ranged=%d  drop_samples=[%s]",
+		kept, dropped, table.concat(dropped_examples, ", "))
 	return filtered
 end)
 
@@ -4407,22 +4444,19 @@ _CWV_OLD_MUSKET_POS_1P_MELEE   = { 0, 0.06, 0 }
 _CWV_OLD_MUSKET_ROT_1P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
 _CWV_OLD_MUSKET_SCALE_1P_MELEE = { 1, 1, 1 }
 
--- v0.1.318: 3P split into _RANGED / _MELEE (was single shared bucket).
--- v0.1.319: 3P-RANGED rotation baked from user live-tune — composed via
--- rotmul X(-90°) then Z(+90°). The same Quaternion.multiply order the
--- rotmul command uses internally: `multiply(current, addon)` = stack
--- addon onto current. Offsets remain identity; user will tune in a
--- subsequent session.
-_CWV_OLD_MUSKET_POS_3P_RANGED   = { 0, 0, 0 }
-_CWV_OLD_MUSKET_ROT_3P_RANGED   = QuaternionBox(Quaternion.multiply(
-	Quaternion.axis_angle(Vector3(1, 0, 0), -math.pi / 2),
-	Quaternion.axis_angle(Vector3(0, 0, 1),  math.pi / 2)
-))
-_CWV_OLD_MUSKET_SCALE_3P_RANGED = { 1, 1, 1 }
+-- v0.1.318: 3P split into _RANGED / _MELEE.
+-- v0.1.320: final tuned values from user live-tune:
+--   3P-RANGED — pos (0, 0.64, -0.01), rot Euler XYZ (-90, -90, 0), scale (1, 1.1, 1.1)
+--   3P-MELEE  — pos (0, 0.045, 0.1) (unchanged from v0.1.318), rot (0, 1, 0) @ -90°
+--               (unchanged), scale (1, 1.1, 1.1) (matched to 3P-RANGED per user
+--               "do the same scaling for melee as well")
+_CWV_OLD_MUSKET_POS_3P_RANGED   = { 0, 0.64, -0.01 }
+_CWV_OLD_MUSKET_ROT_3P_RANGED   = QuaternionBox(Quaternion.from_euler_angles_xyz(-90, -90, 0))
+_CWV_OLD_MUSKET_SCALE_3P_RANGED = { 1, 1.1, 1.1 }
 
 _CWV_OLD_MUSKET_POS_3P_MELEE   = { 0, 0.045, 0.1 }
 _CWV_OLD_MUSKET_ROT_3P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
-_CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1, 1 }
+_CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1.1, 1.1 }
 
 -- Weak-keyed tracking sets — one per (perspective × mode) bucket.
 _CWV_OLD_MUSKET_UNITS_1P_RANGED = setmetatable({}, { __mode = "k" })
@@ -8590,7 +8624,17 @@ end
 
 local function _cwv_spawn_item_post(self, item_name)
 	local def, info = _resolve_preview_def(self, item_name)
-	if not def then return end
+	if not def then
+		-- v0.1.326: log when the resolver fails for a musket-shaped item_name
+		-- so we can tell whether the regex / lookup is broken vs the hook
+		-- never firing.
+		if type(item_name) == "string" and item_name:find("musket", 1, true) then
+			mod:info("[cwv preview] _resolve_preview_def returned nil for item_name=%s (info bid=%s)",
+				tostring(item_name),
+				tostring(info and info.backend_id))
+		end
+		return
+	end
 
 	local equip_units = self._equipment_units
 	if not equip_units then return end
@@ -8632,21 +8676,53 @@ local function _cwv_spawn_item_post(self, item_name)
 	-- character-preview UI. v0.1.318: pass the stance mode so 3P-MELEE
 	-- transforms apply when the player has the musket in melee stance.
 	-- Mode is read from item_data.mod_data.cwv_musket_stance.
+	-- v0.1.326: diagnostic logging to figure out why texture stays white
+	-- in the inventory preview. Logs whether the hook reached this point,
+	-- the unit's mesh/material counts, and each Material.set_texture result.
 	if def.item_key == "cwv_es_musket_old" and slot.right and _is_unit(slot.right) then
 		local _stance = "ranged"
 		local item_data = info and info.item_data
 		if item_data and item_data.mod_data and item_data.mod_data.cwv_musket_stance == "melee" then
 			_stance = "melee"
 		end
-		if _apply_old_musket_textures then
-			_apply_old_musket_textures(slot.right)
+		mod:info("[cwv preview] firing for cwv_es_musket_old: unit=%s stance=%s", tostring(slot.right), _stance)
+		-- Inline diagnostic texture binding (so we can SEE per-call results)
+		local unit = slot.right
+		local meshes_seen, mats_seen, tex_set_oks = 0, 0, 0
+		local ok_nm, num_meshes = pcall(Unit.num_meshes, unit)
+		if ok_nm and num_meshes then
+			for i = 0, num_meshes - 1 do
+				local mok, mesh = pcall(Unit.mesh, unit, i)
+				if mok and mesh then
+					meshes_seen = meshes_seen + 1
+					local nok, num_mats = pcall(Mesh.num_materials, mesh)
+					if nok and num_mats then
+						for j = 0, num_mats - 1 do
+							local matok, mat = pcall(Mesh.material, mesh, j)
+							if matok and mat then
+								mats_seen = mats_seen + 1
+								local rok1 = pcall(Material.set_texture, mat, "texture_map_c0ba2942", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo")
+								local rok2 = pcall(Material.set_texture, mat, "texture_map_59cd86b9", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal")
+								local rok3 = pcall(Material.set_texture, mat, "texture_map_0205ba86", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic")
+								if rok1 and rok2 and rok3 then tex_set_oks = tex_set_oks + 1 end
+							end
+						end
+					end
+				end
+			end
+		else
+			mod:info("[cwv preview] Unit.num_meshes failed: ok=%s num_meshes=%s", tostring(ok_nm), tostring(num_meshes))
 		end
+		mod:info("[cwv preview] textures applied: meshes=%d mats=%d ok_triples=%d", meshes_seen, mats_seen, tex_set_oks)
 		if _track_old_musket_unit then
 			_track_old_musket_unit(slot.right, "3p", _stance)
 		end
 		if _apply_old_musket_transform then
 			_apply_old_musket_transform(slot.right, "3p", _stance)
 		end
+	elseif def.item_key == "cwv_es_musket_old" then
+		mod:info("[cwv preview] cwv_es_musket_old gate failed: slot.right=%s _is_unit=%s",
+			tostring(slot and slot.right), tostring(slot and slot.right and _is_unit(slot.right)))
 	end
 end
 
@@ -8719,20 +8795,22 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
 	self._illusion_widgets = kept
 end)
 
+-- v0.1.328: UNCONDITIONAL logging for every preview-hook firing. The
+-- conditional "if musket" filter in v0.1.326 may have hidden the actual
+-- item_name (which could be "es_handgun" inherited from base, not
+-- "cwv_es_musket"). Need to see every call to figure out what's happening.
 mod:hook("HeroPreviewer", "_spawn_item", function(func, self, item_name, spawn_data)
 	local result = func(self, item_name, spawn_data)
+	mod:info("[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
+		tostring(item_name), tostring(self))
 	_cwv_spawn_item_post(self, item_name)
 	return result
 end)
 
--- REVIEW: MenuWorldPreviewer extends HeroPreviewer and its _spawn_item override
--- calls MenuWorldPreviewer.super._spawn_item (= HeroPreviewer._spawn_item), so
--- the HeroPreviewer hook above already fires for MenuWorldPreviewer instances.
--- This separate MenuWorldPreviewer hook causes _cwv_spawn_item_post to run
--- twice per spawn for that subclass. Harmless for set_local_scale (idempotent)
--- but doubles offsets — see POTENTIAL BUG note above _apply_offset.
 mod:hook("MenuWorldPreviewer", "_spawn_item", function(func, self, item_name, spawn_data)
 	local result = func(self, item_name, spawn_data)
+	mod:info("[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
+		tostring(item_name), tostring(self))
 	_cwv_spawn_item_post(self, item_name)
 	return result
 end)

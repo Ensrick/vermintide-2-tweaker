@@ -1,5 +1,31 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.328-dev (2026-05-12) — Old Musket: stance-toggle wield anim picks correct chamber state + unconditional preview-hook logging
+- User: "when switching between melee and ranged mode, even when the weapon has a round in the chamber, the grip defaults to the 'weapon empty' style passive hold animation in first person."
+- Root cause: v0.1.307 passed `ammo_percent = 0` to `inv:add_equipment` unconditionally (to defeat the v0.1.305 free-chamber-refill exploit), then restored the precise current/reserve POST-spawn. But vanilla's wield-animation picker at `simple_inventory_extension.lua:2050` runs DURING the wield call (before our post-restore) and uses `ammo_extension:ammo_count() == 0` to select `wield_anim_not_loaded`. So spawned-with-0 always picked the empty-chamber animation, even when we restored the chamber to 1 immediately after.
+- Fix: compute `target_percent` from captured state. If `cap_current >= 1` (chamber was loaded before toggle), pass `(cap_current + cap_reserve) / max_ammo` — gives `_start_ammo >= 1`, `_current_ammo = 1`, wield anim picks the loaded variant. If `cap_current == 0` (mid-reload), keep passing 0 (and our `cwv_musket_reload_interrupted` flag still aborts the auto-reload-on-wield).
+- Post-spawn ammo restoration unchanged — still pins precise (current, reserve, shots_fired) values after wield.
+- Also (v0.1.328): made the `[cwv preview hook]` logging UNCONDITIONAL — v0.1.326's `if item_name:find("musket")` filter may have masked the actual item_name (which could be "es_handgun" inherited from base). Every HeroPreviewer / MenuWorldPreviewer `_spawn_item` firing now logs.
+
+## 0.1.327-dev (2026-05-12) — Cross-slot: `_is_cwv_musket_item` short-circuit bug → musket lost from melee
+- User: "What happened to the melee option for Musket. I don't see it." Worked broadly in v0.1.313, scoped in v0.1.316, but the v0.1.316 post-filter dropped the musket itself instead of keeping it.
+- Root cause: `_is_cwv_musket_item` used `local key = data.key or data.name or item.ItemId or item.backend_id` — short-circuits on the FIRST non-nil. For our cwv items, `data.name` is the inherited base weapon name ("es_handgun"), which is NOT nil. So `key` = "es_handgun" and the prefix loop fails on every cross-slot prefix. The function returns false → the post-filter drops the item even though its ItemId / backend_id WOULD have matched.
+- Fix: rewrote `_is_cwv_musket_item` to check ALL candidate id fields independently (data.key, data.name, item.ItemId, item.backend_id, data.backend_id, data.mod_data.backend_id) — if any matches a cross-slot prefix, the function returns true. Replaces the buggy short-circuit pattern.
+- Also added `drop_samples=[…]` to the existing `[cwv melee-grid filter]` log so we can verify which items still get dropped (should be vanilla rifles, NOT the musket).
+- This bug class — short-circuiting an `or` chain when later fallbacks have the data the first one is missing — is a recurring pitfall when probing cwv items' identifiers. The fix template is the explicit `_check(...)` pattern in the function body. Same gotcha as `feedback_cwv_backend_id_lookup.md` warned about, applied to the cross-slot gate this time.
+
+## 0.1.326-dev (2026-05-12) — Old Musket: diagnostic logging for white-texture-in-preview
+- User reports texture still white in keep inventory preview despite v0.1.317 regex fix. Adding instrumentation to figure out which step is failing.
+- Logs `[cwv preview hook]` whenever HeroPreviewer._spawn_item OR MenuWorldPreviewer._spawn_item fires for a musket-named item. Per the just-updated CLAUDE.md rule, only the MenuWorldPreviewer one should fire for the keep inventory.
+- Logs `[cwv preview]` from inside `_cwv_spawn_item_post` for cwv_es_musket_old — reports unit, stance, mesh count, material count, and how many `Material.set_texture` triple-calls returned ok. Lets us tell whether the texture binding is even being attempted, vs. whether the gate exits early.
+- Also logs when `_resolve_preview_def` returns nil for a musket-named item — distinguishes "regex / lookup broken" from "hook never fired".
+
+## 0.1.325-dev (2026-05-12) — Old Musket: 3P-RANGED + 3P-MELEE final defaults baked
+- User live-tune values:
+  - **3P-RANGED**: pos `(0, 0.64, -0.01)`, rot Euler XYZ `(-90, -90, 0)` via `Quaternion.from_euler_angles_xyz`, scale `(1, 1.1, 1.1)`
+  - **3P-MELEE**: pos `(0, 0.045, 0.1)` (unchanged from v0.1.318), rot `(0, 1, 0) @ -90°` (unchanged), scale `(1, 1.1, 1.1)` (matched to 3P-RANGED per user "do the same scaling for melee as well")
+- All four buckets now have user-confirmed defaults — 3P-RANGED was the last one outstanding.
+
 ## 0.1.324-dev (2026-05-12) — Tuskgor Javelin: runtime-hide the duplicate 3P spare boar spear
 - After v0.1.321 restored `ammo_unit = boar spear` (mandatory for projectile/pickup paths — see `feedback_cwv_ammo_unit_required.md`), the held mesh renders correctly again, but 3P shows TWO boar spears (held + spare offhand). Per the v0.1.321 TODO entry: fix by runtime-hiding the spawned `left_ammo_unit_3p` instance, not by zeroing the data field.
 - Implementation: extended two existing hooks (no new hook registrations to avoid VMF hook_safe chaining issues per `feedback_vmf_hook_safe_no_chain.md`):

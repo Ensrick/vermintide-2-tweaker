@@ -6,6 +6,14 @@
 > was researched and stabilised; ongoing portrait work lives in
 > `dynamic_cosmetic_portraits/CHANGELOG.md`.
 
+## [2026-05-12 v0.8.49-dev]
+### Polish
+- **Preview-only 2x scale for `kind="unit"` LA shields.** Custom-mesh LA shields render visibly smaller than vanilla shield illusions in the LootItemUnitPreviewer's intrinsic zoom. Adds `Unit.set_local_scale(unit, 0, Vector3(2, 2, 2))` in the same context-gated block as the v0.8.48 material swap — runs ONLY for `context == "loot_previewer"`, leaves in-game and inventory-mannequin rendering untouched.
+- New tables in `_la_bridge.lua`:
+  - `M.la_kind_unit_preview_scale_default = 2.0` — base multiplier when no override exists.
+  - `M.la_kind_unit_preview_scale = {}` — per-`armoury_key` override map. Empty by default; add `Kruber_empire_shield_basic1 = 1.5` (or similar) only if a future shield needs a different preview size.
+- The scale lives in the customization-preview unit's own world, so it doesn't follow the equipped item anywhere else; the apply-and-equip path uses the in-game world's unit, which is never scaled by this code.
+
 ## [2026-05-12 v0.8.48-dev]
 ### Fixed (v0.8.47 regression — massive in-game shield)
 - v0.8.47 added `Unit.set_all_materials(unit, handgun_path)` to `_paint_offhand_textures_locally` for `kind="unit"` variants. This **fixed** the customization preview (Reiland renders with textures, mesh just smaller because of the previewer's intrinsic zoom). It also **broke** the in-game render — Reiland appears massive on both 1P and 3P views. Root cause: the function is called from THREE rendering paths via `_apply_la_offhand_to_units`:
