@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.5-alpha"
+local MOD_VERSION = "0.7.6-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -1303,6 +1303,20 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     end
 
     local result = { func(mutated, seed, config, dominant_god, with_belakor) }
+    local cursed, total = count_cursed(result[1])
+    mod:info("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
+    -- Dump per-node curse status so we can see if the converted-shop nodes were
+    -- skipped by spread_curse (CURSEABLE_NODE_TYPES filter, MIN_PROGRESS, etc.)
+    if type(result[1]) == "table" then
+        for k, n in pairs(result[1]) do
+            if type(n) == "table" and (n.type == "TRAVEL" or n.type == "SIGNATURE" or n.type == "ARENA") then
+                mod:info("[deus_populate_graph]   node %s type=%s progress=%s curse=%s god=%s level=%s",
+                    tostring(k), tostring(n.type),
+                    tostring(n.run_progress or n.progress or "?"),
+                    tostring(n.curse), tostring(n.god), tostring(n.level))
+            end
+        end
+    end
     restore_curse_count()
     return unpack(result)
 end)

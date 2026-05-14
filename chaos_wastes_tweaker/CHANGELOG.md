@@ -1,5 +1,11 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.6-alpha (2026-05-14)
+
+### Diagnostic only: extended `deus_populate_graph` logging for the `cursed_mission_count` debug
+
+v0.7.5-alpha added a `post-run cursed=N / total_curseable=M` log but only in the `replace_shrines_with_missions = OFF` branch. The user's failing scenario has the toggle ON, so the log never fired. This release moves the count + dumps every curseable node's `curse`, `god`, `progress`, and `level` so we can see exactly which nodes ended up cursed and which were skipped. No behavior change otherwise.
+
 ## 0.7.5-alpha (2026-05-14)
 
 ### Improved: Cursed-node atmosphere lighting (richer per-curse profiles)
