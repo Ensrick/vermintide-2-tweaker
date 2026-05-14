@@ -28,9 +28,17 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.4.4-dev"
+local MOD_VERSION = "0.7.0-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
+
+local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker/_adventure_pool")
+-- Call unconditionally so the LEVEL_AVAILABILITY snapshot is captured at mod load,
+-- even if the master toggle is off. inject_pool() short-circuits internally when the
+-- master is off (only resets to snapshot). Snapshot-at-load means subsequent toggles
+-- always reset to clean vanilla state — no race where snapshot is taken after our
+-- own previous mutations.
+AdventurePool.inject_pool()
 
 local SHRINE_DEFAULT = 4
 local CHEST_DEFAULT = 3
@@ -332,6 +340,28 @@ end)
 -- self._deus_weapon_chest_distribution, pop one entry, and return it. Subsequent calls find a
 -- non-empty distribution and we fall through to vanilla which pops the rest.
 -- The custom distribution overrides the entire chest contents — types left at 0 simply don't appear.
+-- Filter unknown rarities out of get_own_weapon_pool_excludes. Vanilla
+-- `DeusRunController.get_weapon_pool` (line 2130-2134) iterates pool_excludes
+-- as the source of truth and does `weapon_pool[pool_rarity][...] = nil`, but
+-- weapon_pool only contains the vanilla rarities (plentiful/common/exotic/unique).
+-- If a sibling mod (e.g. Peregrinaje) wrote a custom rarity like "modded" to
+-- pool_excludes and is no longer active, the `weapon_pool["modded"]` lookup is
+-- nil and the indexing crashes with "attempt to index a nil value" inside chest
+-- generation (deus_chest_extension.lua:_generate_stored_weapon).
+-- We strip non-standard rarities from the returned table so vanilla doesn't trip.
+local _VANILLA_RARITIES = { plentiful = true, common = true, exotic = true, unique = true }
+mod:hook("DeusRunController", "get_own_weapon_pool_excludes", function(func, self, ...)
+    local excludes = func(self, ...)
+    if type(excludes) ~= "table" then return excludes end
+    for rarity in pairs(excludes) do
+        if not _VANILLA_RARITIES[rarity] then
+            mod:info("[weapon-pool] stripped unknown rarity '%s' from pool_excludes", tostring(rarity))
+            excludes[rarity] = nil
+        end
+    end
+    return excludes
+end)
+
 mod:hook("DeusRunController", "get_deus_weapon_chest_type", function(func, self)
     local distribution = self._deus_weapon_chest_distribution
 
@@ -531,7 +561,16 @@ end)
 -- All settings save/restore around `func()` so vanilla values are preserved between runs.
 -- POTENTIAL BUG (LOW): Same `func` error → state leak issue as boon/trait hooks. If `func()` raises,
 -- pickup_settings stays mutated AND added_potions clones leak in Pickups.deus_potions.
+--
+-- Per-level counter for tome/grim → Chest of Trials conversions. Declared here (not
+-- where the conversion hook below uses it) because Lua 5.1 closures bind locals
+-- lexically AT CREATION TIME — placing the `local` after the hook would make the
+-- earlier reference resolve to a global (per feedback_lua_forward_reference.md).
+-- Reset is performed at the top of THIS hook (consolidated to avoid the VMF
+-- "Attempting to rehook active hook" warning for populate_pickups).
+local _chest_conversions_this_level = 0
 mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
+    _chest_conversions_this_level = 0
     if not LevelHelper then
         return func(self, ...)
     end
@@ -651,6 +690,597 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     end
 
     return unpack(results)
+end)
+
+-- ============================================================
+-- Tome / Grimoire → Chest of Trials substitution
+-- ============================================================
+
+-- CLARIFY: Adventure levels injected into the CW map pool (see _adventure_pool.lua) have
+-- tome/grimoire pickup_spawner units baked into the level bundle. On an injected adventure
+-- level we want those positions to spawn a Chest of Trials (deus_cursed_chest) instead.
+--
+-- Vanilla PickupSystem._spawn_guaranteed_pickup (pickup_system.lua:821-844) iterates AllPickups
+-- and filters via _can_spawn, which reads Unit.get_data(spawner, pickup_name). Tome spawners
+-- have only `tome = true` set; grimoire spawners only `grimoire = true`. We detect those flags
+-- and short-circuit to spawn deus_cursed_chest directly.
+--
+-- Gated on IS_INJECTED_ADVENTURE_LEVEL[base_level_name] so vanilla CW levels (no tomes/grims)
+-- and stock adventure runs (when CW pool injection is off) are completely unaffected.
+
+-- Reverse-match a permutation or duplicate-alias key back to its injected adventure base.
+-- Returns the base key (e.g. "bell") if level_key matches an injected adventure, else nil.
+-- Handles three formats:
+--   "bell"                       (raw base)
+--   "bell_khorne_path1"          (per-theme permutation)
+--   "bell_dup1_khorne_path1"     (duplicate-alias permutation)
+local function adventure_base_from_level_key(level_key)
+    if type(level_key) ~= "string" or not AdventurePool then return nil end
+    for base in pairs(AdventurePool.IS_INJECTED_ADVENTURE_LEVEL) do
+        if level_key == base or level_key:find("^" .. base .. "_") then
+            return base
+        end
+    end
+    return nil
+end
+
+local function on_injected_adventure_level()
+    if not LevelHelper then return false end
+    local current = LevelHelper:current_level_settings()
+    return current and adventure_base_from_level_key(current.level_id) ~= nil
+end
+
+-- Lookup table: <adv_base_key>_title → display name. Used to satisfy the CW map UI
+-- which constructs the title localization key ad-hoc at deus_map_ui_v2.lua:593 as
+-- `Localize(level .. "_title")`, ignoring LevelSettings[<perm>].display_name entirely.
+-- Without this hook the map shows "<elven_ruins_title>" / "<bell_title>" etc.
+-- We also intercept `_desc` for the same reason (line 594).
+local ADV_TITLE_OVERRIDES = {}
+local ADV_DESC_OVERRIDES = {}
+do
+    local function add(key, title, desc)
+        ADV_TITLE_OVERRIDES[key .. "_title"] = title
+        ADV_DESC_OVERRIDES[key .. "_desc"] = desc
+    end
+    for _, m in ipairs(AdventurePool.ADVENTURE_MISSIONS) do
+        -- title shown on the node icon hover; desc shown below it.
+        add(m.key, m.name, m.name)
+    end
+end
+
+-- Consolidated _G.Localize hook. VMF warns "Attempting to rehook active hook" if the
+-- same target is hooked twice — only the second binding survives and shadows the first.
+-- Two purposes live here:
+--   1. Adventure-mission titles/descriptions used by deus_map_ui_v2.lua:593's
+--      ad-hoc `Localize(level .. "_title")` lookup. Without this, injected
+--      adventure nodes render as "<elven_ruins_title>" on Olesya's map.
+--   2. Khaine's Fury (deus_reckless_swings) description override when the user has
+--      `tweak_reckless_swings` enabled. Vanilla format string is "While above 50% …";
+--      we substitute "25% / 1 damage" verbatim. Percent signs MUST be `%%` because
+--      UIUtils.format_localized_description (ui_utils.lua:69) re-feeds the result
+--      through string.format with description_values — a bare `%` becomes
+--      "[Invalid String Format]". See feedback_vt2_localize_string_format_pipeline.md.
+local RECKLESS_SWINGS_DESC_OVERRIDE = "While above 25%% Health, gain 25%% Power but take 1 damage on each melee hit."
+
+mod:hook(_G, "Localize", function(func, key, ...)
+    if type(key) == "string" then
+        local t = ADV_TITLE_OVERRIDES[key]
+        if t then return t end
+        local d = ADV_DESC_OVERRIDES[key]
+        if d then return d end
+        if key == "description_deus_reckless_swings" and reckless_swings_originals then
+            return RECKLESS_SWINGS_DESC_OVERRIDE
+        end
+    end
+    return func(key, ...)
+end)
+
+-- DeusMechanism.uses_random_directors returns false (deus_mechanism.lua:909) so
+-- EnemyPackageLoader._random_director_list stays nil for the entire CW run. Vanilla
+-- CW levels' baked spawn_zone data have explicit `roaming_set` directors (no "random"
+-- choice), so they never hit the nil dereference at
+-- main_path_spawning_generator.lua:314 (`random_director_list[index].name`). Adventure
+-- level spawn zones, however, were authored for AdventureMechanism (which returns
+-- true) and DO have zone strings with "random" as one of the slash-separated
+-- choices. When `process_conflict_directors_zones` picks "random" for any zone, the
+-- subsequent generate_great_cycles crash fires.
+--
+-- Fix: force `use_random_directors = true` on the EnemyPackageLoader.setup_startup_enemies
+-- call for any injected adventure level (matching by permutation base). This causes
+-- _resolve_breed_packages (line 750) to populate _random_director_list, which the
+-- spawn_zone generator then reads safely.
+mod:hook("EnemyPackageLoader", "setup_startup_enemies", function(func, self, level_key, level_seed, failed_locked_functions, use_random_directors, conflict_director_name, difficulty, difficulty_tweak)
+    if adventure_base_from_level_key(level_key) then
+        use_random_directors = true
+    end
+    return func(self, level_key, level_seed, failed_locked_functions, use_random_directors, conflict_director_name, difficulty, difficulty_tweak)
+end)
+
+-- ============================================================
+-- Curse light tinting on injected adventure levels
+-- ============================================================
+-- Vanilla GameModeDeus.local_player_game_starts (game_mode_deus.lua:358-378)
+-- iterates `Level.units(current_level)` and applies `DeusThemeSettings[theme].light_probe_tint`
+-- to lights inside reflection_probe units. For vanilla CW that's enough — the level
+-- bundle's sky shader and atmosphere are theme-specific too, so the tint reinforces
+-- the existing visual.
+--
+-- Adventure level bundles have only the native atmosphere baked in (no per-god sky).
+-- So when our injected `<adv>_<theme>_path1` permutation loads under a curse, the
+-- engine applies the reflection-probe tint but the sky/atmosphere remains adventure-
+-- vanilla. Result: cursed adventure missions look too "normal".
+--
+-- Partial mitigation: hook_safe the same function and apply the theme color to
+-- EVERY light in the level (not just reflection probes), plus the camera backlight.
+-- This makes the curse colour shift more pronounced even on adventure geometry.
+-- It can't bring back the baked sky/particles, but it makes "this node is cursed"
+-- visually obvious.
+-- Saturated tint colors per curse theme, since the vanilla DeusThemeSettings
+-- `light_probe_tint` values are extremely close to white (e.g. slaanesh is
+-- {0.76, 0.76, 1.00} which is barely visible). Without a baked themed sky to
+-- back them up (adventure levels have none), the subtle tint just looks like
+-- "slight color cast". These curated values produce a clearly visible mood.
+local _CURSE_LIGHT_TINT = {
+    khorne   = { 1.00, 0.40, 0.40 },  -- saturated red
+    nurgle   = { 0.50, 1.00, 0.50 },  -- saturated green
+    tzeentch = { 0.50, 0.55, 1.00 },  -- saturated blue
+    slaanesh = { 1.00, 0.55, 0.80 },  -- pink/magenta
+    belakor  = { 0.60, 0.40, 0.80 },  -- purple
+}
+
+mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player, loading_context)
+    if not on_injected_adventure_level() then return end
+    local run_controller = self._deus_run_controller
+    if not run_controller then return end
+    local current_node = run_controller:get_current_node()
+    if not current_node then return end
+    local theme = current_node.theme
+    if not theme or theme == "wastes" then
+        mod:info("[curse-tint] theme=%s (no curse); skipping", tostring(theme))
+        return
+    end
+    local tint = _CURSE_LIGHT_TINT[theme]
+    if not tint then
+        mod:warning("[curse-tint] no tint mapping for theme=%s", tostring(theme))
+        return
+    end
+
+    local world = self._world
+    local level = LevelHelper:current_level(world)
+    if not level then return end
+
+    local r, g, b = tint[1], tint[2], tint[3]
+    -- DELIBERATE: don't tint the camera backlight (that was glowing the
+    -- first-person hands which the user didn't want). Tint only world lights.
+    local units = Level.units(level)
+    local lights_tinted = 0
+    for j = 1, #units do
+        local level_unit = units[j]
+        if Unit.alive(level_unit) then
+            local num_lights = Unit.num_lights(level_unit)
+            if num_lights and num_lights > 0 then
+                for i = 1, num_lights do
+                    local light = Unit.light(level_unit, i - 1)  -- 0-indexed per vanilla
+                    if light then
+                        Light.set_color(light, Vector3(r, g, b))
+                        lights_tinted = lights_tinted + 1
+                    end
+                end
+            end
+        end
+    end
+    mod:info("[curse-tint] level=%s theme=%s tint=%.2f,%.2f,%.2f lights=%d",
+        tostring(current_node.level), tostring(theme), r, g, b, lights_tinted)
+end)
+
+-- ============================================================
+-- Replace shrines with missions (SHOP -> TRAVEL conversion)
+-- ============================================================
+-- When `replace_shrines_with_missions` is enabled, every SHOP node in the base
+-- journey graph is converted to a TRAVEL node BEFORE deus_populate_graph picks
+-- levels for it. Effect: the boon-picker shrines on Olesya's map become regular
+-- mission slots that roll from the TRAVEL pool (vanilla CW missions plus any
+-- enabled adventure missions). Players play more missions and lose the free
+-- between-mission boon picks.
+--
+-- Implementation: hook deus_populate_graph and clone-then-mutate the base_graph
+-- before passing to the original. We shallow-clone individual SHOP nodes (not
+-- the whole graph) so we don't waste memory copying TRAVEL/SIGNATURE/ARENA nodes
+-- — and crucially DON'T mutate the source baked-graph table, which is shared
+-- across calls. Setting `label = 0` on the converted node skips the
+-- shuffled_levels_for_labels deterministic lookup and forces a random pick from
+-- LEVEL_AVAILABILITY.TRAVEL (which is what we want — random TRAVEL roll).
+-- Map node icon swap for adventure levels. Vanilla `spawn_graph_units` in
+-- deus_map_scene.lua:182-192 picks the node's 3D model by string-prefix on
+-- `node.level`:  "sig_*" → SIG, "pat_*" → TRAVEL, "arena_*" → ARENA, else SHRINE.
+-- Adventure mission keys (e.g. `bell_khorne_path1`, `farmlands_khorne_path1`)
+-- don't match any prefix, so they fall to SHRINE. Hook DeusMapScene.on_enter
+-- (the public method that calls spawn_graph_units at line 466): walk the
+-- graph_data, prefix each adventure node's `level` with the CW-icon basename
+-- that matches the mission's `icon` field, call vanilla, then restore.
+-- This routes adventure nodes to TRAVEL_NODE_UNIT and feeds the flow event's
+-- `data.level` lookup a CW basename it recognizes (pat_tower for towers,
+-- pat_mountain for mountain missions, etc.) so the per-mission icon variant
+-- on the 3D node mesh matches our `icon` field. Adventure base_level is also
+-- rewritten so the flow event's `data.level` (set from node.base_level on the
+-- spawned unit) sees the icon-matching base too.
+mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
+    if not graph_data then return func(self, graph_data, ...) end
+    local saved = {}
+    for key, node in pairs(graph_data) do
+        if type(node) == "table" and type(node.level) == "string" then
+            local base_key = adventure_base_from_level_key(node.level)
+            if base_key then
+                local mission = AdventurePool and AdventurePool.MISSION_BY_KEY and AdventurePool.MISSION_BY_KEY[base_key]
+                local icon = mission and mission.icon or "mountain"  -- fallback
+                local cw_base = "pat_" .. icon
+                -- Try matching SIGNATURE prefix if it's that pool type — sig_<icon>
+                -- exists for some CW themes but not all; pat_ is the safer default.
+                saved[key] = { level = node.level, base_level = node.base_level }
+                local suffix = node.level:match("(_[a-z]+_path%d+)$") or "_wastes_path1"
+                node.level = cw_base .. suffix
+                node.base_level = cw_base
+            end
+        end
+    end
+
+    local result = { func(self, graph_data, ...) }
+
+    for key, original in pairs(saved) do
+        if graph_data[key] then
+            graph_data[key].level = original.level
+            graph_data[key].base_level = original.base_level
+        end
+    end
+    return unpack(result)
+end)
+
+-- Filter curse pool by user's disable_curse_* settings BEFORE the graph generator
+-- runs spread_curse → assign_random_curse. The vanilla picker reads
+-- `config.AVAILABLE_CURSES[node_type][god]` and picks at random. If we strip
+-- disabled curses from that array, a node hot-spotted to god X will roll a
+-- DIFFERENT enabled curse of X instead of being nil-curse'd by our downstream
+-- _transition_next_node hook.
+-- Edge case: if user disabled ALL curses of god X, leaving the array empty would
+-- crash assign_random_curse (`curses[random(1, 0)]` → nil indexing). We keep the
+-- original list in that case so the picker has something to pick; the existing
+-- runtime curse-disable hooks (_activate_mutator, get_current_node_curse,
+-- _transition_next_node, start_next_round, _enable_hover) then null out the
+-- still-disabled curse — net effect: theme stays as the god, curse vanishes.
+-- Returns the save-list so the caller can restore originals after func() runs.
+local function filter_available_curses(config)
+    local saved = {}
+    if not config or not config.AVAILABLE_CURSES then return saved end
+    for node_type, god_table in pairs(config.AVAILABLE_CURSES) do
+        if type(god_table) == "table" then
+            for god, curse_list in pairs(god_table) do
+                if type(curse_list) == "table" and #curse_list > 0 then
+                    local filtered = {}
+                    for _, curse in ipairs(curse_list) do
+                        local key = "disable_curse_" .. curse:gsub("^curse_", "")
+                        if not mod:get(key) then
+                            filtered[#filtered + 1] = curse
+                        end
+                    end
+                    if #filtered > 0 and #filtered < #curse_list then
+                        saved[#saved + 1] = { tbl = god_table, key = god, original = curse_list }
+                        god_table[god] = filtered
+                    end
+                    -- If #filtered == 0 (all disabled), leave original in place; the
+                    -- runtime is_curse_disabled hooks will null the picked curse anyway.
+                end
+            end
+        end
+    end
+    return saved
+end
+
+local function restore_available_curses(saved)
+    for i = #saved, 1, -1 do
+        local entry = saved[i]
+        entry.tbl[entry.key] = entry.original
+    end
+end
+
+mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dominant_god, with_belakor)
+    -- Override the curse hotspot count if the user has set `cursed_mission_count`.
+    -- Vanilla `spread_curse` (deus_populate_graph.lua:681) does:
+    --   hot_spot_count = random(CURSES_HOT_SPOTS_MIN_COUNT, CURSES_HOT_SPOTS_MAX_COUNT)
+    --   for each cluster: pick a center node, curse it, AND spread curse to nodes
+    --   within `CURSES_HOT_SPOT_MAX_RANGE` (so each cluster typically curses 1-3 nodes).
+    -- For the user's setting to give an EXACT count of cursed missions, we both:
+    --   1. Force MIN = MAX = N (deterministic cluster count)
+    --   2. Set MIN_RANGE = MAX_RANGE = 0 (each cluster curses only its center, no spread)
+    -- Net: exactly N cursed nodes (or fewer if the map has < N curseable nodes; the
+    -- spreader stops early when it runs out of candidates).
+    local saved_min, saved_max, saved_range_min, saved_range_max
+    local override_curse_count = mod:get("cursed_mission_count")
+    if config and override_curse_count and override_curse_count > 0 then
+        saved_min = config.CURSES_HOT_SPOTS_MIN_COUNT
+        saved_max = config.CURSES_HOT_SPOTS_MAX_COUNT
+        saved_range_min = config.CURSES_HOT_SPOT_MIN_RANGE
+        saved_range_max = config.CURSES_HOT_SPOT_MAX_RANGE
+        config.CURSES_HOT_SPOTS_MIN_COUNT = override_curse_count
+        config.CURSES_HOT_SPOTS_MAX_COUNT = override_curse_count
+        config.CURSES_HOT_SPOT_MIN_RANGE = 0
+        config.CURSES_HOT_SPOT_MAX_RANGE = 0
+    end
+
+    -- Filter the curse pool so disabled curses get re-rolled within their god
+    -- rather than just removed (per user spec).
+    local saved_curses = filter_available_curses(config)
+
+    local function restore_curse_count()
+        if saved_min then config.CURSES_HOT_SPOTS_MIN_COUNT = saved_min end
+        if saved_max then config.CURSES_HOT_SPOTS_MAX_COUNT = saved_max end
+        if saved_range_min then config.CURSES_HOT_SPOT_MIN_RANGE = saved_range_min end
+        if saved_range_max then config.CURSES_HOT_SPOT_MAX_RANGE = saved_range_max end
+        restore_available_curses(saved_curses)
+    end
+
+    if not mod:get("replace_shrines_with_missions") then
+        local result = { func(base_graph, seed, config, dominant_god, with_belakor) }
+        restore_curse_count()
+        return unpack(result)
+    end
+
+    local mutated = {}
+    local converted = 0
+    for node_key, node in pairs(base_graph) do
+        if type(node) == "table" and node.type == "SHOP" then
+            local copy = table.clone(node)
+            copy.type = "TRAVEL"
+            copy.label = 0
+            mutated[node_key] = copy
+            converted = converted + 1
+        else
+            mutated[node_key] = node
+        end
+    end
+
+    if converted > 0 then
+        mod:info("deus_populate_graph: converted %d SHOP node(s) to TRAVEL", converted)
+    end
+
+    local result = { func(mutated, seed, config, dominant_god, with_belakor) }
+    restore_curse_count()
+    return unpack(result)
+end)
+
+-- ============================================================
+-- Per-career weapon override recovery (fixes CW bot ghost-scythe crash)
+-- ============================================================
+--
+-- Crash: `Unit not found wpn_bw_ghost_scythe_01_3p` (Necromancer base mesh) when a
+-- Sienna Unchained bot spawns with the ghost scythe (the scythe can_wield all four
+-- Sienna careers; non-Necromancer careers use `_fire` mesh variants via
+-- `ItemMasterList.bw_ghost_scythe.right_hand_unit_override`).
+--
+-- Vanilla flow:
+--   simple_inventory_extension.add_equipment passes `self._career_name` to
+--   gear_utils.create_equipment, which calls
+--   `BackendUtils.get_item_units(item_data, nil, nil, career_name)`. The override
+--   block at `backend_utils.lua:159-162` is gated on `career_name`, so when it
+--   arrives nil, the BASE `right_hand_unit` survives — and `gear_utils.lua:189`
+--   derives the 3P path as `weapon_unit_name .. "_3p"` (base 3P), which isn't
+--   in the bot's preloaded packages → `world.spawn_unit` fatal.
+--
+-- Why career_name arrives nil: observed in weapon_tweaker v0.12.23/v0.12.24 — the
+-- hook chain between simple_inventory and the unwrapped gear_utils drops the arg
+-- (multiple modded create_equipment hooks chain via varargs, and one of them
+-- occasionally loses the trailing args). weapon_tweaker fixed this for users with
+-- that mod loaded; users who only have chaos_wastes_tweaker need the same fix here.
+--
+-- Fix (two layers):
+--   1. If career_name is nil at hook entry, recover it from the 3P unit's
+--      `inventory_system._career_name` (set in `SimpleInventoryExtension.init`
+--      before extensions_ready fires).
+--   2. If item_data has a per-career override AND we have career_name, pre-resolve
+--      `item_units` ourselves and pass via override_item_units. Vanilla
+--      gear_utils uses `override_item_units or get_item_units(...)`, so our
+--      pre-resolved table is used verbatim and the broken chain pass-through is
+--      sidestepped entirely.
+--
+-- Originally landed in weapon_tweaker v0.12.23-25; cross-ported here so the fix
+-- works for users running ct without wt. Both mods can host the hook safely
+-- (VMF chains them and the operation is idempotent — if the upstream hook
+-- already pre-resolved override_item_units, our `override_item_units == nil`
+-- guard skips the re-resolve).
+mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+    if career_name == nil and unit_3p and ScriptUnit and ScriptUnit.has_extension
+            and ScriptUnit.has_extension(unit_3p, "inventory_system") then
+        local inv = ScriptUnit.extension(unit_3p, "inventory_system")
+        career_name = inv and inv._career_name or nil
+    end
+
+    if override_item_units == nil and item_data and career_name and BackendUtils
+            and BackendUtils.get_item_units
+            and ((item_data.right_hand_unit_override and item_data.right_hand_unit_override[career_name])
+              or (item_data.left_hand_unit_override and item_data.left_hand_unit_override[career_name])) then
+        local ok_resolve, resolved = pcall(BackendUtils.get_item_units, item_data, item_data.backend_id, nil, career_name)
+        if ok_resolve and type(resolved) == "table" then
+            override_item_units = resolved
+        end
+    end
+
+    return func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+end)
+
+-- `_chest_conversions_this_level` is declared earlier in this file (search for
+-- the populate_pickups hook) and reset there at the top of every populate.
+-- That placement is required because Lua 5.1 binds closure locals at creation
+-- time, and consolidating populate_pickups hooks into one avoids the VMF
+-- "Attempting to rehook active hook" warning.
+
+-- Hook on PickupSystem._spawn_pickup — the lowest-level spawn function that ALL
+-- paths route through (public spawn_pickup, spawn_pickup_async, buff_spawn_pickup,
+-- _spawn_guaranteed_pickup, _spawn_spread_pickups). Used for two purposes:
+--
+-- 1. Substitute loot_die → deus_soft_currency on injected adventure levels.
+--    The Bogenhafen loot-die system has no CW analogue. Catches:
+--      a. Guaranteed spawners with loot_die data (also covered by our explicit
+--         hook on _spawn_guaranteed_pickup above, but doesn't hurt to double-up).
+--      b. Flow-event spawned loot dice (level-script-driven bonus dice drops).
+--      c. Boss kill loot if the game_mode somehow returned "loot_die" (vanilla
+--         GameModeDeus.get_boss_loot_pickup returns "deus_soft_currency" already
+--         for our deus-mode adventure levels, but defensive).
+--
+-- 2. Disable physics collision on CW altars/chests so they don't block player
+--    pathing at adventure spawner positions (designed for ammo/healing, not for
+--    a multi-meter-wide blocking prop). `Actor.set_collision_enabled(false)`
+--    removes the character-controller block; interaction raycasts still hit the
+--    visible mesh, so E-to-open still works.
+local _CW_BLOCKING_PICKUP_NAMES = {
+    deus_weapon_chest = true,
+    deus_cursed_chest = true,
+    deus_02 = true,  -- alternate chest variant some CW level pickup_settings reference
+}
+
+mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
+    if on_injected_adventure_level() and pickup_name == "loot_die" then
+        pickup_name = "deus_soft_currency"
+        settings = (AllPickups and AllPickups.deus_soft_currency) or settings
+    end
+
+    local unit, extra = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
+    if on_injected_adventure_level() and _CW_BLOCKING_PICKUP_NAMES[pickup_name]
+            and unit and Unit.alive(unit) then
+        -- v0.6.31 revision: v0.6.28's `set_scene_query_enabled(false)` made the chest
+        -- walk-through BUT broke interaction — DeusCursedChestExtension uses a sphere
+        -- overlap with `filter_overlap_interaction` (generic_unit_interactor_extension.lua:254)
+        -- which depends on scene_query. So we keep scene_query enabled and instead
+        -- reclassify the actor's collision filter to `filter_trigger` (the vanilla
+        -- "non-blocking interactable" filter — see ai_utils.lua:521 for the canonical
+        -- pattern). The player_mover sweep ignores `filter_trigger` actors; raycast
+        -- overlaps still hit them.
+        -- Stingray `Unit.actor` is 1-indexed (see ai_inventory_extension.lua:434).
+        local num_actors = (Unit.num_actors and Unit.num_actors(unit)) or 0
+        local disabled = 0
+        for i = 1, num_actors do
+            local actor = Unit.actor(unit, i)
+            if actor then
+                if Actor.set_collision_filter then Actor.set_collision_filter(actor, "filter_trigger") end
+                if Actor.set_collision_enabled then Actor.set_collision_enabled(actor, false) end
+                disabled = disabled + 1
+            end
+        end
+        mod:info("[no-block] %s: %d/%d actors set to filter_trigger + collision disabled", pickup_name, disabled, num_actors)
+    end
+    return unit, extra
+end)
+
+mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawner_unit, spawn_type)
+    if not on_injected_adventure_level() then
+        return func(self, spawner_unit, spawn_type)
+    end
+
+    -- loot_die spawners on Bogenhafen (Brugrodder '68 bottle, etc.) are guaranteed
+    -- side-objective collectibles. We have no CW equivalent system — convert these
+    -- positions to deus_soft_currency (Pilgrim's Coin) so the spawner still gives
+    -- something useful instead of dropping a collectible the run can't interact with.
+    if Unit.get_data(spawner_unit, "loot_die") then
+        local settings = AllPickups and AllPickups.deus_soft_currency
+        if settings then
+            local position = Unit.local_position(spawner_unit, 0)
+            local rotation = Unit.local_rotation(spawner_unit, 0)
+            return self:_spawn_pickup(settings, "deus_soft_currency", position, rotation, false, spawn_type)
+        end
+        return func(self, spawner_unit, spawn_type)
+    end
+
+    local is_tome = Unit.get_data(spawner_unit, "tome")
+    local is_grim = Unit.get_data(spawner_unit, "grimoire")
+    if not is_tome and not is_grim then
+        return func(self, spawner_unit, spawn_type)
+    end
+
+    -- Respect the user's `cursed_chest_count` setting. Once we've converted
+    -- that many book locations, skip the remaining ones (no pickup spawns —
+    -- the empty book pedestal isn't visible since adventure flow units only
+    -- materialize after spawn). Default is 1 chest per mission.
+    local cap = mod:get("cursed_chest_count") or 1
+    if _chest_conversions_this_level >= cap then
+        return  -- skip; leave the spawner alone
+    end
+
+    local pickup_name = "deus_cursed_chest"
+    local settings = AllPickups and AllPickups[pickup_name]
+    if not settings then
+        -- AllPickups not yet built (extremely unlikely at populate time, but defensive).
+        return func(self, spawner_unit, spawn_type)
+    end
+
+    local position = Unit.local_position(spawner_unit, 0)
+    local rotation = Unit.local_rotation(spawner_unit, 0)
+    local spawned_unit = self:_spawn_pickup(settings, pickup_name, position, rotation, false, spawn_type)
+    _chest_conversions_this_level = _chest_conversions_this_level + 1
+    return spawned_unit
+end)
+
+-- Grant CW-pickup eligibility on adventure-level spawners that have analogous
+-- adventure tags. Vanilla `PickupSystem._can_spawn` returns
+-- `Unit.get_data(spawner, pickup_name) or Managers.mechanism:can_spawn_pickup(spawner, pickup_name)`.
+-- For adventure spawners, neither path matches CW pickup types — they're tagged
+-- `potions`/`painting_scrap`/`ammo`/etc., not `deus_potion`/`deus_cursed_chest`. So
+-- our deus pickup counts in pickup_settings.primary result in "spawn debt" warnings
+-- (engine wanted N, found 0 eligible spawners).
+--
+-- Mapping (only fires on injected adventure levels):
+--   * potion spawners       → deus_potions   (any pickup in Pickups.deus_potions)
+--   * painting_scrap spots  → deus_soft_currency (Pilgrim's Coin)
+--   * non-claimed primaries → deus_weapon_chest (altars compete with ammo/healing
+--                              for remaining primary spawn slots)
+mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup_name)
+    local ok = func(self, spawner_unit, pickup_name)
+    if ok then return ok end
+
+    if not on_injected_adventure_level() then return ok end
+
+    -- Reserved for the tome/grim → Chest of Trials conversion (see
+    -- _spawn_guaranteed_pickup hook below). Never let any CW pickup hijack
+    -- these book spots.
+    if Unit.get_data(spawner_unit, "tome") or Unit.get_data(spawner_unit, "grimoire") then
+        return false
+    end
+
+    -- Triggered event spawners (lamp_oil barrels for wagon-escape, explosive_barrel
+    -- for body-burn objectives, training_dummy_bob spawners, etc.) MUST stay
+    -- exclusive to their tagged pickup type. The vanilla `_can_spawn` checks
+    -- `Unit.get_data(spawner, pickup_name)` — only e.g. `lamp_oil = true` returns
+    -- true. But `_spawn_guaranteed_pickup` iterates ALL pickup names, and our
+    -- CW-type fallback below would otherwise add `healing_draught`, `strength_potion`,
+    -- etc. to the candidate list, so a triggered barrel-spawner could roll a potion
+    -- and break the scripted event. v0.6.32 burned this: barrels for "burn the bodies"
+    -- type events sometimes appeared as potions.
+    -- Same risk for guaranteed_spawn spawners (already filtered for tome/grim
+    -- above) and specified spawners.
+    if Unit.get_data(spawner_unit, "guaranteed_spawn") then
+        return false
+    end
+    local triggered_spawn_id = Unit.get_data(spawner_unit, "triggered_spawn_id")
+    if triggered_spawn_id and triggered_spawn_id ~= "" then
+        return false
+    end
+
+    -- CW pickups accept any non-tome/grim, non-event primary spawner. They
+    -- compete with vanilla ammo/healing/grenades for unclaimed slots: ammo
+    -- iterates first (vanilla `_can_spawn` returns true on ammo-tagged spawners
+    -- before our hook runs), so ammo claims its 5 tagged spawners; same for
+    -- healing and grenades. CW types then claim remaining primary slots up to
+    -- their requested counts (deus_potions = 30, deus_soft_currency = 30, etc.).
+    -- Adventure levels typically have ~30 primary spawners; expect spawn_debt
+    -- warnings for the surplus, which is harmless.
+    if Pickups and Pickups.deus_potions and Pickups.deus_potions[pickup_name] then
+        return true
+    end
+    if pickup_name == "deus_soft_currency" then
+        return true
+    end
+    if pickup_name == "deus_weapon_chest" then
+        return true
+    end
+
+    return false
 end)
 
 -- ============================================================
@@ -786,11 +1416,15 @@ end)
 -- Starting Boons
 -- ============================================================
 
--- CLARIFY: Starting-boons hook. Vanilla `_add_initial_power_ups` adds talent power-ups + event
--- boons after run setup. We append toggled starting boons after that runs (hook_safe = post-call).
--- The host runs this for every peer; clients only run it for their own peer (the `peer_id !=
--- own_peer_id` early-out). Without that guard, clients would each try to grant boons to all 4
--- players, causing duplication or RPC spam.
+-- Starting-boons hook. Vanilla `_add_initial_power_ups` adds talent power-ups + event
+-- boons after run setup; we append toggled starting boons after that (hook_safe = post-call).
+--
+-- HOST-ONLY: the server processes the hook for every peer in the lobby and uses the
+-- HOST's `start_boon_*` settings — so every player gets the same starting boons,
+-- whatever the host picked. Clients early-out unconditionally and never apply their
+-- own start_boon settings (and never duplicate the host's grant either, which was
+-- the old bug). The server's `run_state:set_player_power_ups(peer_id, ...)` call
+-- syncs the granted boons to the target peer via the shared-state networking layer.
 -- QUESTION: The hook signature drops the 5th arg `initial_talents_for_career` (vanilla has 5
 -- positional args). hook_safe ignores extra args so this is fine, but a future maintainer adding a
 -- new arg might be confused.
@@ -798,9 +1432,7 @@ end)
 -- with "Granted N starting boon(s)." Once per run would be cleaner.
 mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer_id, local_player_id, profile_index, career_index)
     local run_state = self._run_state
-    local own_peer_id = run_state and run_state:get_own_peer_id()
-
-    if not run_state:is_server() and peer_id ~= own_peer_id then return end
+    if not run_state or not run_state:is_server() then return end  -- host-only
     if not DeusPowerUpsArray or not DeusPowerUpUtils then return end
 
     local extra = {}
@@ -822,7 +1454,29 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
     local new_power_ups = table.clone(existing, skip_metatable)
     table.append(new_power_ups, extra)
     run_state:set_player_power_ups(peer_id, local_player_id, profile_index, career_index, new_power_ups)
-    mod:echo(string.format("Granted %d starting boon(s).", #extra))
+
+    -- Resolve the player's character + career for the chat message. SPProfiles maps
+    -- profile_index → profile (Kruber/Bardin/Kerillian/Sienna/Saltzpyre) and
+    -- profile.careers maps career_index → career (es_mercenary, dr_slayer, etc.).
+    -- Both use localization keys for display; Localize() resolves them to the
+    -- player-facing names.
+    local profile = rawget(_G, "SPProfiles") and SPProfiles[profile_index]
+    local character = profile and profile.display_name and Localize(profile.display_name) or "?"
+    local career = profile and profile.careers and profile.careers[career_index]
+    local career_name = career and career.display_name and Localize(career.display_name) or "?"
+    -- Player slot in the party: peer_id + local_player_id. Use party-slot index if
+    -- available so users can quickly identify which on-screen panel got the boons.
+    local slot_label = ""
+    local party_manager = Managers.party
+    if party_manager and party_manager.get_status_from_unique_id then
+        local status = party_manager:get_status_from_unique_id(peer_id, local_player_id)
+        if status and status.party_id and status.slot_id then
+            slot_label = string.format(" [P%d:S%d]", status.party_id, status.slot_id)
+        end
+    end
+
+    mod:echo(string.format("Granted %d starting boon(s) to %s (%s)%s",
+        #extra, character, career_name, slot_label))
 end)
 
 -- ============================================================
@@ -903,19 +1557,11 @@ local function revert_reckless_swings_tweak()
     reckless_swings_originals = nil
 end
 
--- CLARIFY: Description override fires only while the tweak is active (gate on
--- reckless_swings_originals being non-nil). The vanilla description includes literal "50%" / "3
--- damage" baked text that description_values can't fix on its own (the format string is in the
--- localized text, not the values table).
--- Note: single % here is fine because Localize returns the string as-is, not via string.format.
-local RECKLESS_SWINGS_DESC_OVERRIDE = "While above 25% Health, gain 25% Power but take 1 damage on each melee hit."
-
-mod:hook(_G, "Localize", function(func, key, ...)
-    if key == "description_deus_reckless_swings" and reckless_swings_originals then
-        return RECKLESS_SWINGS_DESC_OVERRIDE
-    end
-    return func(key, ...)
-end)
+-- CLARIFY: Description override for Khaine's Fury lives in the consolidated _G.Localize
+-- hook above (search for ADV_TITLE_OVERRIDES). Centralized to avoid the VMF
+-- "Attempting to rehook active hook [Localize]" warning when two hooks compete for the
+-- same target. The `reckless_swings_originals` gate ensures the override only fires
+-- while the tweak is active.
 
 -- CLARIFY: Assignment to the forward-declared `sync_reckless_swings`. From here on, references at
 -- the top of the file (in generate_random_power_ups hook) and the on_setting_changed callback
@@ -955,19 +1601,24 @@ local function apply_bomb_cooldown_tweak()
     local buff_entry = tpl and tpl.buff_template and tpl.buff_template.buffs and tpl.buff_template.buffs[1]
     local durations = buff_entry and buff_entry.cooldown_durations
     if not durations then
+        mod:info("[bomb-cooldown] DeusPowerUpTemplates.drop_item_on_ability_use not loaded yet; will retry on next boon roll")
         return
     end
 
     local override = mod:get("bomb_boon_cooldown")
     if not override or override <= 0 then
+        mod:info("[bomb-cooldown] override=%s (no change)", tostring(override))
         return
     end
 
     bomb_cooldown_originals = {}
+    local before = {}
     for k, v in pairs(durations) do
+        before[#before + 1] = string.format("%s=%d", k, v)
         bomb_cooldown_originals[k] = v
         durations[k] = override
     end
+    mod:info("[bomb-cooldown] override=%d applied. Was: %s", override, table.concat(before, ", "))
 end
 
 local function revert_bomb_cooldown_tweak()
@@ -1079,11 +1730,27 @@ mod:hook("ActionChargedProjectileUtility", "fire_charged_projectile", function(f
     return a, b
 end)
 
+-- Pool-affecting settings: master toggle, per-CW-scenario toggles, and per-adventure
+-- toggles. Re-run inject_pool() on any of these so changes take effect without a
+-- restart. The engine reads LEVEL_AVAILABILITY at run setup (DeusMechanism._setup_run)
+-- — changes only affect the NEXT expedition, not a CW run already underway.
+local function is_pool_setting(setting_id)
+    if setting_id == "inject_adventure_maps" then return true end
+    if type(setting_id) ~= "string" then return false end
+    return setting_id:find("^enable_adventure_") ~= nil
+        or setting_id:find("^enable_cw_") ~= nil
+end
+
 mod.on_setting_changed = function(setting_id)
     if setting_id == "tweak_reckless_swings" then
         sync_reckless_swings()
     elseif setting_id == "bomb_boon_cooldown" then
         sync_bomb_cooldown()
+    elseif is_pool_setting(setting_id) then
+        -- inject_pool() is idempotent: takes a one-time snapshot, resets to it on
+        -- every call, then applies current toggle state. Master-off branch inside
+        -- skips inject and leaves the pool at vanilla.
+        AdventurePool.inject_pool()
     end
 end
 
@@ -1458,6 +2125,68 @@ mod:command("dump_traits", "Dump every CW weapon trait that can roll, with local
             name, dn_key, resolve(dn_key), desc_key, resolve(desc_key))
     end
     mod:echo(string.format("dump_traits: %d traits dumped to log.", #sorted))
+end)
+
+-- Resolves the canonical in-game display name for every adventure level AND every
+-- vanilla CW scenario in the catalog. Emits tab-separated rows to the log
+-- (`[DUMP:adv_names]`) for paste-back into _adventure_pool.lua. The level's
+-- `display_name` is a loc key that Localize() resolves to the English string. Works
+-- in the keep or the CW hub — no need to be in a mission.
+mod:command("dump_adventure_names", "Resolve in-game names for every adventure level + CW scenario", function()
+    if not LevelSettings then
+        mod:echo("LevelSettings not loaded.")
+        return
+    end
+
+    local function resolve(key)
+        if not key or key == "" then return "" end
+        local raw = Localize(key)
+        if raw and raw ~= "<" .. key .. ">" then return raw end
+        return ""
+    end
+
+    mod:info("[DUMP:adv_names] === ADVENTURE MISSIONS ===")
+    mod:info("[DUMP:adv_names] level_key\tdisplay_text\tdlc_name\tact\tlevel_bundle_path")
+    for _, entry in ipairs(AdventurePool.ADVENTURE_MISSIONS) do
+        local lvl = entry.key
+        local v = rawget(LevelSettings, lvl)
+        local dn_key = v and v.display_name or ""
+        local level_name = v and v.level_name or ""
+        local dlc_name = v and v.dlc_name or "(base)"
+        local act = v and v.act or ""
+        mod:info("[DUMP:adv_names] %s\t%s\t%s\t%s\t%s", lvl, resolve(dn_key), dlc_name, act, level_name)
+    end
+
+    mod:info("[DUMP:adv_names] === CW SCENARIOS ===")
+    mod:info("[DUMP:adv_names] cw_key\ttitle_key\tdisplay_text\tbase_level_name")
+    for _, scen in ipairs(AdventurePool.CW_SCENARIOS) do
+        local dls = rawget(DEUS_LEVEL_SETTINGS or {}, scen.key)
+        -- CW levels' user-facing title is `<level_key>_title` per level_settings_morris.lua:112
+        local title_key = scen.key .. "_title"
+        local base = dls and dls.base_level_name or scen.key
+        mod:info("[DUMP:adv_names] %s\t%s\t%s\t%s", scen.key, title_key, resolve(title_key), base)
+    end
+
+    local total = #AdventurePool.ADVENTURE_MISSIONS + #AdventurePool.CW_SCENARIOS
+    mod:echo(string.format("dump_adventure_names: %d entries dumped to log (%d adventures + %d CW).",
+        total, #AdventurePool.ADVENTURE_MISSIONS, #AdventurePool.CW_SCENARIOS))
+end)
+
+mod:command("pool_status", "Dump current CW map-pool state (TRAVEL/SIGNATURE keys per journey)", function()
+    AdventurePool.dump_pool_state()
+end)
+
+-- Manual re-run of pool injection. Useful for debugging: if you toggle settings in VMF
+-- and want to see them take effect without restarting the game, run this from the keep
+-- BEFORE entering a CW run. The engine reads LEVEL_AVAILABILITY at run setup
+-- (DeusMechanism._setup_run); changes only take effect for the NEXT run, not the current one.
+mod:command("force_inject_pool", "Re-run adventure pool injection now", function()
+    if not mod:get("inject_adventure_maps") then
+        mod:echo("inject_adventure_maps is OFF — enable it first.")
+        return
+    end
+    local n = AdventurePool.inject_pool()
+    mod:echo("inject_pool ran: " .. tostring(n) .. " adventures injected (check log for details).")
 end)
 
 mod:command("cw_status", "Show Chaos Wastes Tweaker state", function()

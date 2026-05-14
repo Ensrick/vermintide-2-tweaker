@@ -1,5 +1,39 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.0-alpha (2026-05-13)
+
+First experimental public release. Marks the formal opening of the mod to a broader audience after months of internal iteration. Title changed to "Tweaker: Chaos Wastes" (was "Tweaker: Chaos Wastes (WIP)"), Workshop description rewritten to cover the full feature surface, new thumbnail in place.
+
+Headline since the last released build: the **Adventure Maps in Chaos Wastes** subsystem. Adventure missions are now injectable into the CW random map pool with full mission lifecycle (curses, boons, finale routing) intact: tomes/grims become Chests of Trials, pickups rewrite to CW types, altars seed at 5/map (1 upgrade + 1 melee swap + 1 ranged swap + 2 boon), cursed nodes carry the matching sky/lighting tint, and altars/chests use `filter_trigger` so the player walks through them.
+
+## 0.6.33-dev (2026-05-13)
+
+### Fixed: Event barrels spawning as potions (broke scripted events)
+
+`_can_spawn` hook was returning true for `deus_potions`/`deus_soft_currency`/`deus_weapon_chest` on EVERY adventure spawner (except tome/grim), including **triggered event spawners** for scripted lamp_oil / explosive_barrel / training_dummy_bob spawns. `_spawn_guaranteed_pickup` iterates all pickup names asking `_can_spawn` for each, then picks randomly from candidates — so a triggered barrel-spawner could roll `healing_draught` instead of `lamp_oil` and break the scripted event.
+
+Fix: in the `_can_spawn` adventure-fallback, also short-circuit to `false` when:
+- `Unit.get_data(spawner, "guaranteed_spawn")` is truthy (book / specified spawners)
+- `Unit.get_data(spawner, "triggered_spawn_id")` is a non-empty string (event-driven spawners)
+
+CW types still flow onto generic primary spawners (the ones without any specific event tag) so coin / potion / altar counts are unaffected.
+
+## 0.6.32-dev (2026-05-13)
+
+### Fixed: Chest of Trials interaction broken in v0.6.28+
+
+v0.6.28's `Actor.set_scene_query_enabled(actor, false)` made altars/chests walk-through BUT broke interaction with them. Cause: `GenericUnitInteractorExtension._find_best_interaction_unit` (interactor extension line 254) discovers interactables via `PhysicsWorld.immediate_overlap(..., "collision_filter", "filter_overlap_interaction")` which needs scene_query=true on the actor. The "proximity check" assumption in the v0.6.28 comment was wrong — interaction discovery is scene-query-driven.
+
+Fix: revert scene_query disable. Instead, reclassify the actor's collision filter to `filter_trigger` via `Actor.set_collision_filter` — the vanilla "non-blocking interactable" filter (see `ai_utils.lua:521` for the canonical pattern). The player_mover sweep ignores `filter_trigger` actors so the player walks through; raycast overlaps still hit them so interaction works.
+
+`set_collision_enabled(false)` is also kept as belt-and-braces but the filter change is the load-bearing piece.
+
+## 0.6.31-dev (2026-05-13)
+
+### Fixed: Exact cursed-mission count
+
+Setting `cursed_mission_count` was driving `CURSES_HOT_SPOTS_MIN/MAX_COUNT` only, but vanilla `spread_curse` (deus_populate_graph.lua:681) then *spread* each cluster center to neighbouring nodes within `CURSES_HOT_SPOT_MIN_RANGE..MAX_RANGE`, so requesting N would typically yield 5–15 cursed nodes. Fix: when the override is active, also force `CURSES_HOT_SPOT_MIN_RANGE = MAX_RANGE = 0` so each cluster curses only its center node. Both ranges are saved before the override and restored in `restore_curse_count` so vanilla CW spread behaviour returns intact when the setting is back to 0.
+
 ## 0.4.1-dev (2026-05-10)
 
 ### Fixed: `<<1>>`..`<<9>>` in altar count dropdowns

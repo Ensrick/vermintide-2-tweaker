@@ -1,3 +1,6 @@
+local mod = get_mod("ct")
+local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker/_adventure_pool")
+
 local loc = {
     mod_name = { en = "Tweaker: Chaos Wastes" },
     mod_description = { en = "Chaos Wastes run modifiers split out from the old monolithic Tweaker mod." },
@@ -11,7 +14,19 @@ local loc = {
     starting_coins = { en = "Starting Coins" },
     shrine_boon_count = { en = "Shrine Boon Options" },
     chest_boon_count = { en = "Chest Boon Options" },
+    adventure_maps_group         = { en = "Adventure Maps in Chaos Wastes (experimental)" },
+    available_missions_group     = { en = "Available Missions" },
+    cw_scenarios_group           = { en = "Chaos Wastes Scenarios" },
+    campaign_scenarios_group     = { en = "Campaign Scenarios" },
+    event_missions_group         = { en = "Event Missions" },
+    no_book_locations_tooltip    = { en = "This event mission has no tome or grimoire spawn locations, so no Chests of Trials will appear on it (the chest hook converts book spawners — there are none here). All other Chaos Wastes pickups (Pilgrim's Coin, CW potions, Upgrade Altars) still spawn normally." },
+    inject_adventure_maps        = { en = "Inject Adventure Missions into CW Map Pool" },
+    inject_adventure_maps_tooltip = { en = "EXPERIMENTAL. Adds adventure missions to the random TRAVEL/SIGNATURE pool of every Chaos Wastes journey, with CW-style pickups (Pilgrim's Coin, CW potions, altars, Chests of Trials). Tome and grimoire spawn positions become Chests of Trials. Each rolled adventure mission gets 5 Upgrade Altars (1 temper + 1 melee swap + 1 ranged swap + 2 boon).\n\nUse Available Missions to toggle Chaos Wastes scenarios and per-DLC campaign missions. CW finale arenas, the Citadel of Eternity, and Belakor's Temple are never replaced. If you disable enough scenarios that the pool falls below a safety threshold, the mod injects duplicate aliases so the graph generator still has enough to work with.\n\nHost-only. Requires game restart to take effect." },
+    replace_shrines_with_missions = { en = "Replace Shrines with Missions" },
+    replace_shrines_with_missions_tooltip = { en = "Convert every shrine (Strife/Harmony/Fortune boon-picker) node on Olesya's map into an extra mission slot. The graph generator rolls TRAVEL-pool levels for those slots instead of running the between-mission boon picker.\n\nUse this for longer expeditions with more combat and fewer free boons. Finale arenas, Belakor's Temple, and the Citadel are not affected.\n\nHost-only. Changes apply to the NEXT expedition you start." },
     force_belakor = { en = "Always Include Belakor's Temple" },
+    cursed_mission_count = { en = "Cursed Mission Count (0 = vanilla)" },
+    cursed_mission_count_tooltip = { en = "Override the number of curse hot-spot clusters per run. 0 = vanilla (typically 2-7 depending on journey). Higher values force more curses; each cluster usually curses 1-3 adjacent nodes. Max 30. Host-only — applies to whichever lobby host starts the expedition." },
     finale_dominant_god = { en = "Finale God (0=weekly, 1=Nurgle, 2=Tzeentch, 3=Khorne, 4=Slaanesh)" },
     chest_upgrade_count = { en = "Upgrade Altars" },
     chest_swap_melee_count = { en = "Melee Swap Altars" },
@@ -793,5 +808,12 @@ local loc = {
     disable_boon_wolfpack_tooltip = { en = "Gain X%%%% bonus to Power. This is multiplied by the number of allies with the Boon." },
     start_boon_wolfpack_tooltip = { en = "Gain X%%%% bonus to Power. This is multiplied by the number of allies with the Boon." },
 }
+
+-- Per-mission and per-CW-scenario toggle labels. Generated from the catalogs in
+-- _adventure_pool.lua so adding a new mission/DLC group there auto-registers all
+-- needed loc entries (toggle label, DLC group title).
+for setting_id, entry in pairs(AdventurePool.build_loc_entries()) do
+    loc[setting_id] = entry
+end
 
 return loc

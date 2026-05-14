@@ -1,4 +1,49 @@
 ﻿local mod = get_mod("ct")
+local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker/_adventure_pool")
+
+-- Groups whose sub_widgets should render in alphabetical display-name order.
+-- The disable-boons / start-boons lists had drift over time (e.g. "Detect Weakness"
+-- appearing after the `deus_*` cluster instead of before it). Sorting at widget-build
+-- time eliminates the human-maintenance burden.
+local SORT_GROUPS = {
+    disable_boon_properties_group        = true,
+    disable_boon_talents_group           = true,
+    disable_boon_skulls_and_sets_group   = true,
+    disable_boon_combat_group            = true,
+    disable_boon_healing_and_sustain_group = true,
+    disable_boon_utility_and_team_group  = true,
+    disable_boon_bombs_group             = true,
+    start_boon_properties_group          = true,
+    start_boon_talents_group             = true,
+    start_boon_skulls_and_sets_group     = true,
+    start_boon_combat_group              = true,
+    start_boon_healing_and_sustain_group = true,
+    start_boon_utility_and_team_group    = true,
+    start_boon_bombs_group               = true,
+}
+
+local function sort_key(widget)
+    local sid = widget.setting_id or ""
+    local label = mod:localize(sid)
+    if not label or label == "<" .. sid .. ">" then
+        return sid:lower()
+    end
+    return label:lower()
+end
+
+local function recursive_sort(widgets)
+    if type(widgets) ~= "table" then return end
+    for _, w in ipairs(widgets) do
+        if w.sub_widgets then
+            if SORT_GROUPS[w.setting_id] then
+                table.sort(w.sub_widgets, function(a, b)
+                    return sort_key(a) < sort_key(b)
+                end)
+            end
+            recursive_sort(w.sub_widgets)
+        end
+    end
+end
 
 -- `text` values are localization keys (resolved by VMF via mod:localize). VMF wraps any missing
 -- key in `<<>>`, so even numeric labels like "1".."9" need explicit loc entries — see
@@ -17,7 +62,7 @@ local altar_count_options = {
     { text = "9", value = 9 },
 }
 
-return {
+local data = {
     name = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
     is_togglable = true,
@@ -45,7 +90,37 @@ return {
                     { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },
                 },
             },
+            {
+                setting_id = "adventure_maps_group",
+                type = "group",
+                sub_widgets = {
+                    { setting_id = "inject_adventure_maps", type = "checkbox", default_value = false, tooltip = "inject_adventure_maps_tooltip" },
+                    { setting_id = "replace_shrines_with_missions", type = "checkbox", default_value = false, tooltip = "replace_shrines_with_missions_tooltip" },
+                    {
+                        setting_id = "available_missions_group",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "cw_scenarios_group",
+                                type = "group",
+                                sub_widgets = AdventurePool.build_cw_scenario_widgets(),
+                            },
+                            {
+                                setting_id = "campaign_scenarios_group",
+                                type = "group",
+                                sub_widgets = AdventurePool.build_campaign_dlc_group_widgets(),
+                            },
+                            {
+                                setting_id = "event_missions_group",
+                                type = "group",
+                                sub_widgets = AdventurePool.build_event_mission_widgets(),
+                            },
+                        },
+                    },
+                },
+            },
             { setting_id = "force_belakor", type = "checkbox", default_value = false },
+            { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
             { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0 },
             { setting_id = "arena_ammo_count", type = "numeric", default_value = 2, range = { 0, 10 }, decimals_number = 0 },
             { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
@@ -576,3 +651,6 @@ return {
         },
     },
 }
+
+recursive_sort(data.options.widgets)
+return data
