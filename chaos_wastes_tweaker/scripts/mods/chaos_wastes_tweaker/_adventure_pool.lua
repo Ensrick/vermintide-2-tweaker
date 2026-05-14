@@ -675,6 +675,16 @@ function _M.inject_pool()
                 if rawget(_G, "TerrorEventBlueprints") and TerrorEventBlueprints[lvl] and not TerrorEventBlueprints[permutation_key] then
                     TerrorEventBlueprints[permutation_key] = TerrorEventBlueprints[lvl]
                 end
+                -- Same problem for WeightedRandomTerrorEvents — terror_event_mixer.lua:1595
+                -- does `WeightedRandomTerrorEvents[level_key][event_chunk_name]` and crashes
+                -- on `nil[event_chunk_name]` if no entry exists for our permutation key.
+                -- Adventure-level flow events (e.g. `nurgle_end_event_loop` on Festering
+                -- Ground) hit this when the level loads under a CW permutation.
+                -- Mirror the base adventure level's entry onto each permutation key.
+                if rawget(_G, "WeightedRandomTerrorEvents") and WeightedRandomTerrorEvents[lvl]
+                        and not WeightedRandomTerrorEvents[permutation_key] then
+                    WeightedRandomTerrorEvents[permutation_key] = WeightedRandomTerrorEvents[lvl]
+                end
             end
 
             for _, config in pairs(DEUS_MAP_POPULATE_SETTINGS) do

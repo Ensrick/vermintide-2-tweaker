@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.6-alpha"
+local MOD_VERSION = "0.7.18-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -120,6 +120,7 @@ local all_trait_combos_cache = nil
 -- feedback_lua_forward_reference.md (5 prior crashes from this exact bug pattern).
 local sync_reckless_swings
 local sync_bomb_cooldown
+local sync_boon_movespeed
 
 local function is_curse_disabled(curse_name)
     if type(curse_name) ~= "string" or not curse_name:find("^curse_") then
@@ -272,6 +273,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     -- toggle flips.
     sync_reckless_swings()
     sync_bomb_cooldown()
+    sync_boon_movespeed()
 
     return new_seed, new_power_ups
 end)
@@ -886,18 +888,95 @@ end)
 -- This makes the curse colour shift more pronounced even on adventure geometry.
 -- It can't bring back the baked sky/particles, but it makes "this node is cursed"
 -- visually obvious.
--- Saturated tint colors per curse theme, since the vanilla DeusThemeSettings
--- `light_probe_tint` values are extremely close to white (e.g. slaanesh is
--- {0.76, 0.76, 1.00} which is barely visible). Without a baked themed sky to
--- back them up (adventure levels have none), the subtle tint just looks like
--- "slight color cast". These curated values produce a clearly visible mood.
-local _CURSE_LIGHT_TINT = {
-    khorne   = { 1.00, 0.40, 0.40 },  -- saturated red
-    nurgle   = { 0.50, 1.00, 0.50 },  -- saturated green
-    tzeentch = { 0.50, 0.55, 1.00 },  -- saturated blue
-    slaanesh = { 1.00, 0.55, 0.80 },  -- pink/magenta
-    belakor  = { 0.60, 0.40, 0.80 },  -- purple
+-- Per-curse PALETTES instead of a single tint, so individual level lights
+-- pick up complementary / accent colors and the scene reads as themed
+-- atmosphere rather than a uniform color filter.
+--
+-- Each palette has:
+--   dominant: the headline color (most lights). Hits ~50% of lights.
+--   accent:   a related-but-distinct shade. ~25% of lights.
+--   complement: a deliberately contrasting hue. ~15% of lights.
+--   warm/cool counterpoint: ~10% of lights — adds visual depth.
+--
+-- Distribution uses a deterministic hash on each light's index so the look
+-- is repeatable per level / per run, not random per frame. The hash is
+-- coarse on purpose (a handful of buckets) so nearby lights tend to
+-- group rather than producing rainbow noise.
+-- Each palette balances 4-5 slots:
+--   - Dominant: god's headline hue (most lights).
+--   - Accent:   nearby hue, reinforces theme (some lights).
+--   - Complement: TRUE opposite on the color wheel — provides contrast pop.
+--                 Red↔Cyan, Green↔Magenta, Blue↔Orange, Purple↔Yellow-Green.
+--   - Neutral white-ish: keeps some lights "normal-looking" so the
+--     colored lights register as accents instead of saturating the scene.
+--     User feedback 2026-05-14: "purple looks good with white light sources" —
+--     applies broadly; neutral slot makes other palettes pop too.
+local _CURSE_LIGHT_PALETTES = {
+    khorne = {
+        { 1.00, 0.30, 0.25, w = 40 },   -- blood red (dominant)
+        { 1.30, 0.55, 0.20, w = 20 },   -- ember orange (accent — same warm family)
+        { 1.10, 1.05, 0.90, w = 15 },   -- warm white candle (neutral)
+        { 0.95, 0.95, 0.35, w = 10 },   -- gold flame (warm secondary pop)
+        { 0.20, 0.90, 1.00, w = 15 },   -- cold cyan complement (true ↔ red)
+    },
+    nurgle = {
+        { 0.45, 1.00, 0.40, w = 40 },   -- sickly bog green (dominant)
+        { 0.95, 1.05, 0.35, w = 20 },   -- jaundiced yellow (accent)
+        { 1.00, 1.00, 0.95, w = 15 },   -- pale moldy white (neutral)
+        { 0.30, 0.85, 0.95, w = 10 },   -- swamp teal (cool secondary)
+        { 1.10, 0.30, 0.95, w = 15 },   -- pustule magenta complement (true ↔ green)
+    },
+    tzeentch = {
+        -- Per user feedback v0.7.16: "make all the lights and most of the
+        -- natural lights a magic blue, but then have just the overarching
+        -- outdoor light be a deep orange." Dropped the cool-white slot
+        -- entirely so 100% of Light components are some shade of deep
+        -- magic blue. The contrast is now strictly: indoor / point lights
+        -- (= blue) vs. outdoor sun + ambient (= warm orange via the shading
+        -- env profile below).
+        --
+        -- NOTE: vanilla torches that get their orange glow from PARTICLE FX
+        -- and self-illumination materials (not Light components) will still
+        -- look warm — Light.set_color on the unit's Light handle doesn't
+        -- override particle / material colors. If the user wants those
+        -- pulled cool too we need a separate hook on the particle effect
+        -- registry. Not done yet — wait for user feedback to see if it
+        -- matters in practice.
+        { 0.15, 0.30, 1.50, w = 75 },   -- deep magic cobalt (saturated, dominant)
+        { 0.25, 0.50, 1.40, w = 25 },   -- mid cobalt variant (subtle variation, still deep blue)
+    },
+    slaanesh = {
+        { 1.20, 0.45, 1.15, w = 35 },   -- hot pink (dominant)
+        { 0.65, 0.40, 1.10, w = 20 },   -- deep purple (accent)
+        { 1.10, 1.05, 1.10, w = 20 },   -- pale white (USER: "purple looks good with white")
+        { 1.20, 0.75, 0.50, w = 10 },   -- peach warm pop
+        { 0.55, 1.10, 0.45, w = 15 },   -- yellow-green complement (true ↔ pink)
+    },
+    belakor = {
+        { 0.40, 0.30, 0.75, w = 40 },   -- twilight purple (dominant)
+        { 0.30, 0.45, 0.95, w = 20 },   -- moonlight blue (accent)
+        { 0.95, 0.95, 1.05, w = 15 },   -- pale silver-white (ghostly neutral)
+        { 0.55, 0.30, 0.55, w = 10 },   -- shadow violet (cool secondary)
+        { 1.05, 1.00, 0.50, w = 15 },   -- pale gold complement (true ↔ violet)
+    },
 }
+
+-- Pick a palette slot for light index `i`. Stable across reloads — same
+-- light index always gets the same slot for a given palette. Multiplier 7
+-- and offset are arbitrary; chosen so groups of adjacent indices don't all
+-- fall into the same bucket (avoid "all lights in this room are blood red").
+local function _palette_slot(palette, idx)
+    local total_w = 0
+    for s = 1, #palette do total_w = total_w + (palette[s].w or 1) end
+    -- Hash idx into [0, total_w)
+    local h = ((idx * 7919) + 11) % total_w
+    local cum = 0
+    for s = 1, #palette do
+        cum = cum + (palette[s].w or 1)
+        if h < cum then return palette[s] end
+    end
+    return palette[1]
+end
 
 mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player, loading_context)
     if not on_injected_adventure_level() then return end
@@ -910,9 +989,9 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
         mod:info("[curse-tint] theme=%s (no curse); skipping", tostring(theme))
         return
     end
-    local tint = _CURSE_LIGHT_TINT[theme]
-    if not tint then
-        mod:warning("[curse-tint] no tint mapping for theme=%s", tostring(theme))
+    local palette = _CURSE_LIGHT_PALETTES[theme]
+    if not palette then
+        mod:warning("[curse-tint] no palette mapping for theme=%s", tostring(theme))
         return
     end
 
@@ -920,11 +999,11 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
     local level = LevelHelper:current_level(world)
     if not level then return end
 
-    local r, g, b = tint[1], tint[2], tint[3]
     -- DELIBERATE: don't tint the camera backlight (that was glowing the
     -- first-person hands which the user didn't want). Tint only world lights.
     local units = Level.units(level)
     local lights_tinted = 0
+    local global_idx = 0
     for j = 1, #units do
         local level_unit = units[j]
         if Unit.alive(level_unit) then
@@ -933,15 +1012,17 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
                 for i = 1, num_lights do
                     local light = Unit.light(level_unit, i - 1)  -- 0-indexed per vanilla
                     if light then
-                        Light.set_color(light, Vector3(r, g, b))
+                        global_idx = global_idx + 1
+                        local slot = _palette_slot(palette, global_idx)
+                        Light.set_color(light, Vector3(slot[1], slot[2], slot[3]))
                         lights_tinted = lights_tinted + 1
                     end
                 end
             end
         end
     end
-    mod:info("[curse-tint] level=%s theme=%s tint=%.2f,%.2f,%.2f lights=%d",
-        tostring(current_node.level), tostring(theme), r, g, b, lights_tinted)
+    mod:info("[curse-tint] level=%s theme=%s palette_size=%d lights=%d",
+        tostring(current_node.level), tostring(theme), #palette, lights_tinted)
 end)
 
 -- ============================================================
@@ -1010,38 +1091,39 @@ end)
 -- All values are multiplicative on top of the level's baked atmosphere, so the
 -- result blends with the underlying environment instead of replacing it.
 local _CURSE_SKY_PROFILES = {
-    -- KHORNE — blood-red dominant. Sun stays warm (sunset feel), fog is
-    -- thick burning red. Ambient slightly darker to enhance contrast.
+    -- KHORNE — blood-red dominant. v0.7.18: toned ~30% toward neutral
+    -- so the exterior color isn't oppressive (user feedback).
     khorne = {
-        skydome_tint_color   = { 1.45, 0.30, 0.20 },
-        sun_color            = { 1.30, 0.65, 0.45 },
-        secondary_sun_color  = { 1.20, 0.50, 0.40 },
-        ambient_tint         = { 1.05, 0.55, 0.45 },
-        ambient_tint_top     = { 1.20, 0.40, 0.30 },
-        fog_color            = { 1.55, 0.25, 0.20 },
-        exposure_mul         = 0.92,
+        skydome_tint_color   = { 1.32, 0.51, 0.44 },
+        sun_color            = { 1.21, 0.76, 0.62 },
+        secondary_sun_color  = { 1.14, 0.65, 0.58 },
+        ambient_tint         = { 1.04, 0.69, 0.62 },
+        ambient_tint_top     = { 1.14, 0.58, 0.51 },
+        fog_color            = { 1.39, 0.48, 0.44 },
+        exposure_mul         = 0.95,
     },
-    -- NURGLE — sickly bog green. Sun a jaundiced yellow-green, fog murky
-    -- and thick. Slightly brighter exposure to evoke "rotting daylight".
+    -- NURGLE — sickly bog green. v0.7.18: toned ~30% toward neutral.
     nurgle = {
-        skydome_tint_color   = { 0.45, 1.30, 0.40 },
-        sun_color            = { 0.95, 1.15, 0.55 },
-        secondary_sun_color  = { 0.70, 1.05, 0.55 },
-        ambient_tint         = { 0.65, 1.00, 0.60 },
-        ambient_tint_top     = { 0.55, 1.10, 0.45 },
-        fog_color            = { 0.50, 1.20, 0.40 },
+        skydome_tint_color   = { 0.62, 1.21, 0.58 },
+        sun_color            = { 0.97, 1.11, 0.69 },
+        secondary_sun_color  = { 0.79, 1.04, 0.69 },
+        ambient_tint         = { 0.76, 1.00, 0.72 },
+        ambient_tint_top     = { 0.69, 1.07, 0.62 },
+        fog_color            = { 0.65, 1.14, 0.58 },
         exposure_mul         = 1.00,
     },
-    -- TZEENTCH — cobalt + magenta. Sky leans cyan-blue, sun has a pink
-    -- aurora glow, fog deepens to indigo. Brightest exposure (otherworldly).
+    -- TZEENTCH — cobalt sky lit by orange daylight, deep-blue point lights.
+    -- v0.7.18: toned ~30% toward neutral on sun/ambient (user feedback —
+    -- the deep-orange exterior in v0.7.17 was too oppressive). Cobalt sky
+    -- and cool blue fog are also pulled slightly to neutral.
     tzeentch = {
-        skydome_tint_color   = { 0.45, 0.65, 1.50 },
-        sun_color            = { 1.20, 0.65, 1.30 },
-        secondary_sun_color  = { 0.75, 0.80, 1.30 },
-        ambient_tint         = { 0.70, 0.75, 1.15 },
-        ambient_tint_top     = { 0.55, 0.65, 1.40 },
-        fog_color            = { 0.55, 0.60, 1.45 },
-        exposure_mul         = 1.05,
+        skydome_tint_color   = { 0.62, 0.76, 1.35 },   -- cobalt sky (softer)
+        sun_color            = { 1.39, 0.72, 0.44 },   -- orange direct sun (softer than v0.7.17)
+        secondary_sun_color  = { 1.28, 0.79, 0.55 },
+        ambient_tint         = { 1.25, 0.86, 0.58 },
+        ambient_tint_top     = { 1.32, 0.76, 0.48 },
+        fog_color            = { 0.76, 0.83, 1.21 },   -- cool blue fog (softer)
+        exposure_mul         = 1.04,
     },
     -- SLAANESH — pink + lilac, with hot magenta highlights. Sun is a peach
     -- counterpoint to the pink sky for visual depth. Ambient drinks the pink.
@@ -1143,24 +1225,41 @@ end)
 -- rewritten so the flow event's `data.level` (set from node.base_level on the
 -- spawned unit) sees the icon-matching base too.
 mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
-    if not graph_data then return func(self, graph_data, ...) end
+    if not graph_data then
+        mod:info("[DeusMapScene.on_enter] no graph_data; passing through")
+        return func(self, graph_data, ...)
+    end
     local saved = {}
+    local seen, rewritten, skipped = 0, 0, 0
     for key, node in pairs(graph_data) do
         if type(node) == "table" and type(node.level) == "string" then
+            seen = seen + 1
             local base_key = adventure_base_from_level_key(node.level)
             if base_key then
                 local mission = AdventurePool and AdventurePool.MISSION_BY_KEY and AdventurePool.MISSION_BY_KEY[base_key]
                 local icon = mission and mission.icon or "mountain"  -- fallback
                 local cw_base = "pat_" .. icon
-                -- Try matching SIGNATURE prefix if it's that pool type — sig_<icon>
-                -- exists for some CW themes but not all; pat_ is the safer default.
                 saved[key] = { level = node.level, base_level = node.base_level }
                 local suffix = node.level:match("(_[a-z]+_path%d+)$") or "_wastes_path1"
-                node.level = cw_base .. suffix
+                local new_level = cw_base .. suffix
+                mod:info("[DeusMapScene.on_enter]   rewrite %s: %s -> %s (theme=%s curse=%s)",
+                    tostring(key), node.level, new_level, tostring(node.theme), tostring(node.curse))
+                node.level = new_level
                 node.base_level = cw_base
+                rewritten = rewritten + 1
+            else
+                if node.level:match("^pat_") or node.level:match("^sig_") or node.level:match("^arena_") or node.level:match("^shop_") then
+                    -- vanilla CW level, no rewrite needed
+                else
+                    skipped = skipped + 1
+                    mod:info("[DeusMapScene.on_enter]   SKIP %s level=%s (no adventure base match — UI will use SHRINE_NODE_UNIT and curse halo won't show)",
+                        tostring(key), node.level)
+                end
             end
         end
     end
+    mod:info("[DeusMapScene.on_enter] seen=%d rewritten=%d skipped_non_vanilla_non_adventure=%d",
+        seen, rewritten, skipped)
 
     local result = { func(self, graph_data, ...) }
 
@@ -1231,24 +1330,53 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     --   2. Set MIN_RANGE = MAX_RANGE = 0 (each cluster curses only its center, no spread)
     -- Net: exactly N cursed nodes (or fewer if the map has < N curseable nodes; the
     -- spreader stops early when it runs out of candidates).
-    local saved_min, saved_max, saved_range_min, saved_range_max
+    local saved_min, saved_max, saved_range_min, saved_range_max, saved_min_progress, saved_no_dominant
     local override_curse_count = mod:get("cursed_mission_count")
-    mod:info("[deus_populate_graph] override_curse_count=%s, config?=%s, vanilla_min=%s vanilla_max=%s vanilla_range_min=%s vanilla_range_max=%s",
+    mod:info("[deus_populate_graph] override_curse_count=%s, config?=%s, vanilla_min=%s vanilla_max=%s vanilla_range_min=%s vanilla_range_max=%s vanilla_min_progress=%s",
         tostring(override_curse_count), tostring(config ~= nil),
         config and tostring(config.CURSES_HOT_SPOTS_MIN_COUNT) or "?",
         config and tostring(config.CURSES_HOT_SPOTS_MAX_COUNT) or "?",
         config and tostring(config.CURSES_HOT_SPOT_MIN_RANGE) or "?",
-        config and tostring(config.CURSES_HOT_SPOT_MAX_RANGE) or "?")
+        config and tostring(config.CURSES_HOT_SPOT_MAX_RANGE) or "?",
+        config and tostring(config.CURSES_MIN_PROGRESS) or "?")
     if config and override_curse_count and override_curse_count > 0 then
         saved_min = config.CURSES_HOT_SPOTS_MIN_COUNT
         saved_max = config.CURSES_HOT_SPOTS_MAX_COUNT
         saved_range_min = config.CURSES_HOT_SPOT_MIN_RANGE
         saved_range_max = config.CURSES_HOT_SPOT_MAX_RANGE
+        saved_min_progress = config.CURSES_MIN_PROGRESS
         config.CURSES_HOT_SPOTS_MIN_COUNT = override_curse_count
         config.CURSES_HOT_SPOTS_MAX_COUNT = override_curse_count
         config.CURSES_HOT_SPOT_MIN_RANGE = 0
         config.CURSES_HOT_SPOT_MAX_RANGE = 0
-        mod:info("[deus_populate_graph] applied override: count=%d range=0/0", override_curse_count)
+        -- Vanilla CURSES_MIN_PROGRESS (typically 0.2) excludes the first 1-2
+        -- nodes of every journey from being curseable. With range=0 (exact
+        -- count) the user's early nodes are guaranteed-uncursed even when
+        -- they pick count=30. Drop the floor below zero so cluster centers
+        -- can land anywhere.
+        --
+        -- NOTE: must be NEGATIVE, not 0. Vanilla `get_nodes_above_progress`
+        -- (deus_populate_graph.lua:45-55) uses strict `progress < node.run_progress`,
+        -- so 0 < 0 is false — first-mission nodes (run_progress=0) get excluded
+        -- even with min_progress=0. Use -1 so 1+1=2 nodes at run_progress=0 are
+        -- in the pool.
+        config.CURSES_MIN_PROGRESS = -1
+        mod:info("[deus_populate_graph] applied override: count=%d range=0/0 min_progress=-1", override_curse_count)
+    end
+
+    -- Vanilla's spread_curse reserves the dominant_god for the "final"
+    -- node only (deus_populate_graph.lua:686-690), then EXCLUDES it from
+    -- the non-final rotation (line 698) — so a journey with
+    -- dominant_god=khorne will never have Khorne curses on regular missions,
+    -- only on the final arena. NO_DOMINANT_GOD=true puts all 4 gods into
+    -- the uniform rotation (final loses its "must match dominant" guarantee).
+    -- v0.7.18: user-toggleable as `disable_dominant_god` (default on).
+    -- Applies INDEPENDENTLY of the count override so the user can re-enable
+    -- normal curse counts with all gods in rotation, or vice versa.
+    if config and mod:get("disable_dominant_god") then
+        saved_no_dominant = config.NO_DOMINANT_GOD
+        config.NO_DOMINANT_GOD = true
+        mod:info("[deus_populate_graph] disable_dominant_god=true (all 4 gods in rotation)")
     end
 
     -- Filter the curse pool so disabled curses get re-rolled within their god
@@ -1260,15 +1388,21 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         if saved_max then config.CURSES_HOT_SPOTS_MAX_COUNT = saved_max end
         if saved_range_min then config.CURSES_HOT_SPOT_MIN_RANGE = saved_range_min end
         if saved_range_max then config.CURSES_HOT_SPOT_MAX_RANGE = saved_range_max end
+        if saved_min_progress then config.CURSES_MIN_PROGRESS = saved_min_progress end
+        -- restore even when saved_no_dominant was nil (default vanilla state)
+        config.NO_DOMINANT_GOD = saved_no_dominant
         restore_available_curses(saved_curses)
     end
 
-    -- Count cursed nodes in the completed graph for diagnostic
+    -- Count cursed nodes in the completed graph for diagnostic.
+    -- IMPORTANT: completed graph uses `node_type` ("ingame"/"shop"/"start") —
+    -- the `type` field is only on the BASE graph. Burned in v0.7.6's first
+    -- pass which counted 0/0 because it checked the wrong field.
     local function count_cursed(graph)
         if type(graph) ~= "table" then return 0, 0 end
         local cursed, total = 0, 0
         for _, n in pairs(graph) do
-            if type(n) == "table" and (n.type == "TRAVEL" or n.type == "SIGNATURE" or n.type == "ARENA") then
+            if type(n) == "table" and n.node_type == "ingame" then
                 total = total + 1
                 if n.curse then cursed = cursed + 1 end
             end
@@ -1276,10 +1410,32 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         return cursed, total
     end
 
+    -- Dump every node so we can see the FULL graph state regardless of type.
+    local function dump_graph(graph, tag)
+        if type(graph) ~= "table" then
+            mod:info("[deus_populate_graph %s] graph is %s (not a table)", tag, type(graph))
+            return
+        end
+        local n_count = 0
+        for k, n in pairs(graph) do
+            n_count = n_count + 1
+            if type(n) == "table" then
+                mod:info("[deus_populate_graph %s]   %s node_type=%s curse=%s god=%s level=%s progress=%s",
+                    tag, tostring(k),
+                    tostring(n.node_type), tostring(n.curse), tostring(n.god),
+                    tostring(n.level), tostring(n.run_progress or n.progress or "?"))
+            else
+                mod:info("[deus_populate_graph %s]   %s = %s (not a table)", tag, tostring(k), tostring(n))
+            end
+        end
+        mod:info("[deus_populate_graph %s] total entries: %d", tag, n_count)
+    end
+
     if not mod:get("replace_shrines_with_missions") then
         local result = { func(base_graph, seed, config, dominant_god, with_belakor) }
         local cursed, total = count_cursed(result[1])
         mod:info("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
+        dump_graph(result[1], "post-run")
         restore_curse_count()
         return unpack(result)
     end
@@ -1305,18 +1461,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     local result = { func(mutated, seed, config, dominant_god, with_belakor) }
     local cursed, total = count_cursed(result[1])
     mod:info("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
-    -- Dump per-node curse status so we can see if the converted-shop nodes were
-    -- skipped by spread_curse (CURSEABLE_NODE_TYPES filter, MIN_PROGRESS, etc.)
-    if type(result[1]) == "table" then
-        for k, n in pairs(result[1]) do
-            if type(n) == "table" and (n.type == "TRAVEL" or n.type == "SIGNATURE" or n.type == "ARENA") then
-                mod:info("[deus_populate_graph]   node %s type=%s progress=%s curse=%s god=%s level=%s",
-                    tostring(k), tostring(n.type),
-                    tostring(n.run_progress or n.progress or "?"),
-                    tostring(n.curse), tostring(n.god), tostring(n.level))
-            end
-        end
-    end
+    dump_graph(result[1], "post-run-shop-converted")
     restore_curse_count()
     return unpack(result)
 end)
@@ -1906,6 +2051,97 @@ end
 sync_bomb_cooldown()
 
 -- ============================================================
+-- Movement Speed Boon Tweak (5% -> 10% per stack)
+-- ============================================================
+-- The vanilla `movespeed` property boon adds `apply_movement_buff` with multiplier 1.05 (sourced
+-- from `MorrisBuffTweakData.movespeed.multiplier`) and shows "5%" in the tooltip (sourced from
+-- `MorrisBuffTweakData.movespeed.description_value`). The values are baked at game load by
+-- `deus_power_up_settings.lua` into two places:
+--   * Gameplay: `DeusPowerUpBuffTemplates.power_up_movespeed_<rarity>.buffs[1].multiplier` (1.05),
+--     one entry per rarity (common/rare/legendary).
+--   * Tooltip:  `DeusPowerUpTemplates.movespeed.description_values[1].value` (0.05), and the same
+--     table is referenced by every DeusPowerUpsArray entry for movespeed (the engine assigns by
+--     reference at line 7148 of deus_power_up_settings.lua, so a single mutation propagates).
+-- We mirror the reckless_swings save-and-restore: snapshot originals on apply, restore them on
+-- revert, and call sync from the boon-roll hook + on_setting_changed.
+
+local MOVESPEED_RARITIES = { "common", "rare", "legendary" }
+local boon_movespeed_originals = nil
+
+local function apply_boon_movespeed_tweak()
+    if boon_movespeed_originals then
+        return
+    end
+
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local buff_tpls = rawget(_G, "DeusPowerUpBuffTemplates")
+    local tpl = power_up and power_up.movespeed
+    if not tpl or not buff_tpls then
+        return
+    end
+
+    local desc_value_entry = tpl.description_values and tpl.description_values[1]
+    if not desc_value_entry then
+        return
+    end
+
+    local per_rarity = {}
+    for i = 1, #MOVESPEED_RARITIES do
+        local rarity = MOVESPEED_RARITIES[i]
+        local buff_entry = buff_tpls["power_up_movespeed_" .. rarity]
+        local sub = buff_entry and buff_entry.buffs and buff_entry.buffs[1]
+        if sub and sub.multiplier then
+            per_rarity[rarity] = sub.multiplier
+            sub.multiplier = 1.10
+        end
+    end
+
+    boon_movespeed_originals = {
+        desc_value = desc_value_entry.value,
+        per_rarity = per_rarity,
+    }
+
+    desc_value_entry.value = 0.10
+end
+
+local function revert_boon_movespeed_tweak()
+    if not boon_movespeed_originals then
+        return
+    end
+
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local buff_tpls = rawget(_G, "DeusPowerUpBuffTemplates")
+    local tpl = power_up and power_up.movespeed
+    local desc_value_entry = tpl and tpl.description_values and tpl.description_values[1]
+
+    if desc_value_entry then
+        desc_value_entry.value = boon_movespeed_originals.desc_value
+    end
+
+    if buff_tpls then
+        for rarity, original_mult in pairs(boon_movespeed_originals.per_rarity) do
+            local buff_entry = buff_tpls["power_up_movespeed_" .. rarity]
+            local sub = buff_entry and buff_entry.buffs and buff_entry.buffs[1]
+            if sub then
+                sub.multiplier = original_mult
+            end
+        end
+    end
+
+    boon_movespeed_originals = nil
+end
+
+sync_boon_movespeed = function()
+    if mod:get("tweak_boon_movespeed") then
+        apply_boon_movespeed_tweak()
+    else
+        revert_boon_movespeed_tweak()
+    end
+end
+
+sync_boon_movespeed()
+
+-- ============================================================
 -- Endless Bombs Consumes Morgrim's
 -- ============================================================
 -- Vanilla `apply_pockets_full_of_bombs_buff` calls `inventory_extension:drop_level_event_item`
@@ -2002,6 +2238,8 @@ mod.on_setting_changed = function(setting_id)
         sync_reckless_swings()
     elseif setting_id == "bomb_boon_cooldown" then
         sync_bomb_cooldown()
+    elseif setting_id == "tweak_boon_movespeed" then
+        sync_boon_movespeed()
     elseif is_pool_setting(setting_id) then
         -- inject_pool() is idempotent: takes a one-time snapshot, resets to it on
         -- every call, then applies current toggle state. Master-off branch inside
@@ -2016,6 +2254,7 @@ end
 mod.on_disabled = function()
     revert_reckless_swings_tweak()
     revert_bomb_cooldown_tweak()
+    revert_boon_movespeed_tweak()
 end
 
 -- ============================================================
