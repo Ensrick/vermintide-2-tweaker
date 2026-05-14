@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.4-alpha"
+local MOD_VERSION = "0.7.5-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -997,14 +997,74 @@ end)
 -- Stingray re-seeds the shading_environment from the level's baked template
 -- every frame, so no save/restore — when the player leaves the cursed node
 -- and we stop applying, the level's vanilla atmosphere returns automatically.
-local _CURSE_SKY_TINTS = {
-    -- Multiplicative tint (1.0 = unchanged). Tuned to be visible without
-    -- crushing the scene to a single hue.
-    khorne   = { 1.40, 0.30, 0.25 },
-    nurgle   = { 0.40, 1.20, 0.35 },
-    tzeentch = { 0.45, 0.55, 1.40 },
-    slaanesh = { 1.30, 0.55, 1.20 },
-    belakor  = { 0.45, 0.30, 0.65 },
+-- Per-curse lighting PROFILES instead of a single flat tint. Each profile
+-- specifies a different multiplicative tint per shading-environment variable so
+-- the scene reads as "themed atmosphere" rather than "uniform color filter":
+--   - sky (skydome_tint_color):    the headline color — strongest hue
+--   - sun (sun_color):             warmer / cooler accent, not pure-color
+--   - secondary_sun (fill):        subtler, often neutral-toward-tint
+--   - ambient_tint (mid):          moody, shifts whole scene tone
+--   - ambient_tint_top (zenith):   slight contrast cue at the top of ambient
+--   - fog_color (haze):            second strongest accent, ties scene together
+--   - exposure (scalar):           tiny dim/bright tweak for mood
+-- All values are multiplicative on top of the level's baked atmosphere, so the
+-- result blends with the underlying environment instead of replacing it.
+local _CURSE_SKY_PROFILES = {
+    -- KHORNE — blood-red dominant. Sun stays warm (sunset feel), fog is
+    -- thick burning red. Ambient slightly darker to enhance contrast.
+    khorne = {
+        skydome_tint_color   = { 1.45, 0.30, 0.20 },
+        sun_color            = { 1.30, 0.65, 0.45 },
+        secondary_sun_color  = { 1.20, 0.50, 0.40 },
+        ambient_tint         = { 1.05, 0.55, 0.45 },
+        ambient_tint_top     = { 1.20, 0.40, 0.30 },
+        fog_color            = { 1.55, 0.25, 0.20 },
+        exposure_mul         = 0.92,
+    },
+    -- NURGLE — sickly bog green. Sun a jaundiced yellow-green, fog murky
+    -- and thick. Slightly brighter exposure to evoke "rotting daylight".
+    nurgle = {
+        skydome_tint_color   = { 0.45, 1.30, 0.40 },
+        sun_color            = { 0.95, 1.15, 0.55 },
+        secondary_sun_color  = { 0.70, 1.05, 0.55 },
+        ambient_tint         = { 0.65, 1.00, 0.60 },
+        ambient_tint_top     = { 0.55, 1.10, 0.45 },
+        fog_color            = { 0.50, 1.20, 0.40 },
+        exposure_mul         = 1.00,
+    },
+    -- TZEENTCH — cobalt + magenta. Sky leans cyan-blue, sun has a pink
+    -- aurora glow, fog deepens to indigo. Brightest exposure (otherworldly).
+    tzeentch = {
+        skydome_tint_color   = { 0.45, 0.65, 1.50 },
+        sun_color            = { 1.20, 0.65, 1.30 },
+        secondary_sun_color  = { 0.75, 0.80, 1.30 },
+        ambient_tint         = { 0.70, 0.75, 1.15 },
+        ambient_tint_top     = { 0.55, 0.65, 1.40 },
+        fog_color            = { 0.55, 0.60, 1.45 },
+        exposure_mul         = 1.05,
+    },
+    -- SLAANESH — pink + lilac, with hot magenta highlights. Sun is a peach
+    -- counterpoint to the pink sky for visual depth. Ambient drinks the pink.
+    slaanesh = {
+        skydome_tint_color   = { 1.35, 0.50, 1.15 },
+        sun_color            = { 1.30, 0.85, 0.95 },
+        secondary_sun_color  = { 1.20, 0.65, 1.05 },
+        ambient_tint         = { 1.15, 0.65, 1.05 },
+        ambient_tint_top     = { 1.30, 0.55, 1.20 },
+        fog_color            = { 1.25, 0.40, 1.10 },
+        exposure_mul         = 0.97,
+    },
+    -- BELAKOR — twilight purple, very dark. Sun is moonlight-cold blue,
+    -- ambient sinks toward black-violet. Dimmer exposure for shadow mood.
+    belakor = {
+        skydome_tint_color   = { 0.45, 0.30, 0.70 },
+        sun_color            = { 0.55, 0.55, 0.95 },
+        secondary_sun_color  = { 0.45, 0.40, 0.80 },
+        ambient_tint         = { 0.45, 0.40, 0.75 },
+        ambient_tint_top     = { 0.35, 0.30, 0.80 },
+        fog_color            = { 0.40, 0.30, 0.75 },
+        exposure_mul         = 0.85,
+    },
 }
 
 local function _current_node_theme()
@@ -1021,17 +1081,19 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
     if not on_injected_adventure_level() then return end
     local theme = _current_node_theme()
     if not theme or theme == "wastes" then return end
-    local tint = _CURSE_SKY_TINTS[theme]
-    if not tint then return end
+    local profile = _CURSE_SKY_PROFILES[theme]
+    if not profile then return end
 
-    -- Multiply each existing color by the curse tint. ShadingEnvironment.vector3
-    -- returns a fresh Vector3 each call (valid within this frame) — safe to
-    -- read, multiply, and write back without :unbox()/:box.
+    -- Multiply each existing color by the curse profile's per-var tint.
+    -- ShadingEnvironment.vector3 returns a fresh Vector3 each call (valid
+    -- within this frame) — safe to read, multiply, and write back.
     local function mul_set(var_name)
+        local t = profile[var_name]
+        if not t then return end
         local v = ShadingEnvironment.vector3(shading_env, var_name)
         if v then
             ShadingEnvironment.set_vector3(shading_env, var_name,
-                Vector3(v.x * tint[1], v.y * tint[2], v.z * tint[3]))
+                Vector3(v.x * t[1], v.y * t[2], v.z * t[3]))
         end
     end
     mul_set("skydome_tint_color")
@@ -1040,6 +1102,13 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
     mul_set("ambient_tint")
     mul_set("ambient_tint_top")
     mul_set("fog_color")
+
+    if profile.exposure_mul and profile.exposure_mul ~= 1.0 then
+        local cur = ShadingEnvironment.scalar(shading_env, "exposure")
+        if cur then
+            ShadingEnvironment.set_scalar(shading_env, "exposure", cur * profile.exposure_mul)
+        end
+    end
 end)
 
 -- ============================================================
@@ -1164,6 +1233,12 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     -- spreader stops early when it runs out of candidates).
     local saved_min, saved_max, saved_range_min, saved_range_max
     local override_curse_count = mod:get("cursed_mission_count")
+    mod:info("[deus_populate_graph] override_curse_count=%s, config?=%s, vanilla_min=%s vanilla_max=%s vanilla_range_min=%s vanilla_range_max=%s",
+        tostring(override_curse_count), tostring(config ~= nil),
+        config and tostring(config.CURSES_HOT_SPOTS_MIN_COUNT) or "?",
+        config and tostring(config.CURSES_HOT_SPOTS_MAX_COUNT) or "?",
+        config and tostring(config.CURSES_HOT_SPOT_MIN_RANGE) or "?",
+        config and tostring(config.CURSES_HOT_SPOT_MAX_RANGE) or "?")
     if config and override_curse_count and override_curse_count > 0 then
         saved_min = config.CURSES_HOT_SPOTS_MIN_COUNT
         saved_max = config.CURSES_HOT_SPOTS_MAX_COUNT
@@ -1173,6 +1248,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         config.CURSES_HOT_SPOTS_MAX_COUNT = override_curse_count
         config.CURSES_HOT_SPOT_MIN_RANGE = 0
         config.CURSES_HOT_SPOT_MAX_RANGE = 0
+        mod:info("[deus_populate_graph] applied override: count=%d range=0/0", override_curse_count)
     end
 
     -- Filter the curse pool so disabled curses get re-rolled within their god
@@ -1187,8 +1263,23 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         restore_available_curses(saved_curses)
     end
 
+    -- Count cursed nodes in the completed graph for diagnostic
+    local function count_cursed(graph)
+        if type(graph) ~= "table" then return 0, 0 end
+        local cursed, total = 0, 0
+        for _, n in pairs(graph) do
+            if type(n) == "table" and (n.type == "TRAVEL" or n.type == "SIGNATURE" or n.type == "ARENA") then
+                total = total + 1
+                if n.curse then cursed = cursed + 1 end
+            end
+        end
+        return cursed, total
+    end
+
     if not mod:get("replace_shrines_with_missions") then
         local result = { func(base_graph, seed, config, dominant_god, with_belakor) }
+        local cursed, total = count_cursed(result[1])
+        mod:info("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
         restore_curse_count()
         return unpack(result)
     end

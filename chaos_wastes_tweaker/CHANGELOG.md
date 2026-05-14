@@ -1,5 +1,17 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.5-alpha (2026-05-14)
+
+### Improved: Cursed-node atmosphere lighting (richer per-curse profiles)
+
+v0.7.2-alpha's curse sky tint applied one flat RGB multiplier across every shading variable, so e.g. a Khorne node became a single saturated red blanket. Replaced with per-curse PROFILES that tint each shading-environment variable differently — sky, sun, secondary sun, ambient, ambient top, fog, and exposure all get their own multiplier per curse. The result reads as themed atmosphere ("sunset over a burning landscape", "rotten daylight in a bog") rather than a single-color filter.
+
+Color identity is preserved: red Khorne, green Nurgle, blue Tzeentch, pink Slaanesh, dark purple Belakor. But each curse gets accent variation (e.g. Khorne sun is warm orange against a deep red sky; Tzeentch sun has a magenta-aurora glow against cobalt sky).
+
+### Added: Diagnostic logging on `deus_populate_graph` (cursed-mission count debugging)
+
+User reported `cursed_mission_count = 30` produced zero visibly-cursed nodes on Olesya's map. Adding two `mod:info` lines to the existing `deus_populate_graph` hook to confirm (a) the override was read correctly and applied, and (b) how many cursed nodes vanilla's `spread_curse` actually produced in the completed graph. Both log under the `[deus_populate_graph]` prefix.
+
 ## 0.7.4-alpha (2026-05-14)
 
 ### Fixed: `Join failed - Game version mismatch` when peer has Adventure Maps injection on
