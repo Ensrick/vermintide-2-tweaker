@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.0-alpha"
+local MOD_VERSION = "0.7.4-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -38,7 +38,67 @@ local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker/_adventure_p
 -- master is off (only resets to snapshot). Snapshot-at-load means subsequent toggles
 -- always reset to clean vanilla state — no race where snapshot is taken after our
 -- own previous mutations.
+
+-- Capture vanilla NetworkLookup.level_keys count BEFORE inject_pool can mutate it.
+-- The lobby-hash-pretend hook below uses this to hide our injected entries from
+-- LobbyAux.create_network_hash so the combined_hash always reports vanilla num_levels,
+-- letting peers with this mod join vanilla / non-matching lobbies. See v0.7.4-alpha
+-- CHANGELOG for the full root-cause and reference_vt2_lobby_combined_hash.md.
+local _vanilla_level_keys_count
+if rawget(_G, "NetworkLookup") and NetworkLookup.level_keys then
+    _vanilla_level_keys_count = #NetworkLookup.level_keys
+end
+
 AdventurePool.inject_pool()
+
+-- Lobby-hash-pretend shim. VT2's LobbyAux.create_network_hash (lobby_aux.lua:26) reads
+-- `num_levels = #NetworkLookup.level_keys` and folds it into the lobby `combined_hash`
+-- that all peers compare for join compatibility. Our _adventure_pool.lua registers a new
+-- level_keys entry for every injected adventure permutation (and must — the multiplayer
+-- level-load RPC serializes by index into this table). That bumped num_levels from
+-- vanilla 582 to ~774 and gave players `Join failed - Game version mismatch` against any
+-- peer with a different injection configuration (including vanilla).
+--
+-- Fix: temporarily nil out the injected entries (indices > _vanilla_level_keys_count)
+-- during create_network_hash, then restore. `#` operates on the contiguous-prefix length,
+-- so vanilla code computes num_levels as if we never injected. Entries are restored
+-- before the function returns, so the in-game level-load RPC still resolves correctly.
+--
+-- Effect:
+--   • A peer with injection on can JOIN any vanilla or mismatched lobby (hash matches).
+--   • A peer hosting CW with injection on creates a lobby whose hash also reports vanilla,
+--     so vanilla peers can join too.
+--   • Cross-config play is now possible for VANILLA CW scenarios. Picking an INJECTED
+--     adventure mission while a vanilla peer is in the lobby still crashes that peer
+--     (their level_keys lacks the entry) — host has to pick a vanilla CW node, or all
+--     peers must run matching injection. See "Caveats" in v0.7.4-alpha CHANGELOG.
+local _LobbyAux = rawget(_G, "LobbyAux")
+if _LobbyAux and _LobbyAux.create_network_hash and _vanilla_level_keys_count then
+    mod:hook(_LobbyAux, "create_network_hash", function(func, ...)
+        local lookup = rawget(_G, "NetworkLookup") and NetworkLookup.level_keys
+        if not lookup then return func(...) end
+        local current = #lookup
+        if current <= _vanilla_level_keys_count then return func(...) end
+
+        local saved = {}
+        for i = current, _vanilla_level_keys_count + 1, -1 do
+            saved[i] = lookup[i]
+            lookup[i] = nil
+        end
+
+        local hash_result = func(...)
+
+        for i, k in pairs(saved) do
+            lookup[i] = k
+        end
+
+        return hash_result
+    end)
+    mod:info("Lobby hash shim installed (vanilla level_keys count = %d).", _vanilla_level_keys_count)
+else
+    mod:warning("Lobby hash shim NOT installed; LobbyAux=%s vanilla_count=%s. Injected adventure missions may cause 'Game version mismatch' on join.",
+        tostring(_LobbyAux ~= nil), tostring(_vanilla_level_keys_count))
+end
 
 local SHRINE_DEFAULT = 4
 local CHEST_DEFAULT = 3
@@ -568,6 +628,7 @@ end)
 -- earlier reference resolve to a global (per feedback_lua_forward_reference.md).
 -- Reset is performed at the top of THIS hook (consolidated to avoid the VMF
 -- "Attempting to rehook active hook" warning for populate_pickups).
+local _CAMPAIGN_POTION_NAMES = { "damage_boost_potion", "speed_boost_potion", "cooldown_reduction_potion" }
 local _chest_conversions_this_level = 0
 mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     _chest_conversions_this_level = 0
@@ -582,6 +643,16 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     local cursed_count = mod:get("cursed_chest_count") or 1
     local arena_ammo = mod:get("arena_ammo_count") or 2
     local potions_on = mod:get("enable_campaign_potions")
+
+    -- Defensive cleanup: if a previous populate_pickups call errored mid-flight
+    -- with potions_on=true, the campaign-potion clones could remain in
+    -- Pickups.deus_potions for the rest of the session. Scrub them every call
+    -- when the toggle is off so subsequent missions don't see ghost potions.
+    if not potions_on and Pickups and Pickups.deus_potions then
+        for _, name in ipairs(_CAMPAIGN_POTION_NAMES) do
+            Pickups.deus_potions[name] = nil
+        end
+    end
 
     -- CLARIFY: "custom" gates determine which fields to mutate. The defaults (1 cursed chest, 2
     -- arena ammo) are the vanilla values; if the user's setting matches vanilla, we skip mutation
@@ -874,6 +945,104 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
 end)
 
 -- ============================================================
+-- Vanilla bug fix: NetworkedFlowStateManager._num_states leak
+-- ============================================================
+-- Fatshark vanilla bug. `NetworkedFlowStateManager.clear_object_state`
+-- (networked_flow_state_manager.lua:493) nils `_object_states[unit]` when a
+-- unit is destroyed (entity_manager2.lua:390) BUT NEVER DECREMENTS
+-- `_num_states`. The counter is monotonic and the run fatals at
+-- `_num_states == _max_states (512)` with:
+--   "[NetworkedFlowStateManager] Too many object states(512)."
+-- Every destroyed unit that ever held a networked flow state permanently
+-- leaks its slot.
+--
+-- Hits hardest in CW runs with our adventure-mission injection + curses:
+-- the `cursed_chest_objective_unit` buff is applied to every cursed-chest
+-- enemy spawn (deus_generic_terror_events.lua:26 →
+-- morris_buff_settings.lua:614 apply_objective_unit) which spawns a
+-- `units/hub_elements/objective_unit` carrying a `chest_open_state`
+-- networked flow state. Each enemy = 1 permanently-leaked slot. Crash
+-- reproduced ~40 min into a Verminious Dreams khorne node with 2 Chests
+-- of Trials triggered (crash dump
+-- console-2026-05-14-03.23.33-d86fd894-...).
+--
+-- Fix: count the states being released, subtract from `_num_states` BEFORE
+-- delegating to vanilla. Defensive about table shape since this is a
+-- private engine field that could change shape in future patches.
+mod:hook("NetworkedFlowStateManager", "clear_object_state", function(func, self, unit)
+    local unit_states = self._object_states and self._object_states[unit]
+    if unit_states and type(unit_states.states) == "table" and type(self._num_states) == "number" then
+        local count = 0
+        for _ in pairs(unit_states.states) do count = count + 1 end
+        if count > 0 then
+            self._num_states = math.max(0, self._num_states - count)
+        end
+    end
+    return func(self, unit)
+end)
+
+-- ============================================================
+-- Curse SKY / atmosphere tinting (CameraManager.shading_callback)
+-- ============================================================
+-- Light.set_color only tints individual lights — adventure-level skies, sun,
+-- and atmospheric fog stay vanilla. Peregrinaje (bundle-unpacked, file
+-- 92BC0C4E7BFF8C3A.lua) drives sky/sun/fog via ShadingEnvironment.set_vector3
+-- on keys like `skydome_tint_color`, `sun_color`, `secondary_sun_color`,
+-- `ambient_tint`, `fog_color`. Vanilla CameraManager.shading_callback
+-- (camera_manager.lua:283-368) runs per frame with a live shading_env handle;
+-- vanilla `MoodHandler.apply_environment_variables` is called at line 346 to
+-- overlay any active moods. We hook_safe AFTER vanilla so the curse tint
+-- multiplies the post-mood sky color.
+--
+-- Stingray re-seeds the shading_environment from the level's baked template
+-- every frame, so no save/restore — when the player leaves the cursed node
+-- and we stop applying, the level's vanilla atmosphere returns automatically.
+local _CURSE_SKY_TINTS = {
+    -- Multiplicative tint (1.0 = unchanged). Tuned to be visible without
+    -- crushing the scene to a single hue.
+    khorne   = { 1.40, 0.30, 0.25 },
+    nurgle   = { 0.40, 1.20, 0.35 },
+    tzeentch = { 0.45, 0.55, 1.40 },
+    slaanesh = { 1.30, 0.55, 1.20 },
+    belakor  = { 0.45, 0.30, 0.65 },
+}
+
+local function _current_node_theme()
+    if not (Managers.mechanism and Managers.mechanism.game_mechanism) then return nil end
+    local mechanism = Managers.mechanism:game_mechanism()
+    if not mechanism or not mechanism.get_deus_run_controller then return nil end
+    local run = mechanism:get_deus_run_controller()
+    if not run or not run.get_current_node then return nil end
+    local node = run:get_current_node()
+    return node and node.theme or nil
+end
+
+mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading_env, viewport)
+    if not on_injected_adventure_level() then return end
+    local theme = _current_node_theme()
+    if not theme or theme == "wastes" then return end
+    local tint = _CURSE_SKY_TINTS[theme]
+    if not tint then return end
+
+    -- Multiply each existing color by the curse tint. ShadingEnvironment.vector3
+    -- returns a fresh Vector3 each call (valid within this frame) — safe to
+    -- read, multiply, and write back without :unbox()/:box.
+    local function mul_set(var_name)
+        local v = ShadingEnvironment.vector3(shading_env, var_name)
+        if v then
+            ShadingEnvironment.set_vector3(shading_env, var_name,
+                Vector3(v.x * tint[1], v.y * tint[2], v.z * tint[3]))
+        end
+    end
+    mul_set("skydome_tint_color")
+    mul_set("sun_color")
+    mul_set("secondary_sun_color")
+    mul_set("ambient_tint")
+    mul_set("ambient_tint_top")
+    mul_set("fog_color")
+end)
+
+-- ============================================================
 -- Replace shrines with missions (SHOP -> TRAVEL conversion)
 -- ============================================================
 -- When `replace_shrines_with_missions` is enabled, every SHOP node in the base
@@ -1142,32 +1311,14 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
         settings = (AllPickups and AllPickups.deus_soft_currency) or settings
     end
 
-    local unit, extra = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
-    if on_injected_adventure_level() and _CW_BLOCKING_PICKUP_NAMES[pickup_name]
-            and unit and Unit.alive(unit) then
-        -- v0.6.31 revision: v0.6.28's `set_scene_query_enabled(false)` made the chest
-        -- walk-through BUT broke interaction — DeusCursedChestExtension uses a sphere
-        -- overlap with `filter_overlap_interaction` (generic_unit_interactor_extension.lua:254)
-        -- which depends on scene_query. So we keep scene_query enabled and instead
-        -- reclassify the actor's collision filter to `filter_trigger` (the vanilla
-        -- "non-blocking interactable" filter — see ai_utils.lua:521 for the canonical
-        -- pattern). The player_mover sweep ignores `filter_trigger` actors; raycast
-        -- overlaps still hit them.
-        -- Stingray `Unit.actor` is 1-indexed (see ai_inventory_extension.lua:434).
-        local num_actors = (Unit.num_actors and Unit.num_actors(unit)) or 0
-        local disabled = 0
-        for i = 1, num_actors do
-            local actor = Unit.actor(unit, i)
-            if actor then
-                if Actor.set_collision_filter then Actor.set_collision_filter(actor, "filter_trigger") end
-                if Actor.set_collision_enabled then Actor.set_collision_enabled(actor, false) end
-                disabled = disabled + 1
-            end
-        end
-        mod:info("[no-block] %s: %d/%d actors set to filter_trigger + collision disabled", pickup_name, disabled, num_actors)
-    end
-    return unit, extra
+    return func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
 end)
+-- Note: previous versions attempted to make altars/chests walk-through by mutating
+-- their actor collision filter / scene_query / collision_enabled flags. This
+-- ALWAYS regressed interaction (v0.6.28 scene_query disable broke chest open;
+-- v0.6.32 filter_trigger broke it again). The Peregrinaje mod ships chests without
+-- a physics blocker by some other mechanism — investigate that pattern before
+-- re-attempting any collision-disable here.
 
 mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawner_unit, spawn_type)
     if not on_injected_adventure_level() then
