@@ -64,6 +64,24 @@ return {
     disable_friendly_fire_tooltip = {
         en = "Suppress friendly fire damage from both ranged and melee sources. Champion+ difficulties normally enable ranged FF; this turns it off.",
     },
+    noclip_enabled = {
+        en = "Noclip",
+    },
+    noclip_enabled_tooltip = {
+        en = "Fly through walls. WASD to move in the direction you're looking, Space/Ctrl for up/down, hold Shift for a speed boost. Can also be toggled with the 'gt noclip' chat command. Note: when toggled off mid-air you'll fall to the ground.",
+    },
+    noclip_speed = {
+        en = "Noclip Base Speed",
+    },
+    noclip_speed_tooltip = {
+        en = "Flight speed in metres per second. The default ~15 m/s is roughly 4x normal walk speed.",
+    },
+    noclip_boost_multiplier = {
+        en = "Noclip Shift-Boost Multiplier",
+    },
+    noclip_boost_multiplier_tooltip = {
+        en = "When holding Left Shift, base speed is multiplied by this value. 3.0 = ~45 m/s with the default base speed.",
+    },
 
     mission_inventory_group = {
         en = "Keep Menus in Missions",

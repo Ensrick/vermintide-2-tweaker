@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.15-dev"
+local MOD_VERSION = "0.2.17-dev"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -241,6 +241,158 @@ mod:command("freecam", "Toggle detached free-flight camera", function()
 end)
 
 -- ============================================================
+-- Noclip (player flies, ignores wall collision)
+-- ============================================================
+-- Unlike freecam (which detaches the camera and leaves the body),
+-- noclip moves the PLAYER BODY through walls. Built on the engine's
+-- `script_driven_no_mover` locomotion state (used by chaos-spawn-grab
+-- and tentacle-grab), which teleports the unit by velocity_wanted * dt
+-- each tick without touching the mover — so static geometry, props
+-- and enemies are all bypassed.
+--
+-- Two pieces:
+--   (1) Hook `update_script_driven_no_mover_movement` — when noclip is
+--       on for the local player, ignore whatever velocity the character
+--       state machine wrote (walking state writes ground-plane velocity,
+--       falling writes gravity) and compute our own from W/A/S/D +
+--       Space/Ctrl projected through the first-person camera rotation.
+--       Shift applies a boost multiplier.
+--   (2) Re-assert `self.state = "script_driven_no_mover"` every frame —
+--       basic states (standing/walking/jumping/falling) don't touch
+--       locomotion.state, but transitions into ledge-hang / ladder /
+--       knockdown call `enable_script_driven_movement()` which would
+--       hand us back to the wall-respecting mover update.
+
+local _noclip_active = false
+
+local function _local_player_unit()
+    local pm = Managers.player
+    local player = pm and pm:local_player()
+    return player and player.player_unit
+end
+
+local function _local_locomotion()
+    local unit = _local_player_unit()
+    if not unit then return nil end
+    return ScriptUnit.has_extension(unit, "locomotion_system"), unit
+end
+
+local function _apply_noclip(enabled)
+    _noclip_active = enabled and true or false
+    local loco, unit = _local_locomotion()
+    if not loco then
+        mod:info("[noclip] no locomotion extension yet (not in a level?) — flag stored, will re-arm on player spawn via extensions_ready hook")
+        return
+    end
+    if _noclip_active then
+        loco:enable_script_driven_no_mover_movement()
+        mod:info("[noclip] ON — loco.state now '%s' on unit %s", tostring(loco.state), tostring(unit))
+    else
+        -- Snap the mover to the player's current position before handing
+        -- control back, otherwise the mover is still at the entry point
+        -- and the next Mover.move() will yank the player back there.
+        local mover = unit and Unit.mover(unit)
+        if mover then
+            Mover.set_position(mover, Unit.local_position(unit, 0))
+        end
+        loco:enable_script_driven_movement()
+        loco:set_wanted_velocity(Vector3.zero())
+        mod:info("[noclip] OFF — restored script_driven; loco.state '%s'", tostring(loco.state))
+    end
+end
+
+local _NOCLIP_KEYS = {
+    fwd     = "w",
+    back    = "s",
+    left    = "a",
+    right   = "d",
+    up      = "space",
+    down    = "left ctrl",
+    boost   = "left shift",
+}
+
+local function _key_held(name)
+    local idx = Keyboard.button_index(name)
+    return idx and Keyboard.button(idx) > 0
+end
+
+-- Re-arm noclip when the local player's locomotion extension is wired up
+-- on each spawn (mission entry, respawn). Without this, the persisted
+-- VMF setting stays "on" while the actual locomotion state is whatever
+-- the engine initialised it to — usually `script_driven` — and the user
+-- would have to toggle the chat command before flight worked.
+mod:hook_safe("PlayerUnitLocomotionExtension", "extensions_ready", function(self, world, unit)
+    if not mod:get("noclip_enabled") then return end
+    if unit ~= _local_player_unit() then return end
+    _apply_noclip(true)
+end)
+
+mod:hook("PlayerUnitLocomotionExtension", "update_script_driven_no_mover_movement",
+function(func, self, unit, dt, t)
+    if not _noclip_active or unit ~= _local_player_unit() then
+        return func(self, unit, dt, t)
+    end
+    local fp = ScriptUnit.has_extension(unit, "first_person_system")
+    if not fp then return func(self, unit, dt, t) end
+
+    local rotation = fp:current_rotation()
+    local forward  = Quaternion.forward(rotation)
+    local right    = Quaternion.right(rotation)
+
+    local fwd_axis   = (_key_held(_NOCLIP_KEYS.fwd)  and 1 or 0) - (_key_held(_NOCLIP_KEYS.back) and 1 or 0)
+    local right_axis = (_key_held(_NOCLIP_KEYS.right) and 1 or 0) - (_key_held(_NOCLIP_KEYS.left) and 1 or 0)
+    local up_axis    = (_key_held(_NOCLIP_KEYS.up)    and 1 or 0) - (_key_held(_NOCLIP_KEYS.down) and 1 or 0)
+
+    local speed = mod:get("noclip_speed") or 15.0
+    if _key_held(_NOCLIP_KEYS.boost) then
+        speed = speed * (mod:get("noclip_boost_multiplier") or 3.0)
+    end
+
+    local velocity = forward * fwd_axis + right * right_axis + Vector3(0, 0, up_axis)
+    local len = Vector3.length(velocity)
+    if len > 0.001 then
+        velocity = velocity / len * speed
+    else
+        velocity = Vector3.zero()
+    end
+
+    self.velocity_wanted:store(velocity)
+
+    -- Replicate the original body: teleport, sync network, sync current.
+    local current_position = POSITION_LOOKUP[unit]
+    local final_position = current_position + velocity * dt
+    Unit.set_local_position(unit, 0, final_position)
+    self.velocity_network:store(velocity)
+    self.velocity_current:store(velocity)
+end)
+
+-- CLARIFY: `mod.update` runs each tick from VMF's main loop. We use it
+-- as the heartbeat that re-asserts the locomotion state, so transient
+-- character-state transitions can't drop us back into wall collision.
+local _orig_mod_update = mod.update
+mod.update = function(dt)
+    if _orig_mod_update then _orig_mod_update(dt) end
+    if _noclip_active then
+        local loco = _local_locomotion()
+        if loco and loco.state ~= "script_driven_no_mover" then
+            loco.state = "script_driven_no_mover"
+        end
+    end
+end
+
+mod:command("noclip", "Toggle noclip (fly through walls)", function()
+    local new_val = not mod:get("noclip_enabled")
+    mod:set("noclip_enabled", new_val)
+    -- Explicit apply mirrors tp's command (which works in production). Belt-and-
+    -- suspenders against VMF versions that don't fire on_setting_changed on
+    -- programmatic mod:set() calls.
+    _apply_noclip(new_val)
+    mod:echo("Noclip: " .. (new_val
+        and "ON (WASD fly, Space/Ctrl up/down, Shift = boost)"
+        or "OFF"))
+end)
+
+-- ============================================================
 -- Keep Menus in Missions (inventory, talents, achievements, etc.)
 -- ============================================================
 -- The keep's menu hotkeys (I=inventory, H=hero, M=map, O=achievements,
@@ -348,6 +500,11 @@ mod.on_game_state_changed = function(status, state_name)
     if Development._hardcoded_dev_params then
         Development._hardcoded_dev_params.third_person_mode = nil
     end
+    -- Locomotion extensions are torn down across level transitions; the
+    -- next player spawn comes back in vanilla `script_driven` mode. Reset
+    -- the active flag so a stale noclip setting from the previous mission
+    -- doesn't re-arm before the player has a body to fly.
+    _noclip_active = false
     _patch_inventory_access()
 end
 
@@ -362,6 +519,8 @@ mod.on_setting_changed = function(setting_id)
         _patch_camera_offset()
     elseif setting_id == "freecam_enabled" then
         _apply_freecam(mod:get("freecam_enabled"))
+    elseif setting_id == "noclip_enabled" then
+        _apply_noclip(mod:get("noclip_enabled"))
     end
 end
 

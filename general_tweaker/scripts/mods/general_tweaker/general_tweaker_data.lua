@@ -77,6 +77,28 @@ return {
                         default_value = false,
                         tooltip       = mod:localize("disable_friendly_fire_tooltip"),
                     },
+                    {
+                        setting_id    = "noclip_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("noclip_enabled_tooltip"),
+                    },
+                    {
+                        setting_id    = "noclip_speed",
+                        type          = "numeric",
+                        default_value = 15.0,
+                        range         = { 1.0, 60.0 },
+                        decimals_number = 1,
+                        tooltip       = mod:localize("noclip_speed_tooltip"),
+                    },
+                    {
+                        setting_id    = "noclip_boost_multiplier",
+                        type          = "numeric",
+                        default_value = 3.0,
+                        range         = { 1.0, 10.0 },
+                        decimals_number = 1,
+                        tooltip       = mod:localize("noclip_boost_multiplier_tooltip"),
+                    },
                 },
             },
             {

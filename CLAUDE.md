@@ -22,10 +22,33 @@ A modular set of **Vermintide 2** VMF (Vermintide Mod Framework) mods written in
 | crafting_in_modded | `cim` | 3721038774 | **VMB** | Modded crafting menus — Athanor forge UI for crafting any career-eligible weapon. Split from `wt` 2026-05-05 |
 | la_prefix_patch | `la_prefix_patch` | 3721067411 | **VMB** | Loads above Loremaster's Armoury: silently drops its three duplicate hook registrations to keep startup chat clean, and offers VMF toggles to suppress LA's quest markers and unread-letter notifications |
 | event_tweaker | `event_tweaker` | 3721290755 | **VMB** | Host-side mutator picker (Workshop title "Tweaker: Events"). VMF dropdown for canonical event presets (Geheimnisnacht / Skulls — drives mutator + active_events string + keep-level swap) plus checkbox-per-mutator across difficulty / specials / hordes / atmosphere / objectives / winds / raw event categories. Three hooks: `BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`. Scaffolded 2026-05-06 |
+| modded_progression | `mp` | (unpublished) | **VMB** | Re-enables 100% of vanilla VT2 progression in modded realm: XP, shillings, loot chests, Okri's Challenges, Lohner's Emporium, keep crafting bench. Intercepts `BackendInterface*Playfab` methods; writes through `backend_mirror` mutators; persists locally via VMF settings; never commits to PlayFab. Sibling API (`mp.is_unlocked` / `mp.spend` / `mp.credit` / `mp.grant_item`) consumed by CWV + cosmetics_tweaker when both installed. Three starting-state options. See `modded_progression/PLAN.md` for full design. Scaffolded 2026-05-14 |
 | tweaker (legacy) | `t` | 3704660429 | Stingray SDK | Deprecated — split into above mods |
 
 <!-- REVIEW: This entire SDK block is now relevant ONLY for the legacy /tweaker source. After the 2026-05-01 VMB migration, every active mod (wt/ct/gt/crt/cosmetics_tweaker/enemy_tweaker/character_weapon_variants) is built via VMB. Consider collapsing this section to a single line ("legacy /tweaker only — see old-backup/ scripts") and putting the VMB block first. As-is, an AI agent skimming this file will see the SDK commands and may assume they apply to active mods. -->
 ## Build Commands
+
+### Preferred: VMBLauncher headless CLI
+
+The canonical way to build / deploy / upload a VT2 mod is the launcher's headless CLI:
+
+```powershell
+$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
+& $exe list                                          # list discovered mods
+& $exe info   general_tweaker                        # cfg + bundle state
+& $exe doctor                                        # diagnostics
+& $exe build  general_tweaker                        # VMB build -> bundleV2/
+& $exe deploy general_tweaker                        # hash-verified copy to Workshop folder
+& $exe upload general_tweaker                        # stage + push via ugc_tool
+& $exe upload chaos_wastes_tweaker --allow-public    # only required for public-visibility mods
+& $exe all    general_tweaker                        # build + deploy + upload
+```
+
+Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the full doctrine** — verbs, flags, preflight gates, visibility-public safety, the PowerShell pipeline-truncation quirk, GUI/headless detection rule.
+
+The `.ps1` wrappers in this directory (`upload_*.ps1`, `deploy_*.ps1`, `deploy_all.ps1`) are thin convenience scripts that delegate to the launcher. Use either path; output and exit codes are identical.
+
+**Always verify Workshop file size after upload** — `ugc_tool` prints `Upload finished` even when content didn't transfer (memory `feedback_workshop_upload_verify.md`). For public mods that's automatable via `ISteamRemoteStorage/GetPublishedFileDetails`; for `friends_only`/`private` items the public API returns blank fields, so eyeball the Workshop page in Steam.
 
 ### SDK mods (legacy `tweaker` only)
 
