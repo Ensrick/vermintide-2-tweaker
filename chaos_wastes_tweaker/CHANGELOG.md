@@ -1,5 +1,37 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.26-alpha (2026-05-15)
+
+### Renamed "Modified Boons" group to "Reworks"
+
+Broadens the umbrella to include potion reworks (and anything else we add later that mutates vanilla mechanics). Existing settings (Khaine's Fury tweak, Movement Speed boon tweak, bomb boon cooldown, Morgrim's toggles) are unchanged — only the group label and `setting_id` are renamed (`modified_boons_group` → `reworks_group`). Player-facing settings persist correctly because their own setting_ids are unchanged; VMF keys user values by individual `setting_id`, not by group path.
+
+### Added: Tweak — Poison Proof potion lasts 4 minutes
+
+Doubles the Poison Proof (gas/poison immunity) potion's duration from 120s to 240s. With Decanter, the `_increased` variant extends from 240s → 360s (still +50% over the new base). Implementation mutates `BuffTemplates.poison_proof_potion.buffs[1].duration` and the `_increased` sibling directly at mod load; vanilla's `action_potion.lua:68` resolution picks up `_increased` when `buff_perks.potion_duration` is held, so Decanter composition is automatic.
+
+### Added: Tweak — Hangover Brew alternative effect
+
+Replaces Hangover Brew's (`moot_milk_potion`) vanilla dodge-distance/dodge-speed buff with a different effect package:
+
+- +25% movement speed (apply_movement_buff on `move_speed`)
+- Unlimited dodges (`buff_perks.infinite_dodge`)
+- +40% stamina regen (`stat_buff = "fatigue_regen"`)
+- 60-second duration (90 seconds with Decanter, via `_increased` variant)
+
+The visual `screenspace_drink` activation/loop effects are kept so it still feels like a potion. Implementation replaces `BuffTemplates.moot_milk_potion.buffs` with a 4-buff array (FX + MS + infinite dodge + stamina regen) at mod load; mirrors for `moot_milk_potion_increased`. Save-and-restore pattern matches the other tweaks so toggling off restores vanilla.
+
+### Known limitation: Home Brewer composition deferred to v0.7.27
+
+User asked for Home Brewer to provide a +50% potency boost on top of the rework. Home Brewer in vanilla is `not_consume_potion` (chance to refund the potion), not a potency boon — so the tweak would need:
+
+1. New `<potion>_potion_brewed` and `<potion>_potion_brewed_increased` variants registered in `BuffTemplates`
+2. Each variant added to `NetworkLookup.buff_templates` (else RPCs in `action_potion.lua:74` fail)
+3. A hook on `ActionPotion:client_owner_buff_function` (or similar) to swap to `_brewed*` when `not_consume_potion` perk is held
+4. Numeric scaling at variant-build time (multipliers × 1.5)
+
+That's a 1-2 hour effort with its own test cycle. Splitting it out keeps v0.7.26 small and verifiable.
+
 ## 0.7.25-alpha (2026-05-15)
 
 ### Boon menu re-categorization (round 2 of 2): Ability Cooldown + Orbs groups

@@ -153,7 +153,7 @@ local data = {
                 },
             },
             {
-                setting_id = "modified_boons_group",
+                setting_id = "reworks_group",
                 type = "group",
                 sub_widgets = {
                     { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
@@ -162,6 +162,8 @@ local data = {
                     { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
                     { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
                     { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
+                    { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
+                    { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
                 },
             },
             {

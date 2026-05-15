@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.25-alpha"
+local MOD_VERSION = "0.7.26-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -2254,6 +2254,175 @@ end
 sync_boon_movespeed()
 
 -- ============================================================
+-- Potion Reworks (v0.7.26-alpha)
+-- ============================================================
+-- BuffTemplates is the runtime merged table built by DLCUtils.merge at boot
+-- (`buff_templates.lua:5568`-ish). Source `DLCSettings.morris.buff_templates` is the
+-- per-DLC definition; mutating it after merge has no effect on what the runtime reads
+-- (same gotcha as Khaine's Fury v0.7.24). All mutations target `BuffTemplates.<name>`
+-- directly.
+--
+-- Pattern matches reckless_swings: snapshot originals once on apply, restore on revert,
+-- re-run sync on settings change. The action's vanilla `_increased` resolution (in
+-- `action_potion.lua:68`, gated on `potion_duration` perk) automatically picks up the
+-- modified `_increased` variant when Decanter is held — no extra plumbing needed for
+-- Decanter composition.
+--
+-- TODO v0.7.27: Home Brewer composition (+50% potency when home_brewer is held). Needs
+-- a buff-apply hook + `_brewed` / `_brewed_increased` variant registration in
+-- NetworkLookup.buff_templates.
+
+-- --- Poison Proof duration tweak (vanilla 120s/240s -> 240s/360s) ---
+local poison_proof_originals = nil
+
+local function apply_poison_proof_tweak()
+    if poison_proof_originals then
+        return
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    local base = bt and bt.poison_proof_potion
+    local inc = bt and bt.poison_proof_potion_increased
+    local base_buff = base and base.buffs and base.buffs[1]
+    local inc_buff = inc and inc.buffs and inc.buffs[1]
+    if not base_buff or not inc_buff then
+        mod:info("[poison-proof] BuffTemplates not loaded yet; will retry on settings sync")
+        return
+    end
+    poison_proof_originals = {
+        base = base_buff.duration,
+        inc = inc_buff.duration,
+    }
+    base_buff.duration = 240
+    inc_buff.duration = 360
+    mod:info(string.format("[poison-proof] applied: base=%s -> 240, increased=%s -> 360",
+        tostring(poison_proof_originals.base), tostring(poison_proof_originals.inc)))
+end
+
+local function revert_poison_proof_tweak()
+    if not poison_proof_originals then
+        return
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    local base_buff = bt and bt.poison_proof_potion and bt.poison_proof_potion.buffs and bt.poison_proof_potion.buffs[1]
+    local inc_buff = bt and bt.poison_proof_potion_increased and bt.poison_proof_potion_increased.buffs and bt.poison_proof_potion_increased.buffs[1]
+    if base_buff then base_buff.duration = poison_proof_originals.base end
+    if inc_buff then inc_buff.duration = poison_proof_originals.inc end
+    poison_proof_originals = nil
+end
+
+local function sync_poison_proof_tweak()
+    if mod:get("tweak_poison_proof_duration") then
+        apply_poison_proof_tweak()
+    else
+        revert_poison_proof_tweak()
+    end
+end
+
+sync_poison_proof_tweak()
+
+-- --- Hangover Brew (moot_milk) alternative effect ---
+-- Vanilla buff structure (morris_buff_settings.lua:5804): 3 buffs
+--   1. screenspace FX (`fx/screenspace_hungover_01`)
+--   2. movespeed (apply_movement_buff, +50% MS for 1.5s)
+--   3. damage (stat_buff increased_weapon_damage, multiplier 1)
+-- Alt structure: 3 buffs for 60s
+--   1. screenspace FX (keep hungover for visual feedback)
+--   2. movement speed +25% for full duration
+--   3. infinite_dodge perk
+--   4. stamina regen (fatigue_regen stat_buff) +40%
+-- Decanter automatically picks `_increased` (90s) via vanilla action_potion.lua resolution.
+
+local moot_milk_originals = nil
+
+local function build_moot_milk_alt_buffs(duration)
+    return {
+        {
+            activation_effect = "fx/screenspace_drink_01",
+            continuous_effect = "fx/screenspace_drink_looping",
+            icon = "potion_hold_my_beer",
+            max_stacks = 1,
+            name = "moot_milk_potion",
+            refresh_durations = true,
+            remove_buff_func = "remove_deus_potion_buff",
+            duration = duration,
+        },
+        {
+            apply_buff_func = "apply_movement_buff",
+            max_stacks = 1,
+            name = "moot_milk_potion_movement_speed_alt",
+            refresh_durations = true,
+            remove_buff_func = "remove_movement_buff",
+            duration = duration,
+            multiplier = 0.25,
+            path_to_movement_setting_to_modify = {
+                "move_speed",
+            },
+        },
+        {
+            max_stacks = 1,
+            name = "moot_milk_potion_infinite_dodge_alt",
+            refresh_durations = true,
+            duration = duration,
+            perks = {
+                buff_perks.infinite_dodge,
+            },
+        },
+        {
+            max_stacks = 1,
+            name = "moot_milk_potion_stamina_regen_alt",
+            refresh_durations = true,
+            stat_buff = "fatigue_regen",
+            duration = duration,
+            multiplier = 0.40,
+        },
+    }
+end
+
+local function apply_moot_milk_alt_tweak()
+    if moot_milk_originals then
+        return
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    local base = bt and bt.moot_milk_potion
+    local inc = bt and bt.moot_milk_potion_increased
+    if not base or not inc then
+        mod:info("[moot-milk-alt] BuffTemplates not loaded yet; will retry on settings sync")
+        return
+    end
+    if not rawget(_G, "buff_perks") then
+        mod:info("[moot-milk-alt] buff_perks not loaded yet; cannot apply infinite_dodge perk")
+        return
+    end
+    moot_milk_originals = {
+        base_buffs = base.buffs,
+        inc_buffs = inc.buffs,
+    }
+    base.buffs = build_moot_milk_alt_buffs(60)
+    inc.buffs = build_moot_milk_alt_buffs(90)
+    mod:info("[moot-milk-alt] applied: base=60s, increased=90s (+25%% MS, infinite dodge, +40%% stamina regen)")
+end
+
+local function revert_moot_milk_alt_tweak()
+    if not moot_milk_originals then
+        return
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    if bt and bt.moot_milk_potion then bt.moot_milk_potion.buffs = moot_milk_originals.base_buffs end
+    if bt and bt.moot_milk_potion_increased then bt.moot_milk_potion_increased.buffs = moot_milk_originals.inc_buffs end
+    moot_milk_originals = nil
+end
+
+local function sync_moot_milk_alt_tweak()
+    if mod:get("tweak_moot_milk_alt") then
+        apply_moot_milk_alt_tweak()
+    else
+        revert_moot_milk_alt_tweak()
+    end
+end
+
+sync_moot_milk_alt_tweak()
+
+-- ============================================================
 -- Endless Bombs Consumes Morgrim's
 -- ============================================================
 -- Vanilla `apply_pockets_full_of_bombs_buff` calls `inventory_extension:drop_level_event_item`
@@ -2352,6 +2521,10 @@ mod.on_setting_changed = function(setting_id)
         sync_bomb_cooldown()
     elseif setting_id == "tweak_boon_movespeed" then
         sync_boon_movespeed()
+    elseif setting_id == "tweak_poison_proof_duration" then
+        sync_poison_proof_tweak()
+    elseif setting_id == "tweak_moot_milk_alt" then
+        sync_moot_milk_alt_tweak()
     elseif is_pool_setting(setting_id) then
         -- inject_pool() is idempotent: takes a one-time snapshot, resets to it on
         -- every call, then applies current toggle state. Master-off branch inside
@@ -2367,6 +2540,8 @@ mod.on_disabled = function()
     revert_reckless_swings_tweak()
     revert_bomb_cooldown_tweak()
     revert_boon_movespeed_tweak()
+    revert_poison_proof_tweak()
+    revert_moot_milk_alt_tweak()
 end
 
 -- ============================================================
