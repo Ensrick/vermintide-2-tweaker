@@ -1,5 +1,25 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.25-alpha (2026-05-15)
+
+### Boon menu re-categorization (round 2 of 2): Ability Cooldown + Orbs groups
+
+Per user verdict, boons whose primary benefit is ability cooldown reduction now live in their own "Ability Cooldown" group, and orb-like boons (which would otherwise be lumped in with the upcoming Vermintide Skulls event content) get their own "Orbs" group. The "Skulls" group is reserved exclusively for Vermintide Skulls event boons going forward.
+
+**New group: "Ability Cooldown"** (6 boons) — moved out of Properties / Utility & Team:
+
+- From Properties: `ability_cooldown_reduction`
+- From Utility & Team: `cooldown_on_friendly_ability`, `deus_cooldown_reg_not_hit`, `deus_cooldown_regen`, `deus_skill_on_special_kill`, `friendly_cooldown_on_ability`
+
+**New group: "Orbs"** (5 boons) — moved out of Combat / Defense / Healing / Utility:
+
+- From Combat: `focused_accuracy`, `static_charge`
+- From Defense, Damage Reduction & Parry: `protection_orbs`
+- From Healing, THP & Health Gain: `health_orbs`
+- From Utility & Team: `sharing_is_caring`
+
+Source groups (Properties, Combat, Defense/DR/Parry, Healing/THP, Utility & Team) lose those entries respectively. Both the `disabled_boons_group` and `starting_boons_group` mirror trees are updated in lockstep, and `recursive_sort` auto-alphabetizes the four new sub-groups by display name.
+
 ## 0.7.24-alpha (2026-05-14)
 
 ### Fixed: Khaine's Fury (`tweak_reckless_swings`) — damage tweak silently failed
