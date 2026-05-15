@@ -1,5 +1,18 @@
 # General Tweaker Changelog
 
+## 0.2.17-dev — first public Workshop release (2026-05-14)
+
+### Changed: Workshop visibility flipped private → public
+
+gt was uploaded as `friends_only` from its inception. After the noclip feature landed and verified working in 0.2.17-dev, the user flagged the mod ready for a public release. `itemV2.cfg`:
+
+- `visibility`: `"friends_only"` → `"public"`
+- `title`: `"Tweaker: General (WIP)"` → `"Tweaker: General"`
+- `description`: replaced the one-liner with a sectioned feature description matching ct/cim/the rest of the Tweaker series — Third-Person Camera, Noclip, Keep Menus in Missions, Gameplay toggles, Chat commands, Compatibility — plus the canonical BMC block.
+- `preview.jpg`: replaced with the Tweaker General artwork (1024×1024, JPG q=85, 215 KB).
+
+`upload_gt.ps1`'s visibility guard updated `friends_only` → `public` and `--allow-public` added so the launcher's safety gate is satisfied. Upload pushed via `vmblauncher upload general_tweaker --allow-public`; verified live via `ISteamRemoteStorage/GetPublishedFileDetails`: `visibility=0`, `file_size=1346271` (matches `bundleV2/` byte-for-byte).
+
 ## 0.2.17-dev (2026-05-14)
 
 ### Fixed: Noclip chat command now applies immediately
