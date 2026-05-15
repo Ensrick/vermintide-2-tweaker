@@ -1,5 +1,34 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.28a-alpha (2026-05-15)
+
+### Added: Rework — Trait Tier by Rarity
+
+New toggle in `Reworks` group. When on, every weapon roll and altar upgrade picks a trait combo whose ALL traits are eligible for the rolled rarity (per the user-confirmed tier table walked 2026-05-15; see `TRAITS_REFERENCE.md` for the full per-trait assignment).
+
+**Tier assignments** (34 traits total):
+- **T1 Common** (9): Off Balance, Resourceful Combatant, Heroic Intervention, Parry, Resourceful Sharpshooter, Inspirational Shot, Rhya's Thorns, Anath Raema's Swiftness, Myrmidia's Great Leveller
+- **T2 Rare** (9 + 2 overlap): Regrowth, Barrage, Hunter, Thermal Equalizer, Heat Sink, Opportunist, Bloodthirst, Deadeye, Follow Up + (Scrounger, Conservative Shooter)
+- **T3 Exotic** (4 + 6 overlap): Divine Shield, Shockwave, Huanchi's Fangs, Swift Slaying + (Scrounger, Conservative Shooter, Anatha Raema's Talons, Vaul's Tempo, Asuryan's Wrath, Addaioth's Splendour)
+- **T4 Unique** (6 + 4 overlap): Shard Strike, Asaph's Endless Quiver, Quetzl's Repulsion, Manann's Tempest, Taal's Twinned Arrow, Vaul's Anvil + (Anatha Raema's Talons, Vaul's Tempo, Asuryan's Wrath, Addaioth's Splendour)
+
+**Implementation** (`chaos_wastes_tweaker.lua`):
+- `TRAIT_RARITY_POOL` table maps each trait → set of allowed rarity strings (`{ common = true, rare = true, ... }`)
+- `get_tier_filtered_combos(item_key, rarity)` filters the weapon's `baked_trait_combinations` to combos whose all traits are eligible for the rolled rarity
+- `override_traits_in_result(result, rarity)` overwrites `result.traits` with a random tier-eligible pick
+- Extended the existing trait-filter hooks (`generate_weapon`, `generate_weapon_for_slot`, `upgrade_item`) to also post-process via `override_traits_in_result`, and added a new hook on `generate_item_from_item_key`
+
+**Side effects of the toggle:**
+1. **Traits now roll at ALL rarities** — vanilla `deus_weapon_generation.lua:166-169` only rolls traits at Exotic/Unique. Our override doesn't rely on the vanilla rarity gate (we filter the original `baked_trait_combinations` ourselves), so Common and Rare weapons get traits too. This addresses the user's earlier "every upgrade should offer a trait" wish — every upgrade now does, because every rarity has a pool.
+2. **Upgrades effectively reroll the trait** — each upgrade re-picks from the new rarity's pool, so the trait changes on every upgrade. Fulfills the "guaranteed reroll on upgrade" sub-toggle request from the trait walk.
+
+**No-op cases (preserves vanilla):**
+- Toggle off → no behavior change
+- Weapon has no tier-eligible combos at the rolled rarity → vanilla result kept (probably empty `traits`, same as before)
+
+### Deferred to v0.7.28b
+- "Rework: Shard Strike duration" (nerf the 16s damaging aura — configurable)
+
 ## 0.7.27a-alpha (2026-05-15)
 
 ### Disambiguating prefixes on every boon menu label
@@ -298,7 +327,7 @@ v0.7.5 / v0.7.6's diagnostic counted nodes by `n.type == "TRAVEL"` etc., but the
 
 ### Added: `tweak_boon_movespeed` — double the Movement Speed property boon (5% -> 10%)
 
-New checkbox in the Modified Boons group. Vanilla `MorrisBuffTweakData.movespeed` is `{ description_value = 0.05, multiplier = 1.05 }`; `deus_power_up_settings.lua` (line ~7148) bakes the multiplier into per-rarity `DeusPowerUpBuffTemplates.power_up_movespeed_{common,rare,legendary}.buffs[1].multiplier` at game load, and the description_value into `DeusPowerUpTemplates.movespeed.description_values[1].value` (shared by all rarities via reference). The tweak save-and-restores both: mutates the three per-rarity multipliers to 1.10 and the description value to 0.10. In-game tooltip auto-reflects "10%" because vanilla `description_properties_movespeed` is formatted off `description_values`. With `max_amount = 2`, two stacks compound to ~21%.
+New checkbox in the Modified Boons group. The Movement Speed boon is a one-of-a-kind reward awarded on mission completion in Chaos Wastes (boon-treated, not a buff stack). Vanilla `MorrisBuffTweakData.movespeed` is `{ description_value = 0.05, multiplier = 1.05 }`. `deus_power_up_settings.lua` bakes both into runtime tables: the multiplier into `DeusPowerUpBuffTemplates.power_up_movespeed_{common,rare,legendary}.buffs[1].multiplier` (1.05 in all three rarity entries), and the description_value into `DeusPowerUpTemplates.movespeed.description_values[1].value` (single 0.05 entry, referenced by all rarities). The tweak save-and-restores both: writes 1.10 to each rarity's multiplier and 0.10 to the description value. The in-game tooltip auto-reflects "10%" because vanilla `description_properties_movespeed` is formatted off `description_values`.
 
 Mirrors the reckless_swings pattern: forward-declared `sync_boon_movespeed`, called from the boon-roll hook (post-call), `on_setting_changed`, and at mod load; reverted from `on_disabled` so toggling the mod off cleans up the persistent DeusPowerUpBuffTemplates / DeusPowerUpTemplates mutations.
 

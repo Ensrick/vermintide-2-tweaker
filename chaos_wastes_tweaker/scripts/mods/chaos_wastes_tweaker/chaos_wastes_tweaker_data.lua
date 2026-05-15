@@ -1,32 +1,290 @@
-﻿local mod = get_mod("ct")
+local mod = get_mod("ct")
 local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker/_adventure_pool")
 
--- Groups whose sub_widgets should render in alphabetical display-name order.
--- The disable-boons / start-boons lists had drift over time (e.g. "Detect Weakness"
--- appearing after the `deus_*` cluster instead of before it). Sorting at widget-build
--- time eliminates the human-maintenance burden.
-local SORT_GROUPS = {
-    disable_boon_properties_group        = true,
-    disable_boon_talents_group           = true,
-    disable_boon_skulls_and_sets_group   = true,
-    disable_boon_combat_group            = true,
-    disable_boon_defense_and_dr_group    = true,
-    disable_boon_healing_and_sustain_group = true,
-    disable_boon_ability_cooldown_group  = true,
-    disable_boon_orbs_group              = true,
-    disable_boon_utility_and_team_group  = true,
-    disable_boon_bombs_group             = true,
-    start_boon_properties_group          = true,
-    start_boon_talents_group             = true,
-    start_boon_skulls_and_sets_group     = true,
-    start_boon_combat_group              = true,
-    start_boon_defense_and_dr_group      = true,
-    start_boon_healing_and_sustain_group = true,
-    start_boon_ability_cooldown_group    = true,
-    start_boon_orbs_group                = true,
-    start_boon_utility_and_team_group    = true,
-    start_boon_bombs_group               = true,
+-- ============================================================
+-- Boon categorization tree (single source of truth)
+-- ============================================================
+-- Drives both the `disable_boons` and `starting_boons` menu trees. Each entry is one
+-- top-level category. `items` are setting-id tails (without the disable_boon_/start_boon_
+-- prefix). `sub` (optional) lets a category nest one or more sub-categories.
+-- Categories render in the order listed; recursive_sort alphabetizes items inside each
+-- group at build time.
+
+local BOON_TREE = {
+    {
+        category_id = "properties",
+        items = {
+            "attack_speed", "crit_boost", "crit_chance", "curse_resistance", "fatigue_regen",
+            "movespeed", "power_vs_armoured", "power_vs_chaos", "power_vs_frenzy",
+            "power_vs_large", "power_vs_skaven", "power_vs_unarmoured", "respawn_speed",
+            "revive_speed",
+            -- Recovered (mechanically Properties, were mis-grouped pre-v0.7.27b):
+            "block_cost", "push_block_arc", "stamina",
+            "protection_aoe", "protection_chaos", "protection_skaven",
+            "boon_deus_coins_greed",
+        },
+    },
+    {
+        category_id = "talents",
+        items = {
+            "talent_1_1", "talent_1_2", "talent_1_3",
+            "talent_2_1", "talent_2_2", "talent_2_3",
+            "talent_3_1", "talent_3_2", "talent_3_3",
+            "talent_4_1", "talent_4_2", "talent_4_3",
+            "talent_5_1", "talent_5_2", "talent_5_3",
+            "talent_6_1", "talent_6_2", "talent_6_3",
+        },
+    },
+    -- Vermintide Skulls Event boons (boon_skulls_01..08 + 2 set bonuses) are intentionally
+    -- omitted: they only roll during the seasonal Skulls of Vermintide event (~October),
+    -- and several rely on Daemon Skull pickups that don't drop in normal CW play. Their
+    -- setting_ids and localization entries remain for forward compat — if a future version
+    -- needs them, just add a category entry back here.
+    {
+        category_id = "sets",
+        items = {
+            "boonset_crit_set_bonus", "boonset_drone_part1", "boonset_drone_part2",
+            "boonset_drone_part3", "boonset_drone_part4",
+        },
+    },
+    {
+        category_id = "orbs",
+        items = {
+            "focused_accuracy", "health_orbs", "protection_orbs",
+            "sharing_is_caring", "static_charge",
+        },
+    },
+    {
+        category_id = "bomb_bubbles",
+        items = {
+            "boon_supportbomb_concentration_01", "boon_supportbomb_crit_01",
+            "boon_supportbomb_healing_01", "boon_supportbomb_speed_01",
+            "boon_supportbomb_strenght_01",
+        },
+    },
+    {
+        category_id = "auras",
+        items = {
+            "boon_aura_01", "boon_aura_02", "boon_teamaura_01", "boon_teamaura_02",
+            "deus_guard_aura_check", "comradery", "wolfpack",
+        },
+    },
+    {
+        category_id = "defensive_boons",
+        sub = {
+            {
+                category_id = "health",
+                items = {
+                    "hand_of_shallya", "power_up_of_shallya", "tenacious",
+                    "curative_empowerment", "deus_ammo_pickup_heal", "deus_health_regeneration",
+                    "deus_increased_healing_taken", "deus_max_health", "healers_touch",
+                    "heal_on_dot_damage_dealt", "health", "invigorating_strike",
+                    "natural_bond", "transfer_temp_health_at_full",
+                },
+            },
+            {
+                category_id = "stamina_and_parry",
+                items = {
+                    "deus_block_procs_parry", "deus_extra_stamina", "deus_infinite_dodges",
+                    "deus_parry_damage_immune", "deus_push_cost_reduction", "skill_by_block",
+                    "speed_over_stamina", "static_blade",
+                },
+            },
+            {
+                category_id = "damage_reduction",
+                items = {
+                    "missing_health_power_up", "deus_uninterruptable_attacks",
+                    "barkskin", "deus_standing_still_damage_reduction",
+                },
+            },
+            {
+                category_id = "save_revive",
+                items = {
+                    "boon_aura_03", "bad_breath", "blazing_revenge",
+                    "deus_damage_reduction_on_incapacitated", "deus_knockdown_damage_immunity_aura",
+                    "deus_revive_regen", "deus_second_wind", "hidden_escape",
+                    "boulder_bro", "indomitable", "last_player_standing_power_reg", "resolve",
+                },
+            },
+        },
+    },
+    {
+        category_id = "offensive_boons",
+        sub = {
+            {
+                category_id = "crit",
+                items = { "lucky", "deus_crit_on_damage_taken", "pent_up_anger" },
+            },
+            {
+                category_id = "attack_speed",
+                items = { "attack_speed_per_cooldown", "deus_powerup_attack_speed", "melee_killing_spree_speed" },
+            },
+            {
+                category_id = "ranged",
+                items = { "boon_range_01", "boon_range_02", "deus_more_head_less_body_damage" },
+            },
+            {
+                category_id = "damage_and_power",
+                items = {
+                    "pyrrhic_strength", "deus_reckless_swings", "deus_target_full_health_damage_mult",
+                    "thorn_skin", "triple_melee_headshot_power", "staggering_force",
+                    "detect_weakness", "surprise_strike", "boon_meta_01",
+                },
+            },
+            {
+                category_id = "aoe",
+                items = {
+                    "melee_wave", "deus_push_increased_cleave", "explosive_kills_on_elite_kills",
+                    "boon_dot_burning_01", "deus_push_charge",
+                },
+            },
+        },
+    },
+    {
+        category_id = "utility_boons",
+        sub = {
+            {
+                category_id = "potions",
+                items = { "decanter", "home_brewer", "deus_free_potion_use_on_ability" },
+            },
+            {
+                category_id = "bombs",
+                items = {
+                    "boon_bomb_heavy_01", "cluster_barrel", "deus_barrel_power",
+                    "deus_grenade_multi_throw", "explosive_ordinance", "grenadier",
+                    "pyrotechnical_echo", "shrapnel",
+                },
+            },
+            {
+                category_id = "career_skill",
+                items = {
+                    "cooldown_on_friendly_ability", "deus_cooldown_reg_not_hit",
+                    "deus_cooldown_regen", "deus_skill_on_special_kill",
+                    "friendly_cooldown_on_ability", "boon_careerskill_06",
+                    "drop_item_on_ability_use", "movement_speed_on_active_ability_use",
+                },
+                sub = {
+                    {
+                        category_id = "career_skill_aoe",
+                        items = {
+                            "boon_careerskill_01", "boon_careerskill_02", "boon_careerskill_03",
+                            "boon_careerskill_04", "boon_careerskill_07",
+                        },
+                    },
+                },
+            },
+            {
+                category_id = "coins_and_ammo",
+                items = { "money_magnet" },
+            },
+            {
+                category_id = "chest_triggers",
+                items = { "boon_aoe_02", "boon_aoe_03" },
+            },
+            {
+                category_id = "gamble_misc",
+                items = { "boon_weaponrarity_01", "boon_weaponrarity_02", "deus_power_up_quest_granted_test_01" },
+            },
+        },
+    },
 }
+
+-- Dormant boons: defined in vanilla DeusPowerUpTemplates but NOT registered in
+-- DeusPowerUpRarityPool, so they never roll in the active CW loot pool. Excluded from
+-- the disable tree (you can't disable what can't roll). Appear in the start tree only,
+-- with " (Dormant)" appended to the display name.
+local DORMANT_BOONS = {
+    "deus_ammo_pickup_give_allies_ammo",
+    "deus_coin_pickup_regen",
+    "deus_large_ammo_pickup_infinite_ammo",
+    "deus_larger_clip",
+    "deus_throw_speed_increase",
+    "deus_timed_block_free_shot",
+    "deus_transmute_into_coins",
+    "explosive_pushes_on_damage_taken",
+    "squats",
+}
+
+-- Boons whose localization has no _tooltip entry. Suppress the tooltip key on these so
+-- VMF doesn't render `<<missing_key>>` in the tooltip popup.
+local NO_TOOLTIP = {
+    squats = true,
+    deus_power_up_quest_granted_test_01 = true,
+}
+for i = 1, 6 do
+    for j = 1, 3 do
+        NO_TOOLTIP["talent_" .. i .. "_" .. j] = true
+    end
+end
+
+local function build_widget(prefix, boon_id)
+    local sid = prefix .. "_" .. boon_id
+    local w = { setting_id = sid, type = "checkbox", default_value = false }
+    if not NO_TOOLTIP[boon_id] then
+        w.tooltip = sid .. "_tooltip"
+    end
+    return w
+end
+
+local function build_category_group(prefix, entry)
+    local sub_widgets = {}
+    for _, boon_id in ipairs(entry.items or {}) do
+        sub_widgets[#sub_widgets + 1] = build_widget(prefix, boon_id)
+    end
+    if entry.sub then
+        for _, sub_entry in ipairs(entry.sub) do
+            sub_widgets[#sub_widgets + 1] = build_category_group(prefix, sub_entry)
+        end
+    end
+    return {
+        setting_id = prefix .. "_" .. entry.category_id .. "_group",
+        type = "group",
+        sub_widgets = sub_widgets,
+    }
+end
+
+local function build_disable_tree()
+    local groups = {}
+    for _, entry in ipairs(BOON_TREE) do
+        groups[#groups + 1] = build_category_group("disable_boon", entry)
+    end
+    return groups
+end
+
+local function build_start_tree()
+    local groups = {}
+    for _, entry in ipairs(BOON_TREE) do
+        groups[#groups + 1] = build_category_group("start_boon", entry)
+    end
+    -- Dormant boons appear in start tree only, in their own group.
+    local dormant_widgets = {}
+    for _, boon_id in ipairs(DORMANT_BOONS) do
+        dormant_widgets[#dormant_widgets + 1] = build_widget("start_boon", boon_id)
+    end
+    groups[#groups + 1] = {
+        setting_id = "start_boon_dormant_group",
+        type = "group",
+        sub_widgets = dormant_widgets,
+    }
+    return groups
+end
+
+-- Computed from BOON_TREE so adding a category doesn't require a parallel SORT_GROUPS
+-- update. Groups whose sub_widgets are alphabetized by display name at widget-build time.
+local SORT_GROUPS = {}
+local function _add_sort_group(prefix, entry)
+    SORT_GROUPS[prefix .. "_" .. entry.category_id .. "_group"] = true
+    if entry.sub then
+        for _, sub_entry in ipairs(entry.sub) do
+            _add_sort_group(prefix, sub_entry)
+        end
+    end
+end
+for _, entry in ipairs(BOON_TREE) do
+    _add_sort_group("disable_boon", entry)
+    _add_sort_group("start_boon", entry)
+end
+SORT_GROUPS["start_boon_dormant_group"] = true
 
 local function sort_key(widget)
     local sid = widget.setting_id or ""
@@ -125,559 +383,76 @@ local data = {
                     },
                 },
             },
-            { setting_id = "force_belakor", type = "checkbox", default_value = false },
-            { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
-            { setting_id = "disable_dominant_god", type = "checkbox", default_value = true, tooltip = "disable_dominant_god_tooltip" },
-            { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0 },
-            { setting_id = "arena_ammo_count", type = "numeric", default_value = 2, range = { 0, 10 }, decimals_number = 0 },
-            { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
-            { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false },
             {
                 setting_id = "curses_group",
                 type = "group",
                 sub_widgets = {
-                    { setting_id = "disable_curse_abundance_of_life", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_belakor_totems", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_blood_storm", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_bolt_of_change", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_change_of_tzeentch", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_corrupted_flesh", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_egg_of_tzeentch", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_empathy", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_greed_pinata", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_khorne_champions", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_rotten_miasma", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_shadow_homing_skulls", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_skulking_sorcerer", type = "checkbox", default_value = false },
-                    { setting_id = "disable_curse_skulls_of_fury", type = "checkbox", default_value = false },
+                    { setting_id = "force_belakor", type = "checkbox", default_value = false },
+                    { setting_id = "disable_dominant_god", type = "checkbox", default_value = true, tooltip = "disable_dominant_god_tooltip" },
+                    { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0 },
+                    { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
+                    {
+                        setting_id = "disabled_curses_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "disable_curse_abundance_of_life", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_belakor_totems", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_blood_storm", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_bolt_of_change", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_change_of_tzeentch", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_corrupted_flesh", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_egg_of_tzeentch", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_empathy", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_greed_pinata", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_khorne_champions", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_rotten_miasma", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_shadow_homing_skulls", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_skulking_sorcerer", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_skulls_of_fury", type = "checkbox", default_value = false },
+                        },
+                    },
                 },
             },
             {
                 setting_id = "reworks_group",
                 type = "group",
                 sub_widgets = {
-                    { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
-                    { setting_id = "tweak_boon_movespeed", type = "checkbox", default_value = false, tooltip = "tweak_boon_movespeed_tooltip" },
-                    { setting_id = "bomb_boon_cooldown", type = "numeric", default_value = 0, range = { 0, 600 }, decimals_number = 0, tooltip = "bomb_boon_cooldown_tooltip" },
-                    { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
-                    { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
-                    { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
-                    { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
-                    { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
-                },
-            },
-            {
-                setting_id = "disabled_boons_group",
-                type = "group",
-                sub_widgets = {
+                    { setting_id = "arena_ammo_count", type = "numeric", default_value = 2, range = { 0, 10 }, decimals_number = 0, tooltip = "arena_ammo_count_tooltip" },
+                    { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false, tooltip = "any_trait_any_weapon_tooltip" },
+                    { setting_id = "tweak_trait_tier_by_rarity", type = "checkbox", default_value = false, tooltip = "tweak_trait_tier_by_rarity_tooltip" },
                     {
-                        -- "Properties" — stat-pure boons only (max-health, crit, movespeed, power_vs, etc.).
-                        -- v0.7.22: pulled health → Healing/THP, block/protection/push/stamina → Defense/DR/Parry.
-                        setting_id = "disable_boon_properties_group",
+                        setting_id = "reworks_boons_group",
                         type = "group",
                         sub_widgets = {
-                            { setting_id = "disable_boon_attack_speed",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_attack_speed_tooltip" },
-                            { setting_id = "disable_boon_crit_boost",                                        type = "checkbox", default_value = false, tooltip = "disable_boon_crit_boost_tooltip" },
-                            { setting_id = "disable_boon_crit_chance",                                       type = "checkbox", default_value = false, tooltip = "disable_boon_crit_chance_tooltip" },
-                            { setting_id = "disable_boon_curse_resistance",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_curse_resistance_tooltip" },
-                            { setting_id = "disable_boon_fatigue_regen",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_fatigue_regen_tooltip" },
-                            { setting_id = "disable_boon_movespeed",                                         type = "checkbox", default_value = false, tooltip = "disable_boon_movespeed_tooltip" },
-                            { setting_id = "disable_boon_power_vs_armoured",                                 type = "checkbox", default_value = false, tooltip = "disable_boon_power_vs_armoured_tooltip" },
-                            { setting_id = "disable_boon_power_vs_chaos",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_power_vs_chaos_tooltip" },
-                            { setting_id = "disable_boon_power_vs_frenzy",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_power_vs_frenzy_tooltip" },
-                            { setting_id = "disable_boon_power_vs_large",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_power_vs_large_tooltip" },
-                            { setting_id = "disable_boon_power_vs_skaven",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_power_vs_skaven_tooltip" },
-                            { setting_id = "disable_boon_power_vs_unarmoured",                               type = "checkbox", default_value = false, tooltip = "disable_boon_power_vs_unarmoured_tooltip" },
-                            { setting_id = "disable_boon_respawn_speed",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_respawn_speed_tooltip" },
-                            { setting_id = "disable_boon_revive_speed",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_revive_speed_tooltip" },
+                            { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
+                            { setting_id = "tweak_boon_movespeed", type = "checkbox", default_value = false, tooltip = "tweak_boon_movespeed_tooltip" },
+                            { setting_id = "bomb_boon_cooldown", type = "numeric", default_value = 0, range = { 0, 600 }, decimals_number = 0, tooltip = "bomb_boon_cooldown_tooltip" },
+                            { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
+                            { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
+                            { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
                         },
                     },
                     {
-                        setting_id = "disable_boon_talents_group",
+                        setting_id = "reworks_potions_group",
                         type = "group",
                         sub_widgets = {
-                            { setting_id = "disable_boon_talent_1_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_1_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_1_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_2_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_2_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_2_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_3_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_3_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_3_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_4_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_4_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_4_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_5_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_5_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_5_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_6_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_6_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_talent_6_3",                                        type = "checkbox", default_value = false },
-                        },
-                    },
-                    {
-                        setting_id = "disable_boon_skulls_and_sets_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_boon_skulls_01",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_01_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_02",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_02_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_03",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_03_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_04",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_04_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_05",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_05_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_06",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_06_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_07",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_07_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_08",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_08_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_set_bonus_01",                          type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_set_bonus_01_tooltip" },
-                            { setting_id = "disable_boon_boon_skulls_set_bonus_02",                          type = "checkbox", default_value = false, tooltip = "disable_boon_boon_skulls_set_bonus_02_tooltip" },
-                            { setting_id = "disable_boon_boonset_crit_set_bonus",                            type = "checkbox", default_value = false, tooltip = "disable_boon_boonset_crit_set_bonus_tooltip" },
-                            { setting_id = "disable_boon_boonset_drone_part1",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boonset_drone_part1_tooltip" },
-                            { setting_id = "disable_boon_boonset_drone_part2",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boonset_drone_part2_tooltip" },
-                            { setting_id = "disable_boon_boonset_drone_part3",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boonset_drone_part3_tooltip" },
-                            { setting_id = "disable_boon_boonset_drone_part4",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boonset_drone_part4_tooltip" },
-                        },
-                    },
-                    {
-                        -- "Combat" — offensive boons (damage, crit, range, melee waves, etc.).
-                        -- v0.7.22: pulled barkskin/parry/protection/push-defense/static_blade/thorn_skin →
-                        -- Defense/DR/Parry; pulled resolve → Healing/THP;
-                        -- pulled last_player_standing_power_reg → Utility (per user verdict — utility).
-                        -- Kept push_charge & push_increased_cleave here (offense per user verdict).
-                        setting_id = "disable_boon_combat_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_attack_speed_per_cooldown",                         type = "checkbox", default_value = false, tooltip = "disable_boon_attack_speed_per_cooldown_tooltip" },
-                            { setting_id = "disable_boon_bad_breath",                                        type = "checkbox", default_value = false, tooltip = "disable_boon_bad_breath_tooltip" },
-                            { setting_id = "disable_boon_blazing_revenge",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_blazing_revenge_tooltip" },
-                            { setting_id = "disable_boon_boon_aoe_02",                                       type = "checkbox", default_value = false, tooltip = "disable_boon_boon_aoe_02_tooltip" },
-                            { setting_id = "disable_boon_boon_aoe_03",                                       type = "checkbox", default_value = false, tooltip = "disable_boon_boon_aoe_03_tooltip" },
-                            { setting_id = "disable_boon_boon_careerskill_01",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boon_careerskill_01_tooltip" },
-                            { setting_id = "disable_boon_boon_careerskill_02",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boon_careerskill_02_tooltip" },
-                            { setting_id = "disable_boon_boon_careerskill_03",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boon_careerskill_03_tooltip" },
-                            { setting_id = "disable_boon_boon_careerskill_04",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boon_careerskill_04_tooltip" },
-                            { setting_id = "disable_boon_boon_careerskill_06",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boon_careerskill_06_tooltip" },
-                            { setting_id = "disable_boon_boon_careerskill_07",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boon_careerskill_07_tooltip" },
-                            { setting_id = "disable_boon_boon_dot_burning_01",                               type = "checkbox", default_value = false, tooltip = "disable_boon_boon_dot_burning_01_tooltip" },
-                            { setting_id = "disable_boon_boon_meta_01",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_boon_meta_01_tooltip" },
-                            { setting_id = "disable_boon_boon_range_01",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_boon_range_01_tooltip" },
-                            { setting_id = "disable_boon_boon_range_02",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_boon_range_02_tooltip" },
-                            { setting_id = "disable_boon_boulder_bro",                                       type = "checkbox", default_value = false, tooltip = "disable_boon_boulder_bro_tooltip" },
-                            { setting_id = "disable_boon_deus_crit_on_damage_taken",                         type = "checkbox", default_value = false, tooltip = "disable_boon_deus_crit_on_damage_taken_tooltip" },
-                            { setting_id = "disable_boon_deus_larger_clip",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_deus_larger_clip_tooltip" },
-                            { setting_id = "disable_boon_deus_more_head_less_body_damage",                   type = "checkbox", default_value = false, tooltip = "disable_boon_deus_more_head_less_body_damage_tooltip" },
-                            { setting_id = "disable_boon_deus_power_up_quest_granted_test_01",               type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_deus_powerup_attack_speed",                         type = "checkbox", default_value = false, tooltip = "disable_boon_deus_powerup_attack_speed_tooltip" },
-                            { setting_id = "disable_boon_deus_push_charge",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_deus_push_charge_tooltip" },
-                            { setting_id = "disable_boon_deus_push_increased_cleave",                        type = "checkbox", default_value = false, tooltip = "disable_boon_deus_push_increased_cleave_tooltip" },
-                            { setting_id = "disable_boon_deus_reckless_swings",                              type = "checkbox", default_value = false, tooltip = "disable_boon_deus_reckless_swings_tooltip" },
-                            { setting_id = "disable_boon_deus_target_full_health_damage_mult",               type = "checkbox", default_value = false, tooltip = "disable_boon_deus_target_full_health_damage_mult_tooltip" },
-                            { setting_id = "disable_boon_deus_uninterruptable_attacks",                      type = "checkbox", default_value = false, tooltip = "disable_boon_deus_uninterruptable_attacks_tooltip" },
-                            { setting_id = "disable_boon_detect_weakness",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_detect_weakness_tooltip" },
-                            { setting_id = "disable_boon_explosive_kills_on_elite_kills",                    type = "checkbox", default_value = false, tooltip = "disable_boon_explosive_kills_on_elite_kills_tooltip" },
-                            { setting_id = "disable_boon_indomitable",                                       type = "checkbox", default_value = false, tooltip = "disable_boon_indomitable_tooltip" },
-                            { setting_id = "disable_boon_lucky",                                             type = "checkbox", default_value = false, tooltip = "disable_boon_lucky_tooltip" },
-                            { setting_id = "disable_boon_melee_killing_spree_speed",                         type = "checkbox", default_value = false, tooltip = "disable_boon_melee_killing_spree_speed_tooltip" },
-                            { setting_id = "disable_boon_melee_wave",                                        type = "checkbox", default_value = false, tooltip = "disable_boon_melee_wave_tooltip" },
-                            { setting_id = "disable_boon_pyrrhic_strength",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_pyrrhic_strength_tooltip" },
-                            { setting_id = "disable_boon_squats",                                            type = "checkbox", default_value = false },
-                            { setting_id = "disable_boon_staggering_force",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_staggering_force_tooltip" },
-                            { setting_id = "disable_boon_surprise_strike",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_surprise_strike_tooltip" },
-                            { setting_id = "disable_boon_triple_melee_headshot_power",                       type = "checkbox", default_value = false, tooltip = "disable_boon_triple_melee_headshot_power_tooltip" },
-                        },
-                    },
-                    {
-                        -- "Defense, Damage Reduction & Parry" — new group v0.7.22.
-                        -- Aggregates the protection/block/parry/push-defense/damage-reduction
-                        -- boons that were previously scattered across Properties, Combat, and
-                        -- Healing & Sustain. Alphabetical by display name (recursive_sort).
-                        setting_id = "disable_boon_defense_and_dr_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_barkskin",                                          type = "checkbox", default_value = false, tooltip = "disable_boon_barkskin_tooltip" },
-                            { setting_id = "disable_boon_block_cost",                                        type = "checkbox", default_value = false, tooltip = "disable_boon_block_cost_tooltip" },
-                            { setting_id = "disable_boon_deus_block_procs_parry",                            type = "checkbox", default_value = false, tooltip = "disable_boon_deus_block_procs_parry_tooltip" },
-                            { setting_id = "disable_boon_deus_damage_reduction_on_incapacitated",            type = "checkbox", default_value = false, tooltip = "disable_boon_deus_damage_reduction_on_incapacitated_tooltip" },
-                            { setting_id = "disable_boon_deus_knockdown_damage_immunity_aura",               type = "checkbox", default_value = false, tooltip = "disable_boon_deus_knockdown_damage_immunity_aura_tooltip" },
-                            { setting_id = "disable_boon_deus_parry_damage_immune",                          type = "checkbox", default_value = false, tooltip = "disable_boon_deus_parry_damage_immune_tooltip" },
-                            { setting_id = "disable_boon_deus_push_cost_reduction",                          type = "checkbox", default_value = false, tooltip = "disable_boon_deus_push_cost_reduction_tooltip" },
-                            { setting_id = "disable_boon_deus_standing_still_damage_reduction",              type = "checkbox", default_value = false, tooltip = "disable_boon_deus_standing_still_damage_reduction_tooltip" },
-                            { setting_id = "disable_boon_deus_timed_block_free_shot",                        type = "checkbox", default_value = false, tooltip = "disable_boon_deus_timed_block_free_shot_tooltip" },
-                            { setting_id = "disable_boon_explosive_pushes_on_damage_taken",                  type = "checkbox", default_value = false, tooltip = "disable_boon_explosive_pushes_on_damage_taken_tooltip" },
-                            { setting_id = "disable_boon_hidden_escape",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_hidden_escape_tooltip" },
-                            { setting_id = "disable_boon_missing_health_power_up",                           type = "checkbox", default_value = false, tooltip = "disable_boon_missing_health_power_up_tooltip" },
-                            { setting_id = "disable_boon_pent_up_anger",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_pent_up_anger_tooltip" },
-                            { setting_id = "disable_boon_protection_aoe",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_protection_aoe_tooltip" },
-                            { setting_id = "disable_boon_protection_chaos",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_protection_chaos_tooltip" },
-                            { setting_id = "disable_boon_protection_skaven",                                 type = "checkbox", default_value = false, tooltip = "disable_boon_protection_skaven_tooltip" },
-                            { setting_id = "disable_boon_push_block_arc",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_push_block_arc_tooltip" },
-                            { setting_id = "disable_boon_skill_by_block",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_skill_by_block_tooltip" },
-                            { setting_id = "disable_boon_speed_over_stamina",                                type = "checkbox", default_value = false, tooltip = "disable_boon_speed_over_stamina_tooltip" },
-                            { setting_id = "disable_boon_stamina",                                           type = "checkbox", default_value = false, tooltip = "disable_boon_stamina_tooltip" },
-                            { setting_id = "disable_boon_static_blade",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_static_blade_tooltip" },
-                            { setting_id = "disable_boon_thorn_skin",                                        type = "checkbox", default_value = false, tooltip = "disable_boon_thorn_skin_tooltip" },
-                        },
-                    },
-                    {
-                        -- "Healing, THP & Health Gain" — all heal/THP/health-gain boons.
-                        -- v0.7.22: gained `health` from Properties, `resolve` from Combat,
-                        -- `deus_coin_pickup_regen` from Utility, `boon_supportbomb_healing_01`
-                        -- from Bombs; lost knockdown_damage_immunity_aura, hidden_escape,
-                        -- protection_orbs → Defense/DR/Parry.
-                        setting_id = "disable_boon_healing_and_sustain_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_boon_supportbomb_healing_01",                       type = "checkbox", default_value = false, tooltip = "disable_boon_boon_supportbomb_healing_01_tooltip" },
-                            { setting_id = "disable_boon_curative_empowerment",                              type = "checkbox", default_value = false, tooltip = "disable_boon_curative_empowerment_tooltip" },
-                            { setting_id = "disable_boon_deus_ammo_pickup_heal",                             type = "checkbox", default_value = false, tooltip = "disable_boon_deus_ammo_pickup_heal_tooltip" },
-                            { setting_id = "disable_boon_deus_coin_pickup_regen",                            type = "checkbox", default_value = false, tooltip = "disable_boon_deus_coin_pickup_regen_tooltip" },
-                            { setting_id = "disable_boon_deus_health_regeneration",                          type = "checkbox", default_value = false, tooltip = "disable_boon_deus_health_regeneration_tooltip" },
-                            { setting_id = "disable_boon_deus_increased_healing_taken",                      type = "checkbox", default_value = false, tooltip = "disable_boon_deus_increased_healing_taken_tooltip" },
-                            { setting_id = "disable_boon_deus_max_health",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_deus_max_health_tooltip" },
-                            { setting_id = "disable_boon_deus_revive_regen",                                 type = "checkbox", default_value = false, tooltip = "disable_boon_deus_revive_regen_tooltip" },
-                            { setting_id = "disable_boon_deus_second_wind",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_deus_second_wind_tooltip" },
-                            { setting_id = "disable_boon_hand_of_shallya",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_hand_of_shallya_tooltip" },
-                            { setting_id = "disable_boon_heal_on_dot_damage_dealt",                          type = "checkbox", default_value = false, tooltip = "disable_boon_heal_on_dot_damage_dealt_tooltip" },
-                            { setting_id = "disable_boon_healers_touch",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_healers_touch_tooltip" },
-                            { setting_id = "disable_boon_health",                                            type = "checkbox", default_value = false, tooltip = "disable_boon_health_tooltip" },
-                            { setting_id = "disable_boon_invigorating_strike",                               type = "checkbox", default_value = false, tooltip = "disable_boon_invigorating_strike_tooltip" },
-                            { setting_id = "disable_boon_natural_bond",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_natural_bond_tooltip" },
-                            { setting_id = "disable_boon_power_up_of_shallya",                               type = "checkbox", default_value = false, tooltip = "disable_boon_power_up_of_shallya_tooltip" },
-                            { setting_id = "disable_boon_resolve",                                           type = "checkbox", default_value = false, tooltip = "disable_boon_resolve_tooltip" },
-                            { setting_id = "disable_boon_tenacious",                                         type = "checkbox", default_value = false, tooltip = "disable_boon_tenacious_tooltip" },
-                            { setting_id = "disable_boon_transfer_temp_health_at_full",                      type = "checkbox", default_value = false, tooltip = "disable_boon_transfer_temp_health_at_full_tooltip" },
-                        },
-                    },
-                    {
-                        -- "Utility & Team" — auras, coin / ammo utility, cooldown utility, etc.
-                        -- v0.7.22: lost `deus_coin_pickup_regen` → Healing/THP; gained
-                        -- `last_player_standing_power_reg` from Combat (user verdict: utility).
-                        setting_id = "disable_boon_utility_and_team_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_boon_aura_01",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_boon_aura_01_tooltip" },
-                            { setting_id = "disable_boon_boon_aura_02",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_boon_aura_02_tooltip" },
-                            { setting_id = "disable_boon_boon_aura_03",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_boon_aura_03_tooltip" },
-                            { setting_id = "disable_boon_boon_deus_coins_greed",                             type = "checkbox", default_value = false, tooltip = "disable_boon_boon_deus_coins_greed_tooltip" },
-                            { setting_id = "disable_boon_boon_teamaura_01",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_boon_teamaura_01_tooltip" },
-                            { setting_id = "disable_boon_boon_teamaura_02",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_boon_teamaura_02_tooltip" },
-                            { setting_id = "disable_boon_boon_weaponrarity_01",                              type = "checkbox", default_value = false, tooltip = "disable_boon_boon_weaponrarity_01_tooltip" },
-                            { setting_id = "disable_boon_boon_weaponrarity_02",                              type = "checkbox", default_value = false, tooltip = "disable_boon_boon_weaponrarity_02_tooltip" },
-                            { setting_id = "disable_boon_comradery",                                         type = "checkbox", default_value = false, tooltip = "disable_boon_comradery_tooltip" },
-                            { setting_id = "disable_boon_decanter",                                          type = "checkbox", default_value = false, tooltip = "disable_boon_decanter_tooltip" },
-                            { setting_id = "disable_boon_deus_ammo_pickup_give_allies_ammo",                 type = "checkbox", default_value = false, tooltip = "disable_boon_deus_ammo_pickup_give_allies_ammo_tooltip" },
-                            { setting_id = "disable_boon_deus_extra_stamina",                                type = "checkbox", default_value = false, tooltip = "disable_boon_deus_extra_stamina_tooltip" },
-                            { setting_id = "disable_boon_deus_free_potion_use_on_ability",                   type = "checkbox", default_value = false, tooltip = "disable_boon_deus_free_potion_use_on_ability_tooltip" },
-                            { setting_id = "disable_boon_deus_guard_aura_check",                             type = "checkbox", default_value = false, tooltip = "disable_boon_deus_guard_aura_check_tooltip" },
-                            { setting_id = "disable_boon_deus_infinite_dodges",                              type = "checkbox", default_value = false, tooltip = "disable_boon_deus_infinite_dodges_tooltip" },
-                            { setting_id = "disable_boon_deus_large_ammo_pickup_infinite_ammo",              type = "checkbox", default_value = false, tooltip = "disable_boon_deus_large_ammo_pickup_infinite_ammo_tooltip" },
-                            { setting_id = "disable_boon_deus_transmute_into_coins",                         type = "checkbox", default_value = false, tooltip = "disable_boon_deus_transmute_into_coins_tooltip" },
-                            { setting_id = "disable_boon_drop_item_on_ability_use",                          type = "checkbox", default_value = false, tooltip = "disable_boon_drop_item_on_ability_use_tooltip" },
-                            { setting_id = "disable_boon_home_brewer",                                       type = "checkbox", default_value = false, tooltip = "disable_boon_home_brewer_tooltip" },
-                            { setting_id = "disable_boon_last_player_standing_power_reg",                    type = "checkbox", default_value = false, tooltip = "disable_boon_last_player_standing_power_reg_tooltip" },
-                            { setting_id = "disable_boon_money_magnet",                                      type = "checkbox", default_value = false, tooltip = "disable_boon_money_magnet_tooltip" },
-                            { setting_id = "disable_boon_movement_speed_on_active_ability_use",              type = "checkbox", default_value = false, tooltip = "disable_boon_movement_speed_on_active_ability_use_tooltip" },
-                            { setting_id = "disable_boon_wolfpack",                                          type = "checkbox", default_value = false, tooltip = "disable_boon_wolfpack_tooltip" },
-                        },
-                    },
-                    {
-                        -- "Ability Cooldown" — boons whose primary benefit is Career Skill
-                        -- cooldown reduction or regen. v0.7.25.
-                        setting_id = "disable_boon_ability_cooldown_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_ability_cooldown_reduction",                        type = "checkbox", default_value = false, tooltip = "disable_boon_ability_cooldown_reduction_tooltip" },
-                            { setting_id = "disable_boon_cooldown_on_friendly_ability",                      type = "checkbox", default_value = false, tooltip = "disable_boon_cooldown_on_friendly_ability_tooltip" },
-                            { setting_id = "disable_boon_deus_cooldown_reg_not_hit",                         type = "checkbox", default_value = false, tooltip = "disable_boon_deus_cooldown_reg_not_hit_tooltip" },
-                            { setting_id = "disable_boon_deus_cooldown_regen",                               type = "checkbox", default_value = false, tooltip = "disable_boon_deus_cooldown_regen_tooltip" },
-                            { setting_id = "disable_boon_deus_skill_on_special_kill",                        type = "checkbox", default_value = false, tooltip = "disable_boon_deus_skill_on_special_kill_tooltip" },
-                            { setting_id = "disable_boon_friendly_cooldown_on_ability",                      type = "checkbox", default_value = false, tooltip = "disable_boon_friendly_cooldown_on_ability_tooltip" },
-                        },
-                    },
-                    {
-                        -- "Orbs" — boons that spawn pickup orbs (blood / protection / essence /
-                        -- static charge / potion-effect). Per user verdict v0.7.25: orb mechanics
-                        -- are distinct enough to deserve their own group. Note: these are NOT
-                        -- "Skulls" event boons (which stay in skulls_and_sets_group); the
-                        -- naming overlap was confusing.
-                        setting_id = "disable_boon_orbs_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_focused_accuracy",                                  type = "checkbox", default_value = false, tooltip = "disable_boon_focused_accuracy_tooltip" },
-                            { setting_id = "disable_boon_health_orbs",                                       type = "checkbox", default_value = false, tooltip = "disable_boon_health_orbs_tooltip" },
-                            { setting_id = "disable_boon_protection_orbs",                                   type = "checkbox", default_value = false, tooltip = "disable_boon_protection_orbs_tooltip" },
-                            { setting_id = "disable_boon_sharing_is_caring",                                 type = "checkbox", default_value = false, tooltip = "disable_boon_sharing_is_caring_tooltip" },
-                            { setting_id = "disable_boon_static_charge",                                     type = "checkbox", default_value = false, tooltip = "disable_boon_static_charge_tooltip" },
-                        },
-                    },
-                    {
-                        -- "Bombs" — bomb / grenade boons. v0.7.22: lost
-                        -- `boon_supportbomb_healing_01` (Bomb of Alchemical Rejuvenation) → Healing/THP.
-                        setting_id = "disable_boon_bombs_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "disable_boon_boon_bomb_heavy_01",                                type = "checkbox", default_value = false, tooltip = "disable_boon_boon_bomb_heavy_01_tooltip" },
-                            { setting_id = "disable_boon_boon_supportbomb_concentration_01",                 type = "checkbox", default_value = false, tooltip = "disable_boon_boon_supportbomb_concentration_01_tooltip" },
-                            { setting_id = "disable_boon_boon_supportbomb_crit_01",                          type = "checkbox", default_value = false, tooltip = "disable_boon_boon_supportbomb_crit_01_tooltip" },
-                            { setting_id = "disable_boon_boon_supportbomb_speed_01",                         type = "checkbox", default_value = false, tooltip = "disable_boon_boon_supportbomb_speed_01_tooltip" },
-                            { setting_id = "disable_boon_boon_supportbomb_strenght_01",                      type = "checkbox", default_value = false, tooltip = "disable_boon_boon_supportbomb_strenght_01_tooltip" },
-                            { setting_id = "disable_boon_cluster_barrel",                                    type = "checkbox", default_value = false, tooltip = "disable_boon_cluster_barrel_tooltip" },
-                            { setting_id = "disable_boon_deus_barrel_power",                                 type = "checkbox", default_value = false, tooltip = "disable_boon_deus_barrel_power_tooltip" },
-                            { setting_id = "disable_boon_deus_grenade_multi_throw",                          type = "checkbox", default_value = false, tooltip = "disable_boon_deus_grenade_multi_throw_tooltip" },
-                            { setting_id = "disable_boon_deus_throw_speed_increase",                         type = "checkbox", default_value = false, tooltip = "disable_boon_deus_throw_speed_increase_tooltip" },
-                            { setting_id = "disable_boon_explosive_ordinance",                               type = "checkbox", default_value = false, tooltip = "disable_boon_explosive_ordinance_tooltip" },
-                            { setting_id = "disable_boon_grenadier",                                         type = "checkbox", default_value = false, tooltip = "disable_boon_grenadier_tooltip" },
-                            { setting_id = "disable_boon_pyrotechnical_echo",                                type = "checkbox", default_value = false, tooltip = "disable_boon_pyrotechnical_echo_tooltip" },
-                            { setting_id = "disable_boon_shrapnel",                                          type = "checkbox", default_value = false, tooltip = "disable_boon_shrapnel_tooltip" },
+                            { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
+                            { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
+                            { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
                         },
                     },
                 },
             },
-            {
-                setting_id = "starting_boons_group",
-                type = "group",
-                sub_widgets = {
-                    {
-                        -- Mirror of disable_boon_properties_group categorization (v0.7.22).
-                        setting_id = "start_boon_properties_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_attack_speed",                                      type = "checkbox", default_value = false, tooltip = "start_boon_attack_speed_tooltip" },
-                            { setting_id = "start_boon_crit_boost",                                        type = "checkbox", default_value = false, tooltip = "start_boon_crit_boost_tooltip" },
-                            { setting_id = "start_boon_crit_chance",                                       type = "checkbox", default_value = false, tooltip = "start_boon_crit_chance_tooltip" },
-                            { setting_id = "start_boon_curse_resistance",                                  type = "checkbox", default_value = false, tooltip = "start_boon_curse_resistance_tooltip" },
-                            { setting_id = "start_boon_fatigue_regen",                                     type = "checkbox", default_value = false, tooltip = "start_boon_fatigue_regen_tooltip" },
-                            { setting_id = "start_boon_movespeed",                                         type = "checkbox", default_value = false, tooltip = "start_boon_movespeed_tooltip" },
-                            { setting_id = "start_boon_power_vs_armoured",                                 type = "checkbox", default_value = false, tooltip = "start_boon_power_vs_armoured_tooltip" },
-                            { setting_id = "start_boon_power_vs_chaos",                                    type = "checkbox", default_value = false, tooltip = "start_boon_power_vs_chaos_tooltip" },
-                            { setting_id = "start_boon_power_vs_frenzy",                                   type = "checkbox", default_value = false, tooltip = "start_boon_power_vs_frenzy_tooltip" },
-                            { setting_id = "start_boon_power_vs_large",                                    type = "checkbox", default_value = false, tooltip = "start_boon_power_vs_large_tooltip" },
-                            { setting_id = "start_boon_power_vs_skaven",                                   type = "checkbox", default_value = false, tooltip = "start_boon_power_vs_skaven_tooltip" },
-                            { setting_id = "start_boon_power_vs_unarmoured",                               type = "checkbox", default_value = false, tooltip = "start_boon_power_vs_unarmoured_tooltip" },
-                            { setting_id = "start_boon_respawn_speed",                                     type = "checkbox", default_value = false, tooltip = "start_boon_respawn_speed_tooltip" },
-                            { setting_id = "start_boon_revive_speed",                                      type = "checkbox", default_value = false, tooltip = "start_boon_revive_speed_tooltip" },
-                        },
-                    },
-                    {
-                        setting_id = "start_boon_talents_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_talent_1_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_1_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_1_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_2_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_2_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_2_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_3_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_3_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_3_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_4_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_4_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_4_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_5_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_5_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_5_3",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_6_1",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_6_2",                                        type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_talent_6_3",                                        type = "checkbox", default_value = false },
-                        },
-                    },
-                    {
-                        setting_id = "start_boon_skulls_and_sets_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_boon_skulls_01",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_01_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_02",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_02_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_03",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_03_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_04",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_04_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_05",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_05_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_06",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_06_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_07",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_07_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_08",                                    type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_08_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_set_bonus_01",                          type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_set_bonus_01_tooltip" },
-                            { setting_id = "start_boon_boon_skulls_set_bonus_02",                          type = "checkbox", default_value = false, tooltip = "start_boon_boon_skulls_set_bonus_02_tooltip" },
-                            { setting_id = "start_boon_boonset_crit_set_bonus",                            type = "checkbox", default_value = false, tooltip = "start_boon_boonset_crit_set_bonus_tooltip" },
-                            { setting_id = "start_boon_boonset_drone_part1",                               type = "checkbox", default_value = false, tooltip = "start_boon_boonset_drone_part1_tooltip" },
-                            { setting_id = "start_boon_boonset_drone_part2",                               type = "checkbox", default_value = false, tooltip = "start_boon_boonset_drone_part2_tooltip" },
-                            { setting_id = "start_boon_boonset_drone_part3",                               type = "checkbox", default_value = false, tooltip = "start_boon_boonset_drone_part3_tooltip" },
-                            { setting_id = "start_boon_boonset_drone_part4",                               type = "checkbox", default_value = false, tooltip = "start_boon_boonset_drone_part4_tooltip" },
-                        },
-                    },
-                    {
-                        -- Mirror of disable_boon_combat_group categorization (v0.7.22).
-                        setting_id = "start_boon_combat_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_attack_speed_per_cooldown",                         type = "checkbox", default_value = false, tooltip = "start_boon_attack_speed_per_cooldown_tooltip" },
-                            { setting_id = "start_boon_bad_breath",                                        type = "checkbox", default_value = false, tooltip = "start_boon_bad_breath_tooltip" },
-                            { setting_id = "start_boon_blazing_revenge",                                   type = "checkbox", default_value = false, tooltip = "start_boon_blazing_revenge_tooltip" },
-                            { setting_id = "start_boon_boon_aoe_02",                                       type = "checkbox", default_value = false, tooltip = "start_boon_boon_aoe_02_tooltip" },
-                            { setting_id = "start_boon_boon_aoe_03",                                       type = "checkbox", default_value = false, tooltip = "start_boon_boon_aoe_03_tooltip" },
-                            { setting_id = "start_boon_boon_careerskill_01",                               type = "checkbox", default_value = false, tooltip = "start_boon_boon_careerskill_01_tooltip" },
-                            { setting_id = "start_boon_boon_careerskill_02",                               type = "checkbox", default_value = false, tooltip = "start_boon_boon_careerskill_02_tooltip" },
-                            { setting_id = "start_boon_boon_careerskill_03",                               type = "checkbox", default_value = false, tooltip = "start_boon_boon_careerskill_03_tooltip" },
-                            { setting_id = "start_boon_boon_careerskill_04",                               type = "checkbox", default_value = false, tooltip = "start_boon_boon_careerskill_04_tooltip" },
-                            { setting_id = "start_boon_boon_careerskill_06",                               type = "checkbox", default_value = false, tooltip = "start_boon_boon_careerskill_06_tooltip" },
-                            { setting_id = "start_boon_boon_careerskill_07",                               type = "checkbox", default_value = false, tooltip = "start_boon_boon_careerskill_07_tooltip" },
-                            { setting_id = "start_boon_boon_dot_burning_01",                               type = "checkbox", default_value = false, tooltip = "start_boon_boon_dot_burning_01_tooltip" },
-                            { setting_id = "start_boon_boon_meta_01",                                      type = "checkbox", default_value = false, tooltip = "start_boon_boon_meta_01_tooltip" },
-                            { setting_id = "start_boon_boon_range_01",                                     type = "checkbox", default_value = false, tooltip = "start_boon_boon_range_01_tooltip" },
-                            { setting_id = "start_boon_boon_range_02",                                     type = "checkbox", default_value = false, tooltip = "start_boon_boon_range_02_tooltip" },
-                            { setting_id = "start_boon_boulder_bro",                                       type = "checkbox", default_value = false, tooltip = "start_boon_boulder_bro_tooltip" },
-                            { setting_id = "start_boon_deus_crit_on_damage_taken",                         type = "checkbox", default_value = false, tooltip = "start_boon_deus_crit_on_damage_taken_tooltip" },
-                            { setting_id = "start_boon_deus_larger_clip",                                  type = "checkbox", default_value = false, tooltip = "start_boon_deus_larger_clip_tooltip" },
-                            { setting_id = "start_boon_deus_more_head_less_body_damage",                   type = "checkbox", default_value = false, tooltip = "start_boon_deus_more_head_less_body_damage_tooltip" },
-                            { setting_id = "start_boon_deus_power_up_quest_granted_test_01",               type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_deus_powerup_attack_speed",                         type = "checkbox", default_value = false, tooltip = "start_boon_deus_powerup_attack_speed_tooltip" },
-                            { setting_id = "start_boon_deus_push_charge",                                  type = "checkbox", default_value = false, tooltip = "start_boon_deus_push_charge_tooltip" },
-                            { setting_id = "start_boon_deus_push_increased_cleave",                        type = "checkbox", default_value = false, tooltip = "start_boon_deus_push_increased_cleave_tooltip" },
-                            { setting_id = "start_boon_deus_reckless_swings",                              type = "checkbox", default_value = false, tooltip = "start_boon_deus_reckless_swings_tooltip" },
-                            { setting_id = "start_boon_deus_target_full_health_damage_mult",               type = "checkbox", default_value = false, tooltip = "start_boon_deus_target_full_health_damage_mult_tooltip" },
-                            { setting_id = "start_boon_deus_uninterruptable_attacks",                      type = "checkbox", default_value = false, tooltip = "start_boon_deus_uninterruptable_attacks_tooltip" },
-                            { setting_id = "start_boon_detect_weakness",                                   type = "checkbox", default_value = false, tooltip = "start_boon_detect_weakness_tooltip" },
-                            { setting_id = "start_boon_explosive_kills_on_elite_kills",                    type = "checkbox", default_value = false, tooltip = "start_boon_explosive_kills_on_elite_kills_tooltip" },
-                            { setting_id = "start_boon_indomitable",                                       type = "checkbox", default_value = false, tooltip = "start_boon_indomitable_tooltip" },
-                            { setting_id = "start_boon_lucky",                                             type = "checkbox", default_value = false, tooltip = "start_boon_lucky_tooltip" },
-                            { setting_id = "start_boon_melee_killing_spree_speed",                         type = "checkbox", default_value = false, tooltip = "start_boon_melee_killing_spree_speed_tooltip" },
-                            { setting_id = "start_boon_melee_wave",                                        type = "checkbox", default_value = false, tooltip = "start_boon_melee_wave_tooltip" },
-                            { setting_id = "start_boon_pyrrhic_strength",                                  type = "checkbox", default_value = false, tooltip = "start_boon_pyrrhic_strength_tooltip" },
-                            { setting_id = "start_boon_squats",                                            type = "checkbox", default_value = false },
-                            { setting_id = "start_boon_staggering_force",                                  type = "checkbox", default_value = false, tooltip = "start_boon_staggering_force_tooltip" },
-                            { setting_id = "start_boon_surprise_strike",                                   type = "checkbox", default_value = false, tooltip = "start_boon_surprise_strike_tooltip" },
-                            { setting_id = "start_boon_triple_melee_headshot_power",                       type = "checkbox", default_value = false, tooltip = "start_boon_triple_melee_headshot_power_tooltip" },
-                        },
-                    },
-                    {
-                        -- Mirror of disable_boon_defense_and_dr_group (v0.7.22).
-                        setting_id = "start_boon_defense_and_dr_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_barkskin",                                          type = "checkbox", default_value = false, tooltip = "start_boon_barkskin_tooltip" },
-                            { setting_id = "start_boon_block_cost",                                        type = "checkbox", default_value = false, tooltip = "start_boon_block_cost_tooltip" },
-                            { setting_id = "start_boon_deus_block_procs_parry",                            type = "checkbox", default_value = false, tooltip = "start_boon_deus_block_procs_parry_tooltip" },
-                            { setting_id = "start_boon_deus_damage_reduction_on_incapacitated",            type = "checkbox", default_value = false, tooltip = "start_boon_deus_damage_reduction_on_incapacitated_tooltip" },
-                            { setting_id = "start_boon_deus_knockdown_damage_immunity_aura",               type = "checkbox", default_value = false, tooltip = "start_boon_deus_knockdown_damage_immunity_aura_tooltip" },
-                            { setting_id = "start_boon_deus_parry_damage_immune",                          type = "checkbox", default_value = false, tooltip = "start_boon_deus_parry_damage_immune_tooltip" },
-                            { setting_id = "start_boon_deus_push_cost_reduction",                          type = "checkbox", default_value = false, tooltip = "start_boon_deus_push_cost_reduction_tooltip" },
-                            { setting_id = "start_boon_deus_standing_still_damage_reduction",              type = "checkbox", default_value = false, tooltip = "start_boon_deus_standing_still_damage_reduction_tooltip" },
-                            { setting_id = "start_boon_deus_timed_block_free_shot",                        type = "checkbox", default_value = false, tooltip = "start_boon_deus_timed_block_free_shot_tooltip" },
-                            { setting_id = "start_boon_explosive_pushes_on_damage_taken",                  type = "checkbox", default_value = false, tooltip = "start_boon_explosive_pushes_on_damage_taken_tooltip" },
-                            { setting_id = "start_boon_hidden_escape",                                     type = "checkbox", default_value = false, tooltip = "start_boon_hidden_escape_tooltip" },
-                            { setting_id = "start_boon_missing_health_power_up",                           type = "checkbox", default_value = false, tooltip = "start_boon_missing_health_power_up_tooltip" },
-                            { setting_id = "start_boon_pent_up_anger",                                     type = "checkbox", default_value = false, tooltip = "start_boon_pent_up_anger_tooltip" },
-                            { setting_id = "start_boon_protection_aoe",                                    type = "checkbox", default_value = false, tooltip = "start_boon_protection_aoe_tooltip" },
-                            { setting_id = "start_boon_protection_chaos",                                  type = "checkbox", default_value = false, tooltip = "start_boon_protection_chaos_tooltip" },
-                            { setting_id = "start_boon_protection_skaven",                                 type = "checkbox", default_value = false, tooltip = "start_boon_protection_skaven_tooltip" },
-                            { setting_id = "start_boon_push_block_arc",                                    type = "checkbox", default_value = false, tooltip = "start_boon_push_block_arc_tooltip" },
-                            { setting_id = "start_boon_skill_by_block",                                    type = "checkbox", default_value = false, tooltip = "start_boon_skill_by_block_tooltip" },
-                            { setting_id = "start_boon_speed_over_stamina",                                type = "checkbox", default_value = false, tooltip = "start_boon_speed_over_stamina_tooltip" },
-                            { setting_id = "start_boon_stamina",                                           type = "checkbox", default_value = false, tooltip = "start_boon_stamina_tooltip" },
-                            { setting_id = "start_boon_static_blade",                                      type = "checkbox", default_value = false, tooltip = "start_boon_static_blade_tooltip" },
-                            { setting_id = "start_boon_thorn_skin",                                        type = "checkbox", default_value = false, tooltip = "start_boon_thorn_skin_tooltip" },
-                        },
-                    },
-                    {
-                        -- Mirror of disable_boon_healing_and_sustain_group (v0.7.22).
-                        setting_id = "start_boon_healing_and_sustain_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_boon_supportbomb_healing_01",                       type = "checkbox", default_value = false, tooltip = "start_boon_boon_supportbomb_healing_01_tooltip" },
-                            { setting_id = "start_boon_curative_empowerment",                              type = "checkbox", default_value = false, tooltip = "start_boon_curative_empowerment_tooltip" },
-                            { setting_id = "start_boon_deus_ammo_pickup_heal",                             type = "checkbox", default_value = false, tooltip = "start_boon_deus_ammo_pickup_heal_tooltip" },
-                            { setting_id = "start_boon_deus_coin_pickup_regen",                            type = "checkbox", default_value = false, tooltip = "start_boon_deus_coin_pickup_regen_tooltip" },
-                            { setting_id = "start_boon_deus_health_regeneration",                          type = "checkbox", default_value = false, tooltip = "start_boon_deus_health_regeneration_tooltip" },
-                            { setting_id = "start_boon_deus_increased_healing_taken",                      type = "checkbox", default_value = false, tooltip = "start_boon_deus_increased_healing_taken_tooltip" },
-                            { setting_id = "start_boon_deus_max_health",                                   type = "checkbox", default_value = false, tooltip = "start_boon_deus_max_health_tooltip" },
-                            { setting_id = "start_boon_deus_revive_regen",                                 type = "checkbox", default_value = false, tooltip = "start_boon_deus_revive_regen_tooltip" },
-                            { setting_id = "start_boon_deus_second_wind",                                  type = "checkbox", default_value = false, tooltip = "start_boon_deus_second_wind_tooltip" },
-                            { setting_id = "start_boon_hand_of_shallya",                                   type = "checkbox", default_value = false, tooltip = "start_boon_hand_of_shallya_tooltip" },
-                            { setting_id = "start_boon_heal_on_dot_damage_dealt",                          type = "checkbox", default_value = false, tooltip = "start_boon_heal_on_dot_damage_dealt_tooltip" },
-                            { setting_id = "start_boon_healers_touch",                                     type = "checkbox", default_value = false, tooltip = "start_boon_healers_touch_tooltip" },
-                            { setting_id = "start_boon_health",                                            type = "checkbox", default_value = false, tooltip = "start_boon_health_tooltip" },
-                            { setting_id = "start_boon_invigorating_strike",                               type = "checkbox", default_value = false, tooltip = "start_boon_invigorating_strike_tooltip" },
-                            { setting_id = "start_boon_natural_bond",                                      type = "checkbox", default_value = false, tooltip = "start_boon_natural_bond_tooltip" },
-                            { setting_id = "start_boon_power_up_of_shallya",                               type = "checkbox", default_value = false, tooltip = "start_boon_power_up_of_shallya_tooltip" },
-                            { setting_id = "start_boon_resolve",                                           type = "checkbox", default_value = false, tooltip = "start_boon_resolve_tooltip" },
-                            { setting_id = "start_boon_tenacious",                                         type = "checkbox", default_value = false, tooltip = "start_boon_tenacious_tooltip" },
-                            { setting_id = "start_boon_transfer_temp_health_at_full",                      type = "checkbox", default_value = false, tooltip = "start_boon_transfer_temp_health_at_full_tooltip" },
-                        },
-                    },
-                    {
-                        -- Mirror of disable_boon_utility_and_team_group (v0.7.22).
-                        setting_id = "start_boon_utility_and_team_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_boon_aura_01",                                      type = "checkbox", default_value = false, tooltip = "start_boon_boon_aura_01_tooltip" },
-                            { setting_id = "start_boon_boon_aura_02",                                      type = "checkbox", default_value = false, tooltip = "start_boon_boon_aura_02_tooltip" },
-                            { setting_id = "start_boon_boon_aura_03",                                      type = "checkbox", default_value = false, tooltip = "start_boon_boon_aura_03_tooltip" },
-                            { setting_id = "start_boon_boon_deus_coins_greed",                             type = "checkbox", default_value = false, tooltip = "start_boon_boon_deus_coins_greed_tooltip" },
-                            { setting_id = "start_boon_boon_teamaura_01",                                  type = "checkbox", default_value = false, tooltip = "start_boon_boon_teamaura_01_tooltip" },
-                            { setting_id = "start_boon_boon_teamaura_02",                                  type = "checkbox", default_value = false, tooltip = "start_boon_boon_teamaura_02_tooltip" },
-                            { setting_id = "start_boon_boon_weaponrarity_01",                              type = "checkbox", default_value = false, tooltip = "start_boon_boon_weaponrarity_01_tooltip" },
-                            { setting_id = "start_boon_boon_weaponrarity_02",                              type = "checkbox", default_value = false, tooltip = "start_boon_boon_weaponrarity_02_tooltip" },
-                            { setting_id = "start_boon_comradery",                                         type = "checkbox", default_value = false, tooltip = "start_boon_comradery_tooltip" },
-                            { setting_id = "start_boon_decanter",                                          type = "checkbox", default_value = false, tooltip = "start_boon_decanter_tooltip" },
-                            { setting_id = "start_boon_deus_ammo_pickup_give_allies_ammo",                 type = "checkbox", default_value = false, tooltip = "start_boon_deus_ammo_pickup_give_allies_ammo_tooltip" },
-                            { setting_id = "start_boon_deus_extra_stamina",                                type = "checkbox", default_value = false, tooltip = "start_boon_deus_extra_stamina_tooltip" },
-                            { setting_id = "start_boon_deus_free_potion_use_on_ability",                   type = "checkbox", default_value = false, tooltip = "start_boon_deus_free_potion_use_on_ability_tooltip" },
-                            { setting_id = "start_boon_deus_guard_aura_check",                             type = "checkbox", default_value = false, tooltip = "start_boon_deus_guard_aura_check_tooltip" },
-                            { setting_id = "start_boon_deus_infinite_dodges",                              type = "checkbox", default_value = false, tooltip = "start_boon_deus_infinite_dodges_tooltip" },
-                            { setting_id = "start_boon_deus_large_ammo_pickup_infinite_ammo",              type = "checkbox", default_value = false, tooltip = "start_boon_deus_large_ammo_pickup_infinite_ammo_tooltip" },
-                            { setting_id = "start_boon_deus_transmute_into_coins",                         type = "checkbox", default_value = false, tooltip = "start_boon_deus_transmute_into_coins_tooltip" },
-                            { setting_id = "start_boon_drop_item_on_ability_use",                          type = "checkbox", default_value = false, tooltip = "start_boon_drop_item_on_ability_use_tooltip" },
-                            { setting_id = "start_boon_home_brewer",                                       type = "checkbox", default_value = false, tooltip = "start_boon_home_brewer_tooltip" },
-                            { setting_id = "start_boon_last_player_standing_power_reg",                    type = "checkbox", default_value = false, tooltip = "start_boon_last_player_standing_power_reg_tooltip" },
-                            { setting_id = "start_boon_money_magnet",                                      type = "checkbox", default_value = false, tooltip = "start_boon_money_magnet_tooltip" },
-                            { setting_id = "start_boon_movement_speed_on_active_ability_use",              type = "checkbox", default_value = false, tooltip = "start_boon_movement_speed_on_active_ability_use_tooltip" },
-                            { setting_id = "start_boon_wolfpack",                                          type = "checkbox", default_value = false, tooltip = "start_boon_wolfpack_tooltip" },
-                        },
-                    },
-                    {
-                        -- Mirror of disable_boon_ability_cooldown_group (v0.7.25).
-                        setting_id = "start_boon_ability_cooldown_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_ability_cooldown_reduction",                        type = "checkbox", default_value = false, tooltip = "start_boon_ability_cooldown_reduction_tooltip" },
-                            { setting_id = "start_boon_cooldown_on_friendly_ability",                      type = "checkbox", default_value = false, tooltip = "start_boon_cooldown_on_friendly_ability_tooltip" },
-                            { setting_id = "start_boon_deus_cooldown_reg_not_hit",                         type = "checkbox", default_value = false, tooltip = "start_boon_deus_cooldown_reg_not_hit_tooltip" },
-                            { setting_id = "start_boon_deus_cooldown_regen",                               type = "checkbox", default_value = false, tooltip = "start_boon_deus_cooldown_regen_tooltip" },
-                            { setting_id = "start_boon_deus_skill_on_special_kill",                        type = "checkbox", default_value = false, tooltip = "start_boon_deus_skill_on_special_kill_tooltip" },
-                            { setting_id = "start_boon_friendly_cooldown_on_ability",                      type = "checkbox", default_value = false, tooltip = "start_boon_friendly_cooldown_on_ability_tooltip" },
-                        },
-                    },
-                    {
-                        -- Mirror of disable_boon_orbs_group (v0.7.25).
-                        setting_id = "start_boon_orbs_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_focused_accuracy",                                  type = "checkbox", default_value = false, tooltip = "start_boon_focused_accuracy_tooltip" },
-                            { setting_id = "start_boon_health_orbs",                                       type = "checkbox", default_value = false, tooltip = "start_boon_health_orbs_tooltip" },
-                            { setting_id = "start_boon_protection_orbs",                                   type = "checkbox", default_value = false, tooltip = "start_boon_protection_orbs_tooltip" },
-                            { setting_id = "start_boon_sharing_is_caring",                                 type = "checkbox", default_value = false, tooltip = "start_boon_sharing_is_caring_tooltip" },
-                            { setting_id = "start_boon_static_charge",                                     type = "checkbox", default_value = false, tooltip = "start_boon_static_charge_tooltip" },
-                        },
-                    },
-                    {
-                        -- Mirror of disable_boon_bombs_group (v0.7.22).
-                        setting_id = "start_boon_bombs_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "start_boon_boon_bomb_heavy_01",                                type = "checkbox", default_value = false, tooltip = "start_boon_boon_bomb_heavy_01_tooltip" },
-                            { setting_id = "start_boon_boon_supportbomb_concentration_01",                 type = "checkbox", default_value = false, tooltip = "start_boon_boon_supportbomb_concentration_01_tooltip" },
-                            { setting_id = "start_boon_boon_supportbomb_crit_01",                          type = "checkbox", default_value = false, tooltip = "start_boon_boon_supportbomb_crit_01_tooltip" },
-                            { setting_id = "start_boon_boon_supportbomb_speed_01",                         type = "checkbox", default_value = false, tooltip = "start_boon_boon_supportbomb_speed_01_tooltip" },
-                            { setting_id = "start_boon_boon_supportbomb_strenght_01",                      type = "checkbox", default_value = false, tooltip = "start_boon_boon_supportbomb_strenght_01_tooltip" },
-                            { setting_id = "start_boon_cluster_barrel",                                    type = "checkbox", default_value = false, tooltip = "start_boon_cluster_barrel_tooltip" },
-                            { setting_id = "start_boon_deus_barrel_power",                                 type = "checkbox", default_value = false, tooltip = "start_boon_deus_barrel_power_tooltip" },
-                            { setting_id = "start_boon_deus_grenade_multi_throw",                          type = "checkbox", default_value = false, tooltip = "start_boon_deus_grenade_multi_throw_tooltip" },
-                            { setting_id = "start_boon_deus_throw_speed_increase",                         type = "checkbox", default_value = false, tooltip = "start_boon_deus_throw_speed_increase_tooltip" },
-                            { setting_id = "start_boon_explosive_ordinance",                               type = "checkbox", default_value = false, tooltip = "start_boon_explosive_ordinance_tooltip" },
-                            { setting_id = "start_boon_grenadier",                                         type = "checkbox", default_value = false, tooltip = "start_boon_grenadier_tooltip" },
-                            { setting_id = "start_boon_pyrotechnical_echo",                                type = "checkbox", default_value = false, tooltip = "start_boon_pyrotechnical_echo_tooltip" },
-                            { setting_id = "start_boon_shrapnel",                                          type = "checkbox", default_value = false, tooltip = "start_boon_shrapnel_tooltip" },
-                        },
-                    },
+                {
+                    setting_id = "disabled_boons_group",
+                    type = "group",
+                    sub_widgets = build_disable_tree(),
                 },
-            },
+                {
+                    setting_id = "starting_boons_group",
+                    type = "group",
+                    sub_widgets = build_start_tree(),
+                },
             {
                 setting_id = "banned_traits_group",
                 type = "group",

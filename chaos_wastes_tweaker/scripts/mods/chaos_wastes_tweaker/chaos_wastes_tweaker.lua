@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.27a-alpha"
+local MOD_VERSION = "0.7.28b-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -633,30 +633,137 @@ local function restore_weapon_trait_filter(saved)
     end
 end
 
+-- ============================================================
+-- Trait Tier by Rarity (v0.7.28a-alpha)
+-- ============================================================
+-- TRAIT_RARITY_POOL: maps every weapon trait → set of rarities at which it can roll.
+-- Walked all 34 traits with the user 2026-05-15; basis lives in TRAITS_REFERENCE.md.
+-- T1=common (green), T2=rare (blue), T3=exotic (orange), T4=unique (red).
+-- Multi-tier means the trait is eligible in multiple rarity pools.
+--
+-- When `tweak_trait_tier_by_rarity` is on, every weapon roll/upgrade picks a trait
+-- combo whose ALL traits are eligible for the rolled rarity. Implementation: hook the
+-- public DeusWeaponGeneration methods, call vanilla, then overwrite result.traits with
+-- a tier-filtered random pick. This ALSO enables traits at common/rare rarities (which
+-- vanilla skips per `deus_weapon_generation.lua:166-169`) because we don't rely on the
+-- vanilla rarity gate — we pick from the original baked_trait_combinations and filter.
+local TRAIT_RARITY_POOL = {
+    -- T1 only (common / green)
+    melee_increase_damage_on_block                = { common = true },
+    melee_reduce_cooldown_on_crit                 = { common = true },
+    melee_shield_on_assist                        = { common = true },
+    melee_timed_block_cost                        = { common = true },
+    ranged_reduce_cooldown_on_crit                = { common = true },
+    ranged_restore_stamina_headshot               = { common = true },
+    shield_splinters                              = { common = true },
+    deus_ammo_pickup_reload_speed                 = { common = true },
+    deus_big_swing_stagger                        = { common = true },
+    -- T2 only (rare / blue)
+    melee_heal_on_crit                            = { rare = true },
+    ranged_consecutive_hits_increase_power        = { rare = true },
+    ranged_increase_power_level_vs_armour_crit    = { rare = true },
+    ranged_reduced_overcharge                     = { rare = true },
+    ranged_remove_overcharge_on_crit              = { rare = true },
+    melee_counter_push_power                      = { rare = true },
+    bloodthirst                                   = { rare = true },
+    headhunter                                    = { rare = true },
+    follow_up                                     = { rare = true },
+    -- T3 only (exotic / orange)
+    shield_of_isha                                = { exotic = true },
+    stagger_aoe_on_crit                           = { exotic = true },
+    serrated_blade                                = { exotic = true },
+    melee_attack_speed_on_crit                    = { exotic = true },
+    -- T4 only (unique / red)
+    armor_breaker                                 = { unique = true },
+    refilling_shot                                = { unique = true },
+    home_run                                      = { unique = true },
+    deus_crit_chain_lightning                     = { unique = true },
+    deus_extra_shot                               = { unique = true },
+    always_blocking                               = { unique = true },
+    -- T2 + T3
+    ranged_replenish_ammo_on_crit                 = { rare = true,   exotic = true },
+    ranged_replenish_ammo_headshot                = { rare = true,   exotic = true },
+    -- T3 + T4
+    piercing_projectiles                          = { exotic = true, unique = true },
+    crescendo_strike                              = { exotic = true, unique = true },
+    deus_collateral_damage_on_melee_killing_blow  = { exotic = true, unique = true },
+    deus_ranged_crit_explosion                    = { exotic = true, unique = true },
+}
+
+local function get_tier_filtered_combos(item_key, rarity)
+    if not DeusWeapons or not DeusWeapons[item_key] then return {} end
+    local original = DeusWeapons[item_key].baked_trait_combinations
+    if not original then return {} end
+    local filtered = {}
+    for _, combo in ipairs(original) do
+        local all_eligible = true
+        for _, trait in ipairs(combo) do
+            local pool = TRAIT_RARITY_POOL[trait]
+            if not pool or not pool[rarity] then
+                all_eligible = false
+                break
+            end
+        end
+        if all_eligible then
+            filtered[#filtered + 1] = combo
+        end
+    end
+    return filtered
+end
+
+-- Post-process the result of a vanilla weapon generation/upgrade: overwrite result.traits
+-- with a tier-eligible combo for the rolled rarity. No-op if:
+--   - the toggle is off
+--   - result is nil or has no deus_item_key
+--   - no tier-eligible combos exist for this weapon at this rarity
+-- The no-tier-combos guard means weapons with no T1 traits available won't suddenly get
+-- assigned an out-of-tier trait at common rarity — they keep vanilla behavior (no traits).
+local function override_traits_in_result(result, rarity)
+    if not mod:get("tweak_trait_tier_by_rarity") then return result end
+    if not result or not result.deus_item_key then return result end
+    local combos = get_tier_filtered_combos(result.deus_item_key, rarity)
+    if #combos == 0 then return result end
+    local picked = combos[math.random(#combos)]
+    local new_traits = {}
+    for _, trait in ipairs(picked) do
+        new_traits[#new_traits + 1] = trait
+    end
+    result.traits = new_traits
+    return result
+end
+
 -- CLARIFY: Three trait-filter wrap points cover the three vanilla call sites that read
 -- baked_trait_combinations: initial weapon roll, slot-specific roll (Belakor temple?), and altar
 -- upgrade. Same save/restore pattern as the boon hooks above.
 -- POTENTIAL BUG (LOW): Same as boon-removal — if `func()` errors, restore is skipped and DeusWeapons
 -- stays mutated. pcall would harden this.
-mod:hook("DeusWeaponGeneration", "generate_weapon", function(func, ...)
+-- v0.7.28a: each hook now ALSO post-processes with `override_traits_in_result` to apply tier-by-rarity.
+mod:hook("DeusWeaponGeneration", "generate_weapon", function(func, difficulty, run_progress, rarity, ...)
     local saved = apply_weapon_trait_filter()
-    local result = func(...)
+    local result = func(difficulty, run_progress, rarity, ...)
     restore_weapon_trait_filter(saved)
-    return result
+    return override_traits_in_result(result, rarity)
 end)
 
-mod:hook("DeusWeaponGeneration", "generate_weapon_for_slot", function(func, ...)
+mod:hook("DeusWeaponGeneration", "generate_weapon_for_slot", function(func, difficulty, run_progress, rarity, ...)
     local saved = apply_weapon_trait_filter()
-    local result = func(...)
+    local result = func(difficulty, run_progress, rarity, ...)
     restore_weapon_trait_filter(saved)
-    return result
+    return override_traits_in_result(result, rarity)
 end)
 
-mod:hook("DeusWeaponGeneration", "upgrade_item", function(func, ...)
+mod:hook("DeusWeaponGeneration", "generate_item_from_item_key", function(func, item_key, difficulty, run_progress, rarity, ...)
     local saved = apply_weapon_trait_filter()
-    local result = func(...)
+    local result = func(item_key, difficulty, run_progress, rarity, ...)
     restore_weapon_trait_filter(saved)
-    return result
+    return override_traits_in_result(result, rarity)
+end)
+
+mod:hook("DeusWeaponGeneration", "upgrade_item", function(func, item, difficulty, run_progress, target_rarity, ...)
+    local saved = apply_weapon_trait_filter()
+    local result = func(item, difficulty, run_progress, target_rarity, ...)
+    restore_weapon_trait_filter(saved)
+    return override_traits_in_result(result, target_rarity)
 end)
 
 -- CLARIFY: Host-only run-config overrides. `is_server` gating ensures clients don't try to override
@@ -2163,17 +2270,17 @@ end
 sync_bomb_cooldown()
 
 -- ============================================================
--- Movement Speed Boon Tweak (5% -> 10% per stack)
+-- Movement Speed Boon Tweak (5% -> 10%)
 -- ============================================================
--- The vanilla `movespeed` property boon adds `apply_movement_buff` with multiplier 1.05 (sourced
--- from `MorrisBuffTweakData.movespeed.multiplier`) and shows "5%" in the tooltip (sourced from
+-- The vanilla `movespeed` boon (a one-of-a-kind CW mission-completion reward, boon-treated)
+-- adds `apply_movement_buff` with multiplier 1.05 (sourced from
+-- `MorrisBuffTweakData.movespeed.multiplier`) and shows "5%" in the tooltip (sourced from
 -- `MorrisBuffTweakData.movespeed.description_value`). The values are baked at game load by
 -- `deus_power_up_settings.lua` into two places:
 --   * Gameplay: `DeusPowerUpBuffTemplates.power_up_movespeed_<rarity>.buffs[1].multiplier` (1.05),
 --     one entry per rarity (common/rare/legendary).
---   * Tooltip:  `DeusPowerUpTemplates.movespeed.description_values[1].value` (0.05), and the same
---     table is referenced by every DeusPowerUpsArray entry for movespeed (the engine assigns by
---     reference at line 7148 of deus_power_up_settings.lua, so a single mutation propagates).
+--   * Tooltip:  `DeusPowerUpTemplates.movespeed.description_values[1].value` (0.05), shared by
+--     all rarities via reference — a single mutation propagates to every rarity tooltip.
 -- We mirror the reckless_swings save-and-restore: snapshot originals on apply, restore them on
 -- revert, and call sync from the boon-roll hook + on_setting_changed.
 
