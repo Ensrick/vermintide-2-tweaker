@@ -1,5 +1,26 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.27a-alpha (2026-05-15)
+
+### Disambiguating prefixes on every boon menu label
+
+Long dropdowns in the disable/start trees were ambiguous — you couldn't tell at a glance whether a given checkbox was a disable toggle or a start-boon toggle, especially after scrolling past the parent group header. Every item and group title now carries a path-aware prefix:
+
+| Widget type | Disable side | Start side |
+|---|---|---|
+| Item (e.g., Attack Speed) | `Disable Boon: Attack Speed` | `Starting Boon: Attack Speed` |
+| Group (e.g., Properties) | `Disable Boons: Properties` | `Starting Boons: Properties` |
+
+Bulk regex transformation applied via PowerShell on `chaos_wastes_tweaker_localization.lua`:
+
+- 172 item labels prefixed on each side (344 total item transformations)
+- 10 group titles prefixed on each side (20 total group transformations)
+- Tooltips left untouched (`*_tooltip` keys correctly excluded via negative lookbehind)
+
+No tree-structure changes in this phase. v0.7.27b will rebuild the 10-group structure into the new 21-category structure documented in `BOON_CATEGORIZATION_DRAFT.md`.
+
+Backup of original localization preserved at `chaos_wastes_tweaker_localization.lua.v0726.bak` for quick rollback if needed.
+
 ## 0.7.26-alpha (2026-05-15)
 
 ### Renamed "Modified Boons" group to "Reworks"
