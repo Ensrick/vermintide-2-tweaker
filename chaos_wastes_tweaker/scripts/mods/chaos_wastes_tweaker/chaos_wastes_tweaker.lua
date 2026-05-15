@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.18-alpha"
+local MOD_VERSION = "0.7.24-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -153,12 +153,80 @@ end)
 -- DeusSoftCurrencySettings.types.{GROUND,MONSTER,...} value). Passing nil means the server-only
 -- branch in vanilla treats this as neither GROUND nor MONSTER, so the per-pickup counters are NOT
 -- incremented — fine for starting coins, but worth knowing.
+
+-- ============================================================
+-- Multiplayer settings sync (v0.7.21)
+-- ============================================================
+-- CW's graph generation is deterministic from seed and runs on BOTH host and
+-- client (rpc_deus_setup_run triggers it on clients). Without sync, peers run
+-- our graph-mutating overrides against THEIR OWN settings, producing divergent
+-- local graphs. v0.7.20 gated the hook on `is_server` to stop crashes (clients
+-- pass through to vanilla) but the client's local view still differs from the
+-- host's mutated graph — so the map shows the wrong curse, the wrong theme on
+-- a mission, etc.
+--
+-- This sync: when host's setup_run fires, broadcast effective host settings to
+-- clients via VMF's mod:network_send. Clients stash the values in
+-- `_ct_host_settings`. The deus_populate_graph hook then reads from there on
+-- client (instead of mod:get which would give the CLIENT's own settings).
+--
+-- Settings synced: cursed_mission_count, replace_shrines_with_missions,
+-- disable_dominant_god. These are the three graph-mutating overrides that
+-- affect node type/curse/theme distribution.
+local _ct_host_settings = {
+    cursed_mission_count        = 0,      -- 0 = no override (vanilla)
+    replace_shrines_with_missions = false, -- vanilla shops on
+    disable_dominant_god        = false,  -- vanilla dominant-god rule
+}
+
+mod:network_register("ct_sync_host_settings", function(sender_peer_id, cmc, rsw, ddg)
+    _ct_host_settings.cursed_mission_count        = cmc or 0
+    _ct_host_settings.replace_shrines_with_missions = rsw and true or false
+    _ct_host_settings.disable_dominant_god        = ddg and true or false
+    mod:info("[ct_sync] received host settings from %s: count=%s shrines=%s dominant_off=%s",
+        tostring(sender_peer_id), tostring(cmc), tostring(rsw), tostring(ddg))
+end)
+
+-- Read effective setting: on host, use the user's actual configured value.
+-- On client, use whatever the host most recently broadcast. If client hasn't
+-- received the broadcast yet (first run, RPC ordering), falls back to the
+-- default values (matches vanilla behavior — no mutation).
+local function effective_setting(name)
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if is_server then
+        return mod:get(name)
+    else
+        return _ct_host_settings[name]
+    end
+end
+
 mod:hook_safe("DeusRunController", "setup_run", function(self)
     local starting = mod:get("starting_coins")
     if starting and starting > 0 and self.on_soft_currency_picked_up then
         granting_starting_coins = true
         self:on_soft_currency_picked_up(starting)
         granting_starting_coins = false
+    end
+
+    -- On host only: broadcast our settings to all clients so their
+    -- deus_populate_graph hook (about to fire on their machines) mutates the
+    -- same way. VMF's network_send is FIFO over the same Steam channel as the
+    -- engine's rpc_deus_setup_run, so as long as we send BEFORE the engine
+    -- sends its setup_run RPC (we hook_safe AT the end of host's setup_run,
+    -- which is right before full_sync() ships the engine RPC to clients), our
+    -- packet arrives first and the client processes it before their setup_run
+    -- fires. Verified safe to spam — receiving the same values twice is a
+    -- no-op assignment.
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if is_server then
+        mod:network_send("ct_sync_host_settings", "others",
+            mod:get("cursed_mission_count") or 0,
+            mod:get("replace_shrines_with_missions") and true or false,
+            mod:get("disable_dominant_god") and true or false)
+        mod:info("[ct_sync] broadcast host settings to clients: count=%s shrines=%s dominant_off=%s",
+            tostring(mod:get("cursed_mission_count") or 0),
+            tostring(mod:get("replace_shrines_with_missions") and true or false),
+            tostring(mod:get("disable_dominant_god") and true or false))
     end
 end)
 
@@ -1136,16 +1204,17 @@ local _CURSE_SKY_PROFILES = {
         fog_color            = { 1.25, 0.40, 1.10 },
         exposure_mul         = 0.97,
     },
-    -- BELAKOR — twilight purple, very dark. Sun is moonlight-cold blue,
-    -- ambient sinks toward black-violet. Dimmer exposure for shadow mood.
+    -- BELAKOR — twilight purple. v0.7.21: brightened ambient (interior
+    -- bounce) so rooms aren't pitch-black, slightly dimmed exterior
+    -- (sky + sun) so the outdoor mood stays oppressive. Per user feedback.
     belakor = {
-        skydome_tint_color   = { 0.45, 0.30, 0.70 },
-        sun_color            = { 0.55, 0.55, 0.95 },
-        secondary_sun_color  = { 0.45, 0.40, 0.80 },
-        ambient_tint         = { 0.45, 0.40, 0.75 },
-        ambient_tint_top     = { 0.35, 0.30, 0.80 },
-        fog_color            = { 0.40, 0.30, 0.75 },
-        exposure_mul         = 0.85,
+        skydome_tint_color   = { 0.40, 0.25, 0.65 },   -- slightly darker sky
+        sun_color            = { 0.50, 0.50, 0.85 },   -- slightly dimmer direct sun
+        secondary_sun_color  = { 0.55, 0.50, 0.90 },   -- brighter fill (helps interiors)
+        ambient_tint         = { 0.75, 0.65, 1.00 },   -- BRIGHTER interior bounce (was 0.45/0.40/0.75)
+        ambient_tint_top     = { 0.60, 0.55, 1.00 },   -- brighter top ambient
+        fog_color            = { 0.40, 0.30, 0.75 },   -- keep fog
+        exposure_mul         = 0.92,                    -- less darkening (was 0.85)
     },
 }
 
@@ -1320,6 +1389,18 @@ local function restore_available_curses(saved)
 end
 
 mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dominant_god, with_belakor)
+    -- CW graph generation runs on BOTH host and client (deterministic from
+    -- seed). Use effective_setting(name) — returns mod:get() on host, the
+    -- most-recently-synced host value on clients. v0.7.20 gated this hook
+    -- on `is_server` to stop the deus_shop_view_v2 nil crash; v0.7.21
+    -- replaces that gate with proper host→client setting sync (broadcast in
+    -- the setup_run hook above) so peers produce IDENTICAL graphs from the
+    -- same seed instead of merely-vanilla-on-client graphs.
+    --
+    -- If the broadcast hasn't arrived yet on the client (first run, RPC
+    -- ordering), effective_setting falls back to defaults that match
+    -- vanilla behavior (no mutation) — same safety as the v0.7.20 gate.
+
     -- Override the curse hotspot count if the user has set `cursed_mission_count`.
     -- Vanilla `spread_curse` (deus_populate_graph.lua:681) does:
     --   hot_spot_count = random(CURSES_HOT_SPOTS_MIN_COUNT, CURSES_HOT_SPOTS_MAX_COUNT)
@@ -1331,7 +1412,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     -- Net: exactly N cursed nodes (or fewer if the map has < N curseable nodes; the
     -- spreader stops early when it runs out of candidates).
     local saved_min, saved_max, saved_range_min, saved_range_max, saved_min_progress, saved_no_dominant
-    local override_curse_count = mod:get("cursed_mission_count")
+    local override_curse_count = effective_setting("cursed_mission_count")
     mod:info("[deus_populate_graph] override_curse_count=%s, config?=%s, vanilla_min=%s vanilla_max=%s vanilla_range_min=%s vanilla_range_max=%s vanilla_min_progress=%s",
         tostring(override_curse_count), tostring(config ~= nil),
         config and tostring(config.CURSES_HOT_SPOTS_MIN_COUNT) or "?",
@@ -1373,7 +1454,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     -- v0.7.18: user-toggleable as `disable_dominant_god` (default on).
     -- Applies INDEPENDENTLY of the count override so the user can re-enable
     -- normal curse counts with all gods in rotation, or vice versa.
-    if config and mod:get("disable_dominant_god") then
+    if config and effective_setting("disable_dominant_god") then
         saved_no_dominant = config.NO_DOMINANT_GOD
         config.NO_DOMINANT_GOD = true
         mod:info("[deus_populate_graph] disable_dominant_god=true (all 4 gods in rotation)")
@@ -1431,7 +1512,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         mod:info("[deus_populate_graph %s] total entries: %d", tag, n_count)
     end
 
-    if not mod:get("replace_shrines_with_missions") then
+    if not effective_setting("replace_shrines_with_missions") then
         local result = { func(base_graph, seed, config, dominant_god, with_belakor) }
         local cursed, total = count_cursed(result[1])
         mod:info("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
@@ -1702,18 +1783,30 @@ local DIFFICULTY_RECRUIT = "normal"
 local pending_chest_respawn = {}
 
 mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
+    -- v0.7.23: verbose diagnostic on every _set_state call so we can see in
+    -- the log whether the hook is firing, what state it saw, and what player
+    -- states were present at chest-open time. Strip once revive-on-open is
+    -- confirmed working.
+    mod:info("[chest-revive] _set_state fired, state=%s open_const=%s setting=%s is_server=%s",
+        tostring(state), tostring(CURSED_CHEST_STATE_OPEN),
+        tostring(mod:get("respawn_on_chest_complete")),
+        tostring(Managers and Managers.player and Managers.player.is_server))
+
     if state ~= CURSED_CHEST_STATE_OPEN then
         return
     end
     if not mod:get("respawn_on_chest_complete") then
+        mod:info("[chest-revive] setting OFF; bailing")
         return
     end
     if not Managers.player or not Managers.player.is_server then
+        mod:info("[chest-revive] not server; bailing (this hook is host-authoritative)")
         return
     end
 
     local game_mode = Managers.state and Managers.state.game_mode
     if not game_mode then
+        mod:info("[chest-revive] game_mode nil; bailing")
         return
     end
 
@@ -1722,6 +1815,7 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
     local occupied_slots = party and party.occupied_slots
 
     if occupied_slots then
+        mod:info("[chest-revive] inspecting %d player slot(s)", #occupied_slots)
         for i = 1, #occupied_slots do
             local status = occupied_slots[i]
             local data = status.game_mode_data
@@ -1732,38 +1826,43 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
                 local player = Managers.player:player(peer_id, local_player_id)
                 local unit = player and player.player_unit
 
-                -- CLARIFY: Revive any knocked-down player who isn't being held by a disabler.
-                -- is_disabled_by_pact_sworn (generic_status_extension.lua:2154) returns true for
-                -- pack-master / hook / tentacle / chaos-spawn / vortex / corruptor / pounce —
-                -- skipping those avoids yanking someone out of an in-progress disabler interaction
-                -- (which would desync the disabler's animation and is unrecoverable). The engine's
-                -- own revive can_interact (interactions.lua:181-191) uses an equivalent check.
-                -- set_revived_network alone is sufficient: PlayerUnitHealthExtension.update sees
-                -- state="knocked_down" + is_revived() and runs _revive(), which clears
-                -- knocked_down, sets wounded(reason="revived"), and restores percent-on-revive
-                -- health + 50% THP from difficulty settings (player_unit_health_extension.lua:273).
+                local health_state = data and data.health_state or "?"
+                local is_knocked = false
+                local is_disabled_pact = false
                 if unit and Unit.alive(unit) then
                     local status_ext = ScriptUnit.has_extension(unit, "status_system")
-                    if status_ext and status_ext.is_knocked_down and status_ext:is_knocked_down()
-                        and not (status_ext.is_disabled_by_pact_sworn and status_ext:is_disabled_by_pact_sworn())
-                    then
-                        StatusUtils.set_revived_network(unit, true, nil)
+                    if status_ext then
+                        is_knocked = status_ext.is_knocked_down and status_ext:is_knocked_down() or false
+                        is_disabled_pact = status_ext.is_disabled_by_pact_sworn and status_ext:is_disabled_by_pact_sworn() or false
                     end
                 end
+                mod:info("[chest-revive] slot[%d] peer=%s health_state=%s unit_alive=%s knocked=%s disabled_pact=%s",
+                    i, tostring(peer_id), tostring(health_state),
+                    tostring(unit and Unit.alive(unit) or false),
+                    tostring(is_knocked), tostring(is_disabled_pact))
 
-                -- CLARIFY: Mark dead-state players for the post-respawn THP/wounded overrides.
-                -- This is captured at chest-open time, not at spawn time, so we know exactly which
-                -- respawns came from this feature (vs. the standard 30s timer respawn that may
-                -- have completed earlier in the same level).
+                -- Revive knocked-down players (immediate, skipping disabler-held ones).
+                if unit and Unit.alive(unit) and is_knocked and not is_disabled_pact then
+                    StatusUtils.set_revived_network(unit, true, nil)
+                    mod:info("[chest-revive]   -> called set_revived_network on peer=%s", tostring(peer_id))
+                end
+
+                -- Mark dead-state players for the post-respawn THP/wounded overrides.
                 if data and data.health_state == "dead" then
                     pending_chest_respawn[peer_id] = true
+                    mod:info("[chest-revive]   -> marked peer=%s for pending_chest_respawn (dead-state)", tostring(peer_id))
                 end
             end
         end
+    else
+        mod:info("[chest-revive] no occupied_slots; nothing to revive")
     end
 
     if game_mode.force_respawn_dead_players then
         game_mode:force_respawn_dead_players()
+        mod:info("[chest-revive] called game_mode:force_respawn_dead_players()")
+    else
+        mod:info("[chest-revive] game_mode has no force_respawn_dead_players method")
     end
 end)
 
@@ -1902,13 +2001,22 @@ local function apply_reckless_swings_tweak()
     end
 
     local power_up = rawget(_G, "DeusPowerUpTemplates")
-    local buff_tpls = rawget(_G, "DeusPowerUpBuffTemplates")
+    -- v0.7.24 bugfix: previous versions mutated DeusPowerUpBuffTemplates, but
+    -- the runtime buff system reads from the GLOBAL `BuffTemplates` table which
+    -- received COPIED values via DLCUtils.merge() at game boot
+    -- (buff_templates.lua:9532). Mutating the source DeusPowerUpBuffTemplates
+    -- has no effect on what the proc function reads — `template.damage_to_deal`
+    -- inside `deus_reckless_swings_buff_on_hit` reads from BuffTemplates.
+    -- Mutate BuffTemplates directly. Outer-buff health_threshold via
+    -- DeusPowerUpTemplates still works because the apply path reads that
+    -- table directly (deus_power_up_utils.lua:250).
+    local runtime_buffs = rawget(_G, "BuffTemplates")
     if not power_up or not power_up.deus_reckless_swings then
         return
     end
 
     local tpl = power_up.deus_reckless_swings
-    local buff_entry = buff_tpls and buff_tpls.deus_reckless_swings_buff
+    local runtime_buff_entry = runtime_buffs and runtime_buffs.deus_reckless_swings_buff
 
     -- POTENTIAL BUG (LOW): Hard-codes index [1] for buffs and [1]/[3] for description_values. If
     -- FatShark reorders these arrays in a patch, we silently mutate the wrong fields. A more
@@ -1917,16 +2025,19 @@ local function apply_reckless_swings_tweak()
         health_threshold = tpl.buff_template.buffs[1].health_threshold,
         desc_1_value = tpl.description_values[1].value,
         desc_3_value = tpl.description_values[3].value,
-        buff_damage = buff_entry and buff_entry.buffs[1].damage_to_deal,
+        buff_damage = runtime_buff_entry and runtime_buff_entry.buffs[1].damage_to_deal,
     }
 
     tpl.buff_template.buffs[1].health_threshold = 0.25
     tpl.description_values[1].value = 0.25
     tpl.description_values[3].value = 1
 
-    if buff_entry then
-        buff_entry.buffs[1].damage_to_deal = 1
+    if runtime_buff_entry and runtime_buff_entry.buffs and runtime_buff_entry.buffs[1] then
+        runtime_buff_entry.buffs[1].damage_to_deal = 1
     end
+
+    mod:info("[khaines-fury] apply: threshold 0.50->0.25, damage_to_deal 3->1 (BuffTemplates entry=%s)",
+        tostring(runtime_buff_entry ~= nil))
 end
 
 -- CLARIFY: Mirrors apply_reckless_swings_tweak. Note the early-out when DeusPowerUpTemplates is
@@ -1938,21 +2049,22 @@ local function revert_reckless_swings_tweak()
     end
 
     local power_up = rawget(_G, "DeusPowerUpTemplates")
-    local buff_tpls = rawget(_G, "DeusPowerUpBuffTemplates")
+    -- v0.7.24: revert from runtime BuffTemplates (same fix as apply).
+    local runtime_buffs = rawget(_G, "BuffTemplates")
     if not power_up or not power_up.deus_reckless_swings then
         reckless_swings_originals = nil
         return
     end
 
     local tpl = power_up.deus_reckless_swings
-    local buff_entry = buff_tpls and buff_tpls.deus_reckless_swings_buff
+    local runtime_buff_entry = runtime_buffs and runtime_buffs.deus_reckless_swings_buff
 
     tpl.buff_template.buffs[1].health_threshold = reckless_swings_originals.health_threshold
     tpl.description_values[1].value = reckless_swings_originals.desc_1_value
     tpl.description_values[3].value = reckless_swings_originals.desc_3_value
 
-    if buff_entry and reckless_swings_originals.buff_damage then
-        buff_entry.buffs[1].damage_to_deal = reckless_swings_originals.buff_damage
+    if runtime_buff_entry and runtime_buff_entry.buffs and runtime_buff_entry.buffs[1] and reckless_swings_originals.buff_damage then
+        runtime_buff_entry.buffs[1].damage_to_deal = reckless_swings_originals.buff_damage
     end
 
     reckless_swings_originals = nil

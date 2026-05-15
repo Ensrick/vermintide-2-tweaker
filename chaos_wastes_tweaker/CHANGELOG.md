@@ -1,5 +1,96 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.24-alpha (2026-05-14)
+
+### Fixed: Khaine's Fury (`tweak_reckless_swings`) — damage tweak silently failed
+
+User reported the Khaine's Fury softening tweak didn't actually soften the damage even with the toggle on. Root cause: the apply/revert functions were mutating `DeusPowerUpBuffTemplates.deus_reckless_swings_buff.buffs[1].damage_to_deal` — but the runtime buff system reads from the global `BuffTemplates` table, which received COPIED values via `DLCUtils.merge` at game boot (`buff_templates.lua:9532`). Mutating the source `DeusPowerUpBuffTemplates` had zero effect on what the proc function `deus_reckless_swings_buff_on_hit` actually read at hit time (`template.damage_to_deal` still 3).
+
+Fix: mutate `BuffTemplates.deus_reckless_swings_buff.buffs[1].damage_to_deal` directly instead of the source `DeusPowerUpBuffTemplates`. The outer `health_threshold` tweak via `DeusPowerUpTemplates` was already correct (the apply path at `deus_power_up_utils.lua:250` reads that table directly), so it kept working — only the per-hit damage was uncorked.
+
+Effect: with the toggle on, melee hits now deal 1 self-damage instead of 3, matching the displayed tooltip text. Host-side mutation suffices because the proc function is `is_server()` gated and damage is networked via `add_damage_network`.
+
+## 0.7.23-alpha (2026-05-14)
+
+### Diagnostic: verbose logging on chest-of-trials revive hook
+
+User reports `respawn_on_chest_complete` isn't working. Setting was confirmed `true` in user_settings, hook registered correctly in last session's log, but no observable revives. Added `mod:info` lines to `DeusCursedChestExtension._set_state` hook so the next log shows:
+
+- Whether `_set_state` fires at all, and which state value (verifies the hook isn't being shadowed and state OPEN is being reached).
+- Setting value, `is_server` flag (verifies the host-only + setting-on gates pass).
+- Per-slot dump at chest-open time: peer_id, `health_state`, `unit_alive`, `is_knocked_down`, `is_disabled_by_pact_sworn`.
+- Whether `StatusUtils.set_revived_network` was called (knocked-down branch).
+- Whether `pending_chest_respawn[peer]` was set (dead branch).
+- Whether `game_mode:force_respawn_dead_players()` was called.
+
+If chest-revive is working but not noticed (host-only hook + no dead teammates during testing), the log will show empty branches. If the hook isn't firing at all, that narrows the diagnosis to either wrong `state` value, missed `is_server` gate (testing as client), or shadowed hook. Strip the logging once root cause is fixed.
+
+## 0.7.22-alpha (2026-05-14)
+
+### Boon menu re-categorization (round 1 of 2)
+
+Started reorganizing the 172-boon disable / starting-boon menus into more cohesive categories. Categories 1 and 2 done this round; remaining 5 groups TBD.
+
+**New group: "Defense, Damage Reduction & Parry"** — aggregates 23 boons that were previously scattered across Properties / Combat / Healing & Sustain:
+
+- From Properties: `block_cost`, `protection_aoe`, `protection_chaos`, `protection_skaven`, `push_block_arc`, `stamina`
+- From Combat: `barkskin`, `deus_block_procs_parry`, `deus_damage_reduction_on_incapacitated`, `deus_parry_damage_immune`, `deus_push_cost_reduction`, `deus_standing_still_damage_reduction`, `deus_timed_block_free_shot`, `explosive_pushes_on_damage_taken`, `missing_health_power_up`, `pent_up_anger`, `skill_by_block`, `speed_over_stamina`, `static_blade`, `thorn_skin`
+- From Healing & Sustain: `deus_knockdown_damage_immunity_aura`, `hidden_escape`, `protection_orbs`
+
+**Renamed: "Healing & Sustain" → "Healing, THP & Health Gain"** with reshuffled contents:
+
+- Gained: `health` (from Properties), `resolve` (from Combat), `deus_coin_pickup_regen` (from Utility & Team), `boon_supportbomb_healing_01` (from Bombs)
+- Lost: the three boons moved to Defense/DR/Parry above
+
+**Other moves (per user verdicts):**
+
+- `last_player_standing_power_reg`: Combat → Utility & Team (user verdict — utility)
+- `deus_push_charge`, `deus_push_increased_cleave`: stayed in Combat (user verdict — offense, even though they're push-related)
+
+The `recursive_sort` helper now also auto-sorts the new `disable_boon_defense_and_dr_group` and `start_boon_defense_and_dr_group` alphabetically by display name. Both `disabled_boons_group` and `starting_boons_group` mirror trees have been updated in lockstep.
+
+Categories still pending (TBD next session): Combat (further split into damage / crit / ranged / etc.?), Utility & Team, Bombs, Skulls & Sets, Talents, Properties. User to provide further verdicts.
+
+## 0.7.21-alpha (2026-05-14)
+
+### Added: Host→client settings sync (clients now see host's curse layout, not vanilla)
+
+v0.7.20 fixed the shop_view nil crash by gating the `deus_populate_graph` hook on `is_server` — clients passed through to vanilla, never crashed. But clients still produced a VANILLA local graph while host produced a MUTATED one, so the map and theme on each peer differed (client saw wrong curse on a mission, wrong god on the map).
+
+v0.7.21 replaces the `is_server` gate with proper sync:
+
+1. **Host broadcasts effective settings** at the end of `DeusRunController.setup_run` via VMF's `mod:network_send`. Sent BEFORE the engine's `full_sync` RPC so clients receive the settings before their own `setup_run` triggers `deus_populate_graph`. Settings synced: `cursed_mission_count`, `replace_shrines_with_missions`, `disable_dominant_god`.
+2. **Clients receive and stash** in a `_ct_host_settings` table via `mod:network_register("ct_sync_host_settings", ...)`.
+3. **The graph hook uses `effective_setting(name)`** instead of `mod:get(name)`. On host this returns the user's actual setting; on client it returns the host's most-recently-broadcast value. If the broadcast hasn't arrived yet (first run, RPC ordering), falls back to vanilla-equivalent defaults — same safety as v0.7.20's gate.
+
+Net effect: with host running e.g. `cursed_mission_count = 30, disable_dominant_god = true`, all peers now produce the same graph from the same seed. Map shows the same cursed nodes for everyone, themes match, no more "wrong curse on a mission" desync.
+
+### Tweaked: Belakor lighting — brightened interior, slightly dimmed exterior
+
+User feedback: Belakor interiors were almost pitch-black. Bumped `ambient_tint` from `{0.45, 0.40, 0.75}` to `{0.75, 0.65, 1.00}` (brighter purple-ish bounce), `ambient_tint_top` from `{0.35, 0.30, 0.80}` to `{0.60, 0.55, 1.00}` (brighter zenith), `secondary_sun_color` slightly brighter too. `skydome_tint_color` and `sun_color` dimmed slightly so the outdoor still feels oppressive. `exposure_mul` from 0.85 → 0.92 (less overall darkening).
+
+## 0.7.20-alpha (2026-05-14)
+
+### Fixed: `deus_shop_view_v2.lua:182: attempt to index field '_shop_config' (a nil value)` crash on client when host/client mod settings differ
+
+Crash reported by user (client) when client had `replace_shrines_with_missions = true` (shops off, converted to missions) and host had it false (vanilla shops on).
+
+Root cause: CW graph generation is deterministic from seed — both peers call `deus_populate_graph` independently (`rpc_deus_setup_run` triggers it on clients). Our hook fired on BOTH peers with their own settings:
+- Host: hook saw `replace_shrines_with_missions = false`, no mutation, graph kept SHOP nodes with `level = "shop_strife"` etc.
+- Client: hook saw `replace_shrines_with_missions = true`, converted SHOP→TRAVEL with `label = 0`, vanilla level picker then rolled a random TRAVEL level (e.g. `pat_mountain_wastes_path1`) for that node.
+
+Host transitioned the run to the shop node and loaded `shop_strife.level`. Shop UI opened on both peers via flow events. Client's `DeusShopSettings.shop_types[<client's mutated level>]` returned nil → crash on the `_shop_config.blessings` index.
+
+Fix: gate the entire `deus_populate_graph` hook behind `Managers.player.is_server`. Clients now pass straight through to vanilla; their local graph matches what host would have generated without our overrides. UI lookups won't nil-crash because every node has its vanilla level/type. Host's mutations still drive the authoritative shared state.
+
+This same fix prevents future similar bugs from `cursed_mission_count`, `disable_dominant_god`, `filter_available_curses`, and any other graph-modifying override that has differing values between peers.
+
+## 0.7.19-alpha (2026-05-14)
+
+### No code changes — version bump to force Steam Workshop CDN refresh
+
+Friend's subscriber client pulled v0.7.17 despite v0.7.18 being uploaded and the Steam Web API correctly reporting `file_size = 1,399,303`. Steam CDN edges can serve stale content for hours after a metadata update. Bumping MOD_VERSION (visible in chat echo) changes the bundle hash and forces fresh CDN propagation.
+
 ## 0.7.18-alpha (2026-05-14)
 
 ### Added: `disable_dominant_god` checkbox (default on)
