@@ -1,5 +1,13 @@
 # General Tweaker Changelog
 
+## 0.2.18-alpha (2026-05-14)
+
+### Fixed: Free camera now actually freezes the player
+
+The free camera (`gt freecam`) was supposed to detach the camera while leaving the character in place — but WASD was still moving the character alongside the camera. The engine's `_enter_free_flight` calls `input_manager:block_device_except_service("FreeFlight", "keyboard", ...)` which is meant to stop the Player input service from receiving keyboard input, but empirically that block doesn't reliably stop the character state machine from reading movement.
+
+Belt-and-suspenders fix: while freecam is active, also call `loco:set_disabled(true)` on the local player's locomotion extension. That yanks the unit out of the locomotion update list entirely — character state machine still ticks (animation pose, etc.) but no movement can be applied regardless of what the Player input service produces. On freecam exit (toggle off, F8 press, or level transition via the `_exit_free_flight` hook), `loco:set_disabled(false)` re-enables the character cleanly. `pcall`-wrapped to survive engine API drift.
+
 ## 0.2.17-dev — first public Workshop release (2026-05-14)
 
 ### Changed: Workshop visibility flipped private → public

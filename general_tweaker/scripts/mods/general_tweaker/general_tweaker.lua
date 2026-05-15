@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.17-dev"
+local MOD_VERSION = "0.2.18-alpha"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -187,9 +187,13 @@ end)
 -- mouse look, scroll wheel = speed, +/- adjust FOV, Enter teleports
 -- player to cam pos, F8 toggles off.
 --
--- Free flight blocks player input while active (block_device_except_service),
--- so attacks/movement won't fire simultaneously. F8 always exits because
--- the FreeFlight input service stays mapped to keyboard regardless.
+-- _enter_free_flight calls input_manager:block_device_except_service
+-- which is SUPPOSED to stop WASD from reaching the Player input service
+-- — empirically it doesn't, the player walks alongside the camera. We
+-- belt-and-suspenders by also calling `set_disabled(true)` on the
+-- player's locomotion extension, which yanks the unit out of the
+-- locomotion update list entirely. Character state machine still ticks
+-- (animation, etc.) but no movement can be applied.
 
 local function _freecam_player_data()
     local ff = Managers.free_flight
@@ -199,6 +203,17 @@ local function _freecam_player_data()
     if not player then return nil, nil end
     local id = player:local_player_id()
     return player, ff.data[id]
+end
+
+local function _freecam_freeze_player(freeze)
+    -- Lock the local player's locomotion so they can't walk while freecam moves.
+    local pm = Managers.player
+    local player = pm and pm:local_player()
+    local unit = player and player.player_unit
+    if not unit then return end
+    local loco = ScriptUnit.has_extension(unit, "locomotion_system")
+    if not loco then return end
+    pcall(loco.set_disabled, loco, freeze, nil, nil, true)
 end
 
 local function _apply_freecam(enabled)
@@ -213,23 +228,26 @@ local function _apply_freecam(enabled)
                 Development._hardcoded_dev_params.third_person_mode = true
             end
             Managers.free_flight:_enter_free_flight(player, data)
+            _freecam_freeze_player(true)
         end
     else
         local player, data = _freecam_player_data()
         if player and data and data.active then
             Managers.free_flight:_exit_free_flight(player, data)
         end
+        _freecam_freeze_player(false)
         -- Restore the release-build gate so a stray F8 mid-fight doesn't activate the cam.
         GameSettingsDevelopment.disable_free_flight = true
     end
 end
 
 -- Sync the setting back to false when the engine itself exits free flight
--- (F8 press, level transition, cleanup). The inner data.active guard in
--- _apply_freecam makes the resulting on_setting_changed call a no-op, so
--- there's no recursion.
+-- (F8 press, level transition, cleanup). Also un-freeze the player — without
+-- this, an F8-exit leaves the character with locomotion disabled and they'd
+-- be stuck in place until you re-toggle freecam from the menu.
 mod:hook_safe("FreeFlightManager", "_exit_free_flight", function(self, player, data)
     if mod:get("freecam_enabled") then mod:set("freecam_enabled", false) end
+    _freecam_freeze_player(false)
 end)
 
 mod:command("freecam", "Toggle detached free-flight camera", function()
