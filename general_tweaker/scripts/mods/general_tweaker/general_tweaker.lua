@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.19-alpha"
+local MOD_VERSION = "0.2.20-alpha"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -9,6 +9,12 @@ local function _write_dump(filename, lines)
 end
 
 local _godmode = mod:get("godmode_enabled") or false
+-- Forward declaration: _apply_godmode is defined further down (in the Godmode
+-- section) but on_setting_changed (defined before it) needs to reference it.
+-- Per feedback_lua_forward_reference.md, name resolution happens at function
+-- compile time — without this `local` here, on_setting_changed would bind
+-- _apply_godmode to a global (nil) and silently do nothing on UI toggles.
+local _apply_godmode
 
 mod:info("General Tweaker v%s loaded", MOD_VERSION)
 mod:echo("General Tweaker v" .. MOD_VERSION)
@@ -532,7 +538,7 @@ mod.on_setting_changed = function(setting_id)
     elseif setting_id == "tp_camera_enabled" then
         _apply_tp(mod:get("tp_camera_enabled"))
     elseif setting_id == "godmode_enabled" then
-        _godmode = mod:get("godmode_enabled") or false
+        _apply_godmode(mod:get("godmode_enabled") or false)
     elseif setting_id == "tp_distance" or setting_id == "tp_height" or setting_id == "tp_side_offset" or setting_id == "tp_disable_zoom_in" then
         _patch_camera_offset()
     elseif setting_id == "freecam_enabled" then
@@ -717,10 +723,49 @@ end)
 -- Godmode
 -- ============================================================
 
-mod:command("god", "Toggle godmode (invincibility)", function()
-    _godmode = not _godmode
-    mod:set("godmode_enabled", _godmode)
-    mod:echo("Godmode " .. (_godmode and "ON" or "OFF"))
+-- Invisibility: use the engine's own canonical signal so AI perception treats us as
+-- "skip this target" (perception_utils.lua:381 explicitly checks status_ext:is_invisible()).
+-- `reason = "gt_godmode"` namespaces our flag so it doesn't clobber other invisibility
+-- sources (Shade's Shadowfall ult, Pact Sworn ghost mode, etc.).
+local _GODMODE_INVIS_REASON = "gt_godmode"
+
+local function _set_local_player_invisible(invisible)
+    local pm = Managers.player
+    local player = pm and pm:local_player()
+    local unit = player and player.player_unit
+    if not unit then return end
+    local status_ext = ScriptUnit.has_extension(unit, "status_system")
+    if not status_ext or not status_ext.set_invisible then return end
+    -- skip_third_person=false → fade the 3P body so user has a visual cue godmode is on.
+    -- 1P weapon arms are unaffected (they're a separate unit), so first-person view stays normal.
+    pcall(status_ext.set_invisible, status_ext, invisible, false, _GODMODE_INVIS_REASON)
+end
+
+-- NOTE: NOT `local function _apply_godmode(...)` — the local was forward-declared
+-- at the top of the file so on_setting_changed can reference it. Re-declaring
+-- local here would shadow the forward decl and reintroduce the forward-ref bug.
+_apply_godmode = function(on)
+    _godmode = on and true or false
+    _set_local_player_invisible(_godmode)
+end
+
+mod:command("god", "Toggle godmode (invincibility + invisibility to enemies)", function()
+    local new_val = not _godmode
+    mod:set("godmode_enabled", new_val)
+    -- Belt-and-suspenders apply in case on_setting_changed doesn't fire on programmatic set.
+    _apply_godmode(new_val)
+    mod:echo("Godmode " .. (new_val and "ON" or "OFF"))
+end)
+
+-- Re-apply invisibility on each player spawn — GenericStatusExtension.invisible is
+-- reset to {} on extension init, so a level transition while godmode is on would
+-- otherwise leave the new player unit visible to AI.
+mod:hook_safe("GenericStatusExtension", "extensions_ready", function(self, world, unit)
+    if not _godmode then return end
+    local pm = Managers.player
+    local player = pm and pm:local_player()
+    if not player or player.player_unit ~= unit then return end
+    pcall(self.set_invisible, self, true, false, _GODMODE_INVIS_REASON)
 end)
 
 -- Both DamageUtils paths must be blocked for full invincibility:
