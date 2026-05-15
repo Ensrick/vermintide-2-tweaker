@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.18-alpha"
+local MOD_VERSION = "0.2.19-alpha"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -743,6 +743,40 @@ end)
 mod:hook("DamageUtils", "add_damage_network_player", function(func, damage_profile, target_index, power_level, attacked_unit, ...)
     if _godmode and _is_local_player_unit(attacked_unit) then return 0 end
     return func(damage_profile, target_index, power_level, attacked_unit, ...)
+end)
+
+-- Block disabler-state transitions on the local player while godmode is on.
+-- The DamageUtils hooks above stop hp damage but disablers (packmaster hook,
+-- pounce, chaos-spawn / corruptor / tentacle grabs, hanging cage) bypass the
+-- damage pipeline and transition the character state machine directly. To
+-- catch all of them in one place we hook GenericStateMachine.change_state
+-- (the chokepoint every csm:change_state call funnels through) and drop the
+-- transition before the new state's on_enter runs.
+--
+-- Set of states we treat as "disabled":
+--   pounced_down              — gutter runner / assassin pin
+--   grabbed_by_pack_master    — hook drag
+--   grabbed_by_chaos_spawn    — chaos spawn grab
+--   grabbed_by_corruptor      — corruptor grab
+--   grabbed_by_tentacle       — beastman bestigor tentacle, etc.
+--   in_hanging_cage           — Citadel of Eternity hanging cage objective
+--
+-- NOT blocked (these are normal gameplay states even with godmode):
+--   stunned / staggered, ledge_hanging, overpowered, knocked_down, dead.
+local _DISABLER_STATES = {
+    pounced_down           = true,
+    grabbed_by_pack_master = true,
+    grabbed_by_chaos_spawn = true,
+    grabbed_by_corruptor   = true,
+    grabbed_by_tentacle    = true,
+    in_hanging_cage        = true,
+}
+
+mod:hook("GenericStateMachine", "change_state", function(func, self, state_next, state_next_params)
+    if _godmode and _DISABLER_STATES[state_next] and _is_local_player_unit(self.unit) then
+        return
+    end
+    return func(self, state_next, state_next_params)
 end)
 
 -- ============================================================

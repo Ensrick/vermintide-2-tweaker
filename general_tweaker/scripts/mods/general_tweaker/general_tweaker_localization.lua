@@ -50,7 +50,7 @@ return {
         en = "Godmode",
     },
     godmode_enabled_tooltip = {
-        en = "Toggle invincibility. Can also be toggled with the 'gt god' chat command.",
+        en = "Toggle invincibility — no damage taken AND immune to disablers (pounce, packmaster hook, chaos-spawn / corruptor / tentacle grabs, hanging cage). Can also be toggled with the 'gt god' chat command.",
     },
     allow_duplicate_careers = {
         en = "Allow Duplicate Careers",

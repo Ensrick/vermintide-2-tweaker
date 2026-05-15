@@ -1,5 +1,15 @@
 # General Tweaker Changelog
 
+## 0.2.19-alpha (2026-05-15)
+
+### Changed: Godmode now also blocks disablers
+
+The two `DamageUtils` hooks (add_damage_network, add_damage_network_player) stop hp damage but disablers (gutter runner / assassin pounce, packmaster hook, chaos-spawn / corruptor / tentacle grabs, hanging cage) bypass the damage pipeline entirely — they push the character state machine directly into the disabler state.
+
+Hook `GenericStateMachine.change_state` (the chokepoint every `csm:change_state(state_name, params)` call funnels through) and drop the transition when (a) godmode is on AND (b) the unit is the local player AND (c) the requested state is one of: `pounced_down`, `grabbed_by_pack_master`, `grabbed_by_chaos_spawn`, `grabbed_by_corruptor`, `grabbed_by_tentacle`, `in_hanging_cage`. Normal gameplay states (`stunned`, `ledge_hanging`, `overpowered`, `knocked_down`, `dead`) are NOT touched.
+
+Godmode tooltip + Workshop description updated to advertise the broader behaviour.
+
 ## 0.2.18-alpha (2026-05-14)
 
 ### Fixed: Free camera now actually freezes the player
