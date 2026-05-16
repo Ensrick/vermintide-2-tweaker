@@ -1,5 +1,15 @@
 # General Tweaker Changelog
 
+## 0.2.21-alpha (2026-05-16)
+
+### Added: Disable Enemy Spawns toggle
+
+New checkbox in the Gameplay group + `gt no_enemies` chat command. When on, every enemy spawn — hordes, specials, bosses, patrols, and pre-placed level-load enemies — is refused. Every enemy in VT2 funnels through `ConflictDirector`'s two public entry points (`spawn_queued_unit` for the pacing-system queue, `spawn_unit_immediate` for terror events / scripted triggers); hooks on both refuse the call when the setting is on.
+
+Existing enemies are NOT despawned — the toggle affects future spawns only. Combine with `gt god` to walk past anything already alive when toggling mid-mission.
+
+Tooltip + Workshop description updated. Chat-command bullet line in the Workshop description extended with `gt no_enemies`.
+
 ## 0.2.20-alpha (2026-05-15)
 
 ### Changed: Godmode now also makes the player invisible to enemy AI

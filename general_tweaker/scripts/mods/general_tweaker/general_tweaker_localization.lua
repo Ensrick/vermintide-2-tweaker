@@ -82,6 +82,12 @@ return {
     noclip_boost_multiplier_tooltip = {
         en = "When holding Left Shift, base speed is multiplied by this value. 3.0 = ~45 m/s with the default base speed.",
     },
+    disable_enemy_spawns = {
+        en = "Disable Enemy Spawns",
+    },
+    disable_enemy_spawns_tooltip = {
+        en = "Block every enemy from spawning — hordes, specials, bosses, patrols, and pre-placed level enemies all go through the same ConflictDirector chokepoint and are refused while this is on. Existing enemies are NOT despawned; pair with 'gt god' if you want to ignore them. Toggle off any time to resume normal spawning. Chat: 'gt no_enemies'.",
+    },
 
     mission_inventory_group = {
         en = "Keep Menus in Missions",

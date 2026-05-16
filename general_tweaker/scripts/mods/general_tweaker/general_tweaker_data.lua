@@ -99,6 +99,12 @@ return {
                         decimals_number = 1,
                         tooltip       = mod:localize("noclip_boost_multiplier_tooltip"),
                     },
+                    {
+                        setting_id    = "disable_enemy_spawns",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("disable_enemy_spawns_tooltip"),
+                    },
                 },
             },
             {

@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.20-alpha"
+local MOD_VERSION = "0.2.21-alpha"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -822,6 +822,36 @@ mod:hook("GenericStateMachine", "change_state", function(func, self, state_next,
         return
     end
     return func(self, state_next, state_next_params)
+end)
+
+-- ============================================================
+-- Disable Enemy Spawns
+-- ============================================================
+-- Every enemy unit in VT2 — hordes, specials, bosses, patrols, and the
+-- pre-placed level-load spawns — funnels through ConflictDirector's two
+-- public entry points: spawn_queued_unit (the deferred queue used by the
+-- pacing system) and spawn_unit_immediate (synchronous, used by terror
+-- events and some scripted triggers). Hook both and refuse when the
+-- setting is on.
+--
+-- Existing enemies are NOT despawned — refusing the spawn affects future
+-- enemies only. Pair with `gt god` if you want existing enemies to ignore
+-- you while you reach a cleaner area.
+
+mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, ...)
+    if mod:get("disable_enemy_spawns") then return end
+    return func(self, ...)
+end)
+
+mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, ...)
+    if mod:get("disable_enemy_spawns") then return nil, nil end
+    return func(self, ...)
+end)
+
+mod:command("no_enemies", "Toggle blocking all enemy spawns", function()
+    local new_val = not mod:get("disable_enemy_spawns")
+    mod:set("disable_enemy_spawns", new_val)
+    mod:echo("Enemy spawns: " .. (new_val and "BLOCKED" or "normal"))
 end)
 
 -- ============================================================
