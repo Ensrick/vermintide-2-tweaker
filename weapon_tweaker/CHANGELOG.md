@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.28-dev (2026-05-15) — Fix Kerillian native elf-spear 3P animations
+
+`_3p_remap_triggers.to_spear` was missing a `we_` entry, so when Kerillian wielded her own elf spear, `_resolve_3p_remap` fell through to `_default = _3p_remap_spear_to_polearm`. That table was authored for **Kruber wielding the elf spear** (mapping elf-spear attack events to Kruber's polearm-skeleton equivalents) and breaks Kerillian's down_left / left attacks when applied to her own skeleton. Symptom: messed up 3P spear animations on every Kerillian career, visible on bots / other players. Fix: added `we_ = false` to declare "Kerillian native, no remap", mirroring the existing `wh_ = false` pattern on `to_2h_billhook`. One-line data fix; no behavior change for cross-character spear wielders (Kruber/Saltzpyre still get their respective remaps).
+
+## 0.12.27-dev (2026-05-15) — Rename `wt status` → `wt info` to clear command-name collision
+
+Startup log was showing `[MOD][wt][ERROR] (command): command name 'status' is already used by another mod 'SpawnTweaks'`. SpawnTweaks loads first and owns the global `status` command name — VMF rejects our duplicate registration, leaving `wt status` non-functional. Renamed our debug-state command to `info`. Same handler body; new invocation is `wt info`.
+
 ## 0.12.26-dev (2026-05-12) — Authentic Brace: final secondary-spread tune, 12× → 9×
 
 `_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT` dialled back from 12.0 to **9.0** per user feel-test ("9× and I think that'll do"). Primary spread stays at 3×, so secondary is now exactly 3× the primary multiplier (was 4× in v0.12.21–v0.12.25). The doc-block step (5) reference value updated to match. No other authentic-brace behavior changes — speed, reticle reticle-jump fix, ammo, reload, damage all unchanged.

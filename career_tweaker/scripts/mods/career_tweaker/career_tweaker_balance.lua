@@ -1,9 +1,9 @@
 local mod = get_mod("crt")
 
 -- ============================================================
--- Talent Balance Modification Framework
+-- Talent Rework Framework
 -- ============================================================
--- Each entry in BALANCE_MODS is a user-togglable balance change.
+-- Each entry in BALANCE_MODS is a user-togglable talent rework.
 -- The setting_id key must match a checkbox in career_tweaker_data.lua.
 --
 -- Structure:
@@ -15,23 +15,142 @@ local mod = get_mod("crt")
 -- Changes take effect next time TalentExtension.apply_buffs_from_talents() runs
 -- (i.e. next mission load or talent change).
 --
--- Hook-based mods check their setting via mod:get() on every call,
+-- Hook-based reworks check their setting via mod:get() on every call,
 -- so they activate/deactivate without needing apply/restore cycles.
 
 -- Minimum value bloodlust_health gets clamped to when the
--- balance_thp_kill_minimum toggle is on. Vanilla slaves/hordes sit at 0..1.
-local _MIN_THP_ON_KILL = 1
+-- rework_general_thp_kill_minimum toggle is on. Vanilla minimum is skaven_horde
+-- (slaves) at 1; beastmen_horde / chaos_horde sit at 1.5; skaven_roamer at 2.
+-- Floor of 1.5 lifts slaves to match the other hordes without touching roamers
+-- or anything above.
+local _MIN_THP_ON_KILL = 1.5
+
+-- Hellborg's Tutelage rework: how much to subtract from random crit chance
+-- while the talent is selected. Mercenary's base crit chance is 5% (0.05),
+-- so a flat 10% reduction zeroes the random-crit roll at base but stays
+-- meaningfully positive once crit-chance stacking is applied (weapon traits,
+-- properties, bench buffs).
+local _HELLBORGS_CRIT_PENALTY = 0.10
+
+-- ============================================================
+-- Helper: stat-buff "double the small percent" reworks
+-- ============================================================
+-- The pattern across multiple talents is: a career-specific buff template
+-- with a single sub-buff whose value is sourced from `buff_tweak_data.<name>`
+-- and merged in at game-init via BuffUtils.apply_buff_tweak_data. The talent
+-- tooltip's description_values[1].value is statically frozen on the talent
+-- entry at the same init pass. To swap a 5% talent to 10%:
+--   1. patch BuffTemplates[talent_name].buffs[1][buff_field] (runtime effect)
+--   2. rewrite Talents[hero][id].description_values[1].value (tooltip text)
+--
+-- This builder factors both into a {patches, custom_apply, custom_restore}
+-- triple compatible with the apply/restore engine below. Assumes the buff
+-- template name matches the talent's `name` (true for victor_zealot_power,
+-- bardin_ranger_attack_speed, kerillian_maidenguard_crit_chance — verify
+-- before adding a new entry).
+local function _build_stat_buff_rework(talent_name, buff_field, new_value)
+    return {
+        patches = {
+            { buff = talent_name, field = buff_field, value = new_value },
+        },
+        custom_apply = function(saved)
+            if not Talents or not TalentIDLookup then return end
+            local lookup = TalentIDLookup[talent_name]
+            if not lookup then return end
+            local hero_talents = Talents[lookup.hero_name]
+            local talent = hero_talents and hero_talents[lookup.talent_id]
+            local dv = talent and talent.description_values and talent.description_values[1]
+            if not dv then return end
+            saved.tooltip_original = dv.value
+            dv.value = new_value
+        end,
+        custom_restore = function(saved)
+            if saved.tooltip_original == nil then return end
+            if not Talents or not TalentIDLookup then return end
+            local lookup = TalentIDLookup[talent_name]
+            if not lookup then return end
+            local hero_talents = Talents[lookup.hero_name]
+            local talent = hero_talents and hero_talents[lookup.talent_id]
+            local dv = talent and talent.description_values and talent.description_values[1]
+            if not dv then return end
+            dv.value = saved.tooltip_original
+            saved.tooltip_original = nil
+        end,
+    }
+end
 
 local BALANCE_MODS = {
-    balance_zealot_merc_allow_random_crits = {
-        character = "victor/markus",
-        career    = "wh_zealot / es_mercenary",
+    rework_wh_zealot_smite_random_crits = {
+        character = "victor",
+        career    = "wh_zealot",
         patches   = {},
     },
-    balance_whc_parry_extended_window = {
+    -- Zealot's row-1 +5% power talent (victor_zealot_power, multiplier 0.05).
+    -- Career-specific template — patch doesn't bleed into other careers'
+    -- equivalents.
+    rework_wh_zealot_power_5_to_10 = _build_stat_buff_rework("victor_zealot_power", "multiplier", 0.10),
+    -- Ranger Veteran's row-2 +5% attack speed talent
+    -- (bardin_ranger_attack_speed, multiplier 0.05). Career-specific.
+    rework_dr_ranger_attack_speed_5_to_10 = _build_stat_buff_rework("bardin_ranger_attack_speed", "multiplier", 0.10),
+    -- Handmaiden's row-2 +5% crit chance talent
+    -- (kerillian_maidenguard_crit_chance, bonus 0.05). Career-specific.
+    -- Buff field is `bonus` not `multiplier` — critical_strike_chance stat_buff
+    -- consumes bonus additively at the buff_extension level.
+    rework_we_maidenguard_crit_chance_5_to_10 = _build_stat_buff_rework("kerillian_maidenguard_crit_chance", "bonus", 0.10),
+    rework_es_mercenary_hellborgs_tutelage = {
+        character = "markus",
+        career    = "es_mercenary",
+        patches   = {},
+    },
+    rework_wh_captain_parry_window = {
         character = "victor",
         career    = "wh_captain",
         patches   = {},
+    },
+    -- Double-Shotted (victor_bountyhunter_activated_ability_railgun): the
+    -- talent's runtime effect is gated by the buff template's `multiplier`
+    -- field on `victor_bountyhunter_activated_ability_railgun_delayed_add`
+    -- (consumed by buff_function_templates.victor_bountyhunter_activated_ability_railgun_delayed,
+    -- which calls career_extension:reduce_activated_ability_cooldown_percent(buff.multiplier)).
+    -- Patching that template field 0.6 → 0.8 lifts the refund from 60% to 80%.
+    --
+    -- The displayed "60%" in the inventory talent tooltip is sourced from
+    -- Talents.victor[talent_id].description_values[1].value (set at game-init
+    -- from `buff_tweak_data.victor_bountyhunter_activated_ability_railgun.multiplier`,
+    -- so by the time mods run that value is already frozen on the talent entry).
+    -- The custom_apply hook walks TalentIDLookup to find the talent's table
+    -- and rewrites the description_values entry in place; custom_restore puts
+    -- it back. The tooltip refresh isn't instant — players need to close and
+    -- re-enter the talent panel after toggling, same as Hellborg's Tutelage.
+    rework_wh_bountyhunter_double_shotted_80 = {
+        character = "victor",
+        career    = "wh_bountyhunter",
+        patches   = {
+            { buff = "victor_bountyhunter_activated_ability_railgun_delayed_add", field = "multiplier", value = 0.8 },
+        },
+        custom_apply = function(saved)
+            if not Talents or not TalentIDLookup then return end
+            local lookup = TalentIDLookup["victor_bountyhunter_activated_ability_railgun"]
+            if not lookup then return end
+            local hero_talents = Talents[lookup.hero_name]
+            local talent = hero_talents and hero_talents[lookup.talent_id]
+            local dv = talent and talent.description_values and talent.description_values[1]
+            if not dv then return end
+            saved.double_shotted_tooltip_original = dv.value
+            dv.value = 0.8
+        end,
+        custom_restore = function(saved)
+            if saved.double_shotted_tooltip_original == nil then return end
+            if not Talents or not TalentIDLookup then return end
+            local lookup = TalentIDLookup["victor_bountyhunter_activated_ability_railgun"]
+            if not lookup then return end
+            local hero_talents = Talents[lookup.hero_name]
+            local talent = hero_talents and hero_talents[lookup.talent_id]
+            local dv = talent and talent.description_values and talent.description_values[1]
+            if not dv then return end
+            dv.value = saved.double_shotted_tooltip_original
+            saved.double_shotted_tooltip_original = nil
+        end,
     },
     -- Stagger THP rework: +50% per-target THP (base_value 1 -> 1.5) and caps
     -- the per-swing target count at 3 instead of 5. Light/medium/heavy stagger
@@ -40,7 +159,7 @@ local BALANCE_MODS = {
     -- Trades the vanilla horde-feast (5 medium staggers = 5 THP) for a
     -- smaller-but-richer payout that also rewards light/heavy stagger more
     -- meaningfully without ballooning into the OP territory of the +100% rework.
-    balance_stagger_thp_rework = {
+    rework_general_stagger_thp = {
         character = "any",
         career    = "any (Heal-on-Stagger talents)",
         patches   = {
@@ -57,7 +176,7 @@ local BALANCE_MODS = {
     -- number out of BreedTweaks.bloodlust_health at game-load time
     -- (e.g. breed_chaos_warrior.lua:134), so we mutate breed tables directly.
     -- Snapshot per breed_name → restored on disable / re-toggle.
-    balance_thp_kill_minimum = {
+    rework_general_thp_kill_minimum = {
         character = "any",
         career    = "any (THP-on-kill traits/talents)",
         patches   = {},
@@ -87,26 +206,85 @@ local BALANCE_MODS = {
 }
 
 -- ============================================================
--- Hook: Allow random crits alongside "crit every 5 hits"
+-- Hook: per-career suppression of the no_random_crits perk
 -- ============================================================
--- Zealot and Mercenary talents have perks = { "no_random_crits" }.
--- ActionUtils.is_critical_strike checks has_talent_perk("no_random_crits")
--- and forces is_crit = false, bypassing normal crit RNG.
--- This hook suppresses that perk so natural crits can still proc.
-
--- Idempotent and reversible: the hook always reads the current setting via
--- mod:get, so toggling the checkbox takes effect on the very next call to
--- has_talent_perk (which is per-attack via ActionUtils.is_critical_strike).
--- No state to clean up on disable beyond what mod.on_disabled already does.
+-- The Zealot (Smite) and Mercenary (Hellborg's Tutelage) "crit every 5 hits"
+-- talents both attach the perk { "no_random_crits" }. ActionUtils.is_critical_strike
+-- short-circuits the chance roll to false when this perk is present.
+--
+-- The hook differentiates by `self._career_name`: each rework toggle only
+-- suppresses the perk for its own career, so Zealot's setting doesn't lift
+-- Mercenary's restriction and vice versa. Both hooks idempotently re-read
+-- mod:get() on every call, so toggling takes effect on the next attack.
 mod:hook("TalentExtension", "has_talent_perk", function(func, self, perk)
-    if perk == "no_random_crits" and mod:get("balance_zealot_merc_allow_random_crits") then
-        return false
+    if perk == "no_random_crits" then
+        local career = self._career_name
+        if career == "wh_zealot" and mod:get("rework_wh_zealot_smite_random_crits") then
+            return false
+        end
+        if career == "es_mercenary" and mod:get("rework_es_mercenary_hellborgs_tutelage") then
+            return false
+        end
     end
     return func(self, perk)
 end)
 
 -- ============================================================
--- Hook: Extend parry window when WHC parry-crit talent toggle is on
+-- Hook: Hellborg's Tutelage random crit-chance reduction
+-- ============================================================
+-- When the rework is active and the player is on Mercenary with Hellborg's
+-- Tutelage (`markus_mercenary_crit_count`) selected, subtract
+-- _HELLBORGS_CRIT_PENALTY from the final crit chance after vanilla buffs run.
+-- The has_talent_perk hook above lifts the hard-zero short-circuit; this hook
+-- supplies the trade-off (a smaller pool of random crits instead of none).
+--
+-- ActionUtils is a plain global table, so use table-form hooking per
+-- CLAUDE.md hooking rules. Guard for load order — if the helper isn't
+-- registered yet we skip the hook entirely (defensive; in practice the
+-- helpers file loads at game boot, long before any VMF mod).
+if ActionUtils and ActionUtils.get_critical_strike_chance then
+    mod:hook(ActionUtils, "get_critical_strike_chance", function(func, unit, action, overrides)
+        local chance = func(unit, action, overrides)
+        if not mod:get("rework_es_mercenary_hellborgs_tutelage") then
+            return chance
+        end
+        local talent_ext = ScriptUnit.has_extension(unit, "talent_system")
+        if not talent_ext or talent_ext._career_name ~= "es_mercenary" then
+            return chance
+        end
+        if not talent_ext:has_talent("markus_mercenary_crit_count") then
+            return chance
+        end
+        local reduced = chance - _HELLBORGS_CRIT_PENALTY
+        if reduced < 0 then reduced = 0 end
+        return reduced
+    end)
+end
+
+-- ============================================================
+-- Hook: _G.Localize override for Hellborg's Tutelage description
+-- ============================================================
+-- The vanilla talent description text is rendered through Localize() and then
+-- post-formatted by UIUtils.format_localized_description with the talent's
+-- `description_values`. Mercenary crit_count has one description value
+-- (buff_on_stacks = 5), so the override string takes one %d slot. Literal
+-- percent signs MUST be `%%` because the result is re-fed through string.format
+-- — a bare `%` becomes "[Invalid String Format]". See
+-- feedback_vt2_localize_string_format_pipeline.md.
+local _HELLBORGS_DESC_OVERRIDE =
+    "Critical Strike every %d melee hits. Random Critical Strike chance reduced by 10%%."
+
+mod:hook(_G, "Localize", function(func, key, ...)
+    if type(key) == "string"
+       and key == "markus_mercenary_crit_count_desc"
+       and mod:get("rework_es_mercenary_hellborgs_tutelage") then
+        return _HELLBORGS_DESC_OVERRIDE
+    end
+    return func(key, ...)
+end)
+
+-- ============================================================
+-- Hook: Extend parry window when WHC parry-crit rework is on
 -- ============================================================
 -- Vanilla parry window is 0.5s (hardcoded in ActionBlock and ActionMeleeStart).
 -- Extended window doubles it to 1.0s when the toggle is enabled.
@@ -116,7 +294,7 @@ local _PARRY_WINDOW_EXTENDED_S = 1.0
 -- (action_block.lua:45). hook_safe runs AFTER the original, so our overwrite to
 -- t + _PARRY_WINDOW_EXTENDED_S lands last and wins.
 mod:hook_safe("ActionBlock", "client_owner_start_action", function(self, new_action, t)
-    if mod:get("balance_whc_parry_extended_window") then
+    if mod:get("rework_wh_captain_parry_window") then
         local status_extension = self._status_extension
         if status_extension and status_extension.timed_block then
             status_extension.timed_block = t + _PARRY_WINDOW_EXTENDED_S
@@ -130,7 +308,7 @@ end)
 -- Note: ActionMeleeStart inherits from ActionDummy and stores its extension as
 -- `self.status_extension` (no underscore — action_dummy.lua:9), unlike ActionBlock above.
 mod:hook_safe("ActionMeleeStart", "client_owner_post_update", function(self, dt, t, world)
-    if mod:get("balance_whc_parry_extended_window") then
+    if mod:get("rework_wh_captain_parry_window") then
         local status_extension = self.status_extension
         if status_extension and status_extension.timed_block then
             status_extension.timed_block = t + _PARRY_WINDOW_EXTENDED_S
@@ -141,9 +319,6 @@ end)
 -- ============================================================
 -- Field-patch apply/restore engine
 -- ============================================================
--- REVIEW: Currently unused — both registered BALANCE_MODS have empty
--- patches{} and rely on hooks above. _originals will always be empty after
--- apply, and restore is a no-op. Keep if patch-based mods are planned.
 
 local _originals = {}
 

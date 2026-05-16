@@ -21,7 +21,7 @@ Key conventions (also in CLAUDE.md):
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.12.26-dev"
+local MOD_VERSION = "0.12.28-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
@@ -421,6 +421,11 @@ local _3p_remap_triggers = {
     to_spear = {
         _default = _3p_remap_spear_to_polearm,
         wh_      = _3p_remap_spear_to_billhook,
+        -- Kerillian's elf skeleton authors the spear moveset natively; the
+        -- _default remap was built for Kruber's polearm skeleton and breaks
+        -- her down_left / left attacks if applied. Mirrors the wh_ = false
+        -- pattern on to_2h_billhook below.
+        we_      = false,
     },
     to_polearm = {
         _default = _3p_remap_billhook_to_polearm,
@@ -675,7 +680,7 @@ local _local_fp_unit = nil
 local _original_animation_event = nil
 local _animlog_last_was_attack = false
 
-mod:command("status", "Show current weapon tweaker state", function()
+mod:command("info", "Show current weapon tweaker state", function()
     mod:echo("Weapon Tweaker v" .. MOD_VERSION)
     local career = _local_career_name()
     mod:echo("Career: " .. (career or "unknown"))

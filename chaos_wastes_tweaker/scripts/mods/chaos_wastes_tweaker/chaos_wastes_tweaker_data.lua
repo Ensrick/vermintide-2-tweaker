@@ -80,6 +80,7 @@ local BOON_TREE = {
                     "deus_increased_healing_taken", "deus_max_health", "healers_touch",
                     "heal_on_dot_damage_dealt", "health", "invigorating_strike",
                     "natural_bond", "transfer_temp_health_at_full",
+                    "ct_kill_heal",  -- v0.7.32 Mod Boon: 1 green HP per kill (exotic)
                 },
             },
             {
@@ -185,6 +186,21 @@ local BOON_TREE = {
                 category_id = "gamble_misc",
                 items = { "boon_weaponrarity_01", "boon_weaponrarity_02", "deus_power_up_quest_granted_test_01" },
             },
+        },
+    },
+    {
+        category_id = "mod_boons",
+        items = {
+            "ct_meta_stagger",
+            "ct_meta_crit",
+            "ct_meta_health",
+            "ct_meta_cooldown",
+            "ct_meta_movespeed",  -- v0.7.35: +1% MS per active boon
+            -- v0.7.34 Trait-as-Boon (gated by Reworks > Reworks: Boons > enable_boon_* toggles)
+            "ct_boon_vauls_anvil",
+            "ct_boon_manann_tempest",
+            "ct_boon_taal_twinned_arrow",
+            "ct_boon_asuryan_wrath",
         },
     },
 }
@@ -420,6 +436,7 @@ local data = {
                     { setting_id = "arena_ammo_count", type = "numeric", default_value = 2, range = { 0, 10 }, decimals_number = 0, tooltip = "arena_ammo_count_tooltip" },
                     { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false, tooltip = "any_trait_any_weapon_tooltip" },
                     { setting_id = "tweak_trait_tier_by_rarity", type = "checkbox", default_value = false, tooltip = "tweak_trait_tier_by_rarity_tooltip" },
+                    { setting_id = "tweak_shard_strike_duration", type = "numeric", default_value = 16, range = { 1, 16 }, decimals_number = 0, tooltip = "tweak_shard_strike_duration_tooltip" },
                     {
                         setting_id = "reworks_boons_group",
                         type = "group",
@@ -430,6 +447,12 @@ local data = {
                             { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
                             { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
                             { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
+                            { setting_id = "enable_boon_vauls_anvil",         type = "checkbox", default_value = false, tooltip = "enable_boon_vauls_anvil_tooltip" },
+                            { setting_id = "enable_boon_manann_tempest",      type = "checkbox", default_value = false, tooltip = "enable_boon_manann_tempest_tooltip" },
+                            { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
+                            { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
+                            { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
+                            { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
                         },
                     },
                     {
@@ -438,6 +461,7 @@ local data = {
                         sub_widgets = {
                             { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
                             { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
+                            { setting_id = "tweak_home_brewer_potency", type = "checkbox", default_value = false, tooltip = "tweak_home_brewer_potency_tooltip" },
                             { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
                         },
                     },
@@ -452,6 +476,23 @@ local data = {
                     setting_id = "starting_boons_group",
                     type = "group",
                     sub_widgets = build_start_tree(),
+                },
+                {
+                    setting_id = "activate_dormant_boons_group",
+                    type = "group",
+                    sub_widgets = (function()
+                        local widgets = {}
+                        for _, boon_id in ipairs(DORMANT_BOONS) do
+                            local sid = "activate_dormant_" .. boon_id
+                            widgets[#widgets + 1] = {
+                                setting_id = sid,
+                                type = "checkbox",
+                                default_value = false,
+                                tooltip = sid .. "_tooltip",
+                            }
+                        end
+                        return widgets
+                    end)(),
                 },
             {
                 setting_id = "banned_traits_group",

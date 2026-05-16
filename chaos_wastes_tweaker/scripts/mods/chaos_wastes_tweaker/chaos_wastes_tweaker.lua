@@ -28,7 +28,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.28b-alpha"
+local MOD_VERSION = "0.7.40-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -121,6 +121,10 @@ local all_trait_combos_cache = nil
 local sync_reckless_swings
 local sync_bomb_cooldown
 local sync_boon_movespeed
+-- v0.7.39: defeat-recovery state. Referenced in `_transition_next_node` hook (line ~402)
+-- which is defined BEFORE the feature block that owns this flag (line ~2706+). Forward-
+-- declaring here keeps the hook valid pre-feature-block execution.
+local _defeat_recovery_triggered_this_round = false
 
 local function is_curse_disabled(curse_name)
     if type(curse_name) ~= "string" or not curse_name:find("^curse_") then
@@ -400,6 +404,11 @@ end)
 -- POTENTIAL BUG (LOW): If the wrapped `func` errors, restoration is skipped and node.curse stays
 -- nil for the rest of the run. Same pattern repeats in start_next_round and _enable_hover.
 mod:hook("DeusMechanism", "_transition_next_node", function(func, self, next_node_key, ...)
+    -- v0.7.39: reset defeat-recovery flag on every level/node transition so each new
+    -- mission gets its own one-shot rescue. Forward-declared variable lives near the
+    -- defeat-recovery feature block.
+    _defeat_recovery_triggered_this_round = false
+
     local run_controller = self._deus_run_controller
     local graph_data = run_controller and run_controller:get_graph_data()
     local node = graph_data and graph_data[next_node_key]
@@ -996,6 +1005,44 @@ do
     end
 end
 
+-- Mod Boon localization overrides (v0.7.30). The 4 ct-injected meta boons reference
+-- `display_name_ct_meta_*` and `description_ct_meta_*` localization keys in their
+-- DeusPowerUpTemplates entries. Vanilla Localize() returns `<key>` for keys it doesn't
+-- know — so the in-game boon UI would show "<display_name_ct_meta_stagger>" unless we
+-- intercept and provide the strings. Each `%` is escaped as `%%` because vanilla's
+-- UIUtils.format_localized_description re-feeds via string.format (see
+-- feedback_vt2_localize_string_format_pipeline.md).
+local MOD_BOON_LOC = {
+    display_name_ct_meta_stagger = "(Mod Boon) Reactive Bulwark",
+    description_ct_meta_stagger  = "+1%% stagger power and +1%% melee cleave per active boon.",
+    display_name_ct_meta_crit    = "(Mod Boon) Crit Cascade",
+    description_ct_meta_crit     = "+1%% critical strike chance and +5%% critical strike effectiveness per active boon.",
+    display_name_ct_meta_health  = "(Mod Boon) Vitality Cascade",
+    description_ct_meta_health   = "+1%% max health and +1%% healing received per active boon.",
+    display_name_ct_meta_cooldown = "(Mod Boon) Ability Cascade",
+    description_ct_meta_cooldown = "+2%% cooldown regen per active boon.",
+    display_name_ct_meta_movespeed = "(Mod Boon) Wind Cascade",
+    description_ct_meta_movespeed  = "+1%% movement speed per active boon.",
+    display_name_ct_kill_heal    = "(Mod Boon) Khaine's Communion",
+    description_ct_kill_heal     = "Killing an enemy heals you for 1 health.",
+
+    -- v0.7.34 Trait-as-Boon
+    display_name_ct_boon_vauls_anvil         = "(Mod Boon) Vaul's Anvil",
+    description_ct_boon_vauls_anvil          = "All attacks against you count as blocked while your melee weapon is wielded. Block break disables this for 10 seconds.",
+    display_name_ct_boon_manann_tempest      = "(Mod Boon) Manann's Tempest",
+    description_ct_boon_manann_tempest       = "Critical strikes trigger a chain lightning that jumps to up to 5 nearby enemies, ignoring armour. Stacks with the trait.",
+    display_name_ct_boon_taal_twinned_arrow  = "(Mod Boon) Taal's Twinned Arrow",
+    description_ct_boon_taal_twinned_arrow   = "Ranged attacks fire one additional projectile. Stacks with the trait. Has no effect without a ranged weapon.",
+    display_name_ct_boon_asuryan_wrath       = "(Mod Boon) Asuryan's Wrath",
+    description_ct_boon_asuryan_wrath        = "Melee kills have a 50%% chance to deal the killing blow's damage to a nearby enemy. Stacks with the trait.",
+
+    -- v0.7.33 typo fix: vanilla description for Addaioth's Splendour (deus_ranged_crit_explosion
+    -- trait) claims "Every 30 seconds" but the actual cooldown_duration in buff_tweak_data.lua:344
+    -- is 10. Vanilla's loc string swapped the cooldown (10) and damage percent (30) when filling
+    -- description_values positionally. Override returns a static, correct string.
+    description_deus_ranged_crit_explosion_trait = "Every 10 seconds, ranged Critical Hits explode in an area for 30%% of their Damage. Deals damage scaled by Hero Power. Staggers nearby enemies.",
+}
+
 -- Consolidated _G.Localize hook. VMF warns "Attempting to rehook active hook" if the
 -- same target is hooked twice — only the second binding survives and shadows the first.
 -- Two purposes live here:
@@ -1016,6 +1063,8 @@ mod:hook(_G, "Localize", function(func, key, ...)
         if t then return t end
         local d = ADV_DESC_OVERRIDES[key]
         if d then return d end
+        local m = MOD_BOON_LOC[key]
+        if m then return m end
         if key == "description_deus_reckless_swings" and reckless_swings_originals then
             return RECKLESS_SWINGS_DESC_OVERRIDE
         end
@@ -2530,6 +2579,781 @@ end
 sync_moot_milk_alt_tweak()
 
 -- ============================================================
+-- Shard Strike duration nerf (v0.7.28b-alpha)
+-- ============================================================
+-- Shard Strike (`armor_breaker` weapon trait) spawns a 16-second damaging stagger aura
+-- around the player on killing an armoured enemy. Vanilla 16s is widely considered
+-- overtuned (top-tier offensive AND defensive). This nerf lets the user shorten the
+-- duration to any value 1-16s. At 16 = vanilla (no-op).
+--
+-- Mutates `WeaponTraits.buff_templates.armor_breaker.buffs[1].duration` directly. The
+-- buff template is merged from `weapon_traits_morris.lua:980` (BuffUtils.apply_buff_tweak_data)
+-- and registered at game boot, so the runtime value is whatever lives in WeaponTraits at
+-- the moment add_buff is called. Mod load happens after merge, so our mutation takes
+-- effect for all subsequent procs. ALSO mutates `BuffTemplates.armor_breaker` if present
+-- (defensive — some merge paths copy into the global BuffTemplates).
+local shard_strike_originals = nil
+
+local function _shard_strike_buff_entries()
+    local out = {}
+    local wt = rawget(_G, "WeaponTraits")
+    local wt_buff = wt and wt.buff_templates and wt.buff_templates.armor_breaker and wt.buff_templates.armor_breaker.buffs and wt.buff_templates.armor_breaker.buffs[1]
+    if wt_buff then out[#out+1] = wt_buff end
+    local bt = rawget(_G, "BuffTemplates")
+    local bt_buff = bt and bt.armor_breaker and bt.armor_breaker.buffs and bt.armor_breaker.buffs[1]
+    if bt_buff then out[#out+1] = bt_buff end
+    return out
+end
+
+local function revert_shard_strike_tweak()
+    if not shard_strike_originals then return end
+    for _, b in ipairs(_shard_strike_buff_entries()) do
+        b.duration = shard_strike_originals.duration
+    end
+    shard_strike_originals = nil
+end
+
+local function apply_shard_strike_tweak()
+    local user_value = mod:get("tweak_shard_strike_duration") or 16
+    local target = math.max(1, math.min(16, user_value))
+    if target == 16 then
+        revert_shard_strike_tweak()
+        return
+    end
+    local entries = _shard_strike_buff_entries()
+    if #entries == 0 then
+        mod:info("[shard-strike] WeaponTraits.buff_templates.armor_breaker not loaded yet; will retry on settings sync")
+        return
+    end
+    if not shard_strike_originals then
+        shard_strike_originals = { duration = entries[1].duration }
+    end
+    for _, b in ipairs(entries) do
+        b.duration = target
+    end
+end
+
+local function sync_shard_strike()
+    apply_shard_strike_tweak()
+end
+
+sync_shard_strike()
+
+-- ============================================================
+-- Anath Raema's Swiftness — permanent reload speed (v0.7.36-alpha)
+-- ============================================================
+-- Vanilla: the trait `deus_ammo_pickup_reload_speed` watches `on_consumable_picked_up`
+-- and adds a 10-second `deus_ammo_pickup_reload_speed_buff` (+50% reload speed) on
+-- ammo pickup. This rework swaps the parent trait template for a passive permanent
+-- +50% `reload_speed` stat_buff that's active whenever the weapon (with the trait) is
+-- wielded.
+--
+-- Mutates BOTH `WeaponTraits.buff_templates.deus_ammo_pickup_reload_speed` (the trait
+-- registry the trait system reads at apply time) AND `BuffTemplates.deus_ammo_pickup_reload_speed`
+-- (the global runtime buff lookup). Save-and-restore so the toggle is reversible.
+local anath_raema_originals = nil
+
+local function _anath_raema_buff_entries()
+    local out = {}
+    local wt = rawget(_G, "WeaponTraits")
+    if wt and wt.buff_templates and wt.buff_templates.deus_ammo_pickup_reload_speed then
+        out[#out + 1] = { tbl = wt.buff_templates, key = "deus_ammo_pickup_reload_speed" }
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    if bt and bt.deus_ammo_pickup_reload_speed then
+        out[#out + 1] = { tbl = bt, key = "deus_ammo_pickup_reload_speed" }
+    end
+    return out
+end
+
+local function revert_anath_raema_permanent_tweak()
+    if not anath_raema_originals then return end
+    for _, e in ipairs(_anath_raema_buff_entries()) do
+        e.tbl[e.key] = anath_raema_originals.templates[e.key] or e.tbl[e.key]
+    end
+    anath_raema_originals = nil
+end
+
+local function apply_anath_raema_permanent_tweak()
+    local entries = _anath_raema_buff_entries()
+    if #entries == 0 then
+        mod:info("[anath-raema] templates not loaded yet; will retry on settings sync")
+        return
+    end
+    if anath_raema_originals then return end
+    local saved = {}
+    for _, e in ipairs(entries) do
+        saved[e.key] = e.tbl[e.key]
+    end
+    anath_raema_originals = { templates = saved }
+
+    -- Replacement template: single permanent stat_buff. multiplier = 0.5 matches the
+    -- vanilla on-pickup multiplier from MorrisBuffTweakData.deus_ammo_pickup_reload_speed_buff.
+    local replacement = {
+        buffs = {
+            {
+                name        = "deus_ammo_pickup_reload_speed_permanent",
+                stat_buff   = "reload_speed",
+                multiplier  = 0.5,
+                max_stacks  = 1,
+            },
+        },
+    }
+    for _, e in ipairs(entries) do
+        e.tbl[e.key] = replacement
+    end
+end
+
+local function sync_anath_raema_permanent()
+    if mod:get("tweak_anath_raema_permanent") then
+        apply_anath_raema_permanent_tweak()
+    else
+        revert_anath_raema_permanent_tweak()
+    end
+end
+
+sync_anath_raema_permanent()
+
+-- ============================================================
+-- Defeat Recovery: soft wipe recovery with penalty (v0.7.39-alpha)
+-- ============================================================
+-- When `tweak_defeat_recovery` is on and the team would wipe, instead force-respawn
+-- everyone in place and apply a penalty: zero own coins + remove 5 random own boons.
+-- The mission continues from the wipe point — this is NOT a full level reload (the
+-- engine doesn't expose a safe mid-run "reload current level" path; that'd require a
+-- full level transition with all the run-state replication that entails).
+--
+-- LIMITATIONS:
+-- * Per-peer locality: each peer applies the penalty to their OWN coins and boons.
+--   In MP, every peer needs ct with the toggle on for the team to share the rescue.
+--   If only the host has ct, the host doesn't lose / the run continues, but other
+--   peers' coins/boons are not modified.
+-- * Recovery fires once per round (per level). Subsequent wipes on the same level end
+--   the run normally. This prevents infinite loops and keeps recovery a finite resource.
+-- * Reset on level transition via the existing `_transition_next_node` hook.
+-- (Flag itself is forward-declared near the top of the file; just used here.)
+
+local function _apply_local_defeat_penalty()
+    local mechanism = Managers.mechanism and Managers.mechanism:game_mechanism()
+    local deus_run_controller = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+    if not deus_run_controller then
+        mod:info("[defeat-recovery] no deus_run_controller; skipping penalty")
+        return
+    end
+    local run_state = deus_run_controller._run_state
+    if not run_state then return end
+
+    local local_peer_id = run_state:get_own_peer_id()
+    local local_player_id = 1  -- REAL_PLAYER_LOCAL_ID per deus_run_controller.lua:29
+
+    -- Zero own coins.
+    run_state:set_player_soft_currency(local_peer_id, local_player_id, 0)
+    mod:info("[defeat-recovery] zeroed own coins")
+
+    -- Pick 5 random boons (or fewer if you have less than 5) and remove them.
+    local profile_index, career_index = run_state:get_player_profile(local_peer_id, local_player_id)
+    local power_ups = run_state:get_player_power_ups(local_peer_id, local_player_id, profile_index, career_index)
+    if power_ups and #power_ups > 0 then
+        local indices = {}
+        for i = 1, #power_ups do indices[i] = i end
+        local to_remove = math.min(5, #indices)
+        local removed_names = {}
+        for _ = 1, to_remove do
+            local pick = math.random(#indices)
+            local boon_idx = indices[pick]
+            table.remove(indices, pick)
+            local boon = power_ups[boon_idx]
+            if boon and boon.name then
+                removed_names[#removed_names + 1] = boon.name
+                deus_run_controller:remove_power_ups(boon.name, local_player_id)
+            end
+        end
+        mod:info(string.format("[defeat-recovery] removed %d boons: %s", #removed_names, table.concat(removed_names, ", ")))
+    else
+        mod:info("[defeat-recovery] no boons to remove")
+    end
+end
+
+local function _force_respawn_team()
+    if not Managers.state.game_mode then return end
+    local game_mode = Managers.state.game_mode:game_mode()
+    if game_mode and game_mode.force_respawn_dead_players then
+        game_mode:force_respawn_dead_players()
+        mod:info("[defeat-recovery] force-respawned dead players")
+    end
+end
+
+mod:hook("GameModeDeus", "evaluate_end_conditions", function(func, self, ...)
+    if not mod:get("tweak_defeat_recovery") then
+        return func(self, ...)
+    end
+    if _defeat_recovery_triggered_this_round then
+        -- Already burned the recovery for this round; normal end-condition resolution.
+        return func(self, ...)
+    end
+    local ended, reason = func(self, ...)
+    if ended and reason == "lost" then
+        _defeat_recovery_triggered_this_round = true
+        _apply_local_defeat_penalty()
+        _force_respawn_team()
+        mod:info("[defeat-recovery] intercepted wipe — penalty applied, players respawned, round continues")
+        return false  -- Don't propagate the "lost" outcome.
+    end
+    return ended, reason
+end)
+
+-- ============================================================
+-- Activate Dormant Boons (v0.7.29-alpha)
+-- ============================================================
+-- 9 boons defined in vanilla `DeusPowerUpTemplates` but NOT registered in
+-- `DeusPowerUpRarityPool` — they can never roll in the active CW loot pool. Each has an
+-- `activate_dormant_<boon>` toggle. When on, the boon is injected into the rarity pool
+-- (and all derived tables: DeusPowerUps, DeusPowerUpsArray, DeusPowerUpsArrayByRarity,
+-- DeusPowerUpsLookup, DeusPowerUpBuffTemplates) using the same construction pattern as
+-- vanilla's registration loop at `deus_power_up_settings.lua:7121-7176`.
+--
+-- LIMITATIONS:
+-- * Additive only — toggling OFF doesn't remove the boon from the active run; would
+--   require a game restart to fully clear. The injection takes effect on the next CW
+--   run setup (since the engine reads the pool at run start).
+-- * Per-boon rarity is fixed; user can't currently choose a different rarity for a
+--   given dormant boon. Defaults are sensible (powerful boons → exotic, weaker → rare).
+-- IMPORTANT: vanilla boon rarities are { event, rare, exotic, unique } ONLY (see
+-- deus_power_up_settings.lua:7032 `DeusPowerUpRarities`). "common" / "plentiful" are
+-- weapon-drop rarities and do NOT exist for boons. `existing_power_ups_lut` is keyed
+-- off DeusPowerUpRarities — injecting at a non-listed rarity crashes
+-- `deus_power_up_utils.lua:189` when the boon ends up in `existing_power_ups`.
+-- v0.7.37 fix: squats and deus_larger_clip moved from "common" → "rare".
+local DORMANT_BOON_RARITY = {
+    deus_ammo_pickup_give_allies_ammo    = "rare",
+    deus_coin_pickup_regen               = "rare",
+    deus_large_ammo_pickup_infinite_ammo = "exotic",
+    deus_larger_clip                     = "rare",   -- v0.7.37 was "common", crashed
+    deus_throw_speed_increase            = "rare",
+    deus_timed_block_free_shot           = "exotic",
+    deus_transmute_into_coins            = "rare",
+    explosive_pushes_on_damage_taken     = "exotic",
+    squats                               = "rare",   -- v0.7.37 was "common", crashed
+}
+
+local _injected_dormants = {}
+
+-- v0.7.38/v0.7.40: Register a name in a NetworkLookup table. Vanilla builds these
+-- lookups at boot from their backing global tables (BuffTemplates,
+-- DeusPowerUpTemplates, etc.). Entries we add post-boot are NOT in the lookups, and
+-- the lookup's __index metatable errors on unknown keys (network_lookup.lua:2354).
+-- Append index→name and set the reverse name→index. rawget bypasses the
+-- error-on-unknown-key metatable when checking for existing registration.
+local function _register_in_network_lookup(lookup_key, name)
+    if type(name) ~= "string" then return end
+    local nl = rawget(_G, "NetworkLookup")
+    local t = nl and nl[lookup_key]
+    if not t then return end
+    if rawget(t, name) then return end
+    local idx = #t + 1
+    t[idx] = name
+    t[name] = idx
+end
+
+local function register_buff_in_network_lookup(buff_name)
+    _register_in_network_lookup("buff_templates", buff_name)
+end
+
+local function register_power_up_in_network_lookup(power_up_name)
+    _register_in_network_lookup("deus_power_up_templates", power_up_name)
+end
+
+local function inject_dormant_boon(power_up_name, rarity)
+    if _injected_dormants[power_up_name] then return end
+
+    -- v0.7.40: Register in NetworkLookup.deus_power_up_templates immediately. Vanilla
+    -- code at deus_run_state_spec.lua:60, deus_run_controller.lua:1198 (and similar)
+    -- looks up the power-up by name. Without registration the lookup errors when the
+    -- player selects this boon at a chest (Crashify guid 9f697495 — burned in v0.7.39).
+    register_power_up_in_network_lookup(power_up_name)
+
+    local pool             = rawget(_G, "DeusPowerUpRarityPool")
+    local templates        = rawget(_G, "DeusPowerUpTemplates")
+    local power_ups        = rawget(_G, "DeusPowerUps")
+    local array            = rawget(_G, "DeusPowerUpsArray")
+    local array_by_rarity  = rawget(_G, "DeusPowerUpsArrayByRarity")
+    local lookup           = rawget(_G, "DeusPowerUpsLookup")
+    local buff_templates   = rawget(_G, "DeusPowerUpBuffTemplates")
+    local settings         = rawget(_G, "DeusPowerUpSettings")
+    local availability_t   = rawget(_G, "DeusPowerUpAvailabilityTypes")
+    local tweak_data_glob  = rawget(_G, "MorrisBuffTweakData")
+
+    if not (pool and templates and power_ups and array and array_by_rarity and lookup and buff_templates) then
+        mod:info("[dormant] DeusPowerUp* tables not loaded yet; skipping injection of " .. tostring(power_up_name))
+        return
+    end
+
+    local template = templates[power_up_name]
+    if not template then
+        mod:info("[dormant] template not found for " .. tostring(power_up_name))
+        return
+    end
+
+    local availability = (availability_t and {
+        availability_t.cursed_chest,
+        availability_t.weapon_chest,
+        availability_t.shrine,
+    }) or {}
+
+    -- 1. Add to the rarity pool itself.
+    pool[rarity] = pool[rarity] or {}
+    table.insert(pool[rarity], { power_up_name, availability, {} })
+
+    -- 2. Build the new_power_up record (mirrors vanilla deus_power_up_settings.lua:7121-7176).
+    local new_power_up = {}
+    new_power_up.name           = power_up_name
+    new_power_up.rarity         = rarity
+    new_power_up.mutators       = {}
+    new_power_up.availability   = availability
+    new_power_up.max_amount     = template.max_amount or 1
+    new_power_up.incompatibility = template.incompatibility
+    new_power_up.weight         = template.weight or (settings and settings.weight_by_rarity and settings.weight_by_rarity[rarity]) or 1
+
+    if template.talent then
+        new_power_up.talent       = true
+        new_power_up.talent_tier  = template.talent_tier
+        new_power_up.talent_index = template.talent_index
+    else
+        new_power_up.display_name        = template.display_name
+        new_power_up.plain_display_name  = template.plain_display_name
+        new_power_up.buff_name           = "power_up_" .. power_up_name .. "_" .. rarity
+        new_power_up.advanced_description = template.advanced_description
+        new_power_up.description_values  = template.description_values
+        new_power_up.icon                = template.icon
+
+        local buff_template = table.clone(template.buff_template)
+        local tweak_data = tweak_data_glob and tweak_data_glob[power_up_name]
+        if tweak_data then
+            for k, v in pairs(tweak_data) do
+                buff_template.buffs[1][k] = v
+            end
+        end
+        buff_template.buffs[1].name = new_power_up.buff_name
+        buff_templates[new_power_up.buff_name] = buff_template
+        -- Also register in the global BuffTemplates table. Vanilla CW boons get here via a
+        -- boot-time `table.merge_recursive(dlc_settings.buff_templates, DeusPowerUpBuffTemplates)`
+        -- in morris_buff_settings.lua:7310 — but that merge happens BEFORE mods load. Runtime
+        -- writes to DeusPowerUpBuffTemplates don't propagate, so BuffUtils.get_buff_template
+        -- (buff_utils.lua:256, reads `BuffTemplates[name]`) returns nil → crash in
+        -- buff_extension.lua:177 when the buff is applied. Mirror the write here.
+        local global_bt = rawget(_G, "BuffTemplates")
+        if global_bt then
+            global_bt[new_power_up.buff_name] = buff_template
+        end
+        -- v0.7.38: Network sync of boon application reads NetworkLookup.buff_templates
+        -- to translate buff_name → int ID. Vanilla builds the lookup at boot from
+        -- BuffTemplates; our runtime additions aren't in it, and the table's
+        -- __index metatable errors on unknown keys (network_lookup.lua:2354-2358).
+        -- Crash: "Table buff_templates does not contain key: power_up_<name>_<rarity>"
+        -- on the second peer / first network sync. Burned in ct v0.7.34 → v0.7.37.
+        register_buff_in_network_lookup(new_power_up.buff_name)
+    end
+
+    -- 3. Register in all derived tables.
+    power_ups[rarity] = power_ups[rarity] or {}
+    power_ups[rarity][power_up_name] = new_power_up
+
+    table.insert(array, new_power_up)
+    new_power_up.id = #array
+
+    array_by_rarity[rarity] = array_by_rarity[rarity] or {}
+    table.insert(array_by_rarity[rarity], new_power_up)
+
+    new_power_up.lookup_id = #lookup + 1
+    lookup[#lookup + 1]    = new_power_up
+    lookup[power_up_name]  = new_power_up
+
+    _injected_dormants[power_up_name] = new_power_up
+    mod:info(string.format("[dormant] injected %s at rarity %s (lookup_id=%d)", power_up_name, rarity, new_power_up.lookup_id))
+end
+
+local function sync_dormant_boons()
+    for name, default_rarity in pairs(DORMANT_BOON_RARITY) do
+        if mod:get("activate_dormant_" .. name) and not _injected_dormants[name] then
+            inject_dormant_boon(name, default_rarity)
+        end
+    end
+end
+
+sync_dormant_boons()
+
+-- ============================================================
+-- Mod Boons: per-boon scaling (v0.7.30-alpha)
+-- ============================================================
+-- 4 new ct-injected boons modeled on vanilla `boon_meta_01` (Lileath's Favour: +1%
+-- damage and +1% AS per active boon). Each scales different stats per total boon count.
+-- Stat_buff names verified against `buff_templates.lua` (power_level_impact,
+-- power_level_melee_cleave, critical_strike_chance, critical_strike_effectiveness,
+-- max_health, healing_received, cooldown_regen — all are valid stacking_multiplier
+-- entries except critical_strike_chance which is stacking_bonus).
+--
+-- IMPLEMENTATION (per boon):
+--   1. Stack buff template added to BuffTemplates (the stat container)
+--   2. Apply func + on_boon_granted func added to BuffFunctionTemplates.functions
+--      (parameterized by stack name via a factory)
+--   3. Power-up template added to DeusPowerUpTemplates
+--   4. Pool registration via `inject_dormant_boon` (the function is generic — it just
+--      registers a power-up name + rarity into all the runtime tables)
+--
+-- LIMITATION: same as dormants — requires a new CW run to take effect (the engine
+-- snapshots DeusPowerUpsArray at run setup). Toggle off doesn't remove the boon.
+local CT_META_BOONS = {
+    {
+        name = "ct_meta_stagger",
+        rarity = "exotic",
+        icon = "deus_icon_meta_01",
+        stat_buffs = {
+            { stat_buff = "power_level_impact",         multiplier = 0.01 },
+            { stat_buff = "power_level_melee_cleave",   multiplier = 0.01 },
+        },
+    },
+    {
+        name = "ct_meta_crit",
+        rarity = "exotic",
+        icon = "deus_icon_meta_01",
+        stat_buffs = {
+            { stat_buff = "critical_strike_chance",        bonus      = 0.01 },
+            { stat_buff = "critical_strike_effectiveness", multiplier = 0.05 },
+        },
+    },
+    {
+        name = "ct_meta_health",
+        rarity = "exotic",
+        icon = "deus_icon_meta_01",
+        stat_buffs = {
+            { stat_buff = "max_health",        multiplier = 0.01 },
+            { stat_buff = "healing_received",  multiplier = 0.01 },
+        },
+    },
+    {
+        name = "ct_meta_cooldown",
+        rarity = "exotic",
+        icon = "deus_icon_meta_01",
+        stat_buffs = {
+            { stat_buff = "cooldown_regen", multiplier = 0.02 },
+        },
+    },
+}
+
+local function _make_meta_apply(stack_name)
+    return function(unit, buff, params)
+        local player = Managers.player and Managers.player:owner(unit)
+        if not player then return end
+        local buff_extension = ScriptUnit.extension(unit, "buff_system")
+        local deus_run_controller = Managers.mechanism:game_mechanism():get_deus_run_controller()
+        if not deus_run_controller then return end
+        local num_boons = #deus_run_controller:get_player_power_ups(player:network_id(), player:local_player_id())
+        for _ = 1, num_boons do
+            buff_extension:add_buff(stack_name)
+        end
+    end
+end
+
+local function _make_meta_granted(stack_name)
+    return function(unit, buff, params)
+        local player = Managers.player and Managers.player:owner(unit)
+        if not player then return end
+        local buff_extension = ScriptUnit.extension(unit, "buff_system")
+        local num_existing = buff_extension:num_buff_stacks(stack_name)
+        local deus_run_controller = Managers.mechanism:game_mechanism():get_deus_run_controller()
+        if not deus_run_controller then return end
+        local num_boons = #deus_run_controller:get_player_power_ups(player:network_id(), player:local_player_id())
+        for _ = num_existing + 1, num_boons do
+            buff_extension:add_buff(stack_name)
+        end
+    end
+end
+
+local function register_meta_boon(spec)
+    local power_ups      = rawget(_G, "DeusPowerUpTemplates")
+    local buff_templates = rawget(_G, "BuffTemplates")
+    local buff_funcs     = rawget(_G, "BuffFunctionTemplates")
+    if not (power_ups and buff_templates and buff_funcs and buff_funcs.functions) then
+        mod:info("[mod-boon] global tables not ready for " .. spec.name)
+        return
+    end
+    local stack_name   = spec.name .. "_stack"
+    local apply_name   = spec.name .. "_apply"
+    local granted_name = spec.name .. "_granted"
+
+    -- 1. Proc functions
+    buff_funcs.functions[apply_name]   = _make_meta_apply(stack_name)
+    buff_funcs.functions[granted_name] = _make_meta_granted(stack_name)
+
+    -- 2. Stack buff template
+    local stack_buffs = {}
+    for i, sb in ipairs(spec.stat_buffs) do
+        local entry = {
+            name = stack_name .. "_" .. i,
+            stat_buff = sb.stat_buff,
+            max_stacks = math.huge,
+        }
+        if sb.multiplier then entry.multiplier = sb.multiplier end
+        if sb.bonus     then entry.bonus      = sb.bonus     end
+        stack_buffs[i] = entry
+    end
+    buff_templates[stack_name] = { buffs = stack_buffs }
+    register_buff_in_network_lookup(stack_name)
+
+    -- 3. Power-up template
+    power_ups[spec.name] = {
+        advanced_description = "description_" .. spec.name,
+        display_name         = "display_name_" .. spec.name,
+        icon                 = spec.icon,
+        max_amount           = 1,
+        rectangular_icon     = true,
+        buff_template = {
+            buffs = {
+                {
+                    apply_buff_func = apply_name,
+                    buff_func       = granted_name,
+                    event           = "on_boon_granted",
+                    name            = spec.name,
+                },
+            },
+        },
+        description_values = {},
+    }
+
+    -- 4. Inject into rarity pool (reuses the dormant-boon injection helper)
+    inject_dormant_boon(spec.name, spec.rarity)
+    mod:info("[mod-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
+end
+
+for _, spec in ipairs(CT_META_BOONS) do
+    register_meta_boon(spec)
+end
+
+-- Movement Speed meta boon (v0.7.35): +1% MS per active boon, exotic. Diverges from the
+-- stat_buff pattern used by CT_META_BOONS because plain `stat_buff = "movement_speed"`
+-- isn't read by any vanilla code — movement speed must be modified via the
+-- `apply_movement_buff` / `remove_movement_buff` function pair (which directly mutates
+-- the move_speed value via path_to_movement_setting_to_modify).
+--
+-- Compounding caveat: each stack calls apply_movement_buff with multiplier 1.01, so N
+-- stacks = move_speed * 1.01^N. At +1% per stack the compounding is tiny (10 stacks =
+-- ~+10.5% vs +10% additive). Acceptable — tooltip says additive for player comprehension.
+do
+    local power_ups      = rawget(_G, "DeusPowerUpTemplates")
+    local buff_templates = rawget(_G, "BuffTemplates")
+    local buff_funcs     = rawget(_G, "BuffFunctionTemplates")
+    if power_ups and buff_templates and buff_funcs and buff_funcs.functions then
+        local stack_name   = "ct_meta_movespeed_stack"
+        local apply_name   = "ct_meta_movespeed_apply"
+        local granted_name = "ct_meta_movespeed_granted"
+        buff_funcs.functions[apply_name]   = _make_meta_apply(stack_name)
+        buff_funcs.functions[granted_name] = _make_meta_granted(stack_name)
+        buff_templates[stack_name] = {
+            buffs = {
+                {
+                    apply_buff_func = "apply_movement_buff",
+                    remove_buff_func = "remove_movement_buff",
+                    name             = "ct_meta_movespeed_stack",
+                    max_stacks       = math.huge,
+                    multiplier       = 1.01,
+                    path_to_movement_setting_to_modify = { "move_speed" },
+                },
+            },
+        }
+        register_buff_in_network_lookup(stack_name)
+        power_ups.ct_meta_movespeed = {
+            advanced_description = "description_ct_meta_movespeed",
+            display_name         = "display_name_ct_meta_movespeed",
+            icon                 = "deus_icon_meta_01",
+            max_amount           = 1,
+            rectangular_icon     = true,
+            buff_template = {
+                buffs = {
+                    {
+                        apply_buff_func = apply_name,
+                        buff_func       = granted_name,
+                        event           = "on_boon_granted",
+                        name            = "ct_meta_movespeed",
+                    },
+                },
+            },
+            description_values = {},
+        }
+        inject_dormant_boon("ct_meta_movespeed", "exotic")
+        mod:info("[mod-boon] registered ct_meta_movespeed at rarity exotic")
+    end
+end
+
+-- ============================================================
+-- Mod Boon: Khaine's Communion — 1 green HP per kill (v0.7.32-alpha)
+-- ============================================================
+-- Heal 1 permanent (green) health every time the player kills an enemy. Exotic rarity.
+-- Catalogued under Defensive > Health in the boon tree (per user verdict — health-themed
+-- effect groups by effect, not by mod-added origin), but display name carries the
+-- "(Mod Boon)" prefix so it's flagged.
+--
+-- Implementation: proc function with `authority = "server"` so the heal fires once
+-- per kill on the server, then `DamageUtils.heal_network` networks the heal to the
+-- killer's owning peer. Heal type `heal_from_proc` restores permanent HP (green),
+-- not THP.
+-- ============================================================
+-- Mod Boons: Trait-as-Boon (v0.7.34-alpha)
+-- ============================================================
+-- 4 weapon traits re-introduced as opt-in exotic boons. Each is gated behind its own
+-- toggle in Reworks > Reworks: Boons (default off). When enabled, the trait's buff
+-- template is cloned into a new power-up at exotic rarity.
+--
+-- STACKING WITH TRAIT:
+-- * Vaul's Anvil — naturally non-stacks (always_blocking is a binary perk; having two
+--   sources of the same perk = same effect as one source).
+-- * Manann's Tempest — stacks (each buff fires its own chain_lightning proc on crit,
+--   so 2 buffs = 2 independent chains per crit).
+-- * Taal's Twinned Arrow — stacks (extra_shot stat_buff bonus is additive: 2 buffs =
+--   +2 projectiles).
+-- * Asuryan's Wrath — stacks (each fires its own proc roll on melee kill, so 2 buffs
+--   = roughly +75% effective proc chance vs +50% baseline).
+--
+-- TAAL'S TWINNED ARROW RESTRICTION: user asked for "only granted if ranged weapon in
+-- slot 2." Vanilla VT2 careers all have a ranged slot, so the case is rare. If the
+-- player ends up with this boon but no ranged weapon, the stat_buff is just inert
+-- (no shots fire = no extra projectiles). Skipping the gate for v0.7.34; can add an
+-- offer-time filter if it becomes a real issue.
+local CT_TRAIT_BOONS = {
+    { name = "ct_boon_vauls_anvil",         toggle = "enable_boon_vauls_anvil",         rarity = "unique", icon = "deus_icon_meta_01", source_buff = "always_blocking" },
+    { name = "ct_boon_manann_tempest",      toggle = "enable_boon_manann_tempest",      rarity = "unique", icon = "deus_icon_meta_01", source_buff = "deus_crit_chain_lightning" },
+    { name = "ct_boon_taal_twinned_arrow",  toggle = "enable_boon_taal_twinned_arrow",  rarity = "unique", icon = "deus_icon_meta_01", source_buff = "deus_extra_shot" },
+    { name = "ct_boon_asuryan_wrath",       toggle = "enable_boon_asuryan_wrath",       rarity = "unique", icon = "deus_icon_meta_01", source_buff = "deus_collateral_damage_on_melee_killing_blow" },
+}
+
+local function register_trait_boon(spec)
+    if not mod:get(spec.toggle) then return end
+    local power_ups      = rawget(_G, "DeusPowerUpTemplates")
+    local buff_templates = rawget(_G, "BuffTemplates")
+    if not power_ups or not buff_templates then
+        mod:info("[trait-boon] globals not ready for " .. spec.name)
+        return
+    end
+    local source_template = buff_templates[spec.source_buff]
+    if not source_template or not source_template.buffs then
+        mod:info("[trait-boon] source buff template '" .. spec.source_buff .. "' not found for " .. spec.name)
+        return
+    end
+    -- Clone the source's buff array structure; inject_dormant_boon will further clone
+    -- and rename buffs[1].name when it registers in DeusPowerUpBuffTemplates.
+    local cloned_buffs = {}
+    for i, sub in ipairs(source_template.buffs) do
+        cloned_buffs[i] = table.clone(sub)
+    end
+    power_ups[spec.name] = {
+        advanced_description = "description_" .. spec.name,
+        display_name         = "display_name_" .. spec.name,
+        icon                 = spec.icon,
+        max_amount           = 1,
+        rectangular_icon     = true,
+        buff_template        = { buffs = cloned_buffs },
+        description_values   = {},
+    }
+    inject_dormant_boon(spec.name, spec.rarity)
+    mod:info("[trait-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
+end
+
+for _, spec in ipairs(CT_TRAIT_BOONS) do
+    register_trait_boon(spec)
+end
+
+do
+    local power_ups  = rawget(_G, "DeusPowerUpTemplates")
+    local buff_funcs = rawget(_G, "BuffFunctionTemplates")
+
+    if power_ups and buff_funcs and buff_funcs.functions then
+        buff_funcs.functions.ct_kill_heal_on_kill = function(unit, buff, params)
+            if ALIVE[unit] then
+                DamageUtils.heal_network(unit, unit, 1, "heal_from_proc")
+            end
+        end
+
+        power_ups.ct_kill_heal = {
+            advanced_description = "description_ct_kill_heal",
+            display_name         = "display_name_ct_kill_heal",
+            icon                 = "deus_icon_meta_01",  -- placeholder; future: dedicated heal-on-kill icon
+            max_amount           = 1,
+            rectangular_icon     = true,
+            buff_template = {
+                buffs = {
+                    {
+                        authority = "server",
+                        buff_func = "ct_kill_heal_on_kill",
+                        event     = "on_kill",
+                        name      = "ct_kill_heal",
+                    },
+                },
+            },
+            description_values = {},
+        }
+
+        inject_dormant_boon("ct_kill_heal", "exotic")
+        mod:info("[mod-boon] registered ct_kill_heal at rarity exotic")
+    else
+        mod:info("[mod-boon] DeusPowerUpTemplates / BuffFunctionTemplates not ready for ct_kill_heal")
+    end
+end
+
+-- ============================================================
+-- Home Brewer +50% potency for reworked potions (v0.7.31-alpha)
+-- ============================================================
+-- When the toggle is on AND the player has Home Brewer (the boon that grants the
+-- `not_consume_potion` perk), the reworked Moot Milk potion's numerical multipliers are
+-- scaled by 1.5x for that specific drink. Implementation: hook BuffExtension.add_buff,
+-- save the template's multiplier/bonus fields, scale, call vanilla add, restore.
+--
+-- Only scales `moot_milk_potion` and `moot_milk_potion_increased` (the reworked variants)
+-- — `poison_proof_potion` has binary immunity with no multiplier field, so potency is
+-- moot for it. Duration is intentionally NOT scaled (Decanter is the duration lever;
+-- Home Brewer is the potency lever — they remain orthogonal).
+--
+-- LIMITATIONS:
+-- * RACE: BuffTemplates is shared global; two players drinking simultaneously could see
+--   one peer's scaled values briefly. Rare in practice (potion drinks are individual)
+--   and the effect is just stat values, not safety-critical.
+-- * No NetworkLookup variant registration — multiplayer-safe because every peer
+--   applies its own buff (with its own perk check) via this hook.
+local HOME_BREWER_BREWED_TEMPLATES = {
+    moot_milk_potion           = true,
+    moot_milk_potion_increased = true,
+}
+
+mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params)
+    if not mod:get("tweak_home_brewer_potency") then
+        return func(self, template_name, params)
+    end
+    if not (type(template_name) == "string" and HOME_BREWER_BREWED_TEMPLATES[template_name]) then
+        return func(self, template_name, params)
+    end
+    if not self.has_buff_perk or not self:has_buff_perk("not_consume_potion") then
+        return func(self, template_name, params)
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    local sub_buffs = bt and bt[template_name] and bt[template_name].buffs
+    if not sub_buffs then
+        return func(self, template_name, params)
+    end
+    local saved = {}
+    for i, sb in ipairs(sub_buffs) do
+        if sb.multiplier or sb.bonus then
+            saved[i] = { multiplier = sb.multiplier, bonus = sb.bonus }
+            if sb.multiplier then sb.multiplier = sb.multiplier * 1.5 end
+            if sb.bonus      then sb.bonus      = sb.bonus      * 1.5 end
+        end
+    end
+    local result = func(self, template_name, params)
+    for i, s in pairs(saved) do
+        sub_buffs[i].multiplier = s.multiplier
+        sub_buffs[i].bonus      = s.bonus
+    end
+    return result
+end)
+
+-- ============================================================
 -- Endless Bombs Consumes Morgrim's
 -- ============================================================
 -- Vanilla `apply_pockets_full_of_bombs_buff` calls `inventory_extension:drop_level_event_item`
@@ -2632,6 +3456,16 @@ mod.on_setting_changed = function(setting_id)
         sync_poison_proof_tweak()
     elseif setting_id == "tweak_moot_milk_alt" then
         sync_moot_milk_alt_tweak()
+    elseif setting_id == "tweak_shard_strike_duration" then
+        sync_shard_strike()
+    elseif setting_id == "tweak_anath_raema_permanent" then
+        sync_anath_raema_permanent()
+    elseif type(setting_id) == "string" and setting_id:find("^activate_dormant_") == 1 then
+        sync_dormant_boons()
+    elseif type(setting_id) == "string" and setting_id:find("^enable_boon_") == 1 then
+        for _, spec in ipairs(CT_TRAIT_BOONS) do
+            register_trait_boon(spec)  -- idempotent; injects only if toggle on and not yet injected
+        end
     elseif is_pool_setting(setting_id) then
         -- inject_pool() is idempotent: takes a one-time snapshot, resets to it on
         -- every call, then applies current toggle state. Master-off branch inside
@@ -2649,6 +3483,8 @@ mod.on_disabled = function()
     revert_boon_movespeed_tweak()
     revert_poison_proof_tweak()
     revert_moot_milk_alt_tweak()
+    revert_shard_strike_tweak()
+    revert_anath_raema_permanent_tweak()
 end
 
 -- ============================================================

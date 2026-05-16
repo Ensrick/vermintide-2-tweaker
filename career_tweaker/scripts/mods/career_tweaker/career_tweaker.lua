@@ -1,6 +1,6 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.2.11-dev"
+local MOD_VERSION = "0.2.16-dev"
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Career Tweaker v" .. MOD_VERSION)
 
@@ -132,7 +132,7 @@ mod.on_setting_changed = function(setting_id)
         apply_talent_swaps()
     end
 
-    if setting_id:find("^balance_") then
+    if setting_id:find("^rework_") then
         balance.apply()
     end
 end

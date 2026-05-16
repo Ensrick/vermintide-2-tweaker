@@ -1,5 +1,60 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.28b → 0.7.40-alpha (2026-05-15) — consolidated session log
+
+Twelve versions in one session. Listed chronologically by version.
+
+### 0.7.28b — Rework: Shard Strike duration nerf (configurable)
+Toggle in Reworks > Reworks: Boons. Slider 1–16s controls the duration of Shard Strike's damaging stagger aura (vanilla 16s, overtuned at top tier). Mutates `WeaponTraits.buff_templates.armor_breaker.buffs[1].duration` + the global `BuffTemplates` mirror; save-and-restore so toggling off restores vanilla.
+
+### 0.7.29 — Activate Dormant Boons feature
+9 dormant boons (defined in source but never registered in `DeusPowerUpRarityPool`) get individual activation toggles. When enabled, the boon is injected into the rarity pool and all derived runtime tables (`DeusPowerUps`, `DeusPowerUpsArray`, `DeusPowerUpsArrayByRarity`, `DeusPowerUpsLookup`, `DeusPowerUpBuffTemplates`) using the same construction pattern as vanilla's registration loop at `deus_power_up_settings.lua:7121-7176`. Includes: Mathlann's Bounty, Bögenauer's Prosperity, Nethu's Relentlessness, Grungni's Gift, Hashut's Greeting, timed-block free shot, Smednir's Transmutation, Chotec's Touch, Squats. Dormants appear in `starting_boons` with `(Dormant)` suffix; pulled from `disable_boons` since they only roll when activated.
+
+### 0.7.30 — 4 new Mod Boons (per-boon scaling)
+Modeled on vanilla's `boon_meta_01` (Lileath's Favour). Each scales different stats per total active boon count:
+- **Reactive Bulwark** (`ct_meta_stagger`) — +1% stagger power + 1% melee cleave per boon
+- **Crit Cascade** (`ct_meta_crit`) — +1% crit chance + 5% crit power per boon
+- **Vitality Cascade** (`ct_meta_health`) — +1% max HP + 1% healing received per boon
+- **Ability Cascade** (`ct_meta_cooldown`) — +2% cooldown regen per boon
+
+New "Mod Boons" boon-tree category. Localize hook routes the display name and description keys.
+
+### 0.7.31 — Home Brewer +50% potency for reworked potions
+When the player holds Home Brewer (the `not_consume_potion` perk), the Moot Milk rework's numerical multipliers scale by 1.5x for that drink. Implementation: hook `BuffExtension.add_buff`, save the template's multiplier/bonus fields, scale, call vanilla add, restore. Multiplayer-safe via per-peer perk check.
+
+### 0.7.32 — New Mod Boon: Khaine's Communion
+Exotic-rarity mod boon: heal 1 permanent HP on every enemy kill. Server-authoritative proc with `authority = "server"`; `DamageUtils.heal_network` with `heal_from_proc` heal type. Catalogued under Defensive > Health by effect, prefixed `(Mod Boon)` in display name.
+
+### 0.7.33 — Addaioth's Splendour description fix
+Vanilla in-game text said "Every 30 seconds, ranged Critical Hits explode for 10% of their Damage" but the actual implementation uses cooldown_duration = 10 and damage = 30% (vanilla swapped the values positionally when filling description_values). Static loc override via the existing `_G.Localize` hook returns the corrected string.
+
+### 0.7.34 — Trait-as-Boon: 4 traits as opt-in Unique-rarity boons
+Per user request, four weapon traits get optional boon variants (each behind its own toggle, default off):
+- **Vaul's Anvil** — naturally non-stacks with the trait (binary perk)
+- **Manann's Tempest** — stacks with the trait (each fires its own chain lightning per crit)
+- **Taal's Twinned Arrow** — stacks (+2 projectiles if both held)
+- **Asuryan's Wrath** — melee-only via the existing proc filter; stacks with the trait (~75% effective proc chance with both)
+
+`register_trait_boon` clones the source trait's buff template, registers a new power-up template, and injects via `inject_dormant_boon` at Unique rarity.
+
+### 0.7.35 — New Mod Boon: Wind Cascade
+Exotic-rarity mod boon: +1% movement speed per active boon. Uses `apply_movement_buff` (the only function that actually moves the player's speed needle in vanilla — plain `stat_buff = "movement_speed"` isn't read by anything). Each stack compounds via `1.01^N`; at 1% per stack the compounding diff is tiny (10 stacks = +10.5% vs +10% additive).
+
+### 0.7.36 — Rework: Anath Raema's Swiftness permanent
+Swaps the trait's on-ammo-pickup-temporary `+50%` reload speed (10s window) for a permanent passive reload speed while the weapon (with the trait) is wielded. Mutates both `WeaponTraits.buff_templates.deus_ammo_pickup_reload_speed` AND `BuffTemplates.deus_ammo_pickup_reload_speed` with save-and-restore.
+
+### 0.7.37 — Crash fix: dormant boons at "common" rarity
+**Crash:** `deus_power_up_utils.lua:208: attempt to index a nil value`. **Root cause:** `DeusPowerUpRarities` is `{ event, rare, exotic, unique }` — only 4 valid boon rarities. "common" and "plentiful" are weapon-drop rarities, NOT boon rarities. I'd injected `squats` and `deus_larger_clip` at "common" → `existing_power_ups_lut["common"]` was nil → crash on next shrine after rolling either boon. **Fix:** moved both to "rare". Memory saved: `reference_vt2_deus_power_up_rarities.md`.
+
+### 0.7.38 — Crash fix: NetworkLookup.buff_templates missing entries
+**Crash:** `network_lookup.lua:2514: [NetworkLookup.lua] Table buff_templates does not contain key: power_up_deus_timed_block_free_shot_exotic`. **Root cause:** my `inject_dormant_boon` was registering the buff in `DeusPowerUpBuffTemplates` and `BuffTemplates` but NOT in `NetworkLookup.buff_templates`. NetworkLookup has a metatable that throws on unknown keys. **Fix:** new `register_buff_in_network_lookup(buff_name)` helper called for every injected buff.
+
+### 0.7.39 — Rework: Defeat Recovery (soft wipe rescue)
+When the team would wipe and the toggle is on: each peer's coins are zeroed, each peer loses 5 random boons, host force-respawns dead/disabled players. Mission continues from the wipe point (NOT a full level reload — engine doesn't expose a safe mid-run reload path). Fires once per level via `_defeat_recovery_triggered_this_round` flag; resets on `_transition_next_node`.
+
+### 0.7.40 — Crash fix: NetworkLookup.deus_power_up_templates missing entries
+**Crash:** `network_lookup.lua:2514: [NetworkLookup.lua] Table deus_power_up_templates does not contain key: ct_boon_asuryan_wrath`. **Root cause:** vanilla has TWO separate NetworkLookup tables for boons — `buff_templates` (fixed v0.7.38) and `deus_power_up_templates`. The latter is used for power-up selection RPCs (chest pick, boon offer, grant). My injected boon names weren't there. Triggered when picking ANY boon at a chest while having an unregistered injected boon as a current power-up — the chest's add-and-resync re-serialized the full power-up list, hit the unregistered name, errored. **Fix:** new `register_power_up_in_network_lookup` helper called at the top of `inject_dormant_boon` for every injected boon (dormants, meta boons, ct_kill_heal, trait-as-boon variants).
+
 ## 0.7.28a-alpha (2026-05-15)
 
 ### Added: Rework — Trait Tier by Rarity
