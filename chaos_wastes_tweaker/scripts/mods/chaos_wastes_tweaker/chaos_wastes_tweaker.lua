@@ -8,7 +8,9 @@ Major sections (search by name to jump):
   * Disabled boons         — save-and-restore mutation of DeusPowerUpsArray / *ByRarity around the roll.
   * Curses                 — disable_curse_* setting reads, gating MutatorHandler._activate_mutator,
                              DeusMechanism.get_current_node_curse, and node theme/curse fields.
-  * Run config overrides   — _setup_run hook (host-only): force_belakor, finale_dominant_god.
+  * Run config overrides   — deus_journey_with_belakor hook (force_belakor) +
+                             game_round_ended pre-mutation of vote_data.dominant_god
+                             (finale_dominant_god). Both host-only.
   * Pickups & altars       — populate_pickups hook patches deus_weapon_chest / deus_cursed_chest /
                              ammo counts AND injects campaign potions into Pickups.deus_potions
                              with full-group renormalization (see also: DEVELOPMENT.md).
@@ -28,7 +30,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.40-alpha"
+local MOD_VERSION = "0.7.58-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -126,14 +128,16 @@ local sync_boon_movespeed
 -- declaring here keeps the hook valid pre-feature-block execution.
 local _defeat_recovery_triggered_this_round = false
 
-local function is_curse_disabled(curse_name)
-    if type(curse_name) ~= "string" or not curse_name:find("^curse_") then
-        return false
-    end
+-- Forward-declared so hooks/UI text generators can resolve it lexically; body assigned
+-- after `effective_setting` is defined (Lua local hoisting rules require the slot to
+-- exist before any closure captures it).
+local is_curse_disabled
 
-    local key = "disable_curse_" .. curse_name:gsub("^curse_", "")
-    return mod:get(key) == true
-end
+-- v0.7.55: forward-declared so hooks above its assignment (most notably the
+-- on_soft_currency_picked_up hook at line ~140 reading coin_multiplier) can capture
+-- the local slot at closure creation time. Body assigned in the multiplayer-sync
+-- block below.
+local effective_setting
 
 -- CLARIFY: Vanilla signature is `on_soft_currency_picked_up(self, amount, type)`. The `amount` is
 -- args[1] (NOT args[2] — that mistake was the cause of an early-version coin multiplier bug; see
@@ -143,7 +147,9 @@ mod:hook("DeusRunController", "on_soft_currency_picked_up", function(func, self,
     local raw_amount = args[1]
 
     if type(raw_amount) == "number" and not granting_starting_coins then
-        local multiplier = mod:get("coin_multiplier") or 1
+        -- v0.7.55: route through effective_setting so a client picking up coins applies
+        -- the host's coin_multiplier (matches what the host's own pickups grant).
+        local multiplier = effective_setting("coin_multiplier") or 1
         args[1] = math.max(1, math.floor(raw_amount * multiplier))
     end
 
@@ -174,34 +180,122 @@ end)
 -- `_ct_host_settings`. The deus_populate_graph hook then reads from there on
 -- client (instead of mod:get which would give the CLIENT's own settings).
 --
--- Settings synced: cursed_mission_count, replace_shrines_with_missions,
--- disable_dominant_god. These are the three graph-mutating overrides that
--- affect node type/curse/theme distribution.
-local _ct_host_settings = {
-    cursed_mission_count        = 0,      -- 0 = no override (vanilla)
-    replace_shrines_with_missions = false, -- vanilla shops on
-    disable_dominant_god        = false,  -- vanilla dominant-god rule
+-- Settings synced: every mod-defined setting except those in PER_PEER_SETTING_NAMES.
+--
+-- v0.7.55: previously this was a hand-maintained list of ~50 names that grew every
+-- release. After repeated bugs from missing entries (most recently: disable_curse_*
+-- helper bypassed sync, finale_dominant_god / force_belakor weren't reaching clients,
+-- coin/boon/trait toggles silently diverged) we switched to "sync everything by
+-- default" — walk the data file's widget tree at module load and emit every
+-- leaf-widget's setting_id, minus an explicit per-peer exclusion list.
+--
+-- This means: any setting that's host-authoritative (clients should see whatever host
+-- has) gets synced automatically just by living in chaos_wastes_tweaker_data.lua.
+-- Adding a new mod setting requires NO bookkeeping here.
+--
+-- PER_PEER excludes: settings that are intentionally each-peer-local. These are rare
+-- and require a deliberate justification (see comments per entry).
+local PER_PEER_SETTING_NAMES = {
+    -- "Each peer needs the toggle on for their own coins/boons to be penalized; the
+    --  host respawn applies to everyone" — per-peer locality is baked into the design.
+    tweak_defeat_recovery   = true,
+    -- "Server-driven spawn, no graph effect" — host's setting determines what spawns;
+    --  client's local table mutation is irrelevant and meant to be opt-in for solo testing.
+    enable_campaign_potions = true,
+    -- Lobby-hash-affecting adventure-injection — not a runtime knob, host/client must
+    --  match at lobby-join time (already enforced by the LobbyAux hash hook above).
+    inject_adventure_maps   = true,
 }
 
-mod:network_register("ct_sync_host_settings", function(sender_peer_id, cmc, rsw, ddg)
-    _ct_host_settings.cursed_mission_count        = cmc or 0
-    _ct_host_settings.replace_shrines_with_missions = rsw and true or false
-    _ct_host_settings.disable_dominant_god        = ddg and true or false
-    mod:info("[ct_sync] received host settings from %s: count=%s shrines=%s dominant_off=%s",
-        tostring(sender_peer_id), tostring(cmc), tostring(rsw), tostring(ddg))
+local function _collect_setting_ids()
+    -- mod:dofile re-executes the data file. Idempotent: tree-building has no side
+    -- effects beyond an in-place recursive_sort (which is stable on already-sorted
+    -- tables). Returns the same `data` table that VMF loaded at mod registration.
+    local data = mod:dofile("scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_data")
+    local ids = {}
+    local seen = {}
+    local function visit(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" and node.type and node.type ~= "group"
+            and not seen[node.setting_id]
+        then
+            seen[node.setting_id] = true
+            ids[#ids + 1] = node.setting_id
+        end
+        if node.sub_widgets then
+            for _, w in ipairs(node.sub_widgets) do visit(w) end
+        end
+        if node.widgets then
+            for _, w in ipairs(node.widgets) do visit(w) end
+        end
+    end
+    visit(data.options)
+    return ids
+end
+
+local SYNCED_SETTING_NAMES = {}
+for _, id in ipairs(_collect_setting_ids()) do
+    if not PER_PEER_SETTING_NAMES[id] then
+        SYNCED_SETTING_NAMES[#SYNCED_SETTING_NAMES + 1] = id
+    end
+end
+mod:info("[ct_sync] synced setting registry built: %d keys (%d excluded as per-peer)",
+    #SYNCED_SETTING_NAMES, (function() local n = 0; for _ in pairs(PER_PEER_SETTING_NAMES) do n = n + 1 end; return n end)())
+
+local _ct_host_settings = {}
+local _ct_host_sync_received = false
+
+-- Forward-declared so the network_register callback below can call it before
+-- its assignment further down the file (after all sync_* functions exist).
+local sync_host_dependent_state
+
+mod:network_register("ct_sync_host_settings", function(sender_peer_id, payload)
+    if type(payload) ~= "table" then
+        mod:info("[ct_sync] received non-table payload from %s; ignoring", tostring(sender_peer_id))
+        return
+    end
+    for _, name in ipairs(SYNCED_SETTING_NAMES) do
+        _ct_host_settings[name] = payload[name]
+    end
+    _ct_host_sync_received = true
+    mod:info("[ct_sync] received host settings from %s (%d keys)",
+        tostring(sender_peer_id), #SYNCED_SETTING_NAMES)
+    if sync_host_dependent_state then
+        sync_host_dependent_state()
+    end
 end)
 
 -- Read effective setting: on host, use the user's actual configured value.
--- On client, use whatever the host most recently broadcast. If client hasn't
--- received the broadcast yet (first run, RPC ordering), falls back to the
--- default values (matches vanilla behavior — no mutation).
-local function effective_setting(name)
+-- On client, use whatever the host most recently broadcast. If the client
+-- hasn't received the broadcast yet (solo, RPC ordering before host setup_run),
+-- fall back to the client's own mod:get so the mod still works locally before
+-- any sync arrives.
+-- v0.7.55: assigned to the forward-declared `effective_setting` slot so callers
+-- above this point (on_soft_currency_picked_up coin multiplier, etc.) bind to the
+-- same local instead of a nil global.
+effective_setting = function(name)
     local is_server = Managers and Managers.player and Managers.player.is_server
     if is_server then
         return mod:get(name)
-    else
-        return _ct_host_settings[name]
     end
+    local v = _ct_host_settings[name]
+    if v ~= nil then
+        return v
+    end
+    return mod:get(name)
+end
+
+-- v0.7.53: routed through `effective_setting` so client peers gate on the host's synced
+-- toggle, not their own. Previously used `mod:get` directly, which made client-side curse
+-- name display (`get_current_node_curse` hook + `_transition_next_node` save-restore)
+-- diverge from the host's: gameplay ran the host's mutator either way, but the curse
+-- name shown on Holseher's map / mission tooltips read each peer's local toggle.
+is_curse_disabled = function(curse_name)
+    if type(curse_name) ~= "string" or not curse_name:find("^curse_") then
+        return false
+    end
+    local key = "disable_curse_" .. curse_name:gsub("^curse_", "")
+    return effective_setting(key) == true
 end
 
 mod:hook_safe("DeusRunController", "setup_run", function(self)
@@ -223,14 +317,13 @@ mod:hook_safe("DeusRunController", "setup_run", function(self)
     -- no-op assignment.
     local is_server = Managers and Managers.player and Managers.player.is_server
     if is_server then
-        mod:network_send("ct_sync_host_settings", "others",
-            mod:get("cursed_mission_count") or 0,
-            mod:get("replace_shrines_with_missions") and true or false,
-            mod:get("disable_dominant_god") and true or false)
-        mod:info("[ct_sync] broadcast host settings to clients: count=%s shrines=%s dominant_off=%s",
-            tostring(mod:get("cursed_mission_count") or 0),
-            tostring(mod:get("replace_shrines_with_missions") and true or false),
-            tostring(mod:get("disable_dominant_god") and true or false))
+        local payload = {}
+        for _, name in ipairs(SYNCED_SETTING_NAMES) do
+            payload[name] = mod:get(name)
+        end
+        mod:network_send("ct_sync_host_settings", "others", payload)
+        mod:info("[ct_sync] broadcast host settings to clients (%d keys)",
+            #SYNCED_SETTING_NAMES)
     end
 end)
 
@@ -259,9 +352,9 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
         -- chest). This avoids hijacking other call sites that pass arbitrary counts (e.g., quest
         -- rewards, Belakor temple). If FatShark changes the defaults this silently no-ops.
         if original == SHRINE_DEFAULT then
-            custom_count = mod:get("shrine_boon_count")
+            custom_count = effective_setting("shrine_boon_count")
         elseif original == CHEST_DEFAULT then
-            custom_count = mod:get("chest_boon_count")
+            custom_count = effective_setting("chest_boon_count")
         end
 
         if custom_count and custom_count ~= original then
@@ -282,7 +375,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     -- strip the rest from the pool for this roll. existing_power_ups is positionally args[3] in the
     -- vanilla signature (seed, count, existing_power_ups, ...).
     local exclude_bomb_boons = false
-    if mod:get("bomb_boon_exclusive") then
+    if effective_setting("bomb_boon_exclusive") then
         local existing = args[3]
         if type(existing) == "table" then
             for _, pu in ipairs(existing) do
@@ -301,7 +394,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
             local boon = DeusPowerUpsArray[i]
             local name = boon and boon.name
             local key = name and ("disable_boon_" .. name)
-            if (key and mod:get(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
+            if (key and effective_setting(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
                 table.remove(DeusPowerUpsArray, i)
                 removed_main[#removed_main + 1] = { index = i, boon = boon }
             end
@@ -313,7 +406,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
                     local boon = arr[i]
                     local name = boon and boon.name
                     local key = name and ("disable_boon_" .. name)
-                    if (key and mod:get(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
+                    if (key and effective_setting(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
                         table.remove(arr, i)
                         removed_rarity[rarity][#removed_rarity[rarity] + 1] = { index = i, boon = boon }
                     end
@@ -505,10 +598,11 @@ mod:hook("DeusRunController", "get_deus_weapon_chest_type", function(func, self)
     local distribution = self._deus_weapon_chest_distribution
 
     if (not distribution or #distribution == 0) and DEUS_CHEST_TYPES then
-        local upgrade = mod:get("chest_upgrade_count") or 0
-        local swap_melee = mod:get("chest_swap_melee_count") or 0
-        local swap_ranged = mod:get("chest_swap_ranged_count") or 0
-        local power_up = mod:get("chest_power_up_count") or 0
+        -- v0.7.42: effective_setting so client's chest opens see host's distribution.
+        local upgrade = effective_setting("chest_upgrade_count") or 0
+        local swap_melee = effective_setting("chest_swap_melee_count") or 0
+        local swap_ranged = effective_setting("chest_swap_ranged_count") or 0
+        local power_up = effective_setting("chest_power_up_count") or 0
 
         local is_custom = upgrade > 0 or swap_melee > 0 or swap_ranged > 0 or power_up > 0
         if is_custom then
@@ -591,7 +685,7 @@ local function apply_weapon_trait_filter()
         return {}
     end
 
-    local any_trait = mod:get("any_trait_any_weapon")
+    local any_trait = effective_setting("any_trait_any_weapon")
     local expanded_pool = any_trait and get_all_trait_combos()
     local saved = {}
 
@@ -603,7 +697,7 @@ local function apply_weapon_trait_filter()
             for _, combo in ipairs(base) do
                 local keep = true
                 for _, trait in ipairs(combo) do
-                    if mod:get("ban_trait_" .. trait) then
+                    if effective_setting("ban_trait_" .. trait) then
                         keep = false
                         break
                     end
@@ -728,7 +822,7 @@ end
 -- The no-tier-combos guard means weapons with no T1 traits available won't suddenly get
 -- assigned an out-of-tier trait at common rarity — they keep vanilla behavior (no traits).
 local function override_traits_in_result(result, rarity)
-    if not mod:get("tweak_trait_tier_by_rarity") then return result end
+    if not effective_setting("tweak_trait_tier_by_rarity") then return result end
     if not result or not result.deus_item_key then return result end
     local combos = get_tier_filtered_combos(result.deus_item_key, rarity)
     if #combos == 0 then return result end
@@ -775,26 +869,59 @@ mod:hook("DeusWeaponGeneration", "upgrade_item", function(func, item, difficulty
     return override_traits_in_result(result, target_rarity)
 end)
 
--- CLARIFY: Host-only run-config overrides. `is_server` gating ensures clients don't try to override
--- values the host has already authoritatively set. The host's overridden values then propagate to
--- clients via the engine's normal RPC path (rpc_deus_setup_run). This means these settings are
--- HOST-driven: only the lobby host's mod settings affect the run.
-mod:hook("DeusMechanism", "_setup_run", function(func, self, run_id, run_seed, is_server, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons)
-    if is_server then
-        if mod:get("force_belakor") then
-            with_belakor = true
-        end
+-- Upstream override for `force_belakor` (v0.7.49). Vanilla `game_round_ended` calls
+-- `deus_backend:deus_journey_with_belakor(journey_name)` to compute the `with_belakor`
+-- flag, then uses that single value for BOTH `_setup_run` (host local state) AND
+-- `send_rpc_clients("rpc_deus_setup_run", ..., with_belakor, ...)` (client state). Hooking
+-- the source makes the override propagate to both paths, so clients see the Belakor curse
+-- on Holseher's map when the host has the toggle on. Host-only — `deus_journey_with_belakor`
+-- is only invoked on the run host (in `game_round_ended`) and from UI views which are
+-- read by the local player only; mutating it for a client would silently desync.
+mod:hook("BackendInterfaceDeusPlayFab", "deus_journey_with_belakor", function(func, self, journey_name)
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if is_server and mod:get("force_belakor") then
+        return true
+    end
+    return func(self, journey_name)
+end)
 
+-- v0.7.53: Upstream override for `finale_dominant_god`. Same bug shape as the old
+-- `force_belakor` issue (fixed in v0.7.49): `game_round_ended` reads
+-- `self._vote_data.dominant_god` into a local at the top, then uses it for BOTH
+-- `_setup_run` AND `send_rpc_clients(..., dominant_god_id, ...)`. The previous
+-- `_setup_run` hook only changed the value INSIDE `_setup_run` — host's local run state
+-- saw the override but the RPC payload kept the original god, so clients populated their
+-- graph with vanilla god distribution. Fix: pre-mutate `self._vote_data.dominant_god`
+-- before vanilla `game_round_ended` runs, restore after. Both paths then see the override.
+--
+-- Restore-on-return is critical: vote_data persists on `self` and is consumed once per
+-- mission-start; leaving it mutated would survive across rounds.
+mod:hook("DeusMechanism", "game_round_ended", function(func, self, t, dt, reason, reason_data)
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    local restored = false
+    local original_god
+    local vote_data = self._vote_data
+    if reason == "start_game" and is_server and vote_data then
         local god_index = mod:get("finale_dominant_god")
         if god_index and god_index > 0 then
             local god = FINALE_GODS[god_index]
             if god then
-                dominant_god = god
+                original_god = vote_data.dominant_god
+                vote_data.dominant_god = god
+                restored = true
             end
         end
     end
 
-    return func(self, run_id, run_seed, is_server, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons)
+    local ok, err = pcall(func, self, t, dt, reason, reason_data)
+
+    if restored then
+        vote_data.dominant_god = original_god
+    end
+
+    if not ok then
+        error(err, 0)
+    end
 end)
 
 -- CLARIFY: Patches LevelSettings[level].pickup_settings to control the COUNT of altars/cursed
@@ -816,19 +943,24 @@ end)
 -- "Attempting to rehook active hook" warning for populate_pickups).
 local _CAMPAIGN_POTION_NAMES = { "damage_boost_potion", "speed_boost_potion", "cooldown_reduction_potion" }
 local _chest_conversions_this_level = 0
+-- v0.7.55: per-level Belakor altar tracker. Lua 5.1 closure binding rules require this
+-- be declared BEFORE the _spawn_guaranteed_pickup hook reads it. Reset at the top of
+-- the consolidated populate_pickups hook (alongside _chest_conversions_this_level).
+local _belakor_altar_spawned_this_level = false
 mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     _chest_conversions_this_level = 0
     if not LevelHelper then
         return func(self, ...)
     end
 
-    local altar_total = (mod:get("chest_upgrade_count") or 0)
-        + (mod:get("chest_swap_melee_count") or 0)
-        + (mod:get("chest_swap_ranged_count") or 0)
-        + (mod:get("chest_power_up_count") or 0)
-    local cursed_count = mod:get("cursed_chest_count") or 1
-    local arena_ammo = mod:get("arena_ammo_count") or 2
-    local potions_on = mod:get("enable_campaign_potions")
+    -- v0.7.42: effective_setting so each peer's populate_pickups mutation uses host's values.
+    local altar_total = (effective_setting("chest_upgrade_count") or 0)
+        + (effective_setting("chest_swap_melee_count") or 0)
+        + (effective_setting("chest_swap_ranged_count") or 0)
+        + (effective_setting("chest_power_up_count") or 0)
+    local cursed_count = effective_setting("cursed_chest_count") or 1
+    local arena_ammo = effective_setting("arena_ammo_count") or 2
+    local potions_on = mod:get("enable_campaign_potions")  -- per-peer (server-driven spawn, no graph effect)
 
     -- Defensive cleanup: if a previous populate_pickups call errored mid-flight
     -- with potions_on=true, the campaign-potion clones could remain in
@@ -846,6 +978,14 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     local altar_custom = altar_total > 0
     local cursed_custom = cursed_count ~= 1
     local ammo_custom = arena_ammo ~= 2
+
+    -- v0.7.55: reset per-level Belakor altar tracker. Used by the tome/grim hook so
+    -- only the first book spot after all Chests of Trials are placed gets the altar
+    -- (one altar per mission, like vanilla belakor-themed CW levels which request
+    -- `deus_02 = 1`). The altar is no longer requested via populate_pickups primary
+    -- (which placed it in a random ammo/healing spot); routing through book spots
+    -- means it shares the same pedestal a chest would have used, per user spec.
+    _belakor_altar_spawned_this_level = false
 
     if not altar_custom and not cursed_custom and not ammo_custom and not potions_on then
         return func(self, ...)
@@ -1023,6 +1163,8 @@ local MOD_BOON_LOC = {
     description_ct_meta_cooldown = "+2%% cooldown regen per active boon.",
     display_name_ct_meta_movespeed = "(Mod Boon) Wind Cascade",
     description_ct_meta_movespeed  = "+1%% movement speed per active boon.",
+    display_name_ct_meta_ammo      = "(Mod Boon) Quiver Cascade",
+    description_ct_meta_ammo       = "+5%% total ammo per active boon. Inert without a ranged weapon.",
     display_name_ct_kill_heal    = "(Mod Boon) Khaine's Communion",
     description_ct_kill_heal     = "Killing an enemy heals you for 1 health.",
 
@@ -1093,6 +1235,39 @@ mod:hook("EnemyPackageLoader", "setup_startup_enemies", function(func, self, lev
     return func(self, level_key, level_seed, failed_locked_functions, use_random_directors, conflict_director_name, difficulty, difficulty_tweak)
 end)
 
+-- v0.7.41: Adventure-injected levels use vanilla conflict directors (e.g., chaos_light)
+-- whose `PackSpawningSettings` entries lack `difficulty_overrides`. CW's SIGNATURE-zone
+-- pacing applies the `no_roamers` mutator (mutator_deus_pacing_tweak.lua:38) which does
+-- `pairs(pack_spawning_settings.difficulty_overrides)` → "bad argument #1 to 'pairs'
+-- (table expected, got nil)" on first mission entry. Vanilla CW levels all have the
+-- field populated; adventure ones don't (Crashify guid 004768e7).
+--
+-- Vanilla intends no_roamers as a CW-only pacing tool; it's mechanically too aggressive
+-- for adventure levels anyway (area_density_coefficient = 0 wipes roaming spawns). Per
+-- user: replace with the gentler `deus_less_roamers` semantics OR just exempt adventure
+-- levels. Simplest exemption: filter the mutator name out of the zone/mutator lists
+-- before vanilla `tweak_pack_spawning_settings` processes them.
+local ADVENTURE_INCOMPATIBLE_PACK_MUTATORS = {
+    no_roamers = true,
+}
+
+mod:hook("MutatorHandler", "tweak_pack_spawning_settings", function(func, self, zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
+    if not on_injected_adventure_level() then
+        return func(self, zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
+    end
+    local function filter(list)
+        if type(list) ~= "table" then return list end
+        local kept = {}
+        for _, name in ipairs(list) do
+            if not ADVENTURE_INCOMPATIBLE_PACK_MUTATORS[name] then
+                kept[#kept + 1] = name
+            end
+        end
+        return kept
+    end
+    return func(self, filter(zone_mutator_list), filter(mutator_list), conflict_director_name, pack_spawning_settings)
+end)
+
 -- ============================================================
 -- Curse light tinting on injected adventure levels
 -- ============================================================
@@ -1148,7 +1323,10 @@ local _CURSE_LIGHT_PALETTES = {
         { 0.95, 1.05, 0.35, w = 20 },   -- jaundiced yellow (accent)
         { 1.00, 1.00, 0.95, w = 15 },   -- pale moldy white (neutral)
         { 0.30, 0.85, 0.95, w = 10 },   -- swamp teal (cool secondary)
-        { 1.10, 0.30, 0.95, w = 15 },   -- pustule magenta complement (true ↔ green)
+        -- v0.7.46: was { 1.10, 0.30, 0.95 } — bright magenta. User wanted deep
+        -- dark purple instead. Reduced red and blue and dropped overall intensity
+        -- so the complement slot reads as ominous violet rather than hot pink.
+        { 0.45, 0.15, 0.65, w = 15 },   -- deep dark purple complement (true ↔ green)
     },
     tzeentch = {
         -- Per user feedback v0.7.16: "make all the lights and most of the
@@ -1326,14 +1504,17 @@ local _CURSE_SKY_PROFILES = {
         fog_color            = { 1.39, 0.48, 0.44 },
         exposure_mul         = 0.95,
     },
-    -- NURGLE — sickly bog green. v0.7.18: toned ~30% toward neutral.
+    -- NURGLE — sickly bog green. v0.7.18 toned ~30% toward neutral. v0.7.46
+    -- further tones the green channel ~10–15% on every slot and shifts toward
+    -- yellow so it reads as jaundiced/sickly without overwhelming. Per user:
+    -- "outdoor greens a bit less intense, but still visibly a sickly greenish-yellow."
     nurgle = {
-        skydome_tint_color   = { 0.62, 1.21, 0.58 },
-        sun_color            = { 0.97, 1.11, 0.69 },
-        secondary_sun_color  = { 0.79, 1.04, 0.69 },
-        ambient_tint         = { 0.76, 1.00, 0.72 },
-        ambient_tint_top     = { 0.69, 1.07, 0.62 },
-        fog_color            = { 0.65, 1.14, 0.58 },
+        skydome_tint_color   = { 0.78, 1.05, 0.55 },   -- was {0.62, 1.21, 0.58} — softer sky, more yellow tint
+        sun_color            = { 1.05, 1.02, 0.65 },   -- was {0.97, 1.11, 0.69} — pull green down, lean yellow
+        secondary_sun_color  = { 0.92, 0.98, 0.66 },   -- was {0.79, 1.04, 0.69}
+        ambient_tint         = { 0.88, 0.95, 0.68 },   -- was {0.76, 1.00, 0.72} — softer bounce
+        ambient_tint_top     = { 0.82, 1.00, 0.60 },   -- was {0.69, 1.07, 0.62}
+        fog_color            = { 0.80, 1.05, 0.55 },   -- was {0.65, 1.14, 0.58} — fog less aggressively green
         exposure_mul         = 1.00,
     },
     -- TZEENTCH — cobalt sky lit by orange daylight, deep-blue point lights.
@@ -1520,7 +1701,10 @@ local function filter_available_curses(config)
                     local filtered = {}
                     for _, curse in ipairs(curse_list) do
                         local key = "disable_curse_" .. curse:gsub("^curse_", "")
-                        if not mod:get(key) then
+                        -- v0.7.42: use effective_setting so client mirrors host's disable
+                        -- choices. Otherwise the deus_populate_graph filtering diverges
+                        -- across peers → wrong-curse-on-node visible to one player only.
+                        if not effective_setting(key) then
                             filtered[#filtered + 1] = curse
                         end
                     end
@@ -1832,27 +2016,50 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
         return func(self, spawner_unit, spawn_type)
     end
 
-    -- Respect the user's `cursed_chest_count` setting. Once we've converted
-    -- that many book locations, skip the remaining ones (no pickup spawns —
-    -- the empty book pedestal isn't visible since adventure flow units only
-    -- materialize after spawn). Default is 1 chest per mission.
-    local cap = mod:get("cursed_chest_count") or 1
-    if _chest_conversions_this_level >= cap then
-        return  -- skip; leave the spawner alone
+    -- Respect the user's `cursed_chest_count` setting. The first N book spots become
+    -- Chests of Trials. Default is 1 chest per mission; vanilla adventure maps ship 5
+    -- book pedestals (3 tomes + 2 grimoires), so up to 4 spots remain afterwards.
+    local cap = effective_setting("cursed_chest_count") or 1  -- v0.7.42: sync with host
+    if _chest_conversions_this_level < cap then
+        local pickup_name = "deus_cursed_chest"
+        local settings = AllPickups and AllPickups[pickup_name]
+        if not settings then
+            -- AllPickups not yet built (extremely unlikely at populate time, but defensive).
+            return func(self, spawner_unit, spawn_type)
+        end
+
+        local position = Unit.local_position(spawner_unit, 0)
+        local rotation = Unit.local_rotation(spawner_unit, 0)
+        local spawned_unit = self:_spawn_pickup(settings, pickup_name, position, rotation, false, spawn_type)
+        _chest_conversions_this_level = _chest_conversions_this_level + 1
+        return spawned_unit
     end
 
-    local pickup_name = "deus_cursed_chest"
-    local settings = AllPickups and AllPickups[pickup_name]
-    if not settings then
-        -- AllPickups not yet built (extremely unlikely at populate time, but defensive).
-        return func(self, spawner_unit, spawn_type)
+    -- v0.7.55: after Chests of Trials are placed, the NEXT remaining book spot becomes
+    -- the Belakor altar (`deus_02` / `deus_belakor_locus`) when the host has "Always
+    -- Include Belakor's Temple" on. One altar per mission, matching vanilla
+    -- belakor-themed CW levels which all request `deus_02 = 1`. The `_spawn_pickup`
+    -- call below also re-checks `can_spawn_belakor_locus` (vanilla pickup-settings
+    -- `can_spawn_func` gate), which our DeusRunController.can_spawn_belakor_locus hook
+    -- below permits on adventure-injected levels — both paths must agree, or the call
+    -- silently no-ops.
+    if not _belakor_altar_spawned_this_level
+        and effective_setting("force_belakor")
+        and AllPickups and AllPickups.deus_02 then
+        local position = Unit.local_position(spawner_unit, 0)
+        local rotation = Unit.local_rotation(spawner_unit, 0)
+        local spawned_unit = self:_spawn_pickup(AllPickups.deus_02, "deus_02", position, rotation, false, spawn_type)
+        if spawned_unit then
+            _belakor_altar_spawned_this_level = true
+            return spawned_unit
+        end
+        -- _spawn_pickup returns nil if can_spawn_func vetoed; fall through to "skip
+        -- this spawner" so the empty pedestal stays hidden, same as the no-cap case.
     end
 
-    local position = Unit.local_position(spawner_unit, 0)
-    local rotation = Unit.local_rotation(spawner_unit, 0)
-    local spawned_unit = self:_spawn_pickup(settings, pickup_name, position, rotation, false, spawn_type)
-    _chest_conversions_this_level = _chest_conversions_this_level + 1
-    return spawned_unit
+    -- All conversions used up — leave the spawner alone (empty pedestal stays hidden
+    -- because adventure flow units only materialize after spawn).
+    return
 end)
 
 -- Grant CW-pickup eligibility on adventure-level spawners that have analogous
@@ -1918,6 +2125,20 @@ mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup
         return true
     end
 
+    return false
+end)
+
+-- v0.7.51: Belakor altar gate. Vanilla `can_spawn_belakor_locus` only returns true on
+-- belakor-themed CW nodes (or arena_belakor). Adventure-injected campaign levels have
+-- their own non-belakor themes, so the gate would reject every altar spawn even after
+-- populate_pickups has requested one. Override: also return true on injected adventure
+-- levels when host has force_belakor — gating mirrors the populate_pickups inject so
+-- the two stay in sync.
+mod:hook("DeusRunController", "can_spawn_belakor_locus", function(func, self)
+    if func(self) then return true end
+    if on_injected_adventure_level() and effective_setting("force_belakor") then
+        return true
+    end
     return false
 end)
 
@@ -2236,7 +2457,7 @@ end
 -- the top of the file (in generate_random_power_ups hook) and the on_setting_changed callback
 -- below resolve to this function.
 sync_reckless_swings = function()
-    if mod:get("tweak_reckless_swings") then
+    if effective_setting("tweak_reckless_swings") then
         apply_reckless_swings_tweak()
     else
         revert_reckless_swings_tweak()
@@ -2274,7 +2495,7 @@ local function apply_bomb_cooldown_tweak()
         return
     end
 
-    local override = mod:get("bomb_boon_cooldown")
+    local override = effective_setting("bomb_boon_cooldown")
     if not override or override <= 0 then
         mod:info("[bomb-cooldown] override=%s (no change)", tostring(override))
         return
@@ -2310,7 +2531,7 @@ sync_bomb_cooldown = function()
     -- Always revert first so a setting change from one positive value to another re-applies the
     -- new value (rather than silently no-op'ing because originals are already saved).
     revert_bomb_cooldown_tweak()
-    local override = mod:get("bomb_boon_cooldown")
+    local override = effective_setting("bomb_boon_cooldown")
     if override and override > 0 then
         apply_bomb_cooldown_tweak()
     end
@@ -2400,7 +2621,7 @@ local function revert_boon_movespeed_tweak()
 end
 
 sync_boon_movespeed = function()
-    if mod:get("tweak_boon_movespeed") then
+    if effective_setting("tweak_boon_movespeed") then
         apply_boon_movespeed_tweak()
     else
         revert_boon_movespeed_tweak()
@@ -2467,7 +2688,7 @@ local function revert_poison_proof_tweak()
 end
 
 local function sync_poison_proof_tweak()
-    if mod:get("tweak_poison_proof_duration") then
+    if effective_setting("tweak_poison_proof_duration") then
         apply_poison_proof_tweak()
     else
         revert_poison_proof_tweak()
@@ -2475,6 +2696,58 @@ local function sync_poison_proof_tweak()
 end
 
 sync_poison_proof_tweak()
+
+-- --- Killer in the Shadows (invisibility potion) 2x duration ---
+-- Vanilla: base 5s / increased 15s (MorrisBuffTweakData.killer_in_the_shadows_potion.duration).
+-- BuffTemplates copies duration by value at template generation, so we mutate the
+-- BuffTemplates entry directly (the MorrisBuffTweakData mutation is a no-op post-boot).
+local invis_potion_originals = nil
+
+local function apply_invis_potion_tweak()
+    if invis_potion_originals then
+        return
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    local base = bt and bt.killer_in_the_shadows_potion
+    local inc = bt and bt.killer_in_the_shadows_potion_increased
+    local base_buff = base and base.buffs and base.buffs[1]
+    local inc_buff = inc and inc.buffs and inc.buffs[1]
+    if not base_buff or not inc_buff then
+        mod:info("[invis-potion] BuffTemplates not loaded yet; will retry on settings sync")
+        return
+    end
+    invis_potion_originals = {
+        base = base_buff.duration,
+        inc = inc_buff.duration,
+    }
+    base_buff.duration = (invis_potion_originals.base or 5) * 2
+    inc_buff.duration = (invis_potion_originals.inc or 15) * 2
+    mod:info(string.format("[invis-potion] applied: base=%s -> %s, increased=%s -> %s",
+        tostring(invis_potion_originals.base), tostring(base_buff.duration),
+        tostring(invis_potion_originals.inc), tostring(inc_buff.duration)))
+end
+
+local function revert_invis_potion_tweak()
+    if not invis_potion_originals then
+        return
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    local base_buff = bt and bt.killer_in_the_shadows_potion and bt.killer_in_the_shadows_potion.buffs and bt.killer_in_the_shadows_potion.buffs[1]
+    local inc_buff = bt and bt.killer_in_the_shadows_potion_increased and bt.killer_in_the_shadows_potion_increased.buffs and bt.killer_in_the_shadows_potion_increased.buffs[1]
+    if base_buff then base_buff.duration = invis_potion_originals.base end
+    if inc_buff then inc_buff.duration = invis_potion_originals.inc end
+    invis_potion_originals = nil
+end
+
+local function sync_invis_potion_tweak()
+    if effective_setting("tweak_invis_potion_2x") then
+        apply_invis_potion_tweak()
+    else
+        revert_invis_potion_tweak()
+    end
+end
+
+sync_invis_potion_tweak()
 
 -- --- Hangover Brew (moot_milk) alternative effect ---
 -- Vanilla buff structure (morris_buff_settings.lua:5804): 3 buffs
@@ -2503,13 +2776,17 @@ local function build_moot_milk_alt_buffs(duration)
             duration = duration,
         },
         {
+            -- v0.7.50: WAS 0.25 (which is a literal multiplier on move_speed, so the player
+            -- moved at 25% of base speed — a -75% slow). `apply_movement_buff` does
+            -- `move_speed *= multiplier`; vanilla speed_boost_potion uses 1.5 for +50%.
+            -- 1.25 = +25% as the surrounding comment / changelog have always claimed.
             apply_buff_func = "apply_movement_buff",
             max_stacks = 1,
             name = "moot_milk_potion_movement_speed_alt",
             refresh_durations = true,
             remove_buff_func = "remove_movement_buff",
             duration = duration,
-            multiplier = 0.25,
+            multiplier = 1.25,
             path_to_movement_setting_to_modify = {
                 "move_speed",
             },
@@ -2520,7 +2797,15 @@ local function build_moot_milk_alt_buffs(duration)
             refresh_durations = true,
             duration = duration,
             perks = {
-                buff_perks.infinite_dodge,
+                -- v0.7.44: was `buff_perks.infinite_dodge`. The `buff_perks` global is
+                -- a `table.enum` map of name → name string. At mod-load timing it isn't
+                -- always populated in `_G` (the buff system's perk_names file is
+                -- required AFTER mods init in some load orders), so the lookup returned
+                -- nil and the apply silently bailed at the `rawget(_G, "buff_perks")`
+                -- gate below — meaning Moot Milk stayed vanilla for the whole session.
+                -- Using the literal string is functionally identical (the buff system
+                -- looks up perks by string key, which IS what `table.enum` stores).
+                "infinite_dodge",
             },
         },
         {
@@ -2545,10 +2830,10 @@ local function apply_moot_milk_alt_tweak()
         mod:info("[moot-milk-alt] BuffTemplates not loaded yet; will retry on settings sync")
         return
     end
-    if not rawget(_G, "buff_perks") then
-        mod:info("[moot-milk-alt] buff_perks not loaded yet; cannot apply infinite_dodge perk")
-        return
-    end
+    -- v0.7.44: removed `buff_perks` gate. The previous gate bailed when the global
+    -- wasn't populated yet (logged in 2026-05-15 session); the replacement uses the
+    -- literal string "infinite_dodge" in build_moot_milk_alt_buffs above, which is
+    -- functionally equivalent and doesn't require the global.
     moot_milk_originals = {
         base_buffs = base.buffs,
         inc_buffs = inc.buffs,
@@ -2569,7 +2854,7 @@ local function revert_moot_milk_alt_tweak()
 end
 
 local function sync_moot_milk_alt_tweak()
-    if mod:get("tweak_moot_milk_alt") then
+    if effective_setting("tweak_moot_milk_alt") then
         apply_moot_milk_alt_tweak()
     else
         revert_moot_milk_alt_tweak()
@@ -2614,7 +2899,7 @@ local function revert_shard_strike_tweak()
 end
 
 local function apply_shard_strike_tweak()
-    local user_value = mod:get("tweak_shard_strike_duration") or 16
+    local user_value = effective_setting("tweak_shard_strike_duration") or 16
     local target = math.max(1, math.min(16, user_value))
     if target == 16 then
         revert_shard_strike_tweak()
@@ -2705,7 +2990,7 @@ local function apply_anath_raema_permanent_tweak()
 end
 
 local function sync_anath_raema_permanent()
-    if mod:get("tweak_anath_raema_permanent") then
+    if effective_setting("tweak_anath_raema_permanent") then
         apply_anath_raema_permanent_tweak()
     else
         revert_anath_raema_permanent_tweak()
@@ -2974,7 +3259,7 @@ end
 
 local function sync_dormant_boons()
     for name, default_rarity in pairs(DORMANT_BOON_RARITY) do
-        if mod:get("activate_dormant_" .. name) and not _injected_dormants[name] then
+        if effective_setting("activate_dormant_" .. name) and not _injected_dormants[name] then
             inject_dormant_boon(name, default_rarity)
         end
     end
@@ -3038,31 +3323,56 @@ local CT_META_BOONS = {
             { stat_buff = "cooldown_regen", multiplier = 0.02 },
         },
     },
+    {
+        name = "ct_meta_ammo",  -- v0.7.43: +5% total ammo per active boon
+        rarity = "exotic",
+        icon = "deus_icon_meta_01",
+        stat_buffs = {
+            -- v0.7.52: `apply_buff_func = "refresh_ranged_slot_buffs"` fires
+            -- `ammo_extension:refresh_buffs()` on the player's ranged weapon every time the
+            -- stack is added, which re-runs `_apply_buffs` and recomputes `_max_ammo`.
+            -- Without this, the new `total_ammo` stat_buff sat in BuffExtension but the
+            -- ammo extension's CACHED max stayed at the unbuffed value, so the +5%-per-boon
+            -- never showed up in-game. Vanilla uses the same pattern (Markus huntsman's
+            -- ammo passive, Sienna scholar vent zone, etc.).
+            { stat_buff = "total_ammo", multiplier = 0.05, apply_buff_func = "refresh_ranged_slot_buffs" },
+        },
+        -- "Only available when player has a ranged secondary weapon": stat_buff "total_ammo"
+        -- is only read by AmmoExtension on ranged weapons. Players without a ranged slot
+        -- get no effect (the buff is harmless). We don't gate at offer-roll because all VT2
+        -- careers have ranged slots in CW by default; if you find a real no-ranged-weapon
+        -- scenario, the tooltip notes the inertness and we can add a runtime guard later.
+    },
 }
 
-local function _make_meta_apply(stack_name)
+-- Shared body for apply + granted. Brings the stack count up to the current boon count
+-- by adding the delta only. Both procs use the same body so the result is idempotent
+-- regardless of which fires first (vanilla CW fires `on_boon_granted` BEFORE
+-- `activate_deus_power_up` for newly-granted boons, so when Quiver Cascade is the first
+-- ct_meta_* boon a player has the apply func is what does the initial stack — for
+-- subsequent boon grants only `granted` fires).
+--
+-- v0.7.53 fixes two bugs in the prior implementation:
+--   1. `num_buff_stacks(stack_name)` returned 0 always — the actual stored key is the
+--      SUB-buff's `.name`, which we set to `stack_name .. "_" .. i` in the factory. So the
+--      granted func couldn't see existing stacks and re-added the full boon count on every
+--      subsequent grant, producing quadratic stack growth (triangular sum across boons).
+--   2. The apply path used `for 1, num_boons` with no existing-stacks check. Same fix.
+--
+-- The query uses the `_1` suffix (the first sub-buff's name). All meta specs have at least
+-- one sub-buff, and add_buff(stack_name) increments every sub-buff's stack in lockstep, so
+-- counting one of them is enough.
+local function _make_meta_proc(stack_name)
+    local stack_key = stack_name .. "_1"
     return function(unit, buff, params)
         local player = Managers.player and Managers.player:owner(unit)
         if not player then return end
         local buff_extension = ScriptUnit.extension(unit, "buff_system")
+        if not buff_extension then return end
         local deus_run_controller = Managers.mechanism:game_mechanism():get_deus_run_controller()
         if not deus_run_controller then return end
         local num_boons = #deus_run_controller:get_player_power_ups(player:network_id(), player:local_player_id())
-        for _ = 1, num_boons do
-            buff_extension:add_buff(stack_name)
-        end
-    end
-end
-
-local function _make_meta_granted(stack_name)
-    return function(unit, buff, params)
-        local player = Managers.player and Managers.player:owner(unit)
-        if not player then return end
-        local buff_extension = ScriptUnit.extension(unit, "buff_system")
-        local num_existing = buff_extension:num_buff_stacks(stack_name)
-        local deus_run_controller = Managers.mechanism:game_mechanism():get_deus_run_controller()
-        if not deus_run_controller then return end
-        local num_boons = #deus_run_controller:get_player_power_ups(player:network_id(), player:local_player_id())
+        local num_existing = buff_extension:num_buff_stacks(stack_key)
         for _ = num_existing + 1, num_boons do
             buff_extension:add_buff(stack_name)
         end
@@ -3081,9 +3391,12 @@ local function register_meta_boon(spec)
     local apply_name   = spec.name .. "_apply"
     local granted_name = spec.name .. "_granted"
 
-    -- 1. Proc functions
-    buff_funcs.functions[apply_name]   = _make_meta_apply(stack_name)
-    buff_funcs.functions[granted_name] = _make_meta_granted(stack_name)
+    -- 1. Proc functions. Same body for both — apply fires when this meta boon itself is
+    -- granted; granted fires on every subsequent boon. Both should bring stack count to
+    -- the current boon count, idempotently.
+    local proc = _make_meta_proc(stack_name)
+    buff_funcs.functions[apply_name]   = proc
+    buff_funcs.functions[granted_name] = proc
 
     -- 2. Stack buff template
     local stack_buffs = {}
@@ -3093,8 +3406,9 @@ local function register_meta_boon(spec)
             stat_buff = sb.stat_buff,
             max_stacks = math.huge,
         }
-        if sb.multiplier then entry.multiplier = sb.multiplier end
-        if sb.bonus     then entry.bonus      = sb.bonus     end
+        if sb.multiplier      then entry.multiplier      = sb.multiplier      end
+        if sb.bonus           then entry.bonus           = sb.bonus           end
+        if sb.apply_buff_func then entry.apply_buff_func = sb.apply_buff_func end
         stack_buffs[i] = entry
     end
     buff_templates[stack_name] = { buffs = stack_buffs }
@@ -3146,14 +3460,21 @@ do
         local stack_name   = "ct_meta_movespeed_stack"
         local apply_name   = "ct_meta_movespeed_apply"
         local granted_name = "ct_meta_movespeed_granted"
-        buff_funcs.functions[apply_name]   = _make_meta_apply(stack_name)
-        buff_funcs.functions[granted_name] = _make_meta_granted(stack_name)
+        -- v0.7.56: was `_make_meta_apply` / `_make_meta_granted`. Those were consolidated
+        -- into `_make_meta_proc` in v0.7.53 but this special-cased movespeed block was
+        -- missed in the rename — module-load crashed with "attempt to call global
+        -- '_make_meta_apply' (a nil value)". `_make_meta_proc` looks up existing stack
+        -- count via `num_buff_stacks(stack_name .. "_1")`, so the sub-buff's `name`
+        -- field has to use that exact key (was bare "ct_meta_movespeed_stack" prior).
+        local proc = _make_meta_proc(stack_name)
+        buff_funcs.functions[apply_name]   = proc
+        buff_funcs.functions[granted_name] = proc
         buff_templates[stack_name] = {
             buffs = {
                 {
                     apply_buff_func = "apply_movement_buff",
                     remove_buff_func = "remove_movement_buff",
-                    name             = "ct_meta_movespeed_stack",
+                    name             = "ct_meta_movespeed_stack_1",
                     max_stacks       = math.huge,
                     multiplier       = 1.01,
                     path_to_movement_setting_to_modify = { "move_speed" },
@@ -3226,7 +3547,7 @@ local CT_TRAIT_BOONS = {
 }
 
 local function register_trait_boon(spec)
-    if not mod:get(spec.toggle) then return end
+    if not effective_setting(spec.toggle) then return end
     local power_ups      = rawget(_G, "DeusPowerUpTemplates")
     local buff_templates = rawget(_G, "BuffTemplates")
     if not power_ups or not buff_templates then
@@ -3259,6 +3580,26 @@ end
 
 for _, spec in ipairs(CT_TRAIT_BOONS) do
     register_trait_boon(spec)
+end
+
+-- Assignment to the forward-declared `sync_host_dependent_state` (see top of file).
+-- Called by the ct_sync_host_settings RPC handler immediately after a client
+-- receives the host's settings payload, so any template/pool mutations gated on
+-- a synced setting are reapplied with the host's values. Apply order mirrors the
+-- one-shot calls each sync_* function does at module load.
+sync_host_dependent_state = function()
+    sync_reckless_swings()
+    sync_bomb_cooldown()
+    sync_boon_movespeed()
+    sync_poison_proof_tweak()
+    sync_invis_potion_tweak()
+    sync_moot_milk_alt_tweak()
+    sync_shard_strike()
+    sync_anath_raema_permanent()
+    sync_dormant_boons()
+    for _, spec in ipairs(CT_TRAIT_BOONS) do
+        register_trait_boon(spec)
+    end
 end
 
 do
@@ -3323,7 +3664,7 @@ local HOME_BREWER_BREWED_TEMPLATES = {
 }
 
 mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params)
-    if not mod:get("tweak_home_brewer_potency") then
+    if not effective_setting("tweak_home_brewer_potency") then
         return func(self, template_name, params)
     end
     if not (type(template_name) == "string" and HOME_BREWER_BREWED_TEMPLATES[template_name]) then
@@ -3366,7 +3707,7 @@ end)
 -- a nil-table crash if the buff system somehow isn't loaded yet.
 if BuffFunctionTemplates and BuffFunctionTemplates.functions then
     mod:hook(BuffFunctionTemplates.functions, "apply_pockets_full_of_bombs_buff", function(func, unit, buff, params)
-        if not mod:get("endless_bombs_consumes_morgrim") then
+        if not effective_setting("endless_bombs_consumes_morgrim") then
             return func(unit, buff, params)
         end
 
@@ -3383,6 +3724,77 @@ if BuffFunctionTemplates and BuffFunctionTemplates.functions then
 
         return func(unit, buff, params)
     end)
+
+end
+
+-- ============================================================
+-- Manann's Tempest — per-source 8s cooldown
+-- ============================================================
+-- Vanilla `chain_lightning` has no cooldown: every crit triggers a chain, so high-crit
+-- builds turn every fight into a strobe-light spam. We rate-limit both call sites:
+--   * BOON variant (cloned by inject_dormant_boon → renamed to
+--     `power_up_ct_boon_manann_tempest_<rarity>`): hard-capped unconditionally so
+--     enabling the boon doesn't double down on the spam.
+--   * TRAIT variant (`deus_crit_chain_lightning`): gated by the new toggle
+--     `tweak_manann_tempest_cooldown`. Off = vanilla, on = 8s cooldown.
+--
+-- Cooldowns are tracked per `owner_unit` with separate buckets for boon vs trait, so
+-- the two sources don't share a window — a player running both gets one chain per 8s
+-- from each side (matches the existing "boon stacks with trait" design described above
+-- at the CT_TRAIT_BOONS table). Weak-keyed so entries die with the unit.
+--
+-- Gate mirrors `chain_lightning`'s own ALIVE / first_hit / is_critical_strike check so
+-- the cooldown only consumes when the proc would actually have fired.
+--
+-- v0.7.57: hook target is the GLOBAL `ProcFunctions` table, NOT
+-- `BuffFunctionTemplates.functions`. `chain_lightning` lives in
+-- `dlc_settings.morris.proc_functions` (morris_buff_settings.lua:2145+, separate from
+-- buff_function_templates which ends at line 2144) and gets merged via
+-- `DLCUtils.merge("proc_functions", ProcFunctions)` in buff_templates.lua:9533. At
+-- runtime BuffExtension looks it up via `ProcFunctions[buff_func_name]`
+-- (buff_extension.lua:1350) — `BuffFunctionTemplates.functions.chain_lightning` is nil
+-- and was the source of the load-time "trying to hook function or method that doesn't
+-- exist" error in v0.7.48 → v0.7.56. `apply_pockets_full_of_bombs_buff` happens to live
+-- in `buff_function_templates` (the apply-callback category) which is why THAT hook
+-- worked at the same call site.
+if ProcFunctions and ProcFunctions.chain_lightning then
+    local MANANN_TEMPEST_COOLDOWN_S = 8.0
+    local _manann_tempest_t = setmetatable({}, { __mode = "k" })
+
+    mod:hook(ProcFunctions, "chain_lightning", function(func, owner_unit, buff, params, world, param_order)
+        local template = buff and buff.template
+        local template_name = template and template.name
+        local is_boon  = type(template_name) == "string"
+            and string.find(template_name, "^power_up_ct_boon_manann_tempest_") ~= nil
+        local is_trait = template_name == "deus_crit_chain_lightning"
+
+        if not (is_boon or is_trait) then
+            return func(owner_unit, buff, params, world, param_order)
+        end
+        if is_trait and not effective_setting("tweak_manann_tempest_cooldown") then
+            return func(owner_unit, buff, params, world, param_order)
+        end
+
+        local hit_unit = params[param_order.attacked_unit]
+        local first_hit = params[param_order.first_hit]
+        local is_critical_strike = params[param_order.is_critical_strike]
+        if not (ALIVE[owner_unit] and ALIVE[hit_unit] and first_hit and is_critical_strike) then
+            return func(owner_unit, buff, params, world, param_order)
+        end
+
+        local t = (Managers and Managers.time and Managers.time:time("game")) or 0
+        local bucket = _manann_tempest_t[owner_unit]
+        if not bucket then
+            bucket = { boon_next_t = 0, trait_next_t = 0 }
+            _manann_tempest_t[owner_unit] = bucket
+        end
+        local key = is_boon and "boon_next_t" or "trait_next_t"
+        if t < bucket[key] then
+            return
+        end
+        bucket[key] = t + MANANN_TEMPEST_COOLDOWN_S
+        return func(owner_unit, buff, params, world, param_order)
+    end)
 end
 
 -- ============================================================
@@ -3395,7 +3807,7 @@ end
 -- of the call so the proc returns false specifically when the grenade is a Morgrim's Bomb. Other
 -- grenades (frag, fire, conflagration) continue to roll normally.
 mod:hook("ActionChargedProjectileUtility", "fire_charged_projectile", function(func, projectile_context, ...)
-    if not mod:get("rv_no_save_morgrim")
+    if not effective_setting("rv_no_save_morgrim")
         or not projectile_context
         or projectile_context.item_name ~= "holy_hand_grenade"
         or not projectile_context.is_grenade
@@ -3454,6 +3866,8 @@ mod.on_setting_changed = function(setting_id)
         sync_boon_movespeed()
     elseif setting_id == "tweak_poison_proof_duration" then
         sync_poison_proof_tweak()
+    elseif setting_id == "tweak_invis_potion_2x" then
+        sync_invis_potion_tweak()
     elseif setting_id == "tweak_moot_milk_alt" then
         sync_moot_milk_alt_tweak()
     elseif setting_id == "tweak_shard_strike_duration" then
@@ -3482,6 +3896,7 @@ mod.on_disabled = function()
     revert_bomb_cooldown_tweak()
     revert_boon_movespeed_tweak()
     revert_poison_proof_tweak()
+    revert_invis_potion_tweak()
     revert_moot_milk_alt_tweak()
     revert_shard_strike_tweak()
     revert_anath_raema_permanent_tweak()
@@ -3555,6 +3970,34 @@ mod:command("dump_spawners", "Dump pickup spawner counts and pickup_settings for
     end
 
     mod:echo("Done. Full details in log.")
+end)
+
+mod:command("dump_potions", "Dump resolved in-game names for every CW potion (potion_*_01 in ItemMasterList)", function()
+    local iml = rawget(_G, "ItemMasterList")
+    if not iml then
+        mod:echo("ItemMasterList not loaded.")
+        return
+    end
+    local sorted = {}
+    for key, entry in pairs(iml) do
+        if type(entry) == "table" and entry.slot_type == "potion" then
+            sorted[#sorted + 1] = key
+        end
+    end
+    table.sort(sorted)
+    local count = 0
+    for _, key in ipairs(sorted) do
+        local entry = iml[key]
+        local display_raw = Localize(key)
+        local display = (display_raw ~= "<" .. key .. ">") and display_raw or "(no display loc)"
+        local desc_key = entry.description
+        local desc_raw = desc_key and Localize(desc_key) or ""
+        local desc = (desc_key and desc_raw ~= "<" .. desc_key .. ">") and desc_raw or "(no description loc)"
+        local tmpl = entry.temporary_template or "(none)"
+        mod:info("[DUMP:potions] %s\tdisplay='%s'\ttemplate=%s\tdesc='%s'", key, display, tmpl, desc)
+        count = count + 1
+    end
+    mod:echo(string.format("dump_potions: %d potions dumped to log.", count))
 end)
 
 mod:command("dump_boon_loc", "Dump resolved display names and descriptions for all boons", function()

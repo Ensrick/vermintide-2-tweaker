@@ -1,5 +1,140 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.58-alpha (2026-05-18)
+
+### Fixed: Belakor altar spawn fatals `Unit not found #ID[ee6ba7f91c666e61]` on adventure-injected levels
+
+When `force_belakor` was on and the engine rolled a Belakor altar onto an adventure-injected mission's first remaining book spot, `World.spawn_unit("units/props/blk/blk_locus_01", ...)` hit the C-level assert at `c_api_world.cpp:67` because the unit wasn't in any loaded resource package. The locus prop ships in `resource_packages/levels/dlcs/morris/belakor_common`, which vanilla CW belakor-themed levels load via `level_settings_morris.lua`'s `theme_packages_lookup.belakor`. Our adventure-injection clones the adventure level's `packages` table and adds `morris_ingame` + the deus chest unit + DLC career packages — but not the belakor_common package, so the locus unit was unresolvable.
+
+`build_permutation_packages` (`_adventure_pool.lua`) now appends `resource_packages/levels/dlcs/morris/belakor_common` to every injected permutation regardless of theme. `force_belakor` can ignite a Belakor altar on any theme via `_spawn_guaranteed_pickup`, so the package must be available unconditionally. Diagnosed via `crashify://142f40f3-d01d-4811-bd8b-e97272b8afcb` (entered `levels/dlcs/scorpion/alleys_heavens` aka Old Haunts as a Belakor pilgrimage); hash decoded by brute-forcing candidate unit paths through the bundle unpacker.
+
+The `DeusRunController.can_spawn_belakor_locus` permit added in v0.7.51 + the `_spawn_guaranteed_pickup` slot grant added in v0.7.55 stay as-is — they correctly OPEN the spawn gate; v0.7.58 just ensures the asset exists when the spawn actually runs.
+
+## 0.7.57-alpha (2026-05-16)
+
+### Fixed: Manann's Tempest cooldown hook targeted the wrong table → VMF logged "trying to hook function or method that doesn't exist"
+
+The v0.7.48 cooldown hook for `chain_lightning` targeted `BuffFunctionTemplates.functions`, but `chain_lightning` actually lives in the GLOBAL `ProcFunctions` table:
+
+- morris_buff_settings.lua:131-2144 is `dlc_settings.morris.buff_function_templates` (the apply-callback category — that's where `apply_pockets_full_of_bombs_buff` lives, and why our `endless_bombs_consumes_morgrim` hook on the same target works).
+- morris_buff_settings.lua:2145+ is `dlc_settings.morris.proc_functions` (event-driven procs — `chain_lightning` is at line 2563 in this block).
+- At runtime BuffExtension consults `ProcFunctions[buff_func_name]` (buff_extension.lua:1350) — `BuffFunctionTemplates.functions.chain_lightning` is nil.
+
+VMF logged the registration failure but kept loading (unlike the v0.7.53 crash that killed the entire mod), so this was a soft fail: Manann's Tempest cooldown gating just never engaged. Now hooks `ProcFunctions.chain_lightning` directly — both the boon variant (unconditional 8s cooldown) and the trait variant (gated by `tweak_manann_tempest_cooldown`) work as designed.
+
+## 0.7.56-alpha (2026-05-16)
+
+### Fixed: module-load crash since v0.7.53 silently disabled most of the mod
+
+`v0.7.53` consolidated `_make_meta_apply` + `_make_meta_granted` into a single `_make_meta_proc` factory, but the special-cased `ct_meta_movespeed` registration at line ~3460 (separate from the loop because movespeed uses `apply_movement_buff` instead of stat_buff) was missed in the rename. At mod load, Lua raised `attempt to call global '_make_meta_apply' (a nil value)` — VMF aborted `mod_script` initialization at that point, so EVERY hook, registration, and binding after line 3463 silently never ran. That stripped:
+
+- The four trait-as-boon registrations (Vaul's Anvil / Manann's Tempest / Taal's Twinned Arrow / Asuryan's Wrath boon variants)
+- `ct_meta_movespeed` (Boon Bound Steps)
+- `ct_kill_heal` (Khaine's Communion)
+- The Home Brewer +50% potion-potency hook
+- The Manann's Tempest 8s cooldown hook (the entire v0.7.48 feature)
+- `endless_bombs_consumes_morgrim`
+- The Ranger Vet save-grenade-block hook
+- The defeat-recovery handler
+- `mod.on_setting_changed` / `mod.on_disabled` (live updates and cleanup gone)
+- **The host-side `sync_host_dependent_state` assignment** — meaning settings broadcast was partially broken too
+
+Fix: switch `ct_meta_movespeed` to use `_make_meta_proc(stack_name)` (same as the loop-registered meta boons). Also renamed the inline sub-buff's `name` field from `"ct_meta_movespeed_stack"` to `"ct_meta_movespeed_stack_1"` so the proc's `num_buff_stacks(stack_name .. "_1")` delta-check finds the existing stacks (otherwise it would over-stack each grant, same shape as the Bug 2 from v0.7.53 but for movespeed).
+
+If you've been on any v0.7.53–v0.7.55 build, an unknown swath of features were silently dead. v0.7.56 actually wires them all up.
+
+## 0.7.55-alpha (2026-05-16)
+
+### Changed: Belakor altar now spawns at a book pedestal alongside Chests of Trials on adventure-injected missions
+
+Previously (v0.7.51) the altar was injected via `populate_pickups.primary.deus_02 = 1`, which placed it in a random ammo/healing/grenades primary spot. User asked for it to share the 5 book-spot budget instead — 3 tomes + 2 grimoires on every adventure level. The first `cursed_chest_count` book spots become Chests of Trials (default 1); the next book spot becomes the Belakor altar when `force_belakor` is on (one per mission). Remaining book spots stay hidden as before. Removed the populate_pickups inject and the `_can_spawn` allow-list for `deus_02` — both are unnecessary now that `_spawn_pickup` is invoked directly from the tome/grim spawner hook. The `DeusRunController.can_spawn_belakor_locus` override is still required because `_spawn_pickup` calls `pickup_settings.can_spawn_func`, which routes to `can_spawn_belakor_locus`.
+
+### Changed: sync-all-settings by default — drop hand-maintained `SYNCED_SETTING_NAMES`
+
+After repeated bugs caused by forgetting to add a setting to the synced-broadcast list (most recently: `disable_curse_*` helper bypassed the sync, `finale_dominant_god` / `force_belakor` weren't reaching clients, the `coin_multiplier` / `shrine_boon_count` / `chest_boon_count` / `bomb_boon_exclusive` / `disable_boon_*` / `ban_trait_*` / `tweak_home_brewer_potency` / `endless_bombs_consumes_morgrim` / `rv_no_save_morgrim` toggles all silently diverged on clients), the sync model is now opt-out instead of opt-in.
+
+- `SYNCED_SETTING_NAMES` is built at module load by walking the data file's widget tree (`mod:dofile` + recursive visit of every leaf `setting_id`). Every setting the user can configure gets broadcast from the host to clients automatically.
+- A small explicit `PER_PEER_SETTING_NAMES` excludes the three settings that are deliberately each-peer-local: `tweak_defeat_recovery` (per-peer locality is part of the design), `enable_campaign_potions` (server-driven spawn ignores client-side table mutation), `inject_adventure_maps` (lobby-hash-affecting, host/client must match at lobby-join time anyway).
+- All the previously-direct `mod:get` callsites that should be host-authoritative now route through `effective_setting`: `coin_multiplier` (coin pickups now use host's multiplier), `shrine_boon_count` / `chest_boon_count` (boon picker counts match host), `bomb_boon_exclusive` (pool filter applies uniformly), `disable_boon_*` (boon pool filter), `ban_trait_*` (weapon trait filter), `tweak_home_brewer_potency` (potion potency scaling), `endless_bombs_consumes_morgrim` (Morgrim destroy-vs-drop), `rv_no_save_morgrim` (Ranger Vet grenade-save proc).
+- `effective_setting` is now forward-declared near the top of the file so the early-running `on_soft_currency_picked_up` hook (line ~140) can capture the local slot at closure-creation time — without the forward-declare, that closure would have bound to a nil global.
+
+Net effect: every UI setting in the mod menu now behaves host-authoritatively by default. Adding a new setting requires no bookkeeping — the broadcast picks it up automatically just by living in the data file.
+
+## 0.7.54-alpha (2026-05-16)
+
+### Fixed: `disable_curse_*` toggles weren't host-synced at the call site — client saw different curse text than host
+
+`is_curse_disabled` read `mod:get("disable_curse_<name>")` directly instead of routing through `effective_setting`. Even though all 14 `disable_curse_*` keys ARE in `SYNCED_SETTING_NAMES` (so the host broadcasts them), this helper bypassed the sync and read each peer's local toggle. The two consumers (`MutatorHandler._activate_mutator`, `DeusMechanism.get_current_node_curse`) plus the `_transition_next_node` / `start_next_round` save-restore around `node.curse` therefore made decisions based on whoever-was-asking's settings, not the host's.
+
+Symptom: gameplay-side mutator state could diverge between peers, and (the visible one) Holseher's map / mission-tooltip curse text on a client read the client's local toggle — host could see "no curse" while client saw the curse name, or vice versa, even though the actual mutator was the host's.
+
+Fix: forward-declare `is_curse_disabled` near the top of the file (so existing call sites still bind correctly), assign the body just below `effective_setting`, and route the lookup through `effective_setting`.
+
+## 0.7.53-alpha (2026-05-16)
+
+### Fixed: Quiver Cascade (`ct_meta_ammo`, +5% total ammo per boon) did nothing in-game — two bugs
+
+**Bug 1 (stale ammo cache).** `GenericAmmoUserExtension._apply_buffs` queries `apply_buffs_to_value(_original_max_ammo, "total_ammo")` once at AmmoExtension init and caches the result as `_max_ammo`. Adding new `total_ammo` stat_buffs after that point updates BuffExtension but doesn't bust the AmmoExtension cache, so the +5%-per-boon never showed up even when stacks were present. Fix: `apply_buff_func = "refresh_ranged_slot_buffs"` on the stack sub-buff (vanilla's canonical "I changed an ammo stat, recompute max_ammo" hook, used by Markus huntsman's passive and others; idempotent under repeated calls). `register_meta_boon` now propagates `apply_buff_func` from the spec into the sub-buff entry.
+
+**Bug 2 (quadratic stack growth).** The `_make_meta_granted` proc queried `num_buff_stacks(stack_name)` to decide how many delta-stacks to add. But the actual stored key is `sub_buff_template.name`, which the factory builds as `stack_name .. "_" .. i` — so the query returned 0 every time and the granted proc re-added the full current boon count on every subsequent boon grant (triangular sum: after N additional boons the player had N(N+1)/2 stacks, not N). With Bug 1 masking everything visually, this went unnoticed.
+
+Fix: consolidated apply + granted into a single `_make_meta_proc` that queries `num_buff_stacks(stack_name .. "_1")` (the first sub-buff's actual name) and adds only the delta. Same body for both procs so the result is idempotent regardless of fire order — vanilla `on_boon_granted` fires before the new boon's own apply, so the apply path handles the initial stack-up and granted handles incremental boons.
+
+Other meta boons (stagger / crit / cooldown / health) ran the same buggy granted-proc, but their stat_buffs are queried per-use (not cached like total_ammo), so Bug 1 didn't apply and Bug 2 made them OVER-buffed rather than silently inert. Both are now fixed for every meta boon — expect previously over-buffed runs to feel "weaker" but correct.
+
+### Fixed: finale_dominant_god override didn't reach clients — same bug shape as the v0.7.49 Belakor sync fix
+
+The previous `_setup_run` hook flipped `dominant_god` only in host's local run state. `game_round_ended` (deus_mechanism.lua:551-619) reads `self._vote_data.dominant_god` into a local at the top and uses that single value for BOTH `_setup_run` AND `send_rpc_clients("rpc_deus_setup_run", ..., dominant_god_id, ...)`. The hook never reached the RPC payload, so clients populated their graph with the unmodified god.
+
+Fix: hook `DeusMechanism.game_round_ended` and pre-mutate `self._vote_data.dominant_god` before vanilla runs; restore after. The mutation is host-only, gated on `reason == "start_game"`, and restores even if vanilla errors (pcall + rethrow). Vote_data persists on `self` until next mission-start, so restore-on-return is mandatory.
+
+The `_setup_run` finale_dominant_god branch is removed since it was always redundant for the host and broken for clients.
+
+## 0.7.51-alpha (2026-05-16)
+
+### Added: Belakor altar (`deus_02`) spawns on adventure-injected campaign levels when host has "Always Include Belakor's Temple" on
+
+Three coordinated changes route an altar into each adventure-injected map:
+
+- `populate_pickups` injects `pickup_settings.primary.deus_02 = 1` (with proper save/restore so toggling the setting off cleanly reverts), gated on `on_injected_adventure_level() and effective_setting("force_belakor")`.
+- `PickupSystem._can_spawn` adds `deus_02` to the allow-list for adventure-injected levels. The populate_pickups gate is the only place a request gets generated, so vanilla / non-belakor runs are unaffected.
+- `DeusRunController.can_spawn_belakor_locus` returns true on adventure-injected levels when force_belakor is on. The vanilla gate rejects every non-belakor-themed node (campaign themes don't qualify), so without this the altar would still be vetoed at spawn time even after populate_pickups requested one.
+
+`force_belakor` is now host-authoritative — added to the synced settings broadcast so clients use the host's value consistently across all three gates.
+
+## 0.7.50-alpha (2026-05-16)
+
+### Fixed: Moot Milk (Hangover Brew) alt rework slowed the player to 25% instead of +25%
+
+The reworked Moot Milk's movement-speed sub-buff had `multiplier = 0.25` with `apply_buff_func = "apply_movement_buff"`. That function does `move_speed *= multiplier`, so 0.25 capped the player at 25% of base speed (a -75% slow) for the entire potion duration. Vanilla speed_boost_potion uses 1.5 for +50%; the intended +25% needs 1.25. Code comments / changelog have always advertised this as +25% — the value was just wrong since the rework shipped. Decanter-extended (`_increased`) variant inherits from the same builder, so it's fixed too.
+
+## 0.7.49-alpha (2026-05-16)
+
+### Fixed: clients couldn't see the Belakor curse on Holseher's map when host had "Always Include Belakor's Temple" on
+
+Previously the `force_belakor` override was applied inside `DeusMechanism._setup_run`. That works for the host's own run state, but the upstream caller (`game_round_ended`) computes `with_belakor` BEFORE calling `_setup_run`, then re-uses that same outer-scope variable when it broadcasts `rpc_deus_setup_run` to clients. The hook never reached the RPC payload, so clients ran graph generation with `with_belakor=false` and rolled no Belakor nodes / no Belakor curse spread.
+
+Fix: hook the upstream `BackendInterfaceDeusPlayFab.deus_journey_with_belakor` so the override happens at the source. Now both `_setup_run` and the RPC use the same modified value, and clients see the Belakor curse propagated through the graph.
+
+Known related bug (NOT fixed in this version): `finale_dominant_god` has the same shape — the `_setup_run` hook flips the host's local `dominant_god` but the RPC keeps the original. Clients on a `finale_dominant_god`-overridden run see vanilla god distribution on their map. File a follow-up if this matters.
+
+## 0.7.48-alpha (2026-05-16)
+
+### Added: Manann's Tempest — 8s per-source cooldown
+
+Wraps `BuffFunctionTemplates.functions.chain_lightning` to enforce a per-owner cooldown:
+
+- **Boon variant** (the Unique-rarity Manann's Tempest boon, when its toggle is on) — always rate-limited to 1 chain per 8 seconds. No new toggle; the boon now ships with this cap baked in.
+- **Trait variant** (the vanilla `deus_crit_chain_lightning` weapon trait) — new toggle `tweak_manann_tempest_cooldown` under Reworks > Reworks: Boons. Off (default) = vanilla (no cooldown, fires on every crit). On = 8s cooldown that mirrors the boon.
+
+Boon and trait cooldowns are independent buckets per `owner_unit`, so running both gives you one chain per 8s from each side (matches the existing stacking design). The cooldown gate mirrors the proc's own ALIVE / first_hit / is_critical_strike check so it only consumes on procs that would actually have fired. Trait toggle is host-authoritative via the existing settings sync.
+
+## 0.7.47-alpha (2026-05-16)
+
+### Added: Rework — Killer in the Shadows potion lasts 2x as long
+
+New toggle in Reworks > Reworks: Potions. Doubles the invisibility potion's duration: base 5s → 10s, increased 15s → 30s (Decanter then stacks on the increased variant the usual 50%, giving 15s/45s). Same `BuffTemplates` save-and-restore pattern as the Poison Proof duration rework — mutates `BuffTemplates.killer_in_the_shadows_potion.buffs[1].duration` + `_increased` at apply, restores on revert. Synced via the host-authoritative settings broadcast.
+
 ## 0.7.28b → 0.7.40-alpha (2026-05-15) — consolidated session log
 
 Twelve versions in one session. Listed chronologically by version.

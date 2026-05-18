@@ -392,6 +392,14 @@ local function build_permutation_packages(vanilla)
     local need = {
         "resource_packages/dlcs/morris_ingame",
         "units/props/inn/deus/deus_chest_01",
+        -- Belakor pickup/locus units (blk_locus_01, blk_totem_01, shadow_lieutenant,
+        -- belakor_crystal_socket, etc.). Vanilla CW belakor-themed levels load this
+        -- via `theme_packages_lookup.belakor` in level_settings_morris.lua. Adventure
+        -- bundles don't bring it, so force_belakor's altar spawn fatals on c_api_world.cpp:67
+        -- when `World.spawn_unit("units/props/blk/blk_locus_01", ...)` runs and the resource
+        -- isn't in the manager. Load on every theme — force_belakor can ignite a Belakor
+        -- altar (via _spawn_guaranteed_pickup hook) regardless of which theme rolled.
+        "resource_packages/levels/dlcs/morris/belakor_common",
     }
     for _, pkg in ipairs(DLC_CAREER_PACKAGES) do
         need[#need + 1] = pkg
