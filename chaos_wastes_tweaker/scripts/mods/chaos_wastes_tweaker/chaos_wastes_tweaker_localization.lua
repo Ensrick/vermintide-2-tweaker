@@ -230,6 +230,14 @@ local loc = {
     display_name_ct_meta_movespeed = { en = "Wind Cascade" },
     description_ct_meta_movespeed  = { en = "+1%% movement speed per active boon." },
 
+    -- v0.7.43: Quiver Cascade (+5% ammo per boon, ranged-secondary required for any effect)
+    disable_boon_ct_meta_ammo = { en = "Disable Boon: (Mod Boon) Quiver Cascade" },
+    start_boon_ct_meta_ammo   = { en = "Starting Boon: (Mod Boon) Quiver Cascade" },
+    disable_boon_ct_meta_ammo_tooltip = { en = "(Mod Boon) Per active boon, gain +5%%%% total ammo. Exotic rarity. Stat_buff is total_ammo, which is read only by AmmoExtension on ranged weapons — inert if no ranged secondary weapon is equipped (the buff still applies but has no observable effect)." },
+    start_boon_ct_meta_ammo_tooltip   = { en = "(Mod Boon) Per active boon, gain +5%%%% total ammo. Exotic rarity. Inert without a ranged weapon." },
+    display_name_ct_meta_ammo = { en = "Quiver Cascade" },
+    description_ct_meta_ammo  = { en = "+5%% total ammo per active boon." },
+
     -- v0.7.32: 1 green HP per kill mod boon
     disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
     start_boon_ct_kill_heal   = { en = "Starting Boon: (Mod Boon) Khaine's Communion" },
@@ -242,7 +250,9 @@ local loc = {
     enable_boon_vauls_anvil = { en = "Rework: Vaul's Anvil as Boon (Unique)" },
     enable_boon_vauls_anvil_tooltip = { en = "Adds Vaul's Anvil (the trait's effect: passive block while melee wielded, 10s lockout on block break) as a Unique-rarity boon. Stacking with the trait is harmless — always_blocking is a binary perk, so 2 sources of it equal 1 source effect-wise. Requires a new CW run to take effect." },
     enable_boon_manann_tempest = { en = "Rework: Manann's Tempest as Boon (Unique)" },
-    enable_boon_manann_tempest_tooltip = { en = "Adds Manann's Tempest (crit → chain lightning to 5 nearby enemies, ignores armour) as a Unique-rarity boon. Stacks with the trait — each fires its own chain on every crit (vanilla has no cooldown). Requires a new CW run." },
+    enable_boon_manann_tempest_tooltip = { en = "Adds Manann's Tempest (crit → chain lightning to 5 nearby enemies, ignores armour) as a Unique-rarity boon. Hard-capped at one chain per 8 seconds (per peer). Stacks with the trait — each side fires its own chain. Requires a new CW run." },
+    tweak_manann_tempest_cooldown = { en = "Rework: Manann's Tempest trait — 8s cooldown" },
+    tweak_manann_tempest_cooldown_tooltip = { en = "Rate-limits the Manann's Tempest weapon trait to at most one chain lightning per 8 seconds, mirroring the cooldown built into the boon version. Off = vanilla (no cooldown — fires on every crit). Host-authoritative." },
     enable_boon_taal_twinned_arrow = { en = "Rework: Taal's Twinned Arrow as Boon (Unique)" },
     enable_boon_taal_twinned_arrow_tooltip = { en = "Adds Taal's Twinned Arrow (+1 ranged projectile per shot) as a Unique-rarity boon. Stacks with the trait (+2 projectiles if both held). Has no effect without a ranged weapon. Requires a new CW run." },
     enable_boon_asuryan_wrath = { en = "Rework: Asuryan's Wrath as Boon (Unique)" },
@@ -298,6 +308,8 @@ local loc = {
     tweak_poison_proof_duration_tooltip = { en = "Extends the Poison Proof (gas/poison immunity) potion duration from 2 minutes to 4 minutes (6 minutes with Decanter, which still extends by 50%%%%)." },
     tweak_moot_milk_alt = { en = "Rework: Moot Milk alternative effect" },
     tweak_moot_milk_alt_tooltip = { en = "Replaces the Moot Milk potion's vanilla dodge-distance/dodge-speed buff with: +25%%%% movement speed, unlimited dodges, +40%%%% stamina regen, for 60 seconds (90 seconds with Decanter)." },
+    tweak_invis_potion_2x = { en = "Rework: Killer in the Shadows lasts 2x as long" },
+    tweak_invis_potion_2x_tooltip = { en = "Doubles the duration of the Killer in the Shadows (invisibility) potion: base 5s -> 10s, increased 15s -> 30s. Decanter still extends by 50%%%% on top (15s/45s)." },
     tweak_home_brewer_potency = { en = "Rework: Home Brewer +50%%%% potency" },
     tweak_home_brewer_potency_tooltip = { en = "When you have Home Brewer (the boon that grants a chance to not consume the potion), the reworked Moot Milk potion's numerical effects are scaled by 1.5x: +25%%%% MS becomes +37.5%%%%, +40%%%% stamina regen becomes +60%%%%. Duration is NOT scaled (that's Decanter's lever). Only applies to the Moot Milk rework toggle — Poison Proof has binary immunity with no multiplier to scale. Each peer's potency check is local to that peer (multiplayer-safe)." },
     tweak_reckless_swings = { en = "Rework: Khaine's Fury" },

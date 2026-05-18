@@ -196,6 +196,7 @@ local BOON_TREE = {
             "ct_meta_health",
             "ct_meta_cooldown",
             "ct_meta_movespeed",  -- v0.7.35: +1% MS per active boon
+            "ct_meta_ammo",       -- v0.7.43: +5% total ammo per active boon (ranged-only effect)
             -- v0.7.34 Trait-as-Boon (gated by Reworks > Reworks: Boons > enable_boon_* toggles)
             "ct_boon_vauls_anvil",
             "ct_boon_manann_tempest",
@@ -449,6 +450,7 @@ local data = {
                             { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
                             { setting_id = "enable_boon_vauls_anvil",         type = "checkbox", default_value = false, tooltip = "enable_boon_vauls_anvil_tooltip" },
                             { setting_id = "enable_boon_manann_tempest",      type = "checkbox", default_value = false, tooltip = "enable_boon_manann_tempest_tooltip" },
+                            { setting_id = "tweak_manann_tempest_cooldown",   type = "checkbox", default_value = false, tooltip = "tweak_manann_tempest_cooldown_tooltip" },
                             { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
                             { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
                             { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
@@ -462,6 +464,7 @@ local data = {
                             { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
                             { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
                             { setting_id = "tweak_home_brewer_potency", type = "checkbox", default_value = false, tooltip = "tweak_home_brewer_potency_tooltip" },
+                            { setting_id = "tweak_invis_potion_2x", type = "checkbox", default_value = false, tooltip = "tweak_invis_potion_2x_tooltip" },
                             { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
                         },
                     },
