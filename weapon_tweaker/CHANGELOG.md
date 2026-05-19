@@ -1,12 +1,410 @@
 # Weapon Tweaker Changelog
 
+## 0.12.50-dev (2026-05-19) — Kruber Longbow zoom overrides (disable / manual)
+
+Two new toggles under **Weapon Overrides**, both default OFF. Restart required (template patch applied at module init).
+
+- **`kruber_longbow_disable_zoom`** — strips the longbow's delayed sniper-style heavy zoom entirely. Sets `aim_zoom_delay = math.huge` on `action_two.default` and nil's both `heavy_aim_flow_event` (`"lua_heavy_zoom"`) and `heavy_aim_flow_delay`. Holding right-click still draws the bow and applies the planted-charging movement debuff, but the camera never zooms.
+- **`kruber_longbow_manual_zoom`** — replaces the heavy-zoom flow with Kerillian-longbow-style instant manual zoom. Adds `default_zoom = "zoom_in"`, sets `aim_zoom_delay = 0.01`, nil's the heavy-zoom fields. Hold right-click → bow draws AND zooms immediately; release to unzoom. **Overrides** `disable_zoom` when both are on (more specific).
+
+### Affected templates
+
+Patches both `Weapons.longbow_empire_template` and `Weapons.longbow_empire_tutorial_template` so the tutorial mission stays consistent. The cross-character port to Saltzpyre (`_patch_longbow_empire_template_for_saltzpyre`) lives on the same template, so any zoom override propagates to wh_captain / wh_bountyhunter / wh_zealot when they wield the Empire Longbow via the cross-character unlock.
+
+### Implementation
+
+Patcher runs once at module init, after `_patch_longbow_empire_template_for_saltzpyre` and after the moonfire AOE block. No hooks — direct mutation of the template's `action_two.default` aim action. Vanilla flow event `lua_heavy_zoom` is just unhooked from this template; the flow event itself still exists for any other content that might fire it (currently nothing else does).
+
+## 0.12.49-dev (2026-05-19) — Moonfire Bow: pre-nerf AOE revert + cosmetic puff toggles
+
+Two new toggles under **Weapon Overrides**, both default OFF. Restores (or just visually echoes) the small magical AOE every Moonfire Bow arrow used to detonate with before the nerf.
+
+- **`moonfire_cosmetic_puff`** — cosmetic only. On every Moonfire arrow impact (enemy / level geometry / non-level prop) spawns one `fx/wpnfx_we_deus_01_impact` particle effect at the hit position. No damage, no friendly fire, no AOE — purely the lost visual.
+- **`moonfire_aoe_revert`** — gameplay revert. Same hit paths, but routes through `DamageUtils.create_explosion` with a 1.5m radius (0.75m max-damage core) using the existing `poison_aoe` damage profile and an `attacker_power_level_offset = -0.5` cut so it reads as splash, not as a primary-damage detonation. `no_prop_damage` and `no_friendly_fire` are set. Visual is a 4-puff cluster (center + 3 jittered ~0.3m offsets) so the revert reads as visibly bigger than the cosmetic puff. **Overrides the cosmetic toggle** when both are on.
+
+### Multiplayer model
+
+Both hooks run on every peer's `PlayerProjectileUnitExtension` instance — VFX plays on every peer's screen for everyone's Moonfire arrows. Damage is gated by `_is_server` inside `create_explosion`, so host applies the AOE damage authoritatively; clients run the VFX-only path even though they call the same function. No `NetworkLookup` writes, no `LevelSettings` changes — lobby `combined_hash` is unaffected, so toggling on after the fact does not change which lobbies you can join (see `[[reference-vt2-lobby-combined-hash]]`).
+
+### Why hook_safe on three hit paths
+
+`PlayerProjectileUnitExtension` exposes `hit_enemy`, `hit_level_unit`, and `hit_non_level_unit` (plus `hit_player` for friendly-fire — intentionally skipped to avoid puffs on teammate hits). All three carry `hit_position` as the same argument index; one shared `_wt_moonfire_on_hit(self, hit_position)` callback covers them. `hook_safe` is correct because we do not need to modify the return value or short-circuit vanilla — we only piggyback the hit event.
+
+### `we_deus_01` prefix match
+
+Match is on `string.sub(self.item_name, 1, 10) == "we_deus_01"` so every Moonfire skin / illusion / variant carries the toggle through. CWV does not yet ship a `cwv_we_deus_01_*` variant; if one lands, the matcher needs widening.
+
+## 0.12.48-dev (2026-05-19) — Drop Warrior Priest from Kerillian Volley Crossbow port (closes priest-ranged audit)
+
+Third and final pass of the no-bows-on-Warrior-Priest audit (`feedback_vt2_no_bows_on_warrior_priest.md`). The user rule's body explicitly enumerates volley-crossbows; team-lead acked extending the strip to the surviving Priest+`we_crossbow_repeater` (Kerillian Volley Crossbow) entry that shipped pre-v0.12.x.
+
+### Three surfaces touched
+
+- `weapon_unlock_map.wh_priest`: drop trailing `"we_crossbow_repeater"`. Priest's row is now MELEE-ONLY (`wh_dual_hammer`, `es_1h_flail`, `wh_flail_shield`, `wh_1h_hammer`, `wh_hammer_shield`, `wh_hammer_book`, `wh_2h_hammer`).
+- `_data.lua`: remove `unlock_wh_priest_we_crossbow_repeater` widget. The `ranged_wh_priest` group is now empty, so the whole group is removed and replaced with a comment marker citing the rule. (Empty VMF groups can render as label-with-nothing; clean removal avoids that visual oddity.)
+- `_localization.lua`: remove `unlock_wh_priest_we_crossbow_repeater` label AND the now-orphaned `ranged_wh_priest = "Ranged: Warrior Priest"` group label (the group itself is gone).
+
+No `_WIELD_3P` table to touch — `we_crossbow_repeater` cross-character relies on the global `_career_anim_redirect.to_repeating_crossbow_elf` (line 221) which redirects non-`we_*` careers to `to_repeating_crossbow`. Priest's body authors neither event, so the entry silently no-op'd pre-strip (he held prior-weapon idle stance while equipping the Volley Crossbow). Now functionally gated at `can_wield` instead — Priest can no longer equip the weapon at all.
+
+### Audit close
+
+Full `grep wh_priest` across `weapon_tweaker.lua`, `_data.lua`, `_localization.lua` returns:
+- `weapon_unlock_map.wh_priest`: melee-only.
+- `_data.lua melee_wh_priest` group: 7 melee unlocks (`wh_dual_hammer`, `es_1h_flail`, `wh_flail_shield`, `wh_1h_hammer`, `wh_hammer_shield`, `wh_hammer_book`, `wh_2h_hammer`). All ✓.
+- `_data.lua` ranged_wh_priest: absent (comment marker in place).
+- `_localization.lua` Priest labels: 1 group label (`melee_wh_priest`) + 7 weapon labels, all melee. All ✓.
+- `_career_anim_redirect` (line 218+) Priest overrides: all target `to_1h_hammer` / `to_1h_hammer_shield` (melee). ✓
+- `_suffix_career_map` (line 267+) Priest entries: all target `_1h_hammer` / `_1h_hammer_shield` suffixes (melee). ✓
+- `_SP_LONGBOW_CROSSBOW_WIELD_3P` (line 1708): comment cites rule, Priest absent. ✓
+- `_WE_LONGBOW_CROSSBOW_WIELD_3P` (line 1760): comment cites rule, Priest absent. ✓
+- elf-spear patcher (line 1850+): Priest comments only document the unrelated `we_spear` exclusion (Priest never unlocks Kerillian's spear). ✓
+
+**Zero ranged cross-character `wh_priest` entries remain. The audit is closed.** Future ports targeting bows / crossbows / longbows / volley-crossbows must continue to omit Priest per the rule.
+
+### Previously-shipped state
+
+`unlock_wh_priest_we_crossbow_repeater` was `default_value = false`, so opt-in only. Any player who toggled it on:
+- The "Ranged: Warrior Priest" group header is gone from VMF settings on next reload. Their checkbox state survives in settings.config but maps to nothing readable.
+- `apply_weapon_unlocks` strips Priest from `ItemMasterList.we_crossbow_repeater.can_wield` on next reload. Existing Volley Crossbow inventory items on Priest stay in inventory but the equip slot is empty until they swap.
+- Previously-broken 3P render (Priest holding prior-weapon idle stance while equipping the Volley Crossbow) is gone.
+
+## 0.12.47-dev (2026-05-19) — Drop Warrior Priest from historical Empire Longbow on Saltzpyre port
+
+Companion to v0.12.46-dev. Team-lead acked extending the no-bows-on-Warrior-Priest rule (`feedback_vt2_no_bows_on_warrior_priest.md`) to the **pre-existing** Empire Longbow on Saltzpyre port (`es_longbow` on `wh_priest`, shipped pre-v0.12.x in `_SP_LONGBOW_CROSSBOW_WIELD_3P`). v0.12.46-dev stripped Priest from the NEW Port A (`we_longbow`); v0.12.47-dev does the same for the OLDER port that predated the rule.
+
+Same four surfaces as the v0.12.46-dev change:
+- `weapon_unlock_map.wh_priest`: drop trailing `"es_longbow"`.
+- `_data.lua`: remove `unlock_wh_priest_es_longbow` checkbox.
+- `_localization.lua`: remove `unlock_wh_priest_es_longbow` label.
+- `_SP_LONGBOW_CROSSBOW_WIELD_3P`: drop `wh_priest = "to_crossbow"` entry; comment updated to cite the rule and the pre-v0.12.47-dev shipped state.
+
+### Previously-shipped state
+
+The widget defaulted to `false`, so the most likely impact on existing players is zero — Priest+Empire-Longbow was an opt-in pairing and was visually broken when toggled on anyway. For any player who DID toggle it on:
+- The checkbox disappears from the VMF settings menu on next reload.
+- `apply_weapon_unlocks` (`weapon_tweaker.lua:80`) strips Priest from `ItemMasterList.es_longbow.can_wield` on next reload because the unlock map no longer carries the pair. Their existing Empire-Longbow item on Priest stays in inventory (modded items don't lose backend entries), but the equip slot will show empty and the weapon won't be wieldable until they switch careers or pick a different ranged.
+- The previously-broken 3P render (Priest holding his prior weapon's idle pose while firing arrows) is gone; vanilla Priest ranged options are unaffected.
+
+### Audit complete
+
+`wh_priest` now appears in NO `_<PORT>_WIELD_3P` table and in NO ranged cross-character unlock anywhere in the mod. Audit signal: `grep -n wh_priest weapon_tweaker.lua weapon_tweaker_data.lua weapon_tweaker_localization.lua` returns only `weapon_unlock_map.wh_priest` (with no ranged cross-character entries) and the comment citations in the two wield-3p tables. The rule is now enforced in code as well as memory.
+
+## 0.12.46-dev (2026-05-19) — Drop Warrior Priest from Port A (Elf Longbow on Saltzpyre)
+
+Per the user rule established 2026-05-19 (memory `feedback_vt2_no_bows_on_warrior_priest.md`): never add `wh_priest` to bow/crossbow/longbow cross-character ports. Priest's 3P body skeleton authors only the six universal wields plus `to_2h_hammer` — no `to_longbow`, no `to_crossbow`, no `to_repeating_crossbow`. Cross-character ranged ports that include him would produce no playable wield motion on his body.
+
+Port A (`we_longbow` on Saltzpyre, shipped in v0.12.44-dev / consolidated under v0.12.45-dev) was authored before the rule was set and included Priest as a parity entry. Removed in three places this version:
+- `weapon_unlock_map.wh_priest`: drop trailing `"we_longbow"`.
+- `_data.lua`: remove `unlock_wh_priest_we_longbow` checkbox.
+- `_localization.lua`: remove `unlock_wh_priest_we_longbow` label.
+- `_WE_LONGBOW_CROSSBOW_WIELD_3P`: drop `wh_priest = "to_crossbow"` entry; comment updated to cite the rule and the dead-vocabulary diagnosis.
+
+### Audit on the pre-existing es_longbow port
+
+The older `_SP_LONGBOW_CROSSBOW_WIELD_3P` (Empire Longbow on Saltzpyre, shipped pre-v0.12.x) also lists `wh_priest = "to_crossbow"` plus carries `"es_longbow"` in `weapon_unlock_map.wh_priest`. That predates the rule. Pending team-lead confirmation before stripping shipped behavior — the entry is currently dead/no-op (Priest's `can_wield` already includes `es_longbow` so the checkbox is functional, but his body still can't render `to_crossbow` so the stance fires nothing). Will follow up once team-lead acks the audit. The new rule is documented in memory regardless so future ports won't repeat the mistake.
+
+No build/deploy risk: this is a strict subtraction. Port A's other three Saltzpyre careers (`wh_captain`, `wh_bountyhunter`, `wh_zealot`) are unaffected. No new tables, no new helpers, no new force-load paths.
+
+## 0.12.45-dev (2026-05-19) — Cross-character ports: Kerillian Longbow on Saltzpyre + Saltzpyre Repeating Pistol on Kruber
+
+Two new cross-character ports shipped in the same iteration cycle via the canonical `CROSS_CHARACTER_PORT_RECIPE.md` procedure. Both follow the seven-step recipe end-to-end. v0.12.44-dev shipped Port A standalone; v0.12.45-dev adds Port B and consolidates both under one CHANGELOG block.
+
+### Port A — `we_longbow` (Kerillian's Longbow) on all four Saltzpyre careers → empire crossbow 3P
+
+The four Saltzpyre careers (`wh_captain`, `wh_bountyhunter`, `wh_zealot`, `wh_priest`) can now equip Kerillian's elf longbow (`we_longbow`); on Saltzpyre's body it renders as the empire crossbow 3P mesh with crossbow firing/zoom animations. 1P stays the elf longbow (1P is universal across characters — `feedback_1p_animations_universal.md`).
+
+Sibling to the existing `es_longbow` (Kruber's empire longbow) port on Saltzpyre. Same 3P target mesh, same anim_event vocabulary, same 3P unit paths — so the in-mission + preview swap helpers are **reused with the dispatch predicate widened**; no new force-load and no new unit constants required. This is the "reusing an existing helper for sibling ports" pattern documented in `CROSS_CHARACTER_PORT_RECIPE.md` Section 2.
+
+**Surface changes:**
+- `weapon_unlock_map`: append `"we_longbow"` to all four Saltzpyre rows.
+- `_data.lua`: four `unlock_wh_*_we_longbow` checkboxes (`default_value = false`).
+- `_localization.lua`: four "Kerillian: Longbow" labels.
+- `weapon_tweaker.lua`:
+  - New `_patch_longbow_template_1_for_saltzpyre()` mutating `Weapons.longbow_template_1`:
+    - `wield_anim_career_3p[wh_*] = "to_crossbow"`
+    - per-action `anim_event_3p` for `attack_shoot_fast → attack_shoot`, `attack_shoot_fast_last → attack_shoot_last`, `draw_bow → to_zoom`. Crossbow SM has no `*_fast` variants; `to_zoom` is the crossbow's aim-hold (`action_two.default.anim_event`).
+  - In-mission `GearUtils.spawn_inventory_unit` dispatcher: predicate widened to `item_data.name == "es_longbow" or item_data.name == "we_longbow"`. `_wt_longbow_3p_swap_apply` helper body is fully source-template-agnostic — substitutes `Weapons.crossbow_template_1` linking to dodge the `a_unwielded_bow` non-pcall-safe engine fatal (`feedback_vt2_unit_node_not_pcall_safe`).
+  - Preview `MenuWorldPreviewer.equip_item` helper `_wt_longbow_preview_swap_apply`: predicate widened the same way.
+
+### Port B — `wh_repeating_pistols` (Saltzpyre's Repeating Pistol) on all four Kruber careers → repeating handgun 3P
+
+The four Kruber careers (`es_mercenary`, `es_huntsman`, `es_knight`, `es_questingknight`) can now equip Saltzpyre's revolving Repeating Pistol (`wh_repeating_pistols`); on Kruber's body it renders as the empire repeating handgun 3P mesh with repeating-handgun firing/aim animations. Right-hand-only weapon (no left-hand secondary, no ammo unit) — simpler equip-side shape than the brace port. 1P stays the Repeating Pistol.
+
+**Vocabulary overlaps cleanly:** source `repeating_pistol_template_1` fires `attack_shoot` (action_one.default + action_one.bullet_spray) and `lock_target` (action_two.default); target `repeating_handgun_template_1` authors `attack_shoot`, `attack_shoot_last`, `attack_shoot_fast`, `attack_shoot_fast_last`, `lock_target`, `lock_target_loop`, `reload` natively. Per-action `anim_event_3p` remap table is intentionally **empty** — only `wield_anim_career_3p[es_*] = "to_repeating_handgun"` is needed. This is the case Section 2 step (e) of the recipe calls out as "skip step (e) when every source action's anim_event already exists in the target SM vocabulary unchanged."
+
+**New helper required (not a dispatcher-widen).** The sibling-port checklist hits 4/5 against the brace hook (same target unit `_BRACE_REPEATER_3P_UNIT`, same right-hand orientation, no ammo unit on either, neither needs left-hand secondary handling for B1) but fails on the fifth criterion: the source template's `right_hand_attachment_node_linking.third_person.wielded` references **weapon-mesh-side nodes** (`lock_hammer`, `rotator`, `trigger_t1`) that don't exist on the repeating handgun mesh — linking via them would `Unit.node` engine fatal that bypasses pcall (sibling of crashify://f210b3b7). The brace's table is simpler (`j_rightweaponattach → 0` only) and survives the swap unchanged; we don't get that luxury here. Solution: substitute the **target template's** `right_hand_attachment_node_linking.third_person.wielded` for the link call in both the in-mission and preview paths.
+
+**Surface changes:**
+- `weapon_unlock_map`: append `"wh_repeating_pistols"` to all four Kruber rows.
+- `_data.lua`: four `unlock_es_*_wh_repeating_pistols` checkboxes (`default_value = false`).
+- `_localization.lua`: four "Saltzpyre: Repeating Pistol" labels.
+- `weapon_tweaker.lua`:
+  - New `_patch_repeating_pistol_template_1_for_kruber()` mutating `Weapons.repeating_pistol_template_1`: sets `wield_anim_career_3p[es_*] = "to_repeating_handgun"`. No per-action remap (vocabulary overlap).
+  - New `_wt_repeating_pistol_3p_swap_apply` helper parallel to `_wt_longbow_3p_swap_apply`. Spawns `_BRACE_REPEATER_3P_UNIT`, links via `Weapons.repeating_handgun_template_1.right_hand_attachment_node_linking.third_person.wielded`, mirrors vanilla `_wield_slot` visibility (hide on local 1P, keep visible on husks — `feedback_vt2_husk_extension_class_pair` lessons inherited from the brace swap).
+  - New `_wt_repeating_pistol_preview_swap_apply` helper parallel to `_wt_longbow_preview_swap_apply`. Mutates `entry.unit_name = _BRACE_REPEATER_3P_UNIT` AND `entry.unit_attachment_node_linking = handgun_tpl.right_hand_attachment_node_linking.third_person` (whole `third_person` table, covering both wielded and unwielded paths so the holster-mount also avoids the node fatal).
+  - Dispatcher predicates added to both consolidated hooks (`GearUtils.spawn_inventory_unit` + `MenuWorldPreviewer.equip_item`) for `item_data.name == "wh_repeating_pistols"`.
+  - **No new force-load**: `_BRACE_REPEATER_3P_UNIT` is already force-loaded by `_force_load_brace_repeater_3p_unit()` at mod init — Port B reuses the same target unit as the brace swap.
+
+### Verification matrix (per the recipe doc)
+
+Pending QA (`qa` teammate, task #5). For each port, walk all eight cells of the verification matrix in `CROSS_CHARACTER_PORT_RECIPE.md` Section 5:
+- Keep inventory preview: target career rotates with target mesh in target wield stance. Port A = Saltzpyre with crossbow+bolt in `to_crossbow`; Port B = Kruber with repeating handgun in `to_repeating_handgun`.
+- Solo mission: 3P body shows target mesh + target firing/attack anims on every action. 1P unchanged.
+- Multiplayer host viewing husk + vice versa: both halves show target mesh.
+- Wield/unwield cycle: stance re-enters cleanly; no stuck idle stance, no engine fatal on holster (`feedback_vt2_no_tpose_default_stance.md` — missing-event no-ops would hold the previous weapon's idle, not T-pose).
+- Toggle setting off, re-enter keep: career stripped from `can_wield`.
+
+Diagnostic log signatures per port:
+- Port A: `[wt sp-longbow-crossbow] enter ...` then `[wt sp-longbow-crossbow] swapped 3P bow→crossbow ...`
+- Port B: `[wt rp-pistol-handgun] enter ...` then `[wt rp-pistol-handgun] swapped 3P pistol → handgun ...`
+
+## 0.12.43-dev (2026-05-17) — Longbow swap: add entry/skip diagnostic logging (parity with brace)
+
+The brace→repeater swap has had verbose `enter` / `SKIP (<reason>)` log lines on every entry path since v0.12.37, which made it possible to see exactly why the swap was silently bailing for husks. The longbow→crossbow helper never got the same treatment — it only logged on the SUCCESS path, so every silent bail (hand check, career check, `v_w3p` nil, package not loaded, pcall returned nil) was invisible in the host's console.
+
+After a v0.12.42 fresh launch with Saltzpyre wielding `es_longbow` (host viewing the husk), the host log contains the force-load lines at startup but ZERO `[wt sp-longbow-crossbow]` entries during gameplay. The swap is bailing somewhere before the success log. Without entry-level logging we can't tell which gate fires.
+
+Added the same diagnostic pattern as the brace hook:
+- **Entry log**: `enter hand=<...> husk=<bool> owner_unit_3p=<bool> career=<...> owner_known=<bool> owner=<name> v_w3p=<bool> v_a3p=<bool>` — captures all decision inputs.
+- **SKIP log per bail path**: `hand != left`, `career not Saltzpyre`, `v_w3p was nil`, `crossbow 3P package not loaded`, `bolt 3P package not loaded`, `pcall returned nil`.
+
+No functional change. Just observability. After this lands, a fresh test session will tell us exactly which branch the husk path is hitting.
+
+## 0.12.42-dev (2026-05-17) — Elf spear preview stance: bake wield_anim_career_3p
+
+### Bug
+
+Saltzpyre wielding Kerillian's spear (`we_spear`) showed the wrong stance in the keep inventory preview — vanilla `to_spear` polearm pose instead of the billhook stance he uses in-mission. (In-mission was already correct via the `_career_anim_redirect.to_spear` → `to_2h_billhook` redirect for `wh_*` overrides.)
+
+### Root cause
+
+The `_career_anim_redirect` table intercepts `Unit.animation_event(unit_3p, "to_spear")` calls. The in-mission wield flow goes through this hook, so the redirect fires and Saltzpyre enters billhook stance.
+
+The keep inventory previewer (`MenuWorldPreviewer`) sets up the character model's wield animation by reading `wield_anim_career_3p` (or `wield_anim_3p`, or `wield_anim`) directly off the weapon template at spawn time. It doesn't fire the wield event through a path our `Unit.animation_event` hook intercepts. The vanilla elf spear template has `wield_anim = "to_spear"` only (no per-career 3P override), so the previewer fired `to_spear` on Saltzpyre's body and got vanilla polearm-stance.
+
+### Fix
+
+Bake the in-mission `_career_anim_redirect.to_spear.overrides` mapping into the spear template's `wield_anim_career_3p` at mod init — parallel pattern to `_patch_brace_template_for_kruber` and `_patch_longbow_empire_template_for_saltzpyre`:
+
+```lua
+Weapons.two_handed_spears_elf_template_1.wield_anim_career_3p = {
+    wh_captain      = "to_2h_billhook",
+    wh_bountyhunter = "to_2h_billhook",
+    wh_zealot       = "to_2h_billhook",
+    es_mercenary    = "to_polearm",
+    es_huntsman     = "to_polearm",
+    es_knight       = "to_polearm",
+    es_questingknight = "to_polearm",
+}
+```
+
+Both paths (in-mission + preview) now resolve to the correct stance natively. Kerillian and unmapped careers fall back to `wield_anim = "to_spear"` as before — wood-elf SM authors `to_spear` natively. The `_career_anim_redirect.to_spear` entry stays — it still covers any re-fires of `to_spear` through the animation_event path (push-attack stance resets, etc.).
+
+### Why only Saltzpyre + Kruber
+
+Per `weapon_unlock_map`, the elf spear is unlocked for Kerillian (native), all four Kruber careers, and Saltzpyre's wh_captain / wh_bountyhunter / wh_zealot. Bardin, Sienna, and wh_priest don't unlock it — entries for them would be dead.
+
+## 0.12.41-dev (2026-05-17) — Remove Sienna's Sword (`bw_sword`) from all Saltzpyre careers
+
+Dropped `bw_sword` from `weapon_unlock_map` for `wh_captain` / `wh_bountyhunter` / `wh_zealot`, and removed the three matching VMF checkboxes + localization entries. `apply_weapon_unlocks` will strip any previously-added Saltzpyre entries from `ItemMasterList.bw_sword.can_wield` on next reload. Sienna native access (Adept / Scholar / Unchained / Necromancer) is unchanged. `wh_priest` never had this entry. No remap/scale/grip state touched.
+
+## 0.12.40-dev (2026-05-17) — Remove Bardin's Crossbow (`dr_crossbow`) from all Saltzpyre careers
+
+Dropped `dr_crossbow` from `weapon_unlock_map` for `wh_captain` / `wh_bountyhunter` / `wh_zealot`, and removed the three matching VMF checkboxes + localization entries. `apply_weapon_unlocks` will strip any previously-added Saltzpyre entries from `ItemMasterList.dr_crossbow.can_wield` on next reload. Bardin native access (Ranger / Ironbreaker / Slayer / Engineer) is unchanged. `wh_priest` never had this entry. No remap/scale/grip state touched.
+
+## 0.12.39-dev (2026-05-17) — Hide brace left pistol on husks too
+
+### Bug
+
+After v0.12.38 made the brace→repeater swap visible to the host on remote-player Kruber husks, the **left-hand brace pistol** remained visible alongside the swapped repeater on the right hand. Same `wh_brace_of_pistols` issue: the template renders two pistols (one per hand), and the spawn hook only swaps the right hand.
+
+### Root cause
+
+Two parallel issues, both rooted in the husk/self-owned class split:
+
+1. The `mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory", ...)` re-hider only fires on the self-owned class. Per `unit_extension_templates.lua` (line 71), husks use `SimpleHuskInventoryExtension`, which has its own `show_third_person_inventory` method that our hook doesn't cover. Same trap recorded in [[feedback_vt2_husk_extension_class_pair]] and just hit yesterday in v0.12.37.
+
+2. Even if we hook the husk class, `SimpleHuskInventoryExtension._wield_slot` never calls `self:show_third_person_inventory()` at the end (the self-owned `simple_inventory_extension.lua:692` does, but the husk version doesn't). So a hook on the husk method wouldn't fire on initial wield — only on later state-driven visibility toggles (ghost mode, grabbed-by-tentacle).
+
+### Fix
+
+Two-part:
+
+- **Hook both classes' `show_third_person_inventory`** — factored the existing hook body into `_hide_brace_left_pistol(self, show)` and registered it on both `SimpleInventoryExtension` and `SimpleHuskInventoryExtension`. Belt for any later visibility toggles that go through this method.
+- **Hide directly in the spawn hook** — added a branch in the `GearUtils.spawn_inventory_unit` hook for `hand == "left"` + brace + Kruber career, hiding `v_w3p` immediately via the same `Unit.has_visibility_group/set_visibility` branching the existing hook uses. Suspenders for the initial-wield case on husks where the show_third_person_inventory path doesn't fire.
+
+### Why both
+
+- The spawn-time hide is the primary fix and covers the initial wield case for both local and husk.
+- The show_third_person_inventory hook stays for later toggles (e.g. a husk coming out of ghost mode re-enables 3P inventory, which would otherwise re-show the left pistol).
+
+## 0.12.38-dev (2026-05-17) — Brace/longbow swap: don't hide 3P unit on husks
+
+### Bug
+
+After v0.12.37 made the brace→repeater swap correctly fire on the host for remote-player Kruber husks (confirmed by the diagnostic log line `swapped 3P brace → repeater on career=es_mercenary (husk=true)`), the host STILL saw the vanilla brace mesh instead of the repeater.
+
+### Root cause
+
+Both the brace→repeater and longbow→crossbow swap bodies called `Unit.set_unit_visibility(new_unit, false)` unconditionally. That's correct for the LOCAL player path — vanilla `_wield_slot` (both `SimpleInventoryExtension` and `SimpleHuskInventoryExtension`) hides the 3P weapon when a 1P unit exists, because the local player sees their hands in 1P, not their 3P body. But for HUSKS, there's no 1P, so vanilla LEAVES the 3P unit visible — that's exactly how other players see the held weapon. Our unconditional hide inverted that for husks: the new repeater unit was rendered invisible, while the original brace had been `mark_for_deletion`-ed, so the host saw the brace mesh for a frame or two (before deletion landed) and then nothing.
+
+### Fix
+
+Both swap helpers (brace at the `GearUtils.spawn_inventory_unit` hook, longbow at `_wt_longbow_3p_swap_apply`) now gate the visibility hide on `owner_unit_1p`:
+
+```lua
+if owner_unit_1p then
+    Unit.set_unit_visibility(new_unit, false)
+end
+```
+
+Matches vanilla `simple_husk_inventory_extension.lua:750-756` (and the equivalent block in `simple_inventory_extension.lua`) which uses `if right_hand_weapon_unit_1p then ... set_unit_visibility(weapon_unit_3p, false)`.
+
+### Diagnostic log update
+
+The brace swap's success log now also reports the visibility decision (`vis=true` = unit was made invisible, i.e. local player path; `vis=false` = unit stays visible, i.e. husk path).
+
+## 0.12.37-dev (2026-05-16) — Multiplayer husk fixes: husk wield hook + robust career lookup + brace-swap diagnostics
+
+### Bug
+
+Two multiplayer issues, same root cause class:
+1. **Animation remap** (regression in v0.12.35's per-unit migration): the wield hook hooked only `SimpleInventoryExtension.wield`. Remote-player husks use a different class — `SimpleHuskInventoryExtension` — so `_unit_state[husk_unit]` never got populated. The animation_event hook had no per-husk weapon info and fell back to "no remap" for husks.
+2. **Brace → repeater 3P unit swap**: didn't fire on the host's view of a client's Kruber wielding the brace. The user (client) saw their own Kruber as repeater correctly, but the host saw the brace mesh.
+
+### Root cause (both issues)
+
+Per `unit_extension_templates.lua`:
+- `self_owned_extensions` (lines 12 / 43) → `SimpleInventoryExtension`
+- `husk_extensions` (lines 71 / 90) → `SimpleHuskInventoryExtension`
+
+The two classes share no method inheritance. `SimpleHuskInventoryExtension.wield` (line 314 in source) is a separate codepath. It DOES call `GearUtils.spawn_inventory_unit` (line 666), so the brace hook's `mod:hook("GearUtils", "spawn_inventory_unit", ...)` registration DOES fire for husks — but `_unit_career_name(owner_unit_3p)` was reading from the inventory extension's `_career_name`, which is only set when the husk extension's init received a Player object whose `career_name()` was non-nil at that exact moment (race-prone on lobby-formed remote players).
+
+### Fix
+
+- **`_unit_career_name`** — switched to using `career_system` extension as the primary source. `CareerExtension` is attached to both local player_units AND husks (per `unit_extension_templates.lua` line 75) and its `init` sets `self._career_name` directly from `career_data.name` (`career_extension.lua:23`) — no race, no Player-object dependency. The inventory_system and `Managers.player:owner` paths remain as fallbacks.
+
+- **New `mod:hook("SimpleHuskInventoryExtension", "wield", ...)`** — populates `_unit_state[self._unit]` for remote-player husks, mirroring the SimpleInventoryExtension hook from v0.12.35. Factored the state-population body into `_populate_unit_state_from_wield` so the two hook callbacks stay in lockstep.
+
+- **Brace swap diagnostic logging** — every brace spawn now logs (filtered, at most 2 lines per equip): `hand`, `husk=true/false` (derived from `owner_unit_1p == nil`), career resolution, owner-player resolution, and skip reason if the swap bailed. Lets us see exactly what the host's machine reports for a remote Kruber wielding the brace.
+
+### Notes
+
+- The brace swap hook's existing claim "Husks: same hook fires because remote-player spawn flows through the same `GearUtils.spawn_inventory_unit`" was correct about the hook firing. The actual gap was career detection, not hook registration.
+- See [[feedback_vt2_husk_extension_class_pair]] (new memory): for any feature that needs to behave correctly for remote players, audit whether the hooked class has a `Husk*` sibling per `unit_extension_templates.lua`. Hook both, or hook a global function (like `GearUtils.spawn_inventory_unit`) that both classes route through.
+
+## 0.12.36-dev (2026-05-16) — Remove Saltzpyre's Axe (`wh_1h_axe`) from all Kerillian careers
+
+Dropped `wh_1h_axe` from `weapon_unlock_map` for `we_waywatcher` / `we_maidenguard` / `we_shade` / `we_thornsister`, and removed the four matching VMF checkboxes + localization entries. `apply_weapon_unlocks` will strip any previously-added Kerillian entries from `ItemMasterList.wh_1h_axe.can_wield` on next reload. Saltzpyre native access (Captain / Bounty Hunter / Zealot) and Kruber CWV-managed access are unchanged. No remap/scale/grip state touched.
+
+## 0.12.35-dev (2026-05-16) — Per-unit animation remap state (multiplayer fix)
+
+### Bug
+
+Cross-career weapon 3P animations played correctly only on the local player's screen for **their own** weapon. Other players' cross-career weapons rendered with the wrong remap (or none at all) unless the local viewer happened to be holding the same weapon on the same career.
+
+### Root cause
+
+The remap system tracked weapon and remap state as a **single set of globals** (`_current_weapon_template`, `_current_weapon_key`, `_3p_weapon_remap`, `_last_remap_template`). The `SimpleInventoryExtension.wield` hook updated these only when `self._unit == player.player_unit`, so husks never registered. The `Unit.animation_event` hook then applied the (local-player) remap to every 3P body it processed — including remote-player husks — so husks animated as if they were holding the host's weapon on the host's career.
+
+### Fix
+
+Per-unit state, weak-keyed by the 3P body unit:
+
+```lua
+local _unit_state = setmetatable({}, { __mode = "k" })
+-- entries: { template, key, remap, last_remap_id }
+```
+
+- **`SimpleInventoryExtension.wield` hook** — lifted the `self._unit == player.player_unit` gate around state capture. Now populates `_unit_state[self._unit]` for every wield, on every player (local + husks + bots). The `_local_fp_unit` capture stays local-gated (we only need to identify *our own* 1P hands for the redirect-skip early-return).
+
+- **`Unit.animation_event` hook** — all references to the old globals replaced with `_state_for(unit)` lookups. Career resolution switched from `_local_career_name()` to `_unit_career_name(unit)` (falls back to the local career only if the unit lookup fails). 1P early-return moved AHEAD of the state work so 1P events don't allocate state entries.
+
+- **Flail direct-redirect block** (Saltzpyre's flail H1/H2 and Sienna's flaming flail H2 cross-career fixes) — was previously `is_local`-only because the global `_current_weapon_key` only tracked the local viewer. Now reads `state.key` per-unit and uses the unit's own career, so a remote Saltzpyre with es_1h_flail also gets the fix on the host's screen.
+
+- **`to_*` remap reset** — also per-unit now. Each husk re-resolves its own remap on weapon switch via `state.last_remap_id`.
+
+- **`/info` command** — now queries the local player's `_unit_state` entry for the displayed 3P-remap name.
+
+### Notes
+
+- The per-unit table is weak-keyed (`__mode = "k"`) so dead units release automatically without a separate cleanup pass.
+- Bot inventories use the same `SimpleInventoryExtension`, so this also fixes bot 3P anims (which were previously rendered with the local viewer's remap).
+- 1P universality is preserved — only the 3P body unit and remote husks ever enter the redirect/remap blocks. Per `feedback_animation_remap_rules`, 1P animations work on every character with every weapon and are never touched.
+
+## 0.12.34-dev (2026-05-16) — Wide curation pass: Bardin / Kerillian / Sienna
+
+Continuing the curation pass from v0.12.33. All removals trim default-OFF widgets and the matching unlock-map entries; no remap/scale/grip state is touched (those tables either had no entries for the removed careers, or had entries for unrelated careers that still wield the weapon).
+
+**Bardin (all 4 careers) lose:**
+- `wh_1h_hammer` — Saltzpyre's Skull-Splitter
+- `wh_hammer_shield` — Saltzpyre's Skull-Splitter & Shield
+
+**Kerillian (all 4 careers) lose:**
+- `dr_1h_axe`, `dr_1h_hammer` — Bardin's Axe / Hammer
+- `wh_2h_sword`, `wh_1h_hammer`, `wh_1h_falchion` — Saltzpyre's Greatsword / Skull-Splitter / Falchion
+- `bw_sword`, `bw_1h_crowbill` — Sienna's Sword / Crowbill
+- `es_1h_sword`, `es_halberd`, `es_2h_heavy_spear` — Kruber's Sword / Halberd / Tuskgor Spear
+
+**Sienna (all 4 careers) lose every non-`bw_` weapon** — keeping only the seven Sienna-native melee options (`bw_1h_crowbill`, `bw_dagger`, `bw_ghost_scythe`, `bw_flame_sword`, `bw_1h_flail_flaming`, `bw_1h_mace`, `bw_sword`) plus the staff ranged options. Removed: `dr_1h_axe`, `dr_1h_hammer`, `we_1h_sword`, `es_1h_mace`, `wh_1h_axe`, `wh_1h_falchion`, `es_1h_flail`, `wh_1h_hammer`. The Necromancy Staff (`bw_necromancy_staff`) remains correctly exclusive to Necromancer.
+
+## 0.12.33-dev (2026-05-16) — Bulk curation pass + fix `bow_root` in-game crash on Saltzpyre + longbow
+
+## 0.12.33-dev (2026-05-16) — Bulk curation pass + fix `bow_root` in-game crash on Saltzpyre + longbow
+
+### Crash fix — `crashify://92f9907f-45a1-4688-b415-441287faa34d`
+
+`[Script Error]: bow_root` when Saltzpyre (any career) equipped Kruber's longbow IN-MISSION (not the keep preview — that path was fixed in v0.12.29). Sibling bug to v0.12.29's `a_unwielded_bow` crash: `_wt_longbow_3p_swap_apply` linked the spawned crossbow `new_weapon` using the LONGBOW template's `left_hand_attachment_node_linking.third_person.wielded` table, which references `bow_root` — a node that exists on the bow weapon mesh but not on the crossbow mesh. Engine `Unit.node` raised a fatal that bypassed our pcall (`feedback_vt2_unit_node_not_pcall_safe`). Fix: pull the wielded linking from `Weapons.crossbow_template_1.left_hand_attachment_node_linking.third_person.wielded` instead — same approach as the preview fix, applied to the in-game wielded code path. The brace→repeater swap doesn't hit this class because the brace and repeater templates happen to share compatible weapon-side node names; longbow and crossbow do not.
+
+### Curation: remove never-functional cross-character options
+
+Removed unlock entries (and matching VMF widgets + localization) where the underlying animation / skeleton compatibility was never going to work cleanly. All removals are default-OFF toggles, so no user with a saved-ON setting is silently disabled — but the menu noise is gone.
+
+**Bardin (all 4 careers — Ranger / Ironbreaker / Slayer / Engineer) lose:**
+- `bw_sword` — Sienna's Sword
+- `wh_dual_hammer` — Saltzpyre's Dual Skull-Splitters
+
+**Saltzpyre Captain / Bounty Hunter / Zealot lose:**
+- `dr_1h_axe`, `dr_dual_wield_hammers`, `dr_1h_hammer` — Bardin axe / dual hammers / hammer
+- `we_2h_sword` — Kerillian's Greatsword
+- `bw_1h_flail_flaming` — Sienna's Flaming Flail
+
+**Warrior Priest additionally loses (16 weapons stripped; WP now offers only its native moveset + a couple compatible holdouts):**
+- All four Bardin entries above plus `dr_shield_hammer`
+- `we_spear`, `we_1h_sword`
+- `es_halberd`, `es_1h_mace`, `es_mace_shield`, `es_1h_sword`, `es_2h_heavy_spear`
+- `wh_1h_axe`, `wh_2h_billhook`, `wh_1h_falchion`
+- `bw_1h_crowbill`, `bw_1h_flail_flaming`, `bw_sword`
+
+WP retains: `wh_dual_hammer`, `es_1h_flail`, `wh_flail_shield`, `wh_1h_hammer`, `wh_hammer_shield`, `wh_hammer_book`, `wh_2h_hammer`, `we_crossbow_repeater`, `es_longbow`.
+
+`apply_weapon_unlocks` will strip the now-unmanaged career entries from each weapon's `ItemMasterList.<key>.can_wield` on next reload. The `_3p_remap_triggers` and `_weapon_scale_overrides` tables for the affected weapons are untouched — they still serve any character/career combo that legitimately wields them.
+
+## 0.12.32-dev (2026-05-16) — Remove Saltzpyre's Axe (`wh_1h_axe`) from all Bardin careers
+
+Dropped `wh_1h_axe` from `weapon_unlock_map` for `dr_ranger` / `dr_ironbreaker` / `dr_slayer` / `dr_engineer`, and removed the four matching VMF checkboxes + localization entries. `apply_weapon_unlocks` will strip any previously-added Bardin entries from `ItemMasterList.wh_1h_axe.can_wield` on next reload. Saltzpyre / Kruber (CWV-managed) / wh_priest access unchanged. The `_cwv_managed.es_*.wh_1h_axe = true` rows are for Kruber and untouched.
+
+## 0.12.31-dev (2026-05-16) — Remove Bardin's Great Hammer (`dr_2h_hammer`) + Bardin's Hammer (`dr_1h_hammer`) from all Kruber careers
+
+Dropped both keys from `weapon_unlock_map` for `es_mercenary` / `es_huntsman` / `es_knight` / `es_questingknight`, and removed the eight matching VMF checkboxes + localization entries (4 careers × 2 weapons). `apply_weapon_unlocks` will strip any previously-added Kruber entries from `ItemMasterList.dr_1h_hammer.can_wield` and `dr_2h_hammer.can_wield` on next reload. Bardin / wh_priest access is unchanged. `_weapon_scale_overrides.dr_1h_hammer.we_` (Kerillian-only) is untouched.
+
+## 0.12.30-dev (2026-05-16) — Remove Sienna's 1h Sword (`bw_sword`) from all Kruber careers
+
+Dropped `bw_sword` from `weapon_unlock_map` for `es_mercenary` / `es_huntsman` / `es_knight` / `es_questingknight`, and removed the four matching VMF checkboxes + localization entries. `apply_weapon_unlocks` will strip any previously-added Kruber entries from `ItemMasterList.bw_sword.can_wield` on next reload. Bardin / wh_priest / Sienna access is unchanged; the `_3p_remap_triggers` and `_weapon_scale_overrides` entries for `bw_sword` are untouched (Bardin still wields it, scale/remap rows were already `dr_`-only).
+
+## 0.12.29-dev (2026-05-16) — Fix `a_unwielded_bow` keep-inventory preview crash on Saltzpyre + longbow; menu labels prefixed with "Melee:" / "Ranged:"
+
+**Crash fix.** `crashify://f210b3b7-ad4f-4e62-b680-9d1e2bc91684` — `[Script Error]: a_unwielded_bow`. Reproed by previewing `es_longbow` on a Saltzpyre career (in this case `wh_bountyhunter`). The v0.12.22 preview swap (`_wt_longbow_preview_swap_apply`) replaced `entry.unit_name` with the empire crossbow 3P unit but left `entry.unit_attachment_node_linking` pointing at the longbow template's table. The longbow's `.unwielded` half references `a_unwielded_bow`, a skeleton node that exists on the empire / elf 3P bodies but NOT on Saltzpyre's. World preview mounts the unwielded (holstered) weapon, calls `Unit.node(saltzpyre_body, "a_unwielded_bow")`, and the engine raises a fatal that bypasses pcall (per `feedback_vt2_unit_node_not_pcall_safe`). Fix: also overwrite `entry.unit_attachment_node_linking` with `Weapons.crossbow_template_1.left_hand_attachment_node_linking.third_person` — the WH crossbow template Saltzpyre uses natively, whose attachment nodes are known to exist on his body. Guarded with a `Weapons.crossbow_template_1` nil check; if the lookup fails we bail before the mesh swap so we don't crash. The in-game `_wt_longbow_3p_swap_apply` already uses `.wielded` (universal hand bone, exists on all 3P bodies) and was unaffected.
+
+**Menu labels.** Prefixed every `melee_*` and `ranged_*` group label in `_localization.lua` with `Melee: ` / `Ranged: ` so the navigation chain reads `Melee: Kruber` → `Melee: Mercenary` (and same for `Ranged: …`). Leaf weapon checkboxes keep their existing `<Character>: <Weapon>` labels. Pure localization-string change, no widget-tree or code change.
+
 ## 0.12.28-dev (2026-05-15) — Fix Kerillian native elf-spear 3P animations
 
 `_3p_remap_triggers.to_spear` was missing a `we_` entry, so when Kerillian wielded her own elf spear, `_resolve_3p_remap` fell through to `_default = _3p_remap_spear_to_polearm`. That table was authored for **Kruber wielding the elf spear** (mapping elf-spear attack events to Kruber's polearm-skeleton equivalents) and breaks Kerillian's down_left / left attacks when applied to her own skeleton. Symptom: messed up 3P spear animations on every Kerillian career, visible on bots / other players. Fix: added `we_ = false` to declare "Kerillian native, no remap", mirroring the existing `wh_ = false` pattern on `to_2h_billhook`. One-line data fix; no behavior change for cross-character spear wielders (Kruber/Saltzpyre still get their respective remaps).
 
-## 0.12.27-dev (2026-05-15) — Rename `wt status` → `wt info` to clear command-name collision
+## 0.12.27-dev (2026-05-15) — Rename `/status` → `/info` to clear command-name collision
 
-Startup log was showing `[MOD][wt][ERROR] (command): command name 'status' is already used by another mod 'SpawnTweaks'`. SpawnTweaks loads first and owns the global `status` command name — VMF rejects our duplicate registration, leaving `wt status` non-functional. Renamed our debug-state command to `info`. Same handler body; new invocation is `wt info`.
+Startup log was showing `[MOD][wt][ERROR] (command): command name 'status' is already used by another mod 'SpawnTweaks'`. SpawnTweaks loads first and owns the global `status` command name — VMF rejects our duplicate registration, leaving `/status` non-functional. Renamed our debug-state command to `info`. Same handler body; new invocation is `/info`. (Reminder: VT2 chat commands are typed as `/<registered-name>` directly — no mod-id prefix.)
 
 ## 0.12.26-dev (2026-05-12) — Authentic Brace: final secondary-spread tune, 12× → 9×
 
@@ -83,7 +481,7 @@ New cross-character feature, mirrors the `wh_brace_of_pistols` → repeater patt
 - **Crash on equip "Unit not found":** the force-load failed. Look for `[wt sp-longbow-crossbow] force-loaded` in startup log. If absent, the unit paths might be wrong — verify `wpn_empire_crossbow_tier1_3p` and `wpn_crossbow_bolt_3p` resolve. The crossbow unit path was sourced from `wh_crossbow.left_hand_unit + "_3p"` and the bolt from `wh_crossbow.ammo_unit + "_3p"`; if vanilla relies on different package keys for these (unlikely — same code path the brace-repeater uses successfully), use [[reference_vt2_bundle_unpacker]] to brute-hash candidate paths.
 - **Bow still showing in 3P:** check log for `[wt sp-longbow-crossbow] swapped`. If absent, the hook isn't firing — confirm career_name resolution (see `feedback_vt2_mission_spawn_career_lookup`). If hook fires but bow still showing, package readiness check might be failing — early return on line 2150ish — temporarily log `Managers.package:has_loaded(_SP_CROSSBOW_3P_UNIT, "wt_sp_crossbow_3p")` to confirm.
 - **Crossbow rendered but bolt missing / wrong position:** check log for `arrow→bolt(true)` vs `arrow→bolt(false)`. False means `crossbow_template_1.ammo_data.ammo_unit_attachment_node_linking` was nil — global `Weapons` table might not be loaded at mod init yet. Late-bind by deferring the bolt-linking lookup into the swap pcall body (already done — it reads `Weapons` at swap time, not at module load), but if it's still nil there, try `AttachmentNodeLinking.bolt` directly.
-- **Wrong 3P anim:** longbow's per-action `anim_event_3p` overrides might not be enough. Check log for which events fire via the existing `wt animlog` command. Saltzpyre's 3P crossbow SM has event names from `Vermintide-2-Source-Code` skeleton dumps — see `reference_3p_skeleton_events`. If the wield is wrong, try `to_crossbow_loaded` instead of `to_crossbow` in `_SP_LONGBOW_CROSSBOW_WIELD_3P`.
+- **Wrong 3P anim:** longbow's per-action `anim_event_3p` overrides might not be enough. Check log for which events fire via the existing `/animlog` command. Saltzpyre's 3P crossbow SM has event names from `Vermintide-2-Source-Code` skeleton dumps — see `reference_3p_skeleton_events`. If the wield is wrong, try `to_crossbow_loaded` instead of `to_crossbow` in `_SP_LONGBOW_CROSSBOW_WIELD_3P`.
 - **Keep inventory preview unchanged but in-mission works:** identical class-hook trap to v0.12.16; verify the preview hook is registered on `MenuWorldPreviewer`, not `HeroPreviewer`. (Source check: line containing `if item_name ~= "es_longbow" then return end` should be immediately under `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)`.)
 - **In-mission revert (works in keep, breaks on mission load):** same class as v0.12.16 bug #2 — would mean `_unit_career_name` returned nil. v0.12.17 fix should prevent this; if it still happens, see `feedback_vt2_mission_spawn_career_lookup` fallback notes (try `career_system:career_name()` instead).
 
@@ -299,7 +697,7 @@ Fix: rewrote `_unit_career_name` to read `_career_name` from the unit's `invento
 - Migrated from `character_weapon_variants` v0.1.189 — the previous `cwv_es_brace_repeater` standalone variant + `_cwv_3p_unit_override_swap` infrastructure has been removed from CWV. Same end-user behavior, but lives on the vanilla brace cross-access path now (no separate inventory item).
 
 ## 0.12.0-dev (2026-05-05) — Crafting subsystem split out into Crafting in Modded mod
-The entire Athanor crafting subsystem (~1800 lines: NetworkLookup patch, forge persistence, Athanor UI hooks, BackendInterfaceWeavesPlayFab redirects, HeroWindowWeaveForgeWeapons hooks, `wt forge*` console commands, `wt craft_dump` command, `forge_hotkey` keybind) has been moved into a new sibling mod, `crafting_in_modded` (internal ID `cim`). Weapon Tweaker now focuses solely on cross-career weapon unlocks, animation remapping, and scale/offset.
+The entire Athanor crafting subsystem (~1800 lines: NetworkLookup patch, forge persistence, Athanor UI hooks, BackendInterfaceWeavesPlayFab redirects, HeroWindowWeaveForgeWeapons hooks, `/forge*` console commands, `/craft_dump` command, `forge_hotkey` keybind) has been moved into a new sibling mod, `crafting_in_modded` (internal ID `cim`). Weapon Tweaker now focuses solely on cross-career weapon unlocks, animation remapping, and scale/offset.
 
 Migration note: weapons crafted under prior versions of `wt` are saved under the `wt` namespace and will not be migrated to `cim`. They are session-only artifacts and will be lost on the upgrade.
 
@@ -319,7 +717,7 @@ Migration note: weapons crafted under prior versions of `wt` are saved under the
 - `_forge_inject_all` now skips promo items (handled by Athanor path instead).
 - Persistence: `_forge_save` now stores `rarity` and `traits` array.
 - Weapon list: cleared "Magic Level" / "1800" power text from craft template entries.
-- Added `wt craft_dump` diagnostic command for rarity/localization/backend debugging.
+- Added `/craft_dump` diagnostic command for rarity/localization/backend debugging.
 
 ## 0.11.17-dev (2026-05-02) — Dual axes: distinct light chain animations
 v0.11.15's light remaps collapsed L1, L3, L4 onto the same dual_hammers `attack_swing_left` (L1 swing), making 3 of the 5 lights look identical. Spread them across all 5 dual_hammers light anim_events instead:
@@ -342,7 +740,7 @@ Animlog from v0.11.13 dr_ranger play showed all attack events firing without `[M
 Per-career entries for `dr_ironbreaker` / `dr_ranger` / `dr_engineer`; `dr_slayer` has no entry so `_resolve_template_remap` returns nil and native dual-axes animations play. Targets are the dual_hammers template's anim_events — `Unit.has_animation_event` was TRUE on the original events too (per memory rule), so visual confirmation is the only test that matters.
 
 ## 0.11.13-dev (2026-05-01) — Dual axes on Bardin's non-Slayer careers
-- Added `to_dual_axes` → `to_dual_hammers` redirect for non-`dr_slayer` careers. `dr_dual_wield_axes` is already unlocked for Ironbreaker/Ranger/Engineer in `weapon_unlock_map`, but `to_dual_axes` is the Slayer-only wield event — without this redirect, the 3P SM stays in idle on the other Bardin careers and no attack animations play. Mirrors the v0.9.116 pattern used for `to_dual_hammers_priest`. Slayer is unaffected (matches the prefix and skips the redirect). Per-attack remaps may follow once `wt animlog` reveals which dual-axe-specific events (`attack_swing_charge_diagonal`, `attack_swing_heavy_right`, `attack_swing_heavy`, `attack_swing_right_diagonal`, `attack_swing_right`) don't animate on the dual-hammers SM.
+- Added `to_dual_axes` → `to_dual_hammers` redirect for non-`dr_slayer` careers. `dr_dual_wield_axes` is already unlocked for Ironbreaker/Ranger/Engineer in `weapon_unlock_map`, but `to_dual_axes` is the Slayer-only wield event — without this redirect, the 3P SM stays in idle on the other Bardin careers and no attack animations play. Mirrors the v0.9.116 pattern used for `to_dual_hammers_priest`. Slayer is unaffected (matches the prefix and skips the redirect). Per-attack remaps may follow once `/animlog` reveals which dual-axe-specific events (`attack_swing_charge_diagonal`, `attack_swing_heavy_right`, `attack_swing_heavy`, `attack_swing_right_diagonal`, `attack_swing_right`) don't animate on the dual-hammers SM.
 
 ## 0.11.8-dev (2026-05-01) — Migrated to VMB build pipeline
 
@@ -388,13 +786,13 @@ Intermediate dev versions 0.11.5–0.11.7 were undocumented in this changelog; t
 - Additional widget hiding in properties layout: level title/value, mastery, upgrade button, wheel rings.
 
 ## 0.10.30-dev (2026-04-30) — Forge UI: forge_dump_props diagnostic command
-- Added `wt forge_dump_props` command using `mod:echo` (always flushes) instead of `mod:info`. Dumps properties window widgets, `params.selected_item`, and property/trait key mapping results.
+- Added `/forge_dump_props` command using `mod:echo` (always flushes) instead of `mod:info`. Dumps properties window widgets, `params.selected_item`, and property/trait key mapping results.
 
 ## 0.10.15–0.10.29-dev (2026-04-29–30) — Mod Weapon Crafting forge UI
 ### Added
 - **Athanor forge repurposed as Mod Weapon Crafting UI.** Opens via B hotkey. Backend hooks (`BackendInterfaceWeavesPlayFab`) intercept all weave loadout queries to serve real equipped weapon data.
 - **Property/trait pre-fill from real items.** `_forge_seed_item()` reads equipped weapon's `.properties` and `.traits`, maps regular keys to weave-prefixed keys (`crit_boost` → `weave_crit_boost`), and converts float values to bubble-slot arrays. Seed persists across edits so adding/removing properties doesn't discard existing data.
-- **`wt forge_dump` command** for traversing forge UI widget hierarchy (`ingame_ui.views[current_view]._machine._state._active_windows`).
+- **`/forge_dump` command** for traversing forge UI widget hierarchy (`ingame_ui.views[current_view]._machine._state._active_windows`).
 
 ### Changed
 - **Header rebranded**: "Weave Power" label replaced with "MOD WEAPON CRAFTING" in large white text.
@@ -477,10 +875,10 @@ Intermediate dev versions 0.11.5–0.11.7 were undocumented in this changelog; t
 - `we_1h_sword`: H1 charge `attack_swing_charge_down → attack_swing_charge_left_diagonal`, H2 release `attack_swing_heavy_left_up → attack_swing_heavy_right`, H2 charge `attack_swing_charge_left → attack_swing_charge_right_pose`. L1 charge gains a windup as a side effect (same source event).
 
 ## 0.9.96-dev — Saltzpyre flail push-attack fix
-- Narrow native-wielder redirect: on `es_1h_flail` + career prefix `wh_*`, `attack_swing_right` → `attack_swing_right_diagonal`. Vanilla `attack_swing_right` produces no visible animation on Saltzpyre's flail SM. The user explicitly authorized this native-wielder modification after `wt force3p` confirmed the vanilla event was broken.
+- Narrow native-wielder redirect: on `es_1h_flail` + career prefix `wh_*`, `attack_swing_right` → `attack_swing_right_diagonal`. Vanilla `attack_swing_right` produces no visible animation on Saltzpyre's flail SM. The user explicitly authorized this native-wielder modification after `/force3p` confirmed the vanilla event was broken.
 
 ## 0.9.93-dev — Crowbill L2 fix on Kruber
-- Removed `attack_swing_left → attack_swing_down` from the crowbill `_default` remap. L2 was collapsing into L1's vertical; native `attack_swing_left` plays a right swing on Kruber's crowbill SM (verified via `wt force3p`).
+- Removed `attack_swing_left → attack_swing_down` from the crowbill `_default` remap. L2 was collapsing into L1's vertical; native `attack_swing_left` plays a right swing on Kruber's crowbill SM (verified via `/force3p`).
 
 ## 0.9.92-dev — Flaming flail H1 native overhead
 - Removed all template-level remaps for `one_handed_flails_flaming_template`. H1 charge `attack_swing_charge_down` and release `attack_swing_heavy_down` fire natively as the correct overhead on Bardin. Earlier versions remapped them and broke the H1 visual.

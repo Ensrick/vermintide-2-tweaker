@@ -73,7 +73,7 @@ Three rendering paths: only **two** (in-game + HeroPreviewer) are covered. Illus
 
 - **weapon_tweaker.lua:2440-2557** — `forge_dump`, `forge_dump_props`, `forge_dump_backend`, `craft_dump` are debug commands that write large dumps to chat. Useful for development; consider gating with `enable_weapon_debug_logging` (which currently does nothing — see dead settings above).
 
-- ~~**weapon_tweaker.lua:589-595** — `_3p_state_machine_paths` doesn't include warrior_priest. Used only by `wt sm_probe`, so probe is incomplete for that skeleton.~~ **FIXED in v0.11.9** — `witch_hunter_warrior_priest` entry added with the path verified against `cosmetics_bless.lua:8`.
+- ~~**weapon_tweaker.lua:589-595** — `_3p_state_machine_paths` doesn't include warrior_priest. Used only by `/sm_probe`, so probe is incomplete for that skeleton.~~ **FIXED in v0.11.9** — `witch_hunter_warrior_priest` entry added with the path verified against `cosmetics_bless.lua:8`.
 
 ---
 
@@ -209,7 +209,7 @@ The following `ItemMasterList[key]` reads use bracket notation (NOT `rawget`). M
 | L2308 | from `_setup_weapon_list` (existing) | ✅ Yes | OK as-is, fragile |
 | L2423 | from selected weapon list | ✅ Yes | OK as-is, fragile |
 | L2776 | `item.key` (backend item) | ✅ Yes | OK as-is, fragile |
-| L2840-2841 | user-typed `wt forge <key>` | ❌ NO | switch to `rawget` (HIGH priority) |
+| L2840-2841 | user-typed `/forge <key>` | ❌ NO | switch to `rawget` (HIGH priority) |
 | L2851 | same as 2840 | ❌ NO | switch to `rawget` |
 | L2962 | `_forge_pending.item_key` | ⚠️ user input | switch to `rawget` |
 | L2978-2979 | `w.item_key` (save data) | ⚠️ Stale possible | switch to `rawget` |
