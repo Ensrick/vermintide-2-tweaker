@@ -1,8 +1,67 @@
 local mod = get_mod("event_tweaker")
 
-local MOD_VERSION = "0.3.0-dev"
+local MOD_VERSION = "0.4.1-dev"
 mod:info("Tweaker: Events v%s loaded", MOD_VERSION)
 mod:echo("Tweaker: Events v" .. MOD_VERSION)
+
+-- ============================================================
+-- DLC ownership gate
+-- ============================================================
+-- Modded mods may unlock vanilla progression but must NOT bypass paid
+-- DLC paywalls. Mutators / presets that ship as DLC are gated here at
+-- the injection sites so the lobby never receives content the host
+-- doesn't own. (The vanilla level-load path refuses to load the map
+-- anyway; without this gate, picking a DLC preset you don't own
+-- produces a confusing failure instead of a clean "not owned" no-op.)
+--
+-- DLC IDs taken from DLCSettings in
+-- scripts/settings/dlc_settings.lua:274 (geheimnisnacht_2021),
+-- :576 (geheimnisnacht_2025), :287 (skulls_2023). Vanilla gate
+-- pattern: Managers.unlock:is_dlc_unlocked(dlc_id). Pre-check with
+-- dlc_exists so an unknown id doesn't trip the fassert in
+-- UnlockManager.is_dlc_unlocked (unlock_manager.lua:527).
+local DLC_BY_MUTATOR = {
+    geheimnisnacht_2021             = "geheimnisnacht_2021",
+    geheimnisnacht_2021_hard_mode   = "geheimnisnacht_2021",
+    skulls_2023                     = "skulls_2023",
+}
+
+local DLC_BY_PRESET = {
+    geheimnisnacht_2021 = "geheimnisnacht_2021",
+    -- 2025 preset injects the 2021 mutator and the 2025 active_events
+    -- string (the ritual-site engine on the new maps keys off the 2025
+    -- string). Both DLCs need to be owned for the preset to do anything
+    -- useful; gate on the seasonal-content DLC (geheimnisnacht_2025).
+    geheimnisnacht_2025 = "geheimnisnacht_2025",
+    skulls_2023         = "skulls_2023",
+}
+
+local function owns_dlc(dlc_id)
+    if not dlc_id then
+        return true
+    end
+    local um = rawget(_G, "Managers") and Managers.unlock
+    if not um then
+        -- Unlock manager not constructed yet. Fail closed: if we can't
+        -- verify ownership, don't inject. Hooks rerun on every level
+        -- load, so once Managers.unlock exists the gate evaluates normally.
+        return false
+    end
+    if um.dlc_exists and not um:dlc_exists(dlc_id) then
+        return false
+    end
+    return um:is_dlc_unlocked(dlc_id)
+end
+
+local function mutator_allowed(mutator_id)
+    local dlc = rawget(DLC_BY_MUTATOR, mutator_id)
+    return owns_dlc(dlc)
+end
+
+local function preset_allowed(preset_id)
+    local dlc = rawget(DLC_BY_PRESET, preset_id)
+    return owns_dlc(dlc)
+end
 
 -- ============================================================
 -- Mutator catalog (kept in sync with event_tweaker_data.lua's copy)
@@ -90,18 +149,24 @@ local function active_preset()
     if not pick or pick == "off" then
         return nil
     end
+    -- DLC paywall gate: if the preset's DLC isn't owned, treat as "off".
+    -- Don't inject; the vanilla level-load path would refuse the map anyway.
+    if not preset_allowed(pick) then
+        return nil
+    end
     return EVENT_PRESETS[pick]
 end
 
 -- Walks MUTATOR_CATALOG and returns a flat list of mutator names
--- whose individual checkboxes are on.
+-- whose individual checkboxes are on. DLC-gated mutators owned by the
+-- host pass; un-owned ones are dropped so they never reach the lobby.
 local function selected_individual_mutators()
     local out = {}
     for ci = 1, #MUTATOR_CATALOG do
         local cat = MUTATOR_CATALOG[ci]
         for mi = 1, #cat.mutators do
             local id = cat.mutators[mi]
-            if mod:get("mut_" .. id) then
+            if mod:get("mut_" .. id) and mutator_allowed(id) then
                 out[#out + 1] = id
             end
         end
@@ -123,7 +188,14 @@ local function gather_mutators()
     local preset = active_preset()
     if preset and preset.mutators then
         for i = 1, #preset.mutators do
-            add(preset.mutators[i])
+            local name = preset.mutators[i]
+            -- Defense-in-depth: even though active_preset() already
+            -- returns nil for un-owned preset DLCs, re-check each
+            -- mutator in case a preset bundles a mutator gated by a
+            -- different DLC than the preset itself.
+            if mutator_allowed(name) then
+                add(name)
+            end
         end
     end
 
@@ -301,3 +373,88 @@ mod:command("event_clear", "Uncheck every individual mutator (preset untouched)"
     end
     mod:echo("[event] cleared %d mutators", n)
 end)
+
+-- ============================================================
+-- Mid-game preset application
+-- ============================================================
+-- Three vanilla queries we hook (get_special_events, get_active_events,
+-- get_level_variation_data) are all consulted at level-load time. So a
+-- preset change between loads is dormant until the next level swap.
+-- Solution: when the user changes the preset, reload the current level.
+--   - In a mission: retry_level() — re-runs append_live_event_mutators on
+--     the new mutator list and rebuilds the mutator handler.
+--   - In the keep, when the preset's target hub_level differs from the
+--     current one: set_next_level(new_hub_level) + promote_next_level_data()
+--     so AdventureMechanism.get_starting_level picks up the swap.
+--   - In the keep, same hub_level (or no preset): retry_level() reloads
+--     the current keep, which re-runs DialogueSystem's get_special_events
+--     read; cheap and consistent.
+-- Host-only. Vanilla clients re-sync via the standard level-load path.
+
+local function is_host()
+    return Managers.player and Managers.player.is_server
+end
+
+local function current_level_key()
+    local lth = Managers.level_transition_handler
+    return lth and lth:get_current_level_key()
+end
+
+local function is_in_hub()
+    local key = current_level_key()
+    local settings = key and LevelSettings and LevelSettings[key]
+    return settings and settings.hub_level == true
+end
+
+local function target_hub_level()
+    local preset = active_preset()
+    return preset and preset.hub_level or "inn_level"
+end
+
+local function apply_now(reason)
+    if not is_host() then
+        mod:echo("[event] only the lobby host can apply mid-game (vanilla mutator RPC sync requires host trigger)")
+        return false
+    end
+
+    local game_mode = Managers.state and Managers.state.game_mode
+    if not game_mode then
+        mod:echo("[event] no active game mode — change will apply on next level load")
+        return false
+    end
+
+    local cur = current_level_key()
+    if is_in_hub() then
+        local want = target_hub_level()
+        if want ~= cur then
+            -- Hub-level swap. set_next_level + promote queues the load;
+            -- state_ingame's update loop picks it up via needs_level_load()
+            -- and triggers the "load_next_level" transition.
+            local lth = Managers.level_transition_handler
+            lth:set_next_level(want)
+            lth:promote_next_level_data()
+            mod:echo("[event] %s — swapping keep %s -> %s", reason or "applying preset", tostring(cur), tostring(want))
+            return true
+        end
+    end
+
+    -- Mission, or keep with no hub_level change. retry_level reloads the
+    -- current level key; on the way back in, append_live_event_mutators
+    -- re-reads our hooked get_special_events.
+    Managers.state.game_mode:retry_level()
+    mod:echo("[event] %s — reloading %s", reason or "applying preset", tostring(cur))
+    return true
+end
+
+mod:command("event_apply", "Reload the current level so preset + mutator changes take effect", function()
+    apply_now("manual apply")
+end)
+
+mod.on_setting_changed = function(setting_id)
+    -- Auto-reload on preset change only. Individual mutator toggles use
+    -- `event_apply` — otherwise a quick pass of 5 checkboxes would
+    -- trigger 5 reloads.
+    if setting_id == "event_preset" then
+        apply_now("event_preset changed")
+    end
+end

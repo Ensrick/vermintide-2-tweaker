@@ -29,10 +29,47 @@ M.BEASTMEN = {
     "beastmen_bestigor", "beastmen_minotaur", "beastmen_standard_bearer",
 }
 
-M.SKELETON = {
-    "et_necro_skeleton", "et_necro_skeleton_armored",
-    "et_necro_skeleton_dual_wield", "et_necro_skeleton_shield",
-    "et_ghost_skeleton_hammer", "et_ghost_skeleton_shield",
+-- ============================================================
+-- Role categorization (added 2026-05-14 for Phase 1 expansion)
+-- ============================================================
+-- These lists are starter sets, intentionally curated rather than auto-collected
+-- from the Breeds global so we have deterministic UI ordering and don't pick up
+-- internal/dummy breeds. Helper predicates below fall back to runtime Breeds
+-- inspection where possible (e.g. is_special checks Breeds[name].special directly).
+
+-- Chapter-end / DLC lords. Names sourced from SpawnTweaks settings + the
+-- VT2 source breeds/ directory (breed_chaos_exalted_*.lua, breed_skaven_storm_vermin_warlord.lua,
+-- breed_skaven_grey_seer.lua). Subtype suffixes (_norsca, _warcamp) reflect
+-- level-specific variants — Bödvarr in Skittergate is _norsca, Burblespue in War Camp is _warcamp.
+M.LORDS = {
+    "chaos_exalted_champion_norsca",
+    "chaos_exalted_champion_warcamp",
+    "chaos_exalted_sorcerer",
+    "chaos_exalted_sorcerer_drachenfels",
+    "skaven_storm_vermin_warlord",
+    "skaven_grey_seer",
+    "skaven_stormfiend_boss",
+}
+
+-- Non-lord big enemies (the "monster" director slot). Includes both the chase
+-- bosses (rat ogre, stormfiend) and the per-level event monsters (chaos spawn,
+-- troll, troll chief, minotaur). The troll_chief is the Festering Ground finale
+-- boss; standard troll is the regular monster.
+M.MONSTERS = {
+    "skaven_rat_ogre",
+    "skaven_stormfiend",
+    "chaos_spawn",
+    "chaos_troll",
+    "chaos_troll_chief",
+    "beastmen_minotaur",
+}
+
+-- Ambient/passive wildlife. From breed_critters.lua. These spawn from breed_packs
+-- in level decorators; they have threat_value = 0 and aren't part of any horde.
+M.CRITTERS = {
+    "critter_pig",
+    "critter_rat",
+    "critter_nurgling",
 }
 
 M.SPECIALS_FALLBACK = {
@@ -41,6 +78,89 @@ M.SPECIALS_FALLBACK = {
     "skaven_warpfire_thrower",
     "chaos_vortex_sorcerer", "chaos_corruptor_sorcerer",
 }
+
+-- ============================================================
+-- Role predicates
+-- ============================================================
+-- Each predicate prefers the runtime `Breeds` table when available (so newly-loaded
+-- DLC breeds are categorized correctly) and falls back to our curated lists.
+
+local function _set(list)
+    local s = {}
+    for _, name in ipairs(list) do s[name] = true end
+    return s
+end
+
+local _LORDS_SET    = _set(M.LORDS)
+local _MONSTERS_SET = _set(M.MONSTERS)
+local _CRITTERS_SET = _set(M.CRITTERS)
+local _SKAVEN_SET   = _set(M.SKAVEN)
+local _CHAOS_SET    = _set(M.CHAOS)
+local _BEASTMEN_SET = _set(M.BEASTMEN)
+
+function M.is_special(breed_name)
+    local B = rawget(_G, "Breeds")
+    if B and B[breed_name] then
+        local b = B[breed_name]
+        if type(b) == "table" then
+            return b.special == true and not b.boss
+        end
+    end
+    -- Fallback for pre-Breeds-load callers.
+    for _, n in ipairs(M.SPECIALS_FALLBACK) do
+        if n == breed_name then return true end
+    end
+    return false
+end
+
+function M.is_lord(breed_name)
+    return _LORDS_SET[breed_name] == true
+end
+
+function M.is_boss(breed_name)
+    -- A "boss" is any unit with breed.boss = true; covers both monsters and lords.
+    -- Use this when you mean "big damage-sponge target". Use is_lord() for the
+    -- specific chapter-end lord set, is_monster() for the rat-ogre tier.
+    local B = rawget(_G, "Breeds")
+    if B and B[breed_name] and type(B[breed_name]) == "table" then
+        return B[breed_name].boss == true
+    end
+    return _MONSTERS_SET[breed_name] == true or _LORDS_SET[breed_name] == true
+end
+
+function M.is_monster(breed_name)
+    return _MONSTERS_SET[breed_name] == true
+end
+
+function M.is_critter(breed_name)
+    if _CRITTERS_SET[breed_name] then return true end
+    -- Defensive prefix match for any critter_* not in our list yet.
+    return type(breed_name) == "string" and breed_name:sub(1, 8) == "critter_"
+end
+
+function M.faction_of(breed_name)
+    if _SKAVEN_SET[breed_name]    then return "skaven" end
+    if _CHAOS_SET[breed_name]     then return "chaos" end
+    if _BEASTMEN_SET[breed_name]  then return "beastmen" end
+    if _CRITTERS_SET[breed_name]  then return "critter" end
+    -- Best-effort prefix fallback for breeds we haven't catalogued.
+    if type(breed_name) == "string" then
+        if breed_name:sub(1, 7)  == "skaven_"   then return "skaven" end
+        if breed_name:sub(1, 6)  == "chaos_"    then return "chaos" end
+        if breed_name:sub(1, 9)  == "beastmen_" then return "beastmen" end
+        if breed_name:sub(1, 8)  == "critter_"  then return "critter" end
+    end
+    return "other"
+end
+
+-- Convenience: a flat list of every hostile breed we tune (excludes critters,
+-- which are passive). Stable ordering for UI.
+M.ALL_HOSTILE = {}
+for _, list in ipairs({ M.SKAVEN, M.CHAOS, M.BEASTMEN, M.LORDS, M.MONSTERS }) do
+    for _, name in ipairs(list) do
+        M.ALL_HOSTILE[#M.ALL_HOSTILE + 1] = name
+    end
+end
 
 function M.collect_specials()
     if not rawget(_G, "Breeds") then return M.SPECIALS_FALLBACK end
@@ -61,14 +181,8 @@ end
 -- ============================================================
 
 M.BREED_NAME_OVERRIDES = {
-    chaos_corruptor_sorcerer     = "Lifeleech Sorcerer",
-    chaos_vortex_sorcerer        = "Blightstormer",
-    et_necro_skeleton            = "Skeleton Warrior",
-    et_necro_skeleton_armored    = "Skeleton Warrior (Armored)",
-    et_necro_skeleton_dual_wield = "Skeleton Warrior (Dual)",
-    et_necro_skeleton_shield     = "Skeleton Warrior (Shield)",
-    et_ghost_skeleton_hammer     = "Ghost Skeleton (Hammer)",
-    et_ghost_skeleton_shield     = "Ghost Skeleton (Shield)",
+    chaos_corruptor_sorcerer = "Lifeleech Sorcerer",
+    chaos_vortex_sorcerer    = "Blightstormer",
 }
 
 local function _humanize(breed_name)
@@ -76,7 +190,6 @@ local function _humanize(breed_name)
         :gsub("^skaven_", "")
         :gsub("^chaos_", "")
         :gsub("^beastmen_", "")
-        :gsub("^et_", "")
         :gsub("_with_shield", " (Shield)")
         :gsub("_", " ")
     return (s:gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end))

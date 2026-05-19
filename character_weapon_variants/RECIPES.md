@@ -61,7 +61,7 @@ START
 | **Disable a special action** | Remove a weapon's special ability (pistol shot, auto-catch reload, etc.) | `Disable a weapon special action add-on` |
 | **Cross-pool cosmetics** | Curated illusions sourced from a DIFFERENT weapon's skin pool | `Cosmetic harvesting from a different weapon's skin pool` |
 | **Per-perspective scale** | 1P held view needs different scale than 3P body | `Per-perspective scale` |
-| **Animation 3P fix** | Cross-character moveset, body T-poses or wrong clip | See `ANIMATION_FIX_PLAYBOOK.md` |
+| **Animation 3P fix** | Cross-character moveset, missing events (body holds previous idle stance — not a T-pose; see `feedback_vt2_no_tpose_default_stance.md`) or wrong clip | See `ANIMATION_FIX_PLAYBOOK.md` |
 
 ---
 
@@ -227,8 +227,11 @@ clone (see Stat-modifier add-on).
 
 **Animation considerations:** if the base weapon's moveset was authored
 on a different character's skeleton, 3P body events may be missing on
-the new wielder. Check with `wt animlog` after equip. If anything
-T-poses or stub-plays, see `ANIMATION_FIX_PLAYBOOK.md`.
+the new wielder. Check with `/animlog` after equip. Missing events
+silently no-op — the body holds whichever idle stance was active when
+the event fired (not a T-pose; see
+`feedback_vt2_no_tpose_default_stance.md`). If anything stub-plays or
+no-ops, see `ANIMATION_FIX_PLAYBOOK.md`.
 
 ---
 
@@ -1665,11 +1668,11 @@ After deploy + restart, walk every applicable cell:
 | Path | What to do | What to check |
 |---|---|---|
 | **Inventory** | Open inventory on the variant's character | Item appears with correct name, description, icon, rarity color |
-| **Character preview** | Click the variant in inventory | Mesh renders correctly (no T-pose, no base-weapon mesh fallback). Wield pose looks right. Scale + grip offset applied. |
+| **Character preview** | Click the variant in inventory | Mesh renders correctly (no stuck idle stance, no base-weapon mesh fallback — see `feedback_vt2_no_tpose_default_stance.md` for the actual missing-event symptom). Wield pose looks right. Scale + grip offset applied. |
 | **Illusion picker** | Open the variant's cosmetic menu | Picker opens without crash. Curated illusions show up; vanilla skins don't bleed through. Each illusion thumbnail spawns correctly. (Dual-wield: BOTH hands render — the `j_leftweaponattach` regression test.) |
 | **Forge (if `rarity = "default"`)** | Re-roll properties, salvage, apply illusion | All forge actions work. Item shows as unlocked, not locked-illusion. |
 | **In-game equip** | Enter a mission, swap to the weapon | Weapon spawns. Wield pose correct in 3P (use a mirror or spectator). Held mesh visible in 1P. |
-| **In-game combat** | Run the full chain: L1, L2, L3, H1, H2, push, push-attack | Each clip plays visibly on the 3P body. No `[MISSING]` warnings in `wt animlog`. Damage feels right (vs base — verify with `cwv_dump_javelin_impact` or similar dumper). |
+| **In-game combat** | Run the full chain: L1, L2, L3, H1, H2, push, push-attack | Each clip plays visibly on the 3P body. No `[MISSING]` warnings in `/animlog`. Damage feels right (vs base — verify with `/cwv_dump_javelin_impact` or similar dumper). |
 | **Native-wielder regression** | Equip the BASE weapon on its native wielder | Nothing changed for them. Saltzpyre's native axe+falchion still animates as before, etc. (System B and cross-access remap are scoped per-career; if a native wielder regressed, you mutated a shared template.) |
 | **Husk check (cross-character only)** | Have a teammate or bot wield the variant | Their body looks right too. Cross-access remap doesn't cover husks by default — note any gap. |
 | **Multiplayer** | Join a lobby with the variant equipped | No crash on item sync. Other peers either need the mod or see the matchmaking gate (see `project_modded_matchmaking.md`). |

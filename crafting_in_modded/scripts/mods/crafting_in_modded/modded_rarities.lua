@@ -150,3 +150,53 @@ mod.register_rarity("modded", {
     order   = MODDED_ORDER,
     texture = "icon_bg_modded",  -- shipped via cim's gui/materials pipeline
 })
+
+-- ============================================================
+-- Chaos Wastes compat: scrub unknown rarities from pool_excludes
+-- ============================================================
+-- When a Deus chest grants a weapon (e.g. rarity=unique), vanilla calls
+-- DeusRunController._remove_weapon_from_pool. That function asks
+-- RarityUtils.get_lower_rarities(weapon_rarity) which iterates RaritySettings
+-- and returns EVERY rarity with `order < weapon_rarity.order`. Our "modded"
+-- rarity has order=4 (exotic-level), so it's returned for any chest at
+-- rarity 5+ (unique, etc.) — and gets written into pool_excludes["modded"].
+--
+-- On the NEXT chest, DeusRunController.get_weapon_pool iterates the excludes:
+--
+--   for pool_rarity, weapon_groups in pairs(excluded_weapon_groups) do
+--       for excluded_weapon_group, _ in pairs(weapon_groups) do
+--           weapon_pool[pool_rarity][excluded_weapon_group] = nil  -- CRASH
+--       end
+--   end
+--
+-- `weapon_pool` is generated from DeusDropRarityWeights (vanilla deus rarities
+-- only) so weapon_pool["modded"] is nil → "attempt to index a nil value".
+--
+-- Fix: pre-hook get_weapon_pool to drop any rarity key from pool_excludes
+-- that doesn't exist in the base deus weapon pool. Repairs already-
+-- contaminated runs AND prevents future crashes regardless of which custom
+-- rarity caused the pollution. Idempotent: re-runs every chest open.
+mod:hook("DeusRunController", "get_weapon_pool", function(func, self, ...)
+    local ok_base, base_weapon_pool = pcall(self.get_base_weapon_pool, self)
+    local run_state = self._run_state
+    if ok_base and type(base_weapon_pool) == "table"
+            and run_state and run_state.get_own_weapon_pool_excludes then
+        local pool_excludes = run_state:get_own_weapon_pool_excludes()
+        if type(pool_excludes) == "table" then
+            local scrubbed
+            for rarity in pairs(pool_excludes) do
+                if base_weapon_pool[rarity] == nil then
+                    pool_excludes[rarity] = nil
+                    scrubbed = scrubbed or {}
+                    scrubbed[#scrubbed + 1] = rarity
+                end
+            end
+            if scrubbed and run_state.set_own_weapon_pool_excludes then
+                run_state:set_own_weapon_pool_excludes(pool_excludes)
+                mod:info("[cw-modded-fix] scrubbed unknown rarity keys from pool_excludes: %s",
+                    table.concat(scrubbed, ","))
+            end
+        end
+    end
+    return func(self, ...)
+end)

@@ -152,7 +152,9 @@ After a full game restart (hot-reload is unsafe), walk every cell:
 - [ ] **Inventory list:** variant appears with correct name,
   description, icon, rarity color.
 - [ ] **HeroPreviewer (inventory character preview):** mesh renders
-  correctly. No T-pose, no base-weapon mesh fallback. Wield pose
+  correctly. No stuck idle stance, no base-weapon mesh fallback
+  (see `feedback_vt2_no_tpose_default_stance.md` — missing-event
+  symptom is "previous-weapon idle held," not a T-pose). Wield pose
   looks right. Scale + grip applied to BOTH hands (if dual).
   Reference: `feedback_preview_slot_keying.md`.
 - [ ] **Illusion picker:** opens without crash. Curated illusions
@@ -161,7 +163,7 @@ After a full game restart (hot-reload is unsafe), walk every cell:
 - [ ] **In-game equip:** Held mesh visible in 1P. 3P body mesh
   visible (mirror or spectator). Correct wield pose on the 3P body.
 - [ ] **In-game combat:** L1 / L2 / L3 / H1 / H2 / push /
-  push-attack each play visibly on the 3P body. Run `wt animlog` —
+  push-attack each play visibly on the 3P body. Run `/animlog` —
   no `[MISSING]` warnings.
 - [ ] **Native-wielder regression:** equipped the BASE weapon on
   its native wielder; nothing changed for them.
@@ -356,8 +358,11 @@ the mesh sits at an unusual angle). Reference:
 1P animations are universal across all six characters; 3P body
 animations are character-specific. Any cross-character variant whose
 3P moveset uses a different character's `state_machine` /
-`anim_event_3p` / `wield_anim_3p` will T-pose or play wrong clips on
-the wielder's body. Reference: `ANIMATION_FIX_PLAYBOOK.md`,
+`anim_event_3p` / `wield_anim_3p` will silently no-op missing events
+on the wielder's body (the body holds the previous weapon's idle
+stance — see `feedback_vt2_no_tpose_default_stance.md`; **not** a
+T-pose, despite older docs) or play wrong clips. Reference:
+`ANIMATION_FIX_PLAYBOOK.md`,
 `feedback_1p_animations_universal.md`,
 `feedback_animation_remap_rules.md`,
 `feedback_anim_closed_vocabulary.md`.
@@ -365,18 +370,20 @@ the wielder's body. Reference: `ANIMATION_FIX_PLAYBOOK.md`,
 ### Gates
 
 - [ ] Followed `ANIMATION_FIX_PLAYBOOK.md` 9-step procedure for
-  EVERY missing event surfaced by `wt animlog`.
+  EVERY missing event surfaced by `/animlog`.
 - [ ] Remap targets are in the target wield-SM template's
   `anim_event` set — NO skeleton-probe invention. Closed vocabulary
   rule.
 - [ ] 1P fields (`anim_event`, `wield_anim`, `state_machine`) NOT
   overridden — only 3P fields touched.
-- [ ] **Live test:** `wt animlog` shows zero `[MISSING]` warnings
+- [ ] **Live test:** `/animlog` shows zero `[MISSING]` warnings
   for the variant during the L1/L2/L3/H1/H2/push/push-attack chain.
 - [ ] **Husk check:** another player or a bot wields the variant —
   their body animates correctly (cross-access remap doesn't cover
-  husks by default; if the husk T-poses, record it as a deferral
-  not a complete-blocker).
+  husks by default; if the husk holds a stale idle stance / misses
+  attack animations — see `feedback_vt2_no_tpose_default_stance.md`,
+  the actual missing-event symptom — record it as a deferral, not a
+  complete-blocker).
 
 ### Acceptable deferral
 
@@ -386,8 +393,8 @@ work, defer with:
 
 - `TODO.md` entry naming the variant and missing events.
 - `CHANGELOG.md` entry naming the gap explicitly: e.g.
-  `Known issue: 3P L3 plays as base hammer T-pose for X career;
-  fix tracked in TODO.md`.
+  `Known issue: 3P L3 no-ops for X career (body holds previous idle —
+  see feedback_vt2_no_tpose_default_stance); fix tracked in TODO.md`.
 
 A 3P animation gap is the ONE gate where shipping with explicit
 deferral is acceptable — every other gate in this file must be

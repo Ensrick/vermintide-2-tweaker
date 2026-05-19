@@ -103,7 +103,7 @@ Patterns are consistent: every command's primary user-visible output is `echo`, 
 Audited every `ItemMasterList[k]`, `NetworkLookup.weapon_skins[k]`, `NetworkLookup.breeds[k]`, `WeaponSkins.skins[k]` access:
 
 - **Already using `rawget`**:
-  - `weapon_tweaker.lua` for the `wt forge` user-input path (L3173).
+  - `weapon_tweaker.lua` for the `/forge` user-input path (L3173).
   - `cosmetics_tweaker.lua` for `_skin_requires_unowned_dlc` (L77), `apply_cosmetic_unlocks`, `_la_bridge.build_clone_entry` (per second-pass fix), and `_register_custom_illusions` skin-key check (L1545).
   - `character_weapon_variants.lua` for NetworkLookup `item_names` writes (L1332).
   - `enemy_tweaker.lua` for the `Breeds` registration walk (L121) and `NetworkLookup.breeds` injection (L156).

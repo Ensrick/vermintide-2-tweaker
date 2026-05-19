@@ -172,6 +172,28 @@ es_bastard_sword_thiccc = {
     ct_es_deus_we_02_description = {
         en = "Kerillian's exotic elven spear and shield on Kruber.",
     },
+
+    tpe_group = {
+        en = "Third-Person Equipment (Experimental)",
+    },
+    tpe_enable = {
+        en = "Show Unwielded Weapons on Body",
+    },
+    tpe_enable_tooltip = {
+        en = "Spawns a 3P mesh of every loadout weapon you aren't currently holding, attached to your character. Inspired by the standalone Third Person Equipment mod (Workshop 1387440934). EXPERIMENTAL: positions are coarse defaults keyed by item_type, not per-career-tuned like the original. Restart the level after toggling.",
+    },
+    tpe_show_self_in_3p = {
+        en = "Hide Own Equipment in First Person",
+    },
+    tpe_show_self_in_3p_tooltip = {
+        en = "When ON (default), your own holstered weapons hide while you're in first-person camera (they'd clip into the camera). They reappear in /3p mode and for everyone else.",
+    },
+    tpe_downscale_big_weapons = {
+        en = "Holstered Weapon Scale %%",
+    },
+    tpe_downscale_big_weapons_tooltip = {
+        en = "Percent scale applied to every spawned holstered weapon. 100 = full size (vanilla). Drop to 75-85 if 2H weapons look oversized clipping out of the back.",
+    },
 }
 
 -- Merge auto-generated cosmetic-unlock localization (group titles + per-item

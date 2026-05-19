@@ -1,0 +1,3 @@
+lua = [
+    "scripts/mods/material_hijack_patched/*"
+]

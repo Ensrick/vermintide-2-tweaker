@@ -1,5 +1,132 @@
 # Crafting in Modded Changelog
 
+## 0.7.9-dev (2026-05-18) — DLC gate on craftable weapons
+**Report:** "Crafting in modded unlocks all weapons for players, and that's a good thing, but it also unlocks dlc weapons that players may not own."
+
+Vanilla gates DLC weapons behind `required_dlc` on the `ItemMasterList` entry, checked via `Managers.unlock:is_dlc_unlocked`. Modded crafting is a power-up over the vanilla progression unlocks (career levels, crafting materials) — NOT a bypass for paid DLC content. `illusion_swap.lua` already respects this gate for cosmetic skins (`_skin_requires_unowned_dlc`, v0.6 series); the parallel was missing on the weapon side.
+
+**Fix:** new local helper `_item_requires_unowned_dlc(item_key)` in `standard_forge.lua` reads `ItemMasterList[item_key].required_dlc` and returns `not Managers.unlock:is_dlc_unlocked(...)`. Exposed as `mod._cim_item_requires_unowned_dlc` for cross-file use. Added to three weapon-eligibility passes:
+
+1. `_build_template_cache` — the synthetic "blacksmith's template" injection from v0.7.7. This is the main user-visible surface; without this filter, the Craft Item recipe page lists every DLC weapon family alongside owned ones.
+2. `_make_craft_synth`'s `eligible` random pool — defense-in-depth for the no-input-item fallback path.
+3. `HeroWindowWeaveForgeWeapons._setup_weapon_list` — the custom Athanor forge's weapon list, which walks `ItemMasterList` directly.
+
+CWV / mod-added weapons are unaffected — character_weapon_variants explicitly strips `required_dlc` on its cloned entries (cwv `_build_entry`), so the gate is a no-op for them.
+
+## 0.7.8-dev (2026-05-17) — Fix: v0.7.7 templates never built (rehook warning shadowed callback)
+**Symptom:** v0.7.7 logged two rehook warnings at startup —
+```
+[MOD][cim][WARNING] (hook_safe): Attempting to rehook active hook [on_enter].
+```
+one for `HeroWindowCrafting`, one for `HeroWindowCraftingConsole`. The standard forge's existing `on_enter` hook (set `_cim_standard_forge_active = true`) and the new template-rebuild `on_enter` hook were registered as TWO separate `mod:hook_safe(Class, "on_enter", ...)` calls. Per `feedback_vmf_hook_safe_no_chain`, VMF silently drops the second registration — so `_build_template_cache()` was never called on forge entry, the template cache stayed empty, and the Craft Item recipe page still hid every unlocked weapon family.
+
+**Fix:** consolidated into one callback. The existing on_enter hook now does both jobs (flip the active flag AND rebuild the cache, the latter via `mod._cim_rebuild_template_cache` resolved at call time). Removed the duplicate hook block at the bottom of `standard_forge.lua`.
+
+The lazy-build at the head of `_cim_inject_templates` (`if not next(_template_cache) then _build_template_cache() end`) stays as defense in depth — covers the edge case where filter runs before the first on_enter fires (it shouldn't, but cheap to keep).
+
+## 0.7.7-dev (2026-05-16) — Standard forge "Craft Item": craft any career-eligible weapon
+**Report:** "If a player hasn't unlocked a certain kind of weapon then they can't craft or use it." Vanilla `can_craft_with` (backend_interface_common.lua:498) only matches `rarity == "default"` items, and the player only has those for career-level-unlocked weapon families — so the Craft Item recipe page silently hides every weapon family they haven't grinded to. CWV / mod-added weapons never get a default template at all.
+
+**Fix:** synthesize a "blacksmith's template" item per career-eligible weapon family on standard-forge open and inject them into the Craft Item recipe's inventory list. Templates aren't in the backend mirror — they never leak into the regular inventory tab (different filter). Clicking craft feeds the template's `key` into the existing `_make_craft_synth` path, which clones it into a fresh modded-rarity item via `add_item` the same way as before.
+
+Three additions in `standard_forge.lua`:
+1. `_build_template_cache()` — walks `ItemMasterList` for `slot_type in {melee,ranged,ring,necklace,trinket}`, `can_wield contains current career`, rarity not `magic`/`promo`, item_type not `weapon_skin`. Cache is keyed by synthetic bid `"cim_template_<key>"`, rebuilt on every `HeroWindowCrafting{,Console}` `on_enter` to stay in sync with career switches between visits.
+2. `mod._cim_inject_templates(items, filter)` — appends one template per `item_type` not already represented by a real default-rarity entry. Gated on `_is_active() and filter:find("can_craft_with")` so it only fires for the right recipe page.
+3. `BackendInterfaceItemPlayfab.get_item_from_id` hook — resolves `cim_template_*` bids back to the cached entry. The synth's `item_interface:get_item_from_id(bid)` lookup goes through this hook, reads `.key`, and clones the underlying weapon as usual.
+
+`crafting_in_modded.lua`'s existing `get_filtered_items` hook gets one new line: call `mod._cim_inject_templates(filtered, filter)` after the modded-only filtering pass.
+
+**Net effect:** the Craft Item recipe page lists every melee / ranged / jewellery family the current career can wield, regardless of XP-gate state. Player picks one, clicks craft, gets a new modded-rarity weapon of that type.
+
+## 0.7.6-dev (2026-05-13) — Fix inv_dump crash; narrow modded-bid heuristic; new `mirror_dump`
+Three changes diagnosing the "modded items not visible in inventory grid" report:
+
+### 1. Narrow `_cim_is_modded_backend_id`
+Old version matched any UUID-format backend_id (`^%x+-%x+-%x+-%x+-%x+$`) on the theory that we use `Application.guid()` for our crafts. But `PlayFabMirrorBase._create_fake_inventory_items` also uses `guid()` for every fake weapon-skin / cosmetic / weapon-pose entry — so when `unlock_all_illusions` is on (now unconditional in cim's `get_unlocked_weapon_skins` hook, v0.7.3+), ~1500 fake skin items get UUID bids and were *all* misclassified as "modded".
+
+Visible symptom: `/inv_dump` reported `modded=1553 vanilla=887` and the sample-item output showed weapon_skin / frame items instead of actual crafted weapons. The 4 real crafts were buried.
+
+Fix: regex removed. Modded backend_ids are now strictly `_forged_weapons[bid]` (cim's own registered crafts) or `cwv_*` prefix (character_weapon_variants). Rarity-based detection (`item.rarity == "modded"` or `"promo"`) still covers anything we miss.
+
+### 2. Fix inv_dump crash
+`/inv_dump`'s "FILTERED" pass built a sequential array from the bid-keyed `get_all_backend_items()` dict and passed it to `BackendInterfaceCommon.filter_items`. That function iterates with `for backend_id, item in pairs(items)` — so it saw backend_ids `1, 2, 3, …`. `get_item_rarity(1)` called `get_item_from_id(1)` which returned nil, then crashed on `item.skin` (or `item.rarity` depending on the line). Fix: pass `all` directly (already bid-keyed).
+
+### 3. New `/mirror_dump` command
+For diagnosing item-missing-from-grid reports specifically. Walks every saved craft in `mod:get("forged_weapons")` and reports per-bid: key, rarity, slot_type, can_wield, in_mirror (`backend_mirror._inventory_items[bid] ~= nil`), in_items_iface (`get_all_backend_items()[bid] ~= nil`), and current loadout slot. Summary line: `saved=N in_mirror=N in_items_iface=N`.
+
+Use this to find which of (a) item not in mirror, (b) mirror has it but `item.data` is nil, (c) `can_wield` doesn't match current career, (d) other filter drop, is the actual cause.
+
+## 0.7.5-dev (2026-05-13) — Fix rehook warning + consolidate craft hook
+**Warning at launch:** `[MOD][cim][WARNING] (hook): Attempting to rehook active hook [craft].`
+
+**Cause:** `standard_forge.lua` and `illusion_swap.lua` both registered a `mod:hook("BackendInterfaceCraftingPlayfab", "craft", ...)`. VMF rejects the second registration on the same class+method silently, dropping the hook — so illusion_swap.lua's craft logic was *dead code*. Illusion-apply would fall through to vanilla `craft()` and PlayFab → EAC kick in modded realm.
+
+**Fix:** moved illusion_swap.lua's craft body into a helper `mod._cim_try_illusion_apply(self, career, ids, recipe)`. `standard_forge.lua`'s existing craft hook now calls this helper FIRST (regardless of `_is_active`) and returns its result if non-nil. One craft hook, both behaviors. No rehook warning.
+
+This pattern matches the [[feedback_vmf_hook_safe_no_chain]] rule — for shared class+method hooks, consolidate into one callback rather than two.
+
+## 0.7.4-dev (2026-05-13) — Fix Chaos Wastes crash from custom rarity in pool_excludes
+**Crash:** `deus_run_controller.lua:2130 attempt to index a nil value` when opening a Deus weapon chest. Stack: `get_weapon_pool` → `_generate_stored_weapon` → `DeusChestExtension:update`. Crash locals showed `pool_rarity = "modded"`, `excluded_weapon_group = "es_halberd"`.
+
+**Cause:** When a chest grants a unique-rarity weapon, vanilla calls `DeusRunController._remove_weapon_from_pool`. That asks `RarityUtils.get_lower_rarities("unique")`, which iterates `RaritySettings` and returns every rarity with `order < 5` — including our `"modded"` (order=4). The function then writes `pool_excludes["modded"][weapon_group] = true`. On the next chest, `get_weapon_pool` iterates the excludes:
+
+```lua
+weapon_pool[pool_rarity][excluded_weapon_group] = nil
+```
+
+`weapon_pool` is built from `DeusDropRarityWeights` (vanilla deus rarities only), so `weapon_pool["modded"]` is nil → crash.
+
+**Fix:** new pre-hook on `DeusRunController.get_weapon_pool` in `modded_rarities.lua`. Before vanilla iterates, scrub `pool_excludes` of any rarity key not in the base deus weapon pool. Idempotent — repairs already-contaminated CW runs AND prevents future crashes regardless of which custom rarity caused the pollution (so adding more rarities via `mod.register_rarity` is safe in CW too).
+
+The fix is co-located with the rarity registry on purpose: custom rarities are the population vector, so the compat patch belongs with the registration logic.
+
+## 0.7.3-dev (2026-05-13) — Unlock all DLC-owned illusions + inv_dump diagnostic
+Two changes:
+
+### 1. Unlock all DLC-owned weapon illusions in modded realm
+Previously vanilla locked illusions (e.g. "Sword of Bitter Dreams") rendered as locked in cim's illusion-swap grid even though the synthetic-backend-id path would happily craft them — the Apply button was disabled because the backend mirror said the skin wasn't unlocked.
+
+New `hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins")` in `illusion_swap.lua` iterates `WeaponSkins.skins` and marks every entry as unlocked on the local mirror, except skins gated behind unowned DLC (`_skin_requires_unowned_dlc` — same DLC gate used by the rest of illusion_swap.lua). Only runs when `script_data["eac-untrusted"]` is true (modded realm).
+
+Mirrors cosmetics_tweaker's `unlock_all_illusions` setting, but unconditional in cim — the modded-realm illusion swap doesn't make sense without the unlock, so there's no toggle.
+
+### 2. New `/inv_dump` diagnostic command
+Run in the developer console to dump:
+- eac-untrusted flag, standard_forge_active flag, show_only_modded_weapons setting, current mechanism, career
+- Modded-item count vs vanilla count in the backend mirror
+- Per-item detail for the first 8 modded items (backend_id, key, rarity, slot_type, can_wield, wieldable-by-current-career, mechanisms)
+- The result of running the loadout grid's actual filter (`available_in_current_mechanism and can_wield_by_current_career and ...`) against the full backend item list, to identify which filter clause is dropping modded items
+
+For diagnosing "modded items not visible in the inventory grid" reports.
+
+## 0.7.2-dev (2026-05-13) — Migrate illusion-swap UI from cosmetics_tweaker; refreshed `icon_bg_modded`
+Two changes:
+
+### 1. Modded-realm illusion swap (migrated from cosmetics_tweaker v0.8.49)
+cim now ships its own copy of the "change weapon cosmetics in modded realm" pipeline, so the feature is available even when cosmetics_tweaker isn't installed. cosmetics_tweaker yields to cim when both are loaded — each hook in cosmetics_tweaker's illusion-swap section checks `get_mod("cim")` at fire time and defers to the original.
+
+New file `illusion_swap.lua` registers the six hooks that unlock the vanilla illusion-apply flow against the `eac-untrusted` modded-realm gate:
+
+| Hook | Purpose |
+|---|---|
+| `BackendInterfaceItemPlayfab.get_weapon_skin_from_skin_key` | Synthetic backend ids for unowned skins so the grid can reference them |
+| `HeroWindowItemCustomization._enable_craft_button` | Temporarily clear `eac-untrusted` so the Apply button enables for `apply_weapon_skin`. Force-clear hotspot held flags on disable to prevent the fast-completion sound loop |
+| `HeroWindowItemCustomization._on_illusion_index_pressed` | Clear `content.locked = false` on clicked widgets |
+| `HeroWindowItemCustomization._update_state_craft_button` | Clear `eac-untrusted` for the state check |
+| `BackendInterfaceCraftingPlayfab.craft` | Write `item.skin` to the local backend mirror instead of sending to PlayFab |
+| `BackendInterfaceCraftingPlayfab.update` | Defer completion one frame to match vanilla async timing |
+
+DLC ownership is respected — skins with `required_dlc` in ItemMasterList only unlock if the player owns that DLC.
+
+**Persistence for modded items:** when the craft hook applies a skin to a backend_id that `_cim_is_modded_backend_id` recognizes, it writes `craft.skin = skin_key` into `_forged_weapons[bid]` and calls `_cim_persist_crafts()`. cim's existing `_forge_load` already reads `w.skin` from the save and threads it into the rebuilt item on next launch, so modded-item cosmetics survive a game restart.
+
+**What was NOT migrated:** the offhand/shield picker (a separate row of buttons that swaps the left-hand model independently). User explicitly excluded it from this migration.
+
+**What was NOT migrated:** the `_custom_skin_keys` registry (cosmetics_tweaker's own custom illusions). Those still work in cosmetics_tweaker because they live in `WeaponSkins.skins` and its own `get_unlocked_weapon_skins` hook is unaffected by this migration.
+
+### 2. Refreshed `icon_bg_modded` PNG
+User updated `D:\Game Mods\Vermintide 2 modding\CWV Item Icons\source pngs 84x84\icon_bg_modded.png` (16455 → 18419 bytes). Copied into the mod, rebundled.
+
 ## 0.7.1-dev (2026-05-12) — Ship `icon_bg_modded` rarity-background texture
 v0.7.0 introduced the `"modded"` rarity but didn't supply an icon background, so every modded item rendered with the vanilla `icons_placeholder` "missing texture" tile in the inventory grid.
 
@@ -66,7 +193,7 @@ Post-hooked `_set_essence_upgrade_cost` (runs on every refresh) to override:
 
 Combined with the existing `_upgrade_magic_level` hijack (which performs the actual craft on click), the button is now both visible AND functional.
 
-## 0.6.2-dev (2026-05-10) — `cim salvage_debug` diagnostic command
+## 0.6.2-dev (2026-05-10) — `/salvage_debug` diagnostic command
 Adds a focused diagnostic for "why isn't my modded craft showing in salvage?". Dumps every entry in `_forged_weapons` plus whether it's currently in the backend mirror (`inv=Y/N`), the mirror's rarity, the slot_type, the item_key, and the bid. Also dumps any promo-rarity items in the mirror that AREN'T in our save (orphans).
 
 Most likely failure modes the dump reveals:
@@ -175,14 +302,14 @@ The button's text widget is re-labeled to "CRAFT" and kept visible (previous ver
 ## 0.4.3-dev (2026-05-08) — Amulet click auto-cycles slots; viewport title shows next slot
 The amulet viewport's title now reads `EDIT: NECKLACE` / `EDIT: CHARM` / `EDIT: TRINKET` to indicate which accessory the next click will edit. After each click+edit, the amulet's slot pointer auto-advances to the next accessory — three clicks in a row visit all three.
 
-The slot pointer (`mod._cim_amulet_slot`) is reset to necklace whenever `HeroViewStateWeaveForge.on_enter` fires so each forge session starts in a known state. The `cim amulet_n/c/t` commands still let the user jump directly.
+The slot pointer (`mod._cim_amulet_slot`) is reset to necklace whenever `HeroViewStateWeaveForge.on_enter` fires so each forge session starts in a known state. The `/amulet_n` / `/amulet_c` / `/amulet_t` commands still let the user jump directly.
 
 The existing weave Apply flow (bubble grid → `_forge_apply_to_item` → `item.properties`) already handles accessory items because their property keys map cleanly to `WeaveProperties` weave-prefixed entries. No changes needed for Apply on jewellery.
 
 ## 0.4.2-dev (2026-05-08) — Amulet routes to weave_properties for chosen accessory (Phase A.3 partial)
 The amulet viewport click now actually opens the bubble-grid editor for the player's selected jewellery slot. We pre-populate `self._params.selected_item / selected_slot_name / selected_unit_name` (matching what vanilla's `_handle_input` does for melee/ranged) and let the parent state transition to `weave_properties` normally.
 
-The slot cycle lives on `mod._cim_amulet_slot` (default `slot_necklace`). Three console commands set it: `cim amulet_n`, `cim amulet_c`, `cim amulet_t`. The next phase will replace these with on-screen Necklace / Charm / Trinket buttons inside the editor and add the Apply / Craft buttons.
+The slot cycle lives on `mod._cim_amulet_slot` (default `slot_necklace`). Three console commands set it: `/amulet_n`, `/amulet_c`, `/amulet_t`. The next phase will replace these with on-screen Necklace / Charm / Trinket buttons inside the editor and add the Apply / Craft buttons.
 
 The bubble grid renders via `WeaveProperties` weave-prefixed entries; accessory props (`weave_protection_chaos`, `weave_curse_resistance`, etc.) are present in WeaveProperties so the existing `_forge_seed_item` mapping works without changes.
 
@@ -262,7 +389,7 @@ User reported that applying a skin to a CWV Imperial Longsword via the standard 
 ## 0.3.0-dev (2026-05-07) — Persistent modded inventory + filter + loadout restore
 Three new behaviors aimed at making modded play feel like a separate sandbox:
 
-1. **Standard-forge crafts now persist across game runs.** Items created via the inventory crafting tab are saved to `mod:set("forged_weapons")` (same layer as the Athanor) and re-injected on `BackendManagerPlayFab._create_interfaces`. New `via_mirror` flag on each saved entry distinguishes mirror-path items (Athanor + standard forge → restored via `backend_mirror:add_item`) from MIL-path items (legacy `cim forge_confirm` → restored via MoreItemsLibrary). Public helper: `mod._cim_register_craft(backend_id, weapon_data)`.
+1. **Standard-forge crafts now persist across game runs.** Items created via the inventory crafting tab are saved to `mod:set("forged_weapons")` (same layer as the Athanor) and re-injected on `BackendManagerPlayFab._create_interfaces`. New `via_mirror` flag on each saved entry distinguishes mirror-path items (Athanor + standard forge → restored via `backend_mirror:add_item`) from MIL-path items (legacy `/forge_confirm` → restored via MoreItemsLibrary). Public helper: `mod._cim_register_craft(backend_id, weapon_data)`.
 
 2. **Toggleable inventory filter** — VMF setting *"Show only modded weapons in inventory"* (default off). When on, hooks `BackendInterfaceItemPlayfab.get_filtered_items` and drops every item whose `slot_type` is `melee`/`ranged`/`trinket`/`ring`/`necklace` AND whose `backend_id` doesn't match a modded pattern (`cwv_*`, UUID format, or registered in `_forged_weapons`). Crafting materials and cosmetics are unaffected.
 
@@ -270,8 +397,8 @@ Three new behaviors aimed at making modded play feel like a separate sandbox:
 
 New helpers exposed on the mod object: `mod._cim_register_craft`, `mod._cim_unregister_craft`, `mod._cim_is_modded_backend_id`.
 
-## 0.2.7-dev (2026-05-07) — Diagnostics: synth echoes + `cim craft_recent`
-Added per-craft `mod:echo` showing the rolled item key + rarity + backend_id, plus a console command `cim craft_recent` that lists every backend-mirror item flagged as new (post-load additions). Used to diagnose why crafted weapons weren't appearing in the inventory grid.
+## 0.2.7-dev (2026-05-07) — Diagnostics: synth echoes + `/craft_recent`
+Added per-craft `mod:echo` showing the rolled item key + rarity + backend_id, plus a console command `/craft_recent` that lists every backend-mirror item flagged as new (post-load additions). Used to diagnose why crafted weapons weren't appearing in the inventory grid.
 
 ## 0.2.6-dev (2026-05-07) — Defense-in-depth: drop crafting* requests at the PlayFab queue
 Two changes so a stray `crafting*` PlayFab request can never trigger the EAC kick:

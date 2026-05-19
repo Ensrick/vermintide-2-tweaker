@@ -7,14 +7,16 @@ A modular set of Vermintide 2 VMF mods split from the original monolithic **"Twe
 | Mod | Internal ID | VMF Console Prefix | Workshop ID | Visibility | Build Pipeline |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | Chaos Wastes Tweaker | `ct` | `ct <command>` | **3712929235** | public | VMB |
-| Weapon Tweaker | `wt` | `wt <command>` | **3712896117** | private | VMB |
-| General Tweaker | `gt` | `gt <command>` | **3713619122** | private | VMB |
-| Career Tweaker | `crt` | `crt <command>` | **3716286199** | private | VMB |
-| Cosmetics Tweaker | `cosmetics_tweaker` | `cos <command>` | **3715714222** | private | VMB |
-| Enemy Tweaker | `enemy_tweaker` | `enemy_tweaker et_*` | **3716780252** | private | VMB |
+| Weapon Tweaker | `wt` | `/<command>` (e.g. `/dump`, `/animlog`) | **3712896117** | private | VMB |
+| General Tweaker | `gt` | `/<command>` (e.g. `/tp`, `/god`) | **3713619122** | private | VMB |
+| Career Tweaker | `crt` | `/ct_status` | **3716286199** | private | VMB |
+| Cosmetics Tweaker | `cosmetics_tweaker` | `/<command>` (e.g. `/probe_hat`, `/la_force`) | **3715714222** | private | VMB |
+| Enemy Tweaker | `enemy_tweaker` | `/et_*` (registered names start with `et_`) | **3716780252** | private | VMB |
 <!-- REVIEW: character_weapon_variants is published. itemV2.cfg published_id = 3716869446L; deploy_all.ps1 lists 3716869446. Update both Workshop ID and Visibility (visibility="private" per cfg). -->
-| Character Weapon Variants | `character_weapon_variants` | (n/a) | **3716869446** | private | VMB |
-| ~~Tweaker (legacy)~~ | `t` | `t <command>` | 3704660429 | n/a | SDK (kept as reference) |
+| Character Weapon Variants | `character_weapon_variants` | `/cwv*` (registered names start with `cwv` / `cwv_`) | **3716869446** | private | VMB |
+| ~~Tweaker (legacy)~~ | `t` | `/<command>` | 3704660429 | n/a | SDK (kept as reference) |
+
+> Chat command syntax: every VT2 mod command (registered via `mod:command("name", ...)`) is invoked in chat as `/<name>` directly. The mod-id (e.g. `wt`, `cos`, `ct`) is the mod's internal identifier — it appears in code and in version-echo prefixes (`[wt v...]`), but NEVER as a chat prefix. Older docs that show `/<mod> <command>` are wrong.
 
 ## Directory Structure
 
@@ -173,7 +175,7 @@ When adding a weapon:
 
 ### DLC weapon naming conventions
 
-DLC weapons sometimes use `<prefix>_deus_01` (Chaos Wastes / "grass" DLC) instead of descriptive names. Always use `wt dump` in-game or check the source code `item_master_list_*.lua` files to confirm weapon keys -- don't guess from the weapon's display name.
+DLC weapons sometimes use `<prefix>_deus_01` (Chaos Wastes / "grass" DLC) instead of descriptive names. Always use `/dump` in-game or check the source code `item_master_list_*.lua` files to confirm weapon keys -- don't guess from the weapon's display name.
 
 ## Animation System Architecture
 
@@ -205,7 +207,7 @@ VT2 uses two separate units for the local player:
 
 **This is counterintuitive.** Despite being called `player_unit`, it is the third-person body. The first-person hands/weapon view is a separate unit that is NOT `player_unit`.
 
-Evidence: the billhook's `default_stab` action defines `anim_event = attack_swing_charge_stab` and `anim_event_3p = attack_swing_stab_charge`. In practice, `player_unit` receives `attack_swing_stab_charge` (the 3P value) and the non-player unit receives `attack_swing_charge_stab` (the 1P value). Confirmed via `wt dump_actions billhook` + `wt animlog`.
+Evidence: the billhook's `default_stab` action defines `anim_event = attack_swing_charge_stab` and `anim_event_3p = attack_swing_stab_charge`. In practice, `player_unit` receives `attack_swing_stab_charge` (the 3P value) and the non-player unit receives `attack_swing_charge_stab` (the 1P value). Confirmed via `/dump_actions billhook` + `/animlog`.
 
 ### Weapon Action Data: anim_event vs anim_event_3p
 
@@ -263,6 +265,8 @@ local _3p_remap_spear_to_billhook = {
 
 The remap MUST target `is_local` (player_unit = 3P body) and use `anim_event_3p` values from the target weapon. Using `anim_event` values will send events to the wrong animation layer.
 
+For a procedural playbook covering full **cross-character ports** (mesh + wield-stance + per-action remap + in-mission/preview unit swap), see `weapon_tweaker/CROSS_CHARACTER_PORT_RECIPE.md`. The two shipped examples (`_patch_brace_template_for_kruber` and `_patch_longbow_empire_template_for_saltzpyre`) are distilled there with line citations, failure modes, and a verification matrix.
+
 **Activated by:** the career redirect sets `_3p_weapon_remap` when a `to_` event triggers a career override (e.g., `to_spear` on Saltzpyre → `to_2h_billhook`).
 
 **Cleared by:** weapon switches only. Must NOT be cleared by non-weapon `to_` events.
@@ -293,19 +297,19 @@ end
 
 ### Debug Commands
 
-- `wt animlog` -- toggles animation event logging; tags each event as "1P" (player_unit / 3P body) or "3P" (1P hands); shows `[MISSING]`, `REDIR ->`, and `3P REMAP ->` markers
-- `wt dump_actions [pattern]` -- dumps all `Weapons` template actions matching pattern (or ALL templates if no pattern), showing `anim_event` (1P hands) and `anim_event_3p` (3P body) fields; output goes to both in-game chat and mod log file; sorted alphabetically; essential for building remap tables
-- `wt force3p <event>` -- forces an animation event on the last-seen non-player unit (for testing if events exist/play)
-- `wt dump` -- dumps equipped item data to log
+- `/animlog` -- toggles animation event logging; tags each event as "1P" (player_unit / 3P body) or "3P" (1P hands); shows `[MISSING]`, `REDIR ->`, and `3P REMAP ->` markers
+- `/dump_actions [pattern]` -- dumps all `Weapons` template actions matching pattern (or ALL templates if no pattern), showing `anim_event` (1P hands) and `anim_event_3p` (3P body) fields; output goes to both in-game chat and mod log file; sorted alphabetically; essential for building remap tables
+- `/force3p <event>` -- forces an animation event on the last-seen non-player unit (for testing if events exist/play)
+- `/dump` -- dumps equipped item data to log
 
 ### Building a New 3P Remap Table
 
-1. Run `wt dump_actions <source_weapon>` and `wt dump_actions <target_weapon>` in-game
+1. Run `/dump_actions <source_weapon>` and `/dump_actions <target_weapon>` in-game
 2. For each source weapon action, map its `anim_event` value to the target weapon's `anim_event_3p` value (or `anim_event` if no 3P override exists for that action)
 3. Create a Lua table with these mappings
 4. Add it to `_3p_remap_triggers` keyed by the source weapon's `to_` event name
 5. Add the source weapon's `to_` event to `_career_anim_redirect` with the target weapon's `to_` event as the override
-6. Verify with `wt animlog` — every attack should show a `3P REMAP ->` line on `player_unit`
+6. Verify with `/animlog` — every attack should show a `3P REMAP ->` line on `player_unit`
 
 ## Cross-Career Weapon Animation Status
 
@@ -432,8 +436,8 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 
 1. Equip weapon, check stance event in animlog (`to_` event on wield)
 2. Verify 1P attack animations play (first-person hands)
-3. Check 3P body animations with another player or `wt animlog` — look for `[MISSING]` on `player_unit`
-4. If 3P attacks show no animation, build a remap table using `wt dump_actions`
+3. Check 3P body animations with another player or `/animlog` — look for `[MISSING]` on `player_unit`
+4. If 3P attacks show no animation, build a remap table using `/dump_actions`
 5. Test crouch, jump, weapon swap, push-attack — confirm remap doesn't break
 6. Note: `we_1h_spears_shield` crashes the hero previewer on non-elf careers — this is a known issue but gameplay may still work
 
@@ -449,7 +453,7 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 ### Lua / VMF
 
 - Lua 5.1: use `unpack()` not `table.unpack()`
-- Commands: `mod:command("win", "description", function() ... end)` -- called as `wt win` in VMF console
+- Commands: `mod:command("win", "description", function() ... end)` -- called as `/win` in chat (the registered name is the slash-command name; no mod-id prefix)
 - Hook with return: `mod:hook(Class, "method", function(func, self, ...) ... return func(self, ...) end)`
 - Hook without return: `mod:hook_safe(Class, "method", function(self, ...) ... end)`
 - Settings: `mod:get("setting_id")` reads current value
@@ -509,7 +513,7 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 ### 3P remap events firing but no visual animation
 
 - **Cause:** Remap was targeting the wrong unit. `player_unit` (tagged "1P" in animlog) is actually the 3P body. The remap was running on `not is_local` (1P hands) instead of `is_local` (3P body). Also, remap values used `anim_event` names instead of `anim_event_3p` names.
-- **Fix:** Flip to `is_local` and use target weapon's `anim_event_3p` values. Use `wt dump_actions` to find correct values.
+- **Fix:** Flip to `is_local` and use target weapon's `anim_event_3p` values. Use `/dump_actions` to find correct values.
 
 ### ItemMasterList crashify on unknown keys
 

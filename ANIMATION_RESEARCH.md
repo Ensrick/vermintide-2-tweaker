@@ -7,7 +7,7 @@
 > 4. `WORK_ITEMS.md` — current "what works" for animations.
 >
 > Caveats when reading the content below:
-> - Command examples use the legacy `t` prefix (monolithic `tweaker` mod). Current equivalents are under `wt` (`wt animlog`, `wt dump_actions`, `wt force3p`, etc.).
+> - Command examples use the legacy `t` prefix (monolithic `tweaker` mod). Current equivalents live in `weapon_tweaker` and are typed as bare slash-commands: `/animlog`, `/dump_actions`, `/force3p`, etc. (No mod-id prefix in chat — the registered command name IS the slash-command name.)
 > - Status claims and fallback tables predate the mod split; trust `WORK_ITEMS.md` and `WEAPON_CATALOG.md` over anything here.
 > - The Chest of Trials UI item at the bottom has moved to `TODO.md` / `WORK_ITEMS.md`.
 >

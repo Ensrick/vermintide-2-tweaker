@@ -1,5 +1,91 @@
 # Career Tweaker Changelog
 
+## 0.2.21-dev (2026-05-19)
+
+### Added: Zealot ability converts green → temporary HP (toggle)
+
+New rework under **Rework: Saltzpyre > Rework: Zealot**:
+`rework_wh_zealot_ability_green_to_thp` — when on, every Zealot Holy Fervour activation moves all current permanent (green) HP into temporary (white) HP. Synergizes with Zealot's missing-health damage passive: a full-HP activation drops him to 0 permanent HP, maxing the passive's damage multiplier while the THP buffer keeps him alive (and decays normally). Existing THP is preserved; conversion fires once per activation.
+
+Implementation: `mod:hook_safe("CareerAbilityWHZealot", "_run_ability", ...)` reads `current_permanent_health()` and calls `health_extension:convert_to_temp(permanent)`. `convert_to_temp` self-routes — server mutates GameSession fields directly; client fires `rpc_request_convert_temp` to the server. Server-side clamps via `math.min(current_health, amount)`, so the read-back amount is overflow-safe. No `BuffTemplates` mutation and no `NetworkLookup.buff_templates` registration, so the toggle is host-controlled with no peer drift (per `feedback_vt2_gated_registration_diverges.md`).
+
+## 0.2.20-dev (2026-05-18)
+
+### Fixed: HARD DLC paywall bypass via talent swaps
+
+`apply_talent_swaps` iterated all 20 careers — including the five DLC careers (Grail Knight, Warrior Priest, Necromancer, Outcast Engineer, Sister of the Thorn) — and copied their talent trees + `activated_ability` + `passive_ability` onto the player's selected career without consulting DLC ownership. The dropdown UI listed every career unconditionally, so a player who didn't own a DLC could pick its career as a swap source and the talents/ability took effect **at runtime**: Grail Knight ult, Warrior Priest aftershock heal, Necromancer commander, Outcast Engineer pressure gauge, Sister of the Thorn entanglement. That is a paid-content runtime bypass, not just a UI peek — fixed.
+
+#### The gate
+
+New helper `_career_requires_unowned_dlc(career_name)` mirrors `_skin_requires_unowned_dlc` from `cosmetics_tweaker.lua:38`, but reads `CareerSettings[career_name].required_dlc` instead of `ItemMasterList[skin_key].required_dlc`. Base careers have no `required_dlc` field so they short-circuit to false; DLC careers carry the field via their per-DLC `career_settings_<dlc>.lua` registration in the VT2 source.
+
+DLC IDs settled (cited from the decompiled `c:\Users\danjo\source\repos\Vermintide-2-Source-Code` per-DLC `career_settings_*.lua` files):
+
+| Career | `required_dlc` | Source file |
+|---|---|---|
+| `dr_engineer` (Outcast Engineer) | `"cog"` | `scripts/settings/dlcs/cog/career_settings_cog.lua:32` |
+| `es_questingknight` (Grail Knight) | `"lake"` | `scripts/settings/dlcs/lake/career_settings_lake.lua:21` |
+| `wh_priest` (Warrior Priest) | `"bless"` | `scripts/settings/dlcs/bless/career_settings_bless.lua:22` |
+| `bw_necromancer` (Necromancer) | `"shovel"` | `scripts/settings/dlcs/shovel/career_settings_shovel.lua:21` |
+| `we_thornsister` (Sister of the Thorn) | `"woods"` | `scripts/settings/dlcs/woods/career_settings_woods.lua:21` |
+
+(The task brief listed only four DLC careers; the data-driven gate auto-covers `we_thornsister` too — base careers in `scripts/settings/profiles/career_settings.lua` have zero `required_dlc` entries, so no false positives.)
+
+#### Apply-time, both sides
+
+The gate runs at swap-apply time inside `apply_talent_swaps`, not at dropdown-build time:
+
+1. **Source check (load-bearing)** — if `_career_requires_unowned_dlc(src_name)` is true we `goto continue` and never mutate the destination career's slot. This is what closes the bypass.
+2. **Target check (defensive)** — same skip if `_career_requires_unowned_dlc(career_name)` is true. A non-owner can't equip the DLC career anyway, but if they hand-edit settings we still refuse to mutate that career's `TalentTrees` slot / `activated_ability` / `passive_ability`.
+
+Both skips log an info-level line; nothing visible to the player.
+
+#### Why the UI isn't touched
+
+VMF dropdown options are part of the widget's saved schema. Dropping options at registration time would invalidate any user's existing setting that referenced a now-removed option (the saved value falls through to default; if they re-acquire the DLC the option doesn't come back without a restart). The apply-time gate is data-driven, so it works whether the player owns the DLC at boot, mid-session, or never — and saved settings stay portable across machines with different DLC ownership.
+
+#### Balance reworks unchanged
+
+`career_tweaker_balance.lua` was re-audited: `BALANCE_MODS` patches `BuffTemplates` entries for `victor_zealot_power`, `bardin_ranger_attack_speed`, `kerillian_maidenguard_crit_chance`, `victor_bountyhunter_activated_ability_railgun_delayed_add`, `markus_mercenary_crit_count`, `wh_captain` parry actions, `thp_tank`, and `Breeds[*].bloodlust_health`. Every target is base-career or cross-career — no DLC-career-specific templates. The audit conclusion stands: reworks are global table patches and harmless to non-owners (they can't equip the career, so the patched buff template never attaches). No changes needed in this file.
+
+## 0.2.19-dev (2026-05-17)
+
+### Added: Per-character experience level override
+
+Five numeric widgets under a new **Character Experience Level** group — one per hero (Bardin, Kruber, Kerillian, Saltzpyre, Sienna). `0` = use real XP (default), `1`–`35` = force that character to report exactly that level everywhere.
+
+Single chokepoint: hook `ExperienceSettings.get_experience(hero_name)` and return `ExperienceSettings.get_total_experience_required_for_level(override)` when the user has set a non-zero value for that hero. Every downstream consumer — the inventory level badge, character-select tile, mission-spawn `level` network field, network_server's hero-level check, scoreboard, even chest reward level — reads through `get_experience`, so one hook covers all of them and the computed `level` / `progress` / `extra_levels` stay internally consistent.
+
+Per character (not per career): VT2 stores XP keyed on `hero_attributes["dwarf_ranger" | "empire_soldier" | "wood_elf" | "witch_hunter" | "bright_wizard"]`, so all four careers under one hero share the same XP and therefore the same level. Use case: testing host/client features that gate on level (e.g. Athanor unlock at 11, weave forge access, etc.) without grinding XP on a fresh modded-realm character.
+
+Modded realm only by definition — Workshop mods can only execute under `script_data["eac-untrusted"]`. The hook never writes to the backend.
+
+## 0.2.18-dev (2026-05-16)
+
+### Fixed: Talent-swap dropdown options rendering as `<<<<<...None (default)>>>>>` (nested brackets)
+
+After v0.2.14 added per-option `talent_swap_option_*` localization keys, the first dropdown rendered correctly but every subsequent dropdown wrapped the resolved text in another pair of angle brackets — the 20th career's dropdown showed nineteen layers (`<<<<<<<<<<<<<<<<<<<None (default)>>>>>>>>>>>>>>>>>>>`).
+
+Root cause: VMF's `options.lua localize_dropdown_data` mutates each option's `text` field in place (`option.text = mod:localize(option.text)`). All 20 dropdowns shared a single `local talent_swap_options = {…}` table reference, so:
+
+1. First dropdown registered → `option.text` was `"talent_swap_option_none"` → mod:localize → `"None (default)"`.
+2. Second dropdown registered → same physical table → `option.text` is now `"None (default)"` (not a key) → mod:localize falls back to `"<None (default)>"`.
+3. Third dropdown → `"<<None (default)>>"`, and so on through the 20th.
+
+Replaced the shared `talent_swap_options` table with a `_talent_swap_options()` factory function that returns a freshly-built table on every call. All 20 dropdowns now invoke the factory at widget construction so each gets its own option list to mutate.
+
+This pattern is documented in `enemy_tweaker_data.lua:17-24`, which spells out the identical trap; the doc-comment is referenced in the new factory's header so the next person reading this file sees the rule.
+
+## 0.2.17-dev (2026-05-16)
+
+### Fixed: Boot-time `string.format` crashes from un-escaped `%` in localization strings
+
+Four widget labels were crashing at boot when VMF resolved them through the localization → `string.format` pipeline: `rework_dr_ranger_attack_speed_5_to_10`, `rework_we_maidenguard_crit_chance_5_to_10`, `rework_wh_zealot_power_5_to_10`, `rework_wh_bountyhunter_double_shotted_80`. Each contained literal percent signs (`+5%`, `80%`, etc.) that `string.format` interpreted as malformed format directives.
+
+Per `feedback_vt2_localize_string_format_pipeline.md`, any localization string that gets fed through `string.format` (talent description tooltips, VMF widget labels at registration, the chaos_wastes_tweaker Localize-hook descriptions) must escape literal `%` as `%%`. The escape collapses back to a single `%` after formatting.
+
+Swept the entire `career_tweaker_localization.lua`: every raw `%` in user-facing strings is now `%%`. Beyond the four flagged labels, this also covered their `_description` siblings and three pre-existing strings that contained un-escaped percents (`rework_general_stagger_thp_description`, `rework_es_mercenary_hellborgs_tutelage_description`, `rework_wh_zealot_smite_random_crits_description`) — those weren't crashing at boot, presumably because tooltips render lazily, but they were the same bug waiting to fire on hover.
+
 ## 0.2.16-dev (2026-05-15)
 
 ### Added: Three "double the 5% talent" reworks

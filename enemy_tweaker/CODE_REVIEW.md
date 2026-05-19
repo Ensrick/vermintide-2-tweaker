@@ -237,11 +237,12 @@ Four commands are registered via `mod:command(...)`:
 | `et_status` | Prints current preset, multiplier, swap, skeleton flag |
 | `et_check_skeletons` | Verifies the 6 skeleton clones registered |
 
-The in-game prefix is `enemy_tweaker` (the mod ID), so usage is
-`enemy_tweaker et_status`. The `et_` command-name prefix duplicates that —
-consider dropping it (commands would be `dump_breeds`, `status`, etc.). Not
-a bug, just verbose. Worth documenting the prefix in DEVELOPMENT.md (see
-Doc/code mismatches above).
+In chat these commands are typed as `/et_status`, `/et_dump_breeds`, etc.
+— the registered command name is the slash-command name. There is NO
+mod-id prefix in chat. The `et_` prefix is part of the registered names
+themselves (a naming-convention choice to avoid colliding with other mods'
+short command names like `/status`). Could be dropped if collisions are
+not a concern — commands would become `/dump_breeds`, `/status`, etc.
 
 ## Non-obvious things now clarified
 
@@ -290,5 +291,9 @@ Doc/code mismatches above).
    for the dropdown text — though VMF will fall back to the raw value if
    localization is missing, you get an unlocalized key in the menu.
 7. **The mod ID is `enemy_tweaker` (long form), not a short prefix.**
-   Console commands invoke as `enemy_tweaker et_status` not `et et_status`.
-   Update DEVELOPMENT.md "VMF Console Prefix" column accordingly.
+   Console commands invoke in chat as `/<registered-name>` directly — for
+   this mod, `/et_status`, `/et_dump_breeds`, `/et_dump_compositions`. There
+   is NO mod-id prefix in chat syntax: the `et_` is just a naming convention
+   for the registered command names themselves. The mod-id `enemy_tweaker`
+   only appears in code (`new_mod("enemy_tweaker", ...)`) and version-echo
+   prefixes (e.g. `[enemy_tweaker v...]`), never as a chat prefix.

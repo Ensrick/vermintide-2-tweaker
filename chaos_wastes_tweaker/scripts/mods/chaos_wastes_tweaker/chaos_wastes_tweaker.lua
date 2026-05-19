@@ -30,7 +30,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.58-alpha"
+local MOD_VERSION = "0.7.66-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -139,6 +139,12 @@ local is_curse_disabled
 -- block below.
 local effective_setting
 
+-- Forward declaration: assigned in the peer-manifest block. The ct_sync_host_settings_chunk
+-- handler calls this on receive so each client replies to the host's broadcast with its
+-- own manifest. Defined later in the file, but the handler closure is built before then,
+-- so it needs the forward-declared local slot to bind a closure-over.
+local _broadcast_local_manifest
+
 -- CLARIFY: Vanilla signature is `on_soft_currency_picked_up(self, amount, type)`. The `amount` is
 -- args[1] (NOT args[2] — that mistake was the cause of an early-version coin multiplier bug; see
 -- "Coin multiplier not working (wrong argument index)" in DEVELOPMENT.md).
@@ -196,14 +202,28 @@ end)
 -- PER_PEER excludes: settings that are intentionally each-peer-local. These are rare
 -- and require a deliberate justification (see comments per entry).
 local PER_PEER_SETTING_NAMES = {
-    -- "Each peer needs the toggle on for their own coins/boons to be penalized; the
-    --  host respawn applies to everyone" — per-peer locality is baked into the design.
-    tweak_defeat_recovery   = true,
-    -- "Server-driven spawn, no graph effect" — host's setting determines what spawns;
-    --  client's local table mutation is irrelevant and meant to be opt-in for solo testing.
-    enable_campaign_potions = true,
-    -- Lobby-hash-affecting adventure-injection — not a runtime knob, host/client must
-    --  match at lobby-join time (already enforced by the LobbyAux hash hook above).
+    -- v0.7.64: `tweak_defeat_recovery` and `enable_campaign_potions` were per-peer for
+    -- historical reasons (the comments below) but the user's design intent is "all
+    -- settings sync to host." Both are now host-synced; the original comments are
+    -- kept as a record of why they used to be per-peer.
+    --
+    --   tweak_defeat_recovery: was "each peer needs the toggle on for their own
+    --   coins/boons to be penalized." Now: the host's value decides for the lobby.
+    --   The wipe-prevention itself was always host-only (GameModeDeus is
+    --   server-authoritative); only the local penalty arm was per-peer.
+    --
+    --   enable_campaign_potions: was "server-driven spawn, no graph effect; client
+    --   mutation irrelevant." Same — the host's value decides; client-side table
+    --   mutation never had any effect anyway.
+    --
+    -- inject_adventure_maps STAYS per-peer because it mutates NetworkLookup.level_keys
+    -- count and folds into lobby `combined_hash` (see reference_vt2_lobby_combined_hash).
+    -- The LobbyAux hash shim above hides the count diff so peers with different values
+    -- can still join, but each peer's resolved graph diverges as a result. Switching it
+    -- to host-sync would require also re-running AdventurePool.inject_pool() on clients,
+    -- which can't happen post-boot (level_keys are sealed before lobby handshake).
+    -- Curse/mission visual desync from this is tracked as a separate follow-up — likely
+    -- needs a host→client graph snapshot RPC instead of toggle sync.
     inject_adventure_maps   = true,
 }
 
@@ -249,20 +269,425 @@ local _ct_host_sync_received = false
 -- its assignment further down the file (after all sync_* functions exist).
 local sync_host_dependent_state
 
-mod:network_register("ct_sync_host_settings", function(sender_peer_id, payload)
-    if type(payload) ~= "table" then
-        mod:info("[ct_sync] received non-table payload from %s; ignoring", tostring(sender_peer_id))
+-- Chunked-string sync protocol (mirrors vanilla shared_state.lua:288-330).
+-- Stingray caps each RPC string parameter at 500 chars (network_utils.lua:93
+-- STRING_MAX). VMF's mod:network_send packs all user args into ONE JSON-encoded
+-- string parameter on rpc_mod_user_data, so a 105-setting table (~4-5KB JSON)
+-- crashes the host with "Failed to pack parameter 3, too many characters in
+-- string with max length 500" before the packet ever leaves. Cost: clients
+-- received zero host settings between v0.7.55 and v0.7.58.
+--
+-- Fix: encode the payload to JSON ourselves, split into <=CHUNK_SIZE pieces,
+-- send each as (session, seq, total, chunk_str). Receiver buffers per sender
+-- and decodes when all chunks for the current session arrive. Session id
+-- changes on every broadcast so a partial buffer from a stale broadcast is
+-- discarded the moment the next one starts.
+--
+-- CHUNK_SIZE budget: the wire-side JSON envelope is roughly
+--   [<session>,<seq>,<total>,"<chunk>"]  ~= 20 chars of overhead + chunk_str.
+-- VMF adds its own [mod_id,rpc_id] envelope as a separate string parameter,
+-- so only this user-payload string needs to fit under 500. 400 leaves
+-- headroom for the largest plausible envelope growth.
+local SYNC_CHUNK_SIZE = 400
+local _sync_inbound = {}
+
+mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, session, seq, total, chunk_str)
+    if type(session) ~= "number" or type(seq) ~= "number" or type(total) ~= "number" or type(chunk_str) ~= "string" then
+        mod:info("[ct_sync] malformed chunk from %s; ignoring", tostring(sender_peer_id))
+        return
+    end
+    local key = tostring(sender_peer_id)
+    local entry = _sync_inbound[key]
+    if not entry or entry.session ~= session then
+        entry = { session = session, total = total, received = 0, chunks = {} }
+        _sync_inbound[key] = entry
+    end
+    if entry.chunks[seq] == nil then
+        entry.chunks[seq] = chunk_str
+        entry.received = entry.received + 1
+    end
+    if entry.received < entry.total then
+        return
+    end
+    local pieces = {}
+    for i = 1, entry.total do
+        pieces[i] = entry.chunks[i] or ""
+    end
+    _sync_inbound[key] = nil
+    local json = table.concat(pieces)
+    local ok, payload = pcall(cjson.decode, json)
+    if not ok or type(payload) ~= "table" then
+        mod:info("[ct_sync] decode failed from %s (session %s, %d bytes)",
+            tostring(sender_peer_id), tostring(session), #json)
         return
     end
     for _, name in ipairs(SYNCED_SETTING_NAMES) do
         _ct_host_settings[name] = payload[name]
     end
     _ct_host_sync_received = true
-    mod:info("[ct_sync] received host settings from %s (%d keys)",
-        tostring(sender_peer_id), #SYNCED_SETTING_NAMES)
+    mod:info("[ct_sync] received host settings from %s (session %s, %d chunks, %d bytes, %d keys)",
+        tostring(sender_peer_id), tostring(session), entry.total, #json, #SYNCED_SETTING_NAMES)
     if sync_host_dependent_state then
         sync_host_dependent_state()
     end
+    -- v0.7.64: piggyback manifest reply. Sending back to "server" so the host's
+    -- log captures every joined peer's ct version + mod list at the same moment
+    -- the settings sync completes — that's the lobby's first reliable "everyone
+    -- is connected and post-loading" instant. Only the function (not the chat
+    -- command) auto-fires; clients always reply on every host broadcast.
+    if _broadcast_local_manifest then
+        _broadcast_local_manifest("server")
+    end
+end)
+
+-- ============================================================
+-- Graph snapshot sync (v0.7.64)
+-- ============================================================
+-- ct_sync_host_settings_chunk above broadcasts the host's TOGGLES. That's enough
+-- for graph determinism only when every peer's LEVEL_AVAILABILITY pool is identical.
+-- But `inject_adventure_maps` mutates LEVEL_AVAILABILITY arrays at module-load and
+-- can't be runtime-resynced (the count folds into lobby `combined_hash`, sealed at
+-- the lobby handshake — see reference_vt2_lobby_combined_hash.md). When a peer has
+-- the toggle in a different state than the host, their local `deus_populate_graph`
+-- indexes into a different-sized pool and produces a different graph from the same
+-- seed — observed 2026-05-19 in a 3-player run: same seed, three different node
+-- assignments (host: 8 adventure-rewritten nodes; one client: 9; another: 0).
+--
+-- Fix: the host broadcasts its RESOLVED graph after `deus_populate_graph` returns.
+-- Clients overwrite the picker-output fields of their own graph in place. Only the
+-- fields the visual layer reads are shipped (level, base_level, theme, curse, god,
+-- node_type, type, terror_event_power_up + rarity, mutators, minor_modifier_group);
+-- topological fields (next, layout_x/y, run_progress, label) are deterministic
+-- from base_graph + seed and don't need sync.
+
+-- Short<->long field map. Short keys keep the per-node JSON tight to fit chunk
+-- budget — ~22-28 CW nodes × ~110 bytes ~= 3.6 KB worst case, ~9-10 chunks.
+local GRAPH_FIELD_MAP = {
+    l  = "level",
+    b  = "base_level",
+    t  = "theme",
+    c  = "curse",
+    g  = "god",
+    nt = "node_type",
+    ty = "type",
+    te = "terror_event_power_up",
+    tr = "terror_event_power_up_rarity",
+    m  = "mutators",
+    mm = "minor_modifier_group",
+}
+
+local _ct_host_graph_snapshot = nil  -- { session = N, nodes = { [node_key] = { l=..., ... } } }
+local _ct_graph_inbound = {}
+
+-- Walk the snapshot and copy synced fields onto each node in `graph_data` in place.
+-- In-place mutation preserves the table identity that `_path_graph` holds onto and
+-- the `next` pointers that link nodes — neither is shipped, so neither is clobbered.
+local function apply_graph_snapshot(graph_data)
+    if not (_ct_host_graph_snapshot and _ct_host_graph_snapshot.nodes and graph_data) then
+        return 0
+    end
+    local applied = 0
+    for node_key, short_record in pairs(_ct_host_graph_snapshot.nodes) do
+        local node = graph_data[node_key]
+        if type(node) == "table" and type(short_record) == "table" then
+            for short, long in pairs(GRAPH_FIELD_MAP) do
+                local value = short_record[short]
+                -- cjson encodes Lua nil as missing key; we treat missing as "no change"
+                -- and explicit cjson.null (decoded to a sentinel) as "set to nil".
+                if value ~= nil then
+                    if value == cjson.null then
+                        node[long] = nil
+                    else
+                        node[long] = value
+                    end
+                end
+            end
+            applied = applied + 1
+        end
+    end
+    return applied
+end
+
+mod:network_register("ct_graph_snapshot_chunk", function(sender_peer_id, session, seq, total, chunk_str)
+    if type(session) ~= "number" or type(seq) ~= "number" or type(total) ~= "number" or type(chunk_str) ~= "string" then
+        mod:info("[ct_graph] malformed chunk from %s; ignoring", tostring(sender_peer_id))
+        return
+    end
+    local key = tostring(sender_peer_id)
+    local entry = _ct_graph_inbound[key]
+    if not entry or entry.session ~= session then
+        entry = { session = session, total = total, received = 0, chunks = {} }
+        _ct_graph_inbound[key] = entry
+    end
+    if entry.chunks[seq] == nil then
+        entry.chunks[seq] = chunk_str
+        entry.received = entry.received + 1
+    end
+    if entry.received < entry.total then
+        return
+    end
+    local pieces = {}
+    for i = 1, entry.total do
+        pieces[i] = entry.chunks[i] or ""
+    end
+    _ct_graph_inbound[key] = nil
+    local json = table.concat(pieces)
+    local ok, payload = pcall(cjson.decode, json)
+    if not ok or type(payload) ~= "table" then
+        mod:info("[ct_graph] decode failed from %s (session %s, %d bytes)",
+            tostring(sender_peer_id), tostring(session), #json)
+        return
+    end
+    _ct_host_graph_snapshot = { session = session, nodes = payload }
+    local node_count = 0
+    for _ in pairs(payload) do node_count = node_count + 1 end
+    mod:info("[ct_graph] received host graph snapshot from %s (session %s, %d chunks, %d bytes, %d nodes)",
+        tostring(sender_peer_id), tostring(session), entry.total, #json, node_count)
+end)
+
+-- Encode the host's resolved graph_data into the short-key wire shape and
+-- chunk-broadcast it to all clients. Called from the deus_populate_graph hook on
+-- the host's return path. Same envelope as ct_sync_host_settings_chunk.
+local function broadcast_graph_snapshot(graph_data)
+    if type(graph_data) ~= "table" then return end
+    local payload = {}
+    local node_count = 0
+    for node_key, node in pairs(graph_data) do
+        if type(node) == "table" then
+            local short = {}
+            for s, long in pairs(GRAPH_FIELD_MAP) do
+                local v = node[long]
+                if v ~= nil then short[s] = v end
+            end
+            payload[node_key] = short
+            node_count = node_count + 1
+        end
+    end
+    local ok, json = pcall(cjson.encode, payload)
+    if not ok or type(json) ~= "string" then
+        mod:info("[ct_graph] payload encode failed; not broadcasting")
+        return
+    end
+    local json_len = #json
+    local total = math.max(1, math.ceil(json_len / SYNC_CHUNK_SIZE))
+    local session = math.floor(((Application and Application.time_since_launch and Application.time_since_launch()) or os.time()) * 1000) % 2147483647
+    if session == 0 then session = 1 end
+    for seq = 1, total do
+        local start_i = (seq - 1) * SYNC_CHUNK_SIZE + 1
+        local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
+        local chunk_str = string.sub(json, start_i, stop_i)
+        mod:network_send("ct_graph_snapshot_chunk", "others", session, seq, total, chunk_str)
+    end
+    mod:info("[ct_graph] broadcast host graph snapshot (session %d, %d chunks, %d bytes, %d nodes)",
+        session, total, json_len, node_count)
+end
+
+-- ============================================================
+-- Peer manifest logging (v0.7.64)
+-- ============================================================
+-- Diagnostic: at lobby join / mission start, each client replies to the host's
+-- ct_sync_host_settings_chunk broadcast with a ct_peer_manifest packet so the host's
+-- log captures what every peer is actually running. Lets us tell version drift from
+-- "real bug" in post-session log triage — the 2026-05-19 desync run had three peers
+-- on potentially different ct builds and we couldn't confirm that from the logs.
+--
+-- Manifest fields (per peer):
+--   v   ct version string (MOD_VERSION)
+--   h   FNV-1a hash of the host-synced settings (so we can spot setting drift cheaply)
+--   m   list of enabled Workshop mods (id, name, last_updated) — THE diagnostic for
+--       "your friend's halo is different" caused by mismatched mod loadouts
+--   vt  VMF workshop_timestamp (mismatched VMF builds cause weird bugs)
+--   nl  #NetworkLookup.level_keys (confirms adventure-injection state per peer)
+--
+-- VMF network_register is string-keyed, NOT index-sequential, so this RPC does
+-- NOT trip feedback_vt2_gated_registration_diverges.md. Old-ct peers without the
+-- handler silently drop the packet — no crash.
+
+local _ct_peer_manifests = {}      -- peer_id (string) -> decoded manifest table
+local _ct_manifest_inbound = {}    -- chunked-receive buffer
+
+-- FNV-1a 32-bit over a deterministic string. Used to fingerprint the synced settings
+-- payload so a 1-byte log line shows whether two peers have identical CT config.
+-- Stingray runs LuaJIT — `bit.bxor` and `bit.band` are available; native `~` and `&`
+-- operators are not (LuaJIT defaults to Lua 5.1 syntax, no Lua-5.3 bitwise ops).
+local _fnv_bxor = bit and bit.bxor
+local _fnv_band = bit and bit.band
+local function _fnv1a(s)
+    if not (_fnv_bxor and _fnv_band) then
+        -- Defensive fallback: bit library missing on some platform. Use a simple
+        -- modular accumulator. Worse distribution but still good enough to flag
+        -- "definitely different" without an exception.
+        local h = 0
+        for i = 1, #s do
+            h = (h * 31 + string.byte(s, i)) % 4294967296
+        end
+        return h
+    end
+    local h = 2166136261
+    for i = 1, #s do
+        h = _fnv_band(_fnv_bxor(h, string.byte(s, i)), 0xFFFFFFFF)
+        h = _fnv_band(h * 16777619, 0xFFFFFFFF)
+    end
+    return h
+end
+
+local function _build_local_manifest()
+    local manifest = { v = MOD_VERSION }
+    -- Settings hash: serialize SYNCED_SETTING_NAMES values in traversal-order (the
+    -- order `_collect_setting_ids` walks the data tree, deterministic across all
+    -- peers running the same ct version). Two peers with the same config produce
+    -- the same fingerprint. mod:get reads the LOCAL value — we want each peer's
+    -- local setting fingerprint, not the host's.
+    local pieces = {}
+    for _, name in ipairs(SYNCED_SETTING_NAMES) do
+        pieces[#pieces + 1] = name .. "=" .. tostring(mod:get(name))
+    end
+    manifest.h = _fnv1a(table.concat(pieces, "|"))
+    -- Enabled mods: Managers.mod._mods is the canonical local view (mod_manager.lua:326).
+    local enabled = {}
+    if Managers and Managers.mod and Managers.mod._mods then
+        for _, m_entry in ipairs(Managers.mod._mods) do
+            if type(m_entry) == "table" and m_entry.enabled then
+                enabled[#enabled + 1] = {
+                    i = tostring(m_entry.id or ""),
+                    n = tostring(m_entry.name or ""),
+                    u = m_entry.last_updated or m_entry.timestamp or 0,
+                }
+                if tostring(m_entry.id) == "1369573612" then
+                    manifest.vt = m_entry.last_updated or m_entry.timestamp or 0
+                end
+            end
+        end
+    end
+    manifest.m = enabled
+    manifest.nl = (NetworkLookup and NetworkLookup.level_keys and #NetworkLookup.level_keys) or 0
+    return manifest
+end
+
+local function _log_peer_manifest(peer_id, manifest, label)
+    if type(manifest) ~= "table" then return end
+    local mods_count = (type(manifest.m) == "table") and #manifest.m or 0
+    mod:info("[ct_peers] %s peer=%s ct=%s settings_hash=%08x vmf_ts=%s num_levels=%s enabled_mods=%d",
+        label or "PEER",
+        tostring(peer_id),
+        tostring(manifest.v),
+        manifest.h or 0,
+        tostring(manifest.vt or "?"),
+        tostring(manifest.nl or "?"),
+        mods_count)
+end
+
+local function _log_peer_diff_against_host(peer_id, peer_manifest, host_manifest)
+    if type(peer_manifest) ~= "table" or type(host_manifest) ~= "table" then return end
+    local diffs = {}
+    if peer_manifest.v ~= host_manifest.v then
+        diffs[#diffs + 1] = "ct_version(" .. tostring(peer_manifest.v) .. " vs host " .. tostring(host_manifest.v) .. ")"
+    end
+    if peer_manifest.h ~= host_manifest.h then
+        diffs[#diffs + 1] = "settings_hash"
+    end
+    if peer_manifest.nl ~= host_manifest.nl then
+        diffs[#diffs + 1] = "num_levels(" .. tostring(peer_manifest.nl) .. " vs host " .. tostring(host_manifest.nl) .. ")"
+    end
+    if peer_manifest.vt ~= host_manifest.vt then
+        diffs[#diffs + 1] = "vmf_timestamp(" .. tostring(peer_manifest.vt) .. " vs host " .. tostring(host_manifest.vt) .. ")"
+    end
+    -- Mod-set diff (by id).
+    local host_ids, peer_ids = {}, {}
+    if type(host_manifest.m) == "table" then
+        for _, m in ipairs(host_manifest.m) do host_ids[m.i or ""] = m.n or "?" end
+    end
+    if type(peer_manifest.m) == "table" then
+        for _, m in ipairs(peer_manifest.m) do peer_ids[m.i or ""] = m.n or "?" end
+    end
+    local missing, extra = {}, {}
+    for id, name in pairs(host_ids) do
+        if not peer_ids[id] then missing[#missing + 1] = name end
+    end
+    for id, name in pairs(peer_ids) do
+        if not host_ids[id] then extra[#extra + 1] = name end
+    end
+    if #missing > 0 then diffs[#diffs + 1] = "missing_vs_host=[" .. table.concat(missing, ",") .. "]" end
+    if #extra > 0 then diffs[#diffs + 1] = "extra_vs_host=[" .. table.concat(extra, ",") .. "]" end
+
+    if #diffs > 0 then
+        mod:info("[ct_peers]   DIFF peer=%s: %s", tostring(peer_id), table.concat(diffs, "; "))
+    else
+        mod:info("[ct_peers]   peer=%s matches host", tostring(peer_id))
+    end
+end
+
+-- Assigned to the forward-declared local at top of file so the ct_sync handler
+-- closure (which fires before this block executes) can call us.
+_broadcast_local_manifest = function(target)
+    local manifest = _build_local_manifest()
+    local ok, json = pcall(cjson.encode, manifest)
+    if not ok or type(json) ~= "string" then
+        mod:info("[ct_peers] manifest encode failed; not broadcasting")
+        return
+    end
+    local json_len = #json
+    local total = math.max(1, math.ceil(json_len / SYNC_CHUNK_SIZE))
+    local session = math.floor(((Application and Application.time_since_launch and Application.time_since_launch()) or os.time()) * 1000) % 2147483647
+    if session == 0 then session = 1 end
+    for seq = 1, total do
+        local start_i = (seq - 1) * SYNC_CHUNK_SIZE + 1
+        local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
+        local chunk_str = string.sub(json, start_i, stop_i)
+        mod:network_send("ct_peer_manifest_chunk", target, session, seq, total, chunk_str)
+    end
+    return manifest, json_len, total
+end
+
+mod:network_register("ct_peer_manifest_chunk", function(sender_peer_id, session, seq, total, chunk_str)
+    if type(session) ~= "number" or type(seq) ~= "number" or type(total) ~= "number" or type(chunk_str) ~= "string" then
+        return
+    end
+    local key = tostring(sender_peer_id)
+    local entry = _ct_manifest_inbound[key]
+    if not entry or entry.session ~= session then
+        entry = { session = session, total = total, received = 0, chunks = {} }
+        _ct_manifest_inbound[key] = entry
+    end
+    if entry.chunks[seq] == nil then
+        entry.chunks[seq] = chunk_str
+        entry.received = entry.received + 1
+    end
+    if entry.received < entry.total then return end
+    local pieces = {}
+    for i = 1, entry.total do pieces[i] = entry.chunks[i] or "" end
+    _ct_manifest_inbound[key] = nil
+    local json = table.concat(pieces)
+    local ok, payload = pcall(cjson.decode, json)
+    if not ok or type(payload) ~= "table" then
+        mod:info("[ct_peers] manifest decode failed from %s", tostring(sender_peer_id))
+        return
+    end
+    _ct_peer_manifests[key] = payload
+    _log_peer_manifest(sender_peer_id, payload, "RECV")
+    -- If we're host, also print a diff against our own manifest right away.
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if is_server then
+        local host_manifest = _build_local_manifest()
+        _log_peer_diff_against_host(sender_peer_id, payload, host_manifest)
+    end
+end)
+
+-- /peers — on-demand dump. Anyone can run it; everyone re-shares their
+-- manifest so the requester's log is freshly populated.
+mod:command("peers", "Dump per-peer ct/mod manifest diff vs host (for lobby desync triage)", function()
+    local host_manifest = _build_local_manifest()
+    _log_peer_manifest("self", host_manifest, "SELF")
+    -- Broadcast to everyone so each peer re-shares its manifest with us.
+    _broadcast_local_manifest("all")
+    -- Print whatever we already have stored.
+    local n = 0
+    for peer_id, manifest in pairs(_ct_peer_manifests) do
+        n = n + 1
+        _log_peer_manifest(peer_id, manifest, "CACHED")
+        _log_peer_diff_against_host(peer_id, manifest, host_manifest)
+    end
+    mod:echo(string.format("[ct_peers] dumped %d cached peer manifest(s); refreshed broadcast — re-run /peers in ~2s for new replies", n))
 end)
 
 -- Read effective setting: on host, use the user's actual configured value.
@@ -321,9 +746,27 @@ mod:hook_safe("DeusRunController", "setup_run", function(self)
         for _, name in ipairs(SYNCED_SETTING_NAMES) do
             payload[name] = mod:get(name)
         end
-        mod:network_send("ct_sync_host_settings", "others", payload)
-        mod:info("[ct_sync] broadcast host settings to clients (%d keys)",
-            #SYNCED_SETTING_NAMES)
+        local ok, json = pcall(cjson.encode, payload)
+        if not ok or type(json) ~= "string" then
+            mod:info("[ct_sync] payload encode failed; not broadcasting")
+            return
+        end
+        local json_len = #json
+        local total = math.max(1, math.ceil(json_len / SYNC_CHUNK_SIZE))
+        local session = math.floor(((Application and Application.time_since_launch and Application.time_since_launch()) or os.time()) * 1000) % 2147483647
+        if session == 0 then session = 1 end
+        for seq = 1, total do
+            local start_i = (seq - 1) * SYNC_CHUNK_SIZE + 1
+            local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
+            local chunk_str = string.sub(json, start_i, stop_i)
+            mod:network_send("ct_sync_host_settings_chunk", "others", session, seq, total, chunk_str)
+        end
+        mod:info("[ct_sync] broadcast host settings to clients (session %d, %d chunks, %d bytes, %d keys)",
+            session, total, json_len, #SYNCED_SETTING_NAMES)
+        -- v0.7.64: also log the host's own manifest as a baseline so clients'
+        -- replies can be diff'd against it in post-session log triage.
+        local host_manifest = _build_local_manifest()
+        _log_peer_manifest("self (host)", host_manifest, "HOST")
     end
 end)
 
@@ -599,18 +1042,25 @@ mod:hook("DeusRunController", "get_deus_weapon_chest_type", function(func, self)
 
     if (not distribution or #distribution == 0) and DEUS_CHEST_TYPES then
         -- v0.7.42: effective_setting so client's chest opens see host's distribution.
-        local upgrade = effective_setting("chest_upgrade_count") or 0
-        local swap_melee = effective_setting("chest_swap_melee_count") or 0
-        local swap_ranged = effective_setting("chest_swap_ranged_count") or 0
-        local power_up = effective_setting("chest_power_up_count") or 0
+        -- v0.7.65: sentinel -1 = "Default" (use vanilla random distribution). 0 = literal
+        -- zero altars of this type. is_custom is true if ANY altar setting is not the
+        -- sentinel (the user has expressed an override). For altars set to Default in a
+        -- mixed config (one type explicit, others "Default"), the Default ones contribute
+        -- ZERO to the override distribution — explicit per-type control. If users want
+        -- vanilla random behavior, ALL four must be "Default".
+        local upgrade = effective_setting("chest_upgrade_count") or -1
+        local swap_melee = effective_setting("chest_swap_melee_count") or -1
+        local swap_ranged = effective_setting("chest_swap_ranged_count") or -1
+        local power_up = effective_setting("chest_power_up_count") or -1
 
-        local is_custom = upgrade > 0 or swap_melee > 0 or swap_ranged > 0 or power_up > 0
+        local is_custom = upgrade ~= -1 or swap_melee ~= -1 or swap_ranged ~= -1 or power_up ~= -1
         if is_custom then
+            local function as_count(v) return (v == -1) and 0 or v end
             local new_distribution = {}
-            for _ = 1, upgrade do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.upgrade end
-            for _ = 1, swap_melee do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.swap_melee end
-            for _ = 1, swap_ranged do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.swap_ranged end
-            for _ = 1, power_up do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.power_up end
+            for _ = 1, as_count(upgrade)    do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.upgrade    end
+            for _ = 1, as_count(swap_melee) do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.swap_melee end
+            for _ = 1, as_count(swap_ranged)do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.swap_ranged end
+            for _ = 1, as_count(power_up)   do new_distribution[#new_distribution + 1] = DEUS_CHEST_TYPES.power_up   end
 
             if #new_distribution > 0 then
                 -- CLARIFY: Seeding the shuffle with the node's level_seed ensures deterministic
@@ -954,13 +1404,21 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     end
 
     -- v0.7.42: effective_setting so each peer's populate_pickups mutation uses host's values.
-    local altar_total = (effective_setting("chest_upgrade_count") or 0)
-        + (effective_setting("chest_swap_melee_count") or 0)
-        + (effective_setting("chest_swap_ranged_count") or 0)
-        + (effective_setting("chest_power_up_count") or 0)
-    local cursed_count = effective_setting("cursed_chest_count") or 1
-    local arena_ammo = effective_setting("arena_ammo_count") or 2
-    local potions_on = mod:get("enable_campaign_potions")  -- per-peer (server-driven spawn, no graph effect)
+    -- v0.7.65: sentinel -1 = "Default" (use vanilla random/count) — distinct from 0 which means
+    -- "literally zero." `as_count(-1) = 0` for the altar TOTAL sum (a Default altar contributes
+    -- 0 to the override total) but `altar_custom` triggers on ANY non-sentinel value.
+    local function _as_count(v) return (v == -1) and 0 or v end
+    local upgrade_c    = effective_setting("chest_upgrade_count")    or -1
+    local swap_melee_c = effective_setting("chest_swap_melee_count") or -1
+    local swap_ranged_c= effective_setting("chest_swap_ranged_count")or -1
+    local power_up_c   = effective_setting("chest_power_up_count")   or -1
+    local altar_total = _as_count(upgrade_c) + _as_count(swap_melee_c) + _as_count(swap_ranged_c) + _as_count(power_up_c)
+    local altar_any_explicit = upgrade_c ~= -1 or swap_melee_c ~= -1 or swap_ranged_c ~= -1 or power_up_c ~= -1
+    local cursed_count_raw = effective_setting("cursed_chest_count") or -1
+    local cursed_count = _as_count(cursed_count_raw)
+    local arena_ammo_raw = effective_setting("arena_ammo_count") or -1
+    local arena_ammo = _as_count(arena_ammo_raw)
+    local potions_on = effective_setting("enable_campaign_potions")  -- v0.7.64: now host-synced
 
     -- Defensive cleanup: if a previous populate_pickups call errored mid-flight
     -- with potions_on=true, the campaign-potion clones could remain in
@@ -972,12 +1430,13 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
         end
     end
 
-    -- CLARIFY: "custom" gates determine which fields to mutate. The defaults (1 cursed chest, 2
-    -- arena ammo) are the vanilla values; if the user's setting matches vanilla, we skip mutation
-    -- to keep pickup_settings pristine.
-    local altar_custom = altar_total > 0
-    local cursed_custom = cursed_count ~= 1
-    local ammo_custom = arena_ammo ~= 2
+    -- v0.7.65: "custom" gates determine which fields to mutate. Sentinel -1 = "Default" =
+    -- skip override. Explicit values (including 0 = literally zero) trigger override.
+    -- Pre-0.7.65 the gates compared to vanilla defaults (1, 2) — that's gone because the
+    -- new sentinel makes "use vanilla" the explicit choice, not "happens to match vanilla."
+    local altar_custom = altar_any_explicit
+    local cursed_custom = cursed_count_raw ~= -1
+    local ammo_custom = arena_ammo_raw ~= -1
 
     -- v0.7.55: reset per-level Belakor altar tracker. Used by the tome/grim hook so
     -- only the first book spot after all Chests of Trials are placed gets the altar
@@ -1199,6 +1658,20 @@ local MOD_BOON_LOC = {
 --      "[Invalid String Format]". See feedback_vt2_localize_string_format_pipeline.md.
 local RECKLESS_SWINGS_DESC_OVERRIDE = "While above 25%% Health, gain 25%% Power but take 1 damage on each melee hit."
 
+-- v0.7.65: Miracle of Ulric / Miracle of Isha localization overrides — only
+-- applied when the matching tweak toggle is on, so vanilla text stays put when
+-- the alternative behaviors are off. Vanilla loc keys live in compiled
+-- .strings bundles (deus_blessing_settings.lua:19-26, 47-56); we intercept the
+-- Localize hook to substitute when the toggle is host-active.
+-- `%%` is required because UIUtils.format_localized_description re-feeds the
+-- result through string.format (feedback_vt2_localize_string_format_pipeline.md).
+local MIRACLE_LOC_OVERRIDES = {
+    blessing_of_power_name      = "Miracle of Ulric",
+    blessing_of_power_desc      = "Grants every hero +50 Power for the rest of the run. The bonus persists through weapon swaps and upgrades at altars.",
+    blessing_of_isha_desc_aegis = "Grants every hero -25%% damage taken for the rest of the run.",
+    blessing_of_isha_desc_wounds= "Grants every hero unlimited wounds for the rest of the run — every knockdown is revivable instead of resulting in instant death after the first down.",
+}
+
 mod:hook(_G, "Localize", function(func, key, ...)
     if type(key) == "string" then
         local t = ADV_TITLE_OVERRIDES[key]
@@ -1209,6 +1682,19 @@ mod:hook(_G, "Localize", function(func, key, ...)
         if m then return m end
         if key == "description_deus_reckless_swings" and reckless_swings_originals then
             return RECKLESS_SWINGS_DESC_OVERRIDE
+        end
+        if (key == "blessing_of_power_name" or key == "blessing_of_power_desc")
+            and effective_setting("tweak_miracle_of_ulric_persistent") then
+            return MIRACLE_LOC_OVERRIDES[key]
+        end
+        if key == "blessing_of_isha_desc" then
+            -- Inline mode read because _get_isha_mode is defined later in the file
+            -- and this closure is built before its declaration. v0.7.65 stored a
+            -- boolean from the prior checkbox; migrate true→"aegis" here too.
+            local isha_mode = effective_setting("tweak_miracle_of_isha_alternative")
+            if isha_mode == true then isha_mode = "aegis" end
+            if isha_mode == "aegis" then return MIRACLE_LOC_OVERRIDES.blessing_of_isha_desc_aegis end
+            if isha_mode == "wounds" then return MIRACLE_LOC_OVERRIDES.blessing_of_isha_desc_wounds end
         end
     end
     return func(key, ...)
@@ -1565,6 +2051,21 @@ local function _current_node_theme()
     return node and node.theme or nil
 end
 
+local function _current_node_curse()
+    if not (Managers.mechanism and Managers.mechanism.game_mechanism) then return nil end
+    local mechanism = Managers.mechanism:game_mechanism()
+    if not mechanism or not mechanism.get_deus_run_controller then return nil end
+    local run = mechanism:get_deus_run_controller()
+    if not run or not run.get_current_node then return nil end
+    local node = run:get_current_node()
+    return node and node.curse or nil
+end
+
+-- v0.7.64: locus only spawns on the actual Belakor-cursed mission.
+local function _current_node_is_belakor()
+    return _current_node_curse() == "curse_belakor_totems"
+end
+
 mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading_env, viewport)
     if not on_injected_adventure_level() then return end
     local theme = _current_node_theme()
@@ -1634,6 +2135,18 @@ mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
     if not graph_data then
         mod:info("[DeusMapScene.on_enter] no graph_data; passing through")
         return func(self, graph_data, ...)
+    end
+    -- v0.7.64 late-arrival apply: if the host's graph snapshot arrived AFTER the
+    -- client's `deus_populate_graph` ran (RPC ordering race during setup_run),
+    -- this is the natural re-apply site — the map UI is the only visible consumer
+    -- the user complained about. Phase-A's in-place mutation makes downstream
+    -- `_path_graph` reads see the synced values too, so we don't need a third
+    -- application site for in-mission tooltip / curse-name reads.
+    if _ct_host_graph_snapshot then
+        local applied = apply_graph_snapshot(graph_data)
+        if applied > 0 then
+            mod:info("[ct_graph] applied host snapshot to %d nodes (DeusMapScene.on_enter)", applied)
+        end
     end
     local saved = {}
     local seen, rewritten, skipped = 0, 0, 0
@@ -1858,6 +2371,16 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         mod:info("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
         dump_graph(result[1], "post-run")
         restore_curse_count()
+        -- v0.7.64 graph sync — see ct_graph_snapshot_chunk block above.
+        local is_server = Managers and Managers.player and Managers.player.is_server
+        if is_server then
+            broadcast_graph_snapshot(result[1])
+        else
+            local applied = apply_graph_snapshot(result[1])
+            if applied > 0 then
+                mod:info("[ct_graph] applied host snapshot to %d nodes (post-run)", applied)
+            end
+        end
         return unpack(result)
     end
 
@@ -1884,6 +2407,16 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     mod:info("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
     dump_graph(result[1], "post-run-shop-converted")
     restore_curse_count()
+    -- v0.7.64 graph sync — see ct_graph_snapshot_chunk block above.
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if is_server then
+        broadcast_graph_snapshot(result[1])
+    else
+        local applied = apply_graph_snapshot(result[1])
+        if applied > 0 then
+            mod:info("[ct_graph] applied host snapshot to %d nodes (post-run-shop-converted)", applied)
+        end
+    end
     return unpack(result)
 end)
 
@@ -2017,9 +2550,13 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
     end
 
     -- Respect the user's `cursed_chest_count` setting. The first N book spots become
-    -- Chests of Trials. Default is 1 chest per mission; vanilla adventure maps ship 5
-    -- book pedestals (3 tomes + 2 grimoires), so up to 4 spots remain afterwards.
-    local cap = effective_setting("cursed_chest_count") or 1  -- v0.7.42: sync with host
+    -- Chests of Trials. Default ("Default" sentinel = -1) treats this as the vanilla
+    -- value of 1 chest per mission; explicit 0 leaves all book spots empty. Vanilla
+    -- adventure maps ship 5 book pedestals (3 tomes + 2 grimoires), so up to 4 spots
+    -- remain afterwards.
+    -- v0.7.65: sentinel -1 → 1 (vanilla default); 0+ → use as-is.
+    local cap_raw = effective_setting("cursed_chest_count") or -1  -- v0.7.42: sync with host
+    local cap = (cap_raw == -1) and 1 or cap_raw
     if _chest_conversions_this_level < cap then
         local pickup_name = "deus_cursed_chest"
         local settings = AllPickups and AllPickups[pickup_name]
@@ -2043,8 +2580,17 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
     -- `can_spawn_func` gate), which our DeusRunController.can_spawn_belakor_locus hook
     -- below permits on adventure-injected levels — both paths must agree, or the call
     -- silently no-ops.
+    -- v0.7.64: locus only spawns on the actual Belakor cursed mission. Previously
+    -- `force_belakor` alone caused the locus to land on the FIRST adventure-injected
+    -- book pedestal regardless of which node held curse_belakor_totems — so in last
+    -- night's run the locus landed on nurgle_slaanesh_path1 while the actual Belakor
+    -- mission (magnus_belakor_path1) got nothing. `_current_node_is_belakor()` reads
+    -- the current node's curse field, which is the only data that identifies "this
+    -- mission has the Belakor totems curse." `force_belakor` itself only guarantees a
+    -- Belakor curse appears SOMEWHERE in the run — it doesn't say where.
     if not _belakor_altar_spawned_this_level
         and effective_setting("force_belakor")
+        and _current_node_is_belakor()
         and AllPickups and AllPickups.deus_02 then
         local position = Unit.local_position(spawner_unit, 0)
         local rotation = Unit.local_rotation(spawner_unit, 0)
@@ -2108,13 +2654,7 @@ mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup
     end
 
     -- CW pickups accept any non-tome/grim, non-event primary spawner. They
-    -- compete with vanilla ammo/healing/grenades for unclaimed slots: ammo
-    -- iterates first (vanilla `_can_spawn` returns true on ammo-tagged spawners
-    -- before our hook runs), so ammo claims its 5 tagged spawners; same for
-    -- healing and grenades. CW types then claim remaining primary slots up to
-    -- their requested counts (deus_potions = 30, deus_soft_currency = 30, etc.).
-    -- Adventure levels typically have ~30 primary spawners; expect spawn_debt
-    -- warnings for the surplus, which is harmless.
+    -- compete with vanilla ammo/healing/grenades for unclaimed slots.
     if Pickups and Pickups.deus_potions and Pickups.deus_potions[pickup_name] then
         return true
     end
@@ -2123,6 +2663,37 @@ mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup
     end
     if pickup_name == "deus_weapon_chest" then
         return true
+    end
+
+    -- v0.7.64: on injected adventure levels, ALSO allow vanilla campaign pickup
+    -- categories (ammo, healing, grenades, potions, painting_scrap, level_events).
+    -- Pre-v0.7.64 the comment block above incorrectly assumed vanilla `_can_spawn`
+    -- already returned true on these — but for adventure levels running under the
+    -- deus mechanism, `Managers.mechanism:can_spawn_pickup` routes to the deus
+    -- mechanism's pickup whitelist which doesn't recognize campaign pickup names,
+    -- and the per-spawner `Unit.get_data(spawner, pickup_name)` check often fails
+    -- for category vs specific-name mismatches (spawner tagged "ammo=true" while
+    -- pickup_name is "ammo_specific_X"). Result on Holly DLC adventure-injected
+    -- levels (Magnus / Cemetery / Forest Ambush): ALL pickups silently vetoed —
+    -- not just deus types — leaving the map with literally nothing on the ground.
+    -- Burned in the 2026-05-19 3-player run: 13 spawn-debt warnings on magnus
+    -- including ammo, healing, grenades — the vanilla pickup-types ct's earlier
+    -- code path mistakenly assumed were handled before our hook.
+    --
+    -- Explicit allowlist (not `string.sub(cat, 1, 5) ~= "deus_"`) to keep
+    -- `versus_objective`, `weave`, and other non-campaign categories out of the
+    -- candidate set even if Fatshark adds them to the global Pickups table in a
+    -- future patch. Tome/grim/guaranteed/triggered spawners are already filtered
+    -- above; this fallback only fires on plain primary/secondary spawners.
+    if Pickups then
+        local ADVENTURE_CATS = { "ammo", "healing", "grenades", "potions",
+            "painting_scrap", "level_events" }
+        for _, category in ipairs(ADVENTURE_CATS) do
+            local bucket = Pickups[category]
+            if type(bucket) == "table" and bucket[pickup_name] then
+                return true
+            end
+        end
     end
 
     return false
@@ -2166,13 +2737,13 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
     -- confirmed working.
     mod:info("[chest-revive] _set_state fired, state=%s open_const=%s setting=%s is_server=%s",
         tostring(state), tostring(CURSED_CHEST_STATE_OPEN),
-        tostring(mod:get("respawn_on_chest_complete")),
+        tostring(effective_setting("respawn_on_chest_complete")),
         tostring(Managers and Managers.player and Managers.player.is_server))
 
     if state ~= CURSED_CHEST_STATE_OPEN then
         return
     end
-    if not mod:get("respawn_on_chest_complete") then
+    if not effective_setting("respawn_on_chest_complete") then
         mod:info("[chest-revive] setting OFF; bailing")
         return
     end
@@ -3069,7 +3640,11 @@ local function _force_respawn_team()
 end
 
 mod:hook("GameModeDeus", "evaluate_end_conditions", function(func, self, ...)
-    if not mod:get("tweak_defeat_recovery") then
+    -- v0.7.64: host-synced. The hook itself only runs on the host (GameModeDeus is
+    -- server-authoritative), so this read effectively gets the host's value either
+    -- way — but using effective_setting keeps the lookup pattern uniform with the
+    -- rest of the codebase and survives any future re-entry from a client context.
+    if not effective_setting("tweak_defeat_recovery") then
         return func(self, ...)
     end
     if _defeat_recovery_triggered_this_round then
@@ -3257,15 +3832,315 @@ local function inject_dormant_boon(power_up_name, rarity)
     mod:info(string.format("[dormant] injected %s at rarity %s (lookup_id=%d)", power_up_name, rarity, new_power_up.lookup_id))
 end
 
+-- v0.7.60: pre-register every dormant boon's buff template + NetworkLookup entries
+-- at mod-load, regardless of activate_dormant_* toggle. This guarantees every
+-- ct-running peer has identical `_G.BuffTemplates` / `DeusPowerUpBuffTemplates` /
+-- `NetworkLookup.{buff_templates, deus_power_up_templates}` contents in the same
+-- order. A host who has dormants active can RPC the resulting buff IDs to clients
+-- who have those toggles OFF and the lookups resolve cleanly instead of crashing on
+-- "Table buff_templates does not contain key: N" in network_lookup.lua:2514.
+-- Pool injection (DeusPowerUpRarityPool / DeusPowerUps* / DeusPowerUpsLookup)
+-- remains toggle-gated below so each user's offering pool still reflects their
+-- preferences. Sorted iteration eliminates the latent pairs()-order risk where
+-- two peers could otherwise register the same set in different sequences and
+-- assign different network indices.
+--
+-- This is purely additive registration; `register_buff_in_network_lookup` /
+-- `register_power_up_in_network_lookup` early-out if the name is already present,
+-- and `BuffTemplates[name] = buff_template` is an idempotent overwrite with the
+-- same value, so the subsequent toggle-gated `inject_dormant_boon` calls remain
+-- safe and unchanged in behavior on the pool side.
+local function pre_register_dormant_lookups()
+    local templates       = rawget(_G, "DeusPowerUpTemplates")
+    local buff_templates  = rawget(_G, "DeusPowerUpBuffTemplates")
+    local global_bt       = rawget(_G, "BuffTemplates")
+    local tweak_data_glob = rawget(_G, "MorrisBuffTweakData")
+    if not (templates and buff_templates) then
+        mod:info("[dormant] pre-register skipped: DeusPowerUp tables not yet loaded")
+        return
+    end
+    local keys = {}
+    for k in pairs(DORMANT_BOON_RARITY) do keys[#keys + 1] = k end
+    table.sort(keys)
+    local buff_count, name_count = 0, 0
+    for _, power_up_name in ipairs(keys) do
+        local rarity = DORMANT_BOON_RARITY[power_up_name]
+        register_power_up_in_network_lookup(power_up_name)
+        name_count = name_count + 1
+        local template = templates[power_up_name]
+        if template and not template.talent then
+            local buff_name = "power_up_" .. power_up_name .. "_" .. rarity
+            local buff_template = table.clone(template.buff_template)
+            local tweak_data = tweak_data_glob and tweak_data_glob[power_up_name]
+            if tweak_data then
+                for k, v in pairs(tweak_data) do
+                    buff_template.buffs[1][k] = v
+                end
+            end
+            buff_template.buffs[1].name = buff_name
+            buff_templates[buff_name] = buff_template
+            if global_bt then global_bt[buff_name] = buff_template end
+            register_buff_in_network_lookup(buff_name)
+            buff_count = buff_count + 1
+        end
+    end
+    mod:info("[dormant] pre-registered %d buff templates + %d power-up names for client compat",
+        buff_count, name_count)
+end
+
 local function sync_dormant_boons()
-    for name, default_rarity in pairs(DORMANT_BOON_RARITY) do
+    -- Iterate in sorted order so that even if pool-injection ordering ever affects
+    -- a derived table that didn't exist when this comment was written, the
+    -- ordering across peers stays deterministic.
+    local keys = {}
+    for k in pairs(DORMANT_BOON_RARITY) do keys[#keys + 1] = k end
+    table.sort(keys)
+    for _, name in ipairs(keys) do
+        local default_rarity = DORMANT_BOON_RARITY[name]
         if effective_setting("activate_dormant_" .. name) and not _injected_dormants[name] then
             inject_dormant_boon(name, default_rarity)
         end
     end
 end
 
+pre_register_dormant_lookups()
 sync_dormant_boons()
+
+-- ============================================================
+-- Miracle of Ulric / Miracle of Isha (alternative blessing behaviors, v0.7.65)
+-- ============================================================
+-- Two host-synced toggles that REPLACE vanilla blessing behavior:
+--   - tweak_miracle_of_ulric_persistent: vanilla blessing_of_power adds +50 to
+--     each weapon's `power_level` field (deus_run_controller.lua:1671-1703).
+--     That value EVAPORATES on weapon swap at an altar — the new weapon doesn't
+--     have it. When the toggle is on, skip the vanilla weapon-mutation and
+--     instead apply a persistent +50 power_level buff on every hero. Survives
+--     swaps because it's on the player buff_extension, not the weapon entry.
+--   - tweak_miracle_of_isha_alternative: vanilla blessing_of_isha runs a
+--     mutator (mutator_blessing_of_isha.lua) that grants one team revive from
+--     death. When the toggle is on, skip the mutator registration and instead
+--     apply -25% damage_taken to every hero (persistent for the run).
+--
+-- Mirror writes to BuffTemplates (the global table) because the engine reads
+-- via BuffUtils.get_buff_template which only consults that global; vanilla
+-- merges DeusPowerUpBuffTemplates into it at boot, BEFORE mods load, so any
+-- runtime writes to DeusPowerUpBuffTemplates alone are lost (per
+-- feedback_vt2_dormant_buff_template_dual_register.md). Also register in
+-- NetworkLookup.buff_templates via register_buff_in_network_lookup so the
+-- rpc_add_buff sync path doesn't crash on unknown name.
+local CT_BUFF_MIRACLE_OF_ULRIC = "ct_miracle_of_ulric"
+local CT_BUFF_MIRACLE_OF_ISHA_AEGIS = "ct_miracle_of_isha_aegis"
+local CT_BUFF_MIRACLE_OF_ISHA_WOUNDS = "ct_miracle_of_isha_wounds"
+
+-- v0.7.66: Isha behavior is now a 3-way dropdown. Read it through this helper
+-- because the v0.7.65 checkbox values (true/false) can persist in saved settings;
+-- map true→"aegis" so users who enabled the old checkbox stay on Aegis after the
+-- migration, false/nil→"vanilla". Reads via effective_setting → host-authoritative.
+local function _get_isha_mode()
+    local v = effective_setting("tweak_miracle_of_isha_alternative")
+    if v == true then return "aegis" end
+    if v == false or v == nil then return "vanilla" end
+    return v
+end
+
+local function _register_miracle_buff_templates()
+    local global_bt = rawget(_G, "BuffTemplates")
+    local deus_bt = rawget(_G, "DeusPowerUpBuffTemplates")
+    if not global_bt then
+        mod:info("[miracle] BuffTemplates not loaded; cannot register")
+        return
+    end
+
+    -- +50 power_level. Shape mirrors liquid_bravado_potion
+    -- (morris_buff_settings.lua:5534-5546) for the stat_buff="power_level" + bonus
+    -- plumbing; is_persistent flag matches deus_special_farm_max_health_buff
+    -- (deus_power_up_settings.lua:231-242) so DeusSpawning saves+reapplies it
+    -- across missions until the blessing is consumed at end of run.
+    local ulric_tpl = {
+        buffs = {
+            {
+                icon = "blessing_power_01",
+                name = CT_BUFF_MIRACLE_OF_ULRIC,
+                stat_buff = "power_level",
+                bonus = 50,
+                max_stacks = 1,
+                is_persistent = true,
+            },
+        },
+    }
+    global_bt[CT_BUFF_MIRACLE_OF_ULRIC] = ulric_tpl
+    if deus_bt then deus_bt[CT_BUFF_MIRACLE_OF_ULRIC] = ulric_tpl end
+    register_buff_in_network_lookup(CT_BUFF_MIRACLE_OF_ULRIC)
+
+    -- -25% damage_taken (NEGATIVE multiplier — vanilla pattern: ale_defence
+    -- uses multiplier=-0.04 for 4% reduction at buff_templates.lua:5325-5333).
+    local isha_tpl = {
+        buffs = {
+            {
+                icon = "blessing_isha_01",
+                name = CT_BUFF_MIRACLE_OF_ISHA_AEGIS,
+                stat_buff = "damage_taken",
+                multiplier = -0.25,
+                max_stacks = 1,
+                is_persistent = true,
+            },
+        },
+    }
+    global_bt[CT_BUFF_MIRACLE_OF_ISHA_AEGIS] = isha_tpl
+    if deus_bt then deus_bt[CT_BUFF_MIRACLE_OF_ISHA_AEGIS] = isha_tpl end
+    register_buff_in_network_lookup(CT_BUFF_MIRACLE_OF_ISHA_AEGIS)
+
+    -- v0.7.66: Infinite-wounds variant (recruit-style: every down is revivable
+    -- instead of the 2nd down being instant death). Mirrors vanilla CW boon
+    -- `indomitable` (deus_power_up_settings.lua:5056-5073) — perks-only template
+    -- with no stat_buff. The `infinite_wounds` perk makes GenericStatusExtension
+    -- :set_wounded skip the wounds-counter decrement (generic_status_extension
+    -- .lua:1443-1450), so `has_wounds_remaining` always returns true and the
+    -- death-on-down branch at player_unit_health_extension.lua:812 is never taken.
+    local isha_wounds_tpl = {
+        buffs = {
+            {
+                icon = "blessing_isha_01",
+                name = CT_BUFF_MIRACLE_OF_ISHA_WOUNDS,
+                perks = { "infinite_wounds" },
+                max_stacks = 1,
+                is_persistent = true,
+            },
+        },
+    }
+    global_bt[CT_BUFF_MIRACLE_OF_ISHA_WOUNDS] = isha_wounds_tpl
+    if deus_bt then deus_bt[CT_BUFF_MIRACLE_OF_ISHA_WOUNDS] = isha_wounds_tpl end
+    register_buff_in_network_lookup(CT_BUFF_MIRACLE_OF_ISHA_WOUNDS)
+
+    mod:info("[miracle] registered Ulric (+50 power), Isha-aegis (-25%% dmg taken), Isha-wounds (infinite wounds) buff templates")
+end
+
+_register_miracle_buff_templates()
+
+-- Apply a persistent buff to every connected hero (host-only — the host-side
+-- BuffSystem broadcasts add_buff via rpc_add_buff_synced so clients receive it
+-- via the existing engine path). Both new buff templates are pre-registered in
+-- NetworkLookup.buff_templates above, so the RPC dispatch is safe.
+local function _apply_persistent_buff_to_all_heroes(buff_name)
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if not is_server then return end
+    local side = Managers.state and Managers.state.side and Managers.state.side:get_side_from_name("heroes")
+    local units = side and side.PLAYER_AND_BOT_UNITS
+    if not units then return end
+    local buff_system = Managers.state.entity and Managers.state.entity:system("buff_system")
+    if not buff_system then return end
+    for i = 1, #units do
+        local u = units[i]
+        if u and Unit.alive(u) then
+            local be = ScriptUnit.has_extension(u, "buff_system")
+            if be and not be:has_buff_type(buff_name) then
+                buff_system:add_buff(u, buff_name, u)
+            end
+        end
+    end
+end
+
+-- Single consolidated hook for both blessing overrides — VMF silently shadows
+-- duplicate mod:hook on the same Class+method (feedback_vmf_hook_safe_no_chain.md).
+mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, blessing_name)
+    if blessing_name == "blessing_of_power" and effective_setting("tweak_miracle_of_ulric_persistent") then
+        -- Replicate vanilla affordability / dedup guards from
+        -- deus_run_controller.lua:1590-1599.
+        if self:has_blessing(blessing_name) then return false end
+        local current_coins = self._run_state:get_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID)
+        local blessing_cost = DeusCostSettings.shop.blessings[blessing_name]
+        if current_coins < blessing_cost then return false end
+
+        _apply_persistent_buff_to_all_heroes(CT_BUFF_MIRACLE_OF_ULRIC)
+
+        -- Replicate vanilla accounting from deus_run_controller.lua:1705-1722 so
+        -- the blessing appears in run-stats UI and the lifetime decrement runs.
+        local skip_metatable = true
+        local blessings_with_buyer = table.clone(self._run_state:get_blessings_with_buyer(), skip_metatable)
+        blessings_with_buyer[blessing_name] = buyer
+        self._run_state:set_blessings_with_buyer(blessings_with_buyer)
+        self._run_state:set_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID, current_coins - blessing_cost)
+        local bought_blessings = table.clone(self._run_state:get_bought_blessings(), skip_metatable)
+        bought_blessings[#bought_blessings + 1] = blessing_name
+        self._run_state:set_bought_blessings(bought_blessings)
+        self:_add_coin_tracking_entry(buyer, REAL_PLAYER_LOCAL_ID, -blessing_cost, "blessing")
+
+        mod:info("[miracle] Ulric (persistent +50 power) applied; vanilla weapon-power bump skipped")
+        return true
+
+    elseif blessing_name == "blessing_of_isha" then
+        local isha_mode = _get_isha_mode()
+        if isha_mode == "vanilla" then
+            return func(self, buyer, blessing_name)
+        end
+
+        -- v0.7.66 fix (was v0.7.65 dedup bug): the prior implementation SKIPPED
+        -- writing blessing_of_isha to blessings_with_buyer in an attempt to also
+        -- suppress the auto-mutator activation. But `has_blessing` reads from
+        -- blessings_with_buyer, so the shop let users re-buy the alternative on
+        -- every visit and drain coins (deus_shop_view_v2.lua:854-867 also keys
+        -- the "is_bought" indicator off that table). Now we DO write it (fixes
+        -- the shop UX) and instead suppress the vanilla mutator behavior via
+        -- the MutatorTemplates.blessing_of_isha.server_start_function hook below.
+        if self:has_blessing(blessing_name) then return false end
+        local current_coins = self._run_state:get_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID)
+        local blessing_cost = DeusCostSettings.shop.blessings[blessing_name]
+        if current_coins < blessing_cost then return false end
+
+        if isha_mode == "wounds" then
+            _apply_persistent_buff_to_all_heroes(CT_BUFF_MIRACLE_OF_ISHA_WOUNDS)
+        else
+            _apply_persistent_buff_to_all_heroes(CT_BUFF_MIRACLE_OF_ISHA_AEGIS)
+        end
+
+        local skip_metatable = true
+        local blessings_with_buyer = table.clone(self._run_state:get_blessings_with_buyer(), skip_metatable)
+        blessings_with_buyer[blessing_name] = buyer
+        self._run_state:set_blessings_with_buyer(blessings_with_buyer)
+        self._run_state:set_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID, current_coins - blessing_cost)
+        local bought_blessings = table.clone(self._run_state:get_bought_blessings(), skip_metatable)
+        bought_blessings[#bought_blessings + 1] = blessing_name
+        self._run_state:set_bought_blessings(bought_blessings)
+        self:_add_coin_tracking_entry(buyer, REAL_PLAYER_LOCAL_ID, -blessing_cost, "blessing")
+
+        mod:info("[miracle] Isha alternative mode=%s applied; vanilla revive mutator suppressed", isha_mode)
+        return true
+    end
+
+    return func(self, buyer, blessing_name)
+end)
+
+-- v0.7.66: Suppress vanilla Isha mutator when alternative mode is active.
+-- Every entry point in mutator_blessing_of_isha.lua early-returns on
+-- `not data.hero_side`:
+--   - server_update_function:           line 168 — `if not data.hero_side then return end`
+--   - server_player_disabled_function:  line 138 — same
+--   - server_player_hit_function:       line 156 — same
+--   - try_activate_blessing:            only called from the two above, so dead
+-- Setting data.hero_side = nil in the post-start callback neutralizes the entire mutator.
+--
+-- IMPORTANT (v0.7.66 QA-found): the live dispatch target is
+-- `template.server.start_function`, NOT `template.server_start_function`. The
+-- engine wraps every mutator at `mutator_templates.lua:236-269` (runs at engine
+-- boot, before mods) — `template.server_start_function` is left as a dead
+-- field, the wrapper at template.server.start_function captures the original
+-- via upvalue. Hooking the dead field compiled cleanly but suppressed nothing.
+do
+    local mut_templates = rawget(_G, "MutatorTemplates")
+    local isha_template = mut_templates and mut_templates.blessing_of_isha
+    local server_tbl = isha_template and isha_template.server
+    if server_tbl and type(server_tbl.start_function) == "function" then
+        mod:hook(server_tbl, "start_function", function(func, context, data, unit)
+            func(context, data, unit)
+            if _get_isha_mode() ~= "vanilla" then
+                data.hero_side = nil
+                mod:info("[miracle] Isha mutator neutralized at server.start_function (alternative mode active)")
+            end
+        end)
+    else
+        mod:info("[miracle] MutatorTemplates.blessing_of_isha.server.start_function not loaded at hook time; alternative-mode suppression skipped")
+    end
+end
 
 -- ============================================================
 -- Mod Boons: per-boon scaling (v0.7.30-alpha)
@@ -3279,8 +4154,11 @@ sync_dormant_boons()
 --
 -- IMPLEMENTATION (per boon):
 --   1. Stack buff template added to BuffTemplates (the stat container)
---   2. Apply func + on_boon_granted func added to BuffFunctionTemplates.functions
---      (parameterized by stack name via a factory)
+--   2. Apply func added to BuffFunctionTemplates.functions (read by buff_extension
+--      at line 397). on_boon_granted func added to the flat global `ProcFunctions`
+--      table (read by buff_extension at line 1350). Both written via a factory that
+--      shares the same proc body. v0.7.64 fix — pre-0.7.64 the granted func was
+--      written only to BuffFunctionTemplates.functions and silently never fired.
 --   3. Power-up template added to DeusPowerUpTemplates
 --   4. Pool registration via `inject_dormant_boon` (the function is generic — it just
 --      registers a power-up name + rarity into all the runtime tables)
@@ -3383,7 +4261,8 @@ local function register_meta_boon(spec)
     local power_ups      = rawget(_G, "DeusPowerUpTemplates")
     local buff_templates = rawget(_G, "BuffTemplates")
     local buff_funcs     = rawget(_G, "BuffFunctionTemplates")
-    if not (power_ups and buff_templates and buff_funcs and buff_funcs.functions) then
+    local proc_functions = rawget(_G, "ProcFunctions")
+    if not (power_ups and buff_templates and buff_funcs and buff_funcs.functions and proc_functions) then
         mod:info("[mod-boon] global tables not ready for " .. spec.name)
         return
     end
@@ -3394,9 +4273,15 @@ local function register_meta_boon(spec)
     -- 1. Proc functions. Same body for both — apply fires when this meta boon itself is
     -- granted; granted fires on every subsequent boon. Both should bring stack count to
     -- the current boon count, idempotently.
+    -- v0.7.64: on_boon_granted handlers are resolved via the flat `ProcFunctions` global
+    -- (buff_extension.lua:1350), NOT `BuffFunctionTemplates.functions`. Apply funcs read
+    -- from the latter (buff_extension.lua:397). Writing to only one table = granted proc
+    -- silently never fires; the per-boon stack only refreshes on next mission load when
+    -- apply runs fresh. Same root-cause shape as v0.7.57 chain_lightning fix.
     local proc = _make_meta_proc(stack_name)
     buff_funcs.functions[apply_name]   = proc
     buff_funcs.functions[granted_name] = proc
+    proc_functions[granted_name]       = proc
 
     -- 2. Stack buff template
     local stack_buffs = {}
@@ -3456,7 +4341,8 @@ do
     local power_ups      = rawget(_G, "DeusPowerUpTemplates")
     local buff_templates = rawget(_G, "BuffTemplates")
     local buff_funcs     = rawget(_G, "BuffFunctionTemplates")
-    if power_ups and buff_templates and buff_funcs and buff_funcs.functions then
+    local proc_functions = rawget(_G, "ProcFunctions")
+    if power_ups and buff_templates and buff_funcs and buff_funcs.functions and proc_functions then
         local stack_name   = "ct_meta_movespeed_stack"
         local apply_name   = "ct_meta_movespeed_apply"
         local granted_name = "ct_meta_movespeed_granted"
@@ -3466,9 +4352,11 @@ do
         -- '_make_meta_apply' (a nil value)". `_make_meta_proc` looks up existing stack
         -- count via `num_buff_stacks(stack_name .. "_1")`, so the sub-buff's `name`
         -- field has to use that exact key (was bare "ct_meta_movespeed_stack" prior).
+        -- v0.7.64: also write granted proc to ProcFunctions (see register_meta_boon comment).
         local proc = _make_meta_proc(stack_name)
         buff_funcs.functions[apply_name]   = proc
         buff_funcs.functions[granted_name] = proc
+        proc_functions[granted_name]       = proc
         buff_templates[stack_name] = {
             buffs = {
                 {
@@ -3578,6 +4466,87 @@ local function register_trait_boon(spec)
     mod:info("[trait-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
 end
 
+-- v0.7.61: same shape as pre_register_dormant_lookups (v0.7.60). The gated
+-- register_trait_boon below skips registration entirely when the peer's
+-- enable_boon_<name> toggle is off, so without this pre-registration step two
+-- peers with different toggle states (host enables Vaul's Anvil + Manann's
+-- Tempest, client only enables Manann's Tempest) appended a different ordered
+-- subset of `power_up_ct_boon_*_unique` entries to NetworkLookup.buff_templates
+-- and matching deus_power_up_templates entries -- so the host's rpc_add_buff
+-- for a trait-boon index resolved to either the wrong buff or a missing key on
+-- the client. Pre-register every trait boon's DeusPowerUpTemplate, buff
+-- template, and NetworkLookup entries unconditionally at mod-load in sorted
+-- order; the gated register_trait_boon below only does pool injection now (its
+-- own writes to buff_templates / NetworkLookup are idempotent early-outs).
+local function pre_register_trait_boon_lookups()
+    local templates       = rawget(_G, "DeusPowerUpTemplates")
+    local buff_templates  = rawget(_G, "BuffTemplates")
+    local dpubt           = rawget(_G, "DeusPowerUpBuffTemplates")
+    if not (templates and buff_templates and dpubt) then
+        mod:info("[trait-boon] pre-register skipped: globals not yet loaded")
+        return
+    end
+    local sorted = {}
+    for _, spec in ipairs(CT_TRAIT_BOONS) do sorted[#sorted + 1] = spec end
+    table.sort(sorted, function(a, b) return a.name < b.name end)
+    -- v0.7.63-alpha: register the NetworkLookup NAMES unconditionally (sorted
+    -- order, every peer assigns identical indices regardless of which source
+    -- buffs are loaded in their BuffTemplates). The buff-template clone +
+    -- DeusPowerUpBuffTemplates write still requires source_template, but those
+    -- side tables don't determine the sequential NetworkLookup id — only the
+    -- name registration does. Splitting them prevents the receiver-side crash
+    -- pattern where peer A skipped Vaul's Anvil (source 'always_blocking'
+    -- missing for some reason) but peer B registered it → all subsequent
+    -- power_up names land on different ids → `Table deus_power_up_templates
+    -- does not contain key: N` fatal in network_lookup.lua's strict __index
+    -- when peer B's rpc_add_buff reaches peer A. Crash dumps 2026-05-19
+    -- 02:59:56 + 03:08:36 (key 177 on the client side).
+    --
+    -- Same shape as the v0.8.66-dev LA fix: deterministic name registration
+    -- decouples NetworkLookup indices from runtime-dependent state, and the
+    -- gated content writes (templates / dpubt / buff_templates) remain
+    -- idempotent early-outs in the gated register_trait_boon below.
+    for _, spec in ipairs(sorted) do
+        register_power_up_in_network_lookup(spec.name)
+        local buff_name = "power_up_" .. spec.name .. "_" .. spec.rarity
+        register_buff_in_network_lookup(buff_name)
+    end
+    local count = 0
+    for _, spec in ipairs(sorted) do
+        local source_template = buff_templates[spec.source_buff]
+        if source_template and source_template.buffs then
+            if not templates[spec.name] then
+                local cloned_buffs = {}
+                for i, sub in ipairs(source_template.buffs) do
+                    cloned_buffs[i] = table.clone(sub)
+                end
+                templates[spec.name] = {
+                    advanced_description = "description_" .. spec.name,
+                    display_name         = "display_name_" .. spec.name,
+                    icon                 = spec.icon,
+                    max_amount           = 1,
+                    rectangular_icon     = true,
+                    buff_template        = { buffs = cloned_buffs },
+                    description_values   = {},
+                }
+            end
+            local buff_name = "power_up_" .. spec.name .. "_" .. spec.rarity
+            local buff_template = table.clone(templates[spec.name].buff_template)
+            buff_template.buffs[1].name = buff_name
+            dpubt[buff_name] = buff_template
+            buff_templates[buff_name] = buff_template
+            count = count + 1
+        else
+            mod:info("[trait-boon] template skipped " .. spec.name
+                .. ": source buff '" .. spec.source_buff .. "' not in BuffTemplates"
+                .. " — NetworkLookup name reserved, template construction deferred")
+        end
+    end
+    mod:info("[trait-boon] pre-registered %d trait boons for client compat", count)
+end
+
+pre_register_trait_boon_lookups()
+
 for _, spec in ipairs(CT_TRAIT_BOONS) do
     register_trait_boon(spec)
 end
@@ -3603,6 +4572,16 @@ sync_host_dependent_state = function()
 end
 
 do
+    -- v0.7.63-alpha: register NetworkLookup names FIRST, unconditionally, BEFORE
+    -- the globals-ready gate. Two peers running the same ct version must always
+    -- assign the same sequential index to "ct_kill_heal" regardless of whether
+    -- their `DeusPowerUpTemplates` / `BuffFunctionTemplates` globals happened to
+    -- be loaded at module-init time on each peer. Same fix pattern as
+    -- pre_register_trait_boon_lookups: name registration decoupled from
+    -- template construction so the lookup ids stay deterministic across peers.
+    register_power_up_in_network_lookup("ct_kill_heal")
+    register_buff_in_network_lookup("power_up_ct_kill_heal_exotic")
+
     local power_ups  = rawget(_G, "DeusPowerUpTemplates")
     local buff_funcs = rawget(_G, "BuffFunctionTemplates")
 
@@ -3635,7 +4614,7 @@ do
         inject_dormant_boon("ct_kill_heal", "exotic")
         mod:info("[mod-boon] registered ct_kill_heal at rarity exotic")
     else
-        mod:info("[mod-boon] DeusPowerUpTemplates / BuffFunctionTemplates not ready for ct_kill_heal")
+        mod:info("[mod-boon] DeusPowerUpTemplates / BuffFunctionTemplates not ready for ct_kill_heal — NetworkLookup name reserved, template construction deferred")
     end
 end
 
@@ -3728,15 +4707,17 @@ if BuffFunctionTemplates and BuffFunctionTemplates.functions then
 end
 
 -- ============================================================
--- Manann's Tempest — per-source 8s cooldown
+-- Manann's Tempest — single-toggle 8s cooldown for boon + trait
 -- ============================================================
 -- Vanilla `chain_lightning` has no cooldown: every crit triggers a chain, so high-crit
--- builds turn every fight into a strobe-light spam. We rate-limit both call sites:
---   * BOON variant (cloned by inject_dormant_boon → renamed to
---     `power_up_ct_boon_manann_tempest_<rarity>`): hard-capped unconditionally so
---     enabling the boon doesn't double down on the spam.
---   * TRAIT variant (`deus_crit_chain_lightning`): gated by the new toggle
---     `tweak_manann_tempest_cooldown`. Off = vanilla, on = 8s cooldown.
+-- builds turn every fight into a strobe-light spam.
+--
+-- v0.7.64: ONE toggle (`tweak_manann_tempest_cooldown`, default OFF) gates BOTH the
+-- boon and the trait. Previously the boon was hard-capped unconditionally — but the
+-- gate at line 4024 only checked `is_trait`, so the boon's 8s window was applied
+-- silently even when users wanted vanilla behavior, and "the toggle isn't doing
+-- anything" was correct from the user perspective for the boon side. Now: off =
+-- vanilla on both sources, on = 8s cooldown on both.
 --
 -- Cooldowns are tracked per `owner_unit` with separate buckets for boon vs trait, so
 -- the two sources don't share a window — a player running both gets one chain per 8s
@@ -3771,7 +4752,7 @@ if ProcFunctions and ProcFunctions.chain_lightning then
         if not (is_boon or is_trait) then
             return func(owner_unit, buff, params, world, param_order)
         end
-        if is_trait and not effective_setting("tweak_manann_tempest_cooldown") then
+        if not effective_setting("tweak_manann_tempest_cooldown") then
             return func(owner_unit, buff, params, world, param_order)
         end
 
@@ -4359,12 +5340,12 @@ end)
 
 mod:command("cw_status", "Show Chaos Wastes Tweaker state", function()
     mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
-    mod:echo("  Altars: upgrade=" .. tostring(mod:get("chest_upgrade_count") or 0)
-        .. " melee_swap=" .. tostring(mod:get("chest_swap_melee_count") or 0)
-        .. " ranged_swap=" .. tostring(mod:get("chest_swap_ranged_count") or 0)
-        .. " boon=" .. tostring(mod:get("chest_power_up_count") or 0)
-        .. " (0=vanilla)")
-    mod:echo("  Chests of Trials: " .. tostring(mod:get("cursed_chest_count") or 1))
-    mod:echo("  Arena ammo: " .. tostring(mod:get("arena_ammo_count") or 2))
+    mod:echo("  Altars: upgrade=" .. tostring(mod:get("chest_upgrade_count") or -1)
+        .. " melee_swap=" .. tostring(mod:get("chest_swap_melee_count") or -1)
+        .. " ranged_swap=" .. tostring(mod:get("chest_swap_ranged_count") or -1)
+        .. " boon=" .. tostring(mod:get("chest_power_up_count") or -1)
+        .. " (-1=Default, 0=zero)")
+    mod:echo("  Chests of Trials: " .. tostring(mod:get("cursed_chest_count") or -1) .. " (-1=Default, 0=zero)")
+    mod:echo("  Arena ammo: " .. tostring(mod:get("arena_ammo_count") or -1) .. " (-1=Default, 0=zero)")
     mod:echo("  Campaign potions: " .. tostring(mod:get("enable_campaign_potions") or false))
 end)

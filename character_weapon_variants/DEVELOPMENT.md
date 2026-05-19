@@ -578,7 +578,7 @@ The most common authoring drift: you swap `anim_event_3p` to a clip that's a dif
 
 ### When to override more than the event name
 
-- **Substitute clip is shorter/longer than source** → adjust `total_time`, `damage_window_*`, `anim_time_scale` together. The animation plays through `total_time`; if it ends earlier the body T-poses, if it ends later the next action stalls.
+- **Substitute clip is shorter/longer than source** → adjust `total_time`, `damage_window_*`, `anim_time_scale` together. The animation plays through `total_time`; if it ends earlier the body holds whatever idle stance was active before the clip started (per `feedback_vt2_no_tpose_default_stance.md` — not a T-pose), if it ends later the next action stalls.
 - **Visual swing direction differs** (e.g. source's right-handed horizontal becomes a diagonal on target body) → either accept it, pick a different clip, or rebuild the chain so the visible motion makes combo sense.
 - **Charge wind-up direction doesn't match release direction** → MAY look incoherent. Source templates pair specific charge sub-actions with specific release sub-actions via the chain graph; remapping each independently can break the visual pairing (charge cocks left, release strikes right). Whether the disconnect reads as wrong is SM-specific — empire-soldier 3P (Kruber) shows it on the first heavy from idle; wood-elf 3P (Kerillian) often blends through it. If a heavy combo's *first* swing from idle looks wrong, walk the source template's `default → heavy_attack` chain and confirm your charge remap target leaves the wind-up direction matching the release direction. (See `_create_imperial_dual_swords_template` for a worked example: H1's charge had to be re-routed to `attack_swing_charge_right` after the H1 release was swapped to `attack_swing_heavy_right_diagonal`.)
 - **No clip on the target skeleton matches the source intent at all** → restructure the sub-action: change `kind`, `range_mod`, `damage_window`, and pick a clip that makes the new motion read correctly.
@@ -606,9 +606,9 @@ System B can't author new clips. We pick from what the target skeleton's state m
 
 ### Discovery commands
 
-- `wt dump_actions <pattern>` dumps every `Weapons` template's `actions[*][*]` with both `anim_event` and `anim_event_3p` for each sub-action — use this to read the source template you're cloning from and to find candidate substitute clips on related templates.
-- `wt animlog` toggles per-event logging tagged 1P / 3P-body / 3P-husk with `[MISSING]` / `REDIR` / `REMAP` markers — use this to verify the clone's `anim_event_3p` values actually exist on the target body and that no event is hitting the engine fallback path.
-- `wt force3p <event>` fires an event on the last-seen 3P unit so you can preview a candidate clip without rebuilding. **`exists=true` in the output is not the same as visible playback.** It comes from `Unit.has_animation_event`, which returns true whenever the master SM knows the event name — but the destination state in the current sub-graph may be a stub that animates nothing. Always watch the 3P body during the test. Only "the body visibly moved" counts as confirmation that the clip will play during real action firing.
+- `/dump_actions <pattern>` dumps every `Weapons` template's `actions[*][*]` with both `anim_event` and `anim_event_3p` for each sub-action — use this to read the source template you're cloning from and to find candidate substitute clips on related templates.
+- `/animlog` toggles per-event logging tagged 1P / 3P-body / 3P-husk with `[MISSING]` / `REDIR` / `REMAP` markers — use this to verify the clone's `anim_event_3p` values actually exist on the target body and that no event is hitting the engine fallback path.
+- `/force3p <event>` fires an event on the last-seen 3P unit so you can preview a candidate clip without rebuilding. **`exists=true` in the output is not the same as visible playback.** It comes from `Unit.has_animation_event`, which returns true whenever the master SM knows the event name — but the destination state in the current sub-graph may be a stub that animates nothing. Always watch the 3P body during the test. Only "the body visibly moved" counts as confirmation that the clip will play during real action firing.
 
 ### Common mistakes
 
@@ -616,7 +616,7 @@ System B can't author new clips. We pick from what the target skeleton's state m
 - **Forgetting the base-template patch.** The clone has the right wield pose in-game but the menu preview is wrong. Step 6 above.
 - **Shallow clone.** Without `table.clone(..., true)`, mutations leak into vanilla actions. Always deep-clone.
 - **Wholesale `wield_anim_career_3p = {...}` on the base template.** Clobbers any keys other careers added. Merge per-key instead.
-- **Adding a remap entry that was already same-named on the target body.** No-op at best, masks problems at worst (you start "fixing" things that weren't broken). Verify with `wt dump_actions` on the target's native template first.
+- **Adding a remap entry that was already same-named on the target body.** No-op at best, masks problems at worst (you start "fixing" things that weren't broken). Verify with `/dump_actions` on the target's native template first.
 - **Chain action references that don't exist.** If you delete a sub-action, also delete `allowed_chain_actions` entries elsewhere that pointed at it.
 - **Trusting `force3p exists=true` as proof a clip plays.** It only proves the SM has a transition; the destination may be a stub. Always verify visually.
 - **Trying to graft a single cross-SM clip via `pre_action_anim_event` SM-switch.** See "Reaching clips that live in a different SM sub-graph" above — both failure modes are reproducible. Use the wield-commit pattern (Peregrinaje-style) if you need cross-SM clips, or accept the closest in-SM clip.
@@ -666,9 +666,9 @@ local _cross_access_action_remap = {
 
 Procedure:
 
-1. **Identify source events.** Run `wt dump_actions <pattern>` (or grep the source template's `anim_event` values) for the item's template. Note which sub-action each event belongs to and what role it plays (light, heavy, charge, push).
+1. **Identify source events.** Run `/dump_actions <pattern>` (or grep the source template's `anim_event` values) for the item's template. Note which sub-action each event belongs to and what role it plays (light, heavy, charge, push).
 2. **Identify the foreign body's wield SM.** The wielder's `wield_anim_career_3p` should already route them into a sub-graph that exists on their body — this is set up in `_cross_access_template_wield_3p` above.
-3. **Map source events to substitutes authored on the foreign wield SM.** Use the same vocabulary the foreign body's native templates author. `wt force3p <event>` with the cross-access weapon equipped is the verification: watch the body, "exists=true" alone is meaningless.
+3. **Map source events to substitutes authored on the foreign wield SM.** Use the same vocabulary the foreign body's native templates author. `/force3p <event>` with the cross-access weapon equipped is the verification: watch the body, "exists=true" alone is meaningless.
 4. **Walk the chain graph for direction coherence.** When you remap a heavy release, look at which charge sub-actions chain into it (in the source template's `allowed_chain_actions`) and remap those charges to a wind-up that matches the new release direction. Kruber's empire-soldier 3P body surfaces direction-mismatch at the cold start of a heavy combo; other bodies sometimes blend through it but assume they will not.
 5. **Add the (item, career) entries.** Reuse the same remap table for sibling careers when they share a body (all 4 Kruber careers, all 4 Saltzpyre careers, etc.) — keep one `local _<wielder>_<weapon>_remap` table and assign by reference.
 

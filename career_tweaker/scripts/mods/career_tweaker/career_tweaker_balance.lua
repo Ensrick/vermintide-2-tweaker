@@ -317,6 +317,35 @@ mod:hook_safe("ActionMeleeStart", "client_owner_post_update", function(self, dt,
 end)
 
 -- ============================================================
+-- Hook: Zealot ability converts permanent → temporary health
+-- ============================================================
+-- When the toggle is on, every Zealot ability activation (Holy Fervour) moves
+-- the player's current permanent (green) HP into temporary (white) HP. Uses
+-- vanilla `PlayerUnitHealthExtension.convert_to_temp`, which self-routes:
+--   * server  → mutates GameSession fields directly
+--   * client  → sends `rpc_request_convert_temp` to the server, which calls
+--               the server-side convert and the result replicates back.
+-- Server-side `convert_to_temp` clamps via `math.min(current_health, amount)`,
+-- so passing the read-back permanent value is safe (no overflow, no negative).
+-- Existing THP is preserved (the field is added to, not overwritten).
+--
+-- hook_safe on `_run_ability` runs after vanilla has fired the ability buffs
+-- and lunge — the conversion lands during the post-activation frame, so the
+-- ignore-death talent (`victor_zealot_activated_ability_ignore_death`) is
+-- already up if the player has it.
+mod:hook_safe("CareerAbilityWHZealot", "_run_ability", function(self)
+    if not mod:get("rework_wh_zealot_ability_green_to_thp") then return end
+    local owner_unit = self._owner_unit
+    if not owner_unit then return end
+    local health_extension = ScriptUnit.has_extension(owner_unit, "health_system")
+    if not health_extension then return end
+    local permanent = health_extension:current_permanent_health()
+    if permanent and permanent > 0 then
+        health_extension:convert_to_temp(permanent)
+    end
+end)
+
+-- ============================================================
 -- Field-patch apply/restore engine
 -- ============================================================
 

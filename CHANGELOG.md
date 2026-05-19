@@ -96,7 +96,7 @@
 - Added `es_deus_01` (Kruber's Spear & Shield) to Grail Knight instead. Note: weapon key is `es_deus_01`, not an obvious name.
 
 ### Added
-- `wt dump` command — dumps all equipped item data (key, item_type, template, rarity, units, can_wield) to console log.
+- `/dump` command — dumps all equipped item data (key, item_type, template, rarity, units, can_wield) to console log.
 - Cross-character longbow unlocks: `we_longbow` for all 4 Kruber careers, `es_longbow` for all 4 Kerillian careers.
 - Cross-character crossbow unlocks: `dr_crossbow` for WHC/BH/Zealot, `wh_crossbow` for all 4 Bardin careers.
 - Kerillian's Volley Crossbow (`we_crossbow_repeater`) for all 4 Saltzpyre careers.

@@ -61,8 +61,8 @@ LA uses different slots for `swap_hand="armor"` (`texture_map_64cc5eb8` / `_861d
 Any stored `_offhand_selection` whose mesh no longer matches the rendered shield is discarded — the picker always reflects what's visible. Without this, cycling main-hand illusions visually swapped the shield too.
 
 ### Diagnostic commands
-- `cos la_offhand_dump` — each LA shield variant → resolved `intended_unit`, source (`new_units` / `no_override` / `unresolved`), texture path, icon keys.
-- `cos offhand_debug` — dumps the picker pool and current `_offhand_selection`.
+- `/la_offhand_dump` — each LA shield variant → resolved `intended_unit`, source (`new_units` / `no_override` / `unresolved`), texture path, icon keys.
+- `/offhand_debug` — dumps the picker pool and current `_offhand_selection`.
 - `[LA paint]` lines in `Console.log` — shows where the paint flow stopped (gate / variant lookup / paint call).
 
 ## Known limitations

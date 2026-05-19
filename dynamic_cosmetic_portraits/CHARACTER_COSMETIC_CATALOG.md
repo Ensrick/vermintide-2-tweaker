@@ -2,7 +2,7 @@
 
 Authoritative map of `slot_hat` and `slot_skin` item keys → in-game display names for every Kruber/Bardin/Saltzpyre/Kerillian/Sienna career.
 
-**Source:** `cosmetics_tweaker/_cos_probe.txt` (regenerable in-game via `cos probe_hat`/equivalent dumps that capture `NAME|<key>|<localized>` lines from `Localize`). The probe is the source of truth — re-run it and re-export this catalog if cosmetics are added in a future patch.
+**Source:** `cosmetics_tweaker/_cos_probe.txt` (regenerable in-game via `/probe_hat`/equivalent dumps that capture `NAME|<key>|<localized>` lines from `Localize`). The probe is the source of truth — re-run it and re-export this catalog if cosmetics are added in a future patch.
 
 **Why this exists:** the dynamic-portrait system in `dynamic_cosmetic_portraits.lua` keys off the values returned by `CosmeticUtils.get_cosmetic_slot(player, "slot_hat" | "slot_skin").item_name`. Those keys are opaque (`mercenary_hat_0006`, `skin_es_default`, …) and the only way to know what a key looks like in-game is to look it up here.
 

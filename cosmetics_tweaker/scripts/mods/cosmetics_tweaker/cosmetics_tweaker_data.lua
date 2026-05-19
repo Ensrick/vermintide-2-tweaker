@@ -200,6 +200,37 @@ local widgets = {
     },
 }
 
+-- Experimental Third-Person Equipment: spawns extra 3P weapon meshes
+-- attached to the player's body for whichever loadout slot isn't currently
+-- wielded. Inspired by the standalone TPE mod (Workshop 1387440934).
+-- Positions are coarse — per-item_type, not per-career.
+widgets[#widgets + 1] = {
+    setting_id  = "tpe_group",
+    type        = "group",
+    sub_widgets = {
+        {
+            setting_id    = "tpe_enable",
+            type          = "checkbox",
+            default_value = false,
+            tooltip       = mod:localize("tpe_enable_tooltip"),
+        },
+        {
+            setting_id    = "tpe_show_self_in_3p",
+            type          = "checkbox",
+            default_value = true,
+            tooltip       = mod:localize("tpe_show_self_in_3p_tooltip"),
+        },
+        {
+            setting_id      = "tpe_downscale_big_weapons",
+            type            = "numeric",
+            default_value   = 100,
+            range           = { 25, 100 },
+            decimals_number = 0,
+            tooltip         = mod:localize("tpe_downscale_big_weapons_tooltip"),
+        },
+    },
+}
+
 -- Nest the auto-generated per-character cosmetic-unlock widget tree under a
 -- single top-level "Cosmetic Availability" group so it doesn't clutter the
 -- main settings list. The generated tree is Character → Career → Hats/Skins →

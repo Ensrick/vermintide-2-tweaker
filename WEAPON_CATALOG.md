@@ -404,7 +404,7 @@ Per-weapon reference for attack chains, animation events, and cross-career statu
 
 ## Data Collection Needed
 
-The following weapons/combinations have incomplete data. Use `wt animlog`, `wt force3p`, and `wt dump_actions` to fill in gaps.
+The following weapons/combinations have incomplete data. Use `/animlog`, `/force3p`, and `/dump_actions` to fill in gaps.
 
 ### Missing Attack Chain Data
 - Crowbill: light chain, heavy chain, push-attack events
@@ -427,10 +427,10 @@ High priority — weapons are unlocked but 3P animations never verified:
 
 ### Process Reminder
 See `reference_3p_anim_fix_process.md` for the step-by-step workflow. Key points:
-1. `wt animlog` → identify missing 3P events
-2. `wt force3p <event>` → visually verify candidate targets
+1. `/animlog` → identify missing 3P events
+2. `/force3p <event>` → visually verify candidate targets
 3. TRUE in skeleton probe ≠ visible animation — always verify visually
-4. When animlog is insufficient, compile event list from template file and have user test with `wt force3p`
+4. When animlog is insufficient, compile event list from template file and have user test with `/force3p`
 
 ---
 

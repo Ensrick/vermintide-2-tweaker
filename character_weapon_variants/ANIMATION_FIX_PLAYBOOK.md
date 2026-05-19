@@ -16,7 +16,7 @@ If a remap, template clone, or hook in this codebase appears to touch `anim_even
 
 1. **1P animations are universal — never touch.** First-person hands share `first_person_base` across every character; any weapon's 1P state machine plays correctly on every character's first-person view by default. Only `anim_event_3p`, `wield_anim_3p`, `wield_anim_career_3p` are in scope. Touching `anim_event` / `wield_anim` / `state_machine` per character is harmful, not just unnecessary. The `Unit.animation_event` hook in CWV's cross-access remap is gated to fire only on the local 3P body via five early-exits — 1P calls never enter the remap path.
 
-2. **Closed-vocabulary rule (3P).** Every 3P remap target MUST be a string already present in the `anim_event` column of the target body's wield-SM-matching template. The skeleton-events probe (`wt sm_probe`) and `Unit.has_animation_event` only report whether the master state machine knows the name; the destination state in the current sub-graph may be a stub that animates nothing. The only safe candidate universe is the target template's authored event set. There is no parallel "1P closed list" — 1P doesn't need one.
+2. **Closed-vocabulary rule (3P).** Every 3P remap target MUST be a string already present in the `anim_event` column of the target body's wield-SM-matching template. The skeleton-events probe (`/sm_probe`) and `Unit.has_animation_event` only report whether the master state machine knows the name; the destination state in the current sub-graph may be a stub that animates nothing. The only safe candidate universe is the target template's authored event set. There is no parallel "1P closed list" — 1P doesn't need one.
 
 3. **Chain-context rule.** Closed-vocab is necessary but still not sufficient. The body's clip selection depends on **chain state**, not just event name. An in-vocab event can produce zero animation if the body's current chain state has no clip mapped for that event. Pick a target event that the target's NATIVE template fires from a chain position equivalent to the source action's chain position (source H1 from idle → target's idle-H1 event; source H2 after H1 → target's H2 event). Read the source template Lua at `Vermintide-2-Source-Code/scripts/settings/equipment/weapon_templates/<target>.lua` — the action sub-tables show which event each chain position fires.
 
@@ -31,7 +31,7 @@ Classify before reaching for tools.
 | Symptom | Likely scope |
 |---|---|
 | **A. Wield pose wrong** (idle stance, weapon held weird) | `wield_anim_3p` / `wield_anim_career_3p` on the variant template, or a base-template patch for the inventory previewer |
-| **B. Attack missing / T-poses / wrong direction** | `anim_event_3p` on sub-actions (System B) or runtime event-name rewrite (cross-access remap, or `weapon_tweaker` System A) |
+| **B. Attack missing (event silently no-ops — body holds previous idle, NOT a T-pose; `feedback_vt2_no_tpose_default_stance.md`) / wrong direction** | `anim_event_3p` on sub-actions (System B) or runtime event-name rewrite (cross-access remap, or `weapon_tweaker` System A) |
 | **C. In-game OK, menu preview wrong** | Base template's `wield_anim_career_3p` — `HeroPreviewer` reads the base, not the clone |
 | **D. Local OK, husk wrong** | The cross-access runtime remap doesn't cover husks. Either accept the gap or port `weapon_tweaker`'s `_unit_career_name` per-unit resolver |
 | **E. Native wielder regression** | A shared template's `anim_event_3p` was mutated for a foreign career and broke the native one. Back the change out and re-do via the runtime hook |
@@ -55,7 +55,7 @@ If you don't own the item, use the runtime hook. If you own it (CWV variant with
 This is the step that gets skipped.
 
 1. Identify the **target body's wield SM** for the foreign career. For a cross-access weapon, this is the `wield_anim_career_3p` value set in `_cross_access_template_wield_3p`. Example: axe+falchion on Kruber routes to `to_dual_hammer_sword_es`, so the target template is `dual_wield_hammer_sword_template`.
-2. Pull every `anim_event` value from that template (in `dumps/weapon_actions.txt`, or live via `wt dump_actions <template>`).
+2. Pull every `anim_event` value from that template (in `dumps/weapon_actions.txt`, or live via `/dump_actions <template>`).
 3. **Write the closed list down**, including which sub-action each event belongs to. That is your allowed set of remap targets. Nothing else is a candidate.
 4. If the wield SM has companion templates authored in the same sub-graph (rare — verify by sharing the same `wield_anim` prefix), union those events in too.
 
@@ -146,8 +146,8 @@ The closed-vocabulary rule is necessary but not sufficient. Some events in the c
 
 For each chosen substitute:
 1. Equip the cross-character weapon on the target career. Stand idle in the keep.
-2. Run `wt force3p <substitute>` in chat.
-3. Watch the 3P body (use a mirror, or have a teammate spectate). Only "the body visibly moved through a complete strike" counts. `force3p` printing `exists=true` is meaningless on its own — that comes from `Unit.has_animation_event`, which lies about visible playback.
+2. Run `/force3p <substitute>` in chat.
+3. Watch the 3P body (use a mirror, or have a teammate spectate). Only "the body visibly moved through a complete strike" counts. `/force3p` printing `exists=true` is meaningless on its own — that comes from `Unit.has_animation_event`, which lies about visible playback.
 4. Note the strike's actual direction; if it's not what you expected, pick a different candidate.
 
 Skip this step at your peril. Past sessions wasted hours guessing remap targets that "existed" on the skeleton table but produced no visible animation.
@@ -192,7 +192,7 @@ Merge keys; do not clobber. Other careers may have already added entries.
 4. Deploy to Workshop folder. CWV's Workshop ID is `3716869446`.
 5. **Full game restart.** Hot-reload is unsafe for CWV (engine-level C++ resource locks).
 6. In-game: re-equip the weapon (the wield-tracker hook must fire to pick up the new template / career).
-7. `wt animlog` — confirm `[MISSING]` is gone for the events you remapped, and `REMAP` markers fire on the right events.
+7. `/animlog` — confirm `[MISSING]` is gone for the events you remapped, and `REMAP` markers fire on the right events.
 8. Visual check on the target career: full L-chain, full H-chain, push, push-attack. Watch the body.
 9. Inventory preview check: open the menu, confirm wield pose matches in-game.
 10. Husk check (if relevant): bot or friend wields the same weapon, watch their body. The cross-access remap pattern doesn't cover husks by default — note any gap.
@@ -212,7 +212,7 @@ Merge keys; do not clobber. Other careers may have already added entries.
 - [ ] Every remap target appears in the target template's `anim_event` column (`dumps/weapon_actions.txt`)
 - [ ] Source events that already exist in the target list are NOT remapped
 - [ ] For every remapped heavy release, the paired charge is also direction-matched (or already in target vocab natively)
-- [ ] Each substitute was verified with `wt force3p` and a visible strike was confirmed
+- [ ] Each substitute was verified with `/force3p` and a visible strike was confirmed
 - [ ] No `anim_event` (1P), `wield_anim` (1P), or `state_machine` is touched per character
 - [ ] `CHANGELOG.md` updated
 - [ ] In-game test passed on at least one foreign career

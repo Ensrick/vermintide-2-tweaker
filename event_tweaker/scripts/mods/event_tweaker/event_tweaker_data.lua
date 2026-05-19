@@ -64,18 +64,80 @@ local CATEGORIES = {
     },
 }
 
+-- ============================================================
+-- DLC ownership gate (UI polish)
+-- ============================================================
+-- Mirrors DLC_BY_MUTATOR / DLC_BY_PRESET in event_tweaker.lua. The
+-- load-bearing gate lives at the injection hooks; this is purely UI
+-- cleanup so the host doesn't see checkbox / dropdown options for
+-- content they don't own. Failing closed (un-owned -> hidden) matches
+-- vanilla store-page behavior for missing DLC.
+-- DLC IDs cited in event_tweaker.lua (DLCSettings entries:
+-- dlc_settings.lua:274, :576, :287).
+local DLC_BY_MUTATOR_UI = {
+    geheimnisnacht_2021             = "geheimnisnacht_2021",
+    geheimnisnacht_2021_hard_mode   = "geheimnisnacht_2021",
+    skulls_2023                     = "skulls_2023",
+}
+
+local DLC_BY_PRESET_UI = {
+    geheimnisnacht_2021 = "geheimnisnacht_2021",
+    geheimnisnacht_2025 = "geheimnisnacht_2025",
+    skulls_2023         = "skulls_2023",
+}
+
+local function ui_owns_dlc(dlc_id)
+    if not dlc_id then
+        return true
+    end
+    local um = rawget(_G, "Managers") and Managers.unlock
+    if not um then
+        -- Mod-data is evaluated very early in VMF init; if the unlock
+        -- manager isn't up yet, show the widget. The injection-site
+        -- gate in event_tweaker.lua is the load-bearing one and will
+        -- still drop un-owned content there.
+        return true
+    end
+    if um.dlc_exists and not um:dlc_exists(dlc_id) then
+        return false
+    end
+    return um:is_dlc_unlocked(dlc_id)
+end
+
 local function build_mutator_widgets(mutators)
     local widgets = {}
     for i = 1, #mutators do
         local id = mutators[i]
-        widgets[#widgets + 1] = {
-            setting_id    = "mut_" .. id,
-            type          = "checkbox",
-            default_value = false,
-            tooltip       = mod:localize("mut_" .. id .. "_tooltip"),
-        }
+        local dlc = rawget(DLC_BY_MUTATOR_UI, id)
+        if ui_owns_dlc(dlc) then
+            widgets[#widgets + 1] = {
+                setting_id    = "mut_" .. id,
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "mut_" .. id .. "_tooltip",
+            }
+        end
     end
     return widgets
+end
+
+local PRESET_OPTIONS = {
+    { text = "preset_off",                 value = "off" },
+    { text = "preset_geheimnisnacht_2021", value = "geheimnisnacht_2021" },
+    { text = "preset_geheimnisnacht_2025", value = "geheimnisnacht_2025" },
+    { text = "preset_skulls_2023",         value = "skulls_2023" },
+}
+
+local function filtered_preset_options()
+    local out = {}
+    for i = 1, #PRESET_OPTIONS do
+        local opt = PRESET_OPTIONS[i]
+        local dlc = rawget(DLC_BY_PRESET_UI, opt.value)
+        if ui_owns_dlc(dlc) then
+            out[#out + 1] = opt
+        end
+    end
+    return out
 end
 
 local widgets = {
@@ -83,13 +145,8 @@ local widgets = {
         setting_id    = "event_preset",
         type          = "dropdown",
         default_value = "off",
-        tooltip       = mod:localize("event_preset_tooltip"),
-        options = {
-            { text = mod:localize("preset_off"),                 value = "off" },
-            { text = mod:localize("preset_geheimnisnacht_2021"), value = "geheimnisnacht_2021" },
-            { text = mod:localize("preset_geheimnisnacht_2025"), value = "geheimnisnacht_2025" },
-            { text = mod:localize("preset_skulls_2023"),         value = "skulls_2023" },
-        },
+        tooltip       = "event_preset_tooltip",
+        options       = filtered_preset_options(),
     },
 }
 

@@ -8901,20 +8901,20 @@ end
 -- v0.1.295: 3-bucket commands — 1P RANGED, 1P MELEE, 3P. Convention:
 -- _1p_r = first-person ranged stance (rifle), _1p_m = first-person melee
 -- stance (polearm), _3p = third-person (shared across modes).
-mod:command("cwv_om_pos_1p_r", "Old Musket 1P RANGED pos: cwv_om_pos_1p_r <x> <y> <z>", function(x, y, z)
-	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_pos_1p_r <x> <y> <z>"); return end
+mod:command("cwv_om_pos_1p_r", "Old Musket 1P RANGED pos: /cwv_om_pos_1p_r <x> <y> <z>", function(x, y, z)
+	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_1p_r <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_POS_1P_RANGED = v; _reapply_old_musket_transforms_all()
 end)
-mod:command("cwv_om_pos_1p_m", "Old Musket 1P MELEE pos: cwv_om_pos_1p_m <x> <y> <z>", function(x, y, z)
-	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_pos_1p_m <x> <y> <z>"); return end
+mod:command("cwv_om_pos_1p_m", "Old Musket 1P MELEE pos: /cwv_om_pos_1p_m <x> <y> <z>", function(x, y, z)
+	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_1p_m <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_POS_1P_MELEE = v; _reapply_old_musket_transforms_all()
 end)
-mod:command("cwv_om_pos_3p_r", "Old Musket 3P RANGED pos: cwv_om_pos_3p_r <x> <y> <z>", function(x, y, z)
-	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_pos_3p_r <x> <y> <z>"); return end
+mod:command("cwv_om_pos_3p_r", "Old Musket 3P RANGED pos: /cwv_om_pos_3p_r <x> <y> <z>", function(x, y, z)
+	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_3p_r <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_POS_3P_RANGED = v; _reapply_old_musket_transforms_all()
 end)
-mod:command("cwv_om_pos_3p_m", "Old Musket 3P MELEE pos: cwv_om_pos_3p_m <x> <y> <z>", function(x, y, z)
-	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_pos_3p_m <x> <y> <z>"); return end
+mod:command("cwv_om_pos_3p_m", "Old Musket 3P MELEE pos: /cwv_om_pos_3p_m <x> <y> <z>", function(x, y, z)
+	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_3p_m <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_POS_3P_MELEE = v; _reapply_old_musket_transforms_all()
 end)
 -- Rotation commands. Three operations per bucket:
@@ -8998,19 +8998,19 @@ mod:command("cwv_om_eul_3p_m", "SET 3P MELEE rot from Euler XYZ (deg): <x> <y> <
 	if not (x and y and z) then mod:echo("usage: cwv_om_eul_3p_m <x_deg> <y_deg> <z_deg>"); return end
 	_CWV_OLD_MUSKET_ROT_3P_MELEE = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _reapply_old_musket_transforms_all()
 end)
-mod:command("cwv_om_scale_1p_r", "Old Musket 1P RANGED scale: cwv_om_scale_1p_r <x> <y> <z>", function(x, y, z)
+mod:command("cwv_om_scale_1p_r", "Old Musket 1P RANGED scale: /cwv_om_scale_1p_r <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_1p_r <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_SCALE_1P_RANGED = v; _reapply_old_musket_transforms_all()
 end)
-mod:command("cwv_om_scale_1p_m", "Old Musket 1P MELEE scale: cwv_om_scale_1p_m <x> <y> <z>", function(x, y, z)
+mod:command("cwv_om_scale_1p_m", "Old Musket 1P MELEE scale: /cwv_om_scale_1p_m <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_1p_m <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_SCALE_1P_MELEE = v; _reapply_old_musket_transforms_all()
 end)
-mod:command("cwv_om_scale_3p_r", "Old Musket 3P RANGED scale: cwv_om_scale_3p_r <x> <y> <z>", function(x, y, z)
+mod:command("cwv_om_scale_3p_r", "Old Musket 3P RANGED scale: /cwv_om_scale_3p_r <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_3p_r <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_SCALE_3P_RANGED = v; _reapply_old_musket_transforms_all()
 end)
-mod:command("cwv_om_scale_3p_m", "Old Musket 3P MELEE scale: cwv_om_scale_3p_m <x> <y> <z>", function(x, y, z)
+mod:command("cwv_om_scale_3p_m", "Old Musket 3P MELEE scale: /cwv_om_scale_3p_m <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_3p_m <x> <y> <z>"); return end
 	_CWV_OLD_MUSKET_SCALE_3P_MELEE = v; _reapply_old_musket_transforms_all()
 end)
@@ -9094,9 +9094,9 @@ mod:command("cwv_musket_dump", "Dump all musket items + their slot_type / templa
 		tostring(Weapons and Weapons.old_musket_template_melee ~= nil))
 end)
 
-mod:command("cwv_probe_skins", "Dump skin keys + localized names matching a weapon: cwv_probe_skins <matching_item_key>", function(matching_item_key)
+mod:command("cwv_probe_skins", "Dump skin keys + localized names matching a weapon: /cwv_probe_skins <matching_item_key>", function(matching_item_key)
 	if not matching_item_key or matching_item_key == "" then
-		mod:echo("Usage: cwv_probe_skins <matching_item_key>  (e.g. es_2h_sword, es_bastard_sword)")
+		mod:echo("Usage: /cwv_probe_skins <matching_item_key>  (e.g. es_2h_sword, es_bastard_sword)")
 		return
 	end
 	if not ItemMasterList then mod:echo("ItemMasterList not loaded") return end
@@ -9164,9 +9164,9 @@ local function _dump_actor(unit, idx)
 		tostring(cfilter))
 end
 
-mod:command("cwv_probe_unit", "Spawn a unit and dump asset properties (cwv_probe_unit <path>)", function(unit_path)
+mod:command("cwv_probe_unit", "Spawn a unit and dump asset properties (/cwv_probe_unit <path>)", function(unit_path)
 	if not unit_path or unit_path == "" then
-		mod:echo("Usage: cwv_probe_unit <unit_path>")
+		mod:echo("Usage: /cwv_probe_unit <unit_path>")
 		mod:echo("Example paths to compare:")
 		mod:echo("  units/weapons/player/wpn_emp_boar_spear_01/wpn_emp_boar_spear_01_3p")
 		mod:echo("  units/weapons/player/wpn_dw_thrown_axe_01_t1/pup_dw_thrown_axe_01_t1")

@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.21-alpha"
+local MOD_VERSION = "0.2.32-alpha"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -15,6 +15,31 @@ local _godmode = mod:get("godmode_enabled") or false
 -- compile time — without this `local` here, on_setting_changed would bind
 -- _apply_godmode to a global (nil) and silently do nothing on UI toggles.
 local _apply_godmode
+
+-- Same forward-reference rule for the AI Takeover module further down. Both
+-- on_game_state_changed and on_setting_changed reference these names before
+-- the AI block's own `local` declarations execute; without these forward
+-- declarations the closures bind to nil globals and the toggle silently no-ops
+-- (the call to _ai_handle_toggle_change throws "attempt to call a nil value"
+-- which VMF swallows).
+local _ai_suppress_setting_callback = false
+local _ai_saved_state = {}
+local _ai_handle_toggle_change
+
+-- Forward-declared so on_setting_changed (above the AI/no_enemies sections)
+-- can reference the helper defined deeper in the file. Same rule as the AI
+-- forward declarations — name resolution happens at function compile time, so
+-- without this `local` the on_setting_changed closure would bind to a nil
+-- global and the script_data flags would never flip from the VMF checkbox.
+local _apply_script_data_no_enemies
+
+-- Post-spawn re-apply timer. Set by PlayerUnitFirstPerson.extensions_ready
+-- and consumed in mod.update (further down). BulldozerPlayer:spawn does
+-- `assign_unit_ownership` AFTER the extensions are ready, so at extensions_ready
+-- time `Managers.player:local_player().player_unit` still points at the OLD
+-- (or nil) unit. Anything that needs to look up the local player unit on spawn
+-- — godmode invisibility, noclip locomotion state — must defer past that gap.
+local _post_spawn_reapply_timer = nil
 
 mod:info("General Tweaker v%s loaded", MOD_VERSION)
 mod:echo("General Tweaker v" .. MOD_VERSION)
@@ -152,6 +177,13 @@ mod:hook("PlayerUnitFirstPerson", "extensions_ready", function(func, self, world
         pcall(self.set_first_person_mode, self, true, true)
         _tp_reapply_timer = 0.5
     end
+    -- Schedule godmode/noclip re-apply too. PlayerUnitFirstPerson is the
+    -- local-player FP extension (bots use PlayerBotUnitFirstPerson, husks
+    -- don't have a 1P extension at all), so this only fires on the local
+    -- player's own spawn. By 0.5s, BulldozerPlayer:spawn has run
+    -- assign_unit_ownership and `Managers.player:local_player().player_unit`
+    -- points at the new unit.
+    _post_spawn_reapply_timer = 0.5
     return result
 end)
 
@@ -340,16 +372,12 @@ local function _key_held(name)
     return idx and Keyboard.button(idx) > 0
 end
 
--- Re-arm noclip when the local player's locomotion extension is wired up
--- on each spawn (mission entry, respawn). Without this, the persisted
--- VMF setting stays "on" while the actual locomotion state is whatever
--- the engine initialised it to — usually `script_driven` — and the user
--- would have to toggle the chat command before flight worked.
-mod:hook_safe("PlayerUnitLocomotionExtension", "extensions_ready", function(self, world, unit)
-    if not mod:get("noclip_enabled") then return end
-    if unit ~= _local_player_unit() then return end
-    _apply_noclip(true)
-end)
+-- Noclip re-arm on spawn lives in mod.update via _post_spawn_reapply_timer
+-- (set by PlayerUnitFirstPerson.extensions_ready above). Don't hook
+-- PlayerUnitLocomotionExtension.extensions_ready directly here — at that
+-- timing `player.player_unit` isn't yet assigned (assign_unit_ownership
+-- runs later in BulldozerPlayer:spawn), so `_apply_noclip` can't find
+-- the new locomotion extension via _local_locomotion().
 
 mod:hook("PlayerUnitLocomotionExtension", "update_script_driven_no_mover_movement",
 function(func, self, unit, dt, t)
@@ -393,9 +421,24 @@ end)
 -- CLARIFY: `mod.update` runs each tick from VMF's main loop. We use it
 -- as the heartbeat that re-asserts the locomotion state, so transient
 -- character-state transitions can't drop us back into wall collision.
+-- It also consumes _post_spawn_reapply_timer so godmode invisibility and
+-- noclip locomotion state are re-applied after a level transition, since
+-- both depend on `Managers.player:local_player().player_unit` which isn't
+-- yet assigned at PlayerUnitFirstPerson.extensions_ready time.
 local _orig_mod_update = mod.update
 mod.update = function(dt)
     if _orig_mod_update then _orig_mod_update(dt) end
+    if _post_spawn_reapply_timer then
+        _post_spawn_reapply_timer = _post_spawn_reapply_timer - (dt or 0)
+        if _post_spawn_reapply_timer <= 0 then
+            _post_spawn_reapply_timer = nil
+            -- Use the forward-declared `_apply_godmode` (line 17) — calling
+            -- `_set_local_player_invisible` directly would be a forward-ref
+            -- bug since it's defined far below this closure's parse point.
+            if mod:get("noclip_enabled") then _apply_noclip(true) end
+            if _godmode then _apply_godmode(true) end
+        end
+    end
     if _noclip_active then
         local loco = _local_locomotion()
         if loco and loco.state ~= "script_driven_no_mover" then
@@ -530,6 +573,31 @@ mod.on_game_state_changed = function(status, state_name)
     -- doesn't re-arm before the player has a body to fly.
     _noclip_active = false
     _patch_inventory_access()
+    -- AI takeover is a per-run intent — the saved state on the host doesn't
+    -- survive a level/state change cleanly, and persisting the checkbox would
+    -- show "on" across runs where no swap actually happened. Suppress the
+    -- callback because we don't want to fire an RPC swap-back when leaving.
+    if mod:get("ai_takeover_enabled") then
+        _ai_suppress_setting_callback = true
+        mod:set("ai_takeover_enabled", false)
+        _ai_suppress_setting_callback = false
+    end
+    -- Clear host-side saved state too — it's keyed on peer_id which may
+    -- not survive a session/lobby change.
+    _ai_saved_state = {}
+    -- Vanilla wipes the engine time scale on level transition. Re-apply the
+    -- user's slider value if it differs from normal (13 = 1.0x). Also clear
+    -- the pause flag so the toggle remembers we're now unpaused.
+    _pause_active = false
+    if status == "enter" and state_name == "StateIngame" then
+        local v = mod:get("time_scale_value")
+        if v and v ~= 13 then
+            local debug_mgr = Managers.state and Managers.state.debug
+            if debug_mgr and debug_mgr.set_time_scale then
+                debug_mgr:set_time_scale(v)
+            end
+        end
+    end
 end
 
 mod.on_setting_changed = function(setting_id)
@@ -545,6 +613,29 @@ mod.on_setting_changed = function(setting_id)
         _apply_freecam(mod:get("freecam_enabled"))
     elseif setting_id == "noclip_enabled" then
         _apply_noclip(mod:get("noclip_enabled"))
+    elseif setting_id == "skip_intro_enabled" then
+        _apply_skip_intro(mod:get("skip_intro_enabled"))
+        mod:echo("Skip intro: " .. (mod:get("skip_intro_enabled") and "ON" or "OFF") .. " (takes effect on next game launch).")
+    elseif setting_id == "disable_enemy_spawns" then
+        _apply_script_data_no_enemies(mod:get("disable_enemy_spawns"))
+    elseif setting_id == "time_scale_value" then
+        mod.gt_time_apply()
+    elseif setting_id == "base_crit_chance" then
+        mod.gt_apply_crit_chance()
+    elseif setting_id == "movement_speed" then
+        mod.gt_apply_move_speed()
+    elseif setting_id == "ai_takeover_enabled" then
+        if _ai_suppress_setting_callback then return end
+        local want_bot = mod:get("ai_takeover_enabled") and true or false
+        local ok, err = _ai_handle_toggle_change(want_bot)
+        if not ok then
+            _ai_suppress_setting_callback = true
+            mod:set("ai_takeover_enabled", not want_bot)
+            _ai_suppress_setting_callback = false
+            mod:echo("AI toggle: " .. err)
+        else
+            mod:echo("AI " .. (want_bot and "ON" or "OFF") .. " (requested from host).")
+        end
     end
 end
 
@@ -757,16 +848,13 @@ mod:command("god", "Toggle godmode (invincibility + invisibility to enemies)", f
     mod:echo("Godmode " .. (new_val and "ON" or "OFF"))
 end)
 
--- Re-apply invisibility on each player spawn — GenericStatusExtension.invisible is
--- reset to {} on extension init, so a level transition while godmode is on would
--- otherwise leave the new player unit visible to AI.
-mod:hook_safe("GenericStatusExtension", "extensions_ready", function(self, world, unit)
-    if not _godmode then return end
-    local pm = Managers.player
-    local player = pm and pm:local_player()
-    if not player or player.player_unit ~= unit then return end
-    pcall(self.set_invisible, self, true, false, _GODMODE_INVIS_REASON)
-end)
+-- Godmode invisibility re-arm on spawn lives in mod.update via
+-- _post_spawn_reapply_timer (set by PlayerUnitFirstPerson.extensions_ready
+-- above). Don't hook GenericStatusExtension.extensions_ready here — that
+-- check (`player.player_unit ~= unit`) is unreliable at extension-ready
+-- timing because BulldozerPlayer:spawn calls assign_unit_ownership AFTER
+-- extensions have already been wired up, so player.player_unit still
+-- points at the OLD (or nil) unit and the check always early-returns.
 
 -- Both DamageUtils paths must be blocked for full invincibility:
 --   * add_damage_network         — used by direct damage sources (most attacks)
@@ -779,6 +867,20 @@ local function _is_local_player_unit(unit)
     local player = pm and pm:local_player()
     return player and player.player_unit == unit
 end
+
+-- Block fall damage at the source on the local player when godmode is on.
+-- The server-side `add_damage_network` hook below covers the host-self case,
+-- but NOT the client-self case: fall damage RPCs from a client get processed
+-- on the host where `_is_local_player_unit(attacked_unit)` returns false for
+-- a remote-player's unit. Setting `ignore_next_fall_damage` on the client's
+-- own status extension before `update_falling` checks the flag prevents the
+-- RPC from being sent in the first place — works as host AND client.
+mod:hook("GenericStatusExtension", "update_falling", function(func, self, t)
+    if _godmode and _is_local_player_unit(self.unit) then
+        self.ignore_next_fall_damage = true
+    end
+    return func(self, t)
+end)
 
 mod:hook("DamageUtils", "add_damage_network", function(func, attacked_unit, ...)
     if _godmode and _is_local_player_unit(attacked_unit) then return 0 end
@@ -848,9 +950,38 @@ mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, ...)
     return func(self, ...)
 end)
 
+-- Belt-and-suspenders: the two ConflictDirector hooks above catch every spawn
+-- *call*, but Janoti's "Hacks" also flips a fuller set of `script_data.ai_*`
+-- flags that abort earlier in the pacing/intervention pipelines so the spawner
+-- doesn't even queue the work. Mirror that set in sync with the VMF toggle.
+-- Per `feedback_redundant_safeguards_ok` redundancy is welcome here — the cost
+-- is a couple of boolean writes per toggle and the missed-path failure (an
+-- enemy slipping through) is silent.
+local _AI_SPAWN_FLAGS = {
+    "ai_mini_patrol_disabled",
+    "ai_critter_spawning_disabled",
+    "ai_horde_spawning_disabled",
+    "ai_roaming_spawning_disabled",
+    "ai_boss_spawning_disabled",
+    "ai_rush_intervention_disabled",
+    "ai_specials_spawning_disabled",
+    "ai_pacing_disabled",
+    "ai_outside_navmesh_intervention_disabled",
+}
+
+_apply_script_data_no_enemies = function(enabled)
+    script_data = script_data or {}
+    for _, name in ipairs(_AI_SPAWN_FLAGS) do
+        script_data[name] = enabled or nil
+    end
+end
+
+_apply_script_data_no_enemies(mod:get("disable_enemy_spawns"))
+
 mod:command("no_enemies", "Toggle blocking all enemy spawns", function()
     local new_val = not mod:get("disable_enemy_spawns")
     mod:set("disable_enemy_spawns", new_val)
+    _apply_script_data_no_enemies(new_val)
     mod:echo("Enemy spawns: " .. (new_val and "BLOCKED" or "normal"))
 end)
 
@@ -871,16 +1002,126 @@ mod:hook("DamageUtils", "allow_friendly_fire_melee", function(func, ...)
 end)
 
 -- ============================================================
--- Win (complete current map)
+-- Level Control (win / fail / restart / kill_bots / die / fix_sound)
 -- ============================================================
+-- All five commands also have keybind widgets in the Level Control settings
+-- group; VMF's `keybind_type = "function_call"` resolves the bound function via
+-- the function_name string against the mod table, so every callable must live
+-- on `mod.` (not just a local). The keep-guards mirror Janoti's Hacks mod:
+-- complete/fail/restart all no-op in the inn with a friendly echo, so a
+-- mis-press while sorting loadout doesn't accidentally yank you out of the
+-- keep state machine.
 
-mod:command("win", "Complete the current map", function()
+mod.gt_win_level = function()
+    if DamageUtils and DamageUtils.is_in_inn then
+        mod:echo("Can't win in the keep.")
+        return
+    end
     if Managers.state and Managers.state.game_mode then
         Managers.state.game_mode:complete_level()
     else
         mod:echo("No active game mode.")
     end
-end)
+end
+
+mod.gt_fail_level = function()
+    if DamageUtils and DamageUtils.is_in_inn then
+        mod:echo("Can't fail in the keep.")
+        return
+    end
+    if Managers.state and Managers.state.game_mode then
+        Managers.state.game_mode:fail_level()
+    else
+        mod:echo("No active game mode.")
+    end
+end
+
+mod.gt_restart_level = function()
+    if DamageUtils and DamageUtils.is_in_inn then
+        mod:echo("Can't restart in the keep.")
+        return
+    end
+    if Managers.state and Managers.state.game_mode then
+        Managers.state.game_mode:retry_level()
+    else
+        mod:echo("No active game mode.")
+    end
+end
+
+-- Mirrors Hacks's EAC-secure guard: only allowed pre-round on official servers,
+-- unrestricted on untrusted (modded) realm. Vanilla bot_status_extension.set_dead
+-- handles the actual cleanup; we just iterate Managers.player:bots().
+mod.gt_kill_bots = function()
+    if EAC and EAC.state and EAC.state() ~= "untrusted" then
+        local gm = Managers.state and Managers.state.game_mode
+        if gm and gm.is_round_started and gm:is_round_started() then
+            mod:echo("Bots may only be killed at the start of the map on official realm.")
+            return
+        end
+    end
+    local bots = Managers.player and Managers.player:bots() or {}
+    local killed = 0
+    for _, bot in ipairs(bots) do
+        local unit = bot.player_unit
+        if unit and Unit.alive(unit) then
+            local status_ext = ScriptUnit.has_extension(unit, "status_system")
+            if status_ext and not status_ext:is_ready_for_assisted_respawn() then
+                status_ext:set_dead(true)
+                killed = killed + 1
+            end
+        end
+    end
+    mod:echo(string.format("Killed %d bot(s).", killed))
+end
+
+mod.gt_die = function()
+    if DamageUtils and DamageUtils.is_in_inn then
+        mod:echo("Can't die in the keep.")
+        return
+    end
+    local local_player = Managers.player and Managers.player:local_player()
+    local unit = local_player and local_player.player_unit
+    if not (unit and Unit.alive(unit)) then
+        mod:echo("No local player unit.")
+        return
+    end
+    local death_system = Managers.state.entity:system("death_system")
+    death_system:kill_unit(unit, {})
+end
+
+-- Restart-in-storm leaves a vortex SFX looping; canonical fix is to fire the
+-- "false" event for the same sound which un-mutes/clears the wwise state.
+mod.gt_fix_sound = function()
+    local gm = Managers.state and Managers.state.game_mode
+    local level_key = gm and gm._level_key
+    if level_key and string.find(level_key, "inn_level") then
+        mod:echo("Can't fix sound in the keep — must be in a mission.")
+        return
+    end
+    local local_player = Managers.player and Managers.player:local_player()
+    local unit = local_player and local_player.player_unit
+    if not (unit and Unit.alive(unit)) then
+        mod:echo("No local player unit.")
+        return
+    end
+    local fp_ext = ScriptUnit.has_extension(unit, "first_person_system")
+    if fp_ext and fp_ext.play_hud_sound_event then
+        fp_ext:play_hud_sound_event("sfx_player_in_vortex_false")
+        mod:echo("Vortex sound stopped.")
+    end
+end
+
+-- Names are gt-prefixed to avoid colliding with Janoti's "Hacks" mod which
+-- also registers `win` / `fail` / `restart` / `kill_bots` / `die` (and others
+-- below). VMF only allows one registration per global slot; whichever mod
+-- loads first wins it and the other's registration is silently dropped, so
+-- coexistence requires unique names.
+mod:command("gt_win",       "Complete the current map",           function() mod.gt_win_level()     end)
+mod:command("gt_fail",      "Fail the current map",               function() mod.gt_fail_level()    end)
+mod:command("gt_restart",   "Restart the current map",            function() mod.gt_restart_level() end)
+mod:command("gt_killbots",  "Kill all bots (pre-round on EAC-secure realm only)", function() mod.gt_kill_bots() end)
+mod:command("gt_die",       "Kill your character",                function() mod.gt_die()           end)
+mod:command("fix_sound",    "Stop the looping vortex SFX bug (post-restart in a storm)", function() mod.gt_fix_sound() end)
 
 -- ============================================================
 -- Duplicate Careers
@@ -935,4 +1176,711 @@ mod:command("dump_items_by_slot", "Dump all ItemMasterList slot_type values and 
         lines[#lines + 1] = line
     end
     _write_dump("items_by_slot.txt", lines)
+end)
+
+-- ============================================================
+-- Skip Intro Splash Screens
+-- ============================================================
+-- StateSplashScreen.on_enter (state_splash_screen.lua:92-110) checks a set of
+-- Development.parameter flags including "skip_splash" — if any are set,
+-- self._skip_splash = true and the entire splash sequence is bypassed.
+-- Same mechanism as the "-skip-splash" launch arg. We write the flag into
+-- Development._hardcoded_dev_params (Development.set_parameter is a no-op in
+-- release) at mod load time, which is BEFORE StateSplashScreen runs, so the
+-- check on line 105 succeeds and the splash is skipped on this boot too.
+--
+-- Changing the setting mid-session has no immediate effect — the splash for
+-- the current boot already ran. The dev param is still updated so the next
+-- boot reflects the latest setting.
+
+local function _apply_skip_intro(enabled)
+    if Development._hardcoded_dev_params then
+        Development._hardcoded_dev_params.skip_splash = enabled and true or nil
+    end
+end
+
+_apply_skip_intro(mod:get("skip_intro_enabled"))
+
+-- ============================================================
+-- AI Toggle (hand off control to a bot)
+-- ============================================================
+-- VT2 has no hot-swap path between human and bot units — they use different
+-- go_types with incompatible extension stacks (PlayerInputExtension vs
+-- PlayerBotInput, GenericCharacterStateMachineExtension vs PlayerBotBase,
+-- etc.). So toggling means despawn-human + add-bot, or remove-bot +
+-- re-add-human. Both halves of the dance exist in vanilla and we compose
+-- them: see GameModeBase._add_bot_to_party / _remove_bot_instant and
+-- GameModeAdventure.player_entered_game_session.
+--
+-- Server-driven: only the host can perform the swap (ProfileSynchronizer
+-- and PartyManager APIs assert is_server). Clients send a VMF network
+-- request and the host validates + executes.
+--
+-- v1 scope:
+--   * client (remote peer) self-toggle: supported
+--   * host self-toggle: refused — destroying the local Player object mid-
+--     mission would tear down camera/HUD/input bindings that aren't trivial
+--     to recreate
+--   * versus / keep: refused (no hero bot AI / no spawning)
+
+local _AI_RPC = "gt_ai_toggle_request"
+-- _ai_saved_state and _ai_suppress_setting_callback are forward-declared at
+-- the top of the file (on_game_state_changed / on_setting_changed reference
+-- them before this point). Assign here, do NOT redeclare with `local`, or the
+-- early callbacks would still bind to nil globals.
+
+local function _ai_state_key(peer_id, local_player_id)
+    return tostring(peer_id) .. ":" .. tostring(local_player_id)
+end
+
+local function _ai_game_mode_key()
+    local gm = Managers.state and Managers.state.game_mode
+    if not (gm and gm.game_mode) then return nil end
+    local mode = gm:game_mode()
+    if not (mode and mode.settings) then return nil end
+    return mode:settings().key
+end
+
+local function _ai_can_swap_in_current_mode()
+    local key = _ai_game_mode_key()
+    if not key then return false, "no active game mode" end
+    if key:find("versus") or key:find("_vs") then
+        return false, "versus is not supported (heroes have no bot AI)"
+    end
+    if key == "inn" or key == "inn_deus" or key:find("^inn") then
+        return false, "must be in a mission"
+    end
+    return true
+end
+
+local function _ai_find_bot_in_slot(party_id, slot_id)
+    local pm = Managers.player
+    local bots = pm and pm:bots() or {}
+    for _, bot in ipairs(bots) do
+        local bp = bot:network_id()
+        local bl = bot:local_player_id()
+        local status = Managers.party and Managers.party:get_player_status(bp, bl)
+        if status and status.party_id == party_id and status.slot_id == slot_id then
+            return bot
+        end
+    end
+    return nil
+end
+
+local function _ai_swap_human_to_bot(peer_id, local_player_id)
+    local pm = Managers.player
+    if not pm.is_server then return false, "must run on host" end
+    local player = pm:player(peer_id, local_player_id)
+    if not player then return false, "player not found" end
+    if player.bot_player then return false, "already a bot" end
+
+    local status = Managers.party:get_player_status(peer_id, local_player_id)
+    if not (status and status.party_id and status.slot_id) then
+        return false, "no party slot"
+    end
+    local party_id = status.party_id
+    local slot_id = status.slot_id
+    local profile_synchronizer = pm.network_manager and pm.network_manager.profile_synchronizer
+    if not profile_synchronizer then return false, "no profile_synchronizer" end
+    local profile_index, career_index = profile_synchronizer:profile_by_peer(peer_id, local_player_id)
+    if not (profile_index and career_index) then
+        return false, "no profile/career"
+    end
+
+    -- Save enough metadata to recreate the human Player on toggle-back. For
+    -- a remote (client) player we need peer/clan/account; for the host's
+    -- local player we'd need input_source/viewport (not supported in v1).
+    local saved = {
+        peer_id = peer_id,
+        local_player_id = local_player_id,
+        profile_index = profile_index,
+        career_index = career_index,
+        party_id = party_id,
+        slot_id = slot_id,
+        is_remote = player.remote and true or false,
+    }
+    if player.remote then
+        saved.remote = {
+            player_controlled = player._player_controlled,
+            clan_tag = player._clan_tag,
+            account_id = player._account_id,
+        }
+    else
+        saved.local_data = {
+            input_source = player.input_source,
+            viewport_name = player.viewport_name,
+            viewport_world_name = player.viewport_world_name,
+        }
+    end
+    _ai_saved_state[_ai_state_key(peer_id, local_player_id)] = saved
+
+    if player.player_unit then
+        player:despawn()
+    end
+    profile_synchronizer:unassign_profiles_of_peer(peer_id, local_player_id)
+    Managers.party:remove_peer_from_party(peer_id, local_player_id, party_id)
+    pm:remove_player(peer_id, local_player_id)
+
+    local game_mode = Managers.state.game_mode:game_mode()
+    if not (game_mode and game_mode._add_bot_to_party) then
+        return false, "current game mode does not support bots"
+    end
+    game_mode:_add_bot_to_party(party_id, profile_index, career_index, slot_id)
+
+    return true
+end
+
+local function _ai_swap_bot_to_human(peer_id, local_player_id)
+    local pm = Managers.player
+    if not pm.is_server then return false, "must run on host" end
+    local saved = _ai_saved_state[_ai_state_key(peer_id, local_player_id)]
+    if not saved then return false, "no saved state (toggle to bot first)" end
+
+    local bot = _ai_find_bot_in_slot(saved.party_id, saved.slot_id)
+    if bot then
+        local game_mode = Managers.state.game_mode:game_mode()
+        if game_mode and game_mode._remove_bot_instant then
+            game_mode:_remove_bot_instant(bot)
+        end
+    end
+
+    if saved.is_remote and saved.remote then
+        pm:add_remote_player(peer_id, saved.remote.player_controlled, local_player_id,
+            saved.remote.clan_tag, saved.remote.account_id)
+    elseif saved.local_data then
+        pm:add_player(saved.local_data.input_source, saved.local_data.viewport_name,
+            saved.local_data.viewport_world_name, local_player_id)
+    else
+        return false, "saved state missing player kind"
+    end
+
+    Managers.party:assign_peer_to_party(peer_id, local_player_id, saved.party_id, saved.slot_id, false)
+    pm.network_manager.profile_synchronizer:assign_full_profile(peer_id, local_player_id,
+        saved.profile_index, saved.career_index, false)
+
+    _ai_saved_state[_ai_state_key(peer_id, local_player_id)] = nil
+    return true
+end
+
+mod:network_register(_AI_RPC, function(sender_peer_id, payload)
+    local pm = Managers.player
+    if not (pm and pm.is_server) then return end
+    local peer_id, local_player_id = sender_peer_id, 1
+    local want_bot
+    if type(payload) == "table" then
+        peer_id = payload.peer_id or peer_id
+        local_player_id = payload.local_player_id or local_player_id
+        want_bot = payload.want_bot
+    end
+
+    local ok, err = _ai_can_swap_in_current_mode()
+    if not ok then
+        mod:info("[ai_toggle] refused for %s: %s", tostring(peer_id), tostring(err))
+        return
+    end
+
+    -- want_bot is the client's explicit intent (from their checkbox state).
+    -- Saved state is the host's view of truth — used to no-op stale requests.
+    local has_saved = _ai_saved_state[_ai_state_key(peer_id, local_player_id)] ~= nil
+    if want_bot == nil then want_bot = not has_saved end
+
+    if want_bot and not has_saved then
+        local s_ok, s_err = _ai_swap_human_to_bot(peer_id, local_player_id)
+        mod:info("[ai_toggle] human->bot for %s: %s", tostring(peer_id), s_ok and "ok" or tostring(s_err))
+    elseif (not want_bot) and has_saved then
+        local s_ok, s_err = _ai_swap_bot_to_human(peer_id, local_player_id)
+        mod:info("[ai_toggle] bot->human for %s: %s", tostring(peer_id), s_ok and "ok" or tostring(s_err))
+    else
+        mod:info("[ai_toggle] no-op for %s (want_bot=%s has_saved=%s)",
+            tostring(peer_id), tostring(want_bot), tostring(has_saved))
+    end
+end)
+
+-- Returns (ok, err_msg). Caller is responsible for reverting the checkbox on
+-- failure — _ai_suppress_setting_callback must be true while doing so.
+-- Assigns to the forward-declared upvalue (see top of file); MUST NOT use
+-- `local function` here or on_setting_changed would call nil.
+_ai_handle_toggle_change = function(want_bot)
+    local ok, err = _ai_can_swap_in_current_mode()
+    if not ok then return false, err end
+
+    local pm = Managers.player
+    if pm and pm.is_server then
+        return false, "host self-toggle not supported in v1 (would tear down local UI/input). Run from a client."
+    end
+
+    mod:network_send(_AI_RPC, "server", {
+        peer_id = Network.peer_id(),
+        local_player_id = 1,
+        want_bot = want_bot and true or false,
+    })
+    return true
+end
+
+mod:command("ai", "Toggle AI takeover for your character (bot controls it; toggle again to resume)", function()
+    -- Flipping the setting fires on_setting_changed which runs the RPC.
+    -- Keeps the chat command and the VMF checkbox in lockstep.
+    if _ai_suppress_setting_callback then return end
+    mod:set("ai_takeover_enabled", not mod:get("ai_takeover_enabled"))
+end)
+
+-- ============================================================
+-- Time & Pause (Group B — Janoti "Hacks" port)
+-- ============================================================
+-- Two related features sharing the same engine primitive:
+-- `Managers.state.debug:set_time_scale(index)`. The index is into
+-- `time_scale_list` in debug_manager.lua:18 — a 24-entry table of
+-- multipliers. Index 13 = 1.0x (normal). Lower = slower, higher = faster.
+-- Settings persist for the session; vanilla wipes them on level transition,
+-- so on_game_state_changed re-applies the slider value on each StateIngame
+-- entry.
+--
+-- Pause: host-only. Toggles between the configured "pause speed" index
+-- (default 1 = slowest possible) and normal (13). VT2 has no true pause
+-- primitive — set_time_scale(1) is the closest thing and still lets the UI
+-- update. Don't confuse with the time slider: the two write to the same
+-- engine setter, so if both are used simultaneously the last write wins.
+-- We keep them as separate features matching Hacks's UX.
+
+local _pause_active = false
+
+mod.gt_pause_toggle = function()
+    if not (Managers.player and Managers.player.is_server) then
+        mod:echo("Only the host can pause the game.")
+        return
+    end
+    local debug_mgr = Managers.state and Managers.state.debug
+    if not (debug_mgr and debug_mgr.set_time_scale) then
+        mod:echo("Time scale manager not available yet.")
+        return
+    end
+    if _pause_active then
+        debug_mgr:set_time_scale(mod:get("time_scale_value") or 13)
+        _pause_active = false
+        mod:echo("Game unpaused.")
+    else
+        debug_mgr:set_time_scale(mod:get("pause_value") or 1)
+        _pause_active = true
+        mod:echo("Game paused.")
+    end
+end
+
+mod.gt_time_apply = function()
+    if _pause_active then
+        -- While paused, slider edits update the post-unpause target but don't
+        -- override the active pause speed. Matches Hacks's behaviour.
+        return
+    end
+    local debug_mgr = Managers.state and Managers.state.debug
+    if debug_mgr and debug_mgr.set_time_scale then
+        debug_mgr:set_time_scale(mod:get("time_scale_value") or 13)
+    end
+end
+
+mod.gt_time_faster = function()
+    local cur = mod:get("time_scale_value") or 13
+    if cur >= 24 then
+        mod:echo("Already at maximum time speed.")
+        return
+    end
+    mod:set("time_scale_value", cur + 1)
+    mod.gt_time_apply()
+    mod:echo(string.format("Time scale: %d", cur + 1))
+end
+
+mod.gt_time_slower = function()
+    local cur = mod:get("time_scale_value") or 13
+    if cur <= 1 then
+        mod:echo("Already at minimum time speed.")
+        return
+    end
+    mod:set("time_scale_value", cur - 1)
+    mod.gt_time_apply()
+    mod:echo(string.format("Time scale: %d", cur - 1))
+end
+
+mod:command("gt_pause",    "Toggle game pause (host-only time slowdown to the configured pause speed)", function() mod.gt_pause_toggle() end)
+mod:command("time_faster", "Increase game time scale by one step", function() mod.gt_time_faster() end)
+mod:command("time_slower", "Decrease game time scale by one step", function() mod.gt_time_slower() end)
+
+-- ============================================================
+-- Ult Controls (Group C — Janoti "Hacks" port)
+-- ============================================================
+-- Three independent features, all driven through CareerExtension:
+--
+--  1. `gt ult_reset` (+ hotkey) — one-shot, sets every active-ability cooldown
+--     to 0 via :reduce_activated_ability_cooldown_percent(charge_index, 1).
+--     ThePageMan's "No Ult Cooldown" primitive.
+--
+--  2. Player ult cooldown cap (toggle + slider 0-120s) — every
+--     CareerExtension.update tick, if self.player is human-controlled, clamp
+--     each ability's cooldowns[k] down to the configured max. Smooths the
+--     "set ult to 5s for testing" workflow without burning a talent slot.
+--
+--  3. Bot ult cooldown cap — same idea but for AI-controlled units. Useful
+--     to make bots ult more aggressively in solo-with-bots testing.
+--
+-- Both caps share a helper (mod._gt_clamp_cooldowns) that walks every ability
+-- on the extension and trims each charge's cooldown if it exceeds the target.
+-- Borrowed from Hacks 1:1 since the iteration pattern (decaying-charge index,
+-- cooldown_paused unblock, set_activated_ability_cooldown_unpaused) is what
+-- the engine expects and replicating it any other way would desync the ability
+-- HUD overlay.
+
+mod.gt_ult_reset = function()
+    local local_player = Managers.player and Managers.player:local_player()
+    local unit = local_player and local_player.player_unit
+    if not (unit and Unit.alive(unit)) then
+        mod:echo("No local player unit.")
+        return
+    end
+    local career_ext = ScriptUnit.has_extension(unit, "career_system")
+    if not career_ext then
+        mod:echo("No career extension on local player.")
+        return
+    end
+    for i = 1, career_ext._num_abilities or 1, 1 do
+        career_ext:reduce_activated_ability_cooldown_percent(i, 1)
+    end
+    mod:echo("Ult reset.")
+end
+
+mod._gt_clamp_cooldowns = function(career_ext, max_seconds)
+    for i = 1, career_ext._num_abilities or 1, 1 do
+        local ability = career_ext._abilities[i]
+        if ability and ability.cooldowns then
+            local charge_idx = career_ext:_currently_decaying_cooldown(i)
+            if charge_idx then
+                for k = charge_idx, 1, -1 do
+                    if ability.cooldowns[k] and ability.cooldowns[k] > max_seconds then
+                        ability.cooldowns[k] = max_seconds
+                    end
+                end
+            end
+            local is_ready = career_ext:_cooldown_charge_ready(i)
+            if not is_ready then
+                ability.cooldown_paused = false
+            end
+            if is_ready then
+                career_ext:set_activated_ability_cooldown_unpaused(i)
+            end
+        end
+    end
+end
+
+mod:hook_safe(CareerExtension, "update", function(self, unit, input, dt, context, t)
+    if mod:get("ult_player_cap_enabled") and self.player and self.player:is_player_controlled() then
+        mod._gt_clamp_cooldowns(self, mod:get("ult_player_cap_value") or 0)
+    end
+    if mod:get("ult_bot_cap_enabled") and self.player and not self.player:is_player_controlled() then
+        mod._gt_clamp_cooldowns(self, mod:get("ult_bot_cap_value") or 0)
+    end
+end)
+
+mod:command("gt_ultreset", "Reset your ultimate (set cooldown to 0)", function() mod.gt_ult_reset() end)
+
+-- ============================================================
+-- Buffs & Stat Tweaks (Group D — Janoti "Hacks" port)
+-- ============================================================
+-- Five independent toggles/sliders:
+--
+--  1. `gt infinite_ammo`  — applies the vanilla `twitch_no_overcharge_no_ammo_reloads`
+--     buff to the local player (and host-side to every player, since the buff
+--     is server-controlled). Periodic re-apply every second keeps the buff
+--     refreshed in case it gets stripped.
+--  2. `gt infinite_stamina` — hooks GenericStatusExtension.add_fatigue_points
+--     and short-circuits it so stamina-cost calls never deplete the bar.
+--  3. `gt giga_power`     — multiplies BuffTemplates.power_level_unbalance
+--     (Enhanced Power talent) by 1000x. Echoes that the talent must be
+--     re-equipped for the buff to refresh.
+--  4. Base crit chance slider (1–100%) — rewrites
+--     CareerSettings[current_career].attributes.base_critical_strike_chance.
+--     Auto-resets to the career's vanilla value when you switch career
+--     (ProfileRequester.request_profile + GameModeInn._cb_start_menu_closed
+--     hooks).
+--  5. Movement speed slider (0–30 m/s) — rewrites PlayerUnitMovementSettings.move_speed
+--     and walks the per-unit settings table (via the closed-upvalue trick
+--     debug.getupvalue(PlayerUnitMovementSettings.unregister_unit, 1)) so
+--     already-spawned units get the new speed too.
+--
+-- All five settings reset on game restart (we don't try to persist them past
+-- session) — matches Hacks. The infinite-ammo periodic refresher rides on
+-- mod.update which gt already uses for tp/freecam/noclip reapply.
+
+-- ---------- 5.1 Infinite Ammo & 0 Heat -----------------------
+
+local _gt_infinite_ammo_active = false
+local _gt_infinite_ammo_refresh_t = 0
+
+local function _gt_apply_infinite_ammo_buff(unit)
+    if not (unit and Unit.alive(unit)) then return end
+    local buff_ext = ScriptUnit.has_extension(unit, "buff_system")
+    if not buff_ext then return end
+    if buff_ext:has_buff_type("twitch_no_overcharge_no_ammo_reloads") then return end
+    if Managers.player and Managers.player.is_server then
+        local bs = Managers.state.entity:system("buff_system")
+        bs:add_buff(unit, "twitch_no_overcharge_no_ammo_reloads", unit, false)
+    else
+        buff_ext:add_buff("twitch_no_overcharge_no_ammo_reloads")
+    end
+end
+
+local function _gt_remove_infinite_ammo_buff(unit)
+    if not (unit and Unit.alive(unit)) then return end
+    local buff_ext = ScriptUnit.has_extension(unit, "buff_system")
+    if not buff_ext then return end
+    if not buff_ext:has_buff_type("twitch_no_overcharge_no_ammo_reloads") then return end
+    local buff = buff_ext:get_non_stacking_buff("twitch_no_overcharge_no_ammo_reloads")
+    if buff then buff_ext:remove_buff(buff.id) end
+end
+
+local function _gt_refresh_infinite_ammo()
+    local lp = Managers.player and Managers.player:local_player()
+    if lp and lp.player_unit then _gt_apply_infinite_ammo_buff(lp.player_unit) end
+    if Managers.player and Managers.player.is_server then
+        for _, p in pairs(Managers.player:human_and_bot_players() or {}) do
+            _gt_apply_infinite_ammo_buff(p.player_unit)
+        end
+    end
+end
+
+local function _gt_clear_infinite_ammo()
+    local lp = Managers.player and Managers.player:local_player()
+    if lp and lp.player_unit then _gt_remove_infinite_ammo_buff(lp.player_unit) end
+    if Managers.player and Managers.player.is_server then
+        for _, p in pairs(Managers.player:human_and_bot_players() or {}) do
+            _gt_remove_infinite_ammo_buff(p.player_unit)
+        end
+    end
+end
+
+mod.gt_infinite_ammo_toggle = function()
+    _gt_infinite_ammo_active = not _gt_infinite_ammo_active
+    if _gt_infinite_ammo_active then
+        _gt_refresh_infinite_ammo()
+        mod:echo("Infinite ammo & heat: ON.")
+    else
+        _gt_clear_infinite_ammo()
+        mod:echo("Infinite ammo & heat: OFF.")
+    end
+end
+
+mod:command("infinite_ammo", "Toggle infinite ammo and zero overheat for all players (host applies to clients too)", function()
+    mod.gt_infinite_ammo_toggle()
+end)
+
+-- ---------- 5.2 Infinite Stamina -----------------------------
+
+local _gt_stamina_active = false
+
+mod.gt_infinite_stamina_toggle = function()
+    _gt_stamina_active = not _gt_stamina_active
+    mod:echo(_gt_stamina_active and "Infinite stamina: ON." or "Infinite stamina: OFF.")
+end
+
+-- Always-on wrapper. When the flag is off, the closure passes through to the
+-- original; when on, it short-circuits so fatigue cost calls never deplete
+-- the stamina bar. Avoids re-registering hooks (VMF errors on duplicates).
+mod:hook(GenericStatusExtension, "add_fatigue_points", function(func, ...)
+    if _gt_stamina_active then return end
+    return func(...)
+end)
+
+mod:command("gt_stamina", "Toggle infinite stamina (zero fatigue cost on blocks/dodges/pushes)", function()
+    mod.gt_infinite_stamina_toggle()
+end)
+
+-- ---------- 5.3 Giga Power -----------------------------------
+
+local _gt_giga_power_active = false
+local _gt_giga_power_original = nil
+
+mod.gt_giga_power_toggle = function()
+    if not (BuffTemplates and BuffTemplates.power_level_unbalance and BuffTemplates.power_level_unbalance.buffs[1]) then
+        mod:echo("BuffTemplates.power_level_unbalance not available.")
+        return
+    end
+    local buff_row = BuffTemplates.power_level_unbalance.buffs[1]
+    if _gt_giga_power_active then
+        if _gt_giga_power_original ~= nil then
+            buff_row.multiplier = _gt_giga_power_original
+        end
+        _gt_giga_power_active = false
+        mod:echo("Giga power: OFF (re-equip the Enhanced Power talent).")
+    else
+        _gt_giga_power_original = buff_row.multiplier
+        buff_row.multiplier = 1000
+        _gt_giga_power_active = true
+        mod:echo("Giga power: ON (re-equip the Enhanced Power talent).")
+    end
+end
+
+mod:command("gt_gigapower", "Multiply the Enhanced Power talent buff by 1000x (re-equip the talent to refresh)", function()
+    mod.gt_giga_power_toggle()
+end)
+
+-- ---------- 5.4 Base Crit Chance Slider ----------------------
+
+local _gt_current_career_for_crit = nil
+
+local function _gt_get_local_career_name()
+    local lp = Managers.player and Managers.player:local_player()
+    if not lp then return nil end
+    local profile_idx = lp:profile_index()
+    local career_idx  = lp:career_index()
+    if not (profile_idx and career_idx) then return nil end
+    local profile = SPProfiles and SPProfiles[profile_idx]
+    if not (profile and profile.careers and profile.careers[career_idx]) then return nil end
+    return profile.careers[career_idx].name
+end
+
+mod.gt_apply_crit_chance = function()
+    local name = _gt_get_local_career_name()
+    if not (name and CareerSettings[name] and CareerSettings[name].attributes) then return end
+    local pct = mod:get("base_crit_chance") or 5
+    CareerSettings[name].attributes.base_critical_strike_chance = pct / 100
+end
+
+-- On career switch, snap the slider to that career's vanilla value so toggling
+-- back and forth doesn't carry over an unintended override.
+mod.gt_sync_crit_default_for_career = function()
+    local name = _gt_get_local_career_name()
+    if not (name and CareerSettings[name] and CareerSettings[name].attributes) then return end
+    if name == _gt_current_career_for_crit then return end
+    _gt_current_career_for_crit = name
+    local pct = (CareerSettings[name].attributes.base_critical_strike_chance or 0.05) * 100
+    mod:set("base_crit_chance", pct)
+end
+
+mod:hook_safe(ProfileRequester, "request_profile", function() mod.gt_sync_crit_default_for_career() end)
+mod:hook_safe(GameModeInn,      "_cb_start_menu_closed", function() mod.gt_sync_crit_default_for_career() end)
+
+-- ---------- 5.5 Movement Speed Slider -----------------------
+
+mod.gt_apply_move_speed = function()
+    local v = mod:get("movement_speed")
+    if not (v and PlayerUnitMovementSettings) then return end
+    PlayerUnitMovementSettings.move_speed = v
+    -- The per-unit settings table is closed over inside unregister_unit. Reach
+    -- in via debug.getupvalue so already-spawned units pick up the new speed.
+    local _, units_settings = debug.getupvalue(PlayerUnitMovementSettings.unregister_unit, 1)
+    if type(units_settings) == "table" then
+        for _, settings in pairs(units_settings) do
+            settings.move_speed = v
+        end
+    end
+end
+
+-- Chain a 1Hz infinite-ammo refresher onto the existing update closure.
+do
+    local _orig = mod.update
+    mod.update = function(dt)
+        if _orig then _orig(dt) end
+        if _gt_infinite_ammo_active then
+            _gt_infinite_ammo_refresh_t = _gt_infinite_ammo_refresh_t + (dt or 0)
+            if _gt_infinite_ammo_refresh_t >= 1.0 then
+                _gt_infinite_ammo_refresh_t = 0
+                _gt_refresh_infinite_ammo()
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- Player-state toggles (Group E — Janoti "Hacks" port)
+-- ============================================================
+-- Three small toggles that don't fit the other groups, all kept distinct
+-- from gt's existing `god` toggle on purpose:
+--
+--  * `inn_dmg`   — host-only flip of `DamageUtils.is_in_inn`. When the
+--    inn flag is OFF, the keep behaves like a mission (damage taken,
+--    enemies could spawn, etc.). Useful for sparring with bots.
+--  * `cloak`     — visual cloak that hides the player model. gt's `god`
+--    already cloaks via `status_system:set_invisible(true, false,
+--    "gt_godmode")`, but `god` is a multi-feature umbrella. `cloak` is a
+--    standalone cosmetic toggle using a separate reason namespace so it
+--    doesn't clobber god's invisibility state.
+--  * `unkillable`— flips `script_data.player_unkillable`. Unlike `god`
+--    you DO still take damage (and disablers still grab you) but you
+--    can't be dropped below 1 HP. Mostly a "let me actually feel hits
+--    while testing" mode.
+
+mod.gt_inn_dmg_toggle = function()
+    if not (Managers.player and Managers.player.is_server) then
+        mod:echo("Only the host can toggle inn-damage.")
+        return
+    end
+    if DamageUtils.is_in_inn then
+        DamageUtils.is_in_inn = false
+        mod:echo("Damage in keep: ENABLED.")
+    else
+        DamageUtils.is_in_inn = true
+        mod:echo("Damage in keep: disabled (vanilla).")
+    end
+end
+
+mod:command("gt_inndmg", "Toggle whether the keep takes damage (host-only)", function()
+    mod.gt_inn_dmg_toggle()
+end)
+
+-- Visual cloak: distinct from gt god's invisibility (separate reason namespace
+-- so neither clobbers the other on toggle-off). The 3P body and 1P weapon
+-- arms both hide because skip_first_person=false. AI perception ignores the
+-- player too (same set_invisible primitive).
+local _gt_cloak_active = false
+
+mod.gt_cloak_toggle = function()
+    local lp = Managers.player and Managers.player:local_player()
+    local unit = lp and lp.player_unit
+    if not (unit and Unit.alive(unit)) then
+        mod:echo("No local player unit.")
+        return
+    end
+    local status_ext = ScriptUnit.has_extension(unit, "status_system")
+    if not (status_ext and status_ext.set_invisible) then
+        mod:echo("No status extension on local player.")
+        return
+    end
+    _gt_cloak_active = not _gt_cloak_active
+    status_ext:set_invisible(_gt_cloak_active, false, "gt_cloak")
+    mod:echo(_gt_cloak_active and "Cloak: ON (invisible)." or "Cloak: OFF.")
+end
+
+mod:command("cloak", "Toggle visual invisibility (separate from godmode)", function()
+    mod.gt_cloak_toggle()
+end)
+
+-- Unkillable: take damage normally, but the engine refuses to drop you below
+-- 1 HP while the flag is on. Vanilla globals `script_data` controls this; we
+-- just flip the flag and announce.
+mod.gt_unkillable_toggle = function()
+    script_data = script_data or {}
+    script_data.player_unkillable = not script_data.player_unkillable
+    mod:echo(script_data.player_unkillable and "Unkillable: ON (still take damage)." or "Unkillable: OFF.")
+end
+
+mod:command("gt_unkillable", "Toggle take-damage-but-never-die mode", function()
+    mod.gt_unkillable_toggle()
+end)
+
+-- ============================================================
+-- Engine error nil-guards (Group F — Janoti "Hacks" port)
+-- ============================================================
+-- Two well-known places where vanilla code occasionally dereferences a unit
+-- that's mid-cleanup, producing red [Engine Error] spam (and sometimes a
+-- silent fatal during long sessions). Hacks ships these guards too — they're
+-- cheap and we'd rather suppress the error than have it leak into our crash
+-- triage. Both are pure no-op-if-unit-dead pre-guards; the original function
+-- is called normally when the unit is alive.
+
+if VolumetricsFlowCallbacks and VolumetricsFlowCallbacks.unregister_fog_volume then
+    mod:hook(VolumetricsFlowCallbacks, "unregister_fog_volume", function(func, params, ...)
+        if not (params and params.unit and Unit.alive(params.unit)) then return end
+        return func(params, ...)
+    end)
+end
+
+mod:hook(Unit, "get_data", function(func, unit, ...)
+    if not unit then return end
+    return func(unit, ...)
 end)

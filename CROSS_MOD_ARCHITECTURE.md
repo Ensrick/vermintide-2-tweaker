@@ -18,8 +18,9 @@ Three mods with distinct responsibilities, designed to work independently but en
 | Mod | Role | Dependencies |
 |-----|------|-------------|
 | **weapon_tweaker** | Unlocks existing weapons across careers (same item, different wielder) | None |
-| **cosmetics_tweaker** | Cosmetic customization: offhand illusions, skins, icons, glow maps | None (optional: character_weapon_variants, MoreItemsLibrary) |
-| **character_weapon_variants** | Adds brand-new weapon items combining models from multiple characters | MoreItemsLibrary |
+| **cosmetics_tweaker** | Cosmetic customization: offhand illusions, skins, icons, glow maps | None (optional: character_weapon_variants, MoreItemsLibrary, modded_progression) |
+| **character_weapon_variants** | Adds brand-new weapon items combining models from multiple characters | MoreItemsLibrary (optional: modded_progression) |
+| **modded_progression** | Re-enables 100% of vanilla progression in modded realm (XP, loot, currency, Okri's challenges, Lohner's, crafting bench). All state local. | None |
 
 ---
 
@@ -219,12 +220,12 @@ If the vanilla hat is equipped (no clone), the bridge suppresses any LA queue en
 
 | Command | Purpose |
 |---------|---------|
-| `cos la_dump` | Registry contents: all clone backend_ids and their armoury_keys |
-| `cos la_hats` | All hats for current career with VANILLA/CLONE labels, rarity, equipped status, cache state, raw server value |
-| `cos la_trace 1/0` | Per-hook tracing of every equip_item, _spawn_item, AttachmentUtils.link firing |
-| `cos la_force <key>` | Bypass detection, apply an LA variant directly to the player's spawned hat unit |
-| `cos la_loadout` | Dump loadout_cache contents |
-| `cos la_dump_attachments` | Walk player unit's attachment tree, dump unit_name/skin/hand per node |
+| `/la_dump` | Registry contents: all clone backend_ids and their armoury_keys |
+| `/la_hats` | All hats for current career with VANILLA/CLONE labels, rarity, equipped status, cache state, raw server value |
+| `/la_trace 1/0` | Per-hook tracing of every equip_item, _spawn_item, AttachmentUtils.link firing |
+| `/la_force <key>` | Bypass detection, apply an LA variant directly to the player's spawned hat unit |
+| `/la_loadout` | Dump loadout_cache contents |
+| `/la_attach` | Walk player unit's attachment tree, dump unit_name/skin/hand per node |
 
 ### Lessons Learned (for future AI agents)
 
@@ -253,6 +254,38 @@ If the vanilla hat is equipped (no clone), the bridge suppresses any LA queue en
 | Player A has cosmetics_tweaker, Player B doesn't | Offhand swaps are client-local only (player A sees their choice, player B sees vanilla) |
 | Player A has cosmetics_tweaker + LA bridge, Player B doesn't | LA clone textures are client-local. Clone backend_ids never reach the server (loadout cache), so Player B sees the vanilla hat |
 | Player A has weapon_tweaker, Player B doesn't | Cross-career weapons visible to both (items exist in backend), but animations may look wrong to player B |
+
+---
+
+## Mod 4: modded_progression
+
+**Responsibility:** Re-enable every vanilla progression system in the modded realm (XP, end-of-mission rewards, loot chests, Okri's Challenges, Lohner's Emporium, keep crafting bench), with state persisted locally so the player's real PlayFab account is never touched.
+
+Full design in `modded_progression/PLAN.md`. Key architectural points relevant to siblings:
+
+- **Intercepts `BackendInterface*Playfab` methods**, not `script_data["eac-untrusted"]`. The pipeline runs to the cloud-script call site, gets intercepted there, generates data locally, then calls the same `backend_mirror:*` mutator the success callback would have called. The rest of the game reads from the mirror and cannot tell the difference.
+- **PlayFab commits remain blocked** in modded (vanilla behavior at `playfab_mirror_base.lua:2826,2839,2857`). `mp` writes local-only.
+- **Persistence:** mirror state is overlaid from VMF settings on game-start, re-serialized on every mutation. Three starting-state options (fresh / level 35 default / level 35 with all cosmetic unlocks).
+
+### Sibling API
+
+```lua
+local mp = get_mod("mp")
+if mp then
+    if not mp.is_unlocked(item_key) then return false end
+    mp.grant_item(item_data)
+    mp.spend("SM", 250)        -- shillings
+    mp.credit("scrap", 5)
+    mp.has_currency("orange_dust", 1)
+end
+```
+
+### Sibling-specific changes when `mp` is installed
+
+- **character_weapon_variants:** `ItemMasterList[variant_key].can_wield` returns `false` until `mp.is_unlocked(variant_key)`. Variants ship locked; earned via loot chests, challenge rewards, Lohner's, mission completion. Without `mp`, current free-unlock behavior remains.
+- **cosmetics_tweaker:** Custom illusions, shield options, portraits gate on `mp.is_unlocked(key)`. Without `mp`, current free-unlock behavior remains.
+- **crafting_in_modded:** Untouched. Athanor stays free as the sandbox; vanilla-cost crafting at the keep bench is owned by `mp`.
+- **chaos_wastes_tweaker, event_tweaker, weapon_tweaker:** No interaction. CW completions naturally credit the un-gated vanilla pipeline; event mutators are upstream of rewards; cross-career unlocks operate at `can_wield` level.
 
 ---
 

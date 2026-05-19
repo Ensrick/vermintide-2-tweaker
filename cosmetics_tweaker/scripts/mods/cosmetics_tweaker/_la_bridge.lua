@@ -201,6 +201,80 @@ local function _register_la_path_in_network_lookup(path)
     rawset(ip, path, idx)
 end
 
+-- v0.8.66: pre-register EVERY kind="unit" left-hand LA variant's new_units paths
+-- in NetworkLookup.inventory_packages BEFORE any of the gated/filtered code paths
+-- run. This is the same shape of fix as ct v0.7.60 / 0.7.61 / 0.7.62 — the
+-- doctrine memo `feedback_vt2_gated_registration_diverges.md` covers it.
+--
+-- Crash this prevents: lynnd's session 2026-05-19,
+--   `network_lookup.lua:2514: Table inventory_packages does not contain key: 2296`
+-- (peer 11000010ef3befb / danjo equipped an LA shield → ProfileSynchronizer
+-- broadcast an inventory_list whose first_person_packages[9] resolved to network
+-- index 2296 on danjo's machine but lynnd's NetworkLookup.inventory_packages
+-- had no entry there).
+--
+-- Why the gated path diverged: `build_offhand_options` iterates `pairs(SKIN_LIST)`
+-- (unordered) and only registers paths whose `_is_supported_variant` check passes
+-- (`Application.can_get("unit", ...)` — timing-dependent on whether LA's units have
+-- finished loading at registration time). Two peers can both have cosmetics_tweaker
+-- + LA installed and still end up with different append orders or different
+-- supported-variant sets. With `idx = #ip + 1`, even one skipped or reordered entry
+-- shifts every subsequent index → the same path lands on different network IDs
+-- across peers → ProfileSynchronizer crashes the receiver.
+--
+-- Sorted iteration is load-bearing per the doctrine — two peers running the same
+-- ct + same LA version always assign identical indices regardless of which
+-- variants their own filter thinks are presently usable. The runtime
+-- `build_offhand_options` still runs the supported-variant filter for UI pool
+-- building; it just no longer drives the NetworkLookup assignments.
+--
+-- v0.8.66-dev: extended to ALL `kind="unit"` LA variants, not just shield
+-- offhands. The original `swap_hand == "left_hand_unit"` scope-limit was a
+-- holdover from when only shields reached the picker. v0.8.x added direct-
+-- clone hat/armor exposure (build_clone_entry), and a `kind="unit"` LA HAT or
+-- WEAPON-ILLUSION equipped via cosmetics_tweaker triggers the same
+-- ProfileSynchronizer leak: get_item_units returns the LA mesh path,
+-- profile_packages adds it to inventory_list, equipper's
+-- NetworkLookup.inventory_packages has it (LA's swap_units_new dynamically
+-- inserted it on equip), the receiver's doesn't → `Table inventory_packages
+-- does not contain key: <N>` fatal in network_lookup.lua's strict __index,
+-- bypasses pcall via shared_state RPC decode. Crash signature: dump
+-- 2026-05-19-02.05.59. Pre-registering every kind="unit" path in sorted order
+-- on both peers gives both sides the same indices regardless of which variant
+-- was actually equipped.
+function M.pre_register_la_inventory_packages()
+    if not la() then return end
+    if not NetworkLookup or not NetworkLookup.inventory_packages then return end
+    local SKIN_LIST = la().SKIN_LIST
+    if type(SKIN_LIST) ~= "table" then return end
+
+    local sorted_keys = {}
+    for la_key, _ in pairs(SKIN_LIST) do
+        sorted_keys[#sorted_keys + 1] = la_key
+    end
+    table.sort(sorted_keys)
+
+    local registered = 0
+    for _, la_key in ipairs(sorted_keys) do
+        local variant = SKIN_LIST[la_key]
+        if type(variant) == "table"
+                and variant.kind == "unit"
+                and type(variant.new_units) == "table" then
+            local before = #NetworkLookup.inventory_packages
+            -- new_units[1] = 1P / primary mesh; new_units[2] = 3P sibling for
+            -- shields and weapons (left_hand_unit / right_hand_unit). For
+            -- hats / armor, [2] may be nil. _register_la_path_in_network_lookup
+            -- is nil-safe.
+            _register_la_path_in_network_lookup(variant.new_units[1])
+            _register_la_path_in_network_lookup(variant.new_units[2])
+            if #NetworkLookup.inventory_packages > before then
+                registered = registered + 1
+            end
+        end
+    end
+    mod:info("[LA bridge] pre_register_la_inventory_packages: %d variant(s) registered (sorted, all kind=unit)", registered)
+end
+
 -- Build per-weapon-type LA shield pools.
 --
 -- For each LA SKIN_LIST entry with `swap_hand = "left_hand_unit"`, parse the
@@ -218,16 +292,74 @@ end
 -- mace+shield). This is the path for "I want this LA shield available on
 -- THIS weapon too" decisions made one shield at a time as we walk the list.
 local _LA_EXTRA_WEAPON_TYPES = {
-    -- Ostermark + Kotbs are authored for Empire mace/sword/deus UVs but the
-    -- player wants them available on Bret longsword+shield as well; the
-    -- mesh swaps to deus_shield_03 (matches the texture's UVs) so it
-    -- displays as the LA combo rather than wrapping onto Bret UVs.
-    Kruber_empire_shield_hero1_Ostermark01 = { es_1h_sword_shield_breton = true },
-    Kruber_empire_shield_hero1_Kotbs01     = { es_1h_sword_shield_breton = true },
-    -- Empire shield 01 mesh (Reiland-style). Custom kind="unit" mesh; same
-    -- "show LA's authored shape on Bret weapon" rationale as Ostermark.
-    Kruber_empire_shield_basic1            = { es_1h_sword_shield_breton = true },
+    -- Per-variant cross-pollination (legacy table — superseded by the
+    -- per-character rule below for shield families, but kept available
+    -- for one-off non-shield additions).
 }
+
+-- v0.8.57-dev: per-character shield item_type pool, split by mesh family.
+--
+-- Every LA shield variant whose la_key starts with a character prefix is
+-- automatically added to other shield-bearing item_types for that character
+-- — but only within the same mesh family. A `kind="texture"` variant
+-- authored for the Bret heater-shield mesh paints onto whatever mesh the
+-- base item uses, so cross-pollinating it onto Empire kite-shield items
+-- wraps the Bret-UV texture onto Empire geometry (visible artifact: Bret
+-- texture stretched on Empire shield model). Splitting Kruber's shields
+-- into `empire` (kite shield: sword+shield, mace+shield, deus_01) and
+-- `breton` (heater shield: sword+shield_breton) keeps each variant within
+-- the mesh family it was authored for.
+--
+-- `kind="unit"` variants carry their own mesh in `new_units[1]` — those
+-- swap the displayed mesh on apply, so they render correctly across any
+-- base item. For them we cross-pollinate across the whole character pool
+-- (see `_LA_CHARACTER_ALL_SHIELDS` below).
+--
+-- LA's per-variant `icons` table already provides character-correct
+-- targeting; this only adds weapon-type expansion WITHIN a character's
+-- mesh family (or across the character's full pool for kind="unit").
+local _LA_CHARACTER_SHIELD_FAMILIES = {
+    Kruber = {
+        empire = { "es_1h_sword_shield", "es_1h_mace_shield", "es_deus_01" },
+        breton = { "es_1h_sword_shield_breton" },
+    },
+    Bardin    = { dwarf = { "dr_1h_axe_shield", "dr_1h_hammer_shield" } },
+    Kerillian = { wood_elf = { "we_1h_spears_shield" } },
+    Saltzpyre = { imperial = { "wh_flail_shield", "wh_hammer_shield" } },
+}
+
+-- Reverse map: shield item_type → family key (within character). Used to
+-- detect a variant's authored family from its `icons` table.
+local _SHIELD_TYPE_TO_FAMILY = {}
+for _, families in pairs(_LA_CHARACTER_SHIELD_FAMILIES) do
+    for family, types in pairs(families) do
+        for _, wt in ipairs(types) do
+            _SHIELD_TYPE_TO_FAMILY[wt] = family
+        end
+    end
+end
+
+-- Flat per-character shield pool (all families merged), used for the
+-- broad cross-pollination of `kind="unit"` custom-mesh variants. Same set
+-- the old `_LA_CHARACTER_SHIELD_TYPES` exposed.
+local _LA_CHARACTER_ALL_SHIELDS = {}
+for character, families in pairs(_LA_CHARACTER_SHIELD_FAMILIES) do
+    local all = {}
+    for _, types in pairs(families) do
+        for _, wt in ipairs(types) do all[#all + 1] = wt end
+    end
+    _LA_CHARACTER_ALL_SHIELDS[character] = all
+end
+
+-- Set of every shield item_type across all characters, for filtering
+-- non-shield variants (bows etc.) out of the offhand pool. LA's bow
+-- variants share `swap_hand = "left_hand_unit"` with shields because the
+-- bow body is wielded in the left hand, so the swap_hand filter alone
+-- isn't enough to distinguish them.
+local _ALL_SHIELD_TYPES = {}
+for wt, _ in pairs(_SHIELD_TYPE_TO_FAMILY) do
+    _ALL_SHIELD_TYPES[wt] = true
+end
 
 -- LA's icon keys sometimes use a different name than the game's actual
 -- `ItemMasterList[item].item_type` value. The picker queries the table by
@@ -252,7 +384,19 @@ local function build_offhand_options()
     M.la_offhand_options_by_weapon_type = {}
     M._la_offhand_resolution = {}
     local SKIN_LIST = la().SKIN_LIST
-    for la_key, variant in pairs(SKIN_LIST) do
+    -- v0.8.66: sorted iteration. After pre_register_la_inventory_packages has
+    -- already filled NetworkLookup.inventory_packages for every kind="unit"
+    -- left_hand variant, the per-variant calls inside this loop are no-ops via
+    -- the rawget(ip, path) guard. Sorting still matters defensively: any future
+    -- mutation that depends on first-seen order will be deterministic across
+    -- peers. pairs() over a string-keyed table is not guaranteed deterministic.
+    local sorted_keys = {}
+    for la_key, _ in pairs(SKIN_LIST) do
+        sorted_keys[#sorted_keys + 1] = la_key
+    end
+    table.sort(sorted_keys)
+    for _, la_key in ipairs(sorted_keys) do
+        local variant = SKIN_LIST[la_key]
         if variant.swap_hand == "left_hand_unit"
             and _is_supported_variant(variant)
             and type(variant.icons) == "table"
@@ -261,44 +405,103 @@ local function build_offhand_options()
             if character and _character_prefixes[character] then
                 local weapon_types = {}
                 local sorted_icons = {}
+                local authored_family = nil
+                local has_shield_authored = false
                 for icon_key, _ in pairs(variant.icons) do
                     sorted_icons[#sorted_icons + 1] = icon_key
                     local wt = icon_key:match("^(.-)_skin_")
-                    if wt then weapon_types[_normalize_weapon_type(wt)] = true end
+                    if wt then
+                        local normalized = _normalize_weapon_type(wt)
+                        weapon_types[normalized] = true
+                        local family = _SHIELD_TYPE_TO_FAMILY[normalized]
+                        if family then
+                            has_shield_authored = true
+                            -- Prefer the first family found; multi-family
+                            -- icon sets are rare and ambiguous.
+                            authored_family = authored_family or family
+                        end
+                    end
                 end
                 local extras = _LA_EXTRA_WEAPON_TYPES[la_key]
                 if extras then
-                    for wt, _ in pairs(extras) do weapon_types[_normalize_weapon_type(wt)] = true end
+                    for wt, _ in pairs(extras) do
+                        local normalized = _normalize_weapon_type(wt)
+                        weapon_types[normalized] = true
+                        if _SHIELD_TYPE_TO_FAMILY[normalized] then
+                            has_shield_authored = true
+                            authored_family = authored_family or _SHIELD_TYPE_TO_FAMILY[normalized]
+                        end
+                    end
                 end
-                table.sort(sorted_icons)
-                local vanilla_skin_key = sorted_icons[1]
-                local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
-                -- For kind="unit" custom-mesh variants, register both new_units
-                -- entries (1p and _3p) in NetworkLookup.inventory_packages so
-                -- vanilla code reading the table for sync doesn't crash on the
-                -- strict __index. kind="texture" variants point to vanilla
-                -- meshes that are already in the table.
-                if variant.kind == "unit" and variant.new_units then
-                    _register_la_path_in_network_lookup(variant.new_units[1])
-                    _register_la_path_in_network_lookup(variant.new_units[2])
-                end
-                M._la_offhand_resolution[la_key] = {
-                    intended_unit = intended_unit,
-                    source        = source,
-                    texture_path  = (variant.textures and variant.textures[1]) or nil,
-                    icon_keys     = sorted_icons,
-                    weapon_types  = weapon_types,
-                }
-                local opt = {
-                    name          = humanize_armoury_key(la_key),
-                    armoury_key   = la_key,
-                    vanilla_skin  = vanilla_skin_key,
-                    intended_unit = intended_unit,
-                }
-                for wt, _ in pairs(weapon_types) do
-                    local list = M.la_offhand_options_by_weapon_type[wt]
-                    if not list then list = {}; M.la_offhand_options_by_weapon_type[wt] = list end
-                    list[#list + 1] = opt
+
+                -- v0.8.57: bow / non-shield filter. LA bow variants also use
+                -- `swap_hand = "left_hand_unit"` (the bow body wields in the
+                -- left hand), so they pass the outer if. Only proceed if at
+                -- least one of the variant's authored icons maps to a known
+                -- shield item_type. Symptom prior: Kerillian bow models
+                -- appeared as offhand options on her spear+shield.
+                if has_shield_authored then
+                    -- v0.8.57: family-aware cross-pollination.
+                    --   kind="unit"    → broad pool across all the
+                    --                    character's shield item_types.
+                    --                    The variant carries its own mesh
+                    --                    in new_units[1] so it renders
+                    --                    correctly on any base item.
+                    --   kind="texture" → restricted to the variant's
+                    --                    authored family. Texture is
+                    --                    authored for a specific mesh's UV
+                    --                    layout; painting it onto a
+                    --                    different mesh family wraps
+                    --                    incorrectly (Bret texture on
+                    --                    Empire mesh visible as warped
+                    --                    artwork).
+                    if variant.kind == "unit" then
+                        local char_pool = _LA_CHARACTER_ALL_SHIELDS[character]
+                        if char_pool then
+                            for _, wt in ipairs(char_pool) do
+                                weapon_types[_normalize_weapon_type(wt)] = true
+                            end
+                        end
+                    elseif authored_family then
+                        local family_pool = _LA_CHARACTER_SHIELD_FAMILIES[character]
+                            and _LA_CHARACTER_SHIELD_FAMILIES[character][authored_family]
+                        if family_pool then
+                            for _, wt in ipairs(family_pool) do
+                                weapon_types[_normalize_weapon_type(wt)] = true
+                            end
+                        end
+                    end
+                    table.sort(sorted_icons)
+                    local vanilla_skin_key = sorted_icons[1]
+                    local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
+                    -- For kind="unit" custom-mesh variants, register both
+                    -- new_units entries (1p and _3p) in
+                    -- NetworkLookup.inventory_packages so vanilla code
+                    -- reading the table for sync doesn't crash on the
+                    -- strict __index. kind="texture" variants point to
+                    -- vanilla meshes that are already in the table.
+                    if variant.kind == "unit" and variant.new_units then
+                        _register_la_path_in_network_lookup(variant.new_units[1])
+                        _register_la_path_in_network_lookup(variant.new_units[2])
+                    end
+                    M._la_offhand_resolution[la_key] = {
+                        intended_unit = intended_unit,
+                        source        = source,
+                        texture_path  = (variant.textures and variant.textures[1]) or nil,
+                        icon_keys     = sorted_icons,
+                        weapon_types  = weapon_types,
+                    }
+                    local opt = {
+                        name          = humanize_armoury_key(la_key),
+                        armoury_key   = la_key,
+                        vanilla_skin  = vanilla_skin_key,
+                        intended_unit = intended_unit,
+                    }
+                    for wt, _ in pairs(weapon_types) do
+                        local list = M.la_offhand_options_by_weapon_type[wt]
+                        if not list then list = {}; M.la_offhand_options_by_weapon_type[wt] = list end
+                        list[#list + 1] = opt
+                    end
                 end
             end
         end
@@ -344,11 +547,29 @@ function M.register_all()
     if not ItemMasterList then return end
     if type(la().SKIN_LIST) ~= "table" then return end
 
+    -- v0.8.66: pre-register kind="unit" left-hand variant inventory_packages
+    -- BEFORE any other registration so two peers always assign identical network
+    -- indices regardless of their per-machine filter outcomes. See
+    -- pre_register_la_inventory_packages above and the doctrine memo
+    -- feedback_vt2_gated_registration_diverges.md.
+    M.pre_register_la_inventory_packages()
+
     local unit_index = build_unit_index()
     local entries_to_register = {}
     local registered, skipped = 0, {}
 
-    for la_key, variant in pairs(la().SKIN_LIST) do
+    -- v0.8.66: sorted iteration so the order in which we append to
+    -- entries_to_register (and downstream NetworkLookup.item_names below) is
+    -- identical across peers. pairs() over a string-keyed table is not
+    -- guaranteed deterministic across LuaJIT VMs even with the same key set.
+    local sorted_la_keys = {}
+    for la_key, _ in pairs(la().SKIN_LIST) do
+        sorted_la_keys[#sorted_la_keys + 1] = la_key
+    end
+    table.sort(sorted_la_keys)
+
+    for _, la_key in ipairs(sorted_la_keys) do
+        local variant = la().SKIN_LIST[la_key]
         local hand = variant.swap_hand
         if hand == "hat" or hand == "armor" then
             local vanilla_key, unit_path = pick_vanilla_key(variant, unit_index)
@@ -412,9 +633,44 @@ end
 -- (backend_id, armoury_key, vanilla_key) or nil.
 -- Walks the per-career loadout for ALL careers, since LA's hooks fire across
 -- world units that may not belong to the local player (e.g. preview pawns).
+--
+-- v0.8.66-dev: consult cosmetics_tweaker.mod.loadout_cache FIRST. The
+-- get_loadout hook in cosmetics_tweaker.lua rewrites LA backend_ids back to
+-- vanilla in the returned loadout (for net-safety — peers can't decode the LA
+-- bids). When apply_direct → maybe_queue_unit → find_active_clone called
+-- get_loadout, the LA bid was already gone, the lookup missed, apply_direct
+-- never fired, the apply_gate stayed closed, LA's own update loop was blocked
+-- → local player saw vanilla on themselves. Reading from loadout_cache
+-- (populated un-rewritten by the set_loadout_item hook for slot_hat / slot_skin)
+-- gives us the LA bid that should drive apply_direct.
 local function find_active_clone_for_unit_path(unit_path)
     local clones = M.unit_path_to_clones[unit_path]
     if not clones then return nil end
+
+    -- Fast path: check the un-rewritten loadout_cache populated by
+    -- cosmetics_tweaker.lua:3099 (set_loadout_item hook). This is the
+    -- single source of truth for LA hat/armor equips on the local player.
+    local cosmetics_mod = get_mod("cosmetics_tweaker")
+    local cache = cosmetics_mod and cosmetics_mod.loadout_cache
+    if type(cache) == "table" then
+        for _, slots in pairs(cache) do
+            if type(slots) == "table" then
+                for _, equipped_id in pairs(slots) do
+                    for _, our_id in ipairs(clones) do
+                        if equipped_id == our_id then
+                            return our_id, M.backend_to_armoury[our_id], M.backend_to_vanilla[our_id]
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Fallback: vanilla loadout. The get_loadout hook re-injects loadout_cache
+    -- entries on top of the rewritten table (cosmetics_tweaker.lua:3135-3140),
+    -- so this path still matches in steady state for LA hat/armor. It also
+    -- catches LA-cloned weapon illusions / other slots that don't flow
+    -- through loadout_cache.
     if not Managers.backend then return nil end
     local items_iface = Managers.backend:get_interface("items")
     if not items_iface then return nil end
@@ -530,11 +786,140 @@ local SHIELD_NORM_SLOT = "texture_map_59cd86b9"
 --
 -- Source for these paths: `units/empire_shield/<la_mesh>.unit` `colors`,
 -- `normals`, `MABs` keys at slot1.
+--
+-- v0.8.51-dev: bulk-extracted from LA's source `.unit` files in
+-- `C:\Users\danjo\source\repos\Loremasters-Armoury\units\<dir>\<file>.unit`
+-- for every kind="unit" shield variant. All 20 share the same
+-- `mat_to_use = wpn_empire_handgun_02_t2`, so the parent_packages map
+-- below is uniform across the family (see la_kind_unit_parent_packages
+-- block further down).
+--
+-- Kerillian shields have TWO mat_slots in vanilla LA (slot1=handle,
+-- slot2=shield). The current `Unit.set_texture_for_materials` painter
+-- writes uniformly across all materials on the unit, so we use slot2
+-- (the shield face — the primary visual element). The handle will
+-- render with the same texture; visually imperfect but the prominent
+-- visual element renders correctly. A future per-material painter
+-- could refine this; for alpha it's acceptable.
+--
+-- Empire and Bardin shields are single-slot — straightforward.
 local _LA_KIND_UNIT_TEXTURES = {
+    -- ===== Empire (Kruber) — single slot1=shield =====
     Kruber_empire_shield_basic1 = {
         diff = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_diffuse",
         norm = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_normal",
         pack = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_combined",
+    },
+    Kruber_empire_shield_basic1_Ostermark01 = {
+        diff = "textures/Kruber_empire_shield_basic1_Ostermark01/Kruber_empire_shield_basic1_Ostermark01_diffuse",
+        norm = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_normal",
+        pack = "textures/Kruber_empire_shield_basic1/Kruber_empire_shield_basic1_combined",
+    },
+    Kruber_empire_shield_basic2 = {
+        diff = "textures/Kruber_empire_shield_basic2/Kruber_empire_shield_basic2_Ostland01_diffuse",
+        norm = "textures/Kruber_empire_shield_basic2/Kruber_empire_shield_basic2_normal",
+        pack = "textures/Kruber_empire_shield_basic2/Kruber_empire_shield_basic2_combined",
+    },
+    Kruber_empire_shield_basic2_Kotbs01 = {
+        diff = "textures/Kruber_empire_shield_basic2_Kotbs01/Kruber_empire_shield_basic2_Kotbs01_diffuse",
+        norm = "textures/Kruber_empire_shield_basic2/Kruber_empire_shield_basic2_normal",
+        pack = "textures/Kruber_empire_shield_basic2/Kruber_empire_shield_basic2_combined",
+    },
+    Kruber_empire_shield_basic2_Middenheim = {
+        diff = "textures/Kruber_empire_shield_basic2_Middenheim01B/Kruber_empire_shield_basic2_Middenheim01_diffuse",
+        norm = "textures/Kruber_empire_shield_basic2/Kruber_empire_shield_basic2_normal",
+        pack = "textures/Kruber_empire_shield_basic2/Kruber_empire_shield_basic2_combined",
+    },
+    Kruber_empire_shield_basic3_Middenheim01 = {
+        diff = "textures/Kruber_empire_shield_basic3/Kruber_empire_shield_basic3_Middenheim01_diffuse",
+        norm = "textures/Kruber_empire_shield_basic3/Kruber_empire_shield_basic3_normal",
+        pack = "textures/Kruber_empire_shield_basic3/Kruber_empire_shield_basic3_combined",
+    },
+
+    -- ===== Bardin (Dwarf) — single slot1=Tex_0457_0 =====
+    Bardin_dwarf_shield_basicClean_KarakNorn01 = {
+        diff = "textures/Bardin_dwarf_shield_basicClean_KarakNorn01/Bardin_dwarf_shield_basicClean_KarakNorn01_diffuse",
+        norm = "textures/Bardin_dwarf_shield_basicClean_KarakNorn01/Bardin_dwarf_shield_basicClean_KarakNorn01_normal",
+        pack = "textures/Bardin_dwarf_shield_basicClean_KarakNorn01/Bardin_dwarf_shield_basicClean_KarakNorn01_combined",
+    },
+    Bardin_dwarf_shield_heroClean_KarakNorn01 = {
+        diff = "textures/Bardin_dwarf_shield_heroClean_KarakNorn01/Bardin_dwarf_shield_heroClean_KarakNorn01_diffuse",
+        norm = "textures/Bardin_dwarf_shield_heroClean_KarakNorn01/Bardin_dwarf_shield_heroClean_KarakNorn01_normal",
+        pack = "textures/Bardin_dwarf_shield_heroClean_KarakNorn01/Bardin_dwarf_shield_heroClean_KarakNorn01_combined",
+    },
+
+    -- ===== Kerillian (Elf) — TWO mat_slots in vanilla LA (slot1=handle,
+    --     slot2=shield); we use slot2 (shield face — primary visual).
+    --     Two sub-groups by normal/pack base path (extracted verbatim from
+    --     source `.unit` slot2 entries):
+    --       basicClean group: `textures/elf_shield/Kerillian_elf_shield_basicClean_*`
+    --       heroClean group:  `textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_*`
+    Kerillian_elf_shield_basic_Avelorn01_mesh = {
+        -- Mesh path: Kerillian_elf_shield_heroClean_mesh_Avelorn01, but slot2
+        -- in this .unit points to the basicClean-group normal/pack.
+        -- diff filename oddity: ends in `_diffuse1` (with trailing 1).
+        diff = "textures/Kerillian_elf_shield_basic_Avelorn01/Kerillian_elf_shield_basicClean_Avelorn01_diffuse1",
+        norm = "textures/elf_shield/Kerillian_elf_shield_basicClean_normal",
+        pack = "textures/elf_shield/Kerillian_elf_shield_basicClean_combined",
+    },
+    Kerillian_elf_shield_basic2_mesh = {
+        diff = "textures/Kerillian_elf_shield_basic2_Griffongate01/Kerillian_elf_shield_basic2_Griffongate01_diffuse",
+        norm = "textures/elf_shield/Kerillian_elf_shield_basicClean_normal",
+        pack = "textures/elf_shield/Kerillian_elf_shield_basicClean_combined",
+    },
+    -- heroClean group (norm/pack under elf_shield/Shield/)
+    Kerillian_elf_shield_heroClean_Saphery01 = {
+        diff = "textures/Kerillian_elf_shield_heroClean_Saphery01/Kerillian_elf_shield_heroClean_Saphery01_diffuse",
+        norm = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_normal",
+        pack = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_combined",
+    },
+    Kerillian_elf_shield_heroClean_Caledor01 = {
+        diff = "textures/Kerillian_elf_shield_heroClean_Caledor01/Kerillian_elf_shield_heroClean_Caledor01_diffuse",
+        norm = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_normal",
+        pack = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_combined",
+    },
+    Kerillian_elf_shield_heroClean_Avelorn02 = {
+        diff = "textures/Kerillian_elf_shield_heroClean_Avelorn02/Kerillian_elf_shield_heroClean_Avelorn02_diffuse",
+        norm = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_normal",
+        pack = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_combined",
+    },
+    Kerillian_elf_shield_heroClean_Eataine01 = {
+        diff = "textures/Kerillian_elf_shield_heroClean_Eataine01/Kerillian_elf_shield_heroClean_Eataine01_diffuse",
+        norm = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_normal",
+        pack = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_combined",
+    },
+    Kerillian_elf_shield_heroClean_Chrace01 = {
+        diff = "textures/Kerillian_elf_shield_heroClean_Chrace01/Kerillian_elf_shield_heroClean_Chrace01_diffuse",
+        norm = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_normal",
+        pack = "textures/elf_shield/Shield/Kerillian_elf_shield_heroClean_combined",
+    },
+    -- basicClean group (norm/pack under elf_shield/ directly)
+    Kerillian_elf_shield_basicClean = {
+        diff = "textures/Kerillian_elf_shield_basicClean_Eataine01/Kerillian_elf_shield_basicClean_Eataine01_diffuse",
+        norm = "textures/elf_shield/Kerillian_elf_shield_basicClean_normal",
+        pack = "textures/elf_shield/Kerillian_elf_shield_basicClean_combined",
+    },
+    -- Note: in source `.unit` the texture directory is "EagleGate01" (capital
+    -- G) while the diffuse filename has lowercase "Eaglegate01". Match source.
+    Kerillian_elf_shield_basic2_Eaglegate01 = {
+        diff = "textures/Kerillian_elf_shield_basic2_EagleGate01/Kerillian_elf_shield_basic2_Eaglegate01_diffuse",
+        norm = "textures/elf_shield/Kerillian_elf_shield_basicClean_normal",
+        pack = "textures/elf_shield/Kerillian_elf_shield_basicClean_combined",
+    },
+    Kerillian_elf_shield_basicClean_Saphery01 = {
+        diff = "textures/Kerillian_elf_shield_basicClean_Saphery01/Kerillian_elf_shield_basicClean_Saphery01_diffuse",
+        norm = "textures/elf_shield/Kerillian_elf_shield_basicClean_normal",
+        pack = "textures/elf_shield/Kerillian_elf_shield_basicClean_combined",
+    },
+    Kerillian_elf_shield_basicClean_Caledor01 = {
+        diff = "textures/Kerillian_elf_shield_basicClean_Caledor01/Kerillian_elf_shield_basicClean_Caledor01_diffuse",
+        norm = "textures/elf_shield/Kerillian_elf_shield_basicClean_normal",
+        pack = "textures/elf_shield/Kerillian_elf_shield_basicClean_combined",
+    },
+    Kerillian_elf_shield_basicClean_Chrace01 = {
+        diff = "textures/Kerillian_elf_shield_basicClean_Chrace01/Kerillian_elf_shield_basicClean_Chrace01_diffuse",
+        norm = "textures/elf_shield/Kerillian_elf_shield_basicClean_normal",
+        pack = "textures/elf_shield/Kerillian_elf_shield_basicClean_combined",
     },
 }
 
@@ -548,8 +933,36 @@ local _LA_KIND_UNIT_TEXTURES = {
 --
 -- Source for these mappings: `mat_to_use` field in
 -- `units/.../<la_mesh>.unit` (LA's source repo).
+--
+-- v0.8.51-dev: bulk-extracted across all 20 kind="unit" shields. LA
+-- consistently uses `wpn_empire_handgun_02_t2` as the parent material
+-- for every custom-mesh shield (Empire / Bardin / Kerillian), so the
+-- map is uniform.
+local _LA_HANDGUN_PARENT = "units/weapons/player/wpn_empire_handgun_02_t2/wpn_empire_handgun_02_t2"
 M.la_kind_unit_parent_packages = {
-    Kruber_empire_shield_basic1 = "units/weapons/player/wpn_empire_handgun_02_t2/wpn_empire_handgun_02_t2",
+    -- Empire (Kruber)
+    Kruber_empire_shield_basic1                = _LA_HANDGUN_PARENT,
+    Kruber_empire_shield_basic1_Ostermark01    = _LA_HANDGUN_PARENT,
+    Kruber_empire_shield_basic2                = _LA_HANDGUN_PARENT,
+    Kruber_empire_shield_basic2_Kotbs01        = _LA_HANDGUN_PARENT,
+    Kruber_empire_shield_basic2_Middenheim     = _LA_HANDGUN_PARENT,
+    Kruber_empire_shield_basic3_Middenheim01   = _LA_HANDGUN_PARENT,
+    -- Bardin (Dwarf)
+    Bardin_dwarf_shield_basicClean_KarakNorn01 = _LA_HANDGUN_PARENT,
+    Bardin_dwarf_shield_heroClean_KarakNorn01  = _LA_HANDGUN_PARENT,
+    -- Kerillian (Elf)
+    Kerillian_elf_shield_basic_Avelorn01_mesh  = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_basic2_mesh           = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_heroClean_Saphery01   = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_heroClean_Caledor01   = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_heroClean_Avelorn02   = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_heroClean_Eataine01   = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_heroClean_Chrace01    = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_basicClean            = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_basic2_Eaglegate01    = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_basicClean_Saphery01  = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_basicClean_Caledor01  = _LA_HANDGUN_PARENT,
+    Kerillian_elf_shield_basicClean_Chrace01   = _LA_HANDGUN_PARENT,
 }
 
 -- Preview-only scale multiplier per `kind="unit"` shield. Applied via
@@ -752,6 +1165,14 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
         -- for non-previewer contexts to keep the v0.8.46 safe-no-paint
         -- behavior for in-game/inventory (where painting still AVs because
         -- the *paint texture binding* is what 0x8-faulted, not the swap).
+        -- v0.8.64-dev: four valid contexts now — "ingame", "hero_previewer",
+        -- "loot_previewer", "network_husk". Only loot_previewer takes the
+        -- swap+paint path; the other three fall through to the kind="unit"
+        -- bail-without-paint behavior. "network_husk" is the peer-side
+        -- replay path: we paint a wearer-selected LA shield texture onto
+        -- our local husk's left-hand weapon unit. Mesh-swap on a husk
+        -- would require despawning/respawning a network-coupled unit, so
+        -- kind="unit" husk variants are deferred (vanilla mesh stays).
         if context ~= "loot_previewer" then
             if M.trace then
                 mod:info("[LA bridge] kind=unit %s context=%s — skipping swap+paint (vanilla path renders correctly)",
@@ -983,7 +1404,7 @@ end
 
 -- Force-apply a specific LA variant to the player's currently spawned hat unit.
 -- Bypasses our detection logic entirely — confirms whether the LA pipeline
--- itself is working. Usage: cos la_force Kruber_Pureheart_helm_white
+-- itself is working. Usage: /la_force Kruber_Pureheart_helm_white
 function M.force_apply(armoury_key)
     local LA = la()
     if not LA then mod:echo("[la_force] LA not loaded"); return end

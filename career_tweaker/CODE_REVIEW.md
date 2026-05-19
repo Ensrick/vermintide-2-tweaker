@@ -28,17 +28,17 @@ The `ActionBlock` half of the hook (`career_tweaker_balance.lua:71–78`) is cor
 
 - **Controller UI refresh.** `_talent_window_instance` only tracks `HeroWindowTalents`. `HeroWindowTalentsConsole` (controller-mode UI, with its own `_update_talent_sync`) is not tracked, so controller users won't get the live UI refresh after a setting change. Acceptable if controller is out of scope; flagging in case it's not.
 - **Debug echo.** `mod.on_setting_changed` calls `mod:echo("Setting changed: ...")` on every setting toggle. Is this debug output that should be downgraded to `mod:info`?
-- **Mod ID rename.** Code keeps internal ID `"crt"` (correct per recent context — settings persist). Console command `ct_status` collides with the `ct_` convention used for chaos_wastes_tweaker; rename to `crt_status` worth considering for clarity.
+- **Mod ID rename.** Code keeps internal ID `"crt"` (correct per recent context — settings persist). Console command `/ct_status` collides with the `ct_` convention used for chaos_wastes_tweaker; rename to `/crt_status` worth considering for clarity.
 
 ## Refactor / cleanup candidates
 
 - **`career_tweaker_balance.lua`:** the entire patch engine (`_originals`, `apply_balance_mods` patch loop, `restore_all_balance_mods`, `BALANCE_MODS[].patches/character/career` fields) is unused. Either delete it, or keep it explicitly as a framework hook for future patch-based balance mods.
-- **`career_tweaker.lua:130` console-command comment** said `crt status` but the actual command is `ct_status`. Comment fixed in this pass.
+- **`career_tweaker.lua:130` console-command comment** said `crt status` (a malformed two-word form). Actual command is `/ct_status` (registered name is `ct_status` — typed in chat as `/ct_status`). Comment fixed in this pass.
 - The `pcall` wrapping `_update_talent_sync` is defensive but probably unnecessary — `on_exit` clears `_talent_window_instance` synchronously. Could simplify to a direct call. Low priority.
 
 ## Doc/code mismatches
 
-- `career_tweaker.lua:130` — comment said "crt status" but command is `ct_status`. Fixed in inline comment.
+- `career_tweaker.lua:130` — comment said "crt status" but the registered name is `ct_status` (invoked in chat as `/ct_status`). Fixed in inline comment.
 - `CHANGELOG.md` 0.2.0 says "Hooks `HeroWindowTalents.on_enter`/`on_exit`" — that matches code. ✓
 - `CHANGELOG.md` 0.2.0 mentions `_update_talent_sync` — matches `HeroWindowTalents._update_talent_sync` in source. ✓
 

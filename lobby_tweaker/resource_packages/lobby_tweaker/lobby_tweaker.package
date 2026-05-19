@@ -1,0 +1,11 @@
+mod = [
+	"lobby_tweaker"
+]
+
+package = [
+	"resource_packages/lobby_tweaker/lobby_tweaker"
+]
+
+lua = [
+	"scripts/mods/lobby_tweaker/*"
+]

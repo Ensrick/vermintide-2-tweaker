@@ -585,11 +585,121 @@ local function inject_duplicate_aliases()
     return injected
 end
 
+-- Build the LevelSettings / NetworkLookup.level_keys / TerrorEventBlueprints /
+-- WeightedRandomTerrorEvents entries for one adventure mission's six theme
+-- permutations. Does NOT touch DEUS_MAP_POPULATE_SETTINGS pools — pool selection
+-- stays toggle-gated in inject_pool() below. Idempotent: every write is guarded
+-- by an existence check.
+--
+-- Split out of inject_pool() in v0.7.62 so it can run unconditionally regardless
+-- of master / per-mission toggles. A client whose toggles are off would otherwise
+-- crash at state_loading.lua:449 (`attempt to index local 'level_settings' (a nil
+-- value)`) when joining a host who rolled `<adv>_<theme>_path1`. Same bug class
+-- as v0.7.60 (dormants) and v0.7.61 (trait boons) — see
+-- feedback_vt2_gated_registration_diverges.md.
+local function register_mission_resolvables(lvl, mission_entry)
+    local vanilla = rawget(LevelSettings, lvl)
+    if not vanilla then return false end  -- DLC not owned by this peer
+
+    local icon_id = mission_entry and mission_entry.icon and ("twitch_icon_" .. mission_entry.icon)
+        or "twitch_icon_shrine"
+
+    if not rawget(DEUS_LEVEL_SETTINGS, lvl) then
+        DEUS_LEVEL_SETTINGS[lvl] = {
+            base_level_name = lvl,
+            paths = { 1 },
+            themes = { "wastes", "khorne", "nurgle", "slaanesh", "tzeentch", "belakor" },
+            pickup_settings = make_cw_pickup_settings(vanilla),
+            deus_weapon_chest_distribution = make_altar_distribution(),
+            display_name = vanilla.display_name,
+            locations = vanilla.locations or {},
+            packages = {},
+            texture_id = icon_id,
+        }
+    end
+
+    for _, theme_name in ipairs(ALL_THEMES) do
+        local permutation_key = lvl .. "_" .. theme_name .. "_path1"
+        if not rawget(LevelSettings, permutation_key) then
+            local settings_clone = table.clone(vanilla)
+            settings_clone.level_name = vanilla.level_name
+            settings_clone.level_key = permutation_key
+            settings_clone.level_id = permutation_key
+            settings_clone.theme = theme_name
+            settings_clone.game_mode = "deus"
+            settings_clone.mechanism = "deus"
+            settings_clone.act = "deus_act"
+            settings_clone.act_presentation_order = 1
+            settings_clone.act_unlock_order = 0
+            settings_clone.dlc_name = "morris"
+            settings_clone.disable_percentage_completed = true
+            settings_clone.disable_quickplay = true
+            settings_clone.ommit_from_lobby_browser = true
+            settings_clone.unlockable = true
+            settings_clone.display_name = vanilla.display_name
+            settings_clone.description_text = vanilla.description_text or vanilla.display_name
+            settings_clone.allowed_locked_director_functions = { beastmen = true }
+            settings_clone.loading_ui_package_name = vanilla.loading_ui_package_name or "morris/deus_loading_screen_1"
+            settings_clone.pickup_settings = make_cw_pickup_settings(vanilla)
+            settings_clone.packages = build_permutation_packages(vanilla)
+            settings_clone.texture_id = icon_id
+            LevelSettings[permutation_key] = settings_clone
+        end
+        register_network_lookup_key(permutation_key)
+        -- TerrorEventBlueprints is built once at boot from LevelSettings; entries
+        -- for our post-boot permutation keys are missing. terror_event_mixer.lua:1723
+        -- does `TerrorEventBlueprints[level_key][event_name] or GenericTerrorEvents[event_name]`
+        -- which crashes on `nil[event_name]` before the OR fallback. Mirror the BASE
+        -- adventure level's blueprint table onto each permutation key so the lookup
+        -- finds a real table; events not present in the adventure blueprint then fall
+        -- through to GenericTerrorEvents (cursed_chest_prototype, etc.).
+        if rawget(_G, "TerrorEventBlueprints") and TerrorEventBlueprints[lvl] and not TerrorEventBlueprints[permutation_key] then
+            TerrorEventBlueprints[permutation_key] = TerrorEventBlueprints[lvl]
+        end
+        -- Same problem for WeightedRandomTerrorEvents — terror_event_mixer.lua:1595
+        -- does `WeightedRandomTerrorEvents[level_key][event_chunk_name]` and crashes
+        -- on `nil[event_chunk_name]` if no entry exists for our permutation key.
+        -- Adventure-level flow events (e.g. `nurgle_end_event_loop` on Festering
+        -- Ground) hit this when the level loads under a CW permutation.
+        -- Mirror the base adventure level's entry onto each permutation key.
+        if rawget(_G, "WeightedRandomTerrorEvents") and WeightedRandomTerrorEvents[lvl]
+                and not WeightedRandomTerrorEvents[permutation_key] then
+            WeightedRandomTerrorEvents[permutation_key] = WeightedRandomTerrorEvents[lvl]
+        end
+    end
+    return true
+end
+
+-- Unconditional pre-registration of every adventure mission in the catalog.
+-- Runs from inject_pool() before any toggle check (and so before mod-load returns
+-- via chaos_wastes_tweaker.lua:54) so two ct peers always have identical
+-- LevelSettings/NetworkLookup contents regardless of which adventure toggles each
+-- one has set. The crash this prevents: client joins a host running
+-- `magnus_belakor_path1`, client has master OR per-mission toggle off → client's
+-- LevelSettings lookup returns nil → fatal at state_loading.lua:449. Sorted
+-- iteration matches the doctrine for buff/power-up pre-registration in
+-- feedback_vt2_gated_registration_diverges.md — same shape of fix.
+function _M.pre_register_adventure_lookups()
+    if not LevelSettings or not DEUS_LEVEL_SETTINGS or not DEUS_CHEST_TYPES then return end
+    local sorted = {}
+    for _, m in ipairs(_M.ADVENTURE_MISSIONS) do sorted[#sorted + 1] = m end
+    table.sort(sorted, function(a, b) return a.key < b.key end)
+    for _, m in ipairs(sorted) do
+        register_mission_resolvables(m.key, m)
+    end
+end
+
 function _M.inject_pool()
     if not LevelSettings or not DEUS_LEVEL_SETTINGS or not DEUS_MAP_POPULATE_SETTINGS or not DEUS_CHEST_TYPES then
         mod:warning("inject_pool: required globals not loaded; skipping")
         return 0
     end
+
+    -- Pre-register every adventure mission's resolvables unconditionally so a peer
+    -- whose master / per-mission toggles are off can still resolve a host-advertised
+    -- permutation key. Runs before the toggle gate so it covers the master-off case
+    -- too. Idempotent — re-running on setting-change is harmless.
+    _M.pre_register_adventure_lookups()
 
     -- First call snapshots vanilla LEVEL_AVAILABILITY; subsequent calls reset to it
     -- so the operation is idempotent (re-running after toggle changes produces the
@@ -601,7 +711,7 @@ function _M.inject_pool()
     -- ignored entirely so the user can flip the master to deactivate everything
     -- without having to also re-tick every per-mission box.
     if not mod:get("inject_adventure_maps") then
-        mod:info("inject_pool: master toggle off; pool reset to vanilla")
+        mod:info("inject_pool: master toggle off; pool reset to vanilla (resolvables pre-registered)")
         return 0
     end
 
@@ -613,94 +723,27 @@ function _M.inject_pool()
         return 0
     end
 
-    -- 1. Inject adventure missions into TRAVEL + SIGNATURE.
-    -- DEUS_LEVEL_SETTINGS + per-theme LevelSettings entries are CREATE-ONCE: once
-    -- registered they persist for the session (we cannot un-register Lua entries cleanly,
-    -- and re-creating them on every call would churn `level_name`/`packages` references
-    -- that other systems may have cached).
-    -- LEVEL_AVAILABILITY entries are RE-ADDED on every call because reset_to_snapshot
-    -- above wiped them; the snapshot only knows about vanilla CW pools.
+    -- 1. Add enabled adventure missions to TRAVEL + SIGNATURE pools.
+    -- Per-mission resolvables (DEUS_LEVEL_SETTINGS + per-theme LevelSettings +
+    -- NetworkLookup + TerrorEventBlueprints + WeightedRandomTerrorEvents) were
+    -- already registered above via pre_register_adventure_lookups(); here we
+    -- just flag membership and mutate LEVEL_AVAILABILITY (the toggle-gated bit).
+    -- LEVEL_AVAILABILITY entries are RE-ADDED on every call because
+    -- reset_to_snapshot above wiped them.
     local injected_adv = 0
     for _, lvl in ipairs(enabled) do
-        local vanilla = rawget(LevelSettings, lvl)
-        if not vanilla then
-            mod:info("inject_pool: LevelSettings.%s missing (DLC not owned?); skipping", lvl)
+        local dls = rawget(DEUS_LEVEL_SETTINGS, lvl)
+        if not dls then
+            mod:info("inject_pool: DEUS_LEVEL_SETTINGS.%s missing (DLC not owned?); skipping", lvl)
         else
-            local mission_entry = _M.MISSION_BY_KEY[lvl]
-            local icon_id = mission_entry and mission_entry.icon and ("twitch_icon_" .. mission_entry.icon)
-                or "twitch_icon_shrine"  -- defensive fallback if a mission has no icon mapped
-
-            if not rawget(DEUS_LEVEL_SETTINGS, lvl) then
-                DEUS_LEVEL_SETTINGS[lvl] = {
-                    base_level_name = lvl,
-                    paths = { 1 },
-                    themes = { "wastes", "khorne", "nurgle", "slaanesh", "tzeentch", "belakor" },
-                    pickup_settings = make_cw_pickup_settings(vanilla),
-                    deus_weapon_chest_distribution = make_altar_distribution(),
-                    display_name = vanilla.display_name,
-                    locations = vanilla.locations or {},
-                    packages = {},
-                    texture_id = icon_id,
-                }
-            end
             _M.IS_INJECTED_ADVENTURE_LEVEL[lvl] = true
-
-            for _, theme_name in ipairs(ALL_THEMES) do
-                local permutation_key = lvl .. "_" .. theme_name .. "_path1"
-                if not rawget(LevelSettings, permutation_key) then
-                    local settings_clone = table.clone(vanilla)
-                    settings_clone.level_name = vanilla.level_name
-                    settings_clone.level_key = permutation_key
-                    settings_clone.level_id = permutation_key
-                    settings_clone.theme = theme_name
-                    settings_clone.game_mode = "deus"
-                    settings_clone.mechanism = "deus"
-                    settings_clone.act = "deus_act"
-                    settings_clone.act_presentation_order = 1
-                    settings_clone.act_unlock_order = 0
-                    settings_clone.dlc_name = "morris"
-                    settings_clone.disable_percentage_completed = true
-                    settings_clone.disable_quickplay = true
-                    settings_clone.ommit_from_lobby_browser = true
-                    settings_clone.unlockable = true
-                    settings_clone.display_name = vanilla.display_name
-                    settings_clone.description_text = vanilla.description_text or vanilla.display_name
-                    settings_clone.allowed_locked_director_functions = { beastmen = true }
-                    settings_clone.loading_ui_package_name = vanilla.loading_ui_package_name or "morris/deus_loading_screen_1"
-                    settings_clone.pickup_settings = make_cw_pickup_settings(vanilla)
-                    settings_clone.packages = build_permutation_packages(vanilla)
-                    settings_clone.texture_id = icon_id
-                    LevelSettings[permutation_key] = settings_clone
-                end
-                register_network_lookup_key(permutation_key)
-                -- TerrorEventBlueprints is built once at boot from LevelSettings; entries
-                -- for our post-boot permutation keys are missing. terror_event_mixer.lua:1723
-                -- does `TerrorEventBlueprints[level_key][event_name] or GenericTerrorEvents[event_name]`
-                -- which crashes on `nil[event_name]` before the OR fallback. Mirror the BASE
-                -- adventure level's blueprint table onto each permutation key so the lookup
-                -- finds a real table; events not present in the adventure blueprint then fall
-                -- through to GenericTerrorEvents (cursed_chest_prototype, etc.).
-                if rawget(_G, "TerrorEventBlueprints") and TerrorEventBlueprints[lvl] and not TerrorEventBlueprints[permutation_key] then
-                    TerrorEventBlueprints[permutation_key] = TerrorEventBlueprints[lvl]
-                end
-                -- Same problem for WeightedRandomTerrorEvents — terror_event_mixer.lua:1595
-                -- does `WeightedRandomTerrorEvents[level_key][event_chunk_name]` and crashes
-                -- on `nil[event_chunk_name]` if no entry exists for our permutation key.
-                -- Adventure-level flow events (e.g. `nurgle_end_event_loop` on Festering
-                -- Ground) hit this when the level loads under a CW permutation.
-                -- Mirror the base adventure level's entry onto each permutation key.
-                if rawget(_G, "WeightedRandomTerrorEvents") and WeightedRandomTerrorEvents[lvl]
-                        and not WeightedRandomTerrorEvents[permutation_key] then
-                    WeightedRandomTerrorEvents[permutation_key] = WeightedRandomTerrorEvents[lvl]
-                end
-            end
 
             for _, config in pairs(DEUS_MAP_POPULATE_SETTINGS) do
                 local la = config.LEVEL_AVAILABILITY
                 if la then
                     local entry = {
-                        themes = DEUS_LEVEL_SETTINGS[lvl].themes,
-                        paths  = DEUS_LEVEL_SETTINGS[lvl].paths,
+                        themes = dls.themes,
+                        paths  = dls.paths,
                     }
                     if la.TRAVEL    then la.TRAVEL[lvl]    = entry end
                     if la.SIGNATURE then la.SIGNATURE[lvl] = entry end

@@ -101,13 +101,13 @@ All registered via `mod:command(name, description, fn)` in `general_tweaker.lua`
 
 | Command | Line | Description | What it does |
 |---------|------|-------------|--------------|
-| `gt tp` | 113 | Toggle third-person camera | Flips `tp_camera_enabled`, calls `_apply_tp(new_val)`, echoes state |
-| `gt dump_glossary` | 162 | Dump localized names for heroes, careers, and weapons to log | Iterates `SPProfiles` (skips `empire_soldier_tutorial`), then `ItemMasterList` melee+ranged. Writes via `_write_dump("glossary.txt", ...)` |
-| `gt dump_cosmetics [filter]` | 244 | Dump all hats, skins, and frames from ItemMasterList to log | Iterates `ItemMasterList` for `slot_type` in {hat, skin, frame}; optional substring filter on key/careers |
-| `gt unstuck` | 295 | Teleport to nearest living teammate | Uses first `HEALTH_ALIVE` teammate; offsets +0.5m on x to avoid stacking |
-| `gt god` | 326 | Toggle godmode (invincibility) | Flips `_godmode`, persists via `mod:set`. Hook at line 332 returns 0 damage when local player is the target |
-| `gt win` | 348 | Complete the current map | Calls `Managers.state.game_mode:complete_level()` |
-| `gt dump_items_by_slot` | 381 | Dump all ItemMasterList slot_type values and counts | Histogram of slot_type values across ItemMasterList |
+| `/tp` | 113 | Toggle third-person camera | Flips `tp_camera_enabled`, calls `_apply_tp(new_val)`, echoes state |
+| `/dump_glossary` | 162 | Dump localized names for heroes, careers, and weapons to log | Iterates `SPProfiles` (skips `empire_soldier_tutorial`), then `ItemMasterList` melee+ranged. Writes via `_write_dump("glossary.txt", ...)` |
+| `/dump_cosmetics [filter]` | 244 | Dump all hats, skins, and frames from ItemMasterList to log | Iterates `ItemMasterList` for `slot_type` in {hat, skin, frame}; optional substring filter on key/careers |
+| `/unstuck` | 295 | Teleport to nearest living teammate | Uses first `HEALTH_ALIVE` teammate; offsets +0.5m on x to avoid stacking |
+| `/god` | 326 | Toggle godmode (invincibility) | Flips `_godmode`, persists via `mod:set`. Hook at line 332 returns 0 damage when local player is the target |
+| `/win` | 348 | Complete the current map | Calls `Managers.state.game_mode:complete_level()` |
+| `/dump_items_by_slot` | 381 | Dump all ItemMasterList slot_type values and counts | Histogram of slot_type values across ItemMasterList |
 
 ## Non-obvious things now clarified
 

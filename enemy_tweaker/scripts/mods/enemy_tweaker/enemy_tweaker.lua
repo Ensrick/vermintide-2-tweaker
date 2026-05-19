@@ -1,57 +1,8 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.3.2-dev"
+local MOD_VERSION = "0.4.2-dev"
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Enemy Tweaker v" .. MOD_VERSION)
-
--- ============================================================
--- Breed catalog
--- ============================================================
-
--- REVIEW: FACTION_* tables are defined but never read anywhere in the file.
--- Either wire them into the breed_options dropdown (currently hard-coded in
--- enemy_tweaker_data.lua) or delete. They drift out of sync with the dropdown
--- list (e.g. chaos_vortex_sorcerer / chaos_corruptor_sorcerer here, missing
--- from the data-side dropdown).
-local FACTION_SKAVEN = {
-    "skaven_slave",
-    "skaven_clan_rat",
-    "skaven_clan_rat_with_shield",
-    "skaven_storm_vermin",
-    "skaven_storm_vermin_with_shield",
-    "skaven_storm_vermin_commander",
-    "skaven_plague_monk",
-    "skaven_gutter_runner",
-    "skaven_pack_master",
-    "skaven_poison_wind_globadier",
-    "skaven_ratling_gunner",
-    "skaven_warpfire_thrower",
-    "skaven_rat_ogre",
-    "skaven_stormfiend",
-}
-
-local FACTION_CHAOS = {
-    "chaos_fanatic",
-    "chaos_marauder",
-    "chaos_marauder_with_shield",
-    "chaos_berzerker",
-    "chaos_raider",
-    "chaos_warrior",
-    "chaos_bulwark",
-    "chaos_spawn",
-    "chaos_troll",
-    "chaos_vortex_sorcerer",
-    "chaos_corruptor_sorcerer",
-}
-
-local FACTION_BEASTMEN = {
-    "beastmen_ungor",
-    "beastmen_ungor_archer",
-    "beastmen_gor",
-    "beastmen_bestigor",
-    "beastmen_minotaur",
-    "beastmen_standard_bearer",
-}
 
 -- ============================================================
 -- Helpers
@@ -67,144 +18,16 @@ local function _deep_copy(t)
 end
 
 -- ============================================================
--- Skeleton breed cloning
--- ============================================================
--- Clone chaos_skeleton (proven horde enemy) with different models
--- and inventory templates from pet/ethereal skeletons.
-
-local SKELETON_BREEDS = {
-    {
-        name              = "et_necro_skeleton",
-        source_model      = "pet_skeleton",
-        inventory         = "undead_npc_skeleton",
-        unit_template     = "ai_unit_skeleton",
-    },
-    {
-        name              = "et_necro_skeleton_armored",
-        source_model      = "pet_skeleton_armored",
-        inventory         = "undead_npc_skeleton_armored",
-        unit_template     = "ai_unit_skeleton",
-    },
-    {
-        name              = "et_necro_skeleton_dual_wield",
-        source_model      = "pet_skeleton_dual_wield",
-        inventory         = "undead_npc_skeleton_dual_wield",
-        unit_template     = "ai_unit_skeleton",
-    },
-    {
-        name              = "et_necro_skeleton_shield",
-        source_model      = "pet_skeleton_with_shield",
-        inventory         = "undead_npc_skeleton_with_shield",
-        unit_template     = "ai_unit_skeleton_with_shield",
-    },
-    {
-        name              = "et_ghost_skeleton_hammer",
-        source_model      = "ethereal_skeleton_with_hammer",
-        inventory         = "undead_ethereal_skeleton_2h",
-        unit_template     = "ai_unit_skeleton",
-    },
-    {
-        name              = "et_ghost_skeleton_shield",
-        source_model      = "ethereal_skeleton_with_shield",
-        inventory         = "undead_ethereal_skeleton_with_shield",
-        unit_template     = "ai_unit_skeleton_with_shield",
-    },
-}
-
--- Maps cloned breed name → source breed name whose package has the model
-local PACKAGE_REDIRECT = {}
-
-local _skeleton_breeds_registered = false
-
-local function _register_skeleton_breeds()
-    if _skeleton_breeds_registered then return end
-    if not rawget(_G, "Breeds") or not Breeds.chaos_skeleton then return end
-
-    local base = Breeds.chaos_skeleton
-    local base_actions = rawget(_G, "BreedActions") and BreedActions.chaos_skeleton
-
-    for _, def in ipairs(SKELETON_BREEDS) do
-        local source = Breeds[def.source_model]
-        if not source then
-            mod:info("Skipping %s — source breed %s not loaded", def.name, def.source_model)
-            goto continue
-        end
-
-        local breed = _deep_copy(base)
-        breed.name = def.name
-        breed.base_unit = source.base_unit
-        breed.default_inventory_template = def.inventory
-        breed.unit_template = def.unit_template
-        breed.is_always_spawnable = true
-        breed.race = "undead"
-
-        Breeds[def.name] = breed
-
-        if base_actions then
-            BreedActions[def.name] = _deep_copy(base_actions)
-        end
-
-        PACKAGE_REDIRECT[def.name] = def.source_model
-
-        -- Append to NetworkLookup.breeds (forward + reverse mapping).
-        -- network_lookup.lua:267 builds this from Breeds at game-boot, then init() at
-        -- ~2354 installs a __index metatable that errors on any missing-key GET. Use
-        -- rawget for the existence check so we don't trip the metatable before the
-        -- key is written. Direct assignment (newindex) is fine. Without these entries,
-        -- any network serialization of et_*_skeleton (e.g. unit-spawn extractors in
-        -- game_object_initializers_extractors.lua) crashes on host or client.
-        local nl_breeds = rawget(_G, "NetworkLookup") and NetworkLookup.breeds
-        if nl_breeds and not rawget(nl_breeds, def.name) then
-            local idx = #nl_breeds + 1
-            nl_breeds[idx] = def.name
-            nl_breeds[def.name] = idx
-        end
-
-        mod:info("Registered skeleton breed: %s (model from %s)", def.name, def.source_model)
-
-        ::continue::
-    end
-
-    _skeleton_breeds_registered = true
-end
-
--- Register breeds immediately at mod load so the ConflictDirector
--- threat_values table (built at file-load time by iterating Breeds)
--- includes our custom breeds. Registering during ConflictDirector.init
--- is too late — threat_values is already frozen.
--- NetworkLookup.breeds is also extended inside _register_skeleton_breeds
--- (forward + reverse mapping) so multiplayer serialization of et_*_skeleton
--- doesn't trip the strict-lookup metatable.
-_register_skeleton_breeds()
-
--- ============================================================
--- Package loading hook
--- ============================================================
--- EnemyPackageLoader resolves breed name → package path via
--- _breed_package_name. Our cloned breeds have no package of their
--- own — redirect to the source breed's package.
-
--- QUESTION: _breed_package_name caches paths in self._breed_to_package_name_cache
--- keyed by the breed_name argument. Our hook redirects et_necro_skeleton ->
--- pet_skeleton, but that means *both* breeds end up resolving to the same
--- package name. EnemyPackageLoader._load_package asserts
--- "Attempted to load same breed twice" against _session_breed_map (keyed by
--- breed_name not package), so the breed-level guard still works — but ref
--- counting in package_manager:load/unload will be doubled if both breeds
--- ever go live in the same session, and unloading one may yank the package
--- from under the other. Verify by spawning et_necro_skeleton + a vanilla
--- summoned pet_skeleton in the same mission.
-mod:hook("EnemyPackageLoader", "_breed_package_name", function(func, self, breed_name)
-    local redirect = PACKAGE_REDIRECT[breed_name]
-    if redirect then
-        return func(self, redirect)
-    end
-    return func(self, breed_name)
-end)
-
--- ============================================================
 -- Horde composition presets
 -- ============================================================
+-- Skeleton-based presets (necro_skeletons / ghost_skeletons / skeleton_mix)
+-- were prototyped in v0.2.x → v0.3.8-dev but only made it into PACED hordes;
+-- the majority of adventure-mission hordes are terror-event-driven and read
+-- from HordeCompositions (194 keys) which the pacing-key patch never touched.
+-- Skeleton clones also required extensive vanilla-table seeding (threat_values,
+-- StatisticsDefinitions, hit_zones) at boot. Removed in v0.4.0-dev pending a
+-- future iteration that overlays HordeCompositions entries. See project memory
+-- `project_enemy_tweaker.md` for the design notes.
 
 local HORDE_PRESETS = {}
 
@@ -322,69 +145,6 @@ HORDE_PRESETS.mixed_factions = {
     },
 }
 
-HORDE_PRESETS.necro_skeletons = {
-    label = "Necromancer Skeletons",
-    compositions = {
-        all = {
-            { name = "swords", weight = 5, breeds = {
-                "et_necro_skeleton", {15, 22},
-                "et_necro_skeleton_armored", {3, 5},
-            }},
-            { name = "mixed", weight = 3, breeds = {
-                "et_necro_skeleton", {10, 14},
-                "et_necro_skeleton_dual_wield", {4, 6},
-                "et_necro_skeleton_shield", {2, 4},
-            }},
-            { name = "armored", weight = 2, breeds = {
-                "et_necro_skeleton_armored", {6, 8},
-                "et_necro_skeleton_shield", {4, 6},
-            }},
-        },
-    },
-}
-
-HORDE_PRESETS.ghost_skeletons = {
-    label = "Ghost Skeletons",
-    compositions = {
-        all = {
-            { name = "hammers", weight = 5, breeds = {
-                "et_ghost_skeleton_hammer", {12, 18},
-                "et_ghost_skeleton_shield", {3, 5},
-            }},
-            { name = "shields", weight = 3, breeds = {
-                "et_ghost_skeleton_shield", {6, 10},
-                "et_ghost_skeleton_hammer", {8, 12},
-            }},
-            { name = "swarm", weight = 2, breeds = {
-                "et_ghost_skeleton_hammer", {20, 28},
-            }},
-        },
-    },
-}
-
-HORDE_PRESETS.skeleton_mix = {
-    label = "All Skeletons Mixed",
-    compositions = {
-        all = {
-            { name = "necro_heavy", weight = 4, breeds = {
-                "et_necro_skeleton", {10, 14},
-                "et_necro_skeleton_armored", {2, 3},
-                "et_ghost_skeleton_hammer", {4, 6},
-            }},
-            { name = "ghost_heavy", weight = 3, breeds = {
-                "et_ghost_skeleton_hammer", {8, 12},
-                "et_ghost_skeleton_shield", {3, 5},
-                "et_necro_skeleton_dual_wield", {3, 5},
-            }},
-            { name = "elite_skeletons", weight = 2, breeds = {
-                "et_necro_skeleton_shield", {4, 6},
-                "et_necro_skeleton_armored", {4, 6},
-                "et_ghost_skeleton_shield", {4, 6},
-            }},
-        },
-    },
-}
-
 -- ============================================================
 -- State
 -- ============================================================
@@ -392,6 +152,7 @@ HORDE_PRESETS.skeleton_mix = {
 local _original_compositions_pacing = nil
 local _original_compositions = nil
 local _breed_swap_map = {}
+local _faction_swap_map = {}
 
 -- ============================================================
 -- Composition patching
@@ -550,29 +311,177 @@ local function _apply_breed_swap(result)
 end
 
 -- ============================================================
+-- Faction substitution (whole-faction horde slot swap)
+-- ============================================================
+-- VT2 picks a ConflictDirector per mission (and per-zone via
+-- override_conflict_setting on the level), which sets CurrentHordeSettings.
+-- Each `*_composition` field on that settings table is a string like "medium"
+-- (skaven), "chaos_medium", "beastmen_medium". By rewriting those strings
+-- right after ConflictDirector.refresh_conflict_director_patches runs, we
+-- redirect every paced horde slot to a different faction's comp family. This
+-- means Athel Yenlui (default → chaos zones) can be configured to spawn
+-- Beastmen everywhere, Chaos everywhere, or the user's chosen mix.
+--
+-- NOTE: terror-event hordes use HordeCompositions (event_medium / chaos_raiders_*
+-- / etc.) and bypass this rewrite. That patch is a separate workstream.
+
+local FACTION_PREFIX = {
+    skaven = "",
+    chaos = "chaos_",
+    beastmen = "beastmen_",
+}
+
+local FACTION_PREFIX_LIST = {
+    { faction = "chaos", prefix = "chaos_" },
+    { faction = "beastmen", prefix = "beastmen_" },
+    -- skaven last because it's the empty-prefix fallback
+}
+
+local function _composition_faction(comp_str)
+    for _, fp in ipairs(FACTION_PREFIX_LIST) do
+        if comp_str:sub(1, #fp.prefix) == fp.prefix then
+            return fp.faction
+        end
+    end
+    return "skaven"
+end
+
+local function _strip_faction_prefix(comp_str, faction)
+    local prefix = FACTION_PREFIX[faction]
+    if prefix == "" then return comp_str end
+    return comp_str:sub(#prefix + 1)
+end
+
+local function _build_faction_swap_map()
+    _faction_swap_map = {}
+    for _, faction in ipairs({"skaven", "chaos", "beastmen"}) do
+        local target = mod:get("faction_swap_" .. faction)
+        if target and target ~= "off" and target ~= faction and FACTION_PREFIX[target] then
+            _faction_swap_map[faction] = target
+        end
+    end
+end
+
+local function _remap_composition(comp_str)
+    if type(comp_str) ~= "string" then return comp_str end
+    local from = _composition_faction(comp_str)
+    local to = _faction_swap_map[from]
+    if not to then return comp_str end
+    local base = _strip_faction_prefix(comp_str, from)
+    local new_str = FACTION_PREFIX[to] .. base
+    -- Only rewrite if the target composition actually exists; otherwise the
+    -- spawner will crash trying to index a nil composition.
+    local HCP = rawget(_G, "HordeCompositionsPacing")
+    if HCP and HCP[new_str] then
+        return new_str
+    end
+    return comp_str
+end
+
+local COMPOSITION_FIELDS = {
+    "ambush_composition", "vector_composition",
+    "vector_blob_composition", "mini_patrol_composition",
+}
+
+local function _apply_faction_swap_to_current_horde_settings()
+    if not next(_faction_swap_map) then return end
+    local CHS = rawget(_G, "CurrentHordeSettings")
+    if not CHS then return end
+    for _, field in ipairs(COMPOSITION_FIELDS) do
+        local v = CHS[field]
+        if type(v) == "string" then
+            CHS[field] = _remap_composition(v)
+        elseif type(v) == "table" then
+            for i, s in ipairs(v) do
+                v[i] = _remap_composition(s)
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- Difficulty mimic (per-system difficulty override)
+-- ============================================================
+-- Each Current* settings table is built by patch_settings_with_difficulty
+-- against a specific difficulty key. Mimic lets the user override the
+-- difficulty key used PER SYSTEM, so they can play on (e.g.) Champion stats
+-- but use Cataclysm-1's horde compositions, special spawn frequency, roaming
+-- density, etc. Player/enemy stats stay on the real difficulty — only the
+-- spawn-side fields are re-patched.
+--
+-- MIMIC_SYSTEMS maps the user-facing setting → director field name → name of
+-- the Current* global. After ConflictDirector.refresh_conflict_director_patches
+-- runs, for each system where the user picked a difficulty override, we
+-- re-patch from director.<field> with the override difficulty and overwrite
+-- the Current* global. Order is important: difficulty mimic runs BEFORE
+-- faction-swap, because mimic REPLACES the table and faction-swap mutates
+-- in place.
+
+local MIMIC_SYSTEMS = {
+    { setting = "mimic_horde",         field = "horde",         current = "CurrentHordeSettings" },
+    { setting = "mimic_specials",      field = "specials",      current = "CurrentSpecialsSettings" },
+    { setting = "mimic_pacing",        field = "pacing",        current = "CurrentPacing" },
+    { setting = "mimic_pack_spawning", field = "pack_spawning", current = "CurrentPackSpawningSettings" },
+    { setting = "mimic_intensity",     field = "intensity",     current = "CurrentIntensitySettings" },
+    { setting = "mimic_boss",          field = "boss",          current = "CurrentBossSettings" },
+}
+
+local VALID_DIFFICULTIES = {
+    normal = true, hard = true, harder = true, hardest = true,
+    cataclysm = true, cataclysm_2 = true, cataclysm_3 = true,
+}
+
+local function _apply_difficulty_mimic(self)
+    local CDs = rawget(_G, "ConflictDirectors")
+    local director = CDs and CDs[self.current_conflict_settings]
+    if not director then return end
+    local mgr = Managers.state and Managers.state.difficulty
+    local fallback_difficulty = mgr and mgr.fallback_difficulty
+    local CU = rawget(_G, "ConflictUtils")
+    if not CU or not CU.patch_settings_with_difficulty then return end
+
+    for _, m in ipairs(MIMIC_SYSTEMS) do
+        local user_difficulty = mod:get(m.setting)
+        if user_difficulty and user_difficulty ~= "off"
+                and VALID_DIFFICULTIES[user_difficulty]
+                and director[m.field] then
+            local rebuilt = CU.patch_settings_with_difficulty(
+                table.clone(director[m.field]), user_difficulty, fallback_difficulty)
+            _G[m.current] = rebuilt
+        end
+    end
+end
+
+-- ============================================================
 -- Hooks
 -- ============================================================
 
--- The threat_values upvalue in conflict_director.lua is built at file-load
--- time by iterating Breeds. Our custom breeds may not exist yet, so
--- register them into the threat system via set_threat_value after init.
 mod:hook("ConflictDirector", "init", function(func, self, ...)
-    _register_skeleton_breeds()
     local result = func(self, ...)
-
-    for _, def in ipairs(SKELETON_BREEDS) do
-        if Breeds[def.name] then
-            self:set_threat_value(def.name, Breeds[def.name].threat_value or 0)
-        end
-    end
 
     _backup_compositions()
     _restore_compositions()
     _apply_horde_preset()
     _build_swap_map()
+    _build_faction_swap_map()
+    _apply_difficulty_mimic(self)
+    _apply_faction_swap_to_current_horde_settings()
+
     mod:info("Enemy Tweaker: compositions applied (preset=%s, size=%d%%)",
         tostring(mod:get("horde_preset")), mod:get("horde_size_multiplier") or 100)
     return result
+end)
+
+-- refresh_conflict_director_patches runs whenever the active conflict
+-- director changes (zone boundary override, mid-mission switches). It
+-- rebuilds CurrentHordeSettings via table.clone(director.horde), so any
+-- faction-swap rewrites from a previous CD are lost — re-apply after.
+-- Order: difficulty mimic first (replaces Current* tables), then faction-swap
+-- (mutates CurrentHordeSettings in place).
+mod:hook("ConflictDirector", "refresh_conflict_director_patches", function(func, self, ...)
+    func(self, ...)
+    _apply_difficulty_mimic(self)
+    _apply_faction_swap_to_current_horde_settings()
 end)
 
 -- compose_blob_horde_spawn_list returns (spawn_list, num_to_spawn) — a real list,
@@ -755,16 +664,25 @@ end
 -- Settings change handler
 -- ============================================================
 
--- QUESTION: not host-gated. Clients changing settings will mutate their
--- local HordeCompositionsPacing even though spawn decisions are
--- host-authoritative — harmless to actual spawns, but a confused client
--- might think their preset is in effect. Consider adding a host-only
--- guard with mod:echo telling clients their setting has no effect.
+local function _reapply_via_active_cd()
+    -- For settings whose effect lives on the Current* tables (faction-swap,
+    -- difficulty-mimic), we need an active ConflictDirector to re-patch
+    -- against. If we're in the keep / no mission active, the next mission's
+    -- init hook will pick up new settings automatically.
+    local active = Managers.state and Managers.state.conflict
+    if active then
+        _apply_difficulty_mimic(active)
+        _apply_faction_swap_to_current_horde_settings()
+    end
+end
+
 mod.on_setting_changed = function(setting_id)
     if _original_compositions_pacing then
         _restore_compositions()
         _apply_horde_preset()
         _build_swap_map()
+        _build_faction_swap_map()
+        _reapply_via_active_cd()
         mod:echo("Enemy Tweaker: settings updated")
     end
 end
@@ -772,21 +690,21 @@ end
 mod.on_disabled = function()
     _restore_compositions()
     _breed_swap_map = {}
+    _faction_swap_map = {}
+    -- Note: we can't undo the in-place CurrentHordeSettings rewrite from here
+    -- without rebuilding it from director.horde. The next refresh_conflict_director_patches
+    -- (zone change, level transition) will rebuild it from scratch — and our
+    -- hook will be inactive, so no swap is re-applied. Within the same active
+    -- CD, the swap remains until the next refresh.
     mod:echo("Enemy Tweaker disabled — compositions restored")
 end
 
--- QUESTION: re-enabling mid-session calls _register_skeleton_breeds again,
--- but the ConflictDirector.init hook (which calls set_threat_value for the
--- skeleton breeds) only runs at level transition. So enabling mid-mission
--- adds breeds to Breeds without registering their threat values; the loop
--- over activated_per_breed in ConflictDirector.calculate_threat_value
--- will index threat_values[skeleton] = nil and arithmetic will crash. Worth
--- gating on `Managers.state.conflict` and calling set_threat_value here.
 mod.on_enabled = function()
-    _register_skeleton_breeds()
     if _original_compositions_pacing then
         _apply_horde_preset()
         _build_swap_map()
+        _build_faction_swap_map()
+        _reapply_via_active_cd()
         mod:echo("Enemy Tweaker enabled")
     end
 end
@@ -876,25 +794,39 @@ mod:command("et_status", "Show current Enemy Tweaker state", function()
         mod:echo("Breed swap: none")
     end
 
-    mod:echo("Skeleton breeds registered: %s", tostring(_skeleton_breeds_registered))
-    -- POTENTIAL BUG: prints #SKELETON_BREEDS (constant 6) whenever the redirect
-    -- table is non-empty, regardless of how many redirects actually exist.
-    -- If a source breed was missing at registration time, fewer entries are in
-    -- PACKAGE_REDIRECT than 6. Replace with a real count:
-    --   local n = 0; for _ in pairs(PACKAGE_REDIRECT) do n = n + 1 end
-    mod:echo("Package redirects: %d", next(PACKAGE_REDIRECT) and #SKELETON_BREEDS or 0)
-end)
+    local any_faction_swap = false
+    for _, faction in ipairs({"skaven", "chaos", "beastmen"}) do
+        local target = mod:get("faction_swap_" .. faction) or "off"
+        if target ~= "off" and target ~= faction then
+            mod:echo("Faction swap: %s -> %s", faction, target)
+            any_faction_swap = true
+        end
+    end
+    if not any_faction_swap then
+        mod:echo("Faction swap: none")
+    end
 
-mod:command("et_check_skeletons", "Verify skeleton breed registration", function()
-    for _, def in ipairs(SKELETON_BREEDS) do
-        local b = rawget(_G, "Breeds") and Breeds[def.name]
-        if b then
-            mod:echo("  OK: %s -> base_unit=%s, inv=%s, template=%s",
-                def.name, tostring(b.base_unit), tostring(b.default_inventory_template), tostring(b.unit_template))
-        else
-            local source = rawget(_G, "Breeds") and Breeds[def.source_model]
-            mod:echo("  MISSING: %s (source %s %s)", def.name, def.source_model,
-                source and "exists" or "also missing")
+    local any_mimic = false
+    for _, m in ipairs(MIMIC_SYSTEMS) do
+        local v = mod:get(m.setting) or "off"
+        if v ~= "off" then
+            mod:echo("Difficulty mimic: %s = %s", m.field, v)
+            any_mimic = true
+        end
+    end
+    if not any_mimic then
+        mod:echo("Difficulty mimic: none")
+    end
+
+    if rawget(_G, "CurrentHordeSettings") then
+        mod:echo("--- Active CurrentHordeSettings ---")
+        for _, field in ipairs(COMPOSITION_FIELDS) do
+            local v = CurrentHordeSettings[field]
+            if type(v) == "string" then
+                mod:echo("  %s = %s", field, v)
+            elseif type(v) == "table" then
+                mod:echo("  %s = [%s]", field, table.concat(v, ", "))
+            end
         end
     end
 end)

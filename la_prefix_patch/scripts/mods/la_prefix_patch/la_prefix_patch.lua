@@ -1,6 +1,6 @@
 local mod = get_mod("la_prefix_patch")
 
-local MOD_VERSION = "0.3.0-dev"
+local MOD_VERSION = "0.3.1-dev"
 mod:info("LA Prefix Patch v%s loaded", MOD_VERSION)
 mod:echo("LA Prefix Patch v" .. MOD_VERSION)
 
@@ -47,6 +47,42 @@ if rawget(_G, "VMFMod") then
     mod:info("VMFMod hook methods wrapped; LA duplicate registrations will be silently ignored.")
 else
     mod:warning("VMFMod prototype not found; LA dupe filter NOT installed.")
+end
+
+-- v0.3.1-dev: Material-Hijack alias for any downstream mod that looks up MH
+-- by mod_id. A 2026-05-19 audit confirmed Loremaster's Armoury has ZERO
+-- `get_mod("Material-Hijack")` calls — LA's coupling to MH is purely data-
+-- driven (LA units carry `mat_to_use` / `mat_slots` data nodes; whichever
+-- MH variant has its hooks live consumes them). So this alias is NOT
+-- required for LA itself; it's belt-and-braces for any un-audited downstream
+-- mod that might do the lookup. When `material_hijack_patched` is enabled
+-- and the original `Material-Hijack` is disabled, the patched fork's hooks
+-- are the active ones; transparently rerouting the lookup keeps any such
+-- caller (real or hypothetical) seeing the (superset) patched API surface
+-- instead of nil.
+--
+-- Safety: only intercepts the exact string "Material-Hijack". All other
+-- get_mod calls pass through unchanged. If the patched fork itself isn't
+-- enabled, the original lookup proceeds normally.
+do
+    local _orig_get_mod = rawget(_G, "get_mod")
+    if type(_orig_get_mod) == "function" then
+        _G.get_mod = function(name)
+            if name == "Material-Hijack" then
+                local original = _orig_get_mod("Material-Hijack")
+                if original and type(original.is_enabled) == "function" and original:is_enabled() then
+                    return original
+                end
+                local patched = _orig_get_mod("material_hijack_patched")
+                if patched and (type(patched.is_enabled) ~= "function" or patched:is_enabled()) then
+                    return patched
+                end
+                return original
+            end
+            return _orig_get_mod(name)
+        end
+        mod:info("get_mod('Material-Hijack') alias installed; falls back to material_hijack_patched if the original is disabled.")
+    end
 end
 
 -- Quiet-mode toggles: gate LA's quest markers and unread-letter notifications

@@ -82,11 +82,11 @@ Three console commands are registered (in-game chat):
 
 | Command | Purpose |
 |---|---|
-| `dynamic_cosmetic_portraits portrait_diag` | State + material readiness check across every Gui handle. Reports current `career_settings.portrait_image` / `picking_image`, detected hat & skin keys, registered materials. |
-| `dynamic_cosmetic_portraits portrait_dump` | Deep-walks every UI surface and dumps every widget with `character_portrait` or `portrait` in its content. Use to map which surfaces use which textures. |
-| `dynamic_cosmetic_portraits test_portrait` | Force a `_sync_portrait_settings()` call and report the resulting state. |
+| `/portrait_diag` | State + material readiness check across every Gui handle. Reports current `career_settings.portrait_image` / `picking_image`, detected hat & skin keys, registered materials. |
+| `/portrait_dump` | Deep-walks every UI surface and dumps every widget with `character_portrait` or `portrait` in its content. Use to map which surfaces use which textures. |
+| `/test_portrait` | Force a `_sync_portrait_settings()` call and report the resulting state. |
 
-If a user reports a portrait bug, ask them to run `portrait_diag` and
+If a user reports a portrait bug, ask them to run `/portrait_diag` and
 paste the output before guessing.
 
 ## Code-of-conduct for this mod's lua

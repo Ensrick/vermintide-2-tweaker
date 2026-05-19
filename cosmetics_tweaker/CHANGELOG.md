@@ -6,6 +6,372 @@
 > was researched and stabilised; ongoing portrait work lives in
 > `dynamic_cosmetic_portraits/CHANGELOG.md`.
 
+## 0.9.0-dev (2026-05-19) — Per-peer glow + LA stabilization (high blast radius)
+
+### Why
+
+Day 4 of host/client desync investigation. Six fan-out research agents (CT audit + LA source + VT2 networking + prior-attempts triage + local PC logs + PC-B logs over SSH) produced four design docs (`HOST_CLIENT_AUDIT.md`, `LA_SYNC_MODEL.md`, `VT2_NETWORKING_REFERENCE.md`, `PRIOR_ATTEMPTS_TIMELINE.md`, `LOGS_LOCAL_PC.md`, `LOGS_PC_B.md`, `PER_PLAYER_VISUAL_INVENTORY.md`, `GLOW_HOOK_INVESTIGATION.md`, `ROOT_CAUSE_SYNTHESIS.md`).
+
+**Single biggest finding:** PC-B (client) was missing MoreItemsLibrary (Workshop ID 1422758813) — a HARD dependency for `LA_BRIDGE.register_all` (`cosmetics_tweaker.lua:3885`). The bridge sentinel was dormant on PC-B the entire time; every host-side `cos_la_apply` RPC arrived but the receiver short-circuited via `[LA paint] skip: bridge not registered` (~50× per session). PC-B subscribed manually after diagnosis; new deploy rule (memory `feedback_deploy_both_machines`) prevents recurrence.
+
+**Smoking-gun bugs surfaced after that:**
+
+- Quadruple-emit per hat equip — `CosmeticUtils.update_cosmetic_slot` + `PUAE.game_object_initialized` + `PUAE.spawn_resynced_loadout` + `AttachmentUtils.hot_join_sync` all called `_send_la_apply` for the same change; receivers re-spawned the attachment 4× per equip, causing `Slot is not empty, remove attachment before creating a new one` errors (host-PC log, solo-repro on Pureheart_helm × Hippogryph_helm).
+- Glow customization completely **un-synced**: every viewer's `apply_material_settings` hook read local `mod:get("glow_*")`, so each peer painted THEIR OWN chosen glow onto every remote husk weapon. User's #1 surface complaint.
+- Hot-join replay read only the local player's `_local_la_equips`, missing every other peer's equips at join time.
+- `_local_la_equips` stale on LA→vanilla swap (line 3284) leaked stale entries into future hot-join replays.
+- `_la_equips_by_peer` never purged on peer disconnect.
+- `mod.update` defined twice (line 624 + line 4105); the second overwrote the first so `TPE.update` silently never fired since the merge.
+
+### What
+
+**Per-peer GLOW channel (greenfield).** New RPC pair: `cos_glow_apply_req` (client→host) and `cos_glow_apply` (host broadcast to all). `_glow_by_peer` cache on every machine. All five glow read helpers (`_glow_master_mult`, `_glow_var_mult`, `_glow_override_enabled`, `_glow_main_rgb`, `_glow_rgb_for_var`) now accept an optional `peer_id`. The `_hook_apply_with_template_mutation` callback resolves owner-of-unit via `_glow_owner_peer_for_unit(unit)` at paint time and threads it through. Local viewer's own settings still read `mod:get` directly (instant feedback). Remote husks read `_glow_by_peer[wearer_peer]`. **Missing cache entry → no override (vanilla glow), never falls back to local viewer's color.**
+
+Triggers for broadcast: `mod.on_setting_changed` for any `glow_*` setting, `mod.on_game_state_changed` (covers keep enter + mission start + post-host-migration). Coalesced via 300ms throttle so a multi-setting save doesn't burst N RPCs. Hot-join handler rebroadcasts ALL known peers' glow state to the new joiner before husks start spawning. Peer-disconnect purges `_glow_by_peer[peer]` alongside `_la_equips_by_peer[peer]`.
+
+**Emit dedup on `_send_la_apply`.** Per (wearer_peer, slot, kind, armoury_key) within 500ms suppresses duplicate emits. Fixes the quadruple-broadcast → slot-not-empty errors documented in PC-A logs.
+
+**Hat slot teardown** before `create_attachment` in `_apply_la_on_unit kind="hat"`. Uses direct destroy + nil-the-slot path (mirrors `PlayerUnitAttachmentExtension.remove_attachment` local cleanup, minus the RPC) to avoid amplifying traffic on every receive.
+
+**Authoritative hot-join replay.** In `AttachmentUtils.hot_join_sync` hook, the host now iterates `_la_equips_by_peer` for every existing peer and re-emits `_send_la_apply` for every recorded slot. Replaces the local `_local_la_equips` walk that missed non-local peers.
+
+**LA→vanilla swap cache clear.** When `CosmeticUtils.update_cosmetic_slot` fires with neither LA item nor LA skin substituted, any stale `_local_la_equips[player_unit][slot]` is cleared so the next hot-join replay doesn't ghost-restore the prior LA pick.
+
+**Peer-disconnect cleanup.** `mod:hook_safe(PlayerManager, "remove_player")` purges `_la_equips_by_peer[peer]`, `_glow_by_peer[peer]`, and matching `_last_emit_at` entries. Without this, stale state leaks across host migration and Steam-recycled peer_id collisions.
+
+**MIL-missing friendlier log + subscribe URL.** When `get_mod("MoreItemsLibrary")` returns nil at the bridge init gate, log a one-time `mod:echo` with the Workshop URL. Cheap insurance against the 4-day debug spiral repeating.
+
+**Deferred `_G.apply_material_settings` hook.** Per agent investigation (`GLOW_HOOK_INVESTIGATION.md`), the symbol is a bare global in `flow_callbacks_foundation.lua:896`, loaded lazily by Stingray's flow graph on first hub/level enter. Eager install now retries from `mod.on_game_state_changed` until the symbol exists. This only covers NPC display weapons / hub setpieces — player paths route through `GearUtils.apply_material_settings` (always hooked successfully).
+
+**TPE per-frame tick restored.** Merged into the single `mod.update` body.
+
+### Deferred to v0.9.1
+
+- Vanilla-mesh offhand picks broadcast (currently host-only sees their pick)
+- `es_bastard_sword_thiccc` per-wearer broadcast (currently per-viewer; clarify intent)
+- `SimpleHuskInventoryExtension.wield` re-paint hook (closes the >5s sheathe→unwield LA-illusion gap on peers)
+- Receiver-side `_offhand_selection` seed on `cos_la_apply kind="offhand"` (prevents husk re-spawn from losing LA paint)
+- LA `kind="unit"` custom-mesh shields visible on husks (currently deferred — vanilla mesh stays)
+- 2 ranged backend IDs (`502C1B4B2D86C217`, `29D8DF12F964B3C6`) missing from offhand picker registry
+
+### Verification matrix
+
+- [ ] PC-A host + PC-B client. Host equips LA hat with custom color. Client sees host's hat color (not client's default).
+- [ ] Reverse: client equips LA hat with their own color. Host sees client's color.
+- [ ] Host equips glow preset purple. Client sees host's weapon glowing purple. Client equips glow preset green. Host sees client's weapon glowing green AND host's still purple.
+- [ ] Sequential hat changes (Pureheart_helm_white → Hippogryph_helm_white → Pureheart_helm_red): no `Slot is not empty` errors in host log.
+- [ ] Late-join: client disconnects + rejoins mid-mission. Glow + LA state catches up via hot-join broadcast.
+- [ ] Host migration: existing client takes over hosting. _la_equips_by_peer + _glow_by_peer cleanups + rebroadcasts on game_state_changed restore state.
+
+---
+
+## 0.8.67-dev (2026-05-19) — Server-authoritative `cos_la_apply` routing
+
+### Why
+
+The v0.8.66 peer-broadcast model (`mod:network_send("cos_la_apply", "others", ...)`) reached the host via VMF's host-relay transport (`mod_manager.lua:595-605`), but the host's apply still silently bailed in observable cases — texture changes only appeared on the equipping player, never on host or other clients. Root cause analysis (2026-05-19 fan-out) identified three compounding issues with the broadcast model:
+
+1. **`go_id` over the wire is host-relative.** `Managers.state.unit_storage:go_id(unit)` returns an id that's only meaningful for units the engine has registered as networked game objects. During the equip → spawn → broadcast race, the receiver's `storage:unit(go_id)` could return nil and the handler silently bailed.
+2. **Late-spawn races on join.** A peer receiving a `cos_la_apply` before the wearer's player_unit was locally spawned just dropped it; no retry.
+3. **Hot-join replay was per-peer.** Each existing peer's `AttachmentUtils.hot_join_sync` walked the joining peer's slots and emitted private replays. With no central authority, dropped/duplicate messages weren't reconcilable.
+
+### How
+
+Switched to client-request → host-broadcast routing. The host is the only source of `cos_la_apply` messages; clients send `cos_la_apply_req` to the host, which validates, records into per-peer authoritative state, then broadcasts the authoritative apply to ALL peers (including the requesting client, so they apply in lockstep with everyone else). Receivers reject any `cos_la_apply` whose sender_peer_id isn't the host.
+
+**Identity over the wire is now `wearer_peer_id`** (deterministic across peers) instead of `go_id`. Receiver resolves the wearer's player_unit via `Managers.player:players_at_peer(wearer_peer_id)`. If the unit isn't spawned yet (loading screen race / late network spawn / husk not wielding the right slot), the payload is queued and re-tried on `mod.update` for up to 5 seconds.
+
+### Patches
+
+| File / region | Change |
+|---|---|
+| `cosmetics_tweaker.lua` — `_send_la_apply` (~line 3419) | Rewrote: signature dropped `recipient` arg; resolves `wearer_peer_id` from `Managers.player:owner(unit)`; routes to host via `cos_la_apply_req` (clients) or short-circuits and broadcasts directly to "all" (host). |
+| `cosmetics_tweaker.lua` — `cos_la_apply` receiver (~line 3617) | Rewrote: auth-gates on `sender_peer_id == host_peer_id` (rejects spoofed broadcasts). Reads `wearer_peer_id` from payload, calls `_try_apply_by_peer` → `_apply_la_on_unit` (the new unified apply core extracted from the previous receiver). On failure (wearer unit not yet spawned), queues into `_la_pending_apply`. |
+| `cosmetics_tweaker.lua` — new `cos_la_apply_req` receiver (host-only) | Validates `armoury_key ∈ LA_BRIDGE.armoury_to_backend`, records into `_la_equips_by_peer[sender_peer_id][slot] = { kind, armoury_key, vanilla_key }`, broadcasts `cos_la_apply` to "all". |
+| `cosmetics_tweaker.lua` — new `_apply_la_on_unit` (extracted from receiver) | Returns bool: `true` if applied, `false` if target unit isn't ready (so the caller can re-queue). Same per-`kind` branches as the old receiver — hat / armor / offhand / illusion — all bracketed with `LA_BRIDGE._bridge_active = true / false` for receivers that also have cosmetics_tweaker installed (the apply_gate at `_la_bridge.lua:568` blocks LA-managed keys otherwise). |
+| `cosmetics_tweaker.lua` — `mod.update` (~line 3880) | Added pending-queue drain: every frame, retry every queued payload via `_try_apply_by_peer`. Entries past their 5-second deadline are dropped. Bounded retry prevents the queue from leaking when a wearer's unit never spawns (e.g. peer disconnected before replicating into our session). |
+| `cosmetics_tweaker.lua` — emit sites at lines 2040, 3284, 3305, 3739, 3758, 3795, 3823, 3845 | Updated signature: `_send_la_apply(unit, slot, kind, ak, vk)` (no recipient arg). All routes now flow through the new server-authoritative function. AttachmentUtils.hot_join_sync emits dropped the `peer_id` arg — the host's broadcast to "all" already includes the joiner. |
+
+### Non-cosmetics_tweaker peers (gracefully degrade)
+
+VMF's `mod:network_register` adds the handler to a dispatch table keyed by message name. Peers that don't have cosmetics_tweaker never registered `cos_la_apply` / `cos_la_apply_req` and silently drop incoming messages on receipt — verified by the pattern in `chaos_wastes_tweaker.lua:274-358` (ct_sync_host_settings_chunk has been live for months in mixed-mod lobbies without crashes). Host without cosmetics_tweaker → all client equip requests are silently dropped; clients see only their own local apply (degraded behavior, no crash).
+
+### Tradeoff
+
+When the equipping client emits a request, they no longer apply locally first — they wait for the host's broadcast to round-trip back. With normal latency that's <50 ms (one client-host RTT plus host broadcast), invisible. On high-latency lobbies the wearer briefly sees vanilla before LA paints. Acceptable for the consistency win — all peers now see the same thing instead of a per-peer desync.
+
+### Known limitation
+
+The host must have cosmetics_tweaker installed for ANY peer to see LA visuals. Without it, the `cos_la_apply_req` is silently dropped at the host's VMF dispatcher → no broadcast → no peer ever applies. The substitute hooks (CosmeticUtils / LoadoutUtils / PUAE / AttachmentUtils) still rewrite outgoing LA bids to vanilla so non-cosmetics_tweaker peers don't crash — they just see vanilla colors. Documented; ship as-is.
+
+## 0.8.66-dev (2026-05-18) — LA shield host crash: divergent NetworkLookup.inventory_packages indices
+
+### Fixed: client equipping a `kind="unit"` LA shield crashed the host with `inventory_packages` key miss
+
+Verbatim crash on lynnd's host machine (session `9daf2cf6-f1a2-4e15-bdfa-e780871424cd`, level `morris_hub`):
+
+```
+scripts/network_lookup/network_lookup.lua:2514:
+[NetworkLookup.lua] Table inventory_packages does not contain key: 2296
+```
+
+Triggered while decoding an `inventory_list` SharedState update from peer `11000010ef3befb` (danjo, the client) — specifically the `first_person_packages` array at position 9 of 17 — when danjo equipped a Loremaster's Armoury shield with `kind="unit"`. The encoded network ID 2296 had no entry in lynnd's `NetworkLookup.inventory_packages`.
+
+Same bug class as ct v0.7.60 (dormants) / v0.7.61 (trait boons) / v0.7.62 (adventure levels) — see `feedback_vt2_gated_registration_diverges.md`. `_la_bridge.lua`'s `build_offhand_options` iterated `pairs(la().SKIN_LIST)` (unordered) and only called `_register_la_path_in_network_lookup` for variants whose `_is_supported_variant` returned true — which calls `Application.can_get("unit", ...)`, a timing-dependent check on LA's asset loading state. With `idx = #ip + 1`, even one skipped or reordered variant shifts every subsequent index → the same path lands on different network IDs across peers → ProfileSynchronizer's RPC fatals the receiver via the strict `__index` on inventory_packages.
+
+`_la_bridge.lua` now exports `pre_register_la_inventory_packages()` that iterates `SKIN_LIST` keys in sorted order and registers every `kind="unit"` left-hand variant's `new_units[1]` + `new_units[2]` unconditionally — no `_is_supported_variant` / `can_get` filtering. It runs at the very top of `M.register_all` so it executes as soon as LA + MIL are detected (the existing gate in `cosmetics_tweaker.lua:3712-3727`). Both existing `pairs(la().SKIN_LIST)` loops in `register_all` and `build_offhand_options` are also converted to sorted-key iteration so the downstream `NetworkLookup.item_names` appends in `register_all` (lines 505-514) are deterministic across peers too — a latent twin bug for hat/armor clones.
+
+The new registration is purely additive: `_register_la_path_in_network_lookup` guards on `rawget(ip, path)` so re-runs are no-ops. Diagnosed from the host's console log; same incident also produced an unrelated GPU-driver deadlock on amand's machine (NvMemMapStoragex / nvwgf2umx during inn_level pipeline-state creation) — that's a Material-Hijack × NVIDIA driver interaction, not addressed here.
+
+### Fixed: LA recolors didn't sync to peers — armor + weapon illusion
+
+Three coordinated changes covering the second half of the bug report ("host can't see the color change when a client equips an LA recolor"):
+
+**1. Receiver-side `apply_gate` blocked the husk paint.** `cos_la_apply` receiver `kind="armor"` (cosmetics_tweaker.lua:3489) called LA's `apply_new_skin_from_texture` directly. On receivers that ALSO have cosmetics_tweaker, the `apply_gate` installed by `_la_bridge.lua:568` blocks any LA-managed armoury_key when `_bridge_active=false`. The husk-side paint never ran → host saw vanilla even when the cos_la_apply RPC arrived. Bracketed the `pcall` with `LA_BRIDGE._bridge_active = true / false` (matches the local `apply_direct` pattern at `_la_bridge.lua:595-597`).
+
+**2. Missing RPC for weapon illusions (row-1 picker).** `update_cosmetic_slot` v0.8.64 substitutes LA `skin_name` → vanilla for crash-safety, but never emitted a `cos_la_apply` to tell peers to repaint. Peers saw vanilla colors on the wielded weapon. Added a new send branch that fires `cos_la_apply` with `kind="illusion"` when `la_skin_subbed and not la_item_subbed`. New receiver branch in `cos_la_apply` paints the husk's `right_hand_wielded_unit_3p` / `left_hand_wielded_unit_3p` via `apply_new_skin_from_texture` — also bracketed with `_bridge_active`. Hot-join replay (`AttachmentUtils.hot_join_sync` extension) re-emits to joiners for weapon-illusion entries recorded in `_local_la_equips` (now keyed by any slot — not just slot_hat / slot_skin).
+
+**3. Local player saw vanilla on themselves.** `find_active_clone_for_unit_path` (`_la_bridge.lua:532`) read the loadout via `items_iface:get_loadout()`, but the `get_loadout` hook in `cosmetics_tweaker.lua:3114` rewrites LA backend_ids back to vanilla for net-safety. The lookup missed → `apply_direct` never fired → `_bridge_active` stayed false → LA's own update-loop apply was blocked by the gate → vanilla render on the wearer's own view. Fixed by consulting `cosmetics_tweaker.mod.loadout_cache` (the un-rewritten cache populated by the `set_loadout_item` hook for slot_hat / slot_skin) FIRST, then falling back to vanilla loadout. The cache merge in `get_loadout` (cosmetics_tweaker.lua:3135-3140) re-injects on top of the rewrite so the fallback still works for steady-state cache hits, but checking the cache first catches the race window during initial equip before the merge runs.
+
+#### Patches at a glance
+
+| # | File | Region | Change |
+|---|---|---|---|
+| 1 | `_la_bridge.lua` | `pre_register_la_inventory_packages` (~line 230) | Drop the `swap_hand == "left_hand_unit"` filter — register every `kind="unit"` variant in sorted order. *(covered above — Patch 1.)* |
+| 2 | `_la_bridge.lua` | `find_active_clone_for_unit_path` (~line 532) | Consult `cosmetics_tweaker.mod.loadout_cache` first; fall back to vanilla loadout. |
+| 3 | `cosmetics_tweaker.lua` | `cos_la_apply` receiver `kind="armor"` (~line 3489) | Bracket the `pcall(la.apply_new_skin_from_texture, ...)` with `LA_BRIDGE._bridge_active = true / false`. |
+| 4 | `cosmetics_tweaker.lua` | `update_cosmetic_slot` hook (~line 3268) + `cos_la_apply` receiver new `kind="illusion"` branch + `AttachmentUtils.hot_join_sync` replay | New end-to-end `kind="illusion"`: emit, decode, paint husk wielded weapon, hot-join replay. |
+
+### Known issue — NOT patched in v0.8.66
+
+After a host-migration kick (`broken_connection ... authentication_denied`), the `[LA fix kind=unit] set_all_materials` step stops firing in the inventory previewer — every subsequent `[LA paint]` reports `ok=false`. Reproduced in the 2026-05-19 01:59:11 log lines 6911-6983. Likely root cause: `LootItemUnitPreviewer.spawn_units` `mod:hook` (not `hook_safe`) timing in the standalone post-migration state — `_offhand_selection` lookup fails because the loadout reference changed after migration. Tracked for v0.8.67-dev.
+
+### Verification
+
+- Both peers must restart VT2 to pick up v0.8.66 (cosmetics_tweaker hooks unit-creation paths and material managers; the C++-level resource locks make Ctrl+Shift+R reload unsafe per CLAUDE.md "Important Constraints").
+- Patch 2 repro: equip an LA hat/armor recolor. Pre-v0.8.66 the LOCAL player saw vanilla on themselves until alt-tab; v0.8.66+ the LA paint applies on the first frame after equip.
+- Patch 3 repro: equip an LA `kind="texture"` armor recolor with another peer (who also has cosmetics_tweaker) in the lobby. Pre-v0.8.66 the peer saw vanilla; v0.8.66+ the peer sees the LA paint.
+- Patch 4 repro: equip an LA-cloned weapon illusion (row-1 picker) in lobby. Pre-v0.8.66 peers saw vanilla colors on the wielded weapon; v0.8.66+ peers paint the LA illusion. Hot-joiners get the paint too.
+
+## 0.8.65-dev (2026-05-18) — Custom-illusion DLC paywall bypass fix
+
+**Bug.** `get_unlocked_weapon_skins` hook's custom-skin loop (cosmetics_tweaker.lua:1043) unconditionally wrote `mirror._unlocked_weapon_skins[skin_key] = true` for every entry in `_custom_skin_keys`. Custom illusions are cloned on top of DLC-gated base weapons and inherit `required_dlc` at registration time, so a player without (e.g.) the relevant Bardin/Saltz DLC was getting the apply-button for the cloned illusion unlocked anyway. The vanilla-skin path on the next branch already consults `_skin_requires_unowned_dlc`; the custom path was the inconsistency.
+
+**Fix.** Gate the custom-loop write with `_skin_requires_unowned_dlc(skin_key)`, matching the vanilla branch. Modded crafting still grants the power-up over career-level / crafting-material progression; DLC ownership remains the hard line via `Managers.unlock:is_dlc_unlocked`.
+
+## [2026-05-18 v0.8.64-dev]
+### Unified LA peer-sync — cos_la_apply covers hats + armor + shields, plus weapon-skin leak fix and 1P/3P path fix
+
+Four-bug bundle from a fan-out audit on the v0.8.58 → v0.8.62 LA peer-sync stack. The substitute hooks from v0.8.58-v0.8.61 (CosmeticUtils, LoadoutUtils, PUAE×2, AttachmentUtils — the "replace" half of replace-not-append) are preserved; this version adds the "apply" half across all three LA visual surfaces and closes a latent crash that v0.8.58 left behind.
+
+**A. Shields (gap 1) — peer-sync the offhand picker.** `_offhand_selection` is per-peer LOCAL: each peer reads their OWN selection in `BackendUtils.get_item_units` when spawning ANY husk, so each peer renders their own picker choice on everyone instead of the actual wearer's. The v0.8.62 changelog claimed `_offhand_selection` was "host-controlled" — it isn't. Now sent via `cos_la_apply` (kind="offhand") from two sites: (1) when the local user clicks a row-2 shield in `HeroWindowItemCustomization._ct_on_offhand_pressed`, and (2) when `AttachmentUtils.hot_join_sync` fires for a joining peer (replay the local player's currently-wielded shield).
+
+**B. Hats (gap 2) — 1P/3P path verification.** `cos_la_attach` (v0.8.62) checked `Application.can_get("unit", la_unit_path)` only for the 1P path, but husks render the 3P attachment. When the 3P unit wasn't loadable on the viewer the hat silently vanished — most likely cause of "LA hats invisible on peers". The receiver now verifies BOTH the 1P path AND `<path>_3p`; if neither loads it logs and bails. Also removed the async race: cos_la_apply replaces (not appends to) the vanilla send, because vanilla NEVER carries an LA key over the wire after the substitution.
+
+**C. Armor (gap 3) — texture-paint replay on the husk body.** v0.8.62 explicitly punted armor. LA's `apply_new_skin_from_texture` paints the player_unit 3P body directly with hardcoded material slots (`texture_map_64cc5eb8` / `_861dbfdc` / `_abb81538`) for `swap_hand=='armor'` variants. Husk body uses the same slot names, so the receiver calls `LA.apply_new_skin_from_texture(armoury_key, level_world, vanilla_key, husk_player_unit)` directly. Dispatched from `CosmeticUtils.update_cosmetic_slot` for live equips (slot_skin is "cosmetic" category, NOT "attachment", so it doesn't flow through PUAE / AttachmentUtils.hot_join_sync) and from `AttachmentUtils.hot_join_sync` to joiners via a new `_local_la_equips` map recorded at equip time.
+
+**D. Weapon-skin leak (gap 4 — latent crash).** The existing `CosmeticUtils.update_cosmetic_slot` hook substituted the 4th arg `item_name` but NOT the 5th arg `skin_name`. `cosmetic_utils.lua:245` reads `NetworkLookup.weapon_skins[skin_name]` and `:249` broadcasts via `player:set_data`. If the user equipped an LA-cloned WEAPON ILLUSION (not a hat or armor — a row-1 illusion pick), the LA skin_name reached peers' decode path and crashed them in the same class as the v0.8.58 fa479a72 crash. Hook now substitutes BOTH args.
+
+### Implementation notes
+
+- New RPC `cos_la_apply` with payload `{go_id, slot, kind, armoury_key, vanilla_key}`, dispatched by `kind ∈ {"hat", "armor", "offhand"}`.
+- Identity key is **armoury_key** (LA's deterministic `Kruber_Pureheart` etc.), not `la_backend_id`. la_backend_id is mostly deterministic across peers but has a silent-bail failure mode when the receiver's `ItemMasterList[la_backend_id]` lookup misses; armoury_key matches what LA's own `SKIN_LIST` keys by and sidesteps the issue.
+- Forward decl `local _send_la_apply` near the `_offhand_selection` table (~line 1709) so `_ct_on_offhand_pressed` (~line 2004) can call it before the real impl in the cos_la_apply block (~line 3290). Without the forward decl the closure would capture `_G._send_la_apply` (nil) instead of the local slot — same forward-reference rule documented in `feedback_lua_forward_reference.md`.
+- Offhand RPC sends the WEARER's player_unit go_id (not the left-hand unit go_id) — `left_hand_wielded_unit_3p` is a local-spawned unit with no network identity. Receiver looks up its own husk's `inventory_extension._equipment.left_hand_wielded_unit_3p` and paints that. If the husk isn't currently wielding the shielded slot at receive time, the call is skipped — the next wield re-spawns the unit and re-triggers via the wearer's existing equip path.
+- `_paint_offhand_textures_locally` in `_la_bridge.lua` now formally documents four contexts: `ingame`, `hero_previewer`, `loot_previewer`, `network_husk`. The kind="unit" early-return remains: husk-side mesh swap would require despawning/respawning a network-coupled unit, so kind="unit" husk variants are deferred (vanilla mesh stays). kind="texture" variants paint normally.
+- v0.8.58-v0.8.61 substitute hooks UNCHANGED — they are the "replace" half of replace-not-append. The substitute makes vanilla peers crash-free; cos_la_apply makes LA-aware peers visually correct. Both halves are required.
+- VMF namespace handling: peers without cosmetics_tweaker never receive cos_la_apply (no-op, vanilla substitute is what they see). Peers with cosmetics_tweaker but without LA bail at the SKIN_LIST lookup.
+
+### Tradeoffs preserved from v0.8.62
+
+- Brief visual flicker on peer-side as vanilla spawns then immediately gets replaced/repainted by LA. Acceptable for the v0.8.64 ship.
+- kind="unit" LA shields on peers: vanilla mesh stays (no peer-side mesh swap). Texture-paint LA shields work end-to-end.
+
+## [2026-05-17 v0.8.63-dev]
+### Experimental: Third-Person Equipment
+Adds a togglable feature that spawns 3P meshes of every loadout weapon you aren't currently holding, attached to your character. Inspired by the standalone Third Person Equipment mod (Workshop 1387440934).
+
+Scope this pass: clean reimplementation of the spawn/link/visibility machinery in `_tpe.lua`. Off by default (`tpe_enable` checkbox).
+
+Implementation:
+- New file `_tpe.lua`: per-`item_type` attachment table (categories: `two_handed_back`, `one_handed_belt`, `one_handed_shield`, `dual_belt`, `ranged_back`, `bow_back`, `throwable_belt`, `potion_hip`, `grenade_hip`, `healthkit_back`, `default`). Maps every vanilla `item_type` from `item_master_list_*.lua` into one of those categories. Per-career fine tuning deferred — positions are coarse defaults.
+- Hooks installed once at module load, all early-return when `tpe_enable` is OFF: `PlayerUnitFirstPerson.set_first_person_mode` (toggle visibility on FP/3P switch), `SimpleInventoryExtension.wield` + `SimpleHuskInventoryExtension.wield` (track wielded slot, hide its mesh), `SimpleInventoryExtension.destroy`/`destroy_slot` + husk variants (cleanup), `PlayerUnitHealthExtension.die` (cleanup).
+- Per-frame `create_items_if_needed` driven by new `mod.update(dt)` — iterates `Managers.player:human_and_bot_players()`, calls `add_all_items` for any alive player_unit we haven't seen yet. Skips while packages are still queueing.
+- Weapon-skin awareness: resolves `WeaponSkins.skins[slot.skin].right_hand_unit`/`.left_hand_unit` per equipped skin before appending `_3p`, then applies `material_settings` via `GearUtils.apply_material_settings`.
+- Defensive: `Application.can_get("unit", path)` pre-check before `World.spawn_unit` so CWV custom-mesh weapons whose 3P unit isn't in memory simply skip rather than fatal.
+- Two tuning settings: `tpe_show_self_in_3p` (hide own holstered weapons while in first-person; default ON), `tpe_downscale_big_weapons` (percent scale 25-100, default 100). Any TPE setting change calls `M.flush()` which destroys every spawned unit so the next tick respawns with new geometry.
+
+Caveats vs. the original Third Person Equipment mod:
+- No per-career / per-skin position tuning — TPE ships hundreds of lines of dwarf/elf/saltz/etc. specific position+rotation tables, this ships one set keyed only by item_type.
+- No dwarf-backpack alternate node (engineer/ranger backpack carry positions).
+- No slayer dual-axe replace-on-conflict logic.
+- CWV custom-mesh variants will appear at the category-default position, not their actual visual shape's correct holster point.
+
+Expect to tune positions per item_type once we see what looks acceptable in-game. The whole feature is gated experimental; release after the tuning pass.
+
+## [2026-05-17 v0.8.62-dev]
+### LA peer fidelity — peers with LA + cosmetics_tweaker see the real LA hat
+v0.8.58→v0.8.61 stopped the crash by substituting the LA backend_id for its vanilla equivalent in every outgoing sync. Peers never see a bad NetworkLookup index — but they also never see the LA hat; the host renders the vanilla equivalent of the user's Grail Knight LA hat instead of LA's mesh. Confirmed in a two-PC test (Moonlight-controlled client on PC-B, host on PC-A): host shows vanilla Kruber hat where LA hat was expected.
+
+Fix: parallel VMF custom RPC `cos_la_attach` fired AFTER every vanilla `rpc_create_attachment` send. Payload `{go_id, slot, key=la_backend_id}`. Sent from the same three send sites the substitute hook already covered (`PUAE.game_object_initialized` → all others; `PUAE.spawn_resynced_loadout` → all others; `AttachmentUtils.hot_join_sync` → targeted to the joining peer).
+
+Receive side resolves the LA mesh path locally:
+1. `LA_BRIDGE.backend_to_armoury[key]` → LA armoury_key.
+2. `Loremasters-Armoury.SKIN_LIST[armoury_key].new_units[1]` → LA mesh unit path (peer's own LA install — works even if the wearer's exact LA version differs, as long as the armoury_key resolves to a unit on the peer).
+3. `Application.can_get("unit", path)` to verify the mesh is loadable; bail if not.
+4. Clone `ItemMasterList[la_backend_id]`, override `.unit` to the LA mesh, call `attachment_extension:create_attachment` — which removes the just-spawned vanilla and re-spawns the LA mesh in the same slot.
+
+VMF namespace handling means: peers without cosmetics_tweaker never receive this event (no-op, vanilla substitute is what they see). Peers with cosmetics_tweaker but without LA bail at step 1.
+
+Scope: hats only this pass. Armor uses LA's texture-paint pipeline (no unit swap), and would need a separate replay-the-texture-paint RPC. Shields use cosmetics_tweaker's local-only `_offhand_selection` and are never sent to peers — they're already host-controlled visuals and out of scope.
+
+Tradeoff: brief visual flicker on peer-side as vanilla spawns then immediately gets replaced by LA. Acceptable for the v0.8.62 ship.
+
+## [2026-05-16 v0.8.61]
+### Pre-alpha audit — close the 3 remaining peer-sync surfaces for LA cosmetics
+Followup to v0.8.58→v0.8.60. Vanilla source audit found three more send sites that read `NetworkLookup.item_names[<LA backend_id>]` inline (no function wrapper to intercept), all under attachment-spawn RPCs:
+- **`PlayerUnitAttachmentExtension.game_object_initialized` (line 63)** — local player initial spawn; sends `rpc_create_attachment` for every attachment slot to clients (host) / server (client).
+- **`PlayerUnitAttachmentExtension.spawn_resynced_loadout` (line 301)** — fires after a mid-mission loadout resync (e.g. dropped item).
+- **`AttachmentUtils.hot_join_sync` (line 99)** — fires PER NEWLY-JOINED PEER for every attachment slot already worn; the most likely public-alpha trigger (the v0.8.58 crash was Friend joining a Lobby).
+
+Fix shape: since these read the lookup directly via raw table access (not through any function we can wrap), the substitution happens by mutating `slot_data.item_data.name` (or `slot_data.name` for the AttachmentUtils path) to the vanilla equivalent immediately before vanilla runs, then restoring after. The swap window is the single vanilla call; no other code runs mid-call, so the swap is invisible to LOCAL apply. `pcall` guarantees restoration even if vanilla errors.
+
+`AttachmentUtils` is a plain table (`AttachmentUtils = AttachmentUtils or {}` at `attachment_utils.lua:1`) — same string-form pitfall that burned v0.8.58/v0.8.59 — so the hook uses table-form with a nil guard.
+
+### Hook-registration startup verification
+Added `_net_safe_hook_status` map for the four plain-table sync hooks (CosmeticUtils, LoadoutUtils, AttachmentUtils, PUAE). `mod:info` logs applied/missing state at end of mod init, and if ANY hook failed to register the user sees a warning in chat: `WARNING: one or more LA peer-sync hooks did NOT register`. Closes the v0.8.58→v0.8.59 silent-failure mode where a string-form hook on a plain table would no-op without diagnostics.
+
+### Out-of-scope from this pass (verified safe)
+- Pickup-projectile extractors at `game_object_initializers_extractors.lua:1226/1281/1330` send `NetworkLookup.item_names[item_name]` for pickup units — but `item_name` resolves through `AllPickups[pickup_name].item_name`, which only contains vanilla pickup item keys (potions, grenades, healthkits, etc.). LA doesn't author pickup items, so no LA backend_id can reach those extractors.
+- Versus mode party-selection sync (`versus_party_selection_logic.lua:500-504/939-943`) writes cosmetic-slot indices, but is unreachable from Adventure/Chaos Wastes — the primary cosmetics_tweaker user surface — and Versus has its own mod-compat story.
+- The receive sites in inventory_system / cosmetic_utils / etc. are decode-only; they fatal on bad indices but cannot leak local indices.
+
+## [2026-05-16 v0.8.60-dev]
+### Peer crash — second sync path (LoadoutUtils.sync_loadout_slot RPC)
+- **Same crash GUID-pattern as v0.8.58/v0.8.59 — still reproduces after v0.8.59.** v0.8.59 correctly hooked `CosmeticUtils.update_cosmetic_slot` (the SyncData path) — but `SimpleInventoryExtension.add_equipment` (line 885) calls `update_cosmetic_slot` AND **then immediately** calls `LoadoutUtils.sync_loadout_slot(self.player, slot_name, item)`. The latter sends an `rpc_sync_loadout_slot` RPC whose payload includes `item_id = NetworkLookup.item_names[item.key]` — i.e. the same local LA index the v0.8.58 patch was meant to stop. v0.8.59 left this path untouched.
+- Same plain-table pitfall as CosmeticUtils: `LoadoutUtils = LoadoutUtils or {}` at `loadout_utils.lua:1`, so the hook must be table-form with a nil guard. String-form `mod:hook("LoadoutUtils", ...)` would silently never register and we'd be back here for v0.8.61.
+- Fix: hook `LoadoutUtils.sync_loadout_slot` table-form. If `item.key` is an LA backend_id (`LA_BRIDGE.backend_to_armoury[item.key] ~= nil`), build a `shadow` table copying every field and substituting `shadow.key = LA_BRIDGE.backend_to_vanilla[item.key]` before calling vanilla. If no vanilla fallback exists, skip the call entirely (peer sees no equipment change for this slot — preferable to a fatal). Also covers `LoadoutUtils.hot_join_sync`, which re-invokes `sync_loadout_slot` per loadout slot for each newly-joined peer.
+- **Both peers must restart VT2 to pick up v0.8.60 before re-testing LA cosmetics in lobby.** A peer running v0.8.59 still has the leaky RPC path even if the other peer is on v0.8.60 — the RPC is sent from the client wearing the LA cosmetic, decoded on the receiver, so the SENDER must be on v0.8.60 for the substitution to fire.
+
+## [2026-05-16 v0.8.59-dev]
+### Re-fix peer crash — v0.8.58 hook never registered (string-form on plain table)
+- **Crash GUID 2b0ff53d** — same `NetworkLookup.lua:2514: item_names key 2959` crash reproduced on v0.8.58 even though v0.8.58 was meant to fix exactly this. Root cause: `CosmeticUtils` is a **plain table** (`CosmeticUtils = CosmeticUtils or {}` at `cosmetic_utils.lua:3`), not a class. v0.8.58 hooked it via string-form `mod:hook("CosmeticUtils", ...)`, which VMF can't resolve for plain tables — the hook silently never registered and the sync ran vanilla, leaking the local LA item_names index 2959 to peers.
+- Same pitfall is documented for BackendUtils in CLAUDE.md "Hooking" section: plain tables require table-form `mod:hook(TableRef, ...)` with a nil guard.
+- Fix: switched to `if CosmeticUtils then mod:hook(CosmeticUtils, "update_cosmetic_slot", ...) end`. Hook now actually fires and the substitution v0.8.58 described is in effect.
+- **Note for the friend in your lobby:** when both peers have cosmetics_tweaker the friend's client also rawsets LA indices into THEIR `NetworkLookup.item_names`, and pairs() iteration order in `_la_bridge.register_all` is unspecified, so the two clients may have assigned DIFFERENT local indices to the same LA item. v0.8.59's hook prevents the user's client from sending LA indices in the first place — but the friend needs to restart VT2 to pick up the updated mod (and ideally needs v0.8.59 themselves before trying on LA cosmetics from their side).
+
+## [2026-05-16 v0.8.58-dev]
+### Stop network-syncing LA cosmetic backend_ids to peers (peer-crash fix)
+- **Crash GUID fa479a72** — friend hosting a lobby crashed with `NetworkLookup.lua:2514: Table item_names does not contain key: 2959` when the user (with cosmetics_tweaker + LA) tried on a Grail Knight LA hat.
+- Root cause: cosmetics_tweaker's LA bridge `register_all()` adds each LA clone's backend_id to the LOCAL `NetworkLookup.item_names` via `rawset` (necessary to make the items addressable in this client's session). When the user equips an LA cosmetic, vanilla `CosmeticUtils.update_cosmetic_slot` calls `player:set_data(slot, NetworkLookup.item_names[la_backend_id])` — the LOCAL index gets broadcast via SyncData. Peers without the matching local rawset have no entry at that index → `__index` metamethod fatal on decode.
+- Fix: hook `CosmeticUtils.update_cosmetic_slot`. If `item_name` matches `LA_BRIDGE.backend_to_armoury`, substitute with `LA_BRIDGE.backend_to_vanilla[item_name]` (the vanilla item key the LA clone was minted from — every vanilla client knows it) before calling vanilla. If no vanilla fallback exists, skip the sync entirely.
+- Local visual unaffected: the local player's LA hat is applied via the loadout cache + LA's own apply path, not via sync_data. Peers see the vanilla equivalent — closest thing they can render without our mod or LA.
+- Covers every cosmetic slot CosmeticUtils handles: slot_hat, slot_skin, slot_frame, slot_melee, slot_ranged, slot_pose.
+
+## [2026-05-16 v0.8.57-dev]
+### LA offhand pool: family-aware cross-pollination + bow filter
+
+Two cross-pollination bugs reported in v0.8.56:
+
+1. **Bret-textured shield skins wrapped around Empire shield mesh** on Kruber's `es_1h_sword_shield` (and `es_1h_mace_shield`, `es_deus_01`). Root cause: `_LA_CHARACTER_SHIELD_TYPES` (introduced v0.8.54-dev) cross-pollinated every Kruber LA shield variant onto all 4 of his shield item_types. For `kind="texture"` variants — which paint onto whatever mesh the base item uses, without swapping the mesh — a Bret-authored texture painted onto an Empire kite-shield mesh wraps incorrectly (Bret UV layout authored for a heater shield).
+2. **Kerillian's LA bow models appeared as offhand options** on her `we_1h_spears_shield`. Root cause: LA bow variants share `swap_hand = "left_hand_unit"` with shields (the bow body wields in the left hand), so they entered the offhand pool via the outer `swap_hand == "left_hand_unit"` filter. No subsequent check verified that the variant's authored icons actually map to shield item_types.
+
+Fixes (both in `_la_bridge.lua build_offhand_options`):
+
+- Replaced flat `_LA_CHARACTER_SHIELD_TYPES` with `_LA_CHARACTER_SHIELD_FAMILIES`, splitting Kruber's shields into `empire` (sword+shield, mace+shield, deus_01) and `breton` (sword+shield_breton). Bardin / Kerillian / Saltzpyre each have a single family.
+- During variant parsing, derive `authored_family` from the variant's first icon-key that matches a known shield item_type, and set `has_shield_authored = true` if any icon does.
+- Skip variants where `has_shield_authored == false` (filters bows and other non-shield left-hand variants).
+- Family-aware cross-pollination: `kind="unit"` variants still get the broad pool (their `new_units[1]` swaps the displayed mesh on apply, so they render correctly on any base). `kind="texture"` variants get cross-pollinated only WITHIN their authored family.
+- Reverse-lookup tables (`_SHIELD_TYPE_TO_FAMILY`, `_LA_CHARACTER_ALL_SHIELDS`, `_ALL_SHIELD_TYPES`) built once at module load from the families table.
+
+Existing memory `feedback_la_offhand_paint.md` already documented "mesh-must-match-texture for LA shields"; this version operationalizes that constraint for cross-pollination, not just for the per-variant `intended_unit` resolution.
+
+## [2026-05-16 v0.8.56-dev]
+### Independent offhand swap for ALL dual-wield weapons
+Two bugs discovered in v0.8.51's W2 work:
+1. **Pool used `right_hand_unit`** for every skin, but mixed-pair dual-wields (Bret hammer+sword, Saltzpyre axe+falchion, Kerillian sword+dagger) have DIFFERENT right- and left-hand weapons. The picker overrides `left_hand_unit`, so it was offering the wrong half. For Bret hammer+sword the picker was offering mace variants for the left hand instead of sword variants.
+2. **Half the dual-wield item_types reference skin_combination_tables that DON'T EXIST in vanilla.** `dr_dual_wield_hammers_skins`, `es_dual_wield_hammer_sword_skins`, `wh_dual_wield_axe_falchion_skins`, and `wh_dual_hammer_skins` are all referenced by IML entries but missing from `WeaponSkins.skin_combinations`. Pools for these came back empty, so no picker appeared.
+
+Fixes:
+- Replaced `_DUAL_WIELD_SKIN_TABLES` with `_DUAL_WIELD_POOLS` keyed by item_type, each entry is `{ skin_table, unit_field }`. `unit_field` is `"left_hand_unit"` for native dual-wield tables (universally correct: matched-pair = same as right, mixed-pair = the actual offhand).
+- For the 4 dual-wields with missing tables, borrow a single-hand skin table that matches the LEFT-hand weapon kind:
+  - `dr_dual_wield_hammers` (left = 1h dwarf hammer) → `dr_1h_hammer_skins`
+  - `es_dual_wield_hammer_sword` (left = 1h Empire sword) → `es_1h_sword_skins`
+  - `wh_dual_wield_axe_falchion` (left = Saltzpyre falchion) → `wh_1h_falchion_skins`
+  - `wh_dual_hammer`: omitted (only one base unit and no 1h skin table exists; picker would be a single-element no-op).
+- `_build_offhand_options_from_skin_table` now takes a `unit_field` parameter so borrowed single-hand tables work correctly (1h skins store the weapon in `right_hand_unit`).
+
+Result: every Kruber dual-wield (sword+sword via dr_dual etc. doesn't exist for him, but hammer+sword now works), Bardin dual-wield (axes + hammers), Kerillian dual-wield (daggers, swords, sword+dagger), Saltzpyre dual-wield (axe+falchion) gets a meaningful offhand picker. Same-character rule unaffected — pools are derived from character-prefixed skin tables.
+
+## [2026-05-16 v0.8.55-dev]
+### Fix main-hand cycling swapping the shield preview
+- Bug: cycling main-hand axe/sword illusions in the row-1 picker was flipping the previewed shield (row-2 offhand) to whatever the new skin's `left_hand_unit` paired. The user's offhand pick was preserved in `_offhand_selection[backend_id]` but never applied during preview-cycle because vanilla `_on_illusion_index_pressed` rebuilds the previewer with the PENDING skin's IML entry (`item.data = ItemMasterList[pending_skin]`, no `backend_id` stamped). Our `BackendUtils.get_item_units` hook reads `_offhand_selection` by backend_id; with backend_id=nil it found nothing and let the new skin's paired shield through.
+- Fix: new module-level `_active_customization_backend_id` set in `_setup_illusions` from `item.backend_id`, cleared on `HeroWindowItemCustomization.on_exit`. `BackendUtils.get_item_units` and the `LootItemUnitPreviewer.spawn_units` LA-paint call both fall back to it when `effective_backend_id == nil`. Row-1 cycling now leaves the shield mesh AND LA paint frozen on the row-2 selection. Row-2 click + row-1 cycle interaction still works in both directions.
+
+## [2026-05-16 v0.8.54-dev]
+### Per-character cross-pool: all LA shields on all of that character's shield weapons
+- New `_LA_CHARACTER_SHIELD_TYPES` table in `_la_bridge.lua`. Every LA shield variant whose `la_key` starts with a character prefix is now automatically merged into every shield-bearing item_type for that character.
+  - **Kruber:** every Kruber LA shield (Bret natives — Bastonne/Reynard/Luidhard/Lothar/Alberic; Empire natives — Ostermark/Kotbs hero1 + 6 new kind=unit Empire shields = Reiland/Ostermark01-on-basic1/basic2/Kotbs01-on-basic2/Middenheim-on-basic2/Middenheim01-on-basic3) appears on all 4 Kruber shield item_types: `es_1h_sword_shield`, `es_1h_mace_shield`, `es_1h_sword_shield_breton`, `es_deus_01`.
+  - **Bardin:** both Bardin LA shields (basicClean + heroClean KarakNorn) appear on both `dr_1h_axe_shield` and `dr_1h_hammer_shield`.
+  - **Kerillian:** no change (only one shield item_type, `we_1h_spears_shield` — all 13 Kerillian LA shields already pool there).
+  - **Saltzpyre:** no LA shields exist; entries reserved for forward compat.
+- `_LA_EXTRA_WEAPON_TYPES` retained but now empty — the 3 Bret-extra entries (Ostermark/Kotbs/Reiland) are subsumed by the character rule. Table kept available for one-off non-shield cross-pollination if needed later.
+- Same-character invariant from v0.8.52 preserved: rule only expands WITHIN a character's family, never across characters.
+
+## [2026-05-16 v0.8.53-dev]
+### Open the LA focus gate — show every LA shield
+- Replaced the 3-entry `_LA_FOCUS_KEYS` whitelist (`Ostermark01`, `Kotbs01`, `Kruber_empire_shield_basic1`) with an empty table. The "one shield at a time" testing policy from early development was silently hiding every other LA shield from the picker even though registration was complete. With the gate open, every LA variant whose `icons` table targets the current weapon type now appears, still scoped to the wielding character per the v0.8.52 same-character rule (LA's icons are already character-correct).
+- Expected visible counts per weapon: Bret sword+shield now ~8 LA (5 Bret-native + 3 Empire extras), Empire mace+shield / sword+shield ~6 LA, Kerillian spear+shield ~14 LA, Bardin axe+shield / hammer+shield ~2 LA. Crash risk on click is acknowledged for unverified `kind="unit"` variants — see TODO and v0.8.51 entry's W1 note.
+
+## [2026-05-16 v0.8.52-dev]
+### Same-character-only shield pools (cross-character pollution removed)
+- Per user direction: a weapon's offhand-shield picker now strictly only offers shields from the wielding character's asset family. Kruber weapons share Kruber's 12 shields (Empire 01-05, GK 01-05, Deus 02/03). Kerillian gets only the 2 elven shields. Bardin gets only the 8 dwarf shields. Saltzpyre gets only the 3 WP shield variants. Previously `we_1h_spears_shield` exposed Empire shields, `dr_1h_axe_shield` exposed Empire+Elven+WP, `wh_flail_shield` exposed Empire+GK+Elven+Dwarf, and `es_1h_sword_shield` had a stray WP entry.
+- LA shields remain merged in per LA's `icons` table targeting — that's already character-correct so no change needed there.
+- Pool size impact: Kerillian dropped from ~7 to 2, Bardin dropped from ~12 to 8, Saltzpyre dropped from ~9 to 3. Kruber dropped by 1 (WP removed).
+
+## [2026-05-16 v0.8.51-dev]
+### Public-alpha prep, part 1
+- **Stripped TEMP DIAGNOSTIC `[SPAWN_TRACE]` block** at the top of `cosmetics_tweaker.lua` (the `World.spawn_unit` / `World.spawn_unit_with_position` hooks + `/spawn_trace_reset` command). Diagnostic served its purpose during the Imperial-hero crash investigation; the workaround in `_la_bridge._resolve_intended_unit` (returns `nil` for crash-prone variants) covers the Imperial Hero shield issue for now, and the spawn-trace data we gathered is recorded in TODO. Removes 36 lines of unconditional per-frame logging.
+- **Marked `unlock_all_frames` toggle resolved in TODO** — user confirmed in-game on v0.7.100-dev (frames inject after restart with toggle on, all 239 frames appear in cosmetics inventory).
+
+### W1 (LA shields) — full kind="unit" coverage extracted from LA source `.unit` files
+- Extended `_LA_KIND_UNIT_TEXTURES` from 1 entry (Reiland only) to **20 entries** covering every `kind="unit"` LA shield variant:
+  - 6 Empire (Kruber): `_basic1` (Reiland), `_basic1_Ostermark01`, `_basic2`, `_basic2_Kotbs01`, `_basic2_Middenheim`, `_basic3_Middenheim01`
+  - 2 Bardin (Dwarf): `_basicClean_KarakNorn01`, `_heroClean_KarakNorn01`
+  - 12 Kerillian (Elf): `_basic_Avelorn01_mesh`, `_basic2_mesh`, 5× `_heroClean_*` (Saphery01, Caledor01, Avelorn02, Eataine01, Chrace01), 5× `_basicClean*` (basicClean, Eaglegate01, Saphery01, Caledor01, Chrace01)
+- Extended `M.la_kind_unit_parent_packages` to the same 20 entries — all share `mat_to_use = wpn_empire_handgun_02_t2` (LA consistently uses the handgun material as the parent across the whole custom-mesh family).
+- **Extraction methodology:** every variant's diff/norm/pack paths sourced verbatim from `C:\Users\danjo\source\repos\Loremasters-Armoury\units\<dir>\<key>.unit`'s `data.colors / .normals / .MABs` fields. Two case-sensitive trap entries documented: `Kerillian_elf_shield_basic2_Eaglegate01`'s texture directory is `EagleGate01` with capital G while the diffuse filename uses lowercase g; `Kerillian_elf_shield_basic_Avelorn01_mesh`'s diff filename ends in `_diffuse1` (trailing 1).
+- **Kerillian limitation (acknowledged for alpha):** Kerillian shields have TWO `mat_slots` in vanilla LA (`slot1=handle, slot2=shield`); the current `Unit.set_texture_for_materials` painter writes uniformly across all materials on the unit, so we use slot2's textures (the shield face — the primary visual). The handle face will render with the same texture and will look imperfect on close inspection. A per-material painter is a post-alpha improvement.
+- The customization-preview-only `Unit.set_all_materials` swap + `Unit.set_local_scale` from v0.8.46-v0.8.49 now applies to every entry above. In-game and inventory-mannequin contexts continue to early-return per v0.8.48 (LA's own hook handles those paths correctly).
+
+### W2 (offhand picker) — extended coverage to dual-wield weapons
+- Independent offhand picker now appears on the customization screen for dual-wield weapons in addition to shield weapons. Eight new item_types covered:
+  - `dr_dual_axes` (Bardin Slayer dual axes)
+  - `dr_dual_wield_hammers` (Bardin dual hammers)
+  - `ww_dual_daggers` + `we_dual_wield_daggers` aliased pool (Kerillian Shade dual daggers — both the ww_* canonical adventure item_type and the 2024-Q2 cosmetic-pack we_* item_type point to the same pool)
+  - `ww_dual_swords` (Kerillian dual swords)
+  - `ww_sword_and_dagger` (Kerillian sword+dagger)
+  - `es_dual_wield_hammer_sword` (Kruber Foot Knight bret hammer+sword)
+  - `wh_dual_hammer` (Saltzpyre dual hammers)
+  - `wh_dual_wield_axe_falchion` (Saltzpyre dual axe+falchion)
+- **Implementation:** new local `_build_offhand_options_from_skin_table(skin_table_name)` derives the pool dynamically by walking `WeaponSkins.skin_combinations[<table>]` over all rarity buckets, looking up each referenced skin in `WeaponSkins.skins`, and collecting the unique `right_hand_unit` paths. Right-hand and left-hand units are the same for matched-pair dual wields, so the set works as left-hand candidates. Auto-includes vanilla, DLC, and any future skin additions — unlike the hand-curated shield pools (which were necessary because shields cross-pollinate across weapon types).
+- Rendering, package preload, and `_offhand_selection[backend_id]` machinery are unchanged from the shield path — dual-wield options have only `unit` (no `intended_unit` since they're not LA bridge entries), so they flow through the same `BackendUtils.get_item_units` override hook + `_preload_offhand_for_option` preload that shield options use.
+- Sort order within each pool: plentiful → common → rare → exotic → unique → bogenhafen → promotion → unknown, so picker order is predictable launch-to-launch.
+
+## [2026-05-13 v0.8.50-dev]
+### Coexist with crafting_in_modded (cim): yield illusion-swap to cim when it's loaded
+
+cim now ships its own copy of the modded-realm illusion-swap pipeline. When both mods are installed cim is authoritative — cosmetics_tweaker's six illusion-swap hooks now check `get_mod("cim")` at fire time and early-return to the original function, leaving cim's hooks to handle the customization. Hooks gated:
+
+- `BackendInterfaceItemPlayfab.get_weapon_skin_from_skin_key` — `_custom_skin_keys` path still runs (LA bridge + our recolored skins) so those keep working; only the eac-untrusted vanilla-skin path is delegated to cim.
+- `HeroWindowItemCustomization._enable_craft_button`
+- `HeroWindowItemCustomization._on_illusion_index_pressed`
+- `HeroWindowItemCustomization._update_state_craft_button`
+- `BackendInterfaceCraftingPlayfab.craft`
+- `BackendInterfaceCraftingPlayfab.update`
+
+No behavior change when cim isn't loaded. The offhand-shield picker, custom-illusion registry, and veteran-skin glow overrides are unaffected — they remain cosmetics_tweaker-only features.
+
 ## [2026-05-12 v0.8.49-dev]
 ### Polish
 - **Preview-only 2x scale for `kind="unit"` LA shields.** Custom-mesh LA shields render visibly smaller than vanilla shield illusions in the LootItemUnitPreviewer's intrinsic zoom. Adds `Unit.set_local_scale(unit, 0, Vector3(2, 2, 2))` in the same context-gated block as the v0.8.48 material swap — runs ONLY for `context == "loot_previewer"`, leaves in-game and inventory-mannequin rendering untouched.
@@ -107,7 +473,7 @@ Each outcome points to a different fix. No code change to in-game / inventory pa
   - `experimental_tints_group` / `tint_pureheart_white` / `tint_pureheart_white_tooltip` localization entries removed
   - `_TINT_PARAM_NAMES`, `_hat_tints` table, `_apply_tint_to_unit`, `_maybe_tint` helpers removed from `cosmetics_tweaker.lua`
   - Call site inside `GearUtils.create_equipment` post-hook removed (the loop that ran `_maybe_tint` on each hand unit, with its outdated "POTENTIAL BUG" comment about preview-path coverage)
-  - `cos probe_hat` chat command retained — it's still useful for future material introspection work.
+  - `/probe_hat` chat command retained — it's still useful for future material introspection work.
 
 ## [2026-05-10 v0.8.40-dev]
 ### Fixed
@@ -217,7 +583,7 @@ If textures STILL don't bind: parent-package-load wasn't enough. Either the actu
 
 ## [2026-05-09 v0.8.29-dev]
 ### Changed
-- **Glow override redesigned: per-family routing decoupled from color choice.** The user's preset choice now selects an RGB triple; the mod writes that triple to whichever shader variables drive emissive on the target weapon — no separate code paths per family. New design: `_COLOR_PRESETS[preset_key] = { r, g, b }` (just RGB) plus a fixed list of candidate variables (`rune_emissive_color`, `color_glow_high`, `color_glow_low`, `color_smoke_high`, `color_smoke_low`) written on every painted unit. Variables that don't exist on a given mesh silently no-op (verified empirically via `cos glow_scan` in v0.8.22).
+- **Glow override redesigned: per-family routing decoupled from color choice.** The user's preset choice now selects an RGB triple; the mod writes that triple to whichever shader variables drive emissive on the target weapon — no separate code paths per family. New design: `_COLOR_PRESETS[preset_key] = { r, g, b }` (just RGB) plus a fixed list of candidate variables (`rune_emissive_color`, `color_glow_high`, `color_glow_low`, `color_smoke_high`, `color_smoke_low`) written on every painted unit. Variables that don't exist on a given mesh silently no-op (verified empirically via `/glow_scan` in v0.8.22).
 - **Template-mutation hook now mutates EVERY vector3 variable in the template** to user RGB, not just `rune_emissive_color`. Covers any source-defined template — rune family (single channel), versus (5 channels), and any future template — without per-template knowledge.
 - **`color_dots` (versus 5th channel) intentionally omitted** from the direct-paint variable list (probe showed minimal visible color contribution; possibly drives particle behaviour). Template-mutation path still mutates it as part of the versus template — that's fine because the visible contribution is minor.
 
@@ -228,14 +594,14 @@ If textures STILL don't bind: parent-package-load wasn't enough. Either the actu
   - `_runed_01` Stylish loot-chest white-glow (~160 weapons): rune_emissive_color via direct post-spawn paint
   - `_magic_02` Shyish-Infused (Versus rewards): 5 versus channels via template mutation on `versus`
   - `_magic_01` Weavebound (WoM Athanor): 4 versus channels via direct post-spawn paint (no vanilla template — direct write mandatory)
-- `cos glow_status` now reports the active RGB alongside the preset key.
+- `/glow_status` now reports the active RGB alongside the preset key.
 
 ### Tooltip
 - Updated `glow_override_enable` to clarify coverage spans all four glow families through one color picker.
 
 ## [2026-05-09 v0.8.22-dev]
 ### Added
-- **Glow probe diagnostic suite** (`cos glow_dump`, `cos glow_probe <name>`, `cos glow_scan`, `cos glow_scan_stop`, `cos glow_restore`) — finds what shader uniform controls baked emissive on weapon meshes that don't go through the rune-emissive `MaterialSettingsTemplates` system (specifically Stylish `_runed_01` and Weavebound `_magic_01`). The scan sweeps ~63 candidate variable names with bright HDR red on the wielded weapon's units, flashing red on hit. Works because `Material.num_parameters` / `parameter_name` crashes Stingray (resource_manager.cpp:245, NOT pcall-recoverable) so direct enumeration is impossible — brute force is the only viable approach.
+- **Glow probe diagnostic suite** (`/glow_dump`, `/glow_probe <name>`, `/glow_scan`, `/glow_scan_stop`, `/glow_restore`) — finds what shader uniform controls baked emissive on weapon meshes that don't go through the rune-emissive `MaterialSettingsTemplates` system (specifically Stylish `_runed_01` and Weavebound `_magic_01`). The scan sweeps ~63 candidate variable names with bright HDR red on the wielded weapon's units, flashing red on hit. Works because `Material.num_parameters` / `parameter_name` crashes Stingray (resource_manager.cpp:245, NOT pcall-recoverable) so direct enumeration is impossible — brute force is the only viable approach.
 
 ### Fixed
 - **Vector3 frame-allocation gotcha (v0.8.20 → v0.8.22).** The original probe shipped with `local _GLOW_PROBE_HDR = Vector3(15, 0, 0)` cached at module load. Stingray Vector3 is frame-allocated; the storage is invalidated across frames. Every `pcall(Unit.set_vector3_for_materials, unit, name, cached_vec)` returned `false` because the cached Vector3 was no longer a valid argument. Symptom: scan reported `painted=0` on every candidate × every unit. v0.8.22 changed to `local function _probe_red() return Vector3(15, 0, 0) end` and the probe started actually painting. Same gotcha applies to any Stingray vector type — never cache `Vector3()` results across frames; reconstruct per call site.
@@ -301,7 +667,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
 - Equip Kruber Bret longsword+shield → cosmetics → expect Ostermark01, Kotbs01, AND `Empire Shield Basic1 (LA)` (or however it humanizes).
 - Same for sword+shield, mace+shield, deus spear+shield.
 - Apply Reiland → expect a different shield SHAPE (Empire shield 01 mesh, not deus shield) with its embedded materials. No magenta. No leak onto adjacent shields in the inventory mannequin.
-- `cos la_offhand_dump` after a full equip: Reiland line should show `1p=true 3p=true` (engine-resident).
+- `/la_offhand_dump` after a full equip: Reiland line should show `1p=true 3p=true` (engine-resident).
 - If a sync-time crash hits in MP, capture the GUID + missing-key message and we'll add the relevant rawset for whichever NetworkLookup table it points to.
 
 ## [2026-05-08 v0.8.24-dev]
@@ -327,7 +693,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
 ### Fixed
 - **Bret-weapon LA shields were silently invisible.** Dump showed `es_sword_shield_breton offhand pool: 7 entries`, but the in-game log showed `[LA paint] skip: no _offhand_selection for es_1h_sword_shield_breton`. Naming gap: LA's icon keys use `es_sword_shield_breton_skin_*` (no `_1h_` infix) but the game's actual `ItemMasterList[item].item_type` for the Bret weapon is `es_1h_sword_shield_breton`. v0.8.19's icon-driven fanout bucketed every Bret LA shield (Bastonne, Reynard, Luidhard, Lothar, Alberic, plus the v0.8.21 Ostermark/Kotbs extras) into a pool the game never queried. The picker showed only vanilla Bret shield options because the LA pool was unreachable.
 - Added `_LA_WEAPON_TYPE_ALIAS` in `_la_bridge.lua` to translate LA's icon-derived weapon_type to the game's item_type. Currently one entry: `es_sword_shield_breton -> es_1h_sword_shield_breton`. Applied via `_normalize_weapon_type()` in both the icon-driven fanout AND the `_LA_EXTRA_WEAPON_TYPES` map (which I already updated to use the canonical game item_type, but the alias is the safety net so future entries can use either form).
-- Re-running `cos la_offhand_dump` after this build should show `es_1h_sword_shield_breton` (with `_1h_`) as the pool key, with all 7 entries (5 Bret-authored + Ostermark + Kotbs).
+- Re-running `/la_offhand_dump` after this build should show `es_1h_sword_shield_breton` (with `_1h_`) as the pool key, with all 7 entries (5 Bret-authored + Ostermark + Kotbs).
 
 ### Test plan
 - Restart VT2 fully.
@@ -349,7 +715,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
 - Restart VT2 to clear any shared-material residue.
 - Equip Kruber's Bret longsword+shield → cosmetics menu → expect Ostermark01 and Kotbs01 in the LA section alongside the Bret-authored variants (Bastonne02, Reynard01, Luidhard01, Lothar01, Alberic01).
 - Apply Ostermark01 → expect deus shield mesh + Ostermark texture, no magenta, no leak onto adjacent shields. Same combo as on mace+shield.
-- Run `cos la_offhand_dump` and confirm `Kruber_empire_shield_hero1_Ostermark01` lists `es_sword_shield_breton` in its weapons column alongside `es_1h_mace_shield`, `es_1h_sword_shield`, `es_deus_01`.
+- Run `/la_offhand_dump` and confirm `Kruber_empire_shield_hero1_Ostermark01` lists `es_sword_shield_breton` in its weapons column alongside `es_1h_mace_shield`, `es_1h_sword_shield`, `es_deus_01`.
 
 ## [2026-05-08 v0.8.19-dev]
 ### Changed (architectural)
@@ -364,7 +730,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
   - `_merge_la_offhand_options` reads `LA_BRIDGE.la_offhand_options_by_weapon_type[weapon_key]` directly. No character-level indirection, no `seen_lists` dedupe.
   - The Bret-mesh guard in `BackendUtils.get_item_units` is removed. It was a bandaid for the cross-pollination that this build prevents at the source: LA Empire shields (Ostermark, Kotbs) won't appear on Bret weapons at all, so we never need to drop their `intended_unit` override.
 - The v0.8.18 per-unit `Unit.set_texture_for_materials` paint primitive stays in place — it kills the shared-material leak class.
-- `cos la_offhand_dump` now prints each variant's `weapon_types` list so you can verify which weapon types each LA shield will surface in.
+- `/la_offhand_dump` now prints each variant's `weapon_types` list so you can verify which weapon types each LA shield will surface in.
 - `kind="unit"` LA variants remain filtered (separate problem; needs LA `swap_units_new` integration with `rawget`/`rawset` accessors per `feedback_la_custom_mesh_unsupported.md`).
 
 ### Test plan (this build, on a fresh game restart)
@@ -416,7 +782,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
   2. **`NetworkLookup.inventory_packages.__index` is fatal on miss.** Every LA call path that goes through `swap_units_new`/`swap_units_old` does naked reads against this table. Per `feedback_vt2_strict_lookup_rawget.md`, anything we do to that table must use `rawget`/`rawset`. Calling LA's pre-existing helpers means we can't swap in safe accessors without wrapping each helper.
 - A safe integration would need to either (a) take ownership of LA's update loop for the affected skins (suspend its `re_apply_illusion` calls while ours are in flight), or (b) replicate `swap_units_new` end-to-end with our own state machine and `rawget`/`rawset` accessors. Both are substantial; deferred until there's a focused session for it.
 - The Bret-skin mesh-wrapping fix from v0.8.13 is preserved (`kind="texture"` Empire variants still drop the mesh swap on Bret skins; LA's paint overlay handles the texture).
-- `cos la_offhand_dump` retains the `1p=<bool> 3p=<bool> pkg=<bool>` triage columns from v0.8.12.
+- `/la_offhand_dump` retains the `1p=<bool> 3p=<bool> pkg=<bool>` triage columns from v0.8.12.
 
 ## [2026-05-07 v0.8.13-dev]
 ### Fixed
@@ -426,7 +792,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
 
 ## [2026-05-07 v0.8.12-dev]
 ### Fixed
-- **LA custom-mesh shields now actually render in the customization preview.** v0.8.11 made `kind="unit"` LA variants appear in the picker, but selecting one showed "no model at all" — the slot went empty. Root cause: vanilla shields ship as standalone `units/.../wpn_xxx.package` files, so `LootItemUnitPreviewer.load_package` -> `Managers.package:load(unit_path_3p, ...)` succeeds and fires `_on_load_complete`, flipping `self._loaded_packages[path] = true`. The previewer's spawn gate (`loot_item_unit_previewer.lua:511`) only proceeds to `World.spawn_unit` after that flag flips. LA bundles every custom shield mesh into one big `resource_packages/Loremasters-Armoury/Loremasters-Armoury` package — there is no per-unit standalone `.package`. So `Managers.package:load("units/Kerillian_elf_shield/<...>_3p", ...)` phantom-succeeds without firing the callback, the gate stays closed forever, and `World.spawn_unit` never runs. VMF auto-loads each mod's main package on register, so LA's custom meshes ARE engine-resident — just not via the `package`-id lookup the previewer is doing. Fix: hook `LootItemUnitPreviewer.load_package`; when `Application.can_get("unit", path)` is true AND `Application.can_get("package", path)` is false (engine has the unit, but there's no standalone package), short-circuit by setting `_packages_to_load[path] = true` and `_loaded_packages[path] = true` so `_spawn_items` proceeds straight to `World.spawn_unit`. The unit spawn then resolves against LA's globally-loaded resource package. Vanilla weapons are unaffected because their paths satisfy both can_get checks; we only short-circuit the bundled-into-larger-package case. Also extended `cos la_offhand_dump` to print per-variant `1p=<bool> 3p=<bool> pkg=<bool>` so future "no model" reports can be triaged in one command.
+- **LA custom-mesh shields now actually render in the customization preview.** v0.8.11 made `kind="unit"` LA variants appear in the picker, but selecting one showed "no model at all" — the slot went empty. Root cause: vanilla shields ship as standalone `units/.../wpn_xxx.package` files, so `LootItemUnitPreviewer.load_package` -> `Managers.package:load(unit_path_3p, ...)` succeeds and fires `_on_load_complete`, flipping `self._loaded_packages[path] = true`. The previewer's spawn gate (`loot_item_unit_previewer.lua:511`) only proceeds to `World.spawn_unit` after that flag flips. LA bundles every custom shield mesh into one big `resource_packages/Loremasters-Armoury/Loremasters-Armoury` package — there is no per-unit standalone `.package`. So `Managers.package:load("units/Kerillian_elf_shield/<...>_3p", ...)` phantom-succeeds without firing the callback, the gate stays closed forever, and `World.spawn_unit` never runs. VMF auto-loads each mod's main package on register, so LA's custom meshes ARE engine-resident — just not via the `package`-id lookup the previewer is doing. Fix: hook `LootItemUnitPreviewer.load_package`; when `Application.can_get("unit", path)` is true AND `Application.can_get("package", path)` is false (engine has the unit, but there's no standalone package), short-circuit by setting `_packages_to_load[path] = true` and `_loaded_packages[path] = true` so `_spawn_items` proceeds straight to `World.spawn_unit`. The unit spawn then resolves against LA's globally-loaded resource package. Vanilla weapons are unaffected because their paths satisfy both can_get checks; we only short-circuit the bundled-into-larger-package case. Also extended `/la_offhand_dump` to print per-variant `1p=<bool> 3p=<bool> pkg=<bool>` so future "no model" reports can be triaged in one command.
 
 ## [2026-05-07 v0.8.11-dev]
 ### Added
@@ -434,7 +800,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
 
 ## [2026-05-07 v0.8.10-dev]
 ### Removed
-- **Live glow re-paint reverted.** v0.8.7's `mod._refresh_glow` (and the v0.8.9 `cos repaint_glow` chat command) walked `ScriptUnit.extension(local_player_unit, "inventory_system")._equipment.slots` and painted every `right_unit_1p / right_unit_3p / left_unit_1p / left_unit_3p`. Worked for the wielded slot but destabilised adjacent units — user reported that after running the repaint, pressing X (inspect) made hand meshes disappear and 1P state break, only recoverable by switching characters. Root cause not pinned (likely the engine doesn't tolerate `set_vector3_for_materials` on currently-invisible / sheathed 1P units), and I don't have enough data to fix it safely. Removed the function, the command, and the `mod.on_setting_changed` glow dispatch. The hook on `GearUtils.apply_material_settings` (v0.8.4+) is unaffected and still paints any newly-spawned weapon at equip time. Net effect for the user: changing the override or preset now takes effect on the NEXT weapon equip / spawn rather than instantly. To re-add live updates safely, the future approach is to hook the wield event and paint only the weapon at the moment it becomes visible.
+- **Live glow re-paint reverted.** v0.8.7's `mod._refresh_glow` (and the v0.8.9 `/repaint_glow` chat command) walked `ScriptUnit.extension(local_player_unit, "inventory_system")._equipment.slots` and painted every `right_unit_1p / right_unit_3p / left_unit_1p / left_unit_3p`. Worked for the wielded slot but destabilised adjacent units — user reported that after running the repaint, pressing X (inspect) made hand meshes disappear and 1P state break, only recoverable by switching characters. Root cause not pinned (likely the engine doesn't tolerate `set_vector3_for_materials` on currently-invisible / sheathed 1P units), and I don't have enough data to fix it safely. Removed the function, the command, and the `mod.on_setting_changed` glow dispatch. The hook on `GearUtils.apply_material_settings` (v0.8.4+) is unaffected and still paints any newly-spawned weapon at equip time. Net effect for the user: changing the override or preset now takes effect on the NEXT weapon equip / spawn rather than instantly. To re-add live updates safely, the future approach is to hook the wield event and paint only the weapon at the moment it becomes visible.
 
 ## [2026-05-07 v0.8.8-dev]
 ### Changed
@@ -445,7 +811,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
 
 ## [2026-05-07 v0.8.7-dev]
 ### Added
-- **Live glow override re-paint.** Toggling `glow_override_enable` or switching `glow_override_preset` now immediately repaints the local player's currently-spawned weapon units — no re-equip needed. Mechanism: `mod.on_setting_changed` dispatches into `mod._refresh_glow`, which walks `ScriptUnit.extension(local_player_unit, "inventory_system")._equipment.slots` (same access pattern as `cos probe_hat`), and for each `right_unit_1p` / `right_unit_3p` / `left_unit_1p` / `left_unit_3p` slot field either overlays the chosen preset or, when the toggle has just been turned OFF, restores the skin's native template via vanilla `GearUtils.apply_material_settings(unit, WeaponSkins.skins[skin_key].material_settings_name)`. Stylish (`_runed_01`, no template) skins can't be restored — but they also weren't being painted, so that's a no-op. New chat command `cos repaint_glow` triggers the same walk manually for diagnostics. Forward-reference safety: `_refresh_glow` is attached to `mod` rather than declared as a bare local so the early `mod.on_setting_changed` callback can dispatch through a runtime table lookup (per `feedback_lua_forward_reference.md`). Husks (other players' 3p weapons) NOT covered yet — they live on a different inventory extension. Tracked as follow-up.
+- **Live glow override re-paint.** Toggling `glow_override_enable` or switching `glow_override_preset` now immediately repaints the local player's currently-spawned weapon units — no re-equip needed. Mechanism: `mod.on_setting_changed` dispatches into `mod._refresh_glow`, which walks `ScriptUnit.extension(local_player_unit, "inventory_system")._equipment.slots` (same access pattern as `/probe_hat`), and for each `right_unit_1p` / `right_unit_3p` / `left_unit_1p` / `left_unit_3p` slot field either overlays the chosen preset or, when the toggle has just been turned OFF, restores the skin's native template via vanilla `GearUtils.apply_material_settings(unit, WeaponSkins.skins[skin_key].material_settings_name)`. Stylish (`_runed_01`, no template) skins can't be restored — but they also weren't being painted, so that's a no-op. New chat command `/repaint_glow` triggers the same walk manually for diagnostics. Forward-reference safety: `_refresh_glow` is attached to `mod` rather than declared as a bare local so the early `mod.on_setting_changed` callback can dispatch through a runtime table lookup (per `feedback_lua_forward_reference.md`). Husks (other players' 3p weapons) NOT covered yet — they live on a different inventory extension. Tracked as follow-up.
 
 ## [2026-05-06 v0.8.6-dev]
 ### Changed
@@ -510,7 +876,7 @@ With the Stylish probe added, all 4 weapon families are now probe-confirmed pain
 
 ## [2026-05-06 v0.7.100-dev]
 ### Fixed
-- **`Unlock All Portrait Frames` toggle never injected anything** (silent no-op since the feature shipped in v0.7.0-dev). Root cause: the hook targeted `PlayFabMirrorBase` but the runtime instance is `PlayFabMirrorAdventure`. VT2's foundation `class()` helper at `foundation/scripts/util/class.lua:51-57` defines inheritance by **copying** parent methods into the child table at class-definition time — there is no `__index` chain to the base. So `mod:hook("PlayFabMirrorBase", "_create_fake_inventory_items", ...)` registered correctly but wrapped a function value the runtime instance never dispatches to. Verified empirically against `console-2026-05-06-02.40.42.log`: VMF logged `Hooking '_create_fake_inventory_items' from [PlayFabMirrorBase]` at mod load (02:41:12.686), well before PlayFab login at 02:41:22, but the in-game `cos frames_status` diagnostic reported `inject hook fired 0 time(s)` even with the toggle on and modded realm detected. **Fix:** re-targeted both hooks to `PlayFabMirrorAdventure`. Added a more reliable pre-hook on `_create_fake_inventory_items` that mutates the `fake_inventory_items` parameter to inject all frame keys *before* the original mints fake backend IDs — this is the actual gate that registers items into `_inventory_items` (the table the UI's `get_filtered_items("slot_type == frame")` reads). The companion safe hook on `get_unlocked_cosmetics` keeps the table in sync for later UI re-queries. DLC ownership still respected via `_skin_requires_unowned_dlc`. Toggle still requires a full restart to take effect (the gate runs once at PlayFab login). Memory note: `feedback_vt2_class_hook_derived.md`. Diagnostic command `cos frames_status` retained.
+- **`Unlock All Portrait Frames` toggle never injected anything** (silent no-op since the feature shipped in v0.7.0-dev). Root cause: the hook targeted `PlayFabMirrorBase` but the runtime instance is `PlayFabMirrorAdventure`. VT2's foundation `class()` helper at `foundation/scripts/util/class.lua:51-57` defines inheritance by **copying** parent methods into the child table at class-definition time — there is no `__index` chain to the base. So `mod:hook("PlayFabMirrorBase", "_create_fake_inventory_items", ...)` registered correctly but wrapped a function value the runtime instance never dispatches to. Verified empirically against `console-2026-05-06-02.40.42.log`: VMF logged `Hooking '_create_fake_inventory_items' from [PlayFabMirrorBase]` at mod load (02:41:12.686), well before PlayFab login at 02:41:22, but the in-game `/frames_status` diagnostic reported `inject hook fired 0 time(s)` even with the toggle on and modded realm detected. **Fix:** re-targeted both hooks to `PlayFabMirrorAdventure`. Added a more reliable pre-hook on `_create_fake_inventory_items` that mutates the `fake_inventory_items` parameter to inject all frame keys *before* the original mints fake backend IDs — this is the actual gate that registers items into `_inventory_items` (the table the UI's `get_filtered_items("slot_type == frame")` reads). The companion safe hook on `get_unlocked_cosmetics` keeps the table in sync for later UI re-queries. DLC ownership still respected via `_skin_requires_unowned_dlc`. Toggle still requires a full restart to take effect (the gate runs once at PlayFab login). Memory note: `feedback_vt2_class_hook_derived.md`. Diagnostic command `/frames_status` retained.
 - **LA shield paint not visible on the inventory loadout mannequin for vanilla-crafted Bretonnian sword & shield** ("Apply seems to do nothing", "all LA shield options look like the equipped shield"). Root cause: vanilla `equip_item` is called with `skin=nil` for vanilla-crafted Bret weapons because the applied illusion is stored only on the backend `BackendItem` object, not passed through the call chain. Vanilla relies on `BackendUtils.get_item_units` to resolve the skin internally during spawn — but our `_store_equip_skin` hook was caching the literal `nil` arg, so `_spawn_item_post`'s `has_skin` gate failed and LA paint was skipped on the mannequin. **Fix:** `_store_equip_skin` now falls back to `Managers.backend:get_interface("items"):get_skin(backend_id)` when the passed `skin` is nil, mirroring the same resolution chain `_setup_illusions` and `_ct_on_offhand_pressed` already use. Now logs `[LA preview] backend-resolved skin for X: Y` whenever the fallback fires, so future regressions are visible. The customization-screen preview (`LootItemUnitPreviewer`) and in-game body (`GearUtils.create_equipment`) were already painting correctly — only the inventory mannequin path was broken. Verified against console-2026-05-06-02.40.42 log: `[LA paint] skip: has_skin=false` repeating after `equip_item key=es_sword_shield_breton ... skin=nil`.
 
 ### Note on Apply button UX
@@ -616,7 +982,7 @@ The other 6 are LA's `kind="unit"` Empire basic variants (basic1, basic1_Osterma
 - **Note:** existing icon pollution from prior sessions (where the previous code path leaked) only clears on game restart. Fresh sessions on v0.7.78+ will not leak.
 
 ### Added
-- **`cos la_offhand_dump` command** — dumps each LA shield variant -> resolved `intended_unit` mapping with the source (`texture_hint` / `first_icon` / `unresolved`) and the variant's texture path. Use this to identify variants whose intended mesh is wrong and refine `_texture_mesh_hints` in `_la_bridge.lua`.
+- **`/la_offhand_dump` command** — dumps each LA shield variant -> resolved `intended_unit` mapping with the source (`texture_hint` / `first_icon` / `unresolved`) and the variant's texture path. Use this to identify variants whose intended mesh is wrong and refine `_texture_mesh_hints` in `_la_bridge.lua`.
 - **Texture-path hint parser** in `_la_bridge.lua` — `_texture_mesh_hints` table maps LA folder-name patterns (e.g. `Grail_Knight_shield(%d+)`, `bret_shield_`, `Knight_shield_(%d+)`) to canonical vanilla shield unit paths. Replaces the previous nondeterministic "first key from `pairs(variant.icons)`" heuristic that could pick different shields on different runs. Falls back to the lex-sorted first icon key when no pattern matches.
 
 ## [2026-05-01 v0.7.77-dev]
@@ -869,11 +1235,11 @@ Systematic investigation of GUI material injection. Dead ends confirmed: `Gui.cr
 
 ## [2026-04-29 v0.6.23-dev]
 ### Fixed
-- **Mod failed to initialize** when `_register_custom_illusions` ran: `NetworkLookup.weapon_skins[skin_key]` access threw because the table has a metatable that errors on missing keys. Switched to `rawget` so the membership check no longer trips the guard. This was masking the LA bridge entirely — every `cos la_*` command failed silently because mod_script init bailed before the commands were registered.
+- **Mod failed to initialize** when `_register_custom_illusions` ran: `NetworkLookup.weapon_skins[skin_key]` access threw because the table has a metatable that errors on missing keys. Switched to `rawget` so the membership check no longer trips the guard. This was masking the LA bridge entirely — every `/la_*` command failed silently because mod_script init bailed before the commands were registered.
 
 ## [2026-04-29 v0.6.20–v0.6.22-dev]
 ### Added
-- **LA bridge diagnostics**: `cos la_dump` (registry contents), `cos la_trace 1` (per-hook tracing of `AttachmentUtils.link` and `HeroPreviewer._spawn_item_unit`), `cos la_loadout` (find equipped LA-clone backend_ids), `cos la_force <armoury_key>` (bypass detection and apply a specific LA variant directly to the player's hat unit, for isolating queue-routing vs LA-pipeline failures).
+- **LA bridge diagnostics**: `/la_dump` (registry contents), `/la_trace 1` (per-hook tracing of `AttachmentUtils.link` and `HeroPreviewer._spawn_item_unit`), `/la_loadout` (find equipped LA-clone backend_ids), `/la_force <armoury_key>` (bypass detection and apply a specific LA variant directly to the player's hat unit, for isolating queue-routing vs LA-pipeline failures).
 
 ## [2026-04-28 v0.6.19-dev]
 ### Added

@@ -27,7 +27,7 @@ If you pick up this codebase later, start by reading the per-area documents — 
 ### Pre-second-pass fixes (already in place when second pass started)
 
 **weapon_tweaker v0.11.9:**
-- Added `witch_hunter_warrior_priest` to `_3p_state_machine_paths` so `wt sm_probe` covers WP's distinct skeleton.
+- Added `witch_hunter_warrior_priest` to `_3p_state_machine_paths` so `/sm_probe` covers WP's distinct skeleton.
 - `mod.on_game_state_changed` signature reduced to `function()`.
 - Re-aligned `wh_priest`-prefixed rows in `_career_anim_redirect` to match sibling column spacing.
 
@@ -47,7 +47,7 @@ If you pick up this codebase later, start by reading the per-area documents — 
 **weapon_tweaker v0.11.11-dev:**
 - **HIGH — `_safe_has_anim` forward-reference fix.** Moved the function definition above `_try_suffix_redirect`. Lua 5.1 was resolving `_safe_has_anim` at line 311 to a `nil` global (defined at 779) — crash whenever any career hit the suffix-redirect path. 6th instance of `feedback_lua_forward_reference.md`'s exact pattern.
 - **MED — `MenuWorldPreviewer.equip_item` hook re-targeted to `HeroPreviewer.equip_item`.** The method is inherited (not directly defined on the subclass), so VMF's string-form hook on the subclass was unreliable. Hooking the parent guarantees both classes' instances trigger it; harmless extra entries from `HeroPreviewer` instances are auto-cleared by the weak-keyed map on GC.
-- **MED — `wt forge` rawget guard.** `if not ItemMasterList[item_key] then` was crashifying *itself* on user-typed unknown keys via `__index`. Changed to `rawget` and lifted the lookup.
+- **MED — `/forge` rawget guard.** `if not ItemMasterList[item_key] then` was crashifying *itself* on user-typed unknown keys via `__index`. Changed to `rawget` and lifted the lookup. (Command since moved to `crafting_in_modded` as `/forge`.)
 
 **general_tweaker v0.2.11-dev:**
 - **MED — TP camera sliders wired.** `tp_distance`, `tp_height`, `tp_side_offset` widgets now actually drive `_patch_camera_offset`. Side offset → x; distance → -y (negative pulls camera back); height → z. Zoom variants scale at fixed ratios (60% / 40%) so transitions remain perceptually consistent. `on_setting_changed` re-applies on slider drag.
@@ -90,7 +90,7 @@ If you pick up this codebase later, start by reading the per-area documents — 
 ### Second-pass documentation fixes
 
 - **`CLAUDE.md`** — character_weapon_variants Workshop ID `(unpublished)` → `3716869446`. The old "deploy_all.ps1 does NOT handle cosmetics_tweaker or character_weapon_variants" claim replaced with the actual current behavior (auto-detects VMB layout).
-- **`DEVELOPMENT.md`** — same character_weapon_variants ID fix; enemy_tweaker console prefix `(n/a)` → `enemy_tweaker et_*`.
+- **`DEVELOPMENT.md`** — same character_weapon_variants ID fix; enemy_tweaker chat command pattern noted as `/et_*` (registered names start with `et_`; no mod-id prefix in chat).
 - **`ANTIGRAVITY.md` moved to `old-backup/`** — described the entire retired SDK pipeline AND contained 3 occurrences of `visibility = "public"` for weapon_tweaker (the exact action that previously got two mods removed-from-community). `old-backup/README.md` updated with a "Stale documentation" section explaining why.
 
 ### Build verification

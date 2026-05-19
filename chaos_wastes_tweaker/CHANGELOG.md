@@ -1,5 +1,257 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.66-alpha (2026-05-19)
+
+### Fixed: Isha alternative drained coins on every shop visit (v0.7.65 dedup bug)
+
+The v0.7.65 Isha alternative branch of `_try_buy_blessing` deliberately skipped writing `blessing_of_isha` to `blessings_with_buyer` because that table drove the vanilla auto-mutator activation. But `DeusRunController.has_blessing` reads the SAME table to decide "is this blessing already bought" — so the shop's purchase-guard never fired and `deus_shop_view_v2.lua:854-867` never marked the slot as bought. Net result: every shop visit, players could re-purchase the Isha alternative for full price, draining coins.
+
+Fix: the buy hook now DOES write to `blessings_with_buyer` (which fixes both the dedup and the shop UI), and a separate `mod:hook` on `MutatorTemplates.blessing_of_isha.server.start_function` suppresses the vanilla mutator behavior by setting `data.hero_side = nil` immediately after vanilla initializes. Every vanilla entry point (`server_update_function`, `server_player_disabled_function`, `server_player_hit_function`) early-returns on `not data.hero_side`, so the entire revive mechanic goes dormant. Localization and persistent buff application remain.
+
+**Hook-target gotcha (caught in pre-deploy QA):** the live dispatch target is `template.server.start_function`, NOT `template.server_start_function`. The engine wraps every mutator's `server_*_function` fields at `mutator_templates.lua:236-269` (which runs at engine boot, before any mod loads) — the original `server_start_function` field becomes a dead pointer captured in an upvalue closure, the wrapper lives at `template.server.start_function`. Hooking the dead field compiles cleanly but suppresses nothing. The fix targets the correct wrapped field.
+
+### Added: Miracle of Isha — Unlimited Wounds variant (recruit-style)
+
+Third option for Isha behavior. When selected, every hero gets unlimited wounds for the rest of the run — every knockdown is revivable, no more "first down was your one wound, second down = instant death" mechanic that higher difficulties enforce.
+
+Implementation: new buff template `ct_miracle_of_isha_wounds` with `perks = { "infinite_wounds" }` and `is_persistent = true`. Mirrors vanilla CW boon `indomitable` (`deus_power_up_settings.lua:5056-5073`). The `infinite_wounds` perk gates `GenericStatusExtension:set_wounded` at `generic_status_extension.lua:1443-1450` — the wounds-counter decrement is skipped, so `has_wounds_remaining()` always returns true, so the death-on-down branch at `player_unit_health_extension.lua:812` is never taken. Recruit difficulty achieves the same effect via `wounds = 5` (effectively unlimited for a CW run length); we use the cleaner perk-based approach.
+
+### Changed: Miracle of Isha is now a dropdown (Vanilla / Aegis / Unlimited Wounds)
+
+Replaces the v0.7.65 `tweak_miracle_of_isha_alternative` checkbox with a 3-option dropdown:
+- **Vanilla** (default) — original Blessing of Isha behavior (one team revive when squad reduced to one hero)
+- **Aegis** — every hero takes -25% damage for the rest of the run (v0.7.65 alternative)
+- **Unlimited Wounds** — every hero gets unlimited wounds for the rest of the run
+
+Migration: users with the v0.7.65 checkbox set to ON automatically get **Aegis** mode on first load after upgrade (the runtime helper `_get_isha_mode` maps boolean `true` → `"aegis"`). Off / nil → Vanilla.
+
+### Fixed: `/ct status` debug output showed stale "(0=vanilla)" legend
+
+The status echo at `chaos_wastes_tweaker.lua:5338-5345` still printed the v0.7.64 sentinel meaning for altar/chest counts. Now reflects v0.7.65 semantics: -1 = Default, 0 = literal zero.
+
+## 0.7.65-alpha (2026-05-19)
+
+### Added: Miracle of Ulric — toggle replaces vanilla "Blessing of Power" with persistent +50 Power that survives weapon swaps
+
+Setting: `tweak_miracle_of_ulric_persistent` (Reworks → Boons group, default OFF).
+
+Vanilla Blessing of Power mutates each player's serialized weapon `power_level` field (+50, applied at purchase time, deus_run_controller.lua:1671-1703). The +50 lives on the weapon ENTRY, so the moment a player swaps weapons at an upgrade / melee swap / ranged swap altar, the new weapon doesn't have it — the bonus EVAPORATES. The user reported this as a long-standing frustration.
+
+When the toggle is ON: ct intercepts `_try_buy_blessing` for `blessing_of_power` and skips the vanilla weapon-mutation branch entirely. Instead, every hero gets a custom `ct_miracle_of_ulric` buff (`stat_buff = "power_level"`, `bonus = 50`, `is_persistent = true`, `max_stacks = 1`) applied directly to their `buff_extension`. Because the buff lives on the player rather than the weapon entry, it survives every weapon swap for the rest of the run. The vanilla blessing-purchase accounting (coins spent, blessings_with_buyer, bought_blessings, coin tracker) is replicated so the blessing still appears in run-stats UI.
+
+Localization is also overridden via the existing `_G.Localize` hook: when the toggle is on, the blessing's name becomes "Miracle of Ulric" and the description reads "Grants every hero +50 Power for the rest of the run. The bonus persists through weapon swaps and upgrades at altars."
+
+Host-authoritative: the toggle is auto-collected into `SYNCED_SETTING_NAMES` and broadcast via `ct_sync_host_settings_chunk`. Clients see whatever the host configured.
+
+### Added: Miracle of Isha (Aegis Alternative) — toggle replaces revive with -25% damage taken for the whole team
+
+Setting: `tweak_miracle_of_isha_alternative` (Reworks → Boons group, default OFF).
+
+Vanilla Blessing of Isha runs `mutator_blessing_of_isha.lua` which grants a single team-revive when the squad is reduced to one hero. Useful, but binary — and the team has to actually wipe to one hero before it does anything.
+
+When the toggle is ON: ct intercepts `_try_buy_blessing` for `blessing_of_isha` and SKIPS adding the blessing to `blessings_with_buyer`. This suppresses `DeusMechanism.start_next_round` from auto-activating the vanilla revive mutator (which reads its blessing list at `deus_mechanism.lua:759-767`). Instead, every hero gets a custom `ct_miracle_of_isha_aegis` buff (`stat_buff = "damage_taken"`, `multiplier = -0.25`, `is_persistent = true`) so the whole team takes 25% less damage for the rest of the run. Coins are still spent + tracked so the purchase feels real.
+
+Trade-off: Isha no longer appears in the run-stats blessing UI when toggled (since the entry isn't added to `blessings_with_buyer`). Description text is rewritten to reflect the aegis behavior; the name stays "Blessing of Isha."
+
+Host-authoritative — same auto-sync as Ulric.
+
+### Implementation notes (shared by both miracles)
+
+- Both buff templates are registered into the global `BuffTemplates` (and mirror-written to `DeusPowerUpBuffTemplates` for the runtime merge path) at mod-load, unconditionally. This avoids the gated-registration-diverges-across-peers bug class (feedback_vt2_gated_registration_diverges.md) — buff template names are pre-allocated in `NetworkLookup.buff_templates` on every peer's machine before any lobby connection.
+- Single consolidated `mod:hook("DeusRunController", "_try_buy_blessing", ...)` handles both blessings — VMF silently shadows duplicate same-method hooks (feedback_vmf_hook_safe_no_chain.md), so the branch-on-blessing_name pattern is mandatory.
+- Non-ct peers in a ct host's lobby will crash on the rpc_add_buff for these buff names (same failure mode as any other ct-injected buff). This is consistent with existing ct buff-injection behavior — not a new regression class.
+- The damage-reduction sign is NEGATIVE (`-0.25`) per the vanilla `ale_defence` pattern at `buff_templates.lua:5325-5333`. Engine accumulates negative multipliers as damage reduction.
+
+### Altar / Chest / Arena-ammo dropdowns: explicit "Default" sentinel separated from literal 0
+
+Pre-0.7.65, the four altar dropdowns (Upgrade / Melee Swap / Ranged Swap / Boon Altars) used `value = 0` to mean "Default — leave vanilla random distribution untouched." There was no way to force literally zero altars of a given type. Similarly, `cursed_chest_count` was a numeric slider 0–10 (default 1) where 0 meant "zero chests" with no separate "use vanilla" sentinel, and `arena_ammo_count` was numeric 0–10 (default 2) with the same limitation.
+
+User intent: explicit per-dropdown choice between "let CW decide" (Default sentinel) and "force zero" (literal 0).
+
+Changes:
+- Altar dropdowns: `value = -1` is the new "Default" sentinel. `value = 0` is now a distinct option meaning "literally zero altars of this type." 1-9 still mean "force this many." `default_value` for all four widgets updated to `-1`.
+- `cursed_chest_count` converted from numeric to dropdown with the same shape: -1 = Default (vanilla picks the count, defaults to 1/mission), 0 = no chests, 1-10 = override.
+- `arena_ammo_count` converted from numeric to dropdown with -1 = Default (vanilla 2), 0 = no arena ammo, 1-10 = override.
+- New `count_with_default_options` dropdown table at `_data.lua:351-365` for the wider-range chest/ammo widgets.
+- `chaos_wastes_tweaker.lua` consumer hooks updated:
+  - `get_deus_weapon_chest_type` (`:1045-1056`): explicit `as_count` helper maps sentinel→0 in the override distribution; `is_custom = any value not -1`. Default-state altars contribute zero to the override total.
+  - `populate_pickups` (`:1393-1533`): same sentinel handling; cursed_custom / ammo_custom now key off "value not equal to -1" instead of "value not equal to vanilla default."
+  - `_spawn_guaranteed_pickup` cap (`:2528`): sentinel -1 maps to vanilla 1.
+
+Existing user settings stored as 0 will surface as "0 altars" / "0 chests" after this change rather than "Default." Re-pick "Default" if that's what you intended. Tooltip strings updated to document the new semantics (`altar_count_tooltip`, new `cursed_chest_count_tooltip`, updated `arena_ammo_count_tooltip`).
+
+## 0.7.64-alpha (2026-05-19)
+
+Fan-out fix release for issues surfaced in the 2026-05-19 3-player run (host Lyndsey, clients Amanda + user).
+
+### Fixed: Holly DLC adventure-injected levels (Magnus / Cemetery / Forest Ambush) spawned ZERO pickups — no ammo, no healing, no grenades, no Chests of Trials, no altars, no locus
+
+In the bugged run, magnus_belakor_path1 (the actual Belakor cursed mission) loaded and the entire map had nothing on the ground for ~20 minutes. Host log captured 13 PickupSystem spawn-debt warnings the moment the level loaded — every requested pickup type (deus_cursed_chest=4, deus_weapon_chest=7, deus_potions=30, deus_soft_currency=30, ammo=4, grenades=4, healing=4, level_events=8) ended up 100% unfilled.
+
+Root cause: ct's `PickupSystem._can_spawn` hook (`chaos_wastes_tweaker.lua:2163`) only returned true for the three deus pickup categories (`deus_potions`, `deus_soft_currency`, `deus_weapon_chest`). The comment at the bottom of the hook claimed vanilla `_can_spawn` already handled the campaign categories (ammo/healing/grenades) "before our hook runs" — but that's wrong for adventure-injected levels under the deus mechanism: `Managers.mechanism:can_spawn_pickup` routes to the deus pickup whitelist which doesn't recognize campaign pickup names, AND the per-spawner `Unit.get_data(spawner, pickup_name)` check often fails for category-vs-specific mismatches (spawner is tagged "ammo=true" while pickup_name is `ammo_specific_X`).
+
+Net result on the three Holly DLC levels: every spawn-pickup call was vetoed. Other CW maps still worked because vanilla CW pickup_settings only request the three deus types — the bug was latent until adventure-injected levels surfaced it.
+
+Fix: the hook now also returns true on injected-adventure levels for any pickup_name matching a non-deus `Pickups[bucket]` entry. The existing filters for tome/grim, guaranteed_spawn, and triggered_spawn_id stay in place, so triggered barrels / scripted event spawners stay exclusive to their tagged pickup type (no regression of the v0.6.32 burn — barrels showing up as potions).
+
+### Fixed: Belakor locus spawned on the WRONG mission (the first adventure-injected level with `force_belakor` on, not the actual Belakor cursed one)
+
+Host log proves it: at 03:52:51 the locus altar spawned on `nurgle_slaanesh_path1` (node_1, curse=curse_greed_pinata). The actual Belakor cursed mission `magnus_belakor_path1` (node_12, curse=curse_belakor_totems) didn't even load until 04:03:02 — and never spawned a locus (in part because of the Holly-pickup bug above).
+
+The predicate at `chaos_wastes_tweaker.lua:2107` checked `force_belakor` + `not _belakor_altar_spawned_this_level` + `AllPickups.deus_02`. Nothing in there cares which curse the current mission actually has. `force_belakor` only guarantees a Belakor curse appears SOMEWHERE in the run — it doesn't say where.
+
+Fix: added `_current_node_is_belakor()` (`chaos_wastes_tweaker.lua:1629`) — reads `run_controller:get_current_node().curse` and returns true only when it equals `curse_belakor_totems`. Gated both the spawn-side predicate (`:2107`) and the existing `can_spawn_belakor_locus` override (`:2198`) on it. Now the locus only places on the actual Belakor mission, and the Holly-pickup fix above lets it actually spawn there.
+
+### Reworked: Manann's Tempest cooldown is now a single toggle for BOTH boon and trait, default OFF
+
+Previously: trait was gated by `tweak_manann_tempest_cooldown` (toggle, default off), but the boon variant was hard-capped at 8s unconditionally — opt-out only existed for the trait side. User intent was a single toggle that gates BOTH, default off (= vanilla on both).
+
+Changes:
+- `chaos_wastes_tweaker.lua:4024` — removed the `is_trait and` qualifier so the toggle now gates both branches before the proc fires. Separate per-source buckets (`boon_next_t`, `trait_next_t`) preserved so a player running both still gets one chain per 8s from each side.
+- Localization updated: title is now "Rework: Manann's Tempest — 8s cooldown (boon + trait)"; tooltip clarifies both sources are gated. Boon-enable tooltip also updated to remove the stale "hard-capped" claim and direct to the rework toggle.
+
+### Fixed: per-boon-scaling meta boons (`ct_meta_health`, stagger/crit/cooldown/ammo/movespeed) only updated on next mission load, not on every boon gain
+
+Reported in last night's 3-player run (host Lyndsey, clients Amanda + user): grabbing "% max health per active boon" mid-run didn't lift the player's HP cap until the next mission. Confirmed for all six meta boons.
+
+### Root cause
+
+Same shape as the v0.7.57 `chain_lightning` cooldown fix. `register_meta_boon` (`chaos_wastes_tweaker.lua:3507`) and the special-cased `ct_meta_movespeed` block (`:3580`) both registered the granted-proc handler into `BuffFunctionTemplates.functions`, but the engine resolves `on_boon_granted` callbacks from the flat global `ProcFunctions` (`buff_extension.lua:1350`: `local buff_func = ProcFunctions[buff_func_name]`). Result: the granted proc was dead — VMF logged the registration but the runtime lookup returned `nil`.
+
+The apply_buff_func IS read from `BuffFunctionTemplates.functions` (`buff_extension.lua:397`), so the apply path worked. That's why every meta boon's stack count refreshed correctly on the *next* mission (the engine reapplies all power-ups at level start, running apply fresh) but stayed stuck for the rest of the current mission.
+
+Vanilla reference: `boon_meta_01_boon_granted` lives in `morris_buff_settings.lua:4929` inside `dlc_settings.proc_functions` (merged into `ProcFunctions` at `buff_templates.lua:9533`); `boon_meta_01_apply` lives at line 2024 in `dlc_settings.buff_function_templates`. Two separate tables — ct was only writing to one.
+
+### Fix
+
+Added a single line at each registration site: `proc_functions[granted_name] = proc`. Now the granted proc lives in both `BuffFunctionTemplates.functions` (harmless, unread) AND `ProcFunctions` (the table the engine actually queries). The apply path is unchanged.
+
+Vanilla `PlayerUnitHealthExtension.update` (`player_unit_health_extension.lua:281-426`) recomputes `_calculate_max_health()` every server tick, writes the new total to the GameSession `max_health` game-object field, and rescales current HP when the cap changes (lines 348-360). So once the stack buff actually exists on the buff_extension, max-HP lifts and current-HP scales without ct needing to call any refresh API explicitly.
+
+Affected boons:
+- `ct_meta_stagger` (`:3417`)
+- `ct_meta_crit` (`:3426`)
+- `ct_meta_health` (the reported bug)
+- `ct_meta_cooldown` (`:3444`)
+- `ct_meta_ammo` (`:3452` — its `refresh_ranged_slot_buffs` apply path was already correct; the stack delta now lands on every boon gain)
+- `ct_meta_movespeed` (`:3580`)
+
+Network-sync note: `add_power_ups` triggers `on_boon_granted` both locally (`deus_run_controller.lua:1158`) and via `rpc_deus_add_power_ups` on the server (`:1402`). The idempotent loop in `_make_meta_proc` (`for _ = num_existing + 1, num_boons do buff_extension:add_buff(stack_name) end`) prevents double-apply when both fire.
+
+NOT addressed in this fix: stack decrement on boon loss. ct never removes meta-boon stacks, only grows them. Not user-requested.
+
+### Sync: `tweak_defeat_recovery` and `enable_campaign_potions` moved from per-peer to host-synced
+
+Both were originally per-peer for historical reasons (the wipe-prevention is host-only, so the local penalty arm was per-peer; campaign potions are server-driven spawn so client mutation was irrelevant). User intent is "all settings sync to host," so both are now in `SYNCED_SETTING_NAMES`. The two call sites (`chaos_wastes_tweaker.lua:1038, 3194`) now read via `effective_setting`. `inject_adventure_maps` stays per-peer because it mutates `NetworkLookup.level_keys` which folds into lobby `combined_hash` and can't be re-evaluated post-boot.
+
+### Fixed: curse/mission visual desync (different halos/lighting per peer for the same CW node)
+
+In the 2026-05-19 run, three peers received the same lobby seed `-1029216815` but landed on completely different per-node level/curse/theme assignments because `inject_adventure_maps` toggle states differed across peers. The toggle mutates each peer's local `LEVEL_AVAILABILITY` arrays at module-load — `deus_populate_graph` then picks levels by index into those arrays, so identical seed × different arrays = different graphs. The toggle can't be moved to host-sync (it folds into `combined_hash` via `NetworkLookup.level_keys` count, sealed pre-handshake).
+
+Fix: ct now broadcasts the host's RESOLVED graph after `deus_populate_graph` returns. Clients overwrite the picker-output fields in place — level, base_level, theme, curse, god, node_type, type, terror_event_power_up + rarity, mutators, minor_modifier_group. Topological fields (next, layout_x/y, run_progress, label) are deterministic from base_graph + seed and not shipped. Per-node JSON uses short keys (`l`/`b`/`t`/`c`/`g`/...) to keep payload tight: CW ~22-28 nodes × ~110 bytes ≈ 3.6 KB worst case, well under the existing 9-10 chunk envelope.
+
+Implementation: new `ct_graph_snapshot_chunk` RPC mirroring the existing `ct_sync_host_settings_chunk` chunked-send pattern. Two apply sites — Phase A inside `deus_populate_graph` hook on the client's return path (common case), Phase B inside `DeusMapScene.on_enter` hook for late-arrival races where the RPC lost to the engine's `rpc_deus_setup_run`. In-place mutation preserves `_path_graph` table identity and `next` pointers. Host migration is NOT covered in v1 — new host's snapshot represents its pre-migration state; documented as known limitation. No NetworkLookup writes, no buff template — purely VMF string-keyed RPC, so old-ct peers silently drop the packet without crashing.
+
+### Added: lobby mod-mismatch logging (`/peers` chat command + auto-broadcast)
+
+Diagnostic tool for triaging post-session desync reports: each peer now logs a manifest at lobby join + on-demand via `/peers`. Manifest fields:
+- `v`  ct version string (MOD_VERSION)
+- `h`  FNV-1a hash of locally-configured SYNCED_SETTING_NAMES values (catches setting drift cheaply)
+- `m`  list of enabled Workshop mods (id + name + last_updated timestamp) — the smoking gun for "your friend's halo is different"
+- `vt` VMF workshop timestamp
+- `nl` `#NetworkLookup.level_keys` (confirms adventure-injection state per peer)
+
+Auto-broadcast: clients reply to the host's `ct_sync_host_settings_chunk` with a manifest packet. Host's log captures every joined peer's manifest right at the first reliable post-loading moment, with a DIFF line per peer flagging ct version / settings hash / num_levels / VMF timestamp / missing-or-extra mods relative to host. New `/peers` chat command lets any peer dump cached manifests + refresh-broadcast on demand.
+
+Network safety: new RPC is VMF string-keyed (`mod:network_register`), NOT index-sequential — does NOT trip the gated-registration-diverges class of bugs documented in `feedback_vt2_gated_registration_diverges.md`. Old-ct peers silently drop the packet with no crash. Forward-compatible: future field additions just add new keys; missing fields decode as `nil`.
+
+The 2026-05-19 desync would have been instantly diagnosable with this in place — the three peers' manifests would have shown identical mods but different `inject_adventure_maps` state (now fixed by the graph snapshot above), making the cause obvious from logs alone.
+
+## 0.7.63-alpha (2026-05-19)
+
+### Fixed: client crashed decoding `deus_power_up_templates` key 177 when host's buff RPC referenced a trait boon the client hadn't pre-registered
+
+Verbatim crash from peer `1100001043e2511` (a client in lynnd's host session), reproduced in two consecutive dumps `2026-05-19-02.59.56-…` and `2026-05-19-03.08.36-…`:
+
+```
+scripts/network_lookup/network_lookup.lua:2514:
+[NetworkLookup.lua] Table deus_power_up_templates does not contain key: 177
+@scripts/managers/game_mode/mechanisms/deus_run_state_spec.lua:76: in function decoder
+```
+
+Same bug class as v0.7.60 (dormants) / v0.7.61 (trait-boon templates) / v0.7.62 (adventure-injected levels) — see `feedback_vt2_gated_registration_diverges.md`. Two registration sites still had a condition that could shift the sequential `NetworkLookup.deus_power_up_templates` ids between peers running the same ct version:
+
+1. **`pre_register_trait_boon_lookups`** (`chaos_wastes_tweaker.lua:3718`) — wrapped the entire per-spec body in `if source_template and source_template.buffs`. If a peer's `BuffTemplates` happened to be missing one of the four vanilla source buffs (`always_blocking` / `deus_crit_chain_lightning` / `deus_extra_shot` / `deus_collateral_damage_on_melee_killing_blow`) at module-init time, that entire trait boon's NetworkLookup name + buff-template registration was skipped — shifting every subsequent power-up name's id by one.
+2. **`ct_kill_heal`** (`chaos_wastes_tweaker.lua:3790`) — entire registration (including `register_power_up_in_network_lookup`, implicitly via `inject_dormant_boon`) wrapped in `if power_ups and buff_funcs and buff_funcs.functions`. If those globals weren't loaded yet on some peer's machine at the moment this module ran, ct_kill_heal got no NetworkLookup id at all on that peer — but it DID get one on peers where the globals were ready, again shifting the sequential id.
+
+Either path produces "host has id N for boon X, client has id N for boon Y or no boon at all" — when host's `rpc_add_buff` reaches the client carrying id N, the strict `__index` on `NetworkLookup.deus_power_up_templates` raises uncatchable `error()` from inside the shared-state RPC decoder (bypasses pcall — `network_event_delegate.lua:52` doesn't xpcall the decode path).
+
+### Fix
+
+Decouple NetworkLookup name registration from the gated content writes. Both call sites now register the NetworkLookup names unconditionally up-front (in sorted order for trait boons, single-call for ct_kill_heal), then perform the buff-template / DeusPowerUpBuffTemplates / DeusPowerUpTemplates writes inside the existing `if globals_ready` guard. The name registration is what determines the sequential id; the side-table writes only affect whether the boon is actually castable in this peer's run. Same shape as the v0.8.66-dev LA fix for `pre_register_la_inventory_packages`.
+
+Concrete edits:
+- `pre_register_trait_boon_lookups`: moved `register_power_up_in_network_lookup(spec.name)` + `register_buff_in_network_lookup("power_up_" .. spec.name .. "_" .. spec.rarity)` into an unconditional first loop over the sorted CT_TRAIT_BOONS specs. The second loop still does the gated template clone + dpubt write.
+- `ct_kill_heal do-block`: hoisted `register_power_up_in_network_lookup("ct_kill_heal")` + `register_buff_in_network_lookup("power_up_ct_kill_heal_exotic")` above the `if power_ups and buff_funcs` gate. The full template construction still runs inside the gate; only the lookup-id allocation happens unconditionally.
+
+Both registration helpers (`register_power_up_in_network_lookup`, `register_buff_in_network_lookup`) early-out via `rawget` if the name is already present, so re-runs are no-ops — safe for `sync_host_dependent_state` to invoke without producing duplicate slots.
+
+### Note on version skew
+
+The fix guarantees deterministic indices for peers running the same ct version. Peers on DIFFERENT ct versions can still mismatch (e.g. one peer has a boon another doesn't), and there is no safe mod-side workaround for that — players need matching mod versions. The error message in the log is the canonical diagnostic if it recurs in a mixed-version lobby.
+
+## 0.7.62-alpha (2026-05-18)
+
+### Fixed: client joining a host's adventure-injected Deus run crashed at `state_loading.lua:449`
+
+Same toggle-divergence bug class as v0.7.60 (dormants) and v0.7.61 (trait boons), one layer over: the per-mission registration in `_adventure_pool.lua`'s `inject_pool` (LevelSettings permutation clones, `NetworkLookup.level_keys`, `TerrorEventBlueprints`, `WeightedRandomTerrorEvents`) was inside the toggle-gated branch and only iterated `enabled_missions()`. A peer with the master toggle off — or with a specific mission's per-mission toggle off — never registered the corresponding `<adv>_<theme>_path1` keys. When the host then advertised `magnus_belakor_path1` (or any other unregistered permutation) over SharedState, the client's `state_loading.lua:449` did `LevelSettings[level_key]` and crashed with `attempt to index local 'level_settings' (a nil value)`.
+
+`pre_register_adventure_lookups` now runs unconditionally at the top of `inject_pool` (which itself is called at mod-load and on setting change), iterating `_M.ADVENTURE_MISSIONS` in sorted-by-key order and writing each mission's six theme permutations into LevelSettings + NetworkLookup + TerrorEventBlueprints + WeightedRandomTerrorEvents via the extracted helper `register_mission_resolvables`. Sorted iteration matches the load-bearing rule in `feedback_vt2_gated_registration_diverges.md`: two ct peers must compute identical NetworkLookup indices regardless of which toggles each one has on.
+
+Pool selection (the `DEUS_MAP_POPULATE_SETTINGS.LEVEL_AVAILABILITY` mutation + the `IS_INJECTED_ADVENTURE_LEVEL` flag that drives the tome-to-Chest-of-Trials swap) stays gated by master + per-mission toggles, so each user's own CW runs still reflect their preferences. The defensive registration is purely additive — every write is guarded by `not rawget(...)` so re-runs are no-ops.
+
+The `LobbyAux.create_network_hash` shim (added v0.7.4) already nils injected `level_keys` entries during hash creation, so the always-on registration does not bump the lobby `num_levels` past vanilla and does not regress vanilla-host compat. Diagnosed from amand's session 2026-05-19 (`console-2026-05-19-01.00.42-c840d040-3b0b-4de6-880f-08cb990b26a6.log`) — host migration during a Belakor pilgrimage handed control to a client whose toggles didn't have `magnus_belakor_path1` registered.
+
+## 0.7.61-alpha (2026-05-18)
+
+### Fixed: same toggle-divergence bug class as v0.7.60, but for trait boons
+
+The v0.7.60 audit caught the same shape one layer over: `register_trait_boon` for the four CT_TRAIT_BOONS (Vaul's Anvil / Manann's Tempest / Taal's Twinned Arrow / Asuryan's Wrath) early-outs on `effective_setting(spec.toggle)` before doing any registration. Two peers with different `enable_boon_*` toggles would therefore append a different ordered subset of `power_up_ct_boon_*_unique` entries to `NetworkLookup.buff_templates` and `NetworkLookup.deus_power_up_templates` — same crash and same wrong-buff failure modes as the pre-v0.7.60 dormants.
+
+`pre_register_trait_boon_lookups` now runs unconditionally before the gated registration loop, building each spec's `DeusPowerUpTemplates` entry, writing the resulting `power_up_<name>_unique` buff template to `DeusPowerUpBuffTemplates` and `_G.BuffTemplates`, and appending both names to `NetworkLookup` in sorted (`spec.name`) order. The gated `register_trait_boon` below stays as-is and runs idempotent overwrites for the registration parts, then does pool injection if the toggle is on.
+
+### Fixed: two `respawn_on_chest_complete` reads ran through raw `mod:get` instead of `effective_setting`
+
+`DeusCursedChestExtension._set_state` hook fires on every peer locally (the is-server gate is several lines below the setting read). On a client whose `respawn_on_chest_complete` toggle differed from the host's, the diagnostic log and the early-return both reflected the client's local value instead of the synced host value. Real behavior gating only happens host-side so the wrong-bail had no functional effect, but the diagnostic was misleading and the gate's defensive-programming intent was wrong. Both reads now route through `effective_setting`.
+
+## 0.7.60-alpha (2026-05-18)
+
+### Fixed: dormant-boon toggle mismatch could crash clients on `rpc_add_buff`
+
+Before this version, `sync_dormant_boons` only injected a dormant boon's buff template (`_G.BuffTemplates` + `DeusPowerUpBuffTemplates`) AND its `NetworkLookup` entries when the user had `activate_dormant_<name>` enabled. If a host activated `squats` (or any of the 9 dormants in `DORMANT_BOON_RARITY`) and a client had that toggle off, the host's `rpc_add_buff` for the squats buff would hit the client's `NetworkLookup.buff_templates.__index` on a missing key → fatal `Table buff_templates does not contain key: N` at `network_lookup.lua:2514`. Settings-sync alone (v0.7.59) couldn't fix this because the network table is frozen at boot — a runtime setting flip can't add entries after the fact.
+
+`pre_register_dormant_lookups` now runs unconditionally at mod-load, iterating `DORMANT_BOON_RARITY` in sorted order. For every dormant it writes the buff template into `DeusPowerUpBuffTemplates` and `_G.BuffTemplates`, then appends `power_up_<name>_<rarity>` to `NetworkLookup.buff_templates` and `<power_up_name>` to `NetworkLookup.deus_power_up_templates`. Sorted iteration is load-bearing: with `pairs()`, two peers running the same ct version could theoretically register the same set in different orders and assign different network indices to the same name. After this change, every ct-running peer ends up with identical contents in identical positions regardless of which `activate_dormant_*` toggles they have on.
+
+Pool injection (`DeusPowerUpRarityPool` / `DeusPowerUps` / `DeusPowerUpsArray` / `DeusPowerUpsArrayByRarity` / `DeusPowerUpsLookup`) remains gated by `activate_dormant_*`, so each user's offering pool still reflects their own preferences. The host's preference still wins via the v0.7.59 settings sync — clients see the host's pool composition during runtime. `sync_dormant_boons` is itself now sorted-iteration to match.
+
+`pre_register_dormant_lookups` is purely additive: `register_buff_in_network_lookup` / `register_power_up_in_network_lookup` early-out on names already present, and `BuffTemplates[name]` is overwritten with an identical value when the toggled-on `inject_dormant_boon` runs later. No pool-side behavior changes for users who already had their preferred dormants enabled.
+
+Clients without ct installed at all still cannot receive ct-injected buffs and will still crash on host `rpc_add_buff` for any ct-only buff. That class of mismatch is unfixable from inside ct — those peers must install ct (matching version) to be safe.
+
+## 0.7.59-alpha (2026-05-18)
+
+### Fixed: settings sync silently broken since v0.7.55 — host's settings never reached clients
+
+v0.7.55 switched `ct_sync_host_settings` from three hand-picked scalar parameters to a single 105-entry table containing every synced setting. VMF's `mod:network_send` packs all user args into one JSON-encoded string parameter on the underlying `RPC.rpc_mod_user_data`, and Stingray hard-caps each RPC string parameter at 500 characters (`scripts/helpers/network_utils.lua:93` `STRING_MAX = 500`; same constant drives vanilla `shared_state.lua`'s own chunking). The full settings table JSON-encodes to ~4-5KB, so every host broadcast threw:
+
+```
+scripts/managers/mod/mod_manager.lua:627: Failed to pack parameter 3, too many characters in string with max length 500
+```
+
+The error fires inside VMF's safe-hook wrapper, so it never surfaced as a crash — clients just silently received zero host settings for three versions. The 500-char cap is a fixed engine constraint and is unaffected by `max_upload_speed` or `small_network_packets` (those control bandwidth/MTU, not parameter packing). Found from PrincessLyndsey666's host log after a Sigmar's Crag client crashed on `rpc_add_buff` with an unknown buff_template ID — a downstream symptom of clients running ct without host-synced injection toggles.
+
+Fix mirrors the engine's own pattern in `shared_state.lua:288-330`: encode the payload to JSON, split into ≤400-char pieces, send each as `(session, seq, total, chunk_str)` via `ct_sync_host_settings_chunk`. Receiver buffers chunks per-sender and decodes when all chunks for the current session have arrived; a partial buffer from a stale broadcast is discarded the moment a new session id appears. 400-char chunks leave headroom for VMF's `[mod_id, rpc_id]` envelope (separate string parameter) plus the JSON array wrapper `[session, seq, total, "<chunk>"]` (~20 chars).
+
 ## 0.7.58-alpha (2026-05-18)
 
 ### Fixed: Belakor altar spawn fatals `Unit not found #ID[ee6ba7f91c666e61]` on adventure-injected levels

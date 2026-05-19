@@ -14,11 +14,19 @@ mod._setting_key = B.setting_key
 -- Breed substitution dropdown options
 -- ============================================================
 
+-- IMPORTANT: VMF's options.lua localize_dropdown_data mutates each option's
+-- `text` field in place (`option.text = mod:localize(option.text)`). If two
+-- dropdowns share the same options table reference, the first pass converts
+-- "mimic_opt_off" → "Match (vanilla)"; the second pass then tries to localize
+-- "Match (vanilla)" (which isn't a loc key) and gets the missing-key fallback
+-- "<Match (vanilla)>". Each additional sharing dropdown wraps another pair of
+-- angle brackets, giving "<<<...>>>". Every dropdown MUST get its own freshly-
+-- built options table. The factory functions below ensure that.
+
 local function _build_breed_options()
     local out = { { text = "breed_swap_off", value = "off" } }
     local groups = {
-        { list = B.SKAVEN }, { list = B.CHAOS },
-        { list = B.BEASTMEN }, { list = B.SKELETON },
+        { list = B.SKAVEN }, { list = B.CHAOS }, { list = B.BEASTMEN },
     }
     for _, g in ipairs(groups) do
         for _, breed_name in ipairs(g.list) do
@@ -31,7 +39,37 @@ local function _build_breed_options()
     return out
 end
 
-local _BREED_OPTIONS = _build_breed_options()
+local function _faction_swap_options()
+    return {
+        { text = "faction_opt_off",      value = "off" },
+        { text = "faction_opt_skaven",   value = "skaven" },
+        { text = "faction_opt_chaos",    value = "chaos" },
+        { text = "faction_opt_beastmen", value = "beastmen" },
+    }
+end
+
+local function _mimic_options()
+    return {
+        { text = "mimic_opt_off",         value = "off" },
+        { text = "mimic_opt_normal",      value = "normal" },
+        { text = "mimic_opt_hard",        value = "hard" },
+        { text = "mimic_opt_harder",      value = "harder" },
+        { text = "mimic_opt_hardest",     value = "hardest" },
+        { text = "mimic_opt_cataclysm",   value = "cataclysm" },
+        { text = "mimic_opt_cataclysm_2", value = "cataclysm_2" },
+        { text = "mimic_opt_cataclysm_3", value = "cataclysm_3" },
+    }
+end
+
+local function _mimic_dropdown(setting_id, tooltip_id)
+    return {
+        setting_id    = setting_id,
+        type          = "dropdown",
+        default_value = "off",
+        tooltip       = tooltip_id,
+        options       = _mimic_options(),
+    }
+end
 
 -- ============================================================
 -- Per-difficulty Specials widget builders
@@ -132,9 +170,6 @@ return {
                             { text = "preset_beastmen_invasion", value = "beastmen_invasion" },
                             { text = "preset_mixed_factions",    value = "mixed_factions" },
                             { text = "preset_all_elites",        value = "all_elites" },
-                            { text = "preset_necro_skeletons",   value = "necro_skeletons" },
-                            { text = "preset_ghost_skeletons",   value = "ghost_skeletons" },
-                            { text = "preset_skeleton_mix",      value = "skeleton_mix" },
                         },
                     },
                     {
@@ -152,7 +187,60 @@ return {
                 setting_id  = "enemy_spawns_group",
                 type        = "group",
                 sub_widgets = {
+                    -- Difficulty Mimic: override the difficulty key used to
+                    -- patch each Current* settings table independently of the
+                    -- player's actual difficulty. Lets you play on Champion
+                    -- stats with Cata-1's horde sizes, special frequency, etc.
+                    {
+                        setting_id  = "difficulty_mimic_group",
+                        type        = "group",
+                        sub_widgets = {
+                            _mimic_dropdown("mimic_horde",         "mimic_horde_tooltip"),
+                            _mimic_dropdown("mimic_specials",      "mimic_specials_tooltip"),
+                            _mimic_dropdown("mimic_pacing",        "mimic_pacing_tooltip"),
+                            _mimic_dropdown("mimic_pack_spawning", "mimic_pack_spawning_tooltip"),
+                            _mimic_dropdown("mimic_intensity",     "mimic_intensity_tooltip"),
+                            _mimic_dropdown("mimic_boss",          "mimic_boss_tooltip"),
+                        },
+                    },
                     _build_special_spawns_block(),
+                },
+            },
+
+            -- FACTION SUBSTITUTION (per-faction horde slot swap)
+            -- VT2 missions activate one ConflictDirector at start and may
+            -- switch to another at zone boundaries (Athel Yenlui = skaven →
+            -- chaos, etc.). Each director keys to a faction's comp family.
+            -- These dropdowns rewrite the active CurrentHordeSettings
+            -- *_composition fields so every paced horde from a given faction
+            -- becomes another faction's instead. Set Skaven → Beastmen to
+            -- get Beastmen hordes in missions that would normally spawn
+            -- Skaven, etc.
+            {
+                setting_id = "faction_swap_group",
+                type       = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "faction_swap_skaven",
+                        type          = "dropdown",
+                        default_value = "off",
+                        tooltip       = "faction_swap_skaven_tooltip",
+                        options       = _faction_swap_options(),
+                    },
+                    {
+                        setting_id    = "faction_swap_chaos",
+                        type          = "dropdown",
+                        default_value = "off",
+                        tooltip       = "faction_swap_chaos_tooltip",
+                        options       = _faction_swap_options(),
+                    },
+                    {
+                        setting_id    = "faction_swap_beastmen",
+                        type          = "dropdown",
+                        default_value = "off",
+                        tooltip       = "faction_swap_beastmen_tooltip",
+                        options       = _faction_swap_options(),
+                    },
                 },
             },
 
@@ -166,14 +254,14 @@ return {
                         type          = "dropdown",
                         default_value = "off",
                         tooltip       = "breed_swap_from_tooltip",
-                        options       = _BREED_OPTIONS,
+                        options       = _build_breed_options(),
                     },
                     {
                         setting_id    = "breed_swap_to",
                         type          = "dropdown",
                         default_value = "off",
                         tooltip       = "breed_swap_to_tooltip",
-                        options       = _BREED_OPTIONS,
+                        options       = _build_breed_options(),
                     },
                 },
             },

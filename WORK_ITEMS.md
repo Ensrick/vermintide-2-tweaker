@@ -42,7 +42,7 @@ Last updated: 2026-04-27
 | Weapon scale overrides | Cross-character weapons scaled per career (elf sword, Sienna sword, etc.) |
 | Weapon grip offsets | Per-career position offset system (infrastructure ready) |
 | Career action injection | Injects career ability actions into non-native weapon templates |
-| `wt dump`, `wt dump_actions`, `wt status`, `wt animlog`, `wt sm_probe`, `wt force3p` | Debug/inspection commands. `force3p` fires on local `player_unit` (3P body). |
+| `/dump`, `/dump_actions`, `/info`, `/animlog`, `/sm_probe`, `/force3p` | Debug/inspection commands. `/force3p` fires on local `player_unit` (3P body). |
 
 ### Cross-Character 3P Animation Status (v0.9.57-dev)
 
@@ -104,8 +104,8 @@ Below tracks the 3P animation quality for each weapon that has been enabled cros
 ### general_tweaker (v0.2.8-dev)
 | Feature | Notes |
 |---|---|
-| Third-person camera | Toggle via `gt tp` command or `tp_camera_enabled` setting; configurable distance/height/offset; persists across character switches (off→on cycle); zoom nodes patched for ranged |
-| `gt dump_glossary`, `gt dump_cosmetics`, `gt dump_items_by_slot` | Data dump commands |
+| Third-person camera | Toggle via `/tp` command or `tp_camera_enabled` setting; configurable distance/height/offset; persists across character switches (off→on cycle); zoom nodes patched for ranged |
+| `/dump_glossary`, `/dump_cosmetics`, `/dump_items_by_slot` | Data dump commands |
 
 ### chaos_wastes_tweaker (v0.2.1-dev)
 | Feature | Notes |
@@ -137,7 +137,7 @@ Below tracks the 3P animation quality for each weapon that has been enabled cros
 - `_current_weapon_template` can become nil during career ability or other non-weapon slot activations. The remap clear must guard against nil template to avoid false resets.
 - Polearm charge event mapping on Kruber: `attack_swing_charge_right` = thrust windup, `attack_swing_charge` = overhead windup. Match charge events to the corresponding heavy release type (thrust or overhead).
 - The billhook has a 3-light chain (stab → diagonal → stab → loop). `light_attack_bopp` is push follow-up, not L4. Weapons with 4+ lights need special handling for attacks beyond the billhook's chain length.
-- When the remap table breaks the SM (e.g. `attack_swing_stab_02` → any target corrupts the entire chain), use `_original_animation_event` to force-fire the target event directly instead. This bypasses the hook/remap pipeline and works the same as `wt force3p`. The original event is suppressed (return early) and the forced event plays.
+- When the remap table breaks the SM (e.g. `attack_swing_stab_02` → any target corrupts the entire chain), use `_original_animation_event` to force-fire the target event directly instead. This bypasses the hook/remap pipeline and works the same as `/force3p`. The original event is suppressed (return early) and the forced event plays.
 - Force-fire blocks must be scoped to the specific remap table they're designed for (e.g. `_3p_weapon_remap == _3p_remap_spear_to_billhook`). Without this guard, force-fires for one weapon (billhook) can hijack events on other weapons sharing the same event names.
 - Bidirectional weapon pairs (e.g. spear+shield ↔ deus) need two remap tables — one per direction. Use career-prefix entries in `_3p_remap_triggers` to select the correct direction based on who is wielding.
 - Billhook event names are visually inverted: `stab_charge` LOOKS like swing windup, `charge_left_diagonal` LOOKS like stab windup. Same for releases. When mapping charge→release pairs, matching visuals use opposite-named events.

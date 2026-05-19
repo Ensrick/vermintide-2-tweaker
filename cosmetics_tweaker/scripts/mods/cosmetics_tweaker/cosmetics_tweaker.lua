@@ -1,46 +1,11 @@
 ﻿local mod = get_mod("cosmetics_tweaker")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
+local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 
-local MOD_VERSION = "0.8.49-dev"
+local MOD_VERSION = "0.9.0.3-hotfix"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
-
--- ============================================================
--- TEMP DIAGNOSTIC — World.spawn_unit logging for offhand crash
--- ============================================================
--- The "Unit not found #ID[9405eeb80a227a76]" crash has persisted across
--- v0.7.81–v0.7.91 despite progressively more defensive gates. The hash
--- isn't directly decodable, and we never confirmed which unit name is
--- actually failing. This hook logs every World.spawn_unit attempt with
--- a counter, so the LAST line in Console.log before the assertion is
--- the unit name that crashed. Remove once we have the data.
-local _spawn_trace_count = 0
-local _spawn_trace_max = 500  -- safety: don't spam if a loop spawns 1000s
-if World and type(World.spawn_unit) == "function" then
-    mod:hook(World, "spawn_unit", function(func, world, unit_name, ...)
-        _spawn_trace_count = _spawn_trace_count + 1
-        if _spawn_trace_count <= _spawn_trace_max then
-            mod:info("[SPAWN_TRACE #%d] World.spawn_unit name=%s",
-                _spawn_trace_count, tostring(unit_name))
-        end
-        return func(world, unit_name, ...)
-    end)
-end
-if World and type(World.spawn_unit_with_position) == "function" then
-    mod:hook(World, "spawn_unit_with_position", function(func, world, unit_name, position, ...)
-        _spawn_trace_count = _spawn_trace_count + 1
-        if _spawn_trace_count <= _spawn_trace_max then
-            mod:info("[SPAWN_TRACE #%d] World.spawn_unit_with_position name=%s",
-                _spawn_trace_count, tostring(unit_name))
-        end
-        return func(world, unit_name, position, ...)
-    end)
-end
-mod:command("spawn_trace_reset", "Reset SPAWN_TRACE counter", function()
-    _spawn_trace_count = 0
-    mod:echo("[SPAWN_TRACE] counter reset to 0")
-end)
 
 -- ============================================================
 -- Material tinting research (TODO: cloned + recolored cosmetics)
@@ -639,15 +604,44 @@ end
 
 mod.on_game_state_changed = function()
     apply_cosmetic_unlocks()
+    -- v0.9.0-dev: retry deferred _G.apply_material_settings hook (lazy-loaded
+    -- by Stingray flow graph on first hub/level enter).
+    if mod._try_install_flow_glow_hook then mod._try_install_flow_glow_hook() end
+    -- v0.9.0-dev: rebroadcast local glow state on every state transition.
+    -- Covers fresh keep entry, mission start, post-host-migration. Cheap
+    -- (~50 char RPC), and ensures peers' caches resync if connectivity
+    -- glitched.
+    if mod._on_glow_setting_changed then mod._on_glow_setting_changed() end
 end
 mod.on_setting_changed = function(setting_id)
     if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
         apply_cosmetic_unlocks()
     end
+    -- v0.9.0-dev: any glow_* setting change triggers a per-peer glow
+    -- rebroadcast. _on_glow_setting_changed schedules (doesn't emit
+    -- immediately) so a multi-setting save in the VMF menu coalesces into
+    -- one RPC via the throttle in _glow_sync_tick.
+    if setting_id and setting_id:sub(1, 5) == "glow_"
+        and mod._on_glow_setting_changed then
+        mod._on_glow_setting_changed()
+    end
     -- Glow override no longer auto-repaints on setting change — the walk
     -- destabilized adjacent unit state (hand meshes disappeared after pressing
     -- X to inspect, 1P breakage). User re-equips the weapon to see the new
     -- preset; the apply_material_settings hook paints reliably at spawn.
+
+    if TPE and TPE.on_setting_changed then
+        TPE.on_setting_changed(setting_id)
+    end
+end
+
+-- v0.9.0-dev: TPE per-frame tick moved into the unified mod.update defined
+-- later in the file (around line 3880, the LA bridge init driver). Previously
+-- the second definition OVERWROTE this one and TPE.update silently never
+-- fired since the merge. Single update function below handles both.
+
+mod.on_disabled = function()
+    if TPE and TPE.flush then TPE.flush() end
 end
 -- CLARIFY: Ctrl+Shift+R (hot-reload) is UNSAFE for cosmetics_tweaker — see
 -- feedback_hot_reload_unfixable.md. Engine holds C++ resource locks on
@@ -1060,7 +1054,9 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", fu
     local mirror = self._backend_mirror
     if not mirror or not mirror._unlocked_weapon_skins then return end
     for skin_key, _ in pairs(_custom_skin_keys) do
-        mirror._unlocked_weapon_skins[skin_key] = true
+        if not _skin_requires_unowned_dlc(skin_key) then -- DLC gate
+            mirror._unlocked_weapon_skins[skin_key] = true
+        end
     end
     if mod:get("unlock_all_illusions") and script_data["eac-untrusted"] and WeaponSkins then
         for skin_key, _ in pairs(WeaponSkins.skins) do
@@ -1246,6 +1242,14 @@ end)
 
 local _fake_skin_backend_ids = {}
 
+-- cim coexistence: when cim is loaded, it owns the modded-realm illusion swap.
+-- These hooks defer to the original at fire time so cosmetics_tweaker's
+-- _custom_skin_keys (LA bridge + ct's own custom illusions) still work, but
+-- the eac-untrusted bypass for vanilla skins is delegated to cim.
+local function _cim_owns_illusion_swap()
+    return get_mod("cim") ~= nil
+end
+
 mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", function(func, self, skin_key)
     local id, item = func(self, skin_key)
     if id then return id, item end
@@ -1255,7 +1259,10 @@ mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", functio
     -- LA bridge keys (live in WeaponSkins.skins, NOT in IML) and ct_* keys
     -- not yet registered. Use rawget to avoid the crashify.
     local iml_entry = rawget(ItemMasterList, skin_key)
-    if _custom_skin_keys[skin_key] or (script_data["eac-untrusted"] and iml_entry and not _skin_requires_unowned_dlc(skin_key)) then
+    -- When cim is loaded, only handle custom illusions here; cim's hook covers
+    -- the eac-untrusted path for vanilla skins.
+    local handle_vanilla_eac = script_data["eac-untrusted"] and iml_entry and not _skin_requires_unowned_dlc(skin_key) and not _cim_owns_illusion_swap()
+    if _custom_skin_keys[skin_key] or handle_vanilla_eac then
         local fake_id = "ct_fake_" .. skin_key
         _fake_skin_backend_ids[fake_id] = skin_key
         local fake_item = {
@@ -1270,6 +1277,7 @@ mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", functio
 end)
 
 mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, self, enable, disable_edges)
+    if _cim_owns_illusion_swap() then return func(self, enable, disable_edges) end
     if mod:get("apply_trace") then
         mod:info("[apply-trace] _enable_craft_button enable=%s recipe=%s skin_dirty=%s eac=%s",
             tostring(enable), tostring(self._current_recipe_name),
@@ -1293,6 +1301,7 @@ mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, s
 end)
 
 mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(func, self, index, ignore_item_spawn, mark_as_equipped)
+    if _cim_owns_illusion_swap() then return func(self, index, ignore_item_spawn, mark_as_equipped) end
     local widget = self._illusion_widgets and self._illusion_widgets[index]
     if mod:get("apply_trace") then
         local picked_skin = widget and widget.content and widget.content.skin_key
@@ -1324,6 +1333,7 @@ mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(f
 end)
 
 mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
+    if _cim_owns_illusion_swap() then return func(self, recipe_name, ...) end
     if script_data["eac-untrusted"] and recipe_name == "apply_weapon_skin" then
         local saved = script_data["eac-untrusted"]
         script_data["eac-untrusted"] = false
@@ -1337,6 +1347,7 @@ end)
 local _pending_local_craft = nil
 
 mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career_name, item_backend_ids, recipe_override)
+    if _cim_owns_illusion_swap() then return func(self, career_name, item_backend_ids, recipe_override) end
     if not script_data["eac-untrusted"] then
         return func(self, career_name, item_backend_ids, recipe_override)
     end
@@ -1393,6 +1404,7 @@ mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career
 end)
 
 mod:hook_safe("BackendInterfaceCraftingPlayfab", "update", function(self, dt)
+    if _cim_owns_illusion_swap() then return end
     if _pending_local_craft and _pending_local_craft.interface == self then
         self._craft_requests[_pending_local_craft.id] = {}
         Managers.backend:dirtify_interfaces()
@@ -1494,7 +1506,18 @@ local function _override_package_ready(unit_path)
     return true
 end
 
+-- v0.8.51-dev: pools are STRICTLY same-character. A weapon belonging to a
+-- given Hero can only swap to shields that originate from that Hero's
+-- weapon family. All Kruber (`es_*`) weapons share the same Kruber-shield
+-- pool, Kerillian (`we_*`) shares the Kerillian-shield pool, etc. LA
+-- shields are merged in per-weapon-type via `_merge_la_offhand_options`
+-- and LA's own `icons` table is already character-correct (Kruber LA
+-- shields target `es_*` weapons, Kerillian LA shields target `we_*`, etc.),
+-- so the merge preserves the same-character invariant.
 local _offhand_options = {
+    -- Kruber (Empire) — every Kruber-asset shield is shareable across
+    -- every Kruber shield weapon (sword+shield, mace+shield, Bret
+    -- sword+shield, deus 1h).
     es_1h_sword_shield = {
         { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
         { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
@@ -1508,17 +1531,13 @@ local _offhand_options = {
         { name = "GK Shield (Blessed)",    unit = "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01" },
         { name = "Deus Shield (Ornate)",   unit = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02" },
         { name = "Deus Shield (Plumed)",   unit = "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03" },
-        { name = "WP Shield",              unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1" },
     },
+    -- Kerillian (Wood Elf) — only Kerillian-asset shields.
     we_1h_spears_shield = {
         { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
         { name = "Elven Shield (Exotic)",  unit = "units/weapons/player/wpn_we_shield_02/wpn_we_shield_02" },
-        { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
-        { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
-        { name = "GK Shield (Blue)",       unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03" },
-        { name = "Deus Shield (Ornate)",   unit = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02" },
-        { name = "Deus Shield (Plumed)",   unit = "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03" },
     },
+    -- Bardin (Dwarf) — only Bardin-asset shields.
     dr_1h_axe_shield = {
         { name = "Dwarf Shield 1",         unit = "units/weapons/player/wpn_dw_shield_01_t1/wpn_dw_shield_01" },
         { name = "Dwarf Shield 2",         unit = "units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_shield_02" },
@@ -1528,21 +1547,12 @@ local _offhand_options = {
         { name = "Dwarf Shield 4 (Magic)", unit = "units/weapons/player/wpn_dw_shield_04_t1/wpn_dw_shield_04_magic_01" },
         { name = "Dwarf Shield 5",         unit = "units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05" },
         { name = "Dwarf Shield 5 (Runed)", unit = "units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05_runed_01" },
-        { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
-        { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
-        { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
-        { name = "WP Shield",              unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1" },
     },
+    -- Saltzpyre (Warrior Priest) — only Saltzpyre-asset shields.
     wh_flail_shield = {
         { name = "WP Shield",              unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1" },
         { name = "WP Shield (Runed)",      unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed" },
         { name = "WP Shield (Magic)",      unit = "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_magic" },
-        { name = "Empire Shield",          unit = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1" },
-        { name = "Empire Round Shield",    unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02" },
-        { name = "GK Shield (Blue)",       unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03" },
-        { name = "GK Shield (Red)",        unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02" },
-        { name = "Elven Shield",           unit = "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01" },
-        { name = "Dwarf Shield",           unit = "units/weapons/player/wpn_dw_shield_01_t1/wpn_dw_shield_01" },
     },
 }
 -- CLARIFY: keys in _offhand_options are `item_type` strings (the value of
@@ -1569,6 +1579,129 @@ _offhand_options.es_deus_01                 = _shallow_copy(_offhand_options.es_
 _offhand_options.dr_1h_hammer_shield        = _shallow_copy(_offhand_options.dr_1h_axe_shield)
 _offhand_options.wh_hammer_shield           = _shallow_copy(_offhand_options.wh_flail_shield)
 
+-- ============================================================
+-- Dual-wield offhand pools (v0.8.51-dev, refactored v0.8.56-dev)
+-- ============================================================
+-- For dual-wield weapons the offhand picker overrides `left_hand_unit`.
+-- The available pool of left-hand candidates depends on the dual-wield's
+-- shape:
+--
+--   MATCHED-PAIR (dr_dual_axes, we_dual_wield_daggers, ww_dual_swords,
+--   dr_dual_wield_hammers, wh_dual_hammer): both hands hold the same
+--   weapon variant. Pool = every variant of that weapon family. Swapping
+--   the left while keeping the right gives the player axe_01 on right
+--   and axe_02 on left.
+--
+--   MIXED-PAIR (es_dual_wield_hammer_sword: hammer right + sword left;
+--   ww_sword_and_dagger: sword right + dagger left; wh_dual_wield_axe_falchion:
+--   axe right + sword/falchion left): each hand holds a different weapon
+--   kind. Pool = every variant of the LEFT-hand weapon kind, so the user
+--   swaps the secondary weapon.
+--
+-- Pool sourcing:
+--   - Item types whose own `<item_type>_skins` table EXISTS in vanilla
+--     `WeaponSkins.skin_combinations`: walk that table, read `left_hand_unit`
+--     from each referenced skin. For matched pairs this equals right_hand_unit.
+--   - Item types whose own skin table is MISSING in vanilla (only one base
+--     skin exists, no crafted variants): borrow a single-hand skin table
+--     that matches the left-hand weapon kind. Single-hand skins only store
+--     `right_hand_unit`, so use that field. The borrowed table effectively
+--     becomes "every variant of this weapon kind".
+local _DUAL_WIELD_POOLS = {
+    -- Matched/mixed dual-wields WITH their own skin tables in vanilla.
+    dr_dual_axes               = { skin_table = "dr_dual_wield_axes_skins",        unit_field = "left_hand_unit"  },
+    ww_dual_daggers            = { skin_table = "we_dual_wield_daggers_skins",     unit_field = "left_hand_unit"  },
+    we_dual_wield_daggers      = { skin_table = "we_dual_wield_daggers_skins",     unit_field = "left_hand_unit"  },
+    ww_dual_swords             = { skin_table = "we_dual_wield_swords_skins",      unit_field = "left_hand_unit"  },
+    ww_sword_and_dagger        = { skin_table = "we_dual_wield_sword_dagger_skins", unit_field = "left_hand_unit" },
+
+    -- Dual-wields whose own `<item_type>_skins` table is MISSING in vanilla.
+    -- Borrow single-hand skin tables matching the left-hand weapon kind:
+    --   * dr_dual_wield_hammers: left = wpn_dw_hammer_03_t1 (1h dwarf hammer)
+    --     -> dr_1h_hammer_skins
+    --   * es_dual_wield_hammer_sword: left = wpn_emp_sword_06_t1 (1h Empire sword)
+    --     -> es_1h_sword_skins
+    --   * wh_dual_wield_axe_falchion: left = wpn_emp_sword_05_t2 (the "falchion"
+    --     is an emp_sword unit) -> wh_1h_falchion_skins (Saltzpyre's falchion line)
+    -- wh_dual_hammer omitted: the base unit (wpn_wh_1h_hammer_01) has no
+    -- skin variants and no 1h-hammer skin table exists, so the pool would
+    -- be a single-element no-op.
+    dr_dual_wield_hammers      = { skin_table = "dr_1h_hammer_skins",   unit_field = "right_hand_unit" },
+    es_dual_wield_hammer_sword = { skin_table = "es_1h_sword_skins",    unit_field = "right_hand_unit" },
+    wh_dual_wield_axe_falchion = { skin_table = "wh_1h_falchion_skins", unit_field = "right_hand_unit" },
+}
+
+-- Build offhand options from a skin_combination table. Reads either
+-- `left_hand_unit` (native dual-wield tables) or `right_hand_unit`
+-- (borrowed single-hand tables) per the `unit_field` arg. Returns the
+-- canonical `{ name, unit, rarity }` shape consumed by the picker.
+local function _build_offhand_options_from_skin_table(skin_table_name, unit_field)
+    if not WeaponSkins or not WeaponSkins.skin_combinations then return nil end
+    local sct = WeaponSkins.skin_combinations[skin_table_name]
+    if not sct then return nil end
+    unit_field = unit_field or "left_hand_unit"
+
+    local skin_by_name = {}
+    if WeaponSkins.skins then
+        for _, s in ipairs(WeaponSkins.skins) do
+            if s.name and s.data then skin_by_name[s.name] = s.data end
+        end
+    end
+
+    local L = rawget(_G, "Localize")
+    local seen = {}
+    local out = {}
+    local rarity_order = { "plentiful", "common", "rare", "exotic", "unique", "bogenhafen", "promotion" }
+    local seen_rarity = {}
+    local rarity_keys = {}
+    for _, r in ipairs(rarity_order) do
+        if sct[r] then rarity_keys[#rarity_keys + 1] = r; seen_rarity[r] = true end
+    end
+    for r, _ in pairs(sct) do
+        if not seen_rarity[r] then rarity_keys[#rarity_keys + 1] = r end
+    end
+
+    for _, rarity in ipairs(rarity_keys) do
+        local bucket = sct[rarity]
+        if type(bucket) == "table" then
+            for _, skin_key in ipairs(bucket) do
+                local s = skin_by_name[skin_key]
+                local unit_path = s and s[unit_field]
+                if unit_path and not seen[unit_path] then
+                    seen[unit_path] = true
+                    local name = skin_key
+                    if s.display_name and L then
+                        local ok, localized = pcall(L, s.display_name)
+                        if ok and localized and localized ~= "" and localized ~= s.display_name then
+                            name = localized
+                        end
+                    end
+                    out[#out + 1] = {
+                        name   = name,
+                        unit   = unit_path,
+                        rarity = s.rarity or rarity,
+                    }
+                end
+            end
+        end
+    end
+    return out
+end
+
+for item_type, spec in pairs(_DUAL_WIELD_POOLS) do
+    if not _offhand_options[item_type] then
+        local pool = _build_offhand_options_from_skin_table(spec.skin_table, spec.unit_field)
+        if pool and #pool > 0 then
+            _offhand_options[item_type] = pool
+            mod:info("[offhand] dual-wield pool %s: %d options from %s (%s)",
+                item_type, #pool, spec.skin_table, spec.unit_field)
+        else
+            mod:info("[offhand] dual-wield pool %s: NO options from %s (skin table missing or empty)",
+                item_type, spec.skin_table)
+        end
+    end
+end
+
 -- _offhand_selection[weapon_key] = option_table (the same object stored in
 -- _offhand_options[weapon_key]). Vanilla entries have only `unit`; LA-bridge
 -- entries have `la_armoury_key` + `vanilla_skin` (no `unit` — LA paints onto
@@ -1584,27 +1717,53 @@ _offhand_options.wh_hammer_shield           = _shallow_copy(_offhand_options.wh_
 -- follow-up. Variable name preserved to keep diffs minimal.
 local _offhand_selection = {}
 
+-- v0.8.64-dev: forward decl. Real impl lives in the cos_la_apply block below
+-- (~line 3300). _on_offhand_index_pressed (~line 2004) and the local-equip
+-- send sites in the CosmeticUtils hook need to call this; we forward-declare
+-- so the closures capture the LOCAL slot rather than falling through to a
+-- nil _G._send_la_apply.
+local _send_la_apply
+-- Track local player's currently-equipped LA cosmetics so hot_join_sync can
+-- replay them to joining peers. Map: player_unit -> { slot_name -> la_backend_id }.
+-- Populated from the CosmeticUtils.update_cosmetic_slot hook (which fires on
+-- every local equip for slot_hat / slot_skin / slot_frame / slot_melee /
+-- slot_ranged / slot_pose). Cleared on player_unit destruction is left as
+-- future work — stale entries are harmless until the next equip overwrites.
+local _local_la_equips = setmetatable({}, { __mode = "k" })
+
+-- v0.8.55-dev: track the backend_id of the weapon currently being customized.
+-- The HeroWindowItemCustomization screen owns this, but when the user cycles
+-- main-hand illusions in the row-1 picker, vanilla `_on_illusion_index_pressed`
+-- rebuilds the preview using the pending skin's IML entry — that entry has
+-- no `backend_id`, so our `BackendUtils.get_item_units` hook (which reads
+-- `_offhand_selection[backend_id]`) finds nothing and the shield preview
+-- snaps back to the new skin's paired shield. Stashing the active backend_id
+-- module-side lets the hook fall back to it whenever the call comes in with
+-- backend_id == nil. Cleared on customization-screen exit so it doesn't leak
+-- across screens.
+local _active_customization_backend_id = nil
+
+mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
+    _active_customization_backend_id = nil
+end)
+
 -- LA pool merge: each weapon_type pulls the LA shields whose `icons` table
 -- specifically targets that weapon_type. The bridge does the icon-driven
 -- bucketing; the merge here just appends each bucket to the matching
 -- vanilla-offhand list. No cross-weapon-type leakage because each
 -- _offhand_options[weapon_type] is now its own table (de-aliased above).
 --
--- FOCUS GATE: per "one shield at a time" working policy, only the LA shield
--- whose armoury_key matches `_LA_FOCUS_KEYS[la_key] == true` surfaces in the
--- picker. Registration data in `_la_bridge.lua` (icon parsing, _LA_EXTRA_WEAPON_TYPES,
--- the alias map) stays intact, so widening the visible set later is a
--- one-line edit here. Set to nil/empty to surface every LA shield.
-local _LA_FOCUS_KEYS = {
-    Kruber_empire_shield_hero1_Ostermark01 = true,
-    Kruber_empire_shield_hero1_Kotbs01     = true,
-    -- v0.8.25: first kind="unit" custom-mesh shield. NetworkLookup pre-
-    -- registration in _la_bridge.lua makes the LA mesh path safe for
-    -- vanilla sync reads. If this displays correctly on all 4 Kruber
-    -- shield weapons, the same approach extends to the rest of the
-    -- Empire custom-mesh family (basic2, Middenheim, etc.).
-    Kruber_empire_shield_basic1            = true,
-}
+-- FOCUS GATE: legacy "one shield at a time" testing whitelist. Pre-v0.8.52
+-- only the 3 entries below surfaced in the picker (Ostermark, Kotbs, Reiland)
+-- while the rest of LA's registered shields stayed hidden. v0.8.52-dev opens
+-- this fully — every LA shield whose `icons` table targets the current weapon
+-- type now appears, scoped to the wielding character per the same-character
+-- rule (each LA variant's icons are already character-correct, so the merge
+-- preserves the rule).
+--
+-- To re-enable the focus filter for debugging, populate this table with the
+-- armoury_keys you want exposed; an empty table = no filter (default now).
+local _LA_FOCUS_KEYS = {}
 
 local _la_offhand_merged = false
 
@@ -1690,6 +1849,10 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     self._ct_selected_offhand_index = nil
 
     mod:info("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
+
+    -- v0.8.55-dev: stash for the BackendUtils.get_item_units hook fallback.
+    -- See note on `_active_customization_backend_id` declaration.
+    _active_customization_backend_id = item and item.backend_id or nil
 
     if not item then mod:info("[offhand] no item, bailing"); return end
     local item_data = item.data or (item.key and ItemMasterList and rawget(ItemMasterList, item.key))
@@ -1871,6 +2034,28 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
     end
     _preload_offhand_for_option(opt)
 
+    -- v0.8.64-dev: peer-sync the offhand pick. Vanilla _offhand_selection is
+    -- per-peer LOCAL — peers spawning our husk read THEIR OWN selection in
+    -- BackendUtils.get_item_units, so the picker choice never reaches them.
+    -- Send cos_la_apply (kind="offhand") so peers replay the paint on the
+    -- husk's wielded left-hand unit. Vanilla-mesh offhands (opt.unit set, no
+    -- la_armoury_key) still go unsynced — they're a local-only swap that
+    -- can't be expressed as an LA armoury_key. LA-offhand picks (la_armoury_key
+    -- set) sync correctly.
+    if opt and opt.la_armoury_key and _send_la_apply then
+        local pm = Managers and Managers.player
+        local local_player = pm and pm:local_player()
+        local player_unit = local_player and local_player.player_unit
+        -- Send the OWNER (player_unit) go_id, not the left-hand unit go_id —
+        -- left_hand_wielded_unit_3p is a local-spawned unit with no network
+        -- identity. Receivers resolve their own husk's left unit on arrival.
+        if player_unit and Unit.alive(player_unit) then
+            -- v0.8.67-dev: server-authoritative routing; signature change.
+            _send_la_apply(player_unit, weapon_key or "slot_unknown", "offhand",
+                opt.la_armoury_key, opt.vanilla_skin)
+        end
+    end
+
     for i, w in ipairs(widgets) do
         local is_sel = (i == index)
         w.content.button_hotspot.is_selected = is_sel
@@ -1999,6 +2184,15 @@ if BackendUtils then
         -- world.spawn_unit. Documented in CHANGELOG v0.7.101-dev.
         local resolved_skin = skin
         local effective_backend_id = backend_id or (item_data and item_data.backend_id)
+        -- v0.8.55-dev: customization-screen preview-cycle path passes nil
+        -- for both `backend_id` AND item_data.backend_id (preview item is
+        -- the pending skin's IML entry, no backend stamped). Fall back to
+        -- the screen-level active backend_id so `_offhand_selection` lookup
+        -- still hits and the shield preview doesn't flip back to the new
+        -- skin's paired shield when user cycles main-hand illusions.
+        if not effective_backend_id then
+            effective_backend_id = _active_customization_backend_id
+        end
         if not resolved_skin and effective_backend_id and Managers and Managers.backend then
             local backend_items = Managers.backend:get_interface("items")
             if backend_items and backend_items.get_skin then
@@ -2209,19 +2403,64 @@ local _GLOW_GROUP_COLOR_SETTING = {
     dots  = "glow_color_dots",
 }
 
-local function _glow_master_mult()
-    local v = mod:get("glow_mult_master")
+-- v0.9.0-dev: per-peer glow channel.
+--
+-- BEFORE: every glow read called `mod:get("...")` against the LOCAL viewer's
+-- settings. When painting a remote husk, the viewer's chosen glow was applied
+-- to the wearer's weapon — i.e. host saw client's weapon glowing with HOST's
+-- color, not the client's. Bug 4 in the host/client desync investigation.
+--
+-- NOW: a new RPC channel `cos_glow_apply` (host-authoritative, mirrors
+-- cos_la_apply) broadcasts each peer's glow state. Every machine caches all
+-- known peers' state in `_glow_by_peer`. The glow read helpers accept an
+-- optional `peer_id` arg; when set and is NOT the local player, settings are
+-- read from `_glow_by_peer[peer_id]` instead of `mod:get`. The apply hook
+-- resolves owner-of-unit at call time and threads peer_id through every read.
+--
+-- Missing cache entry (haven't received that peer's state yet, or they had
+-- the bridge dormant) → returns nil from every read → no override → wearer
+-- shows vanilla glow. Never bleeds the local viewer's color onto someone
+-- else's weapon.
+mod._glow_by_peer = mod._glow_by_peer or {}
+local _glow_by_peer = mod._glow_by_peer
+
+local function _glow_local_peer_id()
+    local pm = Managers and Managers.player
+    local lp = pm and pm.local_player and pm:local_player()
+    return lp and lp.peer_id
+end
+
+local function _glow_is_local_peer(peer_id)
+    if not peer_id then return true end  -- nil → caller wants local (default)
+    local local_peer = _glow_local_peer_id()
+    return local_peer == peer_id
+end
+
+-- Look up a per-peer glow setting. Returns nil when the peer is remote AND
+-- their state hasn't been received yet (don't fall back to local viewer's
+-- setting — that's the exact bug we're fixing).
+local function _glow_get(peer_id, key)
+    if _glow_is_local_peer(peer_id) then
+        return mod:get(key)
+    end
+    local state = _glow_by_peer[peer_id]
+    if not state then return nil end
+    return state[key]
+end
+
+local function _glow_master_mult(peer_id)
+    local v = _glow_get(peer_id, "glow_mult_master")
     return type(v) == "number" and v or 1.0
 end
 
-local function _glow_var_mult(setting)
+local function _glow_var_mult(setting, peer_id)
     if not setting then return 1.0 end
-    local v = mod:get(setting)
+    local v = _glow_get(peer_id, setting)
     return type(v) == "number" and v or 1.0
 end
 
-local function _glow_override_enabled()
-    return mod:get("glow_override_enable") == true
+local function _glow_override_enabled(peer_id)
+    return _glow_get(peer_id, "glow_override_enable") == true
 end
 
 -- Resolves a preset key to RGB. The special key "default" (and unknown keys)
@@ -2232,9 +2471,9 @@ local function _resolve_preset_rgb(key)
     return _COLOR_PRESETS[key]
 end
 
-local function _glow_main_rgb()
-    if not _glow_override_enabled() then return nil end
-    return _resolve_preset_rgb(mod:get("glow_override_preset"))
+local function _glow_main_rgb(peer_id)
+    if not _glow_override_enabled(peer_id) then return nil end
+    return _resolve_preset_rgb(_glow_get(peer_id, "glow_override_preset"))
 end
 
 -- RGB to use for a given variable. When per-channel is enabled, the magic-
@@ -2244,14 +2483,14 @@ end
 --   * override toggle is OFF, or
 --   * the relevant dropdown is set to "default" — meaning this specific
 --     variable should NOT be overridden, vanilla's value stays.
-local function _glow_rgb_for_var(var_name)
-    if not _glow_override_enabled() then return nil end
+local function _glow_rgb_for_var(var_name, peer_id)
+    if not _glow_override_enabled(peer_id) then return nil end
     local info = _GLOW_VAR_BRIGHTNESS[var_name]
     local group = info and info.group
-    if mod:get("glow_per_channel_color_enable") then
+    if _glow_get(peer_id, "glow_per_channel_color_enable") then
         local setting = group and _GLOW_GROUP_COLOR_SETTING[group]
         if setting then
-            local key = mod:get(setting)
+            local key = _glow_get(peer_id, setting)
             -- Per-channel dropdown drives this variable. "default" → skip.
             -- Any concrete preset → use it. Unknown key → fall through to main.
             if key == "default" then return nil end
@@ -2260,20 +2499,58 @@ local function _glow_rgb_for_var(var_name)
         end
     end
     -- Fallback: main color picker (also returns nil if main is "default")
-    return _glow_main_rgb()
+    return _glow_main_rgb(peer_id)
 end
 
-local function _apply_glow_to_unit(unit)
+-- Resolve the wearer peer for the unit being painted. Used by the per-peer
+-- glow hook to thread owner identity through. Returns nil for non-player
+-- units (NPC display weapons, drops, etc.) — caller treats nil as "local
+-- viewer's settings" which is the historical behavior for those paths.
+local function _glow_owner_peer_for_unit(unit)
+    if not unit then return nil end
+    local pm = Managers and Managers.player
+    if not pm then return nil end
+    -- 1. Direct owner lookup (works for local player + bots; sometimes
+    -- returns nil during mission-spawn race per the memory note).
+    if pm.owner then
+        local owner = pm:owner(unit)
+        if owner and owner.peer_id then return owner.peer_id end
+    end
+    -- 2. Husk-side fallback: the player_unit's inventory_system has
+    -- `_owner_player_id` set; not the same as peer_id but lookup via the
+    -- player table works.
+    if ScriptUnit and ScriptUnit.has_extension then
+        local inv = ScriptUnit.has_extension(unit, "inventory_system")
+        if inv and inv._owner_player_id then
+            -- _owner_player_id is the unique id; walk human players to find peer
+            if pm._human_players then
+                for _, p in pairs(pm._human_players) do
+                    if p.player_unit == unit then return p.peer_id end
+                end
+            end
+        end
+        -- 3. Last-resort husk: weapon/hat units carry no inventory_system,
+        -- but their parent player_unit does. We don't traverse parents here —
+        -- caller passes the OWNING player_unit (resolved upstream via
+        -- equipment.left_hand_wielded_unit_3p etc. → owner of player_unit).
+    end
+    return nil
+end
+
+-- v0.9.0-dev: per-peer glow apply. `owner_peer_id` resolves which peer's
+-- settings drive the override. nil means "local viewer" (legacy behavior for
+-- NPC display weapons, pickups, etc.).
+local function _apply_glow_to_unit(unit, owner_peer_id)
     if not unit or not _is_unit(unit) then return end
-    if not _glow_override_enabled() then return end
+    if not _glow_override_enabled(owner_peer_id) then return end
     -- Per-variable: skip if rgb is nil (main = "default" AND no per-channel
     -- color set for this var's group), else write user RGB scaled to native
     -- brightness × master × per-channel multiplier. mult=0 also skips.
-    local master_mult = _glow_master_mult()
+    local master_mult = _glow_master_mult(owner_peer_id)
     for var_name, info in pairs(_GLOW_VAR_BRIGHTNESS) do
-        local rgb = _glow_rgb_for_var(var_name)
+        local rgb = _glow_rgb_for_var(var_name, owner_peer_id)
         if rgb then
-            local var_mult = _glow_var_mult(info.setting)
+            local var_mult = _glow_var_mult(info.setting, owner_peer_id)
             if var_mult > 0 then
                 local user_max = math.max(rgb[1], rgb[2], rgb[3], 0.0001)
                 local effective = info.brightness * var_mult * master_mult
@@ -2288,9 +2565,14 @@ end
 -- Backward-compatible alias used by the existing call site at create_equipment.
 local function _glow_preset_rgb() return _glow_main_rgb() end
 
-local function _apply_glow_override(units)
-    if not _glow_override_enabled() then return end
-    for _, u in ipairs(units) do _apply_glow_to_unit(u) end
+-- v0.9.0-dev: accept owner peer so glow on remote players' weapons reads from
+-- the wearer's settings, not the local viewer's. Caller MUST pass owner peer
+-- explicitly — units array doesn't carry per-unit owner info, so the resolution
+-- happens at the create_equipment hook where we know the player_unit being
+-- equipped.
+local function _apply_glow_override(units, owner_peer_id)
+    if not _glow_override_enabled(owner_peer_id) then return end
+    for _, u in ipairs(units) do _apply_glow_to_unit(u, owner_peer_id) end
 end
 
 -- Glow override (v0.8.16-dev): TEMPLATE MUTATION approach.
@@ -2315,21 +2597,32 @@ mod._glow_hooks_installed = { gear = false, flow = false, cosmetic = false }
 local function _hook_apply_with_template_mutation(class_id, label)
     mod:hook(class_id, "apply_material_settings", function(func, unit, material_settings_name)
         mod._glow_call_counts[label] = (mod._glow_call_counts[label] or 0) + 1
-        if not _glow_override_enabled() then
+        -- v0.9.0-dev: resolve the wearer of the unit to thread per-peer glow
+        -- settings through. For local player + bots → local peer_id (reads
+        -- mod:get). For remote husks → wearer peer_id (reads _glow_by_peer).
+        -- For non-player units (NPC display weapons, pickups, drops) →
+        -- nil → defaults to local viewer (legacy behavior; nobody owns
+        -- these). The lookup is fast (single :owner() call) — no measurable
+        -- overhead vs the previous fully-local read.
+        local owner_peer_id = _glow_owner_peer_for_unit(unit)
+        if not _glow_override_enabled(owner_peer_id) then
             if mod:get("glow_trace") then
-                mod:info("[GLOW] %s call template=%s (override OFF, passthrough)", label, tostring(material_settings_name))
+                mod:info("[GLOW] %s call template=%s peer=%s (override OFF, passthrough)",
+                    label, tostring(material_settings_name), tostring(owner_peer_id))
             end
             return func(unit, material_settings_name)
         end
         local template = MaterialSettingsTemplates and MaterialSettingsTemplates[material_settings_name]
         if not template then
             if mod:get("glow_trace") then
-                mod:info("[GLOW] %s call template=%s (template nil, passthrough)", label, tostring(material_settings_name))
+                mod:info("[GLOW] %s call template=%s peer=%s (template nil, passthrough)",
+                    label, tostring(material_settings_name), tostring(owner_peer_id))
             end
             return func(unit, material_settings_name)
         end
         if mod:get("glow_trace") then
-            mod:info("[GLOW] %s mutate template=%s", label, tostring(material_settings_name))
+            mod:info("[GLOW] %s mutate template=%s peer=%s",
+                label, tostring(material_settings_name), tostring(owner_peer_id))
         end
         -- Mutate per-variable. Skip variables whose color resolves to nil
         -- (= "Default" preset OR main is "Default" with no per-channel color
@@ -2337,13 +2630,13 @@ local function _hook_apply_with_template_mutation(class_id, label)
         -- through to the spawn unchanged. Skip variables whose mult is 0.
         -- Color and brightness come from _glow_rgb_for_var (respects per-
         -- channel-color toggle) and the var's mult setting.
-        local master_mult = _glow_master_mult()
+        local master_mult = _glow_master_mult(owner_peer_id)
         local saved = {}
         for var_name, entry in pairs(template) do
             if entry.type == "vector3" then
-                local var_rgb = _glow_rgb_for_var(var_name)
+                local var_rgb = _glow_rgb_for_var(var_name, owner_peer_id)
                 local info = _GLOW_VAR_BRIGHTNESS[var_name]
-                local var_mult = info and _glow_var_mult(info.setting) or 1.0
+                local var_mult = info and _glow_var_mult(info.setting, owner_peer_id) or 1.0
                 if var_rgb and var_mult > 0 then
                     saved[var_name] = { x = entry.x, y = entry.y, z = entry.z }
                     local orig_max = math.max(entry.x, entry.y, entry.z, 0.0001)
@@ -2365,16 +2658,34 @@ local function _hook_apply_with_template_mutation(class_id, label)
 end
 
 _hook_apply_with_template_mutation("GearUtils", "gear")
-if _G.apply_material_settings then
-    _hook_apply_with_template_mutation(_G, "flow")
-else
-    mod:info("[GLOW] _G.apply_material_settings nil at hook time")
-end
 if rawget(_G, "CosmeticUtils") and CosmeticUtils.apply_material_settings then
     _hook_apply_with_template_mutation("CosmeticUtils", "cosmetic")
 else
     mod:info("[GLOW] CosmeticUtils.apply_material_settings nil at hook time")
 end
+
+-- v0.9.0-dev: `_G.apply_material_settings` is a BARE GLOBAL declared in
+-- `scripts/flow/flow_callbacks_foundation.lua:896`. That file is loaded
+-- lazily by Stingray's flow graph (typically first hub/level enter), not
+-- during boot. VMF mod-load runs before any flow node fires, so at hook
+-- install time the symbol is genuinely nil. Try eagerly; on miss, retry from
+-- mod.on_game_state_changed (defined earlier). NOTE: this _G site is the
+-- bare-global path used ONLY by NPC display weapons / keep weapon racks —
+-- player wielded weapons, husks, projectiles, pickups, and previewer all
+-- route through GearUtils.apply_material_settings (already hooked above),
+-- so this is purely a coverage-completeness fix for hub setpieces.
+local function _try_install_flow_glow_hook()
+    if mod._glow_hooks_installed.flow then return true end
+    if not _G.apply_material_settings then return false end
+    _hook_apply_with_template_mutation(_G, "flow")
+    mod:info("[GLOW] _G.apply_material_settings hook installed (deferred)")
+    return true
+end
+
+if not _try_install_flow_glow_hook() then
+    mod:info("[GLOW] _G.apply_material_settings nil at boot; will retry on game-state change")
+end
+mod._try_install_flow_glow_hook = _try_install_flow_glow_hook
 
 -- Custom template + spawn-time injection for non-templated meshes.
 --
@@ -2560,10 +2871,15 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         _apply_la_offhand_to_units(world, item_data, { result.left_unit_3p, result.left_unit_1p }, has_skin, nil, "ingame")
     end
     if result then
+        -- v0.9.0-dev: resolve wearer from the 3P unit (= player_unit body).
+        -- create_equipment doesn't pass a player object, but unit_3p IS the
+        -- player_unit here, so :owner(unit_3p) resolves the peer correctly
+        -- for both local + remote husk equips.
+        local owner_peer_id = _glow_owner_peer_for_unit(unit_3p)
         _apply_glow_override({
             result.right_unit_3p, result.left_unit_3p,
             result.right_unit_1p, result.left_unit_1p,
-        })
+        }, owner_peer_id)
     end
     return result
 end)
@@ -2865,7 +3181,12 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
         local has_skin = (item.skin and item.skin ~= "")
                 or (item_data and item_data.item_type == "weapon_skin")
         if has_skin and world and item_data and units and units[1] then
-            _apply_la_offhand_to_units(world, item_data, { units[1] }, true, item.backend_id, "loot_previewer")
+            -- v0.8.55-dev: when previewing a pending-cycle skin, item.backend_id
+            -- is nil. Fall back to the customization screen's active backend_id
+            -- so the LA paint follows the row-2 offhand selection while user
+            -- cycles row-1 main-hand illusions.
+            local effective_bid = item.backend_id or _active_customization_backend_id
+            _apply_la_offhand_to_units(world, item_data, { units[1] }, true, effective_bid, "loot_previewer")
         end
     end
 
@@ -3015,6 +3336,987 @@ local function _install_skin_loadout_safety()
     _fixup_server_clones()
 end
 
+-- v0.8.57-dev: prevent network sync of LA cosmetic backend_ids to peers.
+-- Crash GUID fa479a72 — friend's vanilla client received an item_names
+-- index our mod had locally registered (e.g. 2959) and crashed in
+-- NetworkLookup.lua:2514's strict __index metamethod when decoding.
+-- Root cause: `CosmeticUtils.update_cosmetic_slot` calls
+-- `player:set_data(slot, name_id)` where `name_id` is
+-- `NetworkLookup.item_names[la_backend_id]` — a LOCAL index our
+-- _la_bridge.register_all added via rawset. Peers don't have that
+-- index → crash on decode.
+-- Fix: hook update_cosmetic_slot, substitute LA backend_ids with their
+-- vanilla equivalent for the sync call. Local player still sees the LA
+-- hat (visual is applied via the loadout_cache + LA's own apply path,
+-- not via sync_data). Husk-side rendering on peers shows the vanilla
+-- equivalent — the closest thing they can render without our mod.
+-- v0.8.59-dev: CosmeticUtils is a PLAIN TABLE (`CosmeticUtils = CosmeticUtils
+-- or {}` at cosmetic_utils.lua:3), not a class. v0.8.58 used string-form
+-- `mod:hook("CosmeticUtils", ...)` which VMF can't resolve for plain tables
+-- — the hook silently never fired and the crash kept reproducing. Same
+-- pitfall as BackendUtils (CLAUDE.md "Hooking" section). Must use the
+-- table-form `mod:hook(CosmeticUtils, ...)` with a nil guard.
+if CosmeticUtils then
+    mod:hook(CosmeticUtils, "update_cosmetic_slot", function(func, player, slot, item_name, skin_name)
+        -- v0.8.64-dev: substitute BOTH item_name AND skin_name. The original
+        -- v0.8.58 hook substituted only item_name (the 4th arg) — but
+        -- cosmetic_utils.lua:245 also reads NetworkLookup.weapon_skins[skin_name]
+        -- and :249 broadcasts via player:set_data. If the user equips an LA-
+        -- cloned weapon ILLUSION, the LA skin_name reaches peers' decode path
+        -- and crashes them in the same NetworkLookup __index fashion as the
+        -- fa479a72 crash. Same shape of substitution: LA -> vanilla via
+        -- backend_to_vanilla; SKIP the call if no fallback exists.
+        local effective_item_name = item_name
+        local effective_skin_name = skin_name
+        local la_item_subbed = false
+        local la_skin_subbed = false
+
+        if LA_BRIDGE and LA_BRIDGE.registered then
+            if item_name and LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[item_name] then
+                local vanilla_key = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[item_name]
+                if vanilla_key then
+                    mod:info("[net-safe] update_cosmetic_slot %s LA item(%s) -> vanilla(%s)",
+                        tostring(slot), tostring(item_name), tostring(vanilla_key))
+                    effective_item_name = vanilla_key
+                    la_item_subbed = true
+                else
+                    mod:info("[net-safe] update_cosmetic_slot %s LA item(%s) -> SKIP (no vanilla fallback)",
+                        tostring(slot), tostring(item_name))
+                    return
+                end
+            end
+            if skin_name and LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[skin_name] then
+                local vanilla_skin = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[skin_name]
+                if vanilla_skin then
+                    mod:info("[net-safe] update_cosmetic_slot %s LA skin(%s) -> vanilla(%s)",
+                        tostring(slot), tostring(skin_name), tostring(vanilla_skin))
+                    effective_skin_name = vanilla_skin
+                    la_skin_subbed = true
+                else
+                    mod:info("[net-safe] update_cosmetic_slot %s LA skin(%s) -> SKIP (no vanilla fallback)",
+                        tostring(slot), tostring(skin_name))
+                    return
+                end
+            end
+        end
+
+        -- v0.8.64-dev: peer-replay path for armor (slot_skin). slot_skin is
+        -- "cosmetic" category, NOT "attachment", so it doesn't flow through
+        -- PUAE or AttachmentUtils.hot_join_sync — those only emit cos_la_apply
+        -- for hats. Fire it here so peers can replay the LA armor texture
+        -- paint on the husk player_unit body. Also record into _local_la_equips
+        -- so the hot_join_sync hook can re-emit to joining peers.
+        if la_item_subbed and item_name and player and player.player_unit
+            and Unit.alive(player.player_unit) and _send_la_apply
+        then
+            local kind = nil
+            if slot == "slot_hat"  then kind = "hat"   end
+            if slot == "slot_skin" then kind = "armor" end
+            if kind then
+                local armoury_key = LA_BRIDGE.backend_to_armoury[item_name]
+                local equips = _local_la_equips[player.player_unit]
+                if not equips then equips = {}; _local_la_equips[player.player_unit] = equips end
+                equips[slot] = item_name
+                _send_la_apply(player.player_unit, slot, kind, armoury_key, effective_item_name)
+            end
+        end
+
+        -- v0.8.66-dev: peer-replay path for WEAPON ILLUSIONS (row-1 picker).
+        -- When the user equips an LA-cloned weapon illusion, skin_name (NOT
+        -- item_name) is the LA bid. v0.8.64 substituted it to vanilla for
+        -- crash-safety but never told peers to repaint, so peers saw vanilla
+        -- color on the wielded weapon. Fire kind="illusion" with the LA
+        -- armoury_key derived from skin_name. Record in _local_la_equips
+        -- keyed by the cosmetic slot ("slot_melee" / "slot_ranged" etc.) so
+        -- hot_join_sync can replay to joiners.
+        if la_skin_subbed and skin_name and not la_item_subbed
+            and player and player.player_unit and Unit.alive(player.player_unit)
+            and _send_la_apply
+        then
+            local armoury_key = LA_BRIDGE.backend_to_armoury[skin_name]
+            if armoury_key then
+                local equips = _local_la_equips[player.player_unit]
+                if not equips then equips = {}; _local_la_equips[player.player_unit] = equips end
+                equips[slot] = skin_name
+                _send_la_apply(player.player_unit, slot, "illusion", armoury_key, effective_skin_name)
+            end
+        end
+
+        -- v0.9.0-dev: LA->vanilla swap on a slot must clear the stale LA cache
+        -- entry. Previously the `equips[slot] = item_name` write at lines
+        -- 3284/3305 only happened inside the la_*_subbed branches; equipping
+        -- a vanilla replacement left the prior LA bid in _local_la_equips,
+        -- and the next hot_join_sync would replay it to joiners even though
+        -- the wearer is no longer wearing LA.
+        if not la_item_subbed and not la_skin_subbed
+            and player and player.player_unit
+        then
+            local equips = _local_la_equips[player.player_unit]
+            if equips and equips[slot] then
+                mod:info("[net-safe] update_cosmetic_slot %s: clearing stale LA cache entry %s",
+                    tostring(slot), tostring(equips[slot]))
+                equips[slot] = nil
+            end
+        end
+
+        if la_item_subbed or la_skin_subbed then
+            return func(player, slot, effective_item_name, effective_skin_name)
+        end
+        return func(player, slot, item_name, skin_name)
+    end)
+end
+
+-- v0.8.60-dev: SECOND sync path. SimpleInventoryExtension.add_equipment
+-- calls CosmeticUtils.update_cosmetic_slot (caught by the hook above)
+-- AND then immediately calls LoadoutUtils.sync_loadout_slot, which
+-- broadcasts an `rpc_sync_loadout_slot` RPC with
+-- `item_id = NetworkLookup.item_names[item.key]`. Peers receive the LOCAL
+-- index that only the user's session knows → same crash mode as the
+-- SyncData path. Substitute the item with a shadow whose `.key` is the
+-- vanilla equivalent before the RPC fires. Same protection also blocks
+-- LoadoutUtils.hot_join_sync, which iterates loadouts and re-invokes
+-- sync_loadout_slot for each newly-joined peer.
+--
+-- LoadoutUtils is also a PLAIN TABLE (`LoadoutUtils = LoadoutUtils or {}`),
+-- so use table-form hook with nil guard — same BackendUtils/CosmeticUtils
+-- pitfall as the previous version.
+if LoadoutUtils then
+    mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
+        if item and item.key
+            and LA_BRIDGE and LA_BRIDGE.registered
+            and LA_BRIDGE.backend_to_armoury
+            and LA_BRIDGE.backend_to_armoury[item.key]
+        then
+            local vanilla_key = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[item.key]
+            if vanilla_key then
+                local shadow = {}
+                for k, v in pairs(item) do shadow[k] = v end
+                shadow.key = vanilla_key
+                mod:info("[net-safe] sync_loadout_slot %s LA(%s) -> vanilla(%s)",
+                    tostring(slot_name), tostring(item.key), tostring(vanilla_key))
+                return func(player, slot_name, shadow, sync_to_specific_peer_id)
+            end
+            mod:info("[net-safe] sync_loadout_slot %s LA(%s) -> SKIP (no vanilla fallback)",
+                tostring(slot_name), tostring(item.key))
+            return
+        end
+        return func(player, slot_name, item, sync_to_specific_peer_id)
+    end)
+end
+
+-- v0.8.61-dev: THIRD sync surface — attachment-RPC paths that read
+-- `NetworkLookup.item_names[slot_data.item_data.name]` (or `slot_data.name`)
+-- INLINE via raw table access, then send rpc_create_attachment. No
+-- function wrapper can intercept the table read itself, so we pre-mutate
+-- the LA-keyed name to the vanilla equivalent on the slot data, call
+-- vanilla, then restore. The window is the single vanilla call — no
+-- other code runs mid-call, so the swap is invisible to LOCAL apply.
+--
+-- Three sites covered (all decoded the same crash mode as v0.8.58-60):
+--   1. PlayerUnitAttachmentExtension.game_object_initialized (line 63)
+--      — local player initial spawn, sends rpc_create_attachment for
+--      every attachment slot to clients (host) or server (client).
+--   2. PlayerUnitAttachmentExtension.spawn_resynced_loadout (line 301)
+--      — fires after a mid-mission loadout resync (dropped item, etc.).
+--   3. AttachmentUtils.hot_join_sync (line 99) — fires PER NEWLY-JOINED
+--      PEER for every attachment slot already worn. Plain table, must
+--      use table-form + nil guard.
+--
+-- Hot_join uses `slot_data.name` (top-level); the two PUAE methods use
+-- `slot_data.item_data.name` (nested). Both fields store the LA
+-- backend_id when wearing an LA cosmetic (set by create_attachment via
+-- AttachmentUtils internals).
+local _net_safe_hook_status = { CosmeticUtils = false, LoadoutUtils = false, AttachmentUtils = false, PUAE = false }
+_net_safe_hook_status.CosmeticUtils = CosmeticUtils ~= nil
+_net_safe_hook_status.LoadoutUtils = LoadoutUtils ~= nil
+
+local function _la_substitute_name(original_name)
+    if not (LA_BRIDGE and LA_BRIDGE.registered and original_name) then
+        return nil
+    end
+    if not (LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[original_name]) then
+        return nil
+    end
+    return LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[original_name] or nil
+end
+
+-- v0.8.64-dev: UNIFIED LA peer-sync — cos_la_apply replaces cos_la_attach.
+--
+-- v0.8.58-0.8.61 stopped peers crashing on LA cosmetics by substituting LA
+-- backend_ids with vanilla equivalents on every outgoing vanilla RPC.
+-- v0.8.62 added cos_la_attach for HATS ONLY so LA+cos_tweaker peers saw the
+-- real LA hat. v0.8.64 generalises that pattern to cover all three LA
+-- visual surfaces with ONE RPC:
+--
+--   payload = { go_id, slot, kind, armoury_key, vanilla_key }
+--   kind ∈ { "hat", "armor", "offhand" }
+--
+-- Identity key is ARMOURY_KEY (LA's deterministic string like
+-- "Kruber_Pureheart"), not la_backend_id. la_backend_id is mostly
+-- deterministic across peers but has a silent-bail failure mode at the
+-- receiver when its local ItemMasterList lookup misses; armoury_key matches
+-- what LA's own SKIN_LIST keys by and sidesteps the issue entirely.
+--
+-- RACE FIX — replace, not append. Vanilla sees only the vanilla substitute
+-- (existing CosmeticUtils / LoadoutUtils / PUAE / AttachmentUtils hooks do
+-- the substitution). LA-aware peers receive cos_la_apply and replay.
+-- Nothing races because vanilla NEVER carries an LA key over the wire.
+--
+-- v0.8.67-dev: SERVER-AUTHORITATIVE flow. All client equips emit a request
+-- to the host (`cos_la_apply_req`); the host records the equip in
+-- `_la_equips_by_peer[wearer_peer_id]` and broadcasts the authoritative
+-- `cos_la_apply` to ALL peers (including the originating client, so they
+-- apply in lockstep with everyone else). Peers reject any `cos_la_apply`
+-- whose sender isn't the host. The host short-circuits its own local
+-- equips by skipping the request hop and broadcasting directly.
+--
+-- Identity over the wire is now `wearer_peer_id` (deterministic across
+-- peers) rather than `go_id` (which is host-relative and may not resolve
+-- on late-spawn races). Receiver looks up the wearer's player_unit via
+-- `Managers.player:players_at_peer(wearer_peer_id)`. If the unit isn't
+-- spawned yet (mid-loading, etc.), the payload is queued and re-tried on
+-- mod.update for up to 5 seconds.
+
+-- Per-peer authoritative state (host only). Keyed by wearer_peer_id;
+-- value is { [slot_name] = { kind, armoury_key, vanilla_key } }.
+local _la_equips_by_peer = {}
+
+-- Late-spawn replay queue. Each entry:
+-- { wearer_peer_id, slot, kind, armoury_key, vanilla_key, expires_at }
+local _la_pending_apply = {}
+
+local function _is_local_server()
+    return Managers and Managers.player and Managers.player.is_server == true
+end
+
+local function _host_peer_id()
+    local nm = Managers and Managers.state and Managers.state.network
+    return nm and nm.server_peer_id or nil
+end
+
+local function _wearer_unit_for_peer(wearer_peer_id)
+    if not wearer_peer_id then return nil end
+    local pm = Managers and Managers.player
+    if not pm then return nil end
+    local players = pm.players_at_peer and pm:players_at_peer(wearer_peer_id)
+    if not players then return nil end
+    for _, p in pairs(players) do
+        if p.player_unit and Unit.alive(p.player_unit) then
+            return p.player_unit
+        end
+    end
+    return nil
+end
+
+local function _local_player_peer_id()
+    local pm = Managers and Managers.player
+    local lp = pm and pm:local_player()
+    return lp and lp.peer_id
+end
+
+-- v0.9.0-dev: emit dedup. CosmeticUtils.update_cosmetic_slot, PUAE
+-- .game_object_initialized, PUAE.spawn_resynced_loadout, and
+-- AttachmentUtils.hot_join_sync all call _send_la_apply for the same
+-- equip event; receivers got 3-4 cos_la_apply messages per change, which
+-- caused "Slot is not empty" errors in the create_attachment receiver and
+-- visible flicker on peers. Suppress duplicates of the same
+-- (wearer_peer, slot, kind, armoury_key) within a short window.
+local _last_emit_at = {}
+local _EMIT_DEDUP_WINDOW = 0.5
+
+-- Client-facing emit function (used by every equip call site). Routes via
+-- the host so the resulting apply is server-broadcast and consistent across
+-- peers. If we ARE the host, short-circuits the round-trip.
+_send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key)
+    if not (unit and Unit.alive(unit)) then return end
+    if not (slot_name and kind and armoury_key) then return end
+
+    local wearer_peer = nil
+    local pm = Managers and Managers.player
+    if pm and pm.owner then
+        local owner = pm:owner(unit)
+        wearer_peer = owner and owner.peer_id or nil
+    end
+    wearer_peer = wearer_peer or _local_player_peer_id()
+    if not wearer_peer then return end
+
+    local dedup_key = wearer_peer .. "|" .. tostring(slot_name) .. "|" .. tostring(kind) .. "|" .. tostring(armoury_key)
+    local now = os.clock()
+    local prev = _last_emit_at[dedup_key]
+    if prev and (now - prev) < _EMIT_DEDUP_WINDOW then
+        return  -- recent duplicate, suppress
+    end
+    _last_emit_at[dedup_key] = now
+
+    if _is_local_server() then
+        -- Record + broadcast directly. Host's own broadcast loops back to
+        -- itself via "all"; the cos_la_apply receiver applies locally.
+        _la_equips_by_peer[wearer_peer] = _la_equips_by_peer[wearer_peer] or {}
+        _la_equips_by_peer[wearer_peer][slot_name] = {
+            kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
+        }
+        mod:info("[cos_la_apply emit] HOST wearer=%s slot=%s kind=%s key=%s",
+            tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key))
+        mod:network_send("cos_la_apply", "all", {
+            wearer_peer_id = wearer_peer,
+            slot           = slot_name,
+            kind           = kind,
+            armoury_key    = armoury_key,
+            vanilla_key    = vanilla_key,
+        })
+        return
+    end
+
+    -- Client: ask the host to fan out.
+    mod:info("[cos_la_apply emit] CLIENT->req wearer=%s slot=%s kind=%s key=%s",
+        tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key))
+    mod:network_send("cos_la_apply_req", "server", {
+        slot         = slot_name,
+        kind         = kind,
+        armoury_key  = armoury_key,
+        vanilla_key  = vanilla_key,
+    })
+end
+
+local function _resolve_la_variant(armoury_key)
+    local la = get_mod("Loremasters-Armoury")
+    if not la or type(la.SKIN_LIST) ~= "table" then return nil, nil end
+    return la.SKIN_LIST[armoury_key], la
+end
+
+local function _level_world()
+    if Managers and Managers.world and Managers.world.has_world
+        and Managers.world:has_world("level_world")
+    then
+        return Managers.world:world("level_world")
+    end
+    return nil
+end
+
+-- Unified apply core. All inbound paths (cos_la_apply broadcast + pending-
+-- queue replay) converge here. Returns true if applied, false if the target
+-- unit isn't ready (caller can re-queue).
+local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanilla_key)
+    if not (owner_unit and Unit.alive(owner_unit)) then return false end
+    if not (LA_BRIDGE and LA_BRIDGE.registered) then return false end
+
+    local variant, la = _resolve_la_variant(armoury_key)
+    if not variant then
+        mod:info("[cos_la_apply] %s armoury_key %s missing from local SKIN_LIST — bail",
+            tostring(kind), tostring(armoury_key))
+        return false
+    end
+
+    if kind == "hat" then
+        if variant.swap_hand ~= "hat" then return false end
+        local la_unit_path = variant.new_units and variant.new_units[1]
+        if not la_unit_path then return false end
+        -- v0.8.64-dev: husks render 3P. v0.8.62 checked only the 1P path,
+        -- which is why "LA hats invisible on peers" reproduced — the 1P
+        -- path was present on the wearer but the 3P attachment path the
+        -- husk uses sometimes wasn't loaded on the viewer. Verify BOTH.
+        local can_get = Application and Application.can_get
+        local has_1p = can_get and can_get("unit", la_unit_path)
+        local path_3p = la_unit_path .. "_3p"
+        local has_3p = can_get and can_get("unit", path_3p)
+        if not has_1p and not has_3p then
+            mod:info("[cos_la_apply hat] %s: neither %s nor %s loadable — bail",
+                tostring(armoury_key), tostring(la_unit_path), tostring(path_3p))
+            return false
+        end
+        local clone_key = (ItemMasterList and rawget(ItemMasterList, armoury_key) and armoury_key)
+            or (vanilla_key and ItemMasterList and rawget(ItemMasterList, vanilla_key) and vanilla_key)
+        if not clone_key then
+            mod:info("[cos_la_apply hat] %s: no usable IML clone source — bail", tostring(armoury_key))
+            return false
+        end
+        local ext = ScriptUnit.has_extension(owner_unit, "attachment_system")
+        if not ext or not ext.create_attachment then return false end
+        -- v0.9.0-dev: tear down the prior attachment in this slot before
+        -- creating the new one. AttachmentUtils.create_attachment errors with
+        -- "Slot is not empty, remove attachment before creating a new one"
+        -- when a previous hat is still bound — observed on PC-A across
+        -- Pureheart_helm / Hippogryph_helm sequential equips. Bypass the
+        -- public ext:remove_attachment() because that fires rpc_remove_attachment
+        -- to peers; every cos_la_apply receiver would re-broadcast, amplifying
+        -- traffic. Direct destroy + nil the slot mirrors the local cleanup
+        -- remove_attachment() does, minus the RPC.
+        local existing_slot = ext._attachments and ext._attachments.slots and ext._attachments.slots[slot_name]
+        if existing_slot then
+            if AttachmentUtils and AttachmentUtils.destroy_attachment then
+                pcall(AttachmentUtils.destroy_attachment, ext._world, ext._unit, existing_slot)
+            end
+            ext._attachments.slots[slot_name] = nil
+        end
+        local item_data = table.clone(ItemMasterList[clone_key])
+        item_data.unit = la_unit_path
+        local ok, err = pcall(ext.create_attachment, ext, slot_name, item_data)
+        if not ok then
+            mod:info("[cos_la_apply hat] create_attachment %s failed: %s",
+                tostring(armoury_key), tostring(err))
+        end
+        -- v0.9.0.3-hotfix: paint the LA texture onto the JUST-CREATED HAT
+        -- ATTACHMENT UNIT (not the wearer's player_unit). LA's
+        -- apply_new_skin_from_texture iterates `Unit.num_meshes(unit)` on the
+        -- passed unit and writes textures to those meshes. For armor, the
+        -- player body's own meshes carry the armor texture so passing
+        -- owner_unit works. For hats, the hat is a SEPARATE attached unit
+        -- (vanilla AttachmentUtils.create_attachment spawns it and stores
+        -- the ref in slot_data.unit) — passing owner_unit paints the player
+        -- body's meshes (no-op for hat textures). The just-created hat unit
+        -- lives at ext._attachments.slots[slot_name].unit.
+        if la and type(la.apply_new_skin_from_texture) == "function" then
+            local world = _level_world()
+            local slot_data = ext._attachments and ext._attachments.slots and ext._attachments.slots[slot_name]
+            local hat_unit = slot_data and slot_data.unit
+            if world and ok and hat_unit and Unit.alive(hat_unit) then
+                LA_BRIDGE._bridge_active = true
+                local paint_ok, paint_err = pcall(la.apply_new_skin_from_texture, armoury_key, world, vanilla_key, hat_unit)
+                LA_BRIDGE._bridge_active = false
+                mod:info("[cos_la_apply hat] paint %s on hat_unit=%s ok=%s",
+                    tostring(armoury_key), tostring(hat_unit), tostring(paint_ok))
+                if not paint_ok then
+                    mod:info("[cos_la_apply hat] paint err: %s", tostring(paint_err))
+                end
+            else
+                mod:info("[cos_la_apply hat] paint skipped: world=%s ok=%s hat_unit=%s alive=%s",
+                    tostring(world ~= nil), tostring(ok), tostring(hat_unit),
+                    tostring(hat_unit and Unit.alive(hat_unit)))
+            end
+        end
+        return true
+    end
+
+    if kind == "armor" then
+        if variant.swap_hand ~= "armor" then return false end
+        if not la or type(la.apply_new_skin_from_texture) ~= "function" then return false end
+        local world = _level_world()
+        if not world then return false end
+        LA_BRIDGE._bridge_active = true
+        local ok, err = pcall(la.apply_new_skin_from_texture, armoury_key, world, vanilla_key, owner_unit)
+        LA_BRIDGE._bridge_active = false
+        if not ok then
+            mod:info("[cos_la_apply armor] %s on %s failed: %s",
+                tostring(armoury_key), tostring(owner_unit), tostring(err))
+        end
+        return true
+    end
+
+    if kind == "offhand" then
+        local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
+        local equipment = inv and inv._equipment
+        local left_unit = equipment and equipment.left_hand_wielded_unit_3p
+        if not left_unit or not Unit.alive(left_unit) then
+            -- v0.9.0.3-hotfix: silenced. Previously logged per retry → the
+            -- pending-queue's per-frame retry of an offhand equip while host
+            -- isn't wielding the shield spammed 24+ lines per equip until the
+            -- 5-second TTL expired. The behavior is correct (drops cleanly on
+            -- TTL); the noise was loud. Returning false re-queues; pending
+            -- queue runner drops the entry quietly on TTL.
+            return false
+        end
+        local world = _level_world()
+        if not world then return false end
+        LA_BRIDGE._bridge_active = true
+        local ok, err = pcall(LA_BRIDGE.apply_offhand_to_unit, world, left_unit, armoury_key, vanilla_key, "network_husk")
+        LA_BRIDGE._bridge_active = false
+        if not ok then
+            mod:info("[cos_la_apply offhand] %s on %s failed: %s",
+                tostring(armoury_key), tostring(left_unit), tostring(err))
+        end
+        return true
+    end
+
+    if kind == "illusion" then
+        if not la or type(la.apply_new_skin_from_texture) ~= "function" then return false end
+        local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
+        local equipment = inv and inv._equipment
+        local right_unit = equipment and equipment.right_hand_wielded_unit_3p
+        local left_unit_w = equipment and equipment.left_hand_wielded_unit_3p
+        if (not right_unit or not Unit.alive(right_unit))
+            and (not left_unit_w or not Unit.alive(left_unit_w)) then
+            mod:info("[cos_la_apply illusion] %s on owner %s: no live wielded weapon unit",
+                tostring(armoury_key), tostring(owner_unit))
+            return false  -- re-queue: next wield will spawn
+        end
+        local world = _level_world()
+        if not world then return false end
+        LA_BRIDGE._bridge_active = true
+        for _, target in ipairs({ right_unit, left_unit_w }) do
+            if target and Unit.alive(target) then
+                local ok, err = pcall(la.apply_new_skin_from_texture, armoury_key, world, vanilla_key, target)
+                if not ok then
+                    mod:info("[cos_la_apply illusion] %s on %s failed: %s",
+                        tostring(armoury_key), tostring(target), tostring(err))
+                end
+            end
+        end
+        LA_BRIDGE._bridge_active = false
+        return true
+    end
+
+    mod:info("[cos_la_apply] unknown kind %s — ignored", tostring(kind))
+    return false
+end
+
+local function _try_apply_by_peer(wearer_peer_id, slot_name, kind, armoury_key, vanilla_key)
+    local unit = _wearer_unit_for_peer(wearer_peer_id)
+    if not unit then return false end
+    return _apply_la_on_unit(unit, slot_name, kind, armoury_key, vanilla_key)
+end
+
+-- HOST: receives equip requests from clients, validates, records into
+-- `_la_equips_by_peer`, broadcasts the authoritative cos_la_apply to ALL.
+mod:network_register("cos_la_apply_req", function(sender_peer_id, payload)
+    if not _is_local_server() then return end  -- defense in depth
+    if type(payload) ~= "table" or not sender_peer_id then return end
+    local slot_name   = payload.slot
+    local kind        = payload.kind
+    local armoury_key = payload.armoury_key
+    local vanilla_key = payload.vanilla_key
+    if not (slot_name and kind and armoury_key) then return end
+    if not (LA_BRIDGE and LA_BRIDGE.registered and LA_BRIDGE.armoury_to_backend[armoury_key]) then
+        mod:info("[cos_la_apply_req] reject from %s: unknown armoury_key %s",
+            tostring(sender_peer_id), tostring(armoury_key))
+        return
+    end
+    _la_equips_by_peer[sender_peer_id] = _la_equips_by_peer[sender_peer_id] or {}
+    _la_equips_by_peer[sender_peer_id][slot_name] = {
+        kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
+    }
+    mod:network_send("cos_la_apply", "all", {
+        wearer_peer_id = sender_peer_id,
+        slot           = slot_name,
+        kind           = kind,
+        armoury_key    = armoury_key,
+        vanilla_key    = vanilla_key,
+    })
+end)
+
+-- v0.9.0-dev: peer-disconnect cleanup. Without this _la_equips_by_peer grows
+-- unboundedly across the host's session, and stale entries replay on hot_join
+-- for peers who left long ago (visible if they share peer_id with a future
+-- joiner, which Steam sometimes recycles). Also clears _last_emit_at so the
+-- dedup window doesn't suppress legitimate fresh emits after re-join.
+if rawget(_G, "PlayerManager") then
+    mod:hook_safe(PlayerManager, "remove_player", function(self, peer_id, local_player_id)
+        if not peer_id then return end
+        if _la_equips_by_peer and _la_equips_by_peer[peer_id] then
+            mod:info("[cos_la_apply] peer %s left — purging _la_equips_by_peer entry", tostring(peer_id))
+            _la_equips_by_peer[peer_id] = nil
+        end
+        if _last_emit_at then
+            for k, _ in pairs(_last_emit_at) do
+                if type(k) == "string" and k:sub(1, #tostring(peer_id) + 1) == (tostring(peer_id) .. "|") then
+                    _last_emit_at[k] = nil
+                end
+            end
+        end
+        -- v0.9.0-dev: also drop per-peer glow cache. Stale entries would
+        -- bleed into any future peer who somehow reuses the same peer_id
+        -- (Steam recycles occasionally), and the cache grows otherwise.
+        if mod._glow_by_peer and mod._glow_by_peer[peer_id] then
+            mod:info("[cos_glow_apply] peer %s left — purging _glow_by_peer entry", tostring(peer_id))
+            mod._glow_by_peer[peer_id] = nil
+        end
+    end)
+end
+
+-- ALL PEERS: receives the authoritative apply broadcast. Only accept it from
+-- the host (defense against malicious peers spoofing).
+mod:network_register("cos_la_apply", function(sender_peer_id, payload)
+    if type(payload) ~= "table" then return end
+    local host = _host_peer_id()
+    if host and sender_peer_id ~= host then
+        mod:info("[cos_la_apply] reject non-host sender %s (host=%s)",
+            tostring(sender_peer_id), tostring(host))
+        return
+    end
+    local wearer       = payload.wearer_peer_id
+    local slot_name    = payload.slot
+    local kind         = payload.kind
+    local armoury_key  = payload.armoury_key
+    local vanilla_key  = payload.vanilla_key
+    if not (wearer and slot_name and kind and armoury_key) then return end
+
+    local applied = _try_apply_by_peer(wearer, slot_name, kind, armoury_key, vanilla_key)
+    mod:info("[cos_la_apply recv] from=%s wearer=%s slot=%s kind=%s key=%s applied=%s",
+        tostring(sender_peer_id), tostring(wearer), tostring(slot_name),
+        tostring(kind), tostring(armoury_key), tostring(applied))
+    if not applied then
+        -- Wearer unit not spawned locally yet (loading screen race / late
+        -- network spawn / husk not wielding the right slot). Queue and retry
+        -- on mod.update for up to 5 seconds.
+        _la_pending_apply[#_la_pending_apply + 1] = {
+            wearer, slot_name, kind, armoury_key, vanilla_key, os.clock() + 5,
+        }
+    end
+end)
+
+-- ============================================================
+-- v0.9.0-dev: per-peer GLOW broadcast channel.
+--
+-- Architecture mirrors cos_la_apply: client → cos_glow_apply_req → host →
+-- cos_glow_apply broadcast to all. Host short-circuits its own emit (records
+-- locally + broadcasts). Receivers cache in _glow_by_peer; the apply hooks
+-- (see _hook_apply_with_template_mutation, _apply_glow_override etc.) look
+-- up wearer-of-unit at paint time and read from the cache instead of local
+-- mod:get when painting remote husks.
+--
+-- Payload is small (~50 chars JSON: 12 numbers + 5 enum strings + 2 booleans)
+-- so chunking isn't needed — well under STRING_MAX=500.
+--
+-- Triggers for broadcast:
+--   * mod.on_setting_changed for any "glow_*" setting → re-emit
+--   * Initial fire once the LA bridge inits (first frame where bridge is up)
+--   * Every game-state-changed (keep enter, mission start) → re-emit, in
+--     case peers' caches were cleared on disconnect/reconnect.
+-- ============================================================
+
+local _GLOW_SETTING_KEYS = {
+    "glow_override_enable",
+    "glow_override_preset",
+    "glow_per_channel_color_enable",
+    "glow_color_lower_gradient",
+    "glow_color_upper_gradient",
+    "glow_color_dots",
+    "glow_mult_master",
+    "glow_mult_rune",
+    "glow_mult_glow_high",
+    "glow_mult_glow_low",
+    "glow_mult_smoke_high",
+    "glow_mult_smoke_low",
+    "glow_mult_dots",
+}
+
+local function _collect_local_glow_state()
+    local state = {}
+    for _, key in ipairs(_GLOW_SETTING_KEYS) do
+        state[key] = mod:get(key)
+    end
+    return state
+end
+
+-- Send the local player's glow state to peers. Host: record + broadcast
+-- directly. Client: route via host (server-authoritative — same pattern as
+-- cos_la_apply). Re-call this any time glow settings change OR when joining
+-- a session.
+local _glow_emit_pending = false
+local _glow_last_emit_at = 0
+local _GLOW_EMIT_THROTTLE = 0.3  -- coalesce rapid setting changes
+
+local function _send_local_glow_state()
+    -- v0.9.0-hotfix: `Managers.player:local_player()` calls the engine's
+    -- `peer_id()` C function which asserts "Network backend has not been set"
+    -- if invoked before the network backend is initialized (boot → title →
+    -- pre-keep). VMF's safe-call wrapper traps the error but spams it once per
+    -- frame from `_glow_sync_tick` while `_glow_emit_pending` stays true. PC-B
+    -- log captured 7864× → 36 MB log in one session. Defer with pcall + leave
+    -- pending true; next frame's mod.update will retry.
+    local pm = Managers and Managers.player
+    if not pm or not pm.local_player then
+        _glow_emit_pending = true
+        return
+    end
+    local ok, lp = pcall(pm.local_player, pm)
+    if not ok or not lp then
+        -- Network backend not up yet (engine-level peer_id error). Stay
+        -- pending; next frame will retry.
+        _glow_emit_pending = true
+        return
+    end
+    local local_peer = lp.peer_id
+    if not local_peer then
+        _glow_emit_pending = true
+        return
+    end
+    local state = _collect_local_glow_state()
+    if _is_local_server() then
+        -- Host: record + broadcast (own broadcast loops back via "all").
+        _glow_by_peer[local_peer] = state
+        mod:network_send("cos_glow_apply", "all", {
+            wearer_peer_id = local_peer,
+            state = state,
+        })
+    else
+        mod:network_send("cos_glow_apply_req", "server", {
+            state = state,
+        })
+    end
+    _glow_emit_pending = false
+    _glow_last_emit_at = os.clock()
+end
+
+-- Pump pending re-emits (called from mod.update). Used when the local player
+-- isn't fully spawned yet at the moment a setting change fires.
+-- v0.9.0-hotfix: gate on Managers.state.network being up so the inner
+-- pm:local_player() call never sees a half-initialized backend. Cheap check
+-- (~1 nil-test) and eliminates the cascade described in _send_local_glow_state.
+mod._glow_sync_tick = function(dt)
+    if not _glow_emit_pending then return end
+    local now = os.clock()
+    if (now - _glow_last_emit_at) < _GLOW_EMIT_THROTTLE then return end
+    local sn = Managers and Managers.state and Managers.state.network
+    if not sn or not sn.game then return end  -- backend not ready, retry next frame
+    _send_local_glow_state()
+end
+
+-- HOST: receives glow state from a client, validates, broadcasts to all.
+mod:network_register("cos_glow_apply_req", function(sender_peer_id, payload)
+    if not _is_local_server() then return end  -- defense in depth
+    if type(payload) ~= "table" or type(payload.state) ~= "table" then return end
+    if not sender_peer_id then return end
+    _glow_by_peer[sender_peer_id] = payload.state
+    mod:network_send("cos_glow_apply", "all", {
+        wearer_peer_id = sender_peer_id,
+        state = payload.state,
+    })
+end)
+
+-- ALL PEERS: receives the authoritative glow broadcast. Only accept from host.
+mod:network_register("cos_glow_apply", function(sender_peer_id, payload)
+    if type(payload) ~= "table" or type(payload.state) ~= "table" then return end
+    local host = _host_peer_id()
+    if host and sender_peer_id ~= host then
+        mod:info("[cos_glow_apply] reject non-host sender %s (host=%s)",
+            tostring(sender_peer_id), tostring(host))
+        return
+    end
+    local wearer = payload.wearer_peer_id
+    if not wearer then return end
+    _glow_by_peer[wearer] = payload.state
+end)
+
+-- HOST: when a new peer joins, rebroadcast every known peer's glow state
+-- to "all" (which reaches the new joiner) so they have everyone's state
+-- before they start spawning husks. Wired into the existing hot_join_sync
+-- hook below via the rebroadcast helper.
+local function _glow_rebroadcast_all_for_hot_join()
+    if not _is_local_server() then return end
+    for wearer_peer, state in pairs(_glow_by_peer) do
+        mod:network_send("cos_glow_apply", "all", {
+            wearer_peer_id = wearer_peer,
+            state = state,
+        })
+    end
+end
+mod._glow_rebroadcast_all_for_hot_join = _glow_rebroadcast_all_for_hot_join
+
+-- Public hook for VMF's on_setting_changed (existing handler at line 608
+-- forwards here for glow_* settings). Schedule rather than emit immediately
+-- so a single VMF settings-page save doesn't burst N RPCs for N changed
+-- settings — the throttle in _glow_sync_tick coalesces.
+mod._on_glow_setting_changed = function()
+    _glow_emit_pending = true
+end
+
+-- Map an LA-keyed attachment slot to its cos_la_apply kind. Currently only
+-- slot_hat flows through the attachment path; slot_skin is "cosmetic"
+-- category and arrives via CosmeticUtils.update_cosmetic_slot instead.
+local function _attachment_slot_to_kind(slot_name)
+    if slot_name == "slot_hat" then return "hat" end
+    return nil
+end
+
+-- PUAE is a class, string-form hook is correct.
+mod:hook("PlayerUnitAttachmentExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
+    local slots = self._attachments and self._attachments.slots
+    local restore = nil
+    local la_slots = nil  -- entries: { slot_name, la_backend_id, vanilla_key }
+    if slots then
+        for slot_name, slot_data in pairs(slots) do
+            local item_data = slot_data and slot_data.item_data
+            local orig = item_data and item_data.name
+            local vanilla = _la_substitute_name(orig)
+            if vanilla then
+                restore = restore or {}
+                restore[#restore + 1] = { item_data, orig }
+                item_data.name = vanilla
+                la_slots = la_slots or {}
+                la_slots[#la_slots + 1] = { slot_name, orig, vanilla }
+            end
+        end
+    end
+    local ok, err = pcall(func, self, unit, unit_go_id)
+    if restore then
+        for i = 1, #restore do
+            restore[i][1].name = restore[i][2]
+        end
+    end
+    if not ok then error(err) end
+    if la_slots then
+        for i = 1, #la_slots do
+            local slot_name, la_id, vanilla = la_slots[i][1], la_slots[i][2], la_slots[i][3]
+            local kind = _attachment_slot_to_kind(slot_name)
+            local armoury_key = LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[la_id]
+            if kind and armoury_key then
+                _send_la_apply(unit, slot_name, kind, armoury_key, vanilla)
+            end
+        end
+    end
+end)
+
+mod:hook("PlayerUnitAttachmentExtension", "spawn_resynced_loadout", function(func, self, item_to_spawn)
+    local item_data = item_to_spawn and item_to_spawn.item_data
+    local orig = item_data and item_data.name
+    local vanilla = _la_substitute_name(orig)
+    if vanilla then
+        item_data.name = vanilla
+        local ok, err = pcall(func, self, item_to_spawn)
+        item_data.name = orig
+        if not ok then error(err) end
+        local slot_name = item_to_spawn.slot_id
+        local kind = slot_name and _attachment_slot_to_kind(slot_name)
+        local armoury_key = LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[orig]
+        if kind and armoury_key and self._unit then
+            _send_la_apply(self._unit, slot_name, kind, armoury_key, vanilla)
+        end
+        return
+    end
+    return func(self, item_to_spawn)
+end)
+_net_safe_hook_status.PUAE = true
+
+-- AttachmentUtils is a PLAIN TABLE (`AttachmentUtils = AttachmentUtils or {}`
+-- at attachment_utils.lua:1). Same string-form pitfall as CosmeticUtils/
+-- LoadoutUtils — must use table-form with nil guard, else hook silently
+-- never registers.
+if AttachmentUtils then
+    mod:hook(AttachmentUtils, "hot_join_sync", function(func, peer_id, unit, slots, synced_buffs)
+        local restore = nil
+        local la_slots = nil  -- entries: { slot_name, la_backend_id, vanilla_key }
+        if slots then
+            for slot_name, slot_data in pairs(slots) do
+                local orig = slot_data and slot_data.name
+                local vanilla = _la_substitute_name(orig)
+                if vanilla then
+                    restore = restore or {}
+                    restore[#restore + 1] = { slot_data, orig }
+                    slot_data.name = vanilla
+                    la_slots = la_slots or {}
+                    la_slots[#la_slots + 1] = { slot_name, orig, vanilla }
+                end
+            end
+        end
+        local ok, err = pcall(func, peer_id, unit, slots, synced_buffs)
+        if restore then
+            for i = 1, #restore do
+                restore[i][1].name = restore[i][2]
+            end
+        end
+        if not ok then error(err) end
+        -- v0.8.67-dev: signature change — _send_la_apply now routes through
+        -- the host (server-authoritative). The host's broadcast to "all"
+        -- includes the joining peer, so per-peer targeting is no longer
+        -- needed. Each existing peer's hot_join_sync still fires its own
+        -- emits for its own equips; the host receives each request, records
+        -- in _la_equips_by_peer (idempotent overwrite), and re-broadcasts.
+        -- Slight redundancy (each peer's equips broadcast to everyone again
+        -- on each new joiner), but correct.
+        if la_slots then
+            for i = 1, #la_slots do
+                local slot_name, la_id, vanilla = la_slots[i][1], la_slots[i][2], la_slots[i][3]
+                local kind = _attachment_slot_to_kind(slot_name)
+                local armoury_key = LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[la_id]
+                if kind and armoury_key then
+                    _send_la_apply(unit, slot_name, kind, armoury_key, vanilla)
+                end
+            end
+        end
+
+        -- Replay non-attachment LA cosmetics (slot_skin armor, weapon-slot
+        -- offhand picks, weapon-illusion paints). AttachmentUtils.hot_join_sync
+        -- only walks "attachment"-category slots so these need explicit replay.
+        --
+        -- v0.9.0-dev: previously read ONLY `_local_la_equips[unit]`, which is
+        -- populated solely by the local player's CosmeticUtils.update_cosmetic_slot
+        -- hook → contains entries only for the LOCAL player's player_unit. When
+        -- the host's hot_join_sync iterates OTHER existing players to replay
+        -- their state to the new joiner, the lookup misses for every non-local
+        -- unit, so the new joiner never received those peers' armor/illusion
+        -- selections. Now we ALSO consult `_la_equips_by_peer` (authoritative
+        -- per-peer store, populated by the host's cos_la_apply_req handler) and
+        -- replay every recorded slot for the wearer-peer.
+        do
+            local equips = _local_la_equips[unit]
+            if equips then
+                for slot_name, la_id in pairs(equips) do
+                    local kind = nil
+                    if slot_name == "slot_skin" then
+                        kind = "armor"
+                    elseif slot_name ~= "slot_hat" then
+                        kind = "illusion"
+                    end
+                    local armoury_key = LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[la_id]
+                    local vanilla = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[la_id]
+                    if (kind == "armor" or kind == "illusion") and armoury_key then
+                        _send_la_apply(unit, slot_name, kind, armoury_key, vanilla)
+                    end
+                end
+            end
+
+            -- v0.9.0-dev: authoritative replay for OTHER peers' equips. Only
+            -- the host has _la_equips_by_peer populated for every peer; on
+            -- clients this no-ops (table is empty). Replay every recorded
+            -- (slot, kind, armoury_key) so the new joiner sees the same state
+            -- the host's broadcasts already established with existing peers.
+            if _is_local_server() then
+                local pm = Managers and Managers.player
+                local owner = pm and pm.owner and pm:owner(unit)
+                local wearer_peer = owner and owner.peer_id
+                local peer_equips = wearer_peer and _la_equips_by_peer[wearer_peer]
+                if peer_equips then
+                    for slot_name, entry in pairs(peer_equips) do
+                        if entry and entry.kind and entry.armoury_key then
+                            _send_la_apply(unit, slot_name, entry.kind, entry.armoury_key, entry.vanilla_key)
+                        end
+                    end
+                end
+                -- v0.9.0-dev: also rebroadcast every peer's glow state so the
+                -- new joiner's _glow_by_peer cache is populated before any of
+                -- their husk units start spawning.
+                if mod._glow_rebroadcast_all_for_hot_join then
+                    mod._glow_rebroadcast_all_for_hot_join()
+                end
+            end
+
+            -- Offhand: replay the local player's CURRENTLY-wielded weapon
+            -- backend if it has an LA offhand selection.
+            local pm = Managers and Managers.player
+            local local_player = pm and pm:local_player()
+            local local_unit = local_player and local_player.player_unit
+            if local_unit == unit then
+                local inv = ScriptUnit.has_extension(unit, "inventory_system")
+                local equipment = inv and inv._equipment
+                local wielded_slot = equipment and equipment.wielded_slot
+                local slot_data = wielded_slot and equipment.slots and equipment.slots[wielded_slot]
+                local item_data = slot_data and slot_data.item_data
+                local bid = item_data and item_data.backend_id
+                local sel = bid and _offhand_selection[bid]
+                if sel and sel.la_armoury_key then
+                    _send_la_apply(unit, wielded_slot, "offhand",
+                        sel.la_armoury_key, sel.vanilla_skin)
+                end
+            end
+        end
+    end)
+    _net_safe_hook_status.AttachmentUtils = true
+end
+
+-- Startup verification: log applied/missing state for every plain-table
+-- net-safe hook. Helps catch the silent-no-op failure mode where a
+-- required helper table wasn't loaded yet at mod init (no runtime
+-- indication other than a peer crash).
+mod:info("[net-safe] hook registration: CosmeticUtils=%s LoadoutUtils=%s AttachmentUtils=%s PUAE=%s",
+    tostring(_net_safe_hook_status.CosmeticUtils),
+    tostring(_net_safe_hook_status.LoadoutUtils),
+    tostring(_net_safe_hook_status.AttachmentUtils),
+    tostring(_net_safe_hook_status.PUAE))
+if not (_net_safe_hook_status.CosmeticUtils and _net_safe_hook_status.LoadoutUtils
+    and _net_safe_hook_status.AttachmentUtils and _net_safe_hook_status.PUAE) then
+    mod:echo("[cosmetics_tweaker] WARNING: one or more LA peer-sync hooks did NOT register. Restart VT2 if you plan to play LA cosmetics in a lobby.")
+end
+
 -- VMF calls mod.update once per frame.
 -- CLARIFY: la_bridge initialization is deferred to first frame where:
 --   1. user has la_bridge_enable toggle on
@@ -3023,12 +4325,30 @@ end
 -- If user toggles la_bridge_enable mid-session, this picks it up next
 -- frame. But TOGGLING OFF requires a restart — registered IML entries are
 -- not removed (no public unregister API on MIL).
+-- v0.9.0-dev: warn ONCE when MoreItemsLibrary is missing. PC-B going 4 days
+-- with the bridge silently dormant cost a multi-day debug — a clear log line
+-- is cheap insurance.
+local _la_bridge_missing_dep_logged = false
 mod.update = function(dt)
     if not _la_bridge_init_done then
+        local has_la  = get_mod("Loremasters-Armoury") ~= nil
+        local has_mil = get_mod("MoreItemsLibrary") ~= nil
+        if not _la_bridge_missing_dep_logged
+            and mod:get("la_bridge_enable") and ItemMasterList
+            and (not has_la or not has_mil) then
+            if not has_mil then
+                mod:echo("[cosmetics_tweaker] MoreItemsLibrary is NOT subscribed/active. LA bridge stays dormant — host/client LA cosmetics will NOT sync. Subscribe: https://steamcommunity.com/sharedfiles/filedetails/?id=1422758813")
+                mod:info("[LA bridge] dependency missing: MoreItemsLibrary (Workshop ID 1422758813). bridge will stay dormant.")
+            end
+            if not has_la then
+                mod:info("[LA bridge] dependency missing: Loremaster's Armoury. bridge will stay dormant.")
+            end
+            _la_bridge_missing_dep_logged = true
+        end
         if mod:get("la_bridge_enable")
            and ItemMasterList
-           and get_mod("Loremasters-Armoury")
-           and get_mod("MoreItemsLibrary") then
+           and has_la
+           and has_mil then
             LA_BRIDGE.register_all()
             LA_BRIDGE.install_apply_gate()
             -- v0.8.31 REVERT: skin injection (v0.8.29-30) didn't match
@@ -3044,6 +4364,32 @@ mod.update = function(dt)
     end
     if _la_bridge_init_done then _install_skin_loadout_safety() end
     if mod._glow_scan_tick then mod._glow_scan_tick(dt) end
+
+    -- v0.9.0-dev: TPE per-frame tick was previously in a now-deleted earlier
+    -- mod.update definition that this one overwrote. Restoring here.
+    if TPE and TPE.update then TPE.update(dt) end
+
+    -- v0.9.0-dev: pump glow-state broadcast pending re-emits.
+    if mod._glow_sync_tick then mod._glow_sync_tick(dt) end
+
+    -- v0.8.67-dev: drain the cos_la_apply pending queue. Entries that can't
+    -- apply yet (wearer unit not spawned, husk not wielding the right slot)
+    -- get retried each frame until they succeed or their 5-second deadline
+    -- expires. Bounded retry prevents the queue from leaking on rare cases
+    -- where a wearer's unit never spawns (e.g. player disconnected before
+    -- replicating into our game session).
+    if _la_pending_apply and #_la_pending_apply > 0 then
+        local now = os.clock()
+        local kept = {}
+        for i = 1, #_la_pending_apply do
+            local entry = _la_pending_apply[i]
+            local wp, slot, kind, ak, vk, deadline = entry[1], entry[2], entry[3], entry[4], entry[5], entry[6]
+            if not _try_apply_by_peer(wp, slot, kind, ak, vk) and now < deadline then
+                kept[#kept + 1] = entry
+            end
+        end
+        _la_pending_apply = kept
+    end
 end
 
 -- ============================================================
@@ -3150,9 +4496,9 @@ mod:command("glow_dump", "Dump wielded weapon unit metadata: mesh + material cou
     if _flush_log then _flush_log() end
 end)
 
-mod:command("glow_probe", "Paint wielded weapon's chosen variable to bright HDR red. Usage: cos glow_probe <varname>", function(varname)
+mod:command("glow_probe", "Paint wielded weapon's chosen variable to bright HDR red. Usage: /glow_probe <varname>", function(varname)
     if not varname or varname == "" then
-        mod:echo("[glow_probe] usage: cos glow_probe <varname> — e.g. cos glow_probe emissive_color")
+        mod:echo("[glow_probe] usage: /glow_probe <varname> — e.g. /glow_probe emissive_color")
         return
     end
     local units = _wielded_units_for_probe()
@@ -3308,8 +4654,8 @@ mod:command("la_trace", "Toggle LA-bridge hook tracing (1/0)", function(arg)
     mod:echo("[la_bridge] trace = " .. tostring(LA_BRIDGE.trace))
 end)
 
-mod:command("la_force", "Force-apply LA variant to equipped hat. Usage: cos la_force <armoury_key>", function(armoury_key)
-    if not armoury_key then mod:echo("usage: cos la_force <armoury_key>"); return end
+mod:command("la_force", "Force-apply LA variant to equipped hat. Usage: /la_force <armoury_key>", function(armoury_key)
+    if not armoury_key then mod:echo("usage: /la_force <armoury_key>"); return end
     LA_BRIDGE.force_apply(armoury_key)
 end)
 

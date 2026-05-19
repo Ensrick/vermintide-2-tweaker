@@ -69,6 +69,37 @@ of Ubersreik" outfits — natural starting point):
   takes a `career_name` and a profile/career index pair. Required before
   adding any other career.
 
+## Known issues (defer)
+
+- [ ] **Smallest portrait size uses a different source image in some spots.**
+  In certain UI surfaces, the smallest portrait variant (60×70) appears
+  to draw from a separate underlying image rather than a downscale of
+  the medium portrait — so the custom portrait doesn't propagate there.
+  Current asset pipeline (`tools/add_portrait.ps1`) derives the 60×70
+  via bicubic-resize + borrowed alpha from `small_portrait_kruber_mercenary_hat_0001.png`,
+  which assumes one shared small-size texture per portrait. Need to
+  identify which surfaces consume a distinct small-size asset and
+  author/wire those separately. Not blocking — file under "for later".
+- [ ] **Killfeed portrait icon doesn't update.** The small portrait
+  shown in the killfeed (player-name row when downed/killed/revived)
+  still renders the vanilla hat-keyed texture. May be the same
+  separate-small-source issue above, or may be a different code path
+  entirely (killfeed could be reading a hat-keyed material directly
+  rather than going through `career_settings.portrait_image` /
+  `picking_image`). Investigate via `portrait_dump` while a killfeed
+  entry is on screen.
+- [ ] **Bot portraits in CW / Versus menus show campaign cosmetics,
+  not the mode's actual loadout.** In Chaos Wastes and Versus menu
+  surfaces, a bot character's portrait reflects whichever hat/outfit
+  the player last equipped in **campaign** mode — not the cosmetic
+  the bot is actually wearing in CW/Versus. In-mission, the same bot
+  does get the correct portrait for its CW/Versus loadout, so the
+  detection works for live player_units; the gap is in the menu-side
+  lookup, which appears to read the campaign profile's cosmetic
+  selection rather than the current mode's. Investigate which
+  cosmetic-source the menu surface is reading from when the
+  character is a bot (vs. a player) in CW/Versus.
+
 ## Out of scope (deferred indefinitely)
 
 - **Cross-character hat unlocks for portraits.** If/when cosmetics_tweaker

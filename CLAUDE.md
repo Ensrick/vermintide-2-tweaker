@@ -23,6 +23,7 @@ A modular set of **Vermintide 2** VMF (Vermintide Mod Framework) mods written in
 | la_prefix_patch | `la_prefix_patch` | 3721067411 | **VMB** | Loads above Loremaster's Armoury: silently drops its three duplicate hook registrations to keep startup chat clean, and offers VMF toggles to suppress LA's quest markers and unread-letter notifications |
 | event_tweaker | `event_tweaker` | 3721290755 | **VMB** | Host-side mutator picker (Workshop title "Tweaker: Events"). VMF dropdown for canonical event presets (Geheimnisnacht / Skulls — drives mutator + active_events string + keep-level swap) plus checkbox-per-mutator across difficulty / specials / hordes / atmosphere / objectives / winds / raw event categories. Three hooks: `BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`. Scaffolded 2026-05-06 |
 | modded_progression | `mp` | (unpublished) | **VMB** | Re-enables 100% of vanilla VT2 progression in modded realm: XP, shillings, loot chests, Okri's Challenges, Lohner's Emporium, keep crafting bench. Intercepts `BackendInterface*Playfab` methods; writes through `backend_mirror` mutators; persists locally via VMF settings; never commits to PlayFab. Sibling API (`mp.is_unlocked` / `mp.spend` / `mp.credit` / `mp.grant_item`) consumed by CWV + cosmetics_tweaker when both installed. Three starting-state options. See `modded_progression/PLAN.md` for full design. Scaffolded 2026-05-14 |
+| lobby_tweaker | `lobby_tweaker` | (unpublished) | **VMB** | Workshop title "Tweaker: Lobby" (friends_only). Host-side lobby controls (slot reservations, session ignore list, kick-on-idle, MOTD) + modded-realm failed-join mod-list reveal: host pre-publishes a per-mod manifest to Steam `lobby_data`; client reads it back at hash-mismatch popup time (`state_loading.lua:1084`) and surfaces which `client_required` mods the joiner is missing. Subsumes the prior `modded_matchmaking` project. Chat commands namespaced `/lt_*`. Scaffolded 2026-05-19 |
 | tweaker (legacy) | `t` | 3704660429 | Stingray SDK | Deprecated — split into above mods |
 
 <!-- REVIEW: This entire SDK block is now relevant ONLY for the legacy /tweaker source. After the 2026-05-01 VMB migration, every active mod (wt/ct/gt/crt/cosmetics_tweaker/enemy_tweaker/character_weapon_variants) is built via VMB. Consider collapsing this section to a single line ("legacy /tweaker only — see old-backup/ scripts") and putting the VMB block first. As-is, an AI agent skimming this file will see the SDK commands and may assume they apply to active mods. -->
@@ -214,6 +215,8 @@ Cross-career weapons need animation redirects on the **3P side only** because di
 2. **`_career_anim_redirect`**: career-prefix-aware redirects
 3. **`_suffix_career_map`**: suffix-based event swaps
 
+For full **cross-character ports** (weapon X playable by character Y, rendered as Y's own 3P mesh + anims — e.g. brace-on-Kruber → Repeating Handgun, longbow-on-Saltzpyre → Crossbow), read `weapon_tweaker/CROSS_CHARACTER_PORT_RECIPE.md`. Seven-step procedure, failure-mode table, line citations into `weapon_tweaker.lua`, and verification matrix. Covers template patcher + force-load + in-mission unit swap + preview unit swap.
+
 ### Custom Illusion Injection (cosmetics_tweaker)
 
 To add new selectable weapon skins at runtime, inject into three tables:
@@ -228,7 +231,54 @@ Then hook `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` to mark cu
 <!-- REVIEW: "No `goto` in SDK mods" is now only relevant for the legacy /tweaker mod. Every active mod is VMB and supports `goto`. Phrasing implies this is still a per-mod concern. -->
 - **Lua 5.1** — use `unpack()`, NOT `table.unpack()`. No `goto` in SDK mods (available in VMB-built mods, including chaos_wastes_tweaker now that it's VMB).
 - Game globals: `ItemMasterList`, `WeaponSkins`, `Weapons`, `BackendUtils`, `GearUtils`, `Managers`, `Unit`, `World`, `Vector3`, `Quaternion`, `Material`, `Color`
-- Console commands registered via `mod:command("name", "description", function(...) end)` — invoked in-game as `<prefix> <command>` (e.g. `wt dump`, `cos probe_hat`)
+- Console commands registered via `mod:command("name", "description", function(...) end)` — invoked in-game as `/<name>` directly (e.g. `/dump`, `/probe_hat`). There is NO mod-id prefix in chat: the mod-id you see in code (`wt`, `cos`, `ct`, etc.) is the mod's internal identifier, not a chat prefix. Documentation showing `/<mod> <command>` is wrong.
+
+## DLC Ownership Gate (cross-mod)
+
+**Modded mods unlock vanilla progression (career levels, crafting materials, XP grind), NOT paid DLC content.** When a mod surfaces / unlocks / grants items the player wouldn't otherwise have access to, it MUST respect the vanilla DLC paywall. Vanilla gate (used by the base game everywhere):
+
+```lua
+local data = rawget(<MasterTable>, key)        -- ItemMasterList / CareerSettings / DLCSettings / etc.
+if data and data.required_dlc and Managers.unlock
+   and not Managers.unlock:is_dlc_unlocked(data.required_dlc) then
+    -- player does NOT own this DLC — skip
+end
+```
+
+The DLC id lives on the master entry (`required_dlc` field). For tables that don't carry that field directly (mutator templates, level variations), look up the DLC by name in `scripts/settings/dlc_settings.lua` — entries register their content lists there. Pre-check with `Managers.unlock:dlc_exists(id)` before `is_dlc_unlocked(id)` to avoid the fassert at `unlock_manager.lua:527`.
+
+**Three places the gate applies:**
+1. **Enumerations** that walk `ItemMasterList` / `WeaponSkins.skins` / `CareerSettings` and surface entries to the player (e.g. crafting recipe lists, illusion grids, talent-swap dropdowns).
+2. **Unlock hooks** that write into the backend mirror (e.g. `get_unlocked_weapon_skins`, `get_unlocked_cosmetics`, `get_unlocked_hero_portrait_frames`). Filter before the `mirror._unlocked_*[k] = true` write.
+3. **Injection hooks** that push content into the lobby (e.g. event_tweaker's `get_special_events` / `get_active_events`). Filter before injection — the engine catches missing DLC at level-load with a confusing failure, so the mod should drop the entry cleanly instead.
+
+**Helper pattern:** define a tiny `_X_requires_unowned_dlc(key) -> bool` per file (or shared via `mod._foo` for cross-file use). Examples:
+- `cosmetics_tweaker.lua:43` — `_skin_requires_unowned_dlc(skin_key)` (reads `ItemMasterList`)
+- `crafting_in_modded/illusion_swap.lua:51` — `_skin_requires_unowned_dlc(skin_key)` (same pattern, scoped to skins)
+- `crafting_in_modded/standard_forge.lua:~40` — `_item_requires_unowned_dlc(item_key)` (weapons), exposed as `mod._cim_item_requires_unowned_dlc`
+- `career_tweaker.lua:77` — `_career_requires_unowned_dlc(career_name)` (reads `CareerSettings`)
+- `event_tweaker.lua:23-64` — `DLC_BY_MUTATOR` / `DLC_BY_PRESET` tables + `owns_dlc(dlc_id)` helper (mutator templates don't carry `required_dlc` directly)
+
+**Intentional exceptions.** `character_weapon_variants._build_entry()` (`character_weapon_variants.lua:~7895`) DELIBERATELY strips `required_dlc = nil` on its cloned variant entries because CWV variants are new mod-created items reusing base-package meshes — they are not the DLC content itself. Don't "fix" this. The blanket clearing is documented in CHANGELOG and CODE_REVIEW.md.
+
+**DLC ids (verified 2026-05-18 against decompiled source `c:\Users\danjo\source\repos\Vermintide-2-Source-Code\scripts\settings\dlcs\`):**
+
+| Career / Content | DLC id |
+|---|---|
+| Grail Knight (`es_questingknight`) | `lake` |
+| Warrior Priest (`wh_priest`) | `bless` |
+| Necromancer (`bw_necromancer`) | `shovel` |
+| Outcast Engineer (`dr_engineer`) | `cog` |
+| Sister of the Thorn (`we_thornsister`) | `woods` |
+| Geheimnisnacht 2021 / Hard Mode mutators | `geheimnisnacht_2021` |
+| Geheimnisnacht 2025 ritual-site engine | `geheimnisnacht_2025` |
+| Skulls 2023 mutator | `skulls_2023` |
+| Bardin Outcast Engineer's Cog | `cog` |
+| Lake (Bretonnia) — used by `es_sword_shield_breton` etc. | `lake` |
+
+For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs/<dlc>/item_master_list_<dlc>.lua` to see which `ItemMasterList` keys carry the `required_dlc` field.
+
+**Audit history:** 2026-05-18 fan-out audit (`crafting_in_modded` v0.7.9-dev, `cosmetics_tweaker` v0.8.65-dev, `career_tweaker` v0.2.20-dev, `event_tweaker` v0.4.1-dev) caught and fixed four bypasses. Verified clean at the same date: `weapon_tweaker`, `chaos_wastes_tweaker`, `modded_progression` (scaffolding only — re-audit when loot hooks land), `enemy_tweaker`, `dynamic_cosmetic_portraits`, `general_tweaker`, `la_prefix_patch`. When adding any new unlock surface to any mod, walk the three-places checklist above before merge.
 
 ## Important Constraints
 

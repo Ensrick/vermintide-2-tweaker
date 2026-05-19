@@ -35,15 +35,38 @@ mod._cim_standard_forge_active = false
 
 local function _is_active() return mod._cim_standard_forge_active end
 
+-- DLC ownership gate. Vanilla weapons gated behind unowned DLC stay locked
+-- even in modded realm — modded crafting is a power-up over the vanilla
+-- progression unlocks (career levels, crafting materials), NOT a bypass for
+-- paid DLC content. Same `Managers.unlock:is_dlc_unlocked` check the game
+-- uses elsewhere, and same pattern illusion_swap.lua uses for skins.
+local function _item_requires_unowned_dlc(item_key)
+    if not item_key or not ItemMasterList then return false end
+    local data = rawget(ItemMasterList, item_key)
+    if not data or not data.required_dlc then return false end
+    if not Managers.unlock then return false end
+    return not Managers.unlock:is_dlc_unlocked(data.required_dlc)
+end
+
+mod._cim_item_requires_unowned_dlc = _item_requires_unowned_dlc
+
 -- Both the desktop ("HeroWindowCrafting") and inventory-tab/gamepad
 -- ("HeroWindowCraftingConsole") variants need lifecycle hooks. The user's
 -- Crashify trace showed `Enter Substate HeroWindowCraftingConsole` on PC —
 -- the inventory crafting tab uses the Console class regardless of input
 -- device, so missing this variant let the craft request through to PlayFab
 -- → EAC challenge → kick (BACKEND_PLAYFAB_ERRORS.ERR_PLAYFAB_EAC_ERROR / 511).
+-- ONE hook_safe per Class+method. VMF silently shadows duplicate hook_safe
+-- registrations (memory: feedback_vmf_hook_safe_no_chain), so the cache rebuild
+-- has to live inside this same callback rather than a sibling hook block. The
+-- function is resolved at call time via `mod._cim_rebuild_template_cache`, so
+-- it's safe to invoke before the assignment further down the file runs.
 for _, klass in ipairs({ "HeroWindowCrafting", "HeroWindowCraftingConsole" }) do
     mod:hook_safe(klass, "on_enter", function(self)
         mod._cim_standard_forge_active = true
+        if mod._cim_rebuild_template_cache then
+            mod._cim_rebuild_template_cache()
+        end
     end)
     mod:hook_safe(klass, "on_exit", function(self)
         mod._cim_standard_forge_active = false
@@ -412,7 +435,8 @@ local function _make_craft_synth(allowed_slots)
                 if slots[data.slot_type]
                    and data.can_wield and table.contains(data.can_wield, career_name)
                    and data.item_type ~= "weapon_skin"
-                   and data.rarity ~= "magic" and data.rarity ~= "promo" then
+                   and data.rarity ~= "magic" and data.rarity ~= "promo"
+                   and not _item_requires_unowned_dlc(key) then
                     eligible[#eligible + 1] = key
                 end
             end
@@ -509,6 +533,105 @@ synth.craft_random_item = _make_craft_synth({ melee = true, ranged = true, trink
 synth.craft_weapon      = _make_craft_synth({ melee = true, ranged = true })
 synth.craft_jewellery   = _make_craft_synth({ trinket = true, ring = true, necklace = true })
 
+-- ============================================================
+-- Synthetic "blacksmith's template" items
+-- ============================================================
+-- Vanilla's `can_craft_with` filter (backend_interface_common.lua:498) only
+-- matches `rarity == "default"` items. In modded realm the player doesn't have
+-- a default-rarity template for every weapon family — career-level unlocks
+-- gate which starter weapons exist, and CWV / mod-added weapons never get
+-- one. To make the Craft Item recipe usable for ALL career-eligible weapons,
+-- we inject a synthetic default-rarity template per item_type into the
+-- recipe's inventory list, and teach `get_item_from_id` to resolve them back
+-- to a craftable input.
+--
+-- Templates are not in the backend mirror. They never leak into the regular
+-- inventory tab (different filter), and clicking craft on one feeds it to
+-- `_make_craft_synth` as the input — which clones its `key` into a fresh
+-- modded-rarity item via `add_item`. The template itself is never consumed
+-- or mutated.
+
+local _CRAFTABLE_SLOT_TYPES = { melee = true, ranged = true, ring = true, necklace = true, trinket = true }
+local _template_cache = {}
+
+local function _build_template_cache()
+    _template_cache = {}
+    if not ItemMasterList then return end
+    local career_name = _local_career_name()
+    if not career_name then return end
+
+    for key, data in pairs(ItemMasterList) do
+        if type(data) == "table"
+            and data.slot_type and _CRAFTABLE_SLOT_TYPES[data.slot_type]
+            and data.can_wield and table.contains(data.can_wield, career_name)
+            and data.item_type ~= "weapon_skin"
+            and data.rarity ~= "magic" and data.rarity ~= "promo"
+            and not _item_requires_unowned_dlc(key) then
+            local bid = "cim_template_" .. key
+            _template_cache[bid] = {
+                backend_id = bid,
+                key = key,
+                ItemId = key,
+                ItemInstanceId = bid,
+                rarity = "default",
+                data = data,
+                properties = {},
+                traits = {},
+                power_level = 5,
+                CustomData = {
+                    power_level = "5",
+                    rarity = "default",
+                    properties = "{}",
+                    traits = "[]",
+                },
+            }
+        end
+    end
+end
+
+mod._cim_template_lookup = function(backend_id)
+    return _template_cache[backend_id]
+end
+
+-- Exposed for the consolidated `on_enter` hook above to invoke at call time.
+mod._cim_rebuild_template_cache = _build_template_cache
+
+-- Called from the shared `get_filtered_items` hook in crafting_in_modded.lua
+-- once it's finished its modded-only filtering pass. Returns the same items
+-- table with synthetic templates appended for any item_type not already
+-- represented by a real default-rarity entry.
+mod._cim_inject_templates = function(items, filter)
+    if not _is_active() then return items end
+    if type(filter) ~= "string" or not filter:find("can_craft_with", 1, true) then
+        return items
+    end
+    if not next(_template_cache) then _build_template_cache() end
+
+    local seen_item_types = {}
+    for _, it in ipairs(items) do
+        local t = it and it.data and it.data.item_type
+        if t then seen_item_types[t] = true end
+    end
+
+    for _, tpl in pairs(_template_cache) do
+        local t = tpl.data and tpl.data.item_type
+        if t and not seen_item_types[t] then
+            items[#items + 1] = tpl
+            seen_item_types[t] = true
+        end
+    end
+    return items
+end
+
+-- The Craft Item recipe's synth (`_make_craft_synth`) looks up the input via
+-- `item_interface:get_item_from_id(bid)`. Resolve template bids back to their
+-- cached entry so the synth reads `.key` and clones the right weapon.
+mod:hook("BackendInterfaceItemPlayfab", "get_item_from_id", function(func, self, backend_id)
+    local tpl = _template_cache[backend_id]
+    if tpl then return tpl end
+    return func(self, backend_id)
+end)
+
 -- Diagnostic: list every recently-added (post-load) inventory item so we can
 -- see whether crafted items landed in the mirror but failed to surface in the UI.
 mod:command("craft_recent", "List newly-added items in the backend mirror", function()
@@ -544,6 +667,15 @@ end)
 -- ============================================================
 
 mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career_name, item_backend_ids, recipe_override)
+    -- Illusion-swap intercept FIRST: applies regardless of whether the
+    -- standard crafting UI is open. Defined in illusion_swap.lua and
+    -- wired here so we only register ONE craft hook (VMF rejects rehooks
+    -- on the same class/method with "Attempting to rehook active hook").
+    if mod._cim_try_illusion_apply then
+        local id, recipe = mod._cim_try_illusion_apply(self, career_name, item_backend_ids, recipe_override)
+        if id then return id, recipe end
+    end
+
     if not _is_active() then
         return func(self, career_name, item_backend_ids, recipe_override)
     end

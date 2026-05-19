@@ -90,6 +90,42 @@ REVIEW (2026-05-01):
 - [ ] **Chief Krench from VT1** — port Chief Krench boss from Vermintide 1 into VT2 via modding (pending Fatshark permission — not just community manager approval)
 - [ ] **Lords as monster spawns** — allow a selection of lord/boss enemies to spawn in place of regular monsters (e.g. Bodvarr, Skarrik, Rasknitt, Nurgloth as random monster replacements)
 
+## Modded Progression (New Mod)
+
+Full plan in `modded_progression/PLAN.md`. Single VMF mod that re-enables 100% of vanilla VT2 progression systems while running in modded realm. All state persisted locally; player's real PlayFab account untouched.
+
+**Pre-code research (resolved 2026-05-14, full findings in `modded_progression/PLAN.md`):**
+- [x] `BackendInterfaceCraftingPlayfab` — single `craft()` method funnels all five craft pages; dispatch via `recipe.result_function_playfab`; callback writes through mirror via `add_item`/`update_item_field`/`update_item`/`add_unlocked_weapon_skin`
+- [x] `unlock_manager.lua:719` — gates only DLC-ownership update loop in modded; per-career level-up unlocks unaffected
+- [x] `achievement_manager.lua:125,294` — **CRITICAL**: `trigger_event` (progress tracking) is FULLY halted in modded, not just reward awarding. `mp` must hook `trigger_event` to un-gate Okri's Challenges
+- [x] Loot-chest tables in `scripts/settings/equipment/loot_chest_data_1.lua` — score thresholds, six tiers, six categories by difficulty, power-level easing curves
+- [x] `chest_inventory` shape confirmed: `{ [chest_backend_key] = { ["chest_level_N"] = count, ... } }` as JSON in `_read_only_data`
+- [ ] Loot-rolling probability tables — server-side, not in Lua. Ship hand-tuned approximations for v0.1.0; refine empirically post-release
+
+**Runtime-dump items (unblock crafting-bench section; can be done any time):**
+- [ ] Dump `crafting_recipes` table from in-game console (`dofile("scripts/settings/crafting/crafting_recipes")` + `table.dump`)
+- [ ] Dump `CraftingData` table (slot-type categories, weapon-skin slot types)
+- [ ] Inspect PlayFab title-data at sign-in via `backend_mirror:get_title_data()` for any server-mirrored loot tables
+
+**Build order:**
+- [x] Scaffolding: VMB folder, VMF settings UI for starting-state, mirror-overlay layer (VMF → mirror), serialization layer (mirror → VMF) — 2026-05-14 (v0.1.0-dev, builds clean, 4 bundles; layers are stubs awaiting steps 2+)
+- [x] UI gate overrides + `AchievementManager.trigger_event` hook (~11 sites total) — done 2026-05-15 in v0.2.0-dev. Ten `mod:hook` wrappers via `_with_eac_off` (flip-flag pattern); `IngameUI.not_in_modded` overridden directly. In-game visual verification deferred to user
+- [ ] End-of-mission rewards: intercept `generate_end_of_level_loot`, local roll, mirror mutate
+- [ ] Loot chest opening: intercept `open_loot_chest`
+- [ ] Okri's Challenges: intercept `claim_achievement_rewards` / `claim_multiple_achievement_rewards`
+- [ ] Lohner's Emporium: intercept `exchange_chips` / `_store_purchase_made_cb` / `claim_login_rewards`
+- [ ] Crafting bench: intercept the single `BackendInterfaceCraftingPlayfab:craft` method (blocks on runtime-dump items above)
+- [ ] Starting-state seeder (fresh / level 35 default / level 35 everything unlocked)
+- [ ] Sibling API: `mp.is_unlocked`, `mp.grant_item`, `mp.spend`, `mp.credit`, `mp.has_currency`
+- [ ] character_weapon_variants: gate `can_wield` on `mp.is_unlocked` when `mp` is present
+- [ ] cosmetics_tweaker: gate custom illusions / shield options / portraits on `mp.is_unlocked` when `mp` is present
+
+**Explicit out of scope:**
+- No new screens, NPCs, items, or currencies
+- No multiplayer state sync (local-only)
+- No CW economy bridge (CW already routes through the vanilla pipeline `mp` un-gates)
+- No Versus-mode XP/win-track work in v0.1.x
+
 ## Enemy Tweaker (New Mod)
 - [ ] **Horde composition overrides** — replace the breed mix in hordes via `HordeCompositionsPacing` table patching. Settings UI lets the player pick which enemy types appear in hordes (e.g. all Chaos Warriors, mixed Skaven+Chaos, Beastmen-only on Helmgart maps). Hook `compose_horde_spawn_list()` or patch composition tables at mod load.
 - [ ] **Breed substitution** — global breed-swap map (e.g. every `skaven_slave` → `skaven_storm_vermin`). Hook `HordeSpawner.spawn_unit()` where `Breeds[breed_name]` is resolved, or intercept `ConflictDirector.spawn_queued_unit()` to replace the breed before queuing.

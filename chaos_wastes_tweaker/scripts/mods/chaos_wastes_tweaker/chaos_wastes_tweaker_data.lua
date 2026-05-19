@@ -328,10 +328,16 @@ end
 
 -- `text` values are localization keys (resolved by VMF via mod:localize). VMF wraps any missing
 -- key in `<<>>`, so even numeric labels like "1".."9" need explicit loc entries — see
--- _localization.lua. value=0 is the sentinel meaning "leave vanilla random distribution untouched";
--- see chaos_wastes_tweaker.lua get_deus_weapon_chest_type.
+-- _localization.lua. v0.7.65: value=-1 is the sentinel meaning "leave vanilla random distribution
+-- untouched" (was value=0 in 0.7.64 and earlier — see chaos_wastes_tweaker.lua
+-- get_deus_weapon_chest_type). value=0 is now a distinct option meaning "literally zero altars of
+-- this type" — the user-facing split between "let CW decide" and "force zero" requested
+-- 2026-05-19. Existing user settings stored as 0 will surface as "0 altars" after this change
+-- rather than "Default" — the change is documented in CHANGELOG so users can re-pick "Default"
+-- if that's what they wanted.
 local altar_count_options = {
-    { text = "altar_count_default", value = 0 },
+    { text = "altar_count_default", value = -1 },
+    { text = "0", value = 0 },
     { text = "1", value = 1 },
     { text = "2", value = 2 },
     { text = "3", value = 3 },
@@ -341,6 +347,35 @@ local altar_count_options = {
     { text = "7", value = 7 },
     { text = "8", value = 8 },
     { text = "9", value = 9 },
+}
+
+-- v0.7.66: Miracle of Isha behavior dropdown. Replaces the v0.7.65 checkbox
+-- (boolean) — string values let us add the third "unlimited wounds" variant
+-- without restructuring later. Old boolean storage is migrated in the runtime
+-- read helper (`_get_isha_mode` in chaos_wastes_tweaker.lua).
+local isha_alternative_options = {
+    { text = "isha_alt_vanilla", value = "vanilla" },
+    { text = "isha_alt_aegis",   value = "aegis"   },
+    { text = "isha_alt_wounds",  value = "wounds"  },
+}
+
+-- v0.7.65: Chests-of-Trials and arena-ammo dropdown options. Same shape as
+-- altar_count_options but with a higher max (10) since vanilla numeric versions
+-- allowed up to 10. value=-1 is the "use vanilla count" sentinel matching the
+-- altar dropdowns' Default semantics.
+local count_with_default_options = {
+    { text = "altar_count_default", value = -1 },
+    { text = "0", value = 0 },
+    { text = "1", value = 1 },
+    { text = "2", value = 2 },
+    { text = "3", value = 3 },
+    { text = "4", value = 4 },
+    { text = "5", value = 5 },
+    { text = "6", value = 6 },
+    { text = "7", value = 7 },
+    { text = "8", value = 8 },
+    { text = "9", value = 9 },
+    { text = "10", value = 10 },
 }
 
 local data = {
@@ -363,11 +398,11 @@ local data = {
                 sub_widgets = {
                     { setting_id = "shrine_boon_count", type = "numeric", default_value = 4, range = { 1, 5 }, decimals_number = 0 },
                     { setting_id = "chest_boon_count", type = "numeric", default_value = 3, range = { 1, 5 }, decimals_number = 0 },
-                    { setting_id = "chest_upgrade_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "chest_swap_melee_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "chest_swap_ranged_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "chest_power_up_count", type = "dropdown", default_value = 0, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "cursed_chest_count", type = "numeric", default_value = 1, range = { 0, 10 }, decimals_number = 0 },
+                    { setting_id = "chest_upgrade_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
+                    { setting_id = "chest_swap_melee_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
+                    { setting_id = "chest_swap_ranged_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
+                    { setting_id = "chest_power_up_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
+                    { setting_id = "cursed_chest_count", type = "dropdown", default_value = -1, options = count_with_default_options, tooltip = "cursed_chest_count_tooltip" },
                     { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },
                 },
             },
@@ -434,7 +469,7 @@ local data = {
                 setting_id = "reworks_group",
                 type = "group",
                 sub_widgets = {
-                    { setting_id = "arena_ammo_count", type = "numeric", default_value = 2, range = { 0, 10 }, decimals_number = 0, tooltip = "arena_ammo_count_tooltip" },
+                    { setting_id = "arena_ammo_count", type = "dropdown", default_value = -1, options = count_with_default_options, tooltip = "arena_ammo_count_tooltip" },
                     { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false, tooltip = "any_trait_any_weapon_tooltip" },
                     { setting_id = "tweak_trait_tier_by_rarity", type = "checkbox", default_value = false, tooltip = "tweak_trait_tier_by_rarity_tooltip" },
                     { setting_id = "tweak_shard_strike_duration", type = "numeric", default_value = 16, range = { 1, 16 }, decimals_number = 0, tooltip = "tweak_shard_strike_duration_tooltip" },
@@ -455,6 +490,8 @@ local data = {
                             { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
                             { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
                             { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
+                            { setting_id = "tweak_miracle_of_ulric_persistent", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_ulric_persistent_tooltip" },
+                            { setting_id = "tweak_miracle_of_isha_alternative", type = "dropdown", default_value = "vanilla", options = isha_alternative_options, tooltip = "tweak_miracle_of_isha_alternative_tooltip" },
                         },
                     },
                     {

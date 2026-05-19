@@ -17,7 +17,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("cim")
 
-local MOD_VERSION = "0.7.1-dev"
+local MOD_VERSION = "0.7.9-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 mod:echo("Crafting in Modded v" .. MOD_VERSION)
 
@@ -31,6 +31,12 @@ if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err
 -- the commit alive and PlayFab's anti-tamper rejected the modified inventory state.
 local _ok_sf, _err_sf = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/standard_forge")
 if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_sf)) end
+
+-- Modded-realm illusion swap (migrated from cosmetics_tweaker v0.8.49).
+-- Must load AFTER the forge core so `mod._cim_*` helpers are defined when
+-- the craft hook fires.
+local _ok_is, _err_is = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/illusion_swap")
+if not _ok_is then mod:error("Failed to load illusion_swap: %s", tostring(_err_is)) end
 
 -- Backward-compat: pre-v0.7.0 cim used `rarity = "promo"` for crafts. Keep
 -- "promo" registered in NetworkLookup.rarities too so legacy saved items can
@@ -150,11 +156,16 @@ mod._cim_is_modded_backend_id = function(backend_id)
     if _forged_weapons[backend_id] then return true end
     -- character_weapon_variants items
     if backend_id:sub(1, 4) == "cwv_" then return true end
-    -- Application.guid() output: 8-4-4-4-12 hex with dashes (UUID format).
-    -- Vanilla PlayFab IDs are continuous hex, no dashes.
-    if backend_id:find("^%x+%-%x+%-%x+%-%x+%-%x+$") then return true end
     return false
 end
+-- HISTORICAL NOTE: this function used to also match UUID format
+-- (`^%x+-%x+-%x+-%x+-%x+$`) on the theory that any UUID-like bid came from
+-- `Application.guid()` (which we use). But VT2's `_create_fake_inventory_items`
+-- also generates UUID bids for fake weapon-skin / cosmetic / weapon-pose items
+-- (~1500+ of them when `unlock_all_illusions` is on). That false-positive
+-- inflated diagnostic counts (inv_dump showed modded=1553 vs vanilla=887)
+-- and masked the real cim-craft count. The narrower check above only matches
+-- items registered in `_forged_weapons` or with the `cwv_` prefix.
 
 -- Item-level "is this a modded craft?" check. Same as the backend_id check,
 -- plus a rarity-based fallback: any item with our custom rarity ("modded", or
@@ -389,6 +400,15 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
         if not is_weapon_like or is_modded or is_default_template then
             filtered[#filtered + 1] = item
         end
+    end
+
+    -- Synthetic "blacksmith's template" injection for the Craft Item recipe.
+    -- Defined in standard_forge.lua. No-op unless the forge UI is open AND the
+    -- filter is `can_craft_with`. Lets the player craft career-eligible weapon
+    -- families they never unlocked (career-level gates aren't enforced in
+    -- modded realm; we just need the UI to surface them).
+    if mod._cim_inject_templates then
+        filtered = mod._cim_inject_templates(filtered, filter)
     end
     return filtered
 end)
@@ -1340,7 +1360,10 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
             local can_wield = item_data.can_wield
             if can_wield and table.contains(can_wield, career_name) then
                 local rarity = item_data.rarity
-                if item_data.item_type ~= "weapon_skin" and rarity ~= "magic" and rarity ~= "promo" then
+                local dlc_locked = mod._cim_item_requires_unowned_dlc
+                    and mod._cim_item_requires_unowned_dlc(key)
+                if item_data.item_type ~= "weapon_skin" and rarity ~= "magic" and rarity ~= "promo"
+                   and not dlc_locked then
                     local dn = item_data.display_name or key
                     if not seen_names[dn] then
                         seen_names[dn] = true
@@ -2232,16 +2255,16 @@ mod:command("craft_dump", "Dump equipped item + rarity/localization/network data
 end)
 
 -- ============================================================
--- Manual console crafting commands (cim forge*)
+-- Manual console crafting commands (/forge*)
 -- ============================================================
 
-mod:command("forge", "Start forging a weapon (usage: cim forge <weapon_key>)", function(item_key)
+mod:command("forge", "Start forging a weapon (usage: /forge <weapon_key>)", function(item_key)
     if not item_key then
-        mod:echo("Usage: cim forge <weapon_key>")
-        mod:echo("  Then: cim forge_trait <trait_name>")
-        mod:echo("  Then: cim forge_props <prop1>=<value> <prop2>=<value>")
-        mod:echo("  Then: cim forge_confirm")
-        mod:echo("Use 'wt dump_weapons' to see available weapon keys.")
+        mod:echo("Usage: /forge <weapon_key>")
+        mod:echo("  Then: /forge_trait <trait_name>")
+        mod:echo("  Then: /forge_props <prop1>=<value> <prop2>=<value>")
+        mod:echo("  Then: /forge_confirm")
+        mod:echo("Use /dump_weapons to see available weapon keys.")
         return
     end
     if not ItemMasterList then
@@ -2266,35 +2289,35 @@ mod:command("forge", "Start forging a weapon (usage: cim forge <weapon_key>)", f
         if ok and loc then display = loc end
     end
     mod:echo("Forge: preparing " .. display .. " (" .. item_key .. ")")
-    mod:echo("  Set trait: cim forge_trait <trait_name>")
-    mod:echo("  Set props: cim forge_props <prop>=<0-1> ...")
-    mod:echo("  Set skin:  cim forge_skin <skin_key>")
-    mod:echo("  Set power: cim forge_power <1-300>")
-    mod:echo("  Confirm:   cim forge_confirm")
-    mod:echo("  Cancel:    cim forge_cancel")
+    mod:echo("  Set trait: /forge_trait <trait_name>")
+    mod:echo("  Set props: /forge_props <prop>=<0-1> ...")
+    mod:echo("  Set skin:  /forge_skin <skin_key>")
+    mod:echo("  Set power: /forge_power <1-300>")
+    mod:echo("  Confirm:   /forge_confirm")
+    mod:echo("  Cancel:    /forge_cancel")
 end)
 
-mod:command("forge_trait", "Set trait for pending forge (usage: cim forge_trait <trait_name>)", function(trait)
+mod:command("forge_trait", "Set trait for pending forge (usage: /forge_trait <trait_name>)", function(trait)
     if not _forge_pending then
-        mod:echo("Forge: no weapon pending — run 'cim forge <weapon_key>' first")
+        mod:echo("Forge: no weapon pending — run '/forge <weapon_key>' first")
         return
     end
     if not trait then
-        mod:echo("Usage: cim forge_trait <trait_name>")
+        mod:echo("Usage: /forge_trait <trait_name>")
         return
     end
     _forge_pending.trait = trait
     mod:echo("Forge: trait set to " .. trait)
 end)
 
-mod:command("forge_props", "Set properties for pending forge (usage: cim forge_props crit_chance=0.5 attack_speed=1)", function(...)
+mod:command("forge_props", "Set properties for pending forge (usage: /forge_props crit_chance=0.5 attack_speed=1)", function(...)
     if not _forge_pending then
-        mod:echo("Forge: no weapon pending — run 'cim forge <weapon_key>' first")
+        mod:echo("Forge: no weapon pending — run '/forge <weapon_key>' first")
         return
     end
     local args = {...}
     if #args == 0 then
-        mod:echo("Usage: cim forge_props <prop>=<value> ...")
+        mod:echo("Usage: /forge_props <prop>=<value> ...")
         mod:echo("  Values are 0.0-1.0 (fraction of max)")
         return
     end
@@ -2314,9 +2337,9 @@ mod:command("forge_props", "Set properties for pending forge (usage: cim forge_p
     end
 end)
 
-mod:command("forge_skin", "Set skin for pending forge (usage: cim forge_skin <skin_key>)", function(skin)
+mod:command("forge_skin", "Set skin for pending forge (usage: /forge_skin <skin_key>)", function(skin)
     if not _forge_pending then
-        mod:echo("Forge: no weapon pending — run 'cim forge <weapon_key>' first")
+        mod:echo("Forge: no weapon pending — run '/forge <weapon_key>' first")
         return
     end
     if not skin then
@@ -2328,14 +2351,14 @@ mod:command("forge_skin", "Set skin for pending forge (usage: cim forge_skin <sk
     mod:echo("Forge: skin set to " .. skin)
 end)
 
-mod:command("forge_power", "Set power level for pending forge (usage: cim forge_power <1-300>)", function(val)
+mod:command("forge_power", "Set power level for pending forge (usage: /forge_power <1-300>)", function(val)
     if not _forge_pending then
-        mod:echo("Forge: no weapon pending — run 'cim forge <weapon_key>' first")
+        mod:echo("Forge: no weapon pending — run '/forge <weapon_key>' first")
         return
     end
     local num = tonumber(val)
     if not num or num < 1 or num > 300 then
-        mod:echo("Usage: cim forge_power <1-300>")
+        mod:echo("Usage: /forge_power <1-300>")
         return
     end
     _forge_pending.power_level = math.floor(num)
@@ -2353,7 +2376,7 @@ end)
 
 mod:command("forge_confirm", "Create the forged weapon", function()
     if not _forge_pending then
-        mod:echo("Forge: no weapon pending — run 'cim forge <weapon_key>' first")
+        mod:echo("Forge: no weapon pending — run '/forge <weapon_key>' first")
         return
     end
 
@@ -2451,9 +2474,9 @@ mod:command("forge_list", "List all forged weapons", function()
     end
 end)
 
-mod:command("forge_delete", "Delete a forged weapon (usage: cim forge_delete <backend_id or index>)", function(id_or_idx)
+mod:command("forge_delete", "Delete a forged weapon (usage: /forge_delete <backend_id or index>)", function(id_or_idx)
     if not id_or_idx then
-        mod:echo("Usage: cim forge_delete <backend_id or index from forge_list>")
+        mod:echo("Usage: /forge_delete <backend_id or index from /forge_list>")
         return
     end
 
