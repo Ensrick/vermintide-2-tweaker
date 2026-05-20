@@ -30,7 +30,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.70-alpha"
+local MOD_VERSION = "0.7.77-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -122,6 +122,7 @@ local all_trait_combos_cache = nil
 -- feedback_lua_forward_reference.md (5 prior crashes from this exact bug pattern).
 local sync_reckless_swings
 local sync_bomb_cooldown
+local sync_ulric_pack_unlimited_range
 local sync_boon_movespeed
 -- v0.7.39: defeat-recovery state. Referenced in `_transition_next_node` hook (line ~402)
 -- which is defined BEFORE the feature block that owns this flag (line ~2706+). Forward-
@@ -808,6 +809,38 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
         end
     end
 
+    -- v0.7.77: Belakor temple force-rarity — was a separate `mod:hook("DeusPowerUpUtils",
+    -- "generate_random_power_ups", ...)` block at the old line 1387, which triggered the
+    -- "Attempting to rehook active hook" VMF warning (same mod hooking the same Class+method
+    -- twice). Consolidated into this single hook. Same logic: at the Belakor arena node, when
+    -- a cursed_chest roll fires and the toggle is on, force `forced_rarity = "unique"` so the
+    -- temple chest rewards uniques instead of the default `weight_by_rarity` mix.
+    --
+    -- Positional indices per vanilla signature
+    -- `(seed, count, existing_power_ups, difficulty, run_progress, availability_type,
+    --   career_name, forced_rarity)`:
+    --   args[6] = availability_type
+    --   args[8] = forced_rarity
+    do
+        local availability_type = args[6]
+        local already_forced    = args[8]
+        if not already_forced
+            and availability_type == DeusPowerUpAvailabilityTypes.cursed_chest
+            and effective_setting("tweak_belakor_temple_unique_boons")
+        then
+            local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
+            local run_controller = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+            local run_state = run_controller and run_controller._run_state
+            if run_state and run_state.get_arena_belakor_node and run_state.get_current_node_key then
+                local arena_node = run_state:get_arena_belakor_node()
+                local current_node = run_state:get_current_node_key()
+                if arena_node and current_node and arena_node == current_node then
+                    args[8] = "unique"
+                end
+            end
+        end
+    end
+
     -- CLARIFY: Disabled-boon enforcement uses the "remove-then-restore" pattern: temporarily mutate
     -- the global pool, run the original sampler, then restore. This is safer than wrapping the
     -- sampler because vanilla's `generate_random_power_up` directly reads DeusPowerUpsArray /
@@ -1353,6 +1386,43 @@ mod:hook("BackendInterfaceDeusPlayFab", "deus_journey_with_belakor", function(fu
     return func(self, journey_name)
 end)
 
+-- v0.7.75: Belakor's Temple → unique-tier boon rewards.
+-- The temple is the `arena_belakor` node on the Wastes graph. Completing it triggers a
+-- cursed_chest reward roll via the standard cursed-chest UI; vanilla `weight_by_rarity`
+-- is `{ event=6, exotic=3, rare=6, unique=1 }` for cursed chests, so the temple often
+-- rewards rare/exotic boons even though uniques are in the pool. Lore-wise, Belakor's
+-- temple is meant to be the prestige reward — uniques should be the default.
+--
+-- Hook target: `DeusPowerUpUtils.generate_random_power_ups` (the util, not the
+-- DeusRunController wrapper). The util takes a `forced_rarity` parameter which already
+-- implements the "fall back to adjacent tiers if pool is empty" semantics we want
+-- (deus_power_up_utils.lua:192-215 walks event→rare→exotic→unique and then back up
+-- only when no entries are available). We pass `"unique"` when the conditions match.
+--
+-- Conditions:
+--   - Toggle on (`tweak_belakor_temple_unique_boons`, default ON).
+--   - Availability type is `cursed_chest` (the temple chest is a cursed chest).
+--   - The current node is the run's Belakor arena node, queried via
+--     `_run_state:get_arena_belakor_node()` + `:get_current_node_key()`.
+--
+-- We do NOT mutate `DeusPowerUpSettings.weight_by_rarity` — that's the boot-time table
+-- and any mutation would affect every other cursed/weapon chest in the run. Forcing
+-- the rarity through the function parameter is local to this single call. Per
+-- `feedback_vt2_gated_registration_diverges.md`, this is gate-at-roll-time, not
+-- gate-at-registration-time — no peer-index divergence.
+--
+-- Per-peer note: each peer rolls its own seed when opening the cursed chest
+-- (`deus_cursed_chest_view.lua:58` uses position-derived hash), so the hook runs on
+-- each player's machine independently. No host-authority concern — the boon CHOICE
+-- isn't sync'd, only the resulting `add_power_up` RPC is.
+-- v0.7.77: Belakor-temple force-rarity logic was previously a SECOND mod:hook on
+-- DeusPowerUpUtils.generate_random_power_ups, which triggered the
+-- "Attempting to rehook active hook" VMF warning (same mod hooking the same
+-- Class+method twice). Consolidated into the single hook at line ~783 above —
+-- see the "v0.7.77: Belakor temple force-rarity" comment block inside that
+-- function body. The semantics are identical: at the Belakor arena node, when
+-- a cursed_chest roll fires and the toggle is on, force unique rarity.
+
 -- v0.7.53: Upstream override for `finale_dominant_god`. Same bug shape as the old
 -- `force_belakor` issue (fixed in v0.7.49): `game_round_ended` reads
 -- `self._vote_data.dominant_god` into a local at the top, then uses it for BOTH
@@ -1641,7 +1711,7 @@ local MOD_BOON_LOC = {
     display_name_ct_meta_movespeed = "(Mod Boon) Wind Cascade",
     description_ct_meta_movespeed  = "+1%% movement speed per active boon.",
     display_name_ct_meta_ammo      = "(Mod Boon) Quiver Cascade",
-    description_ct_meta_ammo       = "+5%% total ammo per active boon. Inert without a ranged weapon.",
+    description_ct_meta_ammo       = "+5%% total ammo, +5%% max overheat (Sienna staves, Bardin drakefire), and +5%% Moonfire Bow energy capacity per active boon. May Khaine's quivers and Vaul's forges fill in equal measure.",
     display_name_ct_kill_heal    = "(Mod Boon) Khaine's Communion",
     description_ct_kill_heal     = "Killing an enemy heals you for 1 health.",
 
@@ -2948,6 +3018,212 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
 end)
 
 -- ============================================================
+-- Bot Boon Mirror (v0.7.76)
+-- ============================================================
+-- When `bots_mirror_host_boons` is on, every boon a HUMAN host gains in Chaos
+-- Wastes (shrine pick, altar reward, dormant reveal, Belakor temple, blessing
+-- of the gods, set reward, end-of-level grant, etc.) is also granted to every
+-- bot in the lobby.
+--
+-- The single canonical entry point for boon application is
+-- `DeusRunController.add_power_ups(new_power_ups, local_player_id, present)`
+-- (deus_run_controller.lua:1126). Every code path that grants a boon — chest
+-- pickup, cursed chest, shop blessing, set completion, end-of-level node
+-- (`try_grant_end_of_level_deus_power_ups` falls through to this), debug — funnels
+-- through here. Hooking it once covers all sources.
+--
+-- HOST-ONLY: Bots are entirely client-side on the host (they don't exist as
+-- bots on remote peers; remote peers see them as husk units with normal buff
+-- replication via the server-authoritative buff_system). So mirroring only
+-- runs on `_run_state:is_server()`.
+--
+-- Reentry guard: re-calling `add_power_ups` for each bot would re-enter this
+-- hook → infinite recursion. `_ct_bot_mirror_active` short-circuits the nested
+-- calls.
+--
+-- Talent vs buff boons: `DeusPowerUpUtils.activate_deus_power_up` (called from
+-- `add_power_ups`) branches on `power_up.talent`. Buff boons land via
+-- `buff_system:add_buff(player_unit, buff_name, ...)` which works identically
+-- on bot units. Talent boons mutate the backend talent ids for the receiving
+-- career — that's fine when the bot has the same career as the host, but if
+-- the bot is on a different career the talent slot still gets written into
+-- the bot's own backend so the per-bot talent set is independent. The buff
+-- the talent grants is the same one the host got.
+--
+-- Set completion: `_check_set_completed` runs inside `add_power_ups` post-add
+-- and may recursively call `add_power_ups` for set rewards. We let those run
+-- normally; the guard wraps only our bot-iteration loop so any set rewards a
+-- bot triggers also mirror correctly.
+local _ct_bot_mirror_active = false
+
+mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups, local_player_id, present)
+    if _ct_bot_mirror_active then return end
+    if not effective_setting("bots_mirror_host_boons") then return end
+    if not new_power_ups or #new_power_ups == 0 then return end
+
+    local run_state = self._run_state
+    if not run_state or not run_state:is_server() then return end
+
+    -- Resolve who just got the boon. add_power_ups uses
+    -- `run_state:get_own_peer_id()` for the recipient peer; the recipient
+    -- local_player_id is the second arg. We want to mirror onto bots only when
+    -- the recipient is a HUMAN (otherwise a bot's own grant would re-trigger
+    -- the bot loop).
+    local own_peer_id = run_state:get_own_peer_id()
+    local recipient = Managers.player and Managers.player:player(own_peer_id, local_player_id)
+    if recipient and recipient.bot_player then return end
+
+    local player_manager = Managers.player
+    if not player_manager or not player_manager.human_and_bot_players then return end
+    local all_players = player_manager:human_and_bot_players()
+    if not all_players then return end
+
+    -- Filter bots and skip the recipient (defensive — recipient should be human
+    -- per the check above, but harmless to double-check).
+    local bots = {}
+    for _, p in pairs(all_players) do
+        if p ~= recipient and p.bot_player and p.player_unit and Unit.alive(p.player_unit) then
+            bots[#bots + 1] = p
+        end
+    end
+    if #bots == 0 then return end
+
+    -- Clone the power-up list per-bot. Each call needs fresh client_ids so the
+    -- run_state stores distinct entries (otherwise the same client_id appears
+    -- across multiple players and `remove_power_ups` matching could mis-target).
+    -- generate_specific_power_up assigns a new random id; we mirror by name+rarity.
+    _ct_bot_mirror_active = true
+    local ok, err = pcall(function()
+        for _, bot in ipairs(bots) do
+            local cloned = {}
+            for i = 1, #new_power_ups do
+                local pu = new_power_ups[i]
+                cloned[i] = DeusPowerUpUtils.generate_specific_power_up(pu.name, pu.rarity)
+            end
+            -- present=false: don't trigger the reward-popup UI for bot grants.
+            self:add_power_ups(cloned, bot:local_player_id(), false)
+        end
+    end)
+    _ct_bot_mirror_active = false
+
+    if not ok then
+        mod:info("[bot-mirror] error mirroring boons to bots: %s", tostring(err))
+        return
+    end
+
+    mod:info("[bot-mirror] mirrored %d boon(s) onto %d bot(s)", #new_power_ups, #bots)
+end)
+
+-- Per-bot late-respawn re-apply. CW's `_add_initial_power_ups` (host-side per
+-- peer at run start) already grants bots the talent-boon defaults; the host's
+-- early-run mirror calls during initial setup then propagate via the hook
+-- above. The only respawn case that bypasses both is a mid-run bot career
+-- swap (rare) — vanilla doesn't re-run _add_initial_power_ups in that case
+-- and there is no general "bot career swap" event in CW. We accept this as a
+-- known limit; users can disable + re-enable the bot to re-grant.
+
+-- ============================================================
+-- Grudge Mark Ban Menu (v0.7.76)
+-- ============================================================
+-- Per-mark checkboxes that exclude individual BreedEnhancements from the
+-- monster-boss enhancement roll. Vanilla picks 1-3 enhancements per boss from
+-- `BossGrudgeMarks` (grudge_mark_settings.lua) via
+-- `TerrorEventUtils.generate_enhanced_breed` (terror_event_utils.lua:107).
+--
+-- Filter strategy: hook `add_enhancements_for_difficulty` (line 191) and pass
+-- a filtered `enhancement_set` to `generate_enhanced_breed`. The function
+-- iterates the set into a candidate list and randomly picks; an empty set
+-- yields an empty list of enhancements, which is safe (the base entry is
+-- still appended).
+--
+-- HOST-ONLY because enhancement assignment happens server-authoritatively
+-- during boss spawn. Clients see the chosen enhancements via the spawn data
+-- propagated by `add_enhancements_to_spawn_data`.
+local BOSS_GRUDGE_MARK_NAMES = {
+    "commander", "crippling", "crushing", "frenzy", "intangible",
+    "periodic_curse", "periodic_shield", "raging", "ranged_immune",
+    "regenerating", "unstaggerable", "vampiric", "warping",
+}
+
+local function _build_filtered_boss_grudge_marks(base_set)
+    -- Build a filtered copy of `base_set` (defaults to vanilla
+    -- BossGrudgeMarks). Drop any mark whose ban toggle is on. Returns the
+    -- filtered set OR nil if nothing was banned (so vanilla path runs).
+    base_set = base_set or rawget(_G, "BossGrudgeMarks")
+    if not base_set then return nil end
+    local filtered = {}
+    local any_banned = false
+    for name, _ in pairs(base_set) do
+        local sid = "ban_grudge_mark_" .. name
+        if effective_setting(sid) then
+            any_banned = true
+        else
+            filtered[name] = true
+        end
+    end
+    if not any_banned then return nil end
+    return filtered
+end
+
+mod:hook("TerrorEventUtils", "add_enhancements_for_difficulty", function(func, optional_data, difficulty, breed_name, event, difficulty_tweak, enhancement_set)
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if not is_server then
+        return func(optional_data, difficulty, breed_name, event, difficulty_tweak, enhancement_set)
+    end
+
+    -- Only override when caller passed BossGrudgeMarks (or nil, which defaults
+    -- to BossGrudgeMarks inside vanilla on line 197). Other callers may pass
+    -- custom sets (e.g. termite/dwarf-fest event variants) — leave those alone.
+    local effective_set = enhancement_set
+    if effective_set == nil or effective_set == rawget(_G, "BossGrudgeMarks") then
+        local filtered = _build_filtered_boss_grudge_marks(rawget(_G, "BossGrudgeMarks"))
+        if filtered then
+            effective_set = filtered
+        end
+    end
+
+    return func(optional_data, difficulty, breed_name, event, difficulty_tweak, effective_set)
+end)
+
+-- Resolve display strings for the 13 BreedEnhancements at boot. Internal
+-- names map to localization keys via the `display_name` field on each
+-- BreedEnhancements entry (grudge_mark_settings.lua). The strings live in
+-- compiled localization data — Localize() resolves at runtime. We cache once
+-- at module load so the data file's tooltips can include them; if Localize
+-- isn't ready, fall back to title-cased internal names.
+local function _resolve_grudge_mark_display_name(name)
+    local be = rawget(_G, "BreedEnhancements")
+    local entry = be and be[name]
+    local dn_key = entry and entry.display_name or ("display_name_" .. name)
+    if rawget(_G, "Localize") then
+        local raw = Localize(dn_key)
+        if raw and raw ~= "<" .. dn_key .. ">" then
+            return raw
+        end
+    end
+    -- Title-case fallback: "periodic_curse" -> "Periodic Curse"
+    return (name:gsub("_", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end))
+end
+
+mod._ct_grudge_mark_display = mod._ct_grudge_mark_display or {}
+for _, n in ipairs(BOSS_GRUDGE_MARK_NAMES) do
+    mod._ct_grudge_mark_display[n] = _resolve_grudge_mark_display_name(n)
+end
+
+mod:command("dump_grudge_marks", "Dump the 13 BreedEnhancement names with resolved display strings", function()
+    mod:info("[DUMP:grudge_marks] === %d Boss Grudge Marks ===", #BOSS_GRUDGE_MARK_NAMES)
+    mod:info("[DUMP:grudge_marks] internal_name\tdisplay_name_key\tresolved_display")
+    for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
+        local be = rawget(_G, "BreedEnhancements")
+        local entry = be and be[name]
+        local dn_key = entry and entry.display_name or ("display_name_" .. name)
+        local resolved = _resolve_grudge_mark_display_name(name)
+        mod:info("[DUMP:grudge_marks] %s\t%s\t%s", name, dn_key, resolved)
+    end
+    mod:echo(string.format("dump_grudge_marks: %d entries dumped to log.", #BOSS_GRUDGE_MARK_NAMES))
+end)
+
+-- ============================================================
 -- Modified Boons
 -- ============================================================
 
@@ -3129,6 +3405,68 @@ sync_bomb_cooldown = function()
 end
 
 sync_bomb_cooldown()
+
+-- ============================================================
+-- Ulric's Pack (wolfpack) Unlimited Aura Range
+-- ============================================================
+-- Vanilla `wolfpack` boon's proximity buff has `range_check = { radius = 20, ... }`
+-- (deus_power_up_settings.lua:3829-3835). BuffAreaHelper.update_range_check reads
+-- `range_check_template.radius` fresh on every tick (buff_area_helper.lua:26), so a
+-- one-time mutation of that field is sufficient — no per-frame hook needed. Mirror
+-- the bomb_cooldown save-and-restore pattern: on_setting_changed re-syncs without
+-- restart, and revert lets toggling off restore vanilla 20m radius.
+--
+-- Per `feedback_vt2_gated_registration_diverges.md`: this only mutates an existing
+-- vanilla template field; it never registers/unregisters the boon, never touches
+-- BuffTemplates, NetworkLookup, or any sequential-index table. Safe to gate on the
+-- per-user toggle. Host-authoritative: each peer mutates locally for their own
+-- buff-extension proximity ticks, and the buff itself is applied via standard
+-- buff-system propagation so client peers without the toggle still see the buff's
+-- effect — they just compute their own proximity passes at vanilla 20m. Toggle the
+-- host's setting and the host's proximity passes (which drive who gets the buff
+-- via wolfpack_entered_range/wolfpack_left_range RPCs) ignore distance.
+
+local wolfpack_radius_original = nil
+
+local function apply_wolfpack_unlimited_range()
+    if wolfpack_radius_original ~= nil then
+        return
+    end
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local tpl = power_up and power_up.wolfpack
+    local buff_entry = tpl and tpl.buff_template and tpl.buff_template.buffs and tpl.buff_template.buffs[1]
+    local rc = buff_entry and buff_entry.range_check
+    if not rc or type(rc.radius) ~= "number" then
+        mod:info("[ulric-pack-range] DeusPowerUpTemplates.wolfpack not loaded yet; will retry on next sync")
+        return
+    end
+    wolfpack_radius_original = rc.radius
+    rc.radius = math.huge
+    mod:info("[ulric-pack-range] radius %s -> math.huge", tostring(wolfpack_radius_original))
+end
+
+local function revert_wolfpack_unlimited_range()
+    if wolfpack_radius_original == nil then
+        return
+    end
+    local power_up = rawget(_G, "DeusPowerUpTemplates")
+    local tpl = power_up and power_up.wolfpack
+    local buff_entry = tpl and tpl.buff_template and tpl.buff_template.buffs and tpl.buff_template.buffs[1]
+    local rc = buff_entry and buff_entry.range_check
+    if rc then
+        rc.radius = wolfpack_radius_original
+    end
+    wolfpack_radius_original = nil
+end
+
+sync_ulric_pack_unlimited_range = function()
+    revert_wolfpack_unlimited_range()
+    if effective_setting("ulric_pack_unlimited_range") then
+        apply_wolfpack_unlimited_range()
+    end
+end
+
+sync_ulric_pack_unlimited_range()
 
 -- ============================================================
 -- Movement Speed Boon Tweak (5% -> 10%)
@@ -4277,17 +4615,19 @@ local CT_META_BOONS = {
             -- v0.7.52: `apply_buff_func = "refresh_ranged_slot_buffs"` fires
             -- `ammo_extension:refresh_buffs()` on the player's ranged weapon every time the
             -- stack is added, which re-runs `_apply_buffs` and recomputes `_max_ammo`.
-            -- Without this, the new `total_ammo` stat_buff sat in BuffExtension but the
-            -- ammo extension's CACHED max stayed at the unbuffed value, so the +5%-per-boon
-            -- never showed up in-game. Vanilla uses the same pattern (Markus huntsman's
-            -- ammo passive, Sienna scholar vent zone, etc.).
-            { stat_buff = "total_ammo", multiplier = 0.05, apply_buff_func = "refresh_ranged_slot_buffs" },
+            -- v0.7.72: replaced with `ct_meta_ammo_refresh_capacity` which ALSO refreshes
+            -- overcharge_extension (Sienna staves, Bardin drakefire) and energy_extension
+            -- (Moonfire Bow). See registration block above CT_META_BOONS.
+            { stat_buff = "total_ammo",     multiplier = 0.05, apply_buff_func = "ct_meta_ammo_refresh_capacity" },
+            -- v0.7.72: max_overcharge scales the overcharge bar capacity for Sienna staves
+            -- and Bardin drakefire/drake-pistols (both use PlayerUnitOverchargeExtension
+            -- which reads this key at `_calculate_and_set_buffed_max_overcharge_values`).
+            -- Vanilla recalcs only at extensions_ready (wield) and on_overcharge_lost; the
+            -- custom apply func above forces an immediate recalc so the stack lands live.
+            { stat_buff = "max_overcharge", multiplier = 0.05 },
         },
-        -- "Only available when player has a ranged secondary weapon": stat_buff "total_ammo"
-        -- is only read by AmmoExtension on ranged weapons. Players without a ranged slot
-        -- get no effect (the buff is harmless). We don't gate at offer-roll because all VT2
-        -- careers have ranged slots in CW by default; if you find a real no-ranged-weapon
-        -- scenario, the tooltip notes the inertness and we can add a runtime guard later.
+        -- v0.7.72: Coverage is now ammo + overcharge + Moonfire energy. Inert only on the
+        -- (unlikely) loadout with no ranged weapon at all.
     },
 }
 
@@ -4394,6 +4734,86 @@ local function register_meta_boon(spec)
     inject_dormant_boon(spec.name, spec.rarity)
     _add_dormant_to_pool(spec.name, spec.rarity)
     mod:info("[mod-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
+end
+
+-- v0.7.72: Custom apply_buff_func for ct_meta_ammo. Vanilla `refresh_ranged_slot_buffs`
+-- only touches AmmoExtension; we extend it to also force-refresh the player's
+-- OverchargeExtension (Sienna staves, Bardin drakefire) and EnergyExtension (Moonfire
+-- Bow) so the new `max_overcharge` stack lands without requiring a weapon swap.
+--
+-- - OverchargeExtension calls `_calculate_and_set_buffed_max_overcharge_values` at
+--   extensions_ready and `on_overcharge_lost` (`player_unit_overcharge_extension.lua:103,206`).
+--   Calling it explicitly here picks up the new buff stack immediately.
+--
+-- - EnergyExtension reads `_max_energy = energy_data.max_value` at init and never
+--   recalculates — there is NO stat_buff path in vanilla. We scale `_max_energy` and
+--   `_energy` proportionally so the bar resizes mid-mission. The boon count is queried
+--   from the deus_run_controller so the value is correct regardless of when this fires.
+do
+    local buff_funcs = rawget(_G, "BuffFunctionTemplates")
+    if buff_funcs and buff_funcs.functions then
+        buff_funcs.functions.ct_meta_ammo_refresh_capacity = function (unit, buff, params)
+            -- 1. Vanilla ammo refresh (preserved from old `refresh_ranged_slot_buffs`).
+            local inventory_extension = ScriptUnit.has_extension(unit, "inventory_system")
+            if inventory_extension then
+                local ranged_slot_data = inventory_extension:get_slot_data("slot_ranged")
+                if ranged_slot_data then
+                    local left_hand_unit  = ranged_slot_data.left_unit_1p
+                    local right_hand_unit = ranged_slot_data.right_unit_1p
+                    local left_ammo  = left_hand_unit  and ScriptUnit.has_extension(left_hand_unit,  "ammo_system")
+                    local right_ammo = right_hand_unit and ScriptUnit.has_extension(right_hand_unit, "ammo_system")
+                    if left_ammo  then left_ammo:refresh_buffs()  end
+                    if right_ammo then right_ammo:refresh_buffs() end
+                end
+            end
+
+            -- 2. Overcharge refresh — Sienna staves, Bardin drakegun/drake-pistols. The
+            -- extension lives on the player_unit (not the weapon unit), so the call site
+            -- target is `unit` itself.
+            local overcharge_ext = ScriptUnit.has_extension(unit, "overcharge_system")
+            if overcharge_ext and overcharge_ext._calculate_and_set_buffed_max_overcharge_values then
+                -- pcall guard: if `original_max_value` happens to be nil (e.g. extension
+                -- not yet through extensions_ready), the recalc fasserts on the network
+                -- bounds check. Silent-skip in that case; next wield will pick it up.
+                pcall(overcharge_ext._calculate_and_set_buffed_max_overcharge_values, overcharge_ext)
+            end
+
+            -- 3. Energy refresh — Moonfire Bow (we_deus_01). Vanilla has no buff hook, so
+            -- we mutate `_max_energy` ourselves. We compute the desired multiplier from
+            -- the live boon count (each stack = +5%) and scale relative to the recorded
+            -- base. First entry stashes the base on the extension; later entries scale
+            -- from that base.
+            local energy_ext = ScriptUnit.has_extension(unit, "energy_system")
+            if energy_ext then
+                local player = Managers.player and Managers.player:owner(unit)
+                local deus_run_controller = Managers.mechanism
+                    and Managers.mechanism:game_mechanism()
+                    and Managers.mechanism:game_mechanism().get_deus_run_controller
+                    and Managers.mechanism:game_mechanism():get_deus_run_controller()
+                if player and deus_run_controller then
+                    local num_boons = #deus_run_controller:get_player_power_ups(player:network_id(), player:local_player_id())
+                    -- Stash the unbuffed base the first time we touch this extension.
+                    if energy_ext._ct_meta_ammo_base_max == nil then
+                        energy_ext._ct_meta_ammo_base_max = energy_ext._max_energy
+                    end
+                    local base    = energy_ext._ct_meta_ammo_base_max
+                    local new_max = base * (1.0 + 0.05 * num_boons)
+                    -- Network field max_energy is a clamped int — round + clamp to int32
+                    -- range to avoid future fassert if anyone bolts a similar network
+                    -- field onto energy like the overcharge path does.
+                    new_max = math.max(1, math.floor(new_max + 0.5))
+                    local prev_max = energy_ext._max_energy
+                    if prev_max ~= new_max then
+                        local fraction = (prev_max > 0) and (energy_ext._energy / prev_max) or 1.0
+                        energy_ext._max_energy = new_max
+                        energy_ext._energy     = math.min(new_max, math.max(0, fraction * new_max))
+                    end
+                end
+            end
+        end
+    else
+        mod:info("[mod-boon] BuffFunctionTemplates not ready — ct_meta_ammo_refresh_capacity deferred (boon load order)")
+    end
 end
 
 for _, spec in ipairs(CT_META_BOONS) do
@@ -4854,6 +5274,174 @@ if ProcFunctions and ProcFunctions.chain_lightning then
 end
 
 -- ============================================================
+-- Myrmidia's Wildfire — spread DoT color matches the source burn (v0.7.73)
+-- ============================================================
+-- Boon `boon_dot_burning_01` (Myrmidia's Wildfire). When a burning enemy dies, vanilla's
+-- `boon_dot_burning_01_spread` (morris_buff_settings.lua:3714) applies the HARDCODED
+-- template `boon_career_ability_burning_aoe` (vanilla orange) to nearby enemies — even
+-- if the dying enemy was burning from Moonfire Bow (blue) or Necromancer balefire (purple).
+--
+-- We hook the proc and pick the spread template based on what burn status effect the
+-- killed unit was carrying:
+--
+--   StatusEffectNames.burning_elven_magic  → Moonfire Bow blue flame
+--                                            spread template: `we_deus_01_dot_fast`
+--   StatusEffectNames.burning_balefire     → Necromancer purple
+--                                            spread template: vanilla's auto-generated
+--                                            `boon_career_ability_burning_aoe_balefire`
+--                                            via `BalefireBurnDotLookup`
+--                                            (buff_utils.lua:267 generator)
+--   StatusEffectNames.burning_warpfire     → Chaos sorcerer warp-flame: keep vanilla
+--                                            orange so the boon's own spread reads as
+--                                            Myrmidia's fire rather than warp-corruption
+--   default (StatusEffectNames.burning)    → vanilla orange (unchanged behavior)
+--
+-- We hook `ProcFunctions.boon_dot_burning_01_spread` (same table as `chain_lightning`
+-- above — buff_func entries live in `dlc_settings.morris.proc_functions`, merged into
+-- the global `ProcFunctions` at boot — see the Manann's Tempest block above for the
+-- full lookup-vs-buff_function_templates split documented at v0.7.57).
+--
+-- Caveat: vanilla's spread uses `buff.cached_custom_dot` (one allocation reused across
+-- kills). Our hook writes a fresh `dot_template_name` into the cached table per call so
+-- each kill picks the right color. The other cached field (`cached_broadphase`) is
+-- still reused safely.
+--
+-- v0.7.73: initial color-match. The hook is also the future host for the v0.7.74
+-- generations cap (Phase 2C); that change will tag each spread DoT with a `generation`
+-- field and bail when the source generation exceeds the slider cap, but the color-match
+-- path lives here and is the contract surface.
+--
+-- Replicates vanilla's `is_burning` early-out via the same `unit_is_burning` query
+-- (no need to call the original at all).
+if ProcFunctions and ProcFunctions.boon_dot_burning_01_spread then
+    -- Map status-effect name → dot_template_name we spread with. We resolve the
+    -- balefire variant lazily (after boot) because vanilla generates it after
+    -- buff_settings load. The `_resolved` flag flips on first hit.
+    local _ct_spread_dot_by_status = {
+        burning_elven_magic = "we_deus_01_dot_fast",
+        burning_balefire    = nil, -- resolved lazily from BalefireBurnDotLookup
+        burning_warpfire    = "boon_career_ability_burning_aoe",
+        burning             = "boon_career_ability_burning_aoe",
+    }
+    local _ct_spread_resolved = false
+
+    -- v0.7.74: per-unit Wildfire-spread generation tracker. Weak-keyed so entries
+    -- die with the unit. Generation 0 = the player's own initial burn (NOT in this
+    -- table). Generation N = applied by a spread sourced from a unit at generation
+    -- (N-1). Cap reads from `tweak_wildfire_generations_cap` (1-10, default 3).
+    --
+    -- Why weak-keyed: unit handles are reused by the spawner, but stale entries
+    -- on dead units shouldn't pin them or leak indefinitely. We don't use
+    -- generation as an authoritative buff field — it's a side-band tag that
+    -- accompanies the cached_custom_dot. The DoT applied by `DamageUtils.apply_dot`
+    -- doesn't propagate generation natively, so we must hop via this side table.
+    local _ct_wildfire_generation = setmetatable({}, { __mode = "k" })
+
+    local function _ct_resolve_balefire_spread()
+        if _ct_spread_resolved then return end
+        local lookup = rawget(_G, "BalefireBurnDotLookup")
+        if lookup then
+            local v = lookup["boon_career_ability_burning_aoe"]
+            if v then
+                _ct_spread_dot_by_status.burning_balefire = v
+            end
+        end
+        _ct_spread_resolved = true
+    end
+
+    local function _ct_pick_spread_template(killed_unit)
+        local sem = Managers.state and Managers.state.status_effect
+        if not sem then
+            return "boon_career_ability_burning_aoe"
+        end
+        local StatusNames = rawget(_G, "StatusEffectNames")
+        if not StatusNames then
+            return "boon_career_ability_burning_aoe"
+        end
+        _ct_resolve_balefire_spread()
+
+        -- Priority: elven_magic > balefire > warpfire > vanilla. Moonfire and
+        -- Necromancer are player-induced and worth surfacing; warpfire is enemy
+        -- ambient so it loses the priority race if any other burn is present.
+        if StatusNames.burning_elven_magic and sem:has_status(killed_unit, StatusNames.burning_elven_magic) then
+            return _ct_spread_dot_by_status.burning_elven_magic
+        end
+        if StatusNames.burning_balefire and sem:has_status(killed_unit, StatusNames.burning_balefire) then
+            return _ct_spread_dot_by_status.burning_balefire
+                or "boon_career_ability_burning_aoe"
+        end
+        if StatusNames.burning_warpfire and sem:has_status(killed_unit, StatusNames.burning_warpfire) then
+            return _ct_spread_dot_by_status.burning_warpfire
+        end
+        return "boon_career_ability_burning_aoe"
+    end
+
+    mod:hook(ProcFunctions, "boon_dot_burning_01_spread", function(func, owner_unit, buff, params)
+        local killed_unit = params[3]
+        if not (killed_unit and Managers.state and Managers.state.status_effect) then
+            return func(owner_unit, buff, params)
+        end
+        if not Managers.state.status_effect:unit_is_burning(killed_unit) then
+            return
+        end
+
+        -- v0.7.74: generations cap. Generation of THIS death = whatever was
+        -- recorded for killed_unit (or 0 if it wasn't a spread DoT — e.g. burnt
+        -- by the player's own shot). The new spread DoT will be tagged with
+        -- src_gen + 1; if that would meet or exceed the cap, we don't spread.
+        local cap = effective_setting("tweak_wildfire_generations_cap") or 3
+        if type(cap) ~= "number" then cap = 3 end
+        local src_gen = _ct_wildfire_generation[killed_unit] or 0
+        if src_gen + 1 > cap then
+            return -- chain depth exceeded; stop spreading
+        end
+        local new_gen = src_gen + 1
+
+        local chosen = _ct_pick_spread_template(killed_unit)
+
+        -- Re-implement vanilla spread with our chosen template and generation
+        -- tracking. Mirrors morris_buff_settings.lua:3714-3743. We always handle
+        -- spread ourselves (rather than falling through to vanilla for the
+        -- orange case) so generation tagging is consistent across colors.
+        local template = buff.template
+        buff.cached_broadphase = buff.cached_broadphase or {}
+        buff.cached_custom_dot = buff.cached_custom_dot or { dot_template_name = chosen }
+        buff.cached_custom_dot.dot_template_name = chosen
+
+        local side = Managers.state.side.side_by_unit[owner_unit]
+        local num_nearby_enemies = AiUtils.broadphase_query(
+            POSITION_LOOKUP[killed_unit],
+            template.area_radius,
+            buff.cached_broadphase,
+            side.enemy_broadphase_categories
+        )
+        local hit_zone_name = "full"
+        local damage_source = "buff"
+        local damage_profile, target_index, power_level, boost_curve_multiplier, is_critical_strike, aoe_data
+
+        for i = 1, num_nearby_enemies do
+            local target_unit = buff.cached_broadphase[i]
+            if target_unit ~= killed_unit then
+                DamageUtils.apply_dot(
+                    damage_profile, target_index, power_level, target_unit,
+                    owner_unit, hit_zone_name, damage_source, boost_curve_multiplier,
+                    is_critical_strike, aoe_data, owner_unit, buff.cached_custom_dot
+                )
+                -- Tag the neighbor with the new generation. If it already has a
+                -- LOWER generation tag (e.g. spread from a closer earlier source
+                -- this same frame), we keep the lower one — the chain is bounded
+                -- by the SHORTEST path, which is the more conservative choice
+                -- for cap interpretation.
+                local prev = _ct_wildfire_generation[target_unit]
+                if not prev or new_gen < prev then
+                    _ct_wildfire_generation[target_unit] = new_gen
+                end
+            end
+        end
+    end)
+end
+
+-- ============================================================
 -- Larger Clip — scale ammo_per_reload alongside clip_size (v0.7.68 → v0.7.69 unconditional)
 -- ============================================================
 -- Vanilla `deus_larger_clip` (deus_power_up_settings.lua:2647-2673) uses
@@ -4954,6 +5542,8 @@ mod.on_setting_changed = function(setting_id)
         sync_reckless_swings()
     elseif setting_id == "bomb_boon_cooldown" then
         sync_bomb_cooldown()
+    elseif setting_id == "ulric_pack_unlimited_range" then
+        sync_ulric_pack_unlimited_range()
     elseif setting_id == "tweak_boon_movespeed" then
         sync_boon_movespeed()
     elseif setting_id == "tweak_poison_proof_duration" then

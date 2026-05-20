@@ -1,5 +1,130 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.77-alpha (2026-05-20)
+
+### Fixed: VMF "Attempting to rehook active hook" warning on `generate_random_power_ups`
+
+Two separate `mod:hook("DeusPowerUpUtils", "generate_random_power_ups", ...)` blocks existed in ct — one for count override + disabled-boon enforcement + bomb-boon exclusivity (line ~783, original), one for Belakor-temple force-unique-rarity (was line ~1387). VMF allows mod:hook chaining ACROSS mods but warns when the SAME mod re-hooks the same Class+method; the second hook triggered the warning on every mod load.
+
+Fix: consolidated the Belakor force-rarity logic into the original hook's body. Reads `args[6]` (availability_type) and `args[8]` (forced_rarity) positionally — same vanilla signature both hooks were already targeting. Semantics unchanged; one VMF hook registration instead of two.
+
+## 0.7.76-alpha (2026-05-20)
+
+### Added: Shared Blessings — Bots Mirror Host's Boons (toggle, default OFF)
+
+New checkbox under Reworks → Boons: **Shared Blessings: Bots Mirror Host's Boons** (default OFF).
+
+When enabled, every boon the lobby's heroes gain in Chaos Wastes is also granted to every bot in the warband. Covers all sources — shrine picks, altar rewards, dormant reveals, Belakor's Temple, blessings of the gods, set completions, and end-of-level grants — because every CW boon application funnels through the single canonical entry point `DeusRunController.add_power_ups` (`deus_run_controller.lua:1126`).
+
+**Implementation:**
+- `hook_safe` on `DeusRunController.add_power_ups`. When the toggle is on and the receiving player is a HUMAN on the HOST (`_run_state:is_server()`), iterate `Managers.player:human_and_bot_players()`, clone the power-up list with fresh `client_id`s per bot, and re-call `add_power_ups(cloned, bot:local_player_id(), false)` for each. `present=false` so the reward popup doesn't fire for bot grants.
+- Reentry guard `_ct_bot_mirror_active` prevents infinite recursion when our mirror invocation re-enters the hook. Set rewards triggered inside a host-side `add_power_ups` (via `_check_set_completed`) also mirror naturally because the flag is only set during the inner bot iteration loop.
+- Bots are entirely client-side on the host — remote peers see bots as husk units and receive their buffs via the standard server-authoritative buff_system RPC chain. So mirroring runs only on host.
+- Talent-style boons (the ones with `power_up.talent = true`) are routed by vanilla `activate_deus_power_up` through `deus_backend:set_deus_talent_ids` for the receiving career — works on bot careers identically, the talent slot is written into each bot's own talent set.
+
+**Limits / known edge cases:**
+- Mid-run bot career swaps (rare) won't re-grant historical boons. Workaround: toggle the bot off and back on.
+- The `present` reward popup is suppressed for bots by design (would spam the host's UI with N popups for N bots).
+
+Per `feedback_vt2_gated_registration_diverges.md` — this is a roll-time mirror, NOT a registration-time gate. `DeusPowerUps` table indices remain identical across peers regardless of toggle state.
+
+Localization carries Warhammer flavor: "the heroes' fortunes are bound to the Lords of the Old World" framing in the tooltip.
+
+### Added: Khorne's Champions Banlist — Per-Mark Toggles (defaults all OFF)
+
+New nested menu under Curses: **Khorne's Champions Banlist (Boss Enhancements)** with 13 checkboxes — one per Boss Grudge Mark. Banned marks are excluded from monster-boss enhancement rolls.
+
+**The 13 marks (per `BossGrudgeMarks` in `grudge_mark_settings.lua:127-140`):**
+Commander, Crippling Blow, Crushing Blow, Frenzy, Intangible, Periodic Curse Aura, Periodic Shield, Raging, Ranged Immune, Regenerating, Unstaggerable, Vampiric, Warping.
+
+**Implementation:**
+- `mod:hook` on `TerrorEventUtils.add_enhancements_for_difficulty` (`terror_event_utils.lua:191`). When the caller passes `enhancement_set = nil` or `enhancement_set = BossGrudgeMarks`, swap in a filtered copy that omits banned marks. Other callers (termite / dwarf-fest event variants with their own enhancement sets) pass through untouched.
+- The filter only builds when at least one mark is banned (nothing-banned → return nil → vanilla code path). Empty-set fallback is safe: `generate_enhanced_breed` iterates the set into a candidate list; an empty list yields no enhancements, but the `BreedEnhancements.base` health/damage block is always appended regardless.
+- Server-only — boss enhancement assignment is server-authoritative at spawn time. Clients receive the chosen enhancements via the spawn data envelope.
+
+**Display name resolution:**
+- Display strings live in compiled localization data, not lua source — internal names map to loc keys via the `display_name` field on each `BreedEnhancements` entry.
+- At mod load, `_resolve_grudge_mark_display_name` walks the 13 marks and caches `Localize(display_name_<n>)` results into `mod._ct_grudge_mark_display`. Fallback to title-cased internal name if Localize isn't ready or the key is missing.
+- Companion command `/dump_grudge_marks` prints the 13 internal→key→resolved-display mappings to the log for verification.
+
+Per `feedback_vt2_gated_registration_diverges.md` — boss enhancements are not registered into a network-indexed table; the filter operates on the per-spawn random pool. No registration divergence risk.
+
+## 0.7.75-alpha (2026-05-20)
+
+### Added: Belakor's Temple — Reward Unique Boons (toggle, default ON)
+
+New checkbox under Reworks → Boons: **Belakor's Temple: Reward Unique Boons** (default ON).
+
+The Belakor arena node (the SIG zone on the Wastes map) rewards a cursed chest on completion. Vanilla `weight_by_rarity` for cursed chests is `{ event=6, exotic=3, rare=6, unique=1 }` (`deus_power_up_settings.lua:14-19`) — only a ~6% chance per slot of rolling a unique even though the temple is the prestige reward in lore.
+
+With this toggle on, the cursed-chest roll AT THE BELAKOR TEMPLE NODE ONLY forces `forced_rarity = "unique"` via `DeusPowerUpUtils.generate_random_power_ups`. Vanilla's `forced_rarity` parameter already implements the requested fallback semantics — if the unique pool is exhausted (every unique already collected), it walks down through exotic → rare → event automatically (`deus_power_up_utils.lua:192-215`). Other cursed chests / weapon chests / shrines retain vanilla rarity weights — the override is local to the Belakor-temple call only, no global `weight_by_rarity` mutation.
+
+Conditions:
+- Toggle on.
+- `availability_type == DeusPowerUpAvailabilityTypes.cursed_chest`.
+- Current node = `_run_state:get_arena_belakor_node()` (the Belakor arena node, queryable per-peer at boon-roll time).
+
+Per-peer note: each peer rolls its own seed when opening the chest (`deus_cursed_chest_view.lua:58` uses position-derived hash), so the hook runs on every player's machine independently. The boon CHOICE isn't network-sync'd; only the resulting `add_power_up` RPC is, so per-peer override is consistent.
+
+Per `feedback_vt2_gated_registration_diverges.md`: this is a gate-at-roll-time override (not registration-time), so DeusPowerUps array indices remain identical across peers regardless of toggle state.
+
+## 0.7.74-alpha (2026-05-20)
+
+### Added: Myrmidia's Wildfire — Generations Cap slider
+
+New numeric slider under Reworks → Boons: **Myrmidia's Wildfire: Generations Cap** (range 1-10, default 3).
+
+Caps how deep the Wildfire fire-spread chain can propagate. Each spread DoT carries a generation tag — the player's own burn is generation 0, the first spread is 1, the second 2, and so on. When a burning enemy dies, the spread proc fires only if the source's generation is below the cap. Default 3 keeps the boon's chain useful for clearing small groups while preventing the runaway hallway-of-fire cascades that emerge against dense hordes.
+
+**Tradeoffs surfaced via the tooltip:**
+- Cap = 1: only the player's own burnt enemies trigger a spread; spread targets never re-spread.
+- Cap = 3 (default): up to two re-spreads from a single seed kill.
+- Cap = 10: near-uncapped, vanilla-like behavior but with an upper bound to keep mass-burning enemy groups from softlocking the spread loop.
+
+Implementation: generation tracking lives on a weak-keyed `_ct_wildfire_generation` table inside the same `ProcFunctions.boon_dot_burning_01_spread` hook added in v0.7.73 for color matching. When a neighbor is tagged via `DamageUtils.apply_dot`, we record `new_gen = src_gen + 1` against the neighbor unit so the next death reads it back. Weak references mean tags die with the unit and no leak occurs across runs.
+
+Per `feedback_vt2_gated_registration_diverges.md` — the slider is read at proc time (not at boon registration time), so peer indices remain identical regardless of cap value.
+
+Host-authoritative because `boon_dot_burning_01_spread` is registered with `authority = "server"` in vanilla — only the server-side hook fires the spread loop.
+
+## 0.7.73-alpha (2026-05-20)
+
+### Reworked: Myrmidia's Wildfire spread DoT color matches the source burn
+
+The boon `boon_dot_burning_01` (Myrmidia's Wildfire) propagates a fire DoT to nearby enemies when a burning target dies. Vanilla's `boon_dot_burning_01_spread` (`morris_buff_settings.lua:3714`) hardcodes the spread template as `boon_career_ability_burning_aoe` — regardless of what burn source actually killed the target.
+
+ct now hooks the proc and picks the spread template from the dying enemy's active burn status effect:
+
+- **Sister of the Thorn — Moonfire Bow** (`burning_elven_magic`) → spreads as blue flame via `we_deus_01_dot_fast`.
+- **Sienna Necromancer balefire** (`burning_balefire`) → spreads as purple flame via the auto-generated `boon_career_ability_burning_aoe_balefire` (vanilla's `BalefireBurnDotLookup` builds this variant at boot via `buff_utils.lua:267`).
+- **Warp-flame** (chaos sorcerer / `burning_warpfire`) → keeps vanilla Myrmidia orange — the boon is the player's own fire, not warp-corruption.
+- **Vanilla burn** (`burning`) → unchanged, vanilla orange.
+
+Hook target is `ProcFunctions.boon_dot_burning_01_spread` (same merged table as Manann's Tempest's `chain_lightning` — buff_func entries live in `dlc_settings.morris.proc_functions` and merge into the global `ProcFunctions` at boot). Implementation re-walks the vanilla spread loop with `buff.cached_custom_dot.dot_template_name` overwritten per call so each death picks its own color without leaking the previous kill's choice.
+
+This is the contract surface for v0.7.74's generation-cap slider (planned next).
+
+## 0.7.72-alpha (2026-05-20)
+
+### Reworked: Quiver Cascade also extends max overheat and Moonfire energy
+
+The `ct_meta_ammo` boon ("Quiver Cascade") previously granted only +5% total ammo per active boon. Per-stack it now also grants:
+
+- **+5% max overheat** via `stat_buff = "max_overcharge"`. Covers Sienna's staves (firebolt, beam, conflag, fireball, geiser) and Bardin's drakefire weapons (drakegun + brace of drake pistols) — both use `PlayerUnitOverchargeExtension`, which reads `max_overcharge` at `_calculate_and_set_buffed_max_overcharge_values` (`player_unit_overcharge_extension.lua:108`).
+- **+5% max Moonfire Bow energy** via a runtime hook on `PlayerUnitEnergyExtension._max_energy`. Vanilla's energy system has NO buff path (`apply_buffs_to_value` is never called on max), so we mutate `_max_energy` directly and scale `_energy` proportionally to keep the fill fraction stable. Base value is stashed at first touch and rescaled relative to live boon count.
+
+The prior vanilla `apply_buff_func = "refresh_ranged_slot_buffs"` only refreshed `ammo_extension:refresh_buffs()`. It's replaced by a custom `ct_meta_ammo_refresh_capacity` that does ammo + overcharge recalc + Moonfire-energy rescale in one pass, so all three caps update live on each boon grant — no weapon swap required.
+
+Localization, dropdown tooltips, and the on-boon-card description updated to reflect the extended coverage. Inertness now only applies on the (unlikely) loadout with no ranged weapon at all — every CW career has a ranged slot by default, so this remains theoretical.
+
+Memory cleanup: prior memory file `reference_vt2_max_overheat_modifier_unified.md` was hallucinated. The correct stat_buff key is `max_overcharge` (verified against `buff_templates.lua:109`), not `max_overheat_modifier` (which exists nowhere in the source). Memory rewritten with verified facts.
+
+## 0.7.71-alpha (2026-05-20)
+
+### Added: Ulric's Pack — Unlimited Aura Range toggle
+
+New checkbox under Reworks → Boons. Vanilla `wolfpack` boon's proximity buff has `range_check.radius = 20` (`deus_power_up_settings.lua:3829-3835`); when enabled, the field is set to `math.huge` so the pack's power bonus stacks regardless of how far apart the heroes have spread. `BuffAreaHelper.update_range_check` re-reads the radius every tick (`buff_area_helper.lua:26`) so a one-time field mutation is sufficient — no per-frame hook. Mirrors the bomb-cooldown save-and-restore pattern: toggling off restores vanilla 20m without restart, and `on_setting_changed` re-syncs live. Boon template is never re-registered — only the existing vanilla field is mutated — so peer index alignment is preserved (`feedback_vt2_gated_registration_diverges.md` compliant). Host-authoritative.
+
 ## 0.7.70-alpha (2026-05-20)
 
 ### Fixed: Isha dropdown "Aegis" option displayed "[Invalid String Format]"
