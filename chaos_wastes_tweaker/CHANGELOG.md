@@ -1,8 +1,38 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.68-alpha (2026-05-19)
+
+### Added: Rework — Larger Clip scales ammo-per-reload-tick alongside clip_size
+
+Setting: `tweak_larger_clip_full_reload` (Reworks → Boons group, default OFF).
+
+User report: on shotguns (Grudge-Raker etc.) with `deus_larger_clip` active, the clip goes from 2→4 but refilling it requires 2 pump cycles instead of 1. Each shotgun pump still loads only 2 shells, even though the clip is now 4.
+
+Vanilla cause: `GenericAmmoUserExtension._ammo_per_reload` is set ONCE at extension init from the weapon template (`grudge_raker.lua:155: ammo_per_reload = 2`) and is NEVER passed through `apply_buffs_to_value`. The `clip_size` stat_buff IS applied (line 95 of generic_ammo_user_extension.lua: `_ammo_per_clip = math.ceil(buff_extension:apply_buffs_to_value(_original_ammo_per_clip, "clip_size"))`), but `_ammo_per_reload` is just copied verbatim at line 28. Each reload tick caps at `_ammo_per_reload` shells — so a doubled clip needs two ticks to refill.
+
+This is genuine vanilla behavior, not a CT regression. CT does not touch `larger_clip`, `ammo_per_reload`, or any reload code.
+
+Fix (toggle-gated rebalance): `mod:hook_safe(GenericAmmoUserExtension, "_apply_buffs", ...)` reads the effective clip_size multiplier (`_ammo_per_clip / _original_ammo_per_clip`) and applies the SAME scale to `_ammo_per_reload`. Original value is captured once per extension instance (`_ct_original_ammo_per_reload`) so repeated `_apply_buffs` calls don't compound.
+
+Generic: works for ANY clip_size source (boon, talent, future modded buff). On weapons without an `ammo_per_reload` template entry (everything that already reload-fills in one action) the hook is a no-op. Host-authoritative via `effective_setting`.
+
 ## 0.7.67-alpha (2026-05-19)
 
-### Fixed: `DeusPowerUpsLookup` index drift across peers with divergent dormant/trait-boon toggles
+### Removed redundant name override on `blessing_of_power_name`
+
+Vanilla CW already returns "Miracle of Ulric" for the `blessing_of_power_name` localization key (user-confirmed 2026-05-20). The v0.7.65 Localize hook over-reached and substituted the same string back, which was a no-op visually but conceptually wrong — the user only ever wanted the description changed, not the name. Removed the name from `MIRACLE_LOC_OVERRIDES` and narrowed the `blessing_of_power_*` branch in the Localize hook to `blessing_of_power_desc` only.
+
+### Diagnostic: log every `blessing_of_power` purchase attempt + shop-open offerings
+
+The 2026-05-20 3-player session had the toggle on (host-synced) and the shop was a `shop_strife` (Khorne pillar, which offers `blessing_of_power` per `deus_shop_settings.lua:13-16`), but the user reported "Ulric wasn't purchaseable" and **zero** `_try_buy_blessing` entries appear in either log for the blessing. Buy attempts for the other two blessings (`blessing_holy_hand_grenade`, `blessing_of_grimnir`) recorded normally. Cost was 100; user had 1337 coins remaining after the first two buys, so affordability is not the cause.
+
+Without entry logging in the hook we can't tell if (a) the click never reached `_try_buy_blessing` (UI greyed out the button — most likely) or (b) some silent return-false in our own code fired. v0.7.67 closes that gap:
+
+- **`_try_buy_blessing` entry log** — fires on every call where `blessing_name == "blessing_of_power"`, regardless of toggle state. Logs buyer, is_server, toggle, has_blessing, coins, cost. Next session will tell us whether the click reached the hook at all.
+- **Reject-reason logs** — the previously-silent `has_blessing → return false` and `coins < cost → return false` paths now log their cause.
+- **`DeusShopView._create_ui_elements` hook augmented** — logs the shop type, full blessing offering list, and current `blessings_with_buyer` state at shop-open. Captures whether `blessing_of_power` is even in the offering pool (it should be, for `shop_strife`).
+
+
 
 Same bug class as v0.7.59 / v0.7.60 (gated registration diverges across peers), but at a different table. The v0.7.60 fix split registration from the rarity-pool insert for the `NetworkLookup.deus_power_up_templates` + `BuffTemplates` side tables — but **`DeusPowerUpsLookup` itself** stayed inside the toggle-gated `inject_dormant_boon` body. That table is *also* network-relevant: `deus_mechanism.lua:1256` does `DeusPowerUpsLookup[boon_id]` where `boon_id` is the integer received over RPC. If host's lookup table is ordered differently from client's, host's `rpc_add_buff(id=N)` resolves to a *different* boon on the client.
 

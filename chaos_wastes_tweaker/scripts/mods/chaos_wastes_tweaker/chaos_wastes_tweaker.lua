@@ -30,7 +30,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.67-alpha"
+local MOD_VERSION = "0.7.68-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -4852,6 +4852,43 @@ if ProcFunctions and ProcFunctions.chain_lightning then
         return func(owner_unit, buff, params, world, param_order)
     end)
 end
+
+-- ============================================================
+-- Larger Clip — scale ammo_per_reload alongside clip_size (v0.7.68)
+-- ============================================================
+-- Vanilla `deus_larger_clip` (deus_power_up_settings.lua:2647-2673) uses
+-- `stat_buff = "clip_size"` with multiplier 1 (+100%). On shotguns
+-- (Grudge-Raker etc.) that doubles the clip from 2→4. BUT vanilla
+-- `GenericAmmoUserExtension._ammo_per_reload` is set ONCE at init from the
+-- weapon template (`grudge_raker.lua:155: ammo_per_reload = 2`) and is NEVER
+-- passed through `apply_buffs_to_value`. So each shotgun pump still loads
+-- only 2 shells, requiring 2 pumps to refill the doubled clip.
+--
+-- This tweak hooks `_apply_buffs` (which already recomputes `_ammo_per_clip`
+-- from `_original_ammo_per_clip * clip_size_multiplier`) and applies the same
+-- effective multiplier to `_ammo_per_reload`. Result: larger_clip refills the
+-- doubled clip in one reload tick on shotguns. On weapons without an
+-- ammo_per_reload entry (everything that already reload-fills in one action)
+-- this hook is a no-op.
+--
+-- Captures `_ct_original_ammo_per_reload` once per extension instance to avoid
+-- compounding across repeated `_apply_buffs` calls (which fire on every buff
+-- add/remove). Reads the scaling factor from the ratio `_ammo_per_clip /
+-- _original_ammo_per_clip` so ANY clip_size source (boon, talent, future
+-- modded buff) drives the reload-tick scale too — generic, not larger_clip-
+-- specific.
+mod:hook_safe("GenericAmmoUserExtension", "_apply_buffs", function(self)
+    if not effective_setting("tweak_larger_clip_full_reload") then return end
+    if not (self._original_ammo_per_clip and self._original_ammo_per_clip > 0) then return end
+    if not self._ammo_per_clip then return end
+    if self._ct_original_ammo_per_reload == nil then
+        self._ct_original_ammo_per_reload = self._ammo_per_reload
+    end
+    local orig_reload = self._ct_original_ammo_per_reload
+    if not orig_reload or orig_reload <= 0 then return end
+    local scale = self._ammo_per_clip / self._original_ammo_per_clip
+    self._ammo_per_reload = math.max(orig_reload, math.ceil(orig_reload * scale))
+end)
 
 -- ============================================================
 -- Block Ranger Veteran from Saving Morgrim's
