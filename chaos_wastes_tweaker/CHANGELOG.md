@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.69-alpha (2026-05-19)
+
+### Fixed: Larger Clip required 2 reloads to refill a doubled shotgun clip (now unconditional)
+
+Per user clarification: the deus_larger_clip dormant boon is cut content re-enabled by ct; its "2 pumps to refill a 4-shell clip" is unintended vanilla behavior, not a rebalance choice. Removed the v0.7.68 toggle gate — the hook now always fires.
+
+The behavior is identical to v0.7.68 with the toggle ON. Old toggle widget + localization entries (`tweak_larger_clip_full_reload`, `tweak_larger_clip_full_reload_tooltip`) removed; the only sane behavior is "larger clip refills in one tick."
+
 ## 0.7.68-alpha (2026-05-19)
 
 ### Added: Rework — Larger Clip scales ammo-per-reload-tick alongside clip_size

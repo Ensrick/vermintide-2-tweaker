@@ -489,7 +489,6 @@ local data = {
                             { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
                             { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
                             { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
-                            { setting_id = "tweak_larger_clip_full_reload",   type = "checkbox", default_value = false, tooltip = "tweak_larger_clip_full_reload_tooltip" },
                             { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
                             { setting_id = "tweak_miracle_of_ulric_persistent", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_ulric_persistent_tooltip" },
                             { setting_id = "tweak_miracle_of_isha_alternative", type = "dropdown", default_value = "vanilla", options = isha_alternative_options, tooltip = "tweak_miracle_of_isha_alternative_tooltip" },
