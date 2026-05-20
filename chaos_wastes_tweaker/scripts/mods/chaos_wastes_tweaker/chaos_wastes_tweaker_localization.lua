@@ -320,7 +320,7 @@ local loc = {
     tweak_miracle_of_isha_alternative = { en = "Miracle of Isha behavior" },
     tweak_miracle_of_isha_alternative_tooltip = { en = "Replaces the behavior of Blessing of Isha at the shrine.\n\n• Vanilla = one team revive-from-death per run when the squad is reduced to one hero.\n• Aegis = every hero takes -25%%%% damage for the rest of the run.\n• Unlimited Wounds = every hero gets unlimited wounds for the rest of the run (recruit-style: every knockdown is revivable; no instant-death after the 1st down).\n\nHost-authoritative. Vanilla revive mutator is fully disabled when Aegis or Unlimited Wounds is selected." },
     isha_alt_vanilla = { en = "Vanilla (revive once)" },
-    isha_alt_aegis   = { en = "Aegis (-25% damage taken, all run)" },
+    isha_alt_aegis   = { en = "Aegis (-25%% damage taken, all run)" },
     isha_alt_wounds  = { en = "Unlimited Wounds (recruit-style)" },
     tweak_boon_movespeed = { en = "Rework: Movement Speed property" },
     tweak_boon_movespeed_tooltip = { en = "Changes the 5%%%% movement speed bonus to 10%%%%." },

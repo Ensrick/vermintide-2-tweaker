@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.70-alpha (2026-05-20)
+
+### Fixed: Isha dropdown "Aegis" option displayed "[Invalid String Format]"
+
+The `isha_alt_aegis` localization at `_localization.lua:323` was `"Aegis (-25% damage taken, all run)"` with a bare `%`. VMF dropdown labels go through `string.format` via `localize_dropdown_data`; a single `%` followed by a space and a letter (`% d`) is a valid format specifier (signed decimal with leading space), so when the format call has no matching numeric arg the engine returns the canonical `"[Invalid String Format]"` placeholder.
+
+Fix: doubled the percent sign — `(-25%% damage taken, all run)`. Same fix pattern documented in memory `feedback_vt2_localize_string_format_pipeline.md`. The other Isha dropdown labels (`isha_alt_vanilla`, `isha_alt_wounds`) have no `%` and were unaffected. The Aegis blessing DESCRIPTION strings shipped earlier (in `MIRACLE_LOC_OVERRIDES`) already escape correctly.
+
 ## 0.7.69-alpha (2026-05-19)
 
 ### Fixed: Larger Clip required 2 reloads to refill a doubled shotgun clip (now unconditional)

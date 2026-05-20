@@ -30,7 +30,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.69-alpha"
+local MOD_VERSION = "0.7.70-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
