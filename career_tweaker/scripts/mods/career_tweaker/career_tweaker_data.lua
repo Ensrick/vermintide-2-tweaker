@@ -128,6 +128,7 @@ return {
                                 type        = "group",
                                 sub_widgets = {
                                     { setting_id = "rework_dr_ranger_attack_speed_5_to_10", type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_ranger_base_hp_plus_25",      type = "checkbox", default_value = false },
                                 },
                             },
                         },

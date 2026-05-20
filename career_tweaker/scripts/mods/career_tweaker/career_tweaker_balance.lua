@@ -92,6 +92,35 @@ local BALANCE_MODS = {
     -- Ranger Veteran's row-2 +5% attack speed talent
     -- (bardin_ranger_attack_speed, multiplier 0.05). Career-specific.
     rework_dr_ranger_attack_speed_5_to_10 = _build_stat_buff_rework("bardin_ranger_attack_speed", "multiplier", 0.10),
+    -- Ranger Veteran's base HP pool: vanilla 100 → 125 (+25). Patches
+    -- `CareerSettings.dr_ranger.attributes.max_hp`, the table that
+    -- `PlayerUnitHealthExtension._get_base_max_health` reads via
+    -- `SPProfiles[profile].careers[index].attributes.max_hp` — same table
+    -- reference (SPProfiles.dwarf_ranger.careers entries are direct refs to
+    -- CareerSettings.dr_* — see sp_profiles.lua:163). Takes effect on the
+    -- next mission load / hero respawn (max health is recalculated in
+    -- `PlayerUnitHealthExtension.init`); doesn't retroactively bump an
+    -- already-spawned Ranger's max in the current mission.
+    rework_dr_ranger_base_hp_plus_25 = {
+        character = "bardin",
+        career    = "dr_ranger",
+        patches   = {},
+        custom_apply = function(saved)
+            local cs = CareerSettings and CareerSettings.dr_ranger
+            local attrs = cs and cs.attributes
+            if not attrs or type(attrs.max_hp) ~= "number" then return end
+            saved.ranger_max_hp_original = attrs.max_hp
+            attrs.max_hp = attrs.max_hp + 25
+        end,
+        custom_restore = function(saved)
+            if saved.ranger_max_hp_original == nil then return end
+            local cs = CareerSettings and CareerSettings.dr_ranger
+            local attrs = cs and cs.attributes
+            if not attrs then return end
+            attrs.max_hp = saved.ranger_max_hp_original
+            saved.ranger_max_hp_original = nil
+        end,
+    },
     -- Handmaiden's row-2 +5% crit chance talent
     -- (kerillian_maidenguard_crit_chance, bonus 0.05). Career-specific.
     -- Buff field is `bonus` not `multiplier` — critical_strike_chance stat_buff

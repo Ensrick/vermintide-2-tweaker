@@ -30,7 +30,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.66-alpha"
+local MOD_VERSION = "0.7.67-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -327,16 +327,19 @@ mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, ses
     _ct_host_sync_received = true
     mod:info("[ct_sync] received host settings from %s (session %s, %d chunks, %d bytes, %d keys)",
         tostring(sender_peer_id), tostring(session), entry.total, #json, #SYNCED_SETTING_NAMES)
-    if sync_host_dependent_state then
-        sync_host_dependent_state()
-    end
-    -- v0.7.64: piggyback manifest reply. Sending back to "server" so the host's
-    -- log captures every joined peer's ct version + mod list at the same moment
-    -- the settings sync completes — that's the lobby's first reliable "everyone
-    -- is connected and post-loading" instant. Only the function (not the chat
-    -- command) auto-fires; clients always reply on every host broadcast.
+    -- v0.7.67 ordering fix: the manifest broadcast MUST fire BEFORE
+    -- sync_host_dependent_state() because any of the 11 sync_* re-registration
+    -- helpers it invokes (trait boons, dormants, miracles, etc.) can throw, and
+    -- VMF's network_register safe-wrapper swallows the error — aborting the
+    -- receiver body silently. Pre-0.7.67 the manifest line was last; if anything
+    -- in sync_host_dependent_state threw, the host never saw the client's RECV
+    -- and we couldn't tell version drift from "feature didn't fire" in logs.
+    mod:info("[ct_peers] client received host ct_sync — broadcasting own manifest back to host")
     if _broadcast_local_manifest then
         _broadcast_local_manifest("server")
+    end
+    if sync_host_dependent_state then
+        sync_host_dependent_state()
     end
 end)
 
@@ -910,8 +913,23 @@ local function fix_arc_nan(widgets)
     end
 end
 
-mod:hook_safe("DeusShopView", "_create_ui_elements", function(self)
+mod:hook_safe("DeusShopView", "_create_ui_elements", function(self, shop_settings, power_ups, blessings)
     fix_arc_nan(self._shop_item_widgets)
+    -- v0.7.67 diagnostic: log the blessings the shop is offering this visit. The
+    -- 2026-05-20 session had blessing_of_power available at shop_strife but the
+    -- user reported it "wasn't purchaseable" with zero buy attempts in logs. This
+    -- captures whether the blessing was even in the offering pool, plus the buyer
+    -- state at shop-open so we can tell from logs alone whether the button was
+    -- already greyed out when the shop opened.
+    if type(blessings) == "table" then
+        local names = {}
+        for i = 1, #blessings do names[i] = tostring(blessings[i]) end
+        local with_buyer = self._deus_run_controller and self._deus_run_controller:get_blessings_with_buyer() or {}
+        local buyer_dump = {}
+        for k, v in pairs(with_buyer) do buyer_dump[#buyer_dump + 1] = tostring(k) .. "=" .. tostring(v) end
+        mod:info("[miracle] DeusShopView opened type=%s blessings=[%s] already_bought={%s}",
+            tostring(self._shop_type), table.concat(names, ","), table.concat(buyer_dump, ","))
+    end
 end)
 
 mod:hook_safe("DeusCursedChestView", "create_ui_elements", function(self)
@@ -1665,8 +1683,10 @@ local RECKLESS_SWINGS_DESC_OVERRIDE = "While above 25%% Health, gain 25%% Power 
 -- Localize hook to substitute when the toggle is host-active.
 -- `%%` is required because UIUtils.format_localized_description re-feeds the
 -- result through string.format (feedback_vt2_localize_string_format_pipeline.md).
+-- v0.7.67: name override removed — vanilla already returns "Miracle of Ulric"
+-- for `blessing_of_power_name` (user-confirmed 2026-05-20). Only the
+-- description differs, so only the description is overridden.
 local MIRACLE_LOC_OVERRIDES = {
-    blessing_of_power_name      = "Miracle of Ulric",
     blessing_of_power_desc      = "Grants every hero +50 Power for the rest of the run. The bonus persists through weapon swaps and upgrades at altars.",
     blessing_of_isha_desc_aegis = "Grants every hero -25%% damage taken for the rest of the run.",
     blessing_of_isha_desc_wounds= "Grants every hero unlimited wounds for the rest of the run — every knockdown is revivable instead of resulting in instant death after the first down.",
@@ -1683,7 +1703,7 @@ mod:hook(_G, "Localize", function(func, key, ...)
         if key == "description_deus_reckless_swings" and reckless_swings_originals then
             return RECKLESS_SWINGS_DESC_OVERRIDE
         end
-        if (key == "blessing_of_power_name" or key == "blessing_of_power_desc")
+        if key == "blessing_of_power_desc"
             and effective_setting("tweak_miracle_of_ulric_persistent") then
             return MIRACLE_LOC_OVERRIDES[key]
         end
@@ -3732,7 +3752,8 @@ local function inject_dormant_boon(power_up_name, rarity)
     -- player selects this boon at a chest (Crashify guid 9f697495 — burned in v0.7.39).
     register_power_up_in_network_lookup(power_up_name)
 
-    local pool             = rawget(_G, "DeusPowerUpRarityPool")
+    -- v0.7.67: `DeusPowerUpRarityPool` (the pool table) is no longer read here —
+    -- pool insertion moved to `_add_dormant_to_pool` below. Other globals stay.
     local templates        = rawget(_G, "DeusPowerUpTemplates")
     local power_ups        = rawget(_G, "DeusPowerUps")
     local array            = rawget(_G, "DeusPowerUpsArray")
@@ -3743,7 +3764,7 @@ local function inject_dormant_boon(power_up_name, rarity)
     local availability_t   = rawget(_G, "DeusPowerUpAvailabilityTypes")
     local tweak_data_glob  = rawget(_G, "MorrisBuffTweakData")
 
-    if not (pool and templates and power_ups and array and array_by_rarity and lookup and buff_templates) then
+    if not (templates and power_ups and array and array_by_rarity and lookup and buff_templates) then
         mod:info("[dormant] DeusPowerUp* tables not loaded yet; skipping injection of " .. tostring(power_up_name))
         return
     end
@@ -3760,11 +3781,28 @@ local function inject_dormant_boon(power_up_name, rarity)
         availability_t.shrine,
     }) or {}
 
-    -- 1. Add to the rarity pool itself.
-    pool[rarity] = pool[rarity] or {}
-    table.insert(pool[rarity], { power_up_name, availability, {} })
+    -- v0.7.67 split: the rarity-pool insert is no longer done here. It moved into
+    -- `_add_dormant_to_pool` below, called separately and gated by the user's
+    -- toggle. This function (`inject_dormant_boon`) now does all the network-
+    -- relevant registration UNCONDITIONALLY at mod-load — `DeusPowerUpsLookup`,
+    -- `DeusPowerUpsArray`, `DeusPowerUpsArrayByRarity`, `DeusPowerUps`,
+    -- `NetworkLookup.deus_power_up_templates`, `NetworkLookup.buff_templates`,
+    -- `BuffTemplates`, `DeusPowerUpBuffTemplates`. Same set of indices across
+    -- every peer regardless of which `activate_dormant_*` or `enable_boon_*`
+    -- toggles each has on. Only `DeusPowerUpRarityPool` (which determines what
+    -- a peer actually has the *option* to roll) stays toggle-gated.
+    --
+    -- Why this matters: `DeusPowerUpsLookup[boon_id]` is indexed by an integer
+    -- RPC parameter (deus_mechanism.lua:1256). If host's lookup table is
+    -- ordered differently from client's, host's rpc_add_buff(id=N) resolves to
+    -- a DIFFERENT boon on the client. Pre-0.7.67 the gate at the pool-insert
+    -- was applied to the entire `inject_dormant_boon` call, so `deus_larger_clip`
+    -- (and the other 8 dormants + 11 trait boons + ct_meta_movespeed +
+    -- ct_kill_heal) appeared in the lookup table only on peers with their toggle
+    -- on, drifting every subsequent boon's id by +1 per absent dormant.
+    -- Burned ct v0.7.66 (same class as v0.7.59 / v0.7.60).
 
-    -- 2. Build the new_power_up record (mirrors vanilla deus_power_up_settings.lua:7121-7176).
+    -- Build the new_power_up record (mirrors vanilla deus_power_up_settings.lua:7121-7176).
     local new_power_up = {}
     new_power_up.name           = power_up_name
     new_power_up.rarity         = rarity
@@ -3832,6 +3870,26 @@ local function inject_dormant_boon(power_up_name, rarity)
     mod:info(string.format("[dormant] injected %s at rarity %s (lookup_id=%d)", power_up_name, rarity, new_power_up.lookup_id))
 end
 
+-- v0.7.67: pool insertion is now its own gated step. See the long comment inside
+-- `inject_dormant_boon` for why this split is necessary. Idempotent via
+-- `_added_to_pool` table — safe to call repeatedly (e.g. from both pre-register
+-- and the toggled sync_dormant_boons / register_trait_boon paths).
+local _added_to_pool = {}
+local function _add_dormant_to_pool(power_up_name, rarity)
+    if _added_to_pool[power_up_name] then return end
+    local record = _injected_dormants[power_up_name]
+    if not record then
+        mod:info("[dormant] _add_dormant_to_pool: " .. tostring(power_up_name) .. " not yet registered; skipping pool insert")
+        return
+    end
+    local pool = rawget(_G, "DeusPowerUpRarityPool")
+    if not pool then return end
+    pool[rarity] = pool[rarity] or {}
+    table.insert(pool[rarity], { power_up_name, record.availability, {} })
+    _added_to_pool[power_up_name] = true
+    mod:info(string.format("[dormant] added %s to %s rarity pool (now %d entries in that rarity)", power_up_name, rarity, #pool[rarity]))
+end
+
 -- v0.7.60: pre-register every dormant boon's buff template + NetworkLookup entries
 -- at mod-load, regardless of activate_dormant_* toggle. This guarantees every
 -- ct-running peer has identical `_G.BuffTemplates` / `DeusPowerUpBuffTemplates` /
@@ -3851,54 +3909,42 @@ end
 -- same value, so the subsequent toggle-gated `inject_dormant_boon` calls remain
 -- safe and unchanged in behavior on the pool side.
 local function pre_register_dormant_lookups()
-    local templates       = rawget(_G, "DeusPowerUpTemplates")
-    local buff_templates  = rawget(_G, "DeusPowerUpBuffTemplates")
-    local global_bt       = rawget(_G, "BuffTemplates")
-    local tweak_data_glob = rawget(_G, "MorrisBuffTweakData")
-    if not (templates and buff_templates) then
-        mod:info("[dormant] pre-register skipped: DeusPowerUp tables not yet loaded")
+    -- v0.7.67: fully register every dormant boon (NetworkLookup, buff templates,
+    -- DeusPowerUps / Array / ArrayByRarity / Lookup) unconditionally in sorted
+    -- order. Pool insertion stays toggle-gated in sync_dormant_boons. Replaces
+    -- the v0.7.60 partial pre-register that only covered NetworkLookup names +
+    -- buff templates — that left `DeusPowerUpsLookup` (which IS network-indexed
+    -- per deus_mechanism.lua:1256) toggle-gated, causing lookup-id drift across
+    -- peers with divergent activate_dormant_* toggles (burned 2026-05-19 in the
+    -- multiplayer log scan: deus_larger_clip was inserted at lookup_id=165 on
+    -- the client but absent on the host, shifting every later id by 1).
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    if not templates then
+        mod:info("[dormant] pre-register skipped: DeusPowerUpTemplates not yet loaded")
         return
     end
     local keys = {}
     for k in pairs(DORMANT_BOON_RARITY) do keys[#keys + 1] = k end
     table.sort(keys)
-    local buff_count, name_count = 0, 0
     for _, power_up_name in ipairs(keys) do
         local rarity = DORMANT_BOON_RARITY[power_up_name]
-        register_power_up_in_network_lookup(power_up_name)
-        name_count = name_count + 1
-        local template = templates[power_up_name]
-        if template and not template.talent then
-            local buff_name = "power_up_" .. power_up_name .. "_" .. rarity
-            local buff_template = table.clone(template.buff_template)
-            local tweak_data = tweak_data_glob and tweak_data_glob[power_up_name]
-            if tweak_data then
-                for k, v in pairs(tweak_data) do
-                    buff_template.buffs[1][k] = v
-                end
-            end
-            buff_template.buffs[1].name = buff_name
-            buff_templates[buff_name] = buff_template
-            if global_bt then global_bt[buff_name] = buff_template end
-            register_buff_in_network_lookup(buff_name)
-            buff_count = buff_count + 1
-        end
+        inject_dormant_boon(power_up_name, rarity)
     end
-    mod:info("[dormant] pre-registered %d buff templates + %d power-up names for client compat",
-        buff_count, name_count)
+    mod:info("[dormant] pre-registered %d dormants unconditionally for client compat", #keys)
 end
 
 local function sync_dormant_boons()
-    -- Iterate in sorted order so that even if pool-injection ordering ever affects
-    -- a derived table that didn't exist when this comment was written, the
-    -- ordering across peers stays deterministic.
+    -- v0.7.67: registration is now unconditional in pre_register_dormant_lookups.
+    -- This pass only handles the pool insertion, which IS legitimately per-peer
+    -- (each peer can choose which dormants they want to roll). _add_dormant_to_pool
+    -- is idempotent so safe to call repeatedly.
     local keys = {}
     for k in pairs(DORMANT_BOON_RARITY) do keys[#keys + 1] = k end
     table.sort(keys)
     for _, name in ipairs(keys) do
         local default_rarity = DORMANT_BOON_RARITY[name]
-        if effective_setting("activate_dormant_" .. name) and not _injected_dormants[name] then
-            inject_dormant_boon(name, default_rarity)
+        if effective_setting("activate_dormant_" .. name) then
+            _add_dormant_to_pool(name, default_rarity)
         end
     end
 end
@@ -4043,13 +4089,35 @@ end
 -- Single consolidated hook for both blessing overrides — VMF silently shadows
 -- duplicate mod:hook on the same Class+method (feedback_vmf_hook_safe_no_chain.md).
 mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, blessing_name)
+    -- v0.7.67 diagnostic: log every blessing_of_power entry regardless of toggle.
+    -- The 2026-05-20 session showed zero entries despite the user reporting
+    -- "Ulric wasn't purchaseable" — meaning the click was rejected at the UI
+    -- layer (button greyed out) before reaching us. Next session will capture
+    -- whether the click ever reaches _try_buy_blessing.
+    if blessing_name == "blessing_of_power" then
+        local toggle_on = effective_setting("tweak_miracle_of_ulric_persistent")
+        local is_server = Managers and Managers.player and Managers.player.is_server
+        local already = self:has_blessing(blessing_name)
+        local coins = self._run_state:get_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID) or -1
+        local cost = (DeusCostSettings and DeusCostSettings.shop and DeusCostSettings.shop.blessings
+            and DeusCostSettings.shop.blessings[blessing_name]) or -1
+        mod:info("[miracle] _try_buy_blessing entry: blessing=%s buyer=%s is_server=%s toggle=%s already=%s coins=%s cost=%s",
+            tostring(blessing_name), tostring(buyer), tostring(is_server), tostring(toggle_on),
+            tostring(already), tostring(coins), tostring(cost))
+    end
     if blessing_name == "blessing_of_power" and effective_setting("tweak_miracle_of_ulric_persistent") then
         -- Replicate vanilla affordability / dedup guards from
         -- deus_run_controller.lua:1590-1599.
-        if self:has_blessing(blessing_name) then return false end
+        if self:has_blessing(blessing_name) then
+            mod:info("[miracle] Ulric rejected: has_blessing=true (already bought)")
+            return false
+        end
         local current_coins = self._run_state:get_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID)
         local blessing_cost = DeusCostSettings.shop.blessings[blessing_name]
-        if current_coins < blessing_cost then return false end
+        if current_coins < blessing_cost then
+            mod:info("[miracle] Ulric rejected: coins=%d < cost=%d", current_coins, blessing_cost)
+            return false
+        end
 
         _apply_persistent_buff_to_all_heroes(CT_BUFF_MIRACLE_OF_ULRIC)
 
@@ -4319,8 +4387,12 @@ local function register_meta_boon(spec)
         description_values = {},
     }
 
-    -- 4. Inject into rarity pool (reuses the dormant-boon injection helper)
+    -- 4. Register network-relevant tables + add to rarity pool. v0.7.67 split:
+    -- inject_dormant_boon does the registration; _add_dormant_to_pool does the
+    -- pool insert. Meta boons are unconditional (not toggle-gated), so always
+    -- both — same peer-side behavior as pre-0.7.67.
     inject_dormant_boon(spec.name, spec.rarity)
+    _add_dormant_to_pool(spec.name, spec.rarity)
     mod:info("[mod-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
 end
 
@@ -4389,6 +4461,7 @@ do
             description_values = {},
         }
         inject_dormant_boon("ct_meta_movespeed", "exotic")
+        _add_dormant_to_pool("ct_meta_movespeed", "exotic")
         mod:info("[mod-boon] registered ct_meta_movespeed at rarity exotic")
     end
 end
@@ -4435,35 +4508,13 @@ local CT_TRAIT_BOONS = {
 }
 
 local function register_trait_boon(spec)
+    -- v0.7.67: registration (NetworkLookup, buff template, DeusPowerUps* sides)
+    -- now happens unconditionally in pre_register_trait_boon_lookups. This
+    -- function is only responsible for the toggle-gated pool insert, which
+    -- determines whether the user actually rolls the boon.
     if not effective_setting(spec.toggle) then return end
-    local power_ups      = rawget(_G, "DeusPowerUpTemplates")
-    local buff_templates = rawget(_G, "BuffTemplates")
-    if not power_ups or not buff_templates then
-        mod:info("[trait-boon] globals not ready for " .. spec.name)
-        return
-    end
-    local source_template = buff_templates[spec.source_buff]
-    if not source_template or not source_template.buffs then
-        mod:info("[trait-boon] source buff template '" .. spec.source_buff .. "' not found for " .. spec.name)
-        return
-    end
-    -- Clone the source's buff array structure; inject_dormant_boon will further clone
-    -- and rename buffs[1].name when it registers in DeusPowerUpBuffTemplates.
-    local cloned_buffs = {}
-    for i, sub in ipairs(source_template.buffs) do
-        cloned_buffs[i] = table.clone(sub)
-    end
-    power_ups[spec.name] = {
-        advanced_description = "description_" .. spec.name,
-        display_name         = "display_name_" .. spec.name,
-        icon                 = spec.icon,
-        max_amount           = 1,
-        rectangular_icon     = true,
-        buff_template        = { buffs = cloned_buffs },
-        description_values   = {},
-    }
-    inject_dormant_boon(spec.name, spec.rarity)
-    mod:info("[trait-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
+    _add_dormant_to_pool(spec.name, spec.rarity)
+    mod:info("[trait-boon] enabled " .. spec.name .. " at rarity " .. spec.rarity)
 end
 
 -- v0.7.61: same shape as pre_register_dormant_lookups (v0.7.60). The gated
@@ -4511,38 +4562,61 @@ local function pre_register_trait_boon_lookups()
         local buff_name = "power_up_" .. spec.name .. "_" .. spec.rarity
         register_buff_in_network_lookup(buff_name)
     end
-    local count = 0
+    local count, placeholder_count = 0, 0
     for _, spec in ipairs(sorted) do
         local source_template = buff_templates[spec.source_buff]
-        if source_template and source_template.buffs then
-            if not templates[spec.name] then
-                local cloned_buffs = {}
+        -- v0.7.67 hardening (QA-found): write a `templates[spec.name]` entry
+        -- UNCONDITIONALLY in sorted order so `inject_dormant_boon` below doesn't
+        -- early-out on missing template — if it did, `DeusPowerUpsLookup` would
+        -- drift across peers (the exact bug class this refactor targets). When
+        -- the source buff is missing on a peer, we ship a placeholder template
+        -- with an empty buff array. The boon won't FUNCTION gameplay-wise on
+        -- that peer, but its lookup_id will align with peers that do have it —
+        -- so rpc_add_buff dispatches still resolve to the correct boon name and
+        -- the run doesn't crash. Today all four source buffs (always_blocking,
+        -- deus_crit_chain_lightning, deus_extra_shot,
+        -- deus_collateral_damage_on_melee_killing_blow) are vanilla and always
+        -- present, but this hardening guards against future DLC-gated source
+        -- buffs that could differ across peers.
+        if not templates[spec.name] then
+            local cloned_buffs = {}
+            if source_template and source_template.buffs then
                 for i, sub in ipairs(source_template.buffs) do
                     cloned_buffs[i] = table.clone(sub)
                 end
-                templates[spec.name] = {
-                    advanced_description = "description_" .. spec.name,
-                    display_name         = "display_name_" .. spec.name,
-                    icon                 = spec.icon,
-                    max_amount           = 1,
-                    rectangular_icon     = true,
-                    buff_template        = { buffs = cloned_buffs },
-                    description_values   = {},
-                }
+            else
+                placeholder_count = placeholder_count + 1
+                mod:info("[trait-boon] %s: source buff '%s' missing — using empty placeholder buffs (boon non-functional on this peer but lookup_id stays aligned)",
+                    spec.name, tostring(spec.source_buff))
+                -- Single placeholder buff with the correct name field so
+                -- inject_dormant_boon's `buff_template.buffs[1].name = buff_name`
+                -- assignment doesn't nil-crash.
+                cloned_buffs[1] = { name = "placeholder" }
             end
-            local buff_name = "power_up_" .. spec.name .. "_" .. spec.rarity
-            local buff_template = table.clone(templates[spec.name].buff_template)
-            buff_template.buffs[1].name = buff_name
-            dpubt[buff_name] = buff_template
-            buff_templates[buff_name] = buff_template
-            count = count + 1
-        else
-            mod:info("[trait-boon] template skipped " .. spec.name
-                .. ": source buff '" .. spec.source_buff .. "' not in BuffTemplates"
-                .. " — NetworkLookup name reserved, template construction deferred")
+            templates[spec.name] = {
+                advanced_description = "description_" .. spec.name,
+                display_name         = "display_name_" .. spec.name,
+                icon                 = spec.icon,
+                max_amount           = 1,
+                rectangular_icon     = true,
+                buff_template        = { buffs = cloned_buffs },
+                description_values   = {},
+            }
         end
+        local buff_name = "power_up_" .. spec.name .. "_" .. spec.rarity
+        local buff_template = table.clone(templates[spec.name].buff_template)
+        buff_template.buffs[1].name = buff_name
+        dpubt[buff_name] = buff_template
+        buff_templates[buff_name] = buff_template
+        -- Full registration (NetworkLookup IDs, DeusPowerUps / Array / Lookup,
+        -- buff template tables) — UNCONDITIONAL so every peer's
+        -- DeusPowerUpsLookup ordering matches regardless of source-buff
+        -- availability. Pool insert is gated separately in register_trait_boon.
+        inject_dormant_boon(spec.name, spec.rarity)
+        count = count + 1
     end
-    mod:info("[trait-boon] pre-registered %d trait boons for client compat", count)
+    mod:info("[trait-boon] pre-registered %d trait boons for client compat (%d using placeholder buffs)",
+        count, placeholder_count)
 end
 
 pre_register_trait_boon_lookups()
@@ -4612,6 +4686,7 @@ do
         }
 
         inject_dormant_boon("ct_kill_heal", "exotic")
+        _add_dormant_to_pool("ct_kill_heal", "exotic")
         mod:info("[mod-boon] registered ct_kill_heal at rarity exotic")
     else
         mod:info("[mod-boon] DeusPowerUpTemplates / BuffFunctionTemplates not ready for ct_kill_heal — NetworkLookup name reserved, template construction deferred")

@@ -1,5 +1,14 @@
 # Career Tweaker Changelog
 
+## 0.2.22-dev (2026-05-19)
+
+### Added: Ranger Veteran +25 base HP (toggle)
+
+New rework under **Rework: Bardin > Rework: Ranger Veteran**:
+`rework_dr_ranger_base_hp_plus_25` — adds 25 to Ranger Veteran's base max HP (vanilla 100 → 125, matching Witch Hunter Captain).
+
+Implementation: patches `CareerSettings.dr_ranger.attributes.max_hp` in `custom_apply` and restores the original in `custom_restore`. `PlayerUnitHealthExtension._get_base_max_health` reads `SPProfiles[profile].careers[index].attributes.max_hp`, and `SPProfiles.dwarf_ranger.careers` holds direct references to `CareerSettings.dr_*` (sp_profiles.lua:163), so the single field patch is what every health-calc path consumes. Takes effect on next mission load / hero respawn (vanilla recalculates max at extension init); does not retroactively bump an already-spawned Ranger's max in the current mission. Stacks multiplicatively with `max_health` / `max_health_alive` buffs.
+
 ## 0.2.21-dev (2026-05-19)
 
 ### Added: Zealot ability converts green → temporary HP (toggle)

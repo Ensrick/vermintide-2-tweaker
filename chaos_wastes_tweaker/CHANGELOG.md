@@ -1,5 +1,35 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.67-alpha (2026-05-19)
+
+### Fixed: `DeusPowerUpsLookup` index drift across peers with divergent dormant/trait-boon toggles
+
+Same bug class as v0.7.59 / v0.7.60 (gated registration diverges across peers), but at a different table. The v0.7.60 fix split registration from the rarity-pool insert for the `NetworkLookup.deus_power_up_templates` + `BuffTemplates` side tables — but **`DeusPowerUpsLookup` itself** stayed inside the toggle-gated `inject_dormant_boon` body. That table is *also* network-relevant: `deus_mechanism.lua:1256` does `DeusPowerUpsLookup[boon_id]` where `boon_id` is the integer received over RPC. If host's lookup table is ordered differently from client's, host's `rpc_add_buff(id=N)` resolves to a *different* boon on the client.
+
+Caught in pre-deploy QA of the 2026-05-19 multiplayer log: user (client) had `activate_dormant_deus_larger_clip = ON`, friend (host) had it `OFF`. Client log line `deus_larger_clip at rarity rare (lookup_id=165)` doesn't appear in host log; every dormant + trait boon ID after `deus_coin_pickup_regen` was off by +1 on the client. Subsequent host rpc_add_buff calls would have resolved to the wrong boon.
+
+Fix: split `inject_dormant_boon` into two functions.
+- `inject_dormant_boon(name, rarity)` — registers EVERYTHING network-relevant (NetworkLookup names, buff_templates, DeusPowerUps / Array / ArrayByRarity / Lookup, BuffTemplates global mirror, DeusPowerUpBuffTemplates). Idempotent via `_injected_dormants[name]`. Called unconditionally for all dormants + trait boons in pre-register passes at mod-load.
+- `_add_dormant_to_pool(name, rarity)` — inserts into `DeusPowerUpRarityPool[rarity]`. Idempotent via `_added_to_pool[name]`. Called from the toggle-gated paths (`sync_dormant_boons`, `register_trait_boon`) so each peer only rolls the boons their toggles enabled.
+
+Both pre-register passes (`pre_register_dormant_lookups`, `pre_register_trait_boon_lookups`) now drive full registration. The previous "partial pre-register" code paths in each are simplified — the work is now consolidated in `inject_dormant_boon`. Unconditional registration sites (`register_meta_boon` for CT_META_BOONS, the ct_meta_movespeed do-block, the ct_kill_heal do-block) explicitly call `_add_dormant_to_pool` after `inject_dormant_boon` since meta boons aren't toggle-gated.
+
+Affected dormants (9): `deus_ammo_pickup_give_allies_ammo`, `deus_coin_pickup_regen`, `deus_large_ammo_pickup_infinite_ammo`, `deus_larger_clip`, `deus_throw_speed_increase`, `deus_timed_block_free_shot`, `deus_transmute_into_coins`, `explosive_pushes_on_damage_taken`, `squats`.
+
+Affected trait boons (11): all entries in `CT_TRAIT_BOONS` table — Vaul's Anvil, Manann's Tempest, Taal's Twinned Arrow, Asuryan's Wrath, etc.
+
+**Hardening (pre-deploy QA-caught):** `pre_register_trait_boon_lookups` now writes `DeusPowerUpTemplates[spec.name]` UNCONDITIONALLY (using a placeholder buff array if the source buff is missing on that peer), so `inject_dormant_boon`'s template-existence check never bails — `DeusPowerUpsLookup` stays aligned across peers even for hypothetical DLC-gated source buffs. Today all four source buffs are vanilla so no peer should ever hit the placeholder path; the safety net guards future DLC trait boons.
+
+### Fixed: client-side ct_peers manifest broadcast didn't fire (one-sided handshake)
+
+The v0.7.64 ct_peers diagnostic was supposed to be bidirectional: when a client receives the host's ct_sync_host_settings_chunk, it should auto-reply with its own manifest so the host's log captures every joined peer's ct version + mod list. In practice it was one-sided — host self-logged via the setup_run hook but never received RECV from clients.
+
+Root cause: the `_broadcast_local_manifest("server")` call sat AFTER `sync_host_dependent_state()` in the ct_sync receiver body. `sync_host_dependent_state` calls 11 sync_* re-registration helpers — any one throwing aborts the receiver because VMF's `network_register` safe-wrapper swallows the error. The closure capture analysis was sound; the function was assigned; the call simply never reached.
+
+Fix: moved the manifest broadcast (and added an info log to confirm entry) BEFORE the `sync_host_dependent_state()` call in the ct_sync_host_settings_chunk handler. Now even if a downstream re-registration throws, the manifest reply still goes out.
+
+Next 3-peer session should show `[ct_peers] RECV peer=...` lines on the host log immediately after the ct_sync broadcast lands on each client.
+
 ## 0.7.66-alpha (2026-05-19)
 
 ### Fixed: Isha alternative drained coins on every shop visit (v0.7.65 dedup bug)

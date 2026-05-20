@@ -22,7 +22,7 @@ Key conventions (also in CLAUDE.md):
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.12.50-dev"
+local MOD_VERSION = "0.12.52-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
@@ -2256,7 +2256,15 @@ end
 
 local _MOONFIRE_PUFF_FX = "fx/wpnfx_we_deus_01_impact"
 
+-- Template must be registered in ExplosionTemplates AND carry a .name field.
+-- DamageUtils.create_explosion forwards `explosion_template.name` to
+-- AreaDamageSystem.add_aoe_damage_target, which later calls
+-- ExplosionUtils.get_template(name) -> ExplosionTemplates[name]. The vanilla
+-- auto-name loop at the end of explosion_templates.lua runs at engine boot
+-- (before mods load), so we set .name explicitly here.
+local _MOONFIRE_AOE_NAME = "wt_moonfire_aoe_revert"
 local _MOONFIRE_AOE_TEMPLATE = {
+    name = _MOONFIRE_AOE_NAME,
     explosion = {
         damage_profile = "poison_aoe",
         effect_name = _MOONFIRE_PUFF_FX,
@@ -2269,6 +2277,9 @@ local _MOONFIRE_AOE_TEMPLATE = {
         attacker_power_level_offset = -0.5,
     },
 }
+if rawget(_G, "ExplosionTemplates") then
+    ExplosionTemplates[_MOONFIRE_AOE_NAME] = _MOONFIRE_AOE_TEMPLATE
+end
 
 local _moonfire_jitter_offsets = {
     Vector3Box(0.35, 0, 0.1),
@@ -2332,16 +2343,25 @@ local function _wt_moonfire_on_hit(self, hit_position)
     end
 end
 
-if rawget(_G, "PlayerProjectileUnitExtension") then
-    mod:hook_safe(PlayerProjectileUnitExtension, "hit_enemy", function(self, impact_data, hit_unit, hit_position)
-        _wt_moonfire_on_hit(self, hit_position)
-    end)
-    mod:hook_safe(PlayerProjectileUnitExtension, "hit_level_unit", function(self, impact_data, hit_unit, hit_position)
-        _wt_moonfire_on_hit(self, hit_position)
-    end)
-    mod:hook_safe(PlayerProjectileUnitExtension, "hit_non_level_unit", function(self, impact_data, hit_unit, hit_position)
-        _wt_moonfire_on_hit(self, hit_position)
-    end)
+-- Hook BOTH PlayerProjectileUnitExtension (shooter's own machine) and
+-- PlayerProjectileHuskExtension (every other peer that sees the arrow). Both
+-- carry the same fields _wt_moonfire_on_hit reads (item_name, _world,
+-- _projectile_unit, _owner_unit, _owner_player, scale, power_level,
+-- _is_critical_strike, _is_server). Without the husk hooks the puff only
+-- spawns on the shooter's screen.
+local _moonfire_hooked_classes = { "PlayerProjectileUnitExtension", "PlayerProjectileHuskExtension" }
+local _moonfire_hooked_methods = { "hit_enemy", "hit_level_unit", "hit_non_level_unit" }
+for _, class_name in ipairs(_moonfire_hooked_classes) do
+    local cls = rawget(_G, class_name)
+    if cls then
+        for _, method_name in ipairs(_moonfire_hooked_methods) do
+            if cls[method_name] then
+                mod:hook_safe(cls, method_name, function(self, impact_data, hit_unit, hit_position)
+                    _wt_moonfire_on_hit(self, hit_position)
+                end)
+            end
+        end
+    end
 end
 
 -- ============================================================

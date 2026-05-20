@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.52-dev (2026-05-19) — Moonfire puff visible to remote peers
+
+Adds `mod:hook_safe` registrations on `PlayerProjectileHuskExtension` (`hit_enemy` / `hit_level_unit` / `hit_non_level_unit`) so the cosmetic puff (and the AOE-revert FX) plays on every peer that sees the arrow, not just the shooter's own machine. Previously only `PlayerProjectileUnitExtension` was hooked — that extension only runs on the shooter's client, so remote peers (host or other clients, depending on who fired) never saw the puff. Same husk-vs-self class-pair gap as the cosmetics_tweaker reload-paint bug (see `feedback_vt2_husk_extension_class_pair`).
+
+The husk extension carries all the same fields `_wt_moonfire_on_hit` reads, so the existing callback works as-is. Refactored the hook registration to a small loop over the two class names and three method names — adds resilience if future VT2 patches add a fourth hit method.
+
+AOE-revert side stays safe: `DamageUtils.create_explosion` already gates damage on `is_server`, so calling it from a husk hook on clients spawns FX but does no damage — exactly the per-peer pattern the prior comment block described as the intent.
+
+## 0.12.51-dev (2026-05-19) — Moonfire AOE revert crash fix
+
+Fixes host-side crash `area_damage_system.lua:347: attempt to index local 'explosion_template' (a nil value)` introduced in v0.12.49-dev when the **`moonfire_aoe_revert`** toggle was on and any Moonfire arrow impact reached the damage-buffer drain (queue-overflow path or next-frame `_update_aoe_damage_buffer`).
+
+Root cause: `_MOONFIRE_AOE_TEMPLATE` was an unregistered local table with no `.name` field. `DamageUtils.create_explosion` forwards `explosion_template.name` to `AreaDamageSystem.add_aoe_damage_target` (17th positional arg), which writes it onto the ring-buffer entry. `_damage_unit` later calls `ExplosionUtils.get_template(name)` → `ExplosionTemplates[name]`. With `name = nil` the lookup returned nil and the next line (`explosion_template.explosion`) crashed. Vanilla templates avoid this because `explosion_templates.lua` runs `for name, t in pairs(ExplosionTemplates) do t.name = name end` at engine boot — but mods load after that loop fires, so any mod-defined template must populate `.name` itself **and** register into `ExplosionTemplates` so the late-stage lookup succeeds.
+
+Fix: name the template `"wt_moonfire_aoe_revert"`, set `.name` explicitly, and write into `ExplosionTemplates[name]` at module init.
+
 ## 0.12.50-dev (2026-05-19) — Kruber Longbow zoom overrides (disable / manual)
 
 Two new toggles under **Weapon Overrides**, both default OFF. Restart required (template patch applied at module init).

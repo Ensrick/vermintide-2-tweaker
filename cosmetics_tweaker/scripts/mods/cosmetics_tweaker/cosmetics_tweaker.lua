@@ -3,7 +3,7 @@ local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 
-local MOD_VERSION = "0.9.0.3-hotfix"
+local MOD_VERSION = "0.9.0.15-hotfix"
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
 
@@ -1492,6 +1492,15 @@ local function _preload_offhand_for_option(opt)
     if opt.intended_unit then _preload_offhand_package(opt.intended_unit) end
 end
 
+-- v0.9.0.4-hotfix: forward-decl. Real impl placed AFTER `_offhand_options`
+-- is declared (line ~1574) so the function can close over the local. Called
+-- from mod.update after `_la_bridge_init_done = true` to bulk-preload every
+-- mesh in the offhand pools + custom illusions on EVERY peer. Eliminates the
+-- ProfileSynchronizer async-load vs synchronous-wield-RPC race that crashes
+-- the client when host equips a cross-character shield mesh. Mechanism
+-- documented in `feedback_cwv_cross_character_unit_packages.md`.
+local _force_load_all_offhand_packages
+
 -- Defensive gate before applying a left_hand_unit override. Uses
 -- Application.can_get("unit", ...) — the engine's authoritative answer
 -- about whether World.spawn_unit will succeed, regardless of which
@@ -1825,6 +1834,72 @@ mod:command("offhand_debug", "Dump offhand system state", function()
     mod:echo("[offhand] Colors available: %s", tostring(Colors ~= nil))
 end)
 
+-- v0.9.0.4-hotfix: real impl of the forward-declared
+-- _force_load_all_offhand_packages (declared near _preload_offhand_for_option
+-- around line 1495). Placed here so it can close over the local
+-- `_offhand_options` declared at line 1574+. Called from mod.update once
+-- after `_la_bridge_init_done = true`.
+--
+-- Why this exists: when HOST picks a cross-character shield (e.g.
+-- `wpn_emp_gk_shield_03` "GK Shield Blue" via the offhand picker, or equips
+-- the CT custom illusion `ct_es_mace_gk_shield_01` which also uses
+-- shield_03 as left_hand_unit), the CLIENT receives vanilla skin
+-- propagation. Client's `SimpleHuskInventoryExtension._wield_slot` calls
+-- `BackendUtils.get_item_units(item_data, nil, slot.skin, career_name)`,
+-- gets shield_03's path back, then `GearUtils.spawn_inventory_unit` →
+-- `unit_spawner:spawn_local_unit_with_extensions` → engine `spawn_unit`.
+-- shield_03's package WAS NOT preloaded on the client — ProfileSynchronizer
+-- starts an async load when peer profiles sync but it races the synchronous
+-- wield RPC and loses. Result: engine spawn_unit crash, PC-B fell out of the
+-- session 2026-05-19. Identical mechanism to weapon_tweaker's brace-repeater
+-- crash (feedback_cwv_cross_character_unit_packages.md).
+--
+-- Fix: enumerate every unit_path the user might equip via CT (offhand pools
+-- + custom illusions) and force-load async at boot on EVERY peer.
+-- _preload_offhand_package is idempotent via the _preloaded_offhand_packages
+-- set, so re-calls are cheap.
+local _force_loaded_all_offhand_done = false
+_force_load_all_offhand_packages = function()
+    if _force_loaded_all_offhand_done then return end
+    if not Managers or not Managers.package then return end
+    local count = 0
+    -- A. Vanilla-mesh + cross-character pools (_offhand_options).
+    for _wkey, pool in pairs(_offhand_options) do
+        if type(pool) == "table" then
+            for _, opt in ipairs(pool) do
+                if type(opt) == "table" then
+                    if opt.unit then _preload_offhand_package(opt.unit); count = count + 1 end
+                    if opt.intended_unit then _preload_offhand_package(opt.intended_unit); count = count + 1 end
+                end
+            end
+        end
+    end
+    -- B. LA bridge offhand options (texture-paint + kind="unit" custom-mesh).
+    if LA_BRIDGE and type(LA_BRIDGE.la_offhand_options_by_weapon_type) == "table" then
+        for _wkey, pool in pairs(LA_BRIDGE.la_offhand_options_by_weapon_type) do
+            if type(pool) == "table" then
+                for _, opt in ipairs(pool) do
+                    if type(opt) == "table" then
+                        if opt.unit then _preload_offhand_package(opt.unit); count = count + 1 end
+                        if opt.intended_unit then _preload_offhand_package(opt.intended_unit); count = count + 1 end
+                    end
+                end
+            end
+        end
+    end
+    -- C. Custom illusions injected by CT. These register at boot into
+    -- WeaponSkins.skins and are equippable by any peer; their left/right
+    -- hand units must be loadable on every machine.
+    if _custom_illusions then
+        for _, illusion in ipairs(_custom_illusions) do
+            if illusion.right_hand_unit then _preload_offhand_package(illusion.right_hand_unit); count = count + 1 end
+            if illusion.left_hand_unit  then _preload_offhand_package(illusion.left_hand_unit);  count = count + 1 end
+        end
+    end
+    _force_loaded_all_offhand_done = true
+    mod:info("[offhand] force-loaded all offhand pool packages (%d preload calls, dedup'd via _preloaded_offhand_packages)", count)
+end
+
 local function _has_offhand(item_data)
     return item_data and item_data.left_hand_unit ~= nil
 end
@@ -2051,8 +2126,24 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, index)
         -- identity. Receivers resolve their own husk's left unit on arrival.
         if player_unit and Unit.alive(player_unit) then
             -- v0.8.67-dev: server-authoritative routing; signature change.
+            -- v0.9.0.11-hotfix: resolve the vanilla item_data.template for the
+            -- weapon being customized AND emit TWO entries — one keyed by
+            -- CT's weapon_key (legacy) and one by item.data.template. The
+            -- husk's _wield_slot only knows item_data.template — without the
+            -- template key the cache lookup misses on every recv. Diagnosed
+            -- from v0.9.0.10 PC-B log: cache_has_entry=false even after recv.
+            local template_key = nil
+            if self._item_backend_id and Managers and Managers.backend then
+                local bi = Managers.backend:get_interface("items")
+                local item = bi and bi.get_item_from_id and bi:get_item_from_id(self._item_backend_id)
+                template_key = item and item.data and item.data.template
+            end
             _send_la_apply(player_unit, weapon_key or "slot_unknown", "offhand",
                 opt.la_armoury_key, opt.vanilla_skin)
+            if template_key and template_key ~= weapon_key then
+                _send_la_apply(player_unit, template_key, "offhand",
+                    opt.la_armoury_key, opt.vanilla_skin)
+            end
         end
     end
 
@@ -2162,10 +2253,84 @@ end
 -- Must use TABLE-form hook with a nil guard. The nil guard handles boot
 -- order — at module-load time BackendUtils may not exist yet on every
 -- VT2 build. CLAUDE.md "Hooking" section.
+-- v0.9.0.6-hotfix: husk-wield context. SimpleHuskInventoryExtension._wield_slot
+-- (wrapped below) sets this before calling BackendUtils.get_item_units and
+-- clears it after. The get_item_units hook reads it to decide whether to
+-- override left_hand_unit for kind="unit" LA mesh swaps on remote husks.
+-- Lua main thread is single-threaded so the set→get→clear bracket is safe.
+local _current_husk_wield = nil
+-- v0.9.0.11-hotfix: FORWARD DECLARATION. The real assignment lives at the
+-- old declaration site below (line ~3711). Without this forward decl, the
+-- BackendUtils.get_item_units hook (registered immediately below) would
+-- reference `_la_equips_by_peer` as a GLOBAL (nil) — the actual local
+-- declaration is much later in the file. v0.9.0.10 burned: the husk-mesh-
+-- swap probe always logged cache_has_wearer=false even after the recv
+-- handler had populated the cache, because the receiver captured the
+-- real local but the probe captured the global. Declaring here gives every
+-- subsequent reference (probe + receiver + wraps) the same upvalue.
+local _la_equips_by_peer = {}
+
 if BackendUtils then
     mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
         local result = func(item_data, backend_id, skin, career_name)
         if not result then return result end
+
+        -- v0.9.0.6-hotfix: kind="unit" LA mesh swap for remote husks.
+        -- v0.9.0.8-hotfix: instrumented at every gate so we can see WHY a
+        -- swap didn't fire (cache miss vs variant miss vs package miss).
+        if _current_husk_wield and _current_husk_wield.wearer_peer then
+            local template = item_data and item_data.template
+            local equips = _la_equips_by_peer and _la_equips_by_peer[_current_husk_wield.wearer_peer]
+            local entry = equips and template and equips[template]
+            mod:info("[husk-mesh-swap probe] wearer=%s slot=%s template=%s cache_has_wearer=%s cache_has_entry=%s entry_kind=%s entry_key=%s",
+                tostring(_current_husk_wield.wearer_peer),
+                tostring(_current_husk_wield.slot_name),
+                tostring(template),
+                tostring(equips ~= nil),
+                tostring(entry ~= nil),
+                tostring(entry and entry.kind),
+                tostring(entry and entry.armoury_key))
+            if entry and (entry.kind == "offhand" or entry.kind == "illusion")
+                and entry.armoury_key
+            then
+                local la = get_mod("Loremasters-Armoury")
+                local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
+                if not variant then
+                    mod:info("[husk-mesh-swap] miss: variant %s not in LA.SKIN_LIST", tostring(entry.armoury_key))
+                    -- v0.9.0.14-hotfix: dedup'd chat warning. Surface the
+                    -- missing-variant problem to the local user so they know
+                    -- their LA install is missing what a peer is broadcasting
+                    -- (most commonly: LA disabled in the launcher).
+                    mod._la_missing_variant_logged = mod._la_missing_variant_logged or {}
+                    if not mod._la_missing_variant_logged[entry.armoury_key] then
+                        mod._la_missing_variant_logged[entry.armoury_key] = true
+                        mod:echo("[cosmetics_tweaker] LA variant '%s' missing from your local LA install. Peer's cosmetic won't render. Enable Loremaster's Armoury in launcher + restart, or update LA.",
+                            tostring(entry.armoury_key))
+                    end
+                elseif variant.kind ~= "unit" then
+                    mod:info("[husk-mesh-swap] skip: variant %s is kind=%s (only unit gets mesh-swapped here; texture handled via re-paint)",
+                        tostring(entry.armoury_key), tostring(variant.kind))
+                elseif not (variant.new_units and variant.new_units[1]) then
+                    mod:info("[husk-mesh-swap] miss: variant %s has no new_units[1]", tostring(entry.armoury_key))
+                else
+                    local la_unit = variant.new_units[1]
+                    local la_unit_3p = variant.new_units[2] or (la_unit .. "_3p")
+                    local has_1p = Application and Application.can_get and Application.can_get("unit", la_unit)
+                    local has_3p = Application and Application.can_get and Application.can_get("unit", la_unit_3p)
+                    if not has_1p or not has_3p then
+                        mod:info("[husk-mesh-swap] miss: variant %s LA mesh not loadable (1p=%s 3p=%s) — package preload may have failed",
+                            tostring(entry.armoury_key), tostring(has_1p), tostring(has_3p))
+                    else
+                        local prev = result.left_hand_unit
+                        result.left_hand_unit = la_unit
+                        mod:info("[husk-mesh-swap] APPLIED wearer=%s template=%s left_hand_unit %s -> %s (armoury=%s)",
+                            tostring(_current_husk_wield.wearer_peer), tostring(template),
+                            tostring(prev), tostring(la_unit), tostring(entry.armoury_key))
+                        return result
+                    end
+                end
+            end
+        end
 
         -- Resolve the actual skin: caller may pass nil and rely on backend
         -- lookup. Mirror BackendUtils' OWN resolution chain so we can decide
@@ -2190,7 +2355,20 @@ if BackendUtils then
         -- the screen-level active backend_id so `_offhand_selection` lookup
         -- still hits and the shield preview doesn't flip back to the new
         -- skin's paired shield when user cycles main-hand illusions.
-        if not effective_backend_id then
+        --
+        -- v0.9.0.13-hotfix: GATE THE FALLBACK on NOT being in a husk wield.
+        -- The fallback was a CROSS-BLEED catastrophe for multiplayer: HUSK
+        -- wields (other players' equips) call get_item_units with backend_id
+        -- nil and item_data.backend_id nil. Without this gate, the fallback
+        -- pulled in the LOCAL VIEWER's `_active_customization_backend_id`,
+        -- looked up THEIR offhand pick, and painted THEIR shield mesh onto
+        -- ANY peer's wielded weapon — including an elf player's spear+shield.
+        -- User report 2026-05-19: "the stupid shield now taking the place of
+        -- the 'elf's spear and shield' weapon's shield". The fallback is only
+        -- meaningful when the local user is cycling skins in the customization
+        -- screen — _current_husk_wield being SET means we're inside a husk's
+        -- wield, NOT a customization preview, so skip the fallback.
+        if not effective_backend_id and not _current_husk_wield then
             effective_backend_id = _active_customization_backend_id
         end
         if not resolved_skin and effective_backend_id and Managers and Managers.backend then
@@ -3579,7 +3757,17 @@ end
 
 -- Per-peer authoritative state (host only). Keyed by wearer_peer_id;
 -- value is { [slot_name] = { kind, armoury_key, vanilla_key } }.
-local _la_equips_by_peer = {}
+-- v0.9.0.11-hotfix: was `local _la_equips_by_peer = {}` here at line 3711.
+-- Moved declaration to the top of the file (just above the BackendUtils
+-- hook at line 2241) because that hook's husk-mesh-swap probe was
+-- referencing this local — but at line 2241 the local doesn't exist yet
+-- in lexical scope, so the reference compiled as a GLOBAL nil. The probe
+-- always reported cache_has_wearer=false on PC-B even AFTER the recv handler
+-- wrote to the cache (the receiver, declared after this line, captured
+-- the real local correctly — but the BackendUtils hook captured global nil).
+-- Two readers, two different upvalue resolutions. Reassign to the existing
+-- table here so the rest of the file's references continue to work.
+_la_equips_by_peer = _la_equips_by_peer or {}
 
 -- Late-spawn replay queue. Each entry:
 -- { wearer_peer_id, slot, kind, armoury_key, vanilla_key, expires_at }
@@ -3668,9 +3856,27 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key)
     end
 
     -- Client: ask the host to fan out.
-    mod:info("[cos_la_apply emit] CLIENT->req wearer=%s slot=%s kind=%s key=%s",
-        tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key))
-    mod:network_send("cos_la_apply_req", "server", {
+    -- v0.9.0.15-hotfix: VMF's `mod:network_send` does NOT accept the literal
+    -- string "server" as a recipient — only "all"/"others"/"local" or a
+    -- literal peer_id. The "server" string falls through to the else branch
+    -- in VMF's convert_names_to_numbers, fails the _vmf_users lookup, and
+    -- the packet is SILENTLY DROPPED. No error, no log, no wire activity.
+    -- This bug had been live since v0.8.67-dev and only surfaced now because
+    -- prior multiplayer tests had PC-A as HOST (which hits the `"all"`
+    -- short-circuit above). When PC-A is a CLIENT (this session), the broken
+    -- line fired every emit → host never received any cos_la_apply_req →
+    -- entire LA sync chain dead. Fix: target the host's peer_id directly.
+    -- Nil-guard for the level-transition window when server_peer_id may
+    -- transiently be nil; pending queue retries pick it up.
+    local host = _host_peer_id()
+    if not host then
+        mod:info("[cos_la_apply emit] CLIENT->req DEFERRED (no host peer_id yet) wearer=%s slot=%s key=%s",
+            tostring(wearer_peer), tostring(slot_name), tostring(armoury_key))
+        return
+    end
+    mod:info("[cos_la_apply emit] CLIENT->req wearer=%s slot=%s kind=%s key=%s host=%s",
+        tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(host))
+    mod:network_send("cos_la_apply_req", host, {
         slot         = slot_name,
         kind         = kind,
         armoury_key  = armoury_key,
@@ -3939,10 +4145,72 @@ mod:network_register("cos_la_apply", function(sender_peer_id, payload)
     local vanilla_key  = payload.vanilla_key
     if not (wearer and slot_name and kind and armoury_key) then return end
 
+    -- v0.9.0.7-hotfix: MIRROR THE CACHE WRITE ON CLIENTS.
+    -- Previously only the HOST's `cos_la_apply_req` handler at line 3958
+    -- wrote to `_la_equips_by_peer`. Clients received the broadcast and
+    -- ran the apply once, but never recorded the entry — so:
+    --   1. The v0.9.0.5 husk-wield re-paint hook silently no-op'd on
+    --      every client (lookup returned nil every time).
+    --   2. The v0.9.0.6 husk-mesh-swap in get_item_units also no-op'd
+    --      on clients (same nil lookup) → kind="unit" Ostermark shields
+    --      stayed vanilla on the client viewing the host.
+    -- Fix: mirror the host's write here so EVERY peer (host + clients)
+    -- maintains the same `_la_equips_by_peer` cache state. The host's
+    -- own broadcast loops back via "all" → this handler fires on the
+    -- host too, but the write is idempotent (entry already there from
+    -- the cos_la_apply_req handler).
+    _la_equips_by_peer[wearer] = _la_equips_by_peer[wearer] or {}
+    _la_equips_by_peer[wearer][slot_name] = {
+        kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
+    }
+    -- v0.9.0.11-hotfix: diagnostic — count cache entries to confirm the write
+    -- actually persisted (and to verify the upvalue scope fix from this version).
+    local n = 0
+    for _, _ in pairs(_la_equips_by_peer[wearer]) do n = n + 1 end
+    mod:info("[cos_la_apply recv] CACHE WRITE _la_equips_by_peer[%s][%s] now has %d slot(s) total",
+        tostring(wearer), tostring(slot_name), n)
+
     local applied = _try_apply_by_peer(wearer, slot_name, kind, armoury_key, vanilla_key)
     mod:info("[cos_la_apply recv] from=%s wearer=%s slot=%s kind=%s key=%s applied=%s",
         tostring(sender_peer_id), tostring(wearer), tostring(slot_name),
         tostring(kind), tostring(armoury_key), tostring(applied))
+
+    -- v0.9.0.10-hotfix: TRIGGER MESH SWAP for kind="unit" variants.
+    -- The husk-mesh-swap branch in BackendUtils.get_item_units only fires
+    -- when SimpleHuskInventoryExtension._wield_slot runs, which happens on
+    -- rpc_wield_equipment (slot_melee↔slot_ranged swaps) — NOT when the
+    -- host cycles shield variants via CT's picker (which emits cos_la_apply
+    -- but no wield change). For kind="unit" variants (Ostermark, Bastonne
+    -- custom-mesh shields), the texture-paint path returns false (mesh swap
+    -- is what's needed, not paint). Without a wield event, the husk's
+    -- weapon unit stays vanilla.
+    --
+    -- Fix: when the variant is kind="unit" AND the entry is an offhand/
+    -- illusion (weapon-side, where the wield event is meaningful), force a
+    -- husk re-wield by calling inv:wield(current_wielded_slot). That fires
+    -- _wield_slot → BackendUtils.get_item_units → husk-mesh-swap branch →
+    -- LA mesh spawns. Pcall the whole thing to be safe; even if force-wield
+    -- fails, the rest of the apply chain ran.
+    if applied and (kind == "offhand" or kind == "illusion") then
+        local la = get_mod("Loremasters-Armoury")
+        local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
+        if variant and variant.kind == "unit" then
+            local pm = Managers and Managers.player
+            local players = pm and pm.players_at_peer and pm:players_at_peer(wearer)
+            if players then
+                for _, p in pairs(players) do
+                    if p.player_unit and Unit.alive(p.player_unit) then
+                        local inv = ScriptUnit.has_extension(p.player_unit, "inventory_system")
+                        if inv and inv.wield and inv.wielded_slot then
+                            mod:info("[cos_la_apply recv] kind=unit variant — forcing husk re-wield (wearer=%s slot=%s armoury=%s)",
+                                tostring(wearer), tostring(inv.wielded_slot), tostring(armoury_key))
+                            pcall(inv.wield, inv, inv.wielded_slot)
+                        end
+                    end
+                end
+            end
+        end
+    end
     if not applied then
         -- Wearer unit not spawned locally yet (loading screen race / late
         -- network spawn / husk not wielding the right slot). Queue and retry
@@ -4039,7 +4307,14 @@ local function _send_local_glow_state()
             state = state,
         })
     else
-        mod:network_send("cos_glow_apply_req", "server", {
+        -- v0.9.0.15-hotfix: same fix as cos_la_apply_req above — "server" is
+        -- not a valid VMF recipient string. Use the host's literal peer_id.
+        local host = _host_peer_id()
+        if not host then
+            _glow_emit_pending = true  -- retry next tick when host_peer is up
+            return
+        end
+        mod:network_send("cos_glow_apply_req", host, {
             state = state,
         })
     end
@@ -4102,6 +4377,27 @@ local function _glow_rebroadcast_all_for_hot_join()
 end
 mod._glow_rebroadcast_all_for_hot_join = _glow_rebroadcast_all_for_hot_join
 
+-- v0.9.0.12-hotfix: targeted-at-joiner glow rebroadcast. Same reason as the
+-- cos_la_apply targeted send above — "all" may not include the joiner yet
+-- at hot_join_sync time, so direct-target the joining peer.
+local function _glow_rebroadcast_targeted(target_peer_id)
+    if not _is_local_server() then return end
+    if not target_peer_id then return end
+    local n = 0
+    for wearer_peer, state in pairs(_glow_by_peer) do
+        mod:network_send("cos_glow_apply", target_peer_id, {
+            wearer_peer_id = wearer_peer,
+            state = state,
+        })
+        n = n + 1
+    end
+    if n > 0 then
+        mod:info("[hot-join glow replay] sent %d cos_glow_apply entries targeted at joiner=%s",
+            n, tostring(target_peer_id))
+    end
+end
+mod._glow_rebroadcast_targeted = _glow_rebroadcast_targeted
+
 -- Public hook for VMF's on_setting_changed (existing handler at line 608
 -- forwards here for glow_* settings). Schedule rather than emit immediately
 -- so a single VMF settings-page save doesn't burst N RPCs for N changed
@@ -4109,6 +4405,92 @@ mod._glow_rebroadcast_all_for_hot_join = _glow_rebroadcast_all_for_hot_join
 mod._on_glow_setting_changed = function()
     _glow_emit_pending = true
 end
+
+-- v0.9.0.6-hotfix: husk-wield context wrapper.
+--
+-- Wraps SimpleHuskInventoryExtension._wield_slot to set a thread-local
+-- `_current_husk_wield` table BEFORE the vanilla call enters
+-- BackendUtils.get_item_units. The CT get_item_units hook reads the context
+-- (wearer_peer, slot_name) and overrides result.left_hand_unit when the
+-- wearer has a kind="unit" LA mesh selection recorded in _la_equips_by_peer.
+-- This is how Ostermark / Bastonne / etc. custom-mesh shields render on
+-- husks instead of the vanilla mesh.
+--
+-- v0.9.0.8-hotfix: switched to string-form hook so VMF defers resolution
+-- until the class is loaded. Table-form `mod:hook(SimpleHuskInventoryExtension, ...)`
+-- gated on `rawget(_G, "SimpleHuskInventoryExtension")` silently failed when
+-- the class wasn't yet loaded at mod-init time — the rawget returned nil,
+-- the `if` skipped, hook NEVER registered, and no `[husk-mesh-swap]` log
+-- ever fired on PC-B. String-form lets VMF queue the hook via its delayed-
+-- hooks mechanism (see boot log "Attempt to hook N delayed hooks").
+mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
+    -- Resolve which peer owns this husk extension.
+    local husk_unit = self and self._unit
+    local wearer_peer = nil
+    local pm = Managers and Managers.player
+    if pm and pm._players and husk_unit then
+        for _, p in pairs(pm._players) do
+            if p.player_unit == husk_unit then
+                wearer_peer = p.peer_id
+                break
+            end
+        end
+    end
+    -- v0.9.0.8-hotfix: diagnostic log.
+    mod:info("[husk-wield-wrap] entry wearer=%s slot=%s husk_unit=%s",
+        tostring(wearer_peer), tostring(slot_name), tostring(husk_unit))
+    -- Set context (stack-style).
+    local prev = _current_husk_wield
+    _current_husk_wield = { wearer_peer = wearer_peer, husk_unit = husk_unit, slot_name = slot_name }
+    local r1, r2, r3, r4, r5, r6, r7, r8 = func(self, world, equipment, slot_name, unit_1p, unit_3p)
+    _current_husk_wield = prev
+
+    -- v0.9.0.10-hotfix: RE-PAINT MERGED IN. The v0.9.0.5 separate
+    -- `mod:hook_safe(SimpleHuskInventoryExtension, "wield", ...)` was
+    -- silently dropped by VMF because _tpe.lua:511 had already hooked
+    -- the same Class+method (per feedback_vmf_hook_safe_no_chain). The
+    -- re-paint never ran. Folding the same logic into the _wield_slot
+    -- wrap (above) sidesteps the shadow — _wield_slot is not multi-hooked.
+    -- Runs AFTER vanilla returns, when the just-spawned weapon units are
+    -- in the slots and ready to be painted.
+    if wearer_peer and _la_equips_by_peer then
+        local equips = _la_equips_by_peer[wearer_peer]
+        if equips then
+            local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
+            local item_data = slot_data and slot_data.item_data
+            local wielded_template = item_data and item_data.template
+            for stored_key, entry in pairs(equips) do
+                if entry and entry.kind and entry.armoury_key then
+                    local should_apply = false
+                    if entry.kind == "hat" and stored_key == "slot_hat" then
+                        should_apply = (slot_name == "slot_hat")
+                    elseif entry.kind == "armor" and stored_key == "slot_skin" then
+                        should_apply = true
+                    elseif entry.kind == "offhand" or entry.kind == "illusion" then
+                        if wielded_template and stored_key == wielded_template then
+                            should_apply = true
+                        end
+                    end
+                    if should_apply then
+                        mod:info("[husk-wield-repaint] apply stored_key=%s kind=%s key=%s",
+                            tostring(stored_key), tostring(entry.kind), tostring(entry.armoury_key))
+                        _apply_la_on_unit(husk_unit, stored_key, entry.kind, entry.armoury_key, entry.vanilla_key)
+                    end
+                end
+            end
+        end
+    end
+
+    return r1, r2, r3, r4, r5, r6, r7, r8
+end)
+
+-- v0.9.0.10-hotfix: the standalone re-paint hook_safe("...wield") was
+-- SHADOWED by _tpe.lua:511's earlier registration (VMF hook_safe doesn't
+-- chain — second registration on same Class+method silently dropped, per
+-- feedback_vmf_hook_safe_no_chain). The re-paint logic is now folded
+-- INTO the _wield_slot wrap above, after vanilla's spawn completes.
+-- The wrap uses mod:hook (not hook_safe) on a different method
+-- (_wield_slot vs wield) so there's no shadow conflict.
 
 -- Map an LA-keyed attachment slot to its cos_la_apply kind. Currently only
 -- slot_hat flows through the attachment path; slot_skin is "cosmetic"
@@ -4119,6 +4501,89 @@ local function _attachment_slot_to_kind(slot_name)
 end
 
 -- PUAE is a class, string-form hook is correct.
+-- v0.9.0.9-hotfix: husk-side LA-aware create_attachment.
+--
+-- ROOT CAUSE diagnosed by hat-reequip-diagnosis agent (HAT_REEQUIP_REQUIRED_DIAGNOSIS.md):
+-- Race between vanilla `rpc_create_attachment` and CT `cos_la_apply` on the client:
+--   1. Client receives cos_la_apply FIRST → CT spawns LA-textured hat unit, paint ok.
+--   2. Vanilla rpc_create_attachment arrives LATE → husk's create_attachment sees the
+--      LA unit as old_slot_data → `remove_attachment` destroys it (and the LA paint
+--      bound to that unit's materials) → spawns fresh vanilla unit. Net result:
+--      vanilla-colored hat on the client view of the husk.
+-- Re-equip works because by then only one RPC pair is in flight (no late vanilla
+-- RPC follows CT's spawn).
+--
+-- Fix: hook PlayerHuskAttachmentExtension.create_attachment. When the wearer
+-- has a cached LA hat entry in _la_equips_by_peer (populated on every peer by
+-- the v0.9.0.7 mirror write), pre-patch `item_data.unit = la_unit_path` BEFORE
+-- delegating to vanilla — so vanilla spawns the LA mesh — then apply the
+-- texture on the result. This makes the late vanilla RPC IDEMPOTENT with CT's
+-- earlier apply: whichever RPC arrives second still ends up with the LA-textured
+-- unit visible.
+mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, self, slot_name, item_data)
+    if slot_name ~= "slot_hat" then
+        return func(self, slot_name, item_data)
+    end
+    local pm = Managers and Managers.player
+    local husk_unit = self and self._unit
+    if not pm or not husk_unit then
+        return func(self, slot_name, item_data)
+    end
+    -- Resolve wearer peer (mirror the husk-wield-wrap lookup pattern).
+    local wearer_peer = nil
+    if pm.owner then
+        local owner = pm:owner(husk_unit)
+        wearer_peer = owner and owner.peer_id or nil
+    end
+    if not wearer_peer and pm._players then
+        for _, p in pairs(pm._players) do
+            if p.player_unit == husk_unit then
+                wearer_peer = p.peer_id
+                break
+            end
+        end
+    end
+    local cached = wearer_peer and _la_equips_by_peer
+        and _la_equips_by_peer[wearer_peer]
+        and _la_equips_by_peer[wearer_peer][slot_name]
+    if not cached or cached.kind ~= "hat" or not cached.armoury_key then
+        return func(self, slot_name, item_data)
+    end
+    local la = get_mod("Loremasters-Armoury")
+    local variant = la and la.SKIN_LIST and la.SKIN_LIST[cached.armoury_key]
+    local la_unit = variant and variant.new_units and variant.new_units[1]
+    if not la_unit then
+        return func(self, slot_name, item_data)
+    end
+    -- Patch item_data.unit in place; vanilla spawn will use the LA unit.
+    -- Restore after the call so any caller retaining the table sees the
+    -- original value (defensive — the table is usually call-scoped).
+    local prev_unit = item_data.unit
+    item_data.unit = la_unit
+    mod:info("[husk-hat-create] wearer=%s slot=%s patched unit %s -> %s (LA armoury=%s)",
+        tostring(wearer_peer), tostring(slot_name), tostring(prev_unit), tostring(la_unit), tostring(cached.armoury_key))
+    local ok, err = pcall(func, self, slot_name, item_data)
+    item_data.unit = prev_unit
+    if not ok then error(err) end
+    -- Paint the LA texture onto the just-spawned hat unit. Mirror the
+    -- cos_la_apply hat-branch paint logic at cosmetics_tweaker.lua:~3775.
+    if la and type(la.apply_new_skin_from_texture) == "function" then
+        local world = _level_world()
+        local slot_data = self._attachments and self._attachments.slots and self._attachments.slots[slot_name]
+        local hat_unit = slot_data and slot_data.unit
+        if world and hat_unit and Unit.alive(hat_unit) then
+            LA_BRIDGE._bridge_active = true
+            local paint_ok, paint_err = pcall(la.apply_new_skin_from_texture, cached.armoury_key, world, cached.vanilla_key, hat_unit)
+            LA_BRIDGE._bridge_active = false
+            mod:info("[husk-hat-create] paint %s on hat_unit=%s ok=%s",
+                tostring(cached.armoury_key), tostring(hat_unit), tostring(paint_ok))
+            if not paint_ok then
+                mod:info("[husk-hat-create] paint err: %s", tostring(paint_err))
+            end
+        end
+    end
+end)
+
 mod:hook("PlayerUnitAttachmentExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
     local slots = self._attachments and self._attachments.slots
     local restore = nil
@@ -4255,28 +4720,43 @@ if AttachmentUtils then
                 end
             end
 
-            -- v0.9.0-dev: authoritative replay for OTHER peers' equips. Only
-            -- the host has _la_equips_by_peer populated for every peer; on
-            -- clients this no-ops (table is empty). Replay every recorded
-            -- (slot, kind, armoury_key) so the new joiner sees the same state
-            -- the host's broadcasts already established with existing peers.
+            -- v0.9.0.12-hotfix: TARGETED hot-join replay to the joining peer.
+            -- Previous version called _send_la_apply which always uses "all" —
+            -- but at hot_join_sync time the joiner may not yet be in the
+            -- "all" target list (handshake not complete). User report v0.9.0.11:
+            -- "someone joining a lobby where the hat or shield is already
+            -- equipped won't see it until the other player changes their
+            -- cosmetic selection". The change-broadcast hits because by then
+            -- the joiner is fully connected; the initial hot-join replay
+            -- raced and lost. Fix: bypass _send_la_apply, fire
+            -- cos_la_apply DIRECTLY targeted at the joining peer_id.
             if _is_local_server() then
                 local pm = Managers and Managers.player
                 local owner = pm and pm.owner and pm:owner(unit)
                 local wearer_peer = owner and owner.peer_id
                 local peer_equips = wearer_peer and _la_equips_by_peer[wearer_peer]
                 if peer_equips then
+                    local n = 0
                     for slot_name, entry in pairs(peer_equips) do
                         if entry and entry.kind and entry.armoury_key then
-                            _send_la_apply(unit, slot_name, entry.kind, entry.armoury_key, entry.vanilla_key)
+                            mod:network_send("cos_la_apply", peer_id, {
+                                wearer_peer_id = wearer_peer,
+                                slot           = slot_name,
+                                kind           = entry.kind,
+                                armoury_key    = entry.armoury_key,
+                                vanilla_key    = entry.vanilla_key,
+                            })
+                            n = n + 1
                         end
                     end
+                    if n > 0 then
+                        mod:info("[hot-join replay] sent %d cos_la_apply entries targeted at joiner=%s for wearer=%s",
+                            n, tostring(peer_id), tostring(wearer_peer))
+                    end
                 end
-                -- v0.9.0-dev: also rebroadcast every peer's glow state so the
-                -- new joiner's _glow_by_peer cache is populated before any of
-                -- their husk units start spawning.
-                if mod._glow_rebroadcast_all_for_hot_join then
-                    mod._glow_rebroadcast_all_for_hot_join()
+                -- v0.9.0.12-hotfix: glow rebroadcast also targeted at joiner.
+                if mod._glow_rebroadcast_targeted then
+                    mod._glow_rebroadcast_targeted(peer_id)
                 end
             end
 
@@ -4341,6 +4821,13 @@ mod.update = function(dt)
                 mod:info("[LA bridge] dependency missing: MoreItemsLibrary (Workshop ID 1422758813). bridge will stay dormant.")
             end
             if not has_la then
+                -- v0.9.0.14-hotfix: promote to chat. Mirrors the MIL-missing
+                -- echo above. User report 2026-05-19: Lyndsey had LA
+                -- "subscribed but not enabled" in the VMF launcher; the
+                -- existing mod:info went only to the console log so she
+                -- never knew her LA cosmetics weren't syncing. mod:echo
+                -- surfaces this in chat at boot.
+                mod:echo("[cosmetics_tweaker] Loremaster's Armoury is NOT enabled. LA cosmetics from other players will NOT render correctly. Enable Loremaster's Armoury in the F4 launcher mod list and RESTART the game.")
                 mod:info("[LA bridge] dependency missing: Loremaster's Armoury. bridge will stay dormant.")
             end
             _la_bridge_missing_dep_logged = true
@@ -4362,6 +4849,14 @@ mod.update = function(dt)
             _la_bridge_init_done = true
         end
     end
+    -- v0.9.0.4-hotfix: bulk-preload every offhand-pool + custom-illusion unit
+    -- on this peer so cross-character shield equips (host's "GK Shield Blue"
+    -- etc.) don't crash this peer's husk wield path. Defer until LA bridge
+    -- has finished registering (so LA's la_offhand_options_by_weapon_type is
+    -- populated and gets included). Even when bridge init is skipped (no MIL),
+    -- this still pre-loads the vanilla _offhand_options + _custom_illusions
+    -- meshes, which is enough for non-LA picks. Function is idempotent.
+    if _force_load_all_offhand_packages then _force_load_all_offhand_packages() end
     if _la_bridge_init_done then _install_skin_loadout_safety() end
     if mod._glow_scan_tick then mod._glow_scan_tick(dt) end
 

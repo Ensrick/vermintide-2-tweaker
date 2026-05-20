@@ -83,6 +83,8 @@ return {
     rework_dr_ranger_group                  = { en = "Rework: Ranger Veteran" },
     rework_dr_ranger_attack_speed_5_to_10              = { en = "Rework: +5%% Attack Speed talent → +10%%" },
     rework_dr_ranger_attack_speed_5_to_10_description  = { en = "Doubles Ranger Veteran's row-2 flat +5%% Attack Speed talent (`bardin_ranger_attack_speed`) to +10%%. Career-specific buff template — patching it doesn't affect any other career's stat talents. The in-game talent tooltip is rewritten in-place so the displayed percent matches the new value." },
+    rework_dr_ranger_base_hp_plus_25                   = { en = "Rework: +25 base HP" },
+    rework_dr_ranger_base_hp_plus_25_description       = { en = "Adds 25 to Ranger Veteran's base maximum HP (100 → 125, matching Witch Hunter Captain). Patches `CareerSettings.dr_ranger.attributes.max_hp` — applies on the next mission load or hero respawn (vanilla recalculates max health at extension init). Does not retroactively bump an already-spawned Ranger's max in the current mission. Stacks multiplicatively with `max_health` / `max_health_alive` buffs (Natural Bond, talents, traits)." },
 
     -- Kruber (Markus)
     rework_es_group                         = { en = "Rework: Kruber" },
