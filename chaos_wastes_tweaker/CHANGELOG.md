@@ -1,5 +1,45 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.80-alpha (2026-05-20)
+
+### Fixed: ct_meta_ammo (Quiver Cascade) crashed Sienna + Bardin drakefire users with `Max overcharge outside value bounds allowed by network variable!`
+
+Two crash reports from a co-op session (host Sienna + Bardin drakefire client) both hit the same fassert at `player_unit_overcharge_extension.lua:110`:
+
+```
+fassert(max_value >= NetworkConstants.max_overcharge.min and max_value <= NetworkConstants.max_overcharge.max, "Max overcharge outside value bounds allowed by network variable!")
+```
+
+The crash locals showed `original_max_value = 40, max_value = 64` — Sienna staff buffed from 40 → 64 by twelve stacks of ct_meta_ammo's `+5% max_overcharge` per active boon (12 × 5% = +60%). The network variable bound is ~60 (vanilla designed it around Sienna Scholar's +50% talent: 40 base × 1.5 = 60 exactly). ANY value beyond ~60 crashes both host and husk on the per-frame `update()` call.
+
+The bound lives in the compiled engine `.network_config` binary and is NOT widenable from Lua — `NetworkConstants.max_overcharge` is a read-only snapshot from `Network.type_info` at boot, and the transport layer (`GameSession.set_game_object_field` for `overcharge_max_value`) uses the engine's own type-info, not the Lua table. Even monkey-patching the Lua side wouldn't fix husk reads.
+
+Fix: replaced the `{ stat_buff = "max_overcharge", multiplier = 0.05 }` entry with `{ stat_buff = "reduced_overcharge", multiplier = -0.05 }`. The new stat_buff reduces overcharge GENERATED per cast (consumed locally inside the ActionThrowProjectile / overcharge add paths — not network-synced as a max value), so the gameplay effect is "you cast more spells before overheating," equivalent to a bigger bar. Zero crash risk regardless of boon count, no Scholar talent conflict, works for any weapon with overcharge mechanics (including ones without a max_value field where the prior buff was inert).
+
+Per-cast math: at N boons, heat per cast = `1 + N × -0.05 = 1 - 0.05N` of normal. At 12 boons: 40% heat per cast = 2.5x effective casts before hitting the cap. Stronger than the original "+60% bar" intent (1.6x more casts) but the only stable alternative; users can mentally treat it as the same "more comfortable casting" benefit.
+
+Also removed the now-pointless `_calculate_and_set_buffed_max_overcharge_values` call from `ct_meta_ammo_refresh_capacity` since we no longer buff max_overcharge — eliminates the only ct code path that could ever drive a max_overcharge bounds crash even if another mod adds `max_overcharge` on top of Scholar talent.
+
+Localization updated: tooltips + description now say "-5% overheat per cast" (and explain the equivalence to bigger heat bar) instead of "+5% max overheat."
+
+Confirmed via crash-log scan: not a stacking-math bug — vanilla `stacking_multiplier` math (sum of per-stack multipliers, applied once as `value × (1 + sum)`) produced the exact 64 value. No compounding, no inflated boon count. Just the literal +60% multiplied 40, exceeding the engine cap.
+
+## 0.7.79-alpha (2026-05-20)
+
+### Fixed: VMF crashify exception in `tweak_belakor_temple_unique_boons_tooltip`
+
+The tooltip text contained `"a 14% chance per slot"` — VMF's `localize` runs every string through `string.format`, so the literal `%` was interpreted as a format specifier and triggered `<<crashify-exception>>` every time the options UI initialised. Escaped as `14%%`. Visible symptom was an empty crash dialog on game exit aggregating the queued telemetry events.
+
+## 0.7.78-alpha (2026-05-20)
+
+### Fixed: Engine fatal `Unit not found pup_holy_hand_grenade_01_t1` on adventure-injected levels
+
+Symptom: hard crash on level start (most reliably `dlc_dwarf_whaling` / Skittergate, but every adventure-injected mission was exposed) with engine assertion `world.resource_manager().can_get(unit_type, unit_name)` failed for `units/weapons/player/pup_grenades/pup_holy_hand_grenade_01_t1`. Lua stack: `PickupSystem._spawn_spread_pickups` → `_spawn_pickup` → `World.spawn_unit`.
+
+Root cause: v0.7.64 broadened `_can_spawn` to allow vanilla campaign pickup categories (`ammo`, `healing`, `grenades`, …) on adventure-injected levels, fixing the v0.7.63 regression where Holly DLC missions spawned nothing. Side effect: vanilla's `grenades` bucket includes `holy_hand_grenade` (Morgrim's Bomb), whose pickup unit is only loaded by Morris/CW mission packages. On adventure-injected levels that asset is absent from the resource manager, so when RNG rolled it the engine fataled inside `World.spawn_unit`.
+
+Fix: gate every `return true` in the `_can_spawn` hook on `Application.can_get("unit", settings.unit_name)`. Unloadable pickups soft-veto (empty spawner spot, same as if vanilla's gate had returned false) instead of crashing. Same guard applied to the deus_potions / deus_soft_currency / deus_weapon_chest paths as belt-and-suspenders (`feedback_redundant_safeguards_ok`); those entries are CW-packaged and should always pass, but the redundant check is free.
+
 ## 0.7.77-alpha (2026-05-20)
 
 ### Fixed: VMF "Attempting to rehook active hook" warning on `generate_random_power_ups`

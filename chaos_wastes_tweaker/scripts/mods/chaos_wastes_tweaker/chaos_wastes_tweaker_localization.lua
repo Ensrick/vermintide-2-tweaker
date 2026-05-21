@@ -232,12 +232,13 @@ local loc = {
     description_ct_meta_movespeed  = { en = "+1%% movement speed per active boon." },
 
     -- v0.7.43: Quiver Cascade (+5% ammo per boon, ranged-secondary required for any effect)
+    -- v0.7.72: also extends max overheat (Sienna staves, Bardin drakefire) and Moonfire Bow energy capacity.
     disable_boon_ct_meta_ammo = { en = "Disable Boon: (Mod Boon) Quiver Cascade" },
     start_boon_ct_meta_ammo   = { en = "Starting Boon: (Mod Boon) Quiver Cascade" },
-    disable_boon_ct_meta_ammo_tooltip = { en = "(Mod Boon) Per active boon, gain +5%%%% total ammo. Exotic rarity. Stat_buff is total_ammo, which is read only by AmmoExtension on ranged weapons — inert if no ranged secondary weapon is equipped (the buff still applies but has no observable effect)." },
-    start_boon_ct_meta_ammo_tooltip   = { en = "(Mod Boon) Per active boon, gain +5%%%% total ammo. Exotic rarity. Inert without a ranged weapon." },
+    disable_boon_ct_meta_ammo_tooltip = { en = "(Mod Boon) Per active boon, gain +5%%%% total ammo, -5%%%% overheat generated per cast (Sienna staves, Bardin drakegun + drake pistols), and +5%%%% max Moonfire Bow energy. Exotic rarity. Stat_buffs: total_ammo + reduced_overcharge + a runtime hook for Moonfire's energy_system (which has no native buff path). The reduced-overcharge form is gameplay-equivalent to a bigger heat bar (you cast more before overheating) — the engine's network max-overcharge variable caps at ~60 so a literal-bar buff crashed once stacks pushed beyond it (v0.7.78 fix). Inert only if no ranged weapon at all." },
+    start_boon_ct_meta_ammo_tooltip   = { en = "(Mod Boon) Per active boon, gain +5%%%% total ammo, -5%%%% overheat per cast (Sienna staves, Bardin drakefire — cast more before overheating), and +5%%%% Moonfire Bow energy capacity. Exotic rarity." },
     display_name_ct_meta_ammo = { en = "Quiver Cascade" },
-    description_ct_meta_ammo  = { en = "+5%% total ammo per active boon." },
+    description_ct_meta_ammo  = { en = "+5%% total ammo, -5%% overheat per cast (Sienna staves, Bardin drakefire — equivalent to bigger heat bar), +5%% Moonfire energy per active boon." },
 
     -- v0.7.32: 1 green HP per kill mod boon
     disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
@@ -317,6 +318,12 @@ local loc = {
     tweak_reckless_swings_tooltip = { en = "Softens Khaine's Fury. Vanilla deals 3 self-damage per melee hit and deactivates below 50%%%% health. This tweak reduces self-damage to 1 and the activation threshold to 25%%%% health, so the boon stays active much longer." },
     tweak_miracle_of_ulric_persistent = { en = "Miracle of Ulric (Persistent Power)" },
     tweak_miracle_of_ulric_persistent_tooltip = { en = "Replaces vanilla Blessing of Power. Vanilla adds +50 to each weapon's power_level field, which EVAPORATES the moment a player swaps weapons at an upgrade altar. This tweak instead applies +50 Power as a persistent buff on every hero — survives weapon swaps and lasts for the rest of the run. Also renames the blessing to \"Miracle of Ulric\" with updated description. Host-authoritative." },
+    ulric_pack_unlimited_range = { en = "Ulric's Pack: Unlimited Aura Range" },
+    ulric_pack_unlimited_range_tooltip = { en = "Ulric's pack heeds the call from any distance. Vanilla Ulric's Pack only applies its power bonus when allies stand within 20 meters of you; this tweak removes the leash so every ally with the boon counts no matter how scattered the herd. The boon's per-tick proximity check is rewritten to ignore distance entirely. Re-syncs on toggle without restart." },
+    tweak_wildfire_generations_cap = { en = "Myrmidia's Wildfire: Generations Cap" },
+    tweak_wildfire_generations_cap_tooltip = { en = "Caps how many times Myrmidia's Wildfire (`boon_dot_burning_01`) can chain. Each spread DoT is tagged with a generation counter — the player's own burns are generation 0, the first spread is 1, and so on. When a burning enemy dies, the spread fires only if the source's generation is below this cap. Default 3 prevents infinite cascades during dense hordes while still letting the boon clear a small group. Set to 10 for near-uncapped vanilla behavior, or 1 to allow only the original spread without further chaining. Host-authoritative; the spread function is server-only." },
+    tweak_belakor_temple_unique_boons = { en = "Belakor's Temple: Reward Unique Boons" },
+    tweak_belakor_temple_unique_boons_tooltip = { en = "When you complete Belakor's Temple arena (the SIG zone on the Wastes map), the reward chest forces unique-tier boons only. Vanilla rolls cursed_chest rarity weights `{ event=6, exotic=3, rare=6, unique=1 }` — a 14%% chance per slot of a unique. With this toggle on, the chest passes `forced_rarity = \"unique\"` to vanilla's `DeusPowerUpUtils.generate_random_power_up`, which falls back to lower tiers automatically if the unique pool is empty (vanilla's `forced_rarity` walks down event→rare→exotic→unique then back up). No `weight_by_rarity` global mutation — the override is local to the Belakor-temple call only, so other altars/chests/shrines retain vanilla rarity weights. Host only — the chest UI on each peer rolls its own seed; this hook fires per-peer at the same boon-roll call so all players see unique-tier choices independently. Default ON." },
     tweak_miracle_of_isha_alternative = { en = "Miracle of Isha behavior" },
     tweak_miracle_of_isha_alternative_tooltip = { en = "Replaces the behavior of Blessing of Isha at the shrine.\n\n• Vanilla = one team revive-from-death per run when the squad is reduced to one hero.\n• Aegis = every hero takes -25%%%% damage for the rest of the run.\n• Unlimited Wounds = every hero gets unlimited wounds for the rest of the run (recruit-style: every knockdown is revivable; no instant-death after the 1st down).\n\nHost-authoritative. Vanilla revive mutator is fully disabled when Aegis or Unlimited Wounds is selected." },
     isha_alt_vanilla = { en = "Vanilla (revive once)" },
@@ -999,6 +1006,39 @@ local loc = {
     start_boon_wolfpack = { en = "Starting Boon: Ulric's Pack" },
     disable_boon_wolfpack_tooltip = { en = "Gain X%%%% bonus to Power. This is multiplied by the number of allies with the Boon." },
     start_boon_wolfpack_tooltip = { en = "Gain X%%%% bonus to Power. This is multiplied by the number of allies with the Boon." },
+
+    -- v0.7.76: Bot Boon Mirror (Phase 3.1)
+    bots_mirror_host_boons = { en = "Shared Blessings: Bots Mirror Host's Boons" },
+    bots_mirror_host_boons_tooltip = { en = "When this lobby's heroes claim a blessing at a shrine, altar, Chest of Trials, set completion, or Belakor's Temple, every bot in the warband is bound to the same fortune and receives an identical boon. The Lords of the Old World show no favour to lordless warriors.\n\nHost-only. Boons granted to the lobby host propagate to every bot under their banner. Talent-style boons are written into each bot's own talent set so they take effect on the bot regardless of career; buff-style boons apply to the bot's character as the heroes themselves receive them.\n\nDefault: off." },
+
+    -- v0.7.76: Grudge Mark Ban Menu (Phase 3.2)
+    boss_grudge_marks_group = { en = "Khorne's Champions Banlist (Boss Enhancements)" },
+    ban_grudge_mark_commander       = { en = "Ban: Commander" },
+    ban_grudge_mark_commander_tooltip       = { en = "Forbid the Commander mark — boss summons additional reinforcements during the encounter. With every Boss Enhancement banned, monsters spawn at vanilla strength with no marks." },
+    ban_grudge_mark_crippling       = { en = "Ban: Crippling Blow" },
+    ban_grudge_mark_crippling_tooltip       = { en = "Forbid the Crippling Blow mark — boss attacks reduce hero damage output on hit." },
+    ban_grudge_mark_crushing        = { en = "Ban: Crushing Blow" },
+    ban_grudge_mark_crushing_tooltip        = { en = "Forbid the Crushing Blow mark — boss attacks deal heavy stagger and reduced block angles." },
+    ban_grudge_mark_frenzy          = { en = "Ban: Frenzy" },
+    ban_grudge_mark_frenzy_tooltip          = { en = "Forbid the Frenzy mark — boss attack speed accelerates as its health drops." },
+    ban_grudge_mark_intangible      = { en = "Ban: Intangible" },
+    ban_grudge_mark_intangible_tooltip      = { en = "Forbid the Intangible mark — boss periodically fades and becomes briefly untouchable." },
+    ban_grudge_mark_periodic_curse  = { en = "Ban: Periodic Curse Aura" },
+    ban_grudge_mark_periodic_curse_tooltip  = { en = "Forbid the Periodic Curse Aura — boss radiates a Skarrik-style cursed-blood pulse on a fixed cadence." },
+    ban_grudge_mark_periodic_shield = { en = "Ban: Periodic Shield" },
+    ban_grudge_mark_periodic_shield_tooltip = { en = "Forbid the Periodic Shield mark — boss gains a damage-absorbing shield on a fixed cadence." },
+    ban_grudge_mark_raging          = { en = "Ban: Raging" },
+    ban_grudge_mark_raging_tooltip          = { en = "Forbid the Raging mark — boss enters an enraged state at low health with greater damage and resistance." },
+    ban_grudge_mark_ranged_immune   = { en = "Ban: Ranged Immune" },
+    ban_grudge_mark_ranged_immune_tooltip   = { en = "Forbid the Ranged Immune mark — boss ignores all ranged damage; melee-only kill." },
+    ban_grudge_mark_regenerating    = { en = "Ban: Regenerating" },
+    ban_grudge_mark_regenerating_tooltip    = { en = "Forbid the Regenerating mark — boss steadily heals damage taken if not pressed continuously." },
+    ban_grudge_mark_unstaggerable   = { en = "Ban: Unstaggerable" },
+    ban_grudge_mark_unstaggerable_tooltip   = { en = "Forbid the Unstaggerable mark — boss cannot be staggered by hero attacks or pushes." },
+    ban_grudge_mark_vampiric        = { en = "Ban: Vampiric" },
+    ban_grudge_mark_vampiric_tooltip        = { en = "Forbid the Vampiric mark — boss restores life from damage dealt to heroes." },
+    ban_grudge_mark_warping         = { en = "Ban: Warping" },
+    ban_grudge_mark_warping_tooltip         = { en = "Forbid the Warping mark — boss teleports around the encounter at intervals." },
 }
 
 -- Per-mission and per-CW-scenario toggle labels. Generated from the catalogs in

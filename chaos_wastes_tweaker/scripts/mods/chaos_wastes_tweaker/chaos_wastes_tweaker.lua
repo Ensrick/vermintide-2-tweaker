@@ -30,7 +30,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.77-alpha"
+local MOD_VERSION = "0.7.80-alpha"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
 
@@ -2711,6 +2711,30 @@ end)
 --   * painting_scrap spots  → deus_soft_currency (Pilgrim's Coin)
 --   * non-claimed primaries → deus_weapon_chest (altars compete with ammo/healing
 --                              for remaining primary spawn slots)
+-- v0.7.78: defensive guard against pickup_settings whose `unit_name` is not
+-- in the engine resource manager on the current level. The vanilla campaign
+-- `grenades` pool includes `holy_hand_grenade` (`pup_holy_hand_grenade_01_t1`)
+-- which only loads in Morris/CW mission bundles. After v0.7.64 broadened the
+-- adventure-level allowlist, that entry became spawn-eligible on injected
+-- adventure missions like Skittergate where the unit isn't in resources, and
+-- when RNG rolled it the engine fataled in `World.spawn_unit`. Pre-flight the
+-- pickup's unit path with `Application.can_get` so the spawner is skipped
+-- (empty spot, vanilla-equivalent of a soft veto) instead of crashing.
+local function _pickup_unit_loadable(pickup_name)
+    if not Pickups then return true end  -- can't check, let it through
+    for _, cat in pairs(Pickups) do
+        if type(cat) == "table" then
+            local settings = cat[pickup_name]
+            if type(settings) == "table" then
+                local unit_name = settings.unit_name
+                if type(unit_name) ~= "string" then return true end
+                return Application.can_get("unit", unit_name)
+            end
+        end
+    end
+    return true  -- not a vanilla bucket entry; trust the caller
+end
+
 mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup_name)
     local ok = func(self, spawner_unit, pickup_name)
     if ok then return ok end
@@ -2746,13 +2770,13 @@ mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup
     -- CW pickups accept any non-tome/grim, non-event primary spawner. They
     -- compete with vanilla ammo/healing/grenades for unclaimed slots.
     if Pickups and Pickups.deus_potions and Pickups.deus_potions[pickup_name] then
-        return true
+        return _pickup_unit_loadable(pickup_name)
     end
     if pickup_name == "deus_soft_currency" then
-        return true
+        return _pickup_unit_loadable(pickup_name)
     end
     if pickup_name == "deus_weapon_chest" then
-        return true
+        return _pickup_unit_loadable(pickup_name)
     end
 
     -- v0.7.64: on injected adventure levels, ALSO allow vanilla campaign pickup
@@ -2781,6 +2805,15 @@ mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup
         for _, category in ipairs(ADVENTURE_CATS) do
             local bucket = Pickups[category]
             if type(bucket) == "table" and bucket[pickup_name] then
+                -- v0.7.78: pickup_settings.unit_name may reference a unit that
+                -- isn't loaded on this level (e.g. `holy_hand_grenade` on
+                -- Skittergate). Soft-veto rather than letting the engine fatal
+                -- when the spawner fires.
+                local unit_name = bucket[pickup_name].unit_name
+                if type(unit_name) == "string"
+                    and not Application.can_get("unit", unit_name) then
+                    return false
+                end
                 return true
             end
         end
@@ -4618,13 +4651,28 @@ local CT_META_BOONS = {
             -- v0.7.72: replaced with `ct_meta_ammo_refresh_capacity` which ALSO refreshes
             -- overcharge_extension (Sienna staves, Bardin drakefire) and energy_extension
             -- (Moonfire Bow). See registration block above CT_META_BOONS.
-            { stat_buff = "total_ammo",     multiplier = 0.05, apply_buff_func = "ct_meta_ammo_refresh_capacity" },
-            -- v0.7.72: max_overcharge scales the overcharge bar capacity for Sienna staves
-            -- and Bardin drakefire/drake-pistols (both use PlayerUnitOverchargeExtension
-            -- which reads this key at `_calculate_and_set_buffed_max_overcharge_values`).
-            -- Vanilla recalcs only at extensions_ready (wield) and on_overcharge_lost; the
-            -- custom apply func above forces an immediate recalc so the stack lands live.
-            { stat_buff = "max_overcharge", multiplier = 0.05 },
+            { stat_buff = "total_ammo",        multiplier = 0.05, apply_buff_func = "ct_meta_ammo_refresh_capacity" },
+            -- v0.7.78 (was v0.7.72 max_overcharge crash fix): Sienna staves and Bardin
+            -- drakefire weapons use PlayerUnitOverchargeExtension whose `max_value` is
+            -- network-synced via the `max_overcharge` engine type whose hard cap is ~60
+            -- (NetworkConstants.max_overcharge.max — vanilla designed this around Sienna
+            -- Scholar's +50% talent: 40 base × 1.5 = 60, exactly at the bound). Buffing
+            -- `max_overcharge` beyond 60 trips `fassert(max_value <= ...max)` at
+            -- player_unit_overcharge_extension.lua:110 and instant-crashes both peers
+            -- (server + husk read). The bound is in a compiled binary `.network_config`
+            -- and not widenable from Lua.
+            --
+            -- Switched to `reduced_overcharge` (stacking_multiplier, same shape) which
+            -- reduces overcharge generated PER CAST. Functionally equivalent to "bigger
+            -- bar" because the player can cast more spells / fire more drakefire shots
+            -- before hitting the cap. Not network-synced (per-cast stat_buff only,
+            -- consumed locally inside ActionThrowProjectile / overcharge add paths).
+            -- No crash risk regardless of boon count, no Scholar talent conflict.
+            --
+            -- Side benefit: works for ANY weapon with overcharge mechanics including
+            -- ones that don't even have a max_value field, while the prior max_overcharge
+            -- buff was inert on those.
+            { stat_buff = "reduced_overcharge", multiplier = -0.05 },
         },
         -- v0.7.72: Coverage is now ammo + overcharge + Moonfire energy. Inert only on the
         -- (unlikely) loadout with no ranged weapon at all.
@@ -4767,16 +4815,16 @@ do
                 end
             end
 
-            -- 2. Overcharge refresh — Sienna staves, Bardin drakegun/drake-pistols. The
-            -- extension lives on the player_unit (not the weapon unit), so the call site
-            -- target is `unit` itself.
-            local overcharge_ext = ScriptUnit.has_extension(unit, "overcharge_system")
-            if overcharge_ext and overcharge_ext._calculate_and_set_buffed_max_overcharge_values then
-                -- pcall guard: if `original_max_value` happens to be nil (e.g. extension
-                -- not yet through extensions_ready), the recalc fasserts on the network
-                -- bounds check. Silent-skip in that case; next wield will pick it up.
-                pcall(overcharge_ext._calculate_and_set_buffed_max_overcharge_values, overcharge_ext)
-            end
+            -- 2. Overcharge refresh — REMOVED in v0.7.78. Pre-v0.7.78 ct_meta_ammo
+            -- buffed `max_overcharge` directly, and this call re-ran
+            -- `_calculate_and_set_buffed_max_overcharge_values` to land the new bar size
+            -- immediately. After v0.7.78 the boon uses `reduced_overcharge` instead (a
+            -- per-cast stat_buff with no max_value side-effect), so the recalc is
+            -- pointless — `reduced_overcharge` reads happen inside the per-cast
+            -- ActionThrowProjectile / overcharge add paths, not via max_value. Removing
+            -- the call also eliminates the only ct path that could ever drive a
+            -- max_overcharge-bounds crash even if another mod adds `max_overcharge` on
+            -- top of Scholar talent.
 
             -- 3. Energy refresh — Moonfire Bow (we_deus_01). Vanilla has no buff hook, so
             -- we mutate `_max_energy` ourselves. We compute the desired multiplier from
