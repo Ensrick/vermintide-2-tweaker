@@ -27,6 +27,15 @@ tools/vmb-launcher/
 upload/steam_appid.txt
 .temp/
 
+# Documentation policy (PROJECT_STANDARDS.md §7.3 + §7.4):
+# - Active investigation notes live in <mod>/_investigating/ and are ephemeral.
+#   Findings get distilled into POSTMORTEMS.md (tracked) on resolution.
+# - Audit snapshots (AUDIT_*.md) are point-in-time reports, not source of truth.
+#   Findings get filed as GitHub Issues or distilled into postmortems/reference
+#   docs; the snapshot itself is not committed.
+**/_investigating/
+**/AUDIT_*.md
+
 # REVIEW (2026-05-01):
 # - bundleV2/ is INTENTIONALLY tracked (so other devs / git bisect can see the built bundle
 #   that was deployed at each commit). Confirm with maintainer; if accidentally tracked, add
