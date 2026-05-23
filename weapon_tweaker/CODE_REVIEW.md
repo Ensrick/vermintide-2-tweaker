@@ -1,3 +1,94 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-01 (22 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-01/`.
+# Code Review: weapon_tweaker
+
+**Latest pass:** 2026-05-21 (refresh)
+**Prior pass:** 2026-05-01 (preserved below)
+**Current version:** v0.12.63-dev
+**Audit verdict:** READY (heavily-used, mature)
+
+---
+
+## 2026-05-21 refresh summary
+
+The mod has advanced from v0.11.x to v0.12.63 since the prior pass — roughly 50 minor versions. The forward-ref `_safe_has_anim` HIGH-severity bug flagged in the prior pass was fixed shortly after. Major changes since:
+
+- **Big-Rebalance integration landed (v0.12.61) and was immediately externalized to `bt` (v0.12.62).** wt no longer ships the 419-line `weapon_tweaker_big_rebalance_registrations.lua` (deleted; archived in `_big_rebalance_extract/deprecated_registration_files/`). Per-feature toggles now gate on `(get_mod("bt") or {}).is_br_active and get_mod("bt"):is_br_active()`. `BR.register_all()` is a no-op shim. New files added in v0.12.61:
+  - `weapon_tweaker_big_rebalance.lua` — apply logic + function hooks (Flamethrower / Beam / TrueFlight start+fire)
+  - `weapon_tweaker_big_rebalance_defs.lua` — pure-data definitions for wt-owned content (e.g. Moonfire AOE explosion template, Hagbane DoT damage profile)
+  - ~113 `br_*` per-toggle widgets across `[Big Rebalance]` group, all default OFF
+- **Crafting-in-modded split out (v0.12.x era, before this pass — sibling mod `cim` now owns the Athanor forge UI, illusion swap, modded rarities, SaveWeapon import).** Forge code that lived in `weapon_tweaker.lua` lines 1500-2660 in the prior pass is now in `crafting_in_modded`.
+- **Polearm preview root-cause fix (v0.12.60)** — Found that `Unit.animation_event` hook redirected preview-unit wield events when `career == nil`. Added explicit `career and ...` guard to `should_redirect` formula. Bug stayed invisible for ~12 minor versions because `_career_anim_redirect` table only had polearm-class entries where the alternate body didn't author the alt event; the field-repro condition needed both "preview unit has no career_system" + "preview body authors the alt event."
+- **Kruber Longbow disable-zoom (v0.12.58)** — switched to `zoom_condition_function` gate after game v6.11.0 dropped `aim_zoom_delay` from `2.0 → 0.22` on `longbows_empire_template.actions.action_two.default`. Old `aim_zoom_delay = math.huge` approach broke; the `zoom_condition_function = function() return false end` short-circuits the outer gate at `action_aim.lua:128` regardless of timer arithmetic.
+- **Skullsplitter / Skull-Splitter+Shield / Bardin Hammer+Shield removed from Kruber's roster (v0.12.57)** — twelve `(es_*, weapon)` pairs stripped from `weapon_unlock_map` plus `_strip_removed_kruber_unlocks` idempotent stripper for stale users.
+- **Localization `%%` escape fixes (v0.12.63)** — 10 trait-description strings at lines 550-588 of `weapon_tweaker_localization.lua` contained literal `%` → VMF `safe_string_format` triggered `<<crashify-exception>>` every tooltip render. Same bug class as `gt 0.2.35` and `ct 0.7.79`.
+- **Inventory preview hook moved to `MenuWorldPreviewer.equip_item` (NOT `HeroPreviewer.equip_item`)** per `feedback_vt2_class_hook_derived` — the v0.12.16/17 fix landed in the audit window. VT2's `class()` copies parent methods at class-def time (no `__index`), so hooks on the base class silently never fire on the derived `MenuWorldPreviewer` keep-inventory instance.
+
+Current source stats: `weapon_tweaker.lua` 3934 lines (split with BR sibling files). 25 hooks. 10 chat commands. 595 setting_id widgets (largest tree in the repo; ~113 of those are `br_*` toggles).
+
+## Code quality (Section D findings for this mod)
+
+- **Forward-ref:** clean. The `_safe_has_anim` HIGH-severity bug from the prior pass was fixed. Scanner output had one false positive at `weapon_tweaker.lua:10` (symbol inside the file-header `--[[ ... ]]` block; line-comment stripper doesn't handle block comments).
+- **Hook variants:** clean. Zero instances of `mod:hook_safe(..., function(func, ...))` (would be a wrong-variant bug). Every `mod:hook` with a `function(func, self, ...)` signature invokes `func` directly or via `pcall(func, ...)`.
+- **mod.update layers:** 1 layer at `weapon_tweaker_backend.lua:95`. One-shot sentinels (`_applied_unlocks`, `done_hooking_backend`) — cheap after init.
+- **Dead code:** 1 intentional `if false then ... end` block at `weapon_tweaker_big_rebalance.lua:169-172` (user-flagged placeholder, left as-is per scope of audit). No other large commented blocks.
+- **TODO/FIXME:** 0 markers in any wt file (not listed in Section D's TODO inventory).
+- **Destructive ops:** zero `os.remove` / `os.execute` / `rm -rf` / `Remove-Item -Recurse -Force`.
+- **Debug leftovers:** none in mod.update or hot per-event paths.
+
+## Cross-mod dependencies (Section E findings)
+
+- **Inbound (others consume wt):** `mod.weapon_unlock_map` is exposed but **has no external consumer**. Section E flags it as a P1 item: either consume it somewhere or remove the export.
+- **Outbound (wt calls get_mod on others):**
+  - `weapon_tweaker.lua:127` → `character_weapon_variants` — guarded with `~= nil` boolean only (presence detection; suppresses redundant unlocks when CWV is installed).
+  - `weapon_tweaker_big_rebalance.lua:71` → `bt` — guarded with the canonical `if not (bt and bt.is_br_active) then return false end` pattern.
+- **Shared global writes:** wt writes per-name overlays to `DamageProfileTemplates` and `ExplosionTemplates` for BR overlay and individual content (e.g. `_MOONFIRE_AOE_NAME`). These overlap with `bt`'s pre-registered stubs and `crt`'s overlays — coordinated by the `if not BT[name] then` guard in bt and the `if not NL.buff_templates[name] then` guard in crt. Status: coordinated, no stomp (per Section E).
+- **Load-order requirement:** `bt` should load BEFORE wt's `on_all_mods_loaded` boot path. Out-of-order = BR features no-op for the session but don't crash. Soft constraint.
+
+## Feature state (Section F findings)
+
+**Working (per F.2):**
+- 10 chat commands: `/info`, `/animlog`, `/force3p <event>`, `/force1p <event>`, `/sm_probe`, `/brace_to_repeater_skin`, `/brace_to_repeater_dump`, `/dump`, `/dump_actions [pattern]`, `/dump_weapons`.
+- 25 hooks across `GearUtils.create_equipment`, `MenuWorldPreviewer._spawn_item`, `LootItemUnitPreviewer.spawn_units`, `SimpleInventoryExtension._wield_slot`, `BackendInterfaceCraftingPlayfab.get_unlocked_weapons`, plus BR function hooks (Flamethrower / Beam / TrueFlight start+fire).
+- Per-weapon cross-career toggles, anim remap tables (`_anim_redirect`, `_career_anim_redirect`, `_3p_template_remaps`, `_3p_key_remaps`, `_suffix_career_map`), per-character grip/scale/offset overrides.
+- BR integration: 115 `if _on("br_<name>")` per-toggle gates. Master delegates to `bt:is_br_active()`.
+- 595 widgets / 677 setting_id occurrences in `_data.lua` (counting nested labels).
+
+**Stubs:** 0 `apply = function() end` stubs.
+
+**Aspirational:** intentionally left unimplemented per v0.12.61 CHANGELOG — `DamageUtils.stagger_ai` / `apply_buffs_to_damage` / `calculate_damage` cross-cutting hooks live in `et`, not here. `br_cog_rework` ships speed/crit fields but defers the 19-entry chain-action / baked-sweep rewrites. `br_hook_shield_slam` is currently a gate-only toggle (no body); table-replacement half is covered by `br_shield_slam_replace`.
+
+**Verdict:** READY (heavily-used, mature). 9555 LOC across all wt files; BR layer is opt-in and works the same as any other toggle group.
+
+## Outstanding items
+
+- **P0 / P1 (from prior pass) — RESOLVED:**
+  - `_safe_has_anim` forward-ref bug at `weapon_tweaker.lua:256` (HIGH) — fixed.
+  - `mod:hook_safe("MenuWorldPreviewer", "equip_item", ...)` resolution (MED) — fixed via the v0.12.17 derived-class hook discipline.
+
+- **P1 (new, from Section E):**
+  - Decide whether `mod.weapon_unlock_map` is still a load-bearing export. No external consumer; either remove or document.
+  - Decide whether to lift `local MOD_VERSION` to `mod.MOD_VERSION` for `lobby_tweaker._modded_manifest` visibility (cross-mod manifest reads `mod_obj.MOD_VERSION` and falls back when not exposed).
+
+- **P2 (still open from prior pass):**
+  - **`ItemMasterList[key]` lookups without `rawget`** at lines noted in prior pass — re-verify line numbers against current source. Most are safe by code-path inspection but not defensive (especially `weapon_tweaker.lua:2840-2841`, `2962`, `2978-2979` in the prior numbering). With crafting forge now in `cim`, some of these may have moved out of wt entirely.
+  - **`weapon_tweaker_backend.lua:91`** `set_loadout_item` hook signature drops 5th arg `optional_loadout_index`. Use `function(func, self, ...)` and `func(self, ...)` to forward all args. Versus mode loadout may silently drop.
+  - **`weapon_tweaker_backend.lua:95-96`** bare `return` instead of `return true` — most callers don't check, but `BackendInterfaceVersusPlayfab.set_loadout_item` propagates the value.
+
+- **P3:**
+  - `_data.lua` debug widgets (`debug`, `enable_weapon_debug_logging`) — still never read.
+  - 6 orphan localization keys identified in prior pass — re-grep current source.
+  - 3 widget-less but code-read localization keys (`enable_weapon_animation_redirects`, `enable_weapon_backend_hooks`, `enable_weapon_ui_hooks`) — add widgets or remove from code.
+
+- **CLAUDE.md guidance to add (per Section E P2):** Any new BuffTemplate / DamageProfileTemplate / NetworkLookup.buff_templates entry MUST be added to `buff_tweaker_registrations.lua`, never directly to wt — to preserve cross-peer index determinism. wt's BR sub-toggle apply logic stays here, but no new global table writes outside bt.
+
+---
+
+## Prior pass: 2026-05-01
+
 # Weapon Tweaker Code Review (2026-05-01)
 
 Scope: every file in `weapon_tweaker/` except `bundleV2/`.

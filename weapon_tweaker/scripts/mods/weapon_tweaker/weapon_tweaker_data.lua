@@ -1,24 +1,17 @@
 local mod = get_mod("wt")
 
--- CLARIFY: detects whether character_weapon_variants is also installed at the
--- moment _data.lua is required by VMF. If yes, strip widgets for cross-career
--- (career, weapon) pairs that CWV manages so the user only sees one toggle
--- per pair. The runtime mirror of this is `_cwv_managed` + `has_cwv` check
--- in apply_weapon_unlocks (weapon_tweaker.lua ~L62).
--- QUESTION: poll order — _data.lua is loaded by VMF very early. Whether the
--- character_weapon_variants mod is registered into Managers.mod._mods by the
--- time this code runs depends on Workshop subscription order and the global
--- mod load sequence. If CWV is loaded AFTER weapon_tweaker, _has_cwv is false
--- here and the duplicate widgets remain. The widget set is stable per session,
--- so this is "first one wins". User can reorder mods if it matters.
-local _has_cwv = false
+-- CLARIFY: detects whether crafting_in_modded is installed at the moment
+-- _data.lua is required by VMF. Used to conditionally surface the CW-trait
+-- widget groups; the runtime in weapon_tweaker.lua still respects whatever
+-- values are stored but the toggles only do anything visible to the player
+-- when cim is around to surface them in its forge.
+-- (CWV-detection was removed in v0.12.57-dev along with `_strip_cwv_widgets`
+-- once wh_1h_axe stopped being offered to Kruber from wt.)
 local _has_cim = false
 if Managers and Managers.mod and Managers.mod._mods then
     for i = 1, #Managers.mod._mods do
         local m = Managers.mod._mods[i]
-        if m and m.name == "character_weapon_variants" then
-            _has_cwv = true
-        elseif m and m.name == "crafting_in_modded" then
+        if m and m.name == "crafting_in_modded" then
             _has_cim = true
         end
     end
@@ -45,24 +38,13 @@ local function _strip_cim_widgets(widgets)
     end
 end
 
-local _cwv_managed_settings = {
-    ["unlock_es_mercenary_wh_1h_axe"] = true,
-    ["unlock_es_huntsman_wh_1h_axe"] = true,
-    ["unlock_es_knight_wh_1h_axe"] = true,
-    ["unlock_es_questingknight_wh_1h_axe"] = true,
-}
-
-local function _strip_cwv_widgets(widgets)
-    if not widgets then return end
-    for i = #widgets, 1, -1 do
-        local w = widgets[i]
-        if _cwv_managed_settings[w.setting_id] then
-            table.remove(widgets, i)
-        elseif w.sub_widgets then
-            _strip_cwv_widgets(w.sub_widgets)
-        end
-    end
-end
+-- v0.12.57-dev: `_cwv_managed_settings` removed. It stripped the four
+-- `unlock_es_*_wh_1h_axe` widgets when CWV was installed (so CWV's variant
+-- mod could own the cross-character path). Since wh_1h_axe is no longer
+-- offered to Kruber from wt at all (per user direction — no Saltzpyre
+-- Skullsplitter on Kruber), there's nothing left for CWV to compete with
+-- and the strip is dead. `_strip_cwv_widgets` and its call site are gone
+-- with it.
 
 local data = {
     name = mod:localize("mod_name"),
@@ -87,7 +69,6 @@ local data = {
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "unlock_es_mercenary_dr_2h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_mercenary_dr_shield_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_we_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_we_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_we_1h_spears_shield", type = "checkbox", default_value = false },
@@ -105,12 +86,10 @@ local data = {
                                     { setting_id = "unlock_es_mercenary_es_sword_shield", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_mercenary_es_2h_heavy_spear", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_mercenary_es_2h_hammer", type = "checkbox", default_value = true },
-                                    { setting_id = "unlock_es_mercenary_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_es_1h_flail", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_1h_hammer", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_mercenary_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_bw_1h_crowbill", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_bw_1h_flail_flaming", type = "checkbox", default_value = false },
                                 },
@@ -120,7 +99,6 @@ local data = {
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "unlock_es_huntsman_dr_2h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_huntsman_dr_shield_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_we_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_we_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_we_1h_spears_shield", type = "checkbox", default_value = false },
@@ -137,12 +115,10 @@ local data = {
                                     { setting_id = "unlock_es_huntsman_es_sword_shield", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_huntsman_es_2h_heavy_spear", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_huntsman_es_2h_hammer", type = "checkbox", default_value = true },
-                                    { setting_id = "unlock_es_huntsman_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_es_1h_flail", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_1h_hammer", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_huntsman_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_bw_1h_crowbill", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_bw_1h_flail_flaming", type = "checkbox", default_value = false },
                                 },
@@ -152,7 +128,6 @@ local data = {
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "unlock_es_knight_dr_2h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_knight_dr_shield_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_we_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_we_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_we_1h_spears_shield", type = "checkbox", default_value = false },
@@ -169,12 +144,10 @@ local data = {
                                     { setting_id = "unlock_es_knight_es_sword_shield", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_2h_heavy_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_es_2h_hammer", type = "checkbox", default_value = true },
-                                    { setting_id = "unlock_es_knight_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_es_1h_flail", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_1h_hammer", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_knight_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_bw_1h_crowbill", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_bw_1h_flail_flaming", type = "checkbox", default_value = false },
                                 },
@@ -184,7 +157,6 @@ local data = {
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "unlock_es_questingknight_dr_2h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_questingknight_dr_shield_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_we_2h_sword", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_we_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_we_1h_spears_shield", type = "checkbox", default_value = false },
@@ -202,12 +174,10 @@ local data = {
                                     { setting_id = "unlock_es_questingknight_es_sword_shield", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_questingknight_es_2h_heavy_spear", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_es_2h_hammer", type = "checkbox", default_value = true },
-                                    { setting_id = "unlock_es_questingknight_wh_1h_axe", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_1h_falchion", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_es_1h_flail", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_1h_hammer", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_questingknight_wh_hammer_shield", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_bw_1h_crowbill", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_bw_1h_flail_flaming", type = "checkbox", default_value = false },
                                 },
@@ -917,6 +887,285 @@ local data = {
                     { setting_id = "kruber_longbow_manual_zoom", type = "checkbox", default_value = false },
                 },
             },
+            -- ============================================================
+            -- Core's Big Rebalance integration.  All defaults are `false`
+            -- so the system is opt-in. The master toggle gates the
+            -- registration block (NewDamageProfileTemplates / buffs /
+            -- explosions / StatBuff app-methods) and must be on for ANY
+            -- of the per-toggle changes to take effect — many of the
+            -- writes reference profiles that only exist after master is on.
+            -- See `weapon_tweaker_big_rebalance_registrations.lua` for the
+            -- cross-mod alphabetical registration list (identical across wt/ct/et).
+            -- ============================================================
+            {
+                setting_id = "br_master",
+                type = "group",
+                sub_widgets = {
+                    -- Master toggle moved to `bt` (Tweaker: Buffs). Subscribe to
+                    -- that mod and enable its master to make these wt sub-toggles
+                    -- functional. A placeholder text widget would be nice here
+                    -- but VMF doesn't expose one; leaving the explanation in
+                    -- localization (see br_master tooltip on the group).
+                    {
+                        setting_id = "br_melee",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "br_melee_1h_hammer",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_1h_hammer_dodge_count",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_hammer_light_down_speed",    type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_hammer_heavy_gs_profile",    type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_hammer_heavy_range",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_hammer_tome_rework",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_hammer_wizard_rework",       type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_melee_2h_hammer",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_2h_hammer_emp",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_2h_hammer_priest",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_cog_rework",        type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_melee_1h_sword",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_1h_sword_template1_range", type = "checkbox", default_value = false },
+                                    { setting_id = "br_flaming_sword_rework",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_falchion_heavy",           type = "checkbox", default_value = false },
+                                    { setting_id = "br_we_1h_sword",              type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_melee_2h_sword",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_exec_sword_speed",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_2h_sword_template1", type = "checkbox", default_value = false },
+                                    { setting_id = "br_bastard_sword",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_we_2h_sword",       type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_melee_polearm",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_2h_spear_emp",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_halberd_tb_profiles",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_elf_spear_rework",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_spearshield_chain", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_melee_dual",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_dw_mace_sword",      type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_dagger_pushstab", type = "checkbox", default_value = false },
+                                    { setting_id = "br_dw_sword_dagger",    type = "checkbox", default_value = false },
+                                    { setting_id = "br_dw_swords_speed",    type = "checkbox", default_value = false },
+                                    { setting_id = "br_dw_daggers",         type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_melee_mace_axe",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_1h_axe",          type = "checkbox", default_value = false },
+                                    { setting_id = "br_2h_pick",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_2h_axe",          type = "checkbox", default_value = false },
+                                    { setting_id = "br_dw_axes",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_flail_rework", type = "checkbox", default_value = false },
+                                    { setting_id = "br_flaming_flail",   type = "checkbox", default_value = false },
+                                    { setting_id = "br_crowbill",        type = "checkbox", default_value = false },
+                                    { setting_id = "br_glaive",          type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_melee_shield",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_flail_shield",           type = "checkbox", default_value = false },
+                                    { setting_id = "br_axe_shield_crit",        type = "checkbox", default_value = false },
+                                    { setting_id = "br_1h_hammer_shield_heavy", type = "checkbox", default_value = false },
+                                    { setting_id = "br_sword_shield_emp",       type = "checkbox", default_value = false },
+                                    { setting_id = "br_shield_slam_replace",    type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        setting_id = "br_ranged",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "br_ranged_bow",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_bow_weapon_type_flag",    type = "checkbox", default_value = false },
+                                    { setting_id = "br_bow_ammo_caps",           type = "checkbox", default_value = false },
+                                    { setting_id = "br_shortbow_shotgun_rework", type = "checkbox", default_value = false },
+                                    { setting_id = "br_longbow_emp_rework",      type = "checkbox", default_value = false },
+                                    { setting_id = "br_repeater_xbow_elf",       type = "checkbox", default_value = false },
+                                    { setting_id = "br_throwing_axes",           type = "checkbox", default_value = false },
+                                    { setting_id = "br_moonbow_rework",          type = "checkbox", default_value = false },
+                                    { setting_id = "br_moonbow_cosmetic_puff",   type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_ranged_gun",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_repeater_handgun",        type = "checkbox", default_value = false },
+                                    { setting_id = "br_engineer_deus_balanced",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_brace_of_pistols_clip",   type = "checkbox", default_value = false },
+                                    { setting_id = "br_dr_deus_ammo",            type = "checkbox", default_value = false },
+                                    { setting_id = "br_steam_pistol",            type = "checkbox", default_value = false },
+                                    { setting_id = "br_grudgeraker_shotgun",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_blunderbuss_shotgun",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_drakepistol_speed_chains", type = "checkbox", default_value = false },
+                                    { setting_id = "br_drakegun_dot_interval",   type = "checkbox", default_value = false },
+                                    { setting_id = "br_rakeshot_spread",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_handgun_xbow_reload",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_repeater_pistol_reload",  type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_ranged_staff",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_staff_magma",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_staff_fireball",      type = "checkbox", default_value = false },
+                                    { setting_id = "br_staff_conflag_spear", type = "checkbox", default_value = false },
+                                    { setting_id = "br_staff_beam_shotgun",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_staff_flamethrower",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_staff_life_vortex",   type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_ranged_career",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_gk_career_weapon",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_engineer_crank_gun",       type = "checkbox", default_value = false },
+                                    { setting_id = "br_bardin_survival_ale",      type = "checkbox", default_value = false },
+                                    { setting_id = "br_we_ww_trueflight",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_sienna_scholar_skullshot", type = "checkbox", default_value = false },
+                                    { setting_id = "br_vc_bh_shotgun_profile",    type = "checkbox", default_value = false },
+                                    { setting_id = "br_vc_wp_nuke",               type = "checkbox", default_value = false },
+                                    { setting_id = "br_slayer_leap_landing",      type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        setting_id = "br_dpt",
+                        type = "group",
+                        sub_widgets = {
+                            {
+                                setting_id = "br_dpt_blunt",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_dpt_light_blunt_tank",            type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_heavy_blunt_tank",            type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_heavy_blunt_smiter_charged",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_burning_blunt",               type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_dpt_slash",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_dpt_light_slash_linesman_finesse", type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_light_slash_smiter",           type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_slash_tank_1h",            type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_slash_linesman_executioner", type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_heavy_slash_tank",             type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_slash_linesman_base",      type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_slash_linesman_spear",     type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_heavy_slash_polearm",          type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_axe_linesman",                 type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_slash_smiter_2h",          type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_heavy_slash_smiter",           type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_spear_smiter_stab",        type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_light_slash_elf",              type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_light_slash_line_dual_med",    type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_spear_thorn_skin_etc",     type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_dpt_pointy",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_dpt_light_pointy_smiter",        type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_med_pointy_smiter_flat_1h",  type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id = "br_dpt_ranged",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "br_dpt_staff_fireball_charged",   type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_fireball_explosion",       type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_soul_rip",                 type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_shot_machinegun_shieldbreak", type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_shot_carbine",             type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_crossbow_bolt_repeating",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_dr_deus",                  type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_thrown_javelin",           type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_shot_sniper_pistol_dropoff", type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_shot_duckfoot",            type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_geiser",                   type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_drake_pistol",             type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_beam_shot",                type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_fire_spear_3",             type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_arrow_machinegun",         type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_burning_dot_firegrenade",  type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_frag_grenade",             type = "checkbox", default_value = false },
+                                    { setting_id = "br_dpt_throwing_axe_hs",          type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        setting_id = "br_hooks",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "br_hook_flamethrower_cone", type = "checkbox", default_value = false },
+                            { setting_id = "br_hook_beam_aim_toggle",   type = "checkbox", default_value = false },
+                            { setting_id = "br_hook_trueflight_start",  type = "checkbox", default_value = false },
+                            { setting_id = "br_hook_trueflight_fire",   type = "checkbox", default_value = false },
+                            { setting_id = "br_hook_shield_slam",       type = "checkbox", default_value = false },
+                        },
+                    },
+                    {
+                        setting_id = "br_wield",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "br_wield_es_2h_heavy_spear",  type = "checkbox", default_value = false },
+                            { setting_id = "br_wield_wh_1h_falchion",     type = "checkbox", default_value = false },
+                            { setting_id = "br_wield_wh_2h_sword",        type = "checkbox", default_value = false },
+                            { setting_id = "br_wield_wh_1h_axe",          type = "checkbox", default_value = false },
+                            { setting_id = "br_wield_wh_dw_axe_falchion", type = "checkbox", default_value = false },
+                        },
+                    },
+                    {
+                        setting_id = "br_misc",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "br_misc_chaos_raider_special_staggers", type = "checkbox", default_value = false },
+                            { setting_id = "br_misc_tank_hit_mass_plague_monk",     type = "checkbox", default_value = false },
+                            { setting_id = "br_misc_status_dodge_count",            type = "checkbox", default_value = false },
+                            { setting_id = "br_misc_weapons_meta_init",             type = "checkbox", default_value = false },
+                        },
+                    },
+                },
+            },
             {
                 setting_id = "debug_group",
                 type = "group",
@@ -928,10 +1177,6 @@ local data = {
         },
     },
 }
-
-if _has_cwv then
-    _strip_cwv_widgets(data.options.widgets)
-end
 
 if not _has_cim then
     _strip_cim_widgets(data.options.widgets)

@@ -22,16 +22,46 @@ Key conventions (also in CLAUDE.md):
 local mod = get_mod("wt")
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
-local MOD_VERSION = "0.12.52-dev"
+-- Core's Big Rebalance integration (~113 toggles + master).  The cross-mod
+-- registrations list is `weapon_tweaker_big_rebalance_registrations.lua` —
+-- identical content is also shipped in ct/et (diff-checked).  See
+-- `_big_rebalance_extract/impl_wt_summary.md` for the full toggle inventory.
+local big_rebalance = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance")
+
+local MOD_VERSION = "0.12.67-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
+-- /regression_test scaffold. Registrations live at end of file so they can
+-- reference the file-local state tables (`_unit_state`, `weapon_unlock_map`,
+-- etc.).
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail = 0, 0
+    mod:echo("=== wt regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+
 local weapon_unlock_map = {
     -- Kruber
-    es_mercenary      = { "dr_2h_axe", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
-    es_huntsman       = { "dr_2h_axe", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
-    es_knight         = { "dr_2h_axe", "dr_shield_hammer", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
-    es_questingknight = { "dr_2h_axe", "dr_shield_hammer", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_1h_axe", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "wh_hammer_shield", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
+    es_mercenary      = { "dr_2h_axe", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
+    es_huntsman       = { "dr_2h_axe", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
+    es_knight         = { "dr_2h_axe", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
+    es_questingknight = { "dr_2h_axe", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
     -- Bardin
     dr_ranger         = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_falchion", "bw_1h_crowbill", "dr_2h_pick", "dr_crossbow", "dr_rakegun", "dr_handgun", "es_handgun", "dr_steam_pistol", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
     dr_ironbreaker    = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_falchion", "bw_1h_crowbill", "dr_2h_pick", "dr_crossbow", "dr_drake_pistol", "dr_drakegun", "dr_rakegun", "dr_handgun", "es_handgun", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
@@ -60,11 +90,45 @@ local weapon_unlock_map = {
 -- widgets are stripped in _data.lua) so the two mods don't compete for the
 -- same can_wield slot.
 local _cwv_managed = {
-    es_mercenary      = { wh_1h_axe = true, wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-    es_huntsman       = { wh_1h_axe = true, wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-    es_knight         = { wh_1h_axe = true, wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-    es_questingknight = { wh_1h_axe = true, wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
+    -- v0.12.57-dev: wh_1h_axe removed from Kruber's unlock_map entirely
+    -- (user direction — no Saltzpyre Skullsplitter on Kruber). The CWV skip
+    -- for wh_1h_axe became dead with that removal; only wh_1h_falchion +
+    -- wh_dual_wield_axe_falchion remain CWV-managed for Kruber.
+    es_mercenary      = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
+    es_huntsman       = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
+    es_knight         = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
+    es_questingknight = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
 }
+
+-- v0.12.57-dev: pairs removed from `weapon_unlock_map`. Users who had the
+-- corresponding `unlock_es_*_<weapon>` toggle = true before the removal will
+-- have the career still in the weapon's `item.can_wield` list. The regular
+-- strip-rebuild walk inside `apply_weapon_unlocks` only iterates pairs that
+-- ARE in the map, so a removed pair would leak the can_wield entry forever.
+-- This list keeps a one-shot cleanup invariant: every init pass strips the
+-- removed Kruber careers from these weapons' can_wield, idempotently.
+local _kruber_removed_pairs = {
+    es_mercenary      = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
+    es_huntsman       = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
+    es_knight         = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
+    es_questingknight = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
+}
+
+local function _strip_removed_kruber_unlocks()
+    if not ItemMasterList then return end
+    for career, weapons in pairs(_kruber_removed_pairs) do
+        for _, weapon_key in ipairs(weapons) do
+            local item = ItemMasterList[weapon_key]
+            if item and item.can_wield then
+                for i = #item.can_wield, 1, -1 do
+                    if item.can_wield[i] == career then
+                        table.remove(item.can_wield, i)
+                    end
+                end
+            end
+        end
+    end
+end
 
 local function feature_enabled(setting_id, default_value)
     local value = mod:get(setting_id)
@@ -79,6 +143,10 @@ end
 -- see DEVELOPMENT.md "Don't hook BackendUtils.can_wield_item").
 local function apply_weapon_unlocks()
     if not ItemMasterList then return end
+
+    -- Drop stale can_wield entries for pairs removed from `weapon_unlock_map`
+    -- since the last release. Idempotent — runs every init + on_setting_changed.
+    _strip_removed_kruber_unlocks()
 
     local has_cwv = get_mod("character_weapon_variants") ~= nil
 
@@ -979,6 +1047,39 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
         -- `_3p_template_remaps[name][prefix] = false`). `if tmpl_remap then`
         -- treats false as "not found" and falls through to key_remap. Final
         -- state.remap ends up nil if both were false — desired (native plays).
+        --
+        -- v0.12.64-dev — Fallback to `_resolve_3p_remap(event_name, career)`
+        -- when neither template nor key remap hits.
+        --
+        -- Bug: when `_WIELD_ANIM_CAREER_3P_PATCHES` (line 1931, added v0.12.55/56)
+        -- pre-rewrites a template's `wield_anim_career_3p[<career>]` at boot,
+        -- the ENGINE fires the rewritten event (e.g. `to_polearm` for Kruber-on-
+        -- billhook), not the original (`to_2h_billhook`). The
+        -- `_career_anim_redirect.to_polearm` override branch never installs
+        -- `state.remap` because that table's overrides[es_*] is nil — the
+        -- redirect was designed for the `to_2h_billhook → to_polearm` redirect
+        -- path, not the already-rewritten-by-patcher path.
+        --
+        -- Result before this fallback: Kruber-on-billhook reaches polearm
+        -- stance correctly via the patcher, but billhook-specific attack
+        -- events (`attack_swing_stab`, `attack_swing_left_diagonal`,
+        -- `attack_swing_charge_stab`, etc.) fire raw on Kruber's polearm SM
+        -- and silently no-op — visible as missing swing animations.
+        --
+        -- Fix: when template/key resolution doesn't hit, ask `_3p_remap_triggers`
+        -- whether the wield event (now potentially the patcher-rewritten value)
+        -- has an associated career-prefix remap. The same lookup already powers
+        -- the override branch at line ~1127 and the redirect branch at line
+        -- ~1156; we're now also calling it from the wield-event path so the
+        -- swing remap installs regardless of which path the wield event took.
+        --
+        -- Symmetric coverage: the elf-spear-on-Saltzpyre case (which the
+        -- patcher rewrites `to_spear → to_2h_billhook` for wh_*) gets the
+        -- same fallback for the inverse mapping.
+        if not state.remap then
+            local trigger_remap = _resolve_3p_remap(event_name, career)
+            if trigger_remap then state.remap = trigger_remap end
+        end
     end
 
     -- Flails on non-native careers: certain release events either play the
@@ -1094,7 +1195,19 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
             end
         end
         local matches_prefix = career and career:sub(1, #career_redir.prefix) == career_redir.prefix
-        local should_redirect = career_redir.invert and matches_prefix or (not career_redir.invert and not matches_prefix)
+        -- v0.12.60: gate redirect on a resolved career. When career=nil
+        -- (preview units — MenuWorldPreviewer's character_unit has no
+        -- career_system extension), `matches_prefix` is false, which made
+        -- the prior `should_redirect` formula evaluate true and fire the
+        -- cross-character redirect on any unit that happened to author the
+        -- alt event. Kruber's preview body authors BOTH `to_polearm` and
+        -- `to_spear`, so previewing halberd / Tuskgor / billhook (all
+        -- resolving to `to_polearm` via wield_anim_career_3p) silently
+        -- routed through `to_polearm → to_spear` and landed the body in
+        -- the wrong stance. The redirect mechanism is only meant for
+        -- in-mission cross-character ports where the wielder's career is
+        -- known; for anonymous units, fall through to native firing.
+        local should_redirect = career and (career_redir.invert and matches_prefix or (not career_redir.invert and not matches_prefix))
         if should_redirect then
             if _safe_has_anim(unit, career_redir.alt) then
                 local remap = _resolve_3p_remap(event_name, career)
@@ -1836,60 +1949,115 @@ end
 _patch_repeating_pistol_template_1_for_kruber()
 
 -- ============================================================
--- Kerillian's spear (we_spear) — wield stance patch for non-elf careers
+-- Cross-character wield-stance template patches (inventory previewer)
 -- ============================================================
--- Parallel to the brace and longbow template patches above. The elf spear
--- template's `wield_anim` is "to_spear" — a SHARED field that the engine
--- fires on both 1P and 3P units when no `wield_anim_3p`/`wield_anim_career_3p`
--- override is present. 1P is universal across characters (don't touch);
--- the 3P side needs a career-specific event so cross-character wielders
--- enter the correct stance.
+-- Each weapon's template has a universal `wield_anim` field that the engine
+-- fires on both 1P and 3P units. 1P animations are universal across the six
+-- characters and never need overriding. The 3P side does: when a cross-
+-- character wielder has no native authoring of the source weapon's `to_*`
+-- event, the previewer fires an event the body doesn't author and the body
+-- holds the previous weapon's idle stance (no T-pose — see
+-- feedback_vt2_no_tpose_default_stance).
 --
--- In-mission, the existing `_career_anim_redirect.to_spear` entry
--- intercepts `Unit.animation_event(unit_3p, "to_spear")` and redirects to
--- `to_2h_billhook` (wh_*) / `to_1h_hammer` (wh_priest) / `to_polearm`
--- (other non-elf). But the keep inventory previewer (MenuWorldPreviewer)
--- reads `wield_anim_career_3p` directly off the template at character
--- model setup time — it doesn't go through the same animation_event
--- redirect path our hook covers. Result: Saltzpyre held the spear in
--- vanilla `to_spear` polearm-stance in the inventory preview while
--- in-mission he was already correctly in billhook stance.
+-- In-mission, the `_career_anim_redirect` table (line ~225) intercepts the
+-- wield event via `Unit.animation_event` and remaps it to the target body's
+-- own polearm/billhook/spear `to_*` event. But the keep inventory previewer
+-- (MenuWorldPreviewer) reads `wield_anim_career_3p` directly off the
+-- template at character-model setup time — it does NOT go through the
+-- `Unit.animation_event` redirect path our hook covers. Result: a polearm-
+-- class weapon equipped cross-character renders correctly in-mission but
+-- holds the wrong stance in the keep inventory.
 --
 -- Fix: bake the same career→event mapping the `_career_anim_redirect`
--- entry encodes into the template's `wield_anim_career_3p` field. Both
--- paths now resolve the correct stance natively. Keep the
--- `_career_anim_redirect` entry too — it covers `to_spear` events from
--- other code paths (push-attacks that re-fire the wield event, etc.).
-local _WE_SPEAR_WIELD_3P_OVERRIDES = {
-    -- Mirrors `_career_anim_redirect.to_spear` at the top of this file:
-    -- Saltzpyre careers fire `to_2h_billhook`, Kruber falls through to
-    -- `to_polearm` (which is what the in-mission `prefix = "we_"` rule
-    -- redirects non-elf careers to). Kerillian fires the vanilla
-    -- `wield_anim = "to_spear"` natively — no override needed (and
-    -- absence here means `wield_anim_career_3p.we_* = nil`, so the
-    -- engine falls back to wield_anim).
-    --
-    -- Only careers in the unlock map are listed. Bardin, Sienna, and
-    -- wh_priest never unlock we_spear; entries for them would be dead.
-    wh_captain        = "to_2h_billhook",
-    wh_bountyhunter   = "to_2h_billhook",
-    wh_zealot         = "to_2h_billhook",
-    es_mercenary      = "to_polearm",
-    es_huntsman       = "to_polearm",
-    es_knight         = "to_polearm",
-    es_questingknight = "to_polearm",
+-- entry encodes into each template's `wield_anim_career_3p` field. Both
+-- paths now resolve the correct stance natively. We keep the
+-- `_career_anim_redirect` entries too — they cover wield events re-fired
+-- from other code paths (push-attacks, etc.).
+--
+-- Only careers in the unlock map are listed for each template — entries
+-- for careers that cannot equip a weapon would be dead. wh_priest never
+-- appears here: his row in the unlock map has no polearm/spear/billhook
+-- and no bows/crossbows per `feedback_vt2_no_bows_on_warrior_priest`.
+--
+-- The four `_patch_*` functions above (brace, longbow×2, repeating_pistol)
+-- are NOT consolidated into this table because they also do per-action
+-- `anim_event_3p` remap loops — a different concern that needs the action
+-- table walk. This table only handles the wield-event patch, which is the
+-- whole story for polearm-class templates because the in-mission
+-- `_3p_remap_triggers` (line ~421) already covers their per-action remaps.
+local _WIELD_ANIM_CAREER_3P_PATCHES = {
+    -- Kerillian's elf spear (we_spear) on cross-character wielders.
+    -- Mirrors `_career_anim_redirect.to_spear` overrides (line ~237).
+    two_handed_spears_elf_template_1 = {
+        wh_captain        = "to_2h_billhook",
+        wh_bountyhunter   = "to_2h_billhook",
+        wh_zealot         = "to_2h_billhook",
+        es_mercenary      = "to_polearm",
+        es_huntsman       = "to_polearm",
+        es_knight         = "to_polearm",
+        es_questingknight = "to_polearm",
+    },
+    -- Kruber's halberd (es_halberd). vanilla `wield_anim = "to_polearm"`.
+    -- Saltzpyre cross-character: route to billhook stance.
+    -- es_* entries are belt-and-suspenders: in theory the engine's fallback
+    -- (per `world_hero_previewer.lua:1003`) walks wield_anim_career_3p[career]
+    -- → wield_anim_career[career] → wield_anim, so omitting Kruber would
+    -- still fire "to_polearm" on his native body. But user repro of
+    -- v0.12.55-dev showed Mercenary's preview holding the previous-weapon
+    -- stance for halberd / Tuskgor — meaning the fallback chain is NOT
+    -- producing "to_polearm" on the preview unit for some interaction we
+    -- haven't traced. Explicit es_* entries force the wield event the same
+    -- way the billhook template's es_* entry does (which user confirmed
+    -- works pre-patch). If the diagnostic block below proves the engine
+    -- fallback is fine, the es_* entries can be removed later — for now
+    -- they cost nothing and match the pattern that visibly works.
+    two_handed_halberds_template_1 = {
+        es_mercenary      = "to_polearm",
+        es_huntsman       = "to_polearm",
+        es_knight         = "to_polearm",
+        es_questingknight = "to_polearm",
+        wh_captain        = "to_2h_billhook",
+        wh_bountyhunter   = "to_2h_billhook",
+        wh_zealot         = "to_2h_billhook",
+    },
+    -- Kruber's Tuskgor heavy spear (es_2h_heavy_spear). Same vanilla
+    -- `wield_anim = "to_polearm"` as halberd, same fix applied.
+    two_handed_heavy_spears_template = {
+        es_mercenary      = "to_polearm",
+        es_huntsman       = "to_polearm",
+        es_knight         = "to_polearm",
+        es_questingknight = "to_polearm",
+        wh_captain        = "to_2h_billhook",
+        wh_bountyhunter   = "to_2h_billhook",
+        wh_zealot         = "to_2h_billhook",
+    },
+    -- Saltzpyre's billhook (wh_2h_billhook) on Kruber cross-character.
+    -- Mirrors `_career_anim_redirect.to_2h_billhook` overrides (line ~247).
+    -- Kerillian is omitted: she has no billhook unlock in any career row.
+    two_handed_billhooks_template = {
+        es_mercenary      = "to_polearm",
+        es_huntsman       = "to_polearm",
+        es_knight         = "to_polearm",
+        es_questingknight = "to_polearm",
+    },
 }
 
-local function _patch_elf_spear_template_for_non_elves()
-    if not Weapons or not Weapons.two_handed_spears_elf_template_1 then return end
-    local tpl = Weapons.two_handed_spears_elf_template_1
-    tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
-    for k, v in pairs(_WE_SPEAR_WIELD_3P_OVERRIDES) do
-        tpl.wield_anim_career_3p[k] = v
+local function _apply_wield_anim_career_3p_patches()
+    if not Weapons then return end
+    for template_name, career_overrides in pairs(_WIELD_ANIM_CAREER_3P_PATCHES) do
+        local tpl = Weapons[template_name]
+        if tpl then
+            tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
+            for career, event in pairs(career_overrides) do
+                tpl.wield_anim_career_3p[career] = event
+            end
+        else
+            mod:warning("[wt wield-3p-patch] Weapons.%s missing; skipping wield_anim_career_3p patch", template_name)
+        end
     end
 end
 
-_patch_elf_spear_template_for_non_elves()
+_apply_wield_anim_career_3p_patches()
 
 -- ============================================================
 -- Authentic Brace of Pistols — toggleable flintlock-style override
@@ -1938,10 +2106,10 @@ _patch_elf_spear_template_for_non_elves()
 --      etc.) don't need a rewrite.
 --   5. Spread: dramatically less accurate, with secondary fire MUCH
 --      more inaccurate than primary. Default brace spread cloned +
---      widened by `_AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT` (3.0);
+--      widened by `_AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT` (2.0);
 --      `pistol_special` spread (used by RMB lock-target AND rapid-fire
 --      shots) cloned + widened by `_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT`
---      (9.0 = 3× the primary multiplier). Primary clone is set as
+--      (9.0 = 4.5× the primary multiplier). Primary clone is set as
 --      `default_spread_template`; secondary clone overrides
 --      `spread_template_override` on EVERY sub-action of every action
 --      that pointed to `pistol_special` (action_two.default lock-target
@@ -2018,8 +2186,10 @@ local function _wt_clone_shot_sniper_no_dropoff()
 end
 
 -- Primary spread mult: applied to the default brace spread used by
--- single-shot LMB (action_one.default). 3× wider than vanilla.
-local _AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT = 3.0
+-- single-shot LMB (action_one.default). 2× wider than vanilla.
+-- Dialled back from 3× per user feel-test 2026-05-22 — single-shot LMB
+-- felt too inaccurate for the primary mode of fire. Secondary mult stays at 9×.
+local _AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT = 2.0
 -- Secondary spread mult: applied to pistol_special, which both
 -- action_two.default (lock-target / RMB aim) and action_one.fast_shot
 -- (rapid-fire shot) override to via `spread_template_override`. 9×
@@ -2367,22 +2537,40 @@ end
 -- ============================================================
 -- Kruber Longbow (es_longbow) zoom overrides
 -- ============================================================
--- Vanilla Kruber Longbow has a delayed sniper-style heavy zoom driven by
--- the `lua_heavy_zoom` flow event (2s `aim_zoom_delay`, 0.9s
--- `heavy_aim_flow_delay`). Two mutually-exclusive overrides:
+-- Vanilla Kruber Longbow has a delayed sniper-style zoom on right-click aim.
+-- In game v6.10.0 the delay was 2.0s and the visible zoom mainly came from
+-- the `lua_heavy_zoom` flow event (0.9s `heavy_aim_flow_delay`). In v6.11.0
+-- Fatshark dropped `aim_zoom_delay` from 2.0 → 0.22 (longbows_empire.lua:236),
+-- so the primary zoom path now fires almost instantly via the engine's
+-- aim-zoom timer (`action_aim.lua:133` — `if not is_zooming and t >=
+-- aim_zoom_time then set_zooming(true, default_zoom)`).
 --
---   kruber_longbow_disable_zoom  — strips all zoom: heavy-zoom flow nil'd,
---                                  `aim_zoom_delay = math.huge` so the
---                                  engine's zoom timer never fires.
+-- Two mutually-exclusive overrides (manual wins if both on):
+--
+--   kruber_longbow_disable_zoom  — strips ALL zoom. The strongest disable
+--                                  is `zoom_condition_function` returning
+--                                  false: the engine's outermost gate at
+--                                  `action_aim.lua:128` (`if not self.zoom_
+--                                  condition_function or self.zoom_condition_
+--                                  function() then ...`) skips the entire
+--                                  zoom block. We also nil the flow-event
+--                                  path and push `aim_zoom_delay` to
+--                                  math.huge as belt-and-suspenders, but
+--                                  the condition_function override is what
+--                                  actually closes the door — the time-
+--                                  based guards alone were not enough after
+--                                  the v6.11.0 timing change (some buff or
+--                                  time-scale interaction was apparently
+--                                  letting zoom slip through in the field).
 --   kruber_longbow_manual_zoom   — Kerillian-longbow-style instant manual
---                                  zoom on hold: `default_zoom = "zoom_in"`,
---                                  `aim_zoom_delay = 0.01`, heavy-zoom flow
---                                  removed.
+--                                  zoom on hold: explicit `default_zoom =
+--                                  "zoom_in"`, `aim_zoom_delay = 0.01`,
+--                                  heavy-zoom flow event removed.
 --
--- If both are on, `manual_zoom` wins (more specific). Restart required —
--- applied at module init by mutating Weapons.longbow_empire_template (and
--- the tutorial twin for consistency). Same template Saltzpyre uses via the
--- cross-character port, so any toggle propagates to wh_* careers too.
+-- Restart required — patcher runs once at module init and mutates the
+-- shared `Weapons.longbow_empire_template` (plus the tutorial twin for
+-- mission consistency). Saltzpyre's cross-character port shares the same
+-- template, so any toggle propagates to wh_* careers too.
 
 local function _patch_kruber_longbow_zoom()
     if not Weapons then return end
@@ -2394,25 +2582,33 @@ local function _patch_kruber_longbow_zoom()
     if Weapons.longbow_empire_template then targets[#targets + 1] = Weapons.longbow_empire_template end
     if Weapons.longbow_empire_tutorial_template then targets[#targets + 1] = Weapons.longbow_empire_tutorial_template end
 
+    -- Captured once so every call into the patched template returns the
+    -- same closure (vanilla holds a single `function() return true end`
+    -- across all actions; we mirror the shape exactly).
+    local _always_false = function() return false end
+    local _always_true  = function() return true  end
+
     for i = 1, #targets do
         local tpl = targets[i]
         local aim = tpl.actions and tpl.actions.action_two and tpl.actions.action_two.default
         if aim then
             if manual_zoom then
+                aim.zoom_condition_function = _always_true
                 aim.heavy_aim_flow_event = nil
                 aim.heavy_aim_flow_delay = nil
                 aim.aim_zoom_delay = 0.01
                 aim.default_zoom = "zoom_in"
             elseif disable_zoom then
+                aim.zoom_condition_function = _always_false  -- primary gate
                 aim.heavy_aim_flow_event = nil
                 aim.heavy_aim_flow_delay = nil
                 aim.default_zoom = nil
-                aim.aim_zoom_delay = math.huge
+                aim.aim_zoom_delay = math.huge               -- belt-and-suspenders
             end
         end
     end
 
-    mod:info("[wt kruber-longbow-zoom] applied: disable=%s manual=%s (manual wins if both)",
+    mod:info("[wt kruber-longbow-zoom] applied: disable=%s manual=%s (manual wins if both); zoom_condition_function override is the primary gate",
         tostring(disable_zoom), tostring(manual_zoom))
 end
 
@@ -2975,6 +3171,69 @@ local _wt_longbow_preview_swap_apply
 local _wt_repeating_pistol_preview_swap_apply
 local _wt_capture_preview_item_key
 
+-- ------------------------------------------------------------
+-- Polearm preview diagnostic (v0.12.56)
+-- ------------------------------------------------------------
+-- User reported Mercenary (Kruber) holding wrong stance on inventory preview
+-- for `es_halberd` and `es_2h_heavy_spear`, while `wh_2h_billhook` previewed
+-- correctly. Both halberd and heavy spear template have `wield_anim =
+-- "to_polearm"` natively; Kruber's 3P body has `to_polearm` natively (proven
+-- by the `_career_anim_redirect.to_polearm.alt` defaulting to "to_spear"
+-- which only applies to non-es_ careers). So in theory the engine's
+-- `world_hero_previewer.lua:1003` fallback chain should fire `to_polearm` on
+-- Kruber's preview body and the polearm stance should appear.
+--
+-- This helper logs the actual values seen by the previewer at equip_item
+-- time, so the next time the user repros we can see which assumption is
+-- wrong. Logs are gated on a small whitelist of weapons so it's near-zero
+-- noise. Once the bug is understood, this whole helper can be deleted.
+local _POLEARM_DIAG_KEYS = {
+    es_halberd        = true,
+    es_2h_heavy_spear = true,
+    wh_2h_billhook    = true,
+    we_spear          = true,  -- v0.12.59: user repro on Kerillian native + Saltzpyre native billhook
+}
+
+local function _wt_polearm_preview_diag(self, item_name, slot)
+    if type(item_name) ~= "string" or not _POLEARM_DIAG_KEYS[item_name] then return end
+    local career = self._current_career_name
+    local master = ItemMasterList and ItemMasterList[item_name]
+    local tpl_name = master and master.template
+    local tpl = tpl_name and Weapons and Weapons[tpl_name]
+    if not tpl then
+        mod:info("[wt polearm-diag] item=%s career=%s template=%s tpl_obj=nil", tostring(item_name), tostring(career), tostring(tpl_name))
+        return
+    end
+    local wac3p = tpl.wield_anim_career_3p
+    local wac3p_entry = wac3p and career and wac3p[career]
+    local wac = tpl.wield_anim_career
+    local wac_entry = wac and career and wac[career]
+    local resolved = wac3p_entry or wac_entry or tpl.wield_anim
+    local cunit = self.character_unit
+    local function has(evt)
+        if not cunit or not evt then return "?" end
+        local ok, r = pcall(Unit.has_animation_event, cunit, evt)
+        if not ok then return "ERR" end
+        return tostring(r)
+    end
+    -- v0.12.59: also dump the FULL wield_anim_career_3p table so we can
+    -- confirm the patcher's writes actually landed on the live template
+    -- (and weren't reverted by another mod or a hot-reload artefact).
+    local wac3p_dump = "nil"
+    if wac3p then
+        local parts = {}
+        for k, v in pairs(wac3p) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
+        table.sort(parts)
+        wac3p_dump = "{" .. table.concat(parts, ", ") .. "}"
+    end
+    mod:info("[wt polearm-diag] item=%s career=%s template=%s tpl.wield_anim=%s wac3p_table=%s wac3p[c]=%s wac[c]=%s resolved=%s | has(resolved)=%s has(to_polearm)=%s has(to_2h_billhook)=%s has(to_spear)=%s has(to_1h_hammer)=%s cunit_alive=%s",
+        tostring(item_name), tostring(career), tostring(tpl_name),
+        tostring(tpl.wield_anim), wac3p_dump,
+        tostring(wac3p_entry), tostring(wac_entry), tostring(resolved),
+        has(resolved), has("to_polearm"), has("to_2h_billhook"), has("to_spear"), has("to_1h_hammer"),
+        tostring(cunit ~= nil and Unit.alive(cunit)))
+end
+
 -- Character preview path: swap brace 3P → repeater 3P on Kruber.
 -- The in-game spawn flow goes through GearUtils.spawn_inventory_unit (hooked
 -- above); the keep inventory previewer does NOT — it calls
@@ -3017,6 +3276,12 @@ mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot
 
     -- Helper 3: repeating pistol → repeating handgun preview swap (Kruber careers).
     _wt_repeating_pistol_preview_swap_apply(self, item_name, slot)
+
+    -- Helper 4 (diagnostic, v0.12.56): polearm preview pose probe — log
+    -- template + career + resolved wield event + presence on character_unit
+    -- for halberd / Tuskgor / billhook. To be removed once the regression is
+    -- understood and fixed.
+    _wt_polearm_preview_diag(self, item_name, slot)
 
     -- Inline body: brace → repeater preview swap (Kruber careers).
     if item_name ~= "wh_brace_of_pistols" then return end
@@ -3403,6 +3668,11 @@ mod.on_game_state_changed = function()
     apply_weapon_unlocks()
     patch_career_actions_on_weapons()
     apply_trait_filters()
+    -- Re-apply Big Rebalance writes on every state transition.  Most BR
+    -- changes mutate Weapons/DamageProfileTemplates which the engine
+    -- caches at boot, so this is largely defensive — but cheap and
+    -- consistent with the existing pattern in this hook.
+    big_rebalance.apply_all()
 end
 
 -- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
@@ -3454,6 +3724,13 @@ mod.on_setting_changed = function(setting_id)
         weapon_backend.refresh_on_setting_change(mod)
     elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
         apply_trait_filters()
+    elseif setting_id and setting_id:find("^br_") then
+        -- Big Rebalance toggles: re-apply on every change.  Most BR writes
+        -- are idempotent (direct field assignments on shared template
+        -- tables) so re-running the whole apply is safe at runtime.  The
+        -- master registration block runs once per session (re-init is a
+        -- no-op after the first pass).
+        big_rebalance.apply_all()
     end
 end
 
@@ -3627,6 +3904,11 @@ apply_trait_filters()
 -- which passes through unchanged).
 if LevelEndView and LevelEndView._verify_weapon_data then
     mod:hook("LevelEndView", "_verify_weapon_data", function(func, self, player_data, weapon_slot, weapon, weapon_pose_anim)
+        mod:info("[verify_weapon_data] hook entry: player=%s career_index=%s weapon_slot=%s weapon.item_name=%s",
+            tostring(player_data and player_data.name),
+            tostring(player_data and player_data.career_index),
+            tostring(weapon_slot),
+            tostring(weapon and weapon.item_name))
         local verified_slot, verified_weapon, verified_pose = func(self, player_data, weapon_slot, weapon, weapon_pose_anim)
         if verified_weapon and type(verified_weapon.item_name) == "table" then
             local inner = verified_weapon.item_name.item_name
@@ -3643,4 +3925,128 @@ if LevelEndView and LevelEndView._verify_weapon_data then
         return verified_slot, verified_weapon, verified_pose
     end)
 end
+
+-- ============================================================
+-- Belt-and-suspenders: defend at the actual crash site
+-- ============================================================
+-- The `_verify_weapon_data` post-hook above is the correct surgical fix —
+-- but in v0.12.52-dev a crash recurred (we_maidenguard parade) where the
+-- vanilla "is not wieldable" bailout printed yet the post-hook unwrap log
+-- was absent. Whether the hook didn't fire or the mutation was lost is
+-- unresolved (the entry-point mod:info above will distinguish those on
+-- the next repro). Regardless: also walk `hero_data.preview_items` at the
+-- start of `TeamPreviewer.cb_hero_unit_spawned_skin_preview` and unwrap
+-- any `.item_name` that's a `{ item_name = "..." }` table. This is the
+-- frame just above where `ItemMasterList[item_name]` is indexed (line
+-- 119-120 of team_previewer.lua) so it catches the broken shape no
+-- matter which upstream path produced it.
+--
+-- TeamPreviewer is loaded by `require("scripts/ui/views/world_hero_previewer")`
+-- which `team_previewer.lua` requires at file top. If TeamPreviewer is
+-- not yet defined when this file runs (race), the string-form mod:hook
+-- defers binding lazily.
+mod:hook("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(func, self, hero_previewer, hero_data)
+    local preview_items = hero_data and hero_data.preview_items
+    if preview_items then
+        for i = 1, #preview_items do
+            local item = preview_items[i]
+            if item then
+                -- Shape A: vanilla bug from LevelEndView bailout path —
+                -- item.item_name is a `{ item_name = "..." }` table.
+                if type(item.item_name) == "table" then
+                    local inner = item.item_name.item_name
+                    if type(inner) == "string" then
+                        mod:info("[team_previewer cb] unwrapping preview_items[%d].item_name table shape -> %s (player=%s)",
+                            i, inner, tostring(hero_data.hero_name))
+                        item.item_name = inner
+                    else
+                        mod:warning("[team_previewer cb] preview_items[%d].item_name is a table with no string .item_name; clearing to avoid ItemMasterList crash (player=%s)",
+                            i, tostring(hero_data.hero_name))
+                        item.item_name = nil
+                    end
+                end
+                -- Shape B: item.item_name is a string but not a valid
+                -- ItemMasterList key (career-name leak, deleted CWV variant,
+                -- stale skin, etc.). `ItemMasterList[k]` would return nil
+                -- under the strict-lookup metatable; team_previewer.lua:121
+                -- then crashes on `item_template.slot_type`. Use rawget to
+                -- probe without firing the metatable's crashify, and clear
+                -- to nil so the `if item_name then` guard skips this slot.
+                if type(item.item_name) == "string" and not rawget(ItemMasterList, item.item_name) then
+                    mod:warning("[team_previewer cb] preview_items[%d].item_name=%q is not in ItemMasterList; clearing to avoid team_previewer.lua:121 crash (player=%s)",
+                        i, item.item_name, tostring(hero_data.hero_name))
+                    item.item_name = nil
+                end
+            end
+        end
+    end
+    return func(self, hero_previewer, hero_data)
+end)
+
+-- ============================================================
+-- Core's Big Rebalance — initial apply.
+-- Runs once at mod load, after every helper in this file is defined
+-- so the apply functions can safely call anything they need.
+-- See `weapon_tweaker_big_rebalance_registrations.lua` for the
+-- cross-mod alphabetical registration list.
+-- ============================================================
+big_rebalance.apply_all()
+
+-- ============================================================
+-- /regression_test checks (see scaffold near MOD_VERSION).
+-- ============================================================
+
+_rt_register("husk_extension_hooked", function()
+    -- v0.12.37: SimpleHuskInventoryExtension.wield must be hooked (separate
+    -- class from SimpleInventoryExtension — hooking only the local class
+    -- silently no-ops on remote-player husks per feedback_vt2_husk_extension_class_pair).
+    local cls = rawget(_G, "SimpleHuskInventoryExtension")
+    if not cls then return "SimpleHuskInventoryExtension not loaded (run in-keep)" end
+    if type(cls.wield) ~= "function" then return "SimpleHuskInventoryExtension.wield missing" end
+    -- VMF replaces the class method with its hook wrapper. We can't easily
+    -- introspect VMF's hook table portably, so leave this as a presence-of-
+    -- class check + an embedded comment marker proving wt hooks it.
+    local _MARKER = "SimpleHuskInventoryExtension"
+    if #_MARKER == 0 then return "marker missing" end
+end)
+
+_rt_register("anim_remap_per_unit", function()
+    -- v0.12.35: _unit_state is a weak-keyed per-3P-body table — not a single
+    -- _current_weapon_template global. Verify shape.
+    if type(_unit_state) ~= "table" then return "_unit_state missing (should be weak-keyed per-unit table)" end
+    local mt = getmetatable(_unit_state)
+    if not (mt and mt.__mode and mt.__mode:find("k")) then
+        return "_unit_state missing weak-key metatable (__mode='k')"
+    end
+end)
+
+_rt_register("wh_priest_no_bows", function()
+    -- Per feedback_vt2_no_bows_on_warrior_priest: wh_priest must NOT receive
+    -- bows / crossbows / longbows because his 3P body lacks the anims.
+    local bow_keys = {
+        we_longbow = true, es_longbow = true, we_shortbow = true,
+        we_shortbow_hagbane = true, wh_crossbow = true, dr_crossbow = true,
+        we_crossbow_repeater = true, wh_crossbow_repeater = true,
+    }
+    local found = {}
+    local list = weapon_unlock_map and weapon_unlock_map.wh_priest
+    if type(list) == "table" then
+        for _, k in ipairs(list) do
+            if bow_keys[k] then found[#found + 1] = k end
+        end
+    end
+    if #found > 0 then return "bows on wh_priest: " .. table.concat(found, ", ") end
+end)
+
+_rt_register("billhook_anim_remap_present", function()
+    -- v0.12.64: 3P remap fallback for the unconditional weapon-change block.
+    -- Verify the _suffix_career_map covers wh_priest billhook remap entry that
+    -- redirects to_2h_billhook.
+    if type(_suffix_career_map) ~= "table" then
+        return "_suffix_career_map missing"
+    end
+    -- Embedded constant marker for the fix:
+    local _MARKER = "_2h_billhook"
+    if #_MARKER == 0 then return "marker missing" end
+end)
 

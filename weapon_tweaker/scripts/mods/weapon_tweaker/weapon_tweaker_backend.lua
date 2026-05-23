@@ -109,23 +109,20 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
             -- career equip or silently revert it on next sync. The cache is
             -- read back in get_loadout_item_id / get_loadout to make the
             -- equipped item appear correct in UI and gameplay.
-            -- POTENTIAL BUG (LOW): the hook signature accepts 4 args but the
-            -- vanilla method takes 5 (with `optional_loadout_index`). Versus
-            -- mode and other code paths that pass loadout_index would have
-            -- their 5th arg dropped here when our hook short-circuits with
-            -- `return` (line 95-100 below). Pass `...` through to be safe.
-            -- POTENTIAL BUG (LOW): vanilla returns `true`/`false`. Our
-            -- short-circuit `return` returns nil. Most callers ignore the
-            -- return, but `BackendInterfaceVersusPlayfab.set_loadout_item`
-            -- (L111 in versus_playfab) returns this value to its caller —
-            -- nil gets propagated. Probably fine since most callsites
-            -- truthy-check, not `== true`.
-            mod:hook(items_interface, "set_loadout_item", function(func, self, backend_id, career_name, slot_name)
+            -- v0.12.65: pass-through `...` for vanilla's 5th arg
+            -- `optional_loadout_index` (and any future args). Versus mode
+            -- and other code paths use the loadout_index; dropping it
+            -- silently mis-targeted loadouts before this fix. Also return
+            -- `true` from the mod-unlocked short-circuit so callers that
+            -- treat the return value as success/fail (e.g.
+            -- BackendInterfaceVersusPlayfab.set_loadout_item L111) don't
+            -- see nil.
+            mod:hook(items_interface, "set_loadout_item", function(func, self, backend_id, career_name, slot_name, ...)
                 if not feature_enabled(mod, "enable_weapon_backend_hooks", true) then
                     if mod.loadout_cache[career_name] then
                         mod.loadout_cache[career_name][slot_name] = nil
                     end
-                    return func(self, backend_id, career_name, slot_name)
+                    return func(self, backend_id, career_name, slot_name, ...)
                 end
 
                 local item_data = self:get_item_from_id(backend_id)
@@ -133,14 +130,14 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
                 if is_mod_unlocked_weapon(career_name, weapon_key) then
                     mod.loadout_cache[career_name] = mod.loadout_cache[career_name] or {}
                     mod.loadout_cache[career_name][slot_name] = backend_id
-                    return
+                    return true
                 end
 
                 if mod.loadout_cache[career_name] then
                     mod.loadout_cache[career_name][slot_name] = nil
                 end
 
-                return func(self, backend_id, career_name, slot_name)
+                return func(self, backend_id, career_name, slot_name, ...)
             end)
 
             mod:hook(items_interface, "get_loadout", function(func, self)

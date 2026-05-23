@@ -1,5 +1,303 @@
 # Weapon Tweaker Changelog
 
+## 0.12.67-dev (2026-05-22) — Authentic Brace: primary spread 3× → 2×
+
+Single-shot LMB (action_one.default — primary mode of fire) was too inaccurate per user feel-test. `_AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT` dialled from 3.0 → 2.0; primary clone (`wt_authentic_brace_of_pistols_spread`) now scales every numeric leaf of the cloned `brace_of_pistols` spread template by 2× instead of 3×. Secondary mult unchanged at 9.0, so the rapid-fire / lock-target mode stays as wide-spread as before — the gap between primary and secondary widens to 4.5×.
+
+## 0.12.66-dev (2026-05-22) — Add /regression_test command
+
+### Added
+
+- `/regression_test` chat command runs 4 in-game smoke checks for past fix-state: SimpleHuskInventoryExtension presence, weak-keyed per-3P-body anim-remap state shape, wh_priest's `weapon_unlock_map` excludes bows/crossbows/longbows, and the billhook 3P remap marker. Output: PASS/FAIL per check to chat plus log.
+
+## 0.12.64-dev (2026-05-22) — Fixed: Kruber-on-billhook missing swing animations (regression dating to v0.12.55/56)
+
+### Bug
+
+User report: billhook animations broken after the v0.12.60-dev Kruber polearm preview fix. Three-subagent investigation (`_billhook_anim_diagnosis/`) traced the regression to **v0.12.55/56**, not v0.12.60. v0.12.60 made the codepath more visible but didn't introduce the bug.
+
+### Root cause
+
+`_WIELD_ANIM_CAREER_3P_PATCHES` (line ~1931, added v0.12.55) writes `Weapons.two_handed_billhooks_template.wield_anim_career_3p[es_*] = "to_polearm"` directly into the weapon template at boot. When Kruber wields Saltzpyre's billhook:
+
+1. The patcher's value is already in the template at boot, so the **engine fires `to_polearm` directly** (not the original `to_2h_billhook`).
+2. `Unit.animation_event` hook receives `to_polearm` with `career = es_huntsman` / `es_mercenary`.
+3. Hook walks `_career_anim_redirect.to_polearm`:
+   - `overrides[es_mercenary] = nil` → override branch skipped.
+   - `prefix = "es_"`, `invert = nil`, career matches → `should_redirect = false`.
+4. The two places `_resolve_3p_remap` is consulted to install `state.remap` (lines ~1127, ~1156) both bail. **`state.remap` stays nil.**
+5. Subsequent billhook-specific attack events (`attack_swing_stab`, `attack_swing_left_diagonal`, `attack_swing_charge_stab`, etc.) fire raw on Kruber's polearm SM and silently no-op — polearm stance doesn't author billhook-named swing events.
+
+Visible symptom: Kruber-on-billhook gets the correct stance (polearm) but **swing animations don't play**.
+
+### Why v0.12.60 was innocent
+
+v0.12.60's one-line `career and` short-circuit at line 1153 affects only the `_career_anim_redirect` path for **preview units** where `career == nil`. The Kruber-on-billhook in-mission case has a real career, so v0.12.60 doesn't change its behavior either way. Per subagent #46's git diff against HEAD, the redirect table is byte-identical pre/post v0.12.60. Per subagent #47's log scan, the preview path tested works clean. The regression is older and only manifests during actual wielding.
+
+### Fix
+
+Extended the unconditional weapon-change block at `weapon_tweaker.lua:1011-1026` with a fallback. When neither `_resolve_template_remap` nor `_resolve_key_remap` hits, ask `_resolve_3p_remap(event_name, career)` whether the wield event (which may have been patcher-rewritten) has an associated career-prefix remap in `_3p_remap_triggers`. The same lookup powers the override and redirect branches further down the hook; we're now also calling it from the wield-event path so the swing-event remap installs regardless of whether the wield event reached the hook in its original form or in the patcher-rewritten form.
+
+### Symmetric coverage
+
+Same fallback also fixes the inverse case: Saltzpyre wielding Kerillian's elf spear (the patcher rewrites `to_spear → to_2h_billhook` for `wh_*`). Pre-fix the swing-event remap installs only on the override-branch path; post-fix it installs from the wield-event path too.
+
+### What v0.12.60's gate still does
+
+The `career and` short-circuit at line 1153 stays. It blocks the redirect from firing on nil-career preview units (which would otherwise route polearm-class wields to whatever alt event the preview body happens to author — see v0.12.60's CHANGELOG entry). The new fallback is gated on the same `state and event_name:sub(1,3) == "to_"` check as the rest of the wield-event block, so preview units (no `state`) still don't reach it.
+
+## 0.12.63-dev (2026-05-21) — Fixed: VMF crashify-exception in 10 trait-description tooltips
+
+Per Section C of the 2026-05-21 audit, 10 trait-description strings at lines 550-588 of weapon_tweaker_localization.lua contained literal `%` characters (`+20%`, `5%`, etc.). VMF routes every localization through `safe_string_format` (`string.format`), so a single `%` triggers a `<<crashify-exception>>` event every time the tooltip is rendered — the same bug class fixed in gt 0.2.35. Escaped each occurrence to `%%`. No visual change (one displayed `%` after format).
+
+## 0.12.62-dev (2026-05-21) — Move Big Rebalance master to bt (Tweaker: Buffs)
+
+Refactored the wt-side Big Rebalance integration to depend on the new sister mod `bt` (Tweaker: Buffs). wt no longer ships its own copy of the 419-line `weapon_tweaker_big_rebalance_registrations.lua` (deleted; archived under `_big_rebalance_extract/deprecated_registration_files/`) and no longer exposes its own `br_master_enable_registrations` widget.
+
+`BR.register_all()` is now a no-op shim. Per-feature toggles gate on `(get_mod("bt") or {}).is_br_active and get_mod("bt"):is_br_active()` instead of a local checkbox — when bt is installed and its master is on, wt's BR sub-toggles work; otherwise they silently no-op.
+
+User-visible impact: subscribe to `bt` once, enable its master once, and any of wt/ct/et BR sub-toggles you flip will function. Removes the prior cross-mod sync rule.
+
+## 0.12.61-dev (2026-05-21) — Core's Big Rebalance integration (opt-in)
+
+Source mod: Core's Big Rebalance (Workshop ID `2705276978`,
+"Weapon Balance" decompile). Credit to Core for the original
+balance design; this is a re-implementation, not a redistribution.
+
+Added the `[Big Rebalance]` group with the master toggle
+`br_master_enable_registrations` and ~113 per-toggle widgets buckets
+weapons / damage profiles / hooks / wield permissions / misc.
+Every toggle defaults `false` — Big Rebalance is opt-in.
+
+New files:
+- `scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance.lua` — apply
+  logic + function hooks (Flamethrower / Beam / TrueFlight start+fire).
+- `scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance_defs.lua` —
+  pure-data definitions for NewDamageProfileTemplates, ExplosionTemplates,
+  and BuffTemplates that wt owns.
+- `scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance_registrations.lua`
+  — canonical alphabetical cross-mod registration list. Identical content
+  ships in ct and et (diff-checked) per the gated-registration-divergence rule.
+
+Master toggle `br_master_enable_registrations` runs a single pass that
+writes every BR_REGISTRATIONS entry into DamageProfileTemplates /
+ExplosionTemplates / BuffTemplates / StatBuffApplicationMethods and
+appends each to NetworkLookup in sorted order, UNCONDITIONALLY on every
+peer (per `feedback_vt2_gated_registration_diverges`). Per-toggle
+changes that depend on those registrations only function when master is on.
+
+Cross-mod dependencies left unimplemented in wt (per user direction):
+- `DamageUtils.stagger_ai` / `apply_buffs_to_damage` / `calculate_damage`
+  rewrites are et-owned; wt toggles that reference them work in
+  isolation but reach full intent only with et's stagger rewrite.
+- Talent buff bulk-registration is ct-owned; wt's registration list
+  carries the *names* for index alignment but defers definitions to ct.
+
+Open items (flagged in `impl_wt_summary.md`):
+- `br_cog_rework` ships the speed/crit fields but defers the 19-entry
+  chain-action / baked-sweep rewrites — too large for a clean
+  toggle-gated implementation in one pass.
+- `br_hook_shield_slam` is currently a gate-only toggle (no body); table-
+  replacement half is covered by `br_shield_slam_replace`.
+- `br_misc_status_dodge_count` surfaces only the `dodge_count = 2` knob;
+  the full `GenericStatusExtension.init` rewrite stays with et.
+
+## 0.12.60-dev (2026-05-20) — ROOT CAUSE: Unit.animation_event hook redirecting preview-unit wield events when career=nil
+
+The polearm preview bug is finally root-caused. The v0.12.56 diagnostic data captured on 2026-05-20 (`console-2026-05-21-01.11.04-*.log`) showed:
+
+```
+item=es_halberd career=es_mercenary template=two_handed_halberds_template_1
+  tpl.wield_anim=to_polearm wac3p[c]=to_polearm resolved=to_polearm
+  has(resolved)=true has(to_polearm)=true has(to_2h_billhook)=false has(to_spear)=true
+```
+
+Every field that should be right IS right: the template patcher's `wield_anim_career_3p[es_mercenary] = "to_polearm"` landed, the engine resolved the wield event to `to_polearm`, AND Kruber's preview body authors `to_polearm` natively. So the event SHOULD fire and the pose should appear. Yet the pose was wrong.
+
+The disconnect: `has(to_spear)=true` ALSO appears on Kruber's preview body. Kruber's preview body authors both `to_polearm` AND `to_spear` (the spear is one of the cross-character ports wt enables, so the engine pre-loads the spear SM on his body). That single line is what unlocks the trace.
+
+### The redirect-with-nil-career bug
+
+wt's `Unit.animation_event` hook (`weapon_tweaker.lua:909+`) intercepts every animation event globally. For a wield event on the previewer's character_unit:
+
+1. `_unit_career_name(unit)` walks the unit's extension chain — `career_system` first, then `inventory_system`, then `Managers.player:owner`. The previewer's character_unit has **none** of these (it's a model unit, not a player unit), so the helper returns nil.
+2. `is_local = _is_local_player_unit(unit)` is false (preview unit ≠ local player_unit), so the `_local_career_name()` fallback doesn't trigger either.
+3. The hook continues with `career = nil`.
+4. `career_redir = _career_anim_redirect["to_polearm"]` is the entry `{ alt = "to_spear", prefix = "es_", overrides = {...} }`.
+5. The `overrides[career]` lookup short-circuits because `career` is nil. Good.
+6. `matches_prefix = career and ...` evaluates to **nil → falsy**.
+7. `should_redirect = career_redir.invert and matches_prefix or (not career_redir.invert and not matches_prefix)` reduces to `(nil and false) or (true and true)` = **true**.
+8. `_safe_has_anim(unit, career_redir.alt)` — alt is `"to_spear"` — returns **true** on Kruber's preview body.
+9. Hook fires `to_spear` instead of `to_polearm`. Kruber's body enters spear stance. Pose lands wrong.
+
+Same flow corrupts every polearm-class wield on any preview body that authors the alt event:
+
+| Wield event fired | Career resolves to | Redirect target | Hits |
+|---|---|---|---|
+| `to_polearm` (Kruber on halberd / Tuskgor) | nil | `to_spear` | Kruber preview body authors `to_spear` → redirects |
+| `to_polearm` (Kruber on Saltzpyre billhook, via my wac3p remap) | nil | `to_spear` | same — redirects |
+| `to_spear` (Kerillian on elf spear) | nil | `to_polearm` | Kerillian preview body authors `to_polearm` → redirects |
+| `to_2h_billhook` (Saltzpyre on billhook) | nil | `to_polearm` | Saltzpyre preview body authors `to_polearm` → redirects |
+
+Every native polearm-class preview was being silently routed to the wrong event. The "Kruber on billhook works" report from earlier was actually wrong — the redirect IS firing, but the wrong stance happened to look close enough to halberd stance that it passed visual inspection (both are `to_polearm`-class poses on the Empire skeleton).
+
+### The fix
+
+Gate `should_redirect` on `career` being non-nil. When career resolution fails (preview units, anonymous probes), don't redirect — fall through to native firing of the original event. The redirect mechanism is only meaningful for in-mission cross-character ports where the wielder's career is known; for anonymous units the safe behaviour is to let the body fire whatever event the engine sent it.
+
+```lua
+-- weapon_tweaker.lua:1100 (post-fix)
+local should_redirect = career and (career_redir.invert and matches_prefix or (not career_redir.invert and not matches_prefix))
+```
+
+The `career_redir.overrides[career]` path (line 1080) already short-circuits on nil career and didn't need touching.
+
+### Why this latent bug only surfaced now
+
+The wt animation-event hook has carried this nil-career codepath since v0.9.x, but the bug stayed invisible because:
+
+1. **The `_career_anim_redirect` table only had polearm-class entries with `alt` events the alternate-character bodies don't author.** Saltzpyre's preview body doesn't natively author `to_polearm`, Kerillian's body doesn't natively author `to_2h_billhook`, etc. So even when the hook tried to redirect, `_safe_has_anim` failed and the event fell through to native firing anyway — masking the bug.
+2. **v6.11.0 (2026-05-18) didn't change `_career_anim_redirect` or `_safe_has_anim` — but Fatshark may have widened the preview body's SM-load coverage in an earlier patch.** Kruber's preview body authoring BOTH `to_polearm` AND `to_spear` is the missing ingredient that lets the redirect succeed and corrupt the pose. Whether this is new in v6.11.0 or older, the field repro is consistent with "some preview bodies started authoring more events than they used to".
+3. **My v0.12.55/56/57 work added wield_anim_career_3p entries on the polearm templates**, which made the wield event actually reach the wt hook via the previewer's `_spawn_item_unit → Unit.animation_event` path with the right event name. Pre-v0.12.55, the previewer fired vanilla `wield_anim` (`to_2h_billhook` for billhook, etc.) — which Saltzpyre's preview body authored natively — so the redirect tried to fire on those events too but `_safe_has_anim` for the alt was probably false on the relevant bodies. The diag confirms the alt presence is what flipped.
+
+The combination of "preview unit has no career_system" + "preview body authors the alt event" is what triggers the bug. Both conditions are necessary; the fix removes the first.
+
+### Diagnostic kept (for now)
+
+The polearm-diag from v0.12.56 / v0.12.59 stays in place for one or two more versions to confirm the fix on all four polearms. Once you eyeball halberd / Tuskgor / billhook / elf spear all looking right on every career, I'll delete the diag and tighten the file back up.
+
+**Files changed:**
+- `weapon_tweaker.lua` — MOD_VERSION 0.12.59 → 0.12.60; the should_redirect formula now requires `career` to be truthy before computing the prefix-match-based redirect decision. Single-line behavioural change; the rest of the hook is untouched.
+
+## 0.12.59-dev (2026-05-20) — Polearm preview diagnostic: extend to `we_spear`, dump full `wield_anim_career_3p` table
+
+User reports Mercenary halberd + Tuskgor still broken AND new repro on Kerillian native elf spear + Saltzpyre native billhook (both showing the previous weapon's stance). Static analysis says the engine's `world_hero_previewer.lua:1003` fallback chain (`wield_anim_career_3p[career]` → `wield_anim_career[career]` → `wield_anim`) should fire vanilla `wield_anim` for any career not in the `wield_anim_career_3p` table — and Kerillian (`we_*`) and Saltzpyre (`wh_*` for billhook) are not in those tables on their respective native weapons. Math says the fallback should hold; field repro says it doesn't.
+
+I cannot find a code-level explanation from static read alone. Need the runtime data.
+
+**Two changes to the existing v0.12.56 diagnostic:**
+
+1. Added `we_spear` to `_POLEARM_DIAG_KEYS` so the probe also fires when Kerillian's elf spear is equipped in the keep.
+2. The log line now also dumps the **full** contents of `tpl.wield_anim_career_3p` (sorted `k=v` pairs) and the presence of `to_1h_hammer` (for Warrior Priest path checks). The previous version only printed the single `wac3p[career]` lookup — useful for confirming the engine fallback hit, but not for catching the case where the patcher's writes never landed on the live template (revert by another mod, hot-reload artefact, wrong-template-name typo).
+
+**What I'm trying to distinguish:**
+
+- If the log shows `wac3p_table=nil` or empty `{}` on the affected items → the wt patcher never ran or another mod overwrote the field. Fix is at the patcher level.
+- If the log shows the expected `wac3p_table={es_*=..., wh_*=...}` but `has(resolved)=false` → the resolved event genuinely isn't authored on the preview body. Fix is to pick a different target event (or force-load the state machine).
+- If the log shows the expected table AND `has(resolved)=true` but the pose still looks wrong → some hook fires AFTER the wield event and corrupts the state machine. Fix is hook-ordering or a SM force-reset.
+
+User repro path: open keep inventory, click halberd → Tuskgor → billhook → elf spear in turn, paste the four `[wt polearm-diag]` lines from the in-game log (`%APPDATA%\..\..\AppData\Roaming\Fatshark\Vermintide 2\console_*.log` on the current session).
+
+**Files changed:**
+- `weapon_tweaker.lua` — MOD_VERSION 0.12.58 → 0.12.59; `_POLEARM_DIAG_KEYS` gains `we_spear`; `_wt_polearm_preview_diag` log line extended with `wac3p_table=...` dump and `has(to_1h_hammer)` / `cunit_alive` fields.
+
+## 0.12.58-dev (2026-05-20) — Kruber Longbow disable-zoom: switch to `zoom_condition_function` gate (game v6.11.0 fallout)
+
+User reported that `kruber_longbow_disable_zoom` no longer killed the sniper zoom. Root cause: game v6.11.0 (Aussiemon/Vermintide-2-Source-Code @abe82ab4, 2026-05-18) dropped `aim_zoom_delay` on `longbows_empire_template.actions.action_two.default` from `2.0` → `0.22` (the only line that changed in `longbows_empire.lua`). The old wt disable patch leaned on `aim_zoom_delay = math.huge` to push the engine's `aim_zoom_time` beyond reach, but that's only the inner timing gate inside `action_aim.lua:128-134`:
+
+```lua
+if not self.zoom_condition_function or self.zoom_condition_function() then
+    -- ...
+    if not status_extension:is_zooming() and t >= self.aim_zoom_time then
+        status_extension:set_zooming(true, current_action.default_zoom)
+    end
+end
+```
+
+Static read says `t >= math.huge` is never true and the patch should still hold, but the field repro after v6.11.0 says otherwise. Most plausible culprit: `scale_delay_value` (`action_aim.lua:13`) divides `aim_zoom_delay` by `ActionUtils.get_action_time_scale` per the active buff stack — if any buff pushes that scale to infinity or NaN, `math.huge / inf = NaN` and `t >= NaN` is false on every CPU but the field result was clearly inconsistent. Rather than chase the math, gate the OUTER check directly.
+
+**Fix.** Set `aim.zoom_condition_function = function() return false end` in the disable branch. The engine's outermost gate at `action_aim.lua:128` then short-circuits the entire zoom block before it reaches any timer arithmetic, regardless of buffs / time scale / vanilla delay value. The old field writes (`aim_zoom_delay = math.huge`, `heavy_aim_flow_event = nil`, `heavy_aim_flow_delay = nil`, `default_zoom = nil`) stay in place as belt-and-suspenders.
+
+**Manual-zoom branch** also sets `zoom_condition_function = function() return true end` explicitly — mirrors the shape vanilla writes (a closure returning `true`), so we don't drift from the template's authored type.
+
+**v6.11.0 cross-check.** Diffed every weapon template and aim-related engine file between v6.10.0 (`5ff26df1`) and v6.11.0 (`abe82ab4`); the only relevant change is the `aim_zoom_delay = 0.22` constant. No new fields, no new code paths, so `zoom_condition_function` is and remains the right gate.
+
+**No setting-change re-apply.** The patch still runs once at module init and the toggle is still labelled "Restart required" in localization. Mutating the shared template mid-mission would race with in-flight aim actions that already cached `self.aim_zoom_time`. Restart-on-toggle is the simplest invariant.
+
+**Files changed:**
+- `weapon_tweaker.lua` — MOD_VERSION 0.12.57 → 0.12.58; `_patch_kruber_longbow_zoom` rewritten to set `zoom_condition_function` as the primary gate; comment block updated with v6.10.0 vs v6.11.0 vanilla values and the rationale for switching gates.
+
+## 0.12.57-dev (2026-05-20) — Remove Skullsplitter / Skull-Splitter+Shield / Bardin Hammer+Shield from Kruber's roster
+
+Per user direction. Three cross-character weapons no longer offered to any Kruber career (`es_mercenary` / `es_huntsman` / `es_knight` / `es_questingknight`):
+- `wh_1h_axe` — "Saltzpyre: Axe" (Skullsplitter)
+- `wh_hammer_shield` — "Saltzpyre: Skull-Splitter and Shield"
+- `dr_shield_hammer` — "Bardin: Hammer and Shield"
+
+The three weapons stay available everywhere else they belong: `wh_1h_axe` remains native to Saltzpyre's three captain careers, `wh_hammer_shield` remains native to Warrior Priest plus the Saltzpyre cross-character row, and `dr_shield_hammer` remains native to all four Bardin careers. Only the four Kruber career rows lose the offering.
+
+**Three surfaces touched:**
+- `weapon_tweaker.lua` — removed all twelve `(es_*, weapon)` pairs from `weapon_unlock_map` (lines 31-34). Added `_kruber_removed_pairs` + `_strip_removed_kruber_unlocks` and wired it as the first step of `apply_weapon_unlocks` so existing users who had any of the toggles set true still get their stale `item.can_wield[<es_career>]` entry stripped on next init (or next setting change). Idempotent — runs cheaply on every reapply.
+- `weapon_tweaker_data.lua` — deleted twelve `unlock_es_*_<weapon>` checkbox widget entries across the four Kruber melee groups. Removed `_cwv_managed_settings` table + `_strip_cwv_widgets` helper + its call site — they only stripped `wh_1h_axe` widgets when CWV was installed, and with `wh_1h_axe` gone from wt entirely there's nothing to strip. The CWV detector loop was simplified to just `_has_cim`.
+- `weapon_tweaker_localization.lua` — deleted the matching twelve `unlock_es_*_<weapon> = { en = "..." }` strings across the four Kruber localization blocks.
+
+Also cleaned `_cwv_managed` in `weapon_tweaker.lua` (line ~63): removed the dead `wh_1h_axe = true` entry from each of the four Kruber career rows. The CWV variant `cwv_es_axe_shield` (Kruber's "Imperial Axe and Shield") is unaffected — that variant is owned end-to-end by the `character_weapon_variants` mod and never went through wt's unlock map.
+
+**Files changed:**
+- `weapon_tweaker.lua` — MOD_VERSION 0.12.56 → 0.12.57; weapon_unlock_map trimmed; `_cwv_managed` cleaned; `_kruber_removed_pairs` + `_strip_removed_kruber_unlocks` added; first line of `apply_weapon_unlocks` calls the stripper.
+- `weapon_tweaker_data.lua` — 12 widget rows removed; dead CWV-strip code excised; detector loop simplified.
+- `weapon_tweaker_localization.lua` — 12 label rows removed.
+
+## 0.12.56-dev (2026-05-20) — Kruber polearm preview: add explicit es_* entries + diagnostic probe
+
+User repro of v0.12.55-dev showed Mercenary (Kruber) still holding the previous-weapon stance when previewing **native** `es_halberd` and `es_2h_heavy_spear` in the keep inventory. Both templates have vanilla `wield_anim = "to_polearm"`; Kruber's 3P body authors `to_polearm` natively (proven by `_career_anim_redirect.to_polearm.alt = "to_spear"` only applying to non-es_ careers — meaning es_ careers are expected to play `to_polearm` natively). So the engine's `world_hero_previewer.lua:1003` fallback chain (`wield_anim_career_3p[career]` → `wield_anim_career[career]` → `wield_anim`) should fire `to_polearm` on Kruber's preview body and the polearm stance should appear. Why it doesn't is unknown from static read.
+
+**Two changes:**
+
+1. **Explicit `es_*` entries** added to both polearm templates' `wield_anim_career_3p` (alongside the existing wh_* entries from v0.12.55). This forces the wield event to fire through the same code path as the billhook template's es_* entry that the user already confirmed works pre-patch — bypassing whatever interaction is short-circuiting the engine's `wield_anim` fallback. The entries map every Kruber career to `"to_polearm"`, which is what the fallback was supposed to deliver anyway, so the runtime behavior on the in-mission path is unchanged.
+
+2. **Diagnostic helper `_wt_polearm_preview_diag`** wired into the `MenuWorldPreviewer.equip_item` hook. On every equip of `es_halberd` / `es_2h_heavy_spear` / `wh_2h_billhook`, logs the resolved wield event and whether the character_unit has it, plus the presence of the three candidate `to_*` events. Output goes to `[wt polearm-diag]` in the in-game log. Use one repro pass to capture the data, then delete the helper once the root cause is identified. Cost: 4 log lines per polearm equip while debugging.
+
+If the diagnostic shows `has(to_polearm)=false` on Kruber's `character_unit`, the preview body genuinely lacks the polearm 3P SM — that would mean we need a different target event (probably `to_2h_hammer`) or a state-machine force-load. If `has(to_polearm)=true` but the stance is still wrong, the issue is elsewhere (e.g. another mod's hook firing on the same event and corrupting the SM).
+
+**Files changed:**
+- `weapon_tweaker.lua` — MOD_VERSION 0.12.55 → 0.12.56; expanded `_WIELD_ANIM_CAREER_3P_PATCHES.two_handed_halberds_template_1` and `.two_handed_heavy_spears_template` with es_* keys; added `_wt_polearm_preview_diag` helper and wired it into the consolidated equip_item hook.
+
+## 0.12.55-dev (2026-05-20) — Inventory wield-stance: close the polearm gap (halberd / Tuskgor / billhook)
+
+Adds the missing `wield_anim_career_3p` template patches for the three polearm-class cross-character pairs that had in-mission redirects (`_career_anim_redirect`, line ~225) but no template-side patch — so the keep inventory previewer (`MenuWorldPreviewer`) was firing a wield event the target body doesn't author, and the cross-character wielder held the prior weapon's idle stance.
+
+**New gaps closed:**
+- **`two_handed_halberds_template_1`** (Kruber's halberd `es_halberd`) on `wh_captain` / `wh_bountyhunter` / `wh_zealot` → `to_2h_billhook`. Saltzpyre now enters his billhook stance when previewing the halberd in the keep, matching the in-mission behavior the `_career_anim_redirect.to_polearm` override at line 239-240 already produced.
+- **`two_handed_heavy_spears_template`** (Kruber's Tuskgor spear `es_2h_heavy_spear`) on the same three Saltzpyre careers → `to_2h_billhook`. Same root cause and same fix.
+- **`two_handed_billhooks_template`** (Saltzpyre's billhook `wh_2h_billhook`) on `es_mercenary` / `es_huntsman` / `es_knight` / `es_questingknight` → `to_polearm`. Kruber's halberd stance, matching `_career_anim_redirect.to_2h_billhook` (line 247-248). User confirmed this preview already looked correct pre-patch, so this entry is belt-and-suspenders — it bakes the in-mission redirect into the template so both paths agree natively without depending on engine-fallback timing.
+
+**Refactor:** the previous `_WE_SPEAR_WIELD_3P_OVERRIDES` table + `_patch_elf_spear_template_for_non_elves` function (single-template, wield-only) is replaced by a declarative `_WIELD_ANIM_CAREER_3P_PATCHES` table + one `_apply_wield_anim_career_3p_patches` applier covering all four polearm templates. New gaps surface as additional table rows instead of additional patcher functions. The four pre-existing patchers that ALSO do per-action `anim_event_3p` remap loops (brace / longbow_empire / longbow_template_1 / repeating_pistol) are kept as-is — they encode action-table logic that doesn't fit the declarative table.
+
+**Why this couldn't be discovered earlier from the in-mission behavior alone:** `_career_anim_redirect` only fires through wt's `Unit.animation_event` hook. The inventory previewer doesn't go through that hook — it reads `wield_anim_career_3p` directly off the weapon template. So a missing template patch silently broke the preview pose while in-mission play looked fine, hiding the gap until a player paid attention to the keep stance. Documented in the patch block's comment.
+
+**wh_priest** is intentionally absent from every entry — his row in `weapon_unlock_map` (line 49) has no polearm/spear/billhook/bow/crossbow, so any entry would be dead per `feedback_vt2_no_bows_on_warrior_priest` and the no-T-pose-stance audit closed in v0.12.48-dev.
+
+**Files changed:**
+- `weapon_tweaker.lua` — MOD_VERSION 0.12.54 → 0.12.55; replaced lines ~1838-1892 (the elf-spear-only patch block) with a declarative `_WIELD_ANIM_CAREER_3P_PATCHES` table containing all four polearm templates + one unified applier.
+
+## 0.12.54-dev (2026-05-20) — Extend `TeamPreviewer` defense to invalid-key (Shape B) crashes
+
+Extends the v0.12.53 belt-and-suspenders pre-hook to also handle the case where `item.item_name` is a **string that isn't in `ItemMasterList`** — not just the nested-table shape. PrincessLyndsey's crash repro on v0.12.52 used `we_maidenguard` as the leaking value; `we_maidenguard` is a **career-name string** (used in `can_wield` lists per `item_master_list.lua:14`), NOT an `ItemMasterList` key. Vanilla `team_previewer.lua:120-121` does `ItemMasterList[item_name]` then `item_template.slot_type` — when `item_name` is a string-but-not-a-key, the lookup returns nil under the strict-lookup metatable and the next line crashes on nil-index.
+
+The v0.12.53 hook only unwrapped table-shape values, so it left career-name string leaks unguarded. Now the same pre-hook also `rawget`s the candidate against `ItemMasterList` (per memory `feedback_vt2_strict_lookup_rawget` — strict-lookup tables must use rawget for existence probes) and clears `item.item_name = nil` if the lookup misses. The downstream `if item_name then` guard at `team_previewer.lua:119` then skips that slot cleanly. No effect when `item.item_name` is a valid IML key (the common case).
+
+Root-cause investigation deferred: the upstream code path that wrote `"we_maidenguard"` (a career name) into a `preview_items[i].item_name` slot is unknown. Could be a stale loadout reference, a versus parading-view bug (`versus_team_parading_view_v2.lua:597` reads `career_settings.preview_items[2].item_name` and forwards it verbatim — a CWV variant or career-name leak there would propagate), or an older bailout still in flight from a Fatshark change we haven't tracked. The Shape B guard turns the crash into a silent skip + warning log, which is the right user-facing behavior regardless of which upstream produces the bad data.
+
+## 0.12.53-dev (2026-05-20) — Belt-and-suspenders parade-crash defense at `TeamPreviewer.cb_hero_unit_spawned_skin_preview`
+
+End-of-mission parade crash recurred at `team_previewer.lua:120: attempt to index local 'item_template' (a nil value)` — same bailout-shape root cause documented in v0.12.25-dev (vanilla `LevelEndView._verify_weapon_data` writes `verified_weapon = { item_name = career_settings.preview_items[1] }`, where `preview_items[1]` is a `{ item_name = "..." }` table not a string, so `verified_weapon.item_name` ends up holding a nested table). Reproduced 2026-05-20 with PrincessLyndsey666 hosting Chaos Wastes, finishing on `we_maidenguard` (career_settings.preview_items[1] = `{ item_name = "we_spear" }`). The "is not wieldable" diagnostic print fired (vanilla `level_end_view_v2.lua:326`), confirming the bailout path was taken — but the existing post-hook on `_verify_weapon_data` (`weapon_tweaker.lua:3628-3645`) **did not log the unwrap**, despite the hook being registered (log line 1256: `[MOD][wt][INFO] (hook): Hooking '_verify_weapon_data' from [LevelEndView]`). Whether the hook never fired or the mutation was lost between hook exit and `team_previewer.cb_hero_unit_spawned_skin_preview` reading `preview_items[2].item_name` is unresolved — no other mod hooks `_verify_weapon_data`, the deployed bundle includes the fix code, and the running version is v0.12.52-dev (log line 1231).
+
+**Two changes:**
+
+1. **Entry-point instrumentation on the existing `_verify_weapon_data` post-hook** — log `player.name / career_index / weapon_slot / weapon.item_name` at the TOP of the wrapper (before `func(...)`). On the next repro this distinguishes "hook never fired" from "hook fired but mutation didn't propagate." Cheap, info-level only.
+
+2. **Belt-and-suspenders pre-hook on `TeamPreviewer.cb_hero_unit_spawned_skin_preview`** — walk `hero_data.preview_items` BEFORE the loop body runs, and for any `item.item_name` that's a `{ item_name = "..." }` table, unwrap to the inner string (or clear to nil if unexpected). This catches the broken shape at the frame just above the actual crash site (`team_previewer.lua:117-120` does `local item_name = item.item_name; ItemMasterList[item_name]`), regardless of which upstream path produced the bad data. No-op for the well-formed-string case.
+
+Per memory `feedback_redundant_safeguards_ok.md` — the user endorses belt-and-suspenders writes when redundancy is cheap and the missed-path failure is silent. A nil-index crash on the parade view is exactly such a silent failure (no recovery, kicks the player to keep).
+
+**Risk:** Very low. Pre-hook walks a 2-element table and rewrites a field that's already broken if shape matches the nested-table case. Non-bailout success path (where `item.item_name` is a string) untouched. Hook target is `TeamPreviewer` (defined in `scripts/ui/views/team_previewer.lua`), used only by `LevelEndView._setup_team_previewer` per grep — versus paths use `VersusTeamParadingViewV2` which also goes through TeamPreviewer per the same grep so they get the same coverage.
+
+**Bug B (note, not addressed here):** Vanilla `BackendInterfaceCommon.can_wield(we_maidenguard, "we_dual_wield_sword_dagger")` returned false despite that pair being natively wieldable per `dumps/weapon_native_careers.txt:59`. Likely cause: `apply_weapon_unlocks` at `weapon_tweaker.lua:80-122` strips careers destructively then re-adds only toggle-enabled ones. The bailout fires whenever the user toggles a NATIVE (career × weapon) pair OFF — but the strip-rebuild walks `weapon_unlock_map` rather than checking against a native baseline. Worth a separate fix that distinguishes "wt-added cross-career unlock" from "vanilla-native pair", but tracking as follow-up — out of scope for this patch.
+
+**Files changed:**
+- `weapon_tweaker.lua` — MOD_VERSION bump 0.12.52 → 0.12.53; entry-point `mod:info` on the existing `_verify_weapon_data` hook (~L3629); new `TeamPreviewer.cb_hero_unit_spawned_skin_preview` pre-hook block appended after the verify hook (~L3650+).
+
 ## 0.12.52-dev (2026-05-19) — Moonfire puff visible to remote peers
 
 Adds `mod:hook_safe` registrations on `PlayerProjectileHuskExtension` (`hit_enemy` / `hit_level_unit` / `hit_non_level_unit`) so the cosmetic puff (and the AOE-revert FX) plays on every peer that sees the arrow, not just the shooter's own machine. Previously only `PlayerProjectileUnitExtension` was hooked — that extension only runs on the shooter's client, so remote peers (host or other clients, depending on who fired) never saw the puff. Same husk-vs-self class-pair gap as the cosmetics_tweaker reload-paint bug (see `feedback_vt2_husk_extension_class_pair`).
