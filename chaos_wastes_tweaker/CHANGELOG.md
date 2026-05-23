@@ -1,5 +1,100 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.93-dev (2026-05-23) — Skulls Event Boons: rewrite year-round injection to actually work
+
+### Why
+The v0.7.85 "Enable Skulls Event Boons (any time)" toggle was a no-op. It appended new entries to `DeusPowerUpRarityPool` at mod load — but `DeusPowerUpRarityPool` is read ONCE at game boot to populate the runtime arrays the offering generator actually scans (`DeusPowerUps[rarity]`, `DeusPowerUpsArray`, `DeusPowerUpsArrayByRarity[rarity]`, `DeusPowerUpsLookup` — see `scripts/settings/dlcs/morris/deus_power_up_settings.lua:7121-7176`). Post-boot writes to the source pool never reach the arrays scanned by `deus_power_up_utils.lua:138-146`. Verified by tracing the offering generator and confirming Skulls boons never rolled outside the Skulls 2023 mutator regardless of toggle state.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — Replaced `_add_skulls_to_pool` / `_remove_skulls_from_pool` (which wrote into the unused `DeusPowerUpRarityPool`) with a runtime mutator-clear approach on the live `DeusPowerUps.event[boon_skulls_*]` records. The offering roller at `deus_power_up_utils.lua:146` calls `compatible_mutator_active(power_up.mutators)` on each record's `mutators` field — clearing that field from `{"skulls_2023"}` to `{}` makes the boon roll on any CW run. Toggle-off restores the cached original array.
+- `chaos_wastes_tweaker.lua` — Added `pre_register_skulls_event_lookups()` that unconditionally walks the 10 Skulls boons in sorted order at mod load. Re-registers `NetworkLookup.deus_power_up_templates` + `NetworkLookup.buff_templates` entries (idempotent overlay on vanilla's boot-time registration) and mirrors each `power_up_boon_skulls_<NN>_event` buff template from `DeusPowerUpBuffTemplates` into `_G.BuffTemplates` per `feedback_vt2_dormant_buff_template_dual_register`. Defensive against a future vanilla change that defers the DLCUtils merge.
+- `chaos_wastes_tweaker.lua` — Added `skulls_boons_preregistered` regression check to `/ct_regression_test`. Walks the 10 boon names, verifies each present-in-this-build template has its NetworkLookup + BuffTemplates registration.
+- `chaos_wastes_tweaker_localization.lua` — Rewrote `enable_skulls_event_boons_tooltip` to reflect the mutator-clear approach (not the old broken pool-append wording). Tooltip now warns boons 06/07/08 are inert outside the Skulls mutator (they trigger on daemon-skull pickups + read `skulls_2023_buff` stacks). Boons 01-05 + set bonuses are fully functional outside the event.
+- `itemV2.cfg` — Title version suffix bumped: `v0.7.92-dev` → `v0.7.93-dev`.
+- `MOD_VERSION` bumped: `0.7.92-dev` → `0.7.93-dev`.
+
+### Why this approach over re-running `inject_dormant_boon`
+The 9 ct dormants + 11 trait boons go through `inject_dormant_boon` because they have no vanilla pool entry — we have to BUILD one. The Skulls boons already have full vanilla infrastructure (template, buff variant `power_up_boon_skulls_01_event`, NetworkLookup entries, `DeusPowerUpsArray` slot, etc.). Calling `inject_dormant_boon` for them would duplicate every record in `DeusPowerUpsArray` / `DeusPowerUpsArrayByRarity` / `DeusPowerUpsLookup` and require keeping the duplicated buff-name registration in sync with the vanilla one. The mutator-clear approach preserves the vanilla `power_up_boon_skulls_set_bonus_01_event` linkage that vanilla's set-bonus amplifier closures hard-code in `deus_power_up_settings.lua:462/487/516/...` — meaning the 5-piece set bonus actually works as designed.
+
+### Set-bonus mechanics — verified intact
+Vanilla's set-bonus amplifier code (e.g. `deus_power_up_settings.lua:462`) hard-codes the buff name `power_up_boon_skulls_set_bonus_01_event`. Because we keep the boons at their vanilla "event" rarity (not injecting a new rarity copy), the buff names stay vanilla and the amplifier logic continues to detect set completion correctly. Collecting all 5 of `boon_skulls_01..05` triggers `boon_skulls_set_bonus_01` (`+effect_amplify_amount` boost to attack-speed-per-stack, on-proc multipliers, etc.). Collecting all of `boon_skulls_06..08` triggers `boon_skulls_set_bonus_02` similarly.
+
+### Peer-sync safety
+- Pre-registration is unconditional + sorted per `feedback_vt2_gated_registration_diverges` — every peer's NetworkLookup ends up with identical contents regardless of toggle state.
+- Mutator-field mutation does NOT affect NetworkLookup indices (only the in-table semantics of each record). Each peer can have different toggle states without crashing — the host's roll output is what gets sent over the wire (`rpc_add_power_up` resolves by `lookup_id`, which stays the same vanilla-assigned id).
+- The 2025 boons (06/07/08 + set_bonus_02) early-out cleanly if the vanilla template is missing in older builds — both pre-register and mutator-clear loops nil-check before touching.
+
+### Verification
+1. Restart VT2 with the mod enabled.
+2. Run `/ct_regression_test` — `skulls_boons_preregistered` should PASS.
+3. Toggle **Enable Skulls Event Boons (any time)** ON in the VMF menu.
+4. Start a fresh CW run with no Skulls mutator active.
+5. Visit a shrine and inspect the offered boons. Skulls boons (recognisable by the daemon-skull icons and `boon_skulls_*` localization keys) should appear in the rotation at "event" rarity.
+6. Toggle the setting OFF, return to keep, start another fresh run. Skulls boons should NOT appear.
+7. Optional: with toggle ON, intentionally collect 5 of `boon_skulls_01..05` in a single run and verify `boon_skulls_set_bonus_01` activates (boon icon appears in the buff bar; per-stack attack-speed boost is visibly higher).
+
+### Boons covered (rarity: "event" — vanilla-assigned, preserved by this mod)
+- `boon_skulls_01` — Frenzied Hacks: on melee hit, stack +N% attack speed. Functional.
+- `boon_skulls_02` — Slaughterer's Vigour: on kill, stack +N% power level. Functional.
+- `boon_skulls_03` — Crimson Parry: timed-block triggers a stagger explosion. Functional.
+- `boon_skulls_04` — Bloodletter's Reservoir: on melee hit, gain THP that converts to a regen proc. Functional.
+- `boon_skulls_05` — Wrathful Surge: on melee hit, stack +N% power level. Functional.
+- `boon_skulls_06` — Skull-Bound Power: +N% power per `skulls_2023_buff` stack. **Inert outside the Skulls mutator** (no daemon-skull pickups → 0 stacks).
+- `boon_skulls_07` — Skull Coin Bounty: daemon-skull pickup grants coins. **Inert outside the Skulls mutator.**
+- `boon_skulls_08` — Skull-Bound Cooldown: daemon-skull pickup reduces career skill cooldown. **Inert outside the Skulls mutator.**
+- `boon_skulls_set_bonus_01` — Khorne's Favor (5-piece set of 01-05): amplifies effect + duration of all collected set pieces. Functional outside the event.
+- `boon_skulls_set_bonus_02` — Khorne's Wrath (3-piece set of 06-08): amplifies effect + duration. **Inert outside the Skulls mutator** (depends on inert source boons).
+
+### References
+- `feedback_vt2_gated_registration_diverges` — pre-register unconditionally in sorted order; gate only the pool side.
+- `feedback_vt2_dormant_buff_template_dual_register` — dual-write to `DeusPowerUpBuffTemplates` AND `_G.BuffTemplates`.
+- `reference_vt2_deus_power_up_rarities` — valid rarities are `event/rare/exotic/unique`. Reusing vanilla "event" rarity avoids "common"/"plentiful" crash risk.
+- Vanilla source: `scripts/settings/dlcs/morris/deus_power_up_settings.lua:3069-3362` (boon templates), `:7121-7176` (boot bootstrap), `scripts/helpers/deus_power_up_utils.lua:138-146` (offering roller).
+
+## 0.7.92-dev (2026-05-23) — Migrate Reckless Swings tweak from positional indices to name-based lookup
+
+### Why
+GitHub Issue #5: the Khaine's Fury (deus_reckless_swings) boon tweak used hard-coded array indices (`buffs[1]`, `description_values[1]`, `description_values[3]`) to mutate values. v0.7.84 added sanity guards that bail safely if FatShark reorders the arrays, making the tweak safe-but-disabled rather than safe-and-working. This refactor replaces positional indexing with name-based search so the tweak works regardless of array order.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — Added `_find_entry_by(arr, predicate)` helper function for array searching.
+- `apply_reckless_swings_tweak()` — Now uses `_find_entry_by` to locate:
+  - `buff_template.buffs[N]` where `buff_to_add == "deus_reckless_swings_buff"`
+  - `description_values[N]` where `value_type == "percent"` (threshold)
+  - `description_values[N]` where `value_type == "amount"` (damage)
+  - Stored indices in `reckless_swings_originals` table for use in revert.
+  - Sanity guards retained as defense-in-depth (name-match + numeric-type checks before mutation).
+- `revert_reckless_swings_tweak()` — Now restores using stored indices instead of hard-coded `[1]` and `[3]`.
+- Inline comment updated: Issue #5 marked resolved in v0.7.92-dev.
+- Logging enhanced: `apply` now reports found indices (`buff_index`, `dv_threshold_index`, `dv_damage_index`) to aide verification.
+- MOD_VERSION bumped: 0.7.91-dev → 0.7.92-dev.
+
+### Verification
+1. Restart VT2 with the mod enabled.
+2. Enter Chaos Wastes and enable the **Khaine's Fury Softened** toggle.
+3. Check console logs for: `[khaines-fury] tweak applied via name-based lookup (buff_index=1, dv_threshold_index=1, dv_damage_index=3)` (or equivalent indices if FatShark reorders).
+4. Pick the Khaine's Fury deus boon and verify:
+   - Health trigger threshold shown in tooltip: 25% (not 50%)
+   - Damage per hit shown: 1 (not 3)
+   - In-game behaviour: taking damage at <25% health, dealing 1 damage per hit (not 3)
+5. Disable the toggle and re-enable to verify revert path restores vanilla values.
+6. Run `/ct_regression_test` and verify no new assertion failures.
+
+### References
+GitHub Issue #5: https://github.com/Ensrick/vermintide-2-tweaker/issues/5
+## 0.7.91-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
+
+### Why
+Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands are global — only the first mod wins, the rest fail silently with `[ERROR] (command): command name 'regression_test' is already used by another mod 'cim'`. Detected in PC-A log 2026-05-23 20:50:52.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — renamed `regression_test` → `ct_regression_test`. Verification log line added at registration site.
+
+### Verification
+1. Restart VT2. No `[ERROR] (command):` line in console_logs about this command name.
+2. Run `/ct_regression_test` in chat. Command fires and prints results.
+3. Per memory `feedback_vt2_verify_before_shipping.md`.
+
 ## 0.7.80-alpha (2026-05-20)
 
 ### Fixed: ct_meta_ammo (Quiver Cascade) crashed Sienna + Bardin drakefire users with `Max overcharge outside value bounds allowed by network variable!`

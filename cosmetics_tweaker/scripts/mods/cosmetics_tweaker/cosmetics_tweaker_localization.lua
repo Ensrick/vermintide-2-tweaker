@@ -18,11 +18,26 @@ local loc = {
     unlock_all_frames_tooltip = {
         en = "Makes every portrait frame equippable in the cosmetics loadout. Only works in modded realm. Frames from unowned DLC remain locked. Restart after toggling.",
     },
-    la_bridge_enable = {
-        en = "Loremaster's Armoury: Cosmetics as Separate Items",
+    suppress_la_quest_markers = {
+        en = "LA: Hide quest markers",
     },
-    la_bridge_enable_tooltip = {
-        en = "Adds every Loremaster's Armoury hat/skin recolor as its OWN inventory item (e.g. Pureheart Helm shows up four times — yellow, white, red, black — instead of LA silently overwriting the vanilla one). Requires Loremaster's Armoury and More Items Library subscribed and enabled. Restart after toggling.",
+    suppress_la_quest_markers_tooltip = {
+        en = "Suppresses every Loremaster's Armoury waypoint marker (message board, scroll, pickup, sword shrine). LA's quests still progress normally; only the on-screen waypoint is hidden. Embedded behavior from LA Prefix Patch (v0.9.3.1+).",
+    },
+    suppress_la_notifications = {
+        en = "LA: Hide unread-letter notifications",
+    },
+    suppress_la_notifications_tooltip = {
+        en = "Suppresses the news-feed banner that pops up when an LA quest letter is unread. The letter still exists at the message board; you just won't be reminded. Embedded behavior from LA Prefix Patch (v0.9.3.1+).",
+    },
+    -- v0.9.3.9: la_bridge_enable / la_bridge_enable_tooltip loc keys removed
+    -- along with the toggle widget. The bridge is now a built-in feature.
+
+    glow_picker_auto_popup_enabled = {
+        en = "Auto-Open Glow Picker on Wield",
+    },
+    glow_picker_auto_popup_enabled_tooltip = {
+        en = "When you wield a weapon in the keep that already has a per-item glow applied, the glow picker popup opens automatically so you can review or edit the current color. Only fires once per weapon per keep visit; switching to a non-glowing weapon does nothing. Disable to require manually typing /glow_picker.",
     },
 
     appearance_group = {

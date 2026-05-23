@@ -1,5 +1,46 @@
 local mod = get_mod("gt")
 
+-- Grail Knight quest dropdown options. Values mirror the
+-- `markus_questing_knight_passive_*` reward strings that
+-- PassiveAbilityQuestingKnight's challenge pool reads. Text is plain
+-- English here (the localized labels live in general_tweaker_localization).
+local GT_GK_QUEST_OPTIONS = {
+    { text = "Random (vanilla)",    value = "random" },
+    { text = "Power vs. Elites",    value = "markus_questing_knight_passive_power_level" },
+    { text = "Attack Speed",        value = "markus_questing_knight_passive_attack_speed" },
+    { text = "Cooldown Reduction",  value = "markus_questing_knight_passive_cooldown_reduction" },
+    { text = "Health Regen",        value = "markus_questing_knight_passive_health_regen" },
+    { text = "Damage Reduction",    value = "markus_questing_knight_passive_damage_taken" },
+}
+
+local GT_HUD_MODE_OPTIONS = {
+    { text = "Off",      value = "off" },
+    { text = "Partial",  value = "partial" },
+    { text = "Complete", value = "complete" },
+    { text = "Camera",   value = "camera" },
+}
+
+-- Creature Spawner unit-list dropdown options. Values match the runtime
+-- table keys in _gt_cs_unit_lists (regular_units / dummy_units / etc.) so
+-- mod:get("gt_cs_unit_list") returns the exact key we index into.
+local GT_CS_UNIT_LIST_OPTIONS = {
+    { text = "gt_cs_unit_list_regular", value = "regular_units" },
+    { text = "gt_cs_unit_list_dummy",   value = "dummy_units" },
+    { text = "gt_cs_unit_list_misc",    value = "misc_units" },
+    { text = "gt_cs_unit_list_special", value = "special_units" },
+    { text = "gt_cs_unit_list_boss",    value = "boss_units" },
+    { text = "gt_cs_unit_list_all",     value = "all_units" },
+}
+
+-- Grudge-marked dropdown. Disabled/Random/Manual, matching upstream.
+-- Sub-widget reveal lists mirror the upstream `show_widgets` arrays:
+-- index 1 is the random-count slider, indices 2-14 are the 13 manual toggles.
+local GT_CS_GRUDGE_OPTIONS = {
+    { text = "gt_cs_grudge_disabled", value = false },
+    { text = "gt_cs_grudge_random",   value = "RANDOM", show_widgets = { 1 } },
+    { text = "gt_cs_grudge_manual",   value = "MANUAL", show_widgets = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 } },
+}
+
 return {
     name = "Tweaker: General",
     description = mod:localize("mod_description"),
@@ -100,16 +141,138 @@ return {
                         tooltip       = mod:localize("noclip_boost_multiplier_tooltip"),
                     },
                     {
+                        setting_id      = "noclip_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_noclip_toggle",
+                        default_value   = {},
+                        tooltip         = mod:localize("noclip_hotkey_tooltip"),
+                    },
+                    {
                         setting_id    = "disable_enemy_spawns",
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = mod:localize("disable_enemy_spawns_tooltip"),
                     },
                     {
+                        setting_id      = "clear_enemies_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_clear_enemies",
+                        default_value   = {},
+                        tooltip         = mod:localize("clear_enemies_hotkey_tooltip"),
+                    },
+                    {
                         setting_id    = "ai_takeover_enabled",
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = mod:localize("ai_takeover_enabled_tooltip"),
+                    },
+                },
+            },
+            {
+                setting_id  = "gt_cutscenes_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_skip_cutscenes_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_skip_cutscenes_enabled_tooltip"),
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_skip_cutscenes_auto",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = mod:localize("gt_skip_cutscenes_auto_tooltip"),
+                            },
+                        },
+                    },
+                    {
+                        setting_id    = "gt_disable_intro_monologue",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_disable_intro_monologue_tooltip"),
+                    },
+                },
+            },
+            {
+                setting_id  = "gt_corpses_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_more_corpses_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_more_corpses_enabled_tooltip"),
+                        sub_widgets   = {
+                            {
+                                setting_id      = "gt_more_corpses_count",
+                                type            = "numeric",
+                                default_value   = 100,
+                                range           = { 1, 500 },
+                                decimals_number = 0,
+                                tooltip         = mod:localize("gt_more_corpses_count_tooltip"),
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                setting_id  = "gt_gk_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_gk_quests_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_gk_quests_enabled_tooltip"),
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_gk_quest1",
+                                type          = "dropdown",
+                                default_value = "random",
+                                options       = GT_GK_QUEST_OPTIONS,
+                                tooltip       = mod:localize("gt_gk_quest1_tooltip"),
+                            },
+                            {
+                                setting_id    = "gt_gk_quest2",
+                                type          = "dropdown",
+                                default_value = "random",
+                                options       = GT_GK_QUEST_OPTIONS,
+                                tooltip       = mod:localize("gt_gk_quest2_tooltip"),
+                            },
+                            {
+                                setting_id    = "gt_gk_quest3",
+                                type          = "dropdown",
+                                default_value = "random",
+                                options       = GT_GK_QUEST_OPTIONS,
+                                tooltip       = mod:localize("gt_gk_quest3_tooltip"),
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                setting_id  = "gt_readyup_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id      = "gt_ready_up_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_ready_up_now",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_ready_up_hotkey_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_auto_ready_on_vote_pass",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_auto_ready_on_vote_pass_tooltip"),
                     },
                 },
             },
@@ -123,17 +286,14 @@ return {
                         default_value = false,
                         tooltip       = mod:localize("mission_inventory_enabled_tooltip"),
                     },
-                },
-            },
-            {
-                setting_id  = "startup_group",
-                type        = "group",
-                sub_widgets = {
                     {
-                        setting_id    = "skip_intro_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("skip_intro_enabled_tooltip"),
+                        setting_id      = "gt_open_inv_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_open_mission_inventory",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_open_inv_hotkey_tooltip"),
                     },
                 },
             },
@@ -325,6 +485,188 @@ return {
                         function_name   = "gt_fix_sound",
                         default_value   = {},
                         tooltip         = mod:localize("fix_sound_hotkey_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_bot_toggle_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_bot_toggle",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_bot_toggle_hotkey_tooltip"),
+                    },
+                },
+            },
+            {
+                setting_id  = "gt_hud_visibility_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_hud_mode",
+                        type          = "dropdown",
+                        default_value = "off",
+                        options       = GT_HUD_MODE_OPTIONS,
+                        tooltip       = mod:localize("gt_hud_mode_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_hud_cycle_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_hud_cycle",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_hud_cycle_hotkey_tooltip"),
+                    },
+                },
+            },
+            {
+                setting_id  = "gt_cs_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_cs_unit_list",
+                        type          = "dropdown",
+                        default_value = "regular_units",
+                        options       = GT_CS_UNIT_LIST_OPTIONS,
+                        tooltip       = mod:localize("gt_cs_unit_list_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_cs_spawn",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_cs_spawn",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_cs_spawn_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_cs_next",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_cs_next",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_cs_next_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_cs_prev",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_cs_prev",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_cs_prev_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_cs_destroy",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_cs_destroy",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_cs_destroy_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_cs_spawn_slot_1",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_cs_spawn_slot_1",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_cs_spawn_slot_1_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_cs_spawn_slot_2",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_cs_spawn_slot_2",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_cs_spawn_slot_2_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_cs_spawn_slot_3",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_cs_spawn_slot_3",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_cs_spawn_slot_3_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_cs_mission_ai",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = mod:localize("gt_cs_mission_ai_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_cs_keep_ai",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_cs_keep_ai_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_cs_grudge",
+                        type          = "dropdown",
+                        default_value = false,
+                        options       = GT_CS_GRUDGE_OPTIONS,
+                        tooltip       = mod:localize("gt_cs_grudge_tooltip"),
+                        sub_widgets   = {
+                            {
+                                setting_id      = "gt_cs_grudge_random_modifier_count",
+                                type            = "numeric",
+                                default_value   = 1,
+                                range           = { 0, 13 },
+                                decimals_number = 0,
+                                tooltip         = mod:localize("gt_cs_grudge_random_modifier_count_tooltip"),
+                            },
+                            { setting_id = "gt_cs_grudge_warping",         type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_warping_tooltip") },
+                            { setting_id = "gt_cs_grudge_intangible",      type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_intangible_tooltip") },
+                            { setting_id = "gt_cs_grudge_unstaggerable",   type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_unstaggerable_tooltip") },
+                            { setting_id = "gt_cs_grudge_raging",          type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_raging_tooltip") },
+                            { setting_id = "gt_cs_grudge_vampiric",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_vampiric_tooltip") },
+                            { setting_id = "gt_cs_grudge_ranged_immune",   type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_ranged_immune_tooltip") },
+                            { setting_id = "gt_cs_grudge_periodic_shield", type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_periodic_shield_tooltip") },
+                            { setting_id = "gt_cs_grudge_crippling",       type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_crippling_tooltip") },
+                            { setting_id = "gt_cs_grudge_crushing",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_crushing_tooltip") },
+                            { setting_id = "gt_cs_grudge_regenerating",    type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_regenerating_tooltip") },
+                            { setting_id = "gt_cs_grudge_periodic_curse",  type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_periodic_curse_tooltip") },
+                            { setting_id = "gt_cs_grudge_commander",       type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_commander_tooltip") },
+                            { setting_id = "gt_cs_grudge_frenzy",          type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_frenzy_tooltip") },
+                        },
+                    },
+                },
+            },
+            {
+                setting_id  = "gt_is_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id      = "gt_is_next_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_is_next",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_is_next_hotkey_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_is_prev_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_is_prev",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_is_prev_hotkey_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_is_spawn_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_is_spawn",
+                        default_value   = {},
+                        tooltip         = mod:localize("gt_is_spawn_hotkey_tooltip"),
                     },
                 },
             },

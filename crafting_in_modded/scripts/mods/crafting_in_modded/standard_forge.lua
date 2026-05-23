@@ -35,6 +35,24 @@ mod._cim_standard_forge_active = false
 
 local function _is_active() return mod._cim_standard_forge_active end
 
+-- Forward-declared so the jewelry-pin block inside the
+-- `_MATERIAL_GATED_PAGES` hook body (below, around line 240) can reference
+-- `synth[pinned_recipe]` before the canonical `local synth = {}` further down
+-- the file (~line 430). Without this forward declaration the closure binds
+-- to global `synth` (nil), the `if pinned_recipe and synth[pinned_recipe]`
+-- gate always evaluates false, and jewelry templates fall through to vanilla's
+-- random-slot `craft_jewellery` recipe — silently breaking the v0.7.27 marquee
+-- feature. Hardening added in v0.7.28-alpha alongside the rehook-warning fix.
+-- See `feedback_lua_forward_reference`.
+local synth
+
+-- Forward-declared so `_make_craft_synth` (further down) can reference it
+-- before the canonical assignment near the template-cache block. Without this
+-- forward declaration the closure binds to a nil global, the slot_type
+-- sanity-gate added in v0.7.15 silently no-ops, and crafting_material_scrap-
+-- style items would slip past again. See `feedback_lua_forward_reference`.
+local _CRAFTABLE_SLOT_TYPES = { melee = true, ranged = true, ring = true, necklace = true, trinket = true }
+
 -- DLC ownership gate. Vanilla weapons gated behind unowned DLC stay locked
 -- even in modded realm — modded crafting is a power-up over the vanilla
 -- progression unlocks (career levels, crafting materials), NOT a bypass for
@@ -61,7 +79,109 @@ mod._cim_item_requires_unowned_dlc = _item_requires_unowned_dlc
 -- has to live inside this same callback rather than a sibling hook block. The
 -- function is resolved at call time via `mod._cim_rebuild_template_cache`, so
 -- it's safe to invoke before the assignment further down the file runs.
-for _, klass in ipairs({ "HeroWindowCrafting", "HeroWindowCraftingConsole" }) do
+-- ============================================================
+-- Customization menu (gear-icon → reroll properties / reroll traits)
+-- ============================================================
+-- The gear-icon menu is `HeroWindowItemCustomization`. Its craft button
+-- is gated by three conditions (`hero_window_item_customization.lua:1928`):
+--   disable_button = force_disable or not has_all_requirements or script_data["eac-untrusted"]
+-- In modded realm `script_data["eac-untrusted"] = true` → button always
+-- greyed → user can't reroll props or traits via the cosmetics menu.
+--
+-- Two fixes:
+--   1. Lifecycle hooks below also flip `_cim_standard_forge_active` so
+--      cim's `craft()` hook intercepts the click (otherwise vanilla
+--      tries to send a PlayFab request that the modded backend rejects
+--      with the EAC-untrusted kick).
+--   2. Wrapping hook on `_update_state_craft_button` does two jobs:
+--      (a) For `apply_weapon_skin`: temporarily clears `eac-untrusted`
+--          around the original call so vanilla's state check doesn't
+--          bake in the modded gate (migrated from illusion_swap.lua to
+--          prevent a duplicate `mod:hook*` on the same class+method —
+--          VMF silently drops the second registration with a
+--          "Attempting to rehook active hook" warning).
+--      (b) When the standard forge UI is active: overrides the
+--          disable_button write AFTER vanilla sets it, dropping the
+--          eac-untrusted term but keeping force_disable + requirements.
+mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
+    local result
+    if script_data["eac-untrusted"] and recipe_name == "apply_weapon_skin" then
+        local saved = script_data["eac-untrusted"]
+        script_data["eac-untrusted"] = false
+        result = func(self, recipe_name, ...)
+        script_data["eac-untrusted"] = saved
+    else
+        result = func(self, recipe_name, ...)
+    end
+
+    -- Post-write override: re-enable button for the standard forge UI
+    -- (gear-icon reroll-props / reroll-traits / upgrade / apply-skin tabs).
+    if mod._cim_standard_forge_active then
+        local btn = self._widgets_by_name and self._widgets_by_name.craft_button
+        if btn then
+            local has_all = self._has_all_crafting_requirements
+            if has_all == nil then has_all = true end
+            local force_disable = select(3, ...)  -- (button_text, glow_color, force_disable, offset)
+            btn.content.button_hotspot.disable_button = force_disable or not has_all or false
+        end
+    end
+
+    return result
+end)
+
+-- ============================================================
+-- One-shot trim: existing items in the mirror with >2 properties
+-- ============================================================
+-- Consolidated into the canonical `BackendManagerPlayFab._create_interfaces`
+-- hook_safe in crafting_in_modded.lua (the `_forge_load` callback). A second
+-- registration here was silently dropped by VMF as a duplicate, leaving the
+-- trim logic dead. See memory `feedback_vmf_hook_safe_no_chain`. Fixed in
+-- v0.7.28-alpha.
+
+-- ============================================================
+-- Defensive guard against >2-property items (crash fix v0.7.25)
+-- ============================================================
+-- Crash report 2026-05-22: `hero_window_item_customization.lua:1213` —
+-- `content[option_hotspot_name].disable_button = false` faulted on
+-- `button_hotspot_3` (nil). The `item_properties` widget only ships hotspots
+-- 1 and 2 because vanilla caps weapon/jewelry properties at 2. When cim's
+-- Athanor pile-up writes 3+ properties to an accessory (`_forge_apply_to_*`
+-- allows it via the 10-bubble layer), the iteration at vanilla line 1201-1215
+-- runs N times for N stored properties → indexes a missing widget on N>=3.
+-- Replace the function with a bounded version that skips writes for missing
+-- widgets. Cosmetic-only — the extra properties are still applied to the buff
+-- system, just not surfaced in the Customization → Apply Skin tab's preview.
+mod:hook("HeroWindowItemCustomization", "_update_property_option", function(func, self)
+    local item = self:_get_item(self._item_backend_id)
+    if not item or not item.properties then return end
+    local properties_widget = self._widgets_by_name and self._widgets_by_name.item_properties
+    if not properties_widget then return end
+    local content = properties_widget.content
+    if not content then return end
+    local property_count = 0
+    for property_key, property_value in pairs(item.properties) do
+        property_count = property_count + 1
+        local hotspot_name = "button_hotspot_" .. property_count
+        local text_name = "option_text_" .. property_count
+        local hotspot = content[hotspot_name]
+        if hotspot then
+            local property_data = WeaponProperties and WeaponProperties.properties
+                                  and WeaponProperties.properties[property_key]
+            if property_data then
+                local ok, title_text = pcall(UIUtils.get_property_description,
+                                             property_key, property_value)
+                hotspot.disable_button = false
+                if ok and title_text then content[text_name] = title_text end
+            end
+        end
+        -- Silently drop the write when the widget slot doesn't exist (item
+        -- has more properties than vanilla's Customization UI was authored
+        -- for). Prevents the nil-index crash; the property is still in
+        -- item.properties and still applies to the buff system.
+    end
+end)
+
+for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "HeroWindowCraftingConsole" }) do
     mod:hook_safe(klass, "on_enter", function(self)
         mod._cim_standard_forge_active = true
         if mod._cim_rebuild_template_cache then
@@ -86,6 +206,47 @@ local _MATERIAL_GATED_PAGES = {
     "CraftPageConvertDust",       "CraftPageConvertDustConsole",
 }
 
+-- ============================================================
+-- Jewelry slot pinning + per-slot button label (feedback #6)
+-- ============================================================
+-- Vanilla `CraftPageCraftItem.setup_recipe_requirements`
+-- (craft_page_craft_item.lua:62-78, Console at :69-85) hard-pins
+-- `self._recipe_name = "craft_jewellery"` whenever a jewelry template is
+-- dropped, regardless of slot. The synth then picks a random jewelry slot —
+-- so dropping a charm template might craft a necklace. User wants three
+-- explicit options.
+--
+-- vanilla's UI does NOT support adding new pages to `page_settings` (local-
+-- to-module at hero_window_crafting.lua:18). What we CAN do: post-hook this
+-- function and substitute one of cim's per-slot synth recipes
+-- (`craft_necklace` / `craft_charm` / `craft_trinket`) based on the dropped
+-- item's actual slot_type. The synth then crafts exactly that slot.
+--
+-- Combined with the dynamic button label (`craft_button` / page title), the
+-- effective UX is: drop a necklace template → "CRAFT NECKLACE" → necklace
+-- crafted; drop a charm template → "CRAFT CHARM" → charm crafted; drop a
+-- trinket template → "CRAFT TRINKET" → trinket crafted. Three "buttons" via
+-- three deterministic recipes.
+--
+-- Lives inside the `_MATERIAL_GATED_PAGES` hook body below (gated on the
+-- two CraftPageCraftItem klasses) — a sibling `mod:hook_safe` on the same
+-- two class+method pairs was silently dropped by VMF per memory
+-- `feedback_vmf_hook_safe_no_chain`. Consolidated in v0.7.28-alpha.
+local _JEWELRY_SLOT_TO_RECIPE = {
+    necklace = "craft_necklace",
+    ring     = "craft_charm",
+    trinket  = "craft_trinket",
+}
+local _JEWELRY_SLOT_TO_LABEL = {
+    necklace = "CRAFT NECKLACE",
+    ring     = "CRAFT CHARM",
+    trinket  = "CRAFT TRINKET",
+}
+local _WEAPON_SLOTS_TO_LABEL = {
+    melee  = "CRAFT WEAPON",
+    ranged = "CRAFT WEAPON",
+}
+
 for _, klass in ipairs(_MATERIAL_GATED_PAGES) do
     mod:hook_safe(klass, "setup_recipe_requirements", function(self)
         self._has_all_requirements = true
@@ -104,7 +265,83 @@ for _, klass in ipairs(_MATERIAL_GATED_PAGES) do
                 if icon and icon.content then icon.content.visible = false end
             end
         end
+
+        -- Jewelry slot pinning + per-slot button label.
+        -- Only the two CraftPageCraftItem variants participate (the other
+        -- material-gated pages — RollProperties / RollTrait / etc. — don't
+        -- pick a new slot, so the jewelry logic is a no-op there). Consolidated
+        -- from a sibling hook_safe registration that VMF silently dropped.
+        if klass == "CraftPageCraftItem" or klass == "CraftPageCraftItemConsole" then
+            if not _is_active() then return end
+            local added_bid = self._craft_items and self._craft_items[1]
+            if not added_bid then return end
+            local item_iface = Managers.backend and Managers.backend:get_interface("items")
+            local item_data = item_iface and item_iface:get_item_masterlist_data(added_bid)
+            local slot = item_data and item_data.slot_type
+            if not slot then return end
+
+            -- Pin recipe_name to the slot-specific synth (jewelry only — weapon
+            -- is already a single slot at the synth level).
+            local pinned_recipe = _JEWELRY_SLOT_TO_RECIPE[slot]
+            if pinned_recipe and synth[pinned_recipe] then
+                self._recipe_name = pinned_recipe
+            end
+
+            -- Relabel the page title + craft button so the user sees what
+            -- they're actually crafting. Vanilla title widget is `title_text`
+            -- on the parent HeroWindowCrafting (line 341 of that file writes
+            -- `Localize(recipe.display_name)`). We can't reach the parent from
+            -- the page directly without snooping, so set the craft button text
+            -- (`craft_button.content.title_text`) which is what the user clicks.
+            local label = _JEWELRY_SLOT_TO_LABEL[slot] or _WEAPON_SLOTS_TO_LABEL[slot]
+            local btn = widgets_by_name and widgets_by_name.craft_button
+            if btn and btn.content and label then
+                btn.content.title_text = label
+                if btn.content.button_text then btn.content.button_text = label end
+            end
+            -- Also try the parent window's title for visibility above the page.
+            local parent = self.parent or self.super_parent
+            local parent_widgets = parent and parent._widgets_by_name
+            local title = parent_widgets and parent_widgets.title_text
+            if title and title.content and label then
+                title.content.text = label
+            end
+        end
     end)
+end
+
+-- ============================================================
+-- Craft-completion feedback for the Console / old-UI craft pages
+-- ============================================================
+-- Feedback #4: when crafting via the legacy / gamepad UI, vanilla's
+-- `_play_sound("play_gui_craft_forge_button_completed")` only fires on a
+-- successful craft path that returned truthy. In modded realm cim short-
+-- circuits the PlayFab path (silent_drop returns a no-op id), so the
+-- "complete" sound never plays and the user gets no audible confirmation.
+-- The salvage page is the most-visible offender. Hook `_update_craft_items`
+-- on the Console variants and emit the sound when a craft just finished
+-- (`_presenting_rewards` flag flips true).
+local _FEEDBACK_PAGES = {
+    "CraftPageSalvageConsole",
+    "CraftPageCraftItemConsole",
+    "CraftPageRollPropertiesConsole",
+    "CraftPageRollTraitConsole",
+    "CraftPageUpgradeItemConsole",
+    "CraftPageApplySkinConsole",
+}
+for _, klass in ipairs(_FEEDBACK_PAGES) do
+    if rawget(_G, klass) then
+        mod:hook_safe(klass, "_update_craft_items", function(self)
+            if self._presenting_rewards and not self._cim_played_complete then
+                self._cim_played_complete = true
+                if self._play_sound then
+                    pcall(self._play_sound, self, "play_gui_craft_forge_button_completed")
+                end
+            elseif not self._presenting_rewards then
+                self._cim_played_complete = false
+            end
+        end)
+    end
 end
 
 -- Hide the inventory window's top crafting-material panel (the row of
@@ -134,11 +371,28 @@ end
 -- Backend layer: skip material validation
 -- ============================================================
 
+-- cim-only synth names not in vanilla `crafting_recipes_by_name`. v0.7.27+
+-- adds `craft_necklace` / `craft_charm` / `craft_trinket` so the jewelry-
+-- slot-pin hook in `setup_recipe_requirements` can route to slot-specific
+-- synths. Vanilla's `_crafting_recipes_by_name` doesn't know these, so the
+-- lookup at the start of `_get_valid_recipe` returns nil. Catch those names
+-- here and synthesize a minimal recipe shim — the craft() dispatcher only
+-- reads `recipe.name` to look up `synth[recipe.name]`, so we don't need a
+-- full recipe table.
+local _CIM_ONLY_RECIPE_NAMES = {
+    craft_necklace = true,
+    craft_charm    = true,
+    craft_trinket  = true,
+}
+
 mod:hook("BackendInterfaceCraftingPlayfab", "_get_valid_recipe", function(func, self, item_backend_ids, recipe_override)
     if not _is_active() or not recipe_override then
         return func(self, item_backend_ids, recipe_override)
     end
     local recipe = self._crafting_recipes_by_name[recipe_override]
+    if not recipe and _CIM_ONLY_RECIPE_NAMES[recipe_override] then
+        recipe = { name = recipe_override }
+    end
     if not recipe then
         return func(self, item_backend_ids, recipe_override)
     end
@@ -157,7 +411,37 @@ local _RARITY_CHAIN = { "plentiful", "common", "rare", "exotic", "unique" }
 local _RARITY_INDEX = {}
 for i, r in ipairs(_RARITY_CHAIN) do _RARITY_INDEX[r] = i end
 
-local synth = {}
+-- Read the base_power_level slider (data widget at crafting_in_modded_data.lua).
+-- Falls back to 300 if VMF isn't ready yet or the setting hasn't been migrated.
+local function _cim_base_power()
+    local v = mod:get("base_power_level")
+    if type(v) ~= "number" then return 300 end
+    -- Slider is 0-950 step 50; clamp belt-and-suspenders in case a stale config
+    -- ever held an out-of-range value.
+    if v < 0 then return 0 end
+    if v > 950 then return 950 end
+    return v
+end
+mod._cim_base_power = _cim_base_power
+
+-- Per-property stored-value mapping for prefilled crafts. Vanilla's buff
+-- system reads `params.variable_value` from `item.properties[key]`, then
+-- buff_extension.lua:200-237 resolves the final buff multiplier. For most
+-- properties storing 1.0 produces max-tier (lerp at value=1.0 hits the
+-- variable_multiplier_table's upper bound). For movespeed in DEFAULT mode the
+-- vanilla buff template has a static `multiplier = 1.05` — value 1.0 just
+-- gates application, the multiplier is fixed. For movespeed in 2PCT mode we
+-- patch the buff template to `variable_multiplier = { 1.0, 1.10 }` so the
+-- lerp DOES scale — and prefill at value 1.0 then lands at +10% (max).
+-- Either way, storing 1.0 produces the correct max-tier effect.
+local function _safe_property_value(prop_key)
+    return 1.0
+end
+
+-- Bind the forward-declared `synth` upvalue (see top of file). Was
+-- `local synth = {}` until v0.7.28-alpha; the redeclaration shadowed the
+-- forward-decl and broke the jewelry-pin closure further up.
+synth = {}
 
 local function _result_for_modified(backend_id)
     return { { backend_id, [3] = 1 } }
@@ -275,14 +559,42 @@ local function _shuffle_pick(saved_indices, pool_size)
     return picked, saved_indices
 end
 
+-- The weapon's bid can sit at either end of `item_backend_ids` depending on
+-- which UI invoked the recipe:
+--   * `CraftPageRollProperties` (Keep forge) prepends the weapon and appends
+--     materials → weapon at index 1.
+--   * `HeroWindowItemCustomization` (gear-icon menu) prepends materials and
+--     appends the weapon at the end (`hero_window_item_customization.lua:2453-2455`).
+-- v0.7.21 only handled index 1 → gear-menu rerolls got a material bid (or
+-- nil in modded realm) → `master.trait_table_name` was nil → "Reroll: no
+-- trait pool for nil" echo and the item ended up with empty traits/props.
+-- Fix: scan all bids, return the first one whose ItemMasterList entry has
+-- a slot_type in the weapon/jewellery set.
+local _WEAPON_SLOT_TYPES_REROLL = { melee = true, ranged = true, ring = true, necklace = true, trinket = true }
+
+local function _resolve_weapon_input(item_interface, item_backend_ids)
+    if not item_backend_ids then return nil, nil end
+    for _, bid in ipairs(item_backend_ids) do
+        if bid then
+            local item = item_interface:get_item_from_id(bid)
+            local item_data = item and item.data
+            if item_data and _WEAPON_SLOT_TYPES_REROLL[item_data.slot_type] then
+                return bid, item
+            end
+        end
+    end
+    return nil, nil
+end
+
 -- ---- reroll_weapon_properties / reroll_jewellery_properties ----
 local function _reroll_properties(self, item_backend_ids)
     local mirror = self._backend_mirror
     local item_interface = Managers.backend:get_interface("items")
-    local weapon_bid = item_backend_ids[1]
-    if not weapon_bid then return {} end
-    local item = item_interface:get_item_from_id(weapon_bid)
-    if not item then return {} end
+    local weapon_bid, item = _resolve_weapon_input(item_interface, item_backend_ids)
+    if not weapon_bid or not item then
+        mod:echo("[cim] Reroll: no weapon found in inputs " .. tostring(#(item_backend_ids or {})))
+        return {}
+    end
 
     local master_key = item.key or item.ItemId
     local master = master_key and rawget(ItemMasterList, master_key)
@@ -300,7 +612,7 @@ local function _reroll_properties(self, item_backend_ids)
     local combo = pool[picked_idx]
 
     local new_props = {}
-    for _, pkey in ipairs(combo) do new_props[pkey] = 1.0 end
+    for _, pkey in ipairs(combo) do new_props[pkey] = _safe_property_value(pkey) end
 
     item.properties = new_props
     if item.CustomData then
@@ -333,10 +645,12 @@ synth.reroll_jewellery_properties = _reroll_properties
 local function _reroll_traits(self, item_backend_ids)
     local mirror = self._backend_mirror
     local item_interface = Managers.backend:get_interface("items")
-    local weapon_bid = item_backend_ids[1]
-    if not weapon_bid then return {} end
-    local item = item_interface:get_item_from_id(weapon_bid)
-    if not item then return {} end
+    -- Same scan-for-weapon pattern as _reroll_properties — see comment there.
+    local weapon_bid, item = _resolve_weapon_input(item_interface, item_backend_ids)
+    if not weapon_bid or not item then
+        mod:echo("[cim] Reroll: no weapon found in inputs " .. tostring(#(item_backend_ids or {})))
+        return {}
+    end
 
     local master_key = item.key or item.ItemId
     local master = master_key and rawget(ItemMasterList, master_key)
@@ -410,8 +724,23 @@ local function _make_craft_synth(allowed_slots)
             local input_item = item_interface:get_item_from_id(item_backend_ids[1])
             local input_data = input_item and input_item.data
 
+            -- Sanity-gate: the recipe is filtered to only show items whose
+            -- slot_type is in the recipe's `allowed_slots`, but Athanor / the
+            -- Craft Item recipe's empty-slot click can hand us an item with
+            -- slot_type = "crafting_material" (and friends) that DID slip
+            -- through the filter. Cloning that produces a "modded crafting
+            -- material scrap" that the rest of cim's inventory logic can't
+            -- handle. Refuse if the slot_type isn't in our recipe's allowed
+            -- set OR in the universal craftable set.
             if input_data and input_data.slot_type then
-                slots = { [input_data.slot_type] = true }
+                local st = input_data.slot_type
+                local ok = allowed_slots[st] or _CRAFTABLE_SLOT_TYPES[st]
+                if not ok then
+                    mod:echo("[cim] Cannot craft " .. tostring(input_item.key or "?") ..
+                        " — slot_type '" .. tostring(st) .. "' isn't a weapon/jewellery slot.")
+                    return nil
+                end
+                slots = { [st] = true }
             end
 
             -- Use whatever weapon the player put in the slot. Default-rarity
@@ -449,41 +778,46 @@ local function _make_craft_synth(allowed_slots)
             item_key = eligible[math.random(1, #eligible)]
         end
 
-        -- Roll 2 max-value properties + 1 random trait from the weapon's own
-        -- property/trait tables. We use the `exotic` tier (2-property combos)
-        -- but tag the resulting item with `promo` rarity so the inventory
-        -- shows the purple icon background that signals "modded craft".
+        -- Property / trait prefill is OPT-IN as of v0.7.24 (default off). When
+        -- the user wants a bare 300-power template they can roll on, leave
+        -- both tables empty here and let the inventory tooltip show "no
+        -- properties / no trait" until they reroll. When the prefill toggle
+        -- is enabled, restore the legacy behavior of seeding 2 max-value
+        -- properties + 1 random trait. (Feedback #3.)
         local rolled_props = {}
         local rolled_traits = {}
-        local master = rawget(ItemMasterList, item_key)
-        if master then
-            local prop_table = master.property_table_name
-            local trait_table = master.trait_table_name
-            local WP = rawget(_G, "WeaponProperties")
-            local WT = rawget(_G, "WeaponTraits")
+        if mod:get("prefill_random_properties") then
+            local master = rawget(ItemMasterList, item_key)
+            if master then
+                local prop_table = master.property_table_name
+                local trait_table = master.trait_table_name
+                local WP = rawget(_G, "WeaponProperties")
+                local WT = rawget(_G, "WeaponTraits")
 
-            if WP and WP.combinations and prop_table and WP.combinations[prop_table]
-               and WP.combinations[prop_table].exotic then
-                local pool = WP.combinations[prop_table].exotic
-                local combo = pool[math.random(1, #pool)]
-                if combo then
-                    for _, pkey in ipairs(combo) do
-                        rolled_props[pkey] = 1.0  -- max value
+                if WP and WP.combinations and prop_table and WP.combinations[prop_table]
+                   and WP.combinations[prop_table].exotic then
+                    local pool = WP.combinations[prop_table].exotic
+                    local combo = pool[math.random(1, #pool)]
+                    if combo then
+                        for _, pkey in ipairs(combo) do
+                            rolled_props[pkey] = _safe_property_value(pkey)
+                        end
                     end
                 end
-            end
 
-            if WT and WT.combinations and trait_table and WT.combinations[trait_table] then
-                local pool = WT.combinations[trait_table]
-                local pick = pool[math.random(1, #pool)]
-                local tkey = pick and pick[1]
-                if tkey then rolled_traits[#rolled_traits + 1] = tkey end
+                if WT and WT.combinations and trait_table and WT.combinations[trait_table] then
+                    local pool = WT.combinations[trait_table]
+                    local pick = pool[math.random(1, #pool)]
+                    local tkey = pick and pick[1]
+                    if tkey then rolled_traits[#rolled_traits + 1] = tkey end
+                end
             end
         end
 
+        local power_level = _cim_base_power()
         local cjson_mod = rawget(_G, "cjson")
         local custom_data = {
-            power_level = "300",
+            power_level = tostring(power_level),
             rarity = "modded",
         }
         if cjson_mod then
@@ -512,7 +846,7 @@ local function _make_craft_synth(allowed_slots)
                 item_key = item_key,
                 properties = rolled_props,
                 traits = rolled_traits,
-                power_level = 300,
+                power_level = power_level,
                 rarity = "modded",
                 via_mirror = true,
             })
@@ -532,6 +866,54 @@ end
 synth.craft_random_item = _make_craft_synth({ melee = true, ranged = true, trinket = true, ring = true, necklace = true })
 synth.craft_weapon      = _make_craft_synth({ melee = true, ranged = true })
 synth.craft_jewellery   = _make_craft_synth({ trinket = true, ring = true, necklace = true })
+-- Per-slot jewelry synths (feedback #6). VT2 slot_type mapping is:
+--   slot_necklace -> "necklace"  (Apothecary's Shield etc.)
+--   slot_ring     -> "ring"      (charms — Decanter, Barkskin, etc.)
+--   slot_trinket  -> "trinket"   (trinkets — Healer's Kit Strap, Stamina Insignia)
+-- Exposed via chat commands below so the user can pick exactly which jewelry
+-- slot to craft instead of relying on a vanilla recipe to pick at random.
+synth.craft_necklace = _make_craft_synth({ necklace = true })
+synth.craft_charm    = _make_craft_synth({ ring = true })
+synth.craft_trinket  = _make_craft_synth({ trinket = true })
+
+-- ============================================================
+-- Direct-craft chat commands (feedback #6)
+-- ============================================================
+-- The vanilla `craft_jewellery` recipe always rolls a random jewelry slot.
+-- Users who want a specific slot can drop a slot-specific blacksmith template
+-- in the standard craft UI, but the UI affordance for "craft this exact type"
+-- isn't obvious. These chat commands skip the UI entirely and craft one item
+-- of the chosen jewelry type for the local player's current career, applying
+-- the same `base_power_level` setting and `prefill_random_properties` toggle
+-- as the UI path.
+local function _craft_via_synth(slot_filter, friendly_label)
+    local crafting = Managers.backend and Managers.backend:get_interface("crafting")
+    if not crafting then
+        mod:echo("[cim] crafting interface not ready")
+        return
+    end
+    -- Briefly flip the active flag so the silent craft fires through the same
+    -- code paths the UI craft uses (DLC gating, slot validation, persistence).
+    local was_active = mod._cim_standard_forge_active
+    mod._cim_standard_forge_active = true
+    local synth_fn = _make_craft_synth(slot_filter)
+    local result = synth_fn(crafting, {}, nil, nil)
+    mod._cim_standard_forge_active = was_active
+    if result and result[1] then
+        mod:echo(string.format("[cim] Crafted %s.", friendly_label))
+        if Managers.backend then Managers.backend:dirtify_interfaces() end
+    end
+end
+
+mod:command("cim_craft_necklace", "Craft one modded necklace for your current career", function()
+    _craft_via_synth({ necklace = true }, "necklace")
+end)
+mod:command("cim_craft_charm", "Craft one modded charm for your current career", function()
+    _craft_via_synth({ ring = true }, "charm")
+end)
+mod:command("cim_craft_trinket", "Craft one modded trinket for your current career", function()
+    _craft_via_synth({ trinket = true }, "trinket")
+end)
 
 -- ============================================================
 -- Synthetic "blacksmith's template" items
@@ -551,7 +933,8 @@ synth.craft_jewellery   = _make_craft_synth({ trinket = true, ring = true, neckl
 -- modded-rarity item via `add_item`. The template itself is never consumed
 -- or mutated.
 
-local _CRAFTABLE_SLOT_TYPES = { melee = true, ranged = true, ring = true, necklace = true, trinket = true }
+-- _CRAFTABLE_SLOT_TYPES is declared at the top of the file (near _is_active)
+-- so `_make_craft_synth`'s closure can reference it without a forward-ref bug.
 local _template_cache = {}
 
 local function _build_template_cache()
@@ -560,6 +943,11 @@ local function _build_template_cache()
     local career_name = _local_career_name()
     if not career_name then return end
 
+    -- Templates inherit the player's chosen base power level so the craft
+    -- preview ("X power" widget) shows what the resulting item will actually
+    -- be (feedback #9). Pre-v0.7.24 this was hardcoded 5, which produced
+    -- "5 power" in the preview while the craft result was 300.
+    local base_power = _cim_base_power()
     for key, data in pairs(ItemMasterList) do
         if type(data) == "table"
             and data.slot_type and _CRAFTABLE_SLOT_TYPES[data.slot_type]
@@ -577,9 +965,9 @@ local function _build_template_cache()
                 data = data,
                 properties = {},
                 traits = {},
-                power_level = 5,
+                power_level = base_power,
                 CustomData = {
-                    power_level = "5",
+                    power_level = tostring(base_power),
                     rarity = "default",
                     properties = "{}",
                     traits = "[]",
@@ -686,16 +1074,40 @@ mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career
     -- modded realm the EAC client is unavailable so the response triggers
     -- `playfab_eac_error` (reason 511) → "Backend rejected the challenge response"
     -- → quit. Any unrecognized recipe is reported and silently dropped instead.
+    --
+    -- CRITICAL: we must return a NON-NIL (id, recipe) tuple even on the silent-
+    -- drop path. `craft_page_craft_item.lua:287-336` runs the craft trigger as
+    -- a press-and-hold: every frame the button hold is at progress=1.0,
+    -- `parent:craft()` fires. `HeroWindowCrafting.craft` (`hero_window_crafting.lua:542-560`)
+    -- checks `if craft_id then ... return true` and only on a truthy return
+    -- does it set `_waiting_for_craft = true` + `:lock_input()`. On nil it
+    -- returns false → press-and-hold isn't acknowledged → fires again next
+    -- frame → infinite log spam ("Recipe 'nil' could not be resolved" x50/s
+    -- in the user's session) and the menu wedges in a busy-craft state.
+    --
+    -- Fix: when we silently drop, mint a no-op craft id and stash an empty
+    -- result in `_craft_requests` so `is_craft_complete(id)` immediately
+    -- returns true. The UI plays its craft-complete animation, the button
+    -- disables, and we move on.
+    local function _silent_drop(reason_text)
+        mod:echo("[cim] " .. reason_text)
+        self._last_id = (self._last_id or 0) + 1
+        self._craft_requests[self._last_id] = {}
+        return self._last_id, { name = "cim_noop" }
+    end
+
+    if not recipe_override or not item_backend_ids or not item_backend_ids[1] then
+        return _silent_drop("Craft button pressed without a selected recipe/template (dropped).")
+    end
+
     local recipe, valid_ids = self:_get_valid_recipe(item_backend_ids, recipe_override)
     if not recipe then
-        mod:echo("[cim] Recipe '" .. tostring(recipe_override) .. "' could not be resolved (dropped to avoid EAC kick)")
-        return nil
+        return _silent_drop("Recipe '" .. tostring(recipe_override) .. "' could not be resolved (dropped to avoid EAC kick)")
     end
 
     local synth_fn = synth[recipe.name]
     if not synth_fn then
-        mod:echo("[cim] Recipe '" .. tostring(recipe.name) .. "' not yet implemented in modded (dropped)")
-        return nil
+        return _silent_drop("Recipe '" .. tostring(recipe.name) .. "' not yet implemented in modded (dropped)")
     end
 
     self._last_id = (self._last_id or 0) + 1

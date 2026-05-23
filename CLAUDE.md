@@ -2,36 +2,104 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **READ FIRST**: `PROJECT_STANDARDS.md` (repo root) is the operational rulebook
+> for HOW we work in this repo — workflow conventions, error-handling rules,
+> logging conventions, anti-patterns to avoid, pre-ship checklists. This
+> `CLAUDE.md` describes HOW the code works (technical reference); the standards
+> doc describes how WE work on it. When in doubt, cite the section.
+
 ## Project Overview
 
 A modular set of **Vermintide 2** VMF (Vermintide Mod Framework) mods written in Lua 5.1. Originally a monolithic mod ("Tweaker"), now split into focused sub-mods. Runs on the Stingray engine. The VT2 decompiled source code lives at `c:\Users\danjo\source\repos\Vermintide-2-Source-Code` — use it as a reference for game APIs, class structures, and data tables.
+
+## Documentation Map
+
+Navigation anchor for the entire monorepo's docs. `CLAUDE.md` (this file) is the
+technical entry point; from here, follow the tree to the topic-specific reference.
+
+**Tier 1 — repo-wide (read first):**
+- `CLAUDE.md` (this file) — technical overview: how every mod is wired, the build pipeline, the architecture invariants.
+- `PROJECT_STANDARDS.md` — operational rulebook: workflow conventions, error-handling rules, logging conventions, anti-patterns, pre-ship checklists. Binding when working on any mod.
+- `DEVELOPMENT.md` — historical/detailed technical reference (hooking rules, animation system, shield swap architecture, known errors). Pre-dates this CLAUDE.md but still authoritative for the topics it covers.
+- `CROSS_MOD_ARCHITECTURE.md` — how `weapon_tweaker`, `cosmetics_tweaker`, `character_weapon_variants`, and `modded_progression` interact at runtime; LA bridge pattern; co-installed-mod detection.
+
+**Tier 2 — repo-wide topical:**
+- `WORK_ITEMS.md` — current status of working features and animation remap tables.
+- `TODO.md` — feature roadmap across all mods.
+- `ITEM_LIST.md` — full weapon key catalog from `ItemMasterList`.
+- `WEAPON_CATALOG.md` — repo-level weapon catalog (model paths, ownership, cross-character status).
+- `ANIMATION_RESEARCH.md` — skeleton event probe results across the six character bodies.
+- `LOCALIZATION_STANDARD.md` — string-table and naming conventions for `*_localization.lua`.
+- `REGRESSION_CHECKLIST.md` — repo-wide regression gates (per-mod ones live under each mod folder).
+- `CHANGELOG.md` — repo-aggregate release notes.
+- `VMF_RECIPES.md` — Vermintide Mod Framework gotchas (hook_safe chaining, multi-return collapse, network_send recipients, RPC string cap, dropdown options mutation, widget setting_id uniqueness, mod localization scope, custom_gui_textures format).
+- `COMMANDS.md` — per-mod chat command inventory (every `mod:command(...)` across the repo).
+
+**Tier 3 — per-sub-mod docs worth reading from outside the mod (each mod also has its own CHANGELOG.md + REGRESSION_CHECKLIST.md):**
+
+- `character_weapon_variants/`:
+  - `DEFINITION_OF_DONE.md` — mandatory gate before declaring any CWV variant complete.
+  - `RECIPES.md` — decision tree + per-archetype copy-paste recipes.
+  - `DEVELOPMENT.md` — architectural reference for variant creation (template patterns, scale/grip, custom mesh, known errors).
+  - `ANIMATION_FIX_PLAYBOOK.md` — closed-vocabulary procedure for fixing 3P animations on cross-character variants.
+- `chaos_wastes_tweaker/`:
+  - `DEVELOPMENT.md` — engine gotchas: dormant buff registration, deus rarities, adventure mutator compat, NetworkedFlowStateManager leak, jewelry traits as boons, walk-through interactable, graph-snapshot RPC.
+  - `TODO.md` — planned features (altar cost config, CW inventory).
+- `cosmetics_tweaker/`:
+  - `DEVELOPMENT.md` — three weapon rendering paths + cosmetic-specific recipes.
+  - `LA_SYNC_MODEL.md` — full LA bridge architecture + § 6 gotcha catalogue (kind=texture/unit hats and shields, husk RPC race, offhand preload, hook_safe shadow).
+  - `GLOW_SYSTEM.md` — MaterialSettingsTemplates engine reference + override mechanism.
+- `dynamic_cosmetic_portraits/`:
+  - `CLAUDE.md` — workflow guardrails for the portrait pipeline (read before touching portraits).
+  - `DEVELOPMENT.md` — career_settings swap, texture/alpha requirements, VMF renderer-creator keys.
+- `enemy_tweaker/`:
+  - `DEVELOPMENT.md` — breed-adding checklist (pairs(Breeds) at boot, threat_values upvalue), architecture overview.
+  - `EXPANSION_PLAN.md` — spawn-parity roadmap.
+- `event_tweaker/`:
+  - `DEVELOPMENT.md` — three hooks (`get_special_events`, `get_active_events`, `get_level_variation_data`) plus mutator/preset registration and confirmed mutator catalog.
+- `la_prefix_patch/`:
+  - `DEVELOPMENT.md` — overview + VMF prototype-patching pattern.
+- `modded_progression/`:
+  - `PLAN.md` — full design for the modded-realm vanilla-progression re-enable.
+- `verminious_dreams_lighting/`:
+  - `DEVELOPMENT.md` — per-mission lighting tuning architecture (ShadingEnvironment + Light overrides for dlc_termite_1/2/3).
+- `weapon_tweaker/`:
+  - `CROSS_CHARACTER_PORT_RECIPE.md` — seven-step procedure for adding a new cross-character weapon port.
+  - `DEVELOPMENT.md` — design direction + animation remap rules (per-unit state, closed-vocabulary, 3P fix process, character-skeleton constraints).
+
+**Tier 4 — tooling:**
+- `tools/vmb-launcher/CLAUDE.md` — VMBLauncher doctrine (verbs, flags, preflight gates, visibility-public safety, remote-deploy config).
+- `tools/publish-release/README.md` — GitHub-release pipeline that publishes built bundles for `vt2-mod-updater` consumers.
+- `tools/mod-lint/README.md` + `qa/CHECKS.md` — luacheck + custom QA scans.
+
+Full per-file index is in the **Key Reference Files** section at the bottom.
 
 ## Mod Directory
 
 | Mod | Internal ID | Workshop ID | Build System | Purpose |
 |-----|-------------|-------------|--------------|---------|
-| weapon_tweaker | `wt` | 3712896117 | **VMB** | Cross-career weapon unlocks, animation remapping, scale/offset |
+| weapon_tweaker | `wt` | 3712896117 | **VMB** | Cross-character weapon access with full freedom: any character can wield any weapon (1P universal, never touched), with 3P anim events remapped into a functionally-similar receiver-native weapon's vocab so the bystander view stays plausible (e.g. brace-on-Kruber renders as Repeating Handgun in 3P, longbow-on-Saltzpyre as Crossbow). **Direction reversal 2026-05-23:** identical-functional ports (Bardin's axe on Saltzpyre when Saltzpyre already has a falchion-family native, etc.) are being removed from wt and absorbed into `cosmetics_tweaker` as a cross-character cosmetic swap. wt retains only genuine functional cross-character ports. |
 | chaos_wastes_tweaker | `ct` | 3712929235 | **VMB** | CW economy, curses, boons, altars, traits |
 | general_tweaker | `gt` | 3713619122 | **VMB** | 3rd person camera, debug/data dumps |
-| cosmetics_tweaker | `cosmetics_tweaker` | 3715714222 | **VMB** | Hat/skin unlocks, weapon model tweaks, shield swaps, custom illusions |
+| cosmetics_tweaker | `cosmetics_tweaker` | 3715714222 | **VMB** | Hat/skin unlocks, weapon model tweaks, shield swaps, custom illusions. **Scoped 2026-05-23:** cross-character cosmetic swap for functionally-identical weapons (e.g. Bardin's axe model rendered on Saltzpyre's falchion family) with per-receiver scaling + grip offset adjustments — absorbs the identical-functional ports being removed from wt. |
 | dynamic_cosmetic_portraits | `dynamic_cosmetic_portraits` | 3721036701 | **VMB** | Hat/outfit-aware HUD & hero-select character portraits (split from cosmetics_tweaker 2026-05-06) |
 | career_tweaker | `crt` | 3716286199 | **VMB** | Talent/ability swapping (scaffolded) |
 | enemy_tweaker | `enemy_tweaker` | 3716780252 | **VMB** | Enemy spawns, horde compositions, breed substitution |
-<!-- REVIEW: character_weapon_variants is actually PUBLISHED (Workshop ID 3716869446). itemV2.cfg has published_id = 3716869446L; deploy_all.ps1 maps it; reference_build_deploy.md memory lists it. Update to 3716869446 (private). -->
-| character_weapon_variants | `character_weapon_variants` | 3716869446 | **VMB** | New weapon items grafted from cross-character models (MoreItemsLibrary) |
+| character_weapon_variants | `character_weapon_variants` | 3716869446 | **VMB** | Semi-lore-friendly new variant items that intentionally clone from cross-character base templates to bring other characters' movesets onto receivers (MoreItemsLibrary). 1P wield/stance differentiates the feel even when two variants are functionally identical; 3P side uses `anim_event_3p` remap into a good-enough native vocab so bystanders see something plausible. Planned hammer/mace differentiation toggle will further separate sibling variants on the same base. Variants are designed to *play differently enough* to feel like natural new weapons, distinct from wt's full-freedom cross-character access. |
 | crafting_in_modded | `cim` | 3721038774 | **VMB** | Modded crafting menus — Athanor forge UI for crafting any career-eligible weapon. Split from `wt` 2026-05-05 |
 | la_prefix_patch | `la_prefix_patch` | 3721067411 | **VMB** | Loads above Loremaster's Armoury: silently drops its three duplicate hook registrations to keep startup chat clean, and offers VMF toggles to suppress LA's quest markers and unread-letter notifications |
 | event_tweaker | `event_tweaker` | 3721290755 | **VMB** | Host-side mutator picker (Workshop title "Tweaker: Events"). VMF dropdown for canonical event presets (Geheimnisnacht / Skulls — drives mutator + active_events string + keep-level swap) plus checkbox-per-mutator across difficulty / specials / hordes / atmosphere / objectives / winds / raw event categories. Three hooks: `BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`. Scaffolded 2026-05-06 |
 | modded_progression | `mp` | (unpublished) | **VMB** | Re-enables 100% of vanilla VT2 progression in modded realm: XP, shillings, loot chests, Okri's Challenges, Lohner's Emporium, keep crafting bench. Intercepts `BackendInterface*Playfab` methods; writes through `backend_mirror` mutators; persists locally via VMF settings; never commits to PlayFab. Sibling API (`mp.is_unlocked` / `mp.spend` / `mp.credit` / `mp.grant_item`) consumed by CWV + cosmetics_tweaker when both installed. Three starting-state options. See `modded_progression/PLAN.md` for full design. Scaffolded 2026-05-14 |
-| lobby_tweaker | `lobby_tweaker` | (unpublished) | **VMB** | Workshop title "Tweaker: Lobby" (friends_only). Host-side lobby controls (slot reservations, session ignore list, kick-on-idle, MOTD) + modded-realm failed-join mod-list reveal: host pre-publishes a per-mod manifest to Steam `lobby_data`; client reads it back at hash-mismatch popup time (`state_loading.lua:1084`) and surfaces which `client_required` mods the joiner is missing. Subsumes the prior `modded_matchmaking` project. Chat commands namespaced `/lt_*`. Scaffolded 2026-05-19 |
+| lobby_tweaker | `lobby_tweaker` | 3729845515 | **VMB** | Workshop title "Tweaker: Lobby" (friends_only). Host-side lobby controls (slot reservations, session ignore list, kick-on-idle, MOTD) + modded-realm failed-join mod-list reveal: host pre-publishes a per-mod manifest to Steam `lobby_data`; client reads it back at hash-mismatch popup time (`state_loading.lua:1084`) and surfaces which `client_required` mods the joiner is missing. Subsumes the prior `modded_matchmaking` project. Chat commands namespaced `/lt_*`. Scaffolded 2026-05-19 |
+| buff_tweaker | `bt` | 3730358590 | **VMB** | Shared registry mod that pre-registers Big Rebalance buffs / damage profiles / explosion templates on every peer in deterministic sorted order. Single master toggle gates the registration; wt/ct/et's BR sub-toggles all check `(get_mod('bt') or {}):is_br_active()` before applying. Eliminates the cross-mod sync rule that previously had wt/ct/et each shipping byte-identical 419-line registration files. Scaffolded 2026-05-21. |
+| verminious_dreams_lighting | `verminious_dreams_lighting` | 3727221800 | **VMB** | Per-mission lighting overhaul for the three Verminious Dreams DLC missions (The Forsaken Temple / Devious Delvings / The Well of Dreams). Ships per-mission ShadingEnvironment + Light component overrides; live tuning via `/vdl_*` chat commands. Client-side only — no host requirement, no version-sync risk. Public. |
 | tweaker (legacy) | `t` | 3704660429 | Stingray SDK | Deprecated — split into above mods |
 
-<!-- REVIEW: This entire SDK block is now relevant ONLY for the legacy /tweaker source. After the 2026-05-01 VMB migration, every active mod (wt/ct/gt/crt/cosmetics_tweaker/enemy_tweaker/character_weapon_variants) is built via VMB. Consider collapsing this section to a single line ("legacy /tweaker only — see old-backup/ scripts") and putting the VMB block first. As-is, an AI agent skimming this file will see the SDK commands and may assume they apply to active mods. -->
 ## Build Commands
 
-### Preferred: VMBLauncher headless CLI
+### Required: VMBLauncher headless CLI
 
-The canonical way to build / deploy / upload a VT2 mod is the launcher's headless CLI:
+VMBLauncher is **the only** sanctioned path to build / deploy / upload any VT2 mod in this repo. Not "preferred" — required. Do NOT invent ad-hoc PowerShell pipelines, raw `node vmb.js`, raw `ugc_tool` calls, raw `scp` to PC-B, or wrap the SDK compiler by hand. Every one of those one-off paths has burned multiple iterations in the past (hash-unverified deploys, stale PC-B, missed UTF-8 BOM, 0x2 empty-content-directory, wrong scp protocol, etc.). If the launcher binary is missing on the current machine, rebuild it via `tools/vmb-launcher/publish.ps1 -SkipOpen` before doing anything else.
 
 ```powershell
 $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
@@ -39,126 +107,80 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 & $exe info   general_tweaker                        # cfg + bundle state
 & $exe doctor                                        # diagnostics
 & $exe build  general_tweaker                        # VMB build -> bundleV2/
-& $exe deploy general_tweaker                        # hash-verified copy to Workshop folder
+& $exe deploy general_tweaker                        # hash-verified copy to Workshop folder + PC-B
 & $exe upload general_tweaker                        # stage + push via ugc_tool
 & $exe upload chaos_wastes_tweaker --allow-public    # only required for public-visibility mods
-& $exe all    general_tweaker                        # build + deploy + upload
+& $exe all    general_tweaker                        # build + deploy + upload (incl. PC-B)
 ```
 
-Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the full doctrine** — verbs, flags, preflight gates, visibility-public safety, the PowerShell pipeline-truncation quirk, GUI/headless detection rule.
+Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the full doctrine** — verbs, flags, preflight gates, visibility-public safety, remote-deploy config, the PowerShell pipeline-truncation quirk, GUI/headless detection rule.
 
-The `.ps1` wrappers in this directory (`upload_*.ps1`, `deploy_*.ps1`, `deploy_all.ps1`) are thin convenience scripts that delegate to the launcher. Use either path; output and exit codes are identical.
+**Every deploy hits PC-B automatically.** As of launcher v0.4.0, `deploy` (and `all`) push the bundle to every enabled `RemoteDeployTargets` entry in `%APPDATA%\VMBLauncher\settings.json` right after the local Workshop-folder copy succeeds. The standard PC-B target auto-populates on first run from `~/.ssh/config`. Per `feedback_deploy_both_machines.md` — iterative VT2 debugging must keep the test client in lockstep with the host; local-only deploys silently masked four days of host/client sync bugs in May 2026. Skip the remote push for one invocation with `--no-remote`; disable a target persistently by flipping `Enabled` to `false` in settings.json.
 
-**Always verify Workshop file size after upload** — `ugc_tool` prints `Upload finished` even when content didn't transfer (memory `feedback_workshop_upload_verify.md`). For public mods that's automatable via `ISteamRemoteStorage/GetPublishedFileDetails`; for `friends_only`/`private` items the public API returns blank fields, so eyeball the Workshop page in Steam.
+The `upload_*.ps1` wrappers at repo root are kept because each carries a visibility-regression guard on top of `VMBLauncher.exe upload` (verifies `itemV2.cfg` visibility matches expectation before allowing a `--allow-public` push). Do not author new `.ps1` wrappers; extend the launcher instead.
 
-### SDK mods (legacy `tweaker` only)
+The legacy `deploy_*.ps1` wrappers (`deploy_all.ps1`, `deploy_ct.ps1`, `deploy_gt.ps1`, `deploy_wt.ps1`) were archived 2026-05-21 to `_archive/legacy_deploy_scripts/` — they only delegated to the launcher with no added value. Use `VMBLauncher.exe deploy <mod>` directly (or `VMBLauncher.exe all <mod>` for full build+deploy+upload).
+
+**Always verify Workshop file size after upload** — `ugc_tool` prints `Upload finished` even when content didn't transfer. For public mods that's automatable via `ISteamRemoteStorage/GetPublishedFileDetails`; for `friends_only`/`private` items the public API returns blank fields, so eyeball the Workshop page in Steam.
+
+### Required: GitHub release after every Workshop upload
+
+After every Workshop upload, also publish the built bundles to a GitHub release on this repo. This is non-optional — it's the source of truth that the [vt2-mod-updater](https://github.com/Ensrick/vt2-mod-updater) app reads to keep friends' Workshop folders synced (especially for `friends_only` mods, where Workshop propagation is unreliable and new friends often can't see the items at all).
 
 ```powershell
-$sdk = "C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK"
-$root = "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-$mod = "weapon_tweaker"   # change per mod
-$modDir = "$root\$mod"
-$dataDir = "$modDir\.build\data"
-$bundleDir = "$modDir\.build\bundle"
-$outDir = "$modDir\.build\OUT"
-
-New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-& "$sdk\bin\stingray_win64_dev_x64.exe" --compile-for win32 --source-dir $modDir --data-dir $dataDir --bundle-dir $bundleDir --map-source-dir core $sdk
-
-Start-Sleep -Seconds 1
-
-Get-ChildItem $bundleDir -File | Where-Object { $_.Extension -eq '' } | ForEach-Object {
-    Copy-Item $_.FullName (Join-Path $outDir $_.Name) -Force
-}
-Get-ChildItem $bundleDir -Filter "*.stream" -ErrorAction SilentlyContinue | Copy-Item -Destination $outDir -Force
-Get-ChildItem $modDir -Filter "*.mod" | Copy-Item -Destination $outDir -Force
-Copy-Item "$sdk\ugc_uploader\sample_item\content\e7852992f40eb619.mod_bundle" -Destination "$outDir\e7852992f40eb619" -Force
+& $vmblauncher all <mod>                          # build + deploy + Workshop upload
+.\tools\publish-release\publish-release.ps1       # then publish the GitHub release
 ```
 
-### cosmetics_tweaker (VMB — different pipeline)
+Or for a session that touched multiple mods, run `publish-release.ps1` once at the end — it always packages every mod's current bundle. Tag defaults to `mods-YYYY-MM-DD`. See `tools/publish-release/README.md` for full doctrine. The script auto-skips unpublished mods (no `published_id`) and writes a `vt2updater_version.txt` sidecar into each zip so the updater app can detect installed versions on the consumer side.
 
-```powershell
-Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-node C:/Users/danjo/source/repos/vmb/vmb.js build cosmetics_tweaker --no-workshop --cwd
-```
+### Legacy raw pipelines (archived — DO NOT USE)
 
-Output goes to `cosmetics_tweaker/bundleV2/` (NOT `.build/OUT/`).
+The `node vmb.js build <mod> --no-workshop --cwd` invocations and the raw Stingray SDK compile pipeline that previously lived in this section are no longer the supported path. Use `VMBLauncher.exe build <mod>` for VMB mods and `VMBLauncher.exe all <mod>` for full pipeline. The launcher already wraps `node vmb.js` internally, so if you're tempted to invoke `node` directly you're skipping hash verification, remote PC-B push, BOM handling on staged cfgs, and the rest of the protective layers documented in `tools/vmb-launcher/CLAUDE.md`.
 
-### character_weapon_variants (VMB — same pipeline as cosmetics_tweaker)
-
-```powershell
-Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no-workshop --cwd
-```
-
-Output goes to `character_weapon_variants/bundleV2/`.
-
-### chaos_wastes_tweaker, weapon_tweaker, general_tweaker, career_tweaker (VMB — migrated from SDK; same Workshop IDs)
-
-```powershell
-Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-node C:/Users/danjo/source/repos/vmb/vmb.js build chaos_wastes_tweaker --no-workshop --cwd
-node C:/Users/danjo/source/repos/vmb/vmb.js build weapon_tweaker --no-workshop --cwd
-node C:/Users/danjo/source/repos/vmb/vmb.js build general_tweaker --no-workshop --cwd
-node C:/Users/danjo/source/repos/vmb/vmb.js build career_tweaker --no-workshop --cwd
-node C:/Users/danjo/source/repos/vmb/vmb.js build crafting_in_modded --no-workshop --cwd
-node C:/Users/danjo/source/repos/vmb/vmb.js build dynamic_cosmetic_portraits --no-workshop --cwd
-node C:/Users/danjo/source/repos/vmb/vmb.js build event_tweaker --no-workshop --cwd
-```
-
-Output goes to `<mod>/bundleV2/`. Internal mod IDs preserved (`"ct"`, `"wt"`, `"gt"`, `"crt"`) so existing user settings are unaffected. `deploy_all.ps1` auto-detects VMB vs SDK layout.
-
-### Deploy to Workshop folder (all mods)
-
-SDK mods and chaos_wastes_tweaker (VMB):
-```powershell
-& "$root\deploy_all.ps1" -Mods @("weapon_tweaker", "chaos_wastes_tweaker")
-```
-
-cosmetics_tweaker (manual — not in deploy_all.ps1):
-```powershell
-$wsDir = "C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3715714222"
-Get-ChildItem "cosmetics_tweaker\bundleV2" -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $wsDir $_.Name) -Force }
-```
+The one exception is the deprecated `tweaker` mod (Workshop ID 3704660429) — it pre-dates the VMB migration and only builds via raw SDK. Treat it as frozen: don't iterate on it, don't try to graft it onto the launcher.
 
 ### Version bumping
 
 **Always increment `MOD_VERSION` before every build** — the version string is echoed in-game on load, confirming the correct build is running. Without a bump, you can't visually confirm the new code deployed.
 
-<!-- REVIEW: This dichotomy is no longer accurate. Post-2026-05-01 VMB migration, NO active mod uses the SDK layout. The SDK layout (.build/OUT, settings.ini, lua_preprocessor_defines.config, upload/content/) survives only in /tweaker (legacy reference). Every active mod uses the VMB layout shown below. The "SDK mods" subsection should either be removed or relabeled "legacy `tweaker` only". The active wt/ct/gt/crt mods retained their short internal IDs but use the VMB on-disk layout. -->
+**`MOD_VERSION` is the canonical source for the mod's Workshop title.** As of 2026-05-22, every Workshop upload appends/refreshes a trailing ` v<MOD_VERSION>` suffix on `itemV2.cfg`'s `title` field. Format: `<base_title> v<MOD_VERSION>`. Example: `Tweaker: Cosmetics v0.9.8.8`. The launcher's `upload` verb performs this rewrite automatically; the local cfg file's `title` is rewritten on each upload.
+
+Rules:
+1. **Every mod must define** `local MOD_VERSION = "X.Y.Z..."` near the top of `<mod>/scripts/mods/<mod>/<mod>.lua`. The launcher aborts the upload (rather than fall back to a date stamp) if no MOD_VERSION can be parsed — that surfaces gaps instead of hiding them.
+2. **Base title** = the canonical title minus any existing trailing ` v<digits>` suffix. The launcher strips-and-reappends on each upload.
+3. **Only the version suffix is auto-managed.** Description, visibility, preview, base title text remain user-dictated. See `tools/vmb-launcher/CLAUDE.md` § "ugc_tool pushes ALL cfg fields" for the full pre-upload checklist. Never auto-change those.
+4. **Why:** subscribers see the version in their Workshop sub list (faster triage on crash reports), and the vt2-mod-updater app can read it directly from the title rather than the GitHub manifest.
+
+#### Format: 3-segment semver only
+
+`MOD_VERSION` follows `MAJOR.MINOR.PATCH[-track]`. Examples: `0.7.90-dev`, `0.12.68-dev`, `0.1.329-dev`, `1.0.0`. **Never add a 4th segment.**
+
+- A change that fixes / adjusts / adds anything → bump PATCH. `0.9.10-dev` → `0.9.11-dev`. Don't bump within a patch via a 4th segment.
+- PATCH can grow arbitrarily large (`0.1.329-dev` is fine). No need to roll over to MINOR.
+- Pre-release track stays the same across patches — `alpha` stays `alpha`, `dev` stays `dev`. Only the user moves between tracks explicitly. The suffix is release-track only (`-alpha`/`-beta`/`-dev`/`-rc`), NEVER a change descriptor (`-revert`/`-hotfix`/`-la-icons`).
+- If a mod has a stale 4-segment version (e.g. `0.9.9.4-dev`), normalize on the next bump by incrementing the third segment and dropping the fourth: `0.9.9.4-dev` → `0.9.10-dev` (not `0.9.9.5-dev`). Past 4-segment versions stay in CHANGELOG as historical record — don't rewrite.
+
+**Burned 2026-05-23:** cosmetics_tweaker drifted through `0.9.8.0–.9`, `0.9.9.0–.4`. Pattern came from treating the 4th segment as a within-patch hotfix counter — wrong instinct; just bump PATCH every time. Reset to `0.9.10-dev`.
+
 ## Mod File Structure
 
-Each mod follows one of two patterns:
+All active mods use the VMB layout. Short internal IDs (`wt`, `ct`, `gt`, `crt`, `cim`, `mp`, `bt`) are the `new_mod()` registration name, not a separate directory pattern — those mods live under the same VMB layout as the long-ID ones.
 
-**SDK mods** (short internal IDs like `wt`, `ct`, `gt`):
 ```
 <mod_name>/
-├── <id>.mod                    # VMF entry point (e.g. wt.mod)
-├── settings.ini
-├── resource_packages/<mod_name>.package
-├── scripts/mods/<mod_name>/
-│   ├── <mod_name>.lua          # Main logic
-│   ├── <mod_name>_data.lua     # VMF settings widgets
-│   ├── <mod_name>_localization.lua
-│   └── <mod_name>_backend.lua  # (optional) backend hooks
-├── .build/OUT/                 # Compiler output
-└── upload/content/             # Deploy staging
+├── <mod_name>.mod                        # VMF entry point
+├── itemV2.cfg                            # Workshop upload config (MOD_VERSION suffix appended on upload)
+├── bundleV2/                             # Build output (VMB)
+├── resource_packages/<mod_name>/<mod_name>.package
+└── scripts/mods/<mod_name>/
+    ├── <mod_name>.lua                    # Main logic — MOD_VERSION constant lives here
+    ├── <mod_name>_data.lua               # VMF widget tree
+    ├── <mod_name>_localization.lua       # Localized strings
+    └── _<feature>.lua                    # Per-feature subsystems (optional; see PROJECT_STANDARDS.md §2.2 for docstring header rule)
 ```
 
-<!-- REVIEW: This subsection only mentions cosmetics_tweaker but the same VMB layout applies to ALL active mods now (chaos_wastes_tweaker, weapon_tweaker, general_tweaker, career_tweaker, cosmetics_tweaker, enemy_tweaker, character_weapon_variants). The "long internal ID" qualifier is misleading — wt/ct/gt/crt also live under VMB layouts but kept their short internal IDs in new_mod() registration. -->
-**VMB mods** (cosmetics_tweaker — long internal ID):
-```
-cosmetics_tweaker/
-├── cosmetics_tweaker.mod       # VMF entry point
-├── bundleV2/                   # Build output (VMB)
-├── itemV2.cfg                  # Workshop upload config
-├── resource_packages/cosmetics_tweaker/cosmetics_tweaker.package
-└── scripts/mods/cosmetics_tweaker/
-    ├── cosmetics_tweaker.lua
-    ├── cosmetics_tweaker_data.lua
-    ├── cosmetics_tweaker_localization.lua
-    └── _cosmetic_unlocks.lua   # Auto-generated unlock maps
-```
+**Legacy SDK layout** — only `tweaker/` (Workshop 3704660429, frozen) uses the SDK layout with `.build/OUT/`, `settings.ini`, and `upload/content/`. Do not iterate on it; do not pattern-copy from it.
 
 ## Architecture
 
@@ -171,7 +193,6 @@ Every mod registers via `new_mod(id, { mod_script, mod_data, mod_localization })
 
 Settings are read via `mod:get("setting_id")` and return the current value. Widget `setting_id` must match across data and localization files.
 
-<!-- REVIEW: This hook section is good but missing a few items captured elsewhere: (a) the BackendUtils hook for set_loadout_item must be on BackendUtils (table) not on the items_iface (the dispatch goes through get_loadout_interface_by_slot — see CROSS_MOD_ARCHITECTURE.md "LA bridge" section), (b) rawget guidance for ItemMasterList / NetworkLookup.weapon_skins to avoid crashify on unknown keys (this IS in DEVELOPMENT.md "Known Errors", but missing from this hooking summary). Consider cross-linking. -->
 ### Hooking
 
 VMF provides `mod:hook(class, method, func)` and `mod:hook_safe(class, method, func)`:
@@ -181,6 +202,27 @@ VMF provides `mod:hook(class, method, func)` and `mod:hook_safe(class, method, f
 - `_G` can be used to hook global functions: `mod:hook(_G, "Localize", ...)`
 
 **Do NOT hook `BackendUtils.can_wield_item`** — it is not hookable from Workshop mods. Modify `ItemMasterList[key].can_wield` directly instead.
+
+**`mod:hook_safe` does NOT chain on the same `Class.method`.** Two `mod:hook_safe(C, m, ...)` registrations on the same pair silently overwrite — only one body runs, with no error or warning. The diagnostic install log prints `Hooking '<m>' from [<C>]` twice with identical Origin pointers, but at runtime the shadowed handler never fires. Consolidate concerns (diagnostic + behavior) into a single callback per `(Class, method)` per mod. Full mechanic + burn history in `VMF_RECIPES.md` § 1.
+
+**Hook wrappers collapse multi-returns to one value.** Writing `return wrapper(func(self, ...))` drops every return after the first into the wrapper's argument list, where they are silently discarded. VT2 spawn / composition / `get_loadout` / `get_item_units` functions love returning 2-3 values — always capture them all into locals before transforming:
+```lua
+-- WRONG -- num_to_spawn collapses to nil at the caller
+return _apply_swap(func(self, ...))
+
+-- RIGHT -- capture every return, transform the one you need
+local list, num_to_spawn = func(self, ...)
+return _apply_swap(list), num_to_spawn
+```
+Burn history + full mechanic in `VMF_RECIPES.md` § 2.
+
+**`LootItemUnitPreviewer.spawn_units` MUST use `mod:hook`, not `hook_safe`.** Vanilla `_spawn_items` writes `self._spawned_units = units` AFTER `spawn_units` returns, so a `hook_safe` post-callback reads `nil`. Use the full wrapper and read units from the wrapped call's return. Hit twice (cosmetics_tweaker bret-thinning scale, character_weapon_variants v0.1.127). Full detail in `DEVELOPMENT.md` § "LootItemUnitPreviewer.spawn_units".
+
+**`HeroPreviewer` / `MenuWorldPreviewer` slot keying is split.** `_item_info_by_slot` is **string-keyed** (`"melee"` / `"ranged"`); `_equipment_units` is **numeric-keyed** (`slot_index`). Bridge via `info.spawn_data[1].slot_index`. Iterating `_item_info_by_slot` and using the iterator key on `_equipment_units` returns nil silently. Hit twice (cosmetics_tweaker v0.7.88, character_weapon_variants v0.1.84). Full detail in `DEVELOPMENT.md` § "HeroPreviewer / MenuWorldPreviewer slot keying".
+
+**`BackendUtils` dispatch caveat (LA bridge).** `BackendUtils` is a plain-table dispatcher; its functions are often reassigned at runtime by Loremaster's Armoury's "clone backend" pattern. Hooking `BackendUtils.get_item_from_id`, `.get_loadout_item_id`, etc. by string-form will silently miss calls routed through the LA clone path. See `CROSS_MOD_ARCHITECTURE.md` "LA bridge" section for the dispatch model, the clone-backend_id pattern, and which methods need an explicit LA-aware hook. When in doubt, hook the table form against the post-LA `BackendUtils` reference, not the cold `_G.BackendUtils`.
+
+**`rawget` for fragile globals.** Cold reads of `ItemMasterList[key]` and `NetworkLookup.weapon_skins[key]` will throw if a peer hasn't fully populated the table yet (CW peer-late-join, host-only DLC ownership, gated registration mismatch). Use `rawget(ItemMasterList, key)` / `rawget(NetworkLookup.weapon_skins, key)` and nil-check before dereferencing — full failure-mode table and the gated-registration crash class are in `DEVELOPMENT.md` "Known Errors" section.
 
 ### Three Weapon Rendering Paths
 
@@ -228,10 +270,22 @@ Then hook `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` to mark cu
 
 ## Lua Environment
 
-<!-- REVIEW: "No `goto` in SDK mods" is now only relevant for the legacy /tweaker mod. Every active mod is VMB and supports `goto`. Phrasing implies this is still a per-mod concern. -->
-- **Lua 5.1** — use `unpack()`, NOT `table.unpack()`. No `goto` in SDK mods (available in VMB-built mods, including chaos_wastes_tweaker now that it's VMB).
+- **Lua 5.1** — use `unpack()`, NOT `table.unpack()`. `goto` is available in every active mod (all VMB-built); the SDK preprocessor's restriction only ever applied to the frozen legacy `tweaker`.
 - Game globals: `ItemMasterList`, `WeaponSkins`, `Weapons`, `BackendUtils`, `GearUtils`, `Managers`, `Unit`, `World`, `Vector3`, `Quaternion`, `Material`, `Color`
-- Console commands registered via `mod:command("name", "description", function(...) end)` — invoked in-game as `/<name>` directly (e.g. `/dump`, `/probe_hat`). There is NO mod-id prefix in chat: the mod-id you see in code (`wt`, `cos`, `ct`, etc.) is the mod's internal identifier, not a chat prefix. Documentation showing `/<mod> <command>` is wrong.
+- Console commands registered via `mod:command("name", "description", function(...) end)` — invoked in-game as `/<name>` directly (e.g. `/dump`, `/probe_hat`). There is NO mod-id prefix in chat: the mod-id you see in code (`wt`, `cos`, `ct`, etc.) is the mod's internal identifier, not a chat prefix. Documentation showing `/<mod> <command>` is wrong. Full per-mod command inventory in `COMMANDS.md`.
+
+**High-frequency engine quirks** (full mechanics in `DEVELOPMENT.md` § "Stingray / Lua engine quirks"):
+- **`Unit.node(unit, name)` errors bypass `pcall`** — it's an engine-level fatal, not a Lua error. Use `Unit.has_node(unit, name)` (returns boolean) for existence checks. Same pattern applies to other Stingray `*.node` / `*.actor` APIs — prefer the `has_*` companion when it exists.
+- **`Quaternion` / `Vector3` are stack temporaries** — valid only within the current frame. Storing the raw value in a global/table/upvalue silently corrupts on the next frame. Use `QuaternionBox` / `Vector3Box` / `Matrix4x4Box` for any storage that outlives a single statement; call `:unbox()` at apply time for a fresh raw value.
+- **Lua 5.1 hard limit: 200 locals per function**, including the top-level chunk. Wrap helper groups in `do ... end` so their locals release back to the main chunk. Symptom is a Stingray compile error `main function has more than 200 local variables` — the cited line is the 201st local, not the problem source.
+- **`Unit.actor(unit, idx)` is 1-indexed** (vanilla pattern is `for i = 1, Unit.num_actors(unit)`). Iterating from 0 returns nil at index 0 and skips the final actor — silent no-op.
+- **`pl.player_unit` is a FIELD, not a method.** `Managers.player:local_player().player_unit` (chained field access). `pl:player_unit()` crashes immediately.
+- **`REAL_PLAYER_LOCAL_ID` is a file-scope local in vanilla, not a global.** Add `local REAL_PLAYER_LOCAL_ID = 1` near the top of any mod file that copy-pastes vanilla CW SharedState code, or the affected lookups silently return 0.
+
+**Hooks that silently no-op:**
+- **Upvalue capture bypasses table-entry hooks** — when a vanilla file does `local f = SomeTable.method` at the top, the upvalue holds the original function. Later `mod:hook("SomeTable", "method", ...)` only replaces the table entry; every call site through the captured local bypasses the wrapper. Grep for `local <name> = Class.method` before hooking. Fall back to mutating the data the function READS at call time.
+- **Mutator template `server_*_function` is a dead field** — the engine wraps it into `template.server.start_function` (etc.) at boot. Hook the wrapped form, NOT `template.server_start_function`.
+- **Self-owned vs husk extension classes** — `Simple*Extension` and `SimpleHusk*Extension` are separate root classes with no inheritance. Hooks on one don't fire for the other. Audit `scripts/network/unit_extension_templates.lua` and either hook both, or hook a global function both classes route through.
 
 ## DLC Ownership Gate (cross-mod)
 
@@ -286,17 +340,21 @@ For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs
 - **Never clean `.build/` unless file lock errors** — incremental builds work. Cleaning forces recovery.
 - **Verify bundle output before deploying** — the compiler shows minimal console output; check the bundle dir for files.
 - **Workshop upload verification**: `ugc_tool` prints "Upload finished" even when content fails to transfer. Always check Workshop page file size after upload.
-<!-- REVIEW: This is no longer accurate. deploy_all.ps1 has cosmetics_tweaker (3715714222) and character_weapon_variants (3716869446) entries in $workshopIds, and the auto-detection (Test-Path bundleV2) handles both. The default -Mods list at the top of deploy_all.ps1 is just (chaos_wastes_tweaker, weapon_tweaker, general_tweaker), but you can pass either mod via -Mods @("cosmetics_tweaker") and it will deploy correctly. The DEVELOPMENT.md "Cosmetics — Build & Deploy" section confirms this works. -->
-- **`deploy_all.ps1` auto-detects VMB layout** for every active mod (looks for `bundleV2/` first, falls back to `.build/OUT/`). After the 2026-05-01 VMB migration, the script handles all active mods including cosmetics_tweaker, enemy_tweaker, and character_weapon_variants — pass them via `-Mods @("...")` or rely on the default list.
+- **Deploy via `VMBLauncher.exe deploy <mod>`** — the launcher handles every active mod (VMB-layout `bundleV2/`). The historical `deploy_all.ps1` shim was archived 2026-05-21 to `_archive/legacy_deploy_scripts/`; it only forwarded each `-Mods` entry to `VMBLauncher.exe deploy`.
 
 ## Key Reference Files
 
-- `DEVELOPMENT.md` — detailed technical reference (hooking rules, animation system, shield swap architecture, known errors)
+- `PROJECT_STANDARDS.md` — operational rulebook for the monorepo: workflow conventions, error-handling rules, logging conventions, anti-patterns to avoid, pre-ship checklists. Binding on Claude; cite section numbers when applying. Complements this CLAUDE.md (HOW the code works) with HOW WE WORK on it.
+- `DEVELOPMENT.md` — detailed technical reference (hooking rules, animation system, shield swap architecture, known errors, Stingray / Lua engine quirks, dead ends).
+- `VMF_RECIPES.md` — repo-wide Vermintide Mod Framework gotchas: `hook_safe` no-chain, multi-return collapse, `network_send` recipients (`"server"` silently dropped), 500-char RPC string cap, dropdown options table mutation, widget setting_id uniqueness, mod `_localization.lua` not registered into global `Localize`, `custom_gui_textures` format. Every entry includes burn history.
+- `COMMANDS.md` — snapshot of every `mod:command(...)` across the monorepo (chat commands invoked as `/<name>`).
 - `WORK_ITEMS.md` — current status of all working features and animation remap tables
 - `TODO.md` — feature roadmap across all mods
 - `ITEM_LIST.md` — full weapon key catalog from ItemMasterList
-- `ANIMATION_RESEARCH.md` — skeleton event probe results
-- `CROSS_MOD_ARCHITECTURE.md` — weapon sharing & cosmetics architecture across weapon_tweaker, cosmetics_tweaker, and character_weapon_variants
+- `WEAPON_CATALOG.md` — repo-root weapon catalog: model paths, owning character, cross-character port status, illusion family membership. Use alongside `ITEM_LIST.md` when wiring a new weapon-side feature.
+- `ANIMATION_RESEARCH.md` — skeleton event probe results across the six character bodies
+- `CROSS_MOD_ARCHITECTURE.md` — weapon sharing & cosmetics architecture across weapon_tweaker, cosmetics_tweaker, character_weapon_variants, and modded_progression. Contains the LA bridge dispatch model referenced from the Hooking section above.
+- `weapon_tweaker/CROSS_CHARACTER_PORT_RECIPE.md` — seven-step procedure for adding a full cross-character weapon port (template patcher + force-load + in-mission unit swap + preview unit swap). Failure-mode table, line citations into `weapon_tweaker.lua`, verification matrix.
 - `character_weapon_variants/DEFINITION_OF_DONE.md` — **MANDATORY GATE BEFORE DECLARING ANY CWV VARIANT COMPLETE.** Universal checklist (IML verified, build-from-ground-up integrity, scale/grip, icons, loc, forward-ref audit, build hygiene, live verification matrix) plus trait-gated checklists (G-DUAL, G-RANGED, G-THROWN, G-CROSS-CHAR, G-BLACKSMITH, G-MESH-FAMILY, G-3P-ANIM, G-STANCE, G-CUSTOM-ILLUSION). Variant CHANGELOG entries must end with the `**DoD:**` footer naming which gates were walked and any explicit deferrals. The repeated bug class of "looks right, breaks on equip / fire / forge / preview / dual-wield" is exactly what this file catches.
 - `character_weapon_variants/RECIPES.md` — **READ THIS BEFORE ADDING A NEW VARIANT.** Decision tree (single-melee / 2H / shield / identical-mesh dual / mixed-mesh dual / ranged-ammo / skin-only / cross-access / custom illusion) plus per-archetype copy-paste recipes referencing shipped variants as canon, plus pre-deploy checklist and verification matrix. Each archetype has its own gotchas (dual-wield needs `_force_display_unit`, ranged ammo needs full skin-mirror + custom Pickups + projectile init hook, fire-DoT removal is a 3-step swap, etc.) — the recipes spell them out so you don't rediscover them. The DoD gate (above) supersedes the pre-deploy checklist and verification matrix in this file.
 - `character_weapon_variants/DEVELOPMENT.md` — architectural reference for variant creation: rarity system, blacksmith template pattern, skin system, icon atlases, properties/traits, registration timing, custom templates / stat modifications, model scaling, base-weapon catalog. Cross-references RECIPES.md and ANIMATION_FIX_PLAYBOOK.md.

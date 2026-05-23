@@ -31,7 +31,7 @@ Classify before reaching for tools.
 | Symptom | Likely scope |
 |---|---|
 | **A. Wield pose wrong** (idle stance, weapon held weird) | `wield_anim_3p` / `wield_anim_career_3p` on the variant template, or a base-template patch for the inventory previewer |
-| **B. Attack missing (event silently no-ops — body holds previous idle, NOT a T-pose; `feedback_vt2_no_tpose_default_stance.md`) / wrong direction** | `anim_event_3p` on sub-actions (System B) or runtime event-name rewrite (cross-access remap, or `weapon_tweaker` System A) |
+| **B. Attack missing (event silently no-ops — body holds previous idle, NOT a T-pose; see `PROJECT_STANDARDS.md` § 9.8) / wrong direction** | `anim_event_3p` on sub-actions (System B) or runtime event-name rewrite (cross-access remap, or `weapon_tweaker` System A) |
 | **C. In-game OK, menu preview wrong** | Base template's `wield_anim_career_3p` — `HeroPreviewer` reads the base, not the clone |
 | **D. Local OK, husk wrong** | The cross-access runtime remap doesn't cover husks. Either accept the gap or port `weapon_tweaker`'s `_unit_career_name` per-unit resolver |
 | **E. Native wielder regression** | A shared template's `anim_event_3p` was mutated for a foreign career and broke the native one. Back the change out and re-do via the runtime hook |

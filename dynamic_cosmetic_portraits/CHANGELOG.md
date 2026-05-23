@@ -6,6 +6,10 @@ the v0.8.0–v0.8.4-dev cosmetics_tweaker line) lives in
 [../cosmetics_tweaker/CHANGELOG.md](../cosmetics_tweaker/CHANGELOG.md) — keep it as the
 authoritative archive of how the system was researched and stabilised.
 
+## [2026-05-20 v0.1.7] — Add Sellsword's Twinplume portrait
+### Added
+- Kruber Mercenary hat `mercenary_hat_0005` (Sellsword's Twinplume). Generated via `tools/add_portrait.ps1` from the 110x130 source PNG; alpha mask borrowed from the canonical `mercenary_hat_0001` reference.
+
 ## [2026-05-08 v0.1.6] — Fix Spoils of War crash + cover all known portrait-bearing views
 ### Fixed
 - **Crash on Spoils of War loot menu** with same error shape as v0.1.5 (`Material 'portrait_kruber_mercenary_hat_1002' not found in Gui` at `ui_passes.lua:134`). Root cause clarification: Lua 5.1's **tail-call elimination** strips the inner-factory frames (`view_settings.ui_renderer_function` → `IngameUI:create_ui_renderer`) from the call stack. So when `hero_view_state_loot.lua:271` calls `self.ingame_ui:create_ui_renderer(world)`, VMF's frame-4 traceback parser lands on `hero_view_state_loot.lua`, NOT on `ingame_ui_settings.lua`. The v0.1.5 fix happened to mask the pause-menu case for a different reason (HeroView's caller chain may not have been fully tail-called), but did not generalize.

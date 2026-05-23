@@ -1,5 +1,37 @@
 # Crafting in Modded Changelog
 
+## 0.7.33-alpha (2026-05-23) — Fixed: stale loadout entries overwrote vanilla equip on restore + verbose diagnostic logging
+
+User report 2026-05-23 (cim v0.7.32 load): equipped accessories (necklace / charm / trinket) and last-equipped weapons did not restore after a fresh game load. Log showed `Restored 5 modded loadout entries` firing 3 times across state transitions but no detail on WHICH entries were touched.
+
+**Root cause.** `mod:hook_safe(BackendInterfaceItemPlayfab, "set_loadout_item", ...)` at line ~567 only SAVED entries when the new item was modded. It never CLEARED a slot when the user later equipped a vanilla / Save Weapon / Loadout Manager / etc. item there. Stale modded entries stayed in `_modded_loadout` forever. On next session boot, `_restore_modded_loadout` ran AFTER vanilla PlayFab restored each slot and faithfully re-equipped the stale modded item, clobbering what the user had at session-end.
+
+**Fix.** Hook now ALWAYS clears the slot's cim entry first, then re-saves only if the new item is modded. Vanilla equips clean up the cim record; modded equips refresh it. The saved state always matches currently-equipped, not frozen at first-modded-equip-ever.
+
+**Verbose logging.** Three log surfaces upgraded from aggregate-count to per-entry detail so future user reports are diagnosable from the log alone:
+
+- `_restore_modded_loadout` — now prints `[restore] OK <career>/<slot> -> <bid> (<key>)` for each restored entry, `[restore] MISSING ...` for entries whose bid isn't in the mirror, `[restore] ERROR ...` for pcall failures. Summary line: `[restore] total=N restored=N missing=N errored=N`. Also logs `[restore] skipped` reasons when the function early-returns.
+- Property trim in `_create_interfaces` — now prints `[trim] <key> (bid=<bid>) kept=[a,b] dropped=[c,d,e]` per item that gets clipped. Previously only the aggregate `Trimmed N items` line existed, so it was impossible to tell which items lost which properties.
+
+**Touched files:** `crafting_in_modded.lua`, `CHANGELOG.md`.
+
+**Test gap closed.** Regression-test additions queued in a parallel patch:
+- `/cim_regression_test` round-trip checks for `_modded_loadout` (modded save → reload → confirm; non-modded equip → confirm stale entry cleared)
+- `tools/mod-lint/lint-mod.ps1` static check for any `set_loadout_item` hook missing the clear-before-save pattern
+
+## 0.7.32-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
+
+### Why
+Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands are global — only the first mod wins, the rest fail silently with `[ERROR] (command): command name 'regression_test' is already used by another mod 'cim'`. Detected in PC-A log 2026-05-23 20:50:52.
+
+### Changed
+- `crafting_in_modded.lua` — renamed `regression_test` → `cim_regression_test`. Verification log line added at registration site.
+
+### Verification
+1. Restart VT2. No `[ERROR] (command):` line in console_logs about this command name.
+2. Run `/cim_regression_test` in chat. Command fires and prints results.
+3. Per memory `feedback_vt2_verify_before_shipping.md`.
+
 ## 0.7.9-dev (2026-05-18) — DLC gate on craftable weapons
 **Report:** "Crafting in modded unlocks all weapons for players, and that's a good thing, but it also unlocks dlc weapons that players may not own."
 

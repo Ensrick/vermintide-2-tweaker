@@ -1,5 +1,19 @@
 # Tweaker: Events — Changelog
 
+## 0.4.2-dev (2026-05-23) — Diagnostic logging on injection hook
+
+### Why
+Surface the per-call injection state of `get_special_events` so unexpected
+mutator interactions (e.g. "Horn of Magnus had no pickups — was a special_event
+inject accidentally appending an incompatible mutator?") are diagnosable from
+the console log without re-running with extra instrumentation.
+
+### Changed
+- `event_tweaker.lua:264-270` — added `mod:info("[event-inject] preset=%s injecting %d mutator(s): [%s]", ...)` inside the `BackendInterfaceLiveEventsPlayfab.get_special_events` hook. Fires once per call (mission load + keep transitions), prints the resolved preset name and the comma-joined mutator list. Level chosen per PROJECT_STANDARDS §3.2 — this is a normal-flow event, not a guard.
+
+### Notes
+- No behavior change; observation only.
+
 ## 0.4.1-dev (2026-05-18) — DLC paywall gate (soft-bypass fix)
 
 - Fixed: the canonical-event preset dropdown and the per-mutator checkbox grid exposed DLC-gated content with no ownership check. Picking Geheimnisnacht / Skulls without owning the corresponding DLC caused the three injection hooks (`BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`) to push the DLC mutator + active_events string + decorated keep level into the lobby anyway. The vanilla level-load path then refused to load the map, surfacing a confusing failure instead of clean "not owned" behavior. Soft bypass — no actual DLC content played, but the mod offered broken choices and the lobby state was wrong.

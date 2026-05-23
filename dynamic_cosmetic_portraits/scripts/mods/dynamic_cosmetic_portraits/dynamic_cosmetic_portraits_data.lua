@@ -42,6 +42,9 @@ local _texture_names = {
     "portrait_kruber_mercenary_hat_0003",
     "medium_portrait_kruber_mercenary_hat_0003",
     "small_portrait_kruber_mercenary_hat_0003",
+    "portrait_kruber_mercenary_hat_0005",
+    "medium_portrait_kruber_mercenary_hat_0005",
+    "small_portrait_kruber_mercenary_hat_0005",
 }
 
 -- =========================================================================

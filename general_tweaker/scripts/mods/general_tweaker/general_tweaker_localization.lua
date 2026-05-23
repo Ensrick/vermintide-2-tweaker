@@ -82,6 +82,18 @@ return {
     noclip_boost_multiplier_tooltip = {
         en = "When holding Left Shift, base speed is multiplied by this value. 3.0 = ~45 m/s with the default base speed.",
     },
+    noclip_hotkey = {
+        en = "Noclip Toggle",
+    },
+    noclip_hotkey_tooltip = {
+        en = "Hotkey: toggle noclip on/off. Same as '/noclip'. The toggle remembers state so re-pressing returns you to normal locomotion.",
+    },
+    clear_enemies_hotkey = {
+        en = "Clear Enemy Spawns",
+    },
+    clear_enemies_hotkey_tooltip = {
+        en = "Hotkey: despawn every currently-alive enemy AI unit. Same as '/clear_enemies'. Host-only. Skips breeds tagged as objective-immune (e.g. the cursed-chest beastman) so mission objectives don't break.",
+    },
     disable_enemy_spawns = {
         en = "Disable Enemy Spawns",
     },
@@ -92,7 +104,7 @@ return {
         en = "AI Takeover (bot controls your character)",
     },
     ai_takeover_enabled_tooltip = {
-        en = "Hand your character over to bot AI for stepping away or for testing multiplayer code paths from the host's side. CLIENT ONLY in v1 — host self-toggle is refused because tearing down the local Player object mid-mission would break camera/HUD/input. Refused in versus (no hero bot AI) and in the keep (no spawning). Toggling off recreates your character with a fresh loadout (consumables/ammo do NOT persist across the swap). Auto-resets on state change. The host must also have General Tweaker installed. Chat: 'gt ai'.",
+        en = "Hand your character over to bot AI for stepping away or for testing. Works as host OR client (host self-toggle is now supported — the swap is deferred one tick so the current frame finishes reading input before the local Player object is torn down). Refused in versus (no hero bot AI) and in the keep (no spawning). Toggling off recreates your character with a fresh loadout (consumables/ammo do NOT persist across the swap). Auto-resets on state change. The host must also have General Tweaker installed. Chat: '/ai'.",
     },
 
     mission_inventory_group = {
@@ -102,17 +114,13 @@ return {
         en = "Enable Keep Menu Hotkeys in Missions",
     },
     mission_inventory_enabled_tooltip = {
-        en = "Lets the keep's menu hotkeys (Inventory, Hero, Map, Achievements, Spoils of War, Weave Forge, Weave Play — whatever keys you've rebound them to) open their menus during missions. Also adds an Inventory entry to the in-game ESC menu as a fallback.",
+        en = "Patches InventorySettings so the inventory view can render in adventure/survival/deus game modes and adds an 'Open Inventory' entry to the in-game ESC menu. The keep's bound hotkeys (Inventory/Hero/Map etc.) USUALLY do not fire mid-mission even with this on (vanilla gates them deep inside the view's can_interact checks). Use the keybind/command below for a reliable open.",
     },
-
-    startup_group = {
-        en = "Startup",
+    gt_open_inv_hotkey = {
+        en = "Open Inventory (Mid-Mission)",
     },
-    skip_intro_enabled = {
-        en = "Skip Intro Splash Screens",
-    },
-    skip_intro_enabled_tooltip = {
-        en = "Skip the Fatshark/engine logo splash sequence at game launch. Takes effect on the next boot (the splash for the current session has already run by the time this setting is reachable). Same mechanism as the '-skip-splash' command-line flag — sets Development.parameter(\"skip_splash\") which StateSplashScreen.on_enter honours.",
+    gt_open_inv_hotkey_tooltip = {
+        en = "Hotkey: open the inventory while you're in a mission. Same as '/gt_inv'. Calls `Managers.ui:handle_transition('hero_view_force', ...)` directly — the same path vanilla fires from the ESC-menu 'Open Inventory' entry — so it bypasses the hotkey gating that blocks the standard I/H/M/etc. keys mid-mission.",
     },
 
     player_state_group = {
@@ -129,10 +137,10 @@ return {
         en = "Buffs & Stats",
     },
     base_crit_chance = {
-        en = "Base Crit Chance (%)",
+        en = "Base Crit Chance (%%)",
     },
     base_crit_chance_tooltip = {
-        en = "Rewrites the current career's base_critical_strike_chance. Default for most careers is 5% (Shade and Witch Hunter Captain differ). Auto-resets to that career's vanilla value when you switch careers. Per-session — game restart restores defaults.",
+        en = "Rewrites the current career's base_critical_strike_chance. Default for most careers is 5%% (Shade and Witch Hunter Captain differ). Auto-resets to that career's vanilla value when you switch careers. Per-session — game restart restores defaults.",
     },
     movement_speed = {
         en = "Movement Speed (m/s)",
@@ -248,4 +256,247 @@ return {
     fix_sound_hotkey_tooltip = {
         en = "Hotkey: stop the looping vortex SFX that gets stuck after restarting a mission during a wind/storm. Same as 'gt fix_sound'. Mission-only.",
     },
+
+    gt_cutscenes_group = {
+        en = "Cutscenes & Monologues",
+    },
+    gt_skip_cutscenes_enabled = {
+        en = "Skip Cutscenes",
+    },
+    gt_skip_cutscenes_enabled_tooltip = {
+        en = "Allow cutscenes to be skipped with ESC or Space — vanilla normally gates this behind the level author's `skippable_cutscenes` flag. Chat: '/gt_skipcutscenes'. Uses a unique command name so this can coexist with the standalone 'Skip Cutscenes' / 'Skip Cutscenes Please' workshop mods.",
+    },
+    gt_skip_cutscenes_auto = {
+        en = "Auto-skip Cutscenes",
+    },
+    gt_skip_cutscenes_auto_tooltip = {
+        en = "When on, cutscenes fire their own skip event the moment activation begins — you never see them. Leave off to require a manual ESC/Space press (still much easier than vanilla because the skip is now always enabled).",
+    },
+    gt_disable_intro_monologue = {
+        en = "Disable Loading-Screen Monologues",
+    },
+    gt_disable_intro_monologue_tooltip = {
+        en = "Suppress Lohner/Olesya/weave-loading voice lines that play during the level loading screen. Flips `script_data.disable_level_intro_dialogue` — the same flag the vanilla debug screen exposes. Chat: '/gt_intromono'.",
+    },
+
+    gt_corpses_group = {
+        en = "More Corpses",
+    },
+    gt_more_corpses_enabled = {
+        en = "More Corpses",
+    },
+    gt_more_corpses_enabled_tooltip = {
+        en = "Raise the engine's ragdoll cap so dead enemies persist longer instead of vanishing. Vanilla caps at 24 ragdolls and prunes down to 10 once exceeded; this rewrites both bounds to the value below.",
+    },
+    gt_more_corpses_count = {
+        en = "Max Corpses",
+    },
+    gt_more_corpses_count_tooltip = {
+        en = "Maximum simultaneous ragdolls/corpses. Vanilla = 24. Higher values can stress lower-end machines (more physics simulation, more draw calls); 100-200 is a reasonable cinematic range.",
+    },
+
+    gt_gk_group = {
+        en = "Choose Grail Knight Quests",
+    },
+    gt_gk_quests_enabled = {
+        en = "Choose Grail Knight Quests",
+    },
+    gt_gk_quests_enabled_tooltip = {
+        en = "Override the Grail Knight's random quest selection. When on, the three quests you pick below become Quest 1 / 2 / 3 for every mission; any slots left on 'Random' fall back to the vanilla shuffled pool. The Chaos Wastes 'additional quest' talent still pulls from the remaining shuffled quests.",
+    },
+    gt_gk_quest1 = {
+        en = "Quest 1",
+    },
+    gt_gk_quest1_tooltip = {
+        en = "First quest the Grail Knight should be assigned. 'Random' = leave to vanilla shuffle.",
+    },
+    gt_gk_quest2 = {
+        en = "Quest 2",
+    },
+    gt_gk_quest2_tooltip = {
+        en = "Second quest. Duplicates are skipped — if Quest 1 already took 'Power vs. Elites', selecting it here is ignored and the slot falls through to vanilla shuffle.",
+    },
+    gt_gk_quest3 = {
+        en = "Quest 3",
+    },
+    gt_gk_quest3_tooltip = {
+        en = "Third quest. Same dedupe behaviour as Quest 2.",
+    },
+
+    gt_readyup_group = {
+        en = "Ready Up",
+    },
+    gt_ready_up_hotkey = {
+        en = "Ready Up (Skip Countdown)",
+    },
+    gt_ready_up_hotkey_tooltip = {
+        en = "Hotkey: skip the Bridge of Shadows countdown and start the mission immediately. Host-only. Same as '/gt_readyup'.",
+    },
+    gt_auto_ready_on_vote_pass = {
+        en = "Auto-start On Vote Pass",
+    },
+    gt_auto_ready_on_vote_pass_tooltip = {
+        en = "When a mission vote (deed, lookup, etc.) passes, immediately call `countdown_completed` to skip the bridge animation. Host-only. Leave off if you enjoy the bridge ceremony.",
+    },
+
+    gt_bot_toggle_hotkey = {
+        en = "Toggle Bots On/Off",
+    },
+    gt_bot_toggle_hotkey_tooltip = {
+        en = "Hotkey: flip `no_bots_allowed` on the current level. Lets bots spawn in the keep, or removes them mid-mission. Same as '/gt_bottoggle'. NOTE: Inn bots can trigger a rare nav crash.",
+    },
+
+    gt_hud_visibility_group = {
+        en = "Hide UI",
+    },
+    gt_hud_mode = {
+        en = "HUD Visibility Mode",
+    },
+    gt_hud_mode_tooltip = {
+        en = "Off = normal HUD. Partial = most UI hidden, prompts/subtitles/twitch votes stay (Act on Instinct mutator behavior). Complete = everything hidden, best for screenshots. Camera = Complete + hides first-person arms and weapon, best for scenery screenshots.",
+    },
+    gt_hud_cycle_hotkey = {
+        en = "Cycle HUD Mode",
+    },
+    gt_hud_cycle_hotkey_tooltip = {
+        en = "Hotkey: cycle through off → partial → complete → camera. Same as '/gt_hud'.",
+    },
+
+    -- Creature Spawner (ported from Aussiemon's CreatureSpawner mod,
+    -- Workshop ID 1395132559, MIT-licensed). gt_cs_* namespace.
+    gt_cs_group = {
+        en = "Creature Spawner",
+    },
+    gt_cs_unit_list = {
+        en = "Available Unit List",
+    },
+    gt_cs_unit_list_tooltip = {
+        en = "Pick which subset of breeds the cycle hotkeys walk through.\n\n" ..
+            "REGULAR = normal in-mission unit types.\n" ..
+            "DUMMY   = AI-less practice dummies.\n" ..
+            "MISC    = debug/unused/unstable units.\n" ..
+            "SPECIAL = pingable special enemies only.\n" ..
+            "BOSS    = bosses and monstrosities.\n" ..
+            "ALL     = every known breed.\n\n" ..
+            "Categories are sourced from Aussiemon's `unit_categories` map in CreatureSpawner_data.lua. Changing this snaps the active selection to the first breed in the new list.",
+    },
+    gt_cs_unit_list_regular = { en = "Regular" },
+    gt_cs_unit_list_dummy   = { en = "Dummy" },
+    gt_cs_unit_list_misc    = { en = "Misc" },
+    gt_cs_unit_list_special = { en = "Special" },
+    gt_cs_unit_list_boss    = { en = "Boss" },
+    gt_cs_unit_list_all     = { en = "All" },
+
+    gt_cs_spawn = {
+        en = "Keybind: Spawn Creature",
+    },
+    gt_cs_spawn_tooltip = {
+        en = "Hotkey: spawn the currently-selected breed at your crosshair raycast position. Same as '/gt_spawncreature'. Host-only — uses ConflictDirector:spawn_queued_unit with the breed's debug_spawn_optional_data.ignore_breed_limits flag set so soft caps are bypassed.",
+    },
+    gt_cs_next = {
+        en = "Keybind: Next Creature",
+    },
+    gt_cs_next_tooltip = {
+        en = "Hotkey: cycle forward through the active unit list. Same as '/gt_nextcreature'. Skips breeds that aren't in the `Breeds` global (DLC not owned, etc.).",
+    },
+    gt_cs_prev = {
+        en = "Keybind: Previous Creature",
+    },
+    gt_cs_prev_tooltip = {
+        en = "Hotkey: cycle backward through the active unit list. Same as '/gt_prevcreature'.",
+    },
+    gt_cs_destroy = {
+        en = "Keybind: Destroy Spawned Creatures",
+    },
+    gt_cs_destroy_tooltip = {
+        en = "Hotkey: call ConflictDirector:destroy_all_units() and clear the buff-cap flag. Same as '/gt_destroycreatures'. Host-only. Note: this is the same primitive `gt_clear_enemies` calls, so it also clears non-modded spawns alongside ours.",
+    },
+
+    gt_cs_spawn_slot_1 = {
+        en = "Keybind: Spawn Saved Slot 1",
+    },
+    gt_cs_spawn_slot_1_tooltip = {
+        en = "Hotkey: spawn whatever breed is saved in slot 1. Save with '/gt_savecreature 1'.",
+    },
+    gt_cs_spawn_slot_2 = {
+        en = "Keybind: Spawn Saved Slot 2",
+    },
+    gt_cs_spawn_slot_2_tooltip = {
+        en = "Hotkey: spawn whatever breed is saved in slot 2. Save with '/gt_savecreature 2'.",
+    },
+    gt_cs_spawn_slot_3 = {
+        en = "Keybind: Spawn Saved Slot 3",
+    },
+    gt_cs_spawn_slot_3_tooltip = {
+        en = "Hotkey: spawn whatever breed is saved in slot 3. Save with '/gt_savecreature 3'.",
+    },
+
+    gt_cs_mission_ai = {
+        en = "Enable AI in Missions",
+    },
+    gt_cs_mission_ai_tooltip = {
+        en = "Toggle AI perception and pathfinding in missions. Off means spawned enemies stand still — turn this ON to actually fight what you spawn. Hooked into AISystem.update_brains and AIGroupSystem.update so the AI tick short-circuits when off. Default ON (matches upstream).",
+    },
+    gt_cs_keep_ai = {
+        en = "Enable AI in Keep",
+    },
+    gt_cs_keep_ai_tooltip = {
+        en = "Allow AI in the keep level. WARNING: enabling this often crashes because most breeds rely on level-specific navigation/analysis data the keep doesn't have. Default OFF (matches upstream).",
+    },
+
+    gt_cs_grudge = {
+        en = "Enable Grudge-Marked Modifiers",
+    },
+    gt_cs_grudge_tooltip = {
+        en = "Apply grudge-marked enemy enhancements to newly-spawned breeds.\n\n" ..
+            "DISABLED = no modifiers.\n" ..
+            "RANDOM   = roll N random modifiers (see slider below).\n" ..
+            "MANUAL   = apply exactly the modifiers checked below.\n\n" ..
+            "Uses vanilla TerrorEventUtils.add_enhancements_to_spawn_data / generate_enhanced_breed_from_set. The server-controlled buff id table has a hard cap; the BuffSystem.add_buff hook auto-backs off when approaching it (prints `Too many active grudge-mark modifiers!`).",
+    },
+    gt_cs_grudge_disabled = { en = "Disabled" },
+    gt_cs_grudge_random   = { en = "Random" },
+    gt_cs_grudge_manual   = { en = "Manual" },
+
+    gt_cs_grudge_random_modifier_count = {
+        en = "Random Modifier Count",
+    },
+    gt_cs_grudge_random_modifier_count_tooltip = {
+        en = "When grudge-mark mode is RANDOM, this is how many modifiers each spawn rolls (0-13).",
+    },
+
+    gt_cs_grudge_warping         = { en = "Warping" },
+    gt_cs_grudge_warping_tooltip = { en = "Manual mode: enable Warping modifier (chip damage / warp pulse)." },
+    gt_cs_grudge_intangible      = { en = "Intangible" },
+    gt_cs_grudge_intangible_tooltip = { en = "Manual mode: enable Intangible modifier (periodic damage immunity)." },
+    gt_cs_grudge_unstaggerable   = { en = "Unstaggerable" },
+    gt_cs_grudge_unstaggerable_tooltip = { en = "Manual mode: enable Unstaggerable modifier (immune to stagger)." },
+    gt_cs_grudge_raging          = { en = "Raging" },
+    gt_cs_grudge_raging_tooltip  = { en = "Manual mode: enable Raging modifier (frenzy attack speed)." },
+    gt_cs_grudge_vampiric        = { en = "Vampiric" },
+    gt_cs_grudge_vampiric_tooltip = { en = "Manual mode: enable Vampiric modifier (heals on hit)." },
+    gt_cs_grudge_ranged_immune   = { en = "Ranged Immune" },
+    gt_cs_grudge_ranged_immune_tooltip = { en = "Manual mode: enable Ranged Immune modifier (takes no damage from ranged sources)." },
+    gt_cs_grudge_periodic_shield = { en = "Periodic Shield" },
+    gt_cs_grudge_periodic_shield_tooltip = { en = "Manual mode: enable Periodic Shield modifier (intermittent invulnerability)." },
+    gt_cs_grudge_crippling       = { en = "Crippling" },
+    gt_cs_grudge_crippling_tooltip = { en = "Manual mode: enable Crippling modifier (slows the player on hit)." },
+    gt_cs_grudge_crushing        = { en = "Crushing" },
+    gt_cs_grudge_crushing_tooltip = { en = "Manual mode: enable Crushing modifier (heavy push back / extra knockback)." },
+    gt_cs_grudge_regenerating    = { en = "Regenerating" },
+    gt_cs_grudge_regenerating_tooltip = { en = "Manual mode: enable Regenerating modifier (passive heal-back)." },
+    gt_cs_grudge_periodic_curse  = { en = "Periodic Curse" },
+    gt_cs_grudge_periodic_curse_tooltip = { en = "Manual mode: enable Periodic Curse modifier (debuffs nearby players)." },
+    gt_cs_grudge_commander       = { en = "Commander" },
+    gt_cs_grudge_commander_tooltip = { en = "Manual mode: enable Commander modifier (buffs nearby allies)." },
+    gt_cs_grudge_frenzy          = { en = "Frenzy" },
+    gt_cs_grudge_frenzy_tooltip  = { en = "Manual mode: enable Frenzy modifier (attack speed scales with missing HP)." },
+
+    gt_is_group = { en = "Item Spawner" },
+    gt_is_next_hotkey = { en = "Next Pickup" },
+    gt_is_next_hotkey_tooltip = { en = "Hotkey: cycle to the next pickup in the live AllPickups list (excludes loot_die / lorebook_pages / beer_barrel / *_limited / endurance_badge). Same as '/gt_nextitem'. Spawn the selected pickup with the 'Spawn Pickup' hotkey or '/gt_spawnitem'." },
+    gt_is_prev_hotkey = { en = "Previous Pickup" },
+    gt_is_prev_hotkey_tooltip = { en = "Hotkey: cycle to the previous pickup. Same as '/gt_previtem'." },
+    gt_is_spawn_hotkey = { en = "Spawn Selected Pickup" },
+    gt_is_spawn_hotkey_tooltip = { en = "Hotkey: spawn the currently selected pickup at your feet via vanilla's rpc_spawn_pickup_with_physics. Training dummies are host-only. Same as '/gt_spawnitem' (no arg). '/gt_spawnitem <substring>' fuzzy-matches by pickup name or localized item name." },
 }

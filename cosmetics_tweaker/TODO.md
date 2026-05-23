@@ -148,3 +148,35 @@
 
 ## Other
 - [ ] **3rd person mod** — enable 3rd person camera view so players can see their character model and cosmetics in gameplay
+
+## Cross-character cosmetic weapon swap (planned 2026-05-23)
+
+- [ ] **Cross-character cosmetic weapon swap** — let players equip another character's weapon MODEL on a functionally-identical native receiver weapon, purely cosmetically. Example: Bardin's one-handed axe model rendered on Saltzpyre's falchion-family one-hander; gameplay, stats, traits, and item identity stay 100% on the receiver's native weapon (it's still mechanically a falchion). Only the visible mesh (and any per-mount sub-meshes — e.g. shield arm, offhand pistol) is overridden.
+
+  ### Origin
+  Scoped 2026-05-23 as part of the wt direction reversal. weapon_tweaker is removing identical-functional cross-character ports (cases where the receiver already has a native weapon in the same functional family); those wishes are not gameplay needs, they're cosmetic preferences and belong here. See `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua` top-of-file comment block and the repo-root `CLAUDE.md` mod-table entries for wt + cosmetics_tweaker.
+
+  ### Scope
+  - Surface: per-weapon picker on the customization screen (same window family as the existing illusion / offhand pickers), one extra "use another character's model" row that lists eligible source weapons (i.e. weapons from other characters that map cleanly onto this receiver weapon's functional family).
+  - Eligibility table: hand-curated list of `(receiver_weapon_key, source_weapon_key)` pairs. Start with the set being removed from wt (the identical-functional ports). Extend as user requests come in.
+  - Per-receiver scaling: each `(receiver, source)` pair carries a scale multiplier (similar to wt's `_weapon_scale_overrides`) so the borrowed model sits proportionally on the receiver's body — e.g. a Bardin-scaled axe shrunk to look right on Saltzpyre's hand.
+  - Per-receiver grip offsets: each pair carries grip-position adjustments (translation in weapon-local space, similar to wt's `_weapon_grip_offsets`) so the hand bone lines up with the borrowed model's grip mesh, not its centroid.
+  - Multi-mount aware: if the receiver weapon has independent hands (sword+shield, dual-wield, rapier+pistol), the cosmetic-swap row should respect the existing per-hand picker shape — i.e. picking a cross-character model on the right hand doesn't clobber a separately-picked left-hand illusion.
+
+  ### Out of scope
+  - No gameplay changes. Traits, stats, properties, damage profiles, action sets — all of those stay on the receiver weapon. This is purely a visual override.
+  - No 3P animation remap work. Because the receiver weapon is unchanged mechanically, the receiver's native 3P state machine is already wired; we're only replacing the mesh. (Contrast with wt, which does need 3P anim remap because wt actually lets weapons cross over.)
+  - No cross-skeleton porting. The target weapons in this feature already exist in the receiver's native lineup — we're only swapping the visible mesh on a weapon that's mechanically native.
+
+  ### Implementation sketch
+  - Eligibility table in a new file (e.g. `_xchar_cosmetic_pairs.lua`) keyed by receiver weapon key.
+  - New override layer in the existing `BackendUtils.get_item_units` hook chain — after offhand selection, after LA paint, but before final return — that swaps the unit paths to the chosen source weapon's units if a cosmetic swap is active for this `backend_id`.
+  - Scale + grip applied via the same mechanism `weapon_tweaker` uses on its cross-character ports (`Unit.set_local_scale` on the spawned attachment unit + grip offset matrix on the attachment node).
+  - Persistence: VMF settings keyed by `backend_id`, same pattern as `_offhand_selection`.
+  - Husk sync: cross-character cosmetic swaps must propagate to other peers (otherwise teammates see the receiver's native model while the local player sees the swap). Reuse the `cos_la_apply` RPC family — already handles per-hand husk mesh swap.
+
+  ### Open questions
+  - **UI affordance** — second picker row vs nested into the illusion row? Probably second row for discoverability, especially because the eligibility list is small per weapon.
+  - **DLC gating** — if the source weapon is DLC-locked and the user doesn't own that DLC, do we still let them use the model? Probably no (consistent with the DLC ownership gate the rest of cosmetics_tweaker respects), but verify with the user before shipping.
+  - **First-person view** — does the local player see the borrowed model in 1P, or stay on the receiver's native 1P mesh? 1P is universal so showing the borrowed model is technically fine, but it may break user expectations ("I picked a falchion, why do I see an axe in my hand?"). Default to local 1P matches the visible 3P; offer a toggle if user feedback wants it.
+  - **Eligibility curation source** — do we lift the list directly from wt's pre-reversal cross-character port table, or hand-pick from scratch? Start by lifting the removed entries from wt; extend later.

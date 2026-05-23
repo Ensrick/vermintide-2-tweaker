@@ -1,5 +1,30 @@
 # General Tweaker Changelog
 
+## 0.2.47-dev (2026-05-23) — Convert 1 NetworkLookup lookup to rawget (latent strict-__index crash fix)
+
+### Why
+`NetworkLookup.*` subtables install a strict `__index = error()` metatable at boot. Plain `NetworkLookup.foo[key]` on a missing key throws — see memory `reference_vt2_strict_lookup_rawget.md`. The lint pass on 2026-05-23 flagged the `/spawn`-pickup site as latent: the key currently comes from the curated `_gt_is_pickup_names` list (all vanilla-registered), so it never misses today, but is a latent bomb if anything changes the surrounding data flow.
+
+### Changed
+- `general_tweaker.lua` (`_gt_is_spawn`) — converted `NetworkLookup.pickup_names[pickup_name]` to `rawget(NetworkLookup.pickup_names, pickup_name)` with a guard that echoes "Unknown pickup name" and returns instead of crashing the strict-lookup path.
+
+### Verification
+1. `tools/mod-lint/lint-mod.ps1` — passes.
+2. `tools/lint/regression-lint.ps1 -Quiet` — site no longer appears in `strict-table-lookup` findings.
+
+## 0.2.46-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
+
+### Why
+Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands are global — only the first mod wins, the rest fail silently with `[ERROR] (command): command name 'regression_test' is already used by another mod 'cim'`. Detected in PC-A log 2026-05-23 20:50:52.
+
+### Changed
+- `general_tweaker.lua` — renamed `regression_test` → `gt_regression_test`. Verification log line added at registration site.
+
+### Verification
+1. Restart VT2. No `[ERROR] (command):` line in console_logs about this command name.
+2. Run `/gt_regression_test` in chat. Command fires and prints results.
+3. Per memory `feedback_vt2_verify_before_shipping.md`.
+
 ## 0.2.32-alpha (2026-05-19)
 
 ### Fixed: Command-name collisions with Janoti's "Hacks" mod

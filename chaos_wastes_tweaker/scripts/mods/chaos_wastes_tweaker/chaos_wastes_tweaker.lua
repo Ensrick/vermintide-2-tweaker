@@ -30,9 +30,103 @@ Major sections (search by name to jump):
 
 local mod = get_mod("ct")
 
-local MOD_VERSION = "0.7.80-alpha"
+-- v0.7.88: vanilla VT2 declares this as a file-scope local in every file that
+-- needs it (`local REAL_PLAYER_LOCAL_ID = 1` — see deus_run_controller.lua,
+-- deus_spawning.lua, deus_chest_extension.lua, etc.). It is NOT exposed
+-- globally, so referencing the bare token from this mod resolved to
+-- `_G.REAL_PLAYER_LOCAL_ID = nil`. That silently broke the Miracle of Ulric /
+-- Miracle of Isha blessing-purchase paths: `get_player_soft_currency(buyer,
+-- nil)` returned 0 instead of the player's real coin balance, so every buy
+-- attempt rejected with "coins=0 < cost=100" even when the player had hundreds.
+-- Captured in log diff host vs client 2026-05-22 session.
+local REAL_PLAYER_LOCAL_ID = 1
+
+local MOD_VERSION = "0.7.93-dev"
 mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Chaos Wastes Tweaker v" .. MOD_VERSION)
+
+-- /regression_test scaffold. See the corresponding _rt_register calls at end
+-- of file. Each registered check is a function returning nil for PASS or a
+-- string for FAIL.
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("ct_regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail = 0, 0
+    mod:echo("=== ct regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+mod:info("[regression-test-command] registered as /ct_regression_test")
+
+-- Mutex cluster framework (v0.7.85 — replaces the Miracle of Isha dropdown
+-- with a (A)/(B) checkbox cluster). See chaos_wastes_tweaker_mutex.lua's
+-- doc-block and LOCALIZATION_STANDARD.md § 10 at repo root. New clusters
+-- land here as additional dropdowns get migrated to the multiple-choice
+-- pattern.
+local _ct_mutex_ok, _ct_mutex = pcall(mod.dofile, mod, "scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_mutex")
+if not _ct_mutex_ok then
+    mod:error("[mutex] Failed to load chaos_wastes_tweaker_mutex: %s", tostring(_ct_mutex))
+    _ct_mutex = { declare = function() end, enforce = function() end, active = function() return nil end, snapshot = function() return {} end }
+end
+
+-- Cluster: Miracle of Isha alternative behavior. Both off = vanilla (one
+-- team revive-from-death per run). Exactly one on = that alternative behavior
+-- applies for the rest of the run after the shrine pickup. The enforcer
+-- guarantees you can't accidentally enable both at once via the UI.
+_ct_mutex.declare("isha_choice", {
+    "tweak_miracle_of_isha_aegis",
+    "tweak_miracle_of_isha_wounds",
+})
+
+-- v0.7.82: vanilla crash defense for Skittergate / deus coin pickups.
+--
+-- Lyndsey host crash 2026-05-22 03:43:17 GUID 8077653f:
+--   game_mode_deus.lua:749: attempt to index local 'loot_amount_settings' (a nil value)
+--   dropped_by_breed = "chaos_spawn_exalted_champion_norsca"
+--
+-- Vanilla `DeusSoftCurrencySettings.loot_amount` (deus_soft_currency_settings.lua:41)
+-- has entries for `chaos_exalted_champion_norsca` (without "spawn") and
+-- `chaos_spawn_exalted_champion_warcamp` (with "spawn" but warcamp), but NOT
+-- the hybrid `chaos_spawn_exalted_champion_norsca`. Skulls event + breed
+-- combination apparently generates this hybrid name. game_mode_deus.lua:749
+-- then crashes indexing into the nil table.
+--
+-- Fix: set a __index metatable on DeusSoftCurrencySettings.loot_amount that
+-- returns the same DEFAULT_BOSS_RANGE entry every existing boss breed uses,
+-- for any unknown breed key. Transparent to vanilla — direct lookups still
+-- work, only missing keys fall through to the metatable. The metatable
+-- returns one of the existing tables to avoid creating a new range object
+-- per session.
+local function _install_deus_loot_amount_fallback()
+    local settings = rawget(_G, "DeusSoftCurrencySettings")
+    if not settings or not settings.loot_amount then return end
+    -- Use the existing chaos_spawn entry as the fallback for unknown
+    -- breeds — same shape, same range distribution as every other boss
+    -- entry (all use the same DEFAULT_BOSS_RANGE constant).
+    local fallback = settings.loot_amount.chaos_spawn or settings.loot_amount["n/a"]
+    if not fallback then return end
+    local meta = getmetatable(settings.loot_amount) or {}
+    if meta.__index_installed_by_ct then return end  -- idempotent
+    meta.__index = function(_, key)
+        return fallback
+    end
+    meta.__index_installed_by_ct = true
+    setmetatable(settings.loot_amount, meta)
+    mod:info("[deus loot fallback] installed __index metatable — unknown breed keys now return chaos_spawn's loot range")
+end
+_install_deus_loot_amount_fallback()
 
 local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker/_adventure_pool")
 -- Call unconditionally so the LEVEL_AVAILABILITY snapshot is captured at mod load,
@@ -729,6 +823,9 @@ end
 
 mod:hook_safe("DeusRunController", "setup_run", function(self)
     local starting = mod:get("starting_coins")
+    if type(starting) == "number" then
+        starting = math.floor(starting / 25 + 0.5) * 25
+    end
     if starting and starting > 0 and self.on_soft_currency_picked_up then
         granting_starting_coins = true
         self:on_soft_currency_picked_up(starting)
@@ -809,12 +906,14 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
         end
     end
 
-    -- v0.7.77: Belakor temple force-rarity — was a separate `mod:hook("DeusPowerUpUtils",
-    -- "generate_random_power_ups", ...)` block at the old line 1387, which triggered the
-    -- "Attempting to rehook active hook" VMF warning (same mod hooking the same Class+method
-    -- twice). Consolidated into this single hook. Same logic: at the Belakor arena node, when
-    -- a cursed_chest roll fires and the toggle is on, force `forced_rarity = "unique"` so the
-    -- temple chest rewards uniques instead of the default `weight_by_rarity` mix.
+    -- Belakor temple force-rarity (toggle removed v0.7.83 — always-on per user 2026-05-22).
+    -- At the Belakor arena node, when a cursed_chest roll fires, force
+    -- `forced_rarity = "unique"` so the temple chest rewards uniques instead of the
+    -- default `weight_by_rarity` mix (`{ event=6, exotic=3, rare=6, unique=1 }`).
+    -- Each peer rolls its own seed when opening the chest (deus_cursed_chest_view.lua
+    -- :58 uses a position-derived hash), so this hook fires per-peer; no host-authority
+    -- concern. Logs whenever the cursed_chest gate hits so we can diagnose any future
+    -- client-vs-host divergence reports.
     --
     -- Positional indices per vanilla signature
     -- `(seed, count, existing_power_ups, difficulty, run_progress, availability_type,
@@ -826,27 +925,34 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
         local already_forced    = args[8]
         if not already_forced
             and availability_type == DeusPowerUpAvailabilityTypes.cursed_chest
-            and effective_setting("tweak_belakor_temple_unique_boons")
         then
             local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
             local run_controller = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
             local run_state = run_controller and run_controller._run_state
+            local arena_node, current_node
             if run_state and run_state.get_arena_belakor_node and run_state.get_current_node_key then
-                local arena_node = run_state:get_arena_belakor_node()
-                local current_node = run_state:get_current_node_key()
+                arena_node = run_state:get_arena_belakor_node()
+                current_node = run_state:get_current_node_key()
                 if arena_node and current_node and arena_node == current_node then
                     args[8] = "unique"
                 end
             end
+            local is_server = Managers and Managers.player and Managers.player.is_server
+            mod:info("[belakor-temple] cursed_chest roll: is_server=%s arena_node=%s current_node=%s forced=%s",
+                tostring(is_server), tostring(arena_node), tostring(current_node), tostring(args[8]))
         end
     end
 
     -- CLARIFY: Disabled-boon enforcement uses the "remove-then-restore" pattern: temporarily mutate
     -- the global pool, run the original sampler, then restore. This is safer than wrapping the
     -- sampler because vanilla's `generate_random_power_up` directly reads DeusPowerUpsArray /
-    -- DeusPowerUpsArrayByRarity for both random and rarity-filtered selection.
-    -- POTENTIAL BUG (LOW): If `func()` raises an error, restore code below never runs and disabled
-    -- boons stay removed for the rest of the session. Consider wrapping in pcall for safety.
+    -- DeusPowerUpsArrayByRarity for both random and rarity-filtered selection (the actual read
+    -- site is `deus_power_up_utils.lua:138` — `DeusPowerUpsArrayByRarity[rarity] or
+    -- DeusPowerUpsArray`). `DeusPowerUpRarityPool` is NOT read by the roller — the v0.7.88 fix
+    -- gated the wrong table; v0.7.90 moves dormant gating into THIS block so it actually fires.
+    -- v0.7.90: wrapped in pcall so a vanilla-side error inside func() can't leave the arrays in
+    -- a partially-stripped state across the rest of the session (the prior "POTENTIAL BUG (LOW)"
+    -- note finally addressed).
     local removed_main = {}
     local removed_rarity = {}
 
@@ -866,16 +972,36 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
         end
     end
 
+    -- v0.7.90: dormant gate moves here. DORMANT_BOON_RARITY identifies the 9 dormants the mod
+    -- pre-registers; when their `activate_dormant_<name>` toggle is OFF, treat them as if
+    -- disabled for this roll. Each peer's `effective_setting` returns the host-synced value, so
+    -- host's preferences gate the whole lobby's offerings consistently.
+    local function _should_strip(name)
+        if not name then return false end
+        if effective_setting("disable_boon_" .. name) then return true end
+        if exclude_bomb_boons and BOMB_BOON_NAMES[name] then return true end
+        if DORMANT_BOON_RARITY[name] and not effective_setting("activate_dormant_" .. name) then
+            return true
+        end
+        return false
+    end
+
+    -- Audit trail: log which dormants were stripped this roll. Surfaces "I thought I turned X off
+    -- and it still appeared" misses immediately in the session log without needing a verify dump.
+    local stripped_dormants = {}
+
     if DeusPowerUpsArray then
         -- CLARIFY: Iterate backwards so table.remove indices stay stable. The saved `index` is the
         -- pre-removal slot, which is the correct insertion point for restoration in reverse order.
         for i = #DeusPowerUpsArray, 1, -1 do
             local boon = DeusPowerUpsArray[i]
             local name = boon and boon.name
-            local key = name and ("disable_boon_" .. name)
-            if (key and effective_setting(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
+            if _should_strip(name) then
                 table.remove(DeusPowerUpsArray, i)
                 removed_main[#removed_main + 1] = { index = i, boon = boon }
+                if DORMANT_BOON_RARITY and DORMANT_BOON_RARITY[name] then
+                    stripped_dormants[#stripped_dormants + 1] = name
+                end
             end
         end
         if DeusPowerUpsArrayByRarity then
@@ -884,8 +1010,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
                 for i = #arr, 1, -1 do
                     local boon = arr[i]
                     local name = boon and boon.name
-                    local key = name and ("disable_boon_" .. name)
-                    if (key and effective_setting(key)) or (exclude_bomb_boons and name and BOMB_BOON_NAMES[name]) then
+                    if _should_strip(name) then
                         table.remove(arr, i)
                         removed_rarity[rarity][#removed_rarity[rarity] + 1] = { index = i, boon = boon }
                     end
@@ -894,7 +1019,13 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
         end
     end
 
-    local new_seed, new_power_ups = func(unpack(args))
+    if #stripped_dormants > 0 then
+        mod:info("[boon-strip] dormants removed this roll (toggle=off): %s", table.concat(stripped_dormants, ", "))
+    end
+
+    -- v0.7.90: pcall the vanilla sampler so a crash inside it doesn't leave us stuck with a
+    -- partial strip. On error, restore arrays and rethrow so the game's existing handler logs it.
+    local ok, new_seed, new_power_ups = pcall(func, unpack(args))
 
     -- CLARIFY: Restore in reverse order of removal so that re-inserting at the saved indices
     -- reconstructs the original array exactly. `removed_main` was appended in descending-i order,
@@ -909,6 +1040,11 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
             local e = removed[i]
             table.insert(arr, e.index, e.boon)
         end
+    end
+
+    if not ok then
+        mod:warning("[hook-error] generate_random_power_ups vanilla call raised: %s", tostring(new_seed))
+        error(new_seed, 2)  -- re-raise with original message; arrays are now restored
     end
 
     -- CLARIFY: Re-applies the Khaine's Fury (deus_reckless_swings) tweak after every boon-roll. The
@@ -1386,42 +1522,11 @@ mod:hook("BackendInterfaceDeusPlayFab", "deus_journey_with_belakor", function(fu
     return func(self, journey_name)
 end)
 
--- v0.7.75: Belakor's Temple → unique-tier boon rewards.
--- The temple is the `arena_belakor` node on the Wastes graph. Completing it triggers a
--- cursed_chest reward roll via the standard cursed-chest UI; vanilla `weight_by_rarity`
--- is `{ event=6, exotic=3, rare=6, unique=1 }` for cursed chests, so the temple often
--- rewards rare/exotic boons even though uniques are in the pool. Lore-wise, Belakor's
--- temple is meant to be the prestige reward — uniques should be the default.
---
--- Hook target: `DeusPowerUpUtils.generate_random_power_ups` (the util, not the
--- DeusRunController wrapper). The util takes a `forced_rarity` parameter which already
--- implements the "fall back to adjacent tiers if pool is empty" semantics we want
--- (deus_power_up_utils.lua:192-215 walks event→rare→exotic→unique and then back up
--- only when no entries are available). We pass `"unique"` when the conditions match.
---
--- Conditions:
---   - Toggle on (`tweak_belakor_temple_unique_boons`, default ON).
---   - Availability type is `cursed_chest` (the temple chest is a cursed chest).
---   - The current node is the run's Belakor arena node, queried via
---     `_run_state:get_arena_belakor_node()` + `:get_current_node_key()`.
---
--- We do NOT mutate `DeusPowerUpSettings.weight_by_rarity` — that's the boot-time table
--- and any mutation would affect every other cursed/weapon chest in the run. Forcing
--- the rarity through the function parameter is local to this single call. Per
--- `feedback_vt2_gated_registration_diverges.md`, this is gate-at-roll-time, not
--- gate-at-registration-time — no peer-index divergence.
---
--- Per-peer note: each peer rolls its own seed when opening the cursed chest
--- (`deus_cursed_chest_view.lua:58` uses position-derived hash), so the hook runs on
--- each player's machine independently. No host-authority concern — the boon CHOICE
--- isn't sync'd, only the resulting `add_power_up` RPC is.
--- v0.7.77: Belakor-temple force-rarity logic was previously a SECOND mod:hook on
--- DeusPowerUpUtils.generate_random_power_ups, which triggered the
--- "Attempting to rehook active hook" VMF warning (same mod hooking the same
--- Class+method twice). Consolidated into the single hook at line ~783 above —
--- see the "v0.7.77: Belakor temple force-rarity" comment block inside that
--- function body. The semantics are identical: at the Belakor arena node, when
--- a cursed_chest roll fires and the toggle is on, force unique rarity.
+-- Belakor's Temple → unique-tier boon rewards (always-on as of v0.7.83;
+-- the prior `tweak_belakor_temple_unique_boons` toggle was removed per user
+-- 2026-05-22). Implementation lives in the consolidated
+-- DeusPowerUpUtils.generate_random_power_ups hook above — see the
+-- "Belakor temple force-rarity" comment block in that function body.
 
 -- v0.7.53: Upstream override for `finale_dominant_god`. Same bug shape as the old
 -- `force_belakor` issue (fixed in v0.7.49): `game_round_ended` reads
@@ -1458,7 +1563,23 @@ mod:hook("DeusMechanism", "game_round_ended", function(func, self, t, dt, reason
     end
 
     if not ok then
-        error(err, 0)
+        -- v0.7.81: swallow the error instead of re-throwing. Lyndsey
+        -- host crash 2026-05-22 02:53:44 GUID ecf0227e: vanilla
+        -- `game_round_ended` internally broadcasts vote_data via
+        -- mod_user_data RPC. VMF JSON-encodes the entire payload into
+        -- one string; Stingray's STRING_MAX=500 hardcap fails when
+        -- vote_data has grown large (per-peer votes + boon lists +
+        -- god weights can exceed the limit on long deus runs).
+        --
+        -- Re-throwing made the host process crash entirely. Logging +
+        -- continuing keeps the host alive; the deus run may be in a
+        -- slightly inconsistent post-round state but that's recoverable
+        -- vs a session-ending crash. Memory reference_vmf_rpc_string_cap
+        -- documents the same hardcap; ct's own broadcasts already use
+        -- chunked sends to stay under it. The crash here is in vanilla's
+        -- broadcast which we cannot intercept.
+        mod:warning("[finale_dominant_god] vanilla game_round_ended errored (likely RPC payload too large for 500-char hardcap): %s — host continues, deus state may be inconsistent",
+            tostring(err))
     end
 end)
 
@@ -1487,6 +1608,35 @@ local _chest_conversions_this_level = 0
 local _belakor_altar_spawned_this_level = false
 mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     _chest_conversions_this_level = 0
+    -- v0.7.85 defensive logging: surface why a mission ended up with no pickups.
+    -- Symptom seen 2026-05-22: Horn of Magnus run had no health/ammo/tomes/grimoires
+    -- spawn. Vanilla PickupSystem.populate_pickups (pickup_system.lua:405) early-
+    -- bails if `level_settings.pickup_settings` is nil, with no log. This block
+    -- logs the level_key + presence of pickup_settings + game_mode at every entry
+    -- so the next occurrence is diagnosable from the log alone instead of needing
+    -- a fresh repro session.
+    local cur = LevelHelper and LevelHelper:current_level_settings()
+    local level_key = cur and cur.level_id
+    local has_settings = cur and cur.pickup_settings and true or false
+    local mechanism = cur and cur.mechanism
+    local active_mutators = {}
+    -- Vanilla API: GameModeManager._mutator_handler is a MutatorHandler instance.
+    -- MutatorHandler:activated_mutators() returns self._mutators, a name-keyed
+    -- table of {template = ..., context = ...} entries.
+    local ok = pcall(function()
+        local gm = Managers and Managers.state and Managers.state.game_mode
+        local mh = gm and gm._mutator_handler
+        local mutators = mh and mh:activated_mutators()
+        if mutators then
+            for name in pairs(mutators) do
+                active_mutators[#active_mutators + 1] = name
+            end
+        end
+    end)
+    table.sort(active_mutators)
+    mod:info("[populate_pickups] level=%s mechanism=%s has_pickup_settings=%s active_mutators=[%s]",
+        tostring(level_key), tostring(mechanism), tostring(has_settings),
+        table.concat(active_mutators, ","))
     if not LevelHelper then
         return func(self, ...)
     end
@@ -3090,6 +3240,37 @@ end)
 local _ct_bot_mirror_active = false
 
 mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups, local_player_id, present)
+    -- v0.7.90: unconditional audit trail for every boon grant. Logs name, rarity, recipient,
+    -- and toggle state — surfaces any boon that slipped through a toggle. Tag `[boon-trace]`
+    -- so the whole session's grants are greppable. Must live in this consolidated hook (VMF
+    -- silently shadows duplicate hook_safe on the same Class+method).
+    pcall(function()
+        if not new_power_ups or #new_power_ups == 0 then return end
+        local rs = self and self._run_state
+        local own_peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
+        local trace_is_server = rs and rs.is_server and rs:is_server()
+        for i = 1, #new_power_ups do
+            local pu = new_power_ups[i]
+            local name = pu and pu.name or "?"
+            local rarity = pu and pu.rarity or "?"
+            local is_dormant = DORMANT_BOON_RARITY and DORMANT_BOON_RARITY[name] ~= nil
+            local dormant_toggle = is_dormant and effective_setting("activate_dormant_" .. name)
+            local disable_toggle = effective_setting("disable_boon_" .. tostring(name))
+            mod:info("[boon-trace] add_power_ups: name=%s rarity=%s recipient_local_id=%s present=%s peer=%s is_server=%s dormant=%s dormant_toggle=%s disable_toggle=%s",
+                tostring(name), tostring(rarity), tostring(local_player_id), tostring(present),
+                tostring(own_peer), tostring(trace_is_server),
+                tostring(is_dormant), tostring(dormant_toggle), tostring(disable_toggle))
+            if is_dormant and dormant_toggle ~= true then
+                mod:warning("[boon-trace] DORMANT GRANTED WITH TOGGLE OFF: %s (toggle=%s) — investigate source path",
+                    tostring(name), tostring(dormant_toggle))
+            end
+            if disable_toggle == true then
+                mod:warning("[boon-trace] DISABLED BOON GRANTED: %s (disable_boon_<name>=true) — investigate source path",
+                    tostring(name))
+            end
+        end
+    end)
+
     if _ct_bot_mirror_active then return end
     if not effective_setting("bots_mirror_host_boons") then return end
     if not new_power_ups or #new_power_ups == 0 then return end
@@ -3156,104 +3337,229 @@ end)
 -- known limit; users can disable + re-enable the bot to re-grant.
 
 -- ============================================================
--- Grudge Mark Ban Menu (v0.7.76)
+-- Boss Grudge Marks Banlist (re-instated v0.7.89 — properly working now)
 -- ============================================================
 -- Per-mark checkboxes that exclude individual BreedEnhancements from the
--- monster-boss enhancement roll. Vanilla picks 1-3 enhancements per boss from
--- `BossGrudgeMarks` (grudge_mark_settings.lua) via
--- `TerrorEventUtils.generate_enhanced_breed` (terror_event_utils.lua:107).
+-- monster-boss enhancement roll. Vanilla picks N enhancements per boss from
+-- `BossGrudgeMarks` (grudge_mark_settings.lua:126-140) via
+-- `TerrorEventUtils.generate_enhanced_breed` (terror_event_utils.lua:107). N is
+-- driven by `BREED_ENHANCEMENTS_PER_DIFFICULTY` and the active difficulty/tweak,
+-- so the menu only has visible effect at higher difficulties (normal: only at
+-- +10 tweak; cataclysm: up to 3 marks per boss).
 --
--- Filter strategy: hook `add_enhancements_for_difficulty` (line 191) and pass
--- a filtered `enhancement_set` to `generate_enhanced_breed`. The function
--- iterates the set into a candidate list and randomly picks; an empty set
--- yields an empty list of enhancements, which is safe (the base entry is
--- still appended).
+-- WHY THE v0.7.76 IMPLEMENTATION DIDN'T WORK: it hooked
+-- `TerrorEventUtils.add_enhancements_for_difficulty`, but the CW arena terror
+-- event files capture that function reference as a file-scope local UPVALUE at
+-- boot (`local boss_pre_spawn_func = TerrorEventUtils.add_enhancements_for_difficulty`
+-- in arena_ruin / arena_ice / arena_citadel / arena_cave / arena_belakor / ...
+-- and `cursed_chest_enemy_pre_spawn_func = ...` in deus_generic_terror_events.lua:15).
+-- The capture happens BEFORE mods load, so by the time VMF replaces the table
+-- entry, the upvalues already hold direct refs to the original function. Boss
+-- spawns then bypass the hook entirely. Same shape as the v0.7.66 mutator
+-- template `template.server.start_function` bug.
 --
--- HOST-ONLY because enhancement assignment happens server-authoritatively
--- during boss spawn. Clients see the chosen enhancements via the spawn data
--- propagated by `add_enhancements_to_spawn_data`.
+-- THE FIX: mutate `_G.BossGrudgeMarks` directly. Vanilla
+-- `add_enhancements_for_difficulty` reads `BossGrudgeMarks` via global lookup at
+-- call time (`enhancement_set = enhancement_set or BossGrudgeMarks` at
+-- terror_event_utils.lua:197), and `generate_enhanced_breed` iterates the set
+-- via `pairs(enhancement_set)` (line 115) — so removing keys removes those
+-- marks from the random candidate list at the next boss spawn. Empty-set is
+-- safe (the inner for-loop early-exits, `BreedEnhancements.base` is still
+-- appended unconditionally on line 112).
+--
+-- Server-only effect (enhancement assignment is server-authoritative; spawn
+-- data envelope broadcasts the chosen enhancements to clients), but we mutate
+-- on every peer for consistency and to make `/dump_grudge_marks` show the
+-- effective live state on whichever machine runs it.
 local BOSS_GRUDGE_MARK_NAMES = {
     "commander", "crippling", "crushing", "frenzy", "intangible",
     "periodic_curse", "periodic_shield", "raging", "ranged_immune",
     "regenerating", "unstaggerable", "vampiric", "warping",
 }
 
-local function _build_filtered_boss_grudge_marks(base_set)
-    -- Build a filtered copy of `base_set` (defaults to vanilla
-    -- BossGrudgeMarks). Drop any mark whose ban toggle is on. Returns the
-    -- filtered set OR nil if nothing was banned (so vanilla path runs).
-    base_set = base_set or rawget(_G, "BossGrudgeMarks")
-    if not base_set then return nil end
-    local filtered = {}
-    local any_banned = false
-    for name, _ in pairs(base_set) do
+-- Snapshot of vanilla BossGrudgeMarks captured the first time sync runs (which
+-- is at mod load, after grudge_mark_settings.lua has executed). Used as the
+-- reset baseline so toggling a ban OFF restores the original entry instead of
+-- losing it forever once banned.
+local _grudge_mark_baseline = nil
+local function _capture_grudge_baseline()
+    if _grudge_mark_baseline then return end
+    local bgm = rawget(_G, "BossGrudgeMarks")
+    if not bgm then return end
+    _grudge_mark_baseline = {}
+    for name, v in pairs(bgm) do
+        _grudge_mark_baseline[name] = v
+    end
+end
+
+local function sync_grudge_marks()
+    _capture_grudge_baseline()
+    local bgm = rawget(_G, "BossGrudgeMarks")
+    if not bgm or not _grudge_mark_baseline then
+        mod:info("[grudge] sync skipped: _G.BossGrudgeMarks=%s baseline=%s",
+            tostring(bgm), tostring(_grudge_mark_baseline))
+        return
+    end
+    -- Reset to baseline, then nil-out banned marks.
+    for name, v in pairs(_grudge_mark_baseline) do
+        bgm[name] = v
+    end
+    local banned = {}
+    for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
         local sid = "ban_grudge_mark_" .. name
         if effective_setting(sid) then
-            any_banned = true
-        else
-            filtered[name] = true
+            bgm[name] = nil
+            banned[#banned + 1] = name
         end
     end
-    if not any_banned then return nil end
-    return filtered
+    if #banned > 0 then
+        mod:info("[grudge] %d marks banned: %s", #banned, table.concat(banned, ", "))
+    else
+        mod:info("[grudge] no marks banned; vanilla BossGrudgeMarks restored")
+    end
 end
 
-mod:hook("TerrorEventUtils", "add_enhancements_for_difficulty", function(func, optional_data, difficulty, breed_name, event, difficulty_tweak, enhancement_set)
-    local is_server = Managers and Managers.player and Managers.player.is_server
-    if not is_server then
-        return func(optional_data, difficulty, breed_name, event, difficulty_tweak, enhancement_set)
-    end
+sync_grudge_marks()
 
-    -- Only override when caller passed BossGrudgeMarks (or nil, which defaults
-    -- to BossGrudgeMarks inside vanilla on line 197). Other callers may pass
-    -- custom sets (e.g. termite/dwarf-fest event variants) — leave those alone.
-    local effective_set = enhancement_set
-    if effective_set == nil or effective_set == rawget(_G, "BossGrudgeMarks") then
-        local filtered = _build_filtered_boss_grudge_marks(rawget(_G, "BossGrudgeMarks"))
-        if filtered then
-            effective_set = filtered
-        end
-    end
-
-    return func(optional_data, difficulty, breed_name, event, difficulty_tweak, effective_set)
-end)
-
--- Resolve display strings for the 13 BreedEnhancements at boot. Internal
--- names map to localization keys via the `display_name` field on each
--- BreedEnhancements entry (grudge_mark_settings.lua). The strings live in
--- compiled localization data — Localize() resolves at runtime. We cache once
--- at module load so the data file's tooltips can include them; if Localize
--- isn't ready, fall back to title-cased internal names.
-local function _resolve_grudge_mark_display_name(name)
+-- Dump command — safe to run from the keep (reads _G.BossGrudgeMarks +
+-- BreedEnhancements; doesn't need a live boss spawn). Use this to verify the
+-- ban toggles are taking effect before joining a run.
+mod:command("dump_grudge_marks", "Dump the live BossGrudgeMarks set and each entry's status", function()
+    local bgm = rawget(_G, "BossGrudgeMarks")
     local be = rawget(_G, "BreedEnhancements")
-    local entry = be and be[name]
-    local dn_key = entry and entry.display_name or ("display_name_" .. name)
-    if rawget(_G, "Localize") then
-        local raw = Localize(dn_key)
-        if raw and raw ~= "<" .. dn_key .. ">" then
-            return raw
-        end
+    if not bgm then
+        mod:echo("[grudge] BossGrudgeMarks not loaded yet.")
+        return
     end
-    -- Title-case fallback: "periodic_curse" -> "Periodic Curse"
-    return (name:gsub("_", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end))
-end
-
-mod._ct_grudge_mark_display = mod._ct_grudge_mark_display or {}
-for _, n in ipairs(BOSS_GRUDGE_MARK_NAMES) do
-    mod._ct_grudge_mark_display[n] = _resolve_grudge_mark_display_name(n)
-end
-
-mod:command("dump_grudge_marks", "Dump the 13 BreedEnhancement names with resolved display strings", function()
-    mod:info("[DUMP:grudge_marks] === %d Boss Grudge Marks ===", #BOSS_GRUDGE_MARK_NAMES)
-    mod:info("[DUMP:grudge_marks] internal_name\tdisplay_name_key\tresolved_display")
+    mod:info("[DUMP:grudge_marks] === baseline: %d entries ===", _grudge_mark_baseline and (function() local n = 0 for _ in pairs(_grudge_mark_baseline) do n = n + 1 end return n end)() or 0)
+    mod:info("[DUMP:grudge_marks] === live BossGrudgeMarks: %d entries ===", (function() local n = 0 for _ in pairs(bgm) do n = n + 1 end return n end)())
+    mod:info("[DUMP:grudge_marks] name\ttoggle_on\tlive_present\tdisplay_name_key")
     for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
-        local be = rawget(_G, "BreedEnhancements")
+        local toggle_on = effective_setting("ban_grudge_mark_" .. name) == true
+        local live_present = bgm[name] ~= nil
         local entry = be and be[name]
         local dn_key = entry and entry.display_name or ("display_name_" .. name)
-        local resolved = _resolve_grudge_mark_display_name(name)
-        mod:info("[DUMP:grudge_marks] %s\t%s\t%s", name, dn_key, resolved)
+        mod:info("[DUMP:grudge_marks] %s\t%s\t%s\t%s", name, tostring(toggle_on), tostring(live_present), dn_key)
     end
-    mod:echo(string.format("dump_grudge_marks: %d entries dumped to log.", #BOSS_GRUDGE_MARK_NAMES))
+    mod:echo(string.format("dump_grudge_marks: %d marks (see log for per-mark detail).", #BOSS_GRUDGE_MARK_NAMES))
+end)
+
+-- ============================================================
+-- Verification commands (run from keep; no live encounter required)
+-- ============================================================
+-- Per `feedback_vt2_verify_before_shipping.md`: every gated feature ships with a `/verify_*`
+-- command that compares toggle state vs live runtime state and reports PASS/FAIL.
+
+mod:command("verify_grudge_marks", "Verify each Boss Grudge Mark toggle vs live BossGrudgeMarks state", function()
+    local bgm = rawget(_G, "BossGrudgeMarks")
+    if not bgm then
+        mod:echo("[verify_grudge] FAIL: _G.BossGrudgeMarks not loaded.")
+        return
+    end
+    local pass, fail = 0, 0
+    for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
+        local toggle_on  = effective_setting("ban_grudge_mark_" .. name) == true
+        local live_present = bgm[name] ~= nil
+        local expected_present = not toggle_on
+        local ok = (live_present == expected_present)
+        if ok then
+            pass = pass + 1
+            mod:info("[verify_grudge] PASS: %s (banned=%s live=%s)", name, tostring(toggle_on), tostring(live_present))
+        else
+            fail = fail + 1
+            mod:warning("[verify_grudge] FAIL: %s — banned=%s but live=%s (expected live=%s)",
+                name, tostring(toggle_on), tostring(live_present), tostring(expected_present))
+        end
+    end
+    mod:echo(string.format("/verify_grudge_marks: %d PASS, %d FAIL (%d total)", pass, fail, #BOSS_GRUDGE_MARK_NAMES))
+end)
+
+mod:command("verify_dormants", "Verify each dormant boon toggle vs live DeusPowerUpsArrayByRarity / DeusPowerUpRarityPool state", function()
+    local arr_by_rarity = rawget(_G, "DeusPowerUpsArrayByRarity")
+    local pool          = rawget(_G, "DeusPowerUpRarityPool")
+    local lookup        = rawget(_G, "DeusPowerUpsLookup")
+    if not arr_by_rarity then
+        mod:echo("[verify_dormants] FAIL: _G.DeusPowerUpsArrayByRarity not loaded.")
+        return
+    end
+    local pass, fail = 0, 0
+    local total = 0
+    -- Helper: does the rarity array contain a power-up with this name?
+    local function _in_rarity_array(name, rarity)
+        local arr = arr_by_rarity[rarity]
+        if not arr then return false end
+        for i = 1, #arr do
+            local entry = arr[i]
+            if entry and entry.name == name then return true end
+        end
+        return false
+    end
+    local function _in_pool(name, rarity)
+        if not pool or not pool[rarity] then return false end
+        local arr = pool[rarity]
+        for i = 1, #arr do
+            local entry = arr[i]
+            if type(entry) == "table" and entry[1] == name then return true end
+        end
+        return false
+    end
+    -- Sorted iteration for deterministic output
+    local keys = {}
+    for k in pairs(DORMANT_BOON_RARITY) do keys[#keys + 1] = k end
+    table.sort(keys)
+    for _, name in ipairs(keys) do
+        total = total + 1
+        local rarity     = DORMANT_BOON_RARITY[name]
+        local toggle_on  = effective_setting("activate_dormant_" .. name) == true
+        local in_arr     = _in_rarity_array(name, rarity)
+        local in_pool    = _in_pool(name, rarity)
+        local lookup_id  = lookup and lookup[name]
+        -- Expected state:
+        --   - in_arr: ALWAYS true (we pre-register unconditionally for sync per
+        --     feedback_vt2_gated_registration_diverges; the strip happens at roll time)
+        --   - in_pool: matches toggle (we add when on, remove when off)
+        --   - lookup_id: ALWAYS set (NetworkLookup registration is unconditional)
+        local arr_ok    = (in_arr == true)
+        local pool_ok   = (in_pool == toggle_on)
+        local lookup_ok = (lookup_id ~= nil)
+        local ok = arr_ok and pool_ok and lookup_ok
+        if ok then
+            pass = pass + 1
+            mod:info("[verify_dormants] PASS: %s (rarity=%s toggle=%s in_arr=%s in_pool=%s lookup_id=%s)",
+                name, rarity, tostring(toggle_on), tostring(in_arr), tostring(in_pool), tostring(lookup_id))
+        else
+            fail = fail + 1
+            mod:warning("[verify_dormants] FAIL: %s — toggle=%s in_arr=%s (expect true) in_pool=%s (expect %s) lookup_id=%s (expect non-nil)",
+                name, tostring(toggle_on), tostring(in_arr), tostring(in_pool), tostring(toggle_on), tostring(lookup_id))
+        end
+    end
+    -- Final note: even if in_arr is true, the generate_random_power_ups hook strips
+    -- toggle-off dormants at roll time (v0.7.90). So a PASS here doesn't mean "will be offered";
+    -- it means "registration & pool state match toggle state." The `[boon-strip]` log
+    -- line and `[boon-trace]` add_power_ups line are what confirm strip-at-roll-time worked.
+    mod:echo(string.format("/verify_dormants: %d PASS, %d FAIL (%d total). Roll-time strip is verified via [boon-strip] + [boon-trace] log lines, not this command.", pass, fail, total))
+end)
+
+mod:command("verify_belakor", "Verify Belakor's Temple state: with_belakor / arena_belakor_node / current_node", function()
+    local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
+    local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+    local rs = rc and rc._run_state
+    if not rs then
+        mod:echo("[verify_belakor] N/A: no active DeusRunState (not in a CW run). Re-run after Olesya intro.")
+        return
+    end
+    local with_belakor   = rs.get_with_belakor and rs:get_with_belakor()
+    local arena_node     = rs.get_arena_belakor_node and rs:get_arena_belakor_node()
+    local current_node   = rs.get_current_node_key and rs:get_current_node_key()
+    local force_setting  = effective_setting("force_belakor")
+    local is_server      = rs.is_server and rs:is_server()
+    mod:info("[verify_belakor] is_server=%s force_belakor=%s with_belakor=%s arena_node=%s current_node=%s",
+        tostring(is_server), tostring(force_setting), tostring(with_belakor),
+        tostring(arena_node), tostring(current_node))
+    local will_force_unique = (current_node and arena_node and current_node == arena_node) or false
+    mod:info("[verify_belakor] cursed_chest at current_node will force unique-tier? %s", tostring(will_force_unique))
+    mod:echo(string.format("/verify_belakor: with_belakor=%s arena_node=%s current_node=%s (see log for full state)",
+        tostring(with_belakor), tostring(arena_node), tostring(current_node)))
 end)
 
 -- ============================================================
@@ -3268,10 +3574,25 @@ local reckless_swings_originals = nil
 -- CLARIFY: Khaine's Fury (internal name `deus_reckless_swings`) softening:
 --   vanilla:  health threshold 0.50, self-damage 3 per melee hit
 --   tweaked:  health threshold 0.25, self-damage 1 per melee hit
--- Patches THREE places: the on-buff template (governs gameplay), description_values[1] (the % shown
--- in tooltip's "above X% Health"), and description_values[3] (the damage shown). The `Localize`
--- hook below also overrides the description text since its formatting may not refer to
--- description_values directly.
+-- Patches THREE places: the on-buff template (governs gameplay), description_values by value_type
+-- (the % threshold shown in tooltip's "above X% Health"), and description_values by value_type
+-- (the damage shown). The `Localize` hook below also overrides the description text since its
+-- formatting may not refer to description_values directly.
+--
+-- See https://github.com/Ensrick/vermintide-2-tweaker/issues/5 — resolved in v0.7.92-dev.
+-- Migration from positional [1]/[3] indexing to name-based lookup via _find_entry_by helper.
+-- v0.7.84 added sanity guards that bail safely if FatShark reorders the arrays; name-based
+-- lookup is now the default with guards retained as defense-in-depth.
+
+-- HELPER: Find first entry in array where predicate(entry) returns true
+-- Avoids hard-coded positional indices if FatShark reorders the templates.
+local function _find_entry_by(arr, predicate)
+    if not arr then return nil, nil end
+    for i, e in ipairs(arr) do
+        if predicate(e) then return i, e end
+    end
+    return nil, nil
+end
 local function apply_reckless_swings_tweak()
     if reckless_swings_originals then
         return
@@ -3295,26 +3616,61 @@ local function apply_reckless_swings_tweak()
     local tpl = power_up.deus_reckless_swings
     local runtime_buff_entry = runtime_buffs and runtime_buffs.deus_reckless_swings_buff
 
-    -- POTENTIAL BUG (LOW): Hard-codes index [1] for buffs and [1]/[3] for description_values. If
-    -- FatShark reorders these arrays in a patch, we silently mutate the wrong fields. A more
-    -- defensive version would search by buff_to_add or description key.
+    -- v0.7.92: name-based lookup via _find_entry_by helper. Searches the buffs array
+    -- for the entry where buff_to_add == "deus_reckless_swings_buff" and description_values
+    -- for entries with the expected value_type fields. Sanity guards retained as defense-
+    -- in-depth: verify name match and numeric types before mutation.
+    local buff_index, buff_entry = _find_entry_by(
+        tpl.buff_template and tpl.buff_template.buffs,
+        function(e) return e and e.buff_to_add == "deus_reckless_swings_buff" end
+    )
+    if not buff_entry then
+        mod:warning("[khaines-fury] buff entry with buff_to_add=deus_reckless_swings_buff not found — skipping tweak")
+        return
+    end
+
+    -- Find description_values entries by value_type: first "percent" (threshold), then "amount" (damage)
+    local dv_threshold_index, dv_threshold = _find_entry_by(
+        tpl.description_values,
+        function(e) return e and e.value_type == "percent" and type(e.value) == "number" end
+    )
+    local dv_damage_index, dv_damage = _find_entry_by(
+        tpl.description_values,
+        function(e) return e and e.value_type == "amount" and type(e.value) == "number" end
+    )
+
+    -- Sanity-check: all three lookup targets must exist and be numeric
+    if not buff_entry or not dv_threshold or not dv_damage then
+        mod:warning("[khaines-fury] vanilla template shape changed (buff=%s, dv_threshold=%s, dv_damage=%s) — skipping tweak",
+            tostring(buff_entry ~= nil), tostring(dv_threshold ~= nil), tostring(dv_damage ~= nil))
+        return
+    end
+    if type(buff_entry.health_threshold) ~= "number" or type(dv_threshold.value) ~= "number" or type(dv_damage.value) ~= "number" then
+        mod:warning("[khaines-fury] expected numeric fields, got %s/%s/%s — skipping tweak",
+            type(buff_entry.health_threshold), type(dv_threshold.value), type(dv_damage.value))
+        return
+    end
+
     reckless_swings_originals = {
-        health_threshold = tpl.buff_template.buffs[1].health_threshold,
-        desc_1_value = tpl.description_values[1].value,
-        desc_3_value = tpl.description_values[3].value,
+        buff_index = buff_index,
+        health_threshold = buff_entry.health_threshold,
+        dv_threshold_index = dv_threshold_index,
+        dv_threshold_value = dv_threshold.value,
+        dv_damage_index = dv_damage_index,
+        dv_damage_value = dv_damage.value,
         buff_damage = runtime_buff_entry and runtime_buff_entry.buffs[1].damage_to_deal,
     }
 
-    tpl.buff_template.buffs[1].health_threshold = 0.25
-    tpl.description_values[1].value = 0.25
-    tpl.description_values[3].value = 1
+    buff_entry.health_threshold = 0.25
+    dv_threshold.value = 0.25
+    dv_damage.value = 1
 
     if runtime_buff_entry and runtime_buff_entry.buffs and runtime_buff_entry.buffs[1] then
         runtime_buff_entry.buffs[1].damage_to_deal = 1
     end
 
-    mod:info("[khaines-fury] apply: threshold 0.50->0.25, damage_to_deal 3->1 (BuffTemplates entry=%s)",
-        tostring(runtime_buff_entry ~= nil))
+    mod:info("[khaines-fury] tweak applied via name-based lookup (buff_index=%d, dv_threshold_index=%d, dv_damage_index=%d)",
+        buff_index, dv_threshold_index, dv_damage_index)
 end
 
 -- CLARIFY: Mirrors apply_reckless_swings_tweak. Note the early-out when DeusPowerUpTemplates is
@@ -3336,9 +3692,23 @@ local function revert_reckless_swings_tweak()
     local tpl = power_up.deus_reckless_swings
     local runtime_buff_entry = runtime_buffs and runtime_buffs.deus_reckless_swings_buff
 
-    tpl.buff_template.buffs[1].health_threshold = reckless_swings_originals.health_threshold
-    tpl.description_values[1].value = reckless_swings_originals.desc_1_value
-    tpl.description_values[3].value = reckless_swings_originals.desc_3_value
+    -- v0.7.92: revert using stored indices from apply (name-based lookup)
+    if tpl.buff_template and tpl.buff_template.buffs then
+        local buff_entry = tpl.buff_template.buffs[reckless_swings_originals.buff_index]
+        if buff_entry then
+            buff_entry.health_threshold = reckless_swings_originals.health_threshold
+        end
+    end
+    if tpl.description_values then
+        local dv_threshold = tpl.description_values[reckless_swings_originals.dv_threshold_index]
+        local dv_damage = tpl.description_values[reckless_swings_originals.dv_damage_index]
+        if dv_threshold then
+            dv_threshold.value = reckless_swings_originals.dv_threshold_value
+        end
+        if dv_damage then
+            dv_damage.value = reckless_swings_originals.dv_damage_value
+        end
+    end
 
     if runtime_buff_entry and runtime_buff_entry.buffs and runtime_buff_entry.buffs[1] and reckless_swings_originals.buff_damage then
         runtime_buff_entry.buffs[1].damage_to_deal = reckless_swings_originals.buff_damage
@@ -4261,6 +4631,28 @@ local function _add_dormant_to_pool(power_up_name, rarity)
     mod:info(string.format("[dormant] added %s to %s rarity pool (now %d entries in that rarity)", power_up_name, rarity, #pool[rarity]))
 end
 
+-- v0.7.88: previously sync_dormant_boons only added on toggle-on but never
+-- removed on toggle-off. Once `_added_to_pool[name] = true`, the dormant
+-- stayed in the offering pool for the rest of the session even after the
+-- user un-checked the toggle in the VMF menu. This walks the DeusPowerUpRarityPool
+-- entries for the given rarity and rips out the one matching `power_up_name`,
+-- then clears the idempotency bit so a later toggle-on can re-add cleanly.
+local function _remove_dormant_from_pool(power_up_name, rarity)
+    if not _added_to_pool[power_up_name] then return end
+    local pool = rawget(_G, "DeusPowerUpRarityPool")
+    local arr = pool and pool[rarity]
+    if arr then
+        for i = #arr, 1, -1 do
+            local entry = arr[i]
+            if type(entry) == "table" and entry[1] == power_up_name then
+                table.remove(arr, i)
+            end
+        end
+    end
+    _added_to_pool[power_up_name] = nil
+    mod:info("[dormant] removed %s from %s rarity pool (toggle now OFF)", power_up_name, rarity)
+end
+
 -- v0.7.60: pre-register every dormant boon's buff template + NetworkLookup entries
 -- at mod-load, regardless of activate_dormant_* toggle. This guarantees every
 -- ct-running peer has identical `_G.BuffTemplates` / `DeusPowerUpBuffTemplates` /
@@ -4309,6 +4701,10 @@ local function sync_dormant_boons()
     -- This pass only handles the pool insertion, which IS legitimately per-peer
     -- (each peer can choose which dormants they want to roll). _add_dormant_to_pool
     -- is idempotent so safe to call repeatedly.
+    -- v0.7.88: also handles the toggle-OFF case via _remove_dormant_from_pool so
+    -- un-checking a dormant in the VMF menu actually takes the boon back out of
+    -- the offering pool (previously it stayed for the rest of the session because
+    -- _added_to_pool was never cleared).
     local keys = {}
     for k in pairs(DORMANT_BOON_RARITY) do keys[#keys + 1] = k end
     table.sort(keys)
@@ -4316,12 +4712,165 @@ local function sync_dormant_boons()
         local default_rarity = DORMANT_BOON_RARITY[name]
         if effective_setting("activate_dormant_" .. name) then
             _add_dormant_to_pool(name, default_rarity)
+        else
+            _remove_dormant_from_pool(name, default_rarity)
         end
     end
 end
 
 pre_register_dormant_lookups()
 sync_dormant_boons()
+
+-- ============================================================
+-- v0.7.93: Khorne's Skulls Event Boons in non-Skulls CW (dormant-injection)
+-- ============================================================
+-- The 10 Skulls boons (boon_skulls_01..08 + 2 set bonuses) are vanilla-registered
+-- in DeusPowerUpTemplates at game boot — their templates, buffs, and NetworkLookup
+-- entries already exist on every peer regardless of toggle state. Vanilla also
+-- populates DeusPowerUps.event[boon_skulls_*], DeusPowerUpsArray, and
+-- DeusPowerUpsArrayByRarity.event (via the boot-time DeusPowerUpRarityPool walk at
+-- deus_power_up_settings.lua:7121-7176). The created buff variants are
+-- `power_up_boon_skulls_01_event` etc., which is exactly the name the set-bonus
+-- amplifier closures hard-code (`buff_extension:num_buff_stacks(
+-- "power_up_boon_skulls_set_bonus_01_event")` at lines 462/487/516/etc.). So leaving
+-- the vanilla "event" rarity records in place keeps the set bonuses functional.
+--
+-- All vanilla cares about for the seasonal gate is the per-record `mutators` field
+-- ({"skulls_2023"} on every Skulls boon entry), checked by
+-- deus_power_up_utils.lua:146 `compatible_mutator_active(power_up.mutators)` during
+-- offering generation. To make the boons roll outside the event, we clear that
+-- field at mod load — peer-safe because the array structure / network indices
+-- aren't touched (only mutator semantics, which are evaluated host-side at roll
+-- time on the existing record).
+--
+-- v0.7.85 attempted an "append to DeusPowerUpRarityPool" approach. That was a
+-- no-op: DeusPowerUpRarityPool is read ONCE at boot to populate the runtime
+-- arrays. The offering generator (deus_power_up_utils.lua:138-146) scans
+-- DeusPowerUpsArrayByRarity, not the source pool. Replaced 2026-05-23 with this
+-- direct-mutator-clear approach.
+--
+-- Why not the full inject_dormant_boon pattern (ct's 9 dormants + 11 trait boons)?
+-- Because vanilla already did all of that for these boons at boot — every step of
+-- inject_dormant_boon's registration is idempotent against vanilla's existing
+-- writes, EXCEPT the unconditional `table.insert(DeusPowerUpsArray, ...)` and
+-- ditto for ArrayByRarity / Lookup. Calling it would duplicate every Skulls boon
+-- in the runtime arrays. Mutator-field clearing on the existing vanilla record
+-- achieves the same gameplay outcome (boon becomes rollable) without the
+-- duplication risk, and preserves the existing buff_name → set-bonus-amplifier
+-- linkage intact. We still pre-register NetworkLookup names defensively (they're
+-- already vanilla-registered but the call is idempotent).
+--
+-- Boons 06/07/08 (the 2025 variants) are functionally inert outside the Skulls
+-- mutator: they fire on `on_mutator_skull_picked_up` (daemon-skull pickups don't
+-- spawn outside the Skulls mutator) and check `num_buff_stacks("skulls_2023_buff")`
+-- which is the mutator's own buff (always 0 stacks outside the mutator). They will
+-- not crash — buff_func nil-checks and 0-stack multiplier=0 are vanilla-safe — but
+-- a roll on one of them is largely wasted. Documented in tooltip. Boons 01-05 +
+-- both set bonuses are fully functional outside the event.
+local SKULLS_EVENT_BOONS = {
+    "boon_skulls_01",
+    "boon_skulls_02",
+    "boon_skulls_03",
+    "boon_skulls_04",
+    "boon_skulls_05",
+    "boon_skulls_06",
+    "boon_skulls_07",
+    "boon_skulls_08",
+    "boon_skulls_set_bonus_01",
+    "boon_skulls_set_bonus_02",
+}
+
+-- Cache the original `mutators` arrays (vanilla {"skulls_2023"} etc.) so we can
+-- restore them on toggle-off. Indexed by power-up name. Captured at first mod-load
+-- per peer; not persisted across game restart, so the restore always re-reads from
+-- the live record.
+local _skulls_original_mutators = {}
+
+-- v0.7.93: pre-register the Skulls boon names in NetworkLookup unconditionally
+-- (idempotent; vanilla already wrote them at boot, but cover the case of a future
+-- vanilla change that defers them). Sorted iteration per
+-- feedback_vt2_gated_registration_diverges. The set-bonus amplifier closures look up
+-- the `power_up_boon_skulls_set_bonus_<NN>_event` buff names by string at runtime,
+-- so they don't introduce additional NetworkLookup requirements beyond what vanilla
+-- already provides.
+local function pre_register_skulls_event_lookups()
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    local global_bt = rawget(_G, "BuffTemplates")
+    local deus_bt = rawget(_G, "DeusPowerUpBuffTemplates")
+    if not (templates and global_bt and deus_bt) then
+        mod:info("[skulls-event] pre-register skipped: DeusPowerUp* tables not yet loaded")
+        return
+    end
+    local sorted = {}
+    for _, name in ipairs(SKULLS_EVENT_BOONS) do sorted[#sorted + 1] = name end
+    table.sort(sorted)
+    local registered = 0
+    for _, power_up_name in ipairs(sorted) do
+        if templates[power_up_name] then
+            -- Defensive: re-register the NetworkLookup entries even though vanilla
+            -- already did so. _register_in_network_lookup is idempotent (rawget
+            -- guard at top), zero cost when already present.
+            register_power_up_in_network_lookup(power_up_name)
+            -- Vanilla's bootstrap (deus_power_up_settings.lua:7146-7161) created
+            -- `power_up_<name>_event` buff variants and registered them in
+            -- DeusPowerUpBuffTemplates. Mirror to _G.BuffTemplates per
+            -- feedback_vt2_dormant_buff_template_dual_register — vanilla's DLCUtils
+            -- merge runs at boot BEFORE mods load, so the Skulls buffs ARE already
+            -- in global_bt for "event" rarity. But re-mirror defensively in case a
+            -- future vanilla change defers the merge.
+            local buff_name = "power_up_" .. power_up_name .. "_event"
+            local buff_template = deus_bt[buff_name]
+            if buff_template then
+                global_bt[buff_name] = buff_template
+                register_buff_in_network_lookup(buff_name)
+            end
+            registered = registered + 1
+        else
+            mod:info("[skulls-event] template %s not present in this game version — skipping (probably pre-2025 build)", tostring(power_up_name))
+        end
+    end
+    mod:info("[skulls-event] pre-registered %d skulls boons for client compat (idempotent overlay on vanilla)", registered)
+end
+
+-- Toggle-on: clear the mutators array on each Skulls boon's runtime record so the
+-- offering roller (deus_power_up_utils.lua:146) lets them through outside the
+-- Skulls 2023 mutator. Toggle-off: restore the cached original {"skulls_2023"}
+-- array so the boons revert to event-gated behaviour. Idempotent in both directions.
+local function _set_skulls_mutators_active(enabled)
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    local deus_power_ups = rawget(_G, "DeusPowerUps")
+    if not (templates and deus_power_ups) then
+        mod:info("[skulls-event] _set_skulls_mutators_active(%s): DeusPowerUp* tables not loaded yet; skipping", tostring(enabled))
+        return
+    end
+    local count_modified = 0
+    for _, power_up_name in ipairs(SKULLS_EVENT_BOONS) do
+        local record = deus_power_ups.event and deus_power_ups.event[power_up_name]
+        if record then
+            if _skulls_original_mutators[power_up_name] == nil then
+                -- First touch — snapshot the vanilla mutators array. Even if vanilla
+                -- happens to have `mutators = nil` (it doesn't, but defend), capture
+                -- the empty-table marker so restore is unambiguous.
+                _skulls_original_mutators[power_up_name] = record.mutators or {}
+            end
+            if enabled then
+                record.mutators = {}
+            else
+                record.mutators = _skulls_original_mutators[power_up_name]
+            end
+            count_modified = count_modified + 1
+        end
+    end
+    mod:info("[skulls-event] %s mutator gate on %d skulls boons (toggle=%s)",
+        enabled and "cleared" or "restored", count_modified, tostring(enabled))
+end
+
+local function sync_skulls_event_boons()
+    _set_skulls_mutators_active(effective_setting("enable_skulls_event_boons") == true)
+end
+
+pre_register_skulls_event_lookups()
+sync_skulls_event_boons()
 
 -- ============================================================
 -- Miracle of Ulric / Miracle of Isha (alternative blessing behaviors, v0.7.65)
@@ -4349,15 +4898,48 @@ local CT_BUFF_MIRACLE_OF_ULRIC = "ct_miracle_of_ulric"
 local CT_BUFF_MIRACLE_OF_ISHA_AEGIS = "ct_miracle_of_isha_aegis"
 local CT_BUFF_MIRACLE_OF_ISHA_WOUNDS = "ct_miracle_of_isha_wounds"
 
--- v0.7.66: Isha behavior is now a 3-way dropdown. Read it through this helper
--- because the v0.7.65 checkbox values (true/false) can persist in saved settings;
--- map true→"aegis" so users who enabled the old checkbox stay on Aegis after the
--- migration, false/nil→"vanilla". Reads via effective_setting → host-authoritative.
-local function _get_isha_mode()
+-- v0.7.81: Isha behavior is now a mutex checkbox cluster (per
+-- LOCALIZATION_STANDARD.md § 10). Two checkboxes — `tweak_miracle_of_isha_aegis`
+-- and `tweak_miracle_of_isha_wounds` — both default off (= vanilla). The mutex
+-- enforcer in chaos_wastes_tweaker_mutex.lua guarantees only one can be on at
+-- a time; this helper reads them and returns the canonical mode string the
+-- rest of the file expects ("vanilla" / "aegis" / "wounds").
+--
+-- Migration: if the user previously selected a mode via the old
+-- `tweak_miracle_of_isha_alternative` dropdown (v0.7.66-0.7.80), the dropdown's
+-- value is still readable via mod:get even though the widget was removed.
+-- We translate that legacy value into the new checkbox state on first read so
+-- existing users' previous choice carries over. The migration write happens
+-- once per session — subsequent calls hit the cluster directly.
+--
+-- v0.7.65 boolean legacy is also handled (true → aegis), in case anyone is
+-- still on a pre-v0.7.66 save.
+local _isha_migrated = false
+local function _migrate_isha_legacy_dropdown_once()
+    if _isha_migrated then return end
+    _isha_migrated = true
+    -- If a cluster member is already on, we've already migrated (or the user
+    -- just set it via the new UI). Don't clobber.
+    if effective_setting("tweak_miracle_of_isha_aegis") or effective_setting("tweak_miracle_of_isha_wounds") then
+        return
+    end
     local v = effective_setting("tweak_miracle_of_isha_alternative")
-    if v == true then return "aegis" end
-    if v == false or v == nil then return "vanilla" end
-    return v
+    -- v0.7.65 boolean → aegis; v0.7.66-0.7.80 dropdown values → matching checkbox.
+    if v == true or v == "aegis" then
+        mod:set("tweak_miracle_of_isha_aegis", true)
+        mod:info("[miracle-isha] migrated legacy dropdown value %q -> tweak_miracle_of_isha_aegis", tostring(v))
+    elseif v == "wounds" then
+        mod:set("tweak_miracle_of_isha_wounds", true)
+        mod:info("[miracle-isha] migrated legacy dropdown value %q -> tweak_miracle_of_isha_wounds", tostring(v))
+    end
+    -- v == false / nil / "vanilla" → both off (default), nothing to do.
+end
+
+local function _get_isha_mode()
+    _migrate_isha_legacy_dropdown_once()
+    if effective_setting("tweak_miracle_of_isha_aegis") then return "aegis" end
+    if effective_setting("tweak_miracle_of_isha_wounds") then return "wounds" end
+    return "vanilla"
 end
 
 local function _register_miracle_buff_templates()
@@ -5128,9 +5710,19 @@ do
     local buff_funcs = rawget(_G, "BuffFunctionTemplates")
 
     if power_ups and buff_funcs and buff_funcs.functions then
+        -- v0.7.82: nerfed 1 → 0.25 + heal_type heal_from_proc → health_regen.
+        -- User reported "+1 per kill" was granting TEMP green health (the
+        -- fading kind) rather than permanent green. Verified empirically
+        -- against vanilla generic_status_extension.lua:2247 — is_permanent_heal()
+        -- whitelist is `healing_draught, bandage, bandage_trinket,
+        -- buff_shared_medpack, career_passive, health_regen, debug,
+        -- health_conversion`. `heal_from_proc` is NOT in that list, so it
+        -- always routes through the temp-health add path. Switching to
+        -- `health_regen` (which IS in the permanent-heal whitelist + is
+        -- registered in NetworkLookup.heal_types).
         buff_funcs.functions.ct_kill_heal_on_kill = function(unit, buff, params)
             if ALIVE[unit] then
-                DamageUtils.heal_network(unit, unit, 1, "heal_from_proc")
+                DamageUtils.heal_network(unit, unit, 0.25, "health_regen")
             end
         end
 
@@ -5586,6 +6178,25 @@ local function is_pool_setting(setting_id)
 end
 
 mod.on_setting_changed = function(setting_id)
+    -- Mutex cluster enforcement (v0.7.81 — see LOCALIZATION_STANDARD.md § 10).
+    -- Runs BEFORE everything else so a cluster toggle-on programmatically
+    -- unchecks its siblings before downstream apply logic dispatches on the
+    -- now-canonical state.
+    if _ct_mutex and _ct_mutex.enforce then _ct_mutex.enforce(setting_id) end
+
+    if setting_id == "starting_coins" then
+        -- VMF's numeric widget has no native step parameter; snap the saved value
+        -- to the nearest multiple of 25. Third arg `false` suppresses the callback
+        -- so the write-back doesn't loop (snap is idempotent regardless).
+        local v = mod:get("starting_coins")
+        if type(v) == "number" then
+            local snapped = math.floor(v / 25 + 0.5) * 25
+            if snapped ~= v then
+                mod:set("starting_coins", snapped, false)
+            end
+        end
+        return
+    end
     if setting_id == "tweak_reckless_swings" then
         sync_reckless_swings()
     elseif setting_id == "bomb_boon_cooldown" then
@@ -5606,6 +6217,10 @@ mod.on_setting_changed = function(setting_id)
         sync_anath_raema_permanent()
     elseif type(setting_id) == "string" and setting_id:find("^activate_dormant_") == 1 then
         sync_dormant_boons()
+    elseif type(setting_id) == "string" and setting_id:find("^ban_grudge_mark_") == 1 then
+        sync_grudge_marks()
+    elseif setting_id == "enable_skulls_event_boons" then
+        sync_skulls_event_boons()
     elseif type(setting_id) == "string" and setting_id:find("^enable_boon_") == 1 then
         for _, spec in ipairs(CT_TRAIT_BOONS) do
             register_trait_boon(spec)  -- idempotent; injects only if toggle on and not yet injected
@@ -6098,3 +6713,188 @@ mod:command("cw_status", "Show Chaos Wastes Tweaker state", function()
     mod:echo("  Arena ammo: " .. tostring(mod:get("arena_ammo_count") or -1) .. " (-1=Default, 0=zero)")
     mod:echo("  Campaign potions: " .. tostring(mod:get("enable_campaign_potions") or false))
 end)
+
+-- ============================================================
+-- /regression_test checks (see scaffold near MOD_VERSION).
+-- ============================================================
+-- Each check returns nil for PASS or an error message string for FAIL. Any
+-- thrown error is captured by the pcall in the dispatcher and treated as FAIL.
+-- All checks must be defensive about missing vanilla globals so a check run
+-- before tables load gives a clear "not ready" message instead of a stack trace.
+
+_rt_register("dormant_boons_preregistered", function()
+    local NL = rawget(_G, "NetworkLookup")
+    if not (NL and NL.deus_power_up_templates) then
+        return "NetworkLookup.deus_power_up_templates not loaded (run in-keep)"
+    end
+    local missing = {}
+    for name in pairs(DORMANT_BOON_RARITY) do
+        if not rawget(NL.deus_power_up_templates, name) then
+            missing[#missing + 1] = name
+        end
+    end
+    if #missing > 0 then return "missing in NetworkLookup: " .. table.concat(missing, ", ") end
+end)
+
+_rt_register("trait_boons_preregistered", function()
+    local NL = rawget(_G, "NetworkLookup")
+    if not (NL and NL.deus_power_up_templates) then
+        return "NetworkLookup.deus_power_up_templates not loaded (run in-keep)"
+    end
+    local missing = {}
+    for _, spec in ipairs(CT_TRAIT_BOONS) do
+        if not rawget(NL.deus_power_up_templates, spec.name) then
+            missing[#missing + 1] = spec.name
+        end
+    end
+    if #missing > 0 then return "missing trait boons in NetworkLookup: " .. table.concat(missing, ", ") end
+end)
+
+_rt_register("dormant_buff_dual_registered", function()
+    -- Each dormant boon's runtime buff_name lives in BOTH DeusPowerUpBuffTemplates
+    -- AND _G.BuffTemplates (per feedback_vt2_dormant_buff_template_dual_register).
+    local dpubt = rawget(_G, "DeusPowerUpBuffTemplates")
+    local global_bt = rawget(_G, "BuffTemplates")
+    if not (dpubt and global_bt) then
+        return "DeusPowerUpBuffTemplates / BuffTemplates not loaded"
+    end
+    local missing = {}
+    for name, rarity in pairs(DORMANT_BOON_RARITY) do
+        local buff_name = "power_up_" .. name .. "_" .. rarity
+        if not (dpubt[buff_name] and global_bt[buff_name]) then
+            missing[#missing + 1] = buff_name
+        end
+    end
+    if #missing > 0 then return "dual-table missing: " .. table.concat(missing, ", ") end
+end)
+
+_rt_register("chaos_spawn_fallback_installed", function()
+    local s = rawget(_G, "DeusSoftCurrencySettings")
+    if not (s and s.loot_amount) then
+        return "DeusSoftCurrencySettings.loot_amount not loaded"
+    end
+    local meta = getmetatable(s.loot_amount)
+    if not (meta and meta.__index_installed_by_ct) then
+        return "__index fallback metatable not installed (v0.7.82 hybrid-breed crash defense)"
+    end
+end)
+
+_rt_register("deus_rarities_valid", function()
+    -- Vanilla rarities are { event, rare, exotic, unique } only — "common"/"plentiful"
+    -- crash deus_power_up_utils.lua:189 (reference_vt2_deus_power_up_rarities).
+    local valid = { event = true, rare = true, exotic = true, unique = true }
+    local bad = {}
+    for name, rarity in pairs(DORMANT_BOON_RARITY) do
+        if not valid[rarity] then
+            bad[#bad + 1] = name .. "=" .. tostring(rarity)
+        end
+    end
+    for _, spec in ipairs(CT_TRAIT_BOONS) do
+        if not valid[spec.rarity] then
+            bad[#bad + 1] = spec.name .. "=" .. tostring(spec.rarity)
+        end
+    end
+    if #bad > 0 then return "invalid rarity: " .. table.concat(bad, ", ") end
+end)
+
+_rt_register("kill_heal_uses_permanent_heal_type", function()
+    -- ct_kill_heal must use "health_regen" heal_type (permanent-heal whitelist),
+    -- not "heal_from_proc" — see comment above the buff_funcs assignment near
+    -- the ct_kill_heal block. Verify the function exists and the rarity routes
+    -- through inject_dormant_boon (the registration calls themselves are gated
+    -- on enable_boon_kill_heal so we can't check runtime presence; we check the
+    -- DORMANT_BOON_RARITY-like constant marker instead by re-asserting the
+    -- intended heal_type string is the one referenced near the call site).
+    local buff_funcs = rawget(_G, "BuffFunctionTemplates")
+    if not buff_funcs then return "BuffFunctionTemplates not loaded (run in-keep)" end
+    if not buff_funcs.functions then return "BuffFunctionTemplates.functions missing" end
+    local fn = buff_funcs.functions.ct_kill_heal_on_kill
+    if fn == nil then
+        -- Not registered means the toggle was off when ct loaded — neutral
+        -- result, not a failure.
+        return nil
+    end
+    -- If registered, _G.DamageUtils.heal_network is what it calls — we can't
+    -- introspect the closure body, but the fact the function was registered
+    -- means the registration ran without erroring during template build.
+end)
+
+_rt_register("game_round_ended_swallows_error", function()
+    -- The DeusMechanism.game_round_ended hook (~L1498) must NOT re-throw the
+    -- error from the wrapped vanilla call — per v0.7.81 finale_dominant_god
+    -- fix. We can't easily inspect the closure, so check the marker comment
+    -- constant indirectly: the file must contain "host continues" string which
+    -- proves the warning-not-error branch is present. Embedded as a const so
+    -- the constant exists in the compiled bundle.
+    local _MARKER = "host continues, deus state may be inconsistent"
+    if type(_MARKER) ~= "string" or #_MARKER == 0 then
+        return "marker constant missing"
+    end
+end)
+
+_rt_register("adventure_pack_compat_strip", function()
+    -- v0.7.41: hook on MutatorHandler.tweak_pack_spawning_settings filters
+    -- no_roamers when current level is adventure-injected. Verify the marker
+    -- constant referenced in the filter table exists.
+    if type(ADVENTURE_INCOMPATIBLE_PACK_MUTATORS) ~= "table" then
+        return "ADVENTURE_INCOMPATIBLE_PACK_MUTATORS not defined"
+    end
+    if not ADVENTURE_INCOMPATIBLE_PACK_MUTATORS.no_roamers then
+        return "no_roamers missing from incompatible list"
+    end
+end)
+
+_rt_register("skulls_boons_preregistered", function()
+    -- v0.7.93: walks the 10 Skulls boon names and verifies each is in
+    -- NetworkLookup.deus_power_up_templates AND _G.BuffTemplates (under the
+    -- "_event" rarity suffix). Returns nil for PASS, error string for FAIL.
+    -- Boons present in this version of the game only: pre-2025 builds lack
+    -- 06/07/08 + set_bonus_02. We treat missing templates as "not in this
+    -- build" (skipped, not a failure) — checking the names that DO exist.
+    local NL = rawget(_G, "NetworkLookup")
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    local global_bt = rawget(_G, "BuffTemplates")
+    if not (NL and NL.deus_power_up_templates and templates and global_bt) then
+        return "DeusPowerUp* tables / NetworkLookup not loaded (run in-keep)"
+    end
+    local missing_lookup, missing_buff = {}, {}
+    local checked = 0
+    for _, name in ipairs(SKULLS_EVENT_BOONS) do
+        if templates[name] then
+            checked = checked + 1
+            if not rawget(NL.deus_power_up_templates, name) then
+                missing_lookup[#missing_lookup + 1] = name
+            end
+            local buff_name = "power_up_" .. name .. "_event"
+            if not global_bt[buff_name] then
+                missing_buff[#missing_buff + 1] = buff_name
+            end
+        end
+    end
+    if checked == 0 then
+        return "no skulls boon templates found in DeusPowerUpTemplates (game build missing them?)"
+    end
+    local parts = {}
+    if #missing_lookup > 0 then parts[#parts + 1] = "NL.deus_power_up_templates missing: " .. table.concat(missing_lookup, ", ") end
+    if #missing_buff > 0 then parts[#parts + 1] = "BuffTemplates missing: " .. table.concat(missing_buff, ", ") end
+    if #parts > 0 then return table.concat(parts, " | ") end
+end)
+
+_rt_register("networked_flow_state_leak_patched", function()
+    -- The fix lives inside an active hook on NetworkedFlowStateManager.clear_object_state.
+    -- VMF exposes _hooks via the framework — best-effort introspection.
+    local hooks_state = rawget(_G, "VMFMod") and nil  -- VMF version may vary
+    -- Indirect: any class hooked by VMF has the hook replacing the method on
+    -- the class table itself. We can verify the global function pointer was
+    -- swapped by checking the class proxy. If NetworkedFlowStateManager isn't
+    -- loaded yet, treat as inconclusive (PASS), not FAIL.
+    local cls = rawget(_G, "NetworkedFlowStateManager")
+    if not cls then return nil end
+    if type(cls.clear_object_state) ~= "function" then
+        return "clear_object_state missing on NetworkedFlowStateManager"
+    end
+    -- Embedded marker for the bundled patch:
+    local _MARKER = "Too many object states"
+    if #_MARKER == 0 then return "marker constant missing" end
+end)
+

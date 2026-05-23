@@ -1,6 +1,6 @@
 local mod = get_mod("event_tweaker")
 
-local MOD_VERSION = "0.4.1-dev"
+local MOD_VERSION = "0.4.2-dev"
 mod:info("Tweaker: Events v%s loaded", MOD_VERSION)
 mod:echo("Tweaker: Events v" .. MOD_VERSION)
 
@@ -261,6 +261,13 @@ mod:hook("BackendInterfaceLiveEventsPlayfab", "get_special_events", function (fu
     local injected_name = (preset_pick and preset_pick ~= "off")
         and preset_pick
         or "event_tweaker_custom"
+    -- v0.4.2 defensive logging: log every injected mutator + the preset name.
+    -- Helps diagnose unexpected mutator interactions (e.g. "Horn of Magnus had
+    -- no pickups" → was a special_event injection accidentally appending an
+    -- incompatible mutator?). Fires once per get_special_events call, which
+    -- happens on mission load + keep transitions.
+    mod:info("[event-inject] preset=%s injecting %d mutator(s): [%s]",
+        tostring(injected_name), #mutators, table.concat(mutators, ","))
     local injected = {
         {
             name         = injected_name,

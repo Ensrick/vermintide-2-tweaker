@@ -12,7 +12,7 @@ local loc = {
     disable_boon_bombs_group = { en = "Disable Boons: Bomb Boons" },
     start_boon_bombs_group = { en = "Starting Boons: Bomb Boons" },
     coin_multiplier = { en = "Coin Pickup Multiplier" },
-    starting_coins = { en = "Starting Coins" },
+    starting_coins = { en = "Starting Coins (snaps to nearest 25)" },
     shrine_boon_count = { en = "Shrine Boon Options" },
     chest_boon_count = { en = "Chest Boon Options" },
     adventure_maps_group         = { en = "Adventure Maps in Chaos Wastes (experimental)" },
@@ -243,10 +243,10 @@ local loc = {
     -- v0.7.32: 1 green HP per kill mod boon
     disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
     start_boon_ct_kill_heal   = { en = "Starting Boon: (Mod Boon) Khaine's Communion" },
-    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 1 green (permanent) health. Exotic rarity. Catalogued under Health by effect. Toggle this off to remove it from the boon pool." },
-    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 1 green (permanent) health. Exotic rarity. Enable to roll as your starting boon — the boon must be injected into the pool (which happens automatically when this mod is active)." },
+    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Catalogued under Health by effect. Toggle this off to remove it from the boon pool." },
+    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Enable to roll as your starting boon — the boon must be injected into the pool (which happens automatically when this mod is active)." },
     display_name_ct_kill_heal = { en = "Khaine's Communion" },
-    description_ct_kill_heal  = { en = "Killing an enemy heals you for 1 health." },
+    description_ct_kill_heal  = { en = "Killing an enemy heals you for 0.25 permanent (green) health." },
 
     -- v0.7.34: Trait-as-Boon. Each toggle enables the corresponding trait's effect as a Unique-rarity boon.
     enable_boon_vauls_anvil = { en = "Rework: Vaul's Anvil as Boon (Unique)" },
@@ -283,6 +283,10 @@ local loc = {
     start_boon_ct_boon_asuryan_wrath   = { en = "Starting Boon: (Mod Boon) Asuryan's Wrath" },
     disable_boon_ct_boon_asuryan_wrath_tooltip = { en = "(Mod Boon) Asuryan's Wrath boon variant. Same effect as the trait, stacks with it. Melee-only. Only present in the pool when the Rework toggle is enabled." },
     start_boon_ct_boon_asuryan_wrath_tooltip   = { en = "(Mod Boon) Force Asuryan's Wrath boon as your starting boon. Requires the corresponding Rework toggle to be enabled." },
+
+    skulls_event_boons_group = { en = "Khorne's Skulls Event Boons" },
+    enable_skulls_event_boons = { en = "Enable Skulls Event Boons (any time)" },
+    enable_skulls_event_boons_tooltip = { en = "Adds the 10 Khorne's Skulls event boons (attack-speed stacks, on-kill power stacks, parry explosion, THP regen, cooldown regen stacks, plus 2 set bonuses) to the normal Chaos Wastes boon pool so they can roll regardless of whether the seasonal event is active. Vanilla gates these to the Skulls 2023 (and 2025 variants) mutator; this toggle clears that mutator gate on the runtime boon records so they roll on any CW run. Peer-safe: vanilla template + buff infrastructure is reused (no duplicate entries, no NetworkLookup divergence). Set bonuses (5-piece set amplifies all collected Skulls boons by +50%) work because the buff-name linkage stays intact. Boons 06/07/08 (2025 additions) trigger on daemon-skull pickups — outside the Skulls event they are inert (won't crash, but don't do anything either). Toggle takes effect for the NEXT shrine/chest roll; already-offered boons are unaffected." },
 
     activate_dormant_boons_group = { en = "Activate Dormant Boons" },
     activate_dormant_deus_ammo_pickup_give_allies_ammo = { en = "Activate: Mathlann's Bounty" },
@@ -322,13 +326,28 @@ local loc = {
     ulric_pack_unlimited_range_tooltip = { en = "Ulric's pack heeds the call from any distance. Vanilla Ulric's Pack only applies its power bonus when allies stand within 20 meters of you; this tweak removes the leash so every ally with the boon counts no matter how scattered the herd. The boon's per-tick proximity check is rewritten to ignore distance entirely. Re-syncs on toggle without restart." },
     tweak_wildfire_generations_cap = { en = "Myrmidia's Wildfire: Generations Cap" },
     tweak_wildfire_generations_cap_tooltip = { en = "Caps how many times Myrmidia's Wildfire (`boon_dot_burning_01`) can chain. Each spread DoT is tagged with a generation counter — the player's own burns are generation 0, the first spread is 1, and so on. When a burning enemy dies, the spread fires only if the source's generation is below this cap. Default 3 prevents infinite cascades during dense hordes while still letting the boon clear a small group. Set to 10 for near-uncapped vanilla behavior, or 1 to allow only the original spread without further chaining. Host-authoritative; the spread function is server-only." },
-    tweak_belakor_temple_unique_boons = { en = "Belakor's Temple: Reward Unique Boons" },
-    tweak_belakor_temple_unique_boons_tooltip = { en = "When you complete Belakor's Temple arena (the SIG zone on the Wastes map), the reward chest forces unique-tier boons only. Vanilla rolls cursed_chest rarity weights `{ event=6, exotic=3, rare=6, unique=1 }` — a 14%% chance per slot of a unique. With this toggle on, the chest passes `forced_rarity = \"unique\"` to vanilla's `DeusPowerUpUtils.generate_random_power_up`, which falls back to lower tiers automatically if the unique pool is empty (vanilla's `forced_rarity` walks down event→rare→exotic→unique then back up). No `weight_by_rarity` global mutation — the override is local to the Belakor-temple call only, so other altars/chests/shrines retain vanilla rarity weights. Host only — the chest UI on each peer rolls its own seed; this hook fires per-peer at the same boon-roll call so all players see unique-tier choices independently. Default ON." },
-    tweak_miracle_of_isha_alternative = { en = "Miracle of Isha behavior" },
-    tweak_miracle_of_isha_alternative_tooltip = { en = "Replaces the behavior of Blessing of Isha at the shrine.\n\n• Vanilla = one team revive-from-death per run when the squad is reduced to one hero.\n• Aegis = every hero takes -25%%%% damage for the rest of the run.\n• Unlimited Wounds = every hero gets unlimited wounds for the rest of the run (recruit-style: every knockdown is revivable; no instant-death after the 1st down).\n\nHost-authoritative. Vanilla revive mutator is fully disabled when Aegis or Unlimited Wounds is selected." },
+    -- v0.7.81: Miracle of Isha replaced its dropdown widget with a mutex
+    -- checkbox cluster (per LOCALIZATION_STANDARD.md § 10). Old dropdown
+    -- localization keys preserved one release for the migration path read
+    -- inside _get_isha_mode(); they no longer drive any widget.
+    tweak_miracle_of_isha_alternative = { en = "Miracle of Isha behavior (legacy dropdown)" },
+    tweak_miracle_of_isha_alternative_tooltip = { en = "DEPRECATED: replaced by the (A) / (B) checkboxes 'Miracle of Isha: Aegis' / 'Miracle of Isha: Unlimited Wounds'. Old setting value preserved one release so existing users' previous selection migrates over automatically." },
     isha_alt_vanilla = { en = "Vanilla (revive once)" },
     isha_alt_aegis   = { en = "Aegis (-25%% damage taken, all run)" },
     isha_alt_wounds  = { en = "Unlimited Wounds (recruit-style)" },
+
+    -- Mutex cluster `isha_choice` — pick one (or neither = vanilla). Per
+    -- LOCALIZATION_STANDARD.md § 10, cluster members use the
+    -- "    (A) / (B) / (C)" prefix convention with leading 4-space indent
+    -- so the multiple-choice relationship reads visually in the VMF UI.
+    tweak_miracle_of_isha_aegis = { en = "    (A) Aegis: -25%% damage taken for the rest of the run" },
+    tweak_miracle_of_isha_aegis_tooltip = {
+        en = "Miracle of Isha — choice (A) of (B). Alternative to '(B) Unlimited Wounds' — these are mutually exclusive (toggling either one off-checks the other; both off = vanilla revive-once behavior).\n\nEvery hero takes -25%% damage for the rest of the run after Blessing of Isha is picked up at the shrine.\n\nHost-authoritative. Vanilla revive mutator is fully disabled when this is on."
+    },
+    tweak_miracle_of_isha_wounds = { en = "    (B) Unlimited Wounds: recruit-style, every knockdown revivable" },
+    tweak_miracle_of_isha_wounds_tooltip = {
+        en = "Miracle of Isha — choice (B) of (B). Alternative to '(A) Aegis' — these are mutually exclusive (toggling either one off-checks the other; both off = vanilla revive-once behavior).\n\nEvery hero gets unlimited wounds for the rest of the run. Like Recruit difficulty: every knockdown is revivable; no instant-death after the first down.\n\nHost-authoritative. Vanilla revive mutator is fully disabled when this is on."
+    },
     tweak_boon_movespeed = { en = "Rework: Movement Speed property" },
     tweak_boon_movespeed_tooltip = { en = "Changes the 5%%%% movement speed bonus to 10%%%%." },
     bomb_boon_cooldown = { en = "Bomb Boon Cooldown (s)" },
@@ -1011,10 +1030,12 @@ local loc = {
     bots_mirror_host_boons = { en = "Shared Blessings: Bots Mirror Host's Boons" },
     bots_mirror_host_boons_tooltip = { en = "When this lobby's heroes claim a blessing at a shrine, altar, Chest of Trials, set completion, or Belakor's Temple, every bot in the warband is bound to the same fortune and receives an identical boon. The Lords of the Old World show no favour to lordless warriors.\n\nHost-only. Boons granted to the lobby host propagate to every bot under their banner. Talent-style boons are written into each bot's own talent set so they take effect on the bot regardless of career; buff-style boons apply to the bot's character as the heroes themselves receive them.\n\nDefault: off." },
 
-    -- v0.7.76: Grudge Mark Ban Menu (Phase 3.2)
-    boss_grudge_marks_group = { en = "Khorne's Champions Banlist (Boss Enhancements)" },
+    -- v0.7.89: Grudge Mark Ban Menu (re-instated; previous v0.7.76 implementation
+    -- never took effect because terror events capture the spawn func as an upvalue
+    -- at boot — fixed by mutating _G.BossGrudgeMarks directly).
+    boss_grudge_marks_group = { en = "Boss Grudge Marks Banlist" },
     ban_grudge_mark_commander       = { en = "Ban: Commander" },
-    ban_grudge_mark_commander_tooltip       = { en = "Forbid the Commander mark — boss summons additional reinforcements during the encounter. With every Boss Enhancement banned, monsters spawn at vanilla strength with no marks." },
+    ban_grudge_mark_commander_tooltip       = { en = "Forbid the Commander mark — boss summons additional reinforcements during the encounter." },
     ban_grudge_mark_crippling       = { en = "Ban: Crippling Blow" },
     ban_grudge_mark_crippling_tooltip       = { en = "Forbid the Crippling Blow mark — boss attacks reduce hero damage output on hit." },
     ban_grudge_mark_crushing        = { en = "Ban: Crushing Blow" },
@@ -1039,6 +1060,39 @@ local loc = {
     ban_grudge_mark_vampiric_tooltip        = { en = "Forbid the Vampiric mark — boss restores life from damage dealt to heroes." },
     ban_grudge_mark_warping         = { en = "Ban: Warping" },
     ban_grudge_mark_warping_tooltip         = { en = "Forbid the Warping mark — boss teleports around the encounter at intervals." },
+
+    -- BOON_TREE category_id display names (v0.7.90). These are VMF group headers
+    -- shown in the Disabled Boons and Starting Boons menus. Organized by hierarchy.
+    -- Top-level categories:
+    properties = { en = "Weapon Properties" },
+    talents = { en = "Talents" },
+    sets = { en = "Sets" },
+    orbs = { en = "Orbs" },
+    bomb_bubbles = { en = "Bomb Bubbles" },
+    auras = { en = "Auras" },
+    mod_boons = { en = "Mod Boons" },
+    -- Defensive Boons sub-categories:
+    defensive_boons = { en = "Defensive" },
+    health = { en = "Health" },
+    stamina_and_parry = { en = "Stamina & Parry" },
+    damage_reduction = { en = "Damage Reduction" },
+    save_revive = { en = "Save / Revive" },
+    -- Offensive Boons sub-categories:
+    offensive_boons = { en = "Offensive" },
+    crit = { en = "Crit" },
+    attack_speed = { en = "Attack Speed" },
+    ranged = { en = "Ranged" },
+    damage_and_power = { en = "Damage & Power" },
+    aoe = { en = "AOE" },
+    -- Utility Boons sub-categories:
+    utility_boons = { en = "Utility" },
+    potions = { en = "Potions" },
+    bombs = { en = "Bombs" },
+    career_skill = { en = "Career Skill" },
+    career_skill_aoe = { en = "Career Skill AOE" },
+    coins_and_ammo = { en = "Coins & Ammo" },
+    chest_triggers = { en = "Chest Triggers" },
+    gamble_misc = { en = "Gamble & Misc" },
 }
 
 -- Per-mission and per-CW-scenario toggle labels. Generated from the catalogs in

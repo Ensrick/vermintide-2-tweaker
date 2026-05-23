@@ -193,9 +193,37 @@ Before declaring any mod "shipped" (uploaded to Workshop), Claude must verify:
 2. **CHANGELOG entry** for the new version exists.
 3. **Forward-reference audit**: every `local function foo` is defined before
    any caller. (Future: automate via luacheck.)
-4. **No `tags = [ ]`** in cfg (per memory `feedback_ugc_tool_forward_slashes`).
+4. **No `tags = [ ]`** in cfg (per `tools/vmb-launcher/CLAUDE.md` § "Drop `tags = [ ];` from cfg on first upload").
 5. **Preview file exists** at the path the cfg references.
 6. **Visibility matches expectation** — never auto-flip to public.
+7. **Verify-before-shipping coverage (§5.1a)** — every fix lands with an apply-site log line AND a `/verify_<feature>` chat command.
+
+### 5.1a Verify before shipping (non-negotiable)
+
+**Every fix to a VT2 mod ships with (a) an apply-site log line proving the path ran and (b) a `/verify_<feature>` chat command the user can run from the keep. No more "should work" fixes.** Established 2026-05-23 after repeated burns where fixes compiled, looked right, and silently did nothing in practice:
+
+- ct v0.7.66 mutator hook on `template.server_start_function` — dead field, no behavior change shipped.
+- ct v0.7.76 grudge marks hook on `add_enhancements_for_difficulty` — bypassed by upvalue captures.
+- ct v0.7.88 dormant boon gate on `DeusPowerUpRarityPool` — vanilla rolls from `DeusPowerUpsArrayByRarity` instead, so the gate did nothing.
+
+Each surfaced only in live play, often hours into a session, and required a host+client log diff to root-cause.
+
+When writing any fix that mutates a runtime table or installs a hook:
+
+1. **Add an apply-site log line** at the exact mutation / hook-installation. Format: `[<feature>] applied: <specific evidence>`. The log MUST contain concrete numbers / names that prove which path executed. "Applied." with no detail does NOT count. Examples:
+   - `[grudge] %d marks banned: %s` after the `BossGrudgeMarks` mutation.
+   - `[dormant] added %s to %s rarity pool (now %d entries)` after the pool insert.
+   - `[hook-install] %s hooked at %s` after every `mod:hook` returns.
+
+2. **Add a `/verify_<feature>` chat command** that reports the LIVE state of whatever the fix touches, compared against the toggle / setting that's supposed to gate it. Format: per-item rows showing `name | toggle_state | live_state | PASS/FAIL`. Should work from the keep where possible — read globals directly, don't depend on `Managers.state.entity`.
+
+3. **Verify the right table.** Before gating any boon-related write, grep vanilla code (`deus_power_up_utils.lua`, `deus_run_controller.lua`, etc.) for which table is actually READ at roll/grant time. Don't gate the table that LOOKS authoritative — gate the table that vanilla's call site reads.
+
+4. **For hook installations**, grep for `local <name> = <Class>.<method>` and `<field> = <Class>.<method>` patterns first (see `DEVELOPMENT.md` § "Upvalue capture at file load bypasses later mod:hook"). If any match exists, the hook is dead and you need to mutate data instead.
+
+5. **CHANGELOG entries on fix-class commits** must include the verification command name in the body. Reviewer should be able to run `/verify_<feature>` and confirm before next session.
+
+If any of these is impractical (e.g. nothing observable from the keep), say so explicitly in the changelog — but the default is full coverage.
 
 ### 5.2 Manual smoke test expectation
 For changes affecting load-bearing systems (cosmetics, weapon hooks, attachment
@@ -307,7 +335,7 @@ The complete list of canonical docs and where each lives.
 |---|---|---|
 | `CHANGELOG.md` | **Mandatory, every mod** | Per-mod version history (§6.4 format) |
 | `REGRESSION_CHECKLIST.md` | **Mandatory, every mod** | Per-mod subset of repo-wide checklist + mod-specific regressions |
-| `CODE_REVIEW.md` | **Mandatory for public-Workshop mods** (`ct`, `gt`, `cosmetics_tweaker`, `material_hijack_patched`, `verminious_dreams_lighting`); optional for friends-only | Snapshot architectural review |
+| `CODE_REVIEW.md` | **Mandatory for public-Workshop mods** (`ct`, `gt`, `cosmetics_tweaker`, `verminious_dreams_lighting`); optional for friends-only | Snapshot architectural review |
 | `CLAUDE.md` (per-mod) | Optional | Workflow guardrails specific to that mod (only when the mod has non-obvious gates — see `dynamic_cosmetic_portraits/CLAUDE.md`) |
 | `DEVELOPMENT.md` (per-mod) | Optional | Mod-specific architecture (use when the mod has system-level docs that don't fit in the main lua's header docstring) |
 | `RECIPES.md`, `<TOPIC>_PLAYBOOK.md`, `DEFINITION_OF_DONE.md` | Optional | Reference docs for recurring authoring tasks within the mod |
@@ -599,7 +627,7 @@ EVERY guard that touches non-obvious state.
 `DeusPowerUpsArray` gated by a per-user toggle → peers see different sequential
 indices → `rpc_add_buff(integer_index)` crashes on join. **Fix**: pre-register
 unconditionally in deterministic sorted order; gate only the offering pool.
-See memory `feedback_vt2_gated_registration_diverges.md`.
+See `DEVELOPMENT.md § Gated registration diverges across peers`.
 
 ### 9.4 Hot-reload assumption
 Ctrl+Shift+R is **broken** for mods that hook unit creation
@@ -608,10 +636,7 @@ resources. Always full-restart VT2 after redeploying. See
 `feedback_hot_reload_unfixable.md` memory.
 
 ### 9.5 1P animation overrides
-**Symptom**: T-pose on cross-character weapons. **Wrong fix**: override `anim_event`
-or `wield_anim` (1P) per character. **Right fix**: only override 3P fields
-(`anim_event_3p`, `wield_anim_3p`). 1P is universal across characters. See
-`feedback_1p_animations_universal.md`.
+**Symptom**: missing 3P attack on cross-character weapons (body holds previous weapon's idle stance — **NOT** a T-pose; see §9.8 terminology). **Wrong fix**: override `anim_event` or `wield_anim` (1P) per character. **Right fix**: only override 3P fields (`anim_event_3p`, `wield_anim_3p`). 1P is universal across characters; `first_person_base` is shared across all six characters and any weapon's 1P state machine plays correctly on every character's first-person view by default. See `weapon_tweaker/DEVELOPMENT.md` § "1P animations are universal — never touch" and `character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md` § "Three non-negotiable rules".
 
 ### 9.6 Adding fields to vanilla cfg fields you don't need
 Especially `tags = [ ]` — causes ugc_tool first-upload to fail with 0x2.
@@ -621,6 +646,16 @@ Per `feedback_ugc_tool_forward_slashes.md`.
 Before "fixing" a crash, grep CHANGELOGs + memory for the literal crash
 signature. Most surprising crashes are documented. Cost ~2 wasted ct versions
 in 0.6.5-0.6.6 by skipping. See `feedback_search_changelog_for_known_crashes.md`.
+
+### 9.8 Writing "T-pose" when the actual symptom is "missing event no-op"
+
+VT2 characters do **NOT** T-pose when a `anim_event_3p` doesn't exist on the target weapon's 3P state machine. The actual behavior: the 3P body keeps the **last equipped weapon's idle stance** and silently no-ops the missing event. The attack animation simply doesn't play — no T-pose, no stuck frame, no engine fatal.
+
+**Rule:** do NOT write "T-pose" in failure-mode descriptions, QA matrices, recipe docs, CHANGELOG entries, or commit messages. Use **"default stance of previous weapon"** or **"missing event no-op"** instead. T-pose specifically means the skeleton has no animation playing at all — rare; usually engine-fatal-adjacent — which is a different category of bug (typically a wholly broken state machine, or `Unit.animation_event` returning an error before any anim plays).
+
+A missing `wield_anim_3p` is ALSO not a T-pose — it's the character not entering the new weapon's stance and instead staying in whatever the previous weapon's idle was.
+
+**When auditing existing docs/code:** correct "T-pose" on contact. Most existing entries that say "T-pose" are technically wrong descriptions of "no-anim-played" symptoms. Established 2026-05-19 per user correction.
 
 ---
 
@@ -651,7 +686,7 @@ in 0.6.5-0.6.6 by skipping. See `feedback_search_changelog_for_known_crashes.md`
 ### 10.4 Frozen
 - Mature mods we don't actively iterate on. Add `> FROZEN` banner at the top
   of the main lua.
-- Candidates: `material_hijack_patched`, `verminious_dreams_lighting`,
+- Candidates: `verminious_dreams_lighting`,
   `la_prefix_patch` (per audit findings).
 - Frozen mods still receive crash fixes but no new features.
 

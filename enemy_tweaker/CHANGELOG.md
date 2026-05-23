@@ -1,5 +1,57 @@
 # Enemy Tweaker Changelog
 
+## 0.5.6-dev (2026-05-23) — Convert 6 NetworkLookup lookups to rawget (latent strict-__index crash fix)
+
+### Why
+`NetworkLookup.*` subtables install a strict `__index = error()` metatable at boot. Plain `NetworkLookup.foo[key]` on a missing key throws — see memory `reference_vt2_strict_lookup_rawget.md`. The lint pass on 2026-05-23 flagged six call sites inside the Big Rebalance sweep-damage hot path: `hit_zones[hit_zone_name]` (3 sites) and `damage_sources[item_name]` (3 sites). All six pull from vanilla-registered key spaces today, but they're latent bombs if a mod-injected weapon or breed key ever flows through the same path.
+
+### Changed
+- `enemy_tweaker_big_rebalance.lua` — converted six lookups to `rawget()`:
+  - Line ~1087: `NetworkLookup.hit_zones[target_hit_zone_name]` → `rawget(...)`
+  - Line ~1097: `NetworkLookup.damage_sources[damage_source]` → `rawget(...)`
+  - Line ~1139: `NetworkLookup.damage_sources[damage_source]` → `rawget(...)`
+  - Line ~1165: `NetworkLookup.hit_zones[hit_zone_name]` → `rawget(...)`
+  - Line ~1185: `NetworkLookup.damage_sources[self.item_name]` → `rawget(...)`
+  - Line ~1207: `NetworkLookup.damage_sources[damage_source]` → `rawget(...)`
+- No defensive bailouts added: these sites feed `send_rpc_attack_hit` which already gets the vanilla path's nil propagation; we're matching vanilla behavior, just dropping the strict-`__index` crash. The lint flag was about latent breakage if a future change populates these vars from less-trusted sources.
+
+### Verification
+1. `tools/mod-lint/lint-mod.ps1` — passes.
+2. `tools/lint/regression-lint.ps1 -Quiet` — sites no longer appear in `strict-table-lookup` findings.
+
+## 0.5.5-dev (2026-05-23) — Reseed threat-value cache on mid-session difficulty-mimic re-enable (Issue #9)
+
+### Bug
+When user toggles enemy_tweaker OFF then back ON mid-mission, the ConflictDirector's threat-value cache and performance-manager state remain baked from init time (when hooks were inactive). Difficulty mimic re-applies the spawn settings correctly, but the director's internal threat-tracking state is stale. Zone-boundary auto-fixes it (refresh_conflict_director_patches fires), but the feeling is broken until then.
+
+### Fix
+At end of `mod.on_enabled`, after re-applying difficulty mimic and faction swap, call `active:refresh_conflict_director_patches()` on the active ConflictDirector (if in-mission). This invalidates the threat-value cache and reseeds the performance-manager state immediately, closing the gap to zone-boundary refresh.
+
+**Approach:** Option A — Force a settings refresh on re-enable (vanilla method call).
+- **Why this path:** Vanilla `ConflictDirector.refresh_conflict_director_patches()` already exists and is used internally at zone transitions. It's safe, deterministic, and exactly what we need.
+- **Alternative (Option C) rejected:** Tooltip warning was simpler but less user-friendly.
+
+### Verification
+- `mod:info("[et:difficulty-mimic] reseeded threat-values on enable (%s)", os.date())` logged at apply site per memory `feedback_vt2_verify_before_shipping.md`.
+- Manual test: toggle ET off/on in-mission, observe no threat-value desync until next zone boundary.
+
+### Changed
+- `enemy_tweaker.lua` — `mod.on_enabled` now calls `active:refresh_conflict_director_patches()` if active ConflictDirector exists.
+- Version bumped: `0.5.4-dev` → `0.5.5-dev`.
+
+## 0.5.4-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
+
+### Why
+Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands are global — only the first mod wins, the rest fail silently with `[ERROR] (command): command name 'regression_test' is already used by another mod 'cim'`. Detected in PC-A log 2026-05-23 20:50:52.
+
+### Changed
+- `enemy_tweaker.lua` — renamed `regression_test` → `et_regression_test`. Verification log line added at registration site.
+
+### Verification
+1. Restart VT2. No `[ERROR] (command):` line in console_logs about this command name.
+2. Run `/et_regression_test` in chat. Command fires and prints results.
+3. Per memory `feedback_vt2_verify_before_shipping.md`.
+
 ## 0.4.2-dev (2026-05-16) — Fix `<<<...>>>` bracket-cascading on shared dropdown options
 
 - **Bug:** dropdown option labels in Faction Substitution (2 of 3), Difficulty Mimic (5 of 6), and Breed Substitution (the second one) showed `<<<key>>>` or deeper bracket nests instead of localized labels. Root cause: I built each option table once at file scope (`local _MIMIC_OPTIONS = {...}`) and assigned the same table reference to multiple dropdowns. VMF's `options.lua: localize_dropdown_data` mutates `option.text = mod:localize(option.text)` in place. After the first dropdown of a group processes, option.text is the localized string ("Match (vanilla)"); the next sharing dropdown then tries `mod:localize("Match (vanilla)")` which has no loc entry → `<Match (vanilla)>`. Each additional shared dropdown wraps another layer of brackets.
@@ -87,3 +139,4 @@
 CHANGELOG started after the fact — earlier dev iterations are not documented here. See `git log -- enemy_tweaker/` for the actual history.
 
 Future entries should follow the format used by the other tweaker mods: one `## <version> (date) — <one-line summary>` heading per change set, with bullet points or a short paragraph below.
+

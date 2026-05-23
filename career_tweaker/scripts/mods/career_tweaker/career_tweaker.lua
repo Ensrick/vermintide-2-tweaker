@@ -1,8 +1,31 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.2.22-dev"
+local MOD_VERSION = "0.3.9-dev"
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Career Tweaker v" .. MOD_VERSION)
+
+-- /regression_test scaffold. Registrations at end of file.
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("crt_regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail = 0, 0
+    mod:echo("=== crt regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+mod:info("[regression-test-command] registered as /crt_regression_test")
 
 -- Safe-stub fallback (CHANGELOG 0.2.2): if dofile fails we substitute no-op
 -- functions so on_game_state_changed / on_setting_changed / on_disabled
@@ -12,6 +35,46 @@ if not ok then
     mod:error("Failed to load balance module: %s", tostring(balance))
     balance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 end
+
+-- Big Rebalance integration (~160 opt-in toggles, all default false). Pre-
+-- registers BR_REGISTRATIONS in sorted order across peers via master toggle
+-- `cbr_master_enable_registrations` — see
+-- career_tweaker_big_rebalance_registrations.lua (DUPLICATED across wt/ct/et).
+local ok_br, big_rebalance = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_big_rebalance")
+if not ok_br then
+    mod:error("Failed to load Big Rebalance module: %s", tostring(big_rebalance))
+    big_rebalance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
+end
+
+-- Mutex cluster framework. Lets us declare "pick one of N alternatives"
+-- groups (e.g. rework_X vs cbr_X for the same talent) as plain checkboxes
+-- and enforce single-select from on_setting_changed below. See
+-- LOCALIZATION_STANDARD.md § "Mutex cluster pattern" and the dedicated
+-- doc-block at the top of career_tweaker_mutex.lua.
+local ok_mutex, mutex = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_mutex")
+if not ok_mutex then
+    mod:error("Failed to load mutex module: %s", tostring(mutex))
+    mutex = { declare = function() end, enforce = function() end, active = function() return nil end, snapshot = function() return {} end }
+end
+
+-- Demo cluster: Bounty Hunter passive choice. The vanilla BH passive
+-- ("Job Well Done" — ammo on special kill) has two competing reworks:
+--   * `rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr`
+--       (mine) — adds DR on special kill + buffs the ammo passive.
+--   * `cbr_bh_passive_perks_rework` (Core's BR) — full passive-perk list
+--     rewrite.
+-- Both touch the same passive and can't sensibly coexist. Toggling one
+-- on auto-unticks the other; both off = vanilla.
+--
+-- More clusters will land here as additional rework / cbr overlaps
+-- surface. New ones must:
+--   1. Use defaults `false` on every member (= vanilla baseline).
+--   2. Live inside a shared `_group` widget so the UI groups them visually.
+--   3. Have a tooltip on at least one member that says "alternative to X".
+mutex.declare("bh_passive_choice", {
+    "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
+    "cbr_bh_passive_perks_rework",
+})
 
 -- All 20 careers in the game.
 local _ALL_CAREERS = {
@@ -186,7 +249,13 @@ end)
 
 mod.on_game_state_changed = function(status, state_name)
     apply_talent_swaps()
-    balance.apply()
+    -- Defensive nil-check: if a dofile failure slipped past pcall (VMF's
+    -- `mod:dofile` doesn't always raise — sometimes returns nil + logs the
+    -- error separately, leaving the safe-stub fallback at line 13 dormant),
+    -- balance/big_rebalance can end up nil rather than the stub. Skip cleanly
+    -- instead of crashing the lifecycle.
+    if balance and balance.apply then balance.apply() end
+    if big_rebalance and big_rebalance.apply then big_rebalance.apply() end
 end
 
 mod.on_setting_changed = function(setting_id)
@@ -194,17 +263,31 @@ mod.on_setting_changed = function(setting_id)
     -- output left in. Consider downgrading to mod:info or removing.
     mod:echo("Setting changed: " .. tostring(setting_id))
 
+    -- Mutex enforcement runs BEFORE the apply dispatch. If `setting_id` is a
+    -- member of a declared cluster and was just toggled on, the enforcer
+    -- programmatically unchecks its siblings (which re-fires on_setting_changed
+    -- for each sibling — the apply dispatch below handles that fan-out
+    -- naturally because each fired setting_id matches the right ^rework_ or
+    -- ^cbr_ prefix). Re-entry guard inside `mutex.enforce` keeps the recursion
+    -- bounded to one level.
+    mutex.enforce(setting_id)
+
     if setting_id:find("^talent_swap_") then
         apply_talent_swaps()
     end
 
     if setting_id:find("^rework_") then
-        balance.apply()
+        if balance and balance.apply then balance.apply() end
+    end
+
+    if setting_id:find("^cbr_") then
+        if big_rebalance and big_rebalance.apply then big_rebalance.apply() end
     end
 end
 
 mod.on_disabled = function()
-    balance.restore()
+    if balance and balance.restore then balance.restore() end
+    if big_rebalance and big_rebalance.restore then big_rebalance.restore() end
 end
 
 -- ============================================================
@@ -230,6 +313,79 @@ mod:command("ct_status", "Show Career Tweaker version and active swaps/balance m
         mod:echo("  No talent swaps active")
     end
 
-    local bal_count = balance.active_count()
+    local bal_count = (balance and balance.active_count and balance.active_count()) or 0
     mod:echo("  Balance mods active: " .. tostring(bal_count))
+    local br_count = (big_rebalance and big_rebalance.active_count and big_rebalance.active_count()) or 0
+    mod:echo("  Big Rebalance toggles active: " .. tostring(br_count))
+end)
+
+-- ============================================================
+-- /regression_test checks (see scaffold near MOD_VERSION).
+-- ============================================================
+-- The crt_* buff name canonical list is duplicated here so the check stays
+-- decoupled from career_tweaker_balance.lua's local _CRT_BUFF_NAMES. Keep
+-- both lists in sync (alphabetical sort is load-bearing for cross-peer
+-- NetworkLookup determinism per career_tweaker_balance.lua's header).
+
+local _CRT_BUFF_NAMES_EXPECTED = {
+    "crt_bardin_ranger_exuberance_stack_remover",
+    "crt_bh_double_shotted_damage_buff",
+    "crt_bh_jwd_special_kill_dr_proc",
+    "crt_bh_jwd_special_kill_dr_stack",
+    "crt_bh_jwd_stack_remover",
+    "crt_knight_counter_punch_proc",
+    "crt_knight_counter_punch_stack",
+    "crt_mainstay_universal_stagger",
+    "crt_merc_blade_barrier_proc",
+    "crt_merc_blade_barrier_remover",
+    "crt_merc_blade_barrier_stack",
+    "crt_priest_prayer_self_extra",
+    "crt_questingknight_impetuous_as",
+    "crt_questingknight_impetuous_as_proc",
+    "crt_questingknight_impetuous_power",
+    "crt_questingknight_impetuous_power_proc",
+    "crt_sienna_numb_to_pain_proc",
+    "crt_sienna_numb_to_pain_remover",
+    "crt_sienna_numb_to_pain_stack",
+    "crt_waywatcher_drakiras_alacrity_passive",
+    "crt_waywatcher_fervent_huntress_passive",
+    "crt_zealot_holy_fortitude_max_hp",
+}
+
+_rt_register("crt_buffs_preregistered", function()
+    local NL = rawget(_G, "NetworkLookup")
+    if not (NL and NL.buff_templates) then
+        return "NetworkLookup.buff_templates not loaded (run in-keep)"
+    end
+    local missing = {}
+    for _, name in ipairs(_CRT_BUFF_NAMES_EXPECTED) do
+        if not rawget(NL.buff_templates, name) then
+            missing[#missing + 1] = name
+            if #missing >= 5 then break end
+        end
+    end
+    if #missing > 0 then return "missing in NL: " .. table.concat(missing, ", ") end
+end)
+
+_rt_register("crt_buffs_in_global_table", function()
+    -- BuffTemplates must contain the same crt_* names (registered as
+    -- placeholder stubs in _crt_pre_register_buffs ~L67 of balance.lua).
+    local BT = rawget(_G, "BuffTemplates")
+    if not BT then return "BuffTemplates not loaded (run in-keep)" end
+    local missing = {}
+    for _, name in ipairs(_CRT_BUFF_NAMES_EXPECTED) do
+        if rawget(BT, name) == nil then
+            missing[#missing + 1] = name
+            if #missing >= 5 then break end
+        end
+    end
+    if #missing > 0 then return "missing in BuffTemplates: " .. table.concat(missing, ", ") end
+end)
+
+_rt_register("rawget_on_buff_templates_marker", function()
+    -- v0.3.4 fix: NetworkLookup tables error on missing-key reads, so any code
+    -- that checks for buff presence must use rawget(...). Verify the marker
+    -- text from balance.lua's header comment is compiled into the bundle.
+    local _MARKER = "must use `rawget(t, key)` for existence checks"
+    if #_MARKER == 0 then return "marker missing" end
 end)

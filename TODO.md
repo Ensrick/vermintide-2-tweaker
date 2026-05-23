@@ -7,11 +7,9 @@ REVIEW (2026-05-01):
 - "Implemented" section lists `t unstuck`, `t god`, `t win`, `t dump_boons` with the LEGACY
   prefix `t`. These commands are now in chaos_wastes_tweaker under the `ct` prefix
   (or general_tweaker / weapon_tweaker as applicable). Update prefixes to match current bindings.
-- "Investigate CW ghost scythe 3P spawn crash" entry references CROSS_CAREER_PACKAGE_FIX.md as
-  "partially obsolete — original cross-career theory was wrong" — that doc should get its banner
-  updated to match (see review marker in that file).
-- "Character Weapon Variants mod" entry says "Workshop 3716869446" — consistent with itemV2.cfg.
-  But CLAUDE.md and DEVELOPMENT.md say "(unpublished)". CLAUDE.md and DEVELOPMENT.md are wrong.
+- "Investigate CW ghost scythe 3P spawn crash" entry references `_archive/audits/2026-04-25/CROSS_CAREER_PACKAGE_FIX.md`
+  as "partially obsolete — original cross-career theory was wrong". The doc has been archived
+  (banner directive followed); the cross-career theory remains historical context only.
 - The "Audio" / "Skip/disable character voiceovers" entry — confirm whether this is in scope for
   general_tweaker or a new mod; unclear ownership.
 -->
@@ -38,7 +36,7 @@ REVIEW (2026-05-01):
 - [x] `t dump_boons` command — log boon IDs from next shrine/chest roll
 - [x] Allow duplicate careers (host-only setting — multiple players can share the same hero/career)
 
-- [ ] **Investigate CW ghost scythe 3P spawn crash** — `spawn_unit` assertion on unit hash `877616b4d5c71f36` = `wpn_bw_ghost_scythe_01_3p` (base/Necromancer 3P model). Crash occurs during CW level transitions with an Unchained bot wielding the Ensorcelled Reaper (crashify://77917479-d053-4d34-b6b9-629878a7e6ec, crashify://e4062589-...). Unchained should resolve to `_fire_3p` via `right_hand_unit_override`, so the base variant being requested implies `career_name` was nil at spawn time. Reproduces WITHOUT cross-career weapons enabled. All vanilla code paths pass career_name correctly; suspected timing issue where bot `SimpleInventoryExtension._career_name` is nil during CW unit recreation. **Mitigated** in v0.10.14 with pcall guard + diagnostic logging in `create_equipment` hook — next crash will log weapon key, career_name, and override state to identify the exact failure. Vanilla bug also found: `deus_chest_preload_extension.lua:106-107` calls `get_weapon_packages` without `career_name` for upgrade altar preloads (benign — preload path only). See `CROSS_CAREER_PACKAGE_FIX.md` for earlier analysis (partially obsolete — original cross-career theory was wrong).
+- [ ] **Investigate CW ghost scythe 3P spawn crash** — `spawn_unit` assertion on unit hash `877616b4d5c71f36` = `wpn_bw_ghost_scythe_01_3p` (base/Necromancer 3P model). Crash occurs during CW level transitions with an Unchained bot wielding the Ensorcelled Reaper (crashify://77917479-d053-4d34-b6b9-629878a7e6ec, crashify://e4062589-...). Unchained should resolve to `_fire_3p` via `right_hand_unit_override`, so the base variant being requested implies `career_name` was nil at spawn time. Reproduces WITHOUT cross-career weapons enabled. All vanilla code paths pass career_name correctly; suspected timing issue where bot `SimpleInventoryExtension._career_name` is nil during CW unit recreation. **Mitigated** in v0.10.14 with pcall guard + diagnostic logging in `create_equipment` hook — next crash will log weapon key, career_name, and override state to identify the exact failure. Vanilla bug also found: `deus_chest_preload_extension.lua:106-107` calls `get_weapon_packages` without `career_name` for upgrade altar preloads (benign — preload path only). See `_archive/audits/2026-04-25/CROSS_CAREER_PACKAGE_FIX.md` for earlier analysis (partially obsolete — original cross-career theory was wrong).
 - [ ] **Verify Settings Sync** — Ensure `weapon_tweaker` settings are correctly applied on the client for non-host players.
 - [ ] **Complete weapon_tweaker_data.lua** — Add the missing career weapon checkboxes to the new modular project.
 

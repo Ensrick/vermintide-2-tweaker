@@ -33,9 +33,9 @@ return {
 
     -- Failed-join manifest reveal
     failnotify_title              = { en = "Cannot join — modded host" },
-    failnotify_required_header    = { en = "You are missing %d mods required by the host:" },
-    failnotify_version_header     = { en = "%d mods have a version mismatch:" },
-    failnotify_cosmetic_footer    = { en = "Host also has %d cosmetic mods you don't (gameplay unaffected)." },
+    failnotify_required_header    = { en = "You are missing %%d mods required by the host:" },
+    failnotify_version_header     = { en = "%%d mods have a version mismatch:" },
+    failnotify_cosmetic_footer    = { en = "Host also has %%d cosmetic mods you don't (gameplay unaffected)." },
     failnotify_button_workshop    = { en = "Open Workshop" },
     failnotify_button_cancel      = { en = "Close" },
 }

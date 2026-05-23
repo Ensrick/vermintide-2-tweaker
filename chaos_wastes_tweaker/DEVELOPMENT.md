@@ -1,0 +1,299 @@
+# Chaos Wastes Tweaker — Development Notes
+
+Engine gotchas, crash modes, and load-bearing patterns specific to `chaos_wastes_tweaker` (ct). Read alongside `CHANGELOG.md` (version history), `TODO.md` (planned features), `CW_HANDBOOK_TRAITS.md` (CW-exclusive trait reference), and the repo-root `DEVELOPMENT.md` / `CROSS_MOD_ARCHITECTURE.md`.
+
+This file is for HOW the CW-side internals work (so we don't re-burn the same crash twice). Operational rules (no rm -rf, version bump, deploy doctrine, etc.) live in `PROJECT_STANDARDS.md` and the repo root.
+
+## Buff registration: dormant boons need dual-table writes
+
+When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:
+
+1. `DeusPowerUpBuffTemplates[buff_name]` — for vanilla CW infrastructure that introspects this table
+2. `_G.BuffTemplates[buff_name]` — for `BuffUtils.get_buff_template()` to find it at apply time
+
+**Why:** vanilla flow is:
+- `scripts/settings/dlcs/morris/morris_buff_settings.lua:7310` calls `table.merge_recursive(dlc_settings.buff_templates, DeusPowerUpBuffTemplates)`.
+- DLCUtils then merges `dlc_settings.buff_templates` into the global `BuffTemplates`.
+- Both merges run at boot, BEFORE any mod loads.
+
+`BuffUtils.get_buff_template(name)` (`buff_utils.lua:256`) reads `BuffTemplates[name]`. If ct writes only to `DeusPowerUpBuffTemplates` at runtime, the boon appears in the loot pool but the buff system cannot find its template. Result: `buff_extension.lua:177` crashes with `attempt to index local 'buff_template' (a nil value)` the first time the boon is rolled and applied.
+
+**How to apply:** any code that mutates loot-pool registrations at runtime (dormant activation, mod-provided boons, custom boon injection) must write to both tables. The same rule applies to other DLC-merged template tables — assume any `DLCSettings.morris.*` source has already been merged at runtime.
+
+**Burn history:** ct v0.7.31 (dormant boon activation) → toggling `activate_dormant_*` put the boon in the shrine pool → first apply crashed → fixed v0.7.32 by adding `_G.BuffTemplates[name] = buff_template` alongside the existing `DeusPowerUpBuffTemplates` write.
+
+## Deus boon rarities: event / rare / exotic / unique only
+
+`DeusPowerUpRarities` is the sequential list of valid **boon** rarities:
+
+```lua
+-- scripts/settings/dlcs/morris/deus_power_up_settings.lua:7032
+DeusPowerUpRarities = { "event", "rare", "exotic", "unique" }
+```
+
+`common` and `plentiful` are NOT in this list. They exist in `DeusDropRarityWeights` for WEAPON drops (white/green tier) but boons skip them entirely. There is no "common-tier boon" in CW.
+
+When a mod injects a boon into `DeusPowerUpRarityPool[<rarity>]` at a rarity not in `DeusPowerUpRarities`, the boon **does** enter the pool, but it crashes when it's rolled and added to `existing_power_ups`:
+
+```lua
+-- deus_power_up_utils.lua:189
+existing_power_ups_lut[power_up.rarity][power_up.name] = DeusPowerUps[power_up.rarity][power_up.name]
+```
+
+`existing_power_ups_lut` is file-scope, built from `DeusPowerUpRarities`:
+
+```lua
+-- deus_power_up_utils.lua:179
+local existing_power_ups_lut = table.select_map(table.set(DeusPowerUpRarities), function (_, rarity)
+    return {}
+end)
+```
+
+If `power_up.rarity == "common"`, `existing_power_ups_lut["common"]` is nil → `nil[power_up.name] = ...` crashes with "attempt to index a nil value."
+
+**Symptom:** `[Script Error]: scripts/helpers/deus_power_up_utils.lua:208: attempt to index a nil value`. Stack frame is `generate_random_power_up`. The crash typically appears far from the injection site, after many shrine visits — the boon has to be rolled into `existing_power_ups` before the bad lookup fires.
+
+**Rule:** any mod-injected boon must pick a rarity from `{event, rare, exotic, unique}`. If migrating a "tier 1 / common" mental model, map T1 → `rare` (lowest valid). `event` is reserved for seasonal Skulls boons and may have additional gating; avoid unless mirroring an existing event boon.
+
+**Burn history:** ct v0.7.34 → v0.7.36 with dormant-boon injection of `squats` and `deus_larger_clip` at `common` rarity. Fixed v0.7.37 by remapping both to `rare`.
+
+## Jewelry traits are CW boons, not weapon traits
+
+In **adventure mode**, traits live on three item slots: weapons, jewelry (necklace / charm / trinket), and (career-specific) items.
+
+In **Chaos Wastes**, jewelry traits do NOT appear as item-bound traits. Every necklace / charm / trinket trait is registered in `DeusPowerUpTemplates` as a **boon** — picked up at altars or from chests of trials, identical mechanically to other CW boons.
+
+**Weapon traits remain weapon traits in both modes.** The CW-exclusive weapon traits (Shard Strike, Bloodthirst, Deadeye, etc., see `CW_HANDBOOK_TRAITS.md`) live in `WeaponTraits` and attach to the equipped weapon — not the boon pool.
+
+**Examples of jewelry-trait-as-CW-boon:**
+- `decanter` — charm trait `trait_ring_potion_duration` ("+50% potion duration") → CW boon "Decanter"
+- `home_brewer` — charm trait ("chance to not consume potion") → CW boon "Home Brewer"
+- `barkskin`, `natural_bond`, `boon_of_shallya`, `hand_of_shallya`, `healers_touch`, `grenadier`, `explosive_ordinance`, `shrapnel`, `concoction`, etc. — all in `DeusPowerUpTemplates`.
+
+**Verified via:** `/dump_boon_loc` command — `decanter`, `home_brewer`, `barkskin`, etc. all appear as entries in `DeusPowerUpTemplates`. The advanced description loc key (`description_trait_ring_potion_duration` etc.) preserves the original adventure-mode trait origin, but the CW gameplay surface is always the boon pool.
+
+**How to apply:** when the user mentions any of these names, default to thinking of them as CW boons, not weapon traits. Burned in a v0.7.47 follow-up discussion (Decanter mis-categorized as weapon trait).
+
+## Custom boon design: max_overcharge buff key (`reduced_overcharge` is safer)
+
+`max_overcharge` (NOT `max_overheat_modifier` — older notes were wrong) is the stat_buff key that scales `overcharge_extension` capacity for Sienna staves AND Bardin drakefire weapons. Defined in `scripts/unit_extensions/default_player_unit/buffs/buff_templates.lua:109` as `max_overcharge = "stacking_multiplier"`. Read by `PlayerUnitOverchargeExtension._calculate_and_set_buffed_max_overcharge_values` (`player_unit_overcharge_extension.lua:106-108`):
+
+```lua
+local max_value = self._buff_extension:apply_buffs_to_value(self.original_max_value, "max_overcharge")
+```
+
+Recalc only fires at `extensions_ready` and on `trigger_procs("on_overcharge_lost")`. Adding the buff via `add_buff` mid-game does NOT immediately refresh — must wait for one of those hooks (or weapon swap → wield).
+
+**What it covers:**
+1. **Sienna staves** — firebolt, beam, conflagration, fireball, geiser. All use `weapon_template.overcharge_data` + `overcharge_extension`.
+2. **Bardin drakefire weapons** — `drakegun` and `brace_of_drake_pistols`. Both have `weapon_template.overcharge_data` and use `overcharge_extension`.
+
+**What it does NOT cover:**
+- **Moonfire Bow** (`we_deus_01`): uses `energy_system` via `PlayerUnitEnergyExtension`. The extension reads `_max_energy = energy_data.max_value or 40` at `init` and never calls `apply_buffs_to_value` on it. No buff path exists for max energy. (`ammo_used_multiplier` works on per-shot drain, but not on the max.)
+- **True bow ammo** (Hagbane, Swift Bow, Longbow, etc.) — covered by `total_ammo`, not overcharge.
+- **Vanilla bows + crossbow** — already covered by `total_ammo`.
+
+**Why we use `reduced_overcharge` instead of `max_overcharge` in Quiver Cascade (ct_meta_ammo):** the engine `NetworkConstants.max_overcharge` upper bound is ~60 (vanilla designed it for Sienna Scholar's +50% talent: 40 base × 1.5 = 60 exactly). ANY higher value crashes both host and husk on the per-frame `update()` call with `fassert(max_value >= ... and max_value <= ...) "Max overcharge outside value bounds allowed by network variable!"` at `player_unit_overcharge_extension.lua:110`.
+
+The bound lives in the compiled engine `.network_config` binary and is NOT widenable from Lua — `NetworkConstants.max_overcharge` is a read-only snapshot from `Network.type_info` at boot, and the transport layer (`GameSession.set_game_object_field` for `overcharge_max_value`) uses the engine's own type-info, not the Lua table.
+
+Fix (shipped v0.7.80-alpha): replaced `{ stat_buff = "max_overcharge", multiplier = 0.05 }` with `{ stat_buff = "reduced_overcharge", multiplier = -0.05 }`. The new key reduces overcharge **generated per cast** (consumed locally inside ActionThrowProjectile / overcharge-add paths — not network-synced as a max value), so gameplay effect = "more casts before overheating." Zero crash risk regardless of boon count.
+
+**Burn history:** Co-op session (Sienna host + Bardin drakefire client) — both crashed at 12 stacks (40 → 64, exceeding 60 cap). Fixed v0.7.80-alpha.
+
+## Adventure-injected levels strip incompatible mutators
+
+When ct's `inject_adventure_maps` is on, the player can land in a CW node whose conflict director is a vanilla campaign director (`chaos_light`, `beastmen`, `skaven_light`). Some `PackSpawningSettings` entries in `conflict_settings.lua` lack the `difficulty_overrides` field that CW pacing mutators expect — notably `chaos_light` at line 4795 has only `area_density_coefficient`, `basics`, `roaming_set`.
+
+CW's `mutator_deus_pacing_tweak` applies the `no_roamers` mutator to SIGNATURE zones. Its `tweak_pack_spawning_settings` callback iterates:
+
+```lua
+for _, difficulty_override in pairs(pack_spawning_settings.difficulty_overrides) do
+    difficulty_override.area_density_coefficient = 0
+end
+```
+
+If `pack_spawning_settings.difficulty_overrides == nil`, `pairs(nil)` crashes:
+
+```
+[Script Error]: scripts/settings/mutators/mutator_no_roamers.lua:6:
+  bad argument #1 to 'pairs' (table expected, got nil)
+```
+
+(Reported line varies between vanilla and production due to comment differences — production reports line 6 even though the `pairs` call is at line 8 of the decompiled source.)
+
+**Fix shape (ct v0.7.41):** hook `MutatorHandler.tweak_pack_spawning_settings` and strip `no_roamers` (and other incompatible mutators) from the zone-mutator and per-pack-spawn mutator lists when the current level is adventure-injected. Vanilla CW levels are untouched — their `pack_spawning_settings` have `difficulty_overrides` and `no_roamers` is safe there. Detection via `on_injected_adventure_level()` (defined in `chaos_wastes_tweaker.lua` near `adventure_base_from_level_key`).
+
+**Alternative considered + rejected:** defensive patch adding `difficulty_overrides = {}` to every `PackSpawningSettings` entry at mod load. Would unblock the crash but doesn't honor design intent — `no_roamers` was authored for CW pacing, not campaign. Stripping the mutator is cleaner.
+
+**How to extend:** when a new mutator or pacing rule crashes on adventure-injected levels with a similar nil-field signature, add its name to `ADVENTURE_INCOMPATIBLE_PACK_MUTATORS` near the `MutatorHandler` hook.
+
+## NetworkedFlowStateManager state-count leak (vanilla bug ct patches)
+
+**Vanilla Fatshark bug:** `NetworkedFlowStateManager.clear_object_state` (`scripts/managers/networked_flow_state/networked_flow_state_manager.lua:493-495`) nils `_object_states[unit]` when EntityManager destroys a unit (`entity_manager2.lua:390`) **but never decrements `_num_states`**:
+
+```lua
+NetworkedFlowStateManager.clear_object_state = function (self, unit)
+    self._object_states[unit] = nil
+    -- BUG: should decrement self._num_states by the count of states this unit had
+end
+```
+
+`_num_states` is monotonic for the life of the run. `flow_cb_create_state` (`networked_flow_state_manager.lua:379-406`) asserts `self._num_states < self._max_states` where `_max_states = 512`. Once the total spawn count of "units that ever held a networked flow state" passes 512, the next spawn fatals:
+
+```
+[NetworkedFlowStateManager] Too many object states(512).
+```
+
+**Reproduction:** any sufficiently long run with unit churn. Worst CW offender: the `cursed_chest_objective_unit` buff (`morris_buff_settings.lua:614` `apply_objective_unit`) applies to every cursed-chest enemy spawn. It spawns a `units/hub_elements/objective_unit` carrying a `chest_open_state` networked flow state. Each enemy = 1 permanently-leaked slot. With ct's adventure-mission injection + curses + multiple Chests of Trials per mission, the leak fills in 30–60 minutes.
+
+Reproduced 2026-05-13 on `dlc_termite_3_khorne_path1` (Verminious Dreams khorne node) with `cursed_chest_count > 1`. Crash dump: `console-2026-05-14-03.23.33-d86fd894-2af0-4a4e-82d4-5e54759b32b9.log`.
+
+**Patch (shipped v0.7.3-alpha):**
+
+```lua
+mod:hook("NetworkedFlowStateManager", "clear_object_state", function(func, self, unit)
+    local unit_states = self._object_states and self._object_states[unit]
+    if unit_states and type(unit_states.states) == "table" and type(self._num_states) == "number" then
+        local count = 0
+        for _ in pairs(unit_states.states) do count = count + 1 end
+        if count > 0 then
+            self._num_states = math.max(0, self._num_states - count)
+        end
+    end
+    return func(self, unit)
+end)
+```
+
+Counts states being released and subtracts BEFORE delegating to vanilla. `hook_safe` won't work — vanilla nils the table before the hook fires, leaving nothing to count.
+
+**Consider porting** to other tweaker mods if the same crash signature shows up. The patch is generic and doesn't depend on CW state.
+
+## Walk-through pattern: collision_filter, NOT scene_query
+
+When a spawned CW unit (altar, Chest of Trials, etc.) blocks the player's path and you want them to walk through it without breaking "press E" interaction:
+
+```lua
+local num_actors = (Unit.num_actors and Unit.num_actors(unit)) or 0
+for i = 1, num_actors do                  -- 1-indexed!
+    local actor = Unit.actor(unit, i)
+    if actor then
+        Actor.set_collision_filter(actor, "filter_trigger")
+        Actor.set_collision_enabled(actor, false)  -- belt-and-braces
+    end
+end
+```
+
+Key APIs:
+- `Actor.set_collision_filter(actor, "filter_trigger")` — reclassifies the actor as a non-blocking trigger. The `filter_player_mover` sweep (player character controller) ignores `filter_trigger` actors.
+- `Actor.set_collision_enabled(actor, false)` — extra safety in case some movers consult the enabled flag directly.
+
+**DO NOT** also disable scene_query — that breaks interaction discovery:
+
+```lua
+-- WRONG — breaks "press E to open" prompts
+Actor.set_scene_query_enabled(actor, false)
+```
+
+Interaction discovery in `GenericUnitInteractorExtension._find_best_interaction_unit` (vanilla `generic_unit_interactor_extension.lua:254`) uses a scene query:
+
+```lua
+PhysicsWorld.immediate_overlap(physics_world, "position", self_pos, "shape", "sphere",
+    "size", 0.3, "collision_filter", "filter_overlap_interaction")
+```
+
+`filter_trigger` actors still match `filter_overlap_interaction` (and other interaction filters like `filter_interactable_in_chest`); `scene_query_enabled=false` skips them entirely, so the interaction prompt never appears.
+
+**Burned twice in ct:**
+- v0.6.16 → v0.6.19: 0-indexed `Unit.actor` loop silently no-op'd (`Unit.actor` is 1-indexed).
+- v0.6.28 → v0.6.32: `set_scene_query_enabled(false)` broke Chest of Trials interaction. Fixed by switching to `set_collision_filter(actor, "filter_trigger")`.
+
+Canonical vanilla example of the trigger-only pattern: `scripts/unit_extensions/human/ai_player_unit/ai_utils.lua:521` (warpfire-spewer backpack on death) — but that case disables both filter AND scene_query because the backpack is being destroyed; copy only the filter line for walk-through purposes.
+
+## Lobby combined_hash and `inject_adventure_maps`
+
+VT2's lobby compatibility check happens BEFORE any peer-to-peer communication or VMF host-sync can fire. The matchmaker computes a `combined_hash` from:
+
+- `network_hash` (vanilla engine constant)
+- `trunk_revision` (game build number)
+- `engine_revision` (engine commit)
+- `project_hash` (= "bulldozer")
+- `lobby_data_version`
+- **`num_levels`** — the only field a Lua mod can affect
+
+If host's and joiner's `combined_hash` differ, the joiner gets `Join failed - Game version mismatch` (logged at `[ChatManager][1]System` + `PopupManager:queue_default_popup`). The check fires from `LobbyAux.create_network_hash` → `GameServerAux.create_network_hash`; visible in console as `Making combined_hash: <hex> from network_hash=... num_levels=<N>`.
+
+`num_levels` = count of entries in the engine's `LevelSettings` table at the moment of join. Any mod that calls `LevelSettings[<key>] = <table>` raises the count globally for the session.
+
+### Sticky LevelSettings mutations
+
+`LevelSettings` entries CANNOT be cleanly un-registered from Lua. Once added, they persist until the game closes. Setting them to `nil` doesn't fully revert them — other game systems (`level_name` caches, `packages` references, network lookup tables) hold onto references. So:
+
+- Toggling a mod's level-injection feature OFF mid-session does NOT reduce `num_levels`.
+- Restarting the game IS the only reliable way to return to vanilla `num_levels`.
+
+### ct's `inject_adventure_maps` is the canonical instance
+
+`scripts/mods/chaos_wastes_tweaker/_adventure_pool.lua` `inject_pool()` adds each enabled campaign / event mission × 6 themes (wastes / khorne / nurgle / slaanesh / tzeentch / belakor) plus `_dupN` safety-threshold aliases. Default catalog ≈ 35 missions × 6 themes ≈ 210 entries; in practice ~192 (DLC-not-owned missions skip).
+
+Vanilla `num_levels` = 582. With ct injection on (default missions enabled) = 774.
+
+### What this rules out for "host-controlled" modding
+
+You CANNOT make a `LevelSettings`-mutating feature "always sync to host" without a game restart. The lobby hash check is pre-mod-communication, and the mutation can't be undone in-session.
+
+Workable patterns for a `LevelSettings`-touching feature:
+1. **Lazy injection** — defer the mutation until the player creates a lobby AS HOST. Until then, `num_levels` stays vanilla and the player can join anyone. Cost: once they host, they're committed for the session.
+2. **Clear toggle warning** — surface to the user that enabling this commits the session to matching peers only.
+3. **Refactor away from LevelSettings** — inject via a mechanism the hash doesn't see (e.g. hook the CW node generator to substitute level bundles at runtime, never registering new `LevelSettings` entries). Significantly more work.
+
+### Settings that ARE safely host-controlled
+
+Any state stored in runtime tables not in the hash:
+- `DeusPowerUpsArray` / `*ByRarity` — ct boon enable/disable
+- `DEUS_CHEST_TYPES_DISTRIBUTION` — ct altar mix
+- `MutatorHandler` state — ct curse disable
+- `DeusWeapons[*].baked_trait_combinations` — ct trait ban
+- `DeusRunController.on_soft_currency_picked_up` hook results — ct coin economy
+- `DeusPowerUpTemplates.*.buff_template.buffs` — ct Khaine's Fury, bomb-boon cooldown
+
+These hooks work freely; clients joining a vanilla / non-modded host work fine for these features.
+
+### Diagnostic recipe
+
+If a user reports "Join failed - Game version mismatch" with another modded player:
+
+1. Get both `console-*.log` files (host + client).
+2. Grep both for `Making combined_hash:` — compare `num_levels=N`.
+3. If `num_levels` differs but `network_hash` matches, the cause is mod-induced `LevelSettings` mutation on at least one side. Identify which mod from mod-load lines.
+4. Fix: disable the level-mutating feature on the higher-`num_levels` side AND restart VT2.
+
+> Cross-mod note: this is also relevant to `lobby_tweaker`'s failed-join mod-list reveal. If `CROSS_MOD_ARCHITECTURE.md` gains a dedicated section on the lobby hash, cross-reference this section.
+
+## Graph-snapshot RPC pattern (per-peer determinism fix)
+
+When a load-time toggle in a mod mutates a globally-shared array that vanilla's deterministic generator indexes into, peers with different toggle states produce different output from the same RNG seed — even though every peer runs the "same" deterministic code. Settings-broadcast can't fix it because the array mutation already happened at module-load.
+
+**ct v0.7.64 case:** `inject_adventure_maps` mutates `LEVEL_AVAILABILITY.TRAVEL/SIGNATURE/ARENA` at module-load. Vanilla `deus_populate_graph` picks levels by INDEX into those arrays. Same seed × different arrays = different per-node level/curse/theme picks across peers. The toggle can't be runtime-resynced because `#NetworkLookup.level_keys` folds into the lobby `combined_hash` (sealed pre-handshake — see "Lobby combined_hash" above).
+
+### The pattern: host broadcasts resolved output, clients overwrite in place
+
+1. Hook the deterministic generator at the call site that produces the divergent output (`deus_populate_graph` for CW). On host's return path, broadcast the result; on client's return path, apply the snapshot.
+2. Late-arrival apply at a downstream consumer (`DeusMapScene.on_enter`) for cases where the RPC lost the race against the engine's setup RPC.
+3. **In-place mutation only** — preserves table identity that the controller's internal references hold, and preserves topological fields (`next`, `layout_x/y`) that are deterministic and not shipped.
+4. **Short JSON keys** to keep payload tight (`l`=level, `b`=base_level, etc.). Reuse the existing chunked-send pattern from `ct_sync_host_settings_chunk` (VMF RPC string cap is 500 chars; chunk at 400 for envelope headroom — see `reference_vmf_rpc_string_cap` rule in repo memory).
+5. Forward-compat: pure `mod:network_register` string-keyed RPC. Old-mod peers silently drop the packet — no crash, no NetworkLookup writes.
+
+### When NOT to use
+
+If the divergent state can be host-synced via the existing settings broadcast (toggle doesn't affect lobby_hash) — do that instead. The graph-snapshot RPC is only needed when the *driving toggle itself* can't be host-synced.
+
+### Implementation reference
+
+`chaos_wastes_tweaker.lua` v0.7.64:
+- `GRAPH_FIELD_MAP` (short-key map for wire shape)
+- `apply_graph_snapshot`, `broadcast_graph_snapshot`
+- `mod:network_register("ct_graph_snapshot_chunk", ...)` — mirrors existing `ct_sync_host_settings_chunk` pattern
+- Two apply sites: post-`deus_populate_graph` (common) + `DeusMapScene.on_enter` (late-arrival re-apply)
+
+**Host-migration is NOT covered** — the new host's snapshot represents its pre-migration state. Document as known limit; revisit only if visible drift after migration is reported.

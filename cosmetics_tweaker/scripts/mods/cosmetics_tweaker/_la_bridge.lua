@@ -32,12 +32,13 @@ M.localization          = {}  -- display_name_key -> human-readable string
 
 -- Shield/offhand options derived from LA SKIN_LIST entries with
 -- swap_hand="left_hand_unit". Indexed by VANILLA WEAPON TYPE (the prefix
--- of each `icons` table key, e.g. `es_1h_mace_shield`, `es_sword_shield_breton`).
--- LA authors each shield's texture for specific weapon UVs and lists those
--- weapons in the variant's `icons` table; the picker should mirror that
--- authoring exactly so we never paint a texture meant for one shield
--- silhouette onto a different one.
---   { es_1h_mace_shield = { {name=..., armoury_key=..., vanilla_skin=...}, ... }, ... }
+-- of each `icons` table key, e.g. `es_1h_mace_shield`, `es_sword_shield_breton`)
+-- then by hand_field. LA today only ships swap_hand="left_hand_unit"
+-- variants (and the bow filter weeds bows out), so the inner key is always
+-- "left_hand_unit". The schema is per-hand for forward-compat with future
+-- LA pistol/right-hand variants and to match cosmetics_tweaker's
+-- _offhand_options structure (v0.9.9.4-dev).
+--   { es_1h_mace_shield = { left_hand_unit = { {name=..., armoury_key=..., vanilla_skin=...}, ... } }, ... }
 M.la_offhand_options_by_weapon_type = {}
 
 local function la()  return get_mod("Loremasters-Armoury") end
@@ -491,15 +492,33 @@ local function build_offhand_options()
                         icon_keys     = sorted_icons,
                         weapon_types  = weapon_types,
                     }
+                    -- v0.9.9.1 REVERT: removed the v0.9.9.0 WeaponSkins
+                    -- icon lookup. User reported "the latest has the wrong
+                    -- icons for everything" — the assumption that
+                    -- `WeaponSkins.skins[la_armoury_key].inventory_icon`
+                    -- carries the LA-authored custom icon was wrong (or
+                    -- the lookup returned an unrelated icon path). LA's
+                    -- actual icon storage format needs a proper
+                    -- diagnostic probe before re-attempting. Reverting
+                    -- to pre-v0.9.9.0 opt shape (no icon field).
                     local opt = {
                         name          = humanize_armoury_key(la_key),
                         armoury_key   = la_key,
                         vanilla_skin  = vanilla_skin_key,
                         intended_unit = intended_unit,
                     }
+                    -- v0.9.9.4-dev: nest under hand_field. LA only ships
+                    -- swap_hand="left_hand_unit" today, so the outer hand
+                    -- bucket is always left_hand_unit. If LA later ships
+                    -- right-hand variants, the bucket key would change to
+                    -- variant.swap_hand and the consumer (picker) already
+                    -- knows how to render per-hand rows.
+                    local hand_field = "left_hand_unit"
                     for wt, _ in pairs(weapon_types) do
-                        local list = M.la_offhand_options_by_weapon_type[wt]
-                        if not list then list = {}; M.la_offhand_options_by_weapon_type[wt] = list end
+                        local per_hand = M.la_offhand_options_by_weapon_type[wt]
+                        if not per_hand then per_hand = {}; M.la_offhand_options_by_weapon_type[wt] = per_hand end
+                        local list = per_hand[hand_field]
+                        if not list then list = {}; per_hand[hand_field] = list end
                         list[#list + 1] = opt
                     end
                 end
@@ -620,8 +639,10 @@ function M.register_all()
 
     build_offhand_options()
     M._build_la_path_to_parent_package()
-    for weapon_type, list in pairs(M.la_offhand_options_by_weapon_type) do
-        mod:info("[LA bridge] %s offhand pool: %d entries", weapon_type, #list)
+    for weapon_type, per_hand in pairs(M.la_offhand_options_by_weapon_type) do
+        for hand_field, list in pairs(per_hand) do
+            mod:info("[LA bridge] %s/%s offhand pool: %d entries", weapon_type, hand_field, #list)
+        end
     end
 
     M.registered = true

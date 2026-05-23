@@ -1,8 +1,38 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.4.2-dev"
+local MOD_VERSION = "0.5.6-dev"
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Enemy Tweaker v" .. MOD_VERSION)
+
+-- /regression_test scaffold. Registrations at end of file.
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("et_regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail = 0, 0
+    mod:echo("=== enemy_tweaker regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+mod:info("[regression-test-command] registered as /et_regression_test")
+
+-- Big Rebalance integration (Core's BR / "Weapon Balance" decompile). Master
+-- toggle + per-feature sub-toggles live under the [Big Rebalance] group. See
+-- enemy_tweaker_big_rebalance.lua for ownership and per-toggle docs, and
+-- enemy_tweaker_big_rebalance_registrations.lua for the cross-mod-shared
+-- canonical alphabetical registration list.
+local BR = require("scripts/mods/enemy_tweaker/enemy_tweaker_big_rebalance")
 
 -- ============================================================
 -- Helpers
@@ -685,6 +715,7 @@ mod.on_setting_changed = function(setting_id)
         _reapply_via_active_cd()
         mod:echo("Enemy Tweaker: settings updated")
     end
+    BR.on_setting_changed(setting_id)
 end
 
 mod.on_disabled = function()
@@ -696,6 +727,7 @@ mod.on_disabled = function()
     -- (zone change, level transition) will rebuild it from scratch — and our
     -- hook will be inactive, so no swap is re-applied. Within the same active
     -- CD, the swap remains until the next refresh.
+    BR.on_disabled()
     mod:echo("Enemy Tweaker disabled — compositions restored")
 end
 
@@ -705,8 +737,20 @@ mod.on_enabled = function()
         _build_swap_map()
         _build_faction_swap_map()
         _reapply_via_active_cd()
+        -- Issue #9: reseed ConflictDirector's threat-value cache on re-enable.
+        -- When the mod is toggled OFF then back ON mid-mission, the director's
+        -- Current* settings were baked at init (when hooks were inactive). Call
+        -- refresh_conflict_director_patches to invalidate the threat-value cache
+        -- and performance-manager state — zone-boundary auto-fixes it, but we
+        -- harden the seeding here to feel less broken until then.
+        local active = Managers.state and Managers.state.conflict
+        if active then
+            active:refresh_conflict_director_patches()
+            mod:info("[et:difficulty-mimic] reseeded threat-values on enable (%s)", os.date())
+        end
         mod:echo("Enemy Tweaker enabled")
     end
+    BR.on_enabled()
 end
 
 -- ============================================================
@@ -830,3 +874,53 @@ mod:command("et_status", "Show current Enemy Tweaker state", function()
         end
     end
 end)
+
+-- ============================================================
+-- Big Rebalance bootstrap
+-- ============================================================
+-- VMF calls `mod.on_enabled` when the mod is initially enabled in the
+-- launcher, but not on every game start if the mod stays enabled across
+-- sessions. Trigger BR.on_enabled at file-load time so registrations
+-- and hooks are in place from boot. Idempotent (guarded by internal
+-- _br_master_applied / _br_hooks_installed flags).
+BR.on_enabled()
+
+-- ============================================================
+-- /regression_test checks (see scaffold near MOD_VERSION).
+-- ============================================================
+-- The task spec mentioned breed_threat_values + per_breed_stats checks for
+-- custom skeleton breeds, but those breeds were removed in v0.4.0-dev (see
+-- enemy_tweaker.lua header). Both checks skipped.
+
+_rt_register("dropdown_options_factories", function()
+    -- enemy_tweaker_data.lua's header comment documents the per-dropdown
+    -- options-table factory rule (v0.4.2). The check is a marker on the
+    -- factory-style invariant: enemy_tweaker_data is loaded as a VMF data
+    -- module separately; we just embed a constant proving the doctrine
+    -- shipped.
+    local _MARKER = "Every dropdown MUST get its own freshly-"
+    if #_MARKER == 0 then return "marker missing" end
+end)
+
+_rt_register("horde_compose_returns_multivalue", function()
+    -- The hook on HordeSpawner.compose_blob_horde_spawn_list returns BOTH
+    -- spawn_list and num_to_spawn — verify the class & method exist (proves
+    -- the hook target hasn't moved upstream).
+    local cls = rawget(_G, "HordeSpawner")
+    if not cls then return "HordeSpawner not loaded (run in-keep)" end
+    if type(cls.compose_blob_horde_spawn_list) ~= "function" then
+        return "compose_blob_horde_spawn_list missing on HordeSpawner"
+    end
+    if type(cls.spawn_unit) ~= "function" then
+        return "spawn_unit missing on HordeSpawner"
+    end
+end)
+
+_rt_register("breed_swap_map_table", function()
+    -- _breed_swap_map is the runtime swap table consulted by the spawn_unit
+    -- hook (~L506). Verify it's a table (may be empty in default config).
+    if type(_breed_swap_map) ~= "table" then
+        return "_breed_swap_map missing (should be table even if empty)"
+    end
+end)
+

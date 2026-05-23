@@ -1,6 +1,6 @@
 local mod = get_mod("lobby_tweaker")
 
-mod.MOD_VERSION = "0.1.0-dev"
+mod.MOD_VERSION = "0.1.2-dev"
 mod:echo("[Tweaker: Lobby] v" .. mod.MOD_VERSION .. " loaded.")
 
 -- Phase 1: host-side lobby controls

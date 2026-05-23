@@ -97,17 +97,27 @@ _resolve_mode = function(mod_id, mod_obj)
     return "R"
 end
 
+-- Sibling mods scope their MOD_VERSION as `local MOD_VERSION = "..."`, which
+-- means it's invisible cross-mod — `mod_obj.MOD_VERSION` / `_G[mod_id].MOD_VERSION`
+-- both fall through to nil for every sister mod. Until either (1) sister
+-- mods publish their version as `mod.MOD_VERSION` (public table field) or
+-- (2) we maintain a hardcoded id->version map here, the manifest's version
+-- column can't be populated and clients will see "version_unavailable" in
+-- the failed-join reveal popup. Functionally this only matters for the
+-- "version mismatch" branch — the missing-mod branch (which is the more
+-- common failure mode) doesn't depend on version strings.
+-- TODO: choose (1) lift-to-public or (2) hardcoded map; defer until the
+-- failed-join UX is field-tested. See Section E P1 release-audit note.
 _resolve_version = function(mod_id, mod_obj)
     if mod_obj then
         if type(mod_obj.MOD_VERSION) == "string" then return mod_obj.MOD_VERSION end
         if type(mod_obj.version) == "string" then return mod_obj.version end
     end
-    local g = rawget(_G, mod_id)
-    if type(g) == "table" then
-        if type(g.MOD_VERSION) == "string" then return g.MOD_VERSION end
-        if type(g.version) == "string" then return g.version end
-    end
-    return "?"
+    -- Cross-mod _G lookup intentionally dropped — sister mods don't publish
+    -- a global table keyed by their id, so this path was always a no-op and
+    -- only made the fall-through ambiguous. Public mod-table reads above
+    -- (mod_obj.MOD_VERSION / .version) still win when present.
+    return "version_unavailable"
 end
 
 _resolve_workshop_id = function(vanilla_entry)

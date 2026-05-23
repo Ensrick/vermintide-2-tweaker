@@ -76,7 +76,7 @@ Class inheritance does NOT bridge the gap. VT2's `foundation/scripts/util/class.
 
 **The crash window:** if `GearUtils.spawn_inventory_unit` is called with a unit_name that the local machine's package set didn't include, the call fails (`Resource not found` engine fatal). This bypasses `pcall`. Custom-mesh weapons must therefore appear in `inventory_package_list.lua` OR be force-loaded through `Managers.package:load(path, ...)` BEFORE the husk's `_wield_slot` runs.
 
-Note (from memory `feedback_vt2_force_load_only_listed_paths.md`): `Managers.package:load` succeeds synchronously but async fatals "Resource not found" if the path isn't in `inventory_package_list.lua`. The fatal bypasses pcall. Display units typically are not listed. The only fully safe path for cross-peer custom meshes is to ship vanilla unit paths (the Loremaster's Armoury `data.mat_to_use` overlay pattern) — see `reference_la_custom_mesh_pattern.md`.
+Note (per `DEVELOPMENT.md § Force-load only paths in inventory_package_list.lua`): `Managers.package:load` succeeds synchronously but async fatals "Resource not found" if the path isn't in `inventory_package_list.lua`. The fatal bypasses pcall. Display units typically are not listed. The only fully safe path for cross-peer custom meshes is to ship vanilla unit paths (the Loremaster's Armoury `data.mat_to_use` overlay pattern) — see `character_weapon_variants/RECIPES.md § Custom-mesh add-on — LA-style pattern`.
 
 ## 3. Per-unit visuals — what is per-instance vs shared
 

@@ -1,0 +1,70 @@
+name: QA
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "**/*.lua"
+      - "**/itemV2.cfg"
+      - "**/CHANGELOG.md"
+      - "**/*.md"
+      - ".luacheckrc"
+      - "qa/**"
+      - ".github/workflows/qa.yml"
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install luacheck (Linux native — ignore the bundled Windows .exe)
+        run: sudo apt-get update && sudo apt-get install -y lua-check
+
+      - name: luacheck (Lua static analysis)
+        run: |
+          set +e
+          luacheck . --codes --formatter plain
+          # Currently ~415 warnings (baseline 2026-05-23). ~141 are the known
+          # CWV bare-globals audit finding tracked in PROJECT_STANDARDS §11.
+          # Don't fail the build until we drive the baseline down — but DO
+          # surface the report. `|| true` exits zero.
+          true
+        # TODO: tighten to fail-on-warning once CWV bare globals are refactored
+        # and the baseline is clean.
+
+      - name: check_cfg.ps1
+        shell: pwsh
+        run: ./qa/check_cfg.ps1
+
+      - name: check_versions.ps1
+        shell: pwsh
+        run: ./qa/check_versions.ps1
+        continue-on-error: true
+        # cfg-title-vs-MOD_VERSION sync is currently manual; will tighten once
+        # the launcher auto-rewrite ships.
+
+      - name: check_localization.ps1
+        shell: pwsh
+        run: ./qa/check_localization.ps1
+        continue-on-error: true
+        # Many existing mods have orphan localization keys (false-positive heavy);
+        # tighten to hard-fail once cleaned per qa/CHECKS.md.
+
+      - name: check_file_sizes.ps1
+        shell: pwsh
+        run: ./qa/check_file_sizes.ps1
+        continue-on-error: true
+        # cosmetics_tweaker.lua and chaos_wastes_tweaker.lua exceed 2500; both
+        # are tracked for refactor in PROJECT_STANDARDS §11.
+
+      - name: check_stale_docs.ps1
+        shell: pwsh
+        run: ./qa/check_stale_docs.ps1
+        continue-on-error: true
+        # Stale audit docs are warnings, not blockers.

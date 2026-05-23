@@ -1,5 +1,158 @@
 # Weapon Tweaker Changelog
 
+## 0.12.72-dev (2026-05-23) — Issue #8: defensive rawget on user-input ItemMasterList lookups
+
+### Why
+
+`ItemMasterList[user_input_key]` Crashifies on unknown keys via vanilla's
+strict `__index` metatable. A user typing `/forge nonexistent_weapon` (or
+any future chat command, save-data drift, or peer-late-join race that
+reaches an unrecognized key) would have hit an unrecoverable engine fatal
+instead of a graceful nil-and-log. The repo-wide convention (already
+practiced in `cosmetics_tweaker`) is to wrap every non-literal-key
+lookup in `rawget()` so the strict-metatable bypass is unreachable.
+
+### Changed
+
+Converted every `ItemMasterList[<var>]` site to `rawget(ItemMasterList, <var>)`
+in `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua`:
+
+- `weapon_tweaker.lua:175` — `_strip_removed_kruber_unlocks` walk (was line 171).
+- `weapon_tweaker.lua:208` — `apply_weapon_unlocks` strip pass.
+- `weapon_tweaker.lua:226` — `apply_weapon_unlocks` add-back pass.
+- `weapon_tweaker.lua:277` — `patch_career_actions_on_weapons` ability-action injection.
+- `weapon_tweaker.lua:3835` — `/dump_weapons` chat-command dump loop.
+
+All five sites previously iterated keys from internal literal tables
+(`_kruber_removed_pairs`, `weapon_unlock_map`, sorted snapshot of
+`pairs(ItemMasterList)`), so the strict-`__index` crash was unreachable
+*today* but brittle on future refactors (e.g. if a user-input or
+save-data key ever flows into one of these helpers). The conversion
+matches the cosmetics_tweaker convention (lines 1305 / 1239 / 4555–4556)
+and the file's own comment header at line 18 promising rawget hygiene.
+
+The line-3961 `team_previewer.cb_hero_unit_spawned_skin_preview` hook
+already used `rawget(ItemMasterList, item.item_name)` as part of the
+v0.12.52-dev parade-crash fix — no change there.
+
+### Verification
+
+1. In the keep, type `/dump_weapons` — should print the same weapon
+   dump as before (rawget on a known-good key is identical to direct
+   index for present keys).
+2. With cross-character weapon toggles ON, equip a cross-career weapon
+   in the keep inventory previewer — unlock + ability-action injection
+   paths exercise the four `apply_weapon_unlocks` /
+   `patch_career_actions_on_weapons` sites.
+3. (Future-proofing) Any new chat command in wt that accepts a weapon
+   key as a chat-arg can now safely call `rawget(ItemMasterList, key)`
+   following the same pattern.
+
+## 0.12.71-dev (2026-05-23) — Reorder per-career weapon toggles into canonical order
+
+### What
+
+`weapon_tweaker_data.lua` and `weapon_tweaker_localization.lua` had each
+career's `unlock_<career>_<weapon>` widget list in a mix of lore-grouped,
+add-order, and ad-hoc orderings — different per character bucket. Both
+files reordered in lockstep so every career follows one mechanical rule:
+
+1. **Native weapons first** (alphabetical by base-weapon key after the
+   `unlock_<career>_` prefix), with any `*_deus_01` entry sorting to the
+   end of the native cluster.
+2. **Cross-character ports next**, grouped by donor character in
+   `es → dr → we → wh → bw` order, alphabetical within each donor
+   bucket, donor `_deus_01` at end of donor group.
+3. Ambiguous template-alias setting_ids (e.g. Saltzpyre's `es_1h_flail`,
+   visually a Saltzpyre flail using the shared `es_1h_flail` ItemMasterList
+   key) sort by their **literal setting_id prefix**, not in-game character
+   ownership — keeps the rule mechanical and deterministic from the
+   setting_id alone.
+
+334 widget moves in data, 406 string moves in loc (loc has both melee +
+ranged blocks intermixed per career, so loc moves > data moves). Every
+move is a re-order only — no setting_ids added, removed, renamed, or
+re-defaulted. `default_value` and per-career inclusions/exclusions
+(e.g. `es_sword_shield_breton` only on merc + GK, drake-vs-steam-pistol
+career split on Bardin, `wh_priest`'s unique melee pool) preserved
+exactly as-is.
+
+### Why
+
+- **Discoverability:** new contributors and players adding a weapon need
+  a predictable insert point. The mixed prior ordering required
+  guessing the family group; new alphabetical-by-donor is mechanical.
+- **Maintainability:** `feedback_alphabetical_order.md` mandates moving
+  loc + data together. A mechanical ordering rule makes that
+  enforceable — `sort -u` works for verification.
+- **No internal-consistency cost:** all 4 careers per character bucket
+  already shared the same melee/ranged ordering (audit confirmed), so
+  reordering by mechanical rule preserves per-character symmetry while
+  removing the historical drift.
+
+Ordering rule + alternatives considered in
+`_audit_wt_weapon_order.md` §4-5 (repo root). Peregrinaje was
+evaluated as the canonical reference per user brief but rejected — its
+`tweaks/new_weapons.lua` is a `pairs(DeusWeaponGroups)` walk and
+`tweaks/weapon_options.lua` is a flat unordered registry; neither
+provides a per-career ordering to mirror. Full rationale in §1-2 of
+the audit doc.
+
+### Files touched
+
+- `scripts/mods/weapon_tweaker/weapon_tweaker_data.lua`
+- `scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua`
+- `scripts/mods/weapon_tweaker/weapon_tweaker.lua` (MOD_VERSION bump only)
+
+Pre-edit copies kept at `.bak.v0.12.70-dev` siblings of the two
+touched scripts/mods files for diff insurance.
+
+### Verification
+
+1. Visual spot-check of `weapon_tweaker_data.lua:71-94` (merc native +
+   ports — alphabetical + donor-grouped) and `weapon_tweaker_data.lua:428-435`
+   (wh_priest — natives alphabetical, `es_1h_flail` correctly sorts under
+   `es_*` donor bucket per ambiguous-alias rule).
+2. Data/loc parity scan: both files have 428 unique `unlock_*` setting_ids,
+   1:1 mapping (`set(data_sids) == set(loc_sids)`, no dups on either side).
+3. Per-career divergences preserved: `es_sword_shield_breton` present
+   only on `melee_es_mercenary` + `melee_es_questingknight`; Bardin
+   drake-vs-steam-pistol career split intact; `wh_priest` 7-weapon
+   pool + absent `ranged_wh_priest` group preserved.
+
+## 0.12.70-dev (2026-05-23) — Remove polearm-preview diagnostic + defensive ItemMasterList audit
+
+### Issue #7: Remove `_wt_polearm_preview_diag` diagnostic helper
+
+The polearm preview diagnostic was scaffolded in v0.12.56 to log template/wield-event/animation data for a user-reported regression (Kruber Mercenary holding wrong stance on `es_halberd` / `es_2h_heavy_spear` preview). The regression was subsequently fixed in v0.12.64. The 4-line-per-equip diagnostic log noise is no longer earning its keep.
+
+Deleted:
+- `_POLEARM_DIAG_KEYS` whitelist table
+- `_wt_polearm_preview_diag(self, item_name, slot)` function
+- Call site in `MenuWorldPreviewer.equip_item` hook_safe
+- Associated comment block
+
+**Verification:** Inventory previewer works normally. No `[wt polearm-diag]` lines appear in logs.
+
+### Issue #8: Defensive ItemMasterList lookup audit (resolved as side effect)
+
+Audit pass to wrap user-input ItemMasterList lookups with `rawget(ItemMasterList, key)` pattern. The only remaining direct-index read with a dynamic key was inside `_wt_polearm_preview_diag` (deleted above), which took `item_name` from the hooked method parameter and validated it against `_POLEARM_DIAG_KEYS` before use. All other ItemMasterList accesses in the file iterate over hardcoded or self-validated key lists and are safe. Deletion of the diagnostic function resolves this audit item.
+
+See CLAUDE.md Key conventions section for the pattern.
+
+## 0.12.69-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
+
+### Why
+Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands are global — only the first mod wins, the rest fail silently with `[ERROR] (command): command name 'regression_test' is already used by another mod 'cim'`. Detected in PC-A log 2026-05-23 20:50:52.
+
+### Changed
+- `weapon_tweaker.lua` — renamed `regression_test` → `wt_regression_test`. Verification log line added at registration site.
+
+### Verification
+1. Restart VT2. No `[ERROR] (command):` line in console_logs about this command name.
+2. Run `/wt_regression_test` in chat. Command fires and prints results.
+3. Per memory `feedback_vt2_verify_before_shipping.md`.
+
 ## 0.12.67-dev (2026-05-22) — Authentic Brace: primary spread 3× → 2×
 
 Single-shot LMB (action_one.default — primary mode of fire) was too inaccurate per user feel-test. `_AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT` dialled from 3.0 → 2.0; primary clone (`wt_authentic_brace_of_pistols_spread`) now scales every numeric leaf of the cloned `brace_of_pistols` spread template by 2× instead of 3×. Secondary mult unchanged at 9.0, so the rapid-fire / lock-target mode stays as wide-spread as before — the gap between primary and secondary widens to 4.5×.

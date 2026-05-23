@@ -1,6 +1,6 @@
 local mod = get_mod("verminious_dreams_lighting")
 
-local MOD_VERSION = "0.8.0-alpha"
+local MOD_VERSION = "1.0.0"
 mod:info("Verminious Dreams Lighting v%s loaded", MOD_VERSION)
 mod:echo("Verminious Dreams Lighting v" .. MOD_VERSION)
 

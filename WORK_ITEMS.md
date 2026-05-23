@@ -1,3 +1,9 @@
+> ⚠️ **Stale snapshot — superseded by [`AUDIT_2026_05_21.md`](./AUDIT_2026_05_21.md)**
+>
+> This document was self-stamped 2026-04-27 and has not absorbed the VMB migration or any subsequent work. Use this file for HISTORY and CONTEXT only. For current state, see the 2026-05-21 master audit.
+
+---
+
 <!--
 REVIEW (2026-05-01):
 - "Last updated: 2026-04-27" — predates the 2026-05-01 VMB migration. CHANGELOG.md and

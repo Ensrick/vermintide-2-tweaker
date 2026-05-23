@@ -21,6 +21,24 @@ dual-wield render. Every one was a missed gate.
 
 ---
 
+## Design intent — cross-character base templates are the feature
+
+CWV variants intentionally clone from cross-character base templates
+to bring other characters' movesets onto receivers (Kruber wielding
+Sienna's 2H mace, Bardin wielding Saltzpyre's priest hammer, Kruber
+wielding Kerillian's dual swords, etc.). This is the design, not a
+bug — the whole point is semi-lore-friendly variants that play
+differently enough from a receiver's vanilla loadout to feel like
+natural new weapons. 1P side is universal across characters and needs
+no work. The 3P side is where the work lives: remap source-weapon
+events onto the receiver's good-enough native 3P vocabulary so
+bystanders in the lobby see something plausible. **G-CROSS-CHAR** and
+**G-3P-ANIM** below capture the discipline for that remap. See
+`ISAAK_RECIPE.md` for the lessons-learned reference on 3P remap
+technique.
+
+---
+
 ## How to use this file
 
 1. Identify which **trait gates** apply by walking the matrix below.
@@ -72,6 +90,14 @@ dual-wield render. Every one was a missed gate.
   helpers (`_es_all_careers` etc.) where they apply.
 - [ ] If `item_type` is overridden, also added to `_seed_targets` and
   `_item_type_to_skin_table`.
+- [ ] If the variant ships pre-baked traits + properties (curated
+  exotic / unique / modded-rarity instances), the trait/property
+  choices are aimed at a **real Cataclysm breakpoint** confirmed
+  with the user or against the Royale w/ Cheese community
+  breakpoint spreadsheet — NOT fabricated. Crit-dependent
+  breakpoints are only "reliable" when paired with a guaranteed-crit
+  talent. See `DEVELOPMENT.md` "Build discipline — don't fabricate
+  breakpoints".
 
 ### U-3. Build-from-ground-up integrity
 

@@ -296,3 +296,114 @@ end
 3. **Animation ownership** — if a new weapon needs animation remaps, does character_weapon_variants ship them or delegate to weapon_tweaker? Cleaner if the new mod is self-contained, but duplicates weapon_tweaker's remap infrastructure.
 4. **Scope of new weapons** — curated case-by-case. Need to enumerate which cross-character combos are worth building as real items vs. leaving as raw weapon_tweaker unlocks.
 5. **Cosmetic curation approach** — lore-friendly by default, hand-picked per character. Only models and illusions matching the current character's aesthetic are shown.
+
+---
+
+## Big Rebalance integration (wt / ct / et + buff_tweaker)
+
+Integration of Core's **Cores Big Rebalance** mod (Steam Workshop ID
+`2705276978`, internal mod ID `Weapon Balance`) into the user's tweaker mods
+as opt-in toggles. Landed 2026-05-21. Refactored 2026-05-21+ to centralize
+shared template registration in `buff_tweaker` (mod ID `bt`).
+
+Decompiled source archived at
+`C:\Users\danjo\source\repos\_big_rebalance_extract\source\` (12 files,
+~640KB). Inventory + design + implementation artifacts live alongside.
+
+### Mod split
+
+| Mod | Toggles | Version (at landing) | Owns |
+|---|---|---|---|
+| `wt` (Tweaker: Weapons) | 114 + master | 0.12.61-dev | `Weapons.*`, `DamageProfileTemplates.*`, weapon function hooks (Flamethrower / Beam / TrueFlight) |
+| `ct` (Tweaker: Careers) | 299 + master (`cbr_master_enable_registrations`) | 0.3.0-dev | `TalentBuffTemplates.*`, `BuffTemplates.<career>_*`, passives / ults, `PassiveAbilitySettings.*` |
+| `et` (Tweaker: Enemies) | 14 + master | 0.5.0-dev | `DamageUtils.stagger_ai` / `calculate_damage` / `ActionShieldSlam._hit` hook rewrites, `BreedTweaks.*`, THP-from-kills buffs |
+| `bt` (buff_tweaker) | 1 master | scaffolded 2026-05-21 | **Single shared registration mod.** Pre-registers Big Rebalance buffs / damage profiles / explosion templates on every peer in deterministic sorted order. wt/ct/et's BR sub-toggles all check `(get_mod('bt') or {}):is_br_active()` before applying. |
+
+**SpicyEnemies module dropped entirely** — its 6 forced package preloads
+couldn't be safely gated per-user.
+
+### Master toggle pattern
+
+Each of wt / ct / et has its own master (`br_master_enable_registrations`,
+ct's is `cbr_master_enable_registrations`). When the user enables it, the
+mod patches data tables that reference the BR registrations. Individual
+toggles then patch fields within those tables. **All defaults are
+`false` — opt-in.**
+
+The shared registration of the canonical 328-entry list now lives in
+`buff_tweaker`. wt / ct / et toggle sub-features off the `bt` master.
+
+### Known stubs (41 follow-ups)
+
+ct's ult `_run_ability` rewrites and framework hooks (timed-block,
+infinite_wounds, dodge_count) shipped as `function() end` placeholders.
+Toggles work but no-op until verbatim source is copied.
+
+### How to apply Big Rebalance changes
+
+User enables `bt` master + each of the wt / ct / et masters (any combination
+they want), then individual toggles to taste.
+
+---
+
+## Cross-mod registration sync (historical / now centralized in `bt`)
+
+> **Current state (2026-05-21+):** `buff_tweaker` (`bt`) owns the canonical
+> sorted registration list. wt / ct / et no longer ship per-mod registration
+> files. The pattern below is preserved for context and for anyone authoring
+> a new BR-aware mod outside the existing four.
+
+When two or more mods need to inject the **same set** of new
+`BuffTemplates` / `TalentBuffTemplates` / `NewDamageProfileTemplates` /
+`ExplosionTemplates` (Big Rebalance buffs, custom mutator effects, anything
+that lands in `NetworkLookup.buff_templates`), each mod must either:
+
+- **Delegate to a shared registry mod** (preferred — `bt` is the canonical
+  one for Big Rebalance), OR
+- Ship a **byte-identical canonical sorted name list** — NOT just the
+  entries that mod cares about.
+
+### Why
+
+At mod load, each mod's master toggle pre-registers names into
+`BuffTemplates` + `NetworkLookup.buff_templates` (and equivalents). If
+wt's list has 44 entries and ct's has 288:
+
+- Player A (wt + ct + et installed) ends up with one NetworkLookup index
+  ordering
+- Player B (only ct installed) ends up with a different index ordering
+- Host sends `rpc_add_buff(integer_index)` → resolves to a different buff
+  per peer → silent buff mismatch or crash
+
+Same failure mode as DEVELOPMENT.md "Gated registration diverges across
+peers" — but across mods instead of within one mod.
+
+### Pattern (when shipping a non-`bt`-aware BR mod)
+
+1. Mod ships `<mod>_big_rebalance_registrations.lua` containing the **full
+   canonical union** of every new template defined across all
+   participating mods.
+2. Files are byte-identical except for `local mod = get_mod(...)` and the
+   first-line filename comment.
+3. Registration code is **idempotent** — each mod's apply function checks
+   `if BuffTemplates[name] then continue` before inserting. Two BR-aware
+   mods loaded together don't double-register.
+4. Canonical reference list lives at
+   `_big_rebalance_extract/canonical_BR_REGISTRATIONS.lua` (and in the
+   QA report). When adding new entries, update all participating mods
+   together.
+
+### Build-time check
+
+When next deploying any BR-aware mod that ships its own registration file,
+diff the three `<mod>_big_rebalance_registrations.lua` files — only
+filename comment + mod ID local should differ. Anything else means
+peer-desync risk.
+
+### Burned
+
+Initial Big Rebalance integration 2026-05-21 — wt shipped 44 entries, ct
+shipped 288, et shipped 9. QA agent caught + reconciled to 328 entries
+each before any deploy. Two days later (2026-05-21+) the `bt` extraction
+landed to eliminate the maintenance burden of keeping three byte-identical
+files in sync forever.

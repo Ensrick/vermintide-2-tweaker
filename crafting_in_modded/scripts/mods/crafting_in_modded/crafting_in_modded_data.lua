@@ -67,6 +67,49 @@ return {
                         keybind_type = "function_call",
                         function_name = "open_forge",
                     },
+                    -- Default OFF. Vanilla `HeroViewStateWeaveForge` was never
+                    -- expected to run mid-mission and several code paths fault
+                    -- (gamepad cursor renderer, shading_environment loads). The
+                    -- v0.7.13/.14 hooks catch the known crashes but new ones
+                    -- keep surfacing. While off, the keybind silently no-ops
+                    -- outside the Keep; opt-in if you want to test in-mission
+                    -- and report crash logs.
+                    {
+                        setting_id = "allow_in_mission",
+                        type = "checkbox",
+                        default_value = false,
+                    },
+                    -- Base power level applied to every freshly-crafted item.
+                    -- Vanilla weapons cap at 300; CW boosts apply on top. 0-950
+                    -- in steps of 50 covers the range the user might want.
+                    {
+                        setting_id = "base_power_level",
+                        type = "numeric",
+                        default_value = 300,
+                        range = {0, 950},
+                        decimals_number = 0,
+                        unit_text = "",
+                    },
+                    -- When OFF (default), new crafts start with NO properties
+                    -- and NO trait — bare 300-power template ready for the user
+                    -- to roll. When ON, restore the pre-v0.7.24 behavior of
+                    -- pre-seeding 2 max-value properties + 1 random trait.
+                    {
+                        setting_id = "prefill_random_properties",
+                        type = "checkbox",
+                        default_value = false,
+                    },
+                    -- Movespeed trade-off mode. OFF (default, vanilla):
+                    --   1 bubble = +5% movement speed, capped at 1 bubble.
+                    -- ON: movespeed uncaps to 5 bubbles, each +2% movespeed.
+                    --   Max = +10% at a cost of 5/10 of the trinket's bubble
+                    --   layer (vs. 1/10 for +5% in default mode). For players
+                    --   who'd trade other trinket properties for raw speed.
+                    {
+                        setting_id = "movespeed_2pct_mode",
+                        type = "checkbox",
+                        default_value = false,
+                    },
                 },
             },
             {
@@ -82,6 +125,24 @@ return {
                         setting_id = "restore_modded_loadout",
                         type = "checkbox",
                         default_value = true,
+                    },
+                },
+            },
+            {
+                setting_id = "import_group",
+                type = "group",
+                sub_widgets = {
+                    -- Bindable hotkey for the SaveWeapon importer. Default
+                    -- unbound; the chat command `/cim_import_saved_weapons`
+                    -- is the primary trigger. Set a key if you want a one-
+                    -- press shortcut from the keep.
+                    {
+                        setting_id = "saveweapon_import_hotkey",
+                        type = "keybind",
+                        default_value = {},
+                        keybind_trigger = "pressed",
+                        keybind_type = "function_call",
+                        function_name = "_cim_saveweapon_import",
                     },
                 },
             },

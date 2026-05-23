@@ -24,6 +24,24 @@ If you're touching dual-wield, also read
 
 ---
 
+## Design intent — cross-character base templates are the feature
+
+CWV variants intentionally clone from cross-character base templates
+to bring other characters' movesets onto receivers (Kruber wielding
+Sienna's 2H mace, Bardin wielding Saltzpyre's priest hammer, Kruber
+wielding Kerillian's dual swords, etc.). When a recipe below picks
+`base_weapon = "bw_1h_mace"` for a Kruber variant or
+`base_weapon = "wh_1h_hammer"` for a Bardin variant, that is the
+intentional cross-character port — not an error to correct. 1P side
+is universal across characters and needs no work. The 3P side is the
+technique: remap source-weapon events onto the receiver's good-enough
+native 3P vocabulary so bystanders see something plausible. See
+`ISAAK_RECIPE.md` for the lessons-learned reference on that remap
+discipline and `ANIMATION_FIX_PLAYBOOK.md` for the full 9-step
+procedure.
+
+---
+
 ## Decision tree — what are you making?
 
 ```
@@ -556,6 +574,106 @@ held-mesh `_3p` units typically don't have it and crash
 `Actor.create_actor`. The non-projectile template spawns statically at
 the impact position without bouncing — acceptable trade.
 
+**Carrier-unit pattern for visual + interaction.** Held weapon meshes
+have ZERO collision actors. The interactor's aim raycast finds
+nothing → no E-prompt for the dropped pickup, no matter how
+`can_interact_func` is wired up. Verified via `cwv_probe_unit`
+diagnostic:
+
+| Unit | nodes | actors |
+|---|---|---|
+| `wpn_emp_boar_spear_01_3p` (held) | 0 | **0** |
+| `pup_dw_thrown_axe_01_t1` (purpose-built pickup) | 0 | **3** |
+
+**Solution:** use a unit that has actors as the spawned `unit_name`
+in the Pickups.ammo entry (we use `pup_dw_thrown_axe_01_t1` — the
+throwing axe pickup, 3 actors), then attach the visually-correct
+mesh as a separate world unit at the parent's pose.
+
+Hook `extensions_ready` on the DERIVED class (NOT the base
+`PickupUnitExtension` — see below). Three operations:
+1. `World.spawn_unit(world, <visual_unit_path>, parent_pos,
+   parent_rot)` — the visual mesh.
+2. `Unit.set_unit_visibility(parent, false)` — hide the carrier
+   (interaction stays active because it's a render flag, not
+   physics).
+3. Track the visual on `self._cwv_visual_unit` for cleanup.
+
+**Do NOT call `World.link_unit(world, visual, parent, 0)`.** Linking
+composes the visual's transform with the parent's, so any scale-to-
+tiny on the parent shrinks the visual too. For static stuck-in-wall
+pickups the visual doesn't need to follow the parent (parent is
+pinned by `projectile_linker_system`). Free-standing world unit at
+parent's pose works.
+
+Mirror the `destroy` hook: when the derived extension is destroyed,
+`mark_for_deletion` the visual unit so we don't leak.
+
+**Hook the DERIVED class, not the base.** VT2's `class()` copies
+parent methods into the child at definition time.
+`mod:hook("PickupUnitExtension", "extensions_ready", ...)` silently
+never fires when the actual instance is `LimitedOwnedPickupUnitExtension`.
+Hook the three derived classes:
+- `LimitedOwnedPickupUnitExtension` — what `limited_owned_pickup_unit`
+  template instantiates (what we use)
+- `LifeTimePickupUnitExtension`
+- `PlayerTeleportingPickupExtension`
+
+Cheap insurance for future variants.
+
+**Package force-load for the carrier.** The throwing axe pup unit
+isn't in any naturally-loaded package for non-Bardin lobbies.
+Force-load at mod init using the same API vanilla
+`pickup_package_loader.lua:191` uses:
+
+```lua
+Managers.package:load(<unit_path>, "<mod_unique_ref>", nil, true, true)
+```
+
+The first arg accepts a unit path, not just a `.package` file path.
+Stingray auto-resolves it.
+
+Also inject the unit name into `NetworkLookup.husks` via rawset —
+pickup spawn RPCs read this lookup, and a missing key triggers the
+error-throwing `__index` metamethod (crash).
+
+**VMF hook_safe doesn't chain on same method.** Two
+`mod:hook_safe(Class, method, ...)` registrations on the same
+Class+method silently shadow each other. If you have a diagnostic
+logger AND a behavior fix on the same method, consolidate into one
+callback.
+
+**Three independent "what unit is rendered" decisions** (each with
+different gotchas):
+
+1. **In-flight projectile model** = `WeaponSkins.skins[<skin>].projectile_units_template`
+   → `ProjectileUnits[that key].projectile_unit_name`. Set the
+   skin's `projectile_units_template = "javelin"` to use the slim
+   elf javelin in flight (correctly authored, +Y is tip, no spin).
+2. **Held weapon model** = standard `right_hand_unit` /
+   `left_hand_unit`.
+3. **Stuck/dropped pickup unit** = `Pickups.ammo[<key>].unit_name`.
+   The carrier-unit per above. Visual is the held mesh `_3p`
+   spawned separately.
+
+The three can all differ — and for Tuskgor Javelin they DO:
+in-flight = slim elf javelin, held = boar spear, stuck pickup
+carrier = throwing axe pup with boar spear visual on top.
+
+**Known unresolved limitations:**
+- **White outline on tagged pickup:** when parent is hidden via
+  `Unit.set_unit_visibility(false)`, the OutlineExtension shader
+  may have no visible mesh to silhouette. v0.1.248 lesson — track
+  the visual in `_carrier_visuals` so OutlineSystem can forward.
+- **Stuck-in-moving-enemy javelin:** visual is free-standing
+  (deliberately no `World.link_unit` to avoid scale inheritance).
+  If the enemy walks, the visual stays in place. Only matters for
+  moving stuck-in scenarios; wall sticks are unaffected.
+- **3P body anim during throw wind-up + release:** empire/witch-
+  hunter skeletons have no authored polearm-throw clips. The
+  throw fires (projectile spawns) but the 3P body holds whatever
+  idle stance was active.
+
 **Stat-clone hook:** the projectile system reads the BASE template at
 runtime, NOT your clone (per `feedback_cwv_projectile_template_lookup.md`).
 Hook `PlayerProjectileUnitExtension.init` and swap `self._current_action`,
@@ -571,7 +689,21 @@ profiles (`default_target.power_distribution_near.attack` is a literal
 number), NOT the PowerLevelTemplates string-key indirection used by
 melee weapons. `_clone_damage_profile` won't work — use
 `_clone_inline_throw_profile` (line ~2003) for the throw and
-`_clone_damage_profile` for the melee stab sub-actions.
+`_clone_damage_profile` for the melee stab sub-actions. Branch on
+`sub_action.damage_profile` (melee, string-key) vs
+`sub_action.impact_data.damage_profile` (throw, inline) and call the
+appropriate helper.
+
+**anim_time_scale is mostly absent on thrown templates.** Unlike
+melee templates, the javelin only sets `anim_time_scale` on
+`weapon_reload.default` (value=1) — not on the throw, the charge,
+or the melee stabs. Multiplying it does almost nothing for javelin
+speed. Use timing fields instead:
+- `attack_meta_data.minimum_charge_time` — wind-up before throw fires
+- `total_time` and `minimum_hold_time` on `kind="thrown_projectile"`
+  sub-actions — throw recovery + min-hold
+- Leave `fire_time` alone — moving it desyncs the projectile spawn
+  from the animation
 
 **Throwing-axe-style stick + pickup:** vanilla javelins use
 `link = true` + `wall_nail = true` + `flow_event_on_walls = "teleport_out"`
@@ -580,11 +712,23 @@ melee weapons. `_clone_damage_profile` won't work — use
 on every `kind = "thrown_projectile"` sub-action's `impact_data`. See
 `tuskgor_javelin_template` lines ~2183–2202.
 
-**Auto-catch reload removal:** to convert a finite-stack thrown weapon,
-override `template.actions.weapon_reload.default.condition_func` and
-`chain_condition_func` to a `_always_false` closure (line ~2138). Plus
-`ammo_data.block_ammo_pickup = false` and `unique_ammo_type = false`
-so vanilla ammo crates refill the stack.
+**Auto-catch reload removal:** vanilla javelin has an
+`actions.weapon_reload.default` action with `kind = "catch"` and a
+`condition_func` that triggers whenever
+`total_remaining_ammo < max_ammo`. This is what makes elf javelins
+refill themselves on demand. To convert to a finite-stack thrown
+weapon, override `condition_func` and `chain_condition_func` to a
+`_always_false` closure (line ~2138). The action stays defined
+(state machine + network serialization still need it) but never
+fires. Combine with:
+
+```lua
+template.ammo_data.block_ammo_pickup = false
+template.ammo_data.unique_ammo_type  = false
+```
+
+so vanilla ammo crates refill the stack, sharing the character's
+normal ranged ammo pool.
 
 **Animation:** ranged weapons that don't share their wielder's native
 3P body skeleton (e.g. elf javelin moveset on Kruber) need a 3P body
@@ -1597,6 +1741,421 @@ scaling; use `_1p` overrides when you want a DIFFERENT 1P scale than
 
 See `cwv_es_dual_swords` (line ~353) and `cwv_es_javelin` (line ~199)
 for shipped examples.
+
+---
+
+## Custom-mesh add-on — LA-style pattern (recommended)
+
+**Canon:** `cwv_es_musket` v0.1.286+ (LA pattern after the
+World.spawn_unit overlay in v0.1.277–285 had un-fixable FP-rendering
+issues — shadow in FP, draws on top of hand).
+
+When you want to ship a custom `.fbx`/`.unit` and have it render
+with proper first-person rendering (no shadow in FP, correct depth,
+no overlay-on-hand bug). Sourced from Loremaster's Armoury — its
+hundreds of custom-mesh variants all use this pattern.
+
+**Constraint reminder:** mod-shipped custom paths are NOT
+discoverable via `Application.resource_package()` (see
+`DEVELOPMENT.md` "Mod-shipped custom mesh paths…"). The LA pattern
+works around this by piggybacking on a vanilla material path and
+intercepting the package-load calls.
+
+### Part 1: The `.unit` file
+
+**No `materials = {}` block.** That block compile-validates against
+the SDK's source tree, which doesn't ship vanilla materials. Use a
+`data = {...}` block instead — the compiler doesn't validate paths
+inside `data`.
+
+```
+data = {
+    mat_slots = {
+        slot1 = "<fbx_material_slot_name>"        // whatever the FBX exporter put
+    }
+    mat_to_use = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1"
+    color_slot = "texture_map_c0ba2942"           // LA's default diffuse sampler hash
+    norm_slot  = "texture_map_59cd86b9"           // LA's default normal sampler hash
+    MAB_slot   = "texture_map_0205ba86"           // LA's default metal/AO/black sampler hash
+}
+
+renderables = {
+    <mesh_name> = {
+        always_keep = false
+        culling = "bounding_volume"
+        generate_uv_unwrap = false
+        occluder = false
+        shadow_caster = false   // FALSE for 1P unit (no FP weapon shadow). TRUE for 3P unit.
+        surface_queries = false
+        viewport_visible = true
+    }
+}
+```
+
+**Per-perspective material:** the 1P `.unit` uses the 1P vanilla
+material path; the 3P `.unit` uses the same path + `_3p` suffix.
+`shadow_caster = false` on 1P, `true` on 3P.
+
+**Verification:** after compile, run the bundle unpacker against
+the `.mod_bundle` and extract the `.unit` —
+`grep -ao 'units/[a-zA-Z_0-9/]\{10,\}' <hash>.unit` should print
+the vanilla material path. That's confirmation the data block is
+properly storing the reference.
+
+### Part 2: PackageManager hooks (in main Lua)
+
+Vanilla code calls `Managers.package:load(<right_hand_unit>)` and
+`<right_hand_unit>_3p` for inventory previewer + GearUtils spawn.
+There's no sibling `.package` file at your custom path, so
+`Application.resource_package` would crash with `Resource '#ID[...]'
+not found`. Hooks intercept before the lookup runs:
+
+```lua
+local _CUSTOM_PACKAGES = {
+    ["units/<your_mod>/<your_unit>"]    = true,
+    ["units/<your_mod>/<your_unit>_3p"] = true,
+}
+
+mod:hook(PackageManager, "load", function(func, self, package_name, ...)
+    if _CUSTOM_PACKAGES[package_name] then return end
+    return func(self, package_name, ...)
+end)
+
+mod:hook(PackageManager, "unload", function(func, self, package_name, ...)
+    if _CUSTOM_PACKAGES[package_name] then return end
+    return func(self, package_name, ...)
+end)
+
+mod:hook(PackageManager, "has_loaded", function(func, self, package_name, ...)
+    if _CUSTOM_PACKAGES[package_name] then return true end
+    return func(self, package_name, ...)
+end)
+```
+
+The unit data is already loaded into the engine via your master
+package's `unit = ["units/*"]` glob, so `World.spawn_unit` resolves
+it by path. The hooks just shut up the package layer.
+
+### Part 3: NetworkLookup.inventory_packages registration (mod-init)
+
+The engine syncs equip events across multiplayer by indexing
+`NetworkLookup.inventory_packages[unit_path]`. That table has a
+strict `__index` metamethod that errors on unknown keys. Without
+this step, equip crashes with
+`[NetworkLookup.lua] Table inventory_packages does not contain key:
+<your path>`.
+
+Alias your custom paths to existing vanilla indices — forward
+direction only (do NOT overwrite the reverse index→path mapping
+unless you intend to globally hijack the vanilla weapon for skin
+replacement, which LA does):
+
+```lua
+do
+    local nl = NetworkLookup and NetworkLookup.inventory_packages
+    if nl then
+        local vanilla_1p_idx = rawget(nl, "<vanilla 1P unit path>")
+        local vanilla_3p_idx = rawget(nl, "<vanilla 3P unit path>")
+        if vanilla_1p_idx then nl["<custom 1P unit path>"] = vanilla_1p_idx end
+        if vanilla_3p_idx then nl["<custom 3P unit path>"] = vanilla_3p_idx end
+    end
+end
+```
+
+Use `rawget` to read the vanilla index (sidesteps the strict
+metamethod in case the vanilla path is also missing). LA's
+reference: `utils/funcs.lua:124-128`.
+
+### Part 4: GearUtils.link_units filter (for rig-less FBX)
+
+If your FBX is just mesh geometry (no armature/bones), vanilla
+`GearUtils.link_units` will crash on `Unit.node(target, "j_lock")`
+(or `j_hammer`, `j_trigger`, etc.) because vanilla
+`AttachmentNodeLinking.<weapon_class>` entries reference
+rig-specific skeleton nodes that don't exist on your mesh.
+
+Either:
+- **(A)** Re-export the FBX with a skeleton containing the named
+  bones. Proper fix but requires Blender + rig work.
+- **(B)** Filter the linking table at runtime to skip entries whose
+  target node doesn't resolve. Quick fix; works for all weapon
+  classes:
+
+```lua
+mod:hook("GearUtils", "link_units", function(orig, world, attachment_node_linking, link_table, source, target)
+    if not target then return orig(world, attachment_node_linking, link_table, source, target) end
+    -- Scan for any string-typed target that doesn't resolve on `target`.
+    -- IMPORTANT: use Unit.has_node, not pcall(Unit.node, ...) — Stingray's
+    -- Unit.node raises an engine-level fatal that pcall does NOT catch.
+    for _, entry in ipairs(attachment_node_linking) do
+        local tgt = entry.target
+        if type(tgt) == "string" and not Unit.has_node(target, tgt) then
+            local safe = {}
+            for _, e in ipairs(attachment_node_linking) do
+                local t = e.target
+                if type(t) ~= "string" or Unit.has_node(target, t) then
+                    safe[#safe + 1] = e
+                end
+            end
+            return orig(world, safe, link_table, source, target)
+        end
+    end
+    return orig(world, attachment_node_linking, link_table, source, target)
+end)
+```
+
+The entry with `target = 0` (root node) physically attaches the
+weapon to the hand. The other entries are decorative finger-pose
+locks that only matter for vanilla rigs.
+
+**Trade-off:** player fingers won't snap to weapon parts (trigger,
+hammer, etc.) — slightly stiff hand pose, but the weapon wields
+correctly.
+
+### Part 5: Master `.package` (resource_packages/<mod>/<mod>.package)
+
+```
+unit = [ "units/*" ]
+texture = [ "textures/*" ]
+```
+
+No `material = [...]` (we use vanilla materials). No
+`package = [...]` (no sibling packages needed). Just the unit glob
+to get the mesh data into the bundle.
+
+### What this gives you
+
+- Custom mesh in 1P with proper FP rendering (no shadow, correct
+  depth, draws under FP hand).
+- Custom mesh in 3P with normal world rendering (shadow on, normal
+  depth).
+- Inventory previewer shows the custom mesh.
+- No "Resource not found" crash from package-load lookups.
+
+### What this does NOT give you
+
+- Custom PBR textures applied to your mesh — it uses the vanilla
+  material's textures by default.
+- To apply your own textures, hook one of the unit-spawn paths
+  (`HeroPreviewer._spawn_item_unit` for previewer,
+  `GearUtils.spawn_inventory_unit` for in-mission) and walk the
+  unit's meshes/materials applying `Material.set_texture(mat,
+  slot_name, your_texture_path)` for each slot. See LA's
+  `apply_texture_to_all_world_units` in `utils/funcs.lua`. Slot
+  names come from `data.color_slot`/`norm_slot`/`MAB_slot` in the
+  .unit (LA defaults above work for most weapon materials).
+
+### Don't do these (verified failures)
+
+- `materials = { slot = "<vanilla path>" }` (table form) — compile
+  error: "Could not find resource".
+- `materials = [ "<vanilla path>" ]` (array form) — same compile
+  error.
+- Authoring a `<fbx_basename>.material` stub file referencing a
+  custom shader graph — won't get FP rendering even if it compiles,
+  because FP rendering requires the vanilla shader.
+- World.spawn_unit + World.link_unit overlay approach — mesh spawns
+  but inherits wrong render layer; appears on top of hand model and
+  casts a shadow in FP. v0.1.277–285 burned 8 versions on this
+  before switching to LA's pattern.
+
+### Reference repo
+
+- LA source: github.com/dalokraff/Loremasters-Armoury
+- Key files: `units/dwarf_shield/*.unit`,
+  `units/Kerillian_elf_shield/*.unit`,
+  `scripts/mods/Loremasters-Armoury/utils/hooks.lua`
+  (PackageManager hooks),
+  `scripts/mods/Loremasters-Armoury/utils/funcs.lua` (texture
+  override).
+
+---
+
+## Custom-mesh add-on — full PBR pipeline (when LA isn't enough)
+
+Use this only when you need your OWN PBR textures (LA pattern
+reuses the vanilla material's textures). Hit and fixed all three
+sharp edges in v0.1.272 (Old Musket).
+
+### File layout
+
+```
+<mod>/
+  units/<asset>/<asset>.fbx              # the 1P mesh
+  units/<asset>/<asset>.unit             # 1P unit def
+  units/<asset>/<asset>.package          # 1P sibling package — REQUIRED (previewer calls package:load)
+  units/<asset>/<asset>_3p.fbx           # 3P mesh
+  units/<asset>/<asset>_3p.unit          # 3P unit def
+  units/<asset>/<asset>_3p.package       # 3P sibling package — REQUIRED (GearUtils calls package:load)
+  units/<asset>/<asset>.material         # authored PBR material; shared by 1P + 3P
+  textures/<asset>/<asset>_albedo.png + .texture
+  textures/<asset>/<asset>_normal.png + .texture
+  textures/<asset>/<asset>_roughness.png + .texture
+  textures/<asset>/<asset>_metallic.png + .texture
+  textures/<asset>/<asset>_ao.png + .texture
+  resource_packages/<mod>/<mod>.package  # master: lists `unit`, `texture`, `material`, AND `package = [sibling paths]`
+```
+
+The 3P pair can be a verbatim copy of the 1P pair if the mesh is
+the same in both views (cost: ~310 kB per FBX). The 1P and 3P
+sibling packages each list the unit, the (shared) material, and all
+five PBR textures so a single package load pulls in everything
+needed.
+
+### Sharp edge 0 — sibling `_3p` unit + `.package` files are required
+
+For every `right_hand_unit` field on a CWV variant pointing at the
+custom path, the game uses TWO derived resource names:
+- **`<path>_3p`** — for the third-person view body.
+- **`<path>.package`** — the inventory previewer
+  (`world_hero_previewer.lua:1150 _load_packages`) and equipment
+  spawn call `Managers.package:load("<path>")` on the
+  `right_hand_unit` string. This resolves to a `.package` resource
+  at that path, NOT a `.unit`.
+
+If `<path>_3p.unit` doesn't exist: crash at first-equip "Resource
+not found" for the 3P unit hash.
+
+If `<path>.package` and `<path>_3p.package` don't exist: crash at
+inventory open "Resource not found" for the package hash (same
+path hash, different resource type).
+
+v0.1.273/274 (Old Musket) crashed on BOTH separately. Fix:
+`cp <unit>.fbx <unit>_3p.fbx && cp <unit>.unit <unit>_3p.unit`,
+then author `<unit>.package` and `<unit>_3p.package` listing the
+unit + shared material + all textures. Add
+`package = ["<unit>", "<unit>_3p"]` to the mod's master `.package`
+so they compile in.
+
+### Sharp edge 1 — FBX exporter truncates material names ~60 chars
+
+Blender's FBX export truncates material slot names. A 61-char
+vanilla path like
+`units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1`
+ends up as
+`units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t`
+in the compiled .unit.
+
+**Solution:** keep the FBX material name SHORT (e.g. `rifle_mat`,
+≤15 chars) and bind it to a long path via the .unit's
+`materials = { short_name = "long/path" }` block. Re-export with
+Blender headless using a script that renames materials before
+export.
+
+### Sharp edge 2 — vanilla material paths are NOT available at SDK compile time
+
+`units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1`
+exists at runtime but the .unit compiler can't see it. Build fails
+with `The material '...' could not be found.`
+
+The SDK's resource resolver sees only: SDK install tree + your mod
+folder. Vanilla weapon/material trees are NOT shipped with the SDK
+as source files.
+
+**Solution:** ship your own `.material` file. Reference it from
+`.unit` with the mod-relative path (e.g.
+`units/cwv_es_musket_custom/cwv_es_musket_custom`).
+
+### Sharp edge 3 — SDK exposes some core materials that DO compile-resolve
+
+These ARE available at compile time and can be referenced from a
+`.unit`'s materials block:
+- `core/units/transparent` (renders invisible)
+- `core/units/chroma_cube` (flat unlit RGB)
+
+Useful for compile-test scaffolding, but not PBR — won't show your
+textures.
+
+### Authoring the `.material` file
+
+Clone `C:/Program Files (x86)/Steam/steamapps/common/Vermintide 2
+SDK/core/stingray_renderer/shader_import/standard.material` (~1100
+lines of PBR shader graph). At the bottom, replace
+`textures = {}` and `variables = {}` with bindings to your
+textures:
+
+```
+textures = {
+    color_map     = "textures/<asset>/<asset>_albedo"
+    normal_map    = "textures/<asset>/<asset>_normal"
+    roughness_map = "textures/<asset>/<asset>_roughness"
+    metallic_map  = "textures/<asset>/<asset>_metallic"
+    ao_map        = "textures/<asset>/<asset>_ao"
+}
+variables = {
+    use_color_map     = { type = "scalar", value = 1 }
+    use_normal_map    = { type = "scalar", value = 1 }
+    use_roughness_map = { type = "scalar", value = 1 }
+    use_metallic_map  = { type = "scalar", value = 1 }
+    use_ao_map        = { type = "scalar", value = 1 }
+    emissive_intensity = { type = "scalar", value = 0 }
+}
+```
+
+The `use_*_map = 1` overrides are essential — the standard shader's
+defaults are 0 (off), so without these the shader uses scalar
+fallbacks (base_color = 0.5 grey, roughness = 0.33, metallic = 0)
+and your textures are sampled but ignored.
+
+### `.unit` file shape
+
+```
+materials = {
+    rifle_mat = "units/<asset>/<asset>"   // short FBX slot name -> mod-relative material path
+}
+
+renderables = {
+    rifle = {                              // node name from FBX
+        always_keep = false
+        culling = "bounding_volume"
+        generate_uv_unwrap = false
+        occluder = false
+        shadow_caster = true
+        surface_queries = false
+        viewport_visible = true
+    }
+}
+```
+
+### `.package` file (per-asset siblings)
+
+```
+unit = [ "units/*" ]
+texture = [ "textures/*" ]
+material = [ "units/*" ]    // REQUIRED, else the .material never lands in the bundle
+```
+
+### Texture `.texture` files
+
+One per PNG, format DXT5, in the same folder as the PNG:
+
+```
+common = {
+    input = { filename = "textures/<asset>/<asset>_<channel>" }
+    output = {
+        apply_processing = true
+        cut_alpha_threshold = 0.5
+        enable_cut_alpha_threshold = false
+        format = "DXT5"
+        mipmap_filter = "kaiser"
+        mipmap_filter_wrap_mode = "mirror"
+        mipmap_keep_original = false
+        mipmap_num_largest_steps_to_discard = 0
+        mipmap_num_smallest_steps_to_discard = 0
+        srgb = false           // true ONLY for albedo/color
+    }
+}
+```
+
+### Verify before flagging done
+
+- Build with `node vmb.js build <mod> --no-workshop --cwd`.
+  Successful build = zero engine compile errors.
+- Bundle output should include all three resource sizes: ~6–7MB
+  unit (FBX geometry), ~1MB textures (5x DXT5), ~7KB lua/mod.
+- Load the game, equip in-game, confirm: (a) no `Resource not
+  found` crash, (b) mesh renders with PBR textures (not pink
+  missing material, not flat gray, not invisible).
 
 ---
 

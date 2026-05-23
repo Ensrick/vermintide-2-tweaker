@@ -1,0 +1,182 @@
+# check_localization.ps1 — validates VMF localization tables across all mods.
+# Catches: unescaped %, referenced-but-undefined keys, missing mod_description.
+#
+# See qa/CHECKS.md rows 2, 17, 18, 19.
+#
+# Exit codes: 0 = pass, 1 = warnings only, 2 = errors found.
+
+[CmdletBinding()]
+param(
+    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
+    [switch]$Quiet
+)
+
+$ErrorActionPreference = "Stop"
+$repoRoot = (Resolve-Path $RepoRoot).Path
+$errors = @()
+$warnings = @()
+
+function Read-FileUtf8([string]$path) {
+    return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+}
+
+function Find-LocFiles {
+    Get-ChildItem -Path $repoRoot -Filter "*_localization.lua" -Recurse -File -ErrorAction SilentlyContinue `
+        | Where-Object {
+            $p = $_.FullName
+            $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `
+                -and $p -notlike "*\.temp\*" -and $p -notlike "*\.spawn_tweaks_ref\*" `
+                -and $p -notlike "*\tweaker\*" -and $p -notlike "*\sample_*\*"
+        }
+}
+
+function Find-DataFiles {
+    Get-ChildItem -Path $repoRoot -Filter "*_data.lua" -Recurse -File -ErrorAction SilentlyContinue `
+        | Where-Object {
+            $p = $_.FullName
+            $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `
+                -and $p -notlike "*\.temp\*" -and $p -notlike "*\.spawn_tweaks_ref\*" `
+                -and $p -notlike "*\tweaker\*" -and $p -notlike "*\sample_*\*"
+        }
+}
+
+function Get-ModDirForFile([string]$filePath) {
+    # File is at <repo>/<mod>/scripts/mods/<mod>/<mod>_localization.lua
+    # Walk up 3 levels to <mod>
+    $dir = Split-Path $filePath -Parent
+    for ($i = 0; $i -lt 3; $i++) { $dir = Split-Path $dir -Parent }
+    return $dir
+}
+
+# Parse a localization.lua file into a hashtable of { key = string-value }.
+# Lenient parser. Two patterns common in this repo:
+#   key = { en = "value" }       -- standard VMF
+#   key = en("value")            -- helper-function style (event_tweaker)
+function Parse-LocFile([string]$path) {
+    $text = Read-FileUtf8 $path
+    $result = @{}
+
+    # Pattern 1: key = { en = "value" }
+    $regex1 = '(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
+    foreach ($m in [regex]::Matches($text, $regex1)) {
+        $result[$m.Groups[1].Value] = $m.Groups[2].Value
+    }
+
+    # Pattern 2: key = en("value")
+    $regex2 = '(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*en\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)'
+    foreach ($m in [regex]::Matches($text, $regex2)) {
+        $result[$m.Groups[1].Value] = $m.Groups[2].Value
+    }
+
+    return $result
+}
+
+# Parse a data.lua file to find all `setting_id`, `tooltip`, `category_id` references.
+function Parse-DataFile([string]$path) {
+    $text = Read-FileUtf8 $path
+    $refs = @{}
+    # Match: setting_id = "foo", tooltip = "foo_tooltip", category_id = "foo"
+    $patterns = @(
+        'setting_id\s*=\s*"([^"]+)"',
+        'tooltip\s*=\s*"([^"]+)"',
+        'category_id\s*=\s*"([^"]+)"'
+    )
+    foreach ($p in $patterns) {
+        foreach ($m in [regex]::Matches($text, $p)) {
+            $refs[$m.Groups[1].Value] = $true
+        }
+    }
+    return $refs
+}
+
+# Bug #2: detect unescaped % in localization values. The dangerous pattern is
+# a single % NOT followed by another %. E.g. "5%" should be "5%%".
+function Find-UnescapedPercent([hashtable]$loc, [string]$file) {
+    $bad = @()
+    foreach ($k in $loc.Keys) {
+        $v = $loc[$k]
+        # Look for % not followed by % or end-of-string-with-no-format-chars-after.
+        # Lua format chars after %: %, d, s, i, f, etc. Anything else literal needs %%.
+        # Lenient check: any % not followed by % d s i f x g e o c q is suspect.
+        if ($v -match '%(?![%dsifxgeocq.])' -and $v -notmatch '%%') {
+            # Only flag if it's clearly literal (e.g. "5%", "10% chance") and not a format.
+            if ($v -match '\d%(?!%)' -or $v -match '%(?![\s\dsf])') {
+                $bad += "$($file): key '$k' has unescaped %% in value: '$v'"
+            }
+        }
+    }
+    return $bad
+}
+
+# Group by mod
+$modFiles = @{}
+foreach ($locFile in Find-LocFiles) {
+    $modDir = Get-ModDirForFile $locFile.FullName
+    $modName = Split-Path $modDir -Leaf
+    if (-not $modFiles.ContainsKey($modName)) { $modFiles[$modName] = @{ loc = $null; data = $null } }
+    $modFiles[$modName].loc = $locFile.FullName
+}
+foreach ($dataFile in Find-DataFiles) {
+    $modDir = Get-ModDirForFile $dataFile.FullName
+    $modName = Split-Path $modDir -Leaf
+    if (-not $modFiles.ContainsKey($modName)) { $modFiles[$modName] = @{ loc = $null; data = $null } }
+    $modFiles[$modName].data = $dataFile.FullName
+}
+
+foreach ($modName in $modFiles.Keys | Sort-Object) {
+    $entry = $modFiles[$modName]
+    if (-not $Quiet) { Write-Host "Checking $modName localization" -ForegroundColor DarkGray }
+
+    if (-not $entry.loc) {
+        $warnings += "${modName}: no localization file (*_localization.lua) found"
+        continue
+    }
+    if (-not $entry.data) {
+        $warnings += "${modName}: no data file (*_data.lua) found — can't cross-reference"
+        # Still check for unescaped %
+        $loc = Parse-LocFile $entry.loc
+        $errors += (Find-UnescapedPercent $loc $entry.loc)
+        continue
+    }
+
+    $loc = Parse-LocFile $entry.loc
+    $data = Parse-DataFile $entry.data
+
+    # Row #19: required key mod_description
+    if (-not $loc.ContainsKey("mod_description")) {
+        $warnings += "${modName}: missing required loc key 'mod_description'"
+    }
+
+    # Row #2: unescaped %
+    $errors += (Find-UnescapedPercent $loc $entry.loc)
+
+    # Row #17: referenced-but-undefined keys
+    # data refs a key X, loc must define X (and optionally X_tooltip, X_description)
+    foreach ($key in $data.Keys) {
+        if (-not $loc.ContainsKey($key)) {
+            # Skip keys that look like values, not loc references
+            # (e.g. setting_id values that are setting ids, not display strings)
+            # Loc keys for VMF setting_id are auto-resolved by VMF (it expects key to be defined).
+            $warnings += "${modName}: data.lua references '$key' but no loc entry"
+        }
+    }
+}
+
+# Report
+Write-Host ""
+if ($errors.Count -eq 0 -and $warnings.Count -eq 0) {
+    Write-Host "[check_localization] OK — all mod localization tables are consistent." -ForegroundColor Green
+    exit 0
+}
+
+if ($warnings.Count -gt 0) {
+    Write-Host "[check_localization] WARNINGS ($($warnings.Count)):" -ForegroundColor Yellow
+    foreach ($w in $warnings | Select-Object -First 50) { Write-Host "  ! $w" -ForegroundColor Yellow }
+    if ($warnings.Count -gt 50) { Write-Host "  ... ($($warnings.Count - 50) more)" -ForegroundColor Yellow }
+}
+if ($errors.Count -gt 0) {
+    Write-Host "[check_localization] ERRORS ($($errors.Count)):" -ForegroundColor Red
+    foreach ($e in $errors) { Write-Host "  X $e" -ForegroundColor Red }
+    exit 2
+}
+exit 1

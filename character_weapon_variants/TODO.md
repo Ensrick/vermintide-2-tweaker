@@ -18,6 +18,56 @@
 - [ ] **Enumerate all viable cross-character combos** — catalog which weapon+shield combinations across characters make sense as curated variants, case-by-case.
 - [ ] **Animation remapping** — verify Bardin's axe+shield template animations play correctly on Kruber's skeleton. May need 1P/3P anim redirects (same system as weapon_tweaker).
 
+### Hammer vs mace differentiation toggle (planned 2026-05-23)
+
+Optional VMF toggle. When enabled:
+
+- **Hammers** — more damage, less attack speed, less cleave.
+- **Maces** — less damage, more attack speed, more cleave.
+
+When disabled, hammers and maces share moveset stats (current behavior).
+
+**Why this matters for CWV variant identity:** several cross-character CWV variants are mechanically identical to their receiver-native counterparts without this toggle and are differentiated **only** by 1P wield aesthetics:
+
+- `warpriest_hammer` on Kruber — same moveset as Kruber's mace family.
+- `es_maul` on Kruber — also overlaps with Kruber's mace family.
+
+With the toggle on, those variants gain a hammer profile distinct from the native mace profile — so the variant feels like a genuine new option, not a re-skin. Without the toggle, the 1P differentiation is still preferred (see `DEVELOPMENT.md` "Design intent"); the toggle extends differentiation to mechanics.
+
+### Per-family 5-modded-instance scaffolding (planned 2026-05-13)
+
+Going forward, every CWV weapon family ships:
+
+- **1 blacksmith template** — `rarity = "default"`, `power_level = 5`, unbreakable. Crafting / new-player starter. Already shipped for several families (`cwv_es_axe_shield`, `cwv_es_longsword`).
+- **5 modded-rarity instances** — each a separate def with pre-baked trait + 2 properties. `rarity = "modded"` (order=4, mirrors exotic → unlocks customization tabs → player can re-roll).
+
+**Naming rule (load-bearing):**
+- Item **base name** = the weapon kind (e.g. "Axe and Shield").
+- Instance **name** = whatever cosmetic/illusion is equipped on it (decided at cosmetic-pick time, not at def-creation time).
+- **Do NOT pre-name instances by trait/property combo.** Display name follows the cosmetic + Warhammer Fantasy lore inspiration from the model's iconography (most vanilla weapons aren't lore-named by Fatshark — user does that work).
+
+**Two universal shield archetypes** (first two slots of every shield family — cover ~90% of shield builds):
+
+**Instance 1 — Defensive (stagger / survivability):**
+```lua
+traits     = { "melee_counter_push_power" },          -- Opportunist
+properties = { power_vs_skaven = 1, block_cost = 1 },
+```
+Opportunist hits stagger breakpoints; Power vs Skaven catches Plague Monk stagger; Block Cost Reduction is mandatory shield survivability at high difficulty.
+
+**Instance 2 — Offensive crit:**
+```lua
+traits     = { "melee_attack_speed_on_crit" },          -- Swift Slaying
+properties = { attack_speed = 1, crit_chance = 1 },
+```
+Base 5% + trinket 5% + weapon 5% = 15% crit → Swift Slaying ~90% uptime. Most powerful generic melee trait; no enemy-type bias. Particularly strong on Foot Knight (innate stagger means he doesn't need stagger talents).
+
+**Remaining 3 slots per family:** career- or build-specific. Require user input + breakpoint research per family — don't invent. NEVER fabricate breakpoint claims; crit-dependent breakpoints are NOT "reliable" unless paired with a guaranteed-crit talent. Damage and stagger breakpoints are separate tables — be explicit about which one a build targets. If unknown, ask the user or check the Royale w/ Cheese community breakpoint spreadsheet. Scope is regular Cataclysm only (not C1/C3).
+
+**Modded rarity registration:** currently lives only in `crafting_in_modded/modded_rarities.lua`. For CWV to use standalone, either self-register inside CWV with `if not RaritySettings.modded then ... end` guard, or extract `modded_rarities.lua` into a shared lib mod both `cim` and CWV depend on (out of scope until cross-mod pressure forces it).
+
+**How to apply:** walk one weapon family at a time. Confirm trait/property choices with user before authoring defs. Don't write display names or descriptions until cosmetic is picked.
+
 ### Stance-toggle ranged-melee variants (2026-05-11 batch)
 Each entry below uses the `cwv_es_musket` recipe (`reference_cwv_stance_toggle_recipe.md`): two templates registered, special-key destroys-and-rewields with a stance-flag flip, `BackendUtils.get_item_template` hook returns the alt template. Order roughly by implementation cost (similar bases first, novel combos last).
 

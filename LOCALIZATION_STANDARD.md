@@ -233,7 +233,7 @@ All localization files MUST be saved as **UTF-8 without BOM**.
 
 ### PowerShell 5.1 gotcha — `Get-Content -Raw` defaults to Windows-1252
 
-Per memory `feedback_ps5_getcontent_utf8.md`: PS 5.1's `Get-Content -Raw` does NOT default to UTF-8. It uses Windows-1252 and silently mangles em-dashes, bullets, accented characters, smart quotes. If a tool script needs to read a localization file from PS 5.1, use the explicit decode pattern:
+PS 5.1's `Get-Content -Raw` does NOT default to UTF-8 — it uses Windows-1252 and silently mangles em-dashes, bullets, accented characters, smart quotes. Full recipe in `tools/vmb-launcher/CLAUDE.md § PowerShell 5.1 Get-Content -Raw is NOT UTF-8`. If a tool script needs to read a localization file from PS 5.1, use the explicit decode pattern:
 
 ```powershell
 $text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)

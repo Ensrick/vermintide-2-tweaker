@@ -1,5 +1,21 @@
 # LA Prefix Patch Changelog
 
+## 0.3.1-dev (2026-05-21)
+
+### Added: `get_mod("Material-Hijack")` alias for the patched fork
+
+Wraps `_G.get_mod` so that any caller looking up the string `"Material-Hijack"`
+transparently falls back to the `material_hijack_patched` instance when the
+original Material-Hijack mod is disabled. A 2026-05-19 audit confirmed
+Loremaster's Armoury itself has zero `get_mod("Material-Hijack")` calls — LA's
+coupling to MH is purely data-driven (`mat_to_use` / `mat_slots` data nodes on
+LA units, consumed by whichever MH variant has its hooks live). The alias is
+belt-and-braces for any un-audited downstream mod that might do the lookup.
+
+Safety: only intercepts the exact string `"Material-Hijack"`. All other
+`get_mod` calls pass through unchanged. If `material_hijack_patched` itself
+isn't enabled, the original lookup proceeds normally.
+
 ## 0.3.0-dev (2026-05-08)
 
 ### Added: Quiet Mode toggles for LA quest markers and notifications

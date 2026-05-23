@@ -20,6 +20,96 @@
 > **`J_LEFTWEAPONATTACH_INVESTIGATION.md`** once. It explains why the
 > `_force_display_unit` rule exists.
 
+## Design intent — cross-character base templates are the feature
+
+CWV variants intentionally clone from cross-character base templates
+to bring other characters' movesets onto receivers (Kruber wielding
+Sienna's 2H mace via `bw_1h_mace`, Bardin wielding Saltzpyre's priest
+hammer via `wh_1h_hammer`, Kruber wielding Kerillian's dual swords via
+`we_dual_wield_swords`, etc.). This is the design, not a bug — the
+whole point is semi-lore-friendly variants that play differently
+enough from a receiver's vanilla loadout to feel like natural new
+weapons.
+
+**User's framing (2026-05-23):**
+
+> "We can still benefit from Isaak. In cases like Kruber using
+> Dual-Skullsplitters. They have a different first person wield
+> animation. Though they may be functionally the same without my
+> toggle for hammers to play different; so I like how in first
+> person the regular wield animation looks different even if the
+> moveset is the same. It differentiates them. I like how the first
+> person animations are working. They work just fine. We're using
+> Isaaks' mod to learn how to get 3rd person animations working. The
+> character models lack the right state machines to use each other's
+> animations, so we improvise by using a native weapon that's just
+> good enough."
+
+> "CWV is more about making semi-lore-friendly variants of the
+> weapons where possible, that play differently enough that they
+> feel like natural new variants."
+
+**What this means in practice:**
+
+- **1P is universal — wielder gets the donor character's 1P feel for
+  free.** No remap needed. The `first_person_base` unit is shared
+  across all six characters.
+- **3P is where we improvise.** Receiver character's body lacks the
+  donor's state machine. Pick a "good enough" native weapon's anim
+  vocab and remap `anim_event_3p` onto its events so bystanders see
+  something plausible. Receiver-appropriate `AttachmentNodeLinking`
+  to avoid foreign unwielded bones.
+- **The 1P differentiation IS the variant's identity** even when
+  moveset and stats are functionally identical to a native. Example:
+  Dual-Skullsplitters on Kruber — same moveset as Kruber's mace
+  family, but the 1P wield animation is different. Functional
+  identity comes later, optionally, via the planned hammer/mace
+  toggle (`TODO.md`).
+
+**Canonical CWV cross-character examples:**
+
+- **`warpriest_hammer`** — Skullsplitter mesh on Kruber. Different 1P
+  wield from Kruber's native mace family. Mechanically identical
+  without the planned hammer-vs-mace toggle.
+- **`priest_greathammer`** — Saltzpyre's priest 2H moveset given to
+  Kruber/Bardin.
+- **`maul`** — Sienna's 2H mace moveset on Kruber.
+
+For these, the 3P body improvises with the closest receiver-native
+animation set (Kruber's Mace+Sword for several variants). Bystander
+view is "good enough"; the wielder gets the donor's 1P feel.
+
+**Anti-pattern to avoid:** do **not** audit a CWV variant and flag
+"this clones from `es_2h_hammer` but the receiver is Sienna — should
+clone from `bw_1h_mace`." That recommendation destroys the variant's
+whole point. Peregrinaje (`ISAAK_RECIPE.md`) is a learning reference
+for 3P remap discipline; it is NOT a migration target. Peregrinaje
+clones receiver-native templates (its scope is narrower than CWV's),
+which is exactly what CWV deliberately does not do.
+
+### Isaak's Peregrinaje — what to use it for, what NOT to use it for
+
+When studying Isaak's `_peregrinaje_extract/named/scripts/mods/Peregrinaje/tweaks/new_weapons.lua`, his pattern is:
+
+1. Clone from a **receiver-native** base template (the character already owns the moveset).
+2. Override individual `anim_event` entries per action, drawing only from that template's existing state-machine vocabulary.
+
+That pattern is **correct for Isaak's scope** — same-character new-weapon creation. It is **wrong for CWV's scope** — intentional cross-character moveset porting.
+
+**Use Isaak's source for:**
+- **3P anim_event remap discipline** — picking individual events from a target template's vocabulary.
+- **Masterlist field hygiene** — what fields a clean weapon entry needs.
+- **Template registration ordering** — when in the boot sequence custom templates have to land.
+- **NetworkLookup symmetric registration** — keeping host/client lookup tables in sync.
+- **Closed-vocabulary rule** — remap targets must already exist in the target wield-SM template's `anim_event` set; no inventing events. See `ANIMATION_FIX_PLAYBOOK.md` § "Three non-negotiable rules" item 2.
+
+**Do NOT use Isaak's source for:**
+- Proposing migrating any CWV variant toward Isaak's receiver-native cloning pattern. Recommendations of the form "switch `maul` to clone `es_2h_hammer` instead of `bw_1h_mace`" or "this variant should clone from a Kruber-native template since the receiver is Kruber" are wrong. They destroy the variant's identity because CWV variants *intentionally* clone cross-character base templates to port the donor's moveset.
+
+**How to apply:** any time a CWV variant clones from a non-receiver-native template, do **not** flag as a defect. Treat as intentional unless the user explicitly says otherwise. If you're unsure why a base template was picked, ask the user — don't propose a "fix."
+
+**Burned 2026-05-23:** audited CWV variants flagging `maul`, `priest_greathammer`, and `warpriest_hammer` as having "wrong" base templates when they were correctly cross-character by design. Cost: one round-trip of misframed migration plan.
+
 ## Adding a New Variant Weapon — Quick Index
 
 The full procedural how-to lives in `RECIPES.md`. This section is a
@@ -131,6 +221,21 @@ When the user later applies a different illusion via the cosmetic menu, `result.
 - Apply illusion: works post-v0.1.91 (the skin-side `ItemMasterList[skin_key]` entry is now registered) and post-v0.1.95 (`matching_item_key` correctly points at the base weapon).
 - Salvage: works.
 - Inventory display: white border, no rarity glow — same as a vanilla blacksmith template.
+
+### When to use the blacksmith template pattern
+
+- Variant is meant as a "starter" or generic alternative — like
+  vanilla blacksmith drops.
+- Power level should be low (5).
+- Properties should roll on the forge, not be pre-baked.
+- Player should be able to apply any sibling variant's illusion to
+  it.
+
+For curated exotic/unique variants (Halfling Splitter, Helmgart
+Watchsword, Black Guard Blade): use a different pattern —
+`rarity = "exotic"` / `"unique"`, pre-applied skin via mod_data,
+traits / properties baked in. Those ship with a fixed visual
+identity.
 
 ### Common bugs (and the fixes that landed them)
 
@@ -742,6 +847,20 @@ Two layers, in precedence order:
 1. **Per-variant fields on the def** — `right_hand_scale`, `right_hand_offset`, `left_hand_scale`, `left_hand_offset`. Use these only when a specific variant deviates from its weapon type.
 2. **Type-level entry** — `_type_transforms[item_type] = { right_hand_scale = ..., right_hand_offset = ..., ... }`. **This is the primary way to tune a weapon type.** Each `cwv_*` `item_type` defines a new conceptual weapon (e.g. `cwv_imperial_longsword`); changes at the type level cascade to every variant sharing that type.
 
+**Architectural rule (user-mandated):** when the user says "fix the
+scale on the Imperial Longsword" or "set the grip on the X", they
+mean it as a property of the WEAPON TYPE. Edit
+`_type_transforms[<type>]` — ONE entry that cascades to every
+variant. Don't pick one variant and tune it; don't duplicate the
+same fields across multiple variant defs in lockstep. CWV's whole
+point is creating new conceptual weapons; the data layout reflects
+that. User's framing: *"If we're modifying a model, we modify the
+model. If we're modifying a type of weapon, we modify that type."*
+Same principle applies to any future visual/feel attribute that
+gets a similar split (animation overrides, material settings, etc.)
+— the type/variant distinction is the architectural rule, not just
+a scale-system rule.
+
 ### Per-perspective overrides (`_1p` / `_3p`)
 
 The unified scale/offset fields cascade to both 1P (held first-person view) and 3P (third-person body, what other players see). To target one perspective only, suffix the field name with `_1p` or `_3p`:
@@ -883,6 +1002,493 @@ Three distinct ways the bayonet can render where it shouldn't:
 | Bayonet visible after weapon swap | `Unit.set_unit_visibility` on parent doesn't propagate to linked child | `_wield_slot` post-hook: walk tracked pairs, set child visibility per parent |
 | One-frame "floating bayonet" after stance toggle | `mark_for_deletion` is async; child renders at last world position for one frame | Call `Unit.set_unit_visibility(child, false)` BEFORE `mark_for_deletion` |
 | Extra bayonet on ranged equip ("orphan") | A code path bypasses `destroy_wielded` (cosmetic application, equipment refresh) and re-fires our spawn hook on the same parent → second bayonet attached, first orphans | (a) Make `_attach` idempotent: skip if pair already tracked for the rifle. (b) `_wield_slot` post-hook also destroys orphans (parent dead, child alive) as defensive cleanup |
+
+## Known Errors / Gotchas
+
+A consolidated catalog of CWV-specific failure modes that have shipped
+and been fixed. Skim this before authoring a new variant; check it
+first when an existing variant suddenly breaks.
+
+### Item identification — always go through `backend_id`, never `item_data.key`
+
+For items registered via MoreItemsLibrary (every `cwv_*` item),
+`item_data.key` returns the **BASE weapon key** (e.g.
+`es_bastard_sword`), NOT the custom CWV item_key (e.g.
+`cwv_es_longsword_veteran`). Same for `item_data.name`. The custom
+identity lives in `item_data.backend_id`, formatted as
+`<item_key>_<3-digit-instance>` (e.g. `cwv_es_longsword_veteran_001`).
+
+**Always resolve like this:**
+```lua
+local bid = item_data.backend_id
+if bid then
+    local cwv_key = bid:match("^(cwv_.-)_%d%d%d$")    -- ANY 3-digit instance
+    if cwv_key and _my_lookup_table[cwv_key] then
+        -- found, use cwv_key
+    end
+end
+```
+
+**Why:** this bug has bitten at least four code paths (animation
+weapon-tracking via ActionWield, model scale/offset transforms via
+`GearUtils.create_equipment`, preview transforms via
+`HeroPreviewer._spawn_item`, and the v0.1.317 multi-instance preview
+regex). Each time, items appeared to "work" because the function was
+called but the lookup silently failed (`_lookup[base_key]` returns
+nil), so visuals/animations stayed at vanilla defaults — looking like
+the variant didn't take effect. Variants without custom transforms
+(e.g. shield variants without scale) masked the bug because they
+didn't need the lookup.
+
+**Critical: match `_%d%d%d$`, NOT `_001$`.** Variants with
+`def.instances = N` (introduced v0.1.271 for `cwv_es_musket` /
+`cwv_es_musket_old` to give the player N copies) generate
+backend_ids `_001`, `_002`, ..., `_NNN`. A hardcoded `_001` regex
+silently returns nil for instance 2+, the resolver exits early, and
+the previewer-side texture + transform binding is skipped. Symptom:
+the second backend instance displays in the inventory previewer with
+no textures and no scale/grip applied — looks like a white
+default-stage version. Burned in v0.1.317 (2026-05-12); affected
+every multi-instance variant since v0.1.271. Audit other reverse
+lookups via `Grep "backend_id:match" character_weapon_variants/`.
+
+**Diagnostic:** when adding a `mod:info` debug log on a per-item
+lookup, include the resolved cwv_key — silent lookup failures are
+how this bug class hides. For preview hooks where backend_id isn't a
+direct argument, iterate `self._item_info_by_slot` and match each
+entry's `backend_id`.
+
+### CWV inventory previewer uses the BASE template, not the cwv clone
+
+The inventory previewer (`world_hero_previewer.lua` `equip_item`)
+resolves weapon templates via:
+
+```lua
+local item_template = ItemHelper.get_template_by_item_name(item_name)
+-- which does: ItemMasterList[item_name].template -> Weapons[template_name]
+```
+
+`item_name` here is the **base weapon key** (per the backend_id
+lookup rule above — CWV items inherit `entry.name = base.name`), so
+the previewer reads `Weapons.<base_template>` — NEVER our cwv clone.
+**Modifying the cloned template alone does nothing for the inventory
+preview.**
+
+Symptoms are silent: the menu previewer plays the wrong wield
+animation (or none, leaving the character in the previous weapon's
+pose), without errors. In-game works fine because
+`simple_inventory_extension.lua` reads `item_data.template` directly
+from the slot data (which IS our cwv entry).
+
+**How to apply:** any template-level modification needed for the
+inventory preview path (especially `wield_anim_career_3p`,
+`wield_anim_career`, idle/state-machine fields,
+`<hand>_hand_attachment_node_linking` for hand-mount-flip variants)
+must also be applied to the **base** template. Scope to a
+career-keyed table so vanilla wielders of the base template fall
+through unchanged:
+
+```lua
+local base = Weapons.one_handed_sword_shield_template_1
+base.wield_anim_career_3p = base.wield_anim_career_3p or {}
+for k, v in pairs(my_elf_careers_to_event) do
+    base.wield_anim_career_3p[k] = v
+end
+```
+
+History: v0.1.44 added `wield_anim_career_3p` to the cloned
+template, didn't fix the menu pose. v0.1.48 patched the base
+template, fixed it. v0.1.181 (`cwv_es_outrider_grenade_launcher`)
+hit the same trap for `right_hand_attachment_node_linking` — see
+"BASE template patching for previewer compatibility" above.
+
+### CWV projectile system reads the BASE template at runtime
+
+**For any cwv weapon that fires a projectile (javelins, throwing
+axes, future thrown variants), do NOT clone the weapon template
+under a renamed key and expect the projectile system to use it.**
+
+`PlayerProjectileUnitExtension.init` reads
+`ItemMasterList[item_name].template` at projectile init, where
+`item_name` is the BASE weapon key. A renamed clone (e.g.
+`tuskgor_javelin_template` cloned from `javelin_template`) is **dead
+code at runtime** — the engine never looks it up for projectile
+spawning.
+
+The wield-time path (which DOES use the cloned template via
+`item_data.template`) explains why `max_ammo` works on the clone but
+`link_pickup`, projectile speed, and impact_data do NOT — those
+latter live on the action sub-table the projectile init reads via
+the BASE lookup.
+
+**Two valid options:**
+
+1. **Mutate the base template in place.** Affects ALL wielders of
+   that base weapon — only acceptable if every variant should share
+   the modification.
+2. **Clone-and-swap with a runtime hook** (cwv-friendly). Hook
+   `PlayerProjectileUnitExtension.init` post-vanilla, look up the
+   projectile's owner's `slot_ranged` slot_data, and if the cwv
+   skin matches, swap `self._current_action`, `self._impact_data`,
+   `self.projectile_info`, and `self._impact_damage_profile_id` to
+   point at the cloned template's sub-action.
+
+**Critical detection field:** `slot_data.skin` carries the cwv
+prefix at runtime, NOT `slot_data.id` (slot name like
+`"slot_ranged"`) or `slot_data.backend_id` (nil at this layer). Use
+`bid:match("^cwv_.+_javelin_skin$")` or similar. v0.1.106 diagnostic
+dump confirmed this.
+
+**Burned 30+ versions** (Tuskgor Javelin, 2026-05-06 → 2026-05-07).
+v0.1.65 onward shipped a cloned `tuskgor_javelin_template` with
+stat tweaks, impact_data swapped, custom damage profiles. v0.1.96
+diagnostic confirmed every javelin throw at runtime logged
+`tmpl=javelin_template` (BASE) and `link=true link_pickup=nil`
+(BASE values). 30+ versions of "fixes" — rotation cleanup hooks,
+husk-lookup injection, stick-and-pickup behavior swap, in-flight
+projectile model swap — were ALL applied to the cloned template
+that was unused at projectile-spawn time. Diagnosis only landed
+once we hooked `_handle_linking` unconditionally and saw
+`tmpl=javelin_template` in the log.
+
+Workflow: build the runtime `init` hook FIRST (before adding any
+impact_data / projectile_speed / damage_profile changes to the
+clone). Verify with a `[cwv stick] init post-fix swap` log line per
+throw. Without that line firing, your clone's projectile-side
+fields are dead code.
+
+### Ammo weapons need full skin field mirroring
+
+When creating a variant whose `base_weapon` is an ammo weapon
+(`is_ammo_weapon = true`, e.g. `we_javelin`), the custom skin entry
+registered in `_register_variant_skins` MUST mirror multiple fields
+from the base ItemMasterList entry — not just `ammo_unit`.
+
+**Why:** `BackendUtils.get_item_units`
+(`scripts/managers/backend/backend_utils.lua:174-180`)
+unconditionally overwrites a whole set of fields on `units` from
+`skin_template` whenever a skin is set:
+
+```lua
+left_hand_unit            = skin_template.left_hand_unit
+right_hand_unit           = skin_template.right_hand_unit
+ammo_unit                 = skin_template.ammo_unit
+ammo_unit_3p              = skin_template.ammo_unit_3p
+projectile_units_template = skin_template.projectile_units_template
+pickup_template_name      = skin_template.pickup_template_name
+link_pickup_template_name = skin_template.link_pickup_template_name
+icon                      = skin_template.hud_icon
+material_settings_name    = skin_template.material_settings_name
+```
+
+Anything absent on the skin becomes nil — even though the base IML
+had a valid value. Downstream paths nil-cascade:
+
+- **Equip / previewer crash** — `world_hero_previewer.lua` does
+  `left_hand_unit = item_units.ammo_unit; left_unit = left_hand_unit
+  .. "_3p"` for `is_ammo_weapon` items. nil ammo_unit → "attempt to
+  concatenate local 'left_hand_unit' (a nil value)".
+- **Throw / pickup crashes** — nil `projectile_units_template` /
+  `pickup_template_name` breaks projectile spawn and on-ground
+  pickup spawn.
+
+**How to apply** (since v0.1.64): `_register_variant_skins` already
+mirrors all five fields with `def.<field> or base.<field>` fallback,
+where `base = ItemMasterList[def.base_weapon]`. When adding a NEW
+ammo-weapon variant:
+
+- Set `def.left_hand_unit` to the held model's 1P path (the
+  previewer concatenates `_3p`, so the asset's `_3p` sibling must
+  exist in a loaded package — verify in
+  `dlcs/<dlc>/<dlc>_equipment_settings.lua` package list).
+- If the held model and the thrown projectile should differ, set
+  `def.ammo_unit` explicitly; otherwise the fallback uses
+  `left_hand_unit` (gated — see below).
+- Don't override `projectile_units_template` unless you're also
+  cloning the projectile config — the base entry's value (e.g.
+  `"javelin"` → `Projectiles.javelin`) is the safe default.
+
+**Diagnostic signal:** `_register_variant_skins` logs `Registered
+custom skin: <key> (ammo_unit=..., projectile=...)`. If either is
+`nil`, that code path will crash on use.
+
+**Gate the fallback on the base actually using the field
+(v0.1.184).** The original `ammo_unit = def.ammo_unit or
+def.left_hand_unit` fallback was TOO BROAD — it forced an
+`ammo_unit` value onto cwv variants whose base weapon doesn't use
+one. Concrete case: `cwv_es_brace_repeater` (base
+`wh_brace_of_pistols`). The brace template has `ammo_data.ammo_hand
+= "right"` but no `ammo_unit` (vanilla brace doesn't attach a
+visible ammo model). Our skin force-set `ammo_unit =
+def.left_hand_unit` (the pistol mesh), triggering
+`GearUtils.spawn_inventory_unit`'s gate
+`if ammo_data and ammo_data.ammo_hand == hand and ammo_unit_name
+then` → `fassert(ammo_unit_attachment_node_linking)` failed because
+the brace template doesn't define it. Crash chain landed in
+`simple_inventory_extension: attempt to index local
+'slot_equipment_data' (a nil value)` (crash GUID `2df233ae`).
+
+**The fix (current code):**
+
+```lua
+local ammo_unit = def.ammo_unit or (base.ammo_unit and def.left_hand_unit)
+```
+
+Only fall back to `def.left_hand_unit` when the BASE weapon's IML
+has `ammo_unit`. Preserves javelin/spear behavior; nukes the
+spurious ammo_unit on brace/pistol-family variants.
+
+**General rule:** for ANY new `_register_variant_skins` fallback —
+GATE on the base weapon actually using the assumed field. Don't
+force a value into a field the base never used; vanilla downstream
+code (assertions in `spawn_inventory_unit`, `world_hero_previewer`,
+etc.) is built around the base's shape and breaks if cwv injects
+unexpected non-nil values.
+
+### Cross-character unit references need package loading
+
+Vanilla queues inventory packages off the equipped item's
+`right_hand_unit` / `left_hand_unit` and the item's `required_dlc`
+chain. It does **NOT** walk every reference inside the template,
+skin entry, or pickup_settings. Cross-character units sit in
+packages keyed to ANOTHER character's kit, which only get loaded
+when THAT character has the relevant item equipped.
+
+**Manifests as:**
+`Managers.state.unit_spawner:spawn_local_unit_with_extensions` or
+`World.spawn_unit` called with an unloaded unit path crashes hard
+(sometimes not pcall-catchable; sometimes returns nil; sometimes
+throws engine-level errors that propagate up and wreck unrelated
+state).
+
+**Known incidents:**
+
+- **Tuskgor Javelin (CHANGELOG v0.1.118):** `cwv_es_javelin` had
+  `right_hand_unit = boar spear`, `left_hand_unit = boar spear`.
+  The pickup template referenced `prj_we_javelin_01_3ps` (elf
+  javelin pickup unit). On first throw, `World.spawn_unit` crashed
+  because the elf javelin package wasn't queued. Resolution: use
+  the boar spear unit for both the in-flight and pickup paths.
+- **Brace-Repeater (cwv v0.1.180–0.1.183; recurred in
+  weapon_tweaker v0.12.5-dev 2026-05-09):** cwv_es_brace_repeater
+  had `right_hand_unit = pistol` and a per-perspective
+  `right_hand_unit_3p_override = repeater_3p`. The repeater
+  package wasn't queued for a brace equip; spawning the repeater
+  3P unit crashed the equip. After functionality migrated to
+  weapon_tweaker, the same crash recurred at GUID d9e1d3d3 the
+  first time Kruber equipped the brace. Fix: force-load the
+  repeater 3P unit at WT mod init via
+  `Managers.package:load(_BRACE_REPEATER_3P_UNIT,
+  "wt_brace_repeater_3p", nil, true, true)` (Tuskgor pup pattern),
+  plus a `Managers.package:has_loaded` guard in the swap hook to
+  fall back to vanilla brace 3P if the load hasn't completed yet.
+
+**How to apply** — when writing a variant that references any unit
+path from outside its `base_weapon`'s natural package:
+
+1. **Cross-check the unit's package source.** Grep
+   `Vermintide-2-Source-Code/scripts/settings/dlcs/<dlc>/<dlc>_equipment_settings.lua`
+   and similar for the unit name. Confirm the package it lives in.
+2. **If different from the variant's natural package**, choose one:
+   - **Static dependency:** add the unit (or its package) to
+     `resource_packages/character_weapon_variants/character_weapon_variants.package`.
+     Always loaded; bloats the always-loaded set but simplest.
+   - **Runtime force-load:** call `Managers.package:load(<package>,
+     ...)` before the spawn, then `:unload(<package>, ...)` on
+     unequip. Tighter memory footprint; more code.
+   - **Avoid the cross-character reference:** if the cosmetic
+     effect can be achieved using units from the variant's natural
+     package, prefer that (Tuskgor Javelin's resolution).
+3. **Spot-check by equipping in-game.** A `World.spawn_unit` crash
+   on first equip / first action is the smoking gun.
+
+**Defensive coding** — if the cross-character unit MIGHT not be
+loaded, wrap the spawn in pcall AND structure your hook so failure
+falls back to a working state (vanilla unit, no swap, etc.) rather
+than half-applying a broken state. The brace_repeater hook learned
+this: spawn override FIRST, only destroy vanilla AFTER override
+spawn succeeds. Otherwise a failed override leaves the equip with
+no 3P unit.
+
+### CWV variants must NOT clobber inherited `entry.name` / `entry.key`
+
+In `_build_entry`, after `table.clone(base, true)`:
+
+**DO NOT** override `entry.name` or `entry.key` — they're inherited
+from the base weapon (e.g. `"es_bastard_sword"`) and downstream code
+(`BackendUtils.get_item_units`, equipment pipeline) does
+`ItemMasterList[item.name]` lookups that fall back to the base
+weapon's data. If you set `entry.name = def.item_key`, those
+lookups return nil because cwv items are added via MIL
+`add_mod_items_to_local_backend` (NOT to ItemMasterList) — instant
+crash on equip with `backend_utils.lua: attempt to index local
+'item_data' (a nil value)`.
+
+**DO** add a marker field:
+```lua
+entry.cwv_variant = true
+```
+
+Then sibling mods (`cosmetics_tweaker`, `weapon_tweaker`) gate
+`item_data.name`-keyed lookups on it:
+```lua
+if result and item_data and not item_data.cwv_variant then
+    _scale_units(result, item_data.name, career_name)
+    _offset_units(result, item_data.name, career_name)
+end
+```
+
+**Why both halves matter:**
+- Inheritance is load-bearing for backend lookups — clobbering it
+  breaks equip.
+- WITHOUT the flag/skip, sibling mods' weapon-name-keyed overrides
+  leak onto cwv variants. Concrete case: `es_bastard_sword_thiccc =
+  true` in cosmetics_tweaker scaled `cwv_es_longsword` to `{0.65,
+  1.0, 1.0}` (paper-thin) because the cosmetics_tweaker GearUtils
+  hook used `item_data.name == "es_bastard_sword"` to match.
+
+**Hooks that still need the flag gate** (item-name-keyed paths in
+sibling mods):
+- `GearUtils.create_equipment` (in-game render — most visible leak)
+- `LootItemUnitPreviewer.spawn_units` (skin browser)
+- `_spawn_item_post` (HeroPreviewer/MenuWorldPreviewer) is already
+  safe — it matches by `item_name` parameter (the cwv item key,
+  not inherited name)
+
+**Update 2026-05-01 evening:** cosmetics_tweaker (v0.7.87+)
+migrated its **scale** system from item-name-keyed to
+unit-path-keyed (`_unit_path_scale_overrides`, substring match
+against the resolved model path). The `cwv_variant` flag remains
+load-bearing for grip-offset, hat tinting, and LA-paint paths
+(still item-name-keyed) on the `GearUtils.create_equipment` hook.
+
+**Update 2026-05-05 (v0.7.98):** menu hooks no longer use the
+`cwv_variant` gate at all. Root cause of the open issue: menu
+hooks (`HeroPreviewer/MenuWorldPreviewer._spawn_item`,
+`LootItemUnitPreviewer.spawn_units`) had been resolving paths via
+`item_data.right_hand_unit` + a separate `info.skin_name` →
+`WeaponSkins.skins[…]` lookup, redundant with what vanilla had
+already computed. Switched both menu hooks to read paths straight
+from `spawn_data[i].unit_name` — vanilla `equip_item` /
+`_load_item_units` populates that field after calling
+`BackendUtils.get_item_units`. That's the only truth source for
+"what unit IS being rendered in this slot right now." A cwv item's
+`unit_name` is always its variant model, so it can't accidentally
+match a base-weapon pattern, which made the gate redundant.
+**Default contract for new sibling mods that hook menu paths:**
+read paths from `spawn_data[i].unit_name`, never re-resolve. The
+flag is still required for any item-name-keyed override
+(offset/tint/LA-paint on the GearUtils path).
+
+### Mod-shipped custom mesh paths cannot be `Application.resource_package` discovery targets
+
+VT2 modding does **NOT** support shipping new resource paths that
+are loadable via `Application.resource_package(path)`. **Custom
+meshes must reuse a vanilla unit path** (LA's pattern), not invent
+a new one.
+
+**Why:** two separate resource registries exist:
+- `Mod.resource_package(mod.handle, name)` — mod-scoped registry,
+  used by `mod_manager.lua:421` to load each entry in `.mod`'s
+  `packages = {...}`. Resources loaded this way are accessible
+  WITHIN THE MOD but NOT globally findable.
+- `Application.resource_package(name)` — global registry. Resolves
+  paths to bundle files in the game's `bundle/` folder (vanilla
+  content). Cannot see mod-scoped packages.
+
+Vanilla code (e.g. `world_hero_previewer._load_packages`) calls
+`package_manager:load(right_hand_unit .. "_3p", ...)` which routes
+through `Application.resource_package`. So any `right_hand_unit`
+path that isn't vanilla will crash there with `[Engine Error]:
+Resource '#ID[<hash>]' not found!` where `<hash>` is the murmur64
+of a mod-defined path.
+
+**How to apply:** when adding a CWV variant with a custom mesh,
+set `right_hand_unit` to a vanilla unit path (e.g.
+`units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1`).
+Then overlay your custom mesh via one of:
+- **LA-style pattern:** author a `.unit` data block referencing a
+  vanilla material; mod's PackageManager hooks intercept package
+  loads. See `RECIPES.md` "LA custom-mesh pattern" recipe.
+- **Bayonet pattern:** spawn a child unit linked to the vanilla
+  unit (`World.link_unit`), hide the vanilla mesh via
+  `Unit.set_unit_visibility`, force-load custom mesh's package,
+  sync visibility across FP/3P. See "Bayonet / fixed-attachment
+  child units" section above.
+
+**Verified evidence (v0.1.275 crash):**
+- LA mod ships 104 .unit + 149 .texture resources but ZERO sibling
+  .package files. All its "custom" units are at vanilla paths.
+- Vanilla rifle bundle `3c8a9acd3d48bc69` contains the .unit +
+  .material directly — NO .package resource inside. The bundle
+  FILE is the package.
+- Adding sibling paths to .mod's packages list creates
+  `.mod_bundle` files in workshop folder, but they're not
+  engine-discoverable for `Application.resource_package`.
+- v0.1.271–275 burned 4 versions trying every workaround.
+
+**Don't waste time on:**
+- Authoring sibling `.package` files. Doesn't help.
+- Adding sibling paths to `.mod` `packages = {...}`. Doesn't help.
+- Adding `package = [...]` to master `.package`. Compiles, but
+  resources only accessible mod-scoped.
+
+The shippable `cwv_es_musket` variant works because its
+`right_hand_unit` is the vanilla
+`units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1`.
+The crash only hit `cwv_es_musket_old` (v0.1.271–276) because it
+tried `units/cwv_es_musket_custom/cwv_es_musket_custom`.
+
+## Build discipline — don't fabricate breakpoints
+
+When proposing trait/property combos for new variants:
+
+- **Never make up VT2 weapon breakpoint claims** (e.g. "this combo
+  one-shot headshots Stormvermin on Cata"). They're patch-sensitive,
+  depend on the exact talent stack, and the user has 4000h+ of
+  empirical knowledge — fabricated numbers waste time and erode
+  trust.
+- **Crit-dependent breakpoints are NOT "reliable" unless paired
+  with a guaranteed-crit talent.** Don't sell a crit chain as a
+  reliable kill plan.
+- **Damage and stagger breakpoints are separate tables.** Be
+  explicit about which one a build is targeting.
+- **Scope is regular Cataclysm only** (not C1/C3, per user
+  2026-05-13).
+- **If you don't know the breakpoint, say so plainly and ask.**
+  Don't guess. Either:
+  1. Ask the user what breakpoint they want to hit, then pick the
+     combo that gets there.
+  2. Check the Royale w/ Cheese community breakpoint spreadsheet
+     (see below).
+
+**Burned 2026-05-13** in the CWV "5 modded instances" planning
+conversation: claimed Kruber axe+shield would one-shot headshot
+Cata Stormvermin with Mercenary Paymaster + Swift Slaying. Wrong —
+there is no reliable Cata SV one-shot-headshot breakpoint for 1H
+axe+shield without crit. User had to correct multiple proposed
+builds. The combos in the table were valid Lua, but the breakpoint
+*justifications* were fiction.
+
+### Royale w/ Cheese community breakpoint spreadsheet
+
+The canonical breakpoint data for VT2 weapon/enemy damage and stagger
+at every difficulty lives in a community-maintained spreadsheet,
+typically attributed to / linked from Royale w/ Cheese's user guides.
+
+- **Scope for CWV planning: regular Cataclysm only** (not C1/C3),
+  per user 2026-05-13.
+- Breakpoints are patch-sensitive and depend on the exact talent
+  stack — the spreadsheet is the authoritative reference.
+- Damage breakpoints and **stagger** breakpoints are separate
+  tables — be explicit which one is in play.
+- Don't assume a remembered breakpoint claim still holds across
+  patches — verify before recommending.
+
+**Specific URL not yet captured.** When planning a CWV instance
+aimed at a specific breakpoint, ask the user for the spreadsheet
+URL OR for the relevant breakpoint data ("what's the Cata X
+breakpoint for Y with Z talents?").
 
 ## Reference: Base Weapon Keys
 

@@ -1,5 +1,13 @@
 # Verminious Dreams Lighting — Changelog
 
+## v1.0.0 (2026-05-23)
+
+Graduating to 1.0. Scope is feature-complete: tuned defaults baked for all three Verminious Dreams missions, per-mission VMF toggles, two light groups (torches / general), per-frame ShadingEnvironment overrides via `CameraManager.shading_callback`, live tuning via `/vdl_*` commands.
+
+Chasm-light targeting (dropped at v0.6.0) and particle-FX overrides (deferred at v0.1.0) are now formally out of scope, not deferred TODOs — the engine paths for both have known cost/complexity that isn't justified for a three-mission lighting mod.
+
+No code changes vs. v0.8.0-alpha; this is purely a release-track bump after a week public with no reported issues.
+
 ## v0.8.0-alpha (2026-05-16)
 
 **First public release.** Flipped visibility from `friends_only` → `public`. All three Verminious Dreams missions are baked: The Forsaken Temple, Devious Delvings, The Well of Dreams. Subscribers get tuned lighting on `dlc_termite_1/2/3` out of the box; per-mission VMF toggles default ON.

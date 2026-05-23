@@ -1,6 +1,6 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
 
-local MOD_VERSION = "0.1.6"
+local MOD_VERSION = "0.1.7"
 mod:info("Dynamic Cosmetic Portraits v%s loaded", MOD_VERSION)
 mod:echo("Dynamic Cosmetic Portraits v" .. MOD_VERSION)
 
@@ -91,6 +91,9 @@ local _PORTRAIT_MATERIALS = {
     "materials/ui/portrait_kruber_mercenary_hat_0003",
     "materials/ui/medium_portrait_kruber_mercenary_hat_0003",
     "materials/ui/small_portrait_kruber_mercenary_hat_0003",
+    "materials/ui/portrait_kruber_mercenary_hat_0005",
+    "materials/ui/medium_portrait_kruber_mercenary_hat_0005",
+    "materials/ui/small_portrait_kruber_mercenary_hat_0005",
 }
 
 -- _hat_portrait_map: cosmetic-key (slot_hat) -> texture name set.
@@ -113,6 +116,11 @@ local _hat_portrait_map = {
         hud    = "portrait_kruber_mercenary_hat_0004",
         medium = "medium_portrait_kruber_mercenary_hat_0004",
         small  = "small_portrait_kruber_mercenary_hat_0004",
+    },
+    mercenary_hat_0005 = {  -- Sellsword's Twinplume
+        hud    = "portrait_kruber_mercenary_hat_0005",
+        medium = "medium_portrait_kruber_mercenary_hat_0005",
+        small  = "small_portrait_kruber_mercenary_hat_0005",
     },
     mercenary_hat_0006 = {
         hud    = "portrait_kruber_mercenary_hat_0006",

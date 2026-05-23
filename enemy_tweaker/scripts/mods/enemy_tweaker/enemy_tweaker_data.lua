@@ -265,6 +265,117 @@ return {
                     },
                 },
             },
+
+            -- BIG REBALANCE (Core's BR / "Weapon Balance" decompile)
+            -- All defaults false; master gates registrations across mods
+            -- (same setting_id pattern in wt + ct, OR-merged at runtime).
+            -- See enemy_tweaker_big_rebalance.lua + ..._registrations.lua.
+            {
+                setting_id  = "br_group",
+                type        = "group",
+                sub_widgets = {
+                    -- Master toggle moved to the new `bt` (Tweaker: Buffs) mod.
+                    -- Subscribe to it and enable its master to make these et BR
+                    -- sub-toggles functional.
+
+                    -- Breed tuning
+                    {
+                        setting_id  = "br_breed_tuning_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "br_bloodlust_class_table",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_bloodlust_class_table_tooltip",
+                            },
+                            {
+                                setting_id    = "br_bloodlust_per_breed_assign",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_bloodlust_per_breed_assign_tooltip",
+                            },
+                            {
+                                setting_id    = "br_breed_trash_flags",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_breed_trash_flags_tooltip",
+                            },
+                            -- Per-breed overrides: empty scaffold per design Q4.
+                            -- VMF rejects groups with zero sub_widgets ("must have
+                            -- at least 1 sub_widget"), so the placeholder group
+                            -- was removed entirely. Re-add this group with real
+                            -- sub-widgets when actual per-breed overrides are
+                            -- defined; localization keys for it remain so the
+                            -- label can be reused.
+                        },
+                    },
+
+                    -- Stagger / damage math
+                    {
+                        setting_id  = "br_stagger_damage_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "br_stagger_ai_rewrite",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_stagger_ai_rewrite_tooltip",
+                            },
+                            {
+                                setting_id    = "br_calculate_damage_rewrite",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_calculate_damage_rewrite_tooltip",
+                            },
+                            {
+                                setting_id    = "br_shield_slam_rewrite",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_shield_slam_rewrite_tooltip",
+                            },
+                            {
+                                setting_id    = "br_unbalance_debuff_infra",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_unbalance_debuff_infra_tooltip",
+                            },
+                        },
+                    },
+
+                    -- THP from kills
+                    {
+                        setting_id  = "br_thp_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "br_thp_regrowth_template",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_thp_regrowth_template_tooltip",
+                            },
+                            {
+                                setting_id    = "br_thp_vanguard_template",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_thp_vanguard_template_tooltip",
+                            },
+                            {
+                                setting_id    = "br_thp_reaper_template",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_thp_reaper_template_tooltip",
+                            },
+                            {
+                                setting_id    = "br_thp_bloodlust_template",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "br_thp_bloodlust_template_tooltip",
+                            },
+                        },
+                    },
+                },
+            },
         },
     },
 }

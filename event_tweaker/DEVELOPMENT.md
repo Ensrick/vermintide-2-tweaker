@@ -35,7 +35,7 @@ The mutator name must be a string that's already registered in `NetworkLookup.mu
 1. Add the name to the matching category's `mutators` array in **both** `event_tweaker.lua` (`MUTATOR_CATALOG`) and `event_tweaker_data.lua` (`CATEGORIES`).
 2. Add `mut_<id>` and `mut_<id>_tooltip` keys to `event_tweaker_localization.lua`. Convention: tooltip leads with `[<mutator_id>]` so the literal name being injected is verifiable from the UI.
 3. Bump `MOD_VERSION` in `event_tweaker.lua` per the always-bump rule.
-4. Build (`vmb build event_tweaker --no-workshop --cwd`), deploy (`& .\deploy_all.ps1 -Mods @("event_tweaker")`), restart, test.
+4. Build (`& $exe build event_tweaker`), deploy (`& $exe deploy event_tweaker`) where `$exe` is `tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe`, restart, test.
 
 ## Adding a new event preset
 
@@ -48,11 +48,100 @@ When a mutator inspects `active_events` internally (Geheimnisnacht does, Skulls 
 2. Add an option entry to the `event_preset` dropdown's `options` list in `event_tweaker_data.lua`.
 3. Add `preset_<key>` localization key in `event_tweaker_localization.lua`.
 
+## Confirmed mutator catalog (all year-round in NetworkLookup)
+
+- **Vanilla** (`scripts/settings/mutator_settings.lua:5-38`): no_ammo,
+  no_pickups, player_dot, instant_death, whiterun, no_respawn, elite_run,
+  specials_frequency, more_specials, same_specials, big_specials,
+  elite_specials, gutter_runner_mayhem, chaos_warriors_trickle,
+  mixed_horde, multiple_bosses, hordes_galore, powerful_elites,
+  shared_health_pool, high_intensity, wave_of_plague_monks,
+  wave_of_berzerkers, night_mode, life, metal, heavens, light, shadow,
+  fire, death, beasts, twitch_darkness (excluded — Twitch-only).
+- **DLC mutators_batch_01**
+  (`scripts/settings/dlcs/mutators_batch_01/mutators_batch_01_common_settings.lua:5-10`):
+  splitting_enemies, darkness, ticking_bomb, realism.
+- **DLC mutators_batch_02**
+  (`mutators_batch_02_common_settings.lua:5-12`): escort, slayer_curse,
+  explosive_loot_rats, leash, bloodlust, skulking_sorcerer.
+- **DLC mutators_batch_04**
+  (`mutators_batch_04_common_settings.lua:5-9`): flames,
+  lightning_strike, chasing_spirits.
+- **Live-event** (`geheimnisnacht_2021_common_settings.lua:52`,
+  `skulls_2023_common_settings.lua:27`): geheimnisnacht_2021,
+  geheimnisnacht_2021_hard_mode, skulls_2023.
+- **No mutators_batch_03** in current source (probably retired or skipped numbering).
+
+## Known mutator behaviors that affect the mod
+
+- `mutator_geheimnisnacht_2021.lua:58-86` calls
+  `live_events_interface:get_active_events()` and does
+  `string.find(live_event, "geheimnisnacht_%d+")` to determine which 5
+  maps spawn ritual sites — the year picked decides which canonical map
+  list activates (see `geheimnisnacht_utils.lua:5-41` for the per-year
+  lists). **Hence the preset dropdown is required for Geheimnisnacht to
+  do anything visible.**
+- `mutator_skulls_2023.lua` does NOT inspect `active_events` — its
+  `server_start_function` spawns skull pickups on every
+  `pickup_system.primary/secondary_pickup_spawners` unconditionally. The
+  mutator alone is enough; preset is cosmetic for Skulls.
+- `GameModeBase.append_live_event_mutators`
+  (`game_mode_base.lua:257-288`) skips hub levels and tutorial levels.
+- `level_keys = nil` on a special-event entry means "applies to all
+  levels" (line 275 condition).
+- **Keep decoration is NOT mutator-driven.** Vanilla
+  Geheimnisnacht/Skulls/Anniversary swap the entire keep level file
+  (decorations are baked geometry). `AdventureMechanism.get_starting_level`
+  (`adventure_mechanism.lua:625`) reads
+  `Managers.backend:get_level_variation_data().hub_level` and returns
+  it. Variant level keys defined in
+  `scripts/settings/level_settings.lua:152-196`: `inn_level_halloween`,
+  `inn_level_skulls`, `inn_level_celebrate`, `inn_level_sonnstill`. Each
+  loads its own world file and decoration packages. Hooked in v0.3.0-dev
+  via `BackendManagerPlayFab.get_level_variation_data` — single entry
+  point, all callers (state_ingame, interactions, carousel) get the
+  override. Caveat: changing the preset after the keep is already loaded
+  does NOT swap the keep — user must restart or run a mission and return.
+
 ## Sharp edges
 
 ### `get_special_events` entries MUST have a `name` field
 
-`DialogueSystem.on_add_extension` (`dialogue_system.lua:196-212`) reads `event_data.name` and uses it as a key in `self._global_context`. Missing `name` → `self._global_context[nil] = true` → "table index is nil" crash. Hits on every level load including the hub, so the crash is at startup, NOT only on missions. **Caused the v0.2.0-dev → v0.2.1-dev fix.** See `feedback_special_events_name_required.md` in memory.
+When hooking `BackendInterfaceLiveEventsPlayfab:get_special_events` (or
+otherwise fabricating live-event data), every entry MUST include a
+non-nil string `name` in addition to `weekly_event` and `mutators`.
+
+```lua
+-- WRONG — crashes on startup with "table index is nil"
+{ weekly_event = "append", mutators = { "geheimnisnacht_2021" } }
+
+-- CORRECT
+{ name = "geheimnisnacht_2021", weekly_event = "append", mutators = {...} }
+```
+
+**Why:** `scripts/entity_system/systems/dialogues/dialogue_system.lua:198-200`
+does:
+
+```lua
+local event_name = event_data.name
+self._global_context[event_name] = true   -- nil here = "table index is nil" crash
+```
+
+This runs on every level load **including the keep/hub**, so the crash
+hits at startup — NOT only on missions.
+`GameModeBase.append_live_event_mutators` skips hub levels, but
+`DialogueSystem` does not. **Caused the v0.2.0-dev → v0.2.1-dev fix.**
+
+**How to apply:** When any future tweaker-class mod injects fake events
+into the live-events backend interface:
+
+- Always set `entry.name` to a non-nil string. Use the canonical event
+  name if it matches (e.g. `"geheimnisnacht_2021"`, `"skulls_2023"`), or
+  a synthetic identifier (e.g. `"event_tweaker_custom"`) for
+  hand-rolled selections.
+- The dialogue system also iterates `entry.mutators` and calls
+  `_load_special_event_dialogues(mutator_name, ...)` — that path uses
+  `Application.can_get` first so missing dialogue files don't crash.
 
 ### Hub levels skip the mutator path
 
@@ -81,14 +170,16 @@ E.g. `geheimnisnacht_2021` (NOT `mutator_geheimnisnacht_2021`). The `mutator_` p
 ## Build & deploy (matches sibling tweaker mods)
 
 ```powershell
-Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-node C:/Users/danjo/source/repos/vmb/vmb.js build event_tweaker --no-workshop --cwd
-& .\deploy_all.ps1 -Mods @("event_tweaker")
+$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
+& $exe build  event_tweaker
+& $exe deploy event_tweaker
 # To push to Workshop (creates a new revision visible only to subscribers):
 & .\upload_event_tweaker.ps1
+# Or do all three in one shot:
+& $exe all    event_tweaker
 ```
 
-`upload_event_tweaker.ps1` mirrors `upload_wt.ps1`'s pattern — it aborts if `itemV2.cfg` has `visibility = "public"` to prevent a repeat of the prior automated-public-flip incident that got two mods removed-from-community (irreversible).
+The legacy `deploy_all.ps1` shim that used to cover this flow was archived 2026-05-21 to `_archive/legacy_deploy_scripts/`. `upload_event_tweaker.ps1` mirrors `upload_wt.ps1`'s pattern — it aborts if `itemV2.cfg` has `visibility = "public"` to prevent a repeat of the prior automated-public-flip incident that got two mods removed-from-community (irreversible).
 
 ## Known limitations
 

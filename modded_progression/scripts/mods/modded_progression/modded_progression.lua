@@ -22,7 +22,7 @@ Major sections (search by name to jump):
 
 local mod = get_mod("mp")
 
-local MOD_VERSION = "0.2.0-dev"
+local MOD_VERSION = "0.2.1-dev"
 mod:info("Modded Progression v%s loaded", MOD_VERSION)
 mod:echo("Modded Progression v" .. MOD_VERSION)
 

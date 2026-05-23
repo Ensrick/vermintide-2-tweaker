@@ -14,11 +14,30 @@ local widgets = {
         default_value = false,
         tooltip       = mod:localize("unlock_all_frames_tooltip"),
     },
+    -- v0.9.3.9: la_bridge_enable toggle REMOVED. The LA bridge is now a
+    -- built-in feature, always on. Players who don't want LA cosmetics
+    -- just don't subscribe to Loremaster's Armoury. Removed widget from
+    -- Settings tree; init code below treats it as unconditionally true.
+    -- v0.9.3.1: LA Prefix Patch embedded — quiet-mode toggles for LA's quest
+    -- markers and unread-letter notifications. Default off so LA behaves as
+    -- shipped until user opts in.
     {
-        setting_id    = "la_bridge_enable",
+        setting_id    = "suppress_la_quest_markers",
         type          = "checkbox",
         default_value = false,
-        tooltip       = mod:localize("la_bridge_enable_tooltip"),
+        tooltip       = mod:localize("suppress_la_quest_markers_tooltip"),
+    },
+    {
+        setting_id    = "suppress_la_notifications",
+        type          = "checkbox",
+        default_value = false,
+        tooltip       = mod:localize("suppress_la_notifications_tooltip"),
+    },
+    {
+        setting_id    = "glow_picker_auto_popup_enabled",
+        type          = "checkbox",
+        default_value = true,
+        tooltip       = mod:localize("glow_picker_auto_popup_enabled_tooltip"),
     },
     {
         setting_id  = "appearance_group",

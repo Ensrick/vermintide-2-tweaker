@@ -20,6 +20,55 @@ Key conventions (also in CLAUDE.md):
 ]]
 
 local mod = get_mod("wt")
+
+--[==[
+Direction note — read before adding new cross-character unlocks
+================================================================
+
+What this mod is for
+--------------------
+weapon_tweaker exists to give players FULL FREEDOM to use any character's
+weapons on any character, while keeping the bystander view plausible. The
+1P (first-person) animation system in VT2 is universal: the first_person_base
+unit and its state machine work on every character, with every weapon, with
+no porting work required. We never override 1P fields (anim_event,
+wield_anim, state_machine) — see feedback_1p_animations_universal.md.
+Only the 3P (third-person) body is character-specific, so the work here is
+3P-side only: we remap anim events from the source weapon onto a
+functionally-similar weapon vocabulary that the receiver's 3P skeleton
+actually knows. Example: Saltzpyre wielding a Longbow renders in 3P using
+Crossbow events (a weapon his skeleton knows that's functionally close
+enough that bystanders see something coherent). The local player still sees
+the real Longbow in 1P; the lie is only in the 3P silhouette.
+
+Direction reversal 2026-05-23
+-----------------------------
+wt is shedding IDENTICAL-FUNCTIONAL cross-character ports — cases where the
+receiver already has a native weapon in the same functional family (e.g.
+giving Saltzpyre access to Bardin's one-handed axe when Saltzpyre already
+has a falchion-family one-hander that hits the same archetype). Those ports
+don't add gameplay; they're purely a cosmetic preference. They are moving
+to cosmetics_tweaker as a cross-character cosmetic swap with per-receiver
+scaling and grip offset adjustments. See [[project_wt_direction_2026_05_23]]
+and [[project_cosmetics_tweaker_xchar_swap]] for the migration plan.
+
+What stays in wt
+----------------
+Genuine FUNCTIONAL cross-character ports — weapons that fill a slot or role
+the receiver doesn't otherwise have access to. Examples that stay:
+  - Brace of Pistols on Kruber (Kruber has no other twin-pistol option)
+  - Longbow on Saltzpyre (different rhythm than Crossbow/Repeater Pistol)
+  - Billhook <-> Polearm cross-access
+  - Any weapon family the receiver doesn't have a native equivalent for
+If the receiver already has a same-family weapon in their native lineup,
+the new home for that "I just want to look like I'm using X" wish is
+cosmetics_tweaker's cross-character cosmetic swap, not wt.
+
+Cross-refs: [[project_wt_direction_2026_05_23]],
+            [[project_cosmetics_tweaker_xchar_swap]],
+            [[feedback_1p_animations_universal]]
+]==]
+
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 
 -- Core's Big Rebalance integration (~113 toggles + master).  The cross-mod
@@ -28,7 +77,7 @@ local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_ba
 -- `_big_rebalance_extract/impl_wt_summary.md` for the full toggle inventory.
 local big_rebalance = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance")
 
-local MOD_VERSION = "0.12.67-dev"
+local MOD_VERSION = "0.12.72-dev"
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 mod:echo("Weapon Tweaker v" .. MOD_VERSION)
 
@@ -39,7 +88,7 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
-mod:command("regression_test", "Run regression smoke checks for past bugs", function()
+mod:command("wt_regression_test", "Run regression smoke checks for past bugs", function()
     local pass, fail = 0, 0
     mod:echo("=== wt regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
@@ -55,6 +104,7 @@ mod:command("regression_test", "Run regression smoke checks for past bugs", func
     end
     mod:echo("=== %d passed, %d failed ===", pass, fail)
 end)
+mod:info("[regression-test-command] registered as /wt_regression_test")
 
 local weapon_unlock_map = {
     -- Kruber
@@ -118,7 +168,11 @@ local function _strip_removed_kruber_unlocks()
     if not ItemMasterList then return end
     for career, weapons in pairs(_kruber_removed_pairs) do
         for _, weapon_key in ipairs(weapons) do
-            local item = ItemMasterList[weapon_key]
+            -- Issue #8 (2026-05-23): defensive `rawget` — `weapon_key` here is
+            -- from an internal literal table so a strict-metatable Crashify is
+            -- unreachable today, but the convention is to never index
+            -- ItemMasterList with a non-literal key. Cheap, future-proof.
+            local item = rawget(ItemMasterList, weapon_key)
             if item and item.can_wield then
                 for i = #item.can_wield, 1, -1 do
                     if item.can_wield[i] == career then
@@ -155,7 +209,7 @@ local function apply_weapon_unlocks()
         local cwv_skip = has_cwv and _cwv_managed[career]
         for _, weapon_key in ipairs(weapons) do
             if not (cwv_skip and cwv_skip[weapon_key]) then
-                local item = ItemMasterList[weapon_key]
+                local item = rawget(ItemMasterList, weapon_key)
                 if item and item.can_wield then
                     for i = #item.can_wield, 1, -1 do
                         if item.can_wield[i] == career then
@@ -173,7 +227,7 @@ local function apply_weapon_unlocks()
         for _, weapon_key in ipairs(weapons) do
             if not (cwv_skip and cwv_skip[weapon_key]) then
                 if mod:get("unlock_" .. career .. "_" .. weapon_key) then
-                    local item = ItemMasterList[weapon_key]
+                    local item = rawget(ItemMasterList, weapon_key)
                     if item then
                         if not item.can_wield then item.can_wield = {} end
                         local already = false
@@ -224,7 +278,7 @@ local function patch_career_actions_on_weapons()
             if action_template then
                 for _, weapon_key in ipairs(weapons) do
                     if mod:get("unlock_" .. career .. "_" .. weapon_key) then
-                        local item = ItemMasterList[weapon_key]
+                        local item = rawget(ItemMasterList, weapon_key)
                         local tmpl_key = item and item.template
                         local tmpl = tmpl_key and Weapons[tmpl_key]
                         if tmpl and tmpl.actions and not tmpl.actions[action_name] then
@@ -3171,68 +3225,6 @@ local _wt_longbow_preview_swap_apply
 local _wt_repeating_pistol_preview_swap_apply
 local _wt_capture_preview_item_key
 
--- ------------------------------------------------------------
--- Polearm preview diagnostic (v0.12.56)
--- ------------------------------------------------------------
--- User reported Mercenary (Kruber) holding wrong stance on inventory preview
--- for `es_halberd` and `es_2h_heavy_spear`, while `wh_2h_billhook` previewed
--- correctly. Both halberd and heavy spear template have `wield_anim =
--- "to_polearm"` natively; Kruber's 3P body has `to_polearm` natively (proven
--- by the `_career_anim_redirect.to_polearm.alt` defaulting to "to_spear"
--- which only applies to non-es_ careers). So in theory the engine's
--- `world_hero_previewer.lua:1003` fallback chain should fire `to_polearm` on
--- Kruber's preview body and the polearm stance should appear.
---
--- This helper logs the actual values seen by the previewer at equip_item
--- time, so the next time the user repros we can see which assumption is
--- wrong. Logs are gated on a small whitelist of weapons so it's near-zero
--- noise. Once the bug is understood, this whole helper can be deleted.
-local _POLEARM_DIAG_KEYS = {
-    es_halberd        = true,
-    es_2h_heavy_spear = true,
-    wh_2h_billhook    = true,
-    we_spear          = true,  -- v0.12.59: user repro on Kerillian native + Saltzpyre native billhook
-}
-
-local function _wt_polearm_preview_diag(self, item_name, slot)
-    if type(item_name) ~= "string" or not _POLEARM_DIAG_KEYS[item_name] then return end
-    local career = self._current_career_name
-    local master = ItemMasterList and ItemMasterList[item_name]
-    local tpl_name = master and master.template
-    local tpl = tpl_name and Weapons and Weapons[tpl_name]
-    if not tpl then
-        mod:info("[wt polearm-diag] item=%s career=%s template=%s tpl_obj=nil", tostring(item_name), tostring(career), tostring(tpl_name))
-        return
-    end
-    local wac3p = tpl.wield_anim_career_3p
-    local wac3p_entry = wac3p and career and wac3p[career]
-    local wac = tpl.wield_anim_career
-    local wac_entry = wac and career and wac[career]
-    local resolved = wac3p_entry or wac_entry or tpl.wield_anim
-    local cunit = self.character_unit
-    local function has(evt)
-        if not cunit or not evt then return "?" end
-        local ok, r = pcall(Unit.has_animation_event, cunit, evt)
-        if not ok then return "ERR" end
-        return tostring(r)
-    end
-    -- v0.12.59: also dump the FULL wield_anim_career_3p table so we can
-    -- confirm the patcher's writes actually landed on the live template
-    -- (and weren't reverted by another mod or a hot-reload artefact).
-    local wac3p_dump = "nil"
-    if wac3p then
-        local parts = {}
-        for k, v in pairs(wac3p) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
-        table.sort(parts)
-        wac3p_dump = "{" .. table.concat(parts, ", ") .. "}"
-    end
-    mod:info("[wt polearm-diag] item=%s career=%s template=%s tpl.wield_anim=%s wac3p_table=%s wac3p[c]=%s wac[c]=%s resolved=%s | has(resolved)=%s has(to_polearm)=%s has(to_2h_billhook)=%s has(to_spear)=%s has(to_1h_hammer)=%s cunit_alive=%s",
-        tostring(item_name), tostring(career), tostring(tpl_name),
-        tostring(tpl.wield_anim), wac3p_dump,
-        tostring(wac3p_entry), tostring(wac_entry), tostring(resolved),
-        has(resolved), has("to_polearm"), has("to_2h_billhook"), has("to_spear"), has("to_1h_hammer"),
-        tostring(cunit ~= nil and Unit.alive(cunit)))
-end
 
 -- Character preview path: swap brace 3P → repeater 3P on Kruber.
 -- The in-game spawn flow goes through GearUtils.spawn_inventory_unit (hooked
@@ -3276,12 +3268,6 @@ mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot
 
     -- Helper 3: repeating pistol → repeating handgun preview swap (Kruber careers).
     _wt_repeating_pistol_preview_swap_apply(self, item_name, slot)
-
-    -- Helper 4 (diagnostic, v0.12.56): polearm preview pose probe — log
-    -- template + career + resolved wield event + presence on character_unit
-    -- for halberd / Tuskgor / billhook. To be removed once the regression is
-    -- understood and fixed.
-    _wt_polearm_preview_diag(self, item_name, slot)
 
     -- Inline body: brace → repeater preview swap (Kruber careers).
     if item_name ~= "wh_brace_of_pistols" then return end
@@ -3850,7 +3836,7 @@ mod:command("dump_weapons", "Dump all weapons with native careers and localized 
     mod:info("Types: " .. table.concat(type_parts, ", "))
     mod:info("=== WEAPON DUMP: key | item_type | slot_type | display_name | can_wield ===")
     for _, key in ipairs(sorted) do
-        local item = ItemMasterList[key]
+        local item = rawget(ItemMasterList, key)
         local display = key
         if item.display_name then
             local ok, loc = pcall(Localize, item.display_name)
@@ -3869,7 +3855,11 @@ end)
 
 -- Install basic backend hooks (UI filtering and can_wield override)
 weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks)
-mod.weapon_unlock_map = weapon_unlock_map
+-- v0.12.68-dev: removed `mod.weapon_unlock_map = weapon_unlock_map` public
+-- export. Repo grep + sibling-mod audit (AUDIT_section_e.md, weapon_tweaker
+-- CODE_REVIEW.md, character_weapon_variants check) confirmed zero external
+-- consumers. The local `weapon_unlock_map` table at line 59 remains — the
+-- mod uses it internally. Only the public export is gone.
 
 -- Run trait-pool filtering once at module load. on_game_state_changed will
 -- re-run later if pools weren't ready yet (e.g. WeaponTraits not loaded).

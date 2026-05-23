@@ -389,6 +389,7 @@ local data = {
                 type = "group",
                 sub_widgets = {
                     { setting_id = "coin_multiplier", type = "numeric", default_value = 1, range = { 0.1, 5 }, decimals_number = 2 },
+                    -- starting_coins snaps to the nearest multiple of 25 via on_setting_changed (chaos_wastes_tweaker.lua).
                     { setting_id = "starting_coins", type = "numeric", default_value = 0, range = { 0, 3000 }, decimals_number = 0 },
                 },
             },
@@ -463,6 +464,25 @@ local data = {
                             { setting_id = "disable_curse_skulls_of_fury", type = "checkbox", default_value = false },
                         },
                     },
+                    {
+                        setting_id = "boss_grudge_marks_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "ban_grudge_mark_commander",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_commander_tooltip" },
+                            { setting_id = "ban_grudge_mark_crippling",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crippling_tooltip" },
+                            { setting_id = "ban_grudge_mark_crushing",        type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crushing_tooltip" },
+                            { setting_id = "ban_grudge_mark_frenzy",          type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_frenzy_tooltip" },
+                            { setting_id = "ban_grudge_mark_intangible",      type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_intangible_tooltip" },
+                            { setting_id = "ban_grudge_mark_periodic_curse",  type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_periodic_curse_tooltip" },
+                            { setting_id = "ban_grudge_mark_periodic_shield", type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_periodic_shield_tooltip" },
+                            { setting_id = "ban_grudge_mark_raging",          type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_raging_tooltip" },
+                            { setting_id = "ban_grudge_mark_ranged_immune",   type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_ranged_immune_tooltip" },
+                            { setting_id = "ban_grudge_mark_regenerating",    type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_regenerating_tooltip" },
+                            { setting_id = "ban_grudge_mark_unstaggerable",   type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_unstaggerable_tooltip" },
+                            { setting_id = "ban_grudge_mark_vampiric",        type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_vampiric_tooltip" },
+                            { setting_id = "ban_grudge_mark_warping",         type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_warping_tooltip" },
+                        },
+                    },
                 },
             },
             {
@@ -491,7 +511,19 @@ local data = {
                             { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
                             { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
                             { setting_id = "tweak_miracle_of_ulric_persistent", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_ulric_persistent_tooltip" },
-                            { setting_id = "tweak_miracle_of_isha_alternative", type = "dropdown", default_value = "vanilla", options = isha_alternative_options, tooltip = "tweak_miracle_of_isha_alternative_tooltip" },
+                            { setting_id = "ulric_pack_unlimited_range", type = "checkbox", default_value = false, tooltip = "ulric_pack_unlimited_range_tooltip" },
+                            { setting_id = "tweak_wildfire_generations_cap", type = "numeric", default_value = 3, range = { 1, 10 }, decimals_number = 0, tooltip = "tweak_wildfire_generations_cap_tooltip" },
+                            -- Miracle of Isha — mutex cluster `isha_choice`.
+                            -- v0.7.81: replaced the legacy `tweak_miracle_of_isha_alternative`
+                            -- dropdown with these two checkboxes per LOCALIZATION_STANDARD.md § 10.
+                            -- Both unchecked = vanilla revive-once behavior. Toggling one auto-
+                            -- unchecks the other (enforced in on_setting_changed via
+                            -- chaos_wastes_tweaker_mutex). Labels use the "    (A) / (B)" prefix
+                            -- convention with 4-space leading indent so the multiple-choice
+                            -- relationship reads visually in the VMF UI.
+                            { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
+                            { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
+                            { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
                         },
                     },
                     {
@@ -533,6 +565,18 @@ local data = {
                         end
                         return widgets
                     end)(),
+                },
+                {
+                    setting_id = "skulls_event_boons_group",
+                    type = "group",
+                    sub_widgets = {
+                        {
+                            setting_id = "enable_skulls_event_boons",
+                            type = "checkbox",
+                            default_value = false,
+                            tooltip = "enable_skulls_event_boons_tooltip",
+                        },
+                    },
                 },
             {
                 setting_id = "banned_traits_group",

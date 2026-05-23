@@ -35,6 +35,27 @@ upload/steam_appid.txt
 #   docs; the snapshot itself is not committed.
 **/_investigating/
 **/AUDIT_*.md
+**/_audit_*.md
+**/_audit_*.py
+**/_qa_*.md
+**/_qa_*.py
+**/_qa_*.json
+OPEN_WORK_*.md
+
+# Build/staging output
+.release-stage/
+__pycache__/
+
+# Temp / backup files
+**/*.lua.new
+**/*.lua.bak*
+
+# Local debug captures
+**/_pc_b_logs/
+**/pcb-log.log
+
+# Local reference material (per-mod working copies of upstream sources)
+**/.spawn_tweaks_ref/
 
 # REVIEW (2026-05-01):
 # - bundleV2/ is INTENTIONALLY tracked (so other devs / git bisect can see the built bundle

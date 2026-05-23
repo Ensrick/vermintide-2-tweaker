@@ -60,14 +60,18 @@ Horseshoe" → look up → `mercenary_hat_0003`).
 ## Build & deploy
 
 ```powershell
-Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-node C:/Users/danjo/source/repos/vmb/vmb.js build dynamic_cosmetic_portraits --no-workshop --cwd
-.\deploy_all.ps1 -Mods @("dynamic_cosmetic_portraits")
+$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
+& $exe build  dynamic_cosmetic_portraits
+& $exe deploy dynamic_cosmetic_portraits
+# Or in one shot:
+& $exe all    dynamic_cosmetic_portraits
 ```
 
-`deploy_all.ps1` deploys to the local Steam Workshop folder
-(`steamapps/workshop/content/552500/3721036701/`) and verifies bundle
-hashes. Workshop ID **3721036701**, visibility `private`.
+`VMBLauncher.exe deploy` copies the bundle to the local Steam Workshop folder
+(`steamapps/workshop/content/552500/3721036701/`), verifies bundle hashes,
+and auto-pushes to PC-B. Workshop ID **3721036701**, visibility `private`.
+(The legacy `deploy_all.ps1` shim that used to cover this was archived
+2026-05-21 to `_archive/legacy_deploy_scripts/`.)
 
 ## Hot-reload is unsafe
 

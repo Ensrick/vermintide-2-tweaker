@@ -107,6 +107,63 @@ local loc = {
     breed_swap_from_tooltip = { en = "Every enemy of this breed in hordes will be replaced with the target breed below." },
     breed_swap_to           = { en = "With This Breed" },
     breed_swap_to_tooltip   = { en = "The replacement breed. Must be different from the source breed." },
+
+    -- ============================================================
+    -- BIG REBALANCE (Core's BR integration)
+    -- ============================================================
+    br_group                          = { en = "Big Rebalance" },
+    br_group_tooltip                  = { en = "Opt-in Core's Big Rebalance enemy/stagger/THP changes. All toggles default OFF. REQUIRES the companion mod 'Tweaker: Buffs' (internal id `bt`) installed and its master toggle ON — subscribe to it separately, then restart the game. Without bt's master on, every toggle here is inert." },
+
+    br_breed_tuning_group               = { en = "Breed Tuning" },
+    br_bloodlust_class_table            = { en = "BR: bloodlust_health class table" },
+    br_bloodlust_class_table_tooltip    = {
+        en = "Exposes the Big Rebalance per-class HP table (NewBreedTweaks.bloodlust_health). On its own this does nothing — turn on 'per-breed bloodlust_health assignments' to wire it to actual breeds.",
+    },
+    br_bloodlust_per_breed_assign       = { en = "BR: per-breed bloodlust_health assignments" },
+    br_bloodlust_per_breed_assign_tooltip = {
+        en = "Writes the BR class-table value onto each breed's `bloodlust_health` field (45 breeds). Used by the vanilla bloodlust THP buff. Requires the 'class table' toggle above to be on, otherwise the assignment reads nil.",
+    },
+    br_breed_trash_flags                = { en = "BR: trash flags (horde-rank breeds)" },
+    br_breed_trash_flags_tooltip        = {
+        en = "Sets `breed.trash = true` on the 11 horde-rank breeds (gor/ungor/ungor_archer, fanatic/marauder/marauder_with_shield, slave/clan_rat/clan_rat_with_shield + dummies). Consumed by the Kerillian maidenguard res-time DR path that Tweaker: Careers ships.",
+    },
+    br_per_breed_overrides_group        = { en = "Per-breed overrides" },
+
+    br_stagger_damage_group             = { en = "Stagger / Damage math" },
+    br_stagger_ai_rewrite               = { en = "BR: stagger_ai rewrite" },
+    br_stagger_ai_rewrite_tooltip       = {
+        en = "Replaces DamageUtils.stagger_ai with the Big Rebalance body. Adds blackboard stagger-immunity (num_attacks / damage_threshold / time), push/stab/pull angle logic, and an on_stagger proc trigger with weapon-template buff_type. Affects every AI stagger globally.",
+    },
+    br_calculate_damage_rewrite         = { en = "BR: calculate_damage rewrite" },
+    br_calculate_damage_rewrite_tooltip = {
+        en = "Replaces DamageUtils.calculate_damage with the Big Rebalance body. Integrates smiter / finesse / mainstay stagger-number rules, the `unbalanced_damage_taken` stat buff, weave scaling, and the max_friendly_damage cap. Affects ALL damage calculations.",
+    },
+    br_shield_slam_rewrite              = { en = "BR: ActionShieldSlam._hit rewrite" },
+    br_shield_slam_rewrite_tooltip      = {
+        en = "Replaces ActionShieldSlam._hit with the Big Rebalance body. Reorganizes inner/outer push radii, AOE damage profile dispatch, and level-unit handling. Required for Big Rebalance shield-weapon behavior on ES Sword & Shield, Mace & Shield, and Warrior Priest.",
+    },
+    br_unbalance_debuff_infra           = { en = "BR: power-modifier debuff (Unbalance infra)" },
+    br_unbalance_debuff_infra_tooltip   = {
+        en = "Fills in the two BuffTemplate bodies whose effects apply to enemies: `rebaltourn_tank_unbalance` (proc on stagger) and `rebaltourn_tank_unbalance_buff` (the +15%% damage-taken debuff applied to the staggered enemy for 5 s). Tweaker: Careers owns the talent-slot side; this is just the proc infrastructure.",
+    },
+
+    br_thp_group                        = { en = "THP from kills (template registration)" },
+    br_thp_regrowth_template            = { en = "BR: regrowth THP source" },
+    br_thp_regrowth_template_tooltip    = {
+        en = "Fills in the rebaltourn_regrowth buff body (1.5 THP on melee crit, 3 THP on melee headshot, 4.5 on crit-headshot, perk: ninja_healing) plus its proc function. Talent slots are set by Tweaker: Careers separately.",
+    },
+    br_thp_vanguard_template            = { en = "BR: vanguard THP source" },
+    br_thp_vanguard_template_tooltip    = {
+        en = "Fills in the rebaltourn_vanguard buff body (THP on stagger; flat 0.6 on push; per-weapon caps for wh_2h_billhook and bw_flame_sword; <=5 targets, no corpses; perk: tank_healing) plus its proc function. Talent slots are set by Tweaker: Careers separately.",
+    },
+    br_thp_reaper_template              = { en = "BR: reaper THP source" },
+    br_thp_reaper_template_tooltip      = {
+        en = "Fills in the rebaltourn_reaper buff body (THP per damage dealt; multiplier -0.05; bonus 0.25; max_targets 5; perk: linesman_healing). Uses the vanilla heal_damage_targets_on_melee proc — no new function needed.",
+    },
+    br_thp_bloodlust_template           = { en = "BR: bloodlust THP source" },
+    br_thp_bloodlust_template_tooltip   = {
+        en = "Fills in the rebaltourn_bloodlust buff body (THP on kill scaled by `breed.bloodlust_health`; multiplier 0.2; perk: smiter_healing). Uses the vanilla heal_percentage_of_enemy_hp_on_melee_kill proc. Inert without 'per-breed bloodlust_health assignments' under Breed Tuning.",
+    },
 }
 
 -- ============================================================

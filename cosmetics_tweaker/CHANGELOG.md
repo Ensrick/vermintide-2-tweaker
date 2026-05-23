@@ -1,5 +1,28 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.10-dev (2026-05-23) — Versioning convention reset (drop 4th segment)
+
+### Why
+This mod had drifted to 4-segment versions (`0.9.8.7`, `0.9.9.4`, etc.) while every other mod in the repo uses 3-segment semver (`MAJOR.MINOR.PATCH`). The 4th segment had been used as a within-patch "hotfix counter", but that's not how semver works and it diverged from the rest of the codebase.
+
+### Changed
+- `MOD_VERSION` bumped `0.9.9.4-dev` → `0.9.10-dev`. Going forward, every change bumps the patch number (`0.9.10` → `0.9.11` → `0.9.12` → ...). No 4th segment.
+- `itemV2.cfg` title + description updated to match.
+- Past 4-segment versions (`0.9.8.x`, `0.9.9.x`) stay in the historical record below — they were already shipped under those names.
+
+## 0.9.9.3-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
+
+### Why
+Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands are global — only the first mod wins, the rest fail silently with `[ERROR] (command): command name 'regression_test' is already used by another mod 'cim'`. Detected in PC-A log 2026-05-23 20:50:52.
+
+### Changed
+- `cosmetics_tweaker.lua` — renamed `regression_test` → `cos_regression_test`. Verification log line added at registration site.
+
+### Verification
+1. Restart VT2. No `[ERROR] (command):` line in console_logs about this command name.
+2. Run `/cos_regression_test` in chat. Command fires and prints results.
+3. Per memory `feedback_vt2_verify_before_shipping.md`.
+
 > **Note:** the dynamic-portrait system (v0.7.0–v0.7.102 development line)
 > was split out into the `dynamic_cosmetic_portraits` mod on 2026-05-06.
 > Pre-split entries below remain the historical record of how the system

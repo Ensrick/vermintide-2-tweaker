@@ -1,5 +1,15 @@
 # Tweaker: Lobby — Changelog
 
+## v0.1.2-dev (2026-05-21) — Section E P1 manifest-version honesty
+
+Replaced the broken sibling `MOD_VERSION` reader in `_modded_manifest.lua` with a hardcoded `"version_unavailable"` placeholder. The previous code read `mod_obj.MOD_VERSION` / `_G[mod_id].MOD_VERSION` from sister mods, but every sister mod scopes `MOD_VERSION` as `local MOD_VERSION = "..."` at file top — invisible cross-mod. Result: the manifest's version column was always `"?"` for every sibling, silently degrading the failed-join "version mismatch" branch into a useless string-compare against a constant.
+
+Now the lookup short-circuits to `"version_unavailable"` whenever a sibling doesn't expose a public `mod.MOD_VERSION` (lobby_tweaker itself does, so its own row populates correctly). A TODO marker documents the two paths to a real fix: (1) lift every sibling's `MOD_VERSION` to a public `mod.MOD_VERSION` export, or (2) maintain a hardcoded id->version map in lobby_tweaker. Deferred — needs user signoff because path (1) is a 14-mod refactor. Functional impact is minimal: the missing-mod branch of the failed-join reveal (which is the dominant failure mode) doesn't depend on version strings.
+
+## v0.1.1-dev (2026-05-21) — Fixed: double-format crash in failed-join header strings
+
+Per Section C of the 2026-05-21 audit, three failed-join-reveal strings (`failnotify_required_header`, `failnotify_version_header`, `failnotify_cosmetic_footer`) contained `%d` directives at lines 36-38 of lobby_tweaker_localization.lua. The caller in `_failed_join_reveal.lua` runs `string.format(mod:localize(key), n)` — but VMF's `mod:localize` already routes the value through `safe_string_format` first with no args, consuming the `%d` directive and leaving the caller's outer `string.format` with nothing to interpolate (or, depending on VMF version, raising a crashify exception on the missing arg). Escaped each `%d` to `%%d` so VMF's first pass renders `%d`, leaving the directive intact for the caller's `string.format` to consume normally. Net effect: counts now display correctly in the popup.
+
 ## v0.1.0-dev (2026-05-19)
 
 Phase 1 implementation. Build passes (4 bundles); in-game smoke test pending first Workshop upload.

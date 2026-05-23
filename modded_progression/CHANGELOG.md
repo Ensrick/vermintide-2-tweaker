@@ -1,5 +1,13 @@
 # Modded Progression — Changelog
 
+## v0.2.1-dev (2026-05-21)
+
+Section A + C P1 release-audit fixes.
+
+- Added `item_preview.png` (copied from VMB template). `itemV2.cfg` already referenced this file as the Workshop preview, but the file was absent from the mod folder — first upload attempt would have failed at the preview-staging step. Unblocks future `vmblauncher upload mp`.
+- Added `starting_state_description` localization key. VMF auto-looks up `<setting_id>_description` for every widget's hover description; the dropdown's `setting_id = "starting_state"` was rendering with the raw key string in the description slot.
+- Audit-walked every `mod:localize(...)` call in `modded_progression_data.lua`; the four explicit lookups (`mod_description`, `starting_state_tooltip`, `start_fresh`, `start_level_35`, `start_level_35_unlocked`) all already resolve. No additional keys missing per that criterion.
+
 ## v0.2.0-dev (2026-05-15)
 
 Build-order step 2 — UI gate overrides + achievement-progress un-gate.

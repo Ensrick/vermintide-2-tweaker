@@ -1,12 +1,31 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.328-dev"
+local MOD_VERSION = "0.1.330-dev"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- In-game chat echo so version is visible without opening console.log —
 -- matches cosmetics_tweaker's pattern. Required by `feedback_version_bump.md`:
 -- a build that doesn't visibly confirm its version isn't deployable.
 mod:echo("Character Weapon Variants v" .. MOD_VERSION)
+
+-- ============================================================================
+-- DESIGN INTENT — READ BEFORE "FIXING" CROSS-CHARACTER BASE TEMPLATES
+-- ============================================================================
+-- CWV variants INTENTIONALLY clone from cross-character base templates. When
+-- you see `base_weapon = "bw_1h_mace"` on a Kruber variant, or
+-- `base_weapon = "wh_1h_hammer"` on a Bardin variant, that is the FEATURE,
+-- not a bug. The whole point of this mod is semi-lore-friendly variants that
+-- bring another character's moveset onto a receiver — Kruber wielding
+-- Sienna's 2H mace, Bardin wielding Saltzpyre's priest hammer, Kruber
+-- wielding Kerillian's dual swords, etc.
+--
+-- The 1P side just works (universal across characters). The 3P side is the
+-- discipline: `anim_event_3p` remap onto the receiver's good-enough native
+-- 3P vocabulary so other players in the lobby see something plausible, plus
+-- receiver-appropriate `AttachmentNodeLinking` to avoid foreign unwielded
+-- bones. See ISAAK_RECIPE.md for the lessons-learned reference, and the
+-- ANIMATION_FIX_PLAYBOOK.md for the full per-action remap procedure.
+-- ============================================================================
 
 -- ============================================================================
 -- ANIMATION ARCHITECTURE — READ BEFORE TOUCHING ANY ANIM CODE BELOW
@@ -44,19 +63,18 @@ mod:echo("Character Weapon Variants v" .. MOD_VERSION)
 -- cosmetics_tweaker) read this to expand cosmetic targeting beyond a
 -- single character.
 
--- CLARIFY: Public API consumed by cosmetics_tweaker (CHANGELOG v0.1.45).
--- Contract: mod.weapon_analogues : { [vanilla_item_key:string] = { vanilla_item_key:string, ... } }
--- Returned arrays should NOT include the input key itself.
--- mod.get_analogues(key) returns a freshly-allocated empty table on miss; callers
--- must not mutate the returned table (it may be the live mod.weapon_analogues entry).
-mod.weapon_analogues = {
-	es_2h_sword = { "wh_2h_sword" },
-	wh_2h_sword = { "es_2h_sword" },
-}
-
-function mod.get_analogues(item_key)
-	return mod.weapon_analogues[item_key] or {}
-end
+-- v0.1.329-dev: removed unused public exports `mod.weapon_analogues` table
+-- and `mod.get_analogues(item_key)` function. Repo grep + sibling-mod scan
+-- (cosmetics_tweaker LA bridge, weapon_tweaker, lobby_tweaker manifest)
+-- confirmed zero external consumers. Cleanup per audit roadmap #13.
+--
+-- KNOWN PENDING (this file): 22 bare-global function/data declarations in
+-- the Old Musket section (~line 4500+) need conversion to local forward-decl
+-- pattern. Attempted in v0.1.330/331 today but introduced a Stingray
+-- bundler crash; reverted. See:
+--   https://github.com/Ensrick/vermintide-2-tweaker/issues/1
+-- Plus an 8800-line file size that needs split per RECIPES.md:
+--   https://github.com/Ensrick/vermintide-2-tweaker/issues/2
 
 -- ============================================================
 -- Variant weapon definitions
@@ -5135,7 +5153,7 @@ mod:hook_safe("PlayerProjectileUnitExtension", "init", function(self, extension_
 	self._impact_data    = our_action.impact_data
 	self.projectile_info = our_action.projectile_info or self.projectile_info
 	if our_action.impact_data and our_action.impact_data.damage_profile then
-		local dmg_id = NetworkLookup.damage_profiles[our_action.impact_data.damage_profile]
+		local dmg_id = rawget(NetworkLookup.damage_profiles, our_action.impact_data.damage_profile)
 		if dmg_id then self._impact_damage_profile_id = dmg_id end
 	end
 	mod:info("[cwv stick] init post-fix swap: skin=%s -> tuskgor_javelin_template (action=%s sub=%s, link=%s link_pickup=%s)",
@@ -5220,7 +5238,7 @@ end)
 
 -- Path A server-side: PickupSystem.rpc_spawn_linked_pickup.
 mod:hook("PickupSystem", "rpc_spawn_linked_pickup", function(func, self, channel_id, pickup_name_id, link_position, link_rotation, spawn_type_id, hit_unit_go_id, node_index, is_level_unit, spawn_limit, material_settings_name_id)
-	local pickup_name = NetworkLookup and NetworkLookup.pickup_names and NetworkLookup.pickup_names[pickup_name_id]
+	local pickup_name = NetworkLookup and NetworkLookup.pickup_names and rawget(NetworkLookup.pickup_names, pickup_name_id)
 	if _is_our_pickup(pickup_name) then
 		mod:info("[cwv stick] PATH A rpc_spawn_linked_pickup fired (pickup=%s)", tostring(pickup_name))
 		_log_quat("  input ", link_rotation)
@@ -5235,7 +5253,7 @@ end)
 -- class than PickupSystem). Pickup has physics so it bounces/lands rather
 -- than sticking; align rotation with velocity for a sensible resting pose.
 mod:hook("ProjectileSystem", "rpc_spawn_pickup_projectile", function(func, self, channel_id, projectile_unit_name_id, projectile_unit_template_name_id, network_position, network_rotation, network_velocity, network_angular_velocity, pickup_name_id, pickup_spawn_type_id, spawn_limit, always_show, objective_active, material_settings_name_id)
-	local pickup_name = NetworkLookup and NetworkLookup.pickup_names and NetworkLookup.pickup_names[pickup_name_id]
+	local pickup_name = NetworkLookup and NetworkLookup.pickup_names and rawget(NetworkLookup.pickup_names, pickup_name_id)
 	if _is_our_pickup(pickup_name) then
 		mod:info("[cwv stick] PATH B rpc_spawn_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
 		local vel = AiAnimUtils.velocity_network_scale(network_velocity)

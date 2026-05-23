@@ -44,6 +44,9 @@ material = [
 	"materials/ui/portrait_kruber_mercenary_hat_0003"
 	"materials/ui/medium_portrait_kruber_mercenary_hat_0003"
 	"materials/ui/small_portrait_kruber_mercenary_hat_0003"
+	"materials/ui/portrait_kruber_mercenary_hat_0005"
+	"materials/ui/medium_portrait_kruber_mercenary_hat_0005"
+	"materials/ui/small_portrait_kruber_mercenary_hat_0005"
 ]
 
 texture = [
@@ -80,4 +83,7 @@ texture = [
 	"gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_0003"
 	"gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_0003"
 	"gui/1080p/single_textures/custom_portraits/small_portrait_kruber_mercenary_hat_0003"
+	"gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_0005"
+	"gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_0005"
+	"gui/1080p/single_textures/custom_portraits/small_portrait_kruber_mercenary_hat_0005"
 ]

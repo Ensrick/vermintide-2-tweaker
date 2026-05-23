@@ -114,16 +114,11 @@ mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(f
     return func(self, index, ignore_item_spawn, mark_as_equipped)
 end)
 
-mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
-    if script_data["eac-untrusted"] and recipe_name == "apply_weapon_skin" then
-        local saved = script_data["eac-untrusted"]
-        script_data["eac-untrusted"] = false
-        local result = func(self, recipe_name, ...)
-        script_data["eac-untrusted"] = saved
-        return result
-    end
-    return func(self, recipe_name, ...)
-end)
+-- NOTE: `_update_state_craft_button` is hooked in `standard_forge.lua`
+-- (loaded before this file). The eac-clearing wrap for the
+-- `apply_weapon_skin` recipe lives in that consolidated hook — VMF
+-- rejects a second `mod:hook*` on the same class+method with
+-- "Attempting to rehook active hook" and silently drops the body.
 
 -- ============================================================
 -- 5. Local craft (write skin to backend mirror; persist for modded items)
@@ -230,6 +225,23 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", fu
             mirror._unlocked_weapon_skins[skin_key] = true
         end
     end
+end)
+
+-- ============================================================
+-- Discoverability: skin-swap help (feedback #8)
+-- ============================================================
+-- New users routinely ask "how do I change a weapon skin?" — the path is the
+-- vanilla Apply Skin tab on the Customization menu (gear icon next to an item),
+-- which we've already unlocked in modded realm. There's no in-UI signposting
+-- that this works, so a chat command is the cheapest fix.
+mod:command("cim_skins", "How to change a weapon skin in modded realm", function()
+    mod:echo("[cim] To change a weapon skin in modded realm:")
+    mod:echo("  1) Open Inventory (I) and select the weapon you want to re-skin.")
+    mod:echo("  2) Click the gear/cog icon next to the weapon (Customization).")
+    mod:echo("  3) Pick the Apply Skin tab — ALL illusions are unlocked here in")
+    mod:echo("     modded realm, including DLC skins you own.")
+    mod:echo("  4) Pick an illusion in the grid, then click Apply.")
+    mod:echo("  Note: skin choice is persisted on cim crafts across restarts.")
 end)
 
 -- ============================================================

@@ -1,5 +1,30 @@
 # Career Tweaker Changelog
 
+## 0.3.9-dev (2026-05-23) — Convert 1 NetworkLookup lookup to rawget (latent strict-__index crash fix)
+
+### Why
+`NetworkLookup.*` subtables install a strict `__index = error()` metatable at boot. Plain `NetworkLookup.foo[key]` on a missing key throws — see memory `reference_vt2_strict_lookup_rawget.md`. The lint pass on 2026-05-23 flagged the talent-buff registration site as latent: the BR-stub registration path queries `NetworkLookup.buff_templates[name]` to skip already-registered names, but the strict metatable means an unregistered name would crash *before* the registration write that would fix it.
+
+### Changed
+- `career_tweaker_big_rebalance.lua` (`_register_talent_buff_template_if_missing`) — converted `not NetworkLookup.buff_templates[name]` to `not rawget(NetworkLookup.buff_templates, name)` so the "is this name new?" check returns false (write the entry) instead of crashing on the strict lookup.
+
+### Verification
+1. `tools/mod-lint/lint-mod.ps1` — passes.
+2. `tools/lint/regression-lint.ps1 -Quiet` — site no longer appears in `strict-table-lookup` findings.
+
+## 0.3.8-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
+
+### Why
+Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands are global — only the first mod wins, the rest fail silently with `[ERROR] (command): command name 'regression_test' is already used by another mod 'cim'`. Detected in PC-A log 2026-05-23 20:50:52.
+
+### Changed
+- `career_tweaker.lua` — renamed `regression_test` → `crt_regression_test`. Verification log line added at registration site.
+
+### Verification
+1. Restart VT2. No `[ERROR] (command):` line in console_logs about this command name.
+2. Run `/crt_regression_test` in chat. Command fires and prints results.
+3. Per memory `feedback_vt2_verify_before_shipping.md`.
+
 ## 0.2.22-dev (2026-05-19)
 
 ### Added: Ranger Veteran +25 base HP (toggle)

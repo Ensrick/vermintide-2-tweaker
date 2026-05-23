@@ -309,13 +309,15 @@ In `resource_packages/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.pack
 
 ```powershell
 # In dynamic_cosmetic_portraits.lua, increment MOD_VERSION.
-Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-node C:/Users/danjo/source/repos/vmb/vmb.js build dynamic_cosmetic_portraits --no-workshop --cwd
-& "$PWD\deploy_all.ps1" -Mods @("dynamic_cosmetic_portraits")
+$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
+& $exe build  dynamic_cosmetic_portraits
+& $exe deploy dynamic_cosmetic_portraits
 ```
 
-The deploy script verifies bundle-hash parity against the Workshop folder.
+`VMBLauncher.exe deploy` verifies bundle-hash parity against the Workshop folder.
 If a hash mismatch is reported, do **not** consider the deploy complete.
+(The legacy `deploy_all.ps1` shim that previously covered this flow was
+archived 2026-05-21 to `_archive/legacy_deploy_scripts/`.)
 
 ### 9 — Test in-game
 
@@ -326,6 +328,113 @@ If a hash mismatch is reported, do **not** consider the deploy complete.
 5. Run `portrait_diag` if anything's wrong: it dumps career_settings state,
    material readiness on every GUI handle, and the current detected hat/skin
    key.
+
+## VMF inject_materials — renderer-creator keys
+
+VMF's `inject_materials(mod, ui_renderer_creator, ...)`
+(custom_textures.lua:191) reads `ui_renderer_creator` from
+`debug.traceback()` at frame 4 and matches it against the **basename of
+the `.lua` file**.
+
+If a custom material is registered with creator `"X"` only, ANY view
+whose creator-detection lands on a different file will crash with
+`Material 'X' not found in Gui` at `ui_passes.lua:134` the moment it
+tries to draw a widget that references X.
+
+### CRITICAL: Lua 5.1 tail-call elimination determines what frame 4 is
+
+Many VT2 UI views chain through:
+
+```
+caller.lua  →  IngameUI:create_ui_renderer  →  view_settings.ui_renderer_function  →  UIRenderer.create
+```
+
+Both intermediate functions use `return f(...)` which is a **tail call**
+in Lua 5.1 — those frames are stripped from the stack. So the `.lua`
+file VMF sees at frame 4 is `caller.lua`, NOT `ingame_ui_settings.lua`
+(the inner factory).
+
+Implication: registering only the inner factory (`ingame_ui_settings`)
+is NOT enough. **Every entry-point file that initiates the
+renderer-creation chain must be listed.**
+
+### Default minimum for a portrait/character mod (v0.1.6 baseline)
+
+```lua
+local _renderer_creators = {
+    -- main HUD path (unit frames, tab overlay)
+    "ingame_ui",
+    -- inner factory (catches non-tail-called paths and direct calls)
+    "ingame_ui_settings",
+    -- HeroView entry points (Esc-menu sub-views)
+    "hero_view",
+    "hero_view_state_loot",            -- Spoils of War
+    "hero_view_state_store",           -- Lohner's Emporium / cosmetics shop
+    "hero_view_state_weave_forge",     -- Athanor / Weave forge
+    -- StartGame entry points
+    "start_game_state_settings_overview",
+    "store_item_purchase_popup",
+    "store_welcome_popup",
+    -- end-of-mission
+    "level_end_view_base",
+    "level_end_view_versus",
+    -- Chaos Wastes overworld map (uses portraits)
+    "game_mode_map_deus",
+    -- Managers.ui:create_ui_renderer chain
+    "ui_manager",
+}
+```
+
+### How to find the right creator name when a new crash hits
+
+1. **Read the crash error:** `Material 'X' not found in Gui at ui_passes.lua:134`
+   → some renderer didn't get our materials injected.
+2. **Identify the UI surface** the user was on (pause-menu sub-view,
+   end-of-mission screen, in-keep menu, etc.).
+3. **Find renderer-creation call sites** in VT2 source:
+
+   ```
+   grep -rn "create_ui_renderer\|UIRenderer\.create\b" Vermintide-2-Source-Code/scripts | grep -v "draw\|destroy\|clear\|begin\|end\|create_video\|create_bitmap"
+   ```
+
+4. **Trace from the user-facing surface** back to the
+   `:create_ui_renderer(world, ...)` call. The basename of THAT file
+   (the entry point) is the creator name to add — not the inner
+   factory, because tail-call elimination strips intermediate frames.
+5. **Add it to `_renderer_creators`** in
+   `dynamic_cosmetic_portraits_data.lua`, bump version, build, deploy,
+   restart VT2.
+
+### How crashes manifested in dynamic_cosmetic_portraits history
+
+| Version | Surface that crashed | Missing creator |
+|---|---|---|
+| v0.1.4 | pause-menu buttons (HeroView, OptionsView, etc.) | `ingame_ui_settings` and/or `hero_view` |
+| v0.1.5 | Spoils of War loot menu | `hero_view_state_loot` |
+| v0.1.6 | (none reported as of 2026-05-08) | comprehensive list shipped |
+
+### How to apply
+
+When registering custom materials via VMF
+`custom_gui_textures.ui_renderer_injections`:
+
+1. **Always enumerate multiple creators** — at minimum the list above.
+2. **`Gui.material(gui, name)` returns nil silently** for missing
+   materials, so a `_gui_has_material` probe is the only reliable
+   diagnostic. See `dynamic_cosmetic_portraits.lua` for the reference
+   pattern.
+3. **When a new crash hits**, follow the 5-step procedure above to find
+   the missing creator. Don't guess at the inner factory — trace to the
+   entry-point file.
+4. **VMF doesn't error or warn** when a creator string never matches
+   anything — silent failure. The only signal is the eventual
+   `Material X not found in Gui` crash.
+
+**Minimum creators for a portrait/character mod:** `ingame_ui` +
+`ingame_ui_settings` + `level_end_view_base` + `level_end_view_versus`.
+Missing `ingame_ui_settings` = pause-menu crash.
+
+---
 
 ## Dead ends — do not retry
 

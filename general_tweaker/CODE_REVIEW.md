@@ -1,3 +1,8 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-01 (22 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-01/`.
 # General Tweaker Code Review (2026-05-01)
 
 Scope: `general_tweaker/` excluding `bundleV2/`. Files reviewed:

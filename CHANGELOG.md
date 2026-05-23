@@ -1,5 +1,83 @@
 # Changelog
 
+## 2026-05-23 — `weapon_tweaker` per-career weapon toggle reorder
+
+Repo-aggregate entry for `weapon_tweaker` v0.12.71-dev (full details in
+`weapon_tweaker/CHANGELOG.md`).
+
+Reordered every career's `unlock_<career>_<weapon>` widget tree (and the
+matching localization keys) to a single deterministic rule: natives first
+alphabetical → cross-character ports grouped by donor character
+(`es → dr → we → wh → bw`) alphabetical within each donor → `*_deus_01`
+at end of native and donor clusters. 334 data moves + 406 loc moves;
+no setting_id additions/removals, no `default_value` flips, no
+per-career inclusion changes.
+
+Ordering rule documented in `_audit_wt_weapon_order.md` §4-5 (repo root).
+Peregrinaje was evaluated as the canonical reference (per the user brief)
+but rejected — it has no per-character ordering structure to mirror;
+audit §1-2 has the full reasoning. The alphabetical-then-donor rule
+satisfies the underlying intent (consistent ordering) and is mechanical
+to verify and extend.
+
+## 2026-05-21 — Stale-doc banner pass + deploy_*.ps1 reference sweep
+
+Two follow-on cleanups against the doc set after the Section A archive pass.
+
+### Stale-doc banners (5 files)
+
+Added "Stale snapshot — superseded by AUDIT_2026_05_21.md" banner blocks at the top of:
+
+- `REPO_REVIEW.md` (2026-05-01 snapshot)
+- `REVIEW_AGGREGATE.md` (2026-05-01 snapshot)
+- `CONSISTENCY_REVIEW.md` (2026-05-02 snapshot)
+- `WORK_ITEMS.md` (self-stamped 2026-04-27)
+- `CROSS_CAREER_PACKAGE_FIX.md` (theory later disproven — added stronger banner line noting current cross-career package handling lives in `AUDIT_2026_05_21.md`)
+
+Original content preserved under the banner; these files retain historical value (file:line citations, pre-VMB pipeline references, diagnostic notes).
+
+### deploy_*.ps1 reference sweep (4 files)
+
+The four shims (`deploy_all.ps1`, `deploy_ct.ps1`, `deploy_gt.ps1`, `deploy_wt.ps1`) were archived to `_archive/legacy_deploy_scripts/` earlier today. Live docs that prescribed running them as the canonical deploy step were updated to point at `VMBLauncher.exe deploy <mod>` (or `all <mod>` for full build+deploy+upload):
+
+- `DEVELOPMENT.md` — directory diagram, Quick iteration loop, Build / Deploy sections, "deploy_all.ps1: variables null inside foreach loop" known-error entry, cosmetics_tweaker Build & Deploy
+- `event_tweaker/DEVELOPMENT.md` — "Adding a new mutator" step 4 + Build & deploy section
+- `dynamic_cosmetic_portraits/CLAUDE.md` — Build & deploy section
+- `dynamic_cosmetic_portraits/DEVELOPMENT.md` — step 8 of the portrait-authoring workflow
+
+Historical references in audit reports (`AUDIT_section_*.md`), memory-doc snapshots (`REPO_REVIEW.md`, `REVIEW_AGGREGATE.md`), `_archive/` READMEs, and per-mod CHANGELOG entries were left alone — they document past state and are correct as historical record.
+
+## 2026-05-21 — Repo archive pass
+
+Section A audit recommendations applied. Created `_archive/` for cold storage
+of pre-VMB and otherwise-deprecated content. Nothing on the active build path
+moved. See `_archive/README.md` for full per-folder inventory.
+
+### Moved
+
+- `old-backup/` (entire folder, self-flagged for deletion in its own README) → `_archive/old-backup/`. Contents include 7 pre-VMB SDK scripts, 4 loose hex-named bundle files, `tweaker_manual_install.zip`, `lighting_tweaker_20260516/` pre-rename snapshot of `verminious_dreams_lighting`, and the dir's `ANTIGRAVITY.md` / `README.md`.
+- `bundleHistory.dat`, `launcher_screenshot.png`, `readme.txt` (root-level stale) → `_archive/root-misc/`.
+- `chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_localization.lua.v0726.bak` → `_archive/backups/`.
+- `verminious_dreams_lighting/item_preview.png.bak` → `_archive/backups/verminious_dreams_lighting_item_preview.png.bak` (renamed for source-mod traceability).
+- `deploy_all.ps1`, `deploy_ct.ps1`, `deploy_gt.ps1`, `deploy_wt.ps1` → `_archive/legacy_deploy_scripts/`. All four moved as one unit because the three shims call `deploy_all.ps1`. Use `VMBLauncher.exe deploy <mod>` directly going forward.
+
+### Kept at root
+
+- `settings.ini` — flagged for review but still referenced in CLAUDE.md's mod-file-structure section; Section A audit marked it **KEEP** because VMB tooling may still read it from cwd. Re-audit after one release cycle.
+- All 5 `upload_*.ps1` wrappers — each adds a visibility-regression guard on top of `VMBLauncher.exe upload` (Section A: "highest-value guard of all" for `upload_wt.ps1`).
+- `send_keys.ps1` — referenced by `reference_remote_vt2.md`; active dev tool.
+
+### Reference updates
+
+- `CLAUDE.md` — Build Commands section updated to point at `VMBLauncher.exe deploy <mod>` and note the archived shims.
+
+### Flagged but not moved (require further sign-off)
+
+- Legacy `tweaker/` mod tree.
+- `cosmetics_tweaker/`'s ~13 ephemeral diagnosis `.md` files (active investigation).
+- `_tools/extract_all_bundles.ps1` (active reusable tool).
+- `cosmetics_tweaker/.build/`, `cosmetics_tweaker/upload/`, `cosmetics_tweaker/pcb-log.log`, `chaos_wastes_tweaker/boon_loc_dump.txt`, and the three `.lua.processed` SDK artifacts (gitignored — disk clutter only; Section A recommends DELETE, but the user's archival list did not authorize this pass to touch them).
+
 ## [2026-05-06] dynamic_cosmetic_portraits v0.1.0 — split from cosmetics_tweaker
 ### Added
 - New standalone mod (Workshop ID `3721036701`, private) wrapping the

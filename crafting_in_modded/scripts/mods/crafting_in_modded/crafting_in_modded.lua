@@ -17,9 +17,40 @@ Major sections (search by name to jump):
 
 local mod = get_mod("cim")
 
-local MOD_VERSION = "0.7.9-dev"
+local MOD_VERSION = "0.7.33-alpha"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 mod:echo("Crafting in Modded v" .. MOD_VERSION)
+
+-- /regression_test scaffold. Registrations at end of file.
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+-- A check function returns:
+--   nil                        -> PASS
+--   "skip: <reason>"           -> SKIP (preconditions not met; not in-session, etc.)
+--   any other truthy string    -> FAIL
+--   error / pcall failure      -> FAIL (caught)
+mod:command("cim_regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail, skip = 0, 0, 0
+    mod:echo("=== cim regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+            mod:echo("  SKIP: %s -- %s", c.name, err:sub(6):gsub("^%s+", "")); skip = skip + 1
+            mod:info("[regression] SKIP %s: %s", c.name, err)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
+end)
+mod:info("[regression-test-command] registered as /cim_regression_test")
 
 -- Register the "modded" rarity (and any future custom rarities) BEFORE
 -- anything else loads — sibling modules will create items with this rarity.
@@ -37,6 +68,12 @@ if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_
 -- the craft hook fires.
 local _ok_is, _err_is = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/illusion_swap")
 if not _ok_is then mod:error("Failed to load illusion_swap: %s", tostring(_err_is)) end
+
+-- SaveWeapon mod importer. One-shot chat command (and bindable VMF keybind)
+-- that pulls every weapon the player saved via the SaveWeapon mod into cim's
+-- forged_weapons table. Idempotent; safe to re-run.
+local _ok_sw, _err_sw = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/saveweapon_import")
+if not _ok_sw then mod:error("Failed to load saveweapon_import: %s", tostring(_err_sw)) end
 
 -- Backward-compat: pre-v0.7.0 cim used `rarity = "promo"` for crafts. Keep
 -- "promo" registered in NetworkLookup.rarities too so legacy saved items can
@@ -287,6 +324,17 @@ _forge_load()
 
 local _athanor_inject_all -- forward declaration; defined in the Athanor section below
 local _restore_modded_loadout -- forward declaration; defined in the inventory section below
+-- Forward-declared so the get_property_mastery_costs hook (registered at
+-- line ~1205) can call them. Their canonical definitions live in the
+-- per-property bubble cap section further down (line ~1390). The hook fires
+-- after mod load, so the upvalue is bound by then. Without this forward
+-- declaration the closure resolves `_bubble_cap` as a nil global and the
+-- Athanor crashes the first time a property button asks for its cost array.
+-- Burned by `feedback_lua_forward_reference`.
+local _bubble_cap
+local _value_for_bubbles
+local _bubbles_for_value
+local _strip_weave
 
 mod:hook_safe("BackendManagerPlayFab", "_create_interfaces", function()
     _forge_load()
@@ -296,6 +344,182 @@ mod:hook_safe("BackendManagerPlayFab", "_create_interfaces", function()
     local count = 0
     for _ in pairs(_forged_weapons) do count = count + 1 end
     mod:info("Forge: restored %d forged weapons", count)
+
+    -- ============================================================
+    -- One-shot trim: existing items in the mirror with >2 properties
+    -- ============================================================
+    -- Consolidated here from standard_forge.lua (was a sibling
+    -- registration on the same Class+method that VMF silently dropped
+    -- as a duplicate per memory `feedback_vmf_hook_safe_no_chain`).
+    -- The crash described in
+    -- standard_forge.lua's >2-property guard can also fire on items that
+    -- already exist in the player's save from pre-v0.7.25 sessions. Once
+    -- the backend mirror finishes loading, walk every item and trim
+    -- properties down to the first 2 (in iteration order). Vanilla allows
+    -- at most 2 anyway so the behavior is unchanged from the buff
+    -- system's perspective.
+    local items_iface = Managers.backend and Managers.backend:get_interface("items")
+    local mirror = items_iface and items_iface._backend_mirror
+    local inv = mirror and mirror._inventory_items
+    if type(inv) == "table" then
+        local trimmed = 0
+        -- v0.7.33-alpha: per-item log so user reports of "<X> item missing
+        -- properties after restart" are diagnosable from the log alone.
+        for bid, item in pairs(inv) do
+            local props = item and item.properties
+            if type(props) == "table" then
+                local prop_count = 0
+                local keep = {}
+                local kept_keys = {}
+                local dropped_keys = {}
+                for k, v in pairs(props) do
+                    prop_count = prop_count + 1
+                    if prop_count <= 2 then
+                        keep[k] = v
+                        kept_keys[#kept_keys + 1] = tostring(k)
+                    else
+                        dropped_keys[#dropped_keys + 1] = tostring(k)
+                    end
+                end
+                if prop_count > 2 then
+                    item.properties = keep
+                    if item.CustomData then
+                        local cjson_mod = rawget(_G, "cjson")
+                        if cjson_mod then
+                            item.CustomData.properties = cjson_mod.encode(keep)
+                        end
+                    end
+                    trimmed = trimmed + 1
+                    local item_key = item.key or item.ItemId
+                                    or (item.data and item.data.key) or "<unknown>"
+                    mod:info("[trim] %s (bid=%s) kept=[%s] dropped=[%s]",
+                        tostring(item_key), tostring(bid),
+                        table.concat(kept_keys, ","),
+                        table.concat(dropped_keys, ","))
+                end
+            end
+        end
+        if trimmed > 0 then
+            mod:info("[cim] Trimmed %d items with >2 properties to vanilla cap.", trimmed)
+        end
+    end
+end)
+
+-- ============================================================
+-- Vanilla-client compat: rewrite "modded" rarity on the wire
+-- ============================================================
+-- When the host has a cim craft equipped, the loadout sync RPC
+-- (`rpc_sync_loadout_slot`, encoded by `LoadoutUtils.sync_loadout_slot` in
+-- `helpers/loadout_utils.lua:13-42`) sends `rarity_id =
+-- NetworkLookup.rarities["modded"]`. cim appends "modded" to that table at
+-- mod load (modded_rarities.lua:114-120), so the id is `<vanilla_count>+1`
+-- on hosts that have cim — and undefined on clients that don't.
+--
+-- A vanilla client receiving that id reverse-looks up via
+-- `NetworkLookup.rarities[rarity_id]` in
+-- `LoadoutUtils.create_loadout_item_from_rpc_data:73`, gets nil, stores
+-- `item.rarity = nil`, and the next code path that does
+-- `RaritySettings[item.rarity].order` (e.g.
+-- `deus_chest_extension.lua:232-233`, `reward_popup_ui.lua:451`) fatals.
+--
+-- Fix: wrap-hook `sync_loadout_slot`, temporarily swap `item.rarity` to
+-- "unique" before the RPC encodes it, restore after the call returns. The
+-- swap is invisible to the host's local code (it sees the original rarity
+-- on every read outside this single sync call) and the wire payload
+-- carries a `rarity_id` that exists in EVERY client's NetworkLookup
+-- (cim-installed OR vanilla), because cim only APPENDS to the rarities
+-- table — vanilla ids 1..N are unchanged.
+--
+-- Downstream effect on cim clients: they see the modded item as "unique"
+-- in their loadout view. This is the stated user requirement ("modded
+-- rarity should show up as regular unique/veteran rarity for the client").
+-- The host still sees "modded" because we restore item.rarity after the
+-- sync call, and the host's own UI reads item.rarity locally — not via
+-- the RPC pipeline.
+--
+-- This is the minimum-risk patch: a single wrap-hook on one function
+-- catches every call site (`simple_inventory_extension.lua:885` on equip,
+-- `player_unit_attachment_extension.lua:154` on attachment change,
+-- `LoadoutUtils.hot_join_sync` on new-peer arrival).
+-- Cim-client side-channel: per-(player, slot) "this slot's item is modded" flag.
+-- Populated on the cim host via `cim_modded_slot` VMF RPC fired alongside every
+-- `sync_loadout_slot`; consumed on cim clients in the `rpc_sync_loadout_slot`
+-- hook to restore `item.rarity = "modded"` AFTER vanilla's decode path runs.
+-- Vanilla clients have no registered handler for `cim_modded_slot` and drop
+-- the packet silently — they keep the "unique" rarity baked in by the host's
+-- wire-rewrite hook and never crash.
+--
+-- Keyed by unique_id (peer_id .. ":" .. local_player_id) → slot_name → true.
+local _cim_modded_slot_state = {}
+
+local function _cim_unique_id(peer_id, local_player_id)
+    return tostring(peer_id) .. ":" .. tostring(local_player_id)
+end
+
+if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
+    mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
+        local is_modded = item and item.rarity == "modded" or false
+        local peer_id = player:network_id()
+        local local_player_id = player:local_player_id()
+
+        -- Side-channel BEFORE the loadout RPC. Cim clients latch the flag and
+        -- the rpc_sync_loadout_slot hook below restores rarity on receive.
+        -- We always send (even is_modded=false) so equipping a non-modded item
+        -- clears any stale modded flag on that slot.
+        local target = sync_to_specific_peer_id or "others"
+        local ok_send, err_send = pcall(mod.network_send, mod, "cim_modded_slot",
+            target, peer_id, local_player_id, slot_name, is_modded)
+        if not ok_send then mod:info("[cim] side-channel send failed: %s", tostring(err_send)) end
+
+        if not is_modded then
+            return func(player, slot_name, item, sync_to_specific_peer_id)
+        end
+
+        local original = item.rarity
+        item.rarity = "unique"
+        local ok, err = pcall(func, player, slot_name, item, sync_to_specific_peer_id)
+        item.rarity = original
+        if not ok then mod:info("[cim] sync_loadout_slot rewrite error: %s", tostring(err)) end
+    end)
+end
+
+-- Cim-client side-channel receiver. Records the per-slot modded flag and, if
+-- the loadout RPC already arrived (out-of-order delivery), patches the stored
+-- item's rarity back to "modded" immediately. Vanilla clients never register
+-- this handler so the RPC is dropped harmlessly there.
+mod:network_register("cim_modded_slot", function(sender_peer_id, peer_id, local_player_id, slot_name, is_modded)
+    local uid = _cim_unique_id(peer_id, local_player_id)
+    _cim_modded_slot_state[uid] = _cim_modded_slot_state[uid] or {}
+    _cim_modded_slot_state[uid][slot_name] = is_modded and true or nil
+
+    -- Retroactive patch: if PlayerManager._player_loadouts already has the
+    -- "unique"-coerced item for this slot, upgrade it back to "modded" so the
+    -- cim client's UI shows the right chrome.
+    local pm = Managers.player
+    local loadouts = pm and pm._player_loadouts
+    if loadouts and loadouts[uid] then
+        local stored = loadouts[uid][slot_name]
+        if stored then
+            stored.rarity = is_modded and "modded" or stored.rarity
+        end
+    end
+end)
+
+-- Restore "modded" rarity post-decode on cim clients. hook_safe fires AFTER
+-- vanilla's `rpc_sync_loadout_slot` has stored the item under
+-- `_player_loadouts[unique_id][slot_name]` with rarity = "unique" (the wire
+-- value). We look up the side-channel flag for that (peer, slot) and upgrade
+-- in-place. No-op if the side-channel hasn't arrived yet — the side-channel
+-- receiver above handles the inverse out-of-order case.
+mod:hook_safe("PlayerManager", "rpc_sync_loadout_slot", function(self, channel_id, peer_id, local_player_id, slot_id, item_id, rarity_id)
+    local uid = _cim_unique_id(peer_id, local_player_id)
+    local slot_state = _cim_modded_slot_state[uid]
+    if not slot_state then return end
+    local NL = rawget(_G, "NetworkLookup")
+    local slot_name = NL and NL.equipment_slots and NL.equipment_slots[slot_id]
+    if not slot_name or not slot_state[slot_name] then return end
+    local stored = self._player_loadouts and self._player_loadouts[uid] and self._player_loadouts[uid][slot_name]
+    if stored then stored.rarity = "modded" end
 end)
 
 -- ============================================================
@@ -340,36 +564,215 @@ mod._cim_clear_modded_loadout_for_bid = function(backend_id)
     if dirty then _modded_loadout_save() end
 end
 
--- Assigned to the forward-declared local at the top of the Forge core section,
--- so the `_create_interfaces` hook can call it.
-_restore_modded_loadout = function()
-    if not mod:get("restore_modded_loadout") then return end
-    _modded_loadout_load()
-    local items = Managers.backend and Managers.backend:get_interface("items")
-    if not items then return end
-    local restored = 0
+-- v0.7.33-alpha one-shot migration. Old (pre-v0.7.33) cim never cleared
+-- _modded_loadout entries when the user equipped a non-cim item. The fix in
+-- v0.7.33 keeps state correct GOING FORWARD but doesn't heal save data from
+-- before the fix. This migration walks _modded_loadout once at session load
+-- and purges every entry whose bid isn't in `_forged_weapons` (cim crafts)
+-- and doesn't match `cwv_*` (character_weapon_variants). Stale entries
+-- pointing to non-existent items can't be restored anyway, so dropping them
+-- avoids re-trying the same MISSING restore log line every session.
+local function _modded_loadout_purge_stale()
+    local removed = 0
     for career_name, slots in pairs(_modded_loadout) do
-        for slot_name, backend_id in pairs(slots) do
-            -- Only restore if the saved item still exists in the mirror
-            -- (it should, after _athanor_inject_all + _forge_inject_all ran).
-            local item = items:get_item_from_id(backend_id)
-            if item then
-                local ok = pcall(items.set_loadout_item, items, backend_id, career_name, slot_name)
-                if ok then restored = restored + 1 end
+        for slot_name, bid in pairs(slots) do
+            local keep = false
+            if type(bid) == "string" then
+                if _forged_weapons[bid] then keep = true
+                elseif bid:sub(1, 4) == "cwv_" then keep = true
+                end
+            end
+            if not keep then
+                slots[slot_name] = nil
+                removed = removed + 1
+                mod:info("[loadout-purge] %s/%s -> %s (bid not in forged_weapons or cwv_*)",
+                    tostring(career_name), tostring(slot_name), tostring(bid))
             end
         end
     end
-    if restored > 0 then mod:info("Restored %d modded loadout entries", restored) end
+    if removed > 0 then
+        _modded_loadout_save()
+        mod:info("[loadout-purge] removed %d stale loadout entries", removed)
+    end
 end
 
--- Capture each set_loadout_item call for modded items so we can restore later.
+-- Assigned to the forward-declared local at the top of the Forge core section,
+-- so the `_create_interfaces` hook can call it.
+--
+-- v0.7.33-alpha: verbose per-entry logging. Previous versions only logged the
+-- aggregate "Restored N modded loadout entries" count, which made it
+-- impossible to diagnose user reports like "my <X> didn't come back". Now
+-- every saved entry is logged with career + slot + bid + result (restored /
+-- missing-from-mirror / pcall-error). Counts are still echoed for chat
+-- visibility; the per-entry detail lives in `mod:info` (log only).
+_restore_modded_loadout = function()
+    if not mod:get("restore_modded_loadout") then
+        mod:info("[restore] skipped — restore_modded_loadout setting OFF")
+        return
+    end
+    _modded_loadout_load()
+    -- Purge stale entries (bids no longer in _forged_weapons / cwv_*) before
+    -- attempting restore. Idempotent — runs every restore pass; first session
+    -- after v0.7.33-alpha may purge dozens of entries, subsequent sessions zero.
+    _modded_loadout_purge_stale()
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    if not items then
+        mod:info("[restore] skipped — items backend interface not ready")
+        return
+    end
+
+    -- Total entries seen vs restored vs skipped — diagnostic-only.
+    local total, restored, missing, errored = 0, 0, 0, 0
+    for career_name, slots in pairs(_modded_loadout) do
+        for slot_name, backend_id in pairs(slots) do
+            total = total + 1
+            local item = items:get_item_from_id(backend_id)
+            if not item then
+                missing = missing + 1
+                mod:info("[restore] MISSING %s/%s -> %s (item not in mirror; will retry next state transition)",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id))
+            else
+                local item_key = item.key or item.ItemId or (item.data and item.data.key) or "<unknown>"
+                local ok, err = pcall(items.set_loadout_item, items, backend_id, career_name, slot_name)
+                if ok then
+                    restored = restored + 1
+                    mod:info("[restore] OK %s/%s -> %s (%s)",
+                        tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(item_key))
+                else
+                    errored = errored + 1
+                    mod:info("[restore] ERROR %s/%s -> %s: %s",
+                        tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(err))
+                end
+            end
+        end
+    end
+    if total > 0 then
+        mod:info("[restore] total=%d restored=%d missing=%d errored=%d",
+            total, restored, missing, errored)
+    end
+end
+
+-- Capture each set_loadout_item call so we can track per-(career, slot) state.
+--
+-- Pre-v0.7.33-alpha bug (root cause of "didn't restore my equipped items"
+-- user report 2026-05-23): this hook only saved entries when the new item was
+-- modded — and NEVER cleared a slot when the user later equipped a non-cim
+-- (vanilla / Save Weapon / Loadout Manager / etc.) item there. Stale modded
+-- entries stayed in `_modded_loadout` indefinitely.
+--
+-- On next session boot, `_restore_modded_loadout` ran AFTER vanilla PlayFab
+-- restored each slot — and faithfully re-equipped the stale modded item,
+-- clobbering what the user had actually equipped at session-end.
+--
+-- Fix: ALWAYS clear the slot entry first. Then, only if the new item is
+-- modded, re-save the entry. Vanilla equips clean up the cim record; modded
+-- equips refresh it. Either way the saved state matches what's currently
+-- equipped instead of frozen at first-modded-equip-ever.
 mod:hook_safe("BackendInterfaceItemPlayfab", "set_loadout_item", function(self, item_id, career_name, slot_name, optional_loadout_index)
     if not item_id or not career_name or not slot_name then return end
-    if mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(item_id) then
+
+    local was_stale = _modded_loadout[career_name] and _modded_loadout[career_name][slot_name]
+    if _modded_loadout[career_name] then
+        _modded_loadout[career_name][slot_name] = nil
+    end
+
+    local is_modded = mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(item_id)
+    if is_modded then
         _modded_loadout[career_name] = _modded_loadout[career_name] or {}
         _modded_loadout[career_name][slot_name] = item_id
+    end
+
+    -- Persist if anything changed (cleared a stale entry OR added a new one).
+    if was_stale or is_modded then
         _modded_loadout_save()
     end
+end)
+
+mod:command("cim_restore_loadout", "Manually re-equip the saved modded loadout (use if your modded weapons didn't come back after a restart)", function()
+    if not _restore_modded_loadout then mod:echo("Restore helper not initialised yet."); return end
+    _modded_loadout_load()
+    local count = 0
+    for career_name, slots in pairs(_modded_loadout) do
+        for _ in pairs(slots) do count = count + 1 end
+    end
+    mod:echo(string.format("[cim] %d saved modded loadout entries; restoring...", count))
+    _restore_modded_loadout()
+    mod:echo("[cim] Done. If items are still missing, run /cim_dump_loadout to see what's saved.")
+end)
+
+mod:command("cim_dump_active_window", "Dump the currently-open hero_view active windows + their widgets to log (use while a menu is open)", function()
+    local ui = Managers.ui
+    local ingame_ui = ui and ui._ingame_ui
+    if not ingame_ui then mod:echo("No ingame_ui"); return end
+    local hero_view = ingame_ui.views and ingame_ui.views.hero_view
+    if not hero_view then mod:echo("hero_view not active"); return end
+    -- hero_view holds the active state inside `_machine._state` (a GameStateMachine
+    -- inheriting StateMachine — see hero_view.lua:94). My v0.7.11 dump used the
+    -- nonexistent `_current_state`, which always reported nil. Walk the machine
+    -- path and fall back to a few alternatives in case the field name varies
+    -- across UI states.
+    local state = hero_view._machine and hero_view._machine._state
+        or hero_view._current_state
+        or hero_view._state
+    if not state then
+        mod:echo("No active state on hero_view (machine=" ..
+            tostring(hero_view._machine) .. "). Open the menu first then re-run.")
+        return
+    end
+    mod:echo(string.format("[cim] hero_view state class: %s", tostring(state.NAME or state.__class_name or "?")))
+    mod:info("================ CIM ACTIVE WINDOW DUMP ================")
+    mod:info("hero_view._machine._state = %s", tostring(state.NAME or "?"))
+    local windows = state._active_windows or state.active_windows
+    if not windows then mod:echo("No _active_windows on state"); return end
+    for slot_idx, win in pairs(windows) do
+        mod:info("--- window[%s] NAME=%s ---", tostring(slot_idx), tostring(win.NAME or "?"))
+        mod:echo(string.format("  window[%s] = %s", tostring(slot_idx), tostring(win.NAME or "?")))
+        local widgets = win._widgets_by_name
+        if widgets then
+            local names = {}
+            for n in pairs(widgets) do names[#names + 1] = n end
+            table.sort(names)
+            for _, name in ipairs(names) do
+                local w = widgets[name]
+                local content = w and w.content
+                local hot = content and content.button_hotspot
+                local disabled = hot and hot.disable_button
+                local has_text = content and (content.text or content.title or content.label)
+                local line = string.format("    %-50s hotspot=%s disabled=%s text=%s",
+                    name,
+                    tostring(hot ~= nil),
+                    tostring(disabled),
+                    tostring(has_text or ""))
+                mod:info(line)
+                if hot then
+                    mod:echo("    " .. name .. " disable_button=" .. tostring(disabled))
+                end
+            end
+        end
+        if win._params then
+            for k, v in pairs(win._params) do
+                mod:info("    _params.%s = %s", tostring(k), tostring(v))
+            end
+        end
+    end
+    mod:info("======================== END ===========================")
+    mod:echo("[cim] Window dump written to log (see logs for full widget list).")
+end)
+
+mod:command("cim_dump_loadout", "Print the saved modded loadout table to chat", function()
+    _modded_loadout_load()
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    local total = 0
+    for career_name, slots in pairs(_modded_loadout) do
+        for slot_name, bid in pairs(slots) do
+            local item = items and items:get_item_from_id(bid)
+            local in_mirror = item and "yes" or "MISSING"
+            mod:echo(string.format("  %s %s -> %s (in_mirror=%s)", career_name, slot_name, tostring(bid), in_mirror))
+            total = total + 1
+        end
+    end
+    mod:echo(string.format("[cim] %d entries saved (across %d careers)", total,
+        (function() local c = 0; for _ in pairs(_modded_loadout) do c = c + 1 end; return c end)()))
 end)
 
 -- Inventory filter: drops vanilla weapons / jewellery from get_filtered_items
@@ -492,6 +895,34 @@ mod.open_forge = function()
         return
     end
     if ingame_ui:pending_transition() then return end
+
+    -- Keep gate. HeroViewStateWeaveForge was never authored to run mid-mission
+    -- and several code paths still fault even with the gamepad +
+    -- shading_environment shims in place. Default-off opt-in lets curious
+    -- players test in-mission and report crash logs.
+    -- DamageUtils.is_in_inn covers all hub levels: inn_level + 4 cosmetic
+    -- variants (celebrate/halloween/skulls/sonnstill) + morris_hub (CW staging).
+    -- Versus access lives inside inn_level, no extra check needed.
+    --
+    -- Chaos Wastes block: per user directive 2026-05-22 (crash GUID
+    -- fa1ec6f8-7385-4221-869b-ed4f2893c97c), crafting menus should NOT be
+    -- available anywhere in CW — neither hub nor mission. The hub level
+    -- (morris_hub) sets hub_level=true so the keep-gate alone would let it
+    -- through; add an explicit deus-mechanism check that blocks both. Same
+    -- preview-world fatal that bit general_tweaker's gt_inv affects cim if
+    -- the user opens the Athanor and tabs to the standard Customization view.
+    local mech = Managers.mechanism and Managers.mechanism:current_mechanism_name()
+    if mech == "deus" then
+        mod:echo("Crafting menu disabled in Chaos Wastes (would crash on preview world load).")
+        return
+    end
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+    if not in_keep and not mod:get("allow_in_mission") then
+        mod:echo("Crafting menu only opens in the Keep. " ..
+                 "Enable 'Allow in mission' in the mod options to override (may crash).")
+        return
+    end
+
     _custom_forge_active = true
     _forge_loadout = {}
     _forge_item_props = {}
@@ -500,6 +931,119 @@ mod.open_forge = function()
     })
 end
 
+-- ============================================================
+-- Mid-mission forge: shading_environment substitution
+-- ============================================================
+-- The three weave-forge windows (`HeroWindowWeaveForgeOverview`,
+-- `HeroWindowWeaveForgeWeapons`, `HeroWindowWeaveProperties`) hardcode
+-- `shading_environment = "environment/ui_weave_forge_preview"` in their
+-- `_create_viewport_definition`. That resource is only packaged with the
+-- keep level — mission bundles don't load it — and the engine fatals on
+-- the first viewport setup with:
+--   [Engine Error]: Resource not loaded, type: #ID[fe73c7dcff8a7ca5]
+--   ('shading_environment'), name: #ID[77526267a1844129]
+--   ('environment/ui_weave_forge_preview')
+-- (Both hashes brute-confirmed via the bundle unpacker per
+-- `reference_vt2_hash_reverse_lookup`.)
+--
+-- Workaround: hook each window's `_create_viewport_definition` with a
+-- full mod:hook wrapper. Call the original, then if we're NOT in the
+-- keep, rewrite the returned table's `style.viewport.shading_environment`
+-- to `environment/ui_hdr` — that env is loaded in every state (it's the
+-- UI default that loading_view / hero_view's own viewport use), so it's
+-- always available. Visual fidelity drops a bit mid-mission (the forge
+-- lighting won't match the keep aesthetic) but no crash.
+--
+-- ALSO swap the `_inverted` variant (HeroWindowWeaveForgeOverview takes
+-- an `invert_rendering` arg that picks `_preview_inverted`). Same env
+-- isn't in mission bundles either.
+--
+-- The hook always fires (vanilla never opens the forge in mission so
+-- there's no path to clobber); gated on `not is_in_inn` so the keep
+-- forge keeps its proper lighting.
+
+local _FORGE_MISSION_SAFE_ENV = "environment/ui_hdr"
+
+local function _is_in_keep()
+    return DamageUtils and DamageUtils.is_in_inn and true or false
+end
+
+local function _swap_forge_env(viewport_def)
+    if _is_in_keep() then return viewport_def end
+    if type(viewport_def) ~= "table" then return viewport_def end
+    local style = viewport_def.style
+    local vp = style and style.viewport
+    if vp and (vp.shading_environment == "environment/ui_weave_forge_preview"
+            or vp.shading_environment == "environment/ui_weave_forge_preview_inverted") then
+        vp.shading_environment = _FORGE_MISSION_SAFE_ENV
+    end
+    return viewport_def
+end
+
+mod:hook("HeroWindowWeaveForgeOverview", "_create_viewport_definition", function(func, self, scenegraph_id, invert_rendering)
+    return _swap_forge_env(func(self, scenegraph_id, invert_rendering))
+end)
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_create_viewport_definition", function(func, self, scenegraph_id)
+    return _swap_forge_env(func(self, scenegraph_id))
+end)
+
+mod:hook("HeroWindowWeaveProperties", "_create_viewport_definition", function(func, self)
+    return _swap_forge_env(func(self))
+end)
+
+-- ============================================================
+-- Mid-mission forge: gamepad GUI setup + cursor renderer guard
+-- ============================================================
+-- Crash trace (skittergate level, Steam Controller plugged in, cim open_forge):
+--
+--   hero_view_state_weave_forge.lua:120: attempt to index field '_gui_data' (a nil value)
+--   [1] get_ui_renderer:120
+--   [2] draw_gamepad_cursor:784
+--   [3] hook_chain:628  (state update path)
+--
+-- Vanilla `_setup_gamepad_gui` (`hero_view_state_weave_forge.lua:141-154`)
+-- gates the entire body on `if self.is_in_inn then ... self._gui_data = ... end`.
+-- In mission `is_in_inn` is false, so `_gui_data` is never assigned. When the
+-- player has any gamepad-class input device active (Steam Controller, vJoy, an
+-- actual gamepad), `_gamepad_style_active` is true and `get_ui_renderer` later
+-- dereferences `_gui_data.bottom.renderer` → fatal.
+--
+-- The v0.7.13 shading_environment swap let the forge windows mount in mission,
+-- but didn't address this gate. Two-layer fix:
+--
+-- 1. Hook `_setup_gamepad_gui` and temporarily flip `self.is_in_inn = true` for
+--    the duration of the call so the gui_data branch runs. The renderer's
+--    `is_in_inn` arg ends up true too, which matches what every other code
+--    path inside the forge expects.
+-- 2. Defensive guard on `get_ui_renderer`: if for any reason `_gui_data` is
+--    still nil when the cursor draws, fall back to the parent's `ui_renderer`.
+--    Gamepad cursor visuals may be slightly off but the menu stays usable
+--    and no crash.
+
+mod:hook("HeroViewStateWeaveForge", "_setup_gamepad_gui", function(func, self, ...)
+    if self.is_in_inn then
+        return func(self, ...)
+    end
+    -- Temporarily lie to the gate so the gui_data path runs. Restore afterwards
+    -- so vanilla code outside this hook continues to see the truthful flag.
+    self.is_in_inn = true
+    local ok, err = pcall(func, self, ...)
+    self.is_in_inn = false
+    if not ok then
+        mod:info("[cim] _setup_gamepad_gui in mission failed: %s", tostring(err))
+    end
+end)
+
+mod:hook("HeroViewStateWeaveForge", "get_ui_renderer", function(func, self, ...)
+    -- Vanilla only crashes when gamepad style is active AND gui_data missing.
+    -- Mirror that condition exactly so non-crash paths stay unchanged.
+    if self._gamepad_style_active and not self._gui_data then
+        return self.ui_renderer
+    end
+    return func(self, ...)
+end)
+
 mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
     _custom_forge_active = false
     _forge_loadout = {}
@@ -507,6 +1051,17 @@ mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
     _forge_panel_styled = false
     _forge_bg_colored = false
     _amulet_dirty[1], _amulet_dirty[2], _amulet_dirty[3] = false, false, false
+end)
+
+-- Hide the 3D amulet model in amulet mode (v0.7.32+). The vanilla previewer
+-- gets created lazily by HeroWindowWeaveProperties._post_update_animations or
+-- similar; once `_cim_skip_previewer = true` is set by the per-frame polish
+-- pass, this hook intercepts the unit-previewer's update so the GPU never
+-- draws the rotating amulet. The polish pass clears the flag when the user
+-- selects a weapon (selected_item ~= nil), restoring the 3D model render.
+mod:hook("HeroWindowWeaveProperties", "_create_unit_previewer", function(func, self, ...)
+    if self._cim_skip_previewer then return nil end
+    return func(self, ...)
 end)
 
 -- --- Forge UI polish (runs each frame while forge is open) ---
@@ -537,6 +1092,108 @@ local function _forge_is_hovered(widget)
     if not widget or not widget.content then return false end
     local hs = widget.content.button_hotspot or widget.content.hotspot
     return hs and hs.is_hover
+end
+
+-- ============================================================
+-- Amulet view: 3 stacked craft buttons (v0.7.32+)
+-- ============================================================
+-- User-requested 2026-05-23: replace the rotating Amulet-of-Ashur 3D model in
+-- HeroWindowWeaveProperties' amulet view with 3 vertically-stacked craft
+-- buttons (Necklace / Charm / Trinket). Each crafts exactly one slot from the
+-- current bubble state. Supersedes the single "Craft All" upgrade_button
+-- which dirty-tracked + crafted all edited slots in one click.
+--
+-- Slot order matches `_AMULET_SLOT_BY_INDEX` (declared later in this file).
+-- Hard-coded here to avoid a forward-ref cycle; the indices must match
+-- _AMULET_SLOT_BY_INDEX[1]=ring(charm), [2]=necklace, [3]=trinket_1.
+local _AMULET_SLOT_BUTTONS = {
+    -- Visual top-to-bottom order: Necklace, Charm, Trinket. `idx` references
+    -- the slot in _AMULET_SLOT_BY_INDEX; `slot` is the legacy slot name VT2's
+    -- career_settings uses (slot_ring not slot_charm, slot_trinket_1 not
+    -- slot_trinket — see AMULET_OF_ASHUR.md).
+    { idx = 2, slot = "slot_necklace",  label = "CRAFT NECKLACE", widget_name = "cim_amulet_btn_necklace" },
+    { idx = 1, slot = "slot_ring",      label = "CRAFT CHARM",    widget_name = "cim_amulet_btn_charm"    },
+    { idx = 3, slot = "slot_trinket_1", label = "CRAFT TRINKET",  widget_name = "cim_amulet_btn_trinket"  },
+}
+
+-- Lazy-create the 3 cim button widgets on the properties_win. Returns the
+-- widget array (or nil if VT2 UIWidgets isn't available — defensive).
+local function _ensure_amulet_buttons(properties_win)
+    if properties_win._cim_amulet_buttons then return properties_win._cim_amulet_buttons end
+    local UIWidgets = rawget(_G, "UIWidgets")
+    local UIWidget = rawget(_G, "UIWidget")
+    if not (UIWidgets and UIWidget and UIWidgets.create_default_button) then return nil end
+
+    local btn_size = { 452, 80 }
+    local spacing  = 95   -- vertical distance between button centers (button h=80 + 15 gap)
+    local buttons  = {}
+    local widgets = properties_win._widgets
+    local widgets_by_name = properties_win._widgets_by_name
+    if not (widgets and widgets_by_name) then return nil end
+
+    for i, entry in ipairs(_AMULET_SLOT_BUTTONS) do
+        -- All 3 widgets share scenegraph_id "viewport" (the big center 3D-model
+        -- area). `widget.offset` shifts each vertically from the viewport's
+        -- center: i=1 → +spacing (top), i=2 → 0 (middle), i=3 → -spacing (bottom).
+        -- Z=100 so they render above the bubble grid background.
+        local ok, def = pcall(UIWidgets.create_default_button,
+            "viewport", btn_size, nil, nil, entry.label, 24,
+            nil, "button_detail_02", nil, true)
+        if not ok or not def then
+            mod:info("[cim] amulet button %s create failed: %s", entry.widget_name, tostring(def))
+            return nil
+        end
+        local ok_init, w = pcall(UIWidget.init, def)
+        if not ok_init or not w then
+            mod:info("[cim] amulet button %s init failed: %s", entry.widget_name, tostring(w))
+            return nil
+        end
+        local y_offset = -(i - 2) * spacing
+        w.offset = { 0, y_offset, 100 }
+        w.content.visible = false
+        w.content._cim_slot_index = entry.idx
+        w.content._cim_slot_name  = entry.slot
+        w.content._cim_label      = entry.label
+        buttons[i] = w
+        widgets[#widgets + 1] = w
+        widgets_by_name[entry.widget_name] = w
+    end
+
+    properties_win._cim_amulet_buttons = buttons
+    mod:info("[cim] amulet view: created %d cim craft buttons", #buttons)
+    return buttons
+end
+
+local function _show_amulet_buttons(properties_win, show)
+    local buttons = properties_win._cim_amulet_buttons
+    if not buttons then return end
+    for _, w in ipairs(buttons) do
+        if w and w.content then w.content.visible = show and true or false end
+    end
+end
+
+-- Per-frame click probe. The button's hotspot fires `on_release = true` on the
+-- frame the user lifts their mouse over a hovered hotspot. We consume that by
+-- invoking the craft path and clearing the flag, otherwise the click repeats.
+-- The per-slot craft helper itself is `_amulet_craft_one_slot`, defined alongside
+-- `_upgrade_magic_level`'s hook below — it lives there so the existing
+-- amulet-craft branch and the new per-button branch share one source of truth.
+local function _handle_amulet_button_clicks(properties_win)
+    local buttons = properties_win._cim_amulet_buttons
+    if not buttons then return end
+    for _, w in ipairs(buttons) do
+        local hs = w and w.content and w.content.button_hotspot
+        if hs and hs.on_release then
+            hs.on_release = false  -- consume immediately to prevent re-fire
+            local slot_index = w.content._cim_slot_index
+            local slot_name  = w.content._cim_slot_name
+            if mod._cim_amulet_craft_one_slot then
+                mod._cim_amulet_craft_one_slot(properties_win, slot_index, slot_name)
+            else
+                mod:echo("[cim] amulet craft helper not ready (load order bug)")
+            end
+        end
+    end
 end
 
 -- The Athanor's hover preview now uses VT2's standard `item_tooltip` pass —
@@ -788,20 +1445,49 @@ local function _forge_apply_ui_polish(forge_state)
         _forge_hide_widget(properties_win, "mastery_title_text")
         _forge_hide_widget(properties_win, "mastery_icon")
         _forge_hide_widget(properties_win, "mastery_tooltip")
-        -- upgrade_button is repurposed as our "Craft New" button (see hook on
-        -- HeroWindowWeaveProperties._upgrade_magic_level below). Keep visible
-        -- and re-label per slot type.
-        local craft_label = "CRAFT"
-        local p = properties_win._params
-        local sn = p and p.selected_slot_name
-        if sn == "slot_melee" then craft_label = "CRAFT NEW WEAPON"
-        elseif sn == "slot_ranged" then craft_label = "CRAFT NEW WEAPON"
-        elseif sn == "slot_necklace" then craft_label = "CRAFT NEW NECKLACE"
-        elseif sn == "slot_charm" then craft_label = "CRAFT NEW CHARM"
-        elseif sn == "slot_trinket" then craft_label = "CRAFT NEW TRINKET"
+
+        local params = properties_win._params
+        local sel_item = params and params.selected_item
+        local in_amulet_mode = not (sel_item and sel_item.backend_id)
+
+        if in_amulet_mode then
+            -- Amulet mode (v0.7.32+): 3 stacked craft buttons replace the single
+            -- "CRAFT NEW" upgrade_button. The 3D Amulet of Ashur model and its
+            -- title label are hidden — buttons render in the freed center space.
+            _forge_hide_widget(properties_win, "upgrade_button")
+            _forge_hide_widget(properties_win, "upgrade_text")
+            _forge_hide_widget(properties_win, "upgrade_essence_warning")
+
+            _ensure_amulet_buttons(properties_win)
+            _show_amulet_buttons(properties_win, true)
+            _handle_amulet_button_clicks(properties_win)
+
+            -- Rename viewport_title from "Amulet of Ashur" → "Accessory Crafting".
+            -- vanilla `_set_title_text` writes Localize("weave_amulet_name") into
+            -- this widget every frame in some code paths; the per-frame polish
+            -- pass here re-overrides it after each vanilla write.
+            _forge_set_text(properties_win, "viewport_title", "ACCESSORY CRAFTING")
+            -- viewport_sub_title is the career name — leave it alone (still useful).
+
+            -- Hide the 3D model. The unit_previewer renders the rotating amulet
+            -- inside viewport_widget; setting `_skip_previewer_update` makes the
+            -- update-hook below short-circuit before draw_widget hits the GPU.
+            properties_win._cim_skip_previewer = true
+        else
+            _show_amulet_buttons(properties_win, false)
+            properties_win._cim_skip_previewer = nil
+
+            -- Weapon mode: keep the vanilla upgrade_button visible + per-slot
+            -- relabel. upgrade_button is repurposed as our "Craft New" button
+            -- (see hook on `_upgrade_magic_level` below).
+            local craft_label = "CRAFT NEW WEAPON"
+            local sn = params and params.selected_slot_name
+            if sn == "slot_necklace" then craft_label = "CRAFT NEW NECKLACE"
+            elseif sn == "slot_charm" then craft_label = "CRAFT NEW CHARM"
+            elseif sn == "slot_trinket" then craft_label = "CRAFT NEW TRINKET"
+            end
+            _forge_set_text(properties_win, "upgrade_text", craft_label)
         end
-        _forge_set_text(properties_win, "upgrade_text", craft_label)
-        _forge_hide_widget(properties_win, "upgrade_essence_warning")
         _forge_hide_widget(properties_win, "background_wheel")
         _forge_hide_widget(properties_win, "hdr_background_wheel")
         for i = 1, 3 do
@@ -811,8 +1497,6 @@ local function _forge_apply_ui_polish(forge_state)
 
         _forge_set_style_color(properties_win, "cluster_background_effect_1", "texture_id", {200, 180, 20, 10})
 
-        local params = properties_win._params
-        local sel_item = params and params.selected_item
         if sel_item and sel_item.backend_id then
             local items_backend = Managers.backend and Managers.backend:get_interface("items")
             if items_backend then
@@ -865,7 +1549,16 @@ mod:hook("BackendInterfaceWeavesPlayFab", "get_property_required_forge_level", f
 end)
 
 mod:hook("BackendInterfaceWeavesPlayFab", "get_property_mastery_costs", function(func, self, property_name)
-    if _custom_forge_active then return {0, 0, 0, 0, 0} end
+    if _custom_forge_active then
+        -- Button slot count = #costs (renderer reads it as `total_uses` in
+        -- hero_window_weave_properties.lua). Return exactly `cap` zero-cost
+        -- entries so stamina renders 2 slots, movespeed renders 1 (or 5
+        -- when the 2pct toggle is on), everything else stays at 5.
+        local cap = _bubble_cap(property_name)
+        local out = {}
+        for i = 1, cap do out[i] = 0 end
+        return out
+    end
     return func(self, property_name)
 end)
 
@@ -1005,24 +1698,156 @@ local function _mark_amulet_trait_dirty(slot_index)
     end
 end
 
+-- ============================================================
+-- Per-property bubble caps (stamina, movespeed, ...)
+-- ============================================================
+-- Most weave properties scale linearly: 5 bubbles maps to value 0.0..1.0,
+-- engine reads value into a 5-tier variable_bonus / variable_multiplier_max
+-- and gives a proportional effect. cim defaults to that.
+--
+-- A few adventure properties don't fit that mold:
+--
+--   `properties_stamina` has `variable_bonus = {1, 1, 1, 2, 2}` — three
+--   tiers give +1, two tiers give +2. So 1, 2, or 3 filled bubbles ALL
+--   map to "+1 stamina" (visible discontinuity the user reported); 4 or 5
+--   bubbles to "+2". User-facing fix: cap stamina at 2 bubbles, each
+--   bubble = one step (1 bubble = +1, 2 bubbles = +2).
+--
+--   `properties_movespeed` is a FLAT `multiplier = 1.05` — it doesn't
+--   scale with the stored value at all, always +5% if applied. The cim
+--   grid display read raw value-as-percent (so 4/5 bubbles showed "79%
+--   movement speed") even though the actual buff was +5%. Cap at 1
+--   bubble so there's no discrepancy.
+--
+-- Conversion math (`_value_for_bubbles`) for capped properties: place
+-- each bubble's value at the midpoint of its target buff tier so the
+-- resolver in buff_extension.lua:208-216 lands cleanly:
+--   stamina 1/2 → value 0.4 → bonus_index = floor(0.4 / 0.2) + 1 = 3 → +1
+--   stamina 2/2 → value 1.0 → bonus_index = #table = 5 → +2
+--   movespeed 1/1 → value 1.0 → always +5% (no tier lookup)
+-- Per-property bubble cap. Default `movespeed = 1` matches vanilla's single
+-- +5% multiplier. The `movespeed_2pct_mode` VMF toggle uncaps to 5 (each
+-- bubble = +2% multiplier, max +10%) so we read it dynamically.
+local _PROPERTY_BUBBLE_CAP_STATIC = {
+    stamina   = 2,
+    movespeed = 1,
+}
+
+_strip_weave = function(weave_key)
+    return (weave_key or ""):gsub("^weave_", "")
+end
+
+_bubble_cap = function(weave_key)
+    local key = _strip_weave(weave_key)
+    if key == "movespeed" and mod:get("movespeed_2pct_mode") then return 5 end
+    return _PROPERTY_BUBBLE_CAP_STATIC[key] or 5
+end
+
+-- value 0..1 that the engine should resolve for `count` filled bubbles.
+-- Default linear maps count/5 for backward compatibility with the existing
+-- 5-bubble properties.
+_value_for_bubbles = function(weave_key, count)
+    local key = _strip_weave(weave_key)
+    -- Movespeed 2pct mode: 5 bubbles, each adds 0.2 to the stored value.
+    -- buff_extension lerps multiplier as 1 + (max-1)*value. If we also bump
+    -- `variable_multiplier_max` from 1.05 → 1.10 (in the load-time patch
+    -- below), then 1 bubble (value 0.2) → 1 + 0.10*0.2 = 1.02 = +2%, and
+    -- 5 bubbles (value 1.0) → 1 + 0.10*1.0 = 1.10 = +10%.
+    if key == "movespeed" and mod:get("movespeed_2pct_mode") then
+        return math.min(count / 5, 1.0)
+    end
+    local cap = _bubble_cap(weave_key)
+    if cap == 5 then return math.min(count / 5, 1.0) end
+    if count <= 0 then return 0 end
+    if count >= cap then return 1.0 end
+    -- For stamina cap=2 and count=1: lands at 0.4 (vanilla tier 2 = +1).
+    return (count * 2 - 1) / (cap * 2)
+end
+
+-- Bubble count to fill for an item that has property value `value`. Inverse
+-- of the apply step — used during seeding. For stamina we use the engine's
+-- own tier-breakpoint (>= 0.6 ⇒ +2) so the visible bubble count matches the
+-- visible +N stamina readout.
+_bubbles_for_value = function(weave_key, value)
+    local cap = _bubble_cap(weave_key)
+    if value == nil or value <= 0 then return 0 end
+    if cap == 5 then return math.max(1, math.ceil(value * 5)) end
+    if cap == 1 then return 1 end
+    if cap == 2 then
+        return value >= 0.6 and 2 or 1
+    end
+    -- Generic: scale value over cap, floor to integer, clamp.
+    return math.max(1, math.min(cap, math.ceil(value * cap)))
+end
+
+-- ============================================================
+-- Movespeed buff scaling — 2pct toggle apply path patch
+-- ============================================================
+-- Vanilla's `apply_buff_tweak_data` (buff_utils.lua:13-21) runs at engine
+-- load and merges `buff_tweak_data.properties_movespeed = { multiplier = 1.05 }`
+-- into `WeaponProperties.buff_templates.properties_movespeed.buffs[1]`. That
+-- static multiplier short-circuits the variable-value lerp in
+-- buff_extension.lua:200-237 — vanilla movespeed is binary, applied = +5%,
+-- not applied = no buff.
+--
+-- For the `movespeed_2pct_mode` toggle to actually scale per-bubble (1 bubble
+-- = +2%, 5 bubbles = +10%) we need the lerp path to fire. The lerp uses
+-- `variable_multiplier_table = { min, max }` and computes
+-- `multiplier = math.lerp(min, max, variable_value)`. So setting
+-- `variable_multiplier = { 1.0, 1.10 }` with stored values 0.2 / 0.4 / 0.6
+-- / 0.8 / 1.0 yields multipliers 1.02 / 1.04 / 1.06 / 1.08 / 1.10 — exactly
+-- the +2% / +4% / +6% / +8% / +10% the user wants.
+--
+-- When toggle is OFF, restore the vanilla static `multiplier = 1.05` so the
+-- buff still applies at +5% for the default 1-bubble case.
+--
+-- Called: once on mod load, once on every VMF setting change.
+local function _patch_movespeed_buff()
+    local WP = rawget(_G, "WeaponProperties")
+    local tpl = WP and WP.buff_templates and WP.buff_templates.properties_movespeed
+    local sub = tpl and tpl.buffs and tpl.buffs[1]
+    if not sub then return end
+    if mod:get("movespeed_2pct_mode") then
+        sub.multiplier = nil
+        sub.variable_multiplier = { 1.0, 1.10 }
+    else
+        sub.multiplier = 1.05
+        sub.variable_multiplier = nil
+    end
+end
+
+-- Apply once at mod load (the buff template is already populated by vanilla
+-- at engine boot, so this just rewrites the multiplier shape).
+_patch_movespeed_buff()
+
+-- Re-apply when the user toggles the setting in the VMF menu. VMF fires
+-- `on_setting_changed` with the setting_id; gate on our toggle to avoid
+-- spurious work on unrelated setting flips.
+mod.on_setting_changed = function(setting_id)
+    if setting_id == "movespeed_2pct_mode" then
+        _patch_movespeed_buff()
+    end
+end
+
 local function _seed_one_item(item, props_out, traits_out, slot_index)
     if not item then return end
     local layer_offset = (slot_index - 1) * _AMULET_LAYER_SIZE
     if item.properties then
         local wp = rawget(_G, "WeaveProperties")
         local wp_props = wp and wp.properties
-        local num_slots = 5
         local next_slot = layer_offset + 1
         for prop_key, value in pairs(item.properties) do
             local weave_key = "weave_" .. prop_key
             if wp_props and wp_props[weave_key] then
-                local filled = math.max(1, math.ceil(value * num_slots))
+                local filled = _bubbles_for_value(weave_key, value)
                 local indices = {}
                 for i = 1, filled do
                     indices[i] = next_slot
                     next_slot = next_slot + 1
                 end
-                props_out[weave_key] = indices
+                if #indices > 0 then
+                    props_out[weave_key] = indices
+                end
             else
                 mod:info("Forge seed: no weave mapping for prop '%s' (tried '%s')", prop_key, weave_key)
             end
@@ -1079,12 +1904,12 @@ local function _forge_apply_to_amulet(career_name)
     local items_backend = Managers.backend:get_interface("items")
     if not items_backend then return end
 
-    local num_slots = 5
-
-    -- Group property fills by layer (= accessory slot 1/2/3)
+    -- Group property fills by layer (= accessory slot 1/2/3). Per-property
+    -- caps via `_value_for_bubbles` handle stamina/movespeed tier-snapping;
+    -- everything else stays on the linear count/5 mapping.
     local per_slot_props = { {}, {}, {} }
     for weave_key, slot_indices in pairs(data.properties or {}) do
-        local prop_key = weave_key:gsub("^weave_", "")
+        local prop_key = _strip_weave(weave_key)
         local layer_counts = { 0, 0, 0 }
         for _, idx in ipairs(slot_indices) do
             local layer = math.ceil(idx / _AMULET_LAYER_SIZE)
@@ -1094,7 +1919,7 @@ local function _forge_apply_to_amulet(career_name)
         end
         for layer, count in ipairs(layer_counts) do
             if count > 0 then
-                per_slot_props[layer][prop_key] = math.min(count / num_slots, 1.0)
+                per_slot_props[layer][prop_key] = _value_for_bubbles(weave_key, count)
             end
         end
     end
@@ -1144,13 +1969,11 @@ local function _forge_apply_to_item(career_name, item_backend_id)
     if not item then return end
 
     local data = _forge_seed_item(career_name, item_backend_id)
-    local num_slots = 5
 
     local new_props = {}
     for weave_key, slots in pairs(data.properties) do
-        local prop_key = weave_key:gsub("^weave_", "")
-        local value = #slots / num_slots
-        new_props[prop_key] = math.min(value, 1.0)
+        local prop_key = _strip_weave(weave_key)
+        new_props[prop_key] = _value_for_bubbles(weave_key, #slots)
     end
     item.properties = new_props
 
@@ -1238,8 +2061,58 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
     if _custom_forge_active then
         local data = _forge_seed_item(career_name, item_backend_id)
         local props = data.properties
+        -- Distinct-property cap per item / accessory layer. Vanilla allows max
+        -- 2 distinct properties on any weapon/jewelry item. Single-item editor
+        -- (weapon): one layer covering all slots → cap = 2 total distinct keys.
+        -- Amulet editor: per-layer cap of 2 (each accessory holds 2 distinct
+        -- properties max). Vanilla's HeroWindowItemCustomization Apply-Skin
+        -- preview only ships widgets for `button_hotspot_1` / `_2`; writing
+        -- a 3rd distinct key produces an item that crashes that view
+        -- (`item_customization.lua:1213 attempt to index a nil value`,
+        -- hotspot_3 missing). Burned cim v0.7.23-alpha → v0.7.24 / v0.7.25 fix.
+        local MAX_DISTINCT_PROPERTIES = 2
         if not props[property_key] then
+            local target_layer = item_backend_id and 1 or math.ceil(slot_index / _AMULET_LAYER_SIZE)
+            local distinct_in_layer = 0
+            for existing_key, existing_indices in pairs(props) do
+                if existing_key ~= property_key then
+                    local hit = false
+                    for _, existing_idx in ipairs(existing_indices) do
+                        local layer = item_backend_id and 1 or math.ceil(existing_idx / _AMULET_LAYER_SIZE)
+                        if layer == target_layer then hit = true; break end
+                    end
+                    if hit then distinct_in_layer = distinct_in_layer + 1 end
+                end
+            end
+            if distinct_in_layer >= MAX_DISTINCT_PROPERTIES then
+                mod:echo(string.format(
+                    "[cim] Max %d distinct properties per %s. Remove one to add %s.",
+                    MAX_DISTINCT_PROPERTIES,
+                    item_backend_id and "item" or "accessory",
+                    _strip_weave(property_key)))
+                return
+            end
             props[property_key] = {}
+        end
+        -- Per-property bubble cap. Refuse the click if the player has already
+        -- filled the cap within the current accessory layer (amulet) or
+        -- within the property's whole slot range (single-weapon case where
+        -- there's only one layer).
+        local cap = _bubble_cap(property_key)
+        if cap < 5 then
+            local same_layer_count = 0
+            local target_layer = item_backend_id and 1 or math.ceil(slot_index / _AMULET_LAYER_SIZE)
+            for _, existing_idx in ipairs(props[property_key]) do
+                local layer = item_backend_id and 1 or math.ceil(existing_idx / _AMULET_LAYER_SIZE)
+                if layer == target_layer then
+                    same_layer_count = same_layer_count + 1
+                end
+            end
+            if same_layer_count >= cap then
+                mod:echo(string.format("[cim] %s capped at %d bubble%s (vanilla limit).",
+                    _strip_weave(property_key), cap, cap == 1 and "" or "s"))
+                return
+            end
         end
         props[property_key][#props[property_key] + 1] = slot_index
         if not item_backend_id then _mark_amulet_property_dirty(slot_index) end
@@ -1441,12 +2314,22 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_present_item", function(func, self, it
     viewport_data.item = display_item
 
     local item_data = display_item.data
-    local power_level = display_item.power_level or 300
+    -- Power preview always shows the WILL-BE power (= the base_power_level
+    -- slider). The input item's own power doesn't matter once you click Craft;
+    -- the new item is created at base_power_level. Feedback #9: pre-v0.7.24
+    -- the preview showed the input's power (often 5 for blacksmith templates)
+    -- and confused users into thinking the crafted item would be 5 power.
+    local base_power = (mod._cim_base_power and mod._cim_base_power()) or 300
+    local input_power = display_item.power_level or base_power
+    local power_text = tostring(base_power)
+    if input_power ~= base_power then
+        power_text = tostring(input_power) .. " > " .. tostring(base_power)
+    end
 
     local widgets_by_name = self._widgets_by_name
     widgets_by_name.viewport_level_value.content.visible = false
     widgets_by_name.viewport_level_title.content.visible = false
-    widgets_by_name.viewport_power_value.content.text = tostring(power_level)
+    widgets_by_name.viewport_power_value.content.text = power_text
     widgets_by_name.viewport_power_title.content.visible = true
     widgets_by_name.viewport_power_value.content.visible = true
     widgets_by_name.viewport_title.content.text = Localize(item_data.display_name)
@@ -1606,8 +2489,36 @@ local function _athanor_retry_pending()
     end
 end
 
+-- Timer for the deferred "let the mirror settle" loadout restore. Set by
+-- on_game_state_changed; consumed in mod.update (chain added at file bottom).
+-- Counts down in real time; once it hits 0 we retry _restore_modded_loadout.
+-- This catches the case where PlayFab's _set_inital_career_data /
+-- _fix_career_data path wipes the user's saved modded loadout AFTER our
+-- _create_interfaces hook already ran the first restore pass.
+local _cim_loadout_restore_timer = nil
+
 mod.on_game_state_changed = function()
     _athanor_retry_pending()
+    -- Schedule a deferred loadout restore. 1.0s is empirically enough for
+    -- PlayFab's signin → request_characters → _set_inital_career_data →
+    -- _fix_career_data round-trip to complete and the mirror to settle.
+    -- A second pass at 3.0s catches slow modded-realm signin cases.
+    _cim_loadout_restore_timer = 1.0
+end
+
+mod.update = function(dt)
+    if _cim_loadout_restore_timer then
+        _cim_loadout_restore_timer = _cim_loadout_restore_timer - (dt or 0)
+        if _cim_loadout_restore_timer <= 0 then
+            _cim_loadout_restore_timer = nil
+            if _restore_modded_loadout then
+                -- Idempotent: set_loadout_item just rewrites the mirror entry
+                -- if it already matches. Safer than gating on "did PlayFab
+                -- wipe us?" detection.
+                _restore_modded_loadout()
+            end
+        end
+    end
 end
 
 -- --- Weapon select: craft item on equip press ---
@@ -1721,6 +2632,60 @@ mod:hook_safe("HeroWindowWeaveProperties", "_set_essence_upgrade_cost", function
     if warn and warn.content then warn.content.visible = false end
 end)
 
+-- Single-slot amulet craft helper. Clones the equipped item's current state
+-- (already mutated by `_forge_apply_to_amulet` on each bubble click) into a
+-- fresh modded item, registers it in cim's save layer, and equips it.
+-- Shared between the 3 cim-injected craft buttons (one per slot) and the
+-- legacy "Craft All" iteration in the `_upgrade_magic_level` hook below.
+-- Per `feedback_lua_forward_reference`, exposed as `mod._cim_amulet_craft_one_slot`
+-- so the button click probe (defined ~1500 lines above) can resolve it at
+-- call time without a forward-declaration dance.
+local function _cim_amulet_craft_one_slot(properties_win, slot_index, slot_name)
+    if not (slot_index and slot_name) then return false, "missing args" end
+    local backend_items = Managers.backend and Managers.backend:get_interface("items")
+    local career_name = properties_win and properties_win._career_name
+    if not backend_items or not career_name then
+        mod:echo("[cim] Craft: backend / career not ready")
+        return false
+    end
+    local src_bid = backend_items:get_loadout_item_id(career_name, slot_name)
+    local src_item = src_bid and backend_items:get_item_from_id(src_bid)
+    local src_key = src_item and (src_item.key or src_item.ItemId)
+    if not src_key then
+        mod:echo("[cim] Craft " .. slot_name .. ": no equipped item to clone from")
+        return false
+    end
+    local new_props = {}
+    if src_item.properties then
+        for k, v in pairs(src_item.properties) do new_props[k] = v end
+    end
+    local new_traits = {}
+    if src_item.traits then
+        for i, t in ipairs(src_item.traits) do new_traits[i] = t end
+    end
+    local power = (mod._cim_base_power and mod._cim_base_power()) or 300
+    local new_bid = Application.guid()
+    local weapon_data = {
+        item_key = src_key,
+        properties = new_props,
+        traits = new_traits,
+        power_level = power,
+        rarity = "modded",
+        via_mirror = true,
+    }
+    local injected, err = _athanor_inject_item(weapon_data, new_bid)
+    if not injected then
+        mod:echo("[cim] Craft " .. slot_name .. " failed: " .. tostring(err))
+        return false
+    end
+    if mod._cim_register_craft then mod._cim_register_craft(new_bid, weapon_data) end
+    pcall(backend_items.set_loadout_item, backend_items, new_bid, career_name, slot_name)
+    _amulet_dirty[slot_index] = false
+    mod:echo("[cim] Crafted new " .. slot_name:gsub("^slot_", ""):gsub("_1$", ""))
+    return true
+end
+mod._cim_amulet_craft_one_slot = _cim_amulet_craft_one_slot
+
 mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, self)
     if not _custom_forge_active then return func(self) end
 
@@ -1728,57 +2693,21 @@ mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, sel
     local item_data = item and item.data
     local item_key = item_data and (item_data.key or item_data.name)
 
-    -- Amulet case: no selected_item. Iterate dirty accessory slots; for each,
-    -- create a new modded item with the current bubble state and equip it.
+    -- Amulet case: no selected_item. Iterate dirty accessory slots and craft
+    -- each via the shared single-slot helper. This branch still runs if the
+    -- legacy `upgrade_button` somehow fires (e.g. gamepad activation while in
+    -- amulet view) — the 3 cim per-slot buttons supersede it visually but the
+    -- legacy path stays wired for compat.
     if not item then
-        local backend_items = Managers.backend and Managers.backend:get_interface("items")
-        local career_name = self._career_name
-        if not backend_items or not career_name then
-            mod:echo("[cim] Craft: backend / career not ready")
-            return
-        end
         local crafted = 0
         for slot_index, slot_name in ipairs(_AMULET_SLOT_BY_INDEX) do
             if _amulet_dirty[slot_index] then
-                local src_bid = backend_items:get_loadout_item_id(career_name, slot_name)
-                local src_item = src_bid and backend_items:get_item_from_id(src_bid)
-                local src_key = src_item and (src_item.key or src_item.ItemId)
-                if src_key then
-                    local new_props = {}
-                    if src_item.properties then
-                        for k, v in pairs(src_item.properties) do new_props[k] = v end
-                    end
-                    local new_traits = {}
-                    if src_item.traits then
-                        for i, t in ipairs(src_item.traits) do new_traits[i] = t end
-                    end
-
-                    local new_bid = Application.guid()
-                    local weapon_data = {
-                        item_key = src_key,
-                        properties = new_props,
-                        traits = new_traits,
-                        power_level = 300,
-                        rarity = "modded",
-                        via_mirror = true,
-                    }
-                    local injected, err = _athanor_inject_item(weapon_data, new_bid)
-                    if injected then
-                        if mod._cim_register_craft then mod._cim_register_craft(new_bid, weapon_data) end
-                        pcall(backend_items.set_loadout_item, backend_items,
-                              new_bid, career_name, slot_name)
-                        crafted = crafted + 1
-                        _amulet_dirty[slot_index] = false
-                    else
-                        mod:echo("[cim] Craft " .. slot_name .. " failed: " .. tostring(err))
-                    end
+                if _cim_amulet_craft_one_slot(self, slot_index, slot_name) then
+                    crafted = crafted + 1
                 end
             end
         end
-        if crafted > 0 then
-            mod:echo("[cim] Crafted " .. crafted .. " modded accessor" ..
-                     (crafted == 1 and "y" or "ies"))
-        else
+        if crafted == 0 then
             mod:echo("[cim] No accessory edits to craft (Apply auto-runs on bubble click)")
         end
         return
@@ -2516,3 +3445,257 @@ mod:command("forge_delete", "Delete a forged weapon (usage: /forge_delete <backe
     end
     mod:echo("Forge: deleted " .. target_bid)
 end)
+
+-- ============================================================
+-- /regression_test checks (see scaffold near MOD_VERSION).
+-- ============================================================
+
+_rt_register("pool_excludes_scrubbed", function()
+    -- v0.7.4: hook installed on DeusRunController.get_weapon_pool to drop
+    -- scrubbed entries. Verify the class & method are present.
+    local cls = rawget(_G, "DeusRunController")
+    if not cls then return "DeusRunController not loaded (run in-keep)" end
+    if type(cls.get_weapon_pool) ~= "function" then
+        return "get_weapon_pool missing on DeusRunController"
+    end
+end)
+
+_rt_register("single_on_enter_hook_per_class", function()
+    -- v0.7.8: standard_forge.lua hooks on_enter exactly once per class
+    -- (HeroWindowItemCustomization, HeroWindowCrafting, HeroWindowCraftingConsole).
+    -- Verify class presence. We can't easily count hooks from outside VMF.
+    local classes = { "HeroWindowItemCustomization", "HeroWindowCrafting", "HeroWindowCraftingConsole" }
+    local missing = {}
+    for _, name in ipairs(classes) do
+        local cls = rawget(_G, name)
+        if not cls then missing[#missing + 1] = name end
+    end
+    if #missing > 0 then
+        return "classes not loaded (run in-keep): " .. table.concat(missing, ", ")
+    end
+end)
+
+-- ============================================================
+-- Save/restore invariants (added 2026-05-23 after user reported
+-- equipped accessories + last weapons didn't restore on fresh
+-- load). These exercise the VMF settings round-trip so a future
+-- regression of the "stale modded_loadout entry overwrites vanilla
+-- restore" bug fails the test instead of silently shipping.
+-- ============================================================
+
+-- Test bid pattern: must look like a real cim craft to _cim_is_modded_backend_id.
+-- We INJECT the fake bid into _forged_weapons during the test so the modded
+-- check passes, then remove on teardown via _rt_with_loadout_sandbox.
+local _RT_FAKE_BID         = "rt_test_bid_dont_ship_me"
+local _RT_FAKE_VANILLA_BID = "rt_test_vanilla_bid"
+local _RT_FAKE_CAREER      = "_rt_test_career"
+local _RT_FAKE_SLOT        = "_rt_test_slot"
+
+local function _rt_with_loadout_sandbox(body)
+    -- Snapshot real state via deep-copy of both the on-disk SETTINGS payload
+    -- AND the in-memory tables so any failed assertion in `body` doesn't
+    -- leave fake entries in the player's save.
+    local saved_forged      = mod:get("forged_weapons")
+    local saved_loadout     = mod:get("modded_loadout")
+    local snap_forged_mem   = {}
+    for k, v in pairs(_forged_weapons) do snap_forged_mem[k] = v end
+    local snap_loadout_mem  = {}
+    for c, slots in pairs(_modded_loadout) do
+        snap_loadout_mem[c] = {}
+        for s, b in pairs(slots) do snap_loadout_mem[c][s] = b end
+    end
+
+    local ok, err = pcall(body)
+
+    -- Always teardown — restore in-memory tables AND on-disk payload.
+    _forged_weapons = {}
+    for k, v in pairs(snap_forged_mem) do _forged_weapons[k] = v end
+    _modded_loadout = {}
+    for c, slots in pairs(snap_loadout_mem) do
+        _modded_loadout[c] = {}
+        for s, b in pairs(slots) do _modded_loadout[c][s] = b end
+    end
+    mod:set("forged_weapons", saved_forged)
+    mod:set("modded_loadout", saved_loadout)
+
+    if not ok then error(err, 0) end
+end
+
+_rt_register("modded_loadout_round_trip_save_then_clear", function()
+    -- Validates the v0.7.33-alpha fix for the 2026-05-23 user report.
+    -- Step 1: equip a modded item -> _modded_loadout gets the entry, and
+    --         round-tripping via mod:get/set preserves it.
+    -- Step 2: equip a NON-modded item at the same (career, slot) -> the cim
+    --         entry MUST be cleared. Pre-fix code only saved, never cleared,
+    --         so stale entries clobbered vanilla restore on next session.
+    local cls = rawget(_G, "BackendInterfaceItemPlayfab")
+    if not cls or type(cls.set_loadout_item) ~= "function" then
+        return "skip: BackendInterfaceItemPlayfab.set_loadout_item not loaded (run in-keep)"
+    end
+    local hook_fn = cls.set_loadout_item
+
+    local result_err
+    _rt_with_loadout_sandbox(function()
+        -- Pretend rt_test_bid is a real cim craft so _cim_is_modded_backend_id
+        -- returns true. We register/unregister via the public API to mirror
+        -- the real craft path.
+        mod._cim_register_craft(_RT_FAKE_BID, {
+            item_key = "es_1h_falchion", properties = {}, traits = {}, power_level = 300, rarity = "modded",
+        })
+
+        -- Dummy `items` table — vanilla set_loadout_item only touches fields
+        -- that exist on the real interface. Our hook is hook_safe so it fires
+        -- after vanilla returns; if vanilla errors we still PASS as long as
+        -- the cim hook's side effect ran. Either way we don't care about the
+        -- vanilla path here — we're testing the cim hook's invariants.
+        local fake_items = setmetatable({}, { __index = function() return function() end end })
+
+        -- Step 1: equip modded.
+        pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT)
+
+        -- Round-trip via VMF settings: clear in-memory, reload from disk, check.
+        _modded_loadout = {}
+        _modded_loadout_load()
+        if not (_modded_loadout[_RT_FAKE_CAREER] and _modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_SLOT] == _RT_FAKE_BID) then
+            result_err = "modded equip not persisted: expected bid=" .. _RT_FAKE_BID
+            return
+        end
+
+        -- Step 2: equip vanilla (non-modded) at the same career/slot.
+        pcall(hook_fn, fake_items, _RT_FAKE_VANILLA_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT)
+
+        _modded_loadout = {}
+        _modded_loadout_load()
+        local stale = _modded_loadout[_RT_FAKE_CAREER] and _modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_SLOT]
+        if stale ~= nil then
+            result_err = "STALE modded entry not cleared on vanilla equip: still " .. tostring(stale)
+                .. " (this is the 2026-05-23 user-report bug)"
+            return
+        end
+
+        mod._cim_unregister_craft(_RT_FAKE_BID)
+    end)
+    if result_err then return result_err end
+end)
+
+_rt_register("forged_weapons_round_trip", function()
+    -- Register a fake craft, save, force-reload, confirm parity.
+    local result_err
+    _rt_with_loadout_sandbox(function()
+        local payload = {
+            item_key = "es_1h_falchion",
+            properties = { attack_speed = 5, crit_chance = 5 },
+            traits = { "melee_attack_speed_on_crit" },
+            power_level = 300,
+            rarity = "modded",
+            skin = nil,
+        }
+        mod._cim_register_craft(_RT_FAKE_BID, payload)
+
+        -- Force the on-disk round-trip.
+        _forged_weapons = {}
+        _forge_load()
+
+        local got = _forged_weapons[_RT_FAKE_BID]
+        if not got then
+            result_err = "register/save/load lost the entry"
+            return
+        end
+        if got.item_key ~= payload.item_key then
+            result_err = ("item_key mismatch: got=%s expected=%s"):format(tostring(got.item_key), payload.item_key)
+            return
+        end
+        local got_attack = (got.properties or {}).attack_speed
+        if got_attack ~= 5 then
+            result_err = ("properties.attack_speed mismatch: got=%s expected=5"):format(tostring(got_attack))
+            return
+        end
+        local got_trait = (got.traits or {})[1]
+        if got_trait ~= "melee_attack_speed_on_crit" then
+            result_err = ("traits[1] mismatch: got=%s expected=melee_attack_speed_on_crit"):format(tostring(got_trait))
+            return
+        end
+
+        mod._cim_unregister_craft(_RT_FAKE_BID)
+        -- Confirm unregister wrote through.
+        _forged_weapons = {}
+        _forge_load()
+        if _forged_weapons[_RT_FAKE_BID] ~= nil then
+            result_err = "unregister_craft did not persist nil-write"
+            return
+        end
+    end)
+    if result_err then return result_err end
+end)
+
+_rt_register("restore_after_playfab_inventory_populated", function()
+    -- _restore_modded_loadout must run AFTER vanilla PlayFab inventory sync
+    -- finishes, otherwise set_loadout_item targets an empty mirror and the
+    -- restore silently no-ops. We can't intercept the call ordering after
+    -- the fact, so we check the current state at /cim_regression_test time:
+    -- if the mirror's _inventory_items is empty AND we're past
+    -- _create_interfaces, restore would have just no-op'd.
+    local backend = Managers and Managers.backend
+    if not backend then return "skip: Managers.backend not ready (run in-keep)" end
+    local items_iface = backend.get_interface and backend:get_interface("items")
+    local mirror = items_iface and items_iface._backend_mirror
+    local inv = mirror and mirror._inventory_items
+    if type(inv) ~= "table" then
+        return "skip: backend_mirror._inventory_items not populated yet"
+    end
+    local count = 0
+    for _ in pairs(inv) do count = count + 1; if count > 0 then break end end
+    if count == 0 then
+        return "PlayFab inventory empty at restore time -- _restore_modded_loadout would silently no-op"
+    end
+end)
+
+_rt_register("inventory_property_count_within_cap", function()
+    -- v0.7.25 trim invariant: no item in the mirror should carry >2
+    -- properties. The _create_interfaces hook trims on load; if anything is
+    -- still over, either the trim broke or a code path bypassed it.
+    local backend = Managers and Managers.backend
+    if not backend then return "skip: Managers.backend not ready (run in-keep)" end
+    local items_iface = backend.get_interface and backend:get_interface("items")
+    local mirror = items_iface and items_iface._backend_mirror
+    local inv = mirror and mirror._inventory_items
+    if type(inv) ~= "table" then return "skip: backend_mirror._inventory_items not ready" end
+    local offenders = {}
+    for bid, item in pairs(inv) do
+        local props = item and item.properties
+        if type(props) == "table" then
+            local n = 0
+            for _ in pairs(props) do n = n + 1 end
+            if n > 2 then
+                offenders[#offenders + 1] = tostring(bid) .. "(" .. tostring(n) .. ")"
+                if #offenders >= 5 then break end
+            end
+        end
+    end
+    if #offenders > 0 then
+        return "items over 2-property cap: " .. table.concat(offenders, ", ")
+    end
+end)
+
+_rt_register("modded_loadout_has_no_stale_entries", function()
+    -- Every saved _modded_loadout entry must reference either a live
+    -- _forged_weapons bid or a cwv_-prefixed item. Stale entries (bid no
+    -- longer registered anywhere) are exactly the overwrite-bug substrate:
+    -- on next session they restore-clobber the vanilla loadout with an item
+    -- that no longer exists OR was already deleted.
+    local stale = {}
+    for career_name, slots in pairs(_modded_loadout) do
+        for slot_name, bid in pairs(slots) do
+            local live = (type(bid) == "string") and (_forged_weapons[bid] or bid:sub(1, 4) == "cwv_")
+            if not live then
+                stale[#stale + 1] = string.format("%s/%s=%s", tostring(career_name), tostring(slot_name), tostring(bid))
+                if #stale >= 5 then break end
+            end
+        end
+        if #stale >= 5 then break end
+    end
+    if #stale > 0 then
+        return "stale modded_loadout entries (will clobber vanilla restore): " .. table.concat(stale, ", ")
+    end
+end)
+

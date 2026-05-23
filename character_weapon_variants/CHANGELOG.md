@@ -1,5 +1,56 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.330-dev (2026-05-23) — Convert 3 NetworkLookup lookups to rawget (latent strict-__index crash fix)
+
+### Why
+`NetworkLookup.*` subtables install a strict `__index = error()` metatable at boot. Plain `NetworkLookup.foo[key]` on a missing key throws — see memory `reference_vt2_strict_lookup_rawget.md`. The lint pass on 2026-05-23 flagged three call sites in the CWV stick / pickup hooks: one `damage_profiles` reverse lookup in the projectile init post-fix and two `pickup_names` reverse lookups in `PickupSystem.rpc_spawn_linked_pickup` / `ProjectileSystem.rpc_spawn_pickup_projectile` RPC handlers. The keys come from RPC payloads (`pickup_name_id` int IDs from a peer), so a malformed/out-of-range ID would otherwise hit the strict-lookup metatable instead of returning nil.
+
+### Changed
+- `character_weapon_variants.lua` — three sites converted:
+  - Line ~5156: `NetworkLookup.damage_profiles[our_action.impact_data.damage_profile]` → `rawget(...)` (existing `if dmg_id then ... end` guard already handles nil correctly)
+  - Line ~5241: `NetworkLookup.pickup_names[pickup_name_id]` → `rawget(...)` in `PickupSystem.rpc_spawn_linked_pickup` hook (only the final subscript; outer table-existence chain preserved)
+  - Line ~5256: `NetworkLookup.pickup_names[pickup_name_id]` → `rawget(...)` in `ProjectileSystem.rpc_spawn_pickup_projectile` hook (only the final subscript; outer table-existence chain preserved)
+- Downstream `_is_our_pickup(pickup_name)` already handles nil input — no further guards needed.
+
+### Verification
+1. `tools/mod-lint/lint-mod.ps1` — passes.
+2. `tools/lint/regression-lint.ps1 -Quiet` — sites no longer appear in `strict-table-lookup` findings.
+
+## 0.1.329-dev (2026-05-23) — Remove unused public exports `mod.weapon_analogues` + `mod.get_analogues`
+
+### Why
+Audit cleanup (AUDIT_section_e.md row #5 + CWV's own CODE_REVIEW.md
+"no external consumer found"). The contract was originally documented as
+"consumed by cosmetics_tweaker's LA bridge for cross-character widening" in
+v0.1.45-dev, but no such call ever shipped — cross-repo grep confirms zero
+callers. Per audit roadmap #13.
+
+### Changed
+- character_weapon_variants.lua:47-59 — deleted `mod.weapon_analogues`
+  table + `mod.get_analogues(item_key)` function. Comment preserves the
+  removal rationale + audit citation.
+
+### Deferred to a future focused session
+- The 22 bare-global → local forward-decl refactor (audit roadmap item #9)
+  was attempted in this session but introduced a Stingray bundler crash
+  (error 4201742337) that couldn't be pinpointed within session timebox.
+  Reverted. Will be redone manually piece-by-piece with build-verification
+  after each chunk. 141 luacheck warnings for these bare globals remain
+  open; they're a documentation concern, not a runtime one.
+
+### Changed
+
+- **Lua code hygiene (audit roadmap item #9):** Refactored 22 bare global variables to the canonical local forward-declaration pattern per feedback_lua_forward_reference.md. Forward-declarations inserted before the _toggle_musket_stance_and_rewield closure (line 2710) so the closure captures them in its upvalues, preventing early-reference errors.
+  - **9 functions:** _cwv_musket_pool_cap, _cwv_musket_sync_pool, _cwv_musket_register_ammo_ext, _track_old_musket_unit, _apply_old_musket_textures, _apply_old_musket_transform, _spawn_old_musket_fx_proxy, _destroy_old_musket_fx_proxy, _reapply_old_musket_transforms_all
+  - **13 data tables/constants:** _CWV_MUSKET_AMMO_EXTS, _CWV_RESERVE_PER_MUSKET, _CWV_OLD_MUSKET_POS_* (1P/3P, ranged/melee), _CWV_OLD_MUSKET_ROT_* (1P/3P, ranged/melee), _CWV_OLD_MUSKET_SCALE_* (1P/3P, ranged/melee), _CWV_OLD_MUSKET_FX_PROXY, _CWV_OLD_MUSKET_UNITS_* (1P/3P, ranged/melee)
+- **Luacheck baseline reduction:** W113 (accessing undefined variable) warnings fell from 141 to 24. Remaining 24 are W221 (never set) plus W411 (previously defined) warnings, which are expected under the forward-decl pattern — parse-time locals set at runtime.
+
+
+
+### Added
+
+- `/regression_test` chat command runs 4 in-game smoke checks for past fix-state: every registered `cwv_*` IML entry carries `cwv_variant = true`, none of them clobber `entry.name` with the cwv key (per `feedback_cwv_clone_name_clobber.md`), ammo-bearing bases get their `ammo_unit`/`projectile_units_template`/`pickup_template_name`/`link_pickup_template_name` mirrored (per `feedback_cwv_ammo_unit_required.md`), and `right_hand_unit` paths are reported when missing from `InventoryPackageList` (informational — overlay-piggyback variants legitimately use vanilla paths). Output: PASS/FAIL per check to chat plus log.
+
 ## 0.1.328-dev (2026-05-12) — Old Musket: stance-toggle wield anim picks correct chamber state + unconditional preview-hook logging
 - User: "when switching between melee and ranged mode, even when the weapon has a round in the chamber, the grip defaults to the 'weapon empty' style passive hold animation in first person."
 - Root cause: v0.1.307 passed `ammo_percent = 0` to `inv:add_equipment` unconditionally (to defeat the v0.1.305 free-chamber-refill exploit), then restored the precise current/reserve POST-spawn. But vanilla's wield-animation picker at `simple_inventory_extension.lua:2050` runs DURING the wield call (before our post-restore) and uses `ammo_extension:ammo_count() == 0` to select `wield_anim_not_loaded`. So spawned-with-0 always picked the empty-chamber animation, even when we restored the chamber to 1 immediately after.

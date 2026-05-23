@@ -1,0 +1,11 @@
+mod = [
+	"buff_tweaker"
+]
+
+package = [
+	"resource_packages/buff_tweaker/buff_tweaker"
+]
+
+lua = [
+	"scripts/mods/buff_tweaker/*"
+]
