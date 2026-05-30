@@ -42,7 +42,7 @@ DLC ownership is respected: skins with a `required_dlc` field in
 ItemMasterList only unlock if the player owns that DLC.
 ]]
 
-local mod = get_mod("cim")
+local mod = get_mod("cim_dev")
 
 local _fake_skin_backend_ids = {}
 local _pending_local_craft = nil

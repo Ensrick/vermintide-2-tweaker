@@ -21,7 +21,7 @@ Mutations are session-only. On game restart PlayFab reloads the canonical invent
 and reverts everything. This matches how the Athanor handles property/trait edits.
 ]]
 
-local mod = get_mod("cim")
+local mod = get_mod("cim_dev")
 
 -- ============================================================
 -- Lifecycle: track when the standard forge UI is open
@@ -917,7 +917,7 @@ synth.craft_trinket  = _make_craft_synth({ trinket = true })
 -- the same `base_power_level` setting and `prefill_random_properties` toggle
 -- as the UI path.
 -- v0.7.57-dev: exposed as mod._cim_craft_via_synth for the Athanor overview
--- jewelry buttons (defined in crafting_in_modded.lua). Same direct-craft
+-- jewelry buttons (defined in crafting_in_modded_dev.lua). Same direct-craft
 -- path the standard-forge accessory buttons + `/cim_craft_*` commands use.
 local function _craft_via_synth(slot_filter, friendly_label)
     local crafting = Managers.backend and Managers.backend:get_interface("crafting")

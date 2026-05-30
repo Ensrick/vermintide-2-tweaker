@@ -13,7 +13,7 @@ this file or anywhere after VMF init.
 Color is pure data — to change the look, edit MODDED_COLOR below (a, r, g, b).
 ]]
 
-local mod = get_mod("cim")
+local mod = get_mod("cim_dev")
 
 -- {alpha, r, g, b}. Soft pale gold — legible on dark inventory backgrounds,
 -- visually distinct from every vanilla rarity color.

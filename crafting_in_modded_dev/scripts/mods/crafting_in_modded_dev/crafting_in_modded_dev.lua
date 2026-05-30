@@ -15,7 +15,7 @@ Major sections (search by name to jump):
   * Manual console crafting (`cim forge`, `cim forge_confirm`)
 ]]
 
-local mod = get_mod("cim")
+local mod = get_mod("cim_dev")
 
 -- ============================================================
 -- Quiet-by-default `mod.echo` (chat suppression unless debug toggle is on)
@@ -76,7 +76,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.0"
+local MOD_VERSION = "0.7.69-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
@@ -104,7 +104,7 @@ end
 -- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
 -- one mod:info line at load. ALWAYS fires (operational telemetry).
 local function _settings_fingerprint()
-    local ok, data = pcall(require, "scripts/mods/crafting_in_modded/crafting_in_modded_data")
+    local ok, data = pcall(require, "scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_data")
     if not ok or type(data) ~= "table" then return "nodata" end
     local keys = {}
     local function walk(node)
@@ -185,32 +185,32 @@ mod:info("[regression-test-command] registered as /cim_regression_test")
 
 -- Register the "modded" rarity (and any future custom rarities) BEFORE
 -- anything else loads — sibling modules will create items with this rarity.
-local _ok_rr, _err_rr = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/modded_rarities")
+local _ok_rr, _err_rr = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/modded_rarities")
 if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err_rr)) end
 
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left
 -- the commit alive and PlayFab's anti-tamper rejected the modified inventory state.
-local _ok_sf, _err_sf = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/standard_forge")
+local _ok_sf, _err_sf = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/standard_forge")
 if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_sf)) end
 
 -- Modded-realm illusion swap (migrated from cosmetics_tweaker v0.8.49).
 -- Must load AFTER the forge core so `mod._cim_*` helpers are defined when
 -- the craft hook fires.
-local _ok_is, _err_is = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/illusion_swap")
+local _ok_is, _err_is = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/illusion_swap")
 if not _ok_is then mod:error("Failed to load illusion_swap: %s", tostring(_err_is)) end
 
 -- SaveWeapon mod importer. One-shot chat command (and bindable VMF keybind)
 -- that pulls every weapon the player saved via the SaveWeapon mod into cim's
 -- forged_weapons table. Idempotent; safe to re-run.
-local _ok_sw, _err_sw = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/saveweapon_import")
+local _ok_sw, _err_sw = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/saveweapon_import")
 if not _ok_sw then mod:error("Failed to load saveweapon_import: %s", tostring(_err_sw)) end
 
 -- Accessory craft panel — 3 per-slot craft buttons (own-scenegraph overlay,
 -- mirrors cosmetics_tweaker's _glow_picker pattern). Returns the Panel table;
 -- the _draw hook + craft callback are wired further down (after the amulet
 -- helpers + _custom_forge_active are declared).
-local _ok_acp, _AccessoryPanel = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/_accessory_craft_panel")
+local _ok_acp, _AccessoryPanel = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_accessory_craft_panel")
 if not _ok_acp then
     mod:error("Failed to load _accessory_craft_panel: %s", tostring(_AccessoryPanel))
     _AccessoryPanel = nil
@@ -219,7 +219,7 @@ end
 -- Debug autodumps. Sub-module exposes `mod._cim_autodump_*` helpers; every one
 -- is a fast no-op when the `debug_mode` setting is OFF. Hooks below call into
 -- them at well-known UI transitions / state changes.
-local _ok_dbg, _err_dbg = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/cim_debug")
+local _ok_dbg, _err_dbg = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/cim_debug")
 if not _ok_dbg then mod:error("Failed to load cim_debug: %s", tostring(_err_dbg)) end
 
 -- Backward-compat: pre-v0.7.0 cim used `rarity = "promo"` for crafts. Keep
@@ -465,7 +465,7 @@ local function _forge_inject_item(weapon_data, backend_id)
     local entry = _forge_create_item(weapon_data, backend_id)
     if not entry then return false end
 
-    _more_items_lib:add_mod_items_to_local_backend({entry}, "crafting_in_modded")
+    _more_items_lib:add_mod_items_to_local_backend({entry}, "crafting_in_modded_dev")
     if Managers.backend then
         local items = Managers.backend:get_interface("items")
         if items then items:_refresh() end
@@ -485,7 +485,7 @@ local function _forge_inject_all()
         if not w.via_mirror then
             local entry = _forge_create_item(w, bid)
             if entry then
-                _more_items_lib:add_mod_items_to_local_backend({entry}, "crafting_in_modded")
+                _more_items_lib:add_mod_items_to_local_backend({entry}, "crafting_in_modded_dev")
             end
         end
     end
@@ -4422,7 +4422,7 @@ mod:command("forge_delete", "Delete a forged weapon (usage: /forge_delete <backe
     end
 
     if _forge_detect_mil() then
-        pcall(_more_items_lib.remove_mod_items_from_local_backend, _more_items_lib, {target_bid}, "crafting_in_modded")
+        pcall(_more_items_lib.remove_mod_items_from_local_backend, _more_items_lib, {target_bid}, "crafting_in_modded_dev")
     end
     _forged_weapons[target_bid] = nil
     _forge_save()
@@ -4708,7 +4708,7 @@ _rt_register("localization_format_safe", function()
     -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
     -- ship even if the static check is skipped. RULE: any literal % in a loc
     -- string must be doubled to %%.
-    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/crafting_in_modded_localization")
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_localization")
     if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
     for k, v in pairs(loc) do
         if type(v) == "table" and type(v.en) == "string" then
@@ -4836,7 +4836,7 @@ _rt_register("accessories_label_on_overview", function()
     -- regression would silently ship. Static-source check via mod.dofile of
     -- the localization file (the only place the loc key lives) is a layer; we
     -- also pin the loc override here for the standard forge recipe title.
-    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded/modded_rarities")
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/modded_rarities")
     if not ok then return end  -- module load failed elsewhere; skip
     -- modded_rarities sets cat.display_name = "Accessories" on jewellery
     -- category at HeroWindowLoadoutInventory.on_enter. The Localize override

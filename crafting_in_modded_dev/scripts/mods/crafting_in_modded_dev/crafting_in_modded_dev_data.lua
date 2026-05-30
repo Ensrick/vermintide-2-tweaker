@@ -1,4 +1,4 @@
-local mod = get_mod("cim")
+local mod = get_mod("cim_dev")
 
 -- =========================================================================
 -- Custom UI textures shipped with cim. Currently just `icon_bg_modded` —

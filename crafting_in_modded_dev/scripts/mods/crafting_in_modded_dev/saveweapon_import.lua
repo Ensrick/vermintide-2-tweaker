@@ -15,7 +15,7 @@ SaveWeapon writes every property at value=1.0 on recreation
 (SaveWeapon.lua:561-564); we do the same.
 ]]
 
-local mod = get_mod("cim")
+local mod = get_mod("cim_dev")
 
 local SAVEWEAPON_MOD_ID = "SaveWeapon"
 

@@ -1,0 +1,19 @@
+mod = [
+	"crafting_in_modded_dev"
+]
+
+package = [
+	"resource_packages/crafting_in_modded_dev/crafting_in_modded_dev"
+]
+
+lua = [
+	"scripts/mods/crafting_in_modded_dev/*"
+]
+
+material = [
+	"materials/ui/icon_bg_modded"
+]
+
+texture = [
+	"gui/1080p/single_textures/cim/icon_bg_modded"
+]

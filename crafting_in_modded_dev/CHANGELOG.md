@@ -1,18 +1,471 @@
-# Crafting in Modded Changelog
+﻿# Crafting in Modded Changelog
 
-## 0.8.0 (2026-05-30) — Crafted items appear & persist; accessory craft buttons; big stability pass
+## 0.7.69-dev (2026-05-30) — Pre-promotion hardening
 
-A large batch promoted from the dev branch (0.7.48 → 0.8.0). Headline fixes:
+Issue #22 confirmed working in-game (frame + hat + outfit + every weapon slot on Grail Knight persisted through a restart). Hardening pass before promoting to the public mod, from a full review of the v0.7.62–v0.7.68 changes (no critical bugs found):
 
-- **Crafted weapons now actually appear in your inventory.** Versus-carousel weapons (the `vs_*` items — "Gallant's Blade", "Soldier's Coach Gun", etc.) are tagged `mechanisms = {"versus"}`, which the Adventure inventory grid filters out. The craft succeeded but the item was hidden by game mode. cim now clears that scoping on crafted items so they show up in Adventure (the DLC paywall is left intact). Also added the missing `dirtify_interfaces()` so crafts appear immediately without a menu re-open.
-- **Your modded loadout is remembered and re-equipped on game load (issue #22).** Previously, modded items you'd equipped weren't on your character after a restart. Two causes fixed: (1) with Loremaster's Armoury installed, menu equips dispatch through `BackendUtils.set_loadout_item` and bypassed cim's capture hook — cim now hooks the stable outer entry point so every equip is recorded; (2) cim now re-equips the live keep character after restore (the character spawns before the deferred restore completes), using vanilla's own equip mechanism. Non-modded weapons are unaffected (vanilla handles those).
-- **Per-accessory craft buttons in the Athanor accessories view** — CRAFT NECKLACE / CHARM / TRINKET, implemented as a proper own-scenegraph overlay (no more layout breakage). Jewelry crafting is on the Athanor; the standard forge stays a select-template-and-craft flow.
-- **"JEWELLERY" → "ACCESSORIES"** on the forge surfaces.
-- **Stamina/property slot accounting fixed** — 2-stamina no longer over-consumes slots; the per-property bubble caps (stamina 2 / movespeed 1) are correct.
+- **`_restore_modded_loadout` invariant hardened.** The `items:get_item_from_id` lookup inside the `_restoring = true` bracket is now pcall-guarded. Previously a throw there (LA-clone drift, a stale standard-forge template-cache hit, a malformed mirror entry) would propagate out before `_restoring` was reset to false — silently disabling the equip-capture hook for the rest of the session. Added an explicit INVARIANT comment so future edits don't reintroduce an un-pcall'd throw in the bracket.
 
-**Stability:** comprehensive in-game regression-test suite (`/cim_regression_test`), duplicate-hook guards, pcall-fenced UI and backend paths, and a hardening review before release. New diagnostics gated behind `Debug Logging` (off by default).
+Reviewed-and-accepted (no change): the BackendUtils + BackendInterfaceItemPlayfab double-capture is idempotent (no corruption; the redundant `_modded_loadout_save` only occurs for non-LA users and is negligible); slot routing in `_reequip_live_avatar` is complete (cosmetics correctly excluded); the accessory panel draw path is fully pcall-fenced; no intra-cim duplicate hooks; the global `mechanisms` clear is a deliberate, documented one-way session mutation safe for the modded-realm craft flow.
 
-(Per-change detail lives in the dev branch CHANGELOG. Internal: ported from `crafting_in_modded_dev` v0.7.69-dev; mod-id `cim`.)
+## 0.7.68-dev (2026-05-30) — Issue #22, the REAL cause: LA hides menu equips from cim's capture
+
+v0.7.67 didn't work, and the log showed why: after equipping every slot on es_mercenary, **cim captured ZERO equips** — the only `equip_event` lines were restore's own writes. Two bugs:
+
+**1. Menu equips were never captured (root cause).** With Loremaster's Armoury active, the keep equip path is `HeroViewStateOverview._set_loadout_item` → `BackendUtils.set_loadout_item` → `get_loadout_interface_by_slot(slot):set_loadout_item`, and that inner interface is an **LA clone**, not the `BackendInterfaceItemPlayfab` class cim hooked. So cim's capture hook never fired for the player's actual equips — `_modded_loadout` stayed frozen at 3 ancient Bardin entries, and restore had nothing new to bring back. This is the documented "BackendUtils dispatch / LA bridge" caveat (CLAUDE.md Hooking section). **Fix:** also hook the stable OUTER entry point `BackendUtils.set_loadout_item` (a plain table → TABLE-form `mod:hook` with a nil guard, installed deferred from `mod.update` once the backend/LA bridge are up — the same timing cosmetics_tweaker uses for its own BackendUtils.set_loadout_item hook). Now every menu equip is captured before the LA dispatch.
+
+**2. v0.7.67's re-equip was self-defeating.** Restore's own `set_loadout_item` writes fired cim's capture hook, which set `_reequipped`, which then made `_reequip_live_avatar` think each slot was already done → it skipped (that's why `[reequip]` was empty). **Fix:** a `_restoring` guard — the capture path is fully skipped while restore replays saved state, so restore writes no longer (a) re-process into `_modded_loadout` (which also avoids mutating it mid-`pairs()` iteration) nor (b) pre-mark `_reequipped`. The dedup map is now synced only by genuine live equips (the `BackendUtils` path, `from_live_equip=true`) and by `_reequip_live_avatar` itself.
+
+Capture is centralized in one `_capture_loadout_equip(career, slot, item_id, from_live_equip)` shared by both hooks. The equip probe now resolves its item/read-back via `get_interface("items")` so it works on the self-less BackendUtils path too.
+
+**Test:** `backendutils_capture_installed` — state-witness that the BackendUtils capture actually installed (so menu equips are being recorded).
+
+**To verify:** equip modded weapons in your slots — you should now see `[equip_event] … is_modded_bid=true` lines AND `[cim] BackendUtils.set_loadout_item capture installed` in the log. Restart; they should be equipped, with `[reequip] live avatar …` lines confirming the visual re-equip.
+
+## 0.7.67-dev (2026-05-30) — Issue #22: re-equip last-equipped modded items on game load
+
+**Symptom:** modded weapons you had equipped weren't on your character after a restart. **Confirmed from the log (NOT a data bug):** restore writes the loadout correctly — `[restore] total=3 restored=3 missing=0 errored=0`, every `set_loadout_item` succeeds with read-back `matches=true`. The first restore attempts at boot are `skipped — items backend interface not ready`; restore only succeeds ~16s in — **after the keep character/inventory already spawned holding the pre-restore weapons.** Writing the loadout *data* doesn't re-equip an already-spawned unit (avatar-spawn race).
+
+**Fix:** `_reequip_live_avatar()` — after the restore data write, re-equip the live keep avatar for the current career, replicating vanilla's own equip path (`HeroViewStateOverview` `_equip_request` consumer, `hero_view_state_overview.lua:707-715`):
+- melee/ranged → `inventory_extension:create_equipment_in_slot(slot_name, backend_id)`
+- trinket/ring/necklace → `attachment_extension:create_attachment_in_slot(slot_name, backend_id)`
+
+This is the sanctioned mechanism (exactly what equipping in the menu does), and is NOT the issue-#12 risk — that was craft-time divergence; here we make the live unit MATCH already-correct data. Fully pcall-guarded and gated to: network game ready, a living local `player_unit` (i.e. in the keep), current career only (other careers re-read from data when next spawned). A per-`career/slot/bid` dedup map (`_reequipped`) prevents the repeated deferred restore passes (1.0s + 3.0s) from re-spawning the same weapon unit (flicker); the equip-capture hook keeps that map in sync on manual equips. `/cim_restore_loadout` now also re-equips the live avatar.
+
+**Test:** `reequip_live_api_ok` — state-witness that captures any error from the live-unit re-equip API (`_cim_reequip_last_err`), so a future signature drift or bad-timing call surfaces from a log instead of silently breaking.
+
+**Also:** standard-forge per-slot accessory buttons disabled (`_STD_FORGE_BTNS_ENABLED = false`) — the standard forge is a select-template-then-craft flow and doesn't need them; jewelry crafting lives on the Athanor accessories view (user, 2026-05-30).
+
+## 0.7.66-dev (2026-05-30) — Accessory panel: tests + hardening + recipe doc
+
+Confirmed working in-game (v0.7.65). This build adds the guardrails:
+
+- **Hardening (`_accessory_craft_panel.lua`):** build failures now log ONCE instead of per-frame (a missing UI global could otherwise spam the log every frame); click dispatch only fires when a callback is wired (always consumes `on_release` so a stray click can't queue); exposed `NUM_BUTTONS` / `BUTTONS` for introspection. Draw pass was already fully pcall-guarded.
+- **Regression tests:** `accessory_panel_module_loaded` (module loaded, exposes `draw()`, NUM_BUTTONS == 3, the 3 slot mappings necklace/charm(ring)/trinket_1 are present and unique) and `accessory_panel_built_when_accessories_opened` (state-witness: once the accessories view drew, the lazy build produced exactly NUM_BUTTONS widgets).
+- **Documentation:** repo `VMF_RECIPES.md` §13 "Custom buttons / panels in a hero-view menu — use an own-scenegraph overlay" — the wrong way (create_default_button on a host viewport node → black box / corner / overlapping hotspots), the right way (own scenegraph + hand-rolled widgets + own draw pass off the host `_draw` hook), with both canonical examples (`_glow_picker.lua`, `_accessory_craft_panel.lua`) and the burn history. Memory: `reference_vt2_menu_button_overlay_pattern.md`.
+
+## 0.7.65-dev (2026-05-30) — Accessory craft buttons, done right (own-scenegraph overlay)
+
+Three failed attempts (overview + amulet inline buttons) all shared one root mistake: injecting `UIWidgets.create_default_button` widgets into a host window's draw arrays, anchored to the full-size center "viewport" scenegraph node. That gave a screen-covering black box (default button background stretched to fill the giant node), bottom-left corner placement, and overlapping hotspots (one click crafted two slots).
+
+The fix is the pattern cosmetics_tweaker's `_glow_picker.lua` already proved in-game: a **self-contained overlay with its own scenegraph and hand-rolled widgets**. New module `_accessory_craft_panel.lua`:
+- Its **own scenegraph** — each of the 3 buttons is a node with an EXPLICIT `position`/`size`/`alignment` (left side, vertically centred). Repositioning is now a reliable 2-number edit, not a guess against an opaque node.
+- **Hand-rolled** button widgets (hotspot + sized rect + border + text) — the background is the button's size, not the node's, so no black box.
+- Its **own draw pass** (`begin_pass` on our scenegraph → `draw_widget` → `end_pass`) hooked off `HeroWindowWeaveProperties._draw` (hook_safe; grep-verified as the only cim hook on that method), only in the accessories/amulet view.
+- **Per-button hotspot reads** on non-overlapping nodes → no double-fire. Hover brightens the button.
+
+Clicking a button routes to `mod._cim_amulet_craft_one_slot(properties_win, idx, slot)` — the same craft helper as before. The vanilla "Craft All" control stays for now (additive overlay; once the 3 buttons are confirmed in-game, Craft All can be hidden). The old inline-button code paths remain gated off (`_OVERVIEW_BTNS_ENABLED` / `_AMULET_BTNS_ENABLED` = false).
+
+## 0.7.64-dev (2026-05-30) — Disable accessory buttons (covered the grid); restore "Craft All"
+
+v0.7.63 made the accessory buttons draw, but anchored to the full-size center/bottom `"viewport"` node they: (1) landed in the bottom-left corner, (2) rendered a screen-covering black box over the property/trait grid, and (3) had overlapping hotspots — one click fired two slots (a single press produced both a trinket and a charm). Same failure class as the overview buttons; blind pixel-anchoring to these viewport nodes does not work.
+
+**This build:** gated the 3 accessory buttons behind `_AMULET_BTNS_ENABLED = false`. In amulet mode the vanilla **"Craft All"** control is restored (relabeled "CRAFT ACCESSORIES", routes through the existing `_upgrade_magic_level` craft hook) and the 3D model is no longer force-hidden — so the accessories view is fully usable again (grid visible, no black box). The render-array fix stays in the code; the buttons will be re-placed correctly against a real screenshot (proper small anchor node + non-overlapping hotspots) before re-enabling.
+
+The v0.7.62 weapons fix (clear `mechanisms` on crafted Versus items) remains active and confirmed.
+
+## 0.7.63-dev (2026-05-29) — Accessory craft buttons: render-array fix (HeroWindowWeaveProperties)
+
+The accessory craft buttons (`_ensure_amulet_buttons`, shown in the amulet/accessories view via `_forge_apply_ui_polish`'s `in_amulet_mode` branch) had the SAME bug as the overview buttons: they appended to `properties_win._widgets`, but HeroWindowWeaveProperties has no `_widgets` — its `_draw` iterates `_top_widgets`/`_bottom_widgets`/`_top_hdr_widgets`/`_bottom_hdr_widgets`. So they were created into a collection the window never drew and NEVER rendered — which is why there were "no buttons to craft jewelry."
+
+**Fix:** append to `_top_widgets`, resolve the scenegraph from `_ui_scenegraph`, anchor to the valid center `"viewport"` node (where the 3D amulet renders, hidden in amulet mode), fall back to `"window"`. The render fix is certain; final on-screen position may need a one-line offset tweak against a screenshot (the overview taught us not to trust blind pixel math on these full-size center/bottom viewport nodes).
+
+The v0.7.62 weapons fix (clear `mechanisms` on crafted Versus items) is **confirmed working** by the `[filtered_items]` probe: crafted `es_bastard_sword` is PRESENT in the melee grid, `es_blunderbuss` PRESENT in the ranged grid.
+
+## 0.7.62-dev (2026-05-29) — ROOT CAUSE of "crafted but not in inventory": Versus-scoped (`mechanisms`) items
+
+**The 5-day bug, solved at the source.** The weapons that vanished are vanilla **Versus carousel** items — `vs_es_bastard_sword` ("Gallant's Blade"), `vs_es_blunderbuss` ("Soldier's Coach Gun"), etc. The `vs_` prefix is *Versus*, not "variant". Their `ItemMasterList` entries (`item_master_list_carousel.lua`) carry `mechanisms = { "versus" }`. The Adventure inventory grid filters every item through `available_in_mechanism_adventure` (`backend_interface_common.lua:524`):
+
+```lua
+return is_cosmetic or not mechanisms or table.contains(mechanisms, "adventure")
+```
+
+A `{"versus"}` item has `mechanisms ≠ nil` and no `"adventure"` → **rejected from the Adventure grid**. So the craft genuinely succeeded (item in the mirror, `can_wield` ok, `found_in_all=true`), but the Adventure keep grid hid it by game mode. cim's weapon list offered these because they have Kruber `can_wield` and the player owns the Lake DLC, but they were never Adventure-equippable.
+
+**Why it took 5 days:** every prior probe checked `get_all_backend_items` (the broad backend list) and reported `found_in_all=true` — but the grid populates from `get_filtered_items` → `filter_items`, which runs the mechanism/career filter. The probes measured the wrong layer and kept falsely confirming success.
+
+**Fix:** `_ensure_item_adventure_visible(item_key, career_name)` (was `_ensure_item_wieldable`), called from `_athanor_inject_item`, now (1) appends the crafting career to `can_wield` as before, and (2) **clears any non-adventure `mechanisms`** on the crafted item's master entry so `not mechanisms` is true and it passes the Adventure filter. It deliberately leaves `required_dlc` intact — that's the paid-DLC paywall, and cim's weapon list already restricts the player to DLC they own. Because the boot-time `_athanor_inject_all` re-runs this for every saved craft, **already-crafted Versus weapons become visible after the next restart** — no re-craft needed. Mutates `ItemMasterList` directly per repo rule (`BackendUtils.can_wield_item` isn't hookable from a Workshop mod).
+
+**Confirmation probe (kept):** `_cim_autodump_filtered_items` inside the `get_filtered_items` hook logs, per crafted bid, whether it survived the grid filter; if absent it now dumps `slot_type` / `item_type` / `rarity` / `can_wield` / `mechanisms` / `required_dlc`. So the next run verifies the fix landed (and would reveal any other gate). Recent crafts tracked via `mod._cim_note_craft_bid`.
+
+**Regression test:** `adventure_visible_stamp_and_mechanism_clear` — asserts can_wield append is idempotent AND a `{"versus"}` mechanisms field is cleared.
+
+**Also confirmed from the log (NOT a bug):** stamina is correctly capped at 2 (`weave_stamina` wrote only slots 1,2). The "can't add a 3rd property" was `MAX_DISTINCT_PROPERTIES = 2` (stamina + attack_speed = 2 distinct; block_cost was the rejected 3rd) — a vanilla adventure-item constraint. See the separate >2-properties feature work for lifting it (user wants parity with the Athanor/weave system, which supports more).
+
+## 0.7.61-dev (2026-05-29) — Disable overview jewelry buttons (they obscured the B-menu)
+
+v0.7.60's render-array fix made the 3 overview jewelry buttons actually draw — confirmed in the log (`created 3 jewelry craft buttons (anchor=viewport_2)`). But they render on top of the overview's weapon-type selectors (viewport_1/2/3 = primary / accessories / secondary), landing in a corner over the real UI, so the B-menu showed "nothing but two buttons in the corner." Root issue: `viewport_2` is a near-fullscreen center/bottom node — a bad anchor for fixed-size buttons, and the original "Craft All" button the user wanted to match was top-right (532×126), not where the amulet 3D display sat.
+
+**This build:** gated the overview buttons behind `_OVERVIEW_BTNS_ENABLED = false` so the B-menu is fully usable again (weapon-type selection restored). The render-array fix, scenegraph constant, and regression tests stay in place. Placement will be redone against an actual screenshot of the live cim overview — no more blind pixel guesses — then re-enabled.
+
+Everything from v0.7.60 (craft-visibility 3-way coverage: dirtify + `_refresh` + `can_wield` stamp; saveweapon dirtify; pcall guards; career nil-guard) remains active.
+
+## 0.7.60-dev (2026-05-29) — Overview jewelry buttons never rendered + "weapon missing after craft" covered all 3 ways
+
+**"Crafted & saved but the weapon isn't there" — covered defensively, not diagnostically.** User confirmed the symptom is the green *"Crafted & saved"* message firing while the weapon is absent from inventory. That message only prints AFTER a successful `_athanor_inject_item`, so the item IS in the mirror — the gap is mirror → inventory grid. There are exactly three ways a crafted weapon can be missing, and this build firmly closes all three rather than waiting to diagnose which one bit:
+
+1. **Inject failed (item never reached the mirror).** Already covered: inject is pcall-guarded and prints `[cim] Craft failed: <reason>`. Crucially, *"Crafted & saved" is proof of success* — if you see it, the item is in the mirror and the cause is #2 or #3.
+2. **Item in mirror, inventory grid serving a stale cached filtered list.** The grid caches its filtered item list and only rebuilds when the interface is marked dirty — so even re-opening inventory served the stale list. Fixed two ways (belt + suspenders): `Managers.backend:dirtify_interfaces()` (from v0.7.59, now at all 5 inject sites + saveweapon import) **and** an explicit `items_iface:_refresh()` immediately after, so an already-open grid rebuilds now instead of on its own next tick.
+3. **Item in mirror + wieldable-by-list, but the grid filters it by `can_wield` for the current career.** Structurally near-impossible on the Athanor (the weapon list only offers weapons the current career can already wield), but closed anyway: `_athanor_inject_item` now stamps the crafting career into `ItemMasterList[key].can_wield` (additive + idempotent — only ever appends) before the item enters the mirror. This guarantees visibility even if weapon_tweaker added the cross-career access *after* the craft, or the user later turns that wt toggle off. Per repo rule, `can_wield` is mutated directly (`BackendUtils.can_wield_item` isn't hookable from a Workshop mod). The crafting career is threaded through `weapon_data.career_name` from both `_equip_item` (weapons) and `_cim_amulet_craft_one_slot` (jewelry).
+
+The existing `Post-craft career-gate FAIL` / `Post-craft visibility FAIL` warnings (player-visible via `mod:warning`, fire under debug logging) remain as a live tripwire if any future path slips past all three.
+
+---
+
+### Overview jewelry buttons never rendered (wrong draw array) + pre-stable hardening
+
+**THE overview-button bug, root-caused.** v0.7.57/.58 added 3 jewelry-craft buttons to the Athanor B-menu overview and they still didn't appear. v0.7.58 fixed the *timing* (driver moved into `_forge_apply_ui_polish`) but the buttons still never drew. Reason, confirmed against vanilla source:
+
+`HeroWindowWeaveForgeOverview` has **no `self._widgets` array**. Its `_draw` (hero_window_weave_forge_overview.lua:704–770) iterates four separate hardcoded arrays — `_bottom_hdr_widgets`, `_top_hdr_widgets`, `_top_widgets`, `_bottom_widgets` — plus `_viewports_data`. The button code appended to `overview._widgets` (nil on this class) and the window never iterated it, so the buttons were created (or not) into a collection that is never rendered. Two secondary bugs compounded it: the code read `overview.ui_scenegraph` but vanilla stores it as `overview._ui_scenegraph`, and the fallback anchor `"viewport"` is not a real scenegraph id (the real ones are `viewport_1/2/3`).
+
+**Fix:** append the buttons to `_top_widgets` (drawn on the `ui_top_renderer` pass, above the viewport art, still input-serviced so the hotspot fires), resolve the scenegraph from `_ui_scenegraph`, anchor to the valid `viewport_2`, fall back to root `"window"`. `_forge_hide_widget`/`_forge_get_widget` already worked because they go through `_widgets_by_name`, which DOES exist — that's why hiding the upgrade button succeeded while our appended buttons stayed invisible.
+
+`_widgets` vs `_top_widgets`/`_bottom_widgets` (no unified array) confirmed by reading vanilla `_draw`. `HeroWindowCrafting` (standard forge) DOES draw from `self._widgets`, so the standard-forge buttons were never affected — only the overview ones.
+
+**Regression guards added:**
+- `overview_btn_render_target` — pins `_OVERVIEW_BTN_RENDER_FIELD` to the valid drawn-array set so an edit can't silently point it back at `_widgets`.
+- `overview_btns_created_when_forge_opened` — state-witness: if the weave forge overview was opened this session, asserts all 3 buttons were created (skips if forge never opened).
+
+**Pre-stable hardening (from a 3-agent audit toward a stable promotion):**
+- **saveweapon import missing `dirtify_interfaces`** — `/cim_import_saved_weapons` injects via its own `mirror:add_item` (NOT `_athanor_inject_item`), so it never inherited the v0.7.59 fix. Imported weapons could stay invisible until a menu re-open. Added the guarded `dirtify_interfaces()` call after the import loop.
+- **pcall-guarded the two standard-forge `dirtify_interfaces` calls** (`_craft_via_synth` + the craft hook) for parity with the Athanor path's guarded call.
+- **`_setup_weapon_list` career nil-guard** — `CareerSettings[career_name]` was dereferenced raw inside a full `mod:hook` wrapper; an unknown/nil career would error and break the weapon-list render instead of falling back to vanilla. Now nil-checked with a vanilla fallback.
+- **Doc fix:** the `_athanor_inject_item` comment said "4 callers"; there are 5 (`_athanor_retry_pending`, `_athanor_inject_all`, `_equip_item`, `_cim_amulet_craft_one_slot`, `_upgrade_magic_level`). Corrected.
+
+**Investigated, NOT shipped (needs an in-game data point first — deliberately not touching live units blind):**
+- **Issue #22 (last-equipped modded items not re-equipped on restart):** root cause is an avatar-spawn race, not late-overwrite — cim writes the loadout *data* layer (`set_loadout_item`, read-back proven `matches=true`) but never re-equips the already-spawned keep avatar (vanilla's two-step is data-write + unit re-wield via `_equip_request`; cim only does step 1). The fix is a live-unit re-equip, but cim deliberately avoids live-equip at craft time (issue #12: icon/unit divergence), so this needs in-game validation before shipping into stable. Tracked separately from the craft-visibility work above.
+
+**Touched files:** `crafting_in_modded_dev.lua` (overview button render-array fix, render-target constant + 2 regression tests, career nil-guard, `_ensure_item_wieldable` can_wield stamp + redundant `_refresh` in `_athanor_inject_item`, career threaded through `_equip_item` + `_cim_amulet_craft_one_slot`, inject-caller doc fix, version bump), `standard_forge.lua` (pcall-guard 2 dirtify calls), `saveweapon_import.lua` (dirtify after import), `CHANGELOG.md`.
+
+## 0.7.59-dev (2026-05-28) — Athanor crafts: missing `dirtify_interfaces` (THE bug)
+
+**Symptom (user-reported repeatedly):** "I crafted a blunderbuss / bret sword / halberd but it doesn't exist in inventory." Every cim probe — `craft_synth_result`, `craft_visibility`, `mirror_write`, `in_forged_weapons`, `is_modded_bid` — said the item was in the mirror and visible (`found_in_all=true`, `visible_to_career=true`). The data was right. The user was right too. The inventory was just showing **cached pre-craft state**.
+
+**Root cause:** `_athanor_inject_item` (the Athanor + jewelry craft path) calls `backend_mirror:add_item(bid, item)` to put the new item into the mirror's underlying table — but never bumps the backend interface dirty flag. The inventory grid's `get_filtered_items` queries the interface, which serves cached data until `Managers.backend:dirtify_interfaces()` is called.
+
+`standard_forge.lua`'s craft hook does the call at line 1125 (`Managers.backend:dirtify_interfaces()`). The Athanor path was missing it.
+
+**Fix:** added the `dirtify_interfaces()` call inside `_athanor_inject_item` itself, after the `mirror:add_item` succeeds. This covers all 4 call sites in one place:
+
+1. `_equip_item` hook — Athanor weapon craft (the path user has been hitting)
+2. `_cim_amulet_craft_one_slot` — properties-view jewelry craft + new overview-button jewelry craft (overview buttons route through `mod._cim_craft_via_synth` which already dirtifies via standard_forge's craft hook — but the properties-view path was hitting this)
+3. `_athanor_retry_pending` — deferred re-inject on level transition (also benefits)
+4. `_athanor_inject_all` — boot-time restore of all saved crafts (idempotent, harmless to dirtify during boot before any UI is open)
+
+**Two-day debug chase ending here.** The probes weren't lying. The synth was running. The mirror had the items. The UI just wasn't being told to refresh. I should have noticed earlier when the `craft_visibility` check kept showing `found_in_all=true` while the user kept saying the items weren't there — that's the exact "data is correct, UI is stale" pattern. Lesson: when probe says `found_in_all=true` AND user says "no item", the gap is between mirror and UI render, not between synth and mirror.
+
+**Touched files:** `crafting_in_modded_dev.lua` (`dirtify_interfaces()` call inside `_athanor_inject_item` + version bump), `CHANGELOG.md`.
+
+## 0.7.58-dev (2026-05-28) — Fix Athanor overview button creation timing
+
+User report "nothing changed". v0.7.57-dev log (`console-2026-05-28-22.09.19-...log`) shows the overview button creation skipped EVERY FRAME with `[cim] overview jewelry buttons skipped: overview has no _widgets / _widgets_by_name yet` (13 hits across the session). My v0.7.57 hook on `HeroWindowWeaveForgeOverview.update` fires before vanilla populates the overview's widget tables — so the buttons never got created.
+
+The existing `_forge_apply_ui_polish` works because it's called from `HeroViewStateWeaveForge.update` — the PARENT state's update tick — which only fires after all child windows have completed their `on_enter` (including widget creation). Proof in the log: `_forge_hide_widget(overview, "upgrade_button")` etc. succeed in the same code path.
+
+**Fix:** moved the per-frame `_ensure_overview_jewelry_buttons` / `_show_overview_jewelry_buttons` / `_handle_overview_jewelry_button_clicks` calls into `_forge_apply_ui_polish`'s existing `if overview then ...` block. Removed the failed standalone hook on the overview's own `update`.
+
+This is the timing-pattern bug I keep re-discovering: child-window `update` hooks fire before child-window widgets are populated; parent-state hooks fire after. Save the lesson next to the dev-branch and deploy-doesn't-build rules.
+
+**Touched files:** `crafting_in_modded_dev.lua` (relocate button-driver calls + version bump), `CHANGELOG.md`.
+
+## 0.7.57-dev (2026-05-28) — Athanor overview jewelry craft buttons
+
+User request 2026-05-28: put 3 jewelry-craft buttons on the B-menu Athanor **overview** page (the landing window — `HeroWindowWeaveForgeOverview`), in the space where the Amulet of Ashur 3D display used to render. Each button crafts ONE accessory of the chosen slot directly, no need to navigate into the property editor first.
+
+This is sibling to the existing per-slot buttons in `HeroWindowWeaveProperties` (the properties editor view) — those still fire there. The new overview buttons are a shortcut from the Athanor landing page.
+
+### Cross-module API: `mod._cim_craft_via_synth`
+
+`standard_forge.lua` — exposed the previously-local `_craft_via_synth(slot_filter, friendly_label)` as `mod._cim_craft_via_synth`. Same code path the standard-forge accessory buttons and `/cim_craft_necklace` / `/cim_craft_charm` / `/cim_craft_trinket` chat commands use.
+
+### Overview buttons
+
+`crafting_in_modded_dev.lua` — new `_OVERVIEW_JEWELRY_BUTTONS` table, `_ensure_overview_jewelry_buttons` create helper, `_show_overview_jewelry_buttons` toggle helper, `_handle_overview_jewelry_button_clicks` click consumer, and a `HeroWindowWeaveForgeOverview.update` hook that lazy-builds + shows + handles clicks every frame the modded forge is active. Same pattern as the existing `_AMULET_SLOT_BUTTONS` in the properties view and `_STANDARD_FORGE_BUTTONS` in the regular forge.
+
+- 452x80 button size (matches the properties-view buttons; roughly matches the original "Craft All" upgrade_button this build no longer renders)
+- Vertically stacked, 95 px center-to-center spacing
+- Anchor: `viewport_2` (the center accessories viewport) if the scenegraph has it, fallback to `viewport` (same anchor the properties-view buttons use)
+- Visible only when `_custom_forge_active = true`
+- Diagnostic log line on first create: `[cim] athanor overview: created 3 jewelry craft buttons (anchor=X, size=452x80)`. If the create fails, separate `mod:info` lines report which dependency was missing (UIWidgets, `_widgets`, etc.)
+
+### What to verify in the next session
+
+1. Boot banner: `[cim:LOAD] v0.7.57-dev`
+2. Press B → Athanor overview opens → look for `[cim] athanor overview: created 3 jewelry craft buttons` in the log
+3. Verify all 3 buttons render where you wanted them (center of the overview where the Amulet of Ashur display was)
+4. Click each button once — verify the `[cim] Crafted <slot>.` echo fires and the item appears in inventory
+5. If buttons are misplaced or wrong size, tell me which anchor + dimensions you want — I'll adjust
+
+**Touched files:** `crafting_in_modded_dev.lua` (overview button machinery + version bump), `standard_forge.lua` (expose `mod._cim_craft_via_synth`), `CHANGELOG.md`.
+
+## 0.7.56-dev (2026-05-28) — Widget-list dump for inventory + forge-inventory windows
+
+User stated the disabled search bar is a native vanilla feature. Static grep of `Vermintide-2-Source-Code/` found ZERO text-input / search widgets in `HeroWindowLoadoutInventory`, `HeroWindowInventory`, or `HeroWindowCrafting` (only `HeroWindowCraftingInventoryConsole` has one, console gamepad path). Workshop bundle scans turned up nothing matching `search_input`/`filter_input`/etc. either, but VT2's bundle format hashes string identifiers so a raw ASCII grep doesn't catch obfuscated references.
+
+Conclusion: my decompiled-source/bundle-grep approach has hit its limit. Switching to in-game widget tree dump.
+
+### `_cim_autodump_full_widget_list` probe
+
+New helper in `cim_debug.lua`. On entry to a window, walks `self._widgets_by_name` and logs every widget's name + first 12 content-table keys. Flags interactive widgets (`button_hotspot`) with their disabled/visible state. Flags text-input-like widgets (any `caret_position` / `input_text` / `text` / `text_field` field on content) with `[TEXT-LIKE]`. One-shot per window-open. Gated on `enable_debug_logging`.
+
+Wired into two windows:
+- **`HeroWindowLoadoutInventory.on_enter`** — already had a hook (modded_rarities.lua's category-display-name mutation + jewelry probe). Added the full-widget-list call.
+- **`HeroWindowInventory.on_enter`** — no existing cim hook; added one, conditionally on the class being loaded at file-load time. Same single-callback-per-Class.method discipline as the rehook-warning regression test enforces.
+
+Next session's log will contain two `[widget_list/...]` dumps (one per window), one line per widget. Whatever's drawing the disabled search bar should appear with a `[TEXT-LIKE]` flag — name + content key list tells us exactly which widget to hook + how to enable.
+
+**Touched files:** `cim_debug.lua` (new probe), `modded_rarities.lua` (probe call wired to existing HeroWindowLoadoutInventory hook + new HeroWindowInventory hook), `crafting_in_modded_dev.lua` (version bump), `CHANGELOG.md`.
+
+## 0.7.55-dev (2026-05-27) — Stamina slot-accounting fix + standard-forge button diagnostics
+
+User report 2026-05-27 EOD: "2 stamina still takes 5 slots even though it should only take 2 on weapons" — clarified as "Stamina looks fine. It only has 2 bubbles, the problem is WHEN APPLIED IT TAKES 5". So the visible bubble count is correct (2), but the underlying `props.weave_stamina` array is being written with 5 slot_indices, which the inventory render treats as "5 of 10 slots used by stamina" → blocks a second property from being added even though the distinct-property cap would allow it.
+
+### Stamina/movespeed slot-array cap (issue #49 take 2)
+
+Root cause: vanilla's property picker calls `set_loadout_property(career, "weave_stamina", slot_index)` once per slot_index when the user selects stamina. cim's v0.7.44 fix removed the per-click REJECTION so the visible bubble grid renders correctly (2 filled, because `_value_for_bubbles("stamina", 5)` clamps to 1.0 = +2 tier), but every one of vanilla's 5 calls now appends to `props.weave_stamina` — array grows to length 5 → inventory sees 5 slots used.
+
+Fix at `crafting_in_modded_dev.lua:~2486`: silently cap `props[property_key]` length at `_bubble_cap(property_key)`. Visible bubble count is unchanged (still 2 for stamina, 1 for default-mode movespeed); only the persisted array stops at the engine cap, freeing the remaining slot_indices for a second property.
+
+```lua
+-- v0.7.55-dev replacement:
+local cap = _bubble_cap and _bubble_cap(property_key) or 5
+local cur_len = #props[property_key]
+if cur_len < cap then
+    props[property_key][cur_len + 1] = slot_index
+end
+```
+
+**Existing crafted items** with over-capped arrays still take 5 slots until re-rolled or reapplied. Next session's `[trim]` log will likely show no auto-trim for this since cim's existing trim is for the >2-distinct cap, not per-property array length. A migration to retroactively trim `props.<key>` to cap-length is on the followup list if user wants — but applying the property again on a fresh item works around it.
+
+### Standard-forge button diagnostics
+
+User report: "There are no buttons to craft jewelry now" on the standard forge. The CRAFT NECKLACE / CRAFT CHARM / CRAFT TRINKET buttons in `standard_forge.lua:1231-1235` and the `_ensure_std_forge_buttons` create path should fire from the `HeroWindowCrafting.update` hook every frame the forge is active. No "standard forge: created N cim accessory craft buttons" line in any recent log — but user also hasn't opened the standard forge in any debug-logged session this week.
+
+Added once-per-window-session diagnostic lines to `_ensure_std_forge_buttons` reporting why creation skipped:
+- `UIWidgets/UIWidget/create_default_button` missing on the global
+- `crafting_win._widgets` or `_widgets_by_name` not ready yet (vanilla on_enter ordering issue)
+
+When user opens the standard forge in v0.7.55-dev with debug logging on, the log will show exactly which dependency is blocking creation (or a "creating now" line if everything's ready).
+
+### Search-bar investigation (deferred)
+
+User asks to enable the vanilla disabled search bar on the regular forge. Dispatched a parallel subagent to map every widget in `HeroWindowCrafting`'s definitions and identify whether the search is a hidden widget to un-hide, a wired-but-unconnected widget, or needs a new cim-injected widget. Implementation lands in a follow-up build once the agent reports.
+
+### Other reported issues queued (no code change this build)
+
+- **#22 equip/restore** — v0.7.54-dev probes already deployed; awaiting fresh log
+- **Halberd/blunderbuss won't craft on Kruber merc** — v0.7.53-dev `weapon_list_setup` probe answers next session
+- **Sienna bolt staff** — same probe; need a session on Sienna with debug on
+
+**Touched files:** `crafting_in_modded_dev.lua` (slot-cap at property-write + version bump), `standard_forge.lua` (diagnostic logging in `_ensure_std_forge_buttons`), `CHANGELOG.md`.
+
+## 0.7.54-dev (2026-05-27) — Equip + restore-cycle probes for issue #22
+
+User confirmed 2026-05-27 EOD: on **every** career, modded items last equipped do NOT re-equip at next game start. The `[restore] OK <career>/<slot> -> <bid>` log line says the write returned ok, but the engine clearly reads a different value on the next session boot.
+
+Vanilla `BackendInterfaceItemPlayfab.set_loadout_item` (`backend_interface_item_playfab.lua:635-669`) writes via `self._backend_mirror:set_character_data(career, slot, item_id, ...)` and sets `self._dirty = true`. Vanilla `get_loadout_item_id` (`:512-538`) reads from `self:get_loadout()` → `base_loadouts[career_name]` → `loadout[slot_name]`. Hypotheses (need data to discriminate):
+
+1. The mirror write succeeds, but a LATER vanilla path (e.g. `_set_inital_career_data`, `_fix_career_data`, or a PlayFab title-data refresh) overwrites the layer before the keep avatar reads it.
+2. `set_character_data` writes to one slot index but `get_loadout` reads from a different one (the `optional_loadout_index` parameter — we pass `nil`).
+3. The mirror write succeeds AND `get_loadout_item_id` reflects it AT THE TIME we wrote — but the keep avatar already spawned with the old weapon and doesn't re-equip on the late mirror update.
+
+### Three new probes
+
+**`_cim_autodump_equip_event`** — fires on every `set_loadout_item` (vanilla or modded). Logs career, slot, item_id, resolved key/rarity, `is_modded_bid`, `in_forged_weapons`, and an immediate read-back via `get_loadout_item_id`. If the read-back doesn't match the just-written item_id, emits a `mod:warning [cim:diag] Equip read-back MISMATCH` — the proof that vanilla wrote elsewhere or rejected the write.
+
+**`_cim_autodump_restore_pass`** — dumps the FULL `_modded_loadout` table at the entry of `_restore_modded_loadout`, BEFORE the iteration runs. So we see every saved (career, slot) entry the restore should attempt — not just the ones it successfully restores. Helps detect "I equipped X on career Y but it's not in the table" cases.
+
+**`_cim_autodump_restore_entry`** — fires after EACH `items:set_loadout_item(items, bid, career, slot)` call inside the restore loop. Immediately reads back via `get_loadout_item_id` and asserts the bid matches. If `set_ok=true` but `matches=false`, emits `mod:warning [cim:diag] Restore WRITE-NO-READ — set_loadout_item returned ok ... but get_loadout_item_id reads back X. Mirror silently rejected the write OR a different layer is being read.` That's the smoking gun for hypothesis 2.
+
+### What the next session's log will tell us
+
+For each restore entry, we'll see one of three outcomes:
+1. `[restore_entry] career=... matches=true set_ok=true` AND user reports correct weapon in-game → restore is fine, hypothesis 3 (avatar didn't re-spawn) is the real bug. Fix would be triggering a unit re-spawn after restore, OR moving restore earlier in the boot sequence.
+2. `[restore_entry] ... matches=false set_ok=true` AND `mod:warning` fires → hypothesis 2 (different layers read/write). Investigate `optional_loadout_index`, alt loadout slot, `_player_loadouts` cache.
+3. `[restore_entry] ... matches=true set_ok=true` at restore time, but a LATER `equip_event` shows a different value being written by vanilla → hypothesis 1 (late vanilla overwrite). Move our restore later, or hook the wiping path.
+
+### No code fix yet — diagnostic build only
+
+I deliberately didn't try to "guess-fix" the issue this build. The three hypotheses have meaningfully different fix shapes; picking one without data is the failure mode that's burned this issue for 3 days. Next session's log will discriminate, then v0.7.55-dev ships the actual fix.
+
+**Touched files:** `cim_debug.lua` (3 new probes), `crafting_in_modded_dev.lua` (probe wiring in `set_loadout_item` hook + `_restore_modded_loadout` body + version bump), `CHANGELOG.md`.
+
+## 0.7.53-dev (2026-05-27) — Menu-state INPUT probe complement
+
+v0.7.52-dev's craft-synth probe captures everything about crafts that DO fire — but says nothing about weapons that *should* have been in the menu but weren't. User test on Kruber mercenary (2026-05-27 21:33 log): 27 successful crafts, zero FAIL probes, every gate green for every weapon clicked. The "several didn't get created" weapons must be ones where `_equip_item` never fired — either the weapon wasn't in the Athanor list to click in the first place, or click didn't trigger the synth.
+
+### `_cim_autodump_weapon_list_setup` probe
+
+New helper in `cim_debug.lua`, fired from cim's `HeroWindowWeaveForgeWeapons._setup_weapon_list` hook AFTER `_populate_list` runs. Captures two views per Athanor weapons-window open:
+
+**Section 1 — actual menu contents** (what the user can click):
+```
+[weapon_list_setup] career=es_mercenary slot=slot_melee slot_types=melee menu_count=27
+  MENU: vs_es_halberd [Halberd] slot=melee rarity=default can_wield=[es_huntsman,es_knight,es_mercenary]
+  MENU: es_2h_heavy_spear [Tuskgor Spear] slot=melee rarity=default can_wield=[wh_captain,es_questingknight,...]
+  ... (one line per weapon)
+```
+
+**Section 2 — full ItemMasterList sweep** with per-rejection-reason counts:
+```
+  ItemMasterList sweep: total=2566 wrong_slot=1980 no_can_wield=14 not_career=480 skin=89 magic=23 promo=0 dlc_locked=8
+  PASS-FILTERS-BUT-DEDUPED (3 items — same display_name as something already in menu):
+    DEDUPED: vs_es_2h_sword [Greatsword] rarity=default
+    DEDUPED: cwv_es_handgun_001 [Handgun] rarity=default
+    ...
+```
+
+This discriminates every reason a weapon could be missing from the menu:
+- `wrong_slot` — weapon's `slot_type` isn't in the slot family the user is browsing (melee vs ranged etc.)
+- `no_can_wield` — weapon has no `can_wield` field at all (registration bug in source mod)
+- `not_career` — `can_wield` exists but current career isn't in it (most likely cause for "weapon_tweaker toggle is on but weapon doesn't appear" — toggle didn't push the career into `can_wield`)
+- `skin` — `item_type == "weapon_skin"` (cosmetic, not a craftable weapon)
+- `magic` / `promo` — explicit rarity exclusion by cim
+- `dlc_locked` — `_cim_item_requires_unowned_dlc(key)` returned true
+- `DEDUPED` — passed all filters but shares display_name with another already in the menu (cim's dedupe rule)
+
+When a user reports "weapon X didn't appear", the next session's log answers it directly: either X is in `MENU:` (UI/click-handler issue, not data) or X appears in one of the rejection buckets (data issue) or X appears in `DEDUPED` (cim is hiding it intentionally — review whether dedupe should be relaxed).
+
+### Why this matters for weapon_tweaker cross-character toggles
+
+User explicitly reports trying weapons "not native to him via weapon tweaker". `weapon_tweaker` adds careers to weapons' `can_wield` lists when toggles are enabled. If a wt toggle is ON but the weapon doesn't appear in the cim Athanor menu, two possibilities:
+1. wt didn't actually push `es_mercenary` into `ItemMasterList[key].can_wield` → weapon shows in `not_career` bucket
+2. wt did push the career but the weapon got deduped → weapon shows in `DEDUPED` with a display_name that matches another already-in-menu weapon
+
+The probe distinguishes these mechanically. No more guessing.
+
+**Touched files:** `cim_debug.lua` (new probe), `crafting_in_modded_dev.lua` (probe wired into `_setup_weapon_list` hook + version bump), `CHANGELOG.md`.
+
+## 0.7.52-dev (2026-05-27) — Comprehensive post-craft diagnostic probe
+
+User reports weapons not appearing after craft. v0.7.51-dev's log scan showed 9 successful `Crafted & saved: <name>` messages and zero errors — but none of those messages carried the BID, key, slot_type, rarity, or post-craft visibility state needed to diagnose whether the items are reachable through the inventory grid path. Two distinct craft routes are in cim:
+
+- **Athanor (B-menu)** — `HeroWindowWeaveForgeWeapons._equip_item` hook (`crafting_in_modded_dev.lua:2877`). What the user has been using. Only emits a friendly `Crafted & saved: <name> [modded]` echo. No diagnostic detail.
+- **Standard forge** — `BackendInterfaceCraftingPlayfab.craft` → `_make_craft_synth` (`standard_forge.lua:760+`). Already echoed `[cim] Crafted <key> (key=X rarity=Y bid=Z)` but only after a verification read — no visibility check.
+
+### `_cim_autodump_craft_synth_result` probe
+
+New helper in `cim_debug.lua`. Called immediately after every mirror write (both craft routes). Captures:
+
+| Field | Source |
+|---|---|
+| `career`, `item_key`, `backend_id` | Inputs to the synth |
+| `mirror_write: ok=… err=…` | The `pcall(mirror.add_item, …)` result |
+| `in_mirror=…` | Reads `mirror._inventory_items[bid]` immediately after the write |
+| `resolved: key=… slot=… rarity=…` | `items_iface:get_item_from_id(bid)` — the path inventory queries use |
+| `can_wield=[…] visible_to_career=…` | Career filter pre-check |
+| `is_modded_bid=…` | `mod._cim_is_modded_backend_id(bid)` — the BID heuristic that gates filter passes |
+| `persisted=…` | `mod:get("forged_weapons")[bid] ~= nil` after `_forge_save` |
+| `n_props, n_traits` | Counts on the input weapon_data |
+
+### 2-frame-later visibility check
+
+Schedules a deferred check via `mod._cim_pending_visibility_checks`. Drained from `mod.update`. Two frames after the craft, re-queries:
+
+- `get_all_backend_items()` — broadest interface view
+- `get_item_from_id(bid)` — the resolution path
+- `can_wield` vs current career
+
+Emits `[cim:diag] Post-craft visibility FAIL — bid=X (key=Y) not in backend_mirror items 2 frames after craft. Inventory will NOT show it.` as a `mod:warning` (always visible in chat) if the item is missing. Emits `Post-craft career-gate FAIL — bid=X is in mirror but can_wield does not include current career 'Z'. Switch careers to see it.` if the item is present but career-filtered out — the most likely "I crafted but I don't see it" cause.
+
+### Failure-path probe
+
+The failure branches in both craft routes (`_athanor_inject_item` returning nil; `pcall(mirror.add_item)` returning `not ok`) now also call the probe with `path = "<route>_FAIL"` and `mirror_write_ok = false`. So failed crafts get the same diagnostic trail as successful ones.
+
+### `mod:echo` → `mod:warning` on the standard_forge `add_item` failure path
+
+The mirror-write failure echo at `standard_forge.lua:844` was using `mod:echo`, chat-suppressed when `enable_debug_logging` is OFF — so silent for most users. Switched to `mod:warning` (always visible) per the v0.7.44 action-rejection rule.
+
+### What the next session's log will tell us
+
+After this build, a single failed craft will produce in the log:
+1. `[cim-debug] [craft_synth_result/athanor_equip] career=… item_key=… bid=…` (the inputs)
+2. `  mirror_write: ok=true err=nil in_mirror=true` (or false — which would prove the synth is dropping)
+3. `  resolved: key=… slot=… rarity=…` (does the item resolve through the items interface?)
+4. `  can_wield=[…] visible_to_career=true/false` (career filter pre-check)
+5. `  is_modded_bid=true/false persisted=true/false n_props=… n_traits=…` (the filter gate + persistence)
+6. 2 frames later: `[cim-debug] [craft_visibility/athanor_equip] bid=… 2-frames-post-craft: found_in_all=… visible_to_career=… is_modded_bid=… career=…`
+
+That's enough to discriminate every failure mode listed in `reference_cim_weapon_crafting_flow.md` § 10 without further code changes.
+
+**Touched files:** `cim_debug.lua` (new probe + visibility-check drain), `crafting_in_modded_dev.lua` (probe wiring in Athanor `_equip_item` hook + drain in `mod.update` + version bump), `standard_forge.lua` (probe wiring in `_make_craft_synth` + `add_item` failure → `mod:warning`), `CHANGELOG.md`.
+
+**No new regression test added** for this build — the probe IS the diagnostic surface; the next user-session log either reveals the bug or proves it's not present. Once root cause is identified, a regression test can pin the specific assertion.
+
+## 0.7.51-dev (2026-05-27) — Duplicate `hook_safe` fix + rehook-warning interceptor
+
+Boot log scan of `console-2026-05-27-20.37.09-...log` line 983 showed `[cim_dev][WARNING] (hook_safe): Attempting to rehook active hook [on_enter]`. Two `mod:hook_safe("HeroWindowLoadoutInventory", "on_enter", ...)` registrations:
+
+1. `modded_rarities.lua:172` — mutates `self._categories[*].display_name` to "Accessories" (issue #38 layered fix from v0.7.37).
+2. `cim_debug.lua:407` — JEWELRY-label probe (v0.7.48-alpha) registered on a loop that included `HeroWindowLoadoutInventory`.
+
+VMF silently drops one of the two. Per `feedback_vmf_hook_safe_no_chain`, sibling `hook_safe` callbacks on the same Class.method do NOT chain — only the first-registered one runs. The probe author (me, prior session) added a "DON'T duplicate" comment listing HeroWindowCrafting / HeroWindowCraftingConsole / HeroWindowItemCustomization but missed that `HeroWindowLoadoutInventory` was already taken by modded_rarities.
+
+### Fix
+
+- `cim_debug.lua`: removed `"HeroWindowLoadoutInventory"` from the probe loop list. Comment expanded to call out all four already-hooked Class.method pairs (the three the original author got + this one).
+- `modded_rarities.lua:172`: the surviving `hook_safe` now ALSO calls `mod._cim_autodump_jewelry_probe(self, "HeroWindowLoadoutInventory")` so debug coverage of this surface is preserved.
+
+### Rehook-warning interceptor
+
+`crafting_in_modded_dev.lua` — installed an interceptor on `mod.warning` immediately after the `mod.echo` chat-suppression patch (before any `hook_safe` calls). Captures every warning matching `"rehook active hook"` into `mod._cim_rehook_warnings`. New regression check `no_duplicate_hook_safe_registrations` reads the list and FAILs if any rehook warning was emitted at boot.
+
+This is the first cim regression check that observes boot-time VMF emissions — previous tests inspect post-load state but couldn't catch a hook that was silently dropped during boot.
+
+### Pre-deploy memory correction
+
+While preparing to ship this build I discovered VMBLauncher's `deploy` verb does NOT rebuild — it only copies existing `bundleV2/` artifacts. Every "Deployed N file(s)" message earlier in the day re-copied stale bundles. The user has been running v0.7.49-dev the entire session; none of v0.7.50-dev's work (JEWELLERY fix, craft diagnostics, regression tests) was ever actually in-game. Saved to memory `reference_vmb_launcher_deploy_no_build` so the next session never assumes `deploy` is build+deploy. v0.7.50-dev's content ships in v0.7.51-dev's first real build.
+
+**Touched files:** `crafting_in_modded_dev.lua` (interceptor + version bump + new `_rt_register` block), `cim_debug.lua` (remove duplicate hook), `modded_rarities.lua` (call probe from surviving hook), `CHANGELOG.md`.
+
+## 0.7.50-dev (2026-05-27) — Discriminated craft-failure diagnostics + JEWELLERY→ACCESSORIES fix + regression tests
+
+### JEWELLERY → ACCESSORIES on Athanor overview (issue #38, FINALLY)
+
+The "JEWELRY" label was visible on the main forge page (Athanor overview viewport_title_2). Two prior fix attempts didn't land it (v0.7.35 `Localize` override on `crafting_recipe_craft_jewellery`; v0.7.37 `HeroWindowLoadoutInventory.on_enter` `category.display_name` mutation) — both targeted *other* surfaces where the same word appears.
+
+**Root cause (user-identified 2026-05-27 EOD):** the literal "JEWELLERY" was hardcoded by a prior session of me at `crafting_in_modded_dev.lua:1595` when I first repurposed the Athanor's amulet viewport as the unified accessories editor. The string was never a vanilla loc key on that surface — it was an authored literal in our own source. None of the prior patches could ever fix it because they were intercepting vanilla resolution paths that never ran on this widget.
+
+**Fix:** changed the literal at line 1595 from `"JEWELLERY"` to `"ACCESSORIES"`. The two earlier-layer patches (Localize override for the standard forge recipe title; `category.display_name` mutation for the loadout inventory category header) remain in place — they cover different surfaces that DO route through vanilla and still need translation. Three layers of defense for one user-visible word.
+
+### Discriminated craft-failure diagnostics
+
+User report 2026-05-27: "Crafting several different ranged items, many failed, and I don't know why." Log scan of `console-2026-05-27-15.03.31-...log` shows 5 hits of the generic message `[cim] Craft button pressed without a selected recipe/template (dropped).` (lines 9670, 9951, 10287 [INFO before debug toggle], 10930, 10932 [ECHO after debug toggle]). The message lumped THREE distinct failure modes into one line, so the user — and we — couldn't tell *which* condition was actually nil.
+
+`standard_forge.lua:1106-1118` — the single `if not recipe_override or not item_backend_ids or not item_backend_ids[1]` is now split into two checks with distinct messages:
+
+| Mode | New message |
+|---|---|
+| `recipe_override` is nil | `"Craft dropped — no recipe selected (recipe_override=nil, career=X, items_len=N). Click a recipe tile (Craft Item / Salvage / Reroll / etc.) before pressing craft."` |
+| `item_backend_ids` is nil or empty | `"Craft dropped — no template/item picked (recipe=X, career=Y, items_len=N). Select a weapon/template in the panel before pressing craft."` |
+
+The two existing follow-up drops (`_get_valid_recipe` returned nil, no synth implemented) now also include `career`, `items_len`, and `first_bid`.
+
+**`mod:warning` instead of `mod:echo` on all drops.** The drop helper used `mod:echo`, which the v0.7.38 chat-suppression patch silences into log-only when `enable_debug_logging` is OFF. That's why the user's first 3 attempts went to INFO (invisible in chat) and only the last 2 (after toggling debug on) went to ECHO. Action rejections should always reach chat per the v0.7.44-alpha rule.
+
+**New `_cim_autodump_craft_attempt` helper** in `cim_debug.lua`. Fires at the entry of the `craft()` hook BEFORE any drop check. Gated on `enable_debug_logging`. Logs career, recipe, items_len, first 3 BIDs, plus key/slot_type/rarity for bid[1] via the items interface — tells us whether the BID is a real template or a stale reference.
+
+### Regression tests for v0.7.44 / v0.7.47 / v0.7.33 / v0.7.50-dev fixes
+
+Added five checks to the existing `/cim_regression_test` suite so prior fixes can't silently regress in a future edit:
+
+| Check | Guards against | Original fix |
+|---|---|---|
+| `stamina_movespeed_clamp_at_overcap` | Engine-effective `_value_for_bubbles` clamp removed (would let stamina/movespeed exceed vanilla tiers via over-cap clicks). | v0.7.44-alpha — issue #49 |
+| `action_rejection_uses_warning_channel` | `mod.warning` accidentally aliased to the chat-suppressed `mod.echo` (would re-hide rejection messages). | v0.7.44-alpha — issue #47 |
+| `morris_hub_passes_open_forge_gate` | Blanket `mech == "deus"` block re-introduced (would re-break the CW staging-hub Athanor). State-witness: skips unless in `morris_hub`. | v0.7.47-alpha |
+| `trim_logging_emits_per_item_detail` | `mod.info` channel removed / silenced (would lose per-item `[trim] <key> kept=[…] dropped=[…]` lines). | v0.7.33-alpha |
+| `accessories_label_on_overview` | `crafting_recipe_craft_jewellery` Localize override reverted (would re-show "Jewellery" on the standard forge recipe title). | v0.7.50-dev — issue #38 |
+
+Run via `/cim_regression_test` — PASS/FAIL/SKIP per check.
+
+**Touched files:** `crafting_in_modded_dev.lua` (literal fix line 1595 + version bump + 5 new `_rt_register` blocks), `standard_forge.lua` (discriminated drops + mod:warning), `cim_debug.lua` (new craft-attempt helper), `CHANGELOG.md`.
+
+## v0.7.49-dev — 2026-05-26
+
+- **FORK POINT**: friends-only dev stream for in-flight cim work. Parent `crafting_in_modded/` (Workshop ID 3721038774) remains the public stable stream.
+- Mod_id renamed `cim` → `cim_dev`. Scripts dir renamed `crafting_in_modded` → `crafting_in_modded_dev`. itemV2.cfg: visibility friends_only, published_id cleared.
+- **Cross-mod API caveat**: external mods (CWV, cosmetics_tweaker) consume cim via `get_mod("cim")` — they continue to reference the STABLE stream by design. The dev clone is for isolated cim feature testing, not cross-mod integration.
 
 ## 0.7.48-alpha (2026-05-25) — JEWELRY label-hunt runtime probe (issue #38 data-gathering)
 
