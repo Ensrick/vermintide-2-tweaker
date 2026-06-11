@@ -1,5 +1,94 @@
 # Verminious Dreams Lighting — Changelog
 
+## 1.0.6 (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[vdl] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- verminious_dreams_lighting.lua -- removed the load-time `mod:echo("verminious_dreams_lighting v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[vdl] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("verminious_dreams_lighting v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- removed the `if mod:get("enable_debug_logging") then mod:echo(...) end` startup gate too. Even gated on debug, a load-time echo violates the new policy ("never at module load").
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build verminious_dreams_lighting -- verification only. NOT deployed, NOT uploaded.
+
+## v1.0.5 (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- verminious_dreams_lighting_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- verminious_dreams_lighting.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build verminious_dreams_lighting -- verification only. NOT deployed, NOT uploaded.
+
+## v1.0.4 (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[vdl] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load — self-documenting console_logs. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. ALWAYS fires (not gated on debug_logging).
+
+### Changed
+- `verminious_dreams_lighting.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[vdl] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v1.0.4.
+
+## v1.0.3 (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `verminious_dreams_lighting.lua` — installed `_dbg_alert` helper alongside `_dbg`. Added `_RT_CHECKS` regression scaffold (`/vdl_regression_test`) with `dbg_helpers_two_channel` check.
+- `itemV2.cfg` — bumped to v1.0.3.
+
+### Notes
+- 0 existing `_dbg(...)` call sites in this mod (helper was previously unused).
+- 0 bare `mod:echo` reclassified — all 45+ `mod:echo` calls are inside `/vdl_*` chat command bodies (user-operational, leave alone).
+
+## v1.0.2 (2026-05-25) — Stable-track: no chat-echo of version on startup
+
+### Why
+vdl is the first repo mod to ship as stable (no -dev/-alpha/-beta suffix). User policy: once a mod hits stable, the version line shouldn't pollute chat on startup — the console log is enough. Verbose / chat-echo behaviour returns when the user explicitly enables `enable_debug_logging`.
+
+### Changed
+- `verminious_dreams_lighting.lua` lines 3-9 — `mod:info("Verminious Dreams Lighting v%s loaded", ...)` still fires unconditionally (writes to `console_logs/` for crash reports). The companion `mod:echo("Verminious Dreams Lighting v" .. MOD_VERSION)` is now gated on `mod:get("enable_debug_logging")` — silent in chat by default; visible when debug logging is on.
+
+### Compat
+- No setting changes. Users who want the old startup chat line should tick `Debug Logging` in the VMF settings menu.
+
+## v1.0.1 (2026-05-25) — Standardize Debug Logging toggle (universal convention)
+
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). vdl previously had no debug toggle — added.
+
+### Changed
+- `verminious_dreams_lighting_data.lua` — appended `enable_debug_logging` checkbox (default `false`) at the bottom of `options.widgets`, top-level (NOT inside any group).
+- `verminious_dreams_lighting_localization.lua` — added `enable_debug_logging` + `enable_debug_logging_tooltip` strings.
+- `verminious_dreams_lighting.lua` — added file-local `_dbg(fmt, ...)` helper at top. Output prefix `[vdl:dbg]`.
+- `itemV2.cfg` — title bumped to v1.0.1.
+
+### Notes
+- No existing debug key to rename.
+
 ## v1.0.0 (2026-05-23)
 
 Graduating to 1.0. Scope is feature-complete: tuned defaults baked for all three Verminious Dreams missions, per-mission VMF toggles, two light groups (torches / general), per-frame ShadingEnvironment overrides via `CameraManager.shading_callback`, live tuning via `/vdl_*` commands.

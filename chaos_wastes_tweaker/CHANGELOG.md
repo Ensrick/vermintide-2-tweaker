@@ -1,5 +1,892 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.124-beta (2026-05-26) — Per-mission curse+mutators diagnostic dump + sync level_seed in graph snapshot (citadel curse bug investigation)
+
+### Why
+User reported "the citadel of eternity mission curse doesn't match what host set it to. There are 2 final missions, and the curse should match on each, they should be what the host set it to." Plus directive: "Make sure when debug is on, it dumps the curse for the current mission if it has one, and mutators. Make sure the log on Holseher's map dumps which missions have which curse."
+
+Scoured the 2026-05-26 04:14 client + 04:17 host logs for the journey_citadel run. Key findings:
+
+1. **`force_belakor=true` correctly returned from `deus_journey_with_belakor` hook** on both peers (effective_setting fix from v0.7.122 is working).
+2. **Per-node populate_graph is non-deterministic across peers despite the same run_seed.** Host's `node_6 = sig_citadel_tzeentch_path5` (level_seed -465327678); client's local populate produced `node_6 = sig_citadel_slaanesh_path5` (level_seed +X). The host snapshot fixes the displayed fields (level/curse/theme), but `level_seed` was NOT in `GRAPH_FIELD_MAP` — so any downstream consumer reading `node.level_seed` (e.g. per-mission terror_event scheduling, curse-halo iconography variant selection, intra-mission generation) diverges between peers.
+3. **My v0.7.123 `apply_graph_snapshot` arena_belakor skip is firing correctly** — confirmed by `[ct_graph] apply skipped 1 node(s) for arena_belakor swap preservation (key=node_10)` in the client log, with the temple node showing `level=arena_belakor` in subsequent MAP_OPEN dumps. Issue #53 fix verified working in the wild.
+4. **Curse field DID match host/client** on the MAP_OPEN dumps for node_6 (sig_citadel) and final (arena_citadel) — host: `curse_bolt_of_change`/`curse_khorne_champions`, client: same. So either: (a) the mismatch happens in a downstream display path that reads from a different source than `node.curse`, or (b) the user observed the mismatch on a different visual surface (loading screen curse icon? in-mission curse banner? boon-roll curse text?). Need more instrumentation to catch where the actual mismatch surfaces.
+
+### Added — `level_seed` to `GRAPH_FIELD_MAP`
+- New short-key `ls = level_seed`. Host snapshot now syncs level_seed alongside level/curse/theme/etc. Closes the determinism gap where same `run_seed` produces different per-node `level_seed` values on host vs client.
+- Backward-compatible: v0.7.123 peers receiving from v0.7.124 just ignore the unknown short key; v0.7.124 peers receiving from v0.7.123 see `value == nil` in the iterator and skip (the existing `if value ~= nil then` already handles this). No CT_RPC_SCHEMA bump needed.
+
+### Added — per-mission diagnostic on game start
+- New `pcall`-wrapped block at the top of `mod:hook_safe("GameModeDeus", "local_player_game_starts", ...)`. Gated on `enable_debug_logging` via `_dbg`. Fires on BOTH peers when a CW mission starts. Single log line:
+  ```
+  [mission:start] is_server=<bool> current_node=<key> level=<X> base_level=<X> theme=<X>
+                  curse=<X> level_seed=<N> god=<X> node_type=<X>
+                  node_mutators={<list>} active_mutators={<list>}
+  ```
+  - `node_mutators` reads from `current_node.mutators` (the node's declared list)
+  - `active_mutators` reads from `Managers.state.game_mode._mutator_handler:activated_mutators()` (what the engine actually activated for this mission)
+  - Diff between the two on the same peer = our node data and the engine's mutator activation disagree. Diff between host and client on the same node = sync gap.
+
+### Added — `mutators` + `level_seed` to MAP_OPEN per-node dump
+- `[belakor:diag] MAP_OPEN node` lines now include `level_seed=<N> mutators={<list>}`. Both peers' map opens will show the per-node mutator list so any divergence (e.g., host's node_6 has `{curse_bolt_of_change}` but client's node_6 has `{}` or a different curse) is visible at a glance.
+- Same fields added to `/dump_journey` chat command's per-node dump.
+
+### Verification path for next co-op session
+Both peers turn on `enable_debug_logging`. Host enables `force_belakor`. Run journey_citadel together. At every map open AND on every mission start, both logs get full state dumps. After the session, grep `[mission:start]` + `[belakor:diag] MAP_OPEN node node_6` + `[belakor:diag] MAP_OPEN node final` on both logs and diff host vs client. If `node_mutators` and `active_mutators` diverge on the same peer, that's the bug class. If host/client diverge on the same node's mutators/curse/level_seed, that's a sync gap (and v0.7.124's level_seed sync should plug it).
+
+### Notes
+- The Issue #53 client-side Belakor temple fix from v0.7.123 verified in the wild (host log: `arena_belakor_node=node_10` set after locus destruction; client log: same; client's MAP_OPEN shows `level=arena_belakor` — i.e., the swap survives our apply now).
+- Host's session ended cleanly at 05:39 with a `serialize_pipeline_library 7578 ms` stall (shader cache write timeout on exit). The accompanying crash dump is a benign shutdown timeout, not a Lua-side fault — no Lua errors precede it in the host log.
+
+## 0.7.123-dev (2026-05-26) — Issue #53 REAL root cause: apply_graph_snapshot was reverting client's arena_belakor swap
+
+### Why
+v0.7.122 shipped the `effective_setting("force_belakor")` change plus aggressive `[belakor:diag]` instrumentation and called it Issue #53 done. The instrumentation in last night's session immediately exposed the actual bug — and it was in our own code, not the gated hook. Full grep of the client log captured every relevant signal:
+
+- Client received `with_belakor=true` from host (`_setup_run is_server=false ... with_belakor=true`) ✓
+- Client's local populate_graph ran correctly, including arena candidate flagging
+- Client received host's graph snapshot via `ct_graph_snapshot_chunk` (7 chunks, 2659 bytes, 16 nodes)
+- Client's `apply_graph_snapshot` overlaid host's resolved fields onto its local `_path_graph` — including for the eventual arena_belakor node
+
+The breakage path (verified against vanilla source):
+1. Once `_run_state:set_arena_belakor_node(node_X)` writes to SharedState (host-side, after Belakor altar destruction), the vanilla `DeusRunController._get_graph_data()` (deus_run_controller.lua:2035-2056) mutates `_path_graph[node_X]` in place: `level = "arena_belakor"`, `theme = "belakor"`, `base_level = "arena_belakor"`, `minor_modifier_group = {}`, etc. **This swap is what makes the map's prefix-to-unit mapper spawn `ARENA_NODE_UNIT` (the visible temple) for that node.**
+2. Vanilla `DeusMapView.start()` (deus_map_view.lua:45) calls `_deus_run_controller:get_graph_data()` first — triggering the swap. Then passes the swapped graph_data to `DeusMapScene:on_enter(graph_data, ...)`.
+3. ct's `DeusMapScene.on_enter` hook ran `apply_graph_snapshot(graph_data)` UNCONDITIONALLY when `_ct_host_graph_snapshot` was present — overlaying host's PRE-swap snapshot fields onto the just-swapped node. Net effect: `level="arena_belakor"` got reverted back to (e.g.) `level="bell_belakor_path1"`, `theme="belakor"` got reverted to whatever the host's snapshot had at populate time.
+4. Vanilla `DeusMapScene.on_enter` then saw the un-swapped node and spawned `TRAVEL_NODE_UNIT` or `SHRINE_NODE_UNIT` instead of `ARENA_NODE_UNIT`. **No temple.**
+
+Why this was client-only: `_ct_host_graph_snapshot` is populated by the `ct_graph_snapshot_chunk` RPC receiver — only on peers that RECEIVED the broadcast. Host itself never has a snapshot stored, so its `apply_graph_snapshot` call was a no-op (`if _ct_host_graph_snapshot then` short-circuit). Host's swap stayed intact → host saw temple.
+
+Matches the user's exact Issue #53 report: "host sees temple, client does not."
+
+### Changed
+- `chaos_wastes_tweaker.lua:apply_graph_snapshot` — resolves `_run_state:get_arena_belakor_node()` at apply time. If non-nil, SKIPS that node when iterating the snapshot. All other nodes still get the host's resolved values (the original purpose of the snapshot — see comments at line ~770 for why we ship the graph at all). When at least one node is skipped, a `_dbg` line is emitted so the next test session can confirm the skip fired.
+
+### Verification — what to look for next session
+With `enable_debug_logging=true` on both peers:
+- After altar destruction on a belakor mission: grep client log for `[ct_graph] apply skipped 1 node(s) for arena_belakor swap preservation (key=node_X)` on every subsequent map open.
+- Grep client `[belakor:diag] MAP_OPEN _start` lines for `arena_belakor_node=node_X` non-nil. Confirms SharedState sync delivered.
+- Grep client `[belakor:diag] MAP_OPEN node node_X level=arena_belakor` — confirms the swap survived our snapshot apply. Was previously `level=<original>` post-revert.
+- Visual confirmation: client should see Belakor's Temple node on Holseher's map in the same spot host does, after destroying the first locus.
+
+### Notes
+- The v0.7.122 `effective_setting("force_belakor")` change is unchanged — it correctly catches the local-call paths (dialogue, telemetry, UI views that read `deus_journey_with_belakor` on every peer). That fix was right; it just wasn't the cause of the map-display gap. Both fixes ship together for completeness.
+- The fix is purely additive (1 new lookup + 1 skip-comparison per apply). No behavior change when arena_belakor_node is nil (pre-altar-destruction map opens).
+
+### Closes
+- Issue #53 — ct: Belakor's Temple not visible on Holseher's map for CLIENT when host has 'always belakor' enabled (now actually fixed; v0.7.121-122 caught a contributing path but missed this one)
+
+## 0.7.122-dev (2026-05-25) — Fold setup_run diagnostic into existing hook body (mod-lint duplicate-hook fix)
+
+### Why
+v0.7.121-dev added a separate `mod:hook_safe("DeusRunController", "setup_run", ...)` for the post-populate graph dump. mod-lint correctly flagged it as a duplicate registration on the same `(Class, method)` pair (the existing full `mod:hook("DeusRunController", "setup_run", ...)` at line ~1224 already registers this hook). VMF silently drops one of two registrations on the same pair, so the published bundle would have only one of the two diagnostics firing.
+
+### Changed
+- Removed the separate `mod:hook_safe("DeusRunController", "setup_run", ...)` block.
+- Inlined the same diagnostic (arena-node count + arena_keys list) into the existing full hook body at line ~1224, immediately after the vanilla `func(self, unpack(args))` call returns. Same `[belakor:diag]` tag, same payload, wrapped in pcall.
+- Block-comment left at the old location pointing readers to the new home.
+
+### Verified
+- `tools/mod-lint/lint-mod.ps1 chaos_wastes_tweaker` → no duplicate-hook errors.
+- `publish-release.ps1` now passes its lint gate.
+
+## 0.7.121-dev (2026-05-25) — Issue #53 Belakor temple client-side fix + Issue #54 Isha description fix + aggressive `[belakor:diag]` instrumentation
+
+### Why
+User-reported gaps (Issues #53, #54). Plus directive: "we should be aggressively dumping data to the log when I'm in game and on menus like Holseher's map or in-game that give you the info you need to fix these issues and make the mod work correctly." So both targeted fixes AND comprehensive instrumentation, gated on `enable_debug_logging` so it doesn't spam normal play.
+
+### Fixed — Issue #53 (Belakor's Temple not visible on client map)
+**Root cause:** the `BackendInterfaceDeusPlayFab.deus_journey_with_belakor` hook was gated `is_server and mod:get("force_belakor")` — meaning the host's override only fired on the host. But this method is ALSO called on client peers from non-RPC code paths — specifically `DeusMechanism.get_level_dialogue_context` (deus_mechanism.lua:1337) reads it locally on EVERY peer for dialogue/telemetry, and UI views that ask "does this journey have belakor?" do the same. Pre-v0.7.121 client peers fell through to vanilla which returns the journey's natural belakor-cycle position — wrong answer when host has force_belakor on.
+
+**Fix:** replaced `is_server and mod:get("force_belakor")` with `effective_setting("force_belakor")`. `effective_setting` resolves to host-broadcast value on clients, local value on host — so BOTH peers' local calls now return true when host has the toggle on. The host's `game_round_ended` RPC path is unchanged (still works). The only client-local consumers of this method are display / dialogue / telemetry (none authoritative gameplay state), so mirroring the host is correct.
+
+### Fixed — Issue #54 (Isha description shows wrong mode on client)
+**Root cause:** the `Localize` hook's `blessing_of_isha_desc` branch read `effective_setting("tweak_miracle_of_isha_alternative")` — the legacy v0.7.65 dropdown key. v0.7.81 replaced that with a mutex checkbox cluster (`tweak_miracle_of_isha_aegis` / `_wounds`). On any user who migrated past v0.7.81, the legacy key is nil and the Localize hook fell through to vanilla — which displays the wounds-style text regardless of host's choice.
+
+**Fix:** the Localize hook now reads `effective_setting("tweak_miracle_of_isha_aegis")` and `effective_setting("tweak_miracle_of_isha_wounds")` first, falling back to the legacy key for backward compat. Now description text matches the host's selected mode on both peers.
+
+### Added — aggressive `[belakor:diag]` instrumentation (gated on `enable_debug_logging`)
+All gated through the existing `_dbg(...)` helper (no-op when toggle is off; full dumps when on). Single grep tag `[belakor:diag]` covers the whole sequence from run-start to map-open.
+
+1. **`DeusMechanism._setup_run` hook_safe** — dumps `run_id / run_seed / journey / dominant_god / with_belakor / mutator_count / boon_count / is_initial_setup / server_peer_id` on BOTH peers as the run starts. Confirms whether client receives `with_belakor=true` from host's RPC.
+2. **`DeusRunController.setup_run` hook_safe** — after vanilla setup_run, dumps `_path_graph` arena-node count + arena_keys list per peer. Confirms whether client's `populate_graph` actually produced arena nodes (the temple candidates).
+3. **`DeusRunController.unlock_arena_belakor` hook_safe** — fires only on host. Logs `current_node` + picked `arena_belakor_node`. SharedState should sync this value to clients (visible as `<rpc set server> arena_belakor_node = ...` in log).
+4. **`DeusMapDecisionView._start` hook_safe** — fires on BOTH peers when the map view opens. Dumps `is_server / journey / current_node / belakor_enabled / arena_belakor_node / has_own_seen / graph_total / arena_in_graph / arena_keys / force_setting` plus per-node `key / level / prefix / theme / curse / god / node_type`. This is the single most diagnostic moment for Issue #53.
+5. **`deus_journey_with_belakor` hook** — every call now logs the return value with peer role + setting state, so the dialogue/UI consumer paths are visible.
+
+### Added — `/dump_journey` and `/dump_isha` chat commands
+On-demand mid-game state dumps with the same `[belakor:diag]` / `[isha:diag]` tags. Workflow for next co-op session:
+1. Both peers turn on `enable_debug_logging` in ct settings.
+2. Host enables `force_belakor` (always belakor).
+3. Both peers start a CW run together.
+4. Between missions, both peers run `/dump_journey` AT THE SAME TIME from chat.
+5. Both peers also run `/dump_isha` (with one host-side Isha mode toggled on).
+6. Send both log files. Diff `[belakor:diag]` and `[isha:diag]` entries to confirm host/client divergence (if any) or confirm the fix.
+
+### Fixed — `/verify_belakor` was reading non-existent `get_with_belakor`
+Vanilla method is `get_belakor_enabled` (deus_run_state.lua:404). Pre-v0.7.121 the command printed `nil` for that field. Fixed to try both names; output label renamed `belakor_enabled` for clarity.
+
+### Closes
+- Issue #53 — ct: Belakor's Temple not visible on Holseher's map for CLIENT when host has 'always belakor' enabled
+- Issue #54 — ct: Miracle of Isha tweak text shows 'unlimited wounds' when host selected Aegis
+
+### Verification
+Live in-game with `enable_debug_logging=true`:
+- Both peers in CW with host's `force_belakor=true`: open map → grep `[belakor:diag] MAP_OPEN` → both should show non-nil `arena_belakor_node` + ≥1 arena node in graph.
+- Host enables Aegis, client doesn't have any Isha toggle on. Client opens boon picker on a Miracle of Isha roll → tooltip should read "-25% damage taken" (Aegis text), not "unlimited wounds". Confirm via `/dump_isha` on client showing `eff_aegis=true desc_choice=aegis`.
+
+## 0.7.120-dev (2026-05-25) — Fix Issues #39 (slider step-by-25) + #40 (mutex checkbox visual refresh) via two VMFOptionsView hooks
+
+### Why
+v0.7.110 filed both as GH Issues and left them for design call. User came back: "the coin increments do not work, find out what's necessary for a slider that increments, because clearly it's not working and neither is the multiple choice options." Re-read VMF source end-to-end and found two hookable callbacks that DO drive widget display in real time. Both fixes shipped.
+
+### Changed
+**`chaos_wastes_tweaker.lua`** — two new hooks at file scope, right after `mod.on_setting_changed`:
+
+1. **`mod:hook("VMFOptionsView", "callback_draw_numeric_menu", ...)`** — pre-hook for the `starting_coins` widget. Quantizes `popup_menu_widget.content.internal_value` to multiples of `(25 / full_range)` BEFORE the original (line 4181 of `vmf_options_view.lua`) converts internal_value to a numeric value. Result: when user drags the slider, both the displayed number AND the slider fill visibly snap to multiples of 25 in real time. Gated on `mod_name == "ct" and setting_id == "starting_coins"` so other mods/widgets are unaffected. pcall-wrapped.
+
+2. **`mod:hook("VMFOptionsView", "callback_setting_changed", ...)`** — post-hook fires after VMF's original (which persists the new value and fires `mod.on_setting_changed` — where our mutex enforcer runs and updates sibling values via `mod:set`). Calls `self:update_picked_option_for_settings_list_widgets()`, which walks every widget and re-reads `mod:get(setting_id)` to sync `is_checkbox_checked` / `current_value` / `current_value_text`. Result: when user checks the Aegis variant while Wounds is already checked, Wounds visually unchecks in the same frame. Same fix applies to any future mutex cluster on ct (e.g. isha_choice). Gated on `mod_name == "ct"`; pcall-wrapped.
+
+### Verification (against upstream `vmf/scripts/mods/vmf/modules/ui/options/vmf_options_view.lua`)
+- Slider held_function: line 2486-2492 (writes continuous `internal_value`)
+- Slider numeric conversion: line 4181-4182 (reads `internal_value`, rounds to `decimals_number`)
+- Slider fill render: line 4189-4199 (slider visible position derives from same value)
+- Numeric widget popup creation: line 2839 (`popup_menu_widget`)
+- `update_picked_option_for_settings_list_widgets`: line 4332-4445 (per-widget sync from `mod:get`)
+- View open call site: line 4787 (proves it's only called on `on_enter`, hence the bug)
+
+### Notes
+- Existing snap-on-save in `on_setting_changed` is kept as belt-and-suspenders: even if the slider hook ever fails (VMF refactor, etc.), the persisted value still snaps to 25 on save. Belt-and-suspenders is justified here because the two paths fail independently — see `feedback_redundant_safeguards_ok.md`.
+- Mutex enforcer in `chaos_wastes_tweaker_mutex.lua` is unchanged — the visual refresh is now driven by the new post-hook, not the enforcer itself, keeping the mutex framework generic for future clusters.
+- No CHANGELOG / labels promise behavior the widget doesn't actually do — the `starting_coins` label remains plain `"Starting Coins"` and the slider's visible behavior now matches the persisted-snap-to-25.
+
+### Closes
+- Issue #39 — ct: starting_coins VMF slider steps by 1, not 25
+- Issue #40 — ct: Miracle of Isha mutex checkboxes don't visually deselect siblings
+
+### Tests
+Live in-game (eye-on-outcome verification, per project rule): drag the starting_coins slider, confirm visible snap to 25. Open Reworks > Boons, check Miracle of Isha Wounds while Aegis is checked, confirm Aegis visually unchecks in the same frame.
+
+## 0.7.119-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("<Name> v" .. MOD_VERSION)` startup line from every mod. That's correct for stable (>=1.0.0) builds but hides the active version for in-flight dev/alpha/beta work. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable versions stay silent.
+
+### Changed
+- `chaos_wastes_tweaker.lua` -- added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. When any branch fires, `mod:echo("[ct] v<MOD_VERSION> loaded")` runs once.
+
+## 0.7.118-dev (2026-05-25) -- Demote starting-boon grant chat echo to log-only (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+`chaos_wastes_tweaker.lua:3690` (inside the `DeusRunController._add_initial_power_ups` hook_safe body) called `mod:echo("Granted %d starting boon(s) to %s (%s)%s", ...)`. The grant is engine-driven -- it fires on every player-add at run start and again on every late-joiner / bot add -- not a user-typed operational toggle. Per PROJECT_STANDARDS § 3.6 ("never echo unless explicit user-typed operational toggle"), this is chat spam. Previous audit comment at line 3643-3644 flagged it as "POTENTIAL BUG (LOW)" with "Once per run would be cleaner" -- the new chat-echo policy makes the call: log-only, not chat.
+
+### Changed
+- `chaos_wastes_tweaker.lua` -- starting-boon grant log line at `_add_initial_power_ups` hook_safe body demoted from `mod:echo("Granted %d starting boon(s) to %s (%s)%s", ...)` to `mod:info("[ct:starting_boons] granted %d to %s (%s)%s", ...)`. Same fields, prefixed `[ct:starting_boons]` so the log is greppable. The audit comment at line 3643 is rewritten to document the new behavior (log-only, per § 3.6) instead of flagging it as a known bug.
+
+### Notes
+- Per-run-vs-per-player-add frequency is moot now that the line is log-only; if a future maintainer wants to dedupe to per-run, gate on the run_id at the call site -- but it's no longer chat-visible so the urgency is gone.
+
+### Build
+VMBLauncher.exe build chaos_wastes_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.7.117-dev (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[ct] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- chaos_wastes_tweaker.lua -- removed the load-time `mod:echo("chaos_wastes_tweaker v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[ct] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("chaos_wastes_tweaker v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build chaos_wastes_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.7.116-dev (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- chaos_wastes_tweaker_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- chaos_wastes_tweaker.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build chaos_wastes_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.7.115-dev (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[ct] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load — self-documenting console_logs. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. ALWAYS fires (not gated on debug_logging).
+
+### Changed
+- `chaos_wastes_tweaker.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[ct] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.7.115-dev.
+
+## 0.7.114-dev (2026-05-25) — Issue #27 pilot: explicit RPC schema_version + drop-on-mismatch
+
+### Why
+
+Cross-peer RPCs between host and client today have implicit schema — host and client peers MUST agree on the positional payload structure of every `mod:network_send` / `mod:network_register` pair, or the receiver silently mis-parses the message and corrupts state. With aggressive dev-iteration (multiple builds per day), the chance of a friend running a stale Workshop bundle while the host runs latest dev is high. Closes GitHub Issue #27 (the Wave-2 RPC-schema hardening tracked alongside the bt net_replay ring buffer from Issue #28).
+
+ct is the pilot for the pattern because it ships the densest RPC traffic in this repo (3 host→client/peer→peer chunked broadcasts: settings sync, graph snapshot, peer manifest). If the pattern works here, follow-up Issues will propagate it to cosmetics_tweaker, lobby_tweaker, enemy_tweaker, crafting_in_modded, and general_tweaker.
+
+### Design
+
+Per-mod `CT_RPC_SCHEMA = 1` constant declared near `MOD_VERSION`. Prepended as the FIRST positional argument of every `mod:network_send` ct emits, and validated as the FIRST argument of every `mod:network_register` callback. On mismatch the receiver:
+1. Calls `_dbg_alert("[rpc:schema] <channel> mismatch from peer=<peer>: peer sent v<n>, we expect v<our>. Dropping.")` — logs to file AND surfaces in chat (when debug logging is on).
+2. Returns early. No state mutation, no crash.
+
+Bump `CT_RPC_SCHEMA` ONLY when changing RPC payload shape (add/remove/reorder fields). Non-shape changes (logging tweaks, new hooks that don't touch the wire) leave the constant alone.
+
+Graceful-degradation paths for cross-version peers are spelled out in the `CT_RPC_SCHEMA` comment block near `MOD_VERSION` — both directions (new peer to old peer, old peer to new peer) end in a clean drop, not a corruption.
+
+### Changed
+
+- `chaos_wastes_tweaker.lua`:
+  - **`CT_RPC_SCHEMA = 1`** added near MOD_VERSION with full comment block (when to bump, graceful-degradation behavior, VMF_RECIPES.md § 10 cross-ref).
+  - **`ct_sync_host_settings_chunk`** sender (host's `DeusRunController.setup_run` hook, ~L1178) + receiver (~L630): `CT_RPC_SCHEMA` prepended; receiver gates with `_dbg_alert` mismatch drop.
+  - **`ct_graph_snapshot_chunk`** sender (host's `broadcast_graph_snapshot`, ~L839) + receiver (~L771): same wiring.
+  - **`ct_peer_manifest_chunk`** sender (`_broadcast_local_manifest`, ~L997) + receiver (~L1002): same wiring.
+  - **`_rt_register("ct_rpc_schema_present", ...)`** regression check asserts `CT_RPC_SCHEMA` exists as a number ≥ 1 so a future refactor can't silently drop the constant.
+- `itemV2.cfg` — bumped to v0.7.114-dev.
+- `VMF_RECIPES.md § 10` — new section "RPC schema versioning" covering the design + when to bump + the migration path for adding new RPCs.
+- `PROJECT_STANDARDS.md` — cross-ref under § 3 (logging) pointing at the new recipe section.
+
+### Migration path for follow-up mods
+
+When propagating to bt / lobby_tweaker / cosmetics_tweaker / enemy_tweaker / crafting_in_modded / general_tweaker:
+1. Declare `<MOD>_RPC_SCHEMA = 1` near MOD_VERSION.
+2. Prepend the constant to every `mod:network_send` for THIS mod's RPCs.
+3. Add `schema_version` as the first arg after `sender_peer_id` in every `mod:network_register` callback signature.
+4. Gate with `_dbg_alert + return` on mismatch.
+5. Add `_rt_register("<mod>_rpc_schema_present", ...)`.
+
+Each propagation is a separate Issue so cross-mod churn doesn't compound. **Don't** add other mods' schema constants in ct's pilot bump.
+
+### Closes
+
+GitHub Issue #27 (senior-eng hardening: explicit RPC schema_version + drop-on-mismatch). Follow-up Issues to file: propagate to cosmetics_tweaker (4 RPCs: cos_la_apply / cos_la_apply_req / cos_glow_apply / cos_glow_apply_req), lobby_tweaker (lt_motd_show), enemy_tweaker (et_br_fingerprint), crafting_in_modded (cim_modded_slot), general_tweaker (one AI RPC).
+
+### Notes
+
+- The initial value is 1 — bumping for the pilot would be incorrect, since this is the FIRST schema version we've ever defined.
+- `_dbg_alert` was chosen (not `_dbg`) because a schema mismatch is a "wrong / unexpected" event per PROJECT_STANDARDS.md § 3.6 two-channel discipline — the user wants to see this in chat when debug logging is on.
+- Build verification only this version. No deploy, no Workshop upload.
+
+## 0.7.113-dev (2026-05-25) — Issue #6 auto-probe: altar shuffle determinism dump
+
+### Why
+
+`/verify_altars` (v0.7.105) gave the user a point-in-time snapshot of altar shuffle inputs, but required manually running the command on host AND client at the same node. The MP determinism validation that Issue #6 calls for is far easier if the diagnostic data is captured automatically during normal play: enable debug logging, play a CW run, then diff the two console logs offline.
+
+### Changed
+
+- `chaos_wastes_tweaker.lua`:
+  - **Inside the `DeusRunController.get_deus_weapon_chest_type` hook** (~line 1597): added `_dbg("[altar:get_chest_type] PRE ...")` and `_dbg("... POST ...")` calls bracketing the `table.shuffle(new_distribution, seed)` call. PRE captures `node_key`, `level_seed`, `fnv32(seed)`, the four `effective_setting` chest_*_count values, `is_server`, and the pre-shuffle distribution. POST captures `is_server` + post-shuffle order. With debug logging on, host and client logs can be diffed line-for-line to confirm identical seeds + identical shuffle output.
+  - **Inside the `ct_sync_host_settings_chunk` RPC handler** (~line 685): added `_dbg("[altar:host_sync_arrived] ...")` after the payload merge, dumping the four chest_*_count keys the host pushed. Lets a client-side log confirm what arrived from the host without `/verify_altars`.
+  - **Inside `mod.on_setting_changed`** (~line 7044): added `_dbg("[altar:setting_changed] ...")` for the four chest_*_count widgets. Records "what I just clicked locally" so post-session log diff can distinguish a per-peer mis-toggle from an actual sync failure.
+- `itemV2.cfg` — bumped to v0.7.113-dev.
+
+### Use
+
+1. VMF menu → Chaos Wastes Tweaker → enable `enable_debug_logging`.
+2. Play a CW run on host + client(s).
+3. Attach the host's and each client's log from `%appdata%\Fatshark\Vermintide 2\console_logs\` to a bug report.
+4. Grep for `[ct:dbg] [altar:` lines across both files. PRE seed/hash/effective values should match between peers; POST shuffle order should match between peers.
+
+If any field differs at the same node_key, that's the root cause of the divergence — surface it in the Issue thread. `/verify_altars` remains as the on-demand alternative.
+
+### Closes
+
+GitHub Issue #6 (altar distribution seed determinism untested under live MP).
+
+### Notes
+
+- `_dbg` gates on `enable_debug_logging`; with the toggle off (default) these calls are zero-cost no-ops.
+- No `_dbg_alert` used at altar sites — divergence isn't detectable from one peer's local log alone, only via offline diff, so chat surfacing would be noise.
+
+## 0.7.112-dev (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — installed `_dbg_alert` helper alongside existing `_dbg`. Added `_rt_register("dbg_helpers_two_channel", ...)` alongside the existing 30+ ct regression checks.
+- `itemV2.cfg` — bumped to v0.7.112-dev.
+
+### Notes
+- 0 existing `_dbg(...)` call sites in this mod (helper was previously unused — only the definition existed).
+- 0 bare `mod:echo` reclassified — all `mod:echo` calls are inside `/ct_*` chat command bodies (user-operational, leave alone) or are the load banner.
+
+## 0.7.111-dev (2026-05-25) — Tighten localization strings to vanilla style (~30 entries rewritten)
+
+### Why
+
+Mod-menu tooltips drifted into multi-paragraph essays with meta-language preambles ("Toggle whether...", "When this option is enabled..."). Vanilla VT2 tooltips are uniformly terse, present-tense, and free of meta-language. This pass aligns ct's heavy hitters with the vanilla voice per the new `LOCALIZATION_STANDARD.md` § 11 rules.
+
+### Changed (live entries only — block-commented dormant-boon strings untouched)
+
+- `inject_adventure_maps_tooltip`: 781 → 367 chars; dropped expedition-internals paragraph, kept finale-arena exception + host-only/restart-required.
+- `replace_shrines_with_missions_tooltip`: 474 → 219 chars; trimmed "longer expeditions" rationale paragraph.
+- `cursed_mission_count_tooltip`, `disable_dominant_god_tooltip`, `altar_count_tooltip`, `cursed_chest_count_tooltip`, `respawn_on_chest_complete_tooltip`, `any_trait_any_weapon_tooltip`, `tweak_trait_tier_by_rarity_tooltip`, `tweak_shard_strike_duration_tooltip`: dropped "Default = vanilla random distribution untouched" / "Side effect:" / "Subtle effect because..." rationale, kept all magnitudes inline.
+- Boon tooltips (`disable_boon_ct_meta_ammo_tooltip`, `disable_boon_ct_meta_movespeed_tooltip`, `start_boon_ct_meta_ammo_tooltip`, `description_ct_meta_ammo`, the `enable_boon_*` / `tweak_*` family for Manann's Tempest / Vaul's Anvil / Asuryan's Wrath / Taal's Twinned Arrow / Anath Raema / Wildfire / Ulric / Khaine's Fury / Moot Milk / Killer in the Shadows / Poison Proof / Home Brewer / Miracle of Ulric): dropped implementation-internals paragraphs, kept "Requires a new CW run" gate + every numerical magnitude.
+- Mod-boon variant tooltips (`disable_boon_ct_boon_*`, `start_boon_ct_boon_*`): collapsed "Only present in the pool when 'Rework: X as Boon' is enabled in Reworks > Reworks: Boons" → "Requires the matching Rework toggle".
+- `enable_skulls_event_boons_tooltip`: 945 → 286 chars (was the worst offender in the file).
+- `bots_mirror_host_boons_tooltip`, `tweak_defeat_recovery_tooltip`, `bomb_boon_cooldown_tooltip`, `bomb_boon_exclusive_tooltip`, `endless_bombs_consumes_morgrim_tooltip`, `rv_no_save_morgrim_tooltip`, `tweak_miracle_of_isha_alternative_tooltip`: trimmed.
+
+### Not touched
+
+- Vanilla-template boon descriptions (`disable_boon_boon_skulls_0X_tooltip`, `disable_boon_boon_supportbomb_*_tooltip`, the `X%%%%` placeholder set) — these mirror FT's stock event-boon wording and are already vanilla-style.
+- The Miracle of Isha mutex cluster tooltips (`tweak_miracle_of_isha_aegis_tooltip` / `_wounds_tooltip`) — the leading "choice (A/B) of (B). Alternative to '(B/A) X' — these are mutually exclusive..." preamble is load-bearing per LOCALIZATION_STANDARD.md § 10. Cannot tighten.
+- Trait tooltips inside `ban_trait_*_tooltip` — sourced verbatim from vanilla trait descriptions; already canonical voice.
+- Block-commented entries (Skulls Event Boons, Activate Dormant Boons families inside the `--[[ ... ]]` blocks): edited the live `enable_skulls_event_boons_tooltip` and left the rest alone since they're not live.
+
+### Build
+
+VMBLauncher.exe build chaos_wastes_tweaker — verification only, no deploy/upload.
+
+## 0.7.110-dev (2026-05-25) — Revert misleading "(snaps to nearest 25)" label on starting_coins; document VMF slider limitation in Issue #39
+
+### Why
+v0.7.95 added " (snaps to nearest 25)" to the `starting_coins` localization label as a hint that the persisted value gets rounded to a multiple of 25. The label was misleading on two counts: (1) the user did not request it, and (2) the snap happens at save time, not while dragging — the slider still moves in increments of 1 in the live VMF UI. The label promised behavior the slider doesn't visibly exhibit.
+
+### Changed
+- `chaos_wastes_tweaker_localization.lua` — reverted `starting_coins` label to `"Starting Coins"`. No code/runtime behavior change (snap-on-save in `on_setting_changed` is untouched).
+
+### Filed
+- **Issue #39** — `ct: starting_coins VMF slider steps by 1, not 25`. Documents the VMF numeric-widget limitation: there is no `step` / `snap` / `increment` field in the widget definition (verified against upstream `vmf_options_view.lua` ~L2730 + slider math ~L4181). Options to actually solve in-UI stepping (dropdown of multiples of 25, coarser bin dropdown, upstream VMF PR) listed in the issue for design call.
+- **Issue #40** — `ct: Miracle of Isha mutex checkboxes don't visually deselect siblings`. Root cause: VMF's checkbox widget caches display state in `content.is_checkbox_checked` and only re-syncs from persisted value on `view:on_enter` — `mod:set` from inside `on_setting_changed` updates the store but not the open widget. Underlying mutex enforcement IS working (`_get_isha_mode()` returns the right mode); the failure is purely visual until the menu is reopened. Options listed in the issue.
+
+### Notes
+- `STARTING_COINS_MODE_MARKER` and the snap-on-save logic in `on_setting_changed`, `setup_run`, and `rpc_deus_set_initial_soft_currency` are unchanged — the bug fix from v0.7.95 (300 setting → 500 actual) stays in.
+
+## 0.7.109-dev (2026-05-25) — Standardize Debug Logging toggle (universal convention)
+
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). ct previously had no debug toggle at all — added.
+
+### Changed
+- `chaos_wastes_tweaker_data.lua` — appended `enable_debug_logging` checkbox (default `false`) AFTER `recursive_sort` so it lands at the bottom of `options.widgets`, top-level (NOT inside any group).
+- `chaos_wastes_tweaker_localization.lua` — added `enable_debug_logging` + `enable_debug_logging_tooltip` strings.
+- `chaos_wastes_tweaker.lua` — added file-local `_dbg(fmt, ...)` helper gated on `mod:get("enable_debug_logging")`. Output prefixed `[ct:dbg]`.
+- `itemV2.cfg` — title + description bumped to v0.7.109-dev.
+
+### Notes
+- No existing debug key to rename (ct had none).
+
+## 0.7.108-dev (2026-05-25) — Issue #34: cap ct_meta_ammo Quiver Cascade max_stacks at 30 + belt-and-suspenders _max_ammo clamp
+
+### Why
+Closes Issue #34. Pre-v0.7.108 every `ct_meta_*` per-stack buff template (Quiver Cascade `ct_meta_ammo`, Trueshot Talisman `ct_meta_crit`, Heart of Sigmar `ct_meta_health`, etc. — plus the special-cased `ct_meta_movespeed_stack_1` block) wrote `max_stacks = math.huge`. The factory trusted `_make_meta_proc` to never push the stack count beyond the active boon count. That holds under the happy path, but a runaway proc — stale `_get_player_power_ups` list during peer-late-join graph resync, a future RPC race, or any code path that calls `add_buff(stack_name)` outside the proc — can drive the `total_ammo` `stacking_multiplier` geometrically (engine resolution at buff_extension.lua:1391-1448: `final_value = final_value * (multiplier + 1) + bonus` per stack). At enough stacks the result overflows toward `math.huge`, and `tostring(math.huge) == "inf"` then renders on the HUD via `equipment_ui.lua:635` — the same shape as the wt v0.12.77 nil-hole multi-return collapse that surfaced as `inf` ammo earlier this week.
+
+This is the latent CT version of that bug class (sibling). The user-reported infinity-ammo bug 2026-05-25 was actually wt's safe_hook multi-return collapse (already fixed); this fix addresses the matching ct path so the same symptom can't resurface from this side.
+
+### Changed
+- **New constant** `CT_META_AMMO_MAX_STACKS = 30` near `MOD_VERSION`. Doc-block explains the rationale: 30 is well past the realistic boon ceiling (typical CW run tops out at 12-18 boons; 30 is endgame-of-endgame). With the v0.7.104 hyperbolic cost floor in place, 30 stacks of +5% `total_ammo` = 1.05^30 ≈ 4.3x — generous, bounded, HUD-safe.
+- `register_meta_boon` factory now writes `max_stacks = CT_META_AMMO_MAX_STACKS` (was `math.huge`) on every sub-buff entry.
+- Special-cased `ct_meta_movespeed_stack_1` block: same swap.
+- `_make_meta_proc` clamps its loop's upper bound: `local stacks_target = math.min(num_boons, CT_META_AMMO_MAX_STACKS)`. The cap in the template AND the clamp on the proc loop are mirrored on purpose — either alone is sufficient, both together close the door against future-code-path drift.
+
+### Added — belt-and-suspenders `_max_ammo` ceiling
+- Inside the consolidated `mod:hook_safe("GenericAmmoUserExtension", "_apply_buffs", ...)` body (search for `CT_META_AMMO_MAX_AMMO_SAFETY_CLAMP_v0.7.108`): `if type(self._max_ammo) == "number" and self._max_ammo > 9999 then self._max_ammo = 9999 end`. This is a post-vanilla-`_apply_buffs` clamp that catches the case where some OTHER buff path (talent, weapon trait, foreign mod, future ct feature) ever feeds `total_ammo` enough stacks to push `_max_ammo` toward Lua's float-printable overflow. 9999 sits well above any realistic ammo pool (vanilla max is ~190 on a Drakegun pre-buffs) and well inside Lua's float-printable integer range.
+- Consolidation note: VMF doctrine (CLAUDE.md § Hooking) says `hook_safe` does NOT chain on the same (Class, method) — two registrations silently overwrite. So the existing larger-clip `ammo_per_reload` scaling and the new Issue #34 `_max_ammo` clamp now share a single hook body. Both run unconditionally; neither short-circuits the other.
+
+### Added — regression test
+- `/ct_regression_test` now includes check `ct_meta_ammo_stacks_bounded`:
+  1. Asserts `CT_META_AMMO_MAX_STACKS` sentinel exists and equals 30.
+  2. Walks every `ct_meta_*_stack` template in `BuffTemplates`, asserts each sub-buff's `max_stacks` is finite AND `<= CT_META_AMMO_MAX_STACKS` (catches a regression that drops the cap back to `math.huge`).
+  3. Synthetic 50-boon stress: simulate the engine's stacking_multiplier formula with base=100, multiplier=0.05, clamp stacks to `CT_META_AMMO_MAX_STACKS`, run the simulated `_max_ammo` through the same `math.min(buffed_max, 9999)` gate — asserts finite AND `<= 9999` AND `> base` (sanity).
+
+### Anti-pattern guardrails (unchanged from v0.7.104)
+- Hyperbolic cost-floor curve (`_ct_meta_ammo_cost_multiplier`) is untouched — only the max stack count is bounded, not the per-stack value.
+- Multiplier value (0.05) is untouched — fix only the upper bound on stack count.
+
+### Verification
+- `/ct_regression_test` in-keep → `ct_meta_ammo_stacks_bounded` should PASS alongside the existing `ct_meta_ammo_*` checks.
+- Build-only verification this release (no deploy, no upload). User to drive a CW run with Quiver Cascade and confirm `/verify_ct_meta_ammo` shows finite `_max_ammo` after stacking the boon up.
+
+## 0.7.107-dev (2026-05-25) — Hardening: nil-hole-safe variadic unpack at N call sites (lessons from wt v0.12.77/.78 burn)
+
+### Why
+Repo-wide audit of `{ func(...) }` + bare `return unpack(results)` patterns triggered by the weapon_tweaker v0.12.77/.78 silent-truncation burn. Lua 5.1's `#t` operator stops at the first internal nil entry, and bare `unpack(t)` uses `#t` as its upper bound — any wrapped function that returns multi-values with an interior nil silently loses every return after that nil at the caller. The fix is to capture the true return count via `select("#", ...)` and unpack with explicit bounds (`unpack(t, 1, n)`).
+
+### Sites audited (6 in this file)
+| Site | Hook target | Vanilla return signature | Verdict |
+|---|---|---|---|
+| L~1436 | `DeusMechanism._transition_next_node` | single value (`next_state`) | DEFENSIBLE-AS-IS — documented |
+| L~1463 | `DeusMechanism.start_next_round` | three values (`game_mode_key`, `side_compositions`, `game_mode_settings`) | **FIXED** — `_capture_returns` + bounded unpack |
+| L~2082 | `PickupSystem.populate_pickups` | nothing (bare `return` only) | DEFENSIBLE-AS-IS — documented |
+| L~2727 | `DeusMapScene.on_enter` | nothing | DEFENSIBLE-AS-IS — documented |
+| L~2936 | `_G.deus_populate_graph` (no-replace path) | single value (`complete_graph`); mod code reads `result[1]` | DEFENSIBLE-AS-IS — documented |
+| L~2972 | `_G.deus_populate_graph` (shop-converted path) | same as above | DEFENSIBLE-AS-IS — documented |
+
+### Added
+- File-local `_capture_returns(...)` helper near MOD_VERSION (returns `select("#", ...), { ... }`) for any future hook wrapper that needs nil-hole preservation. Doctrine block above the helper documents the pattern.
+
+### Fixed
+- `DeusMechanism.start_next_round` hook now uses `local n, results = _capture_returns(func(self, ...))` + `return unpack(results, 1, n)`. Vanilla currently returns three non-nil values, but a future signature change introducing an interior nil (e.g. optional middle value) would have been silently truncated.
+
+### Documented (no behavior change, but inline comments added)
+- The five DEFENSIBLE-AS-IS sites now carry a `v0.7.107-dev nil-hole audit:` comment naming the vanilla source line they were verified against and explaining why bare `unpack` is safe at that site.
+
+## 0.7.106-dev (2026-05-25) — Issue #28: demo integration with bt net-replay ring
+
+### Why
+Closes Issue #28 (shared net-replay ring buffer for MP desync triage). bt v0.1.2-alpha ships the ring + chat command; ct is the documented demonstrator integration so adopters can see the wiring pattern before Wave-2 (Issue #27) systematizes it across every RPC site.
+
+### Added
+- `ct_sync_host_settings_chunk` host→client broadcast is now instrumented on both ends:
+  - **Host send side** (~L1098, inside the chunked-broadcast loop in the `DeusRunController.setup_run` hook): per-chunk `record_send("ct", "ct_sync_host_settings_chunk", tag, "others")` where `tag` is `"session=N seq=M total=T chunk=<200 chars>"`.
+  - **Client recv side** (top of the `network_register("ct_sync_host_settings_chunk", ...)` callback at L576): per-chunk `record_recv("ct", "ct_sync_host_settings_chunk", tag, sender_peer_id)`.
+- Both call sites resolve bt via `get_mod("bt"):net_replay()` and silently no-op if bt isn't installed (same install-independence pattern as the existing `is_br_active()` consumer-side check).
+
+### How to use
+1. Run a CW lobby with this mod + bt v0.1.2-alpha installed on every peer.
+2. After the host's settings broadcast (fires once at run setup), every peer (host + clients) has populated their bt ring.
+3. On any peer, run `/bt_net_replay ct` in chat. The output mirrors to `mod:info` so the trace lands in `%appdata%\Fatshark\Vermintide 2\console_logs\` for offline cross-peer diff.
+4. Compare host's `send` lines to each client's `recv` lines: session/seq/total/chunk_str should match end-to-end, and any missing seq number identifies a dropped chunk.
+
+## 0.7.105-dev (2026-05-24) — Issue #6: /verify_altars per-peer determinism diagnostic
+
+### Why
+Issue #6 (audit row #3 of CODE_REVIEW.md 2026-05-23 refresh) flags that the custom altar (`deus_weapon_chest`) distribution at `chaos_wastes_tweaker.lua:~1510` uses `HashUtils.fnv32_hash(node.level_seed)` as the shuffle seed — deterministic in theory, but never verified under live multiplayer (hot-join, cross-platform, run-resume). A divergence would silently produce different altar layouts for host vs client peers on the same node.
+
+### Added
+- `/verify_altars` chat command (inserted after `/verify_meta_ammo`). On each peer, prints:
+  - Current `node_key` (must match across peers — graph-snapshot RPC sync check)
+  - `node.level_seed` (must match — the source-of-truth seed)
+  - `fnv32_hash(level_seed)` output (must match — pure function of seed)
+  - `effective_setting` values for `chest_upgrade_count` / `chest_swap_melee_count` / `chest_swap_ranged_count` / `chest_power_up_count` (must match — host-broadcast settings sync check)
+  - Local `mod:get(...)` values for the same four settings (diagnostic — surfaces local-vs-effective divergence if a client's own setting changed but host didn't broadcast)
+  - `is_server` flag (so you can tell which peer's output is which)
+  - Current `_deus_weapon_chest_distribution` pending pops (only populated AFTER a chest opens on that node)
+- Output also mirrored to `mod:info` so the line lands in `console_logs/` for offline cross-peer comparison.
+
+### Validation plan (manual, per Issue #6)
+1. Host (PC-A) + client (PC-B) in the same CW lobby, same run, same node.
+2. Both run `/verify_altars`. Screenshot or copy both outputs.
+3. Every line should match between peers EXCEPT possibly the pending-pops list (depends on whether either peer has opened a chest yet).
+4. Hot-join a 3rd peer mid-run and repeat.
+5. If `node_key` / `level_seed` / hash differ → graph-snapshot RPC desync.
+6. If `effective_setting` values differ → host-broadcast settings desync.
+7. If only pending pops differ → shuffle ran with different state somehow.
+
+This release ships the diagnostic but does NOT close Issue #6 — the MP test itself remains for the user to run.
+
+## 0.7.104-dev (2026-05-24) — Quiver Cascade hyperbolic cost-floor (closes 0-cost zero-crossing) + per-meta-boon /verify_ct_meta_* commands
+
+### Why
+Two gamebreaking problems, both root-caused by audits this session:
+
+1. **0-cost ammo / energy / overcharge bug** (`.ammo_system_design_2026-05-24.md`): v0.7.102's "consumption-side stat_buff" approach (`ammo_used_multiplier` + `reduced_overcharge`) uses vanilla `stacking_multiplier` resolution which is **linear-additive** (buff_extension.lua:1391-1448). 20 stacks of -0.05 sum to `-1.0`, giving `root_multiplier = 1 + (-1.0) = 0` → cost-per-shot rounds to 0 → infinite ammo, energy, and overcharge headroom. Latent at ~20 boons. Vanilla never ships these stat_buffs at `max_stacks > 1`; ct_meta_ammo's per-boon stacking was unexplored territory and the curve crashed through zero.
+2. **User can't eyeball whether meta-boons are taking effect** (`.meta_boons_audit_2026-05-24.md`): every meta-boon stat_buff key IS valid and IS read by vanilla, but per-stack increments (1-5%) on bar-displayed stats are too small to see. Audit confirmed 0 silent-no-op key bugs — the perceived "broken" is actually "invisible". Need runtime probes per boon to distinguish "broken registration" from "tiny but working".
+
+### Changed — Quiver Cascade redesign
+- **Dropped** the `reduced_overcharge` and `ammo_used_multiplier` stat_buff entries from `CT_META_BOONS[2]`. Both used linear-additive `stacking_multiplier` resolution → divergence at 20 boons → zero / negative cost per shot.
+- **Kept** the `total_ammo` stat_buff (positive-only growth, no zero-crossing — vanilla Waystalker passive ships +100% with no engine issue).
+- **Added** new shared helper `_ct_meta_ammo_cost_multiplier(num_boons)` at top of file (next to `_clamp_network_bounded_max`): hyperbolic-saturating curve with hard floor.
+  - Formula: `cost_factor = max(1 - (N*step) / (1 + N*step/cap), floor)` where `step=0.05`, `cap=0.75`, `floor=0.25`.
+  - Bounded `[0.25, 1.0]` for any non-negative N (asserted by regression tests `ct_meta_ammo_cost_floor_holds` and `ct_meta_ammo_no_zero_cost`).
+  - Sample points: N=5 → 0.81, N=10 → 0.70, N=20 → 0.57, N=50 → 0.42, N=100 → 0.35, N→∞ → 0.25 (asymptote, NEVER reaches 0).
+- **Added** three direct vanilla hooks (use `mod:hook`, not `hook_safe`, since we mutate the cost arg). Each pcalls its body so a crash in resolution can never break the vanilla consumption path. Throttled per-extension log (1 line per 2s) only when factor < 1.0.
+  - `GenericAmmoUserExtension.use_ammo` (vanilla line 425) — scales `ammo_used` with belt-and-suspenders integer floor `math.max(1, math.ceil(...))`.
+  - `PlayerUnitEnergyExtension.drain` (vanilla line 85) — scales `amount` (float).
+  - `PlayerUnitOverchargeExtension.add_charge` (vanilla line 330) — scales `overcharge_amount`, respecting `_ignored_overcharge_types` (charging, damage_to_overcharge, drakegun_charging, flamethrower — same list vanilla skips at line 343).
+- **Hooks gate on local-player ownership** — husk units (remote players) early-return with no scaling. Each peer applies its own discount to its own shots; vanilla networking syncs the result.
+
+### Added — per-meta-boon verify commands
+For every entry in `CT_META_BOONS`, a factory-generated `/verify_ct_meta_<suffix>` chat command:
+- `/verify_ct_meta_stagger` — probes `power_level_impact` + `power_level_melee_cleave`
+- `/verify_ct_meta_crit` — probes `critical_strike_chance` + `critical_strike_effectiveness`
+- `/verify_ct_meta_health` — probes `max_health` + `healing_received`
+- `/verify_ct_meta_cooldown` — probes `cooldown_regen`
+- `/verify_ct_meta_ammo` — probes `total_ammo` AND prints the hyperbolic cost factor from the direct hooks
+- `/verify_ct_meta_movespeed` (special-cased) — reads `PlayerUnitMovementSettings.get_movement_settings_table(unit).move_speed` directly (no stat_buff path)
+
+Each command prints `OK`/`FAIL` per stat_buff with `resolved` vs `expected` (linear projection) and `delta`. Tolerance `1e-3`. Lets the user PROVE in-mission "the stat_buff applied" — distinguishes broken-registration from invisible-effect.
+
+### Rewritten — /verify_meta_ammo
+Now prints the hyperbolic curve at N=0,1,5,10,20,50,100,1000 so the user can see saturation visually. Live section shows `num_boons`, `cost_factor`, and `total_ammo` live resolution if a player unit is available.
+
+### Sentinel marker swap
+- **Retired** `CT_META_AMMO_ENERGY_CONSUMPTION_MARKER` value (v0.7.102) — kept the local declaration as a dead placeholder so any transitional upvalue reads still resolve. The body it anchored (`buff_funcs.functions.ct_meta_ammo_refresh_capacity`) still runs the ammo refresh.
+- **Added** `CT_META_AMMO_HYPERBOLIC_MARKER = "CT_META_AMMO_HYPERBOLIC_FLOOR_v0.7.104"` at top-of-file scope, read as upvalue inside `_ct_meta_ammo_cost_multiplier` body and printed by `/verify_meta_ammo`.
+
+### Regression tests (`/ct_regression_test`)
+- **Removed** `ct_meta_ammo_uses_consumption_side` — the assertion ("ammo_used_multiplier present in ct_meta_ammo_stack") is now WRONG (the stat_buff was the bug). The new `ct_meta_ammo_hyperbolic_floor_v0_7_104` check actively REJECTS its presence.
+- **Added** `ct_meta_ammo_hyperbolic_floor_v0_7_104` — verifies marker constant matches v0.7.104 value, helper is exposed on mod table, `BuffTemplates.ct_meta_ammo_stack` contains `total_ammo` and does NOT contain `ammo_used_multiplier`/`reduced_overcharge`/`max_energy`/`max_overcharge`.
+- **Added** `ct_meta_ammo_cost_floor_holds` — runtime probe: asserts `_ct_meta_ammo_cost_multiplier(1000)` returns a number in `[0.25, 1.0]` AND `_ct_meta_ammo_cost_multiplier(0)` returns exactly `1.0` (no behavior change without active boons).
+- **Added** `ct_meta_ammo_no_zero_cost` — runtime probe: iterates N from 0 to 50, asserts cost factor stays in `[0.25, 1.0]` AND is monotonically non-increasing (curve-shape sanity).
+- **Kept** `ct_clamp_helper_present` and `ct_no_direct_max_energy_mutation` — both still valid (helper still useful for future code, no direct `_max_<X>` writes anywhere in ct).
+
+### Verification
+1. Restart VT2 with mod enabled.
+2. Run `/ct_regression_test` — all 4 new checks PASS (plus the two retained).
+3. Run `/verify_meta_ammo` from keep — see hyperbolic curve printout (N=20→0.571, N=100→0.348, N=1000→0.250).
+4. Start a CW run, pick up boons until count > 20, run `/verify_ct_meta_ammo` mid-mission — see `cost_factor` decrease as N grows, total_ammo OK/FAIL line.
+5. Fire any ranged weapon with N ≥ 20 boons — ammo counter decrements every shot (not stuck at full); reload triggers at empty. Same for Sienna staff (overcharge rises) and Moonfire bow (energy drains).
+6. Run `/verify_ct_meta_<X>` per boon to confirm each stat_buff resolves to its expected linear projection.
+
+### References
+- Design source: `.ammo_system_design_2026-05-24.md`
+- Audit source: `.meta_boons_audit_2026-05-24.md`
+- Prior fix lineage: v0.7.78 (max_overcharge → reduced_overcharge), v0.7.102 (consumption-side stat_buff), v0.7.104 (this — direct hooks).
+
+## 0.7.103-dev (2026-05-23) — Back-fill regression test for v0.7.92 Reckless Swings name-based lookup (GH #5)
+
+### Why
+Test-coverage audit `.test_coverage_audit_2026-05-24.md` flagged v0.7.92-dev as the one ct fix shipped without an automated regression check (doctrine PROJECT_STANDARDS §15 violation — "every bug requires a test"). The v0.7.92 verification block was entirely manual (load CW, enable toggle, eyeball log line). If a future refactor reverts the name-based lookup to positional `buffs[1]`/`description_values[1]`/`[3]` indexing, nothing catches it.
+
+### Added
+- `CT_RECKLESS_SWINGS_NAME_LOOKUP_MARKER` source-pattern sentinel — file-scope constant declared next to `_find_entry_by`, read as an upvalue inside `apply_reckless_swings_tweak` (anchored anti-bitrot pattern, mirrors v0.7.102's `CT_META_AMMO_ENERGY_CONSUMPTION_MARKER`). A refactor that strips the name-based search code path also breaks the upvalue read site.
+- `/ct_regression_test` check `reckless_swings_name_based_lookup` — verifies the marker constant matches the v0.7.92 value AND `_find_entry_by` helper exists AS A FUNCTION at file scope. Also schema-checks `reckless_swings_originals` for the v0.7.92 `buff_index`/`dv_threshold_index`/`dv_damage_index` numeric fields (when the tweak is active — payload-shape regression catch).
+
+### Verification
+1. Restart VT2 with mod enabled.
+2. Run `/ct_regression_test` in chat — verify line `PASS: reckless_swings_name_based_lookup`.
+3. (Optional positive trip) Comment out the marker declaration, rebuild, rerun — expect FAIL with "CT_RECKLESS_SWINGS_NAME_LOOKUP_MARKER not defined".
+
+### References
+- Test coverage audit: `.test_coverage_audit_2026-05-24.md` MISSING row 1.
+- Doctrine: PROJECT_STANDARDS.md §15.
+- Original fix: v0.7.92-dev (below).
+
+## 0.7.102-dev (2026-05-23) — Quiver Cascade energy: consumption-side rewrite + universal `_clamp_network_bounded_max` helper (retires v0.7.101's career-specific gate)
+
+### Why
+v0.7.101-dev "fixed" the Necromancer-bot max_energy crash (GUID `10764a92-d642-43c2-a51b-07c5b45508be`) by gating the direct `_max_energy` mutation on `item_name == "we_deus_01"` + a base-sanity check + an engine clamp. User feedback (correct): **career-specific gating is the wrong approach.** If any future career (or any future ANY-careers-can-wield-any-weapon mod, of which we ship one) puts the `energy_system` extension on a different career or wields Moonfire on a non-Kerillian, the gate's whitelist is wrong and the bug class returns. The right fix is the same shape as v0.7.78's `max_overcharge → reduced_overcharge` switch: use the vanilla consumption-side stat_buff so the engine's network-bounded max field is never touched.
+
+Vanilla DOES expose a consumption-side stat_buff for energy: **`ammo_used_multiplier`** (defined `stacking_multiplier` at `buff_templates.lua:28`, read by `PlayerUnitEnergyExtension.drain` line 95: `amount = amount * apply_buffs_to_value(1, "ammo_used_multiplier")`). It's the EXACT parallel of `reduced_overcharge`: per-cast, never network-synced, no engine cap involved. Vanilla CW boon `boon_range_01` (Hand of Drakira) already uses it — `scripts/settings/dlcs/morris/deus_power_up_settings.lua:4974`.
+
+### Changed — three-layer doctrine fix
+1. **Consumption-side stat_buff (PRIMARY).** `CT_META_BOONS.ct_meta_ammo.stat_buffs` now includes `{ stat_buff = "ammo_used_multiplier", multiplier = -0.05 }` alongside `reduced_overcharge` (overcharge) and `total_ammo` (ammo). At 12 boons → cumulative -0.60 multiplier; `stacking_multiplier` composes additively so the effective drain multiplier is `1 + (-0.60) = 0.40`. Per-cast energy cost drops to 40% → ~2.5x effective firing capacity. Functionally equivalent to the prior +60% bar buff but with no NetworkConstants ceiling risk for any career, present or future.
+2. **Universal clamp helper (UNIVERSAL SAFEGUARD).** New top-of-file helper `_clamp_network_bounded_max(field_name, raw_value)` reads `NetworkConstants[field_name].max` (with safe `or 60` fallback) and clamps to `[min, cap]` with integer rounding. Exposed as `mod._clamp_network_bounded_max` for tests / future code. There are currently ZERO direct `_max_<X>` writes in the entire monorepo (verified via grep) — the helper is purely belt-and-suspenders for future code that might be tempted to write the field directly.
+3. **Energy refresh block REMOVED.** The entire energy-extension mutation block at the old L5650-5742 (item-name whitelist + base-sanity gate + engine clamp + `_max_energy = N` write + `_energy` rescale) is gone. The boon's apply func now only refreshes `AmmoExtension` (for `total_ammo`); overcharge and energy ride entirely on their respective consumption-side stat_buffs and need no explicit refresh — that's the whole point of the consumption-side pattern.
+
+### Sentinel marker swap
+- **Retired:** `CT_META_AMMO_WEAPON_GATE_MARKER`, `CT_META_AMMO_ENERGY_CLAMP_MARKER` (and their two regression checks). They documented the v0.7.101 weapon-gate approach which is now wrong.
+- **Added:** `CT_META_AMMO_ENERGY_CONSUMPTION_MARKER = "CT_META_AMMO_ENERGY_CONSUMPTION_v0.7.102"`. Read as an upvalue inside the `ct_meta_ammo_refresh_capacity` closure so a future refactor that strips the consumption-side comment block also breaks the marker read site (anti-bitrot).
+
+### New `/verify_meta_ammo` (rewritten)
+The v0.7.101 command was Moonfire-gate-focused. The v0.7.102 rewrite is career-agnostic. Output:
+- `weapon=<name>  num_boons=<N>`
+- Per-stack and N-stack totals for all 3 stat_buffs (`total_ammo`, `reduced_overcharge`, `ammo_used_multiplier`)
+- Live `apply_buffs_to_value(1, <key>)` resolution from the buff_extension (cross-check vs raw arithmetic when other mods stack)
+- Clamp ceilings for `max_overcharge` + `max_energy` (proves the helper works at runtime)
+- Direct-mutation scan: prints current `_max_overcharge` / `_max_energy` and FLAGS any value > clamp ceiling
+- Sentinel marker
+
+### New regression checks (replaces 3 from v0.7.101)
+1. `ct_meta_ammo_uses_consumption_side` — asserts `CT_META_AMMO_ENERGY_CONSUMPTION_MARKER` is the v0.7.102 value AND walks `BuffTemplates.ct_meta_ammo_stack.buffs` to verify `ammo_used_multiplier` is present and no engine-bounded `max_energy`/`max_overcharge` stat_buff is present. Catches a partial revert that puts the bug back in either the marker OR the data path.
+2. `ct_clamp_helper_present` — asserts `mod._clamp_network_bounded_max` exists, is callable, and emits a clamped value `<= NetworkConstants.max_<X>.max` for both overcharge and energy when fed a deliberately oversized input (9999).
+3. `ct_no_direct_max_energy_mutation` — runtime walk of `Managers.player:human_and_bot_players()` asserting `_max_energy` AND `_max_overcharge` on every player unit stays within their respective engine caps. Best-effort PASS during keep load timing.
+
+### Files modified
+- `chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua` (≈170 LOC delta; net negative: full energy mutation block excised, replaced by 1-line consumption-side stat_buff entry + universal clamp helper):
+  - `MOD_VERSION` `0.7.101-dev` → `0.7.102-dev`
+  - Added top-of-file `_clamp_network_bounded_max(field_name, raw_value)` helper (around line 47), exposed as `mod._clamp_network_bounded_max`
+  - `CT_META_BOONS.ct_meta_ammo.stat_buffs` — new `{ stat_buff = "ammo_used_multiplier", multiplier = -0.05 }` entry
+  - Retired markers + new sentinel `CT_META_AMMO_ENERGY_CONSUMPTION_MARKER`
+  - `ct_meta_ammo_refresh_capacity` — energy mutation block deleted; function body shrunk to its original "refresh AmmoExtension" role + an upvalue read of the new marker
+  - `/verify_meta_ammo` — rewritten career-agnostic
+  - 3 regression checks swapped (retired v0.7.101 weapon-gate / clamp-marker / energy-within-bounds; added v0.7.102 consumption-side / clamp-helper / no-direct-max-mutation)
+- `chaos_wastes_tweaker/itemV2.cfg` — title suffix `v0.7.101-dev` → `v0.7.102-dev` (vmblauncher auto-rewrites on upload)
+
+### Verification recipe
+1. Restart VT2.
+2. In the keep on ANY career (Necromancer, Outcast Engineer, Sister of the Thorn, Mercenary, Slayer — anything), run `/ct_regression_test` — all v0.7.102 checks PASS (plus the pre-existing ones).
+3. Run `/verify_meta_ammo` — should print all three stat_buffs, clamp ceilings ≥ 60, and `violations=NONE`.
+4. Start a CW run with **Necromancer** (the original crash career — bot or human). Collect 12+ boons. Open a Chest of Trials. No crash. Run `/verify_meta_ammo` — should show `num_boons=12`, `ammo_used_multiplier  -5% -> -60% (live=0.40)`, `violations=NONE`.
+5. Start a CW run with **Kerillian + Moonfire Bow**. Collect 12+ boons. Verify firing the bow drains the energy bar visibly slower (≈40% per shot of the pre-boon rate).
+6. Lint: `tools/mod-lint/lint-mod.ps1 -ModPath chaos_wastes_tweaker` PASS.
+
+### Peer-sync safety
+The fix is BACKWARD-COMPATIBLE with prior versions IF the player using v0.7.102 never crashes a non-Kerillian host running pre-v0.7.102 (because the host's local stack still mutates `_max_energy` and that's per-peer state). Mixed-version play between v0.7.101 ↔ v0.7.102 is safe; pre-v0.7.101 hosts still risk the original crash on their own side. The BuffTemplates entry is registered via the same `register_buff_in_network_lookup` path as the existing 3 stat_buffs (deterministic sort), so combined_hash is stable.
+
+### Doctrine memory written
+`feedback_vt2_max_resource_consumption_side.md` — formalizes the rule: when a boon/buff conceptually means "more of a network-bounded resource", use the consumption-side stat_buff (`reduced_<field>`, `ammo_used_multiplier`, etc.); never write `_max_<field>` directly. Career-specific gating is wrong because the bug class returns the moment another career adopts the resource.
+
+---
+
+## 0.7.101-dev (2026-05-23) — Quiver Cascade Moonfire-only energy gate + engine-bound clamp (fixes Necromancer-bot max_energy crash)
+
+### Why
+Crash GUID `10764a92-d642-43c2-a51b-07c5b45508be`. Engine fatal at `foundation/scripts/util/error.lua:26`:
+```
+Max energy outside value bounds allowed by network variable!
+```
+fired from `player_unit_energy_extension.lua:43`. Self state at crash: `_max_energy = 64`, `_ct_meta_ammo_base_max = 40`, `_energy = 64`. Career = **Necromancer (bot)**. `NetworkConstants.max_energy.max == 60` so 64 trips the fassert.
+
+Root cause: the Quiver Cascade meta boon's `ct_meta_ammo_refresh_capacity` apply func (v0.7.43–v0.7.100) mutated `_max_energy` on **any** player unit with the `energy_system` extension. But per `scripts/network/unit_extension_templates.lua`, `PlayerUnitEnergyExtension` is registered on EVERY career's player + husk profile. Non-Kerillian careers fall back to `max_value or 40` (player_unit_energy_extension.lua:14) because `EnergyData` (energy_data.lua) only defines entries for Kerillian's four careers (`we_waywatcher` / `we_maidenguard` / `we_shade` / `we_thornsister`, all `max_value = 25`).
+
+So a Necromancer bot collected 12 boons (Quiver Cascade stacks 12 → +60%): `40 × 1.60 = 64`, exceeded the cap, crashed the host. Bots get boons too — `Managers.player:owner(unit)` returns the bot's player object the same as a human's.
+
+The original code (L5650) was AUTHORED only for Moonfire Bow (Kerillian's `we_deus_01`) per the comment, but the gate it used was extension-existence — wrong gate.
+
+### Changed — three-layer defensive gate
+`scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua` (the `ct_meta_ammo_refresh_capacity` body):
+
+1. **Gate 1 — weapon whitelist.** Reads `inventory_extension:get_slot_data("slot_ranged").item_data.name` and proceeds only when it equals `"we_deus_01"`. Necromancer / Outcast Engineer / Sister of the Thorn / any future career-with-energy-mechanic short-circuit at this gate and the extension is never touched.
+2. **Gate 2 — base sanity.** If `_ct_meta_ammo_base_max >= 40`, skip. Moonfire Bow's base on Kerillian is 25 (per `EnergyData.we_<career>.max_value`); a base of 40 means we stashed the value while the extension was on a non-Kerillian career falling back to the `or 40` default. Belt-and-suspenders against gate-1 missing a future Kerillian-equips-non-Moonfire-then-equips-Moonfire transition.
+3. **Engine clamp.** Even when both gates pass, clamp `new_max` to `NetworkConstants.max_energy.max` (with hardcoded fallback `60` if the constant isn't loaded yet). That's the same value the engine fassert reads — staying at-or-below it is the only crash-free shape.
+
+### Apply-site logging (per PROJECT_STANDARDS.md §15)
+- Gate fires: `[ct/meta_ammo] energy_max gated: weapon=<name> (not Moonfire Bow); skipping`
+- Base-sanity gate fires: `[ct/meta_ammo] energy_max gated: base=<n> suspiciously high for Moonfire (expected ~25); skipping`
+- Scaling proceeds: `[ct/meta_ammo] energy_max scaled: weapon=we_deus_01 base=25 raw_new=<f> new_max=<n> clamp_ceiling=60 num_boons=<n>`
+
+### New chat command — `/verify_meta_ammo`
+Dumps the local player's wielded weapon item_name, base/cur max energy from the extension, num_boons from the deus run controller, the clamp ceiling, and what the refresh func would emit for the current state. Reports `gate=SKIP (not Moonfire)` or `gate=PROCEED (Moonfire)` so the user can confirm the fix works without staring at logs. Works in the keep (no run → num_boons = 0) and mid-run.
+
+### New regression checks
+Three new `_rt_register` entries on `/ct_regression_test`:
+1. `ct_meta_ammo_weapon_gate_present` — asserts the file-scope marker constant `CT_META_AMMO_WEAPON_GATE_MARKER` shipped to the compiled bundle. The closure uses it as an upvalue, so removing it during a refactor breaks both the read site and this check.
+2. `ct_meta_ammo_energy_clamp_present` — same shape for `CT_META_AMMO_ENERGY_CLAMP_MARKER`.
+3. `ct_meta_ammo_energy_within_bounds` — runtime: walks `Managers.player:human_and_bot_players()`, finds any unit with an `energy_system` extension, asserts `_max_energy <= NetworkConstants.max_energy.max`. Returns FAIL with the offending player + value if any unit exceeds. Tolerates keep-load timing (PASS if `Managers.player` not ready).
+
+### Files modified
+- `chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua` — `MOD_VERSION` `0.7.100-dev` → `0.7.101-dev`; gate + clamp in `ct_meta_ammo_refresh_capacity`; file-scope marker constants; `/verify_meta_ammo` command; 3 new regression checks.
+- `chaos_wastes_tweaker/itemV2.cfg` — title suffix `v0.7.100-dev` → `v0.7.101-dev`; description body `v0.7.98-dev` → `v0.7.101-dev` (the stale `0.7.98-dev` reference inside the description was a pre-existing drift, fixed in this bump).
+
+### Verification recipe
+1. Restart VT2 with the updated mod.
+2. In the keep, run `/ct_regression_test` — all 3 new checks must PASS (plus the existing ones).
+3. With a Necromancer in the party (bot or human), wield any non-Moonfire ranged weapon. Run `/verify_meta_ammo` — should report `gate=SKIP (not Moonfire)`.
+4. Start a CW run with Kerillian + Moonfire Bow. Collect 12+ boons. Open a Chest of Trials. Run `/verify_meta_ammo` — should report `gate=PROCEED (Moonfire)`, `would_emit` clamped to ≤ 60. No crash.
+
+### Peer-sync safety
+The fix only changes the LOCAL apply func body — no new NetworkLookup entries, no new BuffTemplates, no new DeusPowerUp* registrations. Peers running mixed versions remain compatible: pre-v0.7.101 peers crash on Necromancer-with-12-boons; v0.7.101 peers no-op the energy mutation on Necromancer. No combined_hash impact.
+
+---
+
+## 0.7.100-dev (2026-05-23) — Full dormant-boon code-path purge (eliminates the v0.7.99 half-fix that re-crashed at Chest of Trials)
+
+### Why
+v0.7.98-dev disabled the dormant feature by emptying `DORMANT_BOON_RARITY = {}`, but every other reference to dormant data in the file remained ACTIVE. v0.7.99-dev added `_G.DORMANT_BOON_RARITY = _G.DORMANT_BOON_RARITY or {}` to fix a Lua scope bug exposed at the Chest of Trials (crash GUID `4c5d2157-e5ee-45fd-8f49-ecdcd2e7ade3`, `chaos_wastes_tweaker.lua:1144`). That was a half-fix: live code still walked the empty table and read `activate_dormant_*` settings from a non-existent widget. User demand: **zero active code referencing dormant data**.
+
+### Changed — full purge inventory
+- `chaos_wastes_tweaker.lua` — `MOD_VERSION` bumped `0.7.99-dev` → `0.7.100-dev`.
+- `chaos_wastes_tweaker.lua` — Top of file: replaced the `_G.DORMANT_BOON_RARITY = ... or {}` shim with a defensive-style preamble block + the `CT_DORMANT_PURGE_VERIFIED` sentinel constant. The global table is GONE (no empty `{}` either).
+- `chaos_wastes_tweaker.lua` — Apply-site breadcrumb reworded `dormant boons disabled` → `dormant/skulls boons purged` (active vs. inactive distinction); now logs the sentinel value.
+- `chaos_wastes_tweaker.lua` — `_should_strip` (in `generate_random_power_ups` hook ~L1150): dormant branch removed (`DORMANT_BOON_RARITY[name] ... activate_dormant_<name>` check deleted). Only `disable_boon_<name>` + bomb-mutex remain.
+- `chaos_wastes_tweaker.lua` — `stripped_dormants` audit log path and `_should_strip` post-strip `DORMANT_BOON_RARITY[name]` check deleted. The strip loop is still defensive (belt-and-suspenders) but contains no dormant-specific code.
+- `chaos_wastes_tweaker.lua` — `add_power_ups` boon-trace hook (~L3435): removed `is_dormant`, `dormant_toggle`, and the `DORMANT GRANTED WITH TOGGLE OFF` warning. The `DISABLED BOON GRANTED` warning (user-facing disable toggle) remains active.
+- `chaos_wastes_tweaker.lua` — `/verify_dormants` chat command (~L3670) entire body block-commented (`--[[ ... --]]`). Re-enable is a literal uncomment.
+- `chaos_wastes_tweaker.lua` — `pre_register_dormant_lookups` + `sync_dormant_boons` function declarations + apply-site calls (~L4885) wrapped in `--[[ ... --]]`. The functions iterated `DORMANT_BOON_RARITY` directly. `_injected_dormants`, `_added_to_pool`, `inject_dormant_boon`, `_add_dormant_to_pool`, `_remove_dormant_from_pool` stay ACTIVE (used by trait + meta boons as generic injectors; do NOT touch `DORMANT_BOON_RARITY`).
+- `chaos_wastes_tweaker.lua` — `sync_host_dependent_state` (~L5931): the inline `sync_dormant_boons()` comment was rewritten to point at the FULL purge.
+- `chaos_wastes_tweaker.lua` — `deus_rarities_valid` regression check (~L7155): replaced the `pairs(DORMANT_BOON_RARITY)` iteration with `pairs(CT_DISABLED_DORMANT_RARITIES)` so the check still validates the disabled-set's rarities are vanilla-legal (paranoia against future re-enable bringing back a bad rarity).
+- `chaos_wastes_tweaker.lua` — `dormant_boon_rarity_is_table` regression check (v0.7.99) renamed to `dormant_boon_rarity_global_absent` and inverted: PASS now means `_G.DORMANT_BOON_RARITY == nil`. The full purge means no global remains.
+- `chaos_wastes_tweaker.lua` — NEW regression check `dormant_setting_keys_not_consumed`: asserts the `CT_DORMANT_PURGE_VERIFIED` sentinel constant is present + correct in the compiled bundle. A future partial revert that drops the sentinel fails this check.
+- `chaos_wastes_tweaker.lua` — NEW regression check `dormant_chat_commands_removed`: walks the VMF command registry (`mod._data.commands` + `_G.vmf.commands`) and asserts `verify_dormants` is NOT present.
+- `itemV2.cfg` — Title suffix bumped: `v0.7.99-dev` → `v0.7.100-dev`.
+
+### Defensive style guide added
+A new preamble near `MOD_VERSION` documents the four defensive rules established after this purge:
+1. Top-level tables consumed by mid-file closures: declare at TOP of file.
+2. Global table indexes: wrap in `(rawget(_G, "X") or {})` sentinel.
+3. NetworkLookup / BuffTemplates: always `rawget()`.
+4. Every disabled feature ships with a regression check asserting the disable.
+
+### Regression checks for dormant-related code after this purge
+
+Five checks now cover the dormant-disabled state:
+1. `dormant_boons_NOT_registered` — disabled names absent from `NetworkLookup.deus_power_up_templates` + `_G.BuffTemplates`.
+2. `dormant_boons_NOT_in_pool` — disabled names absent from `DeusPowerUpRarityPool` + `DeusPowerUps[rarity]`.
+3. `dormant_boon_rarity_global_absent` — `_G.DORMANT_BOON_RARITY == nil`.
+4. `dormant_setting_keys_not_consumed` — purge-verified sentinel present.
+5. `dormant_chat_commands_removed` — `/verify_dormants` absent from VMF registry.
+
+### Verification
+1. Restart VT2 with the updated mod.
+2. Run `/ct_regression_test` in keep — all 5 dormant-related checks must PASS.
+3. Start a CW run and trigger a Chest of Trials. The v0.7.99 crash GUID `4c5d2157` was at line 1144 (`_should_strip` indexing the missing global); the line no longer has that code path.
+
+### Peer-sync safety
+No change vs. v0.7.99: every peer running v0.7.100-dev produces the same `NetworkLookup` contents (no names added beyond trait/meta boons). The trait + meta boon injection paths still call `inject_dormant_boon` directly with non-dormant names — `inject_dormant_boon` is just historically named; it's a generic boon injector.
+
+---
+
+## 0.7.98-dev (2026-05-23) — Disable all dormant boons + Skulls event boons + ct_kill_heal (Chest-of-Trials crash mitigation)
+
+### Why
+After investigating a possible Chest-of-Trials crash, the user requested all mod-injected dormant CW boons be removed from the game entirely. The 9 vanilla "dormant" power-ups (`squats`, `deus_larger_clip`, `deus_throw_speed_increase`, `deus_ammo_pickup_give_allies_ammo`, `deus_coin_pickup_regen`, `deus_large_ammo_pickup_infinite_ammo`, `deus_timed_block_free_shot`, `deus_transmute_into_coins`, `explosive_pushes_on_damage_taken`) and the mod-defined `ct_kill_heal` boon are no longer registered in any `NetworkLookup` / `BuffTemplates` / `DeusPowerUps*` table. The v0.7.93-dev Skulls event boon mutator-clear is also disabled — Skulls boons remain behind their vanilla `skulls_2023` mutator gate (i.e. pre-v0.7.85 behavior). The implementation code is preserved in block comments so re-enable is a literal uncomment.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — `MOD_VERSION` bumped `0.7.97-dev` → `0.7.98-dev`.
+- `chaos_wastes_tweaker.lua` — Added apply-site log breadcrumb at mod load: `[ct] dormant boons disabled (v0.7.98-dev); 10 dormants + 10 skulls boons commented out at mod-load.` per `feedback_vt2_verify_before_shipping.md`.
+- `chaos_wastes_tweaker.lua` — Added `CT_DISABLED_DORMANT_BOON_NAMES` + `CT_DISABLED_DORMANT_RARITIES` + `CT_DISABLED_SKULLS_BOON_NAMES` constants near the top of the file so the new regression checks can iterate the disabled names without depending on the block-commented originals.
+- `chaos_wastes_tweaker.lua` — `DORMANT_BOON_RARITY` populated table replaced with empty `{}`; original entries preserved in block comment immediately above. With the table empty every cross-file reference (`_should_strip`, the `add_power_ups` boon-trace hook, `pre_register_dormant_lookups`, `sync_dormant_boons`, `/verify_dormants`, the `deus_rarities_valid` regression check) becomes a clean no-op without needing per-call edits.
+- `chaos_wastes_tweaker.lua` — Apply-site calls `pre_register_dormant_lookups()` + `sync_dormant_boons()` block-commented.
+- `chaos_wastes_tweaker.lua` — `sync_dormant_boons()` call inside `sync_host_dependent_state` line-commented so re-enable is symmetric with the apply-site uncomment.
+- `chaos_wastes_tweaker.lua` — `on_setting_changed` branches for `activate_dormant_*` and `enable_skulls_event_boons` line-commented — the widgets no longer exist so the branches couldn't fire anyway, but commenting them keeps the disable explicit.
+- `chaos_wastes_tweaker.lua` — Entire Skulls block (`SKULLS_EVENT_BOONS` list + `_skulls_original_mutators` + `pre_register_skulls_event_lookups` + `_set_skulls_mutators_active` + `sync_skulls_event_boons` + the two apply-site calls) wrapped in a `--[[ ... --]]` block comment.
+- `chaos_wastes_tweaker.lua` — `ct_kill_heal` `do ... end` block wrapped in a `--[[ ... --]]` block comment. The NetworkLookup pre-registration that previously had to fire unconditionally is removed at the same time — acceptable because every peer re-syncing to v0.7.98-dev has identical mod state with no `ct_kill_heal` name in the lookup, so no peer-version-subset can produce divergent indices.
+- `chaos_wastes_tweaker.lua` — Regression checks `dormant_boons_preregistered`, `dormant_buff_dual_registered`, `kill_heal_uses_permanent_heal_type`, and `skulls_boons_preregistered` block-commented (they would FAIL given registration is disabled). The `skulls_boons_preregistered` block-comment is mandatory because it references the now-undefined `SKULLS_EVENT_BOONS` local — leaving it live would throw "attempt to index a nil value" at `/ct_regression_test` time.
+- `chaos_wastes_tweaker.lua` — Added two new regression checks:
+  - `dormant_boons_NOT_registered` — iterates `CT_DISABLED_DORMANT_BOON_NAMES` and verifies each is absent from BOTH `NetworkLookup.deus_power_up_templates` AND `_G.BuffTemplates` (under each name's known rarity variant).
+  - `dormant_boons_NOT_in_pool` — verifies the disabled names are not present in any rarity bucket of `DeusPowerUpRarityPool` or `DeusPowerUps[rarity]`.
+- `chaos_wastes_tweaker_data.lua` — VMF widget groups `activate_dormant_boons_group` (9 checkboxes) and `skulls_event_boons_group` (1 checkbox) block-commented.
+- `chaos_wastes_tweaker_data.lua` — `start_boon_dormant_group` builder block-commented in `build_start_tree()`. A starting-boon checkbox for an unregistered boon would silently no-op and mislead users.
+- `chaos_wastes_tweaker_data.lua` — `ct_kill_heal` entry in BOON_TREE's health category line-commented.
+- `chaos_wastes_tweaker_data.lua` — `SORT_GROUPS["start_boon_dormant_group"] = true` line-commented.
+- `chaos_wastes_tweaker_localization.lua` — Block-commented: `display_name_ct_kill_heal` / `description_ct_kill_heal` / `disable_boon_ct_kill_heal*` / `start_boon_ct_kill_heal*`; `skulls_event_boons_group` / `enable_skulls_event_boons*`; `activate_dormant_boons_group` and all 9 `activate_dormant_<boon_id>` + `_tooltip` entries.
+- `itemV2.cfg` — Title version suffix bumped: `v0.7.97-dev` → `v0.7.98-dev`.
+
+### Boons removed from the game
+
+Dormant boons (no longer registered in any lookup or pool):
+- `squats`, `deus_larger_clip`, `deus_throw_speed_increase`
+- `deus_ammo_pickup_give_allies_ammo`, `deus_coin_pickup_regen`
+- `deus_large_ammo_pickup_infinite_ammo`, `deus_timed_block_free_shot`
+- `deus_transmute_into_coins`, `explosive_pushes_on_damage_taken`
+
+Mod-defined boon (no longer registered):
+- `ct_kill_heal` (Khaine's Communion)
+
+Skulls event boons (now stay behind the vanilla `skulls_2023` mutator gate, never roll outside the Skulls event):
+- `boon_skulls_01..08` + `boon_skulls_set_bonus_01` + `boon_skulls_set_bonus_02`
+
+### Peer-sync safety
+Because every peer running v0.7.98-dev produces the same `NetworkLookup` contents (no names added beyond what other mod features already register), no `feedback_vt2_gated_registration_diverges` desync class can occur. The user is the host so all clients will re-sync against the same mod state once they update.
+
+### Verification
+1. Restart VT2 with the updated mod.
+2. Run `/ct_regression_test` in keep — both new checks must PASS:
+   - `dormant_boons_NOT_registered` — nil for PASS.
+   - `dormant_boons_NOT_in_pool` — nil for PASS.
+3. Start a CW run, open a shrine — none of the disabled boon names should appear in the offering.
+4. Open a Chest of Trials — should no longer crash (the original symptom that triggered this change).
+5. Mod load log line: `[ct] dormant boons disabled (v0.7.98-dev)` confirms the apply-site breadcrumb is firing.
+
+### Re-enable instructions
+Every block comment carries a `2026-05-23 v0.7.98-dev DISABLED` header with specific re-enable steps. Search the codebase for that string to find every commented block. Restore order:
+1. `chaos_wastes_tweaker.lua` — populated `DORMANT_BOON_RARITY` table; apply-site calls; Skulls block; `ct_kill_heal` block; `sync_host_dependent_state` `sync_dormant_boons()` call; `on_setting_changed` branches; the 4 disabled regression checks.
+2. `chaos_wastes_tweaker_data.lua` — VMF widget groups; `start_boon_dormant_group` builder; BOON_TREE `ct_kill_heal` entry; SORT_GROUPS entry.
+3. `chaos_wastes_tweaker_localization.lua` — All commented locale keys.
+4. Remove the two new `dormant_boons_NOT_*` regression checks (or invert their semantics).
+5. Bump MOD_VERSION + itemV2.cfg suffix.
+
+## 0.7.97-dev (2026-05-23) -- Block Outcast Engineer crafted bombs from world pickup spawns
+
+### Why
+User bug report 2026-05-23: "Bardin's Outcast Engineer bombs are appearing in the item spawns; those are his crafted bombs. They're not supposed to be there." The Outcast Engineer's bomb (`engineer_grenade_t1`) is a vanilla `Pickups.grenades` entry whose only legitimate path into inventory is the career's cooldown buff handing it out via `inventory_extension:add_equipment(slot_name, ItemMasterList["grenade_engineer"], ...)` (see `scripts/settings/dlcs/cog/buff_settings_cog.lua:232`). It is NOT meant to spawn on the ground, on racks, in chests, or via any other world-spawn path.
+
+The ct adventure-injection broadening in v0.7.64 added `"grenades"` to `ADVENTURE_CATS` (the `_can_spawn` fallback that approves vanilla campaign pickups on injected adventure missions). That allow-list swept in EVERY entry of `Pickups.grenades`, including the engineer-only `engineer_grenade_t1`, so on a CW run with adventure injection the bomb could roll as a ground pickup for any character. Vanilla `_can_spawn` could also accidentally approve it if a spawner unit ever tagged `engineer_grenade_t1 = true` (unlikely but not blocked).
+
+### Changed
+- `chaos_wastes_tweaker.lua` — Added `_CAREER_EXCLUSIVE_PICKUPS_BLOCKLIST` constant near the top of the file (next to `BOMB_BOON_NAMES`) listing pickup names that must NEVER be world-spawned. Currently one entry: `engineer_grenade_t1` (Bardin Outcast Engineer's crafted bomb). Doc block explains the vanilla source-of-truth (`scripts/settings/equipment/pickups.lua:698`) and the career-grant path that is intentionally NOT routed through `PickupSystem._spawn_pickup` (so the denial doesn't break legitimate career mechanics).
+- `chaos_wastes_tweaker.lua` — Modified the `PickupSystem._can_spawn` hook to apply the blocklist BEFORE vanilla's check and BEFORE the ct ADVENTURE_CATS allow-list. Denial is global (every level, every mechanism) since these names should never world-spawn anywhere.
+- `chaos_wastes_tweaker.lua` — Added per-run denial telemetry (`_career_exclusive_denial_counts`, `_career_exclusive_logged_this_run`). Reset at the top of every `populate_pickups` hook entry. The denial path bumps the counter, and the first denial per name per run emits an apply-site `mod:info("[pickup] denied career-exclusive: <name>")` log line (rate-limited to once per name per run -- vanilla's spawn-roller polls each pickup name many times per level).
+- `chaos_wastes_tweaker.lua` — Added `/verify_engineer_bombs` chat command per the verify-before-shipping doctrine. Prints the blocklist + each entry's per-run denial count + whether the name still exists in the live `Pickups` table.
+- `chaos_wastes_tweaker.lua` — Added two `/ct_regression_test` checks:
+  - `engineer_bombs_not_in_world_spawns` — asserts the expected blocklist names are in `_CAREER_EXCLUSIVE_PICKUPS_BLOCKLIST`. Source-pattern check; PASSes from the keep.
+  - `engineer_bombs_present_in_vanilla_pickups` — asserts every blocklist name still exists somewhere in the global `Pickups` table (catches a vanilla rename that would silently make our denial path dead code).
+- MOD_VERSION bumped: `0.7.96-dev` -> `0.7.97-dev`.
+
+### Verification
+1. Restart VT2 with the mod enabled.
+2. From the keep, run `/ct_regression_test` -- `engineer_bombs_not_in_world_spawns` and `engineer_bombs_present_in_vanilla_pickups` should PASS.
+3. Run `/verify_engineer_bombs` -- should print `engineer_grenade_t1 : denials_this_run=0, present_in_Pickups=true`.
+4. Start a CW run on an injected adventure mission (any DLC mission, e.g. Magnus / Cemetery / Forest Ambush).
+5. Play for a few minutes so spawn rolls accumulate. Open the keep again or `/verify_engineer_bombs` mid-run -- the denial count should be > 0 if `engineer_grenade_t1` ever rolled (it will, given the equal-weight grenade pool: previously visible as engineer bombs on the ground).
+6. Confirm no engineer-style bombs (the cylindrical fragmentation-grenade model) appear as world pickups. Regular frag/fire grenades still spawn normally.
+7. Pick Bardin Outcast Engineer and confirm his cooldown-grant bomb mechanic still works (he can still craft bombs via his career passive).
+
+### Why this approach
+- Constant blocklist at the top of the file (not embedded inside the hook) for visibility -- future career-exclusive pickups added to the blocklist are immediately discoverable, and the regression check's expected-list constant doubles as a one-line audit summary.
+- Applied BEFORE the vanilla call to `func(self, spawner_unit, pickup_name)` so denial covers EVERY path -- not just the ct-broadened adventure fallback. Even if vanilla's per-spawner `Unit.get_data(spawner, "engineer_grenade_t1")` ever flipped true on some level, ct overrides.
+- Per-run telemetry (counter + once-per-run log) instead of always-fail / count-every-call: the deny path fires many times per level for the same pickup name (each spawner polls the full grenade pool). Once-per-name-per-run is enough to surface the gate is working without spamming the log.
+- The career grant path (`buff_settings_cog.lua:232` -> `inventory_extension:add_equipment`) does NOT go through `PickupSystem._spawn_pickup`, so this denial is surgical: only world-spawn paths are blocked, never the engineer's own bomb-crafting passive.
+
+### Related career-exclusive items NOT blocked (informational; do not auto-fix without user direction)
+Audited in vanilla `scripts/settings/equipment/pickups.lua` and `scripts/settings/dlcs/morris/morris_pickups_settings.lua`:
+- `Pickups.special.bardin_survival_ale` -- Slayer/Ranger Veteran ale buff pickup. NOT in `ADVENTURE_CATS`, so ct's allow-list does NOT sweep it in. No fix needed.
+- `Pickups.special.necromancer_ripped_soul` -- Necromancer-only orb (`can_pickup_orb` gates by `career_name == "bw_necromancer"`). Vanilla-gated, NOT in `ADVENTURE_CATS`. No fix needed.
+- `Pickups.grenades.holy_hand_grenade` (Morris/CW deus pickup) -- legitimate CW world spawn, not career-exclusive (anyone in a CW run can pick it up). Already handled by `_pickup_unit_loadable` on injected-adventure levels where its unit isn't packaged. No change.
+
+### References
+- Vanilla source: `scripts/settings/equipment/pickups.lua:698` (`Pickups.grenades.engineer_grenade_t1`); `scripts/settings/dlcs/cog/buff_settings_cog.lua:232` (engineer's grant path via `add_equipment`).
+- `reference_vt2_adventure_pack_spawning_compat.md` -- related context for the v0.7.78 `_pickup_unit_loadable` guard on Skittergate `holy_hand_grenade`.
+- `feedback_vt2_verify_before_shipping.md` -- mandates apply-site log + verify command for behavior changes that wouldn't be obviously visible to the user.
+
+## 0.7.96-dev (2026-05-23) — Miracle of Isha: lock in mutex single-select + verify command + regression checks
+
+### Why
+User bug report 2026-05-23: "The Miracle of Isha multiple choice doesn't work and neither of the options are titled. Both can be toggled on at the same time (at least in the GUI even if it has no effect)." All three symptoms were already addressed in the v0.7.81-v0.7.85 mutex-cluster rework that exists in current source — but the live deployed bundle was stale (or the user's machine had stale cached UI) and there was no regression gate locking in the canonical state, so a future accidental drop of the mutex declaration or the suppression hook would silently reintroduce all three symptoms with no test failing.
+
+This release adds the missing belt-and-suspenders: (1) a flag the suppression-hook install path writes only on success, (2) a `/verify_isha` chat command that prints the current resolved mode + flag + per-title localization status, (3) three `/ct_regression_test` checks that fail loud if the mutex cluster, the localization keys, or the suppression hook ever go missing.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — Added `_G.__ct_isha_suppression_hook_installed` flag. Initialized `false` immediately before the `MutatorTemplates.blessing_of_isha.server.start_function` hook block; set to `true` only on the success branch (template loaded + hook attached). Also: apply-site `mod:info("[isha] mode=%s, applying alternative ...")` log line per the verify-before-shipping doctrine.
+- `chaos_wastes_tweaker.lua` — Added `/verify_isha` chat command. Prints MOD_VERSION header, resolved mode (`_get_isha_mode()`), both raw toggle values, the mutex `active("isha_choice")` member, hook-install state, and per-title localization resolution (echoes `OK` if `mod:localize(key) ~= key` else `MISSING`). Surfaces a WARN line if both toggles happen to read true at the same time (mutex enforcer should have prevented; aegis-preference still resolves deterministically in `_get_isha_mode`).
+- `chaos_wastes_tweaker.lua` — Three new `/ct_regression_test` checks (appended to the test scaffold near end of file):
+  - `miracle_of_isha_choice_widget_is_dropdown` — verifies mutex cluster `isha_choice` is declared with exactly `{tweak_miracle_of_isha_aegis, tweak_miracle_of_isha_wounds}` members. Failure means the radio-style single-select degraded back to independent checkboxes.
+  - `miracle_of_isha_titles_present` — verifies all four localization keys (`tweak_miracle_of_isha_aegis`/`_tooltip`, `tweak_miracle_of_isha_wounds`/`_tooltip`) resolve via `mod:localize` to non-empty strings that are not just the key echoed back.
+  - `miracle_of_isha_hook_installed` — verifies `_G.__ct_isha_suppression_hook_installed == true`, which is set only when the vanilla revive mutator's `server.start_function` was hookable at mod init.
+- `MOD_VERSION` bumped: `0.7.95-dev` → `0.7.96-dev`.
+
+### Verification
+1. Restart VT2 with the mod enabled.
+2. Run `/ct_regression_test` — three new checks `miracle_of_isha_choice_widget_is_dropdown`, `miracle_of_isha_titles_present`, `miracle_of_isha_hook_installed` should all PASS.
+3. Run `/verify_isha` — should print resolved mode (vanilla / aegis / wounds), both raw toggle values, hook installed=true, and `aegis title: (A) Aegis: ... (OK)` / `wounds title: (B) Unlimited Wounds: ... (OK)`.
+4. Open VMF settings → Reworks → Boons. The two Isha rows should show their full titles ("(A) Aegis: -25% damage taken for the rest of the run" and "(B) Unlimited Wounds: recruit-style, every knockdown revivable"). Toggling one ON should programmatically toggle the other OFF.
+5. Start a CW run, reach the blessing shrine, purchase Blessing of Isha. Console should print `[isha] mode=<aegis|wounds>, applying alternative (vanilla mutator neutralized at server.start_function)`. If a teammate goes down, vanilla's revive-everyone-once mutator does NOT fire (Aegis: the -25% buff is already active; Wounds: knockdown becomes revivable instead of instakill).
+
+### References
+- `LOCALIZATION_STANDARD.md` § 10 — Mutex cluster pattern (the canonical (A) / (B) checkbox + leading-4-space indent label convention).
+- `feedback_vt2_mutator_template_server_wrap.md` — hook `template.server.start_function`, not the dead `template.server_start_function` field.
+- `feedback_vt2_verify_before_shipping.md` — apply-site log + chat verify command convention.
+
+## 0.7.95-dev (2026-05-23) — Starting Coins: rewrite as SETTER (not adder); fix 300-setting-gives-500 bug
+
+### Why
+User report 2026-05-23: "We got an extra 200 coins even though we had the setting for starting at 300 we got 500 somehow." Root cause: the prior implementation (`mod:hook_safe("DeusRunController", "setup_run", ...)`) ran AFTER vanilla's `set_player_soft_currency(own_peer_id, REAL_PLAYER_LOCAL_ID, initial_own_soft_currency)` had already written the rolled-over coins (`~0-200` from prior run's `get_rolled_over_soft_currency()`). The mod then re-entered `on_soft_currency_picked_up(starting)` which ADDED the setting on top. Vanilla 200 + setting 300 = displayed 500.
+
+### What changed (setter, not adder)
+- `chaos_wastes_tweaker.lua` — Added full `mod:hook("DeusRunController", "setup_run", ...)` that intercepts vanilla's `initial_own_soft_currency` argument (arg[5]) and REWRITES it to the user's snapped `starting_coins` setting BEFORE vanilla executes. Vanilla's setter then writes exactly the setting value — no addition, no double-grant. Setting=0 leaves vanilla rolled-over behavior intact.
+- `chaos_wastes_tweaker.lua` — Added host-side `mod:hook("DeusRunController", "rpc_deus_set_initial_soft_currency", ...)` that overrides the incoming `initial_own_soft_currency` from a joining client with the host's own setting. Keeps the "host controls economy" invariant (precedent across `coin_multiplier` / shrine multipliers).
+- `chaos_wastes_tweaker.lua` — Removed the old adder block from the `hook_safe(setup_run)` body (`granting_starting_coins = true; self:on_soft_currency_picked_up(starting); granting_starting_coins = false`). The remaining `hook_safe` body now only carries the host-side settings broadcast.
+- `chaos_wastes_tweaker.lua` — Added per-run idempotence flag `_starting_coins_applied_for_run` keyed off `DeusRunState:get_run_id()` to defend against host-migration replay or debug re-runs of `setup_run`. Belt-and-suspenders per `feedback_redundant_safeguards_ok.md`.
+- `chaos_wastes_tweaker.lua` — Added `STARTING_COINS_MODE_MARKER = "starting_coins:setter-override-via-setup_run-arg"` embedded in the compiled bundle so the source-pattern regression check (below) can verify the setter mode shipped.
+- `chaos_wastes_tweaker.lua` — Added `[ct/coins]` log lines at both apply sites: `starting_coins setter applied: vanilla_initial=X, setting=Y, final=Y (run_id=Z)` on the local setup_run hook, and `host RPC override for joining peer: client_sent=X, host_setting=Y` on the RPC handler.
+- `chaos_wastes_tweaker.lua` — Added two regression checks:
+  - `starting_coins_setter_not_adder` (source-pattern): asserts `STARTING_COINS_MODE_MARKER == "starting_coins:setter-override-via-setup_run-arg"`. Catches a future refactor that accidentally reverts to adder mode.
+  - `starting_coins_value_matches_setting` (runtime): when a CW run is active AND `_starting_coins_applied_for_run` matches the live `run_id`, asserts `get_player_soft_currency(own_peer_id) == snapped_setting`. Gives PASS when not applicable (no run / setting=0) instead of false-positive FAIL.
+- `chaos_wastes_tweaker.lua` — Added `/verify_coins` chat command: prints the current coin balance, the snapped setting, whether the override-hook marker is present, and host/client status. Use during a fresh CW run to confirm the value applied.
+
+### Per-peer scoping (design call)
+Host's setting wins. The local `setup_run` hook reads via `effective_setting("starting_coins")` (host-broadcast value on clients, own value on host), so both peers compute the same target. The host-side `rpc_deus_set_initial_soft_currency` hook ALSO enforces the host's setting on the value written for the joining client's row — belt-and-suspenders for the case where a hot-joiner's broadcast hasn't landed by the time their RPC fires.
+
+### Verification
+1. Restart VT2 with the mod enabled.
+2. Run `/ct_regression_test` from the keep — `starting_coins_setter_not_adder` should PASS (the runtime check is N/A in keep).
+3. In the VMF menu, set **Starting Coins** to `300`.
+4. Start a fresh CW run.
+5. After Olesya intro, run `/verify_coins` — should show `setting=300, live=300` (or whatever the snapped value is). Also check the log: a single `[ct/coins] starting_coins setter applied: vanilla_initial=<X>, setting=300, final=300 (run_id=<...>)` line.
+6. Run `/ct_regression_test` while in the run — `starting_coins_value_matches_setting` should PASS.
+7. Negative test: set Starting Coins to `0`, start another fresh CW run. `/verify_coins` should show vanilla behavior (`live=<rolled-over>` — non-zero only if you carried coins over from a prior run).
+
+### References
+- `feedback_redundant_safeguards_ok.md` — belt-and-suspenders for silent-fail surfaces.
+- `feedback_vt2_verify_before_shipping.md` — every gated feature ships with a `/verify_*` chat command.
+- Vanilla source: `scripts/managers/game_mode/mechanisms/deus_run_controller.lua:273` (setup_run signature), `:315` (host setter), `:350-384` (rpc_deus_set_initial_soft_currency host-side handler), `scripts/managers/game_mode/mechanisms/deus_mechanism.lua:1198` (setup_run call site — passes `rolled_over_coins`).
+
 ## 0.7.93-dev (2026-05-23) — Skulls Event Boons: rewrite year-round injection to actually work
 
 ### Why
@@ -82,6 +969,10 @@ GitHub Issue #5: the Khaine's Fury (deus_reckless_swings) boon tweak used hard-c
 
 ### References
 GitHub Issue #5: https://github.com/Ensrick/vermintide-2-tweaker/issues/5
+
+### Verification (back-filled 2026-05-23 in v0.7.103-dev per PROJECT_STANDARDS §15)
+Automated regression check `reckless_swings_name_based_lookup` added in v0.7.103. Run via `/ct_regression_test`.
+
 ## 0.7.91-dev (2026-05-23) — Namespace `regression_test` chat command to avoid cross-mod collision
 
 ### Why

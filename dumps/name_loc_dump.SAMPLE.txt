@@ -1,0 +1,5 @@
+[gt:name_dump] BEGIN build=FIXTURE-SAMPLE count=4
+wh_crossbow_skin_05_name	Repeater Crossbow	(3-column form: description ignored)
+beastmen_bestigor	Bestigor
+beastmen_minotaur	Minotaur
+[gt:name_dump] END build=FIXTURE-SAMPLE count=4

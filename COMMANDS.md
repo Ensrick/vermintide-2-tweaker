@@ -7,8 +7,7 @@ Every entry is the literal first argument of `mod:command("name", ...)` —
 typed in chat as `/<name>` directly (NO mod-id prefix; see CLAUDE.md "Lua
 Environment" section on the chat command syntax rule).
 
-**Snapshot date:** 2026-05-19 (from cross-mod audit). Refresh after any
-mod adds/renames commands — grep `mod:command\(` across `**/*.lua` to
+**Snapshot date:** 2026-05-25 (lobby_tweaker retired -- its commands absorbed into gt as `/gt_lobby_*`; bt + gut / others not re-audited). Refresh after any mod adds/renames commands — grep `mod:command\(` across `**/*.lua` to
 regenerate.
 
 ---
@@ -19,15 +18,27 @@ regenerate.
 ```
 info, animlog, force3p, force1p, sm_probe,
 brace_to_repeater_skin, brace_to_repeater_dump,
-dump, dump_actions, dump_weapons
+dump, dump_actions, dump_weapons,
+wt_regression_test, wt_dump_wielded,
+wt_dump_anim_picks, wt_coverage,                  -- anim tuning loop (export + skeleton probe)
+wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose  -- hold-pose tuner
 ```
+*(wt section refreshed 2026-06-11 — added the 7 commands landed since the 2026-05-25 snapshot.)*
 
 ### `gt` (general_tweaker)
 ```
 tp, freecam, noclip, dump_glossary, dump_cosmetics, unstuck, god,
 no_enemies, win, fail, restart, kill_bots, die, fix_sound,
 dump_items_by_slot, ai, ult_reset, time_faster, time_slower, pause,
-infinite_ammo, infinite_stamina, giga_power
+infinite_ammo, infinite_stamina, giga_power,
+gt_regression_test,
+-- Host-side lobby controls (absorbed from lobby_tweaker 2026-05-25):
+gt_lobby_reserve, gt_lobby_unreserve, gt_lobby_reservations,
+gt_lobby_ignore, gt_lobby_ignore_persist, gt_lobby_unignore,
+gt_lobby_ignored, gt_lobby_ignore_last,
+gt_lobby_idle_whitelist, gt_lobby_idle_unwhitelist, gt_lobby_idle_status,
+gt_lobby_motd_test,
+gt_lobby_manifest_dump, gt_lobby_manifest_probe
 ```
 
 ### `ct` (chaos_wastes_tweaker)
@@ -99,6 +110,13 @@ portrait_diag, portrait_dump, test_portrait
 ```
 event_probe, event_active, event_clear, event_apply
 ```
+
+### `bt` (buff_tweaker)
+```
+bt_net_replay, perf_dump, bug_report, bt_regression_test
+```
+
+`bug_report` is a zero-arg paste-ready context dump (loaded mods + version + non-default settings + career/level + log-path pointer) intended for handoff to a Claude agent on a bug report. Mirrors output to both chat and `console_logs/`.
 
 ---
 

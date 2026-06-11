@@ -76,7 +76,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.0"
+local MOD_VERSION = "0.8.1"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
@@ -1540,6 +1540,56 @@ mod:hook("HeroViewStateWeaveForge", "get_ui_renderer", function(func, self, ...)
     -- Mirror that condition exactly so non-crash paths stay unchanged.
     if self._gamepad_style_active and not self._gui_data then
         return self.ui_renderer
+    end
+    return func(self, ...)
+end)
+
+-- ------------------------------------------------------------
+-- Mid-mission forge: parent HeroView HDR gui setup + renderer guard
+-- ------------------------------------------------------------
+-- Crash trace (user report 2026-06-07, in mission, cim open_forge with Allow in
+-- mission enabled):
+--   hero_view.lua:175: attempt to index local 'hdr_gui_data' (a nil value)
+-- (HeroView.hdr_renderer / hdr_top_renderer; the line shifts by game build — the
+--  cited local is `self._hdr_gui_data` being indexed.)
+--
+-- Same bug class as the _setup_gamepad_gui fix above, one level UP on the parent
+-- HeroView. Vanilla HeroView._setup_hdr_gui (hero_view.lua:136-165) gates its
+-- whole body on `if self.is_in_inn then ... self._hdr_gui_data = ... end`. In
+-- mission is_in_inn is false, so _hdr_gui_data is never built, and the Athanor
+-- forge windows' per-frame parent:hdr_renderer()/hdr_top_renderer() calls
+-- dereference `self._hdr_gui_data.bottom` -> fatal. cim's open_forge transition
+-- passes no force_ingame_menu, so HeroView.on_enter DOES call _setup_hdr_gui, so
+-- the hook below fires. Cleanup is leak-safe: HeroView.destroy_hdr_gui
+-- (hero_view.lua:639) tears down whatever _hdr_gui_data holds regardless of
+-- is_in_inn. Two-layer fix mirrors _setup_gamepad_gui above.
+-- Backported from cim_dev v0.7.71-dev. Regression: heroview_hdr_renderer_guard_failsafe.
+mod:hook("HeroView", "_setup_hdr_gui", function(func, self, ...)
+    if self.is_in_inn then
+        return func(self, ...)
+    end
+    -- Temporarily satisfy the is_in_inn gate so _hdr_gui_data gets built with real
+    -- HDR renderers in mission. Restore the flag afterwards.
+    self.is_in_inn = true
+    local ok, err = pcall(func, self, ...)
+    self.is_in_inn = false
+    if not ok then
+        -- Ungated (mod:warning): a failure here breaks the in-mission forge HDR
+        -- layer; surface it in the log WITHOUT requiring Debug Logging to be on.
+        mod:warning("[cim] HeroView._setup_hdr_gui in mission failed: %s", tostring(err))
+    end
+end)
+
+mod:hook("HeroView", "hdr_renderer", function(func, self, ...)
+    if not self._hdr_gui_data then
+        return self.ui_renderer
+    end
+    return func(self, ...)
+end)
+
+mod:hook("HeroView", "hdr_top_renderer", function(func, self, ...)
+    if not self._hdr_gui_data then
+        return self.ui_top_renderer
     end
     return func(self, ...)
 end)
@@ -4684,6 +4734,26 @@ _rt_register("modded_loadout_has_no_stale_entries", function()
     if #stale > 0 then
         return "stale modded_loadout entries (will clobber vanilla restore): " .. table.concat(stale, ", ")
     end
+end)
+
+_rt_register("heroview_hdr_renderer_guard_failsafe", function()
+    -- v0.8.1: in-mission forge crashed at HeroView.hdr_renderer / hdr_top_renderer
+    -- because vanilla _setup_hdr_gui only builds self._hdr_gui_data when is_in_inn
+    -- (false in mission) and the forge windows dereference _hdr_gui_data.bottom/.top
+    -- every frame. The accessor hooks must fall back to the view's own renderer when
+    -- _hdr_gui_data is nil. Drive the (hooked) accessors with a synthetic self.
+    if type(HeroView) ~= "table" or type(HeroView.hdr_renderer) ~= "function"
+        or type(HeroView.hdr_top_renderer) ~= "function" then
+        return "skip: HeroView not loaded"
+    end
+    local r_sentinel, t_sentinel = {}, {}
+    local fake = { _hdr_gui_data = nil, ui_renderer = r_sentinel, ui_top_renderer = t_sentinel }
+    local ok, ret = pcall(HeroView.hdr_renderer, fake)
+    if not ok then return "hdr_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret) end
+    if ret ~= r_sentinel then return "hdr_renderer did not fall back to self.ui_renderer on nil _hdr_gui_data" end
+    local ok2, ret2 = pcall(HeroView.hdr_top_renderer, fake)
+    if not ok2 then return "hdr_top_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret2) end
+    if ret2 ~= t_sentinel then return "hdr_top_renderer did not fall back to self.ui_top_renderer on nil _hdr_gui_data" end
 end)
 
 _rt_register("dbg_helpers_two_channel", function()

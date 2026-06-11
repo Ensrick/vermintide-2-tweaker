@@ -72,11 +72,19 @@ foreach ($lua in Find-ModLuas) {
     }
 }
 
-# Find collisions: any command name owned by 2+ distinct mods
+# Find collisions: any command name owned by 2+ distinct BASE mods.
+# audit 2026-06-07: dev/stable twins (`<mod>` and `<mod>_dev`) are SEPARATE VMF
+# registrations that coexist by design (see CLAUDE.md "Dev/stable split workflow")
+# and legitimately share every command name — a tester runs one stream at a time.
+# Treating those as collisions hard-failed run_all on 140 expected duplicates and
+# masked genuine cross-mod collisions. Collapse a trailing `_dev` so only DISTINCT
+# base mods count. (The only `_dev` dirs are the four public-mod dev clones, all of
+# the form `<base>_dev`, so the strip is unambiguous.)
 $collisions = @()
 foreach ($cmd in $commands.Keys) {
     $entry = $commands[$cmd]
-    if ($entry.mods.Count -gt 1) {
+    $baseMods = @($entry.mods | ForEach-Object { $_ -replace '_dev$', '' } | Sort-Object -Unique)
+    if ($baseMods.Count -gt 1) {
         $collisions += [PSCustomObject]@{
             Name = $cmd
             Mods = $entry.mods -join ", "

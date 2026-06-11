@@ -6,11 +6,17 @@ return {
     -- Event presets (handle the active_events string magic some
     -- mutators inspect inside their server_start_function)
     event_preset = en("Event Preset"),
-    event_preset_tooltip = en("Pick a canonical live event. Drives three things: (1) the mutator list, (2) the active_events string the mutator inspects internally (mutator_geheimnisnacht_2021 reads `active_events` to choose its ritual-site map list), (3) the keep level — Geheimnisnacht swaps to inn_level_halloween, Skulls to inn_level_skulls (decorations are baked into the level file, not runtime-spawned). Changing the preset mid-game auto-reloads the level so the new mutators/keep variant take effect immediately (host only). For Geheimnisnacht, the year you pick decides which 5 maps spawn ritual sites — see per-option text. Off = hand-pick mutators below without preset bundling. Individual mutator checkboxes apply on next level load or via /event_apply."),
+    event_preset_tooltip = en("Pick a canonical live event. Drives the mutator list, the active_events string, and the keep level (inn_level_halloween for Geheimnisnacht, inn_level_skulls for Skulls). Changing mid-game auto-reloads. Host-only.\n\nOff = hand-pick mutators below. Individual checkboxes apply on next level load or via /event_apply."),
     preset_off                 = en("Off (no preset)"),
     preset_geheimnisnacht_2021 = en("Geheimnisnacht 2021 (rituals on dlc_portals/bell/military/dlc_castle/ussingen)"),
     preset_geheimnisnacht_2025 = en("Geheimnisnacht 2025 (rituals on dlc_termite_1/military/mines/warcamp/dlc_portals)"),
+    preset_geheimnisnacht_2026 = en("Geheimnisnacht 2026 (rituals on farmlands/dlc_wizards_tower/catacombs/bell/ussingen)"),
     preset_skulls_2023         = en("Khorne's Skulls 2023 (skull pickups → +hordes_galore at 5 stacks)"),
+    preset_skulls_2026         = en("Khorne's Skulls 2026 (same mutator as 2023 — Fatshark 2026 DLC only adds cosmetics + portraits)"),
+
+    -- v0.4.10-dev: opt-in switch to neutralize Fatshark's currently-live event.
+    suppress_live_event         = en("Suppress Fatshark's live event"),
+    suppress_live_event_tooltip = en("Drop Fatshark's currently-live event from the three backend queries we hook (special_events, active_events, level_variation_data). The keep reverts to the plain inn, ritual sites stop spawning, live-event lighting / dialogue stop firing. Your own preset / individual mutator checkboxes still apply on top.\n\nHost-only. Defaults off — leaving this off keeps the prior pass-through behavior. Toggling auto-reloads the level."),
 
     -- Categories
     cat_difficulty = en("Difficulty Modifiers"),
@@ -123,9 +129,13 @@ return {
 
     -- Live event mutators (raw)
     mut_geheimnisnacht_2021              = en("Geheimnisnacht 2021"),
-    mut_geheimnisnacht_2021_tooltip      = en("[geheimnisnacht_2021] Spawns ritual sites on the canonical 5 maps for the year picked in the Event Preset above. If no preset, the mutator runs but won't spawn rituals — set the preset to Geheimnisnacht 20XX to drive the active_events string the mutator inspects."),
+    mut_geheimnisnacht_2021_tooltip      = en("[geheimnisnacht_2021] Spawns ritual sites on the canonical 5 maps for the year in Event Preset. No preset = mutator runs but no rituals spawn."),
     mut_geheimnisnacht_2021_hard_mode    = en("Geheimnisnacht Hard Mode"),
-    mut_geheimnisnacht_2021_hard_mode_tooltip = en("[geheimnisnacht_2021_hard_mode] Activated automatically when a player picks up the side objective in normal Geheimnisnacht mode. You can also force-enable here."),
+    mut_geheimnisnacht_2021_hard_mode_tooltip = en("[geheimnisnacht_2021_hard_mode] Auto-enabled when a player picks up the Geheimnisnacht side objective. Force-enable here to skip the pickup."),
     mut_skulls_2023                      = en("Khorne's Skulls 2023"),
     mut_skulls_2023_tooltip              = en("[skulls_2023] Spawns skull pickups; 5 picked grants hordes_galore. Self-contained — no preset string required."),
+
+    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+    enable_debug_logging         = en("Debug Logging"),
+    enable_debug_logging_tooltip = en("Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable."),
 }

@@ -57,6 +57,12 @@ __pycache__/
 # Local reference material (per-mod working copies of upstream sources)
 **/.spawn_tweaks_ref/
 
+# Multi-agent coordination sentinels (see CLAUDE.md § "Multi-agent coordination").
+# The directory README is intentionally tracked so the convention is discoverable;
+# individual sentinel files are ephemeral per-session claims and must not be committed.
+.in_progress/*.md
+!.in_progress/README.md
+
 # REVIEW (2026-05-01):
 # - bundleV2/ is INTENTIONALLY tracked (so other devs / git bisect can see the built bundle
 #   that was deployed at each commit). Confirm with maintainer; if accidentally tracked, add
@@ -73,3 +79,10 @@ __pycache__/
 #   subfolder?
 # Sensitive paths check: no .env or credentials.json patterns ignored, but none exist in repo
 # either. ugc_tool authenticates via Steam session, no token files written here.
+
+# Retired-mod archives — kept on disk, never committed (repo convention:
+# lobby_tweaker / la_prefix_patch / buff_tweaker all live here untracked)
+_archive/
+
+# Per-mod probe logs
+**/.pcb_latest.log

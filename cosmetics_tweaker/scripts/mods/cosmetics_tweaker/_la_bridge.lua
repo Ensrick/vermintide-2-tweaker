@@ -725,15 +725,53 @@ function M.install_apply_gate()
 
     local original_apply = LA.apply_new_skin_from_texture
     M._original_apply = original_apply
-    LA.apply_new_skin_from_texture = function(armoury_key, world, skin, unit)
-        if M.armoury_to_backend[armoury_key] and not M._bridge_active then
+    -- v0.9.33: gate checks _gate_installed so that if uninstall can't restore the
+    -- original (another mod re-wrapped on top of us — see uninstall_apply_gate),
+    -- clearing the flag still makes a stranded gate a transparent passthrough.
+    local gate_fn = function(armoury_key, world, skin, unit)
+        if M._gate_installed and M.armoury_to_backend[armoury_key] and not M._bridge_active then
             if M.trace then mod:info("[LA bridge] GATE blocked managed key %s", armoury_key) end
             return
         end
         if M.trace then mod:info("[LA bridge] GATE allowed %s (bridge_active=%s)", armoury_key, tostring(M._bridge_active)) end
         return original_apply(armoury_key, world, skin, unit)
     end
+    M._gate_fn = gate_fn  -- v0.9.33: saved so uninstall can verify the live fn is still ours
+    LA.apply_new_skin_from_texture = gate_fn
     mod:info("[LA bridge] apply gate installed (raw replacement)")
+end
+
+-- audit 2026-06-07 (F7): install_apply_gate() RAW-replaces
+-- LA.apply_new_skin_from_texture with a blocking closure but never restored it.
+-- cosmetics_tweaker is is_togglable=true, and mod.on_disabled only flushes TPE,
+-- so after an in-session F4 disable LA's OWN recolor for bridge-managed keys
+-- stayed permanently blocked until a game restart. Restore the captured original
+-- here and clear the installed flag so a later re-enable can re-install cleanly.
+-- (Injected ItemMasterList/NetworkLookup entries can't be safely removed
+-- mid-session — we deliberately leave those and only restore the apply fn.)
+function M.uninstall_apply_gate()
+    if not M._gate_installed then return end
+    local LA = la()
+    -- Only restore if LA is still present AND the live apply fn is still our gate
+    -- (don't clobber a different override another mod may have layered on since).
+    -- v0.9.33: the guard the comment above always described is now actually
+    -- implemented via M._gate_fn (audit follow-up: comment/code mismatch). When the
+    -- live fn is foreign we leave the chain intact; clearing _gate_installed below
+    -- makes our gate (wherever it sits in the chain) a transparent passthrough.
+    if LA and M._original_apply then
+        if M._gate_fn == nil or LA.apply_new_skin_from_texture == M._gate_fn then
+            LA.apply_new_skin_from_texture = M._original_apply
+            mod:info("[LA bridge] apply gate uninstalled (original restored)")
+        else
+            -- Ungated: this is a teardown that could not fully complete; the user
+            -- should see it without Debug Logging on.
+            mod:warning("[LA bridge] live apply fn is not our gate (another mod layered on top since install); leaving the chain intact — our gate goes transparent instead of restoring")
+        end
+    end
+    M._original_apply  = nil
+    M._gate_fn         = nil
+    M._gate_installed  = false
+    M._bridge_active   = false
 end
 
 local function suppress_la_queue(unit)

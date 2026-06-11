@@ -1,0 +1,11 @@
+mod = [
+	"chaos_wastes_tweaker_dev"
+]
+
+package = [
+	"resource_packages/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev"
+]
+
+lua = [
+	"scripts/mods/chaos_wastes_tweaker_dev/*"
+]

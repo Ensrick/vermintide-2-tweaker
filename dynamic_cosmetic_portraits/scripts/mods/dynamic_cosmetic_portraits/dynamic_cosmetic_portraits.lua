@@ -1,9 +1,136 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
 
-local MOD_VERSION = "0.1.7"
+local MOD_VERSION = "0.1.14-dev"
+-- Startup banner: log-only, NOT chat. The applied marker line further down
+-- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
+-- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Dynamic Cosmetic Portraits v%s loaded", MOD_VERSION)
-mod:echo("Dynamic Cosmetic Portraits v" .. MOD_VERSION)
 
+-- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
+-- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- `_dbg` is for confirmation / expected behavior — file only.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[dcp:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[dcp:dbg] " .. fmt, ...)
+        mod:echo("[dcp] " .. fmt, ...)
+    end
+end
+
+-- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
+-- one mod:info line at load. ALWAYS fires (operational telemetry).
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[dcp:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[dcp] v%s loaded", MOD_VERSION))
+end
+
+-- v0.1.9: regression test scaffold (dcp had none).
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("dcp_regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail = 0, 0
+    mod:echo("=== dcp regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)
 -- Returns true if the given Gui has the named material loaded.
 --
 -- IMPORTANT: `Gui.material(gui, name)` does NOT throw on missing materials in

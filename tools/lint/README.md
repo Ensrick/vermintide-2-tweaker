@@ -32,12 +32,12 @@ pwsh -File .\tools\lint\regression-lint.ps1 -SelfTest
 Exit code: `0` clean (errors=0, or warnings=0 when `-WarningsAsErrors` set);
 `1` errors found or self-test failed.
 
-## Mods scanned (16)
+## Mods scanned (15)
 
 Anything in the repo root that has an `itemV2.cfg`:
 `weapon_tweaker`, `chaos_wastes_tweaker`, `general_tweaker`, `cosmetics_tweaker`,
 `dynamic_cosmetic_portraits`, `career_tweaker`, `enemy_tweaker`,
-`character_weapon_variants`, `crafting_in_modded`, `la_prefix_patch`,
+`character_weapon_variants`, `crafting_in_modded`,
 `event_tweaker`, `modded_progression`, `lobby_tweaker`, `buff_tweaker`,
 `material_hijack_patched`, `verminious_dreams_lighting`.
 
@@ -95,7 +95,7 @@ within 2 lines above/below. Example:
 
 ```lua
 mod:hook("Foo", "bar", function() ... end)
--- LINT_OK_REHOOK: la_prefix_patch deliberately re-hooks LA's broken handler
+-- LINT_OK_REHOOK: deliberately re-hook a broken upstream handler (e.g. an LA helper)
 mod:hook_safe("Foo", "bar", function() ... end)
 ```
 

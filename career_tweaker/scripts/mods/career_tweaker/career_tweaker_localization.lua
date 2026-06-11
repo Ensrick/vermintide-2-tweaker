@@ -10,15 +10,17 @@ return {
     -- ============================================================
     experience_levels_group                 = { en = "Character Experience Level" },
     level_override_dwarf_ranger             = { en = "Bardin - level (0 = no override)" },
-    level_override_dwarf_ranger_tooltip     = { en = "Force Bardin's reported experience level. All four Bardin careers share this value (XP is per-character, not per-career). 0 = use real XP. 1-35 = report that level everywhere (inventory badge, character-select tile, mission spawn). Modded realm only - does not write to the backend." },
+    level_override_dwarf_ranger_tooltip     = { en = "Force Bardin's reported XP level (shared across all 4 careers). 0 = real XP; 1-35 = override. Modded realm only; never writes to the backend." },
     level_override_empire_soldier           = { en = "Kruber - level (0 = no override)" },
-    level_override_empire_soldier_tooltip   = { en = "Force Kruber's reported experience level. All four Kruber careers share this value. 0 = use real XP. 1-35 = report that level. Modded realm only - does not write to the backend." },
+    level_override_empire_soldier_tooltip   = { en = "Force Kruber's reported XP level (shared across all 4 careers). 0 = real XP; 1-35 = override. Modded realm only; never writes to the backend." },
     level_override_wood_elf                 = { en = "Kerillian - level (0 = no override)" },
-    level_override_wood_elf_tooltip         = { en = "Force Kerillian's reported experience level. All four Kerillian careers share this value. 0 = use real XP. 1-35 = report that level. Modded realm only - does not write to the backend." },
+    level_override_wood_elf_tooltip         = { en = "Force Kerillian's reported XP level (shared across all 4 careers). 0 = real XP; 1-35 = override. Modded realm only; never writes to the backend." },
     level_override_witch_hunter             = { en = "Saltzpyre - level (0 = no override)" },
-    level_override_witch_hunter_tooltip     = { en = "Force Saltzpyre's reported experience level. All four Saltzpyre careers share this value. 0 = use real XP. 1-35 = report that level. Modded realm only - does not write to the backend." },
+    level_override_witch_hunter_tooltip     = { en = "Force Saltzpyre's reported XP level (shared across all 4 careers). 0 = real XP; 1-35 = override. Modded realm only; never writes to the backend." },
     level_override_bright_wizard            = { en = "Sienna - level (0 = no override)" },
-    level_override_bright_wizard_tooltip    = { en = "Force Sienna's reported experience level. All four Sienna careers share this value. 0 = use real XP. 1-35 = report that level. Modded realm only - does not write to the backend." },
+    level_override_bright_wizard_tooltip    = { en = "Force Sienna's reported XP level (shared across all 4 careers). 0 = real XP; 1-35 = override. Modded realm only; never writes to the backend." },
+    unlock_all_careers                      = { en = "Unlock all careers (owned DLC only)" },
+    unlock_all_careers_tooltip              = { en = "Bypass the level requirement for every career you OWN. DLC ownership is preserved -- unowned DLC careers (Grail Knight, Sister of the Thorn, Warrior Priest, Outcast Engineer, Necromancer) stay locked unless you actually own the DLC. Modded realm only; affects the LOCAL character-select only. Hooks ProgressionUnlocks.is_unlocked_for_profile, which is downstream of the vanilla DLC gate." },
     -- ============================================================
     -- Career swapping
     -- ============================================================
@@ -72,13 +74,13 @@ return {
     -- General (cross-career)
     rework_general_group                    = { en = "General" },
     rework_general_stagger_thp                          = { en = "General: Stagger THP (+50%% per-target, max 3 targets)" },
-    rework_general_stagger_thp_description              = { en = "Reworks the Heal-on-Stagger talents: +50%% per-stagger THP base value (light/medium/heavy stagger now heal 0.375 / 1.5 / 3 THP per target, was 0.25 / 1 / 2) but caps the per-swing target count at 3 instead of 5." },
+    rework_general_stagger_thp_description              = { en = "Heal-on-Stagger: +50%% base THP (light/medium/heavy 0.25/1/2 → 0.375/1.5/3 per target) but per-swing target cap 5 → 3." },
     rework_general_thp_kill_minimum                     = { en = "General: Minimum THP-on-kill = 1.5" },
-    rework_general_thp_kill_minimum_description         = { en = "Clamps every breed's THP-on-kill payout to a minimum of 1.5, lifting skaven slaves (vanilla 1) up to the same payout as the other hordes. Affects every Heal-on-Kill source: weapon traits, Bloodlust talents, Warrior Priest aftershock." },
+    rework_general_thp_kill_minimum_description         = { en = "Clamps THP-on-kill minimum to 1.5 (vanilla skaven slaves are 1). Applies to every Heal-on-Kill source: weapon traits, Bloodlust, WP aftershock." },
     rework_general_enhanced_power_10pct                  = { en = "General: Enhanced Power 7.5%% -> 10%% (all careers)" },
-    rework_general_enhanced_power_10pct_description      = { en = "Lifts every base career's level-15 Enhanced Power talent from +7.5%% to +10%% power. One field patch on the shared power_level_unbalance buff template covers all 15 base careers simultaneously." },
+    rework_general_enhanced_power_10pct_description      = { en = "Enhanced Power talent (level 15, all 15 base careers): +7.5%% → +10%% power." },
     rework_general_mainstay_stagger_15pct                = { en = "General: Mainstay universal +15%% stagger" },
-    rework_general_mainstay_stagger_15pct_description    = { en = "No vanilla talent named 'Mainstay' exists, so this applies a universal +15%% power_level_impact (stagger power) buff to every player whenever the toggle is on, regardless of career or talent." },
+    rework_general_mainstay_stagger_15pct_description    = { en = "Applies a universal +15%% stagger power (power_level_impact) buff to every player. Not gated by career or talent." },
 
     -- Bardin
     rework_dr_group                         = { en = "Bardin" },
@@ -88,7 +90,7 @@ return {
     rework_dr_ranger_base_hp_plus_25                   = { en = "Ranger Veteran: +25 base HP" },
     rework_dr_ranger_base_hp_plus_25_description       = { en = "Adds 25 to Ranger Veteran's base max HP (100 -> 125, matching Witch Hunter Captain). Applies on next mission load / hero respawn." },
     rework_dr_ranger_exuberance_stacking_dr             = { en = "Ranger Veteran: Exuberance -> 6%%/stack x5, lose on hit" },
-    rework_dr_ranger_exuberance_stacking_dr_description = { en = "Vanilla Exuberance grants -30%% damage taken on ranged headshot (single stack). Rework: -6%% per stack, max 5x, one stack per shot (not per target), taking damage removes one stack." },
+    rework_dr_ranger_exuberance_stacking_dr_description = { en = "Exuberance: -6%% damage taken per stack, max 5x, one stack per ranged headshot. Taking damage removes a stack." },
     rework_dr_slayer_group                              = { en = "Slayer" },
     rework_dr_slayer_trophy_hunter_30_stacks_bundle     = { en = "Slayer: Trophy Hunter 30x@1%% (Impatience 10%%->1%%)" },
     rework_dr_slayer_trophy_hunter_30_stacks_bundle_description = { en = "Trophy Hunter: 1%%/hit x 30 stacks x 2s (was 10%%/hit x 3). Impatience scaled to 1%%/stack to match. Same +30%% cap, smoother ramp." },
@@ -114,22 +116,22 @@ return {
     rework_es_huntsman_base_hp_plus_25                  = { en = "Huntsman: +25 base HP" },
     rework_es_huntsman_base_hp_plus_25_description      = { en = "Adds 25 to Huntsman's base max HP (100 -> 125)." },
     rework_es_huntsman_prowl_monster_power              = { en = "Huntsman: Prowl +50%% damage vs monsters" },
-    rework_es_huntsman_prowl_monster_power_description  = { en = "During Prowl, +50%% damage vs monsters (boss creatures - chaos spawn, troll, stormfiend, rat ogre). Caveat: also applies to melee-vs-monster during Prowl (no ranged-only-vs-monster stat buff exists in VT2)." },
+    rework_es_huntsman_prowl_monster_power_description  = { en = "During Prowl: +50%% damage vs monsters (chaos spawn, troll, stormfiend, rat ogre). Also applies to melee-vs-monster (no ranged-only stat_buff exists)." },
     rework_es_mercenary_group               = { en = "Mercenary" },
     rework_es_mercenary_hellborgs_tutelage              = { en = "Mercenary: Hellborg's Tutelage -> -10%% random crit (keep crits)" },
-    rework_es_mercenary_hellborgs_tutelage_description  = { en = "Hellborg's Tutelage no longer disables random crits. Instead, random crit chance is reduced by 10%% while the talent is selected. The guaranteed crit every 5 hits still procs." },
+    rework_es_mercenary_hellborgs_tutelage_description  = { en = "Hellborg's Tutelage no longer disables random crits — only reduces crit chance by 10%%. Guaranteed crit every 5 hits still procs." },
     rework_es_mercenary_blade_barrier_60x_minus_10_on_hit             = { en = "Mercenary: Blade Barrier 0.5%%/kill x60, -10/hit" },
     rework_es_mercenary_blade_barrier_60x_minus_10_on_hit_description = { en = "-0.5%% damage taken per kill, max 60 stacks (-30%% at cap). Taking damage strips 10 stacks at once." },
     rework_es_knight_group                                            = { en = "Foot Knight" },
     rework_es_knight_protective_presence_10m_rock_20m                 = { en = "Foot Knight: Protective Presence 5m->10m, Rock->20m" },
     rework_es_knight_protective_presence_10m_rock_20m_description     = { en = "Doubles Protective Presence base aura to 10m. Rock of the Reickland talent then extends to 20m." },
     rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s             = { en = "Foot Knight: Valiant Charge 45s base, Battering Ram->30s" },
-    rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s_description = { en = "Base cooldown 30s -> 45s. When Battering Ram is selected, refunds 1/3 of the cooldown back to 30s. Talent keeps its doubled-width effect. ('Always charges through great foes' baseline deferred - collision gate lives in C++.)" },
+    rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s_description = { en = "Valiant Charge cooldown 30s → 45s. Battering Ram refunds it back to 30s and keeps its doubled-width effect." },
     rework_es_knight_counter_punch_stagger_stack                                  = { en = "Foot Knight: Counter-Punch +30%% stagger/block, x5" },
     rework_es_knight_counter_punch_stagger_stack_description                      = { en = "Each successful block grants +30%% stagger (power_level_impact) stacking up to 5x. Each stack lasts 5s." },
     rework_es_questingknight_group                                                = { en = "Grail Knight" },
     rework_es_questingknight_virtue_of_ideal_3pct_per_kill                        = { en = "Grail Knight: Virtue of the Ideal +3%%/kill x10, indep. 10s" },
-    rework_es_questingknight_virtue_of_ideal_3pct_per_kill_description            = { en = "Vanilla +8%%/kill x3 x10s refreshing -> +3%%/kill x10 x10s independent (each stack expires on its own timer). Cap +30%% at full stacks." },
+    rework_es_questingknight_virtue_of_ideal_3pct_per_kill_description            = { en = "Virtue of the Ideal: +8%%/kill x3 → +3%%/kill x10, each stack 10s independent timer. Cap +30%%." },
     rework_es_questingknight_virtue_of_discipline_double_parry                    = { en = "Grail Knight: Virtue of Discipline double parry (no power)" },
     rework_es_questingknight_virtue_of_discipline_double_parry_description        = { en = "Replaces the +20%% power-on-parry effect with a doubled parry window (0.5s -> 1.0s)." },
     rework_es_questingknight_virtue_of_impetuous_buffed                           = { en = "Grail Knight: Impetuous Knight 20s, +20%% MS/AS/Power" },
@@ -177,23 +179,23 @@ return {
     rework_bw_necromancer_army_of_dead_buffed_description            = { en = "Halves the ability cooldown (110s -> 55s) and doubles the despawn timer on extra skeletons (20s -> 40s)." },
     rework_bw_unchained_group                                        = { en = "Unchained" },
     rework_bw_unchained_wildfire_burst_and_radius                    = { en = "Unchained: Wildfire +50%% burst, +25%% radius" },
-    rework_bw_unchained_wildfire_burst_and_radius_description        = { en = "Lifts Wildfire's explosion radius +25%% (5 -> 6.25) and damage +50%% (0.15 -> 0.225). ('Make innate' baseline portion deferred - requires hooking the ability's explosion selection.)" },
+    rework_bw_unchained_wildfire_burst_and_radius_description        = { en = "Wildfire: radius +25%% (5 → 6.25), damage +50%% (0.15 → 0.225)." },
     rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit                       = { en = "Unchained: Numb to Pain x4, burn-elite kill, lose on hit" },
-    rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit_description           = { en = "Each kill of a burning elite or special grants -5%% damage taken (max 4 stacks, -20%% at cap), no timeout. Each hit you take strips one stack." },
+    rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit_description           = { en = "Killing a burning elite/special grants -5%% damage taken (max 4 stacks). No timeout. Hit removes 1 stack." },
 
     -- Saltzpyre (Victor)
     rework_wh_group                         = { en = "Saltzpyre" },
     rework_wh_zealot_group                  = { en = "Zealot" },
     rework_wh_zealot_smite_random_crits                 = { en = "Zealot: Smite allow random crits" },
-    rework_wh_zealot_smite_random_crits_description     = { en = "Smite normally disables all random crits. This removes that restriction so you can still get lucky crits between the guaranteed ones." },
+    rework_wh_zealot_smite_random_crits_description     = { en = "Smite no longer disables random crits. Lucky crits still proc between the guaranteed ones." },
     rework_wh_zealot_power_5_to_10                      = { en = "Zealot: +5%% Power talent -> +10%%" },
     rework_wh_zealot_power_5_to_10_description          = { en = "Doubles Zealot's row-1 flat +5%% Power talent to +10%%." },
     rework_wh_zealot_ability_green_to_thp               = { en = "Zealot: Ability converts green HP to THP" },
-    rework_wh_zealot_ability_green_to_thp_description   = { en = "Every Holy Fervour activation converts all permanent (green) HP into temporary (white) HP. Synergizes with Zealot's missing-HP damage passive." },
+    rework_wh_zealot_ability_green_to_thp_description   = { en = "Holy Fervour activation converts all green HP to THP. Synergizes with Zealot's missing-HP damage passive." },
     rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30                 = { en = "Zealot: Fiery Faith +1%%/5 missing HP, max 30 stacks" },
     rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30_description     = { en = "Vanilla 5%%/stack x6 (25 HP chunks) -> 1%%/stack x30 (5 HP chunks). Same +30%% cap, smoother ramp." },
     rework_wh_zealot_castigate_4pct_as_per_fiery_faith                = { en = "Zealot: Castigate +4%% AS/Fiery Faith stack (cap +20%%)" },
-    rework_wh_zealot_castigate_4pct_as_per_fiery_faith_description    = { en = "Threshold tiers -> chunk-based scaling matching Fiery Faith. +4%% AS per 30 HP missing, max 5 stacks." },
+    rework_wh_zealot_castigate_4pct_as_per_fiery_faith_description    = { en = "Castigate: +4%% AS per 30 HP missing, max 5 stacks (matches Fiery Faith chunk scaling)." },
     rework_wh_zealot_holy_fortitude_30_max_hp                         = { en = "Zealot: Holy Fortitude -> +30 max HP" },
     rework_wh_zealot_holy_fortitude_30_max_hp_description             = { en = "Replaces the level-20 healing-received talent with a flat +30 max HP buff." },
     rework_wh_bountyhunter_group            = { en = "Bounty Hunter" },
@@ -202,11 +204,11 @@ return {
     rework_wh_bountyhunter_double_shotted_damage_double                   = { en = "Bounty Hunter: Double-Shotted also doubles damage" },
     rework_wh_bountyhunter_double_shotted_damage_double_description       = { en = "Independent of the 80%% refund toggle. Activating Locked And Loaded grants +100%% ranged power for 3 seconds." },
     rework_wh_bountyhunter_blessed_combat_25_and_passive_melee_reset                  = { en = "Bounty Hunter: Blessed Combat 25%%/stack (+melee-reset innate)" },
-    rework_wh_bountyhunter_blessed_combat_25_and_passive_melee_reset_description      = { en = "Stack multipliers lifted from 15%% to 25%% (max +150%%). 'Melee kills reset Blessed Shots cooldown' becomes innate across all lvl-20 talents." },
+    rework_wh_bountyhunter_blessed_combat_25_and_passive_melee_reset_description      = { en = "Stack multiplier 15%% → 25%% (max +150%%). Melee kills resetting Blessed Shots becomes innate across all lvl-20 talents." },
     rework_wh_bountyhunter_rile_the_mob_movement                          = { en = "Bounty Hunter: Rile the Mob -> +10%% MS permanent" },
     rework_wh_bountyhunter_rile_the_mob_movement_description              = { en = "Replaces the conditional team-speed-on-ranged-crit with a permanent self-only +10%% movement speed." },
     rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload                   = { en = "Bounty Hunter: Salvaged Ammo no gate (+reload innate)" },
-    rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload_description       = { en = "Drops the 'must be out of ammo' gate. Also promotes 'melee kills reload ranged weapon' to innate across all lvl-25 talents." },
+    rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload_description       = { en = "Drops the 'must be out of ammo' gate. Melee kills reloading ranged becomes innate across all lvl-25 talents." },
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr                  = { en = "    (A) BH passive: Job Well Done innate +5%%/stack DR" },
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_description      = { en = "Vanilla effect becomes innate. Talent slot replaced: special-kill grants -5%% damage taken per stack, max 6x, lose 1 stack on damage." },
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip          = { en = "BH passive choice (A) of (B). Alternative to '(B) BH passive: perks rework (Big Rebalance)' — these are mutually exclusive (toggling either one off-checks the other; both off = vanilla).\n\nThis is my rework: vanilla Job Well Done effect becomes innate. Talent slot replaced — special-kill grants -5%% damage taken per stack, max 6 stacks, lose 1 stack on damage." },
@@ -219,7 +221,7 @@ return {
     rework_wh_captain_parry_window_description          = { en = "Doubles the parry timing window from 0.5s to 1.0s." },
     rework_wh_priest_group                              = { en = "Warrior Priest" },
     rework_wh_priest_shield_of_faith_10s_110s_cd_plus_unyielding_20s              = { en = "Warrior Priest: Shield of Faith 10s base / 110s CD / Unyielding +20s" },
-    rework_wh_priest_shield_of_faith_10s_110s_cd_plus_unyielding_20s_description  = { en = "Doubles Shield of Faith base duration (5s -> 10s) and cooldown (70s -> 110s). Unyielding Blessing bonus 10s -> 20s. Combined uptime with Unyielding = 30s." },
+    rework_wh_priest_shield_of_faith_10s_110s_cd_plus_unyielding_20s_description  = { en = "Shield of Faith: duration 5s → 10s, cooldown 70s → 110s. Unyielding bonus 10s → 20s (combined uptime 30s)." },
     rework_wh_priest_prayer_of_vengeance_self_40_others_20                        = { en = "Warrior Priest: Prayer of Vengeance self +40%%, allies +20%%" },
     rework_wh_priest_prayer_of_vengeance_self_40_others_20_description            = { en = "Team aura +20%% damage vs monsters; Warrior Priest gets an extra +20%% self-only on top for +40%% total." },
 
@@ -228,7 +230,7 @@ return {
     -- ============================================================
     -- Top-level group labels
     cbr_group                              = { en = "Big Rebalance" },
-    cbr_group_description                  = { en = "Opt-in Core's Big Rebalance career changes. All toggles default OFF. REQUIRES the companion mod 'Tweaker: Buffs' (internal id `bt`) installed and its master toggle ON — subscribe to it separately, then restart the game. Without bt's master on, every toggle here is inert." },
+    cbr_group_description                  = { en = "Opt-in Big Rebalance career changes. All toggles default OFF. REQUIRES 'Tweaker: Buffs' (bt) installed with its master toggle ON; without bt master, every toggle here is inert." },
 
     -- Group headers
     cbr_general_group                      = { en = "General — cross-career framework" },
@@ -601,4 +603,38 @@ return {
     cbr_buff_infinite_burn_dot_clones      = { en = "Cross: infinite-burn DOT auto-clone loop" },
     cbr_buff_warp_lightning_strike_delayed = { en = "Cross: warp lightning strike (delayed)" },
     cbr_buff_timed_warp_explosion          = { en = "Cross: timed warp explosion" },
+
+    -- ============================================================
+    -- Passive-perks-rework descriptions (crt's own keys; v0.3.19-dev)
+    -- ============================================================
+    -- The three `cbr_*_passive_perks_rework` BR toggles replace a career
+    -- passive's `perks` UI list (PassiveAbilitySettings.<id>.perks) with a new
+    -- 3-entry list, each `{ description = <key>, icon = <key> }`. The vanilla
+    -- perk convention is `career_passive_desc_<id><letter>_<n>`, NOT these keys
+    -- (verified absent from decompiled source) — so these are crt-invented keys
+    -- that were never given loc entries (check_name_integrity check #2). The
+    -- English below is grounded in the documented vanilla passive `buffs` lists
+    -- (career_ability_settings.lua we_2 / wh_1 / wh_2) — the passive component
+    -- effects the rework surfaces as sub-perks. No invented numbers.
+    --
+    -- Handmaiden (we_2) passive buffs: dodge, dodge_speed, stamina_regen_aura
+    -- (allies), increased_stamina, ress_time, ability cooldown on hit/damage.
+    kerillian_maidenguard_perk_1_desc  = { en = "Improved dodge distance and dodge speed." },
+    kerillian_maidenguard_perk_2_desc  = { en = "Increased maximum stamina, and a stamina-regeneration aura for nearby allies." },
+    kerillian_maidenguard_perk_3_desc  = { en = "Faster ally revives, and ability cooldown reduced on hits dealt and damage taken." },
+    -- Zealot (wh_1) passive buffs: increased_damage (lower health = more power),
+    -- uninterruptible_heavy, invulnerability on lethal damage taken, ability
+    -- cooldown on hit/damage.
+    victor_zealot_perk_1_desc          = { en = "Deals increased damage the lower your health." },
+    victor_zealot_perk_2_desc          = { en = "Heavy attacks cannot be interrupted, and surviving lethal damage grants a window of invulnerability." },
+    victor_zealot_perk_3_desc          = { en = "Ability cooldown reduced on hits dealt and damage taken." },
+    -- Bounty Hunter (wh_2) passive buffs: crit_buff (every Nth shot crits),
+    -- reload_speed, increased_ammunition, ability cooldown on hit/damage.
+    victor_bountyhunter_perk_1_desc    = { en = "Periodic guaranteed critical ranged shot." },
+    victor_bountyhunter_perk_2_desc    = { en = "Increased reload speed and ammunition capacity." },
+    victor_bountyhunter_perk_3_desc    = { en = "Ability cooldown reduced on hits dealt and damage taken." },
+
+    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+    enable_debug_logging         = { en = "Debug Logging" },
+    enable_debug_logging_tooltip = { en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable." },
 }

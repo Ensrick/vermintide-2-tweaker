@@ -1,0 +1,11 @@
+mod = [
+	"general_tweaker_dev"
+]
+
+package = [
+	"resource_packages/general_tweaker_dev/general_tweaker_dev"
+]
+
+lua = [
+	"scripts/mods/general_tweaker_dev/*"
+]

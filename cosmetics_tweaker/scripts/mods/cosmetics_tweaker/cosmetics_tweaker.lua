@@ -36,10 +36,86 @@ local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
+local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
+-- v0.9.24-dev: UI diagnostic dump harness. No-op at runtime unless the
+-- enable_debug_logging VMF toggle is on. See _ui_dump.lua header for
+-- what gets dumped per window class.
+local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 
-local MOD_VERSION = "0.9.10-dev"
+local MOD_VERSION = "0.9.34-dev"
+-- Startup banner: log-only, NOT chat. The applied marker line further down
+-- ([cosmetics] enabled v<X> settings_fp=<hash>) is the canonical version surface
+-- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
-mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)
+
+-- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
+-- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- `_dbg` is for confirmation / expected behavior — file only.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[cosmetics:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[cosmetics:dbg] " .. fmt, ...)
+        mod:echo("[cosmetics] " .. fmt, ...)
+    end
+end
+
+-- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
+-- one mod:info line at load. ALWAYS fires (operational telemetry).
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[cosmetics:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[cosmetics] v%s loaded", MOD_VERSION))
+end
 
 -- /regression_test scaffold. Registrations at end of file.
 local _RT_CHECKS = {}
@@ -63,6 +139,41 @@ mod:command("cos_regression_test", "Run regression smoke checks for past bugs", 
     mod:echo("=== %d passed, %d failed ===", pass, fail)
 end)
 mod:info("[regression-test-command] registered as /cos_regression_test")
+
+-- v0.9.12-dev: persistence inspection + manual replay commands.
+mod:command("cos_persist_dump", "Dump saved LA cosmetic + illusion entries", function()
+    local pm = Managers and Managers.player
+    local lp = pm and pm:local_player()
+    local career = lp and LA_PERSIST and LA_PERSIST._career_name_for_player(lp)
+    mod:echo("=== la_persistence (current career: %s) ===", tostring(career))
+    local careers_state = mod:get("la_persisted_equips") or {}
+    local careers_t = careers_state.careers or {}
+    local illusions_t = careers_state.illusions or {}
+    local cn = 0
+    for k, v in pairs(careers_t) do
+        cn = cn + 1
+        mod:echo("  career[%s] = { hat=%s, skin=%s }", tostring(k),
+            tostring(v.slot_hat or "-"), tostring(v.slot_skin or "-"))
+    end
+    local _in = 0; for _ in pairs(illusions_t) do _in = _in + 1 end
+    mod:echo("  %d career entries, %d illusion entries", cn, _in)
+    if _in > 0 and _in <= 20 then
+        for bid, skin in pairs(illusions_t) do
+            mod:echo("    illusion[%s] = %s", tostring(bid), tostring(skin))
+        end
+    end
+end)
+mod:command("cos_persist_replay", "Re-apply saved LA hat + armor for local player's current career", function()
+    local pm = Managers and Managers.player
+    local lp = pm and pm:local_player()
+    if not lp then mod:echo("no local player"); return end
+    local n = LA_PERSIST and LA_PERSIST.restore_for_player(lp) or 0
+    mod:echo("replayed %d saved LA cosmetic(s) for current career", n)
+end)
+mod:command("cos_persist_clear", "Wipe all saved LA persistence entries", function()
+    mod:set("la_persisted_equips", { schema = 1, careers = {}, illusions = {} })
+    mod:echo("[la-persist] cleared all saved entries (in-memory cache will refresh on next save)")
+end)
 
 -- ============================================================
 -- Material tinting research (TODO: cloned + recolored cosmetics)
@@ -584,7 +695,7 @@ mod:hook_origin("NewsFeedUI", "draw", function(self, dt)
                 stale_indices = stale_indices or {}
                 stale_indices[#stale_indices + 1] = i
                 if _hot_reload_purges < 5 then
-                    mod:info("[hot-reload-safety] news widget %d draw failed: %s", i, tostring(err))
+                    _dbg_alert("[hot-reload-safety] news widget %d draw failed: %s", i, tostring(err))
                 end
             end
         end
@@ -680,6 +791,14 @@ mod.on_game_state_changed = function()
     -- change. Drain logic lives in mod.update (after locals are declared).
     mod._la_self_rebroadcast_pending = true
 
+    -- v0.9.13-dev: snapshot LA state on every game-state change. Gated on the
+    -- debug_dumps toggle. Fires on inn entry, mission entry, mission exit —
+    -- so any later spawn / equip event in the log has a baseline to compare
+    -- against. No-op when the toggle is off.
+    if mod._la_dump_mission_state then
+        mod._la_dump_mission_state("game_state_change")
+    end
+
     -- v0.9.9.3-dev: reset glow-picker auto-popup gate on every state
     -- transition. Keep→mission and mission→keep both wipe the per-session
     -- "already shown" set so re-entering the keep can re-trigger the popup
@@ -715,6 +834,13 @@ end
 
 mod.on_disabled = function()
     if TPE and TPE.flush then TPE.flush() end
+    -- audit 2026-06-07 (F7): restore LA.apply_new_skin_from_texture so an
+    -- in-session F4 disable doesn't leave LA's own recolor permanently blocked
+    -- for bridge-managed keys until restart. Injected IML/NetworkLookup entries
+    -- can't be safely torn down mid-session, so we only undo the apply gate.
+    if LA_BRIDGE and LA_BRIDGE.uninstall_apply_gate then
+        LA_BRIDGE.uninstall_apply_gate()
+    end
 end
 -- CLARIFY: Ctrl+Shift+R (hot-reload) is UNSAFE for cosmetics_tweaker — see
 -- feedback_hot_reload_unfixable.md. Engine holds C++ resource locks on
@@ -1352,7 +1478,7 @@ end)
 mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, self, enable, disable_edges)
     if _cim_owns_illusion_swap() then return func(self, enable, disable_edges) end
     if mod:get("apply_trace") then
-        mod:info("[apply-trace] _enable_craft_button enable=%s recipe=%s skin_dirty=%s eac=%s",
+        _dbg("[apply-trace] _enable_craft_button enable=%s recipe=%s skin_dirty=%s eac=%s",
             tostring(enable), tostring(self._current_recipe_name),
             tostring(self._skin_dirty), tostring(script_data["eac-untrusted"]))
     end
@@ -1388,7 +1514,7 @@ mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(f
         end
         local default_skin = current_item and current_item.key and WeaponSkins.default_skins[current_item.key]
         local effective_current = current_skin or default_skin
-        mod:info("[apply-trace] _on_illusion_index_pressed picked=%s current=%s default=%s differs=%s ignore_spawn=%s locked=%s",
+        _dbg("[apply-trace] _on_illusion_index_pressed picked=%s current=%s default=%s differs=%s ignore_spawn=%s locked=%s",
             tostring(picked_skin), tostring(current_skin), tostring(default_skin),
             tostring(picked_skin ~= effective_current), tostring(ignore_item_spawn),
             tostring(widget and widget.content and widget.content.locked))
@@ -1402,6 +1528,50 @@ mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(f
             end
         end
     end
+
+    -- v0.9.18-dev DATA PROBE — always-on, low volume (1 line per user click).
+    -- Captures the picked skin + its material_settings_name so the future
+    -- Evengleam glow popup feature has authoritative data on which skins
+    -- belong to which glow family (rune / weaves / magic / etc.) without
+    -- requiring offline source-tree probing.
+    do
+        local picked_skin = widget and widget.content and widget.content.skin_key
+        if picked_skin and WeaponSkins and WeaponSkins.skins then
+            local entry = WeaponSkins.skins[picked_skin]
+            if entry then
+                mod:info("[illusion-probe] item_bid=%s picked_skin=%s matching_item=%s material_settings=%s rarity=%s",
+                    tostring(self._item_backend_id), tostring(picked_skin),
+                    tostring(entry.matching_item_key), tostring(entry.material_settings_name),
+                    tostring(entry.rarity))
+            end
+        end
+    end
+
+    -- v0.9.34 (release gate, GLOW_SYSTEM M3 item 7): auto-open the glow picker
+    -- when the user SELECTS an illusion that has a glow variant. Selection is
+    -- explicit intent, so no once-per-keep gate (unlike the wield-triggered
+    -- path below). We're inside HeroWindowItemCustomization, whose _draw hook
+    -- already renders the overlay, so it appears immediately. Runs BEFORE the
+    -- vanilla call so the tail-call's multi-returns stay untouched; the picker
+    -- keys per-item state off the ITEM backend_id, so ordering vs vanilla's
+    -- internal handling doesn't matter.
+    do
+        local picked_skin = widget and widget.content and widget.content.skin_key
+        if picked_skin and mod:get("glow_picker_auto_popup_enabled") ~= false then
+            local family = GlowPicker.classify({ skin = picked_skin })
+            local bid = self._item_backend_id
+            if family and bid then
+                GlowPicker.open_for(bid, { skin = picked_skin })
+                mod:info("[glow_picker:auto] opened on illusion select bid=%s skin=%s family=%s",
+                    tostring(bid), tostring(picked_skin), tostring(family))
+            elseif not family and GlowPicker.is_open() then
+                -- Selected a non-glow illusion while the picker was up for this
+                -- item — the panel no longer applies; close it.
+                GlowPicker.close()
+            end
+        end
+    end
+
     return func(self, index, ignore_item_spawn, mark_as_equipped)
 end)
 
@@ -1530,7 +1700,7 @@ local function _preload_one(package_path)
     -- "spawnable?" answer regardless of which package provides the unit.
     if Application and Application.can_get and Application.can_get("unit", package_path) then
         _preloaded_offhand_packages[package_path] = true
-        mod:info("[offhand] %s already engine-resident (no standalone load needed)", package_path)
+        _dbg("[offhand] %s already engine-resident (no standalone load needed)", package_path)
         return
     end
     -- v0.9.3.2-hotfix: paths in `NetworkLookup.inventory_packages` ARE
@@ -1555,7 +1725,7 @@ local function _preload_one(package_path)
     end
     if Application and Application.can_get and not Application.can_get("package", package_path)
         and not in_inventory_list then
-        mod:info("[offhand] no standalone package at %s and not in inventory_packages list — skipping preload", package_path)
+        _dbg("[offhand] no standalone package at %s and not in inventory_packages list — skipping preload", package_path)
         return
     end
     -- Sync load (async=false). Async returns immediately and races the
@@ -1565,9 +1735,9 @@ local function _preload_one(package_path)
     end)
     if ok then
         _preloaded_offhand_packages[package_path] = true
-        mod:info("[offhand] preloaded package %s (sync)", package_path)
+        _dbg("[offhand] preloaded package %s (sync)", package_path)
     else
-        mod:info("[offhand] preload FAILED for %s: %s", package_path, tostring(err))
+        _dbg_alert("[offhand] preload FAILED for %s: %s", package_path, tostring(err))
     end
 end
 
@@ -1997,7 +2167,7 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
             end
         end
         if n > 0 then
-            mod:info("[ct offhand] drained %d deferred LA emit(s) on screen exit", n)
+            _dbg("[ct offhand] drained %d deferred LA emit(s) on screen exit", n)
             -- v0.9.3.8: pulse-wield to force fresh weapon-unit spawn.
             --
             -- v0.9.3.7 tried `inv:wield(inv.wielded_slot)` but vanilla
@@ -2026,15 +2196,15 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
             -- v0.9.4: per-guard diagnostic. v0.9.3.8 silently bailed in keep
             -- context with zero log output; need to know WHICH guard failed.
             if not pm then
-                mod:info("[ct offhand] pulse-wield SKIP — Managers.player nil")
+                _dbg("[ct offhand] pulse-wield SKIP — Managers.player nil")
             elseif not lp then
-                mod:info("[ct offhand] pulse-wield SKIP — local_player nil")
+                _dbg("[ct offhand] pulse-wield SKIP — local_player nil")
             elseif not pu then
-                mod:info("[ct offhand] pulse-wield SKIP — player_unit nil")
+                _dbg("[ct offhand] pulse-wield SKIP — player_unit nil")
             elseif not Unit.alive(pu) then
-                mod:info("[ct offhand] pulse-wield SKIP — player_unit not alive")
+                _dbg("[ct offhand] pulse-wield SKIP — player_unit not alive")
             elseif not (ScriptUnit and ScriptUnit.has_extension) then
-                mod:info("[ct offhand] pulse-wield SKIP — ScriptUnit.has_extension unavailable")
+                _dbg("[ct offhand] pulse-wield SKIP — ScriptUnit.has_extension unavailable")
             end
             if pu and Unit.alive(pu) and ScriptUnit and ScriptUnit.has_extension then
                 local inv = ScriptUnit.has_extension(pu, "inventory_system")
@@ -2043,11 +2213,11 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                 -- nil instead of pulse-cycling). Other SKIP messages remain
                 -- as informational diagnostics.
                 if not inv then
-                    mod:info("[ct offhand] pulse-wield SKIP — no inventory_system extension on player_unit")
+                    _dbg("[ct offhand] pulse-wield SKIP — no inventory_system extension on player_unit")
                 elseif not inv.wield then
-                    mod:info("[ct offhand] pulse-wield SKIP — inv.wield method missing")
+                    _dbg("[ct offhand] pulse-wield SKIP — inv.wield method missing")
                 elseif not (inv._equipment and inv._equipment.slots) then
-                    mod:info("[ct offhand] pulse-wield SKIP — inv._equipment / inv._equipment.slots missing")
+                    _dbg("[ct offhand] pulse-wield SKIP — inv._equipment / inv._equipment.slots missing")
                 end
                 if inv and inv.wield and inv._equipment and inv._equipment.slots then
                     local orig_slot = inv.wielded_slot  -- may be NIL in keep
@@ -2086,13 +2256,13 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                         if target_slot then
                             local ok, err = pcall(inv.wield, inv, target_slot)
                             if ok then
-                                mod:info("[ct offhand] keep-wield slot=%s (from nil) to refresh local model",
+                                _dbg("[ct offhand] keep-wield slot=%s (from nil) to refresh local model",
                                     tostring(target_slot))
                             else
-                                mod:info("[ct offhand] keep-wield errored: %s", tostring(err))
+                                _dbg_alert("[ct offhand] keep-wield errored: %s", tostring(err))
                             end
                         else
-                            mod:info("[ct offhand] pulse-wield SKIP — no equipped weapon slot found")
+                            _dbg("[ct offhand] pulse-wield SKIP — no equipped weapon slot found")
                         end
                     else
                         -- orig_slot is set — do the original pulse pattern.
@@ -2113,14 +2283,14 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                             local ok1, err1 = pcall(inv.wield, inv, pulse_slot)
                             local ok2, err2 = pcall(inv.wield, inv, orig_slot)
                             if ok1 and ok2 then
-                                mod:info("[ct offhand] pulse-wielded %s -> %s to refresh local model",
+                                _dbg("[ct offhand] pulse-wielded %s -> %s to refresh local model",
                                     tostring(pulse_slot), tostring(orig_slot))
                             else
-                                mod:info("[ct offhand] pulse-wield errored: %s / %s",
+                                _dbg_alert("[ct offhand] pulse-wield errored: %s / %s",
                                     tostring(err1), tostring(err2))
                             end
                         else
-                            mod:info("[ct offhand] pulse-wield SKIP — no alternate slot to pulse through (wielded=%s)",
+                            _dbg("[ct offhand] pulse-wield SKIP — no alternate slot to pulse through (wielded=%s)",
                                 tostring(orig_slot))
                         end
                     end
@@ -2324,8 +2494,112 @@ local function _get_weapon_key_from_item(item)
     return item.key
 end
 
+-- v0.9.29-dev (issue #48): filter weavebound / shyish glow families from
+-- the illusion grid by default. Data evidence: 2026-05-27 ui-dump on
+-- es_2h_sword (Kruber Greatsword) showed 13 skins with mat= field on each
+-- (`mat=weaves` for Weavebound, `mat=shyish` for Shyish-Infused). User
+-- wants these hidden by default — they're visually jarring on most
+-- weapons (the Bret Longsword "Evengleam" weavebound/shyish pair is the
+-- canonical complaint). Filter is per-mat-family + per-VMF-toggle so the
+-- user can opt back in. Currently-equipped skin is NEVER filtered out so
+-- vanilla's `_select_illusion_by_key` (called from _setup_illusions
+-- before our hook runs) stays valid.
+local _FILTERED_MAT_FAMILIES = {
+    weaves = "hide_weavebound_skins",
+    shyish = "hide_shyish_skins",
+}
+
+local function _skin_mat_family(skin_key)
+    if not skin_key or not WeaponSkins or not WeaponSkins.skins then return nil end
+    local entry = rawget(WeaponSkins.skins, skin_key)
+    if type(entry) ~= "table" then return nil end
+    local mat = entry.material_settings_name
+    return (type(mat) == "string") and mat or nil
+end
+
+-- Pure helper so the regression test can drive it with synthetic widget
+-- arrays + setting-getter overrides. `current_skin_key` is the
+-- always-keep guard (vanilla selection state would dangle otherwise).
+-- `get_setting` defaults to `mod.get` but the test overrides it.
+mod._filter_illusion_widgets = function(widgets, current_skin_key, get_setting)
+    if type(widgets) ~= "table" then return widgets, 0 end
+    get_setting = get_setting or function(key) return mod:get(key) end
+    local kept, removed = {}, 0
+    for _, w in ipairs(widgets) do
+        local skin_key = w and w.content and w.content.skin_key
+        local keep = true
+        if skin_key and skin_key ~= current_skin_key then
+            local mat = _skin_mat_family(skin_key)
+            local setting_id = mat and _FILTERED_MAT_FAMILIES[mat]
+            if setting_id and get_setting(setting_id) then keep = false end
+        end
+        if keep then
+            kept[#kept + 1] = w
+        else
+            removed = removed + 1
+        end
+    end
+    if removed > 0 then
+        -- Re-run vanilla's offset math (hero_window_item_customization.lua:1611-1618).
+        local width, spacing = 51, -5
+        local n = #kept
+        local total_width = (n > 0) and (-spacing + n * (width + spacing)) or 0
+        local x_offset = width / 2
+        for _, w in ipairs(kept) do
+            local offset = w.offset
+            if offset then
+                offset[1] = -total_width / 2 + x_offset
+                x_offset = x_offset + width + spacing
+            end
+        end
+    end
+    return kept, removed
+end
+
 mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self, item)
     func(self, item)
+
+    -- v0.9.29-dev: drop hidden glow-family skins from the grid. Done
+    -- AFTER vanilla setup (and AFTER vanilla's `_select_illusion_by_key`
+    -- runs inside the original function) so a currently-equipped weaves
+    -- or shyish skin survives — only unselected hidden-family widgets
+    -- get pruned.
+    if self._illusion_widgets and #self._illusion_widgets > 0 then
+        local current_skin = item and (item.skin or (item.data and item.data.default_skin))
+        local kept, removed = mod._filter_illusion_widgets(self._illusion_widgets, current_skin)
+        if removed > 0 then
+            self._illusion_widgets = kept
+            _dbg("[illusion-filter] dropped %d hidden-family skin(s); %d remain",
+                removed, #kept)
+        end
+    end
+
+    -- v0.9.18-dev DATA PROBE — dump every illusion built into the picker for
+    -- this item along with the skin's material_settings_name + rarity. Runs
+    -- once per picker open (~1 line per illusion). Gated on debug_dumps so
+    -- it's silent in normal play. Goal: when the user opens the picker on
+    -- the Evengleam-bearing weapon, we get a complete inventory of the
+    -- magic-family skins it carries — enough data to scope the Evengleam
+    -- glow popup feature precisely.
+    if mod:get("enable_debug_logging") and item then
+        local weapon_key = _get_weapon_key_from_item(item)
+        _dbg("[illusion-picker-setup] item.key=%s weapon_key=%s backend_id=%s current.skin=%s",
+            tostring(item.key), tostring(weapon_key),
+            tostring(item.backend_id), tostring(item.skin))
+        local widgets = self._illusion_widgets
+        if widgets then
+            for i, widget in ipairs(widgets) do
+                local skin_key = widget.content and widget.content.skin_key
+                local entry = skin_key and WeaponSkins and WeaponSkins.skins
+                    and WeaponSkins.skins[skin_key]
+                if entry then
+                    _dbg("[illusion-picker-setup]   [%d] %s -> matching=%s material_settings=%s rarity=%s",
+                        i, tostring(skin_key), tostring(entry.matching_item_key),
+                        tostring(entry.material_settings_name), tostring(entry.rarity))
+                end
+            end
+        end
+    end
 
     self._ct_offhand_widgets = nil
     self._ct_offhand_title_widget = nil
@@ -2333,22 +2607,22 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     self._ct_offhand_divider_widget = nil
     self._ct_selected_offhand_index = nil
 
-    mod:info("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
+    _dbg("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
 
     -- v0.8.55-dev: stash for the BackendUtils.get_item_units hook fallback.
     -- See note on `_active_customization_backend_id` declaration.
     _active_customization_backend_id = item and item.backend_id or nil
 
-    if not item then mod:info("[offhand] no item, bailing"); return end
+    if not item then _dbg("[offhand] no item, bailing"); return end
     local item_data = item.data or (item.key and ItemMasterList and rawget(ItemMasterList, item.key))
-    mod:info("[offhand] item_data=%s, left_hand_unit=%s", tostring(item_data ~= nil), tostring(item_data and item_data.left_hand_unit))
-    if not _has_offhand(item_data) then mod:info("[offhand] no offhand, bailing"); return end
+    _dbg("[offhand] item_data=%s, left_hand_unit=%s", tostring(item_data ~= nil), tostring(item_data and item_data.left_hand_unit))
+    if not _has_offhand(item_data) then _dbg("[offhand] no offhand, bailing"); return end
 
     local weapon_key = _get_weapon_key_from_item(item)
-    mod:info("[offhand] weapon_key=%s", tostring(weapon_key))
+    _dbg("[offhand] weapon_key=%s", tostring(weapon_key))
     local hand_pools = _get_offhand_options(weapon_key)
     if type(hand_pools) ~= "table" then
-        mod:info("[offhand] no options for key=%s, bailing", tostring(weapon_key)); return
+        _dbg("[offhand] no options for key=%s, bailing", tostring(weapon_key)); return
     end
 
     -- v0.9.9.4-dev: build row sequence in display order. Right hand renders
@@ -2367,7 +2641,7 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
         hand_rows[#hand_rows + 1] = { hand = "left_hand_unit", pool = hand_pools.left_hand_unit }
     end
     if #hand_rows == 0 then
-        mod:info("[offhand] no hand pools for key=%s, bailing", tostring(weapon_key)); return
+        _dbg("[offhand] no hand pools for key=%s, bailing", tostring(weapon_key)); return
     end
 
     local definitions = local_require("scripts/ui/views/hero_view/windows/definitions/hero_window_item_customization_definitions")
@@ -2470,14 +2744,14 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
                         _offhand_selection[current_backend_id][hand_field] = opt
                     end
                     current_sel = opt
-                    mod:info("[offhand] auto-selected %s/%s: %s (backend_id=%s)",
+                    _dbg("[offhand] auto-selected %s/%s: %s (backend_id=%s)",
                         tostring(weapon_key), hand_field, tostring(opt.name),
                         tostring(current_backend_id))
                     break
                 end
             end
             if not current_sel then
-                mod:info("[offhand] no option matched %s/%s current=%s — leaving row unhighlighted",
+                _dbg("[offhand] no option matched %s/%s current=%s — leaving row unhighlighted",
                     tostring(weapon_key), hand_field, tostring(current_unit))
             end
         end
@@ -2526,22 +2800,35 @@ mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, s
         end
     end
 
-    -- QUESTION: hotspot.on_pressed semantics — is this ONE-FRAME-ONLY (set
-    -- by the engine on the click frame and cleared next frame), or sticky
-    -- until consumed? If sticky, this could re-fire _ct_on_offhand_pressed
-    -- every frame after a click until the next button registers a new
-    -- press. Vanilla illusion buttons in HeroWindowItemCustomization handle
-    -- this via _on_illusion_index_pressed which is gated on a state machine,
-    -- not directly on on_pressed. Worth adding a per-frame consumed flag
-    -- (e.g. set hotspot.on_pressed = false after handling) if observed.
+    -- v0.9.18-dev FIX #37 — switch from `on_pressed` to `on_release` and
+    -- manually clear after consumption. Vanilla's `_is_button_pressed`
+    -- (hero_window_item_customization.lua:611-616) uses this exact pattern:
+    --   if hotspot.on_release then hotspot.on_release = false; return true end
+    -- `on_pressed` is sticky in this engine build — it stays true across
+    -- multiple draw frames after a click and even across screen entries in
+    -- some cases — which made the prior code re-fire `_ct_on_offhand_pressed`
+    -- on the FIRST widget every frame the picker was open, "applying" the
+    -- yellow-Reynard01 shield instantly on browse (issue #37). `on_release`
+    -- is the single-frame edge-trigger vanilla uses and we now clear it
+    -- manually so a sticky engine state can't leak across frames either.
     for _, widget in ipairs(offhand_widgets) do
         local hotspot = widget.content.button_hotspot
-        if hotspot and hotspot.on_pressed then
+        if hotspot and hotspot.on_release then
+            hotspot.on_release = false  -- consume edge — mirror vanilla pattern
             -- v0.9.9.4-dev: dispatch on the widget's recorded hand_field +
             -- index, not on a flat list index — multi-mount weapons
             -- interleave widgets across rows in self._ct_offhand_widgets.
             local hand_field = widget.content.offhand_hand or "left_hand_unit"
             local index = widget.content.offhand_index
+            -- v0.9.18-dev diagnostic — always-on, low volume (one line per
+            -- legitimate click). Captures what the user pressed + which
+            -- backend_id the resulting _offhand_selection write will land
+            -- under, so any future regression of #37 (or its cousins) is
+            -- visible without enabling debug_dumps.
+            mod:info("[offhand-press] hand=%s index=%s widget=%s backend_id=%s",
+                tostring(hand_field), tostring(index),
+                tostring(widget.content.name or widget.scenegraph_id),
+                tostring(self._item_backend_id))
             if index then
                 self:_ct_on_offhand_pressed(hand_field, index)
             end
@@ -2807,7 +3094,7 @@ if BackendUtils then
             local template = item_data and item_data.template
             local equips = _la_equips_by_peer and _la_equips_by_peer[_current_husk_wield.wearer_peer]
             local entry = equips and template and equips[template]
-            mod:info("[husk-mesh-swap probe] wearer=%s slot=%s template=%s cache_has_wearer=%s cache_has_entry=%s entry_kind=%s entry_key=%s",
+            _dbg("[husk-mesh-swap probe] wearer=%s slot=%s template=%s cache_has_wearer=%s cache_has_entry=%s entry_kind=%s entry_key=%s",
                 tostring(_current_husk_wield.wearer_peer),
                 tostring(_current_husk_wield.slot_name),
                 tostring(template),
@@ -2821,7 +3108,7 @@ if BackendUtils then
                 local la = get_mod("Loremasters-Armoury")
                 local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
                 if not variant then
-                    mod:info("[husk-mesh-swap] miss: variant %s not in LA.SKIN_LIST", tostring(entry.armoury_key))
+                    _dbg("[husk-mesh-swap] miss: variant %s not in LA.SKIN_LIST", tostring(entry.armoury_key))
                     -- v0.9.0.14-hotfix: dedup'd chat warning. Surface the
                     -- missing-variant problem to the local user so they know
                     -- their LA install is missing what a peer is broadcasting
@@ -2833,17 +3120,17 @@ if BackendUtils then
                             tostring(entry.armoury_key))
                     end
                 elseif variant.kind ~= "unit" then
-                    mod:info("[husk-mesh-swap] skip: variant %s is kind=%s (only unit gets mesh-swapped here; texture handled via re-paint)",
+                    _dbg("[husk-mesh-swap] skip: variant %s is kind=%s (only unit gets mesh-swapped here; texture handled via re-paint)",
                         tostring(entry.armoury_key), tostring(variant.kind))
                 elseif not (variant.new_units and variant.new_units[1]) then
-                    mod:info("[husk-mesh-swap] miss: variant %s has no new_units[1]", tostring(entry.armoury_key))
+                    _dbg("[husk-mesh-swap] miss: variant %s has no new_units[1]", tostring(entry.armoury_key))
                 else
                     local la_unit = variant.new_units[1]
                     local la_unit_3p = variant.new_units[2] or (la_unit .. "_3p")
                     local has_1p = Application and Application.can_get and Application.can_get("unit", la_unit)
                     local has_3p = Application and Application.can_get and Application.can_get("unit", la_unit_3p)
                     if not has_1p or not has_3p then
-                        mod:info("[husk-mesh-swap] miss: variant %s LA mesh not loadable (1p=%s 3p=%s) — package preload may have failed",
+                        _dbg("[husk-mesh-swap] miss: variant %s LA mesh not loadable (1p=%s 3p=%s) — package preload may have failed",
                             tostring(entry.armoury_key), tostring(has_1p), tostring(has_3p))
                     else
                         -- v0.9.9.4-dev: write to the hand_field recorded
@@ -2852,7 +3139,7 @@ if BackendUtils then
                         local hand_field = entry.hand_field or "left_hand_unit"
                         local prev = result[hand_field]
                         result[hand_field] = la_unit
-                        mod:info("[husk-mesh-swap] APPLIED wearer=%s template=%s %s %s -> %s (armoury=%s)",
+                        _dbg("[husk-mesh-swap] APPLIED wearer=%s template=%s %s %s -> %s (armoury=%s)",
                             tostring(_current_husk_wield.wearer_peer), tostring(template),
                             tostring(hand_field),
                             tostring(prev), tostring(la_unit), tostring(entry.armoury_key))
@@ -2945,7 +3232,7 @@ if BackendUtils then
                     if override_unit and _override_package_ready(override_unit) then
                         result[hand_field] = override_unit
                     elseif override_unit then
-                        mod:info("[offhand] SKIP override %s/%s -> %s (package not ready)",
+                        _dbg("[offhand] SKIP override %s/%s -> %s (package not ready)",
                             tostring(item_type), tostring(hand_field), tostring(override_unit))
                     end
                 end
@@ -3451,7 +3738,7 @@ local function _hook_apply_with_template_mutation(class_id, label)
         local owner_peer_id = _glow_owner_peer_for_unit(unit)
         if not _glow_override_enabled(owner_peer_id) then
             if mod:get("glow_trace") then
-                mod:info("[GLOW] %s call template=%s peer=%s (override OFF, passthrough)",
+                _dbg("[GLOW] %s call template=%s peer=%s (override OFF, passthrough)",
                     label, tostring(material_settings_name), tostring(owner_peer_id))
             end
             return func(unit, material_settings_name)
@@ -3459,13 +3746,13 @@ local function _hook_apply_with_template_mutation(class_id, label)
         local template = MaterialSettingsTemplates and MaterialSettingsTemplates[material_settings_name]
         if not template then
             if mod:get("glow_trace") then
-                mod:info("[GLOW] %s call template=%s peer=%s (template nil, passthrough)",
+                _dbg("[GLOW] %s call template=%s peer=%s (template nil, passthrough)",
                     label, tostring(material_settings_name), tostring(owner_peer_id))
             end
             return func(unit, material_settings_name)
         end
         if mod:get("glow_trace") then
-            mod:info("[GLOW] %s mutate template=%s peer=%s",
+            _dbg("[GLOW] %s mutate template=%s peer=%s",
                 label, tostring(material_settings_name), tostring(owner_peer_id))
         end
         -- Mutate per-variable. Skip variables whose color resolves to nil
@@ -3496,7 +3783,7 @@ local function _hook_apply_with_template_mutation(class_id, label)
             local entry = template[var_name]
             if entry then entry.x, entry.y, entry.z = orig.x, orig.y, orig.z end
         end
-        if not ok then mod:info("[GLOW] %s vanilla apply errored: %s", label, tostring(err)) end
+        if not ok then _dbg_alert("[GLOW] %s vanilla apply errored: %s", label, tostring(err)) end
     end)
     mod._glow_hooks_installed[label] = true
 end
@@ -3573,7 +3860,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
         if mesh and (mesh:find("_runed_01$") or mesh:find("_magic_01$")) then
             material_settings_name = "_cosmetics_tweaker_glow"
             if mod:get("glow_trace") then
-                mod:info("[GLOW] inject template for mesh=%s hand=%s", tostring(mesh), tostring(hand))
+                _dbg("[GLOW] inject template for mesh=%s hand=%s", tostring(mesh), tostring(hand))
             end
         end
     end
@@ -3668,17 +3955,17 @@ end
 -- override gate. Painting the base weapon template would surprise users
 -- ("base template can't have illusions applied").
 local function _apply_la_offhand_to_units(world, item_data, units, has_skin, backend_id_arg, context)
-    if not LA_BRIDGE.registered then mod:info("[LA paint] skip: bridge not registered"); return end
-    if not world or not item_data then mod:info("[LA paint] skip: world/item_data nil"); return end
-    if not has_skin then mod:info("[LA paint] skip: has_skin=false"); return end
+    if not LA_BRIDGE.registered then _dbg("[LA paint] skip: bridge not registered"); return end
+    if not world or not item_data then _dbg("[LA paint] skip: world/item_data nil"); return end
+    if not has_skin then _dbg("[LA paint] skip: has_skin=false"); return end
     -- v0.8.32: read selection by backend_id. Resolve from arg first, then
     -- from item_data.backend_id (vanilla stamps this on equipment resync).
     local bid = backend_id_arg or (item_data and item_data.backend_id)
-    if not bid then mod:info("[LA paint] skip: no backend_id"); return end
+    if not bid then _dbg("[LA paint] skip: no backend_id"); return end
     _migrate_legacy_offhand_selection(bid)
     local per_hand_sel = _offhand_selection[bid]
     if type(per_hand_sel) ~= "table" then
-        mod:info("[LA paint] skip: no _offhand_selection for backend_id=%s", tostring(bid)); return
+        _dbg("[LA paint] skip: no _offhand_selection for backend_id=%s", tostring(bid)); return
     end
     -- v0.9.9.4-dev: caller passes the units it has spawned. LA paints are
     -- texture-only and idempotent across all matching unit meshes — we
@@ -3690,12 +3977,12 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
     local painted = false
     for hand_field, sel in pairs(per_hand_sel) do
         if type(sel) == "table" and sel.la_armoury_key then
-            mod:info("[LA paint] painting %s (%s) on %d units (backend_id=%s)",
+            _dbg("[LA paint] painting %s (%s) on %d units (backend_id=%s)",
                 tostring(sel.la_armoury_key), hand_field, #units, tostring(bid))
             for _, u in ipairs(units) do
                 if u and _is_unit(u) then
                     local ok = LA_BRIDGE.apply_offhand_to_unit(world, u, sel.la_armoury_key, sel.vanilla_skin, context)
-                    mod:info("[LA paint]   unit=%s ok=%s", tostring(u), tostring(ok))
+                    _dbg("[LA paint]   unit=%s ok=%s", tostring(u), tostring(ok))
                 end
             end
             painted = true
@@ -3793,7 +4080,7 @@ local function _store_equip_skin(previewer, item_name, skin, backend_id)
             local resolved = items_iface:get_skin(backend_id)
             if resolved and resolved ~= "" then
                 skin = resolved
-                mod:info("[LA preview] backend-resolved skin for %s: %s", tostring(item_name), tostring(resolved))
+                _dbg("[LA preview] backend-resolved skin for %s: %s", tostring(item_name), tostring(resolved))
             end
         end
     end
@@ -3819,7 +4106,7 @@ end
 
 mod:hook("MenuWorldPreviewer", "equip_item", function(func, self, item_key, slot, backend_id, skin, skip_wield_anim)
     local slot_name = (type(slot) == "table" and slot.name) or tostring(slot)
-    mod:info("[LA preview] equip_item key=%s slot=%s bid=%s skin=%s is_clone=%s",
+    _dbg("[LA preview] equip_item key=%s slot=%s bid=%s skin=%s is_clone=%s",
         tostring(item_key), tostring(slot_name), tostring(backend_id), tostring(skin),
         tostring(LA_BRIDGE.backend_to_armoury[backend_id] ~= nil))
 
@@ -3841,7 +4128,7 @@ mod:hook("MenuWorldPreviewer", "equip_item", function(func, self, item_key, slot
     end
 
     if LA_BRIDGE.registered and backend_id and LA_BRIDGE.backend_to_armoury[backend_id] then
-        mod:info("[LA preview] equip_item swapping key %s -> %s for clone", tostring(item_key), tostring(backend_id))
+        _dbg("[LA preview] equip_item swapping key %s -> %s for clone", tostring(item_key), tostring(backend_id))
         return func(self, backend_id, slot, backend_id, skin, skip_wield_anim)
     end
 
@@ -3937,7 +4224,7 @@ local function _spawn_item_post(self, item_name, spawn_data)
                     if sd.left_hand  then left_path  = sd.unit_name end
                 end
                 if mod:get("cos_thiccc_trace") then
-                    mod:info("[thiccc] preview name=%s skin=%s right=%s left=%s",
+                    _dbg("[thiccc] preview name=%s skin=%s right=%s left=%s",
                         tostring(info.name), tostring(info.skin_name),
                         tostring(right_path), tostring(left_path))
                 end
@@ -3951,10 +4238,10 @@ end
 
 local function _spawn_item_wrapper(func, self, item_name, spawn_data)
     local is_direct_clone = LA_BRIDGE.registered and item_name and LA_BRIDGE.backend_to_armoury[item_name]
-    mod:info("[LA preview] _spawn_item name=%s direct=%s", tostring(item_name), tostring(is_direct_clone ~= nil))
+    _dbg("[LA preview] _spawn_item name=%s direct=%s", tostring(item_name), tostring(is_direct_clone ~= nil))
     if is_direct_clone then
         self._cos_la_spawning = item_name
-        mod:info("[LA preview]   -> spawning clone %s", item_name)
+        _dbg("[LA preview]   -> spawning clone %s", item_name)
     end
     local result = func(self, item_name, spawn_data)
     self._cos_la_spawning = nil
@@ -4037,10 +4324,10 @@ mod:hook("LootItemUnitPreviewer", "load_package", function(func, self, package_n
                     Managers.package, parent_pkg, reference_name, nil, false)
                 if ok then
                     refs[parent_pkg] = true
-                    mod:info("[LA preview-load] sync-loaded parent %s for %s",
+                    _dbg("[LA preview-load] sync-loaded parent %s for %s",
                         parent_pkg, package_name)
                 else
-                    mod:info("[LA preview-load] FAILED to load parent %s for %s: %s",
+                    _dbg_alert("[LA preview-load] FAILED to load parent %s for %s: %s",
                         parent_pkg, package_name, tostring(err))
                 end
             end
@@ -4127,11 +4414,11 @@ local function _install_skin_loadout_safety()
         if is_clone and (slot_name == "slot_hat" or slot_name == "slot_skin") then
             mod.loadout_cache[career_name] = mod.loadout_cache[career_name] or {}
             mod.loadout_cache[career_name][slot_name] = backend_id
-            mod:info("[loadout] CACHED %s %s = %s", career_name, slot_name, backend_id)
+            _dbg("[loadout] CACHED %s %s = %s", career_name, slot_name, backend_id)
             return
         end
         if (slot_name == "slot_hat" or slot_name == "slot_skin") and mod.loadout_cache[career_name] then
-            mod:info("[loadout] CLEARED cache %s %s (vanilla bid=%s)", career_name, slot_name, backend_id)
+            _dbg("[loadout] CLEARED cache %s %s (vanilla bid=%s)", career_name, slot_name, backend_id)
             mod.loadout_cache[career_name][slot_name] = nil
         end
         return func(backend_id, career_name, slot_name)
@@ -4178,7 +4465,7 @@ local function _install_skin_loadout_safety()
                 local all_items = items_iface:get_all_backend_items()
                 for bid, item in pairs(all_items or {}) do
                     if item.key == vanilla_key and not LA_BRIDGE.backend_to_armoury[bid] then
-                        mod:info("[loadout] redirected server clone %s -> vanilla %s (%s)", raw, bid, vanilla_key)
+                        _dbg("[loadout] redirected server clone %s -> vanilla %s (%s)", raw, bid, vanilla_key)
                         return bid
                     end
                 end
@@ -4212,7 +4499,7 @@ local function _install_skin_loadout_safety()
                         local vanilla_key = LA_BRIDGE.backend_to_vanilla[bid]
                         for vbid, item in pairs(all_items) do
                             if item.key == vanilla_key and not LA_BRIDGE.backend_to_armoury[vbid] then
-                                mod:info("[loadout] fixup server: %s %s clone %s -> vanilla %s", career_name, slot_name, bid, vbid)
+                                _dbg("[loadout] fixup server: %s %s clone %s -> vanilla %s", career_name, slot_name, bid, vbid)
                                 local iface = Managers.backend:get_loadout_interface_by_slot(slot_name)
                                 if iface then iface:set_loadout_item(vbid, career_name, slot_name) end
                                 break
@@ -4248,6 +4535,45 @@ end
 -- table-form `mod:hook(CosmeticUtils, ...)` with a nil guard.
 if CosmeticUtils then
     mod:hook(CosmeticUtils, "update_cosmetic_slot", function(func, player, slot, item_name, skin_name)
+        -- v0.9.12-dev: persistence-driven LA injection. On the FIRST
+        -- update_cosmetic_slot for a weapon slot in a new session, vanilla
+        -- passes the saved vanilla-substitute skin (because PlayFab can't
+        -- store LA names). If the player's current weapon backend_id has a
+        -- saved LA illusion on disk, swap skin_name in to the LA bid BEFORE
+        -- the substitution check below — that way the existing flow paints
+        -- LA visuals AND falls through to net-safe vanilla substitution.
+        -- Same idea for hat / armor via the per-career table.
+        if LA_PERSIST and player and player.player_unit then
+            if slot == "slot_hat" or slot == "slot_skin" then
+                if item_name and LA_BRIDGE and LA_BRIDGE.backend_to_armoury
+                    and not LA_BRIDGE.backend_to_armoury[item_name]
+                then
+                    local career = LA_PERSIST._career_name_for_player(player)
+                    local saved = career and LA_PERSIST.get_saved_cosmetic(career, slot)
+                    if saved and saved ~= item_name then
+                        _dbg("[la-persist] inject %s/%s vanilla(%s) -> LA(%s)",
+                            tostring(career), tostring(slot), tostring(item_name), tostring(saved))
+                        item_name = saved
+                    end
+                end
+            else
+                if skin_name and LA_BRIDGE and LA_BRIDGE.backend_to_armoury
+                    and not LA_BRIDGE.backend_to_armoury[skin_name]
+                then
+                    local inv = ScriptUnit.has_extension(player.player_unit, "inventory_system")
+                    local slot_data = inv and inv._equipment and inv._equipment.slots
+                        and inv._equipment.slots[slot]
+                    local backend_id = slot_data and slot_data.item_data and slot_data.item_data.backend_id
+                    local saved = backend_id and LA_PERSIST.get_saved_illusion(backend_id)
+                    if saved and saved ~= skin_name then
+                        _dbg("[la-persist] inject illusion %s vanilla(%s) -> LA(%s)",
+                            tostring(backend_id), tostring(skin_name), tostring(saved))
+                        skin_name = saved
+                    end
+                end
+            end
+        end
+
         -- v0.8.64-dev: substitute BOTH item_name AND skin_name. The original
         -- v0.8.58 hook substituted only item_name (the 4th arg) — but
         -- cosmetic_utils.lua:245 also reads NetworkLookup.weapon_skins[skin_name]
@@ -4265,12 +4591,12 @@ if CosmeticUtils then
             if item_name and LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[item_name] then
                 local vanilla_key = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[item_name]
                 if vanilla_key then
-                    mod:info("[net-safe] update_cosmetic_slot %s LA item(%s) -> vanilla(%s)",
+                    _dbg("[net-safe] update_cosmetic_slot %s LA item(%s) -> vanilla(%s)",
                         tostring(slot), tostring(item_name), tostring(vanilla_key))
                     effective_item_name = vanilla_key
                     la_item_subbed = true
                 else
-                    mod:info("[net-safe] update_cosmetic_slot %s LA item(%s) -> SKIP (no vanilla fallback)",
+                    _dbg("[net-safe] update_cosmetic_slot %s LA item(%s) -> SKIP (no vanilla fallback)",
                         tostring(slot), tostring(item_name))
                     return
                 end
@@ -4278,12 +4604,12 @@ if CosmeticUtils then
             if skin_name and LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[skin_name] then
                 local vanilla_skin = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[skin_name]
                 if vanilla_skin then
-                    mod:info("[net-safe] update_cosmetic_slot %s LA skin(%s) -> vanilla(%s)",
+                    _dbg("[net-safe] update_cosmetic_slot %s LA skin(%s) -> vanilla(%s)",
                         tostring(slot), tostring(skin_name), tostring(vanilla_skin))
                     effective_skin_name = vanilla_skin
                     la_skin_subbed = true
                 else
-                    mod:info("[net-safe] update_cosmetic_slot %s LA skin(%s) -> SKIP (no vanilla fallback)",
+                    _dbg("[net-safe] update_cosmetic_slot %s LA skin(%s) -> SKIP (no vanilla fallback)",
                         tostring(slot), tostring(skin_name))
                     return
                 end
@@ -4308,6 +4634,11 @@ if CosmeticUtils then
                 if not equips then equips = {}; _local_la_equips[player.player_unit] = equips end
                 equips[slot] = item_name
                 _send_la_apply(player.player_unit, slot, kind, armoury_key, effective_item_name)
+                -- v0.9.12-dev: persist to disk so the LA hat / armor survives
+                -- the next game restart. Per-career keying mirrors vanilla's
+                -- own loadout-per-career model.
+                local career_name = LA_PERSIST._career_name_for_player(player)
+                if career_name then LA_PERSIST.save_cosmetic(career_name, slot, item_name) end
             end
         end
 
@@ -4329,6 +4660,16 @@ if CosmeticUtils then
                 if not equips then equips = {}; _local_la_equips[player.player_unit] = equips end
                 equips[slot] = skin_name
                 _send_la_apply(player.player_unit, slot, "illusion", armoury_key, effective_skin_name)
+                -- v0.9.12-dev: persist LA illusion per backend_id so the same
+                -- weapon instance keeps its LA skin on next game restart. Works
+                -- for vanilla weapons AND CIM-forged modded weapons (CIM's
+                -- forged_weapons save covers the item itself; this covers the
+                -- LA illusion overlay vanilla can't represent).
+                local inv = ScriptUnit.has_extension(player.player_unit, "inventory_system")
+                local slot_data = inv and inv._equipment and inv._equipment.slots
+                    and inv._equipment.slots[slot]
+                local backend_id = slot_data and slot_data.item_data and slot_data.item_data.backend_id
+                if backend_id then LA_PERSIST.save_illusion(backend_id, skin_name) end
             end
         end
 
@@ -4343,9 +4684,23 @@ if CosmeticUtils then
         then
             local equips = _local_la_equips[player.player_unit]
             if equips and equips[slot] then
-                mod:info("[net-safe] update_cosmetic_slot %s: clearing stale LA cache entry %s",
+                _dbg("[net-safe] update_cosmetic_slot %s: clearing stale LA cache entry %s",
                     tostring(slot), tostring(equips[slot]))
                 equips[slot] = nil
+            end
+            -- v0.9.12-dev: persistence parity for the clear path. If the user
+            -- equips a vanilla item over a previously-saved LA one, the on-disk
+            -- entry must be cleared too — otherwise next restart re-applies a
+            -- cosmetic the user already unequipped.
+            if slot == "slot_hat" or slot == "slot_skin" then
+                local career_name = LA_PERSIST._career_name_for_player(player)
+                if career_name then LA_PERSIST.clear_cosmetic(career_name, slot) end
+            else
+                local inv = ScriptUnit.has_extension(player.player_unit, "inventory_system")
+                local slot_data = inv and inv._equipment and inv._equipment.slots
+                    and inv._equipment.slots[slot]
+                local backend_id = slot_data and slot_data.item_data and slot_data.item_data.backend_id
+                if backend_id then LA_PERSIST.clear_illusion(backend_id) end
             end
         end
 
@@ -4382,11 +4737,11 @@ if LoadoutUtils then
                 local shadow = {}
                 for k, v in pairs(item) do shadow[k] = v end
                 shadow.key = vanilla_key
-                mod:info("[net-safe] sync_loadout_slot %s LA(%s) -> vanilla(%s)",
+                _dbg("[net-safe] sync_loadout_slot %s LA(%s) -> vanilla(%s)",
                     tostring(slot_name), tostring(item.key), tostring(vanilla_key))
                 return func(player, slot_name, shadow, sync_to_specific_peer_id)
             end
-            mod:info("[net-safe] sync_loadout_slot %s LA(%s) -> SKIP (no vanilla fallback)",
+            _dbg("[net-safe] sync_loadout_slot %s LA(%s) -> SKIP (no vanilla fallback)",
                 tostring(slot_name), tostring(item.key))
             return
         end
@@ -4603,7 +4958,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
             kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
             hand_field = hand_field,
         }
-        mod:info("[cos_la_apply emit] HOST wearer=%s slot=%s kind=%s key=%s hand=%s",
+        _dbg("[cos_la_apply emit] HOST wearer=%s slot=%s kind=%s key=%s hand=%s",
             tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field))
         mod:network_send("cos_la_apply", "all", {
             wearer_peer_id = wearer_peer,
@@ -4647,12 +5002,12 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
             hand_field   = hand_field,
             queued_at    = os.clock(),
         }
-        mod:info("[cos_la_apply emit] CLIENT->req DEFERRED+queued (no host peer_id yet) wearer=%s slot=%s key=%s queue_size=%d",
+        _dbg("[cos_la_apply emit] CLIENT->req DEFERRED+queued (no host peer_id yet) wearer=%s slot=%s key=%s queue_size=%d",
             tostring(wearer_peer), tostring(slot_name), tostring(armoury_key),
             #mod._la_deferred_emits)
         return
     end
-    mod:info("[cos_la_apply emit] CLIENT->req wearer=%s slot=%s kind=%s key=%s hand=%s host=%s",
+    _dbg("[cos_la_apply emit] CLIENT->req wearer=%s slot=%s kind=%s key=%s hand=%s host=%s",
         tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field), tostring(host))
     mod:network_send("cos_la_apply_req", host, {
         slot         = slot_name,
@@ -4683,7 +5038,7 @@ local function _drain_deferred_la_emits()
     -- their mind" purging without dropping live equips.
     for _, entry in ipairs(q) do
         if (now - entry.queued_at) > 300 then
-            mod:info("[cos_la_apply drain] dropping stale entry wearer=%s slot=%s key=%s age=%.1fs",
+            _dbg("[cos_la_apply drain] dropping stale entry wearer=%s slot=%s key=%s age=%.1fs",
                 tostring(entry.wearer_peer), tostring(entry.slot_name),
                 tostring(entry.armoury_key), now - entry.queued_at)
         else
@@ -4703,7 +5058,7 @@ local function _drain_deferred_la_emits()
                     vanilla_key    = entry.vanilla_key,
                     hand_field     = entry.hand_field,
                 })
-                mod:info("[cos_la_apply drain] HOST broadcast wearer=%s slot=%s key=%s (was queued %.1fs)",
+                _dbg("[cos_la_apply drain] HOST broadcast wearer=%s slot=%s key=%s (was queued %.1fs)",
                     tostring(entry.wearer_peer), tostring(entry.slot_name),
                     tostring(entry.armoury_key), now - entry.queued_at)
             else
@@ -4714,7 +5069,7 @@ local function _drain_deferred_la_emits()
                     vanilla_key  = entry.vanilla_key,
                     hand_field   = entry.hand_field,
                 })
-                mod:info("[cos_la_apply drain] CLIENT->req sent wearer=%s slot=%s key=%s host=%s (was queued %.1fs)",
+                _dbg("[cos_la_apply drain] CLIENT->req sent wearer=%s slot=%s key=%s host=%s (was queued %.1fs)",
                     tostring(entry.wearer_peer), tostring(entry.slot_name),
                     tostring(entry.armoury_key), tostring(host), now - entry.queued_at)
             end
@@ -4729,6 +5084,230 @@ local function _resolve_la_variant(armoury_key)
     local la = get_mod("Loremasters-Armoury")
     if not la or type(la.SKIN_LIST) ~= "table" then return nil, nil end
     return la.SKIN_LIST[armoury_key], la
+end
+
+-- v0.9.13-dev: extracted from the v0.9.11 character-mismatch guard in
+-- `_apply_la_on_unit` so the decision is unit-testable in isolation. Pure:
+-- given the owner_unit's currently-equipped hat path (preferred source) AND
+-- the profile base prefix (fallback when no hat is attached yet), decide
+-- whether the LA hat's mesh is safe to attach to this body.
+--
+--   owner_char_path -- path to the OWNER's current vanilla slot_hat
+--                      (e.g. "units/beings/player/empire_soldier_breton/
+--                      headpiece/es_gk_hat_01") or nil if no slot_hat.
+--   la_unit_path    -- path to the cached LA hat mesh
+--                      (e.g. "units/beings/player/empire_soldier_breton/
+--                      headpiece/es_gk_hat_03").
+--   profile_base    -- character base from SPProfiles.unit_name (e.g.
+--                      "empire_soldier") or nil if unresolvable.
+--
+-- Returns (true) when the LA mesh's character segment matches the owner's
+-- character segment, otherwise (false, reason_string). When neither source
+-- is resolvable, returns false — the conservative choice (no LA visual is
+-- strictly better than a wrong-skeleton attach that may crash via
+-- `Unit.node` failing the C-level attachment node lookup).
+local function _la_chars_compatible(owner_char_path, la_unit_path, profile_base)
+    local la_char = string.match(la_unit_path or "", "^units/beings/player/([^/]+)/")
+    if not la_char then return true end  -- can't extract LA char; let caller proceed
+    if owner_char_path then
+        local owner_char = string.match(owner_char_path, "^units/beings/player/([^/]+)/")
+        if owner_char then
+            if owner_char == la_char then return true end
+            return false, ("owner_char=%s la_char=%s"):format(owner_char, la_char)
+        end
+    end
+    if profile_base then
+        if la_char == profile_base
+            or string.sub(la_char, 1, #profile_base + 1) == profile_base .. "_"
+        then
+            return true
+        end
+        return false, ("profile_base=%s la_char=%s"):format(profile_base, la_char)
+    end
+    return false, "no owner_char_path AND no profile_base resolvable"
+end
+mod._la_chars_compatible = _la_chars_compatible
+
+-- v0.9.13-dev: passive runtime monitor. Fires on every player spawn (host's
+-- own + every bot owned by the host + every husk on a remote client). For
+-- the spawned unit, compares the CACHED LA hat (`_la_equips_by_peer
+-- [wearer_peer]["slot_hat"]`) against the unit's actual character body. If
+-- the cached LA mesh's character segment doesn't match the spawning unit's
+-- character, that's the exact failure mode from issue #14 — a host-owned bot
+-- whose career differs from the host's about to receive a cross-skeleton
+-- attach. The v0.9.11 guard prevents the attach itself; this monitor surfaces
+-- when the situation arises so any regression is visible in console without
+-- needing a manual chat command.
+--
+-- Mismatch detections ALWAYS log (this is the safety net). Routine "here's
+-- the cache state for the spawning peer" snapshots are gated on the
+-- universal `enable_debug_logging` VMF toggle (PROJECT_STANDARDS.md § 3.6;
+-- v0.9.14-dev: renamed from `debug_dumps`).
+local function _debug_dumps_enabled()
+    return mod:get("enable_debug_logging") == true
+end
+
+-- v0.9.28-dev (issue #14 cache-leak follow-up): pure invalidation helper.
+-- `_la_equips_by_peer` is keyed `[peer_id][slot]` only, so when a peer
+-- switches career on the same peer_id (e.g. Kerillian → Saltzpyre WHC),
+-- the previous career's LA hat entry persists until the peer disconnects.
+-- The v0.9.11 character-mismatch guard catches the visible apply, but the
+-- stale entry keeps firing CROSS-SKELETON MISMATCH warnings on every spawn
+-- of the new character. Solution: when the spawn-monitor catches a
+-- mismatch, purge the offending slot from the cache so it self-heals on
+-- the first post-switch spawn. Subsequent legitimate cos_la_apply RPCs
+-- repopulate the slot for the current career; if there isn't one, the
+-- slot stays empty and the warning stops firing.
+--
+-- Pulled into a module-level local so the regression test can drive it
+-- with synthetic inputs (no player units / LA bridge / Managers mocks).
+local function _purge_stale_peer_slot(cache, wearer_peer, slot_name)
+    if not (cache and wearer_peer and slot_name) then return false end
+    local equips = cache[wearer_peer]
+    if not (equips and equips[slot_name]) then return false end
+    equips[slot_name] = nil
+    if next(equips) == nil then cache[wearer_peer] = nil end
+    return true
+end
+mod._purge_stale_peer_slot = _purge_stale_peer_slot
+
+local function _resolve_owner_char(owner_unit, player)
+    if not owner_unit then return nil end
+    -- Prefer the unit's actual attached slot_hat — most accurate.
+    local ext = ScriptUnit and ScriptUnit.has_extension
+        and ScriptUnit.has_extension(owner_unit, "attachment_system")
+    local slot_hat = ext and ext._attachments and ext._attachments.slots
+        and ext._attachments.slots.slot_hat
+    local item_unit = slot_hat and slot_hat.item_data and slot_hat.item_data.unit
+    if item_unit then
+        return string.match(item_unit, "^units/beings/player/([^/]+)/"), "slot_hat"
+    end
+    -- Fallback: SPProfiles base (e.g. "empire_soldier"). Coarser — only catches
+    -- cross-character mismatches, not cross-career within the same character.
+    if player then
+        local profile_index = player.profile_index
+        if type(profile_index) == "function" then
+            local ok, idx = pcall(profile_index, player); if ok then profile_index = idx end
+        end
+        local profile = profile_index and rawget(_G, "SPProfiles") and SPProfiles[profile_index]
+        return profile and profile.unit_name, "profile_base"
+    end
+    return nil, "unresolved"
+end
+
+mod._la_spawn_monitor = function(unit)
+    if not (unit and Unit.alive(unit)) then return end
+    if not (LA_BRIDGE and LA_BRIDGE.registered) then return end
+    local pm = Managers and Managers.player
+    if not (pm and pm.owner) then return end
+    local owner = pm:owner(unit)
+    if not owner then return end
+    local wearer_peer = owner.peer_id
+    if not wearer_peer then return end
+    local equips = _la_equips_by_peer and _la_equips_by_peer[wearer_peer]
+    if not equips then
+        if _debug_dumps_enabled() then
+            _dbg("[la-spawn-monitor] unit=%s wearer=%s local_id=%s career=%s — no cached LA equips",
+                tostring(unit), tostring(wearer_peer),
+                tostring(owner.local_player_id and owner:local_player_id() or "?"),
+                tostring(LA_PERSIST and LA_PERSIST._career_name_for_player(owner)))
+        end
+        return
+    end
+    local owner_char, source = _resolve_owner_char(unit, owner)
+    local career = LA_PERSIST and LA_PERSIST._career_name_for_player(owner)
+    if _debug_dumps_enabled() then
+        local entry_keys = {}
+        for k in pairs(equips) do entry_keys[#entry_keys+1] = k end
+        table.sort(entry_keys)
+        _dbg("[la-spawn-monitor] unit=%s wearer=%s career=%s owner_char=%s (via %s) cached_slots={%s}",
+            tostring(unit), tostring(wearer_peer), tostring(career),
+            tostring(owner_char), tostring(source), table.concat(entry_keys, ","))
+    end
+    -- Check the cached slot_hat specifically (the issue #14 failure mode).
+    local hat_entry = equips.slot_hat
+    if not (hat_entry and hat_entry.armoury_key) then return end
+    local variant = _resolve_la_variant(hat_entry.armoury_key)
+    local la_unit_path = variant and variant.new_units and variant.new_units[1]
+    if not la_unit_path then return end
+    local profile_base = (source == "profile_base") and owner_char or nil
+    local owner_char_path
+    if source == "slot_hat" then
+        local ext = ScriptUnit and ScriptUnit.has_extension(unit, "attachment_system")
+        local s = ext and ext._attachments and ext._attachments.slots and ext._attachments.slots.slot_hat
+        owner_char_path = s and s.item_data and s.item_data.unit
+    end
+    local ok, reason = _la_chars_compatible(owner_char_path, la_unit_path, profile_base)
+    if not ok then
+        -- ALWAYS log (this is the regression detector, not a debug dump).
+        mod:warning("[la-spawn-monitor] CROSS-SKELETON MISMATCH wearer=%s career=%s cached_armoury=%s la_path=%s — %s. v0.9.11 guard SHOULD bail the apply, but if you see vanilla logic patching this anyway it's a regression of issue #14.",
+            tostring(wearer_peer), tostring(career),
+            tostring(hat_entry.armoury_key), tostring(la_unit_path), tostring(reason))
+        -- v0.9.28-dev: self-heal the stale cache entry so the warning stops
+        -- firing on every subsequent spawn. The v0.9.11 guard already bailed
+        -- the visible apply, but the entry would otherwise sit in
+        -- `_la_equips_by_peer[wearer_peer].slot_hat` until peer disconnect.
+        _purge_stale_peer_slot(_la_equips_by_peer, wearer_peer, "slot_hat")
+    end
+end
+
+-- Wire-up note: SimpleInventoryExtension.extensions_ready is already hooked
+-- inside `_la_persistence.lua` for the auto-restore queue. VMF's hook_safe
+-- does NOT chain on (Class, method) (per VMF_RECIPES.md § 1) — a second
+-- hook_safe registration here would silently overwrite the first and break
+-- restore. Instead, the existing hook in _la_persistence.lua calls
+-- `mod._la_spawn_monitor` if defined, so both behaviors run from a single
+-- registration. The husk-side equivalent is hooked from this file because
+-- _la_persistence only cares about the owned-player path.
+--
+-- v0.9.16-dev (issue #35): the husk class does NOT have `extensions_ready` —
+-- only `Simple*Extension` (the self-owned variant) does. The husk class is a
+-- separate root class with no inheritance (per CLAUDE.md "Self-owned vs husk
+-- extension classes"), and its lifecycle entry point is `init`. The earlier
+-- registration on `extensions_ready` silently no-op'd at hook-install time.
+-- Hooking `init` with the husk signature `(self, extension_init_context, unit,
+-- extension_init_data)` resolves the dead-hook and runs the spawn monitor on
+-- every remote-player husk inventory init.
+mod:hook_safe("SimpleHuskInventoryExtension", "init", function(self, extension_init_context, unit, extension_init_data)
+    if mod._la_spawn_monitor then
+        local ok, err = pcall(mod._la_spawn_monitor, unit)
+        if not ok then _dbg_alert("[la-spawn-monitor] pcall err: %s", tostring(err)) end
+    end
+end)
+
+-- v0.9.13-dev: mission-start state snapshot. Gated on debug_dumps. Fires
+-- once when StateInGameRunning starts so the cached LA state + persisted
+-- entries land in the log at the same timestamp as the mission begin —
+-- makes correlating later spawn events to the snapshot trivial.
+mod._la_dump_mission_state = function(reason)
+    if not _debug_dumps_enabled() then return end
+    _dbg("[la-state-dump] reason=%s", tostring(reason))
+    local n_peers = 0
+    if _la_equips_by_peer then
+        for peer, slots in pairs(_la_equips_by_peer) do
+            n_peers = n_peers + 1
+            for slot, entry in pairs(slots) do
+                _dbg("[la-state-dump]   peer=%s slot=%s kind=%s armoury=%s vanilla=%s",
+                    tostring(peer), tostring(slot), tostring(entry.kind),
+                    tostring(entry.armoury_key), tostring(entry.vanilla_key))
+            end
+        end
+    end
+    local persisted = mod:get("la_persisted_equips") or {}
+    local n_careers = 0
+    if persisted.careers then
+        for career, slots in pairs(persisted.careers) do
+            n_careers = n_careers + 1
+            _dbg("[la-state-dump]   persisted career=%s hat=%s skin=%s",
+                tostring(career), tostring(slots.slot_hat or "-"), tostring(slots.slot_skin or "-"))
+        end
+    end
+    local n_illusions = 0
+    if persisted.illusions then
+        for _ in pairs(persisted.illusions) do n_illusions = n_illusions + 1 end
+    end
+    _dbg("[la-state-dump] totals: %d live peer(s), %d persisted career entr(ies), %d persisted illusion(s)",
+        n_peers, n_careers, n_illusions)
 end
 
 local function _level_world()
@@ -4749,7 +5328,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
 
     local variant, la = _resolve_la_variant(armoury_key)
     if not variant then
-        mod:info("[cos_la_apply] %s armoury_key %s missing from local SKIN_LIST — bail",
+        _dbg("[cos_la_apply] %s armoury_key %s missing from local SKIN_LIST — bail",
             tostring(kind), tostring(armoury_key))
         return false
     end
@@ -4759,54 +5338,58 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         local la_unit_path = variant.new_units and variant.new_units[1]
         if not la_unit_path then return false end
 
-        -- v0.9.8.8 CRASH/VISUAL FIX: character-mismatch gate.
+        -- v0.9.13-dev: guard now delegates to the pure helper
+        -- `_la_chars_compatible` so the same decision is unit-testable in
+        -- isolation. See its docstring for the contract. Inline doc below
+        -- preserved for context on WHY this guard exists at all.
         --
-        -- The v0.9.8.5 character gate was ONLY in our
-        -- PlayerHuskAttachmentExtension.create_attachment hook, but
-        -- `_apply_la_on_unit` (this function) calls ext.create_attachment
-        -- DIRECTLY (line below) without going through that hook for the
-        -- local player + bots owned by the host. Result: when a Saltzpyre
-        -- bot spawns under the host's peer with the host's LA hat cached,
-        -- this code patches `item_data.unit` to the host's character's
-        -- LA mesh and creates the attachment on the bot's body — wrong
-        -- character mesh on different body skeleton. Doesn't always crash
-        -- (humanoid characters' skeletons overlap enough) but renders
-        -- visually wrong (bot wearing host's hat).
+        -- v0.9.11-dev CRASH/VISUAL FIX: character-mismatch gate (rewritten).
         --
-        -- Same regex-based detection as the husk hook (cosmetics_tweaker.lua
-        -- ~L5220). Extract character key from incoming vanilla hat path
-        -- (via clone_key item_data later) AND from cached la_unit_path.
-        -- If they don't match, bail without patching/painting. The owner
-        -- gets vanilla's own character hat instead of the wrong-character
-        -- LA hat.
+        -- The v0.9.8.8 guard derived `owner_char_path` from `vanilla_key`'s
+        -- IML entry — but `vanilla_key` is the CACHED LA emit's vanilla
+        -- substitute (the EMITTER's hat), not the OWNER's character. For
+        -- host-owned bots whose career differs from the host's, both the
+        -- cached LA mesh AND `vanilla_key.unit` resolve to the host's
+        -- character paths, so the comparison was a tautology that always
+        -- passed. Result: GK LA hat attached to host's WP bot at mission
+        -- start (host view only). Issue #14.
         --
-        -- The "incoming" character for this code path comes from the
-        -- OWNER_UNIT's actual career, not from any item_data. Resolve it
-        -- via the owner unit's career or its default hat unit path.
+        -- Correct source for the OWNER's character: the owner_unit's
+        -- currently-attached vanilla slot_hat item_data.unit. That unit
+        -- was spawned for THIS body, so its path encodes the body's
+        -- character_career composite (e.g. "witch_hunter_priest" vs LA's
+        -- cached "empire_soldier_breton"). If the bot doesn't have a
+        -- vanilla hat yet (early-spawn race), fall back to SPProfiles
+        -- via the owner's Player + profile_index, matching la_char's
+        -- first segment against profile.unit_name (character base).
+        -- If neither resolves, bail — safer than wrong-skeleton attach.
         do
             local owner_char_path
-            if ScriptUnit and ScriptUnit.has_extension then
-                local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
-                if inv and inv._career_name then
-                    -- Career name maps to character body via profile lookup,
-                    -- but the simpler signal: the owner's currently-equipped
-                    -- vanilla hat (item_data.unit when vanilla_key resolves
-                    -- to an IML hat entry) carries the character key.
-                    local v_data = vanilla_key and ItemMasterList
-                        and rawget(ItemMasterList, vanilla_key)
-                    if v_data and v_data.unit then
-                        owner_char_path = v_data.unit
-                    end
-                end
+            local ext_peek = ScriptUnit and ScriptUnit.has_extension
+                and ScriptUnit.has_extension(owner_unit, "attachment_system")
+            local existing = ext_peek and ext_peek._attachments
+                and ext_peek._attachments.slots
+                and ext_peek._attachments.slots[slot_name]
+            local existing_item_data = existing and existing.item_data
+            if existing_item_data and existing_item_data.unit then
+                owner_char_path = existing_item_data.unit
             end
-            if owner_char_path then
-                local owner_char = string.match(owner_char_path, "^units/beings/player/([^/]+)/")
-                local la_char    = string.match(la_unit_path,    "^units/beings/player/([^/]+)/")
-                if owner_char and la_char and owner_char ~= la_char then
-                    mod:info("[cos_la_apply hat] character mismatch — owner_char=%s la_char=%s (armoury=%s) — skipping cross-skeleton patch",
-                        tostring(owner_char), tostring(la_char), tostring(armoury_key))
-                    return false
-                end
+            local profile_base
+            if not owner_char_path then
+                local pm = Managers and Managers.player
+                local player = pm and pm.owner and pm:owner(owner_unit)
+                local profile_index = player and player.profile_index
+                    and (type(player.profile_index) == "function"
+                        and player:profile_index() or player.profile_index)
+                local profile = profile_index and rawget(_G, "SPProfiles")
+                    and SPProfiles[profile_index]
+                profile_base = profile and profile.unit_name
+            end
+            local ok, reason = _la_chars_compatible(owner_char_path, la_unit_path, profile_base)
+            if not ok then
+                _dbg("[cos_la_apply hat] character mismatch — %s (armoury=%s) — skipping cross-skeleton patch",
+                    tostring(reason), tostring(armoury_key))
+                return false
             end
         end
 
@@ -4819,14 +5402,14 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         local path_3p = la_unit_path .. "_3p"
         local has_3p = can_get and can_get("unit", path_3p)
         if not has_1p and not has_3p then
-            mod:info("[cos_la_apply hat] %s: neither %s nor %s loadable — bail",
+            _dbg("[cos_la_apply hat] %s: neither %s nor %s loadable — bail",
                 tostring(armoury_key), tostring(la_unit_path), tostring(path_3p))
             return false
         end
         local clone_key = (ItemMasterList and rawget(ItemMasterList, armoury_key) and armoury_key)
             or (vanilla_key and ItemMasterList and rawget(ItemMasterList, vanilla_key) and vanilla_key)
         if not clone_key then
-            mod:info("[cos_la_apply hat] %s: no usable IML clone source — bail", tostring(armoury_key))
+            _dbg("[cos_la_apply hat] %s: no usable IML clone source — bail", tostring(armoury_key))
             return false
         end
         local ext = ScriptUnit.has_extension(owner_unit, "attachment_system")
@@ -4851,7 +5434,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         item_data.unit = la_unit_path
         local ok, err = pcall(ext.create_attachment, ext, slot_name, item_data)
         if not ok then
-            mod:info("[cos_la_apply hat] create_attachment %s failed: %s",
+            _dbg_alert("[cos_la_apply hat] create_attachment %s failed: %s",
                 tostring(armoury_key), tostring(err))
         end
         -- v0.9.0.3-hotfix: paint the LA texture onto the JUST-CREATED HAT
@@ -4872,13 +5455,13 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
                 LA_BRIDGE._bridge_active = true
                 local paint_ok, paint_err = pcall(la.apply_new_skin_from_texture, armoury_key, world, vanilla_key, hat_unit)
                 LA_BRIDGE._bridge_active = false
-                mod:info("[cos_la_apply hat] paint %s on hat_unit=%s ok=%s",
+                _dbg("[cos_la_apply hat] paint %s on hat_unit=%s ok=%s",
                     tostring(armoury_key), tostring(hat_unit), tostring(paint_ok))
                 if not paint_ok then
-                    mod:info("[cos_la_apply hat] paint err: %s", tostring(paint_err))
+                    _dbg_alert("[cos_la_apply hat] paint err: %s", tostring(paint_err))
                 end
             else
-                mod:info("[cos_la_apply hat] paint skipped: world=%s ok=%s hat_unit=%s alive=%s",
+                _dbg("[cos_la_apply hat] paint skipped: world=%s ok=%s hat_unit=%s alive=%s",
                     tostring(world ~= nil), tostring(ok), tostring(hat_unit),
                     tostring(hat_unit and Unit.alive(hat_unit)))
             end
@@ -4895,7 +5478,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         local ok, err = pcall(la.apply_new_skin_from_texture, armoury_key, world, vanilla_key, owner_unit)
         LA_BRIDGE._bridge_active = false
         if not ok then
-            mod:info("[cos_la_apply armor] %s on %s failed: %s",
+            _dbg_alert("[cos_la_apply armor] %s on %s failed: %s",
                 tostring(armoury_key), tostring(owner_unit), tostring(err))
         end
         return true
@@ -4920,7 +5503,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         local ok, err = pcall(LA_BRIDGE.apply_offhand_to_unit, world, left_unit, armoury_key, vanilla_key, "network_husk")
         LA_BRIDGE._bridge_active = false
         if not ok then
-            mod:info("[cos_la_apply offhand] %s on %s failed: %s",
+            _dbg_alert("[cos_la_apply offhand] %s on %s failed: %s",
                 tostring(armoury_key), tostring(left_unit), tostring(err))
         end
         return true
@@ -4934,7 +5517,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         local left_unit_w = equipment and equipment.left_hand_wielded_unit_3p
         if (not right_unit or not Unit.alive(right_unit))
             and (not left_unit_w or not Unit.alive(left_unit_w)) then
-            mod:info("[cos_la_apply illusion] %s on owner %s: no live wielded weapon unit",
+            _dbg("[cos_la_apply illusion] %s on owner %s: no live wielded weapon unit",
                 tostring(armoury_key), tostring(owner_unit))
             return false  -- re-queue: next wield will spawn
         end
@@ -4945,7 +5528,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
             if target and Unit.alive(target) then
                 local ok, err = pcall(la.apply_new_skin_from_texture, armoury_key, world, vanilla_key, target)
                 if not ok then
-                    mod:info("[cos_la_apply illusion] %s on %s failed: %s",
+                    _dbg_alert("[cos_la_apply illusion] %s on %s failed: %s",
                         tostring(armoury_key), tostring(target), tostring(err))
                 end
             end
@@ -4954,7 +5537,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         return true
     end
 
-    mod:info("[cos_la_apply] unknown kind %s — ignored", tostring(kind))
+    _dbg_alert("[cos_la_apply] unknown kind %s — ignored", tostring(kind))
     return false
 end
 
@@ -4998,7 +5581,7 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, payload)
         end
     end
     if not (bridge_known or la_known) then
-        mod:info("[cos_la_apply_req] reject from %s: unknown armoury_key %s",
+        _dbg_alert("[cos_la_apply_req] reject from %s: unknown armoury_key %s",
             tostring(sender_peer_id), tostring(armoury_key))
         return
     end
@@ -5026,7 +5609,7 @@ if rawget(_G, "PlayerManager") then
     mod:hook_safe(PlayerManager, "remove_player", function(self, peer_id, local_player_id)
         if not peer_id then return end
         if _la_equips_by_peer and _la_equips_by_peer[peer_id] then
-            mod:info("[cos_la_apply] peer %s left — purging _la_equips_by_peer entry", tostring(peer_id))
+            _dbg("[cos_la_apply] peer %s left — purging _la_equips_by_peer entry", tostring(peer_id))
             _la_equips_by_peer[peer_id] = nil
         end
         if _last_emit_at then
@@ -5040,7 +5623,7 @@ if rawget(_G, "PlayerManager") then
         -- bleed into any future peer who somehow reuses the same peer_id
         -- (Steam recycles occasionally), and the cache grows otherwise.
         if mod._glow_by_peer and mod._glow_by_peer[peer_id] then
-            mod:info("[cos_glow_apply] peer %s left — purging _glow_by_peer entry", tostring(peer_id))
+            _dbg("[cos_glow_apply] peer %s left — purging _glow_by_peer entry", tostring(peer_id))
             mod._glow_by_peer[peer_id] = nil
         end
     end)
@@ -5052,7 +5635,7 @@ mod:network_register("cos_la_apply", function(sender_peer_id, payload)
     if type(payload) ~= "table" then return end
     local host = _host_peer_id()
     if host and sender_peer_id ~= host then
-        mod:info("[cos_la_apply] reject non-host sender %s (host=%s)",
+        _dbg_alert("[cos_la_apply] reject non-host sender %s (host=%s)",
             tostring(sender_peer_id), tostring(host))
         return
     end
@@ -5070,7 +5653,8 @@ mod:network_register("cos_la_apply", function(sender_peer_id, payload)
     if not (wearer and slot_name and kind and armoury_key) then return end
 
     -- v0.9.0.7-hotfix: MIRROR THE CACHE WRITE ON CLIENTS.
-    -- Previously only the HOST's `cos_la_apply_req` handler at line 3958
+    -- Previously only the HOST's `cos_la_apply_req` register handler (see
+    -- the `mod:network_register("cos_la_apply_req", ...)` block above)
     -- wrote to `_la_equips_by_peer`. Clients received the broadcast and
     -- ran the apply once, but never recorded the entry — so:
     --   1. The v0.9.0.5 husk-wield re-paint hook silently no-op'd on
@@ -5092,11 +5676,11 @@ mod:network_register("cos_la_apply", function(sender_peer_id, payload)
     -- actually persisted (and to verify the upvalue scope fix from this version).
     local n = 0
     for _, _ in pairs(_la_equips_by_peer[wearer]) do n = n + 1 end
-    mod:info("[cos_la_apply recv] CACHE WRITE _la_equips_by_peer[%s][%s] now has %d slot(s) total",
+    _dbg("[cos_la_apply recv] CACHE WRITE _la_equips_by_peer[%s][%s] now has %d slot(s) total",
         tostring(wearer), tostring(slot_name), n)
 
     local applied = _try_apply_by_peer(wearer, slot_name, kind, armoury_key, vanilla_key)
-    mod:info("[cos_la_apply recv] from=%s wearer=%s slot=%s kind=%s key=%s applied=%s",
+    _dbg("[cos_la_apply recv] from=%s wearer=%s slot=%s kind=%s key=%s applied=%s",
         tostring(sender_peer_id), tostring(wearer), tostring(slot_name),
         tostring(kind), tostring(armoury_key), tostring(applied))
 
@@ -5127,7 +5711,7 @@ mod:network_register("cos_la_apply", function(sender_peer_id, payload)
                     if p.player_unit and Unit.alive(p.player_unit) then
                         local inv = ScriptUnit.has_extension(p.player_unit, "inventory_system")
                         if inv and inv.wield and inv.wielded_slot then
-                            mod:info("[cos_la_apply recv] kind=unit variant — forcing husk re-wield (wearer=%s slot=%s armoury=%s)",
+                            _dbg("[cos_la_apply recv] kind=unit variant — forcing husk re-wield (wearer=%s slot=%s armoury=%s)",
                                 tostring(wearer), tostring(inv.wielded_slot), tostring(armoury_key))
                             pcall(inv.wield, inv, inv.wielded_slot)
                         end
@@ -5278,7 +5862,7 @@ mod:network_register("cos_glow_apply", function(sender_peer_id, payload)
     if type(payload) ~= "table" or type(payload.state) ~= "table" then return end
     local host = _host_peer_id()
     if host and sender_peer_id ~= host then
-        mod:info("[cos_glow_apply] reject non-host sender %s (host=%s)",
+        _dbg_alert("[cos_glow_apply] reject non-host sender %s (host=%s)",
             tostring(sender_peer_id), tostring(host))
         return
     end
@@ -5317,7 +5901,7 @@ local function _glow_rebroadcast_targeted(target_peer_id)
         n = n + 1
     end
     if n > 0 then
-        mod:info("[hot-join glow replay] sent %d cos_glow_apply entries targeted at joiner=%s",
+        _dbg("[hot-join glow replay] sent %d cos_glow_apply entries targeted at joiner=%s",
             n, tostring(target_peer_id))
     end
 end
@@ -5362,7 +5946,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
         end
     end
     -- v0.9.0.8-hotfix: diagnostic log.
-    mod:info("[husk-wield-wrap] entry wearer=%s slot=%s husk_unit=%s",
+    _dbg("[husk-wield-wrap] entry wearer=%s slot=%s husk_unit=%s",
         tostring(wearer_peer), tostring(slot_name), tostring(husk_unit))
     -- Set context (stack-style).
     local prev = _current_husk_wield
@@ -5384,7 +5968,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
             for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
                 local p = item_data[field]
                 if p and p ~= "" and not Application.can_get("unit", p) then
-                    mod:info("[husk-wield-wrap] PREFLIGHT WARN wearer=%s slot=%s field=%s unit=%s NOT in resource manager — vanilla may assert downstream",
+                    _dbg_alert("[husk-wield-wrap] PREFLIGHT WARN wearer=%s slot=%s field=%s unit=%s NOT in resource manager — vanilla may assert downstream",
                         tostring(wearer_peer), tostring(slot_name), field, tostring(p))
                 end
             end
@@ -5393,7 +5977,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
     local ok, r1, r2, r3, r4, r5, r6, r7, r8 = pcall(func, self, world, equipment, slot_name, unit_1p, unit_3p)
     _current_husk_wield = prev
     if not ok then
-        mod:info("[husk-wield-wrap] vanilla _wield_slot ERRORED wearer=%s slot=%s err=%s — pcall caught it. Husk visual likely missing/stale but host stays alive.",
+        _dbg_alert("[husk-wield-wrap] vanilla _wield_slot ERRORED wearer=%s slot=%s err=%s — pcall caught it. Husk visual likely missing/stale but host stays alive.",
             tostring(wearer_peer), tostring(slot_name), tostring(r1))
         return nil
     end
@@ -5425,7 +6009,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
                         end
                     end
                     if should_apply then
-                        mod:info("[husk-wield-repaint] apply stored_key=%s kind=%s key=%s",
+                        _dbg("[husk-wield-repaint] apply stored_key=%s kind=%s key=%s",
                             tostring(stored_key), tostring(entry.kind), tostring(entry.armoury_key))
                         _apply_la_on_unit(husk_unit, stored_key, entry.kind, entry.armoury_key, entry.vanilla_key)
                     end
@@ -5544,7 +6128,7 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
         and string.match(item_data.unit, "^units/beings/player/([^/]+)/")
     local la_char       = string.match(la_unit, "^units/beings/player/([^/]+)/")
     if incoming_char and la_char and incoming_char ~= la_char then
-        mod:info("[husk-hat-create] character mismatch — wearer=%s incoming=%s cached_LA=%s (armoury=%s) — skipping cross-skeleton patch to avoid c_api_unit.cpp:74 crash",
+        _dbg("[husk-hat-create] character mismatch — wearer=%s incoming=%s cached_LA=%s (armoury=%s) — skipping cross-skeleton patch to avoid c_api_unit.cpp:74 crash",
             tostring(wearer_peer), tostring(incoming_char), tostring(la_char), tostring(cached.armoury_key))
         return func(self, slot_name, item_data)
     end
@@ -5567,12 +6151,12 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
     -- want to propagate up and crash the client.
     local prev_unit = item_data.unit
     item_data.unit = la_unit
-    mod:info("[husk-hat-create] wearer=%s slot=%s patched unit %s -> %s (LA armoury=%s)",
+    _dbg("[husk-hat-create] wearer=%s slot=%s patched unit %s -> %s (LA armoury=%s)",
         tostring(wearer_peer), tostring(slot_name), tostring(prev_unit), tostring(la_unit), tostring(cached.armoury_key))
     local ok, err = pcall(func, self, slot_name, item_data)
     item_data.unit = prev_unit
     if not ok then
-        mod:info("[husk-hat-create] inner create_attachment errored on wearer=%s slot=%s: %s — bailing silently",
+        _dbg_alert("[husk-hat-create] inner create_attachment errored on wearer=%s slot=%s: %s — bailing silently",
             tostring(wearer_peer), tostring(slot_name), tostring(err))
         return
     end
@@ -5586,10 +6170,10 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
             LA_BRIDGE._bridge_active = true
             local paint_ok, paint_err = pcall(la.apply_new_skin_from_texture, cached.armoury_key, world, cached.vanilla_key, hat_unit)
             LA_BRIDGE._bridge_active = false
-            mod:info("[husk-hat-create] paint %s on hat_unit=%s ok=%s",
+            _dbg("[husk-hat-create] paint %s on hat_unit=%s ok=%s",
                 tostring(cached.armoury_key), tostring(hat_unit), tostring(paint_ok))
             if not paint_ok then
-                mod:info("[husk-hat-create] paint err: %s", tostring(paint_err))
+                _dbg_alert("[husk-hat-create] paint err: %s", tostring(paint_err))
             end
         end
     end
@@ -5776,7 +6360,7 @@ if AttachmentUtils then
                         end
                     end
                     if n > 0 then
-                        mod:info("[hot-join replay] sent %d cos_la_apply entries targeted at joiner=%s for wearer=%s",
+                        _dbg("[hot-join replay] sent %d cos_la_apply entries targeted at joiner=%s for wearer=%s",
                             n, tostring(peer_id), tostring(wearer_peer))
                     end
                 end
@@ -5839,6 +6423,13 @@ end
 -- is cheap insurance.
 local _la_bridge_missing_dep_logged = false
 mod.update = function(dt)
+    -- v0.9.12-dev: pump persistence-restore queue. SimpleInventoryExtension
+    -- .extensions_ready queues a Player for restore; tick processes the queue
+    -- once career_name + player_unit are both ready (~1 frame later).
+    if LA_PERSIST and LA_PERSIST.tick_pending_restore then
+        LA_PERSIST.tick_pending_restore()
+    end
+
     -- v0.9.4: drain pending self-rebroadcast of local LA equips.
     -- Triggered by on_game_state_changed. Walks _local_la_equips for the
     -- local player_unit and re-emits each entry. Idempotent — the per-
@@ -5908,7 +6499,7 @@ mod.update = function(dt)
             end
             mod._la_self_rebroadcast_pending = false
             if n > 0 then
-                mod:info("[ct la-rebroadcast] re-emitted %d local LA equip(s) on state change (hats/armor + offhand)", n)
+                _dbg("[ct la-rebroadcast] re-emitted %d local LA equip(s) on state change (hats/armor + offhand)", n)
             end
         end
         -- If player_unit not yet ready, keep flag pending and retry next frame.
@@ -6291,10 +6882,10 @@ local function _spawn_item_unit_la_hook(self, unit)
 
     local world = self._world or self.world
     local spawning = self._cos_la_spawning
-    mod:info("[LA preview] _spawn_item_unit spawning=%s world=%s", tostring(spawning), tostring(world))
+    _dbg("[LA preview] _spawn_item_unit spawning=%s world=%s", tostring(spawning), tostring(world))
     if spawning then
         local ok = LA_BRIDGE.queue_unit_direct(world, unit, spawning)
-        mod:info("[LA preview]   queue_unit_direct result=%s", tostring(ok))
+        _dbg("[LA preview]   queue_unit_direct result=%s", tostring(ok))
         return
     end
 
@@ -6730,14 +7321,231 @@ _rt_register("glow_picker_resolves_via_unit_to_backend", function()
     if #_MARKER == 0 then return "marker missing" end
 end)
 
-_rt_register("character_mismatch_gate_in_apply_la", function()
-    -- v0.9.8.8: _apply_la_on_unit must contain the character-prefix
-    -- regex / gate to avoid cross-skeleton patching.
-    if type(_apply_la_on_unit) ~= "function" then
-        return "_apply_la_on_unit not defined"
+_rt_register("la_chars_compatible_same_char_allowed", function()
+    -- v0.9.13-dev: real behavioral test of the v0.9.11 character-mismatch
+    -- guard helper. Replaces the v0.9.8.8 marker-only assertion that would
+    -- have passed even when the underlying logic was broken (the broken
+    -- v0.9.8.8 guard ALSO emitted "character mismatch" log strings).
+    if type(mod._la_chars_compatible) ~= "function" then
+        return "mod._la_chars_compatible not exposed"
     end
-    local _MARKER = "character mismatch"
-    if #_MARKER == 0 then return "marker missing" end
+    local ok, reason = mod._la_chars_compatible(
+        "units/beings/player/empire_soldier_breton/headpiece/es_gk_hat_01",
+        "units/beings/player/empire_soldier_breton/headpiece/es_gk_hat_03",
+        nil)
+    if not ok then return "same-character should pass but got: " .. tostring(reason) end
+end)
+
+_rt_register("la_chars_compatible_different_char_denied", function()
+    -- The exact scenario from issue #14: GK LA hat against a WP body. Must
+    -- return false so _apply_la_on_unit bails before attaching to the wrong
+    -- skeleton.
+    local ok = mod._la_chars_compatible(
+        "units/beings/player/witch_hunter_warrior_priest/headpiece/wh_wp_hat_04",
+        "units/beings/player/empire_soldier_breton/headpiece/es_gk_hat_03",
+        nil)
+    if ok then return "GK hat on WP body should be denied (issue #14 regression)" end
+end)
+
+_rt_register("la_chars_compatible_profile_fallback_match", function()
+    -- When no existing slot_hat yet (early spawn), profile base name should
+    -- gate by prefix. empire_soldier base accepts empire_soldier_breton.
+    local ok, reason = mod._la_chars_compatible(
+        nil,
+        "units/beings/player/empire_soldier_breton/headpiece/es_gk_hat_03",
+        "empire_soldier")
+    if not ok then return "profile_base prefix-match should pass: " .. tostring(reason) end
+end)
+
+_rt_register("la_chars_compatible_profile_fallback_deny", function()
+    -- Same fallback path but cross-character. witch_hunter base should NOT
+    -- accept an empire_soldier_* LA path.
+    local ok = mod._la_chars_compatible(
+        nil,
+        "units/beings/player/empire_soldier_breton/headpiece/es_gk_hat_03",
+        "witch_hunter")
+    if ok then return "witch_hunter base must not accept empire_soldier_* LA path" end
+end)
+
+_rt_register("la_chars_compatible_no_sources_denied", function()
+    -- Conservative default: with no owner_char_path AND no profile_base, bail.
+    -- Wrong-skeleton attach risks an engine-level crash via Unit.node failing
+    -- the C attachment-node lookup; missing LA visual is the safer outcome.
+    local ok = mod._la_chars_compatible(
+        nil,
+        "units/beings/player/empire_soldier_breton/headpiece/es_gk_hat_03",
+        nil)
+    if ok then return "no resolvable sources should default-deny" end
+end)
+
+_rt_register("material_settings_templates_loaded", function()
+    -- v0.9.30-dev: the new MaterialSettingsTemplates dump (in _ui_dump.lua)
+    -- depends on the global table being populated by the time the
+    -- customizer opens. Assert the engine global is there and that the
+    -- known weapon-mat families exist. If vanilla ever renames any of
+    -- them this catches it before subscribers hit it.
+    local templates = rawget(_G, "MaterialSettingsTemplates")
+    if type(templates) ~= "table" then
+        return "MaterialSettingsTemplates global not loaded"
+    end
+    local REQUIRED_WEAPON_MATS = {
+        "blue_glow", "purple_glow", "golden_glow", "deep_crimson",
+        "life_green", "lileath", "weaves", "versus", "white_glow",
+    }
+    local missing = {}
+    for _, name in ipairs(REQUIRED_WEAPON_MATS) do
+        if type(templates[name]) ~= "table" then
+            missing[#missing + 1] = name
+        end
+    end
+    if #missing > 0 then
+        return "missing weapon mat templates: " .. table.concat(missing, ", ")
+    end
+    -- Spot-check `weaves` shape (vanilla:
+    -- scripts/settings/equipment/weapon_material_settings_templates.lua:52).
+    -- All 5 vector3 channels must be present. The per-instance glow popup
+    -- design depends on this exact shape.
+    local weaves = templates.weaves
+    local REQUIRED_WEAVES_FIELDS = {
+        "color_glow_high", "color_glow_low",
+        "color_smoke_high", "color_smoke_low",
+        "color_dots",
+    }
+    for _, field in ipairs(REQUIRED_WEAVES_FIELDS) do
+        local v = weaves[field]
+        if type(v) ~= "table" or v.type ~= "vector3" then
+            return "weaves." .. field .. " missing or wrong type (expected vector3)"
+        end
+    end
+end)
+
+_rt_register("filter_illusion_widgets_hides_named_mat", function()
+    -- v0.9.29-dev (issue #48): the `_filter_illusion_widgets` helper must
+    -- drop widgets whose skin maps to a filtered mat family (weaves /
+    -- shyish), preserve everything else, AND always keep the currently-
+    -- equipped skin even if its family is filtered (otherwise vanilla's
+    -- selection state dangles).
+    --
+    -- Drive the helper with a synthetic widget array + setting overrides
+    -- so we don't depend on live WeaponSkins state. We stub
+    -- WeaponSkins.skins via a local override of _skin_mat_family — but
+    -- _skin_mat_family is file-local; instead we pre-populate
+    -- WeaponSkins.skins with synthetic entries scoped to test-only skin
+    -- keys so we don't trip real entries.
+    if type(mod._filter_illusion_widgets) ~= "function" then
+        return "mod._filter_illusion_widgets helper missing"
+    end
+    if not WeaponSkins or not WeaponSkins.skins then
+        return "WeaponSkins.skins not loaded — can't synthesize test inputs"
+    end
+    local TEST_KEYS = {
+        "_ct_test_skin_nil",
+        "_ct_test_skin_weaves",
+        "_ct_test_skin_shyish",
+        "_ct_test_skin_blue",
+        "_ct_test_skin_equipped_weaves",
+    }
+    -- Inject synthetic entries — clean them up at end.
+    local saved = {}
+    for _, k in ipairs(TEST_KEYS) do saved[k] = rawget(WeaponSkins.skins, k) end
+    WeaponSkins.skins._ct_test_skin_nil            = { material_settings_name = nil }
+    WeaponSkins.skins._ct_test_skin_weaves         = { material_settings_name = "weaves" }
+    WeaponSkins.skins._ct_test_skin_shyish         = { material_settings_name = "shyish" }
+    WeaponSkins.skins._ct_test_skin_blue           = { material_settings_name = "blue_glow" }
+    WeaponSkins.skins._ct_test_skin_equipped_weaves= { material_settings_name = "weaves" }
+    local function make_widget(skin_key)
+        return { content = { skin_key = skin_key }, offset = { 0, 0, 0 } }
+    end
+    local widgets = {
+        make_widget("_ct_test_skin_nil"),
+        make_widget("_ct_test_skin_weaves"),
+        make_widget("_ct_test_skin_shyish"),
+        make_widget("_ct_test_skin_blue"),
+        make_widget("_ct_test_skin_equipped_weaves"),
+    }
+    local get_setting = function(key)
+        if key == "hide_weavebound_skins" then return true end
+        if key == "hide_shyish_skins"     then return true end
+        return false
+    end
+    local kept, removed = mod._filter_illusion_widgets(
+        widgets, "_ct_test_skin_equipped_weaves", get_setting)
+    -- Restore.
+    for _, k in ipairs(TEST_KEYS) do WeaponSkins.skins[k] = saved[k] end
+    if removed ~= 2 then
+        return "expected 2 widgets removed (weaves+shyish), got " .. tostring(removed)
+    end
+    if #kept ~= 3 then
+        return "expected 3 widgets kept (nil + blue + equipped-weaves), got " .. tostring(#kept)
+    end
+    local kept_keys = {}
+    for _, w in ipairs(kept) do kept_keys[w.content.skin_key] = true end
+    if not kept_keys._ct_test_skin_nil then return "nil-mat skin should remain" end
+    if not kept_keys._ct_test_skin_blue then return "non-filtered mat should remain" end
+    if not kept_keys._ct_test_skin_equipped_weaves then
+        return "currently-equipped skin must NEVER be filtered out (selection-state guard)"
+    end
+    if kept_keys._ct_test_skin_weaves then return "unequipped weaves should be hidden" end
+    if kept_keys._ct_test_skin_shyish then return "unequipped shyish should be hidden" end
+    -- Disable both filters → nothing removed.
+    local widgets2 = {
+        make_widget("_ct_test_skin_weaves"),
+        make_widget("_ct_test_skin_shyish"),
+        make_widget("_ct_test_skin_blue"),
+    }
+    -- Re-inject for the second pass.
+    WeaponSkins.skins._ct_test_skin_weaves = { material_settings_name = "weaves" }
+    WeaponSkins.skins._ct_test_skin_shyish = { material_settings_name = "shyish" }
+    WeaponSkins.skins._ct_test_skin_blue   = { material_settings_name = "blue_glow" }
+    local _, removed2 = mod._filter_illusion_widgets(
+        widgets2, nil, function(_) return false end)
+    for _, k in ipairs(TEST_KEYS) do WeaponSkins.skins[k] = saved[k] end
+    if removed2 ~= 0 then
+        return "filters off should remove nothing, got " .. tostring(removed2)
+    end
+end)
+
+_rt_register("la_cache_self_heal_purge_helper", function()
+    -- v0.9.28-dev: the `_purge_stale_peer_slot` helper is the
+    -- self-healing primitive the spawn-monitor calls when it catches a
+    -- CROSS-SKELETON MISMATCH. Without it, `_la_equips_by_peer` accretes
+    -- stale entries when a peer switches career (host log 2026-05-26
+    -- showed Kerillian Maiden Guard hat sitting against the same peer's
+    -- subsequent WHC + Necromancer spawns until disconnect). Test the
+    -- helper directly so a future refactor that breaks the contract is
+    -- caught here, not in the next multiplayer session.
+    if type(mod._purge_stale_peer_slot) ~= "function" then
+        return "mod._purge_stale_peer_slot helper missing"
+    end
+    local cache = { ["peer-x"] = {
+        slot_hat  = { armoury_key = "Kerillian_elf_hat_Windrunner_Avelorn" },
+        slot_skin = { armoury_key = "other_skin" },
+    }}
+    -- Clear only slot_hat; slot_skin remains; peer table remains.
+    if mod._purge_stale_peer_slot(cache, "peer-x", "slot_hat") ~= true then
+        return "expected true on hit"
+    end
+    if cache["peer-x"].slot_hat ~= nil then return "slot_hat not cleared" end
+    if cache["peer-x"].slot_skin == nil then return "slot_skin should remain" end
+    -- Clearing the last entry removes the empty peer table.
+    mod._purge_stale_peer_slot(cache, "peer-x", "slot_skin")
+    if cache["peer-x"] ~= nil then return "empty peer table should be removed" end
+    -- Idempotent / nil-tolerant.
+    if mod._purge_stale_peer_slot(cache, "peer-x", "slot_hat") ~= false then
+        return "missing peer should return false"
+    end
+    if mod._purge_stale_peer_slot(cache, "peer-y", "slot_hat") ~= false then
+        return "missing peer key should return false"
+    end
+    if mod._purge_stale_peer_slot(nil, "peer-x", "slot_hat") ~= false then
+        return "nil cache should return false"
+    end
+    if mod._purge_stale_peer_slot({}, nil, "slot_hat") ~= false then
+        return "nil peer should return false"
+    end
+    if mod._purge_stale_peer_slot({}, "peer-x", nil) ~= false then
+        return "nil slot should return false"
+    end
 end)
 
 _rt_register("attachments_slots_correct_key", function()
@@ -6770,3 +7578,201 @@ _rt_register("offhand_options_per_hand_shape", function()
     end
 end)
 
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+
+
+_rt_register("ui_dump_hook_targets_exist", function()
+    -- v0.9.25-dev: catches the v0.9.24 boot ERROR (typo'd class name +
+    -- guessed HeroView method that doesn't exist). _ui_dump's install
+    -- loop now skips any unknown class with a [ui-dump] WARN instead of
+    -- letting VMF raise an ERROR. This test asserts the install actually
+    -- found everything we listed: any non-empty _unknown_classes means
+    -- a name in WINDOWS_TO_MONITOR no longer matches vanilla (renamed /
+    -- removed in a patch). Fix by editing the list or the method name.
+    if type(UI_DUMP) ~= "table" then return "UI_DUMP module not loaded" end
+    if type(UI_DUMP._all_class_names) ~= "table" then
+        return "UI_DUMP._all_class_names not exposed"
+    end
+    if not UI_DUMP._heroview_hook_installed then
+        return string.format("HeroView.%s missing — vanilla nav-hook target renamed",
+            tostring(UI_DUMP._heroview_hook_method))
+    end
+    if UI_DUMP._unknown_classes and #UI_DUMP._unknown_classes > 0 then
+        return string.format("unknown UI classes in WINDOWS_TO_MONITOR: %s",
+            table.concat(UI_DUMP._unknown_classes, ", "))
+    end
+    -- v0.9.27-dev: per-(class, method) pairs for the loadout equip/unequip
+    -- write-site hooks. Catches the v0.9.26 ERROR where
+    -- HeroWindowCosmeticsLoadout._clear_item_slot was hooked but vanilla
+    -- doesn't define it. Either remove the pair from _loadout_hook_pairs
+    -- in _ui_dump.lua, or (if vanilla added/renamed the method) update it.
+    if UI_DUMP._unknown_method_pairs and #UI_DUMP._unknown_method_pairs > 0 then
+        return string.format("unknown UI method pairs in _loadout_hook_pairs: %s",
+            table.concat(UI_DUMP._unknown_method_pairs, ", "))
+    end
+end)
+
+_rt_register("la_bridge_uninstall_apply_gate_clears_state", function()
+    -- audit 2026-06-07 (F7): install_apply_gate() raw-replaced
+    -- LA.apply_new_skin_from_texture but there was NO uninstall path, so an
+    -- in-session F4 disable left LA's recolor permanently blocked until restart.
+    -- Behavioral test of the new teardown: it must exist, be idempotent when no
+    -- gate is installed, and fully clear _gate_installed / _original_apply when
+    -- one was. We drive the state machine directly (no live LA required) and
+    -- restore the real state afterwards so the running session is untouched.
+    if type(LA_BRIDGE) ~= "table" then return "LA_BRIDGE module missing" end
+    if type(LA_BRIDGE.uninstall_apply_gate) ~= "function" then
+        return "uninstall_apply_gate not exposed (F7 regression: gate can't be torn down)"
+    end
+
+    -- Snapshot ALL state the teardown can touch, including the LIVE LA apply fn:
+    -- if LA is installed and a gate is currently installed, uninstall would write
+    -- our sentinel onto LA.apply_new_skin_from_texture, so we must save+restore it
+    -- to avoid corrupting LA's real recolor for the rest of the session.
+    local LA = get_mod("Loremasters-Armoury")
+    local saved_installed = LA_BRIDGE._gate_installed
+    local saved_original  = LA_BRIDGE._original_apply
+    local saved_active    = LA_BRIDGE._bridge_active
+    local saved_gate_fn   = LA_BRIDGE._gate_fn
+    local saved_la_apply  = LA and LA.apply_new_skin_from_texture or nil
+
+    local fail
+    local sentinel = function() end
+    LA_BRIDGE._gate_installed = true
+    LA_BRIDGE._original_apply = sentinel
+    LA_BRIDGE._bridge_active  = true
+    -- v0.9.33: point _gate_fn at the live fn so the identity guard sees "still our
+    -- gate" and takes the restore path (the original F7 behavior under test).
+    LA_BRIDGE._gate_fn        = saved_la_apply
+
+    LA_BRIDGE.uninstall_apply_gate()
+
+    if LA_BRIDGE._gate_installed ~= false then
+        fail = "_gate_installed not cleared after uninstall"
+    elseif LA_BRIDGE._original_apply ~= nil then
+        fail = "_original_apply not nil'd after uninstall"
+    elseif LA_BRIDGE._bridge_active ~= false then
+        fail = "_bridge_active not cleared after uninstall"
+    elseif LA_BRIDGE._gate_fn ~= nil then
+        fail = "_gate_fn not cleared after uninstall"
+    elseif LA and LA.apply_new_skin_from_texture ~= sentinel then
+        fail = "uninstall did not restore captured original onto LA"
+    else
+        -- idempotent second call must not raise on already-uninstalled state
+        local ok2 = pcall(LA_BRIDGE.uninstall_apply_gate)
+        if not ok2 then fail = "second uninstall_apply_gate raised" end
+    end
+
+    -- v0.9.33: layered-wrapper guard — when the live apply fn is NOT our saved
+    -- gate (another mod re-wrapped on top after install), uninstall must NOT
+    -- clobber the foreign wrapper; it leaves the chain and goes transparent.
+    if not fail and LA then
+        local foreign       = function() end
+        local gate_sentinel = function() end
+        LA_BRIDGE._gate_installed = true
+        LA_BRIDGE._original_apply = sentinel
+        LA_BRIDGE._gate_fn        = gate_sentinel
+        LA.apply_new_skin_from_texture = foreign
+
+        LA_BRIDGE.uninstall_apply_gate()
+
+        if LA.apply_new_skin_from_texture ~= foreign then
+            fail = "uninstall clobbered a foreign wrapper layered after our gate"
+        elseif LA_BRIDGE._gate_installed ~= false then
+            fail = "_gate_installed not cleared on the guarded (no-restore) path"
+        end
+    end
+
+    -- Restore ALL live state regardless of outcome — session must be untouched.
+    LA_BRIDGE._gate_installed = saved_installed
+    LA_BRIDGE._original_apply = saved_original
+    LA_BRIDGE._bridge_active  = saved_active
+    LA_BRIDGE._gate_fn        = saved_gate_fn
+    if LA and saved_la_apply ~= nil then
+        LA.apply_new_skin_from_texture = saved_la_apply
+    end
+
+    return fail
+end)
+
+_rt_register("glow_classify_uses_material_settings", function()
+    -- v0.9.34: classify() must key off WeaponSkins.skins[*].material_settings_name
+    -- (the engine's own glow signal, gear_utils.lua:107/155) with the suffix
+    -- fallback extended to bare `_runed` CW deus keys the old regex missed.
+    -- Exercises live vanilla data — vacuous pass if tables aren't loaded yet.
+    local skins = rawget(_G, "WeaponSkins")
+    if not (skins and skins.skins) then
+        mod:info("[regression] glow_classify: WeaponSkins not loaded; vacuous pass")
+        return nil
+    end
+    local cases = {
+        { skin = "wh_1h_axe_skin_04_runed_01",      want = "rune"  },  -- blue_glow template
+        { skin = "es_2h_sword_exe_skin_03_magic_01", want = "magic" },  -- weaves template (Weavebound)
+        { skin = "dr_deus_01_skin_01_runed",         want = "rune"  },  -- bare _runed CW deus (old regex missed)
+        { skin = "wh_1h_axe_skin_04",                want = nil     },  -- base skin, no glow
+    }
+    for _, c in ipairs(cases) do
+        if c.want ~= nil and skins.skins[c.skin] == nil then
+            return string.format("vanilla skin key %s missing from WeaponSkins (data drift — update test cases)", c.skin)
+        end
+        local got = GlowPicker.classify({ skin = c.skin })
+        if got ~= c.want then
+            return string.format("classify(%s): expected %s, got %s", c.skin, tostring(c.want), tostring(got))
+        end
+    end
+end)
+
+_rt_register("cosmetic_unlock_labels_no_mojibake", function()
+    -- audit 2026-06-07 (F12): _gen_unlocks.py read _cos_probe.txt with the
+    -- platform-default encoding (cp1252) instead of utf8, corrupting "Bögenhafen"
+    -- into "BA?genhafen" in 4 es_hat_0002 labels. Fixed at source (utf8 read) +
+    -- regen. Behavioral guard: load the generated unlock table and assert no
+    -- en-label carries the mojibake signature, so a future regen with the
+    -- encoding bug reintroduced fails here.
+    local ok, unlocks = pcall(mod.dofile, mod, "scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
+    if not ok or type(unlocks) ~= "table" then return end  -- can't reach table; skip
+    local loc = unlocks.localization
+    if type(loc) ~= "table" then return "unlock localization table missing" end
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            -- "BA?" is the asciify-of-cp1252-misread signature; "?" alone is the
+            -- residue of any non-ASCII char that fell through transliteration.
+            if v.en:find("BA?genhafen", 1, true) or v.en:find("?", 1, true) then
+                return string.format("loc key %q has mojibake/unrenderable label: %q", k, v.en)
+            end
+        end
+    end
+end)
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)

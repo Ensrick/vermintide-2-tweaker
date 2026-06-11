@@ -1,304 +1,178 @@
-> [!WARNING]
-> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-01 (22 days old).
-> Recent state may differ. Kept for historical context — verify against current
-> code before acting on findings. Remove this banner manually after a refresh
-> or move the doc to `_archive/audits/2026-05-01/`.
-# Enemy Tweaker Code Review (2026-05-01)
+# Enemy Tweaker Code Review (2026-05-24)
 
-Scope: `enemy_tweaker/` excluding `bundleV2/`. Reviewed against
-`Vermintide-2-Source-Code/scripts/managers/conflict_director/*` and
-`scripts/game_state/components/enemy_package_loader.lua`.
+**Version reviewed:** `0.7.1-dev` (per `MOD_VERSION` in `scripts/mods/enemy_tweaker/enemy_tweaker.lua:3`).
+
+> **Header re-stamped 2026-05-29; body findings predate this version and may be stale — see GitHub Issues for current state.** This review was originally written against `0.5.7-dev`; the header version was corrected to match disk on 2026-05-29 but the body below was NOT re-reviewed. Treat individual findings as point-in-time observations from the `0.5.7-dev` era.
+
+Scope: every Lua file under `enemy_tweaker/scripts/mods/enemy_tweaker/` (5 files, 2231 lines main + BR, 836 lines data/loc/breeds). Reviewed against the running VT2 source under `Vermintide-2-Source-Code/scripts/managers/conflict_director/` and `scripts/utils/loaded_dice.lua`.
 
 Files reviewed:
-- `enemy_tweaker/enemy_tweaker.mod`
-- `enemy_tweaker/itemV2.cfg`
-- `enemy_tweaker/resource_packages/enemy_tweaker/enemy_tweaker.package`
-- `enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker.lua` (665 lines pre-comments)
-- `enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_data.lua`
-- `enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_localization.lua`
-- `enemy_tweaker/CHANGELOG.md`
-- `enemy_tweaker/SKELETON_HORDES.md`
+- `enemy_tweaker.mod` (entry point)
+- `itemV2.cfg`
+- `scripts/mods/enemy_tweaker/enemy_tweaker.lua` (964 lines)
+- `scripts/mods/enemy_tweaker/enemy_tweaker_big_rebalance.lua` (1267 lines)
+- `scripts/mods/enemy_tweaker/enemy_tweaker_data.lua` (381 lines)
+- `scripts/mods/enemy_tweaker/enemy_tweaker_breeds.lua` (236 lines)
+- `scripts/mods/enemy_tweaker/enemy_tweaker_localization.lua` (219 lines)
+- `CHANGELOG.md`, `EXPANSION_PLAN.md`, `SKELETON_HORDES.md` (skimmed for context)
 
-## Summary
+---
 
-Two distinct features in one mod:
-1. **Horde composition presets + breed substitution** (mature-looking, mostly OK
-   but with two functional bugs — see (B1) and (B2)).
-2. **Skeleton breed cloning + horde injection** (architecturally risky — see
-   (B3) which is likely a hard crash on first spawn).
+## 1. Mod purpose
 
-No forward-reference bugs. No localization escape bugs. Hooks use string-form
-correctly. Settings IDs match between data and localization. **(B3) is
-resolved as of 0.2.4-dev** — the existence check on `NetworkLookup.breeds`
-was switched to `rawget` so it no longer trips the strict-lookup metatable.
-Multiplayer smoke test still pending.
+Tweaker: Enemies is a host-side spawn / enemy-tuning mod. Its surface area covers six independent systems, every one toggleable from the VMF settings menu:
 
-Health: dev-quality v0.2.4, two confirmed code defects (B1, B2), B3
-resolved in 0.2.4-dev (rawget existence check). Not ready for public
-release.
+1. **Horde composition presets** — replace VT2's paced `HordeCompositionsPacing` entries with single-faction or themed compositions (Skaven Only, Beastmen Invasion, All Elites, etc.) plus a 25–300% horde-size scaler.
+2. **Difficulty mimic** — override the difficulty key used by `ConflictUtils.patch_settings_with_difficulty` per spawn subsystem (horde / specials / pacing / pack_spawning / intensity / boss), so the player can run Champion stats with Cataclysm horde sizes (or any mix).
+3. **Per-difficulty special spawn controls** — max active, max same type, per-special weight, per-special disable; configured independently for each of the 7 difficulties (Recruit → Cataclysm 3).
+4. **Breed substitution** — runtime swap of one breed name for another across paced/blob horde spawn lists and per-unit ambush spawns.
+5. **Faction swap** — rewrite the active `CurrentHordeSettings.*_composition` strings so an entire faction's paced hordes are replaced by another faction's compositions for the current mission.
+6. **Big Rebalance integration** — opt-in port of Core's BR enemy-side rebalance (stagger formula rewrite, damage-calc rewrite, shield-slam rewrite, THP-on-kill buff template bodies, per-breed bloodlust_health, breed.trash flags, on-stagger unbalance debuff). Gated through the sibling `bt` (buff_tweaker) mod's master toggle.
 
-## Confirmed bugs / potential bugs
+The legacy custom skeleton breeds (necro / ghost) prototyped in 0.2.x–0.3.8-dev were **removed in v0.4.0-dev** (see header comment in `enemy_tweaker.lua:57-66`). They only ever affected paced hordes, not the terror-event-driven `HordeCompositions` table that drives most adventure spawns, and required extensive boot-time seeding into vanilla tables (threat_values, StatisticsDefinitions, hit_zones). The future skeleton iteration is deferred until a HordeCompositions-overlay path is designed.
 
-**(B1) `_apply_preset_to_pacing_keys` drops `loaded_probs` —
-`enemy_tweaker.lua:430` / now annotated**
-When a preset is applied we replace `HordeCompositionsPacing[key]` with a
-deep-copy of preset_variants and only restore `sound_settings`. The original
-`loaded_probs` field (built at file-load by
-`scripts/settings/conflict_settings.lua:636` via `LoadedDice.create`) is gone.
-`horde_spawner.lua` then reads `composition.loaded_probs` at lines 139, 243,
-349, 743 (`LoadedDice.roll_easy(composition.loaded_probs)` ->
-`LoadedDice.roll_easy(nil)` -> `nil[1]` crash). The next ambush / vector blob
-/ event horde will crash. Fix: compute `new_variants.loaded_probs` from the
-new variant weights:
-```lua
-local weights = {}
-for i, v in ipairs(new_variants) do weights[i] = v.weight end
-new_variants.loaded_probs = { LoadedDice.create(weights) }
-```
+---
 
-**(B2) `compose_horde_spawn_list` hook is a no-op —
-`enemy_tweaker.lua:527`**
-The vanilla function returns `(sum, sum_a, sum_b)` (three integers). It pushes
-breed names into module-local upvalues `spawn_list_a` / `spawn_list_b` which
-are popped via `HordeSpawner:pop_random_*`. Our hook iterates `result[i]` over
-a number — does nothing — and only returns 1 of the 3 expected values. Net
-effect: ambush hordes are never breed-swapped, only vector-blob hordes are.
-Hook `HordeSpawner.spawn_unit` (line 1228) and substitute the `breed_name`
-argument before the original runs.
+## 2. Architecture overview
 
-**(B3) NetworkLookup.breeds metatable error on custom skeletons — FIXED in
-0.2.4-dev**
-`scripts/network_lookup/network_lookup.lua` builds `NetworkLookup.breeds`
-from `Breeds` then runs an `init` finalizer that (a) builds the reverse
-`name -> index` map and (b) installs `__index = function(_, key) error(...) end`
-that raises on any unknown key. VMF mods load AFTER network_lookup
-finalization.
+### File structure
+| File | Role |
+|---|---|
+| `enemy_tweaker.lua` | Main module: presets, faction-swap, difficulty-mimic, breed-swap, per-difficulty specials hooks, lifecycle (`on_enabled` / `on_disabled` / `on_setting_changed`), chat commands, regression-test scaffold. |
+| `enemy_tweaker_big_rebalance.lua` | All Big Rebalance code (`require`'d as `BR`). Exports `on_enabled` / `on_disabled` / `on_setting_changed` driven from the main module. Hooks `DamageUtils.stagger_ai`, `DamageUtils.calculate_damage`, `ActionShieldSlam._hit`. |
+| `enemy_tweaker_breeds.lua` | Shared data + helpers (`SKAVEN`/`CHAOS`/`BEASTMEN`/`LORDS`/`MONSTERS`/`CRITTERS` lists, faction/role predicates, `collect_specials()`, `breed_label()`, `DIFFICULTIES` table, `setting_key()`/`breed_swap_option_key()` formatters). Required by both `_data.lua` and `_localization.lua` so widgets and loc keys stay in sync. |
+| `enemy_tweaker_data.lua` | VMF widget tree. Builds horde / faction-swap / breed-swap / per-difficulty specials groups + 16 BR sub-toggles. Uses **factory functions** for every dropdown options table (the 0.4.2-dev fix for the `<<<key>>>` bracket-cascading bug). |
+| `enemy_tweaker_localization.lua` | Static `loc` table plus dynamic per-difficulty / per-breed entries appended in two loops over `B.DIFFICULTIES` × `SPECIALS` and `FACTION_GROUPS` × breed lists. |
 
-The earlier review proposed three workarounds (visual-only swap; pre-init
-injection; metatable replacement). All overcomplicated — option (b) actually
-works for the read side too: direct ASSIGNMENT bypasses `__index`, so we
-can extend the table post-finalization. The crash that shipped in 0.2.2/0.2.3
-was caused by the existence check itself: `if not nl_breeds[def.name] then`
-is a GET, which trips the metatable before the new key gets written. Switched
-to `rawget(nl_breeds, def.name)` and the registration runs cleanly. SETs
-into the table do not invoke `__index`, so subsequent indexes from the
-network layer find the new entries normally. See `enemy_tweaker.lua:156`.
+### Hook points (9 total)
+| File | Class | Method | Wrapper kind | Purpose |
+|---|---|---|---|---|
+| main | `ConflictDirector` | `init` | string-form `mod:hook` | Backup compositions, apply preset, build swap maps, apply mimic + faction swap. Runs once per mission. |
+| main | `ConflictDirector` | `refresh_conflict_director_patches` | string-form `mod:hook` | Re-apply mimic + faction swap after zone-boundary CD switches (VT2 calls this to rebuild `Current*Settings`). |
+| main | `HordeSpawner` | `compose_blob_horde_spawn_list` | string-form `mod:hook` | Breed-swap pass over the returned spawn-list (returns BOTH `spawn_list` and `num_to_spawn` — captures multi-return per `VMF_RECIPES.md` §2). |
+| main | `HordeSpawner` | `spawn_unit` | string-form `mod:hook` | Per-unit breed-swap for ambush hordes (compose_horde_spawn_list returns ints, not a list — substitute at spawn site). |
+| main | `SpecialsPacing.setup_functions.specials_by_slots` | (table-form) | `mod:hook` | Overrides `CurrentSpecialsSettings.max_specials` and filters `.breeds` via per-difficulty disabled toggles, restored after `func` returns. |
+| main | `SpecialsPacing.select_breed_functions.get_random_breed` | (table-form) | `mod:hook` | Weighted random pick + `max_of_same` enforcement per active difficulty. |
+| BR | `DamageUtils` | `stagger_ai` | table-form `mod:hook` | Big Rebalance stagger rewrite (gated on `br_stagger_ai_rewrite` AND bt master). |
+| BR | `DamageUtils` | `calculate_damage` | table-form `mod:hook` | BR damage-calc rewrite (gated on `br_calculate_damage_rewrite` AND bt master). |
+| BR | `ActionShieldSlam` | `_hit` | table-form `mod:hook` | BR shield-slam rewrite (gated on `br_shield_slam_rewrite` AND bt master). |
 
-In-game multiplayer verification (host RPC of et_*_skeleton to a client
-that also has the mod) is still pending.
+All wrappers use `mod:hook` (full transform). No `mod:hook_safe` anywhere in the mod. The two `SpecialsPacing` hooks are intentionally table-form because `SpecialsPacing.setup_functions` / `.select_breed_functions` are plain sub-tables, not classes (the engine never registers them as hookable strings).
 
-**(B4) `et_status` reports stale redirect count — `enemy_tweaker.lua:649`
-annotated POTENTIAL BUG**
-`mod:echo("Package redirects: %d", next(PACKAGE_REDIRECT) and #SKELETON_BREEDS or 0)`
-prints either 6 (constant) or 0. If e.g. `pet_skeleton_armored` source breed
-isn't loaded (DLC gating) the redirect map has 5 entries but the status
-prints 6.
+### State (file-scope upvalues)
+- `_original_compositions_pacing`, `_original_compositions` — deep-copy of `HordeCompositionsPacing` / `HordeCompositions` captured on first `_backup_compositions()`, restored on every settings change / disable.
+- `_breed_swap_map`, `_faction_swap_map` — rebuilt from settings via `_build_swap_map()` / `_build_faction_swap_map()` on every state change.
+- BR module: `_original_bloodlust_health`, `_original_trash` (per-breed restore tables), `_br_master_applied`, `_br_hooks_installed` (idempotency flags).
 
-**(B5) Mid-session re-enable adds breeds without threat value —
-`enemy_tweaker.lua:556` annotated**
-`mod.on_enabled` calls `_register_skeleton_breeds()` which inserts new
-entries into `Breeds`. The threat-value seeding only happens inside the
-`ConflictDirector.init` hook, which fires once per level. So toggling the
-mod on mid-mission adds breeds whose `threat_values[name]` is nil; if the
-performance manager ever counts one as activated, the multiplication in
-`ConflictDirector.calculate_threat_value:2323` does nil arithmetic.
+### Cross-mod gating
+- **Big Rebalance master toggle lives in `bt` (Tweaker: Buffs)**, not in et. `BR._master_on()` calls `get_mod("bt"):is_br_active()`; if bt isn't installed or its master is off, every BR sub-toggle in et is a no-op (with a warning logged on per-feature check). Registration of buff templates / damage profiles / explosion templates also happens inside bt; et's `REG` table is now an empty stub (lines 38 of BR file) — comment block explains this is the post-extraction of the cross-mod-shared registration list.
 
-**(B6) Size multiplier silently discarded when preset = "off" —
-`enemy_tweaker.lua:441` annotated**
-`_apply_horde_preset` early-returns when no preset is selected, so the
-"Horde Size %" slider never applies on its own. If that's intentional, the
-tooltip should say "applies on top of preset only".
+---
 
-## Open questions
+## 3. Risk hotspots
 
-- Does `EnemyPackageLoader` ref-count cleanly when two breed names map to
-  the same package via `_breed_package_name`? See annotation at
-  `enemy_tweaker.lua:172`. Spawning `et_necro_skeleton` and a vanilla
-  `pet_skeleton` (e.g. via Necromancer career summons) in the same session
-  may double-load or double-unload. Needs verification.
-- Should the breed-swap dropdown include the custom skeleton breeds as
-  swap targets? Currently `breed_options` in `_data.lua` is hand-curated
-  vanilla-only.
-- Is `breed.race = "undead"` correct for damage interactions? Vanilla
-  `chaos_skeleton` has `race = "chaos"` (verify); switching to "undead"
-  may affect anti-undead trinkets / Sister of the Thorn AoE.
+### R1. `v0.5.5-dev` mid-session reseed path — narrow but defensible
+`mod.on_enabled` (main `:740-760`) was extended with `active:refresh_conflict_director_patches()` to invalidate the threat-value cache when the user toggles et off→on during a mission (issue #9, now closed). The call is **idempotent on vanilla** — `refresh_conflict_director_patches` is the same vanilla method VT2 invokes at every zone boundary, so calling it once extra is safe. Two things to keep an eye on:
 
-## Refactor / cleanup candidates
+1. The reseed only runs when `Managers.state.conflict` is non-nil. If the user enables the mod from the main menu / hub world there is no active CD, the call is skipped (correctly), and the next mission's `ConflictDirector.init` hook handles seeding. The control flow looks right, but live verification with the user toggling off-on inside a mission has not been logged anywhere I could grep — `mod:info("[et:difficulty-mimic] reseeded threat-values on enable")` shows up in the source but no observation of it firing has been recorded. Worth a quick smoke confirmation.
+2. The path only fires from `on_enabled` — `on_setting_changed` calls `_reapply_via_active_cd()` which does NOT call `refresh_conflict_director_patches`, just re-runs mimic + faction-swap. If the user changes a *mimic* setting mid-mission (without toggling the mod off-on), the threat-value cache might still go stale until zone boundary. Possibly intentional ("only flush on hard re-enable"), possibly an inconsistency.
 
-- **`FACTION_SKAVEN` / `FACTION_CHAOS` / `FACTION_BEASTMEN`** at lines 11-49
-  are dead — defined, never read. Either consume them in `_data.lua`'s
-  `breed_options` (drop the parallel hand-curated list there) or delete.
-- `_status` hard-codes faction labels for `et_dump_breeds` output; could
-  share a single source-of-truth with `breed_options`.
-- `HORDE_PRESETS` is a flat hash with `.compositions` per preset; the
-  `compositions.all` vs `compositions.skaven|chaos|beastmen` branch in
-  `_apply_horde_preset` is asymmetric (`all_elites` is the only preset
-  using per-faction compositions). If that ends up being the only one,
-  consider dropping `compositions.all` and forcing per-faction always —
-  cleaner mental model.
+### R2. `_apply_horde_preset` mutates EVERY `HordeCompositionsPacing` entry when multiplier ≠ 1.0
+The size-multiplier loop at `enemy_tweaker.lua:312-318` iterates **every key in `HordeCompositionsPacing`**, including ones the preset never touched (versus / weave / deus variants, mod-injected compositions). The `_restore_compositions()` step on each settings-change restores cleanly because we deep-copy the originals, but any third-party mod that runs AFTER et and reads `HordeCompositionsPacing[some_other_key]` will see scaled numbers. Low-risk in practice (et is generally meant to be authoritative on horde composition), but document or scope the loop to known keys if a compat issue surfaces.
 
-## Doc/code mismatches
+### R3. Faction-swap is irreversible within an active CD
+The `on_disabled` handler (`enemy_tweaker.lua:727-738`) acknowledges that mutating `CurrentHordeSettings.*_composition` in place is non-recoverable without a director-rebuild — the comment block at `:731-735` is explicit. Next `refresh_conflict_director_patches` (zone change) restores it. Acceptable, but the player won't see the swap revert until they cross a zone boundary or restart the mission; the `mod:echo("Enemy Tweaker disabled — compositions restored")` line could mislead.
 
-- `DEVELOPMENT.md` table lists Enemy Tweaker's "VMF Console Prefix" as
-  `(n/a)` — but the mod registers four `et_*` console commands. The actual
-  in-game prefix used is `enemy_tweaker` (the full mod ID). Update
-  DEVELOPMENT.md to either say `enemy_tweaker <command>` or split the
-  doc field into "Mod ID" vs "command prefix".
-- `SKELETON_HORDES.md` documents the design but doesn't note the
-  NetworkLookup.breeds metatable issue (B3). If the design is kept, that
-  caveat belongs in the doc.
-- `CHANGELOG.md` is a stub directing to git log — fine, per task brief.
+### R4. Big Rebalance hook bodies are large verbatim ports of decompiled source
+The `_do_damage_calculation` helper (BR `:631-840`, 210 lines) and `ActionShieldSlam._hit` body (BR `:1017-1219`, 203 lines) are copy-pastes from Core's Big Rebalance decompile. The six `rawget(NetworkLookup.{hit_zones,damage_sources}, ...)` calls (lines 1087, 1097, 1139, 1165, 1185, 1207) are the v0.5.6-dev hardening — they now match `PROJECT_STANDARDS.md`'s strict-`__index` rule. The risk is upstream drift: any future Fatshark patch that changes `DamageUtils.calculate_damage` semantics will silently diverge from the BR hook body. This is inherent to the verbatim-port design pattern; no fix available short of feature-pinning to a vanilla version.
 
-## Settings coherence
+### R5. `BR._stub_template` no-ops because `REG.BR_BUFF_TEMPLATES` is empty
+Per the comment block at `enemy_tweaker_big_rebalance.lua:31-38`, the canonical registration list was extracted into `bt`. The local `REG` stub is `{ BR_BUFF_TEMPLATES = {}, ... }`. `_register_buff_templates()` (`:268-300`) iterates an empty list, returns true (because the `BT`/`NL` guard passes), and `_br_master_applied = true` is set without any actual registration work. That's fine **as long as `bt` is installed and has done its own registration pass**. If a user installs et without bt and flips the master on (impossible via UI now — the et master toggle was removed in this refactor — but possible by editing settings.json), the THP/unbalance template bodies will be `_set_template_body(name, body)` writes into a `BuffTemplates` table that has no NetworkLookup index for the name, and the first RPC referencing the template will fail. The `_feature_on` check guards this since it requires `_master_on()` which requires bt — but defensive enforcement at boot would be worth adding.
 
-All four `mod:get` reads have matching widget definitions and localization
-entries:
+### R6. Defensive logging is sparse, especially in the spawn hot path
+- `mod:info` fires once per `ConflictDirector.init` ("compositions applied"), once per BR registration burst, and once per mid-session reseed.
+- No logging on faction-swap rewrites (silent unless `/et_status` is invoked).
+- No logging on per-unit breed-swap fallbacks (when `Breeds[replacement]` is nil, the original breed silently spawns).
+- `_warn` fires only for: `bt` missing in `_feature_on`, BR cross-cutting class tables not loaded, BR buff-template registration failure.
 
-| `mod:get` key | data.lua | localization.lua |
-| :--- | :--- | :--- |
-| `horde_preset` | dropdown | yes |
-| `horde_size_multiplier` | numeric | yes (with `%%` escape) |
-| `breed_swap_from` | dropdown | yes |
-| `breed_swap_to` | dropdown | yes |
+For multiplayer crash diagnosis the gaps could matter — if a client without the mod RPC's an unexpected breed name (because the host did a swap), there's no host-side trail. Adding a `mod:info` at apply-time on every swap-map rebuild would help triage.
 
-Group widgets `horde_group`, `breed_swap_group` are localized.
+### R7. No host/client gating
+Every hook runs on every peer. The composition / faction-swap / mimic mutations are harmless on clients (the host runs the spawn logic), but the BR `DamageUtils.calculate_damage` / `DamageUtils.stagger_ai` hooks DO run on every peer that has the mod, and the math is purely local (calculate_damage is called inside `is_server` branches anyway by the time it matters for damage resolution). Per `enemy_tweaker_big_rebalance.lua:418` / `:855` the only `is_server` check inside BR is in proc-function bodies that are explicitly server-only. There's no documented assumption that all peers must have the same BR sub-toggles enabled. **If host has `br_calculate_damage_rewrite` ON and client has it OFF**, the client's local calculate_damage call returns vanilla numbers while the server's says BR numbers — likely results in client-side prediction divergence (rubberbanding hit reactions) rather than a crash, but worth a multiplayer smoke test before public release.
 
-Tooltips use `_tooltip` suffix consistently. `%%` percent-escape is correctly
-applied on the one entry that needs it (`horde_size_multiplier`).
+### R8. `_set_template_body` overwrites prior buffs unconditionally
+`enemy_tweaker_big_rebalance.lua:362-366` — `_set_template_body(name, body)` does `BT[name] = { buffs = { body } }`. If anything in vanilla, bt, or another mod has populated `BT[name].buffs` with additional entries, this stomps them. The BR file owns these template names exclusively (`rebaltourn_regrowth` / `_vanguard` / `_reaper` / `_bloodlust` / `_tank_unbalance` / `_tank_unbalance_buff`) so the conflict surface is small, but a future cross-mod boon/talent that wanted to extend one of those templates would be silently overridden.
 
-No orphans, no missing localization keys.
+---
 
-## Hook patterns
+## 4. QA status
 
-All three game-class hooks use string-form, matching CLAUDE.md guidance:
-- `mod:hook("EnemyPackageLoader", "_breed_package_name", ...)` 
-- `mod:hook("ConflictDirector", "init", ...)` 
-- `mod:hook("HordeSpawner", "compose_horde_spawn_list", ...)` 
-- `mod:hook("HordeSpawner", "compose_blob_horde_spawn_list", ...)` 
+### Tests / checks present
+- **`/et_regression_test` chat command** (renamed from `regression_test` in v0.5.4-dev to avoid the cross-mod collision). Four `_rt_register` checks:
+  1. `dropdown_options_factories` — marker-only check confirming the v0.4.2 factory-function fix is still in place.
+  2. `horde_compose_returns_multivalue` — verifies `HordeSpawner.compose_blob_horde_spawn_list` + `HordeSpawner.spawn_unit` exist (catches upstream method renames).
+  3. `breed_swap_map_table` — confirms `_breed_swap_map` is a table.
+  4. `et_big_rebalance_uses_rawget` — v0.5.7 runtime check: marker constant present + `rawget(NetworkLookup.{hit_zones,damage_sources}, <bad-key>)` returns nil without raising.
+- **Lint coverage**: `tools/lint/regression-lint.ps1`'s `strict-table-lookup` flag covers the six BR sites statically.
+- **Diagnostic commands**: `/et_dump_breeds` (breeds by faction with `special`/`boss`/`elite` flags), `/et_dump_compositions` (pacing keys + variant counts), `/et_status` (current preset / multiplier / swap / mimic / `CurrentHordeSettings` snapshot).
+- **REGRESSION_CHECKLIST.md** exists at mod root.
 
-No table-form hooks needed; no `BackendUtils`-style plain tables involved.
-No use of `mod:hook_safe` — every hook calls through to `func`. Correct
-choice for transformation hooks.
+### Gaps
+- **No multiplayer smoke test recorded** for the BR hook divergence scenario described in R7.
+- **No verification log** for the mid-session reseed code path added in v0.5.5-dev — the `mod:info` is wired but I couldn't find a session-log artifact confirming the `[et:difficulty-mimic] reseeded threat-values on enable` line ever appeared.
+- **No regression check** for the faction-swap → `_remap_composition` fall-back path (`enemy_tweaker.lua:411-414` — when target composition doesn't exist, return original; not currently asserted).
+- **No regression check** for the per-difficulty specials hook when the active difficulty has zero enabled specials (line 635-637 falls back to `func(...)`, presumably vanilla behavior, but unverified).
+- BR `_set_template_body` overwrite behavior (R8) has no test.
 
-## Spawn timing correctness
+---
 
-- **Horde preset application:** runs at the end of `ConflictDirector.init`
-  (per-mission). Compositions are mutated AFTER the original `init` runs,
-  so the director's own setup (which iterates compositions and primes
-  `loaded_probs` per session) is intact — except we then drop those probs
-  (B1).
-- **Breed substitution:** runs every time `compose_blob_horde_spawn_list`
-  returns a list. No timing issue there. The `compose_horde_spawn_list`
-  hook is a no-op (B2) so ambush-breed substitution doesn't happen at all.
-- **Skeleton breeds:** registered at mod load AND re-attempted in
-  `ConflictDirector.init` hook. Threat values seeded only in init hook.
+## 5. Open follow-ups
 
-**Network/host correctness:** No host-only check anywhere. Mutating
-`HordeCompositionsPacing` on a client is harmless (host runs spawn logic),
-but `Breeds[name] = clone` runs on every peer including clients. If a
-client doesn't have the mod and the host does, the host's RPC will reference
-breed names the client can't decode — which loops back to (B3). The mod is
-implicitly *required by all peers* without enforcing it.
+Cross-checked against `gh issue list --state open`. There is no `enemy_tweaker` label in the repo's label set, so issues touching this mod are filed under `audit` / `bug` / etc. The currently open repo issues with even loose enemy_tweaker relevance:
 
-## Breed substitution
+- **Issue #2** (`audit, refactor`) — *8 Lua files over 2500-line hard limit*. Enemy Tweaker is **not currently on the list** (`enemy_tweaker.lua` 964 lines, `enemy_tweaker_big_rebalance.lua` 1267 lines, both well under the 1500-line target). Mentioned here only to note the absence — no action needed.
 
-Looks safe in isolation:
-- `_build_swap_map` filters `swap_from == swap_to` and "off" sentinels.
-- `_apply_breed_swap` checks `rawget(_G, "Breeds") and Breeds[replacement]`
-  before substituting — won't insert an unknown breed name into spawn_list.
-- The swap targets the spawn_list returned by `compose_blob_horde_spawn_list`,
-  which IS a fresh array per-call (allocated inside the function body).
-  Mutation in-place is safe.
+Recently closed for this mod:
+- **Issue #9** (closed 2026-05-23) — *et: difficulty-mimic threat-value seeding gap on mid-session re-enable*. Fixed in v0.5.5-dev (R1 above). Live verification still desirable.
+- **Issue #11** (closed 2026-05-23) — *Cross-mod chat-command name collision: 7 mods all registered 'regression_test'*. Fixed in v0.5.4-dev (renamed to `/et_regression_test`).
 
-But the bracket lookup `Breeds[replacement]` is the standard *mutable*
-`Breeds` global, not `ItemMasterList` — there's no `__index` crashify trap
-here, so `Breeds[name]` returning nil is fine. No safety issue analogous
-to ItemMasterList.
+### Suggested new follow-ups (not yet filed)
 
-## Persistence / lifecycle
+These are NOT cited Issue numbers — file with `gh issue create` first before referencing.
 
-- `_original_compositions_pacing` and `_original_compositions` are captured
-  once (guarded by `if not _original_*`), then never re-captured. Good — if
-  another mod also mutates compositions, we capture the post-other-mod
-  state, but that's the right behaviour for "restore to what was here when
-  WE arrived".
-- `_restore_compositions` runs at every `on_setting_changed`, `on_disabled`,
-  and inside `ConflictDirector.init`. This is the right pattern: re-apply
-  on every transition.
-- **Skeleton breeds are not deregistered on disable.** `mod.on_disabled`
-  restores compositions and clears `_breed_swap_map`, but the entries in
-  `Breeds`, `BreedActions`, and `PACKAGE_REDIRECT` linger. Likely
-  intentional (re-enable wants them back), and harmless if the breeds
-  never spawn — but the threat_value seeding doesn't clean up either.
+1. **Multiplayer-divergence smoke test for BR sub-toggles.** Host and client must agree on `br_calculate_damage_rewrite` / `br_stagger_ai_rewrite` / `br_shield_slam_rewrite` or local damage prediction diverges. Document the requirement; consider host-only `mod:info` warning if the mod detects it's a client and BR is active (no easy way to check the host's settings, but at least log).
+2. **`on_setting_changed` mimic re-apply should consider calling `refresh_conflict_director_patches`** to match the `on_enabled` path. The threat-value-cache invalidation gap (R1.2) is a latent edition of the issue #9 bug for the mid-mission settings-edit case.
+3. **`/et_status` should report active BR sub-toggles** (and whether bt master is on / installed). Currently shows preset / multiplier / swaps / mimic; doesn't surface BR state, which makes triage of BR-related reports awkward.
+4. **Description-block version drift** in `itemV2.cfg` (still says v0.5.5-dev). Fix on next upload — `VMBLauncher.exe upload` only rewrites the title, not description.
+5. **EXPANSION_PLAN.md still references B1 / B2 from the 2026-05-01 review** as "Open from CODE_REVIEW.md, verify before Phase 1." Both bugs are fixed (the current `_apply_preset_to_pacing_keys` rebuilds `loaded_probs` via `_build_loaded_probs`; ambush breed-swap is at `HordeSpawner.spawn_unit` not `compose_horde_spawn_list`). Update the plan doc.
 
-## Console commands
+---
 
-Four commands are registered via `mod:command(...)`:
+## 6. Settings coherence (spot check)
 
-| Command | Purpose |
-| :--- | :--- |
-| `et_dump_breeds` | Lists `Breeds` keyed by `race`, with flags |
-| `et_dump_compositions` | Lists `HordeCompositionsPacing` keys + variant counts |
-| `et_status` | Prints current preset, multiplier, swap, skeleton flag |
-| `et_check_skeletons` | Verifies the 6 skeleton clones registered |
+Sampled `mod:get` keys against widget definitions and localization:
 
-In chat these commands are typed as `/et_status`, `/et_dump_breeds`, etc.
-— the registered command name is the slash-command name. There is NO
-mod-id prefix in chat. The `et_` prefix is part of the registered names
-themselves (a naming-convention choice to avoid colliding with other mods'
-short command names like `/status`). Could be dropped if collisions are
-not a concern — commands would become `/dump_breeds`, `/status`, etc.
+| `mod:get` key | data.lua widget | loc key | Notes |
+|---|---|---|---|
+| `horde_preset` | dropdown | yes | 6 options, all localized |
+| `horde_size_multiplier` | numeric | yes | `%%` escape correct in label |
+| `breed_swap_from` / `breed_swap_to` | dropdown (factory `_build_breed_options`) | yes | per-breed loc keys built in loc loop |
+| `faction_swap_{skaven,chaos,beastmen}` | dropdown (factory `_faction_swap_options`) | yes | |
+| `mimic_{horde,specials,pacing,pack_spawning,intensity,boss}` | dropdown (factory `_mimic_options`) | yes | |
+| `et_diff_<diff>_max_total`, `_max_same`, `_weight_<breed>`, `_disabled_<breed>` | numeric / checkbox (dynamic) | yes (dynamic) | both sides loop `B.DIFFICULTIES × SPECIALS` |
+| `br_*` (16 sub-toggles) | checkbox | yes | each with `_tooltip` |
 
-## Non-obvious things now clarified
+No orphan reads, no missing loc keys spotted in the spot check. The factory-function rule from v0.4.2-dev is intact — every shared dropdown options table is rebuilt per dropdown.
 
-- `HordeCompositionsPacing[key].sound_settings` is the only field worth
-  preserving across replacement — `loaded_probs` is the OTHER one we missed
-  (see B1).
-- `compose_horde_spawn_list` (no `_blob`) returns numbers, not a list —
-  easy to misread as symmetrical with the blob version.
-- `HordeSpawner.spawn_unit` (line 1228) is the only spot that turns a
-  string breed_name into an actual `Breeds[breed_name]` lookup for ambush
-  hordes — that's the right hook target for ambush breed substitution.
-- `NetworkLookup.breeds` is finalized with an error-on-missing metatable
-  during boot, before VMF mods load. Adding entries to `Breeds` after that
-  is "free" for non-network code (`Breeds[name]` is direct rawget) but
-  fatal as soon as the engine network-serializes the breed name.
-- `EnemyPackageLoader._breed_package_name` caches per-instance, so the
-  redirect hook fires once per breed per session and the cached entry
-  remains correct on later calls.
+---
 
-## Dead code
+## 7. Notes for future agents
 
-- `FACTION_SKAVEN`, `FACTION_CHAOS`, `FACTION_BEASTMEN` — unused (annotated).
-- `mod.on_setting_changed`'s `setting_id` parameter is ignored — fine, but
-  could be used to short-circuit when a non-relevant setting changes.
-
-## Notes for future AI agents
-
-1. **Forward-reference audit passed.** All locals are referenced from below
-   their definition. Maintain that on edits.
-2. **(B3) is the make-or-break finding.** Don't claim this mod works in
-   multiplayer without first verifying NetworkLookup.breeds doesn't blow
-   up when a custom skeleton spawns. Solo-host with a friend joining is
-   the minimum smoke test.
-3. **(B1) is testable solo.** Set any preset, start a level, wait for the
-   first horde — if you hear a horde sound and then nothing spawns / game
-   crashes, that's loaded_probs.
-4. **`HordeCompositionsPacing.huge_armor`** etc. are referenced by string
-   in `PACING_KEYS_*` — verify these keys still exist in
-   `horde_compositions_pacing.lua` before relying on them. Versus / weave
-   variants (e.g. `large_vs`) are intentionally NOT in our key lists.
-5. **Don't hook `HordeSpawner.compose_horde_spawn_list` for return-value
-   mutation.** It returns numbers. Hook `spawn_unit` for ambush breed
-   substitution.
-6. **Adding new presets:** they need entries in `HORDE_PRESETS`,
-   `enemy_tweaker_data.lua` dropdown options, AND a localization label
-   for the dropdown text — though VMF will fall back to the raw value if
-   localization is missing, you get an unlocalized key in the menu.
-7. **The mod ID is `enemy_tweaker` (long form), not a short prefix.**
-   Console commands invoke in chat as `/<registered-name>` directly — for
-   this mod, `/et_status`, `/et_dump_breeds`, `/et_dump_compositions`. There
-   is NO mod-id prefix in chat syntax: the `et_` is just a naming convention
-   for the registered command names themselves. The mod-id `enemy_tweaker`
-   only appears in code (`new_mod("enemy_tweaker", ...)`) and version-echo
-   prefixes (e.g. `[enemy_tweaker v...]`), never as a chat prefix.
+1. **Version is `0.5.7-dev`** in `enemy_tweaker.lua:3` (`MOD_VERSION`). Title in `itemV2.cfg` matches; description body lags one version.
+2. **`MOD_VERSION` constant gets bumped EVERY edit per `CLAUDE.md` rules.** The version is echoed in-game on load (`mod:echo("Enemy Tweaker v" .. MOD_VERSION)`).
+3. **Don't add a master toggle for BR back into et.** The master is intentionally owned by `bt`. The et BR toggles all gate through `BR._feature_on` → `_master_on()` → `bt:is_br_active()`.
+4. **`HordeSpawner.compose_horde_spawn_list` (no `_blob`) returns three integers, not a list.** Hook `HordeSpawner.spawn_unit` for ambush breed-swap, not `compose_horde_spawn_list`. The fix is already in place (line 535); don't regress.
+5. **`HordeCompositionsPacing[key].loaded_probs` MUST be rebuilt when replacing a composition.** `_build_loaded_probs` at `enemy_tweaker.lua:265-273` does this; the comment block above it cites the upstream callsites. Removing it crashes `LoadedDice.roll_easy` on the next horde.
+6. **Custom skeleton breeds were removed in v0.4.0-dev** and live only in project memory now. Don't reintroduce them without the HordeCompositions-overlay design.
+7. **Every BR `NetworkLookup.{hit_zones,damage_sources}[key]` lookup MUST use `rawget`.** The strict-`__index` metatable will fatal otherwise. Six sites converted in v0.5.6-dev (lines 1087, 1097, 1139, 1165, 1185, 1207 of the BR file). The `et_big_rebalance_uses_rawget` regression check guards this.
+8. **Chat commands are typed as `/et_regression_test`, `/et_status`, `/et_dump_breeds`, `/et_dump_compositions` — no mod-id prefix.** The `et_` is part of the registered command name, not a chat prefix.

@@ -68,6 +68,12 @@ function Parse-LocFile([string]$path) {
         $result[$m.Groups[1].Value] = $m.Groups[2].Value
     }
 
+    # Pattern 3: loc.<key> = { en = "value" }   -- chaos_wastes_tweaker assignment style
+    $regex3 = '(?m)^\s*loc\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
+    foreach ($m in [regex]::Matches($text, $regex3)) {
+        $result[$m.Groups[1].Value] = $m.Groups[2].Value
+    }
+
     return $result
 }
 

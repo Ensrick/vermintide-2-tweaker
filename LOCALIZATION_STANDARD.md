@@ -34,6 +34,29 @@ trait_ranged_replenish_ammo_on_crit_description = {
 
 `gt` 0.2.35's CHANGELOG was the first place this rule was documented in the repo, after the same class of bug appeared in a percentage string. That note was per-mod and got missed when `wt` and `lobby_tweaker` later authored the same shape of string — hence this central doc.
 
+### Recurring offender — environment variable references (`%APPDATA%`, `%USERNAME%`, etc.)
+
+The most common second-time-burn is referencing a Windows env var by name inside a tooltip. **Every `%FOO%` token must be written as `%%FOO%%`** because Lua's `string.format` reads the first `%` as a format directive opener — `%A` (in `%APPDATA%`) is the directive `A` which is undefined and raises `invalid option '%A' to 'format'`. The user sees a red error tooltip on hover.
+
+```lua
+-- WRONG -- VMF tooltip render path raises "invalid option '%A' to 'format'"
+enable_debug_logging_tooltip = { en = "Logs to %APPDATA%\\Fatshark\\Vermintide 2\\console_logs\\." },
+
+-- RIGHT
+enable_debug_logging_tooltip = { en = "Logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\." },
+```
+
+**Burned again 2026-05-25** across all 16 mods (every `enable_debug_logging_tooltip` shipped with literal `%APPDATA%`). Triggered the multi-layer defense below.
+
+### Defense layers
+
+The repo enforces this rule at four points:
+
+1. **Static lint** — `qa/check_localization.ps1` walks every `*_localization.lua` file and reports unescaped `%` in loc values. Exit code 2 = errors. Runs automatically as part of the pre-commit hook (via `qa/run_all.ps1`).
+2. **Build-time doctrine** — `tools/vmb-launcher/CLAUDE.md` § "Run `qa/check_localization.ps1` before declaring any localization edit complete" — agents are required to run the static check explicitly any time they touch a loc file, even if not committing.
+3. **Runtime regression test** — each mod's `_rt_register("localization_format_safe", ...)` check (in `<mod>.lua`) dofiles the loc table and `pcall(string.format, value)` on each entry. Run via `/<mod>_regression_test` chat command. Catches drift even when the static check is skipped.
+4. **Bug class catalog** — `docs/BUG_CLASSES.md` lists this as a known repeat-offender pattern. New bug reports matching the symptom (red error tooltip on a VMF settings hover) should pattern-match here first.
+
 ---
 
 ## 2. The double-format anti-pattern
@@ -124,7 +147,7 @@ gameplay_group  = { en = "Gameplay" },
 ### Required keys for every mod
 
 - `mod_description` — top-level mod blurb shown by VMF in the mod-options panel header. Every mod MUST define this.
-- `mod_name` — optional but recommended; some mods use it for the panel header. (`buff_tweaker`, `career_tweaker`, `chaos_wastes_tweaker`, `la_prefix_patch` define it; `general_tweaker`, `modded_progression`, `verminious_dreams_lighting`, `enemy_tweaker`, `lobby_tweaker` rely on the mod-id alone.)
+- `mod_name` — optional but recommended; some mods use it for the panel header. (`buff_tweaker`, `career_tweaker`, `chaos_wastes_tweaker` define it; `general_tweaker`, `modded_progression`, `verminious_dreams_lighting`, `enemy_tweaker`, `lobby_tweaker` rely on the mod-id alone.)
 
 ---
 
@@ -254,7 +277,6 @@ PS 7+ defaults to UTF-8 and is fine. The repo's `_tools/` scripts should use the
 | `weapon_tweaker` (post 0.12.63-dev) | YES | YES (Fix 1) | mixed `_tooltip`/`_description` | no |
 | `lobby_tweaker` (post 0.1.1-dev) | YES | YES (Fix 1) | YES | yes (in `_failed_join_reveal.lua`) |
 | `verminious_dreams_lighting` | YES | YES | YES | no |
-| `la_prefix_patch` | YES | YES | YES | no |
 | `enemy_tweaker` | YES | YES | YES | no |
 | `chaos_wastes_tweaker` | YES | YES | YES | no |
 | `career_tweaker` | YES | YES | YES | no |
@@ -411,6 +433,96 @@ The helper exposes two introspection calls for `/<mod>_status`-style commands:
 
 - `mutex.active(group_id)` — returns the active member's setting_id, or nil if all members are off (= vanilla).
 - `mutex.snapshot()` — returns the full `{ group_id = active_member_or_nil }` map.
+
+---
+
+## 11. Style — match vanilla VT2 terseness
+
+The rules above keep localization files *correct* (no `<<crashify-exception>>` spam, no missing keys, no double-`string.format`). This section keeps them *readable*. Vanilla VT2's tooltips, talent text, and boon text are uniformly **short, present-tense, and free of meta-language**. Mod menus that drift away from that style read as bloated and chaotic next to the base game.
+
+### 11.1 — Setting titles (the toggle / slider / dropdown label)
+
+- **≤ 6 words.** Longer than that is a tooltip, not a label.
+- **Sentence case.** Not Title Case. Not ALL CAPS.
+- **No trailing period.** Labels are not sentences.
+- **Active verb if the setting performs an action** — "Boost Throwing Axes", "Disable Quest Markers".
+- **Noun phrase if the setting is a property** — "Altar Distribution", "Coin Multiplier", "Starting State".
+
+| Bad | Why | Good |
+|-----|-----|------|
+| `"Toggle whether or not you want to enable the third-person camera feature"` | Meta-language; sentence-as-label | `"Enable third-person camera"` |
+| `"Repeater Handgun maximum ammo boost setting"` | Trailing noise ("setting") | `"Boost Repeater Handgun max ammo"` |
+| `"This option controls the multiplier for shilling drops."` | Meta-language; full sentence | `"Shilling multiplier"` |
+
+### 11.2 — Setting tooltips (the `_tooltip` body shown on hover)
+
+- **≤ 2 sentences. ≤ 30 words total.** If you need more, you're explaining a system; cite the relevant doc in the CHANGELOG instead.
+- **Present-tense or imperative.** "Heals slightly when killing an enemy with melee." NOT "When you kill an enemy with a melee weapon, you will heal a small amount."
+- **No meta-language.** Never start with "This option / toggle / setting / feature does..." — say what it does directly. The fact that it's a setting is implied by where it appears.
+- **Magnitudes go inline.** `x1.5 damage`, `12 → 18 ammo`, `+15%% vs armoured` — not "a significant increase" or "a larger amount".
+- **Host-only / restart-required caveats** go in a second sentence, NOT a parenthetical clause inside the main one. Keep them terse: "Host-only.", "Requires game restart."
+
+| Bad | Why | Good |
+|-----|-----|------|
+| `"When this option is enabled, players will be able to access an additional category of crafting recipes that allow them to upgrade their weapons further."` | Meta-language preamble; vague magnitude | `"Adds upgrade recipes to the forge. +1 power tier per upgrade."` |
+| `"Toggle whether or not you want to enable the feature that boosts the maximum amount of ammo for the Repeater Handgun (default 12, with this on it's 18)."` | "Toggle whether..." preamble; parenthetical magnitude | `"Boosts Repeater Handgun max ammo: 12 → 18."` |
+| `"This is a slider that controls the multiplier for the amount of coins dropped from chest pickups in the Chaos Wastes."` | "This is a slider..." preamble | `"Coin multiplier for chest pickups."` |
+
+### 11.3 — Boon / Talent descriptions (overriding vanilla mechanics)
+
+When a mod replaces or extends a vanilla boon / talent / trait, the description MUST match vanilla style — players compare them side-by-side with stock entries.
+
+- **≤ 2 sentences.** Factual mechanical detail, magnitudes inline.
+- **No flavor text** unless the vanilla entry for the same category has flavor text. Stock boon descriptions are dry mechanical lines; stock career-class blurbs have flavor. Match the neighbor.
+- **Imperative or present tense.** "Replace your ult with X." / "Heal slightly when..." / "Gain X stacks for Y seconds on Z."
+- **Magnitudes inline** — `+15%%`, `5 seconds`, `x2`. No "slightly" / "significantly" / "a lot".
+
+Vanilla examples (canonical phrasings — match this voice exactly):
+
+- Sister of the Thorn ult "Briarwall": *"Replace your ult with Briarwall — places a thicket of vines that blocks enemy movement and slowly damages enemies within."*
+- Heal-on-melee-kill boon family: *"Heal slightly when killing an enemy with a melee attack."*
+- Resourceful Combatant trait: *"Critical hits reduce the cooldown of your career skill by 1 second. 1 second cooldown."*
+
+### 11.4 — Group / section headings
+
+- **1-4 words.** Anything longer is a description, not a heading.
+- **Title Case if 2+ words** — "Big Rebalance", "Chaos Wastes Economy", "Altar Distribution".
+- **No punctuation.** No trailing `:` or `.`.
+
+### 11.5 — Dropdown / checkbox option labels
+
+- **≤ 3 words usually.** Sentence case.
+- **Single-word options preferred** when they parse: "Off / Low / Medium / High / Extreme".
+- **No magnitude inside the option label** — the magnitude goes in the tooltip, not the dropdown row. Exception: numeric-only dropdowns where the magnitude IS the label (`"1.5x"`, `"2.0x"`).
+
+### 11.6 — Anti-patterns (do not ship)
+
+These three patterns must never appear in a new or rewritten entry. Find-and-replace if any survive:
+
+1. **Meta-language preamble.** Any string that opens with `"This option..."` / `"This toggle..."` / `"This setting..."` / `"Toggle whether..."` / `"When this is enabled..."` / `"With this on..."`. Say what it does, not that it's a thing that does things.
+2. **Vague magnitudes.** "Slightly", "significantly", "a lot", "much more", "a small amount of". Replace with the actual number.
+3. **Trailing noise nouns.** Labels ending in `... feature`, `... setting`, `... option`, `... mode`, `... functionality`. The widget chrome already conveys "this is a setting".
+
+### 11.7 — Preserved when tightening
+
+When rewriting an existing entry to match this section:
+
+- **Preserve magnitude numbers** (every `%%`, `x1.5`, `+15`, `12 → 18`). Tightening must not strip mechanical accuracy.
+- **Preserve mechanical claims.** "Host-authoritative." stays. "Requires game restart." stays. "Mutually exclusive with `(B) ...`" stays (see § 10 for the mutex-cluster header).
+- **Preserve key references.** If a tooltip names a specific in-game term (an item key, a talent name, a chat command), keep it verbatim — those are searchable handles.
+
+### 11.8 — Quick checklist for tightening passes
+
+Run this every time you rewrite or audit an existing entry:
+
+```
+[ ] ≤ 6 words for setting title, ≤ 30 words for tooltip, ≤ 4 words for group heading?
+[ ] No "This option/toggle/setting/feature..." preamble?
+[ ] Imperative or present tense (no "will" / "you can" / "when you do X, Y happens")?
+[ ] Vague magnitudes ("slightly", "much more") replaced with the real number?
+[ ] Mechanical claims preserved (host-only, restart-required, magnitudes, mutex tooltips)?
+[ ] Trailing period dropped from labels (kept in 2-sentence tooltips)?
+```
 
 ---
 

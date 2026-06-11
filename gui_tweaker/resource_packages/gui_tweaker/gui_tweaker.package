@@ -1,0 +1,11 @@
+mod = [
+	"gui_tweaker"
+]
+
+package = [
+	"resource_packages/gui_tweaker/gui_tweaker"
+]
+
+lua = [
+	"scripts/mods/gui_tweaker/*"
+]

@@ -1,8 +1,85 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.9-dev"
+local MOD_VERSION = "0.3.22-dev"
+-- Startup banner: log-only, NOT chat. The applied marker line further down
+-- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
+-- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
-mod:echo("Career Tweaker v" .. MOD_VERSION)
+
+-- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
+-- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- `_dbg` is for confirmation / expected behavior — file only.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[crt:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[crt:dbg] " .. fmt, ...)
+        mod:echo("[crt] " .. fmt, ...)
+    end
+end
+
+-- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
+-- one mod:info line at load. ALWAYS fires (operational telemetry).
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/career_tweaker/career_tweaker_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[crt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[crt] v%s loaded", MOD_VERSION))
+end
+
+-- v0.3.10: source-pattern marker constant for the /crt_regression_test
+-- `crt_big_rebalance_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
+-- PARTIAL row 3 — promoted to PASS by adding a runtime check beside the
+-- existing strict-table-lookup lint coverage).
+local CT_CRT_BIG_REBALANCE_RAWGET_MARKER_v0_3_10 = "crt-big-rebalance-rawget-hardened"
 
 -- /regression_test scaffold. Registrations at end of file.
 local _RT_CHECKS = {}
@@ -36,10 +113,12 @@ if not ok then
     balance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 end
 
--- Big Rebalance integration (~160 opt-in toggles, all default false). Pre-
--- registers BR_REGISTRATIONS in sorted order across peers via master toggle
--- `cbr_master_enable_registrations` — see
--- career_tweaker_big_rebalance_registrations.lua (DUPLICATED across wt/ct/et).
+-- Big Rebalance integration (~160 opt-in toggles, all default false). The BR
+-- buffs / damage profiles / explosion templates are registered by buff_tweaker
+-- (bt) as the shared registry; this module's per-feature toggles gate on
+-- bt:is_br_active() (see career_tweaker_big_rebalance.lua:46-48) before
+-- applying. (bt took ownership of the shared registry, eliminating the
+-- previously byte-identical registration files that wt/ct/et each shipped.)
 local ok_br, big_rebalance = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_big_rebalance")
 if not ok_br then
     mod:error("Failed to load Big Rebalance module: %s", tostring(big_rebalance))
@@ -147,13 +226,15 @@ local function _career_requires_unowned_dlc(career_name)
     return not Managers.unlock:is_dlc_unlocked(cs.required_dlc)
 end
 
-local function apply_talent_swaps()
+-- Revert any prior talent swap by re-binding the saved original tree/ability
+-- into each destination career's slot. Restores rebind only (no mutation of
+-- inner tree contents), so this stays correct as long as nothing else mutates
+-- TalentTrees[profile][index] in place. Factored out of apply_talent_swaps
+-- (audit 2026-06-07, v0.3.22-dev) so on_disabled can cheaply unwind talent
+-- swaps too (BUG_CLASSES §7 — "restore what's cheap"). Safe to call when
+-- _talent_swap_originals is empty (no-op).
+local function restore_talent_swaps()
     if not CareerSettings or not TalentTrees then return end
-
-    -- Restore step: revert any prior swap by re-binding the saved original
-    -- tree/ability into the destination career's slot. Restores rebind only
-    -- (no mutation of inner tree contents), so this stays correct as long as
-    -- nothing else mutates TalentTrees[profile][index] in place.
     for career_name, orig in pairs(_talent_swap_originals) do
         local cs = CareerSettings[career_name]
         if cs then
@@ -164,6 +245,13 @@ local function apply_talent_swaps()
         end
     end
     _talent_swap_originals = {}
+end
+
+local function apply_talent_swaps()
+    if not CareerSettings or not TalentTrees then return end
+
+    -- Restore step: revert any prior swap before re-applying current settings.
+    restore_talent_swaps()
 
     -- Apply current settings
     for _, career_name in ipairs(_ALL_CAREERS) do
@@ -243,6 +331,83 @@ mod:hook("ExperienceSettings", "get_experience", function(func, hero_name)
     return func(hero_name)
 end)
 
+-- v0.3.20-dev: the hook above only patches level/XP DISPLAY reads. The FUNCTIONAL
+-- level gates — talent unlock + level-gated feature unlocks — read raw experience
+-- DIRECTLY from the backend mirror, NOT through ExperienceSettings.get_experience,
+-- so the override never reached them. Verified against decompiled source:
+-- BackendInterfaceTalentsPlayfab._validate_talents (backend_interface_talents_playfab.lua:234)
+-- does `hero_experience = self._backend_mirror:get_read_only_data(profile_name.."_experience")`
+-- -> `hero_level = ExperienceSettings.get_level(hero_experience)` -> for each talent,
+-- `if not ProgressionUnlocks.is_unlocked("talent_point_"..i, hero_level) then career_talents[i] = 0`.
+-- So a character SHOWN at the override level still had its talents stripped (and other
+-- level unlocks withheld) because the gate read the real (low) XP from the mirror.
+--
+-- Fix: also override the mirror's `<hero>_experience` read so the functional gates see
+-- the override level. CRITICAL class()-copy caveat (CLAUDE.md "HOOK THE DERIVED CLASS"):
+-- VT2's class() COPIES methods into subclasses at load time — the live mirror is
+-- `PlayFabMirrorAdventure` (= class(.., PlayFabMirrorBase)) / `PlayFabMirrorDedicated`,
+-- each carrying its OWN copy of get_read_only_data. Hooking only PlayFabMirrorBase would
+-- never fire on the live PlayFabMirrorAdventure instance. Hook every concrete class.
+-- Read-only override (returns a value; never writes) — in modded realm no XP persists,
+-- and it matches the existing display hook's exposure.
+local function _mirror_experience_override(func, self, key)
+    if type(key) == "string" then
+        local hero = string.match(key, "^(.+)_experience$")
+        if hero then
+            local override = mod:get("level_override_" .. hero)
+            if override and override > 0 then
+                local real = func(self, key)
+                local xp = ExperienceSettings.get_total_experience_required_for_level(override)
+                -- Match vanilla's stored type (PlayFab read_only_data values are strings).
+                if type(real) == "string" then return tostring(xp) end
+                return xp
+            end
+        end
+    end
+    return func(self, key)
+end
+for _, mirror_class in ipairs({ "PlayFabMirrorAdventure", "PlayFabMirrorDedicated", "PlayFabMirrorBase" }) do
+    mod:hook(mirror_class, "get_read_only_data", _mirror_experience_override)
+end
+
+-- ============================================================
+-- Unlock All Careers (level gate only — DLC ownership preserved)
+-- ============================================================
+-- v0.3.21-dev: bypass the level requirement on careers the player already owns.
+-- DLC ownership is NOT bypassed (CLAUDE.md § "DLC Ownership Gate": modded mods
+-- unlock vanilla progression, NOT paid DLC content). Unowned-DLC careers stay
+-- locked regardless of this toggle.
+--
+-- Verified against decompiled source. The unlock chain in vanilla:
+--   career_settings.lua:23 local_is_unlocked_function
+--     -> career:override_available_for_mechanism()   -- mechanism gate
+--     -> career:is_dlc_unlocked()                    -- DLC GATE (unchanged)
+--     -> ProgressionUnlocks.is_unlocked_for_profile(display_name, hero_name, hero_level)  -- LEVEL gate
+-- DLC careers (lake/bless/cog/shovel/woods) have bespoke is_unlocked_functions
+-- that return after the DLC check WITHOUT calling the level gate, so for DLC
+-- careers ownership IS the whole gate — this toggle correctly has no effect on
+-- DLC careers (they just need to be owned).
+--
+-- Convenient: vanilla ALREADY has a dev flag for this exact behavior, baked
+-- into the level gate itself:
+--   progression_unlocks.lua:205-208
+--   ProgressionUnlocks.is_unlocked_for_profile = function (unlock_name, profile, level)
+--       if Development.parameter("unlock_all_careers") then return true end
+--       ...level check...
+-- So the surgical fix is to hook that ONE function. Returning `true` skips the
+-- level check ONLY; the upstream DLC gate has already run and locked unowned
+-- DLC careers. Authority stays local — this is read in the LOCAL character-select
+-- and talent-validation paths. The host's join-time check (network_server:91-94)
+-- uses the SAME function via career:is_unlocked_function, so a host running this
+-- mod won't reject their own client picks; clients without crt joining a normal
+-- host are still gated by the host's vanilla check.
+mod:hook("ProgressionUnlocks", "is_unlocked_for_profile", function(func, unlock_name, profile, level)
+    if mod:get("unlock_all_careers") then
+        return true
+    end
+    return func(unlock_name, profile, level)
+end)
+
 -- ============================================================
 -- Lifecycle hooks
 -- ============================================================
@@ -259,9 +424,11 @@ mod.on_game_state_changed = function(status, state_name)
 end
 
 mod.on_setting_changed = function(setting_id)
-    -- REVIEW: This echo fires in chat for EVERY setting toggle. Likely debug
-    -- output left in. Consider downgrading to mod:info or removing.
-    mod:echo("Setting changed: " .. tostring(setting_id))
+    -- v0.3.17: removed `mod:echo("Setting changed: " .. tostring(setting_id))`
+    -- per PROJECT_STANDARDS.md § 3.6 "Chat-echo policy" — routine setting flips
+    -- (especially the universal Debug Logging toggle) should not echo to chat
+    -- on every click. Use _dbg if a diagnostic trace is needed in future.
+    _dbg("on_setting_changed: %s", tostring(setting_id))
 
     -- Mutex enforcement runs BEFORE the apply dispatch. If `setting_id` is a
     -- member of a declared cluster and was just toggled on, the enforcer
@@ -286,8 +453,35 @@ mod.on_setting_changed = function(setting_id)
 end
 
 mod.on_disabled = function()
+    -- audit 2026-06-07 (v0.3.22-dev), BUG_CLASSES §7: previously on_disabled only
+    -- unwound the balance / big_rebalance buff-template mutations and left talent
+    -- swaps + the global table/hook mutations behind. Restore what's CHEAP, echo
+    -- the limitation for the rest (matches gt v0.2.56's documented-limitation
+    -- pattern, Issue #15).
+    --
+    -- Cheaply reversible (done here):
+    --   * Talent swaps — re-bind saved originals into TalentTrees / CareerSettings
+    --     (rebind only; _talent_swap_originals already holds the pre-swap values).
+    --   * Balance reworks + Big Rebalance — restore the patched BuffTemplate fields.
     if balance and balance.restore then balance.restore() end
     if big_rebalance and big_rebalance.restore then big_rebalance.restore() end
+    restore_talent_swaps()
+    -- Refresh the inventory talent picker if it's open so a live disable visibly
+    -- reverts swapped trees instead of waiting for a menu re-open.
+    refresh_talent_ui()
+
+    -- NOT cheaply reversible (restart required), so we document rather than unwind:
+    --   * The crt_* stub buff names registered UNCONDITIONALLY into BuffTemplates +
+    --     NetworkLookup.buff_templates at load (career_tweaker_balance.lua:67-87).
+    --     Tearing these out would shift every later NetworkLookup index and break
+    --     cross-peer rpc_add_buff determinism — far worse than leaving the inert
+    --     no-op stubs in place. Restart clears them.
+    --   * VMF-installed hooks (ExperienceSettings.get_experience, the mirror
+    --     get_read_only_data overrides, ProgressionUnlocks.is_unlocked_for_profile,
+    --     HeroWindowTalents on_enter/on_exit). VMF deactivates a disabled mod's
+    --     hooks for us, and each body also gates on a mod:get(...) read, so they
+    --     no-op while disabled — but the wrappers stay installed until restart.
+    mod:echo("[crt] Talent swaps + balance reworks reverted. Buff registrations and hooks need a game restart for a fully clean vanilla state.")
 end
 
 -- ============================================================
@@ -388,4 +582,98 @@ _rt_register("rawget_on_buff_templates_marker", function()
     -- text from balance.lua's header comment is compiled into the bundle.
     local _MARKER = "must use `rawget(t, key)` for existence checks"
     if #_MARKER == 0 then return "marker missing" end
+end)
+
+_rt_register("crt_big_rebalance_uses_rawget", function()
+    -- v0.3.9/.10: `_register_talent_buff_template_if_missing` in
+    -- `career_tweaker_big_rebalance.lua:124` uses
+    -- `rawget(NetworkLookup.buff_templates, name)` for the pre-register guard
+    -- so the registration is safe against the strict `__index` metatable
+    -- vanilla installs on `NetworkLookup.*` tables. The strict-table-lookup
+    -- lint covers static-pattern regressions; this runtime check is the
+    -- belt-and-suspenders companion required by §15 of PROJECT_STANDARDS.md.
+    --
+    -- 1. Source-pattern: marker constant must be present.
+    if CT_CRT_BIG_REBALANCE_RAWGET_MARKER_v0_3_10 ~= "crt-big-rebalance-rawget-hardened" then
+        return "RAWGET marker absent — was the v0.3.9 big_rebalance hardening reverted?"
+    end
+    -- 2. Runtime-state: rawget against a known-bad key on
+    --    NetworkLookup.buff_templates must return nil without raising.
+    local NL = rawget(_G, "NetworkLookup")
+    local bt = NL and NL.buff_templates
+    if type(bt) == "table" then
+        local ok, value = pcall(rawget, bt, "__crt_rawget_probe_does_not_exist__")
+        if not ok then
+            return "rawget(NetworkLookup.buff_templates, <bad-key>) RAISED — strict-metatable behavior changed"
+        end
+        if value ~= nil then
+            return "rawget(NetworkLookup.buff_templates, <bad-key>) returned non-nil — unexpected"
+        end
+    end
+end)
+
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)
+
+_rt_register("on_disabled_unwinds_talent_swaps", function()
+    -- v0.3.22-dev (audit 2026-06-07, BUG_CLASSES §7): on_disabled must cheaply
+    -- unwind talent swaps, not just the balance/big_rebalance buff mutations.
+    -- The unwind is restore_talent_swaps(), which re-binds saved originals and
+    -- clears _talent_swap_originals. This check FAILS if that unwind path is
+    -- removed/broken (i.e. the F13 bug returns).
+    --
+    -- Behavioral assertion: seed a SYNTHETIC pending-swap whose career_name is
+    -- not in CareerSettings, so restore_talent_swaps() iterates it (cs == nil ->
+    -- no real game-table write) and then clears the table. Asserts the unwind
+    -- actually runs and resets state without mutating real career data.
+    if type(restore_talent_swaps) ~= "function" then
+        return "restore_talent_swaps helper missing — on_disabled can't unwind swaps"
+    end
+    local saved = _talent_swap_originals
+    _talent_swap_originals = {
+        __crt_rt_probe_not_a_real_career__ = {
+            tree = false, activated_ability = "x", passive_ability = "y",
+        },
+    }
+    local ok, err = pcall(restore_talent_swaps)
+    local cleared = (next(_talent_swap_originals) == nil)
+    _talent_swap_originals = saved  -- always restore the real (live) table
+    if not ok then
+        return "restore_talent_swaps raised: " .. tostring(err)
+    end
+    if not cleared then
+        return "restore_talent_swaps did not clear _talent_swap_originals — swaps would persist after disable"
+    end
 end)

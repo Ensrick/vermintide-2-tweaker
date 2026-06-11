@@ -48,7 +48,12 @@ all_player_careers = set(career_to_char.keys())  # excludes wh_priest
 # Parse probe: native[item_key] = {section, careers set}; names[item_key] = label.
 native = {}
 names = {}
-with open(PROBE) as f:
+# audit 2026-06-07 (F12): _cos_probe.txt is UTF-8 (it contains "Bögenhafen").
+# Reading without an explicit encoding used the platform default (cp1252 on
+# Windows), which decoded the UTF-8 "ö" (0xC3 0xB6) as "Ã¶" -> asciify() then
+# emitted "BA?genhafen" mojibake into es_hat_0002 labels. Force utf8 to match
+# the output write below so the transliteration table ("ö" -> "o") fires.
+with open(PROBE, encoding="utf8") as f:
     for line in f:
         line = line.strip()
         if not line:

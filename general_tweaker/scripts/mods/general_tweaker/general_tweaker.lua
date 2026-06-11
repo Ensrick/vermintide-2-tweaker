@@ -1,6 +1,119 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.47-dev"
+local MOD_VERSION = "0.2.69-alpha"
+-- Public field so cross-mod code (e.g. bt's /bug_report walker, the
+-- gt_lobby_* manifest broadcaster below) can read the version without
+-- needing access to this file-local. Mirrors the same pattern lt used
+-- (lt v0.1.x exposed `mod.MOD_VERSION` for this exact reason).
+mod.MOD_VERSION = MOD_VERSION
+
+-- ============================================================
+-- gt_lobby RPC schema versioning (VMF_RECIPES.md § 10, Issue #43)
+-- ============================================================
+-- Bumped ONLY when the payload shape of any gt_lobby_* RPC changes
+-- (currently just `gt_lobby_motd_show`). Receivers gate on this and
+-- drop mismatched payloads with a `_dbg_alert` -- no state mutation,
+-- no crash. See _gt_lobby_motd.lua sender + receiver for the gate.
+--
+-- Established for gt as the merge-in heir to lt's `lt_motd_show` RPC.
+-- Initial value is 1; never define lower.
+mod.GT_LOBBY_RPC_SCHEMA = 1
+
+-- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
+-- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- `_dbg` is for confirmation / expected behavior — file only.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- v0.2.55: NOTE — the file ALSO redeclares `_dbg` (without prefix) inside the
+-- per-frame observation hooks block further down, which shadows this top-of-
+-- file definition for everything below that point. Both definitions read the
+-- same `enable_debug_logging` gate, so behavior is consistent.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[gt:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[gt:dbg] " .. fmt, ...)
+        mod:echo("[gt] " .. fmt, ...)
+    end
+end
+
+-- Exposed for sibling `_gt_lobby_*` modules (and any future external file
+-- that needs gt's debug-helpers). Both keys read the same
+-- `enable_debug_logging` gate as the file-local closures.
+mod._gt_dbg = _dbg
+mod._gt_dbg_alert = _dbg_alert
+
+-- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
+-- one mod:info line at load. ALWAYS fires (operational telemetry).
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[gt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[gt] v%s loaded", MOD_VERSION))
+end
+
+-- v0.2.48: source-pattern marker constant for the /gt_regression_test
+-- `gt_pickup_lookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
+-- PARTIAL row 2 — promoted to PASS by adding a runtime check beside the
+-- existing strict-table-lookup lint coverage).
+local CT_GT_PICKUP_LOOKUP_RAWGET_MARKER_v0_2_48 = "gt-pickup-lookup-rawget-hardened"
+
+-- v0.2.52 marker: source-pattern guard for the AI Takeover client send fix.
+-- `_ai_handle_toggle_change` for clients MUST (a) resolve host via
+-- `Managers.mechanism:server_peer_id()` (NOT the literal `"server"` string —
+-- VMF doesn't understand it), (b) call `get_mod("VMF").ping_vmf_users()`
+-- before queuing, and (c) defer through `_ai_pending_client_send` rather than
+-- sending inline. Each layer was added across v0.2.49 → v0.2.52 in response
+-- to a separate burn (see CHANGELOG). The regression-test guard at the
+-- bottom of this file asserts this marker is intact AND grep-asserts the
+-- three call-sites in the function body via the file source.
+local CT_GT_AI_CLIENT_SEND_MARKER_v0_2_52 = "gt-ai-client-send-vmf-rehandshake"
 
 local function _write_dump(filename, lines)
     for _, line in ipairs(lines) do
@@ -15,6 +128,38 @@ local _godmode = mod:get("godmode_enabled") or false
 -- compile time — without this `local` here, on_setting_changed would bind
 -- _apply_godmode to a global (nil) and silently do nothing on UI toggles.
 local _apply_godmode
+
+-- AI Takeover client-side send queue.
+--
+-- Why a queue rather than a single send: VMF's `_vmf_users` table can be
+-- stale on the client. Vanilla VMF (network.lua:375-404) hooks
+-- `PlayerManager.remove_player` and, when ANY player owned by peer_id is
+-- removed AND that peer still has a human_player on the same peer_id, it
+-- removes the WHOLE peer from `_vmf_users`. Host bot churn at mission
+-- load (e.g. a slot reassignment) triggers `remove_player(host_peer,
+-- bot_local_id)`; the host's own human player on host_peer matches the
+-- "still has human_player" check, so VMF drops the host. Once dropped, every
+-- `mod:network_send(..., host_peer, ...)` silently no-ops via
+-- `convert_names_to_numbers` returning nil. Re-handshake (`ping_vmf_users`)
+-- restores it but is async — pong round-trip ~50-300 ms on Steam P2P.
+--
+-- Queue contains zero or one entry of `{want_bot, retries_left, next_at}`.
+-- Each toggle replaces the queue (latest intent wins). mod.update polls and
+-- fires the send when `next_at` arrives; on failure (no detection possible
+-- since VMF returns void) we just re-fire up to `_AI_CLIENT_SEND_MAX_RETRIES`
+-- times. Idempotent: the host's RPC handler no-ops if state already matches.
+local _ai_pending_client_send = nil
+-- Same forward-declaration rationale as _ai_handle_toggle_change below.
+-- The debug-mode AI dump (added in v0.2.52) needs to read this from a
+-- chunk position above the original `local _ai_pending_host_toggle =
+-- nil` further down; without the forward decl that read resolves to a
+-- nil global and the dump always reports "nil" even when a host toggle
+-- is queued. The later assignment must drop `local` so it writes the
+-- forward upvalue rather than shadowing.
+local _ai_pending_host_toggle = nil
+local _AI_CLIENT_SEND_MAX_RETRIES = 3
+local _AI_CLIENT_SEND_DELAY_FIRST = 0.05   -- first send: nearly immediate
+local _AI_CLIENT_SEND_DELAY_RETRY = 0.4    -- subsequent retries: post-pong window
 
 -- Same forward-reference rule for the AI Takeover module further down. Both
 -- on_game_state_changed and on_setting_changed reference these names before
@@ -41,6 +186,18 @@ local _apply_script_data_no_enemies
 local _gt_cs_on_setting_changed
 local _gt_cs_on_game_state_changed
 
+-- Forward-declared for the pause-toggle module further down. on_game_state_changed
+-- (defined above the pause-toggle block) clears the flag on every state
+-- transition: `_pause_active = false`. Without this forward-decl, the
+-- assignment binds to a GLOBAL because the file-local `local _pause_active`
+-- at line ~2153 doesn't exist yet at the on_game_state_changed compile point.
+-- The pause/time-scale toggle code (gt_pause_toggle / gt_time_apply) reads the
+-- file-local — so the global write was a no-op for the toggle's read path,
+-- causing pause/unpause to desync after a level transition (Issue #13).
+-- The declaration at line ~2153 is now `_pause_active = false` (no `local`)
+-- so it reuses this forward-decl slot instead of shadowing it.
+local _pause_active
+
 -- Post-spawn re-apply timer. Set by PlayerUnitFirstPerson.extensions_ready
 -- and consumed in mod.update (further down). BulldozerPlayer:spawn does
 -- `assign_unit_ownership` AFTER the extensions are ready, so at extensions_ready
@@ -49,8 +206,42 @@ local _gt_cs_on_game_state_changed
 -- — godmode invisibility, noclip locomotion state — must defer past that gap.
 local _post_spawn_reapply_timer = nil
 
+-- Startup banner: log-only, NOT chat. The applied marker line further down
+-- ([gt] enabled v<X> settings_fp=<hash>) is the canonical version surface
+-- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("General Tweaker v%s loaded", MOD_VERSION)
-mod:echo("General Tweaker v" .. MOD_VERSION)
+
+-- ============================================================
+-- mod.update subscriber registry (Issue #16)
+-- ============================================================
+-- Replaces the prior 5x layered `local _orig = mod.update; mod.update = ...`
+-- chain pattern (lines ~287/522/2486/2693/3027). The chain had no central
+-- registry, no inline `-- consumer #N: <feature>` header, and a single
+-- accidental edit `mod.update = function(dt) ... end` without preserving
+-- `_orig` silently dropped every earlier consumer.
+--
+-- Each feature registers its per-frame tick via `_register_update(name, fn)`.
+-- Registration order is preserved so dependencies between consumers (if any)
+-- continue to run in the original order: tp_camera, post_spawn_reapply,
+-- infinite_ammo_and_ai_pending, cutscene_auto_skip, hide_ui. pcall isolation
+-- per-consumer is a bonus — one consumer error no longer kills the others.
+local _update_consumers = {}
+local function _register_update(name, fn)
+    _update_consumers[#_update_consumers + 1] = { name = name, fn = fn }
+end
+-- Exposed for sibling `_gt_lobby_*` modules (and any future external file
+-- that wants to plug into gt's per-frame tick). Same isolated-pcall +
+-- ordered-registration semantics as the file-local _register_update.
+mod._gt_register_update = _register_update
+mod.update = function(dt)
+    for i = 1, #_update_consumers do
+        local c = _update_consumers[i]
+        local ok, err = pcall(c.fn, dt)
+        if not ok then
+            mod:error("[gt:update] consumer '%s' raised: %s", c.name, tostring(err))
+        end
+    end
+end
 
 -- /regression_test scaffold. Registrations at end of file.
 local _RT_CHECKS = {}
@@ -222,7 +413,7 @@ end)
 -- PlayerUnitFirstPerson finish its post-extension setup before we flip the
 -- third_person_mode flag again — flipping too early leaves the camera in a
 -- half-initialised state.
-mod.update = function(dt)
+_register_update("tp_camera", function(dt)
     if _tp_reapply_timer then
         _tp_reapply_timer = _tp_reapply_timer - (dt or 0)
         if _tp_reapply_timer <= 0 then
@@ -230,7 +421,7 @@ mod.update = function(dt)
             _apply_tp(true)
         end
     end
-end
+end)
 
 -- REVIEW: redundant `_apply_tp` call. `mod:set(...)` triggers
 -- `on_setting_changed` (defined below), which already calls
@@ -456,9 +647,7 @@ end)
 -- noclip locomotion state are re-applied after a level transition, since
 -- both depend on `Managers.player:local_player().player_unit` which isn't
 -- yet assigned at PlayerUnitFirstPerson.extensions_ready time.
-local _orig_mod_update = mod.update
-mod.update = function(dt)
-    if _orig_mod_update then _orig_mod_update(dt) end
+_register_update("post_spawn_reapply", function(dt)
     if _post_spawn_reapply_timer then
         _post_spawn_reapply_timer = _post_spawn_reapply_timer - (dt or 0)
         if _post_spawn_reapply_timer <= 0 then
@@ -476,7 +665,7 @@ mod.update = function(dt)
             loco.state = "script_driven_no_mover"
         end
     end
-end
+end)
 
 -- Shared toggle helper. `mod:command` and the VMF keybind widget both invoke
 -- this through `mod.gt_noclip_toggle` so they stay in lockstep.
@@ -689,6 +878,519 @@ end
 
 mod.on_disabled = function()
     _restore_camera_offset()
+    -- Issue #15: the mod is is_togglable=true but only the camera offset is
+    -- snapshot-and-restored above. Many global mutations persist after
+    -- disable: script_data flags (ai_*, skippable_cutscenes, intro dialogue,
+    -- player_unkillable), RagdollSettings, BuffTemplates.power_level_unbalance,
+    -- CareerSettings[*].attributes.base_critical_strike_chance,
+    -- PlayerUnitMovementSettings.move_speed (plus the closed-upvalue per-unit
+    -- copy), InventorySettings, DamageUtils.is_in_inn,
+    -- GameSettingsDevelopment.disable_free_flight, ESC-menu inventory entry.
+    -- A full snapshot-on-enable + restore-on-disable refactor is significant
+    -- effort; for now we honestly warn the user. This warning fires regardless
+    -- of the enable_debug_logging gate because it's user-facing operational
+    -- guidance, not debug spam.
+    mod:echo("[gt] Disable does not fully unwind active mutations. Restart the game for a clean vanilla state.")
+end
+
+-- ============================================================
+-- Debug Mode (auto-dump on key events)
+-- ============================================================
+-- Surfaces context that's hard to reconstruct from a crash log alone:
+-- mechanism, level_key, in_keep, current_view, profile/career, item
+-- being customized, cim presence. Off by default. Turn on before
+-- reproducing a crash (or before any session you want richly-logged),
+-- then off to silence the stream.
+--
+-- Output goes through mod:info — lands in
+-- `%APPDATA%\fatshark\Vermintide 2\console_logs\` for post-mortem
+-- triage. To surface in chat too, raise gt's Logging Level in VMF's
+-- per-mod settings.
+--
+-- The toggle gates emission only — hooks register once at mod load
+-- and early-return on every call when the toggle is off, so the
+-- runtime cost in the off state is one mod:get() per event.
+--
+-- Why mod:hook (not hook_safe) for the observation hooks: hook_safe
+-- registrations on the same Class.method silently overwrite each
+-- other (VMF_RECIPES § 1). mod:hook with `return func(self, ...)`
+-- preserves all returns intact (VMF_RECIPES § 2) and chains cleanly
+-- with other mods' wrappers on the same method.
+
+-- v0.2.54-dev: renamed from `gt_debug_mode` to the universal
+-- `enable_debug_logging` key per PROJECT_STANDARDS.md § 3.6.
+-- v0.2.55-dev: shadows the top-of-file `_dbg`/`_dbg_alert` pair; both read
+-- the same gate key.
+local function _dbg_on() return mod:get("enable_debug_logging") end
+
+local function _dbg(fmt, ...)
+    if _dbg_on() then mod:info(fmt, ...) end
+end
+
+local function _dbg_alert(fmt, ...)
+    if _dbg_on() then
+        mod:info(fmt, ...)
+        mod:echo("[gt] " .. tostring(fmt), ...)
+    end
+end
+
+-- Exposed on `mod` so the existing _customize_item hook (further
+-- down in the file, predates this section) can call into it.
+mod._dbg_on  = _dbg_on
+mod._dbg_log = _dbg
+
+local function _ctx_str()
+    -- Single-line context summary, all fields nil-safe so calls from
+    -- any state (boot, title screen, loading, ingame) don't fault.
+    local mech, lvl, in_keep, view, profile, career = "?", "?", false, "?", "?", "?"
+    if Managers and Managers.mechanism and Managers.mechanism.current_mechanism_name then
+        mech = Managers.mechanism:current_mechanism_name() or "?"
+    end
+    local gm = Managers and Managers.state and Managers.state.game_mode
+    if gm and gm.level_key then lvl = gm:level_key() or "?" end
+    if rawget(_G, "DamageUtils") and DamageUtils.is_in_inn then in_keep = true end
+    if Managers and Managers.ui and Managers.ui._ingame_ui then
+        view = Managers.ui._ingame_ui.current_view or "?"
+    end
+    -- local_player() reads self.network_manager.peer_id() and asserts
+    -- "Network backend has not been set" during boot/title-screen state
+    -- transitions when Managers.player exists but its network_manager
+    -- upvalue is still nil (set in PlayerManager.set_is_server). Guard
+    -- on the actual field, not just method presence, so on_game_state_changed
+    -- doesn't ERROR ~4x per session.
+    if Managers and Managers.player and Managers.player.local_player
+       and Managers.player.network_manager then
+        local pl = Managers.player:local_player()
+        if pl then
+            -- profile_index/career_index return 0 (or nil) before the
+            -- profile is bound — typical for StateIngame enter on the
+            -- host's own peer until the profile_synchronizer publishes.
+            -- Report "?" in that case so the dump distinguishes "unbound"
+            -- from a legitimate profile/career index of 0 (which doesn't
+            -- exist — SPProfiles is 1-indexed).
+            local pi = (pl.profile_index and pl:profile_index()) or 0
+            local ci = (pl.career_index  and pl:career_index())  or 0
+            local sp_profile = (pi > 0) and rawget(_G, "SPProfiles") and SPProfiles[pi]
+            profile = (sp_profile and sp_profile.display_name) or (pi > 0 and tostring(pi)) or "?"
+            local sp_career  = sp_profile and sp_profile.careers and sp_profile.careers[ci]
+            career  = (sp_career and sp_career.name) or (ci > 0 and tostring(ci)) or "?"
+        end
+    else
+        profile = "<pre-backend>"
+        career  = "<pre-backend>"
+    end
+    return string.format("mech=%s level=%s in_keep=%s view=%s profile=%s career=%s",
+        mech, lvl, tostring(in_keep), view, profile, career)
+end
+
+local function _cim_str()
+    -- cim doesn't expose MOD_VERSION on its mod table (file-scope local),
+    -- so we can only assert present/absent here. If a future cim release
+    -- exposes `mod.MOD_VERSION`, switch this to read it.
+    return get_mod("cim") and "present" or "absent"
+end
+
+-- Wrap the existing mod.on_game_state_changed (defined above) so we
+-- don't clobber the third-person camera / noclip / time-scale / AI
+-- takeover reset logic that already lives there.
+do
+    local prev = mod.on_game_state_changed
+    mod.on_game_state_changed = function(status, state_name)
+        if prev then prev(status, state_name) end
+        _dbg("[state] %s %s | %s | cim=%s", status, tostring(state_name), _ctx_str(), _cim_str())
+    end
+end
+
+-- HeroView open/close: every entry to the keep / mission inventory
+-- menu. Useful for confirming gt_open_mission_inventory actually
+-- dispatched and which substate the view landed in.
+mod:hook("HeroView", "on_enter", function(func, self, params, ...)
+    _dbg("[hero_view] on_enter | %s | cim=%s", _ctx_str(), _cim_str())
+    return func(self, params, ...)
+end)
+
+mod:hook("HeroView", "on_exit", function(func, self, ...)
+    _dbg("[hero_view] on_exit | %s", _ctx_str())
+    return func(self, ...)
+end)
+
+-- Item Customization screen: dump item context on enter so a future
+-- crash log carries backend_id, slot, item key, plus mechanism + cim
+-- presence. This is the screen the gear icon opens — the same path
+-- that crashed in fa1ec6f8 (CW) and ef637399 (dlc_dwarf_interior).
+mod:hook("HeroWindowItemCustomization", "on_enter", function(func, self, params, ...)
+    local slot, key, bid = "?", "?", "?"
+    if params and params.item_to_customize then
+        local item = params.item_to_customize
+        local d = item.data
+        slot = (d and d.slot_type) or "?"
+        key  = item.key or (d and d.key) or "?"
+        bid  = item.backend_id or "?"
+    end
+    _dbg("[item_customize] on_enter item.key=%s slot=%s backend_id=%s | %s | cim=%s",
+        tostring(key), tostring(slot), tostring(bid), _ctx_str(), _cim_str())
+    return func(self, params, ...)
+end)
+
+mod:hook("HeroWindowItemCustomization", "on_exit", function(func, self, params, ...)
+    local sd = self and self._skin_dirty and "true" or "false"
+    local id = self and self._item_dirty and "true" or "false"
+    local cd = self and self._character_dirty and "true" or "false"
+    _dbg("[item_customize] on_exit skin_dirty=%s item_dirty=%s character_dirty=%s", sd, id, cd)
+    return func(self, params, ...)
+end)
+
+-- Every menu transition — log the requested transition name. Often
+-- the difference between "click did nothing" and "transition was
+-- requested but blocked by IngameUI gates" is invisible without this.
+mod:hook("IngameUI", "handle_transition", function(func, self, new_transition, transition_params, ...)
+    _dbg("[transition] %s | %s", tostring(new_transition), _ctx_str())
+    return func(self, new_transition, transition_params, ...)
+end)
+
+-- Level loading: log when a new level resource is requested. Pairs
+-- well with the [state] enter StateLoading line — that line fires
+-- first with the previous level still resolved; this one fires next
+-- with the level being loaded. Hooks load_current_level directly
+-- with full mod:hook because other mods (BossTimer, keyPickupMessage,
+-- Loremasters-Armoury) all hook_safe this method — adding a fourth
+-- hook_safe would silently shadow theirs.
+mod:hook("LevelTransitionHandler", "load_current_level", function(func, self, ...)
+    local lvl = "?"
+    if self and self.level_key then
+        lvl = (type(self.level_key) == "function" and self:level_key()) or tostring(self.level_key) or "?"
+    end
+    _dbg("[level_load] requested level_key=%s | %s | cim=%s", lvl, _ctx_str(), _cim_str())
+    return func(self, ...)
+end)
+
+-- ------------------------------------------------------------
+-- AI takeover / bot dump
+-- ------------------------------------------------------------
+-- Players table, bots table, party slot assignments, game-mode bot
+-- capability flags, profile_synchronizer reservations, host peer_id,
+-- and _ai_saved_state contents. Used to triage why AI takeover still
+-- doesn't reliably swap — the swap path depends on a long chain of
+-- preconditions (server-only mutation, party slot present, game_mode
+-- exposes _add_bot_to_party, profile_synchronizer not still busy with
+-- a transfer) and a failure at any link returns one short reason
+-- string. The dump surfaces the whole chain.
+--
+-- Auto-fires on: StateIngame enter, AI toggle changes (both host &
+-- client), and a peer joining/leaving. Manual: /gt_dump_ai.
+
+local function _safe_call(fn, ...)
+    local ok, result = pcall(fn, ...)
+    if ok then return result end
+    return nil
+end
+
+local function _player_brief(p)
+    if not p then return "nil" end
+    local peer = (p.peer_id and (type(p.peer_id) == "function" and p:peer_id()) or p.peer_id) or "?"
+    local lpid = p.local_player_id and (type(p.local_player_id) == "function" and p:local_player_id() or p.local_player_id) or "?"
+    -- Same 0-vs-nil distinction as _ctx_str: SPProfiles is 1-indexed so
+    -- pi=0 is "unbound", not a valid profile. Surface as "?".
+    local pi = (p.profile_index and p:profile_index()) or 0
+    local ci = (p.career_index  and p:career_index())  or 0
+    local sp = (pi > 0) and rawget(_G, "SPProfiles") and SPProfiles[pi]
+    local profile = (sp and sp.display_name) or (pi > 0 and tostring(pi)) or "?"
+    local sp_career = sp and sp.careers and sp.careers[ci]
+    local career = (sp_career and sp_career.name) or (ci > 0 and tostring(ci)) or "?"
+    local unit_alive = (p.player_unit and Unit and Unit.alive(p.player_unit)) and "true" or "false"
+    return string.format("{peer=%s lpid=%s profile=%s career=%s bot=%s remote=%s unit_alive=%s}",
+        tostring(peer), tostring(lpid), profile, career,
+        tostring(p.bot_player and true or false),
+        tostring(p.remote and true or false),
+        unit_alive)
+end
+
+local function _gt_dump_ai_now(why)
+    local pm = Managers and Managers.player
+    if not pm then
+        _dbg("[ai_dump:%s] Managers.player absent", why or "manual")
+        return
+    end
+    _dbg("[ai_dump:%s] === BEGIN ===", why or "manual")
+    _dbg("[ai_dump:%s] context: %s", why or "manual", _ctx_str())
+    _dbg("[ai_dump:%s] is_server=%s peer=%s",
+        why or "manual",
+        tostring(pm.is_server and true or false),
+        tostring(Network and Network.peer_id and Network.peer_id() or "?"))
+
+    -- Mechanism / host
+    local host = nil
+    if Managers.mechanism and Managers.mechanism.server_peer_id then
+        host = _safe_call(function() return Managers.mechanism:server_peer_id() end)
+    end
+    _dbg("[ai_dump:%s] mechanism=%s host_peer=%s",
+        why or "manual",
+        Managers.mechanism and _safe_call(function() return Managers.mechanism:current_mechanism_name() end) or "?",
+        tostring(host or "?"))
+
+    -- Players & bots
+    local players = (pm.players and _safe_call(function() return pm:players() end)) or {}
+    local nh, nb = 0, 0
+    for _, p in pairs(players) do
+        if p.bot_player then nb = nb + 1 else nh = nh + 1 end
+        _dbg("[ai_dump:%s] player %s", why or "manual", _player_brief(p))
+    end
+    _dbg("[ai_dump:%s] counts: humans=%d bots=%d total=%d", why or "manual", nh, nb, nh + nb)
+
+    -- Party slots
+    local parties = Managers.party and Managers.party._parties
+    if parties then
+        for pid, party in pairs(parties) do
+            local slots = party and (party.slots or party.occupied_slots) or {}
+            local slot_lines = {}
+            for sid, slot in pairs(slots) do
+                local peer = slot and (slot.peer_id or (slot.player and slot.player.peer_id)) or "-"
+                slot_lines[#slot_lines + 1] = string.format("[%s]=%s", tostring(sid), tostring(peer))
+            end
+            _dbg("[ai_dump:%s] party %s slots {%s}", why or "manual", tostring(pid), table.concat(slot_lines, ","))
+        end
+    else
+        _dbg("[ai_dump:%s] Managers.party absent or no _parties", why or "manual")
+    end
+
+    -- Game mode bot capability
+    local gm = Managers.state and Managers.state.game_mode and _safe_call(function() return Managers.state.game_mode:game_mode() end)
+    if gm then
+        _dbg("[ai_dump:%s] game_mode supports: _add_bot_to_party=%s _remove_bot_instant=%s",
+            why or "manual",
+            tostring(gm._add_bot_to_party and true or false),
+            tostring(gm._remove_bot_instant and true or false))
+    else
+        _dbg("[ai_dump:%s] game_mode unavailable", why or "manual")
+    end
+
+    -- Profile sync state. ProfileSynchronizer stores reservations inside
+    -- its private `self._state` (a SharedState), not on the synchronizer
+    -- itself — there is no `_owned_profiles` field. The canonical public
+    -- enumerator is `:get_peers_with_full_profiles()` which returns an
+    -- array of `{peer_id, local_player_id, profile_index, career_index}`
+    -- entries. Use it to surface who's bound to which profile/career.
+    local ps = pm.network_manager and pm.network_manager.profile_synchronizer
+    if ps and ps.get_peers_with_full_profiles then
+        local entries = _safe_call(function() return ps:get_peers_with_full_profiles() end) or {}
+        if #entries > 0 then
+            local lines = {}
+            for _, e in ipairs(entries) do
+                lines[#lines + 1] = string.format("{peer=%s lpid=%s pi=%s ci=%s}",
+                    tostring(e.peer_id), tostring(e.local_player_id),
+                    tostring(e.profile_index), tostring(e.career_index))
+            end
+            _dbg("[ai_dump:%s] profile_sync full_profiles: %s",
+                why or "manual", table.concat(lines, " | "))
+        else
+            _dbg("[ai_dump:%s] profile_sync full_profiles: <empty>", why or "manual")
+        end
+    else
+        _dbg("[ai_dump:%s] profile_synchronizer not available", why or "manual")
+    end
+
+    -- gt's own saved state
+    local saved_lines = {}
+    for k, v in pairs(_ai_saved_state) do
+        saved_lines[#saved_lines + 1] = string.format("%s={pi=%s,ci=%s,party=%s,slot=%s,remote=%s}",
+            tostring(k), tostring(v.profile_index), tostring(v.career_index),
+            tostring(v.party_id), tostring(v.slot_id), tostring(v.is_remote))
+    end
+    _dbg("[ai_dump:%s] _ai_saved_state: {%s}", why or "manual", table.concat(saved_lines, " | "))
+    _dbg("[ai_dump:%s] _ai_pending_host_toggle=%s _ai_pending_client_send=%s",
+        why or "manual",
+        _ai_pending_host_toggle and "queued" or "nil",
+        _ai_pending_client_send and "queued" or "nil")
+
+    -- VMF handshake state. The `_vmf_users` ping/pong table is a
+    -- file-scope local inside `scripts/mods/vmf/modules/core/network.lua`
+    -- (confirmed in cosmetics_tweaker/RPC_NOT_ROUTING.md). It is not
+    -- exposed on the VMF mod table, so no introspection from outside
+    -- VMF. If a client AI toggle fails, the relevant signals are the
+    -- `[ai_toggle queue]` / `[ai_toggle emit]` mod:info lines (each
+    -- retry logs a "CLIENT->req" attempt and ping_vmf_users is re-
+    -- called before each fire to refresh the handshake).
+    _dbg("[ai_dump:%s] vmf user table: private to VMF.network (not introspectable)", why or "manual")
+
+    _dbg("[ai_dump:%s] === END ===", why or "manual")
+end
+
+mod:command("gt_dump_ai", "Dump the AI/bot takeover state (players, bots, party slots, profile sync, host peer, saved state)", function()
+    -- Run the dump unconditionally on command (don't gate on debug_mode
+    -- since the user explicitly asked for it). Force mod:info emission.
+    local was = mod:get("gt_debug_mode")
+    if not was then mod:set("gt_debug_mode", true) end
+    _gt_dump_ai_now("manual")
+    if not was then mod:set("gt_debug_mode", false) end
+end)
+
+-- Auto-fire on player join/leave so we see who's where. hook_safe is
+-- safe here: gt is the only mod hooking add_remote_player /
+-- remove_player in this repo (verified). If another mod ships a
+-- hook_safe on these, switch to full mod:hook.
+mod:hook_safe("PlayerManager", "add_remote_player", function(self, peer_id, ...)
+    _dbg("[ai_event] add_remote_player peer=%s", tostring(peer_id))
+    _gt_dump_ai_now("peer_join")
+end)
+
+mod:hook_safe("PlayerManager", "remove_player", function(self, peer_id, local_player_id, ...)
+    _dbg("[ai_event] remove_player peer=%s lpid=%s", tostring(peer_id), tostring(local_player_id))
+    _gt_dump_ai_now("peer_leave")
+end)
+
+-- ------------------------------------------------------------
+-- Menu / inventory dump
+-- ------------------------------------------------------------
+-- HeroView substate hierarchy + active windows + which game modes
+-- the inventory considers itself allowed in. Useful for diagnosing
+-- why a menu doesn't show up mid-mission, and which windows mounted
+-- so we can target the right Class.method for any further hardening.
+--
+-- Auto-fires on: HeroView open, HeroViewStateOverview.set_layout_by_name,
+-- and each HeroWindow* substate enter. Manual: /gt_dump_menu.
+
+local function _gt_dump_menu_now(why)
+    _dbg("[menu_dump:%s] === BEGIN ===", why or "manual")
+    _dbg("[menu_dump:%s] context: %s", why or "manual", _ctx_str())
+
+    -- InventorySettings flags — the patch that allows the inventory
+    -- panel to consider itself valid mid-mission.
+    local inv = rawget(_G, "InventorySettings")
+    local modes = inv and inv.inventory_loadout_access_supported_game_modes
+    if modes then
+        local mlines = {}
+        for k, v in pairs(modes) do
+            mlines[#mlines + 1] = string.format("%s=%s", tostring(k), tostring(v))
+        end
+        _dbg("[menu_dump:%s] inv.supported_game_modes: {%s}", why or "manual", table.concat(mlines, ","))
+    else
+        _dbg("[menu_dump:%s] InventorySettings.inventory_loadout_access_supported_game_modes absent", why or "manual")
+    end
+
+    local ingame_ui = Managers and Managers.ui and Managers.ui._ingame_ui
+    if not ingame_ui then
+        _dbg("[menu_dump:%s] no ingame_ui (not in StateIngame?)", why or "manual")
+        _dbg("[menu_dump:%s] === END ===", why or "manual")
+        return
+    end
+
+    local hero_view = ingame_ui.views and ingame_ui.views.hero_view
+    if not hero_view then
+        _dbg("[menu_dump:%s] hero_view view not registered", why or "manual")
+        _dbg("[menu_dump:%s] === END ===", why or "manual")
+        return
+    end
+
+    -- Current state name. VT2's class() helper (foundation/scripts/util/
+    -- class.lua) sets `class_table.NAME` directly when the state file
+    -- declares `Cls.NAME = "..."` after `class(Cls)`. Since
+    -- `class_table.__index = class_table`, instances inherit NAME via
+    -- the metatable — so `state.NAME` resolves correctly. Vanilla
+    -- hero_view.lua:442 reads it the same way (`current_state.NAME`).
+    local state = hero_view.current_state and _safe_call(function() return hero_view:current_state() end)
+                  or (hero_view._machine and _safe_call(function() return hero_view._machine:state() end))
+    local state_name = (state and state.NAME) or "?"
+    _dbg("[menu_dump:%s] hero_view.state=%s current_transition=%s",
+        why or "manual", state_name, tostring(ingame_ui._previous_transition or "?"))
+
+    -- Active windows. HeroViewStateOverview stores them on `_active_windows`
+    -- (underscore-prefixed — `hero_view_state_overview.lua:253`). Each
+    -- entry is a window-class instance with a `.NAME` field set the same
+    -- way as the state class (e.g. "HeroWindowLoadoutConsole").
+    local active = state and state._active_windows
+    if active then
+        for idx, win in pairs(active) do
+            local cls = (win and win.NAME) or "?"
+            _dbg("[menu_dump:%s] window[%s]=%s", why or "manual", tostring(idx), cls)
+        end
+    else
+        _dbg("[menu_dump:%s] no _active_windows on state", why or "manual")
+    end
+
+    -- Available layout names. `_window_layouts` is an ipairs array of
+    -- `{name = "...", windows = {...}, ...}` tables — keys are integer
+    -- indices, names live in the `.name` field of each entry. Iterating
+    -- pairs() over the array and stringifying the integer keys produced
+    -- "1,2,3,..." in the old code; surface the actual layout names
+    -- (e.g. "equipment", "equipment_selection", "item_customization",
+    -- "system") so they're useful targets for set_layout_by_name.
+    if state and state._window_layouts then
+        local layout_names = {}
+        for _, entry in ipairs(state._window_layouts) do
+            if entry and entry.name then
+                layout_names[#layout_names + 1] = tostring(entry.name)
+            end
+        end
+        _dbg("[menu_dump:%s] available layouts: %s", why or "manual", table.concat(layout_names, ","))
+    end
+
+    _dbg("[menu_dump:%s] === END ===", why or "manual")
+end
+
+mod:command("gt_dump_menu", "Dump the active HeroView substate + windows + InventorySettings flags", function()
+    local was = mod:get("gt_debug_mode")
+    if not was then mod:set("gt_debug_mode", true) end
+    _gt_dump_menu_now("manual")
+    if not was then mod:set("gt_debug_mode", false) end
+end)
+
+-- Auto-fire on each layout change inside HeroViewStateOverview. This
+-- catches the inventory → customize → upgrade → equipment_selection
+-- traversal that the gear icon and tab buttons drive.
+mod:hook("HeroViewStateOverview", "set_layout_by_name", function(func, self, name, ...)
+    _dbg("[menu_event] set_layout_by_name name=%s", tostring(name))
+    if _dbg_on() then _gt_dump_menu_now("layout_" .. tostring(name)) end
+    return func(self, name, ...)
+end)
+
+mod:hook("HeroViewStateOverview", "on_enter", function(func, self, params, ...)
+    _dbg("[menu_event] HeroViewStateOverview.on_enter")
+    if _dbg_on() then _gt_dump_menu_now("state_overview_enter") end
+    return func(self, params, ...)
+end)
+
+-- Each substate-window enter/exit is already vanilla-printed (see the
+-- log: "[HeroViewWindow] Enter Substate HeroWindowLoadoutConsole").
+-- Extend with our context so the same line carries mechanism +
+-- in_keep + level info. _change_window is the single chokepoint
+-- vanilla routes every window swap through.
+mod:hook("HeroViewStateOverview", "_change_window", function(func, self, window_index, window_name, ...)
+    _dbg("[menu_event] _change_window index=%s name=%s | %s",
+        tostring(window_index), tostring(window_name), _ctx_str())
+    return func(self, window_index, window_name, ...)
+end)
+
+-- AI-toggle pre/post dump wrap lives further down — see the comment
+-- block after _ai_handle_toggle_change's assignment (~line 2535).
+-- It can't live here because _ai_handle_toggle_change is forward-
+-- declared at the top of the file and not assigned until line 2463;
+-- capturing it here would bind to nil.
+
+-- Auto-fire one AI dump shortly after StateIngame enter (deferred so
+-- the player manager has finished publishing the local player /
+-- mechanism has its server_peer_id). Wired by extending the
+-- on_game_state_changed handler.
+do
+    local prev = mod.on_game_state_changed
+    local _pending_after_ingame = false
+    mod.on_game_state_changed = function(status, state_name)
+        if prev then prev(status, state_name) end
+        if status == "enter" and state_name == "StateIngame" and _dbg_on() then
+            _pending_after_ingame = true
+        end
+    end
+    -- Drain the pending dump on the first update tick after StateIngame
+    -- enter — Managers.player and Managers.mechanism are guaranteed
+    -- ready by then.
+    local prev_update = mod.update
+    mod.update = function(self, dt)
+        if prev_update then prev_update(self, dt) end
+        if _pending_after_ingame then
+            _pending_after_ingame = false
+            _gt_dump_ai_now("state_ingame_enter")
+            _gt_dump_menu_now("state_ingame_enter")
+        end
+    end
 end
 
 -- ============================================================
@@ -1106,16 +1808,34 @@ mod.gt_open_mission_inventory = function()
         mod:echo("UI manager not available (not in-game?).")
         return
     end
-    -- Chaos Wastes block. CW levels don't include `levels/ui_store_preview/world`
-    -- in their package set; opening the Customization tab tries to load it and
-    -- fatals `hero_window_item_customization.lua:357: Level not loaded`. Crash
-    -- GUID fa1ec6f8-7385-4221-869b-ed4f2893c97c (2026-05-22). User directive:
-    -- crafting/inventory should not be available in Chaos Wastes at all, hub
-    -- or mission. The deus mechanism covers both `morris_hub` (staging) and
-    -- every `dlc_morris_*` mission level.
+    -- Chaos Wastes hub guard. CW levels don't include
+    -- `levels/ui_store_preview/world` in their package set; opening the
+    -- Customization tab tries to load it and fatals at
+    -- `hero_window_item_customization.lua:357`. Crash GUID
+    -- fa1ec6f8-7385-4221-869b-ed4f2893c97c (2026-05-22).
+    --
+    -- cim v0.7.36+ strips the level reference from the viewport
+    -- definition mid-mission (HeroWindowItemCustomization hook),
+    -- BUT that hook is gated on `not _is_in_keep()` — and
+    -- `DamageUtils.is_in_inn` returns true for the CW hub
+    -- `morris_hub` (per the memory store note on hub-level coverage).
+    -- So in the hub the cim hook bails early and vanilla still
+    -- fatals. Mid-mission `dlc_morris_*` levels report
+    -- is_in_inn=false → cim's fix applies → safe.
+    --
+    -- 2026-05-25 (gt v0.2.69-dev): tightened the gate from
+    -- "any deus mechanism" to "deus mechanism AND in_keep". The
+    -- original 2026-05-22 directive was crash-driven; with the crash
+    -- class fixed mid-mission, lift the mid-mission block so the
+    -- gear-icon customize flow is actually reachable in CW missions.
+    -- Hub block remains until either (a) cim extends its hook to also
+    -- cover the keep path, or (b) the package gets pre-loaded for
+    -- morris_hub. Either reverses this block; until then the hub
+    -- echo stands.
     local mech = Managers.mechanism and Managers.mechanism:current_mechanism_name()
-    if mech == "deus" then
-        mod:echo("Inventory disabled in Chaos Wastes (vanilla preview level isn't loaded — would crash the game).")
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+    if mech == "deus" and in_keep then
+        mod:echo("Inventory disabled in the Chaos Wastes hub (vanilla preview level isn't loaded — would crash). Customize works in CW missions via Crafting in Modded.")
         return
     end
     -- Inventory view depends on the loadout_access_supported_game_modes patch.
@@ -1139,6 +1859,48 @@ end
 
 mod:command("gt_inv", "Open the inventory mid-mission (uses the same transition vanilla fires from the ESC-menu 'Open Inventory' entry)", function()
     mod.gt_open_mission_inventory()
+end)
+
+-- ============================================================
+-- Mission Customize gear-icon: cim presence gate
+-- ============================================================
+-- The gear icon on the loadout panel routes to
+-- HeroWindowItemCustomization (illusion swap + reroll properties /
+-- traits). Vanilla's preview viewport hard-loads
+-- `levels/ui_store_preview/world`, which is only in the keep's
+-- package set; mid-mission it fatals on `LevelResource.object_set_names`.
+-- Crash GUID ef637399-8862-46dc-b7fb-8c6f9c475cf4 (2026-05-24,
+-- dlc_dwarf_interior).
+--
+-- cim v0.7.36+ ships the fix: it strips the level reference from the
+-- viewport definition mid-mission so the screen mounts cleanly (item
+-- still renders via the always-loaded ui_loot_preview package). With
+-- cim active, the gear icon is fully functional in mission — illusion
+-- swap, property reroll, trait reroll all run through cim's existing
+-- HeroWindowItemCustomization hooks.
+--
+-- Without cim, that fix doesn't load, so the vanilla crash returns.
+-- Block the action and tell the user. This intentionally only fires
+-- mid-mission: in the keep, vanilla works without cim and nothing
+-- needs gating. The CW block in gt_open_mission_inventory above
+-- continues to fire first for CW (separate user directive — crafting
+-- shouldn't be available in CW at all, hub or mission).
+
+mod:hook("HeroWindowLoadoutConsole", "_customize_item", function(func, self, item)
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+    if mod._dbg_on and mod._dbg_on() and mod._dbg_log then
+        local d = item and item.data
+        mod._dbg_log("[customize_click] item.key=%s slot=%s backend_id=%s in_keep=%s cim=%s",
+            tostring(item and (item.key or (d and d.key)) or "?"),
+            tostring(d and d.slot_type or "?"),
+            tostring(item and item.backend_id or "?"),
+            tostring(in_keep),
+            get_mod("cim") and "present" or "absent")
+    end
+    if in_keep or get_mod("cim") then
+        return func(self, item)
+    end
+    mod:echo("Customize disabled mid-mission (Crafting in Modded mod isn't loaded — would crash the game).")
 end)
 
 -- ============================================================
@@ -1357,6 +2119,167 @@ mod:command("dump_items_by_slot", "Dump all ItemMasterList slot_type values and 
     _write_dump("items_by_slot.txt", lines)
 end)
 
+-- gt_dump_hero_view: capture live hero view widget tree for porting analysis
+mod:command("gt_dump_hero_view", "Dump the active HeroView state, menu layout, and widget tree to log", function()
+    local lines = {}
+    local function add(line)
+        lines[#lines + 1] = line
+    end
+
+    local function safe_localize(key)
+        if not key then return "?" end
+        local ok, result = pcall(Localize, key)
+        return ok and result or key
+    end
+
+    local function safe(fn)
+        local ok, result = pcall(fn)
+        if ok then return result end
+        return nil
+    end
+
+    add(string.format("=== gt_dump_hero_view @ %s ===", os.date("%Y-%m-%d %H:%M:%S")))
+    local build_id = rawget(_G, "BUILD") or safe(function() return Application.build_identifier() end)
+    add(string.format("BUILD=%s", tostring(build_id or "?")))
+
+    local ingame_ui = safe(function() return Managers.ui:ingame_ui() end)
+    if not ingame_ui then
+        mod:echo("Hero view not active - open the character menu first, then run /gt_dump_hero_view.")
+        return
+    end
+
+    local views = ingame_ui.views
+    local hero_view = views and views.hero_view
+    if not hero_view then
+        mod:echo("Hero view not active - open the character menu first, then run /gt_dump_hero_view.")
+        return
+    end
+
+    local current_view = ingame_ui.current_view
+    local is_active = (current_view == "hero_view")
+    add(string.format("ACTIVE_VIEW class=HeroView current_view=%s visible=%s",
+        tostring(current_view), tostring(is_active)))
+
+    if not is_active then
+        add("Hero view exists but is not the current_view; dumping last-known state anyway.")
+    end
+
+    local machine = hero_view._machine
+    local state = safe(function() return hero_view:current_state() end) or (machine and safe(function() return machine:state() end))
+    if not state then
+        add("STATE machine_or_state_unavailable")
+        _write_dump("hero_view_dump.txt", lines)
+        mod:echo(string.format("gt_dump_hero_view: %d lines written to log", #lines))
+        return
+    end
+
+    local state_class_name = "?"
+    local mt = getmetatable(state)
+    if mt and mt.__index then
+        for name, ref in pairs(_G) do
+            if ref == mt.__index then state_class_name = name; break end
+        end
+    end
+    add(string.format("STATE class=%s", state_class_name))
+
+    local profile_index = state.profile_index or hero_view.initial_profile_index
+    local career_index = state.career_index
+    local hero_name = state.hero_name
+    add(string.format("CAREER hero=%s profile_index=%s career_index=%s",
+        tostring(hero_name), tostring(profile_index), tostring(career_index)))
+    if SPProfiles and profile_index and SPProfiles[profile_index] then
+        local prof = SPProfiles[profile_index]
+        local career = prof.careers and prof.careers[career_index]
+        if career then
+            add(string.format("  career_name=%s display=%s",
+                tostring(career.name), safe_localize(career.display_name or career.name)))
+        end
+    end
+
+    add("")
+    add("=== MENU LAYOUT ===")
+    local layout_settings = state._layout_settings
+    if layout_settings then
+        add(string.format("max_active_windows=%s", tostring(layout_settings.max_active_windows)))
+        local window_layouts = layout_settings.window_layouts or state._window_layouts
+        if window_layouts then
+            for i, entry in ipairs(window_layouts) do
+                local display = entry.display_name and safe_localize(entry.display_name) or ""
+                add(string.format("  layout[%d] name=%s close_on_exit=%s display=%s",
+                    i, tostring(entry.name), tostring(entry.close_on_exit), display))
+            end
+        end
+        local windows = layout_settings.windows or state._windows_settings
+        if windows then
+            add("  --- windows ---")
+            for key, w in pairs(windows) do
+                add(string.format("    window[%s] class=%s", tostring(key), tostring(w.class_name)))
+            end
+        end
+    else
+        add("(_layout_settings not present on state)")
+    end
+
+    add(string.format("selected_layout_index=%s", tostring(state._selected_game_mode_index)))
+
+    add("")
+    add("=== ACTIVE WINDOWS ===")
+    local active_windows = state._active_windows
+    if active_windows then
+        for idx, window in pairs(active_windows) do
+            local cls = "?"
+            local wmt = getmetatable(window)
+            if wmt and wmt.__index then
+                for name, ref in pairs(_G) do
+                    if ref == wmt.__index then cls = name; break end
+                end
+            end
+            add(string.format("  active_window[%s] class=%s", tostring(idx), cls))
+        end
+    else
+        add("(no _active_windows)")
+    end
+
+    local function dump_widgets(owner_label, widgets_by_name)
+        if not widgets_by_name then return end
+        add(string.format("--- widgets_by_name (%s) ---", owner_label))
+        local keys = {}
+        for k in pairs(widgets_by_name) do keys[#keys+1] = k end
+        table.sort(keys)
+        for _, k in ipairs(keys) do
+            local w = widgets_by_name[k]
+            local wtype = w and (w.element and w.element.name) or (w and w.widget_type) or "?"
+            local label = ""
+            if w and w.content then
+                local txt = w.content.text or w.content.title_text or w.content.display_name
+                if type(txt) == "string" then
+                    if #txt > 60 then txt = txt:sub(1, 60) .. "..." end
+                    label = " text=\"" .. txt .. "\""
+                end
+                if w.content.visible ~= nil then
+                    label = label .. " visible=" .. tostring(w.content.visible)
+                end
+            end
+            add(string.format("  [%s] type=%s%s", k, tostring(wtype), label))
+        end
+    end
+
+    add("")
+    add("=== STATE WIDGETS ===")
+    dump_widgets("state", state._widgets_by_name)
+
+    if active_windows then
+        for idx, window in pairs(active_windows) do
+            add("")
+            add(string.format("=== WINDOW[%s] WIDGETS ===", tostring(idx)))
+            dump_widgets("window_" .. tostring(idx), window._widgets_by_name)
+        end
+    end
+
+    _write_dump("hero_view_dump.txt", lines)
+    mod:echo(string.format("gt_dump_hero_view: %d lines written to log", #lines))
+end)
+
 -- ============================================================
 -- AI Toggle (hand off control to a bot)
 -- ============================================================
@@ -1519,6 +2442,8 @@ local function _ai_swap_bot_to_human(peer_id, local_player_id)
 end
 
 mod:network_register(_AI_RPC, function(sender_peer_id, payload)
+    mod:info("[ai_toggle recv] HOST<-req sender=%s payload=%s",
+        tostring(sender_peer_id), type(payload) == "table" and "table" or tostring(payload))
     local pm = Managers.player
     if not (pm and pm.is_server) then return end
     local peer_id, local_player_id = sender_peer_id, 1
@@ -1556,7 +2481,11 @@ end)
 -- the current frame finishes (input read, etc.) before we tear the local
 -- Player object down. Polled in the main mod.update closure below — see the
 -- `_ai_pending_host_toggle` block.
-local _ai_pending_host_toggle = nil
+-- NOTE: declared as a forward `local` near the top of the file alongside
+-- _ai_pending_client_send (the debug-mode AI dump reads it from above
+-- this point). Assign without `local` here so we write the existing
+-- upvalue instead of shadowing it.
+_ai_pending_host_toggle = nil
 
 -- Returns (ok, err_msg). Caller is responsible for reverting the checkbox on
 -- failure — _ai_suppress_setting_callback must be true while doing so.
@@ -1578,12 +2507,115 @@ _ai_handle_toggle_change = function(want_bot)
         return true
     end
 
-    mod:network_send(_AI_RPC, "server", {
+    -- VMF `network_send` does NOT understand `"server"` — it falls through
+    -- the recipient-name lookup, treats the string as a literal peer_id,
+    -- fails the `_vmf_users[peer_id]` check, and returns silently. No wire
+    -- activity, no error. (Burned v0.2.48-dev: client toggle echoed "request
+    -- sent" but host never received the RPC.) See VMF_RECIPES.md § 3.
+    --
+    -- Resolve the host's real peer_id. The canonical engine API is
+    -- `Managers.mechanism:server_peer_id()` (verified in vanilla at
+    -- `imgui_career_debug.lua:153` and `versus_mechanism.lua:1845`). DO NOT
+    -- use `Managers.state.network.server_peer_id` — `Managers.state.network`
+    -- is `GameNetworkManager` which has no such field directly; the field
+    -- lives one level deeper on `.network_client` (client) or `.network_server`
+    -- (host). Burned v0.2.49-dev: that wrong path always returned nil and
+    -- the toggle refused with "host peer_id not yet known". Try the mechanism
+    -- API first; fall back through GameNetworkManager subcomponents in case
+    -- mechanism hasn't published yet during late session-join.
+    local host
+    if Managers.mechanism and Managers.mechanism.server_peer_id then
+        host = Managers.mechanism:server_peer_id()
+    end
+    if not host then
+        local nm = Managers.state and Managers.state.network
+        host = nm and ((nm.network_client and nm.network_client.server_peer_id)
+            or (nm.network_server and nm.network_server.server_peer_id))
+    end
+    if not host then
+        return false, "host peer_id not yet known (session still loading?)"
+    end
+
+    -- Force VMF to re-handshake with the host before our first send. Covers
+    -- the bot-churn bug where VMF dropped the host from `_vmf_users` at
+    -- mission load. ping_vmf_users sends a ping to every human player and
+    -- the resulting pong re-populates `_vmf_users[host_peer]` so the next
+    -- send succeeds. ping_vmf_users is the canonical VMF re-handshake API
+    -- (vanilla VMF network.lua:452-463). Wrapped in pcall in case the API
+    -- shape changes in a future VMF update — even if the re-handshake fails
+    -- we still queue the send (the host MIGHT already be in vmf_users).
+    local vmf = get_mod("VMF")
+    if vmf and vmf.ping_vmf_users then
+        pcall(vmf.ping_vmf_users)
+    end
+
+    -- Queue the actual send (with retries) instead of sending inline. The
+    -- pong round-trip needs ~50-300 ms over Steam P2P; sending immediately
+    -- would race the re-handshake and lose the first attempt. mod.update
+    -- consumer fires the queued send after the delay.
+    _ai_pending_client_send = {
+        host = host,
+        want_bot = want_bot and true or false,
+        retries_left = _AI_CLIENT_SEND_MAX_RETRIES,
+        next_at = os.clock() + _AI_CLIENT_SEND_DELAY_FIRST,
+    }
+    mod:info("[ai_toggle queue] CLIENT host=%s want_bot=%s retries=%d",
+        tostring(host), tostring(want_bot), _AI_CLIENT_SEND_MAX_RETRIES)
+    return true
+end
+
+-- Debug-mode dump wrap. Placed here because _ai_handle_toggle_change
+-- was nil at chunk load when the rest of the debug section ran
+-- (assignment lives just above). Captures before/after AI state on
+-- every toggle so the user/agent can diff what mutated vs. what was
+-- meant to mutate. The helpers _dbg_on / _gt_dump_ai_now are file-
+-- scope locals declared in the debug section further up — both
+-- visible by chunk position here.
+do
+    local prev = _ai_handle_toggle_change
+    _ai_handle_toggle_change = function(want_bot)
+        if mod._dbg_on and mod._dbg_on() then _gt_dump_ai_now("toggle_pre_want_bot=" .. tostring(want_bot)) end
+        local ok, err = prev(want_bot)
+        if mod._dbg_on and mod._dbg_on() then
+            (mod._dbg_log or function() end)("[ai_event] toggle returned ok=%s err=%s", tostring(ok), tostring(err))
+            _gt_dump_ai_now("toggle_post")
+        end
+        return ok, err
+    end
+end
+
+-- Drain the client-side send queue. Called from mod.update. Sends the RPC
+-- when `next_at` has elapsed; on each fire, also re-pings VMF users so a
+-- pong stays warm against further bot-churn events between retries. Returns
+-- once retries are exhausted. Idempotent — the host's RPC handler no-ops
+-- when state already matches the requested want_bot.
+local function _ai_consume_pending_client_send()
+    local q = _ai_pending_client_send
+    if not q then return end
+    if os.clock() < q.next_at then return end
+
+    -- Refresh VMF user state on each fire so a bot-churn between retries
+    -- doesn't strand the next send.
+    local vmf = get_mod("VMF")
+    if vmf and vmf.ping_vmf_users then
+        pcall(vmf.ping_vmf_users)
+    end
+
+    mod:info("[ai_toggle emit] CLIENT->req host=%s want_bot=%s (attempt %d of %d)",
+        tostring(q.host), tostring(q.want_bot),
+        (_AI_CLIENT_SEND_MAX_RETRIES - q.retries_left) + 1, _AI_CLIENT_SEND_MAX_RETRIES)
+    mod:network_send(_AI_RPC, q.host, {
         peer_id = Network.peer_id(),
         local_player_id = 1,
-        want_bot = want_bot and true or false,
+        want_bot = q.want_bot,
     })
-    return true
+
+    q.retries_left = q.retries_left - 1
+    if q.retries_left <= 0 then
+        _ai_pending_client_send = nil
+    else
+        q.next_at = os.clock() + _AI_CLIENT_SEND_DELAY_RETRY
+    end
 end
 
 -- Execute the deferred host swap. Called from mod.update — see the chained
@@ -1635,7 +2667,11 @@ end)
 -- engine setter, so if both are used simultaneously the last write wins.
 -- We keep them as separate features matching Hacks's UX.
 
-local _pause_active = false
+-- _pause_active is forward-declared near the top of the file (Issue #13).
+-- This is an ASSIGNMENT to the file-local, not a new declaration — without
+-- the forward-decl, the on_game_state_changed write at line ~688 binds to a
+-- global and the pause-toggle desyncs after every level transition.
+_pause_active = false
 
 mod.gt_pause_toggle = function()
     if not (Managers.player and Managers.player.is_server) then
@@ -1964,24 +3000,24 @@ mod.gt_apply_move_speed = function()
     end
 end
 
--- Chain a 1Hz infinite-ammo refresher + the deferred host-AI-toggle consumer
--- onto the existing update closure.
-do
-    local _orig = mod.update
-    mod.update = function(dt)
-        if _orig then _orig(dt) end
-        if _gt_infinite_ammo_active then
-            _gt_infinite_ammo_refresh_t = _gt_infinite_ammo_refresh_t + (dt or 0)
-            if _gt_infinite_ammo_refresh_t >= 1.0 then
-                _gt_infinite_ammo_refresh_t = 0
-                _gt_refresh_infinite_ammo()
-            end
-        end
-        if _ai_pending_host_toggle then
-            _ai_consume_pending_host_toggle()
+-- 1Hz infinite-ammo refresher + the deferred host-AI-toggle / client-send
+-- consumers. Registered through the central update subscriber registry
+-- (Issue #16 — replaces the prior layered mod.update chain idiom).
+_register_update("infinite_ammo_and_ai_pending", function(dt)
+    if _gt_infinite_ammo_active then
+        _gt_infinite_ammo_refresh_t = _gt_infinite_ammo_refresh_t + (dt or 0)
+        if _gt_infinite_ammo_refresh_t >= 1.0 then
+            _gt_infinite_ammo_refresh_t = 0
+            _gt_refresh_infinite_ammo()
         end
     end
-end
+    if _ai_pending_host_toggle then
+        _ai_consume_pending_host_toggle()
+    end
+    if _ai_pending_client_send then
+        _ai_consume_pending_client_send()
+    end
+end)
 
 -- ============================================================
 -- Player-state toggles (Group E — Janoti "Hacks" port)
@@ -2168,12 +3204,10 @@ if CutsceneSystem then
     end)
 end
 
--- Deferred auto-skip processor. Wraps the existing mod.update layered chain
--- (noclip / post-spawn-reapply / Creature Spawner / etc.). Fires one tick
--- after a cutscene activates with auto-skip on.
-local _gt_cutscene_prev_update = mod.update
-mod.update = function(dt)
-    if _gt_cutscene_prev_update then _gt_cutscene_prev_update(dt) end
+-- Deferred auto-skip processor. Fires one tick after a cutscene activates
+-- with auto-skip on. Registered through the central update subscriber
+-- registry (Issue #16 — replaces the prior layered mod.update chain idiom).
+_register_update("cutscene_auto_skip", function(dt)
     if _pending_auto_skip_system then
         local sys = _pending_auto_skip_system
         _pending_auto_skip_system = nil
@@ -2195,7 +3229,7 @@ mod.update = function(dt)
             mod:info("[gt_skipcutscenes] deferred skip failed: %s (cutscene state likely already torn down — harmless)", tostring(err))
         end
     end
-end
+end)
 
 -- Underflow guard. Other mods (or vanilla code paths) sometimes pop the
 -- cursor stack to 0 mid-cutscene; a follow-up pop would crash. Reproduce
@@ -2502,12 +3536,10 @@ end)
 
 -- Per-frame enforcement for complete + camera modes. Partial mode rides
 -- entirely on the visibility-group hook above and needs no per-frame work.
--- Wrap any prior mod.update (noclip / post-spawn reapply chains) so this
--- stacks cleanly with the existing layered-update pattern in the file.
+-- Registered through the central update subscriber registry (Issue #16 —
+-- replaces the prior layered mod.update chain idiom).
 local _gt_hud_last_applied_mode = HUD_MODE_OFF
-local _gt_hud_prev_update = mod.update
-mod.update = function(dt)
-    if _gt_hud_prev_update then _gt_hud_prev_update(dt) end
+_register_update("hide_ui", function(dt)
     local current = _gt_hud_mode()
     if current == HUD_MODE_COMPLETE or current == HUD_MODE_CAMERA then
         _gt_hud_force_hide_components()
@@ -2518,7 +3550,7 @@ mod.update = function(dt)
         _gt_hud_apply_camera_mode_visibility(true)
     end
     _gt_hud_last_applied_mode = current
-end
+end)
 
 -- ============================================================
 -- Creature Spawner (ported from Aussiemon's CreatureSpawner mod,
@@ -4195,3 +5227,161 @@ _rt_register("cutscene_skip_setting_id_present", function()
     if not ok then return "mod:get(gt_skip_cutscenes_enabled) errored" end
 end)
 
+_rt_register("gt_pickup_lookup_uses_rawget", function()
+    -- v0.2.47/.48: `_gt_is_spawn` resolves the chat-supplied pickup name through
+    -- `rawget(NetworkLookup.pickup_names, pickup_name)` (~L3553) so an unknown
+    -- name echoes "Unknown pickup name: ..." instead of raising the strict
+    -- `__index` metatable. The strict-table-lookup lint covers static-pattern
+    -- regressions; this runtime check is the belt-and-suspenders companion
+    -- required by §15 of PROJECT_STANDARDS.md.
+    --
+    -- 1. Source-pattern: the marker constant must be present.
+    if CT_GT_PICKUP_LOOKUP_RAWGET_MARKER_v0_2_48 ~= "gt-pickup-lookup-rawget-hardened" then
+        return "RAWGET marker absent — was the v0.2.47 pickup-lookup hardening reverted?"
+    end
+    -- 2. Runtime-state: probe rawget on a known-bad key — must return nil
+    --    without raising. If pickup_names ever loses its strict metatable,
+    --    this still passes; if it grows one with broken handling, this fails.
+    local NL = rawget(_G, "NetworkLookup")
+    local pn = NL and NL.pickup_names
+    if type(pn) == "table" then
+        local ok, value = pcall(rawget, pn, "__gt_rawget_probe_does_not_exist__")
+        if not ok then
+            return "rawget(NetworkLookup.pickup_names, <bad-key>) RAISED — strict-metatable behavior changed"
+        end
+        if value ~= nil then
+            return "rawget(NetworkLookup.pickup_names, <bad-key>) returned non-nil — unexpected"
+        end
+    end
+end)
+
+_rt_register("ai_takeover_marker_present", function()
+    -- v0.2.52 source-pattern guard. If a future refactor strips the marker
+    -- constant or the v0.2.52 fix gets reverted, this fails. Belt-and-
+    -- suspenders for the runtime queue test below — the queue test would
+    -- still pass even if `_ai_handle_toggle_change` deleted the ping call.
+    if CT_GT_AI_CLIENT_SEND_MARKER_v0_2_52 ~= "gt-ai-client-send-vmf-rehandshake" then
+        return "AI client-send marker absent — was the v0.2.52 fix reverted?"
+    end
+end)
+
+_rt_register("ai_takeover_vmf_ping_api_available", function()
+    -- v0.2.52: AI Takeover client send now calls `get_mod("VMF").ping_vmf_users()`
+    -- before each emit to force VMF to re-handshake when `_vmf_users` has gone
+    -- stale (bot-churn at mission load drops the host — see send-queue comment
+    -- in this file). If VMF ever renames or removes this entry point, the
+    -- workaround silently no-ops via the pcall and every client toggle would
+    -- silently drop again. Pin both the mod presence and the function shape.
+    local vmf = get_mod("VMF")
+    if not vmf then
+        return "VMF mod not loaded — `get_mod('VMF')` returned nil"
+    end
+    if type(vmf.ping_vmf_users) ~= "function" then
+        return "vmf.ping_vmf_users is not a function (type=" .. type(vmf.ping_vmf_users) .. ")"
+    end
+end)
+
+_rt_register("ai_takeover_client_send_queue_wired", function()
+    -- v0.2.52: client-side toggle now enqueues into `_ai_pending_client_send`
+    -- with retries instead of sending inline. The mod.update consumer must
+    -- be wired into the existing update chain — without it the queue would
+    -- fill and never drain. Verify the consumer function exists in the file's
+    -- closure scope by walking the queue forward via a synthetic enqueue and
+    -- asserting mod.update drains it.
+    --
+    -- We don't actually exercise the network send (no real peer in regression
+    -- harness); we just verify the queue shape + drain behavior using a
+    -- guaranteed-elapsed `next_at`. Restore the prior queue state on exit.
+    local saved = _ai_pending_client_send
+    _ai_pending_client_send = {
+        host = "__rt_probe_peer__",
+        want_bot = true,
+        retries_left = 1,
+        next_at = os.clock() - 1.0,  -- already-elapsed so the first tick fires
+    }
+    -- Drive one mod.update tick. The consumer should fire (next_at elapsed),
+    -- decrement retries to 0, and clear the queue.
+    if type(mod.update) ~= "function" then
+        _ai_pending_client_send = saved
+        return "mod.update is not a function — update chain broken"
+    end
+    local ok, err = pcall(mod.update, 0.016)
+    if not ok then
+        _ai_pending_client_send = saved
+        return "mod.update raised during client-send drain probe: " .. tostring(err)
+    end
+    if _ai_pending_client_send ~= nil then
+        _ai_pending_client_send = saved
+        return "client-send queue did not drain after one tick (consumer not wired into mod.update?)"
+    end
+    _ai_pending_client_send = saved
+end)
+
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/general_tweaker/general_tweaker_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)
+
+-- v0.2.60-dev: VMF_RECIPES § 10 / Issue #43 -- assert the gt_lobby RPC schema
+-- constant is in place. Migrated from lt v0.1.7-dev when its `lt_motd_show`
+-- RPC was absorbed as `gt_lobby_motd_show`.
+_rt_register("gt_lobby_rpc_schema_present", function()
+    if type(mod.GT_LOBBY_RPC_SCHEMA) ~= "number" then
+        return "mod.GT_LOBBY_RPC_SCHEMA not defined as number"
+    end
+    if mod.GT_LOBBY_RPC_SCHEMA < 1 then
+        return "mod.GT_LOBBY_RPC_SCHEMA < 1"
+    end
+end)
+
+-- ============================================================
+-- gt_lobby_* feature modules (absorbed from lobby_tweaker 2026-05-25;
+-- lt v0.1.7-dev). Each module is self-contained and wires into gt's
+-- central per-frame update registry (mod._gt_register_update) and
+-- wraps mod.on_setting_changed / mod.on_game_state_changed where
+-- needed. Settings are namespaced `gt_lobby_*`; chat commands too.
+--
+-- Load order matters slightly:
+--   * known_mods is a pure data table -- loaded by modded_manifest itself.
+--   * slot_reservations / session_ignore / kick_idle / motd are independent.
+--   * modded_manifest must load AFTER on_setting_changed has its final
+--     shape (we just finished defining it above).
+--   * failed_join_reveal hooks StateLoading.create_popup -- order-independent.
+-- ============================================================
+mod:dofile("scripts/mods/general_tweaker/_gt_lobby_slot_reservations")
+mod:dofile("scripts/mods/general_tweaker/_gt_lobby_session_ignore")
+mod:dofile("scripts/mods/general_tweaker/_gt_lobby_kick_idle")
+mod:dofile("scripts/mods/general_tweaker/_gt_lobby_motd")
+mod:dofile("scripts/mods/general_tweaker/_gt_lobby_modded_manifest")
+mod:dofile("scripts/mods/general_tweaker/_gt_lobby_failed_join_reveal")

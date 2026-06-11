@@ -77,9 +77,167 @@ local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_ba
 -- `_big_rebalance_extract/impl_wt_summary.md` for the full toggle inventory.
 local big_rebalance = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance")
 
-local MOD_VERSION = "0.12.72-dev"
+local MOD_VERSION = "0.12.119-dev"
+
+-- v0.12.73: source-pattern marker constant for the /wt_regression_test
+-- `wt_itemmasterlist_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
+-- PARTIAL row 1 — promoted to PASS by adding a belt-and-suspenders runtime
+-- check beside the existing strict-table-lookup lint coverage).
+local CT_WT_ITEMMASTERLIST_RAWGET_MARKER_v0_12_73 = "wt-itemmasterlist-rawget-hardened"
+
+-- v0.12.77 (Issue #26): pcall-isolated `mod:safe_hook` / `mod:safe_hook_safe`
+-- helpers. Required here near the top (after MOD_VERSION, before any
+-- `mod:hook(...)` call site) so the methods are attached to the mod table
+-- before any consumer below reaches for them. Self-contained per mod for v1;
+-- cross-mod sharing is Wave-2. See `_safe_hook.lua` header for the full
+-- rationale + VMF chain-isolation reference.
+--
+-- v0.12.84-dev: same require also installs Layer 3 `mod:traced_hook` /
+-- `mod:traced_hook_safe` — safe_hook + structured `[wt:trace] event=...`
+-- entry/exit log lines gated on `enable_debug_logging`. Adopt on hooks
+-- where fire-confirmation is load-bearing (NOT on per-frame hooks — see
+-- _safe_hook.lua header "RATE-LIMIT CAVEAT").
+mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
+
+-- ============================================================
+-- Dev-only tooling modules (v0.12.96-dev)
+-- ============================================================
+-- Two nested VMF menus for live in-game tuning of cross-character ports.
+-- Loaded HERE (after _safe_hook, before template patchers) so the module
+-- locals are available; their `install()` calls fire at the bottom of this
+-- file after the template patchers have populated `Weapons.<template>` with
+-- their initial values (which is what the anim picker dropdowns mirror).
+--
+-- These modules will be stripped (or moved to a sibling `_dev` directory)
+-- when wt forks a stable release-side mod; until then they ship inline.
+-- See feedback_no_premature_dev_gates.md.
+local _wt_dev_anim_picker = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_anim_picker")
+local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_hold_pose")
+
+-- Startup banner: log-only, NOT chat. The applied marker line further down
+-- ([wt] enabled v<X> settings_fp=<hash>) is the canonical version surface
+-- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
-mod:echo("Weapon Tweaker v" .. MOD_VERSION)
+
+-- ============================================================
+-- Debug helper (v0.12.74-dev; gate renamed v0.12.81-dev) — gated
+-- verbose diagnostics
+-- ============================================================
+-- `enable_debug_logging` is the single user-facing toggle
+-- (PROJECT_STANDARDS.md § 3.6, replaces the previous
+-- `wt_debug_mode`). When OFF (default), the noisy per-spawn /
+-- per-wield / per-state diagnostic lines that used to fire
+-- unconditionally are suppressed. When ON, every `_dbg(...)` call
+-- below routes to `mod:info` with a `[wt:dbg]` tag prefix.
+--
+-- Load-time status (e.g. "Weapon Tweaker: Baseline Active") and
+-- warnings/errors stay on `mod:info` / `mod:warning` / `mod:error`
+-- so they always print regardless of the toggle. The intent is
+-- "noisy fine-grained diagnostics OFF by default; importable info
+-- ON by default" — not a log-level system.
+--
+-- Performance note: `mod:get` is a hash-table lookup with no
+-- network / disk roundtrip, so a per-call check is cheap. Inside
+-- a hot loop, cache once at the top: `local D = mod:get("enable_debug_logging")`.
+--
+-- v0.12.83-dev: two-helper policy per PROJECT_STANDARDS.md § 3.6.
+-- `_dbg` = confirmation / expected behavior — file only.
+-- `_dbg_alert` = unexpected / wrong / mismatch — file AND in-game chat.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[wt:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[wt:dbg] " .. fmt, ...)
+        mod:echo("[wt] " .. fmt, ...)
+    end
+end
+
+-- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
+-- one mod:info line at load. ALWAYS fires (operational telemetry). Additive
+-- to the existing "Weapon Tweaker: Baseline Active" line further down.
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/weapon_tweaker/weapon_tweaker_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[wt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[wt] v%s loaded", MOD_VERSION))
+end
+
+-- One-time migration of the v0.12.73-and-earlier dead checkboxes
+-- (`debug`, `enable_weapon_debug_logging`, `wt_debug_mode`) into
+-- the universal `enable_debug_logging` toggle (v0.12.81-dev rename
+-- per PROJECT_STANDARDS.md § 3.6). Gated by a sentinel so it runs
+-- exactly once per user — re-running would clobber an explicit OFF
+-- set after the first migration. The widgets are gone in _data.lua
+-- so the old keys won't be re-written by the VMF settings panel.
+local function _migrate_legacy_debug_setting()
+    if mod:get("wt_debug_migration_v1") then return end
+    local legacy_debug    = mod:get("debug")
+    local legacy_logging  = mod:get("enable_weapon_debug_logging")
+    local legacy_wtdebug  = mod:get("wt_debug_mode")
+    if legacy_debug or legacy_logging or legacy_wtdebug then
+        mod:set("enable_debug_logging", true)
+        mod:info("[wt] migrated legacy debug settings -> enable_debug_logging=true (debug=%s, enable_weapon_debug_logging=%s, wt_debug_mode=%s)",
+            tostring(legacy_debug), tostring(legacy_logging), tostring(legacy_wtdebug))
+    end
+    -- Clear the old keys to a definite `false`. The widgets are gone in
+    -- _data.lua so VMF won't surface these in the panel; the residual
+    -- entries are harmless but we still want a clean baseline so a
+    -- future re-introduction of `debug` etc. doesn't pick up a stale
+    -- truthy value from years ago. `mod:set(key, false)` is the
+    -- safest cross-version write (some VMF builds treat `nil` as
+    -- "no change").
+    mod:set("debug", false)
+    mod:set("enable_weapon_debug_logging", false)
+    mod:set("wt_debug_migration_v1", true)
+end
+_migrate_legacy_debug_setting()
 
 -- /regression_test scaffold. Registrations live at end of file so they can
 -- reference the file-local state tables (`_unit_state`, `weapon_unlock_map`,
@@ -89,66 +247,45 @@ local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
 mod:command("wt_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail = 0, 0
+    local pass, fail, skip = 0, 0, 0
     mod:echo("=== wt regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
             mod:info("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+            -- v0.12.117 (Issue #74): tests return "skip: <reason>" when their
+            -- preconditions (game tables, sibling mods) aren't loaded; that's
+            -- neither PASS nor FAIL and must not pollute the failure count.
+            mod:echo("  SKIP: %s -- %s", c.name, err); skip = skip + 1
+            mod:info("[regression] SKIP %s: %s", c.name, err)
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
             mod:warning("[regression] FAIL %s: %s", c.name, msg)
         end
     end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
 end)
 mod:info("[regression-test-command] registered as /wt_regression_test")
 
-local weapon_unlock_map = {
-    -- Kruber
-    es_mercenary      = { "dr_2h_axe", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
-    es_huntsman       = { "dr_2h_axe", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
-    es_knight         = { "dr_2h_axe", "es_bastard_sword", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
-    es_questingknight = { "dr_2h_axe", "es_bastard_sword", "es_sword_shield_breton", "es_2h_sword_executioner", "es_2h_sword", "es_halberd", "we_2h_sword", "we_spear", "we_1h_spears_shield", "we_1h_sword", "es_1h_mace", "es_mace_shield", "es_dual_wield_hammer_sword", "wh_2h_billhook", "wh_1h_falchion", "es_1h_flail", "wh_1h_hammer", "bw_1h_crowbill", "bw_1h_flail_flaming", "es_deus_01", "es_1h_sword", "es_sword_shield", "es_2h_heavy_spear", "es_2h_hammer", "es_blunderbuss", "es_handgun", "we_longbow", "es_longbow", "es_repeating_handgun", "wh_brace_of_pistols", "wh_repeating_pistols" },
-    -- Bardin
-    dr_ranger         = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_falchion", "bw_1h_crowbill", "dr_2h_pick", "dr_crossbow", "dr_rakegun", "dr_handgun", "es_handgun", "dr_steam_pistol", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
-    dr_ironbreaker    = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_falchion", "bw_1h_crowbill", "dr_2h_pick", "dr_crossbow", "dr_drake_pistol", "dr_drakegun", "dr_rakegun", "dr_handgun", "es_handgun", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
-    dr_slayer         = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_falchion", "bw_1h_crowbill", "dr_2h_pick", "dr_crossbow", "dr_rakegun", "dr_handgun", "es_handgun", "dr_steam_pistol", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
-    dr_engineer       = { "dr_1h_axe", "dr_shield_axe", "dr_2h_cog_hammer", "dr_dual_wield_axes", "dr_dual_wield_hammers", "dr_2h_axe", "dr_2h_hammer", "dr_1h_hammer", "dr_shield_hammer", "we_1h_sword", "es_1h_sword", "wh_1h_falchion", "bw_1h_crowbill", "dr_2h_pick", "dr_crossbow", "dr_drake_pistol", "dr_drakegun", "dr_rakegun", "dr_handgun", "es_handgun", "dr_steam_pistol", "wh_crossbow", "dr_1h_throwing_axes", "dr_deus_01" },
-    -- Kerillian
-    we_waywatcher     = { "we_dual_wield_daggers", "we_dual_wield_swords", "we_1h_axe", "we_2h_axe", "we_2h_sword", "es_2h_sword", "es_1h_mace", "es_deus_01", "we_spear", "we_1h_spears_shield", "we_1h_sword", "we_dual_wield_sword_dagger", "we_shortbow_hagbane", "we_javelin", "es_longbow", "we_longbow", "we_deus_01", "wh_crossbow_repeater", "we_shortbow", "we_crossbow_repeater" },
-    we_maidenguard    = { "we_dual_wield_daggers", "we_dual_wield_swords", "we_1h_axe", "we_2h_axe", "we_2h_sword", "es_2h_sword", "es_1h_mace", "es_deus_01", "we_spear", "we_1h_spears_shield", "we_1h_sword", "we_dual_wield_sword_dagger", "we_shortbow_hagbane", "we_javelin", "es_longbow", "we_longbow", "we_deus_01", "wh_crossbow_repeater", "we_shortbow", "we_crossbow_repeater" },
-    we_shade          = { "we_dual_wield_daggers", "we_dual_wield_swords", "we_1h_axe", "we_2h_axe", "we_2h_sword", "es_2h_sword", "es_1h_mace", "es_deus_01", "we_spear", "we_1h_spears_shield", "we_1h_sword", "we_dual_wield_sword_dagger", "we_shortbow_hagbane", "we_javelin", "es_longbow", "we_longbow", "we_deus_01", "wh_crossbow_repeater", "we_shortbow", "we_crossbow_repeater" },
-    we_thornsister    = { "we_dual_wield_daggers", "we_dual_wield_swords", "we_1h_axe", "we_2h_axe", "we_2h_sword", "es_2h_sword", "es_1h_mace", "es_deus_01", "we_spear", "we_1h_spears_shield", "we_1h_sword", "we_dual_wield_sword_dagger", "we_life_staff", "we_shortbow_hagbane", "we_javelin", "es_longbow", "we_longbow", "we_deus_01", "wh_crossbow_repeater", "we_shortbow", "we_crossbow_repeater" },
-    -- Saltzpyre
-    wh_captain        = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_spear", "we_1h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater", "es_longbow", "we_longbow" },
-    wh_bountyhunter   = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_spear", "we_1h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater", "es_longbow", "we_longbow" },
-    wh_zealot         = { "wh_1h_axe", "wh_dual_wield_axe_falchion", "wh_2h_billhook", "wh_dual_hammer", "wh_1h_falchion", "es_1h_flail", "wh_2h_sword", "wh_1h_hammer", "wh_2h_hammer", "we_spear", "we_1h_sword", "es_halberd", "es_1h_mace", "es_1h_sword", "es_2h_heavy_spear", "wh_fencing_sword", "bw_1h_crowbill", "wh_brace_of_pistols", "wh_crossbow", "wh_deus_01", "we_crossbow_repeater", "wh_repeating_pistols", "wh_crossbow_repeater", "es_longbow", "we_longbow" },
-    wh_priest         = { "wh_dual_hammer", "es_1h_flail", "wh_flail_shield", "wh_1h_hammer", "wh_hammer_shield", "wh_hammer_book", "wh_2h_hammer" },
-    -- Sienna
-    bw_adept          = { "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "bw_1h_mace", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_skullstaff_flamethrower" },
-    bw_scholar        = { "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "bw_1h_mace", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_skullstaff_flamethrower" },
-    bw_unchained      = { "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "bw_1h_mace", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_skullstaff_flamethrower" },
-    bw_necromancer    = { "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "bw_1h_mace", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_necromancy_staff" },
-}
+-- v0.12.99-dev: weapon_unlock_map + _cwv_managed extracted to wt_unlock_data.lua
+-- so wt_dev_anim_picker.lua can dofile the same source without depending on
+-- VMF's main-script-vs-data load order. (v0.12.98-dev had the picker reading
+-- `mod._weapon_unlock_map`, which was nil at _data.lua time because VMF runs
+-- _data.lua before main wt.lua finishes — load order is a VMF invariant.)
+local _wt_unlock_data   = mod:dofile("scripts/mods/weapon_tweaker/wt_unlock_data")
+local weapon_unlock_map = _wt_unlock_data.weapon_unlock_map
 
 -- CLARIFY: career_weapon_variants ("CWV") publishes its own custom items for
 -- these (career, weapon) pairs. When CWV is installed, weapon_tweaker SKIPS
 -- adding those careers to `can_wield` for the listed weapons (and the matching
 -- widgets are stripped in _data.lua) so the two mods don't compete for the
 -- same can_wield slot.
-local _cwv_managed = {
-    -- v0.12.57-dev: wh_1h_axe removed from Kruber's unlock_map entirely
-    -- (user direction — no Saltzpyre Skullsplitter on Kruber). The CWV skip
-    -- for wh_1h_axe became dead with that removal; only wh_1h_falchion +
-    -- wh_dual_wield_axe_falchion remain CWV-managed for Kruber.
-    es_mercenary      = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-    es_huntsman       = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-    es_knight         = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-    es_questingknight = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-}
+-- v0.12.99-dev: also from wt_unlock_data.lua (shared source of truth — see
+-- the unlock_data dofile above).
+local _cwv_managed = _wt_unlock_data.cwv_managed
 
 -- v0.12.57-dev: pairs removed from `weapon_unlock_map`. Users who had the
 -- corresponding `unlock_es_*_<weapon>` toggle = true before the removal will
@@ -376,6 +513,13 @@ local _career_anim_redirect = {
                                                        wh_captain = "to_1h_sword", wh_bountyhunter = "to_1h_sword", wh_zealot = "to_1h_sword" } },
     to_dual_hammers_priest           = { alt = "to_dual_hammers",               prefix = "wh_" },
     to_dual_axes                     = { alt = "to_dual_hammers",               prefix = "dr_slayer" },
+    -- v0.12.119: Sienna's Flaming Flail (bw_1h_flail_flaming) wield on non-bw
+    -- receivers — DECISIONS:36 flagged the missing wield redirect as the cause
+    -- of the broken wield stance (the H2 attack redirect in the flail block
+    -- already existed; the wield event did not). `to_1h_flail` is the universal
+    -- Empire-flail wield that already works on every character via es_1h_flail.
+    to_1h_flail_flaming              = { alt = "to_1h_flail",                   prefix = "bw_",
+                                         overrides = { wh_priest = "to_1h_hammer" } },
 }
 
 -- Suffix-based animation redirect: when an event ending in a weapon suffix
@@ -705,6 +849,29 @@ local _3p_template_remaps = {
     -- handled by the direct-redirect block in the animation_event hook —
     -- table-remap of that event corrupts the SM (same pattern as billhook
     -- attack_swing_stab_02).
+    --
+    -- Saltzpyre's billhook (wh_2h_billhook) on Kruber. v0.12.102-dev fix for
+    -- the wield-event-collision bug class identified during the Kruber-on-
+    -- billhook regression triage:
+    --   `_WIELD_ANIM_CAREER_3P_PATCHES.two_handed_billhooks_template` rewrites
+    --   the wield event to `to_polearm` for es_*. The v0.12.64-dev
+    --   `_resolve_3p_remap(event_name, career)` fallback at line ~1287 then
+    --   keys on the POST-patch wield event, but `_3p_remap_triggers["to_polearm"]`
+    --   defines `es_ = _3p_remap_spear_to_polearm` (authored for the elf-spear
+    --   cross-character port). That entry hijacks the billhook lookup and
+    --   installs the wrong remap table — billhook source events (e.g.
+    --   `attack_swing_charge_stab`, `attack_swing_left_diagonal`, etc., all
+    --   listed in `_3p_remap_billhook_to_polearm` at line ~644) get no
+    --   substitute and fire raw on Kruber's polearm SM. Adding an explicit
+    --   `_3p_template_remaps[two_handed_billhooks_template]` entry routes the
+    --   lookup through `_resolve_template_remap` FIRST (line ~1247), which is
+    --   keyed unambiguously by template name and short-circuits the ambiguous
+    --   wield-event fallback. The wh_ branch is intentionally `false` —
+    --   billhook is Saltzpyre-native and needs no remap.
+    two_handed_billhooks_template = {
+        wh_ = false,
+        es_ = _3p_remap_billhook_to_polearm,
+    },
     -- Bardin's dual axes on non-Slayer careers. The wield event redirect
     -- (to_dual_axes → to_dual_hammers) loads the dual-hammers SM, but the
     -- dual_wield_axes template fires several attack events the dual-hammers
@@ -1016,6 +1183,20 @@ local function _unit_career_name(unit)
     return nil
 end
 
+-- v0.12.88-dev: sampling counters for hot-path _dbg traces. animation_event
+-- fires on every animation event for every unit (per-frame-class hot path),
+-- so emitting a _dbg line per call would flood the log. _ANIM_EVENT_SAMPLE_N
+-- = 60 means roughly "log 1 in 60 calls" (~1/sec on a player wielding a
+-- weapon). REMAP / FORCE / REDIR branches sample less aggressively because
+-- they only fire on actual remap hits (cross-character ports), which are
+-- rarer than the top-level call count. Per PROJECT_STANDARDS § 3.6
+-- "Performance note: mod:get is cheap"; sampling is purely a log-volume
+-- concern.
+local _ANIM_EVENT_SAMPLE_N = 60
+local _ANIM_EVENT_SAMPLE_REMAP_N = 30
+local _anim_event_call_count = 0
+local _anim_event_remap_count = 0
+
 -- CLARIFY: stringified hook on the C-API class `Unit`. VMF resolves this
 -- against `_G.Unit.animation_event`. This is the central entry point — every
 -- animation event for every unit goes through here once the mod is loaded,
@@ -1027,6 +1208,15 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
     if not _original_animation_event then _original_animation_event = func end
 
     if not event_name then return func(unit, event_name, ...) end
+
+    -- v0.12.88-dev: sampled entry trace (1-in-60). This is the hottest hook
+    -- in wt; full per-call _dbg would flood. Sample is enough to confirm the
+    -- hook is firing at all + spot-check the event names flowing through.
+    _anim_event_call_count = _anim_event_call_count + 1
+    if _anim_event_call_count % _ANIM_EVENT_SAMPLE_N == 0 then
+        _dbg("[wt:anim] event=enter event_name=%s sample=%d (1-in-%d)",
+            tostring(event_name), _anim_event_call_count, _ANIM_EVENT_SAMPLE_N)
+    end
 
     if not feature_enabled("enable_weapon_animation_redirects", true) then
         return func(unit, event_name, ...)
@@ -1196,6 +1386,19 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                 mod:info(msg)
                 mod:echo(msg)
             end
+            -- v0.12.88-dev: sampled _dbg trace (1-in-N). Cross-character
+            -- anim REMAP path is rarer than the top-level hook fire rate
+            -- (only fires when state.remap is populated AND the source
+            -- event has a substitute), so 1-in-30 is enough to confirm
+            -- the path is hit without flooding mid-combat. Captures
+            -- career so combo bugs ("REMAP fires for the wrong career")
+            -- are visible.
+            _anim_event_remap_count = _anim_event_remap_count + 1
+            if _anim_event_remap_count % _ANIM_EVENT_SAMPLE_REMAP_N == 0 then
+                _dbg("[wt:anim] event=REMAP src=%s -> tgt=%s career=%s tmpl=%s key=%s sample=%d",
+                    tostring(event_name), tostring(target), tostring(career),
+                    tostring(state.template), tostring(state.key), _anim_event_remap_count)
+            end
             pcall(func, unit, target, ...)
             return
         end
@@ -1325,7 +1528,17 @@ end
 
 -- Local-player wield. Populates state AND captures the 1P hands unit ref
 -- (needed for the redirect-skip early-return in the animation_event hook).
-mod:hook("SimpleInventoryExtension", "wield", function(func, self, slot_name, ...)
+-- v0.12.77 (Issue #26): converted to `mod:safe_hook` — this hook fans out
+-- to per-unit state population + diagnostic dumps; a raise inside here
+-- previously could silently kill every later wield consumer in the chain
+-- (cosmetics_tweaker / LA / cwv all stack on the same Class.method).
+-- v0.12.84-dev: promoted to `mod:traced_hook` (Layer 3) — wield is event-rate
+-- (one fire per slot swap, NOT per-frame), so trace lines are safe. With
+-- enable_debug_logging on, every wield emits paired
+-- `[wt:trace] event=enter|exit class=SimpleInventoryExtension method=wield`
+-- lines. Catches "did the wield hook fire?" diagnostics without grepping
+-- through downstream state population logs.
+mod:traced_hook("SimpleInventoryExtension", "wield", function(func, self, slot_name, ...)
     _populate_unit_state_from_wield(self, slot_name)
 
     -- Local-only side effects: capture the 1P hands unit ref and log details.
@@ -1350,6 +1563,38 @@ mod:hook("SimpleInventoryExtension", "wield", function(func, self, slot_name, ..
                     mod:info("[WIELD] item_data is nil, slot_data=" .. tostring(slot_data))
                 end
             end
+
+            -- v0.12.74-dev: debug-mode wield diagnostic. Separate from the
+            -- `_log_anims`/`/animlog`-driven block above so users can enable
+            -- the universal `enable_debug_logging` toggle from the VMF
+            -- settings panel without also touching the chat-command
+            -- animation log. Cache the toggle once to avoid two `mod:get`
+            -- calls per wield. (v0.12.81-dev: renamed from `wt_debug_mode`.)
+            --
+            -- Fields chosen are the ones that drive 3P presentation on
+            -- the receiver: career_name (3P skeleton selector — see
+            -- _3p_state_machine_paths block above), item_key, template,
+            -- and the template's `anim_event_3p` + `wield_anim_3p`
+            -- (the per-template default 3P clip names). The actual 3P
+            -- skeleton path is derived from career_name via the profile
+            -- (e.g. `wh_` -> witch_hunter base, `es_` -> empire_soldier).
+            local D = mod:get("enable_debug_logging")
+            if D then
+                local s = _state_for(self._unit)
+                local equipment = self._equipment or self.equipment
+                local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
+                local item_data = slot_data and slot_data.item_data
+                local item_key = (item_data and (item_data.key or item_data.name)) or "?"
+                local template = (s and s.template) or (item_data and item_data.template) or "?"
+                local tmpl_tbl = Weapons and Weapons[template]
+                local anim_event_3p = (tmpl_tbl and tmpl_tbl.anim_event_3p) or "?"
+                local wield_anim_3p = (tmpl_tbl and tmpl_tbl.wield_anim_3p) or "?"
+                local career_name = self._career_name or "?"
+                _dbg("[wield] slot=%s career=%s key=%s template=%s anim_event_3p=%s wield_anim_3p=%s",
+                    tostring(slot_name), tostring(career_name),
+                    tostring(item_key), tostring(template),
+                    tostring(anim_event_3p), tostring(wield_anim_3p))
+            end
         end
     end
     return func(self, slot_name, ...)
@@ -1364,7 +1609,10 @@ end)
 -- for the multiplayer case.
 --
 -- No local side effects — husks never represent the local viewer's 1P hands.
-mod:hook("SimpleHuskInventoryExtension", "wield", function(func, self, slot_name, ...)
+-- v0.12.77 (Issue #26): converted to `mod:safe_hook` — same chain-isolation
+-- rationale as the local-player wield above. Husk wield is the entry point
+-- for cross-character 3P remap on every non-local peer in multiplayer.
+mod:safe_hook("SimpleHuskInventoryExtension", "wield", function(func, self, slot_name, ...)
     _populate_unit_state_from_wield(self, slot_name)
     return func(self, slot_name, ...)
 end)
@@ -1423,9 +1671,9 @@ local function _scale_weapon_units(slot_data, weapon_key, career_name)
         for k, v in pairs(slot_data) do
             local t = type(v)
             if t == "userdata" then
-                mod:info("[scale_probe] %s slot_data.%s (UNIT)", weapon_key, tostring(k))
+                _dbg("[scale_probe] %s slot_data.%s (UNIT)", weapon_key, tostring(k))
             elseif t == "table" then
-                mod:info("[scale_probe] %s slot_data.%s (table)", weapon_key, tostring(k))
+                _dbg("[scale_probe] %s slot_data.%s (table)", weapon_key, tostring(k))
             end
         end
     end
@@ -1458,9 +1706,9 @@ local function _scale_weapon_units(slot_data, weapon_key, career_name)
         end
     end
     if type(scale_factor) == "table" then
-        mod:info("Scaled %s on %s by {%.2f, %.2f, %.2f}", weapon_key, career_name, scale_factor[1], scale_factor[2], scale_factor[3])
+        _dbg("Scaled %s on %s by {%.2f, %.2f, %.2f}", weapon_key, career_name, scale_factor[1], scale_factor[2], scale_factor[3])
     else
-        mod:info("Scaled %s on %s by %.2fx", weapon_key, career_name, scale_factor)
+        _dbg("Scaled %s on %s by %.2fx", weapon_key, career_name, scale_factor)
     end
 end
 
@@ -1522,7 +1770,7 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
             pcall(Unit.set_local_position, unit, 0, current + pos)
         end
     end
-    mod:info("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(hand or "both"))
+    _dbg("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(hand or "both"))
 end
 
 -- CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
@@ -1537,7 +1785,16 @@ end
 -- Rendering-path coverage: this is path 1 (in-game). Path 2 (HeroPreviewer) hook
 -- lives below. Path 3 (LootItemUnitPreviewer) is intentionally NOT covered per
 -- feedback_grip_offset_sign.md; CWV covers all three.
-mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
+-- v0.12.77 (Issue #26): converted to `mod:safe_hook`. This is the in-game
+-- (path 1 of 3) rendering hook for the keep + every mission spawn — a
+-- raise inside here would kill cosmetics_tweaker / cwv / LA hooks on the
+-- same Class.method silently, manifesting as "weapon model didn't apply"
+-- with no log line to chase.
+-- v0.12.84-dev: promoted to `mod:traced_hook` (Layer 3). Equip events are
+-- per-mission-spawn / per-keep-load rate (NOT per-frame), so trace lines
+-- are safe. The entry/exit pair confirms the in-game rendering path fired
+-- and lets the user count returns when chasing cross-mod regressions.
+mod:traced_hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
     -- Fallback: if career_name was lost somewhere in the hook chain (observed in
     -- CW bot spawns), recover it from the spawning unit's inventory extension.
     -- _career_name is set in SimpleInventoryExtension.init before extensions_ready,
@@ -1571,7 +1828,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         local ok_resolve, resolved = pcall(BackendUtils.get_item_units, item_data, item_data.backend_id, nil, career_name)
         if ok_resolve and type(resolved) == "table" then
             override_item_units = resolved
-            mod:info("[create_equipment] pre-resolved item_units for %s on %s (rhu=%s)",
+            _dbg("[create_equipment] pre-resolved item_units for %s on %s (rhu=%s)",
                 tostring(item_data.name), tostring(career_name), tostring(resolved.right_hand_unit))
         end
     end
@@ -1829,13 +2086,19 @@ local _BRACE_REPEATER_ANIM_REMAP_3P = {
 }
 
 local function _patch_brace_template_for_kruber()
-    if not Weapons or not Weapons.brace_of_pistols_template_1 then return end
+    if not Weapons or not Weapons.brace_of_pistols_template_1 then
+        _dbg_alert("[wt:tpl_patch] event=skip template=brace_of_pistols_template_1 reason=missing")
+        return
+    end
     local tpl = Weapons.brace_of_pistols_template_1
+    local n_career_overrides = 0
+    local n_action_remaps = 0
 
     -- Wield event per-career override.
     tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
     for k, v in pairs(_BRACE_REPEATER_BASE_WIELD_3P) do
         tpl.wield_anim_career_3p[k] = v
+        n_career_overrides = n_career_overrides + 1
     end
 
     -- Per-action anim_event_3p remap for events the repeater SM doesn't
@@ -1849,11 +2112,17 @@ local function _patch_brace_template_for_kruber()
                             and sub_action.anim_event
                             and _BRACE_REPEATER_ANIM_REMAP_3P[sub_action.anim_event] then
                         sub_action.anim_event_3p = _BRACE_REPEATER_ANIM_REMAP_3P[sub_action.anim_event]
+                        n_action_remaps = n_action_remaps + 1
                     end
                 end
             end
         end
     end
+    -- v0.12.88-dev: per-patcher trace. Boot-time only; always-on. Captures
+    -- how many career_overrides + per-action remaps were applied so a
+    -- regression (table-emptied / iter-order-broken) is visible at load.
+    _dbg("[wt:tpl_patch] event=applied template=brace_of_pistols_template_1 career_overrides=%d action_remaps=%d",
+        n_career_overrides, n_action_remaps)
 end
 
 _patch_brace_template_for_kruber()
@@ -1890,12 +2159,18 @@ local _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P = {
 }
 
 local function _patch_longbow_empire_template_for_saltzpyre()
-    if not Weapons or not Weapons.longbow_empire_template then return end
+    if not Weapons or not Weapons.longbow_empire_template then
+        _dbg_alert("[wt:tpl_patch] event=skip template=longbow_empire_template reason=missing")
+        return
+    end
     local tpl = Weapons.longbow_empire_template
+    local n_career_overrides = 0
+    local n_action_remaps = 0
 
     tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
     for k, v in pairs(_SP_LONGBOW_CROSSBOW_WIELD_3P) do
         tpl.wield_anim_career_3p[k] = v
+        n_career_overrides = n_career_overrides + 1
     end
 
     -- Per-action anim_event_3p remap. Pattern mirrors the brace patcher.
@@ -1907,11 +2182,14 @@ local function _patch_longbow_empire_template_for_saltzpyre()
                             and sub_action.anim_event
                             and _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event] then
                         sub_action.anim_event_3p = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event]
+                        n_action_remaps = n_action_remaps + 1
                     end
                 end
             end
         end
     end
+    _dbg("[wt:tpl_patch] event=applied template=longbow_empire_template career_overrides=%d action_remaps=%d",
+        n_career_overrides, n_action_remaps)
 end
 
 _patch_longbow_empire_template_for_saltzpyre()
@@ -1940,12 +2218,18 @@ local _WE_LONGBOW_CROSSBOW_ANIM_REMAP_3P = {
 }
 
 local function _patch_longbow_template_1_for_saltzpyre()
-    if not Weapons or not Weapons.longbow_template_1 then return end
+    if not Weapons or not Weapons.longbow_template_1 then
+        _dbg_alert("[wt:tpl_patch] event=skip template=longbow_template_1 reason=missing")
+        return
+    end
     local tpl = Weapons.longbow_template_1
+    local n_career_overrides = 0
+    local n_action_remaps = 0
 
     tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
     for k, v in pairs(_WE_LONGBOW_CROSSBOW_WIELD_3P) do
         tpl.wield_anim_career_3p[k] = v
+        n_career_overrides = n_career_overrides + 1
     end
 
     if tpl.actions then
@@ -1956,11 +2240,14 @@ local function _patch_longbow_template_1_for_saltzpyre()
                             and sub_action.anim_event
                             and _WE_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event] then
                         sub_action.anim_event_3p = _WE_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event]
+                        n_action_remaps = n_action_remaps + 1
                     end
                 end
             end
         end
     end
+    _dbg("[wt:tpl_patch] event=applied template=longbow_template_1 career_overrides=%d action_remaps=%d",
+        n_career_overrides, n_action_remaps)
 end
 
 _patch_longbow_template_1_for_saltzpyre()
@@ -1988,16 +2275,23 @@ local _WH_REPEATING_PISTOLS_REPEATING_HANDGUN_WIELD_3P = {
 }
 
 local function _patch_repeating_pistol_template_1_for_kruber()
-    if not Weapons or not Weapons.repeating_pistol_template_1 then return end
+    if not Weapons or not Weapons.repeating_pistol_template_1 then
+        _dbg_alert("[wt:tpl_patch] event=skip template=repeating_pistol_template_1 reason=missing")
+        return
+    end
     local tpl = Weapons.repeating_pistol_template_1
+    local n_career_overrides = 0
 
     tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
     for k, v in pairs(_WH_REPEATING_PISTOLS_REPEATING_HANDGUN_WIELD_3P) do
         tpl.wield_anim_career_3p[k] = v
+        n_career_overrides = n_career_overrides + 1
     end
 
     -- Intentionally no anim_event_3p remap loop: source vocabulary is a strict
     -- subset of target vocabulary, so falling through unchanged is correct.
+    _dbg("[wt:tpl_patch] event=applied template=repeating_pistol_template_1 career_overrides=%d action_remaps=0_intentional",
+        n_career_overrides)
 end
 
 _patch_repeating_pistol_template_1_for_kruber()
@@ -2102,9 +2396,17 @@ local function _apply_wield_anim_career_3p_patches()
         local tpl = Weapons[template_name]
         if tpl then
             tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
+            local applied = 0
             for career, event in pairs(career_overrides) do
                 tpl.wield_anim_career_3p[career] = event
+                applied = applied + 1
             end
+            -- v0.12.102-dev: mirror the per-template `[wt:tpl_patch] event=applied`
+            -- instrumentation already present on the brace / longbow / repeating-pistol
+            -- patchers (lines ~2088 / 2155 / 2213 / 2257). Closes the diagnostic blind
+            -- spot where polearm patches applied silently and we couldn't confirm from
+            -- log whether wield_anim_career_3p[<career>] actually installed.
+            _dbg("[wt:tpl_patch] event=applied template=%s career_overrides=%d", template_name, applied)
         else
             mod:warning("[wt wield-3p-patch] Weapons.%s missing; skipping wield_anim_career_3p patch", template_name)
         end
@@ -2112,6 +2414,63 @@ local function _apply_wield_anim_career_3p_patches()
 end
 
 _apply_wield_anim_career_3p_patches()
+
+-- ============================================================
+-- Body-specific attachment source-node safety (v0.12.114-dev — per-spawn)
+-- ============================================================
+-- Crash class: a weapon template's `unit_attachment_node_linking.third_person`
+-- table references a body-skeleton-specific source node (e.g.
+-- `j_leftweaponcomponent16`, an elf-body-only node) that doesn't exist on
+-- non-native receiver bodies. `Unit.node(body_unit, source_node)` bypasses
+-- pcall and engine-fatals when the requested node is missing.
+--
+-- Burn history:
+--   * 2026-06-05 v0.12.112-dev: `j_leftweaponcomponent16` crash on
+--     `we_shortbow` previewed on Foot Knight (crash GUID e7a69981).
+--   * 2026-06-05 v0.12.113-dev: `j_leftweaponcomponent17` minutes later
+--     (crash GUID 2061fa18). Generalized to prefix-match.
+--   * Both fixes mutated the LIVE template at boot — which also affected
+--     elves wielding their own bow. Result: elves' bows went INVISIBLE
+--     because the proper grip linking entries were rewritten to `j_hips`
+--     and the bow couldn't be held visibly. User reported 2026-06-05.
+--
+-- v0.12.114-dev fix: per-spawn check via Unit.has_node. Only substitute a
+-- source node WHEN THE BODY UNIT ACTUALLY MISSING THE NODE. Elves keep
+-- their proper grip; non-elves get `j_hips` fallback. Cost: ~one
+-- `Unit.has_node` call per attachment entry per spawn (cheap, sub-ms).
+--
+-- Implementation: hook `MenuWorldPreviewer._spawn_item_unit` (preview) and
+-- `GearUtils.create_equipment` (in-mission) to validate + substitute the
+-- attachment_node_linking before the engine's link_units fires.
+--
+-- TODO (post-play, task #31): replace this safety-net with a proper 3P
+-- unit swap so non-elves wielding the elf bows render as Kruber's Empire
+-- Longbow (model + animations). Mirrors the brace-on-Kruber pattern.
+
+local function _wt_validate_attachment_sources(body_unit, attachment_node_linking)
+    if not attachment_node_linking
+        or type(attachment_node_linking.third_person) ~= "table"
+        or not body_unit or not Unit.has_node then
+        return
+    end
+    local substituted = 0
+    for _, phase in ipairs({ "display", "wielded", "unwielded" }) do
+        local arr = attachment_node_linking.third_person[phase]
+        if type(arr) == "table" then
+            for _, e in ipairs(arr) do
+                if type(e) == "table" and type(e.source) == "string" then
+                    if not Unit.has_node(body_unit, e.source) then
+                        e.source = "j_hips"  -- universal-body fallback
+                        substituted = substituted + 1
+                    end
+                end
+            end
+        end
+    end
+    if substituted > 0 then
+        _dbg("[wt:body_attach_safe] substituted %d missing-node source(s) at spawn", substituted)
+    end
+end
 
 -- ============================================================
 -- Authentic Brace of Pistols — toggleable flintlock-style override
@@ -2458,6 +2817,25 @@ local function _apply_authentic_brace_mode()
         tostring(rapid_spread_key), tostring(_AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT))
 end
 
+-- audit 2026-06-07 (PROJECT_STANDARDS §9.3 gated-registration divergence):
+-- ALWAYS register the custom damage profile into NetworkLookup at load — even
+-- when the toggle is OFF — so wt_authentic_pistol resolves to the SAME network
+-- index on every peer running this wt version, regardless of each peer's toggle
+-- state. Only the template PATCHING (usage) below stays gated. Without this, a
+-- host with the brace ON and a client with it OFF diverge on the
+-- damage_profiles index -> "Table damage_profiles does not contain key" crash /
+-- silent wrong-damage desync when a networked brace shot is decoded.
+-- (_wt_clone_shot_sniper_no_dropoff is idempotent; same load timing as before.)
+-- RESIDUAL: full cross-MOD-SET determinism (a peer that also runs CWV/other
+-- NetworkLookup appenders vs one that doesn't) still requires routing through
+-- bt's shared sorted registry — the proper long-term fix, tracked as follow-up.
+-- Regression: wt_authentic_pistol_profile_registered_unconditionally.
+if not _wt_clone_shot_sniper_no_dropoff() then
+    -- Ungated (mod:warning): if the profile can't register at load (tables not
+    -- ready), a networked brace shot would desync / crash on the other peer when
+    -- the toggle is on. Surface it without requiring Debug Logging.
+    mod:warning("[wt:authentic-brace] wt_authentic_pistol damage-profile registration failed at load (DamageProfileTemplates/NetworkLookup not ready)")
+end
 if mod:get("authentic_brace_of_pistols") then
     _apply_authentic_brace_mode()
 end
@@ -2679,7 +3057,18 @@ local _wt_repeating_pistol_3p_swap_apply
 -- all 4 returns (v_w3p, v_a3p, v_w1p, v_a1p), then attempt the swap inside
 -- a pcall so any failure returns vanilla's units unchanged. Equipping
 -- never fails because of this swap.
-mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+-- v0.12.77 (Issue #26): converted to `mod:safe_hook`. The per-weapon swap
+-- helpers below (_wt_brace_3p_swap_apply / _wt_longbow_3p_swap_apply /
+-- _wt_repeating_pistol_3p_swap_apply) already pcall their own bodies, but
+-- the outer dispatch + return-value plumbing was bare. safe_hook gives
+-- chain-isolation belt-and-suspenders on top.
+-- v0.12.84-dev: promoted to `mod:traced_hook` (Layer 3). This is the
+-- cross-character 3P swap dispatch — the canonical 5-return / 2-nil-hole
+-- function (`weapon_3p, ammo_3p, weapon_1p, ammo_1p` with melee nils) that
+-- motivated the safe_hook v0.12.77/.78/.79 fix cycle. Trace lines let the
+-- user see n_args + n_returned per fire when debugging swap regressions.
+-- Event-rate (per spawn_inventory_unit call, not per-frame) so flood-safe.
+mod:traced_hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
     local v_w3p, v_a3p, v_w1p, v_a1p =
         func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
 
@@ -2725,7 +3114,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
             else
                 Unit.set_unit_visibility(v_w3p, false)
             end
-            mod:info("[wt brace-3p-swap] hid left brace pistol at spawn for husk=%s career=%s",
+            _dbg("[wt brace-3p-swap] hid left brace pistol at spawn for husk=%s career=%s",
                 tostring(owner_unit_1p == nil), career_left)
         end
         return v_w3p, v_a3p, v_w1p, v_a1p
@@ -2755,18 +3144,18 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
                 if n_ok and n then owner_name = tostring(n) end
             end
         end
-        mod:info("[wt brace-3p-swap] enter hand=%s husk=%s owner_unit_3p=%s career=%s owner_known=%s owner=%s",
+        _dbg("[wt brace-3p-swap] enter hand=%s husk=%s owner_unit_3p=%s career=%s owner_known=%s owner=%s",
             tostring(hand), tostring(is_husk), tostring(owner_unit_3p ~= nil), tostring(career_name),
             tostring(owner_ok), owner_name)
     end
 
     if not career_name or career_name:sub(1, 3) ~= "es_" then
-        mod:info("[wt brace-3p-swap] SKIP (career not Kruber: %s)", tostring(career_name))
+        _dbg("[wt brace-3p-swap] SKIP (career not Kruber: %s)", tostring(career_name))
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
 
     if not v_w3p then
-        mod:info("[wt brace-3p-swap] SKIP (vanilla v_w3p was nil)")
+        _dbg("[wt brace-3p-swap] SKIP (vanilla v_w3p was nil)")
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
 
@@ -2836,7 +3225,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
             Unit.set_unit_visibility(new_unit, false)
         end
 
-        mod:info("[wt brace-3p-swap] swapped 3P brace → repeater on career=%s (husk=%s vis=%s)",
+        _dbg("[wt brace-3p-swap] swapped 3P brace -> repeater on career=%s (husk=%s vis=%s)",
             career_name, tostring(owner_unit_1p == nil), tostring(owner_unit_1p == nil))
 
         return new_unit
@@ -2899,34 +3288,34 @@ _wt_longbow_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, it
             end
         end
         local career_for_log = _unit_career_name(owner_unit_3p)
-        mod:info("[wt sp-longbow-crossbow] enter hand=%s husk=%s owner_unit_3p=%s career=%s owner_known=%s owner=%s v_w3p=%s v_a3p=%s",
+        _dbg("[wt sp-longbow-crossbow] enter hand=%s husk=%s owner_unit_3p=%s career=%s owner_known=%s owner=%s v_w3p=%s v_a3p=%s",
             tostring(hand), tostring(is_husk), tostring(owner_unit_3p ~= nil), tostring(career_for_log),
             tostring(owner_ok), owner_name, tostring(v_w3p ~= nil), tostring(v_a3p ~= nil))
     end
 
     if hand ~= "left" then
-        mod:info("[wt sp-longbow-crossbow] SKIP (hand=%s, not left)", tostring(hand))
+        _dbg("[wt sp-longbow-crossbow] SKIP (hand=%s, not left)", tostring(hand))
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
     local career_name = _unit_career_name(owner_unit_3p)
     if not career_name or career_name:sub(1, 3) ~= "wh_" then
-        mod:info("[wt sp-longbow-crossbow] SKIP (career not Saltzpyre: %s)", tostring(career_name))
+        _dbg("[wt sp-longbow-crossbow] SKIP (career not Saltzpyre: %s)", tostring(career_name))
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
 
     if not v_w3p then
-        mod:info("[wt sp-longbow-crossbow] SKIP (vanilla v_w3p was nil)")
+        _dbg("[wt sp-longbow-crossbow] SKIP (vanilla v_w3p was nil)")
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
 
     -- Package readiness checks — same async-load defensiveness as the brace hook.
     if Managers and Managers.package and Managers.package.has_loaded then
         if not Managers.package:has_loaded(_SP_CROSSBOW_3P_UNIT, "wt_sp_crossbow_3p") then
-            mod:info("[wt sp-longbow-crossbow] SKIP (crossbow 3P package not loaded)")
+            _dbg("[wt sp-longbow-crossbow] SKIP (crossbow 3P package not loaded)")
             return v_w3p, v_a3p, v_w1p, v_a1p
         end
         if v_a3p and not Managers.package:has_loaded(_SP_CROSSBOW_BOLT_3P_UNIT, "wt_sp_crossbow_bolt_3p") then
-            mod:info("[wt sp-longbow-crossbow] SKIP (bolt 3P package not loaded)")
+            _dbg("[wt sp-longbow-crossbow] SKIP (bolt 3P package not loaded)")
             return v_w3p, v_a3p, v_w1p, v_a1p
         end
     end
@@ -3015,7 +3404,7 @@ _wt_longbow_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, it
             if new_ammo then Unit.set_unit_visibility(new_ammo, false) end
         end
 
-        mod:info("[wt sp-longbow-crossbow] swapped 3P bow→crossbow, arrow→bolt(%s) on career=%s (husk=%s)",
+        _dbg("[wt sp-longbow-crossbow] swapped 3P bow->crossbow, arrow->bolt(%s) on career=%s (husk=%s)",
             tostring(new_ammo ~= nil), career_name, tostring(owner_unit_1p == nil))
 
         return { weapon = new_weapon, ammo = new_ammo }
@@ -3029,7 +3418,10 @@ _wt_longbow_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, it
     if swap_result then
         return swap_result.weapon, (swap_result.ammo or v_a3p), v_w1p, v_a1p
     end
-    mod:info("[wt sp-longbow-crossbow] SKIP (pcall returned nil — internal abort, see prior warning)")
+    -- v0.12.83-dev: promoted to `_dbg_alert` — this branch only fires after the
+    -- preceding `mod:warning("[wt sp-longbow-crossbow] pcall ERROR ...")` has
+    -- already logged, so the follow-up SKIP is part of the alert chain.
+    _dbg_alert("[wt sp-longbow-crossbow] SKIP (pcall returned nil — internal abort, see prior warning)")
     return v_w3p, v_a3p, v_w1p, v_a1p
 end
 
@@ -3075,29 +3467,29 @@ _wt_repeating_pistol_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world,
             end
         end
         local career_for_log = _unit_career_name(owner_unit_3p)
-        mod:info("[wt rp-pistol-handgun] enter hand=%s husk=%s owner_unit_3p=%s career=%s owner_known=%s owner=%s v_w3p=%s",
+        _dbg("[wt rp-pistol-handgun] enter hand=%s husk=%s owner_unit_3p=%s career=%s owner_known=%s owner=%s v_w3p=%s",
             tostring(hand), tostring(is_husk), tostring(owner_unit_3p ~= nil), tostring(career_for_log),
             tostring(owner_ok), owner_name, tostring(v_w3p ~= nil))
     end
 
     if hand ~= "right" then
-        mod:info("[wt rp-pistol-handgun] SKIP (hand=%s, not right)", tostring(hand))
+        _dbg("[wt rp-pistol-handgun] SKIP (hand=%s, not right)", tostring(hand))
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
     local career_name = _unit_career_name(owner_unit_3p)
     if not career_name or career_name:sub(1, 3) ~= "es_" then
-        mod:info("[wt rp-pistol-handgun] SKIP (career not Kruber: %s)", tostring(career_name))
+        _dbg("[wt rp-pistol-handgun] SKIP (career not Kruber: %s)", tostring(career_name))
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
 
     if not v_w3p then
-        mod:info("[wt rp-pistol-handgun] SKIP (vanilla v_w3p was nil)")
+        _dbg("[wt rp-pistol-handgun] SKIP (vanilla v_w3p was nil)")
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
 
     if Managers and Managers.package and Managers.package.has_loaded
             and not Managers.package:has_loaded(_BRACE_REPEATER_3P_UNIT, "wt_brace_repeater_3p") then
-        mod:info("[wt rp-pistol-handgun] SKIP (repeating handgun 3P package not loaded)")
+        _dbg("[wt rp-pistol-handgun] SKIP (repeating handgun 3P package not loaded)")
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
 
@@ -3154,7 +3546,7 @@ _wt_repeating_pistol_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world,
             Unit.set_unit_visibility(new_unit, false)
         end
 
-        mod:info("[wt rp-pistol-handgun] swapped 3P pistol → handgun on career=%s (husk=%s)",
+        _dbg("[wt rp-pistol-handgun] swapped 3P pistol -> handgun on career=%s (husk=%s)",
             career_name, tostring(owner_unit_1p == nil))
 
         return new_unit
@@ -3296,7 +3688,7 @@ mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot
     info.spawn_data = new_spawn_data
 
     if swapped then
-        mod:info("[wt brace-3p-swap preview] swapped preview 3P brace → repeater on career=%s", career)
+        _dbg("[wt brace-3p-swap preview] swapped preview 3P brace -> repeater on career=%s", career)
     end
 end)
 
@@ -3357,7 +3749,7 @@ _wt_longbow_preview_swap_apply = function(self, item_name, slot)
     end
 
     if swapped then
-        mod:info("[wt sp-longbow-crossbow preview] swapped preview 3P bow → crossbow on career=%s (unit_name + unit_attachment_node_linking)", career)
+        _dbg("[wt sp-longbow-crossbow preview] swapped preview 3P bow -> crossbow on career=%s (unit_name + unit_attachment_node_linking)", career)
     end
 end
 
@@ -3402,7 +3794,7 @@ _wt_repeating_pistol_preview_swap_apply = function(self, item_name, slot)
     end
 
     if swapped then
-        mod:info("[wt rp-pistol-handgun preview] swapped preview 3P pistol → handgun on career=%s (unit_name + unit_attachment_node_linking)", career)
+        _dbg("[wt rp-pistol-handgun preview] swapped preview 3P pistol -> handgun on career=%s (unit_name + unit_attachment_node_linking)", career)
     end
 end
 
@@ -3432,18 +3824,87 @@ _wt_capture_preview_item_key = function(self, item_key, slot)
     end
 end
 
-mod:hook_safe("MenuWorldPreviewer", "_spawn_item_unit", function(self, unit, slot_type, item_data, ...)
-    if not unit or not _is_unit(unit) then return end
+-- v0.12.114-dev: converted from hook_safe to mod:hook (full wrapper) so we
+-- can PRE-VALIDATE attachment_node_linking before the original _spawn_item_unit
+-- calls link_units. Previously hook_safe ran AFTER spawn (post-crash, useless
+-- for prevention). The PRE check substitutes any source nodes that the
+-- target body doesn't actually have (e.g. j_leftweaponcomponent16 on a non-
+-- elf body) with j_hips. Elves keep their native nodes because Unit.has_node
+-- returns true. Replaces the broken boot-time global mutation that
+-- v0.12.112/.113-dev shipped (which broke elf bow visibility).
+mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings_name, skip_wield_anim)
+    -- PRE: validate attachment sources against the actual body unit to
+    -- prevent engine-fatal Unit.node() on missing-node lookups.
+    if self and _is_unit(self.character_unit) then
+        _wt_validate_attachment_sources(self.character_unit, attachment_node_linking)
+    end
+
+    -- Call through. Multi-return capture per VMF_RECIPES.md § 2.
+    local r1, r2, r3 = func(self, unit, slot_type, item_template,
+        attachment_node_linking, scene_graph_links, material_settings_name,
+        skip_wield_anim)
+
+    -- POST: scale / offset + diagnostic probe (original hook_safe logic).
+    if not unit or not _is_unit(unit) then return r1, r2, r3 end
     local map = _mwp_pending_keys[self]
     local weapon_key = map and map[slot_type]
-    if not weapon_key then return end
+    if not weapon_key then return r1, r2, r3 end
     local career_name = _local_career_name() or self._character_name
                         or (self._profile and self._profile.name)
-    if not career_name then return end
+    if not career_name then return r1, r2, r3 end
 
     local fake_slot = { right_unit_3p = unit }
     _scale_weapon_units(fake_slot, weapon_key, career_name)
     _offset_weapon_units(fake_slot, weapon_key, career_name)
+
+    -- DIAGNOSTIC v0.12.94-dev: cross-character attachment node-presence probe.
+    -- v0.12.93-dev shipped this reading the GLOBAL weapon template, which was
+    -- WRONG -- the global template intentionally stays untouched (Saltzpyre's
+    -- vanilla flow needs `a_unwielded_crossbow` and other body-specific
+    -- nodes). The engine actually reads from the SPAWN_DATA entry's
+    -- `unit_attachment_node_linking` field, which is what per-spawn helpers
+    -- substitute. Read from the same table the engine reads so we get TRUE
+    -- positives only.
+    --
+    -- Walk every spawn_data entry on every slot the previewer is currently
+    -- displaying, look at the actually-attached `unit_attachment_node_linking`
+    -- (the post-substitution table when a helper fired), check each source
+    -- node against the live character body. Anything missing here is an
+    -- IMMINENT engine fatal -- and the absence of any alert is the green
+    -- light that the fix held.
+    local body = self.character_unit
+    if not body or not _is_unit(body) then return r1, r2, r3 end
+    local info_by_slot = self._item_info_by_slot
+    if type(info_by_slot) ~= "table" then return r1, r2, r3 end
+    for slot_name, info in pairs(info_by_slot) do
+        local entries = info and info.spawn_data
+        if type(entries) == "table" then
+            for entry_idx, entry in ipairs(entries) do
+                local link = entry.unit_attachment_node_linking
+                if type(link) == "table" then
+                    for _, state in ipairs({ "display", "wielded", "unwielded" }) do
+                        local arr = link[state]
+                        if type(arr) == "table" then
+                            for _, e in ipairs(arr) do
+                                local src = e and e.source
+                                if type(src) == "string"
+                                        and not Unit.has_node(body, src) then
+                                    _dbg_alert(
+                                        "[wt:attach_probe] MISSING NODE on body "
+                                        .. "(engine read path): career=%s slot=%s "
+                                        .. "entry=%d state=%s source=%s "
+                                        .. "-- engine fatal expected",
+                                        tostring(career_name), tostring(slot_name),
+                                        entry_idx, state, src)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return r1, r2, r3
 end)
 
 --[[
@@ -3649,7 +4110,43 @@ mod._revert_trait_pools = revert_trait_pools
 -- (StateLoading -> StateIngame, etc.) — re-applies the can_wield mutations
 -- in case some other mod or game code reset ItemMasterList between states.
 -- Idempotent (apply_weapon_unlocks strips before adding).
-mod.on_game_state_changed = function()
+--
+-- v0.12.74-dev: also drives a loadout dump on StateIngame entry when
+-- enable_debug_logging is ON (v0.12.81-dev rename from wt_debug_mode
+-- per PROJECT_STANDARDS.md § 3.6). VMF passes (status, state_name) where status is
+-- "enter" / "exit" and state_name is the class name (e.g. "StateIngame")
+-- — verified against general_tweaker / buff_tweaker / career_tweaker
+-- which all use the same signature. The dump uses inventory_system
+-- extension fields (`._career_name`, `:equipment().slots`) — same path
+-- as the existing `/dump` chat command. Cheap: a handful of pairs() walks
+-- through equipment.slots, only runs on state entry, only runs when debug
+-- is on.
+local function _dbg_dump_local_player_loadout()
+    if not mod:get("enable_debug_logging") then return end
+    local pm = Managers and Managers.player
+    if not pm then return end
+    local ok_pl, player = pcall(pm.local_player, pm)
+    if not ok_pl or not player or not player.player_unit then return end
+    local unit = player.player_unit
+    local ok_inv, inv = pcall(ScriptUnit.has_extension, unit, "inventory_system")
+    if not ok_inv or not inv then return end
+    local career_name = inv._career_name or "(unknown career)"
+    local ok_eq, equipment = pcall(inv.equipment, inv)
+    if not ok_eq or not equipment or not equipment.slots then return end
+    _dbg("[loadout] StateIngame enter career=%s", tostring(career_name))
+    for slot_name, slot_data in pairs(equipment.slots) do
+        local item = slot_data and slot_data.item_data
+        if item then
+            local key = item.key or item.name or "?"
+            local tmpl = item.template or (item.data and item.data.template) or "?"
+            local itype = item.item_type or (item.data and item.data.item_type) or "?"
+            _dbg("[loadout]   %s: key=%s item_type=%s template=%s",
+                tostring(slot_name), tostring(key), tostring(itype), tostring(tmpl))
+        end
+    end
+end
+
+mod.on_game_state_changed = function(status, state_name)
     mod:info("Weapon Tweaker: Baseline Active")
     apply_weapon_unlocks()
     patch_career_actions_on_weapons()
@@ -3659,6 +4156,14 @@ mod.on_game_state_changed = function()
     -- caches at boot, so this is largely defensive — but cheap and
     -- consistent with the existing pattern in this hook.
     big_rebalance.apply_all()
+
+    -- Debug-only loadout dump on StateIngame entry. `mod:get` is cheap
+    -- so the gate also lives inside `_dbg_dump_local_player_loadout`
+    -- (belt-and-suspenders — if a future caller re-uses the dump
+    -- helper outside this hook, the gate still holds).
+    if status == "enter" and state_name == "StateIngame" then
+        _dbg_dump_local_player_loadout()
+    end
 end
 
 -- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
@@ -3717,7 +4222,12 @@ mod.on_setting_changed = function(setting_id)
         -- master registration block runs once per session (re-init is a
         -- no-op after the first pass).
         big_rebalance.apply_all()
+    elseif setting_id and setting_id:find("^wt_dev_anim_") then
+        -- Dev: 3P anim picker — mutate live Weapons.<tpl> tables.
+        _wt_dev_anim_picker.on_setting_changed(setting_id)
     end
+    -- wt_dev_hp_* settings are read by the hold-pose tuner's per-frame hook
+    -- via mod:get directly, no dispatcher branch needed.
 end
 
 mod:command("dump", "Dump equipped item data to log", function()
@@ -3893,8 +4403,12 @@ apply_trait_filters()
 -- assigned the string `weapon.item_name` at line 336 of the vanilla source,
 -- which passes through unchanged).
 if LevelEndView and LevelEndView._verify_weapon_data then
-    mod:hook("LevelEndView", "_verify_weapon_data", function(func, self, player_data, weapon_slot, weapon, weapon_pose_anim)
-        mod:info("[verify_weapon_data] hook entry: player=%s career_index=%s weapon_slot=%s weapon.item_name=%s",
+    -- v0.12.77 (Issue #26): converted to `mod:safe_hook`. The end-of-mission
+    -- victory screen runs on a quick `LevelEndView:_setup_player_widgets`
+    -- pass that hits this hook once per player. A raise here would blank
+    -- the screen for every later consumer mod hooking the same path.
+    mod:safe_hook("LevelEndView", "_verify_weapon_data", function(func, self, player_data, weapon_slot, weapon, weapon_pose_anim)
+        _dbg("[verify_weapon_data] hook entry: player=%s career_index=%s weapon_slot=%s weapon.item_name=%s",
             tostring(player_data and player_data.name),
             tostring(player_data and player_data.career_index),
             tostring(weapon_slot),
@@ -3903,7 +4417,7 @@ if LevelEndView and LevelEndView._verify_weapon_data then
         if verified_weapon and type(verified_weapon.item_name) == "table" then
             local inner = verified_weapon.item_name.item_name
             if type(inner) == "string" then
-                mod:info("[verify_weapon_data] unwrapping preview_items table shape: %s -> %s",
+                _dbg("[verify_weapon_data] unwrapping preview_items table shape: %s -> %s",
                     tostring(verified_weapon.item_name), inner)
                 verified_weapon.item_name = inner
             else
@@ -3946,7 +4460,7 @@ mod:hook("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(func, se
                 if type(item.item_name) == "table" then
                     local inner = item.item_name.item_name
                     if type(inner) == "string" then
-                        mod:info("[team_previewer cb] unwrapping preview_items[%d].item_name table shape -> %s (player=%s)",
+                        _dbg("[team_previewer cb] unwrapping preview_items[%d].item_name table shape -> %s (player=%s)",
                             i, inner, tostring(hero_data.hero_name))
                         item.item_name = inner
                     else
@@ -4040,3 +4554,621 @@ _rt_register("billhook_anim_remap_present", function()
     if #_MARKER == 0 then return "marker missing" end
 end)
 
+_rt_register("wt_safe_hook_installed", function()
+    -- v0.12.77 (Issue #26): pcall-isolated `mod:safe_hook` wrapper. The helper
+    -- is required from `_safe_hook.lua` near the top of this file, BEFORE any
+    -- `mod:hook(...)` call site. If the require ever drops out of the load
+    -- order (refactor / bad merge), every `mod:safe_hook(...)` site below
+    -- crashes at module load with "attempt to call a nil value (method
+    -- 'safe_hook')". This check surfaces the regression at /wt_regression_test
+    -- time rather than letting it manifest as a load failure.
+    --
+    -- 1. Source-pattern marker constant set by `_safe_hook.lua`.
+    if CT_WT_SAFE_HOOK_MARKER_v0_12_74 ~= "wt-safe-hook-pcall-isolated" then
+        return "safe_hook marker absent — was _safe_hook.lua require removed?"
+    end
+    -- 2. Runtime: both methods must be callable functions on the mod table.
+    if type(mod.safe_hook) ~= "function" then
+        return "mod.safe_hook is not a function (got " .. type(mod.safe_hook) .. ")"
+    end
+    if type(mod.safe_hook_safe) ~= "function" then
+        return "mod.safe_hook_safe is not a function (got " .. type(mod.safe_hook_safe) .. ")"
+    end
+end)
+
+-- v0.12.80-dev: hard regression test for the multi-return + nil-hole bug
+-- class that shipped 3 versions in 2 hours (v0.12.77/.78/.79). The marker
+-- constant check above (`wt_safe_hook_installed`) only proves the module
+-- loaded — it does NOT exercise the actual multi-return path that broke
+-- silently in v0.12.77 (collapse to single return) and again in v0.12.78
+-- (`unpack(results, 2)` without explicit `j`, non-deterministic with nil
+-- holes per Lua 5.1 `#table` undefined behavior).
+--
+-- This fixture builds a fresh dummy class on every test invocation (fresh
+-- table identity = fresh hook target, so VMF's "duplicate hook" guard never
+-- trips and the check is rerunnable any number of times), wraps a method
+-- that mimics the worst-case `GearUtils.spawn_inventory_unit` return shape
+-- (5 returns, 2 nil holes at positions 2 and 4 — more aggressive than the
+-- real one), and asserts positional integrity through `safe_hook`.
+_rt_register("wt_safe_hook_preserves_multi_returns_with_nil_holes", function()
+    -- Each run uses a fresh table identity so VMF treats it as a new hook
+    -- target (no double-registration error on repeated /wt_regression_test).
+    local _dummy_class = {
+        -- Returns 5 values, with two nil holes (positions 2 and 4) — mimics
+        -- and exceeds the melee-weapon `GearUtils.spawn_inventory_unit`
+        -- return shape (`weapon_3p, ammo_3p_nil, weapon_1p, ammo_1p_nil`).
+        method = function(self, ...) return 1, nil, 2, nil, 3 end,
+        -- Error path: handler that raises so we can prove safe_hook catches
+        -- + logs without crashing and the chain continues to vanilla.
+        raiser = function(self) error("test-raise: safe_hook fixture") end,
+    }
+
+    -- Wrap the method via safe_hook. Handler just forwards everything so any
+    -- return-mangling is attributable to the wrapper, not the body.
+    mod:safe_hook(_dummy_class, "method", function(func, ...)
+        return func(...)
+    end)
+
+    -- Call the safe-hooked method. Capture every return positionally using
+    -- the `select("#", ...)` + table-pack idiom — the same one safe_hook
+    -- itself must use internally to be correct.
+    local function _capture(...) return select("#", ...), { ... } end
+    local n, r = _capture(_dummy_class:method())
+
+    -- Assertion 1: full count preserved (catches the v0.12.77 collapse-to-1
+    -- bug and the v0.12.78 non-deterministic-#table truncation).
+    if n ~= 5 then
+        return string.format(
+            "safe_hook truncated multi-return: got n=%d expected 5 (results=%s,%s,%s,%s,%s)",
+            n, tostring(r[1]), tostring(r[2]), tostring(r[3]), tostring(r[4]), tostring(r[5]))
+    end
+    -- Assertion 2: positional integrity. Each slot exact value, including
+    -- the two intentional nil holes. Catches any future "compact away nils"
+    -- regression in the unpack path.
+    if r[1] ~= 1 then
+        return "safe_hook positional integrity: r[1] expected 1, got " .. tostring(r[1])
+    end
+    if r[2] ~= nil then
+        return "safe_hook positional integrity: r[2] expected nil, got " .. tostring(r[2])
+    end
+    if r[3] ~= 2 then
+        return "safe_hook positional integrity: r[3] expected 2, got " .. tostring(r[3])
+    end
+    if r[4] ~= nil then
+        return "safe_hook positional integrity: r[4] expected nil, got " .. tostring(r[4])
+    end
+    if r[5] ~= 3 then
+        return "safe_hook positional integrity: r[5] expected 3, got " .. tostring(r[5])
+    end
+
+    -- Error-path coverage: safe_hook a raiser, call it, assert it doesn't
+    -- crash. safe_hook's contract is "log + fall through to vanilla" so the
+    -- raiser's `error(...)` will fire twice (once in the handler, once in
+    -- the vanilla fall-through call to `func(...)`). The outer pcall here
+    -- catches the vanilla raise; we ONLY care that the wrapper itself
+    -- didn't propagate an uncaught Lua error from inside safe_hook's own
+    -- bookkeeping (e.g. nil-method-deref, bad unpack args). We accept
+    -- either outcome (pcall ok=true OR ok=false with the test-raise
+    -- message) as long as the wrapper didn't blow up with its own error.
+    mod:safe_hook(_dummy_class, "raiser", function(func, ...)
+        return func(...)
+    end)
+    local raiser_ok, raiser_err = pcall(function() _dummy_class:raiser() end)
+    -- raiser_ok == false is expected (vanilla raises after handler logged);
+    -- raiser_ok == true would also be acceptable (engine swallowed it).
+    -- What we DON'T want is a wrapper-internal failure like "attempt to
+    -- call nil" or "bad argument #2 to 'unpack'".
+    if not raiser_ok then
+        local err_str = tostring(raiser_err)
+        if not err_str:find("test%-raise") then
+            return "safe_hook error path: wrapper raised its own error instead of vanilla fall-through: " .. err_str
+        end
+    end
+end)
+
+-- v0.12.84-dev: Layer 3 traced_hook smoke test. Sister check to the
+-- v0.12.77 `wt_safe_hook_installed` marker — proves the traced_hook module
+-- attached both methods AND the trace lines don't crash when emitted.
+-- Does NOT exercise the actual log-line contents (that's a manual
+-- in-game verification — toggle `enable_debug_logging` on and watch the
+-- log file for `[wt:trace] event=enter|exit ...` pairs around any of the
+-- three migrated hook sites: SimpleInventoryExtension.wield,
+-- GearUtils.create_equipment, GearUtils.spawn_inventory_unit).
+_rt_register("wt_traced_hook_present", function()
+    -- 1. Source-pattern marker constant set by `_safe_hook.lua` (Layer 3
+    --    section). If the require ever drops out of the load order or the
+    --    Layer 3 block gets deleted, this surfaces at /wt_regression_test.
+    if CT_WT_TRACED_HOOK_MARKER_v0_12_84 ~= "wt-traced-hook-layer3-installed" then
+        return "traced_hook marker absent — was Layer 3 block removed from _safe_hook.lua?"
+    end
+    -- 2. Runtime: both Layer 3 methods must be callable functions on the
+    --    mod table.
+    if type(mod.traced_hook) ~= "function" then
+        return "mod.traced_hook is not a function (got " .. type(mod.traced_hook) .. ")"
+    end
+    if type(mod.traced_hook_safe) ~= "function" then
+        return "mod.traced_hook_safe is not a function (got " .. type(mod.traced_hook_safe) .. ")"
+    end
+    -- 3. Smoke: install traced_hook on a fresh dummy class (fresh identity
+    --    so VMF's duplicate-hook guard never trips), call with toggle OFF,
+    --    assert no crash. We DON'T assert "no trace lines emitted" — that
+    --    would require log-file inspection — but a crash inside the
+    --    tracing closure (nil deref, bad unpack args, etc.) would surface
+    --    here as a runtime error captured by the outer pcall in
+    --    /wt_regression_test.
+    local _dummy_class = {
+        method = function(self, a, b) return a, nil, b end,  -- 3 returns w/ nil hole
+    }
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    mod:traced_hook(_dummy_class, "method", function(func, ...)
+        return func(...)
+    end)
+    local r1, r2, r3 = _dummy_class:method(7, 9)
+    if r1 ~= 7 or r2 ~= nil or r3 ~= 9 then
+        if saved == true then mod:set("enable_debug_logging", true) end
+        return string.format("traced_hook return-shape broken (toggle off): r1=%s r2=%s r3=%s",
+            tostring(r1), tostring(r2), tostring(r3))
+    end
+    -- 4. Same smoke with toggle ON — proves the trace-emit path doesn't
+    --    crash. Restore prior toggle state regardless.
+    mod:set("enable_debug_logging", true)
+    local _dummy_class_b = {
+        method = function(self, a, b) return a, nil, b end,
+    }
+    mod:traced_hook(_dummy_class_b, "method", function(func, ...)
+        return func(...)
+    end)
+    local s1, s2, s3 = _dummy_class_b:method(11, 13)
+    -- Restore prior toggle BEFORE we early-return on a check failure, so
+    -- a failing test doesn't leave the user with a flipped setting.
+    if saved == false or saved == nil then mod:set("enable_debug_logging", false) end
+    if s1 ~= 11 or s2 ~= nil or s3 ~= 13 then
+        return string.format("traced_hook return-shape broken (toggle on): s1=%s s2=%s s3=%s",
+            tostring(s1), tostring(s2), tostring(s3))
+    end
+end)
+
+_rt_register("wt_itemmasterlist_uses_rawget", function()
+    -- v0.12.72/.73: defensive `rawget(ItemMasterList, key)` (GH #8) at 5 known
+    -- mutation sites (~L175, 208, 226, 277, 3835 of weapon_tweaker.lua). The
+    -- strict-table-lookup lint covers static-pattern regressions; this runtime
+    -- check is the belt-and-suspenders companion required by §15 of
+    -- PROJECT_STANDARDS.md.
+    --
+    -- 1. Source-pattern: the marker constant must be present (catches
+    --    accidental code deletion / revert).
+    if CT_WT_ITEMMASTERLIST_RAWGET_MARKER_v0_12_73 ~= "wt-itemmasterlist-rawget-hardened" then
+        return "RAWGET marker absent — was the v0.12.72 ItemMasterList hardening reverted?"
+    end
+    -- 2. Runtime-state: rawget on a known-bad key must return nil rather than
+    --    raise. If ItemMasterList ever grows a strict __index, this would
+    --    surface the regression at boot.
+    local iml = rawget(_G, "ItemMasterList")
+    if type(iml) == "table" then
+        local ok, value = pcall(rawget, iml, "__wt_rawget_probe_does_not_exist__")
+        if not ok then
+            return "rawget(ItemMasterList, <bad-key>) RAISED — strict-metatable behavior changed"
+        end
+        if value ~= nil then
+            return "rawget(ItemMasterList, <bad-key>) returned non-nil — unexpected"
+        end
+    end
+end)
+
+_rt_register("wt_authentic_pistol_profile_registered_unconditionally", function()
+    -- audit 2026-06-07 (PROJECT_STANDARDS §9.3): the custom damage profile must be
+    -- registered in NetworkLookup on EVERY peer regardless of the authentic-brace
+    -- toggle, or the network index diverges between peers with the toggle on vs off
+    -- (RPC crash / wrong-damage desync). Assert it's present even when the toggle
+    -- is off. Fails if a future edit re-gates the registration behind the toggle.
+    local DPT = rawget(_G, "DamageProfileTemplates")
+    local NL  = rawget(_G, "NetworkLookup")
+    if not (DPT and NL and NL.damage_profiles) then
+        return "skip: DamageProfileTemplates/NetworkLookup not loaded"
+    end
+    if not rawget(DPT, "wt_authentic_pistol") then
+        return "wt_authentic_pistol missing from DamageProfileTemplates (registration not unconditional)"
+    end
+    if not rawget(NL.damage_profiles, "wt_authentic_pistol") then
+        return "wt_authentic_pistol missing from NetworkLookup.damage_profiles (peer index would diverge)"
+    end
+end)
+
+_rt_register("wt_br_trueflight_speed_falloff_matches_vanilla", function()
+    -- v0.12.116: the BR true-flight fire reimpl shipped vanilla's per-projectile
+    -- speed falloff sign-flipped — speed * (i * 0.05 - 1) instead of vanilla's
+    -- speed * (1 - i * 0.05) (action_true_flight_bow.lua:152) — so with
+    -- br_hook_trueflight_fire on, every projectile after the first launched
+    -- BACKWARDS at negative speed under multi-shot fires. The formula now lives in
+    -- mod._wt_tf_projectile_speed (file scope in weapon_tweaker_big_rebalance.lua).
+    local f = mod._wt_tf_projectile_speed
+    if type(f) ~= "function" then
+        return "_wt_tf_projectile_speed missing — BR true-flight falloff regressed or moved"
+    end
+    if f(10, 1) ~= 10 then
+        return "i=1 (first projectile) must pass speed through unmodified"
+    end
+    local expected = 10 * (1 - 2 * 0.05)  -- vanilla falloff for i=2
+    local got = f(10, 2)
+    if math.abs(got - expected) > 1e-9 then
+        return string.format("i=2: expected %.4f (vanilla falloff), got %.4f (sign-flip regression?)", expected, got)
+    end
+    for i = 2, 5 do
+        if f(10, i) <= 0 then
+            return string.format("i=%d produced non-positive speed %.4f — projectile would fire backwards", i, f(10, i))
+        end
+    end
+end)
+
+_rt_register("wt_br_trueflight_extra_shot_gating_matches_vanilla", function()
+    -- v0.12.117 (Issue #74): the BR true-flight fire reimpl gated
+    -- set_shooting/ammo/overcharge on `self.extra_buff_shot`, which is only ever
+    -- assigned false — so extra-shot-buff projectiles wrongly bumped spread state
+    -- and charged ammo/overcharge. Vanilla derives a per-projectile is_extra_shot
+    -- (action_true_flight_bow.lua:128,132): extra_shots_idx = num_projectiles -
+    -- num_extra_shots + 1; is_extra_shot = extra_shots_idx <= i. The formula now
+    -- lives in mod._wt_tf_is_extra_shot; assert it matches vanilla's truth table.
+    local f = mod._wt_tf_is_extra_shot
+    if type(f) ~= "function" then
+        return "_wt_tf_is_extra_shot missing — BR true-flight extra-shot gating regressed or moved"
+    end
+    -- No extra shots: nothing is an extra shot.
+    for i = 1, 3 do
+        if f(i, 3, 0) then return string.format("i=%d flagged extra with num_extra_shots=0", i) end
+    end
+    -- 5 projectiles, 2 extra: vanilla idx = 5-2+1 = 4 → i=1..3 normal, i=4..5 extra.
+    for i = 1, 3 do
+        if f(i, 5, 2) then return string.format("i=%d flagged extra (expected normal; idx=4)", i) end
+    end
+    for i = 4, 5 do
+        if not f(i, 5, 2) then return string.format("i=%d not flagged extra (expected extra; idx=4)", i) end
+    end
+    -- nil num_extra_shots must behave as 0 (start_action always sets it, but the
+    -- helper is the last line of defense).
+    if f(1, 1, nil) then return "nil num_extra_shots treated as extra shot" end
+end)
+
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/weapon_tweaker/weapon_tweaker_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)
+
+-- ============================================================
+-- Wield-time weapon-data dump  (v0.12.90-dev)
+-- ============================================================
+-- When `enable_debug_logging` is ON, every local-player wield emits a
+-- structured dump of the wielded weapon's ItemMasterList entry: animations,
+-- state machines, can_wield list, resolved unit paths. Lets the user (and
+-- Claude) read the log to see exactly what wt sees the moment a weapon is
+-- equipped -- useful for diagnosing "weapon X isn't available on career Y"
+-- or "wrong 3P anim on cross-character port" without in-game repro.
+--
+-- Also exposed as `/wt_dump_wielded` for one-shot dumps of the currently
+-- held weapon (forces a dump regardless of the toggle).
+local function _wt_dump_weapon_data(item_key, source)
+    if type(item_key) ~= "string" or item_key == "" then
+        mod:info("[wt:wield_dump] no item_key (source=%s)", tostring(source))
+        return
+    end
+    local iml = rawget(_G, "ItemMasterList")
+    local entry = iml and rawget(iml, item_key)
+    if type(entry) ~= "table" then
+        mod:info("[wt:wield_dump] %s (source=%s) -- no ItemMasterList entry",
+            item_key, tostring(source))
+        return
+    end
+    mod:info("[wt:wield_dump] === %s (source=%s) ===", item_key, tostring(source))
+    mod:info("[wt:wield_dump]   slot_type=%s item_type=%s template=%s",
+        tostring(entry.slot_type), tostring(entry.item_type), tostring(entry.template))
+    mod:info("[wt:wield_dump]   display_name=%s inventory_icon=%s required_dlc=%s",
+        tostring(entry.display_name), tostring(entry.inventory_icon),
+        tostring(entry.required_dlc))
+    mod:info("[wt:wield_dump]   anim_event=%s wield_anim=%s",
+        tostring(entry.anim_event), tostring(entry.wield_anim))
+    mod:info("[wt:wield_dump]   anim_event_3p=%s wield_anim_3p=%s",
+        tostring(entry.anim_event_3p), tostring(entry.wield_anim_3p))
+    mod:info("[wt:wield_dump]   state_machine=%s state_machine_3p=%s",
+        tostring(entry.state_machine), tostring(entry.state_machine_3p))
+    if type(entry.can_wield) == "table" then
+        mod:info("[wt:wield_dump]   can_wield=[%s]",
+            table.concat(entry.can_wield, ","))
+    end
+    if entry.left_hand_unit or entry.right_hand_unit then
+        mod:info("[wt:wield_dump]   1p left=%s right=%s",
+            tostring(entry.left_hand_unit), tostring(entry.right_hand_unit))
+    end
+    if entry.left_hand_unit_3p or entry.right_hand_unit_3p then
+        mod:info("[wt:wield_dump]   3p left=%s right=%s",
+            tostring(entry.left_hand_unit_3p), tostring(entry.right_hand_unit_3p))
+    end
+end
+
+-- Hook: SimpleInventoryExtension._wield_slot fires for every local-player
+-- wield. slot_data.id carries the item key. hook_safe so we never perturb
+-- the wield path. Husk extension intentionally NOT hooked -- we want our
+-- own equips, not teammates'.
+mod:hook_safe("SimpleInventoryExtension", "_wield_slot",
+    function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
+        if not mod:get("enable_debug_logging") then return end
+        local item_key = slot_data
+            and (slot_data.id
+                or (slot_data.item_data and slot_data.item_data.key))
+        _wt_dump_weapon_data(item_key, "wield_slot")
+    end)
+
+mod:command("wt_dump_wielded",
+    "Dump everything wt knows about the currently wielded weapon.",
+    function()
+        local pm = Managers.player
+        local lp = pm and pm:local_player()
+        local punit = lp and lp.player_unit
+        if not punit then
+            mod:echo("[wt_dump_wielded] no local player unit")
+            return
+        end
+        local inv = ScriptUnit.has_extension(punit, "inventory_system")
+        if not inv then
+            mod:echo("[wt_dump_wielded] no inventory extension")
+            return
+        end
+        local slot = inv.get_wielded_slot_name and inv:get_wielded_slot_name()
+        local slot_data = slot and inv.get_slot_data and inv:get_slot_data(slot)
+        local item_key = slot_data
+            and (slot_data.id
+                or (slot_data.item_data and slot_data.item_data.key))
+        _wt_dump_weapon_data(item_key, "command")
+        mod:echo("[wt_dump_wielded] dumped %s -- see console log",
+            tostring(item_key))
+    end)
+
+_rt_register("widget_unlock_map_consistency", function()
+    -- Bug class: a (career, weapon) pair lives in `weapon_unlock_map` but
+    -- the companion `unlock_<career>_<weapon>` VMF widget is missing from
+    -- weapon_tweaker_data.lua. The runtime apply logic supports the unlock
+    -- but the toggle is silently unreachable from the VMF settings UI -- so
+    -- the user can never turn it on. Burned 2026-05-25: es_sword_shield_breton
+    -- was in es_knight's weapon_unlock_map array but had no widget in
+    -- melee_es_knight, so Foot Knight couldn't get Bretonnian Sword and
+    -- Shield (wt v0.12.89-dev -> v0.12.90-dev fix). Same check also catches
+    -- the inverse: dead widgets that don't map to anything.
+    if type(weapon_unlock_map) ~= "table" then
+        return "weapon_unlock_map unreachable"
+    end
+    local ok, data = pcall(mod.dofile, mod,
+        "scripts/mods/weapon_tweaker/weapon_tweaker_data")
+    if not ok or type(data) ~= "table" then
+        return "weapon_tweaker_data not loadable: " .. tostring(data)
+    end
+    -- Walk the nested widget tree, harvest every setting_id.
+    local widget_ids = {}
+    local function _harvest(w)
+        if type(w) ~= "table" then return end
+        if type(w.setting_id) == "string" then
+            widget_ids[w.setting_id] = true
+        end
+        if type(w.sub_widgets) == "table" then
+            for _, s in ipairs(w.sub_widgets) do _harvest(s) end
+        end
+        if type(w.widgets) == "table" then
+            for _, s in ipairs(w.widgets) do _harvest(s) end
+        end
+        for _, s in ipairs(w) do _harvest(s) end
+    end
+    _harvest(data)
+    -- Forward: every map (career, weapon) needs a widget.
+    local missing_widgets = {}
+    for career, weapons in pairs(weapon_unlock_map) do
+        if type(weapons) == "table" then
+            for _, weapon in ipairs(weapons) do
+                local key = "unlock_" .. career .. "_" .. weapon
+                if not widget_ids[key] then
+                    missing_widgets[#missing_widgets + 1] = key
+                end
+            end
+        end
+    end
+    if #missing_widgets > 0 then
+        return string.format("widget missing for unlock_map entries: %s",
+            table.concat(missing_widgets, ", "))
+    end
+    -- Reverse: every "unlock_<career>_<weapon>" widget needs a map entry.
+    -- Both career names and weapon keys contain underscores, so simple
+    -- string.match is ambiguous -- walk each known career prefix instead.
+    local missing_map = {}
+    for sid, _ in pairs(widget_ids) do
+        if type(sid) == "string" and sid:sub(1, 7) == "unlock_" then
+            local matched = false
+            for career, weapons in pairs(weapon_unlock_map) do
+                local pfx = "unlock_" .. career .. "_"
+                if sid:sub(1, #pfx) == pfx then
+                    local w = sid:sub(#pfx + 1)
+                    if type(weapons) == "table" then
+                        for _, mw in ipairs(weapons) do
+                            if mw == w then matched = true; break end
+                        end
+                    end
+                    if matched then break end
+                end
+            end
+            if not matched then
+                missing_map[#missing_map + 1] = sid
+            end
+        end
+    end
+    if #missing_map > 0 then
+        return string.format(
+            "widget(s) present but missing from weapon_unlock_map: %s",
+            table.concat(missing_map, ", "))
+    end
+end)
+
+_rt_register("xchar_unwielded_attach_node_safe", function()
+    -- Bug class: a cross-character port adds (career, weapon) where the
+    -- weapon's attachment_node_linking references a body-specific source
+    -- node like `a_unwielded_crossbow` that the equipping career's body
+    -- skeleton does NOT author. `Unit.node()` on the missing node bypasses
+    -- pcall and engine-fatals -- typically the moment the inventory
+    -- previewer opens or the weapon transitions to unwielded in-game.
+    -- Burned 2026-05-25 (crashify 9ef21d18-0926-4c1b-b53f-9655a38f9447):
+    -- wh_crossbow on Kruber crashed "a_unwielded_crossbow" in the
+    -- inventory screen because Kruber's body lacks that node. Fixed by
+    -- _patch_xchar_unwielded_attachment_safe() substituting `j_hips`.
+    --
+    -- This check walks every cross-character port in weapon_unlock_map,
+    -- looks up each weapon's attachment_node_linking, and flags any
+    -- `third_person.unwielded[].source` that still looks body-specific
+    -- (`a_unwielded_*` prefix) -- those are candidates for the same crash
+    -- class on bodies that don't author that node. Pre-shipped bodies
+    -- only author `a_unwielded_*` nodes for weapons their own career
+    -- vanilla-wields, so any `a_unwielded_<weapon>` source on a weapon
+    -- being ported to a different character is a red flag.
+    if type(weapon_unlock_map) ~= "table" then return end
+    if not AttachmentNodeLinking then return end
+    if not rawget(_G, "ItemMasterList") then return end
+    if not rawget(_G, "Weapons") then return end
+    local iml = ItemMasterList
+
+    -- Build career -> base prefix lookup so we know which weapons are
+    -- "native" to each career (we only want to flag CROSS-character ports,
+    -- not the weapon's own vanilla career).
+    local _NATIVE_PREFIX = {
+        es_ = { es_mercenary = true, es_huntsman = true,
+                es_knight = true,    es_questingknight = true },
+        dr_ = { dr_ranger = true,    dr_ironbreaker = true,
+                dr_slayer = true,    dr_engineer = true },
+        we_ = { we_waywatcher = true, we_maidenguard = true,
+                we_shade = true,      we_thornsister = true },
+        wh_ = { wh_captain = true,   wh_bountyhunter = true,
+                wh_zealot = true,    wh_priest = true },
+        bw_ = { bw_adept = true,     bw_scholar = true,
+                bw_unchained = true, bw_necromancer = true },
+    }
+    local function _is_native(career, weapon_key)
+        for pfx, careers in pairs(_NATIVE_PREFIX) do
+            if weapon_key:sub(1, #pfx) == pfx then
+                return careers[career] == true
+            end
+        end
+        return false   -- es_deus_* / unknown prefix -- treat as cross-char
+    end
+
+    local risky = {}  -- {career, weapon_key, source_node}
+    for career, weapons in pairs(weapon_unlock_map) do
+        if type(weapons) == "table" then
+            for _, weapon_key in ipairs(weapons) do
+                if not _is_native(career, weapon_key) then
+                    local entry = rawget(iml, weapon_key)
+                    local tpl_name = entry and entry.template
+                    local tpl = tpl_name and rawget(Weapons, tpl_name)
+                    if type(tpl) == "table" then
+                        local linkings = {
+                            tpl.left_hand_attachment_node_linking,
+                            tpl.right_hand_attachment_node_linking,
+                            tpl.ammo_unit_attachment_node_linking,
+                        }
+                        for _, link in ipairs(linkings) do
+                            if type(link) == "table" and type(link.third_person) == "table" then
+                                local unw = link.third_person.unwielded
+                                if type(unw) == "table" then
+                                    for _, e in ipairs(unw) do
+                                        local src = e and e.source
+                                        if type(src) == "string"
+                                                and src:sub(1, 11) == "a_unwielded" then
+                                            risky[#risky + 1] = string.format(
+                                                "%s/%s -> %s", career, weapon_key, src)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if #risky > 0 then
+        return string.format(
+            "cross-char port(s) with body-specific unwielded source node "
+            .. "(crash risk -- substitute with j_hips or run-time hook): %s",
+            table.concat(risky, "; "))
+    end
+end)
+
+-- v0.12.99-dev: VMF rejects `type = "group"` widgets with zero `sub_widgets`
+-- at init ("must have at least 1 sub_widget") and the whole mod fails to
+-- load — silent surfacing failure that's hard to debug from in-game. Walk
+-- the live data tree recursively; fail with the offending setting_id if
+-- any group is empty. Burned twice: v0.12.96-dev (empty character bucket
+-- in dev anim picker) and v0.12.98-dev (empty top-level picker group when
+-- mod._weapon_unlock_map was nil at _data.lua time).
+_rt_register("vmf_no_empty_group_widgets", function()
+    -- Reload the same data file VMF reads. mod:dofile is idempotent for
+    -- pure data builders (no side effects), so calling here at regression
+    -- time doesn't disturb VMF's bound copy. We walk what VMF sees.
+    local data = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_data")
+    if not data or not data.options or not data.options.widgets then
+        return "could not load weapon_tweaker_data.lua for inspection"
+    end
+    local offenders = {}
+    local function _walk(widgets, path)
+        if type(widgets) ~= "table" then return end
+        for _, w in ipairs(widgets) do
+            if type(w) == "table" and w.type == "group" then
+                local sid = w.setting_id or "?"
+                local children = w.sub_widgets
+                if type(children) ~= "table" or #children == 0 then
+                    offenders[#offenders + 1] = path .. "/" .. sid .. " (group has 0 sub_widgets)"
+                else
+                    _walk(children, path .. "/" .. sid)
+                end
+            end
+        end
+    end
+    _walk(data.options.widgets, "")
+    if #offenders > 0 then
+        return string.format("%d empty VMF group(s) found (would trip 'must have at least 1 sub_widget' at boot): %s",
+            #offenders, table.concat(offenders, "; "))
+    end
+end)
+
+-- ============================================================
+-- Dev tooling installs (v0.12.96-dev)
+-- ============================================================
+-- Both modules expose M.install(). Called HERE, at the bottom of wt.lua, so
+-- the template patchers above have already populated `Weapons.<template>`
+-- with their initial values — the anim picker reads from those live tables
+-- at install time to seed its dropdown defaults.
+_wt_dev_anim_picker.install()
+_wt_dev_hold_pose.install()

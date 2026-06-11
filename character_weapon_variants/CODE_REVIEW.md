@@ -2,8 +2,10 @@
 
 **Latest pass:** 2026-05-23 (refresh)
 **Prior pass:** 2026-05-01 (snapshot at v0.1.56-dev — **SUPERSEDED**)
-**Current version:** v0.1.331-dev
+**Current version:** v0.1.347-dev
 **Audit verdict:** IN-DEV (shipping audits #9 and #13, active iteration on Old Musket/Tuskgor Javelin)
+
+> **Header re-stamped 2026-05-29; body findings predate this version and may be stale — see GitHub Issues for current state.** This review's body was written against `v0.1.331-dev`; the header version was corrected to match disk (`v0.1.347-dev`) on 2026-05-29 but the body below was NOT re-reviewed.
 
 ---
 

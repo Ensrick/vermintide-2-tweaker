@@ -62,6 +62,10 @@ return {
                     { setting_id = "level_override_wood_elf",       type = "numeric", default_value = 0, range = { 0, 35 } },
                     { setting_id = "level_override_witch_hunter",   type = "numeric", default_value = 0, range = { 0, 35 } },
                     { setting_id = "level_override_bright_wizard",  type = "numeric", default_value = 0, range = { 0, 35 } },
+                    -- v0.3.21-dev: bypass the LEVEL gate on owned careers. DLC
+                    -- ownership is preserved (unowned-DLC careers stay locked).
+                    -- Hooks ProgressionUnlocks.is_unlocked_for_profile only.
+                    { setting_id = "unlock_all_careers",            type = "checkbox", default_value = false, tooltip = mod:localize("unlock_all_careers_tooltip") },
                 },
             },
             -- ============================================================
@@ -723,6 +727,15 @@ return {
                         },
                     },
                 },
+            },
+            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+            -- Must be at the BOTTOM of the widget tree, top-level (NOT inside
+            -- any group), key `enable_debug_logging` verbatim across every mod.
+            {
+                setting_id    = "enable_debug_logging",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = mod:localize("enable_debug_logging_tooltip"),
             },
         },
     },

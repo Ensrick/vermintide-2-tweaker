@@ -52,6 +52,7 @@ it always packages every mod's current bundle, so a single release covers all ch
       "workshop_id": "3712929235",
       "version": "0.7.80-alpha",
       "asset_filename": "ct.zip",
+      "sha256": "228ed038b0a243256121c52df7ed67dcb85479b3039c261099a4f3e191d38e08",
       "visibility": "public"
     }
   ]
@@ -60,6 +61,24 @@ it always packages every mod's current bundle, so a single release covers all ch
 
 If you add/remove a field here, mirror the change in `vt2-mod-updater`'s
 `Models/ReleaseManifest.cs` — the schemas are coupled.
+
+## Bundle integrity
+
+Each `mods[]` entry carries an `sha256` field — the SHA-256 digest of the corresponding
+`<mod_id>.zip` asset, encoded as lowercase hex (64 characters, `[0-9a-f]`). The hash is
+computed over the raw zip bytes (the asset uploaded to the release), produced by
+`Get-FileHash -Algorithm SHA256` immediately after `Compress-Archive`.
+
+`vt2-mod-updater` hashes each downloaded zip and compares against this field before
+extracting. Mismatch refuses the bundle, retries once, then surfaces a user-visible
+warning if both attempts fail. This is the second-line gate against the known
+`ugc_tool` "Upload finished" false-success bug (consumers don't go near ugc_tool, but
+they pull the same release assets through GitHub's CDN, which has its own corruption
+windows).
+
+Backwards compatibility: older consumers that don't know about `sha256` ignore the
+field. Older manifests without the field cause newer consumers to skip integrity
+verification with a debug log entry — not a hard error.
 
 ## Mod inventory
 

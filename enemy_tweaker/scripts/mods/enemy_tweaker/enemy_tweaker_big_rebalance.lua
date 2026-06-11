@@ -56,6 +56,34 @@ local function _warn(fmt, ...)
     mod:warning("[BR] " .. fmt, ...)
 end
 
+-- Local _dbg wrapper for the BR module — gated on enable_debug_logging (same
+-- contract as the main file's helper, just lives here so we don't reach across
+-- modules for hot per-event logging). Issue #17 auto-probe call sites.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[et:dbg] [BR] " .. fmt, ...)
+    end
+end
+
+-- Short hash of attacker_unit for log correlation. Stingray unit handles are
+-- big ints — slice to last 4 hex chars so log lines stay readable.
+local function _u_short(unit)
+    if unit == nil then return "nil" end
+    local s = tostring(unit)
+    return s:sub(-6)
+end
+
+local function _peer_short()
+    local pl = Managers and Managers.player and Managers.player.local_player and Managers.player:local_player()
+    if not pl then return "?" end
+    local pid = pl.peer_id and pl:peer_id() or pl.network_id and pl:network_id() or "?"
+    return tostring(pid):sub(-6)
+end
+
+local function _is_server()
+    return (Managers and Managers.player and Managers.player.is_server) or false
+end
+
 -- Per design_et.md: "When [master is] off, individual toggles are no-ops
 -- even if checked (defensive — log a warning)."
 -- Bridge to bt's master toggle. Returns false if bt isn't installed or
@@ -362,6 +390,13 @@ end
 local function _set_template_body(name, body)
     local BT = rawget(_G, "BuffTemplates")
     if not BT then return end
+    -- Issue #19: collision warning before overwriting. Names are et-owned by
+    -- convention (rebaltourn_*) but warn if any other mod (or future Fatshark
+    -- patch) ever lands an entry under the same key, so the stomp is visible.
+    if BT[name] then
+        local existing_n = #((BT[name] and BT[name].buffs) or {})
+        mod:warning("[et:set_template_body] '%s' already exists (n=%d entries) -- overwriting", name, existing_n)
+    end
     BT[name] = { buffs = { body } }
 end
 
@@ -852,10 +887,22 @@ local function _install_hooks()
     end
 
     -- H2: DamageUtils.stagger_ai rewrite
+    -- v0.6.0-dev: BR rewrite body wrapped in pcall — on inner error log
+    -- mod:warning + bail to vanilla so a malformed enemy/attacker state
+    -- doesn't crash the whole damage path. The master-gate short-circuit
+    -- at the top stays as the cheap pre-check.
     mod:hook(DamageUtils, "stagger_ai", function(func, t, damage_profile, target_index, power_level, target_unit, attacker_unit, hit_zone_name, attack_direction, boost_curve_multiplier, is_critical_strike, blocked, damage_source, source_attacker_unit)
         if not mod:get("br_stagger_ai_rewrite") or not _master_on() then
             return func(t, damage_profile, target_index, power_level, target_unit, attacker_unit, hit_zone_name, attack_direction, boost_curve_multiplier, is_critical_strike, blocked, damage_source, source_attacker_unit)
         end
+        local _et_br_ok, _et_br_r1 = pcall(function()
+        -- Issue #17 auto-probe: entry log + one-shot fingerprint broadcast.
+        if mod._br_fingerprint_broadcast_once then mod._br_fingerprint_broadcast_once() end
+        _dbg("[stagger_ai] entry peer=%s host=%s fp=%s target=%s attacker=%s hit_zone=%s src=%s",
+            _peer_short(), tostring(_is_server()),
+            mod._br_settings_fingerprint and mod._br_settings_fingerprint() or "?",
+            _u_short(target_unit), _u_short(attacker_unit),
+            tostring(hit_zone_name), tostring(damage_source))
         if not stagger_types then
             stagger_types = require("scripts/utils/stagger_types")
         end
@@ -908,13 +955,39 @@ local function _install_hooks()
                 attacker_buff_extension:trigger_procs("on_stagger", target_unit, damage_profile, attacker_unit, stagger_type, stagger_duration, stagger_value, buff_type, target_index)
             end
         end
+        -- Issue #17 auto-probe exit (end-of-body only — early returns above are
+        -- "stagger immune / no blackboard / not enemy" short-circuits that the
+        -- entry-log already disambiguates by hit_zone + targets).
+        _dbg("[stagger_ai] exit  peer=%s target=%s stagger_type=%s stagger_dur=%s",
+            _peer_short(), _u_short(target_unit),
+            tostring(stagger_type), tostring(stagger_duration))
+        end) -- end of v0.6.0-dev pcall wrapper
+        if not _et_br_ok then
+            -- v0.7.0-dev: log-only. stagger_ai fires on every melee hit; if BR
+            -- body errors, the chat echo would land on EVERY swing — pure spam.
+            -- mod:warning still hits the log so post-mission triage works.
+            mod:warning("[et:BR:stagger_ai] rewrite body errored: %s — bailing to vanilla", tostring(_et_br_r1))
+            return func(t, damage_profile, target_index, power_level, target_unit, attacker_unit, hit_zone_name, attack_direction, boost_curve_multiplier, is_critical_strike, blocked, damage_source, source_attacker_unit)
+        end
     end)
 
     -- H6: DamageUtils.calculate_damage rewrite
+    -- v0.6.0-dev: BR rewrite body wrapped in pcall — on inner error log
+    -- mod:warning + bail to vanilla. Crucial because calculate_damage
+    -- runs on EVERY damage event; a hot crash here would brick the run.
     mod:hook(DamageUtils, "calculate_damage", function(func, damage_output, target_unit, attacker_unit, hit_zone_name, original_power_level, boost_curve, boost_damage_multiplier, is_critical_strike, damage_profile, target_index, backstab_multiplier, damage_source)
         if not mod:get("br_calculate_damage_rewrite") or not _master_on() then
             return func(damage_output, target_unit, attacker_unit, hit_zone_name, original_power_level, boost_curve, boost_damage_multiplier, is_critical_strike, damage_profile, target_index, backstab_multiplier, damage_source)
         end
+        local _et_br_ok, _et_br_result = pcall(function()
+        -- Issue #17 auto-probe: entry log + one-shot fingerprint broadcast.
+        if mod._br_fingerprint_broadcast_once then mod._br_fingerprint_broadcast_once() end
+        _dbg("[calculate_damage] entry peer=%s host=%s fp=%s target=%s attacker=%s hit_zone=%s power=%s crit=%s src=%s",
+            _peer_short(), tostring(_is_server()),
+            mod._br_settings_fingerprint and mod._br_settings_fingerprint() or "?",
+            _u_short(target_unit), _u_short(attacker_unit),
+            tostring(hit_zone_name), tostring(original_power_level),
+            tostring(is_critical_strike), tostring(damage_source))
         local difficulty_settings = Managers.state.difficulty:get_difficulty_settings()
         local breed, dummy_unit_armor, is_dummy, unit_max_health
         if target_unit then
@@ -1008,16 +1081,38 @@ local function _install_hooks()
         if target_is_hero and damage_profile and damage_profile.max_friendly_damage and damage_profile.max_friendly_damage < calculated_damage then
             calculated_damage = damage_profile.max_friendly_damage
         end
+        -- Issue #17 auto-probe exit. Damage is the headline value for
+        -- divergence triage (HUD damage-number desync is the visible symptom).
+        _dbg("[calculate_damage] exit  peer=%s target=%s damage=%s",
+            _peer_short(), _u_short(target_unit), tostring(calculated_damage))
         return calculated_damage
+        end) -- end of v0.6.0-dev pcall wrapper
+        if not _et_br_ok then
+            -- v0.7.0-dev: log-only (see stagger_ai comment above — calculate_damage
+            -- runs on every damage event, chat echo would be catastrophic spam).
+            mod:warning("[et:BR:calculate_damage] rewrite body errored: %s — bailing to vanilla", tostring(_et_br_result))
+            return func(damage_output, target_unit, attacker_unit, hit_zone_name, original_power_level, boost_curve, boost_damage_multiplier, is_critical_strike, damage_profile, target_index, backstab_multiplier, damage_source)
+        end
+        return _et_br_result
     end)
 
     -- H1: ActionShieldSlam._hit rewrite. Body copied verbatim (vanilla-style
     -- method form) — too large to reproduce inline a second time; the
     -- per-toggle short-circuit short-paths to the original.
+    -- v0.6.0-dev: BR rewrite body wrapped in pcall — on inner error log
+    -- mod:warning + bail to vanilla. PhysicsWorld lookups + actor iteration
+    -- have a long history of edge-case nil returns on world transitions.
     mod:hook(ActionShieldSlam, "_hit", function(func, self, world, can_damage, owner_unit, current_action)
         if not mod:get("br_shield_slam_rewrite") or not _master_on() then
             return func(self, world, can_damage, owner_unit, current_action)
         end
+        local _et_br_ok, _et_br_r1 = pcall(function()
+        -- Issue #17 auto-probe: entry log + one-shot fingerprint broadcast.
+        if mod._br_fingerprint_broadcast_once then mod._br_fingerprint_broadcast_once() end
+        _dbg("[shield_slam] entry peer=%s host=%s fp=%s owner=%s can_damage=%s item=%s",
+            _peer_short(), tostring(_is_server()),
+            mod._br_settings_fingerprint and mod._br_settings_fingerprint() or "?",
+            _u_short(owner_unit), tostring(can_damage), tostring(self.item_name))
         local network_manager = Managers.state.network
         local physics_world = World.get_data(world, "physics_world")
         local attacker_unit_id = network_manager:unit_game_object_id(owner_unit)
@@ -1215,7 +1310,18 @@ local function _install_hooks()
             end
         end
 
+        -- Issue #17 auto-probe exit. total_hits + num_targets_hit are the
+        -- two cross-peer-comparable scalars for shield-slam result divergence.
+        _dbg("[shield_slam] exit  peer=%s owner=%s total_hits=%s num_targets_hit=%s",
+            _peer_short(), _u_short(owner_unit),
+            tostring(total_hits), tostring(self._num_targets_hit))
         self.state = "hit"
+        end) -- end of v0.6.0-dev pcall wrapper
+        if not _et_br_ok then
+            -- v0.7.0-dev: log-only (see stagger_ai comment above).
+            mod:warning("[et:BR:shield_slam] rewrite body errored: %s — bailing to vanilla", tostring(_et_br_r1))
+            return func(self, world, can_damage, owner_unit, current_action)
+        end
     end)
 
     _br_hooks_installed = true

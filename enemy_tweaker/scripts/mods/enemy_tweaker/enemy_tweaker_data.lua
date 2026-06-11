@@ -153,6 +153,139 @@ return {
     is_togglable = true,
     options = {
         widgets = {
+            -- SPAWN SCALING (added v0.6.0-dev — four multipliers, all 0–15x in
+            -- 0.1 steps, default 1.0 = vanilla, 0 = suppress entirely)
+            --
+            -- The widget type is `numeric` with `decimals_number = 1`, which
+            -- gives a slider that snaps to 0.1 increments (verified across 40
+            -- in-repo usages — chaos_wastes_tweaker_data.lua:402,
+            -- general_tweaker_data.lua:66 etc). mod:get returns a Lua number.
+            --
+            -- Why these four:
+            --   horde_size   — paced hordes (HordeCompositionsPacing, ~25 keys)
+            --   event_size   — terror-event hordes (HordeCompositions, ~194 keys
+            --                  — majority of visible adventure-mission hordes)
+            --   roaming_size — ambient roaming patrols (SizeOfInterestPoint
+            --                  pack sizes, drives ConflictDirector.roaming)
+            --   patrol_size  — formed marching squads (AIGroupSystem
+            --                  create_formation_data formation rows)
+            --
+            -- All four apply *independently and multiplicatively* on their own
+            -- spawn surface so setting one to 0 suppresses only that channel.
+            -- See enemy_tweaker.lua for the apply implementations and
+            -- /verify_horde_size /verify_event_size /verify_roaming_size
+            -- /verify_patrol_size commands for live-state verification.
+            {
+                setting_id  = "spawn_scaling_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "horde_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 15 },
+                        decimals_number = 1,
+                        tooltip       = "horde_size_multiplier_tooltip",
+                    },
+                    {
+                        setting_id    = "event_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 15 },
+                        decimals_number = 1,
+                        tooltip       = "event_size_multiplier_tooltip",
+                    },
+                    {
+                        setting_id    = "roaming_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 15 },
+                        decimals_number = 1,
+                        tooltip       = "roaming_size_multiplier_tooltip",
+                    },
+                    {
+                        setting_id    = "patrol_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 15 },
+                        decimals_number = 1,
+                        tooltip       = "patrol_size_multiplier_tooltip",
+                    },
+                },
+            },
+
+            -- SPAWN PACING (added v0.7.0-dev — SpawnTweaks parity pass)
+            -- These hit different engine layers than the four 0–15x sliders
+            -- above:
+            --   max_grunts_override          -> RecycleSettings.max_grunts
+            --                                   (concurrent-alive trash cap;
+            --                                   vanilla baseline ~90)
+            --   spawn_pace_multiplier        -> ConflictDirector.threat_value
+            --                                   + Pacing.total_intensity (>1 =
+            --                                   spawn-delay thresholds trip
+            --                                   sooner = MORE FREQUENT spawns)
+            --   horde_grunt_push_threshold   -> RecycleSettings
+            --                                   .push_horde_if_num_alive_grunts_above
+            --                                   (lower = hordes trigger sooner)
+            --   horde_frequency_min/max      -> CurrentPacing.horde_frequency
+            --                                   (paced-horde interval seconds)
+            --   ambients_ignore_threat       -> mini_patrol.only_spawn_below_intensity
+            --                                   = math.huge during update
+            --                                   (ambient packs spawn even
+            --                                   while combat is hot)
+            --
+            -- SPAWN SCALING (above) controls "how many enemies per spawn event."
+            -- SPAWN PACING (here)  controls "how often / how many concurrently."
+            -- They compound multiplicatively at runtime — use both.
+            {
+                setting_id  = "spawn_pacing_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "max_grunts_override",
+                        type          = "numeric",
+                        default_value = 90,
+                        range         = { 10, 360 },
+                        tooltip       = "max_grunts_override_tooltip",
+                    },
+                    {
+                        setting_id    = "spawn_pace_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 5 },
+                        decimals_number = 1,
+                        tooltip       = "spawn_pace_multiplier_tooltip",
+                    },
+                    {
+                        setting_id    = "horde_grunt_push_threshold",
+                        type          = "numeric",
+                        default_value = 60,
+                        range         = { 10, 240 },
+                        tooltip       = "horde_grunt_push_threshold_tooltip",
+                    },
+                    {
+                        setting_id    = "horde_frequency_min",
+                        type          = "numeric",
+                        default_value = 50,
+                        range         = { 5, 200 },
+                        tooltip       = "horde_frequency_min_tooltip",
+                    },
+                    {
+                        setting_id    = "horde_frequency_max",
+                        type          = "numeric",
+                        default_value = 100,
+                        range         = { 5, 200 },
+                        tooltip       = "horde_frequency_max_tooltip",
+                    },
+                    {
+                        setting_id    = "ambients_ignore_threat",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "ambients_ignore_threat_tooltip",
+                    },
+                },
+            },
+
             -- HORDES
             {
                 setting_id = "horde_group",
@@ -172,12 +305,38 @@ return {
                             { text = "preset_all_elites",        value = "all_elites" },
                         },
                     },
+                },
+            },
+
+            -- BEASTMAN BANNER (v0.7.2-dev)
+            -- Two toggles for the beastmen standard-bearer's planted banner:
+            --   banner_bearer_staggerable_during_placement
+            --     Patches BreedActions.beastmen_standard_bearer
+            --     .place_standard_stagger_immune.ignore_staggers from
+            --     {true, true, true, true, true, true} to all-false so the
+            --     bearer can be staggered out of the place animation.
+            --   banner_breakable_by_ranged
+            --     Hooks BeastmenStandardHealthExtension.add_damage and
+            --     extends the can_damage_banner whitelist to include
+            --     attack_type "projectile" / "instant_projectile" /
+            --     "heavy_instant_projectile" (vanilla only accepts melee
+            --     light/heavy plus a small explosive/torch whitelist).
+            -- Both default false (vanilla behavior preserved).
+            {
+                setting_id  = "banner_group",
+                type        = "group",
+                sub_widgets = {
                     {
-                        setting_id    = "horde_size_multiplier",
-                        type          = "numeric",
-                        default_value = 100,
-                        range         = { 25, 300 },
-                        tooltip       = "horde_size_multiplier_tooltip",
+                        setting_id    = "banner_bearer_staggerable_during_placement",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "banner_bearer_staggerable_during_placement_tooltip",
+                    },
+                    {
+                        setting_id    = "banner_breakable_by_ranged",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "banner_breakable_by_ranged_tooltip",
                     },
                 },
             },
@@ -375,6 +534,15 @@ return {
                         },
                     },
                 },
+            },
+            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+            -- Must be at the BOTTOM of the widget tree, top-level (NOT inside
+            -- any group), key `enable_debug_logging` verbatim across every mod.
+            {
+                setting_id    = "enable_debug_logging",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "enable_debug_logging_tooltip",
             },
         },
     },

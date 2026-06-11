@@ -1,10 +1,118 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.14-dev (2026-06-07) -- Back-fill: Workshop preview swap (item_preview.png -> preview.jpg) + version bump
+
+### Why
+Back-filled during the 2026-06-07 audit (`check_versions` flagged that MOD_VERSION `0.1.14-dev` had no matching CHANGELOG entry). The version was bumped to `0.1.14-dev` on 2026-05-26 but the CHANGELOG was never updated.
+
+Best-effort attribution from source/asset timestamps and git working-tree state (no git commit isolates this version, and there is no in-source feature/behavior marker for it):
+- The main lua was last touched 2026-05-26 13:23:44 -- AFTER v0.1.13 was finalized (2026-05-25 18:59). The only version-bearing delta in it is the `MOD_VERSION` constant `0.1.13` -> `0.1.14-dev`; no new hooks, commands, or behavioral markers were introduced.
+- `itemV2.cfg` was touched 2026-05-26 13:24:26 (title suffix rewritten to ` v0.1.14-dev` by the launcher) and its `preview` field points at `preview.jpg`.
+- The Workshop preview image was swapped: `item_preview.png` was deleted and replaced by a new `preview.jpg` (created 2026-05-26 13:23). This is the substantive change behind the bump -- a Workshop presentation refresh, not a code change.
+
+**Uncertainty:** attribution is reconstructed from file timestamps + working-tree diff, not from a per-version commit. If v0.1.14-dev carried any additional unreviewed code change it is not visible in the source as a dated marker. The `itemV2.cfg` description body still reads "v0.1.13" (prose was not revised for this bump), consistent with a preview-asset/version-only change.
+
+### Changed
+- `dynamic_cosmetic_portraits.lua:3` -- `MOD_VERSION` bumped `0.1.13` -> `0.1.14-dev`.
+- `itemV2.cfg:1,3` -- title suffix `v0.1.14-dev`; `preview = "preview.jpg"`.
+- `item_preview.png` (removed) / `preview.jpg` (added) -- Workshop preview image swapped to JPG.
+
+### Tests
+None -- documentation-only back-fill. No code change, so no new regression check. Existing `/dcp_regression_test` scaffold (`dbg_helpers_two_channel`, `localization_format_safe`) is unaffected.
+
+### To verify
+- Workshop item page shows the new `preview.jpg` thumbnail (not the old `item_preview.png`).
+- In-game load banner / `/dcp_regression_test` header reports `v0.1.14-dev`.
+
+## 0.1.13 (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("Dynamic Cosmetic Portraits v" .. MOD_VERSION)` startup line from every mod. dcp is still 0.x (no track suffix, but version starts with `0.`) so it counts as in-flight: the user can't tell at a glance which patch is running. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable (>=1.0.0) versions stay silent.
+
+### Changed
+- `dynamic_cosmetic_portraits.lua` -- added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. The `^0%.` branch is what fires for dcp (no suffix). When any branch fires, `mod:echo("[dcp] v<MOD_VERSION> loaded")` runs once.
+
+## 0.1.12 (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[dcp] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- dynamic_cosmetic_portraits.lua -- removed the load-time `mod:echo("dynamic_cosmetic_portraits v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[dcp] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("dynamic_cosmetic_portraits v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build dynamic_cosmetic_portraits -- verification only. NOT deployed, NOT uploaded.
+
 This mod was split out of `cosmetics_tweaker` on 2026-05-06. The full
 pre-split development history of the portrait system (v0.7.37–v0.7.102 and
 the v0.8.0–v0.8.4-dev cosmetics_tweaker line) lives in
 [../cosmetics_tweaker/CHANGELOG.md](../cosmetics_tweaker/CHANGELOG.md) — keep it as the
 authoritative archive of how the system was researched and stabilised.
+
+## 0.1.11 (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- dynamic_cosmetic_portraits_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- dynamic_cosmetic_portraits.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build dynamic_cosmetic_portraits -- verification only. NOT deployed, NOT uploaded.
+
+## [2026-05-25 v0.1.10] — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[dcp] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load — self-documenting console_logs. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. ALWAYS fires (not gated on debug_logging).
+
+### Changed
+- `dynamic_cosmetic_portraits.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[dcp] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.1.10.
+
+## [2026-05-25 v0.1.9] — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `dynamic_cosmetic_portraits.lua` — installed `_dbg_alert` helper alongside existing `_dbg`. Added new `_RT_CHECKS` regression scaffold (`/dcp_regression_test`) with `dbg_helpers_two_channel` check (dcp had no regression command before).
+- `itemV2.cfg` — bumped to v0.1.9.
+
+### Notes
+- 0 existing `_dbg(...)` call sites in this mod (helper was previously unused).
+- 0 bare `mod:echo` reclassified.
+
+## [2026-05-25 v0.1.8] — Standardize Debug Logging toggle (universal convention)
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). dcp previously had no debug toggle — added.
+
+### Changed
+- `dynamic_cosmetic_portraits_data.lua` — appended `enable_debug_logging` checkbox (default `false`) at the bottom of `options.widgets`, top-level (NOT inside any group).
+- `dynamic_cosmetic_portraits_localization.lua` — added `enable_debug_logging` + `enable_debug_logging_tooltip` strings.
+- `dynamic_cosmetic_portraits.lua` — added file-local `_dbg(fmt, ...)` helper at top. Output prefix `[dcp:dbg]`.
+- `itemV2.cfg` — title + description bumped to v0.1.8.
+
+### Notes
+- No existing debug key to rename (dcp had none).
 
 ## [2026-05-20 v0.1.7] — Add Sellsword's Twinplume portrait
 ### Added

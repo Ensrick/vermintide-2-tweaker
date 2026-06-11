@@ -39,6 +39,21 @@ local widgets = {
         default_value = true,
         tooltip       = mod:localize("glow_picker_auto_popup_enabled_tooltip"),
     },
+    -- v0.9.29-dev (issue #48): hide weavebound / shyish glow families from
+    -- the illusion grid by default. Per-family toggles let the user opt
+    -- back in. Currently-equipped skin is preserved regardless.
+    {
+        setting_id    = "hide_weavebound_skins",
+        type          = "checkbox",
+        default_value = true,
+        tooltip       = mod:localize("hide_weavebound_skins_tooltip"),
+    },
+    {
+        setting_id    = "hide_shyish_skins",
+        type          = "checkbox",
+        default_value = true,
+        tooltip       = mod:localize("hide_shyish_skins_tooltip"),
+    },
     {
         setting_id  = "appearance_group",
         type        = "group",
@@ -258,6 +273,18 @@ widgets[#widgets + 1] = {
     setting_id  = "cosmetic_availability_group",
     type        = "group",
     sub_widgets = U.widgets,
+}
+
+-- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+-- Appended LAST so it stays at the BOTTOM of the widget tree, top-level
+-- (NOT inside any group), key `enable_debug_logging` verbatim across every
+-- mod in the repo. v0.9.14-dev: renamed from the per-mod `debug_dumps` key
+-- (previously above the appearance group).
+widgets[#widgets + 1] = {
+    setting_id    = "enable_debug_logging",
+    type          = "checkbox",
+    default_value = false,
+    tooltip       = mod:localize("enable_debug_logging_tooltip"),
 }
 
 return {

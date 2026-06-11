@@ -1,5 +1,171 @@
 # Career Tweaker Changelog
 
+## 0.3.22-dev (2026-06-07) — on_disabled now unwinds talent swaps + documents the rest
+
+### Why
+Audit 2026-06-07 finding F13 (BUG_CLASSES §7 — togglable-mod limitation): `mod.on_disabled` restored only the balance / big_rebalance buff-template mutations and left the **talent swaps** (TalentTrees / CareerSettings activated_ability + passive_ability rebinds) and the global table/hook mutations behind. Toggling the mod off mid-session left swapped careers swapped until a restart. Per the repo's accepted class-7 pattern (gt v0.2.56, Issue #15): restore what's cheap, document the rest.
+
+### Changed
+- `career_tweaker.lua:229-247` — factored the talent-swap restore loop out of `apply_talent_swaps` into a reusable file-scope `restore_talent_swaps()` (rebind saved originals + clear `_talent_swap_originals`; no-op when empty). `apply_talent_swaps` now calls it instead of inlining the loop — behavior unchanged.
+- `career_tweaker.lua:446-475` (`on_disabled`) — now calls `restore_talent_swaps()` (cheap unwind) + `refresh_talent_ui()` so an open talent picker visibly reverts, then `mod:echo`s a one-line restart-required note for the genuinely non-reversible mutations: the unconditional `crt_*` stub registrations in `BuffTemplates` + `NetworkLookup.buff_templates` (removing them would shift later NetworkLookup indices and break cross-peer `rpc_add_buff` determinism) and the VMF-installed hooks (VMF deactivates them on disable and each body already gates on `mod:get`, so they no-op, but the wrappers persist until restart).
+
+### Tests
+- `career_tweaker.lua` — added `_rt_register("on_disabled_unwinds_talent_swaps", ...)`. Behavioral: seeds a synthetic pending-swap whose career_name is absent from `CareerSettings` (so the restore iterates it without writing any real game table), calls `restore_talent_swaps()`, and asserts `_talent_swap_originals` is cleared. Restores the live table afterward. FAILS if the F13 unwind path is removed or the helper goes missing.
+
+### To verify
+- In-keep: enable a talent swap (e.g. set a career's `talent_swap_*` dropdown), confirm the swap applied, then toggle Career Tweaker OFF in the VMF menu. The swapped career should revert to its vanilla tree/ability (open the talent picker to confirm), and chat should show the `[crt] Talent swaps + balance reworks reverted…` restart note once.
+- `/crt_regression_test` — the new `on_disabled_unwinds_talent_swaps` check passes alongside the existing suite.
+
+## v0.3.21-dev (2026-06-06) -- Add "Unlock all careers" toggle (owned-DLC only)
+
+Sibling feature to the level override: a single checkbox that bypasses the level requirement for every career the player OWNS. DLC ownership is preserved — unowned-DLC careers (Grail Knight, Sister of the Thorn, Warrior Priest, Outcast Engineer, Necromancer) stay locked unless the player actually owns the DLC. Matches CLAUDE.md § DLC Ownership Gate: "modded mods unlock vanilla progression, NOT paid DLC content."
+
+**Implementation** (verified against decompiled source): the vanilla unlock chain is `local_is_unlocked_function` (career_settings.lua:23) -> `override_available_for_mechanism` -> `is_dlc_unlocked` (DLC GATE) -> `ProgressionUnlocks.is_unlocked_for_profile(display_name, hero_name, hero_level)` (LEVEL GATE). DLC careers (lake/bless/cog/shovel/woods) have bespoke `is_unlocked_function`s that short-circuit after the DLC check without calling the level gate — so for DLC careers, ownership IS the whole gate; this toggle correctly has no effect on them. Hooking just `ProgressionUnlocks.is_unlocked_for_profile` is therefore the single, surgical fix: it bypasses the level check only and runs DOWNSTREAM of the DLC gate, which has already locked unowned DLC careers. Vanilla already had a built-in dev flag for this exact behavior at `progression_unlocks.lua:206` (`Development.parameter("unlock_all_careers")`); this toggle gives it a user-facing surface.
+
+**Scope:** Local character-select only. Off by default. No XP / unlock state ever writes to the backend.
+
+## v0.3.20-dev (2026-06-06) -- Fix: level override didn't unlock talents / level-gated features
+
+User report: setting a character's level higher (Character Experience Level Override) showed the higher level but still wouldn't let you **equip talents** or unlock the things you get from leveling.
+
+**Root cause** (verified against decompiled source): the existing override is a single hook on `ExperienceSettings.get_experience`, which only covers DISPLAY reads. The functional gates read raw experience DIRECTLY from the backend mirror — `BackendInterfaceTalentsPlayfab._validate_talents` (backend_interface_talents_playfab.lua:234) does `self._backend_mirror:get_read_only_data(profile_name.."_experience")` → `ExperienceSettings.get_level(...)` → strips any talent whose `ProgressionUnlocks.is_unlocked("talent_point_"..i, hero_level)` is false (`career_talents[i] = 0`). That path never touched the display hook, so the gate saw the real (low) level and stripped the talents.
+
+**Fix:** override the mirror's `<hero>_experience` read too, so the functional gates see the override level. Class()-copy caveat handled: the live mirror is `PlayFabMirrorAdventure` (copies methods from `PlayFabMirrorBase` at load time per VT2's class system), so hooking only the base would never fire — the hook targets every concrete mirror class (`PlayFabMirrorAdventure` / `PlayFabMirrorDedicated` / `PlayFabMirrorBase`). Read-only (returns a value, never writes); type-matched to vanilla's stored string. No XP is persisted.
+
+## 0.3.19-dev (2026-05-30) -- Loc integrity: add missing passive-perks-rework descriptions
+
+### Why
+`qa/check_name_integrity.ps1` check #2 flagged 9 `description = "<key>"` assignments in `career_tweaker_big_rebalance.lua` that resolved in no loc table (mod/any-mod/vanilla): `kerillian_maidenguard_perk_{1,2,3}_desc`, `victor_zealot_perk_{1,2,3}_desc`, `victor_bountyhunter_perk_{1,2,3}_desc`. These are the `perks` UI sub-entry descriptions written into `PassiveAbilitySettings.we_2 / wh_1 / wh_2` by the three `cbr_*_passive_perks_rework` BR toggles. Investigation: the vanilla perk-description convention is `career_passive_desc_<id><letter>_<n>` (e.g. `career_passive_desc_we_2b_2`), NOT these keys — and they appear nowhere in the decompiled source NOR the Big Rebalance extract (`_big_rebalance_extract` ships `career_perk_1/2/3` icon atlas names but no `*_perk_*_desc` strings). So these are crt's own invented keys that were never added to crt's loc table — without entries the hero UI would render the raw key strings on those reworked passives.
+
+### Changed
+- `career_tweaker_localization.lua` — added the 9 perk-description loc entries. English is grounded in the documented vanilla passive `buffs` lists (`career_ability_settings.lua` we_2 / wh_1 / wh_2 — dodge/stamina-aura/ress for Handmaiden, low-health-power/uninterruptible/invuln for Zealot, periodic-crit/reload/ammo for Bounty Hunter); no invented numbers.
+
+### Notes
+- Resolves all 9 career_tweaker entries in the 13 check_name_integrity errors. CONFIRMED crt's-own keys, not vanilla — no validator allowlist needed.
+
+## 0.3.18-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("<Name> v" .. MOD_VERSION)` startup line from every mod. That's correct for stable (>=1.0.0) builds but hides the active version for in-flight dev/alpha/beta work -- the user can't tell at a glance which patch is running. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable versions stay silent.
+
+### Changed
+- `career_tweaker.lua` -- added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. When any branch fires, `mod:echo("[crt] v<MOD_VERSION> loaded")` runs once.
+
+## 0.3.17-dev (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[crt] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- career_tweaker.lua -- removed the load-time `mod:echo("career_tweaker v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[crt] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("career_tweaker v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- career_tweaker.lua:329 -- removed `mod:echo("Setting changed: " .. tostring(setting_id))` from on_setting_changed. The echo fired in chat on EVERY widget flip (including Debug Logging itself), which was the source of the user-reported "needless echos when enabling debug logging". Diagnostic trace now routes through `_dbg("on_setting_changed: %s", ...)` -- file only, gated on enable_debug_logging.
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build career_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.3.16-dev (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- career_tweaker_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- career_tweaker.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build career_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.3.15-dev (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[crt] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. Self-documenting console_logs: scrolling back you can see which build + config was running. ALWAYS fires (not gated on debug_logging — operational telemetry).
+
+### Changed
+- `career_tweaker.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[crt] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.3.15-dev.
+
+## 0.3.14-dev (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `career_tweaker.lua` — installed `_dbg_alert` helper alongside existing `_dbg`. Added `_rt_register("dbg_helpers_two_channel", ...)` alongside the existing four crt regression checks.
+- `itemV2.cfg` — bumped to v0.3.14-dev.
+
+### Notes
+- 0 existing `_dbg(...)` call sites in this mod (helper was previously unused).
+- 0 bare `mod:echo` reclassified — all `mod:echo` calls are inside chat command bodies or are permanent operational output.
+
+## 0.3.13-dev (2026-05-25) — Tighten localization strings to vanilla style (~20 entries rewritten)
+
+### Why
+
+Mod-menu tooltips for the 5 character-XP-level overrides and the rework_* talent descriptions read as multi-paragraph essays. Vanilla VT2 talent text is dry single-sentence mechanical detail with magnitudes inline. This pass aligns crt with the vanilla voice per the new `LOCALIZATION_STANDARD.md` § 11 rules.
+
+### Changed
+
+- `level_override_<char>_tooltip` × 5 (Bardin / Kruber / Kerillian / Saltzpyre / Sienna): collapsed identical 240-char tooltips down to "Force X's reported XP level (shared across all 4 careers). 0 = real XP; 1-35 = override. Modded realm only; never writes to the backend."
+- `cbr_group_description`: dropped the "subscribe to it separately, then restart the game" prose; kept the bt-master-required gate.
+- `rework_general_stagger_thp_description`, `rework_general_thp_kill_minimum_description`, `rework_general_enhanced_power_10pct_description`, `rework_general_mainstay_stagger_15pct_description`: trimmed implementation-details paragraphs, kept magnitudes inline (0.375/1.5/3 THP, +7.5%% → +10%%, etc.).
+- BR talent reworks: `rework_es_huntsman_prowl_monster_power_description`, `rework_es_mercenary_hellborgs_tutelage_description`, `rework_es_knight_valiant_charge_*_description`, `rework_es_questingknight_virtue_of_ideal_*_description`, `rework_dr_ranger_exuberance_stacking_dr_description`, `rework_bw_unchained_wildfire_burst_and_radius_description`, `rework_bw_unchained_numb_to_pain_*_description`, `rework_wh_zealot_smite_random_crits_description`, `rework_wh_zealot_ability_green_to_thp_description`, `rework_wh_zealot_castigate_*_description`, `rework_wh_bountyhunter_blessed_combat_*_description`, `rework_wh_bountyhunter_salvaged_ammo_*_description`, `rework_wh_priest_shield_of_faith_*_description`: dropped vanilla-comparison preambles, kept the magnitudes.
+
+### Not touched
+
+- Bounty Hunter mutex-cluster tooltips (`rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip` / `cbr_bh_passive_perks_rework_tooltip`) — the leading "choice (A/B) of (B). Alternative to '(B/A) X' — these are mutually exclusive..." is load-bearing per LOCALIZATION_STANDARD.md § 10. Cannot tighten the prefix.
+- Talent rework descriptions that already match vanilla style.
+
+### Build
+
+VMBLauncher.exe build career_tweaker — verification only.
+
+## 0.3.12-dev (2026-05-25) — Standardize Debug Logging toggle (universal convention)
+
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). crt previously had no debug toggle at all — added.
+
+### Changed
+- `career_tweaker_data.lua` — new top-level `enable_debug_logging` checkbox (default `false`) at the bottom of `options.widgets`, NOT nested in any group.
+- `career_tweaker_localization.lua` — added `enable_debug_logging` + `enable_debug_logging_tooltip` strings.
+- `career_tweaker.lua` — added file-local `_dbg(fmt, ...)` helper gated on `mod:get("enable_debug_logging")`. Output prefixed `[crt:dbg]`.
+- `itemV2.cfg` — title + description bumped to v0.3.12-dev.
+
+### Notes
+- No existing debug key to rename (crt had none).
+
+## 0.3.10-dev (2026-05-24) — §15 belt-and-suspenders runtime test for v0.3.9 rawget conversion
+
+### Why
+Audit `.test_coverage_audit_2026-05-24.md` PARTIAL row 3: the v0.3.9 `NetworkLookup.buff_templates` rawget conversion (`career_tweaker_big_rebalance.lua:124`) was lint-covered (regression-lint.ps1 `strict-table-lookup`) but lacked a target-specific runtime check (the pre-existing `rawget_on_buff_templates_marker` is generic). Per the §15 doctrine update appended this round, lint-covered fixes ALSO require a runtime regression test.
+
+### Added
+- Source-pattern marker constant `CT_CRT_BIG_REBALANCE_RAWGET_MARKER_v0_3_10 = "crt-big-rebalance-rawget-hardened"` near the top of `career_tweaker.lua`.
+- `_rt_register("crt_big_rebalance_uses_rawget", ...)` at the bottom of `career_tweaker.lua`. Two assertions:
+  1. The marker constant retains its expected value.
+  2. `rawget(NetworkLookup.buff_templates, <known-bad-key>)` returns `nil` without raising.
+
+### Verification
+1. Restart VT2 with the mod enabled, load the keep.
+2. Run `/crt_regression_test` in chat. Expect `PASS: crt_big_rebalance_uses_rawget` alongside the pre-existing checks.
+
 ## 0.3.9-dev (2026-05-23) — Convert 1 NetworkLookup lookup to rawget (latent strict-__index crash fix)
 
 ### Why

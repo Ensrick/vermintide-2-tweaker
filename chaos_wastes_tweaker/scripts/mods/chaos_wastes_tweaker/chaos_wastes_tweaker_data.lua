@@ -80,7 +80,10 @@ local BOON_TREE = {
                     "deus_increased_healing_taken", "deus_max_health", "healers_touch",
                     "heal_on_dot_damage_dealt", "health", "invigorating_strike",
                     "natural_bond", "transfer_temp_health_at_full",
-                    "ct_kill_heal",  -- v0.7.32 Mod Boon: 1 green HP per kill (exotic)
+                    -- 2026-05-23 v0.7.98-dev DISABLED: ct_kill_heal mod boon removed per user
+                    -- request after Chest-of-Trials crash. Re-add this line when re-enabling
+                    -- the ct_kill_heal block in chaos_wastes_tweaker.lua (~L5698).
+                    -- "ct_kill_heal",  -- v0.7.32 Mod Boon: 1 green HP per kill (exotic)
                 },
             },
             {
@@ -273,6 +276,11 @@ local function build_start_tree()
     for _, entry in ipairs(BOON_TREE) do
         groups[#groups + 1] = build_category_group("start_boon", entry)
     end
+    -- 2026-05-23 v0.7.98-dev DISABLED: start_boon_dormant_group removed because the dormant
+    -- boons themselves are no longer registered (see chaos_wastes_tweaker.lua ~L4448). A
+    -- starting boon checkbox for an unregistered boon would silently no-op and mislead users.
+    -- Re-enable alongside the dormant injection code.
+    --[[
     -- Dormant boons appear in start tree only, in their own group.
     local dormant_widgets = {}
     for _, boon_id in ipairs(DORMANT_BOONS) do
@@ -283,6 +291,7 @@ local function build_start_tree()
         type = "group",
         sub_widgets = dormant_widgets,
     }
+    --]]
     return groups
 end
 
@@ -301,7 +310,9 @@ for _, entry in ipairs(BOON_TREE) do
     _add_sort_group("disable_boon", entry)
     _add_sort_group("start_boon", entry)
 end
-SORT_GROUPS["start_boon_dormant_group"] = true
+-- 2026-05-23 v0.7.98-dev DISABLED: start_boon_dormant_group no longer registered (see
+-- build_start_tree above). Sort registration is harmless either way, but commented for clarity.
+-- SORT_GROUPS["start_boon_dormant_group"] = true
 
 local function sort_key(widget)
     local sid = widget.setting_id or ""
@@ -524,6 +535,13 @@ local data = {
                             { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
                             { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
                             { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
+                            -- v0.7.120-dev: mutex alternative to mirror. Bots roll INDEPENDENT random boons each
+                            -- time the host claims one. Mutex group "bots_boon_mode" — declared in chaos_wastes_tweaker.lua.
+                            { setting_id = "bots_get_random_boons",            type = "checkbox", default_value = false, tooltip = "bots_get_random_boons_tooltip" },
+                            -- v0.7.120-dev: mirror host weapon-chest interactions onto every bot. Swap chests
+                            -- generate a random weapon for the bot's career; upgrade chests upgrade the bot's
+                            -- currently-equipped CW weapon to the same target rarity.
+                            { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
                         },
                     },
                     {
@@ -549,6 +567,19 @@ local data = {
                     type = "group",
                     sub_widgets = build_start_tree(),
                 },
+                -- 2026-05-23 v0.7.98-dev DISABLED: Activate Dormant Boons + Skulls Event Boons
+                -- VMF groups removed per user request after Chest-of-Trials crash. The
+                -- corresponding lua implementation is block-commented in
+                -- `chaos_wastes_tweaker.lua` (~L4448 dormants, ~L4724 Skulls). The
+                -- "start_boon_dormant_group" widget (above, in build_start_tree) is also
+                -- effectively unused now — those dormants will not register, so picking a
+                -- starting boon from that list would fail to apply. Keeping the start-tree
+                -- widget visible would mislead users; consider commenting build_start_tree's
+                -- dormant_widgets too if dormant disable becomes permanent.
+                -- To re-enable: uncomment the block below AND uncomment the matching loc keys
+                -- (activate_dormant_*, enable_skulls_event_boons, skulls_event_boons_group) AND
+                -- uncomment the apply-site calls in chaos_wastes_tweaker.lua.
+                --[[
                 {
                     setting_id = "activate_dormant_boons_group",
                     type = "group",
@@ -578,6 +609,7 @@ local data = {
                         },
                     },
                 },
+                --]]
             {
                 setting_id = "banned_traits_group",
                 type = "group",
@@ -635,4 +667,16 @@ local data = {
 }
 
 recursive_sort(data.options.widgets)
+
+-- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+-- Appended AFTER `recursive_sort` so it stays at the BOTTOM of the widget tree,
+-- top-level (NOT inside any group), key `enable_debug_logging` verbatim across
+-- every mod in the repo.
+data.options.widgets[#data.options.widgets + 1] = {
+    setting_id    = "enable_debug_logging",
+    type          = "checkbox",
+    default_value = false,
+    tooltip       = mod:localize("enable_debug_logging_tooltip"),
+}
+
 return data

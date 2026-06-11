@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -7,6 +7,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > logging conventions, anti-patterns to avoid, pre-ship checklists. This
 > `CLAUDE.md` describes HOW the code works (technical reference); the standards
 > doc describes how WE work on it. When in doubt, cite the section.
+>
+> **Bug class catalog: `docs/BUG_CLASSES.md`** — match symptoms against known
+> patterns before deep dive. Most bug reports are repeats of a class already
+> shipped, debugged, and fixed elsewhere in the monorepo. Triage workflow lives
+> in `docs/BUG_TRIAGE_RUNBOOK.md`.
+>
+> **🛑 STOP: BEFORE WRITING ANY `mod:hook(...)` OR `mod:hook_safe(...)` LINE 🛑**
+>
+> VMF silently drops the SECOND hook on the same `(Class, method)` pair from
+> the same mod (whether `mod:hook` or `mod:hook_safe`, doesn't matter — same
+> target = drop). This has burned this codebase **at minimum five times**
+> (cim, ct v0.7.121, ct v0.7.129/.130, plus older ct entries). The lint at
+> `tools/mod-lint/lint-mod.ps1` is supposed to catch it; if your hook still
+> ships and a `Attempting to rehook active hook` log line appears in the
+> user's session, the lint missed it AND so did you.
+>
+> **MANDATORY pre-flight before writing a new hook:**
+> 1. `Grep` the target mod source file for `("ClassName"` AND for `<ClassNameSymbol>,` to find every existing hook on that class. Inspect every match for the method you want to hook.
+> 2. If ANY match exists for `(ClassName, method)`, **DO NOT add a new hook line**. Instead, merge your new logic INTO the body of the existing hook. Add a banner comment naming the consolidation site (e.g. `_ct_consolidated_open_chest_hook` marker) so the next session can grep for it.
+> 3. Add or extend a `/ct_regression_test` `_rt_register` source-pattern marker for the consolidation, so the singleton invariant is checked on every release.
+>
+> When in doubt: search for `"<method>"` (with quotes) in the file. A grep that returns more than one hit on `mod:hook` or `mod:hook_safe` is a bug, full stop. Reference: `VMF_RECIPES.md` § 1 + `memory/feedback_vmf_no_duplicate_hooks.md`.
 
 ## Project Overview
 
@@ -17,9 +39,17 @@ A modular set of **Vermintide 2** VMF (Vermintide Mod Framework) mods written in
 Navigation anchor for the entire monorepo's docs. `CLAUDE.md` (this file) is the
 technical entry point; from here, follow the tree to the topic-specific reference.
 
+> This map is a **navigation aid** (file → one-line purpose). It deliberately
+> does NOT carry per-file version or staleness stickers — those drift faster
+> than the map gets updated. The canonical doc index, including which docs are
+> required/current for which mods, is `PROJECT_STANDARDS.md` §7.1.
+
 **Tier 1 — repo-wide (read first):**
 - `CLAUDE.md` (this file) — technical overview: how every mod is wired, the build pipeline, the architecture invariants.
 - `PROJECT_STANDARDS.md` — operational rulebook: workflow conventions, error-handling rules, logging conventions, anti-patterns, pre-ship checklists. Binding when working on any mod.
+- `docs/BUG_CLASSES.md` — catalog of known bug patterns this repo has seen (symptom -> diagnosis pattern -> fix template + Issue/commit citation). Pattern-match here FIRST on any bug report before deep dive.
+- `docs/BUG_TRIAGE_RUNBOOK.md` — workflow for using the bug-class catalog: intake, match, fix, verify, document.
+- `docs/MECHANICS.md` — provenance-enforced index of how VT2 / Stingray mechanics actually work. Every factual bullet carries a provenance tag (`[src: file:line]` / `[dump:]` / `[memory:]` / `[bugclass:]` / `[user:]` / `[unverified]`). **Before stating any mechanic, grep the decompiled source and cite it, or write `[unverified]` — never confabulate** (PROJECT_STANDARDS § 12a capture doctrine). `qa/check_mechanics_citations.ps1` fails on any untagged claim. This is an INDEX that points at source/memory/BUG_CLASSES, not a fourth prose surface.
 - `DEVELOPMENT.md` — historical/detailed technical reference (hooking rules, animation system, shield swap architecture, known errors). Pre-dates this CLAUDE.md but still authoritative for the topics it covers.
 - `CROSS_MOD_ARCHITECTURE.md` — how `weapon_tweaker`, `cosmetics_tweaker`, `character_weapon_variants`, and `modded_progression` interact at runtime; LA bridge pattern; co-installed-mod detection.
 
@@ -57,13 +87,12 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `EXPANSION_PLAN.md` — spawn-parity roadmap.
 - `event_tweaker/`:
   - `DEVELOPMENT.md` — three hooks (`get_special_events`, `get_active_events`, `get_level_variation_data`) plus mutator/preset registration and confirmed mutator catalog.
-- `la_prefix_patch/`:
-  - `DEVELOPMENT.md` — overview + VMF prototype-patching pattern.
 - `modded_progression/`:
   - `PLAN.md` — full design for the modded-realm vanilla-progression re-enable.
 - `verminious_dreams_lighting/`:
   - `DEVELOPMENT.md` — per-mission lighting tuning architecture (ShadingEnvironment + Light overrides for dlc_termite_1/2/3).
 - `weapon_tweaker/`:
+  - `ANIMATION_COVERAGE.md` — **the release walk list**: per-(receiver, weapon) 3P animation status matrix (working / wired-unverified / decided-not-wired / undecided), the tune→export→bake workflow, and the model-substitute queue. Source of truth for "what's left before wt releases" (added 2026-06-11).
   - `CROSS_CHARACTER_PORT_RECIPE.md` — seven-step procedure for adding a new cross-character weapon port.
   - `DEVELOPMENT.md` — design direction + animation remap rules (per-unit state, closed-vocabulary, 3P fix process, character-skeleton constraints).
 
@@ -74,26 +103,63 @@ technical entry point; from here, follow the tree to the topic-specific referenc
 
 Full per-file index is in the **Key Reference Files** section at the bottom.
 
+## Bug triage
+
+On receiving a user bug report, read `docs/BUG_TRIAGE_RUNBOOK.md` first — it's the 60-second orientation (phase 1 reads, bug-class match, deep-dive log patterns, fix checklist with the `_rt_register` + `/verify_<feature>` + GitHub-release steps, post-fix hardening) and is the single entry point any session should use before diving into mod source.
+
 ## Mod Directory
 
-| Mod | Internal ID | Workshop ID | Build System | Purpose |
-|-----|-------------|-------------|--------------|---------|
-| weapon_tweaker | `wt` | 3712896117 | **VMB** | Cross-character weapon access with full freedom: any character can wield any weapon (1P universal, never touched), with 3P anim events remapped into a functionally-similar receiver-native weapon's vocab so the bystander view stays plausible (e.g. brace-on-Kruber renders as Repeating Handgun in 3P, longbow-on-Saltzpyre as Crossbow). **Direction reversal 2026-05-23:** identical-functional ports (Bardin's axe on Saltzpyre when Saltzpyre already has a falchion-family native, etc.) are being removed from wt and absorbed into `cosmetics_tweaker` as a cross-character cosmetic swap. wt retains only genuine functional cross-character ports. |
-| chaos_wastes_tweaker | `ct` | 3712929235 | **VMB** | CW economy, curses, boons, altars, traits |
-| general_tweaker | `gt` | 3713619122 | **VMB** | 3rd person camera, debug/data dumps |
-| cosmetics_tweaker | `cosmetics_tweaker` | 3715714222 | **VMB** | Hat/skin unlocks, weapon model tweaks, shield swaps, custom illusions. **Scoped 2026-05-23:** cross-character cosmetic swap for functionally-identical weapons (e.g. Bardin's axe model rendered on Saltzpyre's falchion family) with per-receiver scaling + grip offset adjustments — absorbs the identical-functional ports being removed from wt. |
-| dynamic_cosmetic_portraits | `dynamic_cosmetic_portraits` | 3721036701 | **VMB** | Hat/outfit-aware HUD & hero-select character portraits (split from cosmetics_tweaker 2026-05-06) |
-| career_tweaker | `crt` | 3716286199 | **VMB** | Talent/ability swapping (scaffolded) |
-| enemy_tweaker | `enemy_tweaker` | 3716780252 | **VMB** | Enemy spawns, horde compositions, breed substitution |
-| character_weapon_variants | `character_weapon_variants` | 3716869446 | **VMB** | Semi-lore-friendly new variant items that intentionally clone from cross-character base templates to bring other characters' movesets onto receivers (MoreItemsLibrary). 1P wield/stance differentiates the feel even when two variants are functionally identical; 3P side uses `anim_event_3p` remap into a good-enough native vocab so bystanders see something plausible. Planned hammer/mace differentiation toggle will further separate sibling variants on the same base. Variants are designed to *play differently enough* to feel like natural new weapons, distinct from wt's full-freedom cross-character access. |
-| crafting_in_modded | `cim` | 3721038774 | **VMB** | Modded crafting menus — Athanor forge UI for crafting any career-eligible weapon. Split from `wt` 2026-05-05 |
-| la_prefix_patch | `la_prefix_patch` | 3721067411 | **VMB** | Loads above Loremaster's Armoury: silently drops its three duplicate hook registrations to keep startup chat clean, and offers VMF toggles to suppress LA's quest markers and unread-letter notifications |
-| event_tweaker | `event_tweaker` | 3721290755 | **VMB** | Host-side mutator picker (Workshop title "Tweaker: Events"). VMF dropdown for canonical event presets (Geheimnisnacht / Skulls — drives mutator + active_events string + keep-level swap) plus checkbox-per-mutator across difficulty / specials / hordes / atmosphere / objectives / winds / raw event categories. Three hooks: `BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`. Scaffolded 2026-05-06 |
-| modded_progression | `mp` | (unpublished) | **VMB** | Re-enables 100% of vanilla VT2 progression in modded realm: XP, shillings, loot chests, Okri's Challenges, Lohner's Emporium, keep crafting bench. Intercepts `BackendInterface*Playfab` methods; writes through `backend_mirror` mutators; persists locally via VMF settings; never commits to PlayFab. Sibling API (`mp.is_unlocked` / `mp.spend` / `mp.credit` / `mp.grant_item`) consumed by CWV + cosmetics_tweaker when both installed. Three starting-state options. See `modded_progression/PLAN.md` for full design. Scaffolded 2026-05-14 |
-| lobby_tweaker | `lobby_tweaker` | 3729845515 | **VMB** | Workshop title "Tweaker: Lobby" (friends_only). Host-side lobby controls (slot reservations, session ignore list, kick-on-idle, MOTD) + modded-realm failed-join mod-list reveal: host pre-publishes a per-mod manifest to Steam `lobby_data`; client reads it back at hash-mismatch popup time (`state_loading.lua:1084`) and surfaces which `client_required` mods the joiner is missing. Subsumes the prior `modded_matchmaking` project. Chat commands namespaced `/lt_*`. Scaffolded 2026-05-19 |
-| buff_tweaker | `bt` | 3730358590 | **VMB** | Shared registry mod that pre-registers Big Rebalance buffs / damage profiles / explosion templates on every peer in deterministic sorted order. Single master toggle gates the registration; wt/ct/et's BR sub-toggles all check `(get_mod('bt') or {}):is_br_active()` before applying. Eliminates the cross-mod sync rule that previously had wt/ct/et each shipping byte-identical 419-line registration files. Scaffolded 2026-05-21. |
-| verminious_dreams_lighting | `verminious_dreams_lighting` | 3727221800 | **VMB** | Per-mission lighting overhaul for the three Verminious Dreams DLC missions (The Forsaken Temple / Devious Delvings / The Well of Dreams). Ships per-mission ShadingEnvironment + Light component overrides; live tuning via `/vdl_*` chat commands. Client-side only — no host requirement, no version-sync risk. Public. |
-| tweaker (legacy) | `t` | 3704660429 | Stingray SDK | Deprecated — split into above mods |
+| Mod | Internal ID | Workshop ID | Build System | Stream | Purpose |
+|-----|-------------|-------------|--------------|--------|---------|
+| weapon_tweaker | `wt` | 3712896117 | **VMB** | single | Cross-character weapon access with full freedom: any character can wield any weapon (1P universal, never touched), with 3P anim events remapped into a functionally-similar receiver-native weapon's vocab so the bystander view stays plausible (e.g. brace-on-Kruber renders as Repeating Handgun in 3P, longbow-on-Saltzpyre as Crossbow). **Direction reversal 2026-05-23:** identical-functional ports (Bardin's axe on Saltzpyre when Saltzpyre already has a falchion-family native, etc.) are being removed from wt and absorbed into `cosmetics_tweaker` as a cross-character cosmetic swap. wt retains only genuine functional cross-character ports. |
+| chaos_wastes_tweaker | `ct` | 3712929235 | **VMB** | stable | CW economy, curses, boons, altars, traits. Public Workshop; only merged-down releases land here — in-flight work happens in `chaos_wastes_tweaker_dev`. |
+| chaos_wastes_tweaker_dev | `ct_dev` | 3733366926 | **VMB** | dev | In-flight `ct` work; friends-only Workshop clone. Distinct VMF mod registration (`ct_dev`) so it can coexist with stable `ct` in the same install. See § "Dev/stable split workflow". |
+| general_tweaker | `gt` | 3713619122 | **VMB** | stable | 3rd person camera, noclip, freecam, godmode, in-mission keep menus, debug/data dumps, **host-side lobby controls (absorbed from lobby_tweaker 2026-05-25):** slot reservations, session ignore list, kick-on-idle, MOTD broadcast, modded-realm failed-join mod-list reveal. Lobby settings + chat commands namespaced `gt_lobby_*`. Defines `mod.GT_LOBBY_RPC_SCHEMA = 1` for the `gt_lobby_motd_show` RPC per VMF_RECIPES § 10. Public Workshop; only merged-down releases land here — in-flight work happens in `general_tweaker_dev`. |
+| general_tweaker_dev | `gt_dev` | 3733367409 | **VMB** | dev | In-flight `gt` work; friends-only Workshop clone. Distinct VMF mod registration (`gt_dev`) so it can coexist with stable `gt` in the same install. Caveat: `GT_LOBBY_RPC_SCHEMA` is per-mod-id, so dev and stable can't share a lobby RPC channel — friends running dev should all pin to dev for a session. See § "Dev/stable split workflow". |
+| gui_tweaker | `gut` | 3732144878 | **VMB** | single | Quality-of-life features for the hero/character GUI. v0.1 ships save/swap loadout via chat commands (`/gut_save_loadout N`, `/gut_load_loadout N`, `/gut_list_loadouts`) — a clean reimplementation of the sanctioned `loadout_manager_vt2` that fixes the gear/cosmetic namespace-merge bug. v0.2.0-dev adds in-game HUD customization: hold LEFT ALT while chat is focused OR `/gut_edit_hud` for sticky toggle, then click-drag any of 10 registered widgets (ability/equipment/overcharge/career-ability/energy/buff/boss-health/challenge-tracker/loot-objective/news) to reposition. Per-resolution persistence. Resize via corner-handles deferred to v0.2.1. Future v0.3+ adds HeroView UI integration. Scaffolded 2026-05-24. |
+| cosmetics_tweaker | `cosmetics_tweaker` | 3715714222 | **VMB** | single | Hat/skin unlocks, weapon model tweaks, shield swaps, custom illusions. **Scoped 2026-05-23:** cross-character cosmetic swap for functionally-identical weapons (e.g. Bardin's axe model rendered on Saltzpyre's falchion family) with per-receiver scaling + grip offset adjustments — absorbs the identical-functional ports being removed from wt. |
+| dynamic_cosmetic_portraits | `dynamic_cosmetic_portraits` | 3721036701 | **VMB** | single | Hat/outfit-aware HUD & hero-select character portraits (split from cosmetics_tweaker 2026-05-06) |
+| career_tweaker | `crt` | 3716286199 | **VMB** | single | Talent/ability swapping (scaffolded) |
+| enemy_tweaker | `enemy_tweaker` | 3716780252 | **VMB** | single | Enemy spawns, horde compositions, breed substitution |
+| character_weapon_variants | `character_weapon_variants` | 3716869446 | **VMB** | single | Semi-lore-friendly new variant items that intentionally clone from cross-character base templates to bring other characters' movesets onto receivers (MoreItemsLibrary). 1P wield/stance differentiates the feel even when two variants are functionally identical; 3P side uses `anim_event_3p` remap into a good-enough native vocab so bystanders see something plausible. Planned hammer/mace differentiation toggle will further separate sibling variants on the same base. Variants are designed to *play differently enough* to feel like natural new weapons, distinct from wt's full-freedom cross-character access. |
+| crafting_in_modded | `cim` | 3721038774 | **VMB** | stable | Modded crafting menus — Athanor forge UI for crafting any career-eligible weapon. Split from `wt` 2026-05-05. Public Workshop; only merged-down releases land here — in-flight work happens in `crafting_in_modded_dev`. |
+| crafting_in_modded_dev | `cim_dev` | 3733366851 | **VMB** | dev | In-flight `cim` work; friends-only Workshop clone. Distinct VMF mod registration (`cim_dev`) so it can coexist with stable `cim` in the same install. See § "Dev/stable split workflow". |
+| event_tweaker | `event_tweaker` | 3721290755 | **VMB** | single | Host-side mutator picker (Workshop title "Tweaker: Events"). VMF dropdown for canonical event presets (Geheimnisnacht / Skulls — drives mutator + active_events string + keep-level swap) plus checkbox-per-mutator across difficulty / specials / hordes / atmosphere / objectives / winds / raw event categories. Three hooks: `BackendInterfaceLiveEventsPlayfab.get_special_events`, `get_active_events`, `BackendManagerPlayFab.get_level_variation_data`. Scaffolded 2026-05-06 |
+| modded_progression | `mp` | 3730422873 (private) | **VMB** | single | Re-enables 100% of vanilla VT2 progression in modded realm: XP, shillings, loot chests, Okri's Challenges, Lohner's Emporium, keep crafting bench. Intercepts `BackendInterface*Playfab` methods; writes through `backend_mirror` mutators; persists locally via VMF settings; never commits to PlayFab. Sibling API (`mp.is_unlocked` / `mp.spend` / `mp.credit` / `mp.grant_item`) consumed by CWV + cosmetics_tweaker when both installed. Three starting-state options. See `modded_progression/PLAN.md` for full design. Scaffolded 2026-05-14 |
+| buff_tweaker | `bt` | 3730358590 | **VMB** | **RETIRED** | **Retired 2026-06-08; archived to `_archive/buff_tweaker_v0.1.12-alpha/`.** Was the shared Big Rebalance registry (buffs / damage profiles / explosion templates, deterministic sorted order) + `net_replay` ring buffer. Consumers (wt/ct/et/crt) reference it via the guarded `if not (bt and bt.is_br_active) then return false end` pattern, so their BR sub-features go **inert (no crash)** now that bt is gone — they were NOT stripped from the consumers. Friends-only Workshop item 3730358590 still live; delete in Steam if desired. |
+| verminious_dreams_lighting | `verminious_dreams_lighting` | 3727221800 | **VMB** | stable | Per-mission lighting overhaul for the three Verminious Dreams DLC missions (The Forsaken Temple / Devious Delvings / The Well of Dreams). Ships per-mission ShadingEnvironment + Light component overrides; live tuning via `/vdl_*` chat commands. Client-side only — no host requirement, no version-sync risk. Public. Only merged-down releases land here — in-flight work happens in `verminious_dreams_lighting_dev`. |
+| verminious_dreams_lighting_dev | `verminious_dreams_lighting_dev` | 3733366748 | **VMB** | dev | In-flight `verminious_dreams_lighting` work; friends-only Workshop clone. Distinct VMF mod registration (`verminious_dreams_lighting_dev`) so it can coexist with stable in the same install. See § "Dev/stable split workflow". |
+| tweaker (legacy) | `t` | 3704660429 | Stingray SDK | frozen | Deprecated — split into above mods |
+
+## Dev/stable split workflow
+
+**Why the split exists.** The four public-Workshop mods (`ct`, `cim`, `gt`, `verminious_dreams_lighting`) have a mixed audience: public subscribers expect a stable bundle that doesn't break weekly, and the friends cohort wants visibility into in-flight work as it's being iterated on. Shipping every dev iteration to the public Workshop item caused subscriber loss (~80 cim subs in a few days in May 2026 from reflex uploads pushing unstable mid-fix builds). The fix is two parallel Workshop items per split mod: dev = friends-only, stable = public.
+
+**What's split.** Only the four public mods. Everything else is single-stream (already friends-only or unpublished — `wt`, `cosmetics_tweaker`, `cwv`, `et`, `crt`, `gut`, `bt`, `dcp`, `mp`).
+
+| Stable directory | Stable mod_id | Stable Workshop ID | Dev directory | Dev mod_id | Dev Workshop ID |
+|---|---|---|---|---|---|
+| `chaos_wastes_tweaker/` | `ct` | 3712929235 (public) | `chaos_wastes_tweaker_dev/` | `ct_dev` | 3733366926 (friends-only) |
+| `crafting_in_modded/` | `cim` | 3721038774 (public) | `crafting_in_modded_dev/` | `cim_dev` | 3733366851 (friends-only) |
+| `general_tweaker/` | `gt` | 3713619122 (public) | `general_tweaker_dev/` | `gt_dev` | 3733367409 (friends-only) |
+| `verminious_dreams_lighting/` | `verminious_dreams_lighting` | 3727221800 (public) | `verminious_dreams_lighting_dev/` | `verminious_dreams_lighting_dev` | 3733366748 (friends-only) |
+
+**Where work happens.**
+
+- **`<mod>-dev/`** — all new feature work, in-flight fixes, experiments. Build/deploy/upload from here during the dev loop. MOD_VERSION carries the `-dev` (or `-alpha`/`-beta`) suffix.
+- **`<mod>/`** — stable releases only. When dev work matures and the user signs off on a release, cherry-pick or merge the changes into the stable dir, normalize MOD_VERSION (strip `-dev`/`-alpha`/etc.), then `build` + `deploy` + `upload` to the public Workshop item. The stable directory should never contain in-flight `-dev` work between releases.
+
+**Mod ID convention.** Stable carries the short canonical id (`ct`, `cim`, `gt`, plus the long `verminious_dreams_lighting`). Dev carries the `_dev` suffix (`ct_dev`, `cim_dev`, `gt_dev`, `verminious_dreams_lighting_dev`). Because these are distinct VMF mod registrations, both items can be subscribed simultaneously without conflict — a tester running dev keeps the stable item installed but disabled, or runs both side-by-side if their behaviors don't overlap destructively.
+
+**Cross-mod refs always target stable.** External mods (CWV, cosmetics_tweaker, et, etc.) that consume sibling mods via `get_mod("cim")` / `get_mod("gt")` / `(get_mod('bt') or {}):is_br_active()` MUST resolve against the stable mod_id. Dev clones are isolated test surfaces; nothing external consumes them. If you need a cross-mod hook to fire against dev for testing, edit the consumer's `get_mod(...)` call to point at the dev id locally — never ship that change to a stable directory.
+
+**Caveat — per-mod-id RPC channels.** Anything keyed by mod_id (network channels, lobby data slots, the `GT_LOBBY_RPC_SCHEMA` constant in `gt`) is automatically isolated between stable and dev because the mod_ids differ. That's the desired isolation in most cases, but it means **dev and stable can't talk to each other over a lobby RPC**. If a session needs the lobby/MOTD/slot-reservation surface, every peer should pin to the same stream (all dev or all stable). Don't mix.
+
+**Upload doctrine** — same per-build approval rule as every other upload in this repo (see `PROJECT_STANDARDS.md` § 6 and the Build Commands section below). Two additional gates apply to the split mods:
+
+- **Dev uploads** target the friends-only Workshop item. `visibility = "friends_only"` in the dev clone's `itemV2.cfg`. The launcher does NOT require `--allow-public` for these and never will — dev clones must not be promoted to public visibility under any circumstance.
+- **Stable uploads** target the public Workshop item. They require `--allow-public` (the launcher's visibility gate) AND a fresh per-build ship signal from the user — "ship it" said three bug-fixes ago does not carry forward. Use the `upload_*.ps1` wrapper at repo root (which carries an extra visibility-regression guard on top of `VMBLauncher.exe upload --allow-public`).
+- **GitHub release** still required after every Workshop upload of either stream (per `tools/publish-release/README.md`) so `vt2-mod-updater` consumers stay in sync — especially the friends cohort, where Workshop propagation is unreliable.
 
 ## Build Commands
 
@@ -114,6 +180,35 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 ```
 
 Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the full doctrine** — verbs, flags, preflight gates, visibility-public safety, remote-deploy config, the PowerShell pipeline-truncation quirk, GUI/headless detection rule.
+
+### Default iteration workflow (2026-05-25 doctrine — IMPORTANT, REINFORCED 2026-05-25 EOD)
+
+**HARD RULE: NO Workshop upload happens without explicit per-build user approval. Every upload needs its OWN ship signal — a standing "ship it" from earlier in the session does NOT carry forward to the next build.**
+
+**Workflow the user wants:**
+
+1. **Develop** in source (edit, `build`, optionally `deploy` to PC-A / PC-B for local testing).
+2. **Test** in-game until the user confirms stability and that reported issues are fixed.
+3. **User explicitly approves the upload** — naming the version and the verb (e.g. "ship v0.7.45 now", "upload cim", "push to friends").
+4. **Then** `upload` (or `all` if also fresh-building) + `publish-release.ps1`.
+
+A dev branch may be introduced if iterative pre-ship work warrants it — the user will direct that decision.
+
+**Default: `build` + `deploy`. NEVER `upload` or `all` unless the user has approved THIS specific build for shipping.**
+
+The user iterates many times per session. Every `upload` pushes to Steam Workshop and is visible to friends. Reflex-using `all` (which includes upload) means every dev iteration goes live to friends — they get broken/half-baked bundles. Earlier user directives:
+
+- 2026-05-25 morning: "stop reflexively uploading to the workshop. Only do so when directed. Just deploy to PC-A and PC-B."
+- 2026-05-25 EOD: "no workshop uploads take place unless I approve them. We develop the game, test to ensure stability and issues are fixed, and then upload to the workshop."
+
+| User intent | Verbs to use |
+|---|---|
+| Iterate / test locally | `build` then `deploy` (deploy auto-pushes to PC-B too) |
+| Confirm build compiles | `build` alone |
+| **Ship to Workshop (REQUIRES FRESH PER-BUILD APPROVAL)** | `upload <mod>` (or `upload_*.ps1` wrapper for public), then `publish-release.ps1` |
+| Bulk ship (also requires fresh approval) | `all <mod>` per mod, then `publish-release.ps1` |
+
+**For agents:** NEVER chain `upload` or `all` in a fix flow. Friends-visible Workshop pushes are production deploys, not free iteration. "Ship it" said three hours ago does NOT authorize an upload three bug-fixes later — re-confirm before each push. When in doubt: `build + deploy --no-remote` and report back; let the user decide when to ship. Treat upload like `git push --force` — it ALWAYS warrants a fresh ask.
 
 **Every deploy hits PC-B automatically.** As of launcher v0.4.0, `deploy` (and `all`) push the bundle to every enabled `RemoteDeployTargets` entry in `%APPDATA%\VMBLauncher\settings.json` right after the local Workshop-folder copy succeeds. The standard PC-B target auto-populates on first run from `~/.ssh/config`. Per `feedback_deploy_both_machines.md` — iterative VT2 debugging must keep the test client in lockstep with the host; local-only deploys silently masked four days of host/client sync bugs in May 2026. Skip the remote push for one invocation with `--no-remote`; disable a target persistently by flipping `Enabled` to `false` in settings.json.
 
@@ -162,6 +257,21 @@ Rules:
 - If a mod has a stale 4-segment version (e.g. `0.9.9.4-dev`), normalize on the next bump by incrementing the third segment and dropping the fourth: `0.9.9.4-dev` → `0.9.10-dev` (not `0.9.9.5-dev`). Past 4-segment versions stay in CHANGELOG as historical record — don't rewrite.
 
 **Burned 2026-05-23:** cosmetics_tweaker drifted through `0.9.8.0–.9`, `0.9.9.0–.4`. Pattern came from treating the 4th segment as a within-patch hotfix counter — wrong instinct; just bump PATCH every time. Reset to `0.9.10-dev`.
+
+### Local development setup
+
+After cloning, run `./tools/install-hooks.ps1` to enable the local pre-commit hook. It runs `qa/run_all.ps1 -Quick -SkipLua` (cfg drift + MOD_VERSION / title suffix typos) and `tools/mod-lint/lint-mod.ps1` (duplicate hook registrations, forward-ref / late-local / save-restore / network-bound warnings) against staged `*.lua` / `*.cfg` / `*.ps1` / `*.mod` files before the commit hits CI. The installer is idempotent — re-running is a no-op once the hook is in place. Bypass on a single commit with `git commit --no-verify` if you've verified the working tree locally and the hook is being overly cautious; cite the reason in the commit message. See `PROJECT_STANDARDS.md` § 8 for the escape-hatch convention.
+
+## Multi-agent coordination
+
+When more than one session / agent is working in this repo at the same time, parallel edits to the same mod cause silent breakage — broken builds blocking `publish-release.ps1`, MOD_VERSION reverts that mask real fixes, version-bump churn, etc. The 2026-05-25 session burned four times on this in a single afternoon (cwv v0.1.336 → .339 churn, cim build broken twice, wt MOD_VERSION reverted 0.12.78 → 0.12.77). The convention below is the fix — lightweight and advisory, not a locking mechanism.
+
+- **`MOD_OWNERSHIP.md` (repo root)** — single table mapping every mod to its primary maintainer (`Ensrick` for all current mods) and a Status column: `stable` / `in-flight` / `frozen` / `blocked`. Read this before starting substantive work on a mod.
+- **`.in_progress/<mod>.md` sentinel files** — when a session starts substantive multi-step work on a mod, drop a sentinel file at `.in_progress/<mod_name>.md` containing timestamp (`- **Started:** <ISO-8601-UTC>`), session ID, brief description, and files expected to be touched. Other sessions check this directory before starting work on the same mod. Sentinels are gitignored (advisory only); the README in that directory documents the template and is the only tracked file. Delete the sentinel when work finishes.
+- **`qa/check_in_progress.ps1`** — wired into `qa/run_all.ps1`. Scans `.in_progress/`, warns on stale sentinels (>24h old), and cross-references staged files against claimed mods. Exit codes: 0 = clean, 1 = stale or staged-file collision, 2 = malformed sentinel. Never blocks — just surfaces awareness.
+- **Workflow**: before editing a mod, (1) check `MOD_OWNERSHIP.md` for the row's status, (2) `Get-ChildItem .in_progress\*.md -Exclude README.md` to see active claims, (3) if no claim, drop your own sentinel + flip the MOD_OWNERSHIP row, (4) when done, remove the sentinel + flip the row back to `stable`.
+
+The point is awareness, not enforcement — if a sentinel exists for a mod you need to edit, coordinate with the listed session/owner before stomping their in-flight state.
 
 ## Mod File Structure
 
@@ -278,6 +388,7 @@ Then hook `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` to mark cu
 - **`Unit.node(unit, name)` errors bypass `pcall`** — it's an engine-level fatal, not a Lua error. Use `Unit.has_node(unit, name)` (returns boolean) for existence checks. Same pattern applies to other Stingray `*.node` / `*.actor` APIs — prefer the `has_*` companion when it exists.
 - **`Quaternion` / `Vector3` are stack temporaries** — valid only within the current frame. Storing the raw value in a global/table/upvalue silently corrupts on the next frame. Use `QuaternionBox` / `Vector3Box` / `Matrix4x4Box` for any storage that outlives a single statement; call `:unbox()` at apply time for a fresh raw value.
 - **Lua 5.1 hard limit: 200 locals per function**, including the top-level chunk. Wrap helper groups in `do ... end` so their locals release back to the main chunk. Symptom is a Stingray compile error `main function has more than 200 local variables` — the cited line is the 201st local, not the problem source.
+- **`#table` is undefined for arrays with nil holes.** Lua 5.1 `#t` does a binary boundary search over the array part — for `{1, nil, 2, nil, 3}`, the result could be 1, 3, or 5. Never use bare `unpack(t)` / `unpack(t, i)` if `t` may contain nils after position `i`. Capture the real count via `select("#", ...)` from the source variadic and pass `j` explicitly: `unpack(t, i, n)`. Burned in weapon_tweaker v0.12.77/.78 (2026-05-25 fix cycle through v0.12.79) — see `VMF_RECIPES.md § 2a`.
 - **`Unit.actor(unit, idx)` is 1-indexed** (vanilla pattern is `for i = 1, Unit.num_actors(unit)`). Iterating from 0 returns nil at index 0 and skips the final actor — silent no-op.
 - **`pl.player_unit` is a FIELD, not a method.** `Managers.player:local_player().player_unit` (chained field access). `pl:player_unit()` crashes immediately.
 - **`REAL_PLAYER_LOCAL_ID` is a file-scope local in vanilla, not a global.** Add `local REAL_PLAYER_LOCAL_ID = 1` near the top of any mod file that copy-pastes vanilla CW SharedState code, or the affected lookups silently return 0.
@@ -361,7 +472,7 @@ For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs
 - `character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md` — 9-step closed-vocabulary procedure for fixing 3P animations on cross-character variants. Read before touching `anim_event_3p`, `wield_anim_3p`, or any `_cross_access_action_remap` entry.
 - `character_weapon_variants/J_LEFTWEAPONATTACH_INVESTIGATION.md` — post-mortem for the ~20-version dual-wield rig saga. Read once before adding any dual-wield variant.
 - `character_weapon_variants/CHANGELOG.md` — version history for the Character Weapon Variants mod. Best source of "why we do X" — most recipes have a CHANGELOG entry behind every load-bearing rule.
-- `character_weapon_variants/CODE_REVIEW.md` — STALE point-in-time review at v0.1.56-dev. Historical context only.
+- `character_weapon_variants/CODE_REVIEW.md` — snapshot architectural review for CWV. (Per-doc currency/staleness is tracked in `PROJECT_STANDARDS.md` §7.1, the canonical doc index — not version-stickered here, since those stickers drift.)
 - `character_weapon_variants/TODO.md` — feature roadmap for cross-character weapon variants
 - `cosmetics_tweaker/TODO.md` — feature roadmap for cosmetics-specific work
 - `dynamic_cosmetic_portraits/CLAUDE.md` — **READ THIS BEFORE TOUCHING PORTRAITS.** Workflow guardrails + the canonical asset-generation script.

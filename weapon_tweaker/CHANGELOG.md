@@ -1,5 +1,591 @@
 # Weapon Tweaker Changelog
 
+## 0.12.119-dev (2026-06-11) — Flaming Flail wield redirect (fixes broken wield stance on non-Sienna); /wt_coverage skeleton probe
+
+### Why
+Two items off the new ANIMATION_COVERAGE.md walk list that don't need an in-game tuning session:
+- **Flaming Flail (bw_1h_flail_flaming) on non-Sienna receivers** had a broken wield stance — the H2 attack redirect existed but the wield event didn't (the exact gap DECISIONS:36 flagged as needs-fix). 🧊 on both the Kruber and Kerillian rows.
+- No in-game probe existed to bulk-answer "which of this character's ports have authored 3P events?" — deriving coverage was a manual `/animlog` + `/dump_actions` + eyeball walk per port.
+
+### Changed
+- **`weapon_tweaker.lua` (`_career_anim_redirect`):** `to_1h_flail_flaming → to_1h_flail` for non-`bw_` careers (Sienna keeps her native event; `wh_priest` override → `to_1h_hammer`, consistent with the table's other entries). `to_1h_flail` is the universal Empire-flail wield already proven on every character via es_1h_flail. **Needs in-game verify** — flipped to 🔧 in ANIMATION_COVERAGE.md.
+- **`wt_dev_anim_picker.lua`: new `/wt_coverage` command** (PROJECT_STANDARDS §3.7 data harness): for the CURRENT character, walks every catalog port and reports wield + per-action `anim_event_3p` authored-ness against the live 3P skeleton — one parseable `[wt:coverage]` line per port, FULL/PARTIAL/NONE summary. One command per character refreshes the coverage matrix statuses. (Authored ≠ visibly plays in chain states — final word stays with the eye.)
+
+## 0.12.118-dev (2026-06-11) — Anim picker: tuned picks now survive restart (boot re-apply); two display-name mislabels fixed
+
+### Why
+The user's animation workflow is: tune a port's 3P picks in the dev Anim Picker menu in-game, verify by eye, then have the values baked into source. The structural hole (2026-06-11 system audit): picks applied live via `on_setting_changed` and persisted in the VMF store, but **nothing replayed them onto `Weapons.*` at boot** — every tuned port silently reverted to patcher/template defaults on restart until baked. That made the picker a one-session scratchpad instead of the intended tune→persist→export→bake loop.
+
+### Changed (`wt_dev_anim_picker.lua`)
+- **`M.reapply_stored_picks()`** — called from `M.install()` (end of main wt.lua, AFTER all template patchers): walks `_setting_index` and re-applies every stored pick onto the live templates via the same `_apply_wield_change`/`_apply_anim_event_change` paths as a live menu change. Logs an ungated one-line summary (`N stored pick(s) applied`) so the user can confirm their tuning is live without Debug Logging.
+- **Only user-CHANGED settings re-apply.** Each `_setting_index` rec now captures its build-time `default_value`; a stored value equal to it is skipped. Load-bearing guard: widget defaults are captured at `_data.lua` time (BEFORE the main-file template patchers run), so blindly re-applying everything would overwrite patcher output with stale pre-patcher state — exactly the brace/longbow/repeating-pistol ports.
+- **Display-name mislabel fixes** (`_WEAPON_NAME`): `we_deus_01` = **Moonfire Bow** (was "Deus Greatsword") and `we_life_staff` = **Deepwood Staff** (was "Moonfire Bow"). The per-character `*_deus_01` keys are the CW weapons; the old labels would have routed tuning decisions at the wrong weapon.
+
+### Notes
+- The tuned values remain session-layer until exported (`/wt_dump_anim_picks`, paste-ready `_WIELD_3P`/`_ANIM_REMAP_3P` blocks) and baked into the patcher tables — boot re-apply makes the interim state survive restarts, it does not replace baking.
+
+## 0.12.117-dev (2026-06-08) — BR true-flight extra-shot gating matches vanilla; regression harness gets a skip channel (Issue #74)
+
+### Why
+Issue #74 follow-through from the 2026-06-08 re-review:
+- The BR true-flight `fire` reimpl gated `set_shooting()` / ammo / overcharge / energy on `self.extra_buff_shot`, which is only ever assigned `false` — so under extra-shot buffs (Waywatcher +projectile talent, extra-shot procs) the free extra projectiles also bumped spread state and charged ammo/overcharge where vanilla skips them.
+- `/wt_regression_test` counted `"skip: ..."` returns as FAIL, polluting the failure count whenever game tables weren't loaded yet.
+
+### Changed
+- **`weapon_tweaker_big_rebalance.lua`:** new file-scope `mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)` implementing vanilla's per-projectile test exactly (`extra_shots_idx = num_projectiles - num_extra_shots + 1; is_extra_shot = extra_shots_idx <= i`, action_true_flight_bow.lua:128,132). All four gates (set_shooting / ammo / overcharge / energy) now key off it. Also tidied the mangled-but-equivalent `shot_count_offset` ternary to vanilla's form (action_true_flight_bow.lua:137).
+- **`weapon_tweaker.lua`:** `/wt_regression_test` runner gained a SKIP channel — `"skip: <reason>"` returns are echoed and counted separately, no longer FAIL. Summary line now reports passed/failed/skipped.
+
+### Tests
+- `wt_br_trueflight_extra_shot_gating_matches_vanilla` — pins vanilla's truth table (0 extras → none flagged; 5 projectiles / 2 extras → exactly i=4,5 flagged; nil extras behaves as 0).
+
+## 0.12.116-dev (2026-06-08) — Fix BR true-flight speed falloff sign-flip (projectiles 2+ fired backwards)
+
+### Why
+Post-ship re-review of the v0.12.115 audit fixes (fresh-eyes verification pass, 2026-06-08) found a pre-existing bug two lines below the audited `extra_buff_shot` gate in the BR true-flight `fire` reimpl: the per-projectile speed falloff was the **sign-flip** of vanilla — `speed = speed * (i * 0.05 - 1)` instead of vanilla's `speed = speed * (1 - i * 0.05)` (`action_true_flight_bow.lua:152`). For every projectile after the first (i ≥ 2) the multiplier is negative (i=2 → −0.9×), so with `br_hook_trueflight_fire` enabled, multi-projectile fires (Waywatcher extra-projectile talent, extra-shot buffs) launched projectiles 2+ **backwards at negative speed**. Present since the reimpl landed (~28 versions).
+
+### Changed
+- **`weapon_tweaker_big_rebalance.lua`:** falloff factored into `mod._wt_tf_projectile_speed(speed, i)` (file scope, NOT inside the master-gated hook installer, so it exists even with BR off) implementing vanilla's formula; the fire loop now calls it.
+
+### Tests
+- `wt_br_trueflight_speed_falloff_matches_vanilla` — asserts i=1 passes through unmodified, i=2 matches vanilla's 0.9× exactly, and i=2..5 all stay positive (the sign-flip made them negative).
+
+## 0.12.115-dev (2026-06-07) — Audit fixes: brace damage-profile peer-index divergence, bot loadout arg, true-flight dead branch, dead loc keys
+
+### Why
+Repo-wide audit (2026-06-07). (Note: the CHANGELOG had drifted — MOD_VERSION was at 0.12.114-dev with no entries since 0.12.95-dev; this entry brings the head current. The .96–.114 gap is pre-existing and out of scope.)
+
+### Changed
+- **`weapon_tweaker.lua` ~2807 (HIGH, MP):** the `wt_authentic_pistol` custom damage profile was registered into `NetworkLookup.damage_profiles` only inside the toggle-gated `_apply_authentic_brace_mode()`. Per `PROJECT_STANDARDS §9.3` (gated-registration divergence), a host with the authentic-brace toggle ON and a client with it OFF get **different network indices** for that profile → `NetworkLookup` strict `__index` crash ("Table damage_profiles does not contain key") or silent wrong-damage decode when a networked brace shot resolves on the other peer. Now registers the profile **unconditionally at load** (`_wt_clone_shot_sniper_no_dropoff()` is idempotent; same load timing); only the template patching stays toggle-gated. **Residual:** full cross-*mod-set* determinism (peer also runs CWV/other NetworkLookup appenders vs not) still needs routing through bt's shared sorted registry — tracked as a follow-up.
+- **`weapon_tweaker_backend.lua` ~170 (MEDIUM):** the `get_loadout_item_id` hook dropped vanilla's 4th `is_bot` arg (`backend_interface_item_playfab.lua:512`) on both fall-through calls, so bot loadout lookups silently used the player-default path. Now threads `is_bot` through and only answers the modded cache for the local player (`not is_bot`); bot queries fall through to vanilla.
+- **`weapon_tweaker_big_rebalance.lua` ~2503/2529 (LOW):** the BR `ActionTrueFlightBow.fire` reimpl declared an `add_spread` 2nd param that vanilla never passes (`action_true_flight_bow.lua:121` is `fire(self, current_action)`), so its `if add_spread then spread_extension:set_shooting() end` branch was dead — spread "shooting" state was never set on true-flight fires. Dropped the vestigial param; gate on the reimpl's own `not self.extra_buff_shot` to match vanilla (`action_true_flight_bow.lua:143`).
+- **`weapon_tweaker_localization.lua` ~1064 (cleanup):** removed 6 orphan loc strings for long-deleted settings (`enable_weapon_unlocks_core`, `enable_weapon_runtime_guards`, `enable_weapon_wield_slot_guard`, `enable_weapon_create_equipment_guard`, `enable_weapon_career_action_injection`, `force_bretonnian_shield_unlock`) flagged by `qa/check_name_integrity.ps1`.
+- MOD_VERSION → 0.12.115-dev.
+
+### Tests
+- `wt_authentic_pistol_profile_registered_unconditionally` (`/wt_regression_test`) — asserts `wt_authentic_pistol` is in `DamageProfileTemplates` + `NetworkLookup.damage_profiles` regardless of the toggle. Fails if the registration is ever re-gated.
+- `is_bot` passthrough and the true-flight gate are not cleanly keep-testable (need a live bot loadout / the BR true-flight path) — verify in-game per below.
+
+### To verify
+- **MP (needs 2 clients):** host with authentic-brace ON, client with it OFF, fire the brace at an enemy near the client — no `damage_profiles` crash and damage is correct. This is the load-bearing one; **do not promote until 2-client verified.**
+- Bots: equip a modded weapon, check a bot's loadout resolves to its own gear (not your modded weapon).
+
+## v0.12.95-dev — 2026-05-26
+
+- **REMOVED**: Saltzpyre's crossbow as a toggle for the 4 Kruber careers. Ceded ownership to `character_weapon_variants` v0.1.347-dev's `cwv_es_crossbow` variant (default-on). The polish items it carried (3P grip offsets vs rifle anims, smoke FX on shot, missing bolt in 3P) made it too heavyweight for wt's "simple toggle" model.
+- Strips the `_patch_crossbow_template_for_kruber` base template patcher (`wield_anim_career_3p[es_*] = "to_handgun"`), the `_build_crossbow_kruber_safe_third_person` lazy builder, and the `_wt_crossbow_kruber_attach_safe_apply` preview-time attachment-node substitution — all migrated to CWV.
+- Bardin's wh_crossbow toggles (default-off) are unchanged; Saltzpyre's native wh_crossbow access is unchanged.
+
+## 0.12.89-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("Weapon Tweaker v" .. MOD_VERSION)` startup line from every mod. That's correct for stable (>=1.0.0) builds but hides the active version for in-flight dev/alpha/beta work. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable versions stay silent.
+
+### Changed
+- `weapon_tweaker.lua` -- added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. When any branch fires, `mod:echo("[wt] v<MOD_VERSION> loaded")` runs once.
+
+## 0.12.88-dev (2026-05-25) -- Sprinkle `_dbg` instrumentation at anim-remap dispatch / template patchers / BR function hooks (sampled on hot paths)
+
+### Why
+User enabled `enable_debug_logging` and played; log captured almost nothing for wt because the load-bearing event points (template patchers, anim-remap REMAP/FORCE/REDIR branches, BR function hooks) had no `_dbg` calls. Dummy-static-bug triage needs visibility into whether wt's animation_event hook is firing at all, whether the cross-character REMAP path is being hit, and whether the BR function hooks (Flamethrower / Beam / TrueFlight) are taking the modded path or vanilla.
+
+### Changed
+- `weapon_tweaker.lua`:
+  - **`Unit.animation_event` hook (line ~1159)** -- added file-local `_anim_event_call_count` sample counter (`_ANIM_EVENT_SAMPLE_N = 60`) and a `_dbg("[wt:anim] event=enter ...")` at the top of the body that fires 1-in-60 calls. PER-FRAME hot path -- sampling is mandatory.
+  - **REMAP branch inside the same hook** -- added `_anim_event_remap_count` (separate counter, `_ANIM_EVENT_SAMPLE_REMAP_N = 30`) + `_dbg("[wt:anim] event=REMAP src=... -> tgt=... career=... tmpl=... key=... sample=N")` so cross-character anim REMAP hits are visible without flood.
+  - **`_patch_brace_template_for_kruber` / `_patch_longbow_empire_template_for_saltzpyre` / `_patch_longbow_template_1_for_saltzpyre` / `_patch_repeating_pistol_template_1_for_kruber`** -- added `_dbg("[wt:tpl_patch] event=applied template=<name> career_overrides=N action_remaps=M")` exit lines + a `_dbg_alert` on the missing-template skip path. Boot-time only; always-on.
+- `weapon_tweaker_big_rebalance.lua`:
+  - Added local `_dbg` helper at the top (file-local mirroring of the main file's helper since Lua 5.1 file-locals don't cross dofile boundaries).
+  - **`BR.apply_all` entry + exit** -- `[wt:br_hooks] event=apply_all_begin master_active=...` / `event=apply_all_done hooks_installed=...`. Boot-time only; always-on.
+  - **`_install_function_hooks`** -- added `[wt:br_hooks] event=install_begin` / `event=install_done flamethrower=... beam=... trueflight=...` markers; `event=skip_install reason=master_off` on the bt master-off short-circuit.
+  - **Flamethrower `_select_targets`, Beam `client_owner_post_update`, TrueFlight `client_owner_start_action` + `fire`** -- each got its own sample counter (`_BR_HOOK_SAMPLE_N = 60`) and a `_dbg("[wt:br_hooks] event=<hook_name> sample=N ...")` line. Beam is per-frame while held; sampling is mandatory. Flamethrower/TrueFlight are per-fire but sampled for consistency.
+
+### Existing instrumentation left unchanged (verified still present + correct)
+- **`SimpleInventoryExtension.wield` (Layer 3 `traced_hook` at line ~1474)** -- emits paired `[wt:trace] event=enter|exit class=SimpleInventoryExtension method=wield` lines (gated on debug_logging) PLUS the existing `[wield] slot=... career=... key=... template=... anim_event_3p=... wield_anim_3p=...` line at line ~1526.
+- **`SimpleHuskInventoryExtension.wield` (`safe_hook` at line ~1548)** -- no extra trace needed; husk wield is a pass-through whose state-population side effect is captured by `_populate_unit_state_from_wield`.
+- **`GearUtils.create_equipment` (Layer 3 `traced_hook` at line ~1730)** -- emits paired enter/exit trace lines under debug_logging. Existing `[create_equipment] pre-resolved item_units` log line preserved.
+- **`GearUtils.spawn_inventory_unit` (Layer 3 `traced_hook` at line ~2883)** -- the cross-character 3P swap dispatch; emits paired enter/exit trace lines. The downstream swap helpers (`_wt_brace_3p_swap_apply`, `_wt_longbow_3p_swap_apply`, `_wt_repeating_pistol_3p_swap_apply`) each already log `[wt brace-3p-swap]` / `[wt sp-longbow-crossbow]` / `[wt rp-pistol-handgun]` enter/SKIP/swap lines on every path -- well-instrumented, left as-is.
+- **`MenuWorldPreviewer.equip_item` post-hook (line ~3465)** -- preview swap helpers each emit `[wt brace-3p-swap preview]` / `[wt sp-longbow-crossbow preview]` / `[wt rp-pistol-handgun preview]` lines on success. Already-instrumented.
+
+### What I deliberately skipped
+- **`mod.update` / per-frame update consumer bodies** -- none in wt's hot path that would benefit; per the brief.
+- **Inner per-action / per-sub_action loops inside the template patchers** -- count+rollup is enough; per-iteration would emit dozens of lines per template at boot.
+- **`Unit.animation_event` REDIR / FORCE / SUFFIX branches** -- the existing `_log_anims` (`/animlog` command) chat-echo path already covers per-event detail; adding a second sampled-debug stream would duplicate. The REMAP branch is the highest-suspect for cross-character bugs, so it's the one branch that got a dedicated sample counter.
+- **`Unit.animation_event` per-call** without sampling -- would flood the log; 1-in-60 covers "is the hook even firing?" diagnostics.
+- **Damage-path hooks on `DamageUtils.*` / `ActionAttack.*`** -- wt has no direct hooks on these classes (verified via Grep). Only the BR function hooks (Flamethrower / Beam / TrueFlight) interact with the damage pipeline, and those got their own `[wt:br_hooks]` markers.
+- **`_safe_hook.lua` body** -- already has Layer 3 traced_hook which emits `[wt:trace] event=enter|exit class=... method=... n_args=... / n_returned=...` on every fire. Adding additional `_dbg` inside the wrapper would double-emit.
+
+### Build
+`VMBLauncher.exe build weapon_tweaker` -- verification only. NOT deployed, NOT uploaded (user-explicit doctrine 2026-05-25 EOD: develop, test, then user approves per-build for ship).
+
+## 0.12.87-dev (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[wt] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- weapon_tweaker.lua -- removed the load-time `mod:echo("weapon_tweaker v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[wt] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("weapon_tweaker v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build weapon_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.12.86-dev (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- weapon_tweaker_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- weapon_tweaker.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build weapon_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## v0.12.85-dev (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[wt] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load — self-documenting console_logs. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. ALWAYS fires (not gated on debug_logging). Additive to the existing "Weapon Tweaker: Baseline Active" operational line further down — does not replace it.
+
+### Changed
+- `weapon_tweaker.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[wt] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.12.85-dev.
+
+### Notes
+- Fingerprint walks the post-CIM-strip widget tree on the local peer — surfaces what settings are actually live, not just the canonical definition.
+
+## v0.12.84-dev — Layer 3 traced_hook helper: structured entry/exit log lines gated on debug logging
+
+### Why
+User idea: "Wrap every part of the code in a logger that shows us that it fired" when debug mode is on. Targeted form: wrap every `mod:hook` body with `[wt:trace] event=fire class=GearUtils method=spawn_inventory_unit n_args=N` at entry and `[returned n_vals=M]` at exit. Catches "did the hook fire?" and "did it return what we expected?" — exactly the v0.12.77/.78/.79 safe_hook bug class.
+
+Layered on top of the existing wt safe_hook helpers:
+- Layer 1 (existing): `mod:hook` — vanilla VMF (chain dispatch, no isolation).
+- Layer 2 (v0.12.77+): `mod:safe_hook` — pcall-isolated + multi-return-safe wrap.
+- Layer 3 (NEW): `mod:traced_hook` — Layer 2 PLUS structured entry/exit log lines gated on `enable_debug_logging`.
+
+A consumer adopts `mod:traced_hook` when they want fire-confirmation + return-shape visibility. Otherwise stays on `mod:safe_hook`.
+
+### Added
+- `_safe_hook.lua` — `mod.traced_hook(self, class, method, handler)` and `mod.traced_hook_safe(self, class, method, handler)` methods. Both delegate to safe_hook / safe_hook_safe (Layer 2) for pcall isolation + multi-return preservation — do NOT re-implement either. Layer the trace lines on top by wrapping the user handler in a tracing closure.
+  - Trace format: `[wt:trace] event=enter class=<C> method=<m> n_args=N` and `[wt:trace] event=exit  class=<C> method=<m> n_returned=M`.
+  - Gate: `mod:get("enable_debug_logging")`. Toggle off => no trace lines, semantically identical to safe_hook.
+  - Layer 3 marker constant `CT_WT_TRACED_HOOK_MARKER_v0_12_84 = "wt-traced-hook-layer3-installed"` for the new regression test.
+- New `/wt_regression_test` check `wt_traced_hook_present` (next to the existing `wt_safe_hook_installed` block at ~L4357):
+  - Asserts marker constant present.
+  - Asserts `mod.traced_hook` and `mod.traced_hook_safe` are callable.
+  - Smoke-tests installation + invocation on a fresh dummy class with toggle OFF then toggle ON. Asserts no crash and that the 3-return / 1-nil-hole shape survives the wrapper in both modes. Restores prior toggle state on exit.
+
+### Migrated
+Three load-bearing safe_hook call sites flipped to traced_hook. These fire on weapon wield / equip events (NOT per-frame), so trace lines are flood-safe.
+
+- `weapon_tweaker.lua` L1414 — `mod:safe_hook("SimpleInventoryExtension", "wield", ...)` → `mod:traced_hook(...)`. Local-player wield. Confirms the wield hook fires per slot swap.
+- `weapon_tweaker.lua` L1666 — `mod:safe_hook("GearUtils", "create_equipment", ...)` → `mod:traced_hook(...)`. In-game (path 1 of 3) weapon rendering. Per-mission-spawn / per-keep-load rate.
+- `weapon_tweaker.lua` L2813 — `mod:safe_hook("GearUtils", "spawn_inventory_unit", ...)` → `mod:traced_hook(...)`. Cross-character 3P swap dispatch. The canonical 5-return / 2-nil-hole function that motivated the safe_hook fix cycle. Trace shows n_args + n_returned per fire — debugging swap regressions gets concrete return-count visibility for the first time.
+
+### Rate-limit caveat
+Per-frame hooks (e.g. `mod.update`) MUST NOT be wrapped in `traced_hook` — at 60+ fires/sec they would flood the log when the toggle is on. The three migrated sites are all event-rate. wt has no per-frame hook adoption today; if/when it does, leave it on `safe_hook` and document the rate-limit reason inline.
+
+### Files changed
+- `weapon_tweaker/scripts/mods/weapon_tweaker/_safe_hook.lua` — added Layer 3 header subsection + `mod.traced_hook` / `mod.traced_hook_safe` methods + `CT_WT_TRACED_HOOK_MARKER_v0_12_84` constant.
+- `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua` — MOD_VERSION bump; 3 hook sites migrated; new `_rt_register("wt_traced_hook_present", ...)` block.
+- `weapon_tweaker/itemV2.cfg` — title + description bumped to v0.12.84-dev.
+- `VMF_RECIPES.md § 2b` — extended with Layer 3 traced_hook sub-section + rate-limit caveat.
+- `PROJECT_STANDARDS.md § 3.6` — one-line cross-ref to traced_hook (Layer 3) added.
+
+### Verification
+1. Restart VT2, load keep.
+2. `/wt_regression_test` — new check `wt_traced_hook_present` should PASS. Existing `wt_safe_hook_installed` + `wt_safe_hook_preserves_multi_returns_with_nil_holes` checks must continue to PASS (Layer 3 stacks on top of Layer 2; it does not replace it).
+3. Toggle `Debug Logging` ON in the VMF mod menu, wield a weapon and equip another — expect to see paired `[wt:trace] event=enter|exit class=SimpleInventoryExtension method=wield n_args=...` / `n_returned=...` lines plus matching pairs for `GearUtils.create_equipment` and `GearUtils.spawn_inventory_unit` in `%APPDATA%\Fatshark\Vermintide 2\console_logs\`.
+4. Toggle Debug Logging OFF — no `[wt:trace]` lines should emit.
+
+### Sample log lines (toggle on)
+```
+[wt:trace] event=enter class=GearUtils method=spawn_inventory_unit n_args=12
+[wt:trace] event=exit  class=GearUtils method=spawn_inventory_unit n_returned=4
+```
+
+## 0.12.83-dev (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `weapon_tweaker.lua` — installed `_dbg_alert` helper alongside existing `_dbg`. Added `_rt_register("dbg_helpers_two_channel", ...)` alongside the existing seven wt regression checks.
+- `weapon_tweaker.lua` ~L3152 — promoted ONE `_dbg(...)` call site to `_dbg_alert(...)`: the `[wt sp-longbow-crossbow] SKIP (pcall returned nil — internal abort, see prior warning)` line. This branch only fires after the preceding `mod:warning("[wt sp-longbow-crossbow] pcall ERROR ...")` has already logged, so the follow-up SKIP is part of the alert chain. With the toggle on, the user will see both messages in chat.
+- `itemV2.cfg` — bumped to v0.12.83-dev.
+
+### Notes
+- 35 existing `_dbg(...)` call sites audited. 34 kept as `_dbg` (state/scale/wield/transition confirmations, plus expected SKIP branches like "career not Kruber" / "hand=right, not left" / "vanilla v_w3p was nil" — all are normal guard paths, not error conditions). 1 promoted to `_dbg_alert` (the post-pcall-failure SKIP at L3152).
+- 0 bare `mod:echo` reclassified — all `mod:echo` calls are inside `/wt_*` / `/verify_*` chat command bodies (user-operational) or are permanent operational output (load banner).
+
+### Notes on judgment calls
+- SKIP branches like `[wt brace-3p-swap] SKIP (career not Kruber: %s)` and `(vanilla v_w3p was nil)` use the alert word "nil" but represent expected-skip paths where the guard is intentional. Per the policy's "Ambiguous → leave as `_dbg`. Conservative default."
+- `[wt sp-longbow-crossbow] SKIP (crossbow 3P package not loaded)` similarly — package-not-loaded is an expected timing condition, not an error.
+
+## 0.12.82-dev (2026-05-25) — Finish §3.6 rename: migrate stale `mod:get("wt_debug_mode")` gate call sites
+
+### Why
+v0.12.81-dev renamed the widget from `wt_debug_mode` to `enable_debug_logging` in `weapon_tweaker_data.lua` + `_localization.lua`, but four `mod:get("wt_debug_mode")` call sites in `weapon_tweaker.lua` (the `_dbg` helper at L118, the `D = mod:get(...)` cached wield-hook gate at L1442, the loadout-dump gate at L3782, plus comments) were not updated in the same pass. Result: the widget wrote `enable_debug_logging` while the gate read `wt_debug_mode` — debug mode was de-facto non-functional. `tools/mod-lint/lint-mod.ps1` doesn't catch a stale `mod:get` against a removed widget, so this slipped through.
+
+### Fixed
+- `weapon_tweaker.lua` — all four call sites now read `mod:get("enable_debug_logging")`. The legacy-key migration logic at L132-145 deliberately keeps a `mod:get("wt_debug_mode")` (with a `legacy_wtdebug` local) so an early-adopter's pre-rename clicked-on value still gets carried over.
+
+### Note
+The `mod:echo("Weapon Tweaker v" .. MOD_VERSION)` at line 97 still fires unconditionally — wt is on the `-dev` track, so the user-policy "no chat-echo unless `enable_debug_logging`" only applies to stable releases. The echo gets gated automatically the day wt drops the `-dev` suffix.
+
+## 0.12.81-dev (2026-05-25) — Standardize Debug Logging toggle (universal convention)
+
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). wt previously had `wt_debug_mode` nested inside `diagnostics_group` — renamed and un-nested.
+
+### Changed
+- `weapon_tweaker_data.lua` — removed `diagnostics_group` wrapper; `wt_debug_mode` renamed to `enable_debug_logging` at top-level bottom of `options.widgets`.
+- `weapon_tweaker_localization.lua` — removed `diagnostics_group` / `wt_debug_mode` / `wt_debug_mode_description`; added `enable_debug_logging` + `enable_debug_logging_tooltip` per the standard.
+- `weapon_tweaker.lua`:
+  - `_dbg(fmt, ...)` helper now reads `mod:get("enable_debug_logging")` (was `wt_debug_mode`). Output prefix `[wt:dbg]` unchanged.
+  - All other `mod:get("wt_debug_mode")` call sites (wield hook cached lookup, `_dbg_dump_local_player_loadout`) renamed to `enable_debug_logging`.
+  - `_migrate_legacy_debug_setting()` now ALSO carries the saved value of `wt_debug_mode` (in addition to the v0.12.74 legacy `debug` / `enable_weapon_debug_logging` keys) into the new `enable_debug_logging` key on first load. Sentinel `wt_debug_migration_v1` continues to gate it to one-time.
+- `itemV2.cfg` — title + description bumped to v0.12.82-dev.
+
+### Notes
+- **Migration**: existing users with `wt_debug_mode = true` get auto-carried into `enable_debug_logging = true` on first load via the migration helper.
+
+## 0.12.81-dev (2026-05-25) — Tighten localization strings to vanilla style (15 entries rewritten)
+
+### Why
+
+Mod-menu descriptions in `weapon_tweaker_localization.lua` drifted into multi-paragraph essays for `authentic_brace_of_pistols`, the Moonfire Bow toggles, the Kruber Longbow zoom pair, and the Big Rebalance master/meta-init tooltips. Vanilla VT2 tooltips are uniformly terse. This pass aligns wt's heavy hitters with the vanilla voice per the new `LOCALIZATION_STANDARD.md` § 11 rules.
+
+### Changed
+
+- `authentic_brace_of_pistols_description`: 838 → 305 chars; kept all 5 mechanical bullets (handgun shot, single-shot, no manual reload, ammo cap, spread) + "Requires restart" but dropped the flavor commentary ("Flintlocks weren't tack-drivers...").
+- `wt_debug_mode_description`: 565 → 220 chars; kept the `[wt:dbg]` tag enumeration + "off = warnings only" but dropped per-event prose.
+- `moonfire_aoe_revert_description`, `moonfire_cosmetic_puff_description`: trimmed; kept 1.5m / 0.75m magnitudes and the "override" relationship between the two toggles.
+- `kruber_longbow_disable_zoom_description`, `kruber_longbow_manual_zoom_description`: dropped state-machine internals ("zoom_in stage, ~0.01s delay") that don't help the player.
+- `br_master_description`, `br_misc_weapons_meta_init_description`, `br_hook_shield_slam_description`, `br_shield_slam_replace_description`, `br_misc_status_dodge_count_description`, `br_misc_chaos_raider_special_staggers_description`: trimmed "subscribe to it separately, then restart the game" prose, kept the bt-master gate.
+- `weapon_traits_description`, `cw_melee_traits_description`, `cw_ranged_traits_description`: trimmed.
+
+### Not touched
+
+- The vanilla trait descriptions (`trait_melee_*_description`, `trait_ranged_*_description`, `cw_trait_*_description`) are already vanilla-style (Critical hits grant +20%% attack speed for 5 seconds.) — left as canon.
+- Per-BR-toggle short labels (`br_1h_hammer_*`, `br_2h_sword_*`, etc.) — already ≤6 words.
+
+### Build
+
+VMBLauncher.exe build weapon_tweaker — verification only.
+
+## 0.12.80-dev (2026-05-25) — Hardening: regression test fixture for safe_hook multi-return + nil-hole preservation
+
+### Why
+v0.12.79's CHANGELOG closed with "Worth adding a regression test that asserts safe_hook'd functions preserve all positional returns INCLUDING nil values." This release adds that test as a hard fixture under `/wt_regression_test`.
+
+The existing `wt_safe_hook_installed` check (kept) only validates the module loaded and the methods are callable — it does NOT exercise the actual multi-return path that broke silently across v0.12.77/.78/.79. The new check builds a fresh dummy class per invocation, wraps a 5-return / 2-nil-hole method via `mod:safe_hook`, and asserts positional integrity through the wrapper.
+
+### Added
+- New `/wt_regression_test` check `wt_safe_hook_preserves_multi_returns_with_nil_holes` (next to `wt_safe_hook_installed`, not replacing it):
+  - Builds a dummy class on every invocation with `method = function(self, ...) return 1, nil, 2, nil, 3 end` (mimics melee-weapon `GearUtils.spawn_inventory_unit`'s nil-hole shape, more aggressive — 5 returns, 2 nils).
+  - Fresh table identity per run guarantees VMF's duplicate-hook guard never trips, so the test is rerunnable any number of times in one session.
+  - Wraps the method via `mod:safe_hook(_dummy_class, "method", function(func, ...) return func(...) end)`.
+  - Captures the call result via `select("#", ...)` + table-pack idiom and asserts `n == 5` plus each positional slot exact-value (catches both v0.12.77 single-return collapse AND v0.12.78 non-deterministic `#table` truncation).
+  - Returns self-diagnosing failure strings (e.g. `safe_hook truncated multi-return: got n=2 expected 5 (results=1,nil,...)`).
+  - Also covers the error path: safe-hooks a `raiser` method that raises and asserts safe_hook itself didn't blow up with its own internal error (vs. the expected `test-raise` propagating from vanilla fall-through).
+- New version constant `MOD_VERSION = "0.12.80-dev"` (was `0.12.79-dev`).
+
+### Files changed
+- `scripts/mods/weapon_tweaker/weapon_tweaker.lua` — `MOD_VERSION` bump; new `_rt_register("wt_safe_hook_preserves_multi_returns_with_nil_holes", ...)` block appended next to the existing `wt_safe_hook_installed` block (~L4226).
+- `itemV2.cfg` — title + description bumped to v0.12.80-dev.
+
+### Verification
+1. Restart VT2, load keep.
+2. `/wt_regression_test` — new check `wt_safe_hook_preserves_multi_returns_with_nil_holes` should PASS.
+3. To prove the test would catch the bug: temporarily revert `_safe_hook.lua`'s `unpack(results, 2, n)` back to `unpack(results, 2)` and re-run — the check fails with a diagnostic message naming the truncated count.
+
+## 0.12.79-dev (2026-05-25) — CRITICAL FIX #2: `unpack(results, 2)` non-deterministic with nil holes
+
+### Why
+v0.12.78's fix replaced `local ok, result_or_err = xpcall(...)` with `local results = { xpcall(...) }; return unpack(results, 2)`. That preserved trailing returns BUT introduced a subtler bug: `unpack(results, 2)` without an explicit `j` argument defaults to `j = #results`.
+
+In Lua 5.1, `#table` is **undefined behavior for arrays with nil holes**. `GearUtils.spawn_inventory_unit` returns 4 values (`weapon_3p, ammo_3p, weapon_1p, ammo_1p`) — `ammo_3p` and `ammo_1p` are **nil for melee weapons**. So the xpcall result table `{true, weapon_3p, nil, weapon_1p, nil}` has non-deterministic length: `#t` could be 2, 3, 4, or 5 depending on Lua's internal boundary search.
+
+This still produced nil-weapon-units in the inventory pipeline → infinity ammo HUD + corrupted 1P weapon rendering, ONLY visible when CWV's chained `mod:hook` was the next consumer (CWV re-emitted the nil values back to the engine). With CWV disabled, wt's truncation was less visible because the engine tolerated some nil returns; with CWV enabled, the chained re-emit cemented the corruption.
+
+### Fixed
+Capture the actual return count via `select("#", ...)` and pass it as `j` to `unpack` so nil holes are preserved:
+```lua
+local function _capture(...) return select("#", ...), { ... } end
+local n, results = _capture(xpcall(handler, _error_handler, func, ...))
+if results[1] then
+    return unpack(results, 2, n)  -- explicit j preserves nil holes
+end
+```
+
+### Bug timeline (per user investigation)
+- v0.12.76 and earlier: no safe_hook wrapper → vanilla VMF mod:hook handled returns correctly → no bug
+- v0.12.77 (Issue #26 fix shipped today): safe_hook introduced with `local ok, result_or_err` collapse → bug introduced (drops returns 2+)
+- v0.12.78 (my first attempt at the fix shipped today): `unpack(results, 2)` without `j` → still broken (non-deterministic truncation)
+- v0.12.79 (this release): `unpack(results, 2, n)` with explicit `j` → FIXED
+
+### Lesson
+The "table-pack the returns" idiom is necessary but not sufficient — you ALSO need `select("#", ...)` to know the true count when the function may return nils. This is the second time we hit a `VMF_RECIPES.md § 2` variant in 24 hours. Worth adding a regression test that asserts safe_hook'd functions preserve all positional returns INCLUDING nil values.
+
+### Verification
+1. Restart VT2. Load keep on Grail Knight (or any melee-weapon-equipping career).
+2. Confirm ammo HUD shows finite number (NOT ∞).
+3. Confirm 1P weapon model + grip renders correctly.
+4. `/wt_regression_test` — `wt_safe_hook_installed` PASS.
+
+## 0.12.78-dev (2026-05-25) — CRITICAL FIX: `safe_hook` wrapper multi-return collapse
+
+### Why
+v0.12.77's `_safe_hook.lua` shipped a textbook violation of `VMF_RECIPES.md` § 2 ("Hook wrappers collapse multi-returns"). The wrapper captured `local ok, result_or_err = xpcall(handler, ...)` and returned only `result_or_err` — silently dropping any 2nd / 3rd / 4th return value.
+
+Several VT2 functions return multiple values:
+- `GearUtils.spawn_inventory_unit` returns **4 values** (`weapon_unit_3p, ammo_unit_3p, weapon_unit_1p, ammo_unit_1p`) — wt v0.12.77 converted this site, so callers received only `weapon_unit_3p` and got `nil` for the other three.
+
+### Symptoms (reported live by user on Grail Knight 2026-05-25 06:04)
+- **Infinity-symbol ammo HUD** ← `ammo_unit_3p` collapsed to nil → ammo extension reads through missing unit → `nil` / `math.huge` arithmetic → ∞ glyph rendered.
+- **First-person weapons rendered weirdly** ← `weapon_unit_1p` collapsed to nil → engine renders fallback / empty hands / wrong attachment.
+
+### Fixed
+`_safe_hook.lua` now table-packs the xpcall returns and `unpack(results, 2)` on success, preserving multi-return semantics:
+```lua
+local results = { xpcall(handler, _error_handler, func, ...) }
+if results[1] then
+    return unpack(results, 2)  -- Lua 5.1 unpack
+end
+```
+Future-proofs every safe_hook'd function that returns multi-values, not just `spawn_inventory_unit`.
+
+### Verification
+1. Restart VT2. Load into keep on any Empire Soldier career.
+2. Confirm ammo HUD shows a numeric value (NOT ∞) on any ranged weapon.
+3. Confirm 1P weapon model + grip renders correctly.
+4. Run `/wt_regression_test` — `wt_safe_hook_installed` should still PASS.
+
+### Lesson
+The new helper failed to apply its own repo's documented recipe. Adding a pre-merge gate that asserts `_safe_hook.lua` round-trips multi-returns through a test fixture is a follow-up worth filing.
+
+## 0.12.77-dev (2026-05-25) — pcall-isolated `mod:safe_hook` wrapper (Issue #26)
+
+### Why
+
+A single `mod:hook` body that raises currently kills every later consumer
+in the chain silently — no log, no error, just stops working. VMF's
+`safe_calls.lua` xpcalls the outermost hook entry but does NOT isolate
+consumers from each other when multiple mods stack hooks on the same
+`(Class, method)`. Symptom in the wild: cosmetics_tweaker hook A raises
+→ wt hook B never fires → user sees a missing feature with no diagnostic
+log line. Fixes the diagnostic-cost side of GH #26 by giving wt a
+drop-in-compatible wrapper that pcall-isolates each consumer's body.
+
+### Added
+
+- `weapon_tweaker/scripts/mods/weapon_tweaker/_safe_hook.lua` — module
+  attaches `mod.safe_hook(self, class, method, fn)` and
+  `mod.safe_hook_safe(self, class, method, fn)` methods. Wraps `fn` in
+  xpcall; on error logs `[wt:safe_hook] <Class>.<method> raised: <err>`
+  via `mod:error` (with stack trace from `Script.callstack()`), then
+  falls through to `func(...)` so the original engine path and every
+  later consumer in the chain stay intact.
+- `mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")` require near
+  the top of `weapon_tweaker.lua`, after MOD_VERSION and before any
+  hook call site, so `mod.safe_hook` exists by the time consumers below
+  reach for it.
+- New marker constant `CT_WT_SAFE_HOOK_MARKER_v0_12_74 =
+  "wt-safe-hook-pcall-isolated"` set by `_safe_hook.lua` (read by the
+  regression-test check below).
+- `/wt_regression_test` check `wt_safe_hook_installed`: asserts the
+  marker constant is present + both `mod.safe_hook` and
+  `mod.safe_hook_safe` are callable functions. Catches accidental
+  removal of the require in future refactors.
+- New section in repo-root `VMF_RECIPES.md`: "Pcall-isolated hooks
+  (mod:safe_hook)" — when to use vs raw `mod:hook`, the
+  consumer-isolation principle, signature compatibility, and the v1
+  scope (wt-local; cross-mod sharing is Wave-2).
+- New version constant `MOD_VERSION = "0.12.77-dev"` (was `0.12.76-dev`).
+
+### Changed
+
+- 5 representative hook sites converted from `mod:hook` / `mod:hook_safe`
+  to `mod:safe_hook` / `mod:safe_hook_safe`:
+  - `SimpleInventoryExtension.wield` (local-player wield + 1P-hands
+    capture).
+  - `SimpleHuskInventoryExtension.wield` (husk-side per-unit state
+    population for cross-character 3P remap).
+  - `GearUtils.create_equipment` (in-game keep + mission spawn render
+    path — path 1 of 3).
+  - `GearUtils.spawn_inventory_unit` (cross-character 3P swap dispatch).
+  - `LevelEndView._verify_weapon_data` (end-of-mission victory screen).
+- Each converted site picks up the consumer-isolation contract: a raise
+  in this mod's body logs + falls through to vanilla instead of killing
+  every later mod's hook on the same Class.method.
+
+### Anti-patterns avoided
+
+- Did NOT convert every `mod:hook` call site in `weapon_tweaker.lua` —
+  establish the pattern, demonstrate adoption, and stop. Per Issue #26's
+  scope: 3-5 sites, not a wholesale refactor.
+- `mod:safe_hook` is a drop-in compatible signature with `mod:hook` — no
+  call-site changes needed beyond the method name.
+- Self-contained inside `weapon_tweaker/` for v1. Cross-mod sharing
+  (helper in `bt` or a `vmf_shared/` package) is a Wave-2 concern; not
+  in scope here.
+
+### Verification
+
+- `VMBLauncher.exe build weapon_tweaker` — green.
+- `/wt_regression_test` — `wt_safe_hook_installed` PASS expected
+  (validates marker + method-callable + type checks).
+- Behavior of the 5 converted hook sites is unchanged on the happy path
+  (xpcall wraps the body but returns its result through unchanged).
+- Issue #26 closed on this version.
+
+---
+
+## 0.12.76-dev (2026-05-25) — wt_debug_mode toggle + diagnostic event subscriptions + legacy widget migration
+
+### Why
+
+Two orphan checkboxes (`debug`, `enable_weapon_debug_logging`) were defined
+in `_data.lua` since the legacy monolithic Tweaker era but never read by
+`weapon_tweaker.lua` — `CODE_REVIEW.md` line 135 / 213 flagged them as
+dead settings. Meanwhile, every cross-character 3P unit swap path (brace,
+longbow, repeater pistol), per-spawn unit override resolution, weapon
+scale/offset application, and the end-of-mission `_verify_weapon_data`
+hook fired their `mod:info(...)` diagnostic lines unconditionally, which
+makes the console log noisy for anyone running multiple Tweaker mods at
+once. Consolidate into one user-facing toggle that gates the noisy
+fine-grained diagnostics, leaving load-time status and warnings/errors
+unchanged.
+
+### Added
+
+- `wt_debug_mode` checkbox under a new `diagnostics_group` ("Diagnostics")
+  in `_data.lua`. Default OFF. Localization key + `_description` per
+  `LOCALIZATION_STANDARD.md`.
+- `_dbg(fmt, ...)` helper near the top of `weapon_tweaker.lua` (right
+  after the load-time `mod:info` banner). Routes to `mod:info("[wt:dbg] " .. fmt, ...)`
+  only when `wt_debug_mode` is on; no-op otherwise.
+- One-time migration helper `_migrate_legacy_debug_setting()` runs at
+  module load. If either `debug` or `enable_weapon_debug_logging` was
+  set to `true` by an older version, it ORs them into `wt_debug_mode`
+  and writes a `wt_debug_migration_v1 = true` sentinel so the migration
+  never reruns. Clears both legacy keys on the same pass.
+- StateIngame-enter loadout dump in `mod.on_game_state_changed(status,
+  state_name)` — when debug is on and `status == "enter"` /
+  `state_name == "StateIngame"`, dumps career_name + per-slot (item_key,
+  item_type, template) for the local player via `inventory_system._career_name`
+  + `equipment().slots`. Gated inside the helper too (belt-and-suspenders).
+- Wield-time diagnostic in the existing `SimpleInventoryExtension.wield`
+  hook. When debug is on, dumps slot_name, career_name, item_key,
+  template, `anim_event_3p`, `wield_anim_3p` for each wield. Separate
+  from the `_log_anims`/`/animlog`-driven block so users don't need to
+  toggle two systems.
+- New version constant `MOD_VERSION = "0.12.76-dev"` (was `0.12.75-dev` from
+  the parallel Issue #26 `_safe_hook` landing).
+
+### Changed
+
+- 17 verbose `mod:info(...)` calls in `weapon_tweaker.lua` converted to
+  `_dbg(...)`:
+  - `[create_equipment] pre-resolved item_units` (per-spawn override
+    resolution).
+  - `[scale_probe]` one-time per-weapon slot_data field probe (2 lines).
+  - `Scaled %s on %s` / `Offset %s on %s` per-spawn unit transforms (3
+    lines).
+  - `[wt brace-3p-swap]` enter / SKIP / hid-left-pistol / swapped (4 lines).
+  - `[wt sp-longbow-crossbow]` enter / SKIP-hand / SKIP-career /
+    SKIP-no-v_w3p / SKIP-package / SKIP-bolt-package / swapped /
+    SKIP-pcall-nil (8 lines).
+  - `[wt rp-pistol-handgun]` enter / SKIP-hand / SKIP-career /
+    SKIP-no-v_w3p / SKIP-package / swapped (6 lines).
+  - `[wt brace-3p-swap preview]` / `[wt sp-longbow-crossbow preview]` /
+    `[wt rp-pistol-handgun preview]` per-equip swap confirmations (3
+    lines).
+  - `[verify_weapon_data]` LevelEndView hook entry + unwrap (2 lines).
+  - `[team_previewer cb]` preview_items unwrap (1 line).
+- Retired the `debug` + `enable_weapon_debug_logging` widget definitions
+  in `_data.lua`. The keys live in user_settings.config for legacy
+  users until the one-time migration clears them.
+
+### Kept as `mod:info` (always print)
+
+- `Weapon Tweaker v%s loaded` + `Weapon Tweaker: Baseline Active` —
+  load-time / state-entry status.
+- `[wt brace-3p-swap] force-loaded repeater 3P unit` + `[wt
+  sp-longbow-crossbow] force-loaded %s` — one-time mod-init status.
+- `[wt authentic-brace] applied` + `[wt kruber-longbow-zoom] applied` —
+  one-time apply confirmations.
+- `[regression] PASS/FAIL`, `[regression-test-command] registered`,
+  `/dump`, `/dump_weapons`, `/sm_probe` outputs — command-driven, only
+  fire when the user explicitly invokes.
+- All `mod:warning` / `mod:error` calls — never gated.
+- `[WIELD]` + `[animlog]` blocks gated behind `_log_anims` (toggled via
+  `/animlog` chat command) — independent of the new VMF toggle.
+
+### Anti-patterns avoided
+
+- Single checkbox, single helper — no per-feature debug categories, no
+  log-level enum.
+- `wt_debug_mode` chosen as the key name (NOT `debug`, which would
+  collide with the legacy widget and prevent the migration from
+  distinguishing the two).
+- `_dbg` calls inside the wield hook cache `mod:get("wt_debug_mode")`
+  into a local `D` before the block to avoid two table lookups per
+  wield.
+
+### Verification
+
+1. Restart VT2 with the mod enabled, load the keep.
+2. Open VMF mod options, scroll to weapon_tweaker, expand "Diagnostics".
+   Confirm `Debug Mode` checkbox is present with the description from
+   `_localization.lua`.
+3. With debug OFF (default): equip a brace of pistols on Kruber Foot
+   Knight. Console log should show no `[wt:dbg]` lines and no
+   per-spawn `[wt brace-3p-swap]` entries.
+4. Toggle debug ON. Wield/unwield a weapon → expect `[wt:dbg] [wield]
+   slot=slot_melee career=...` line per wield.
+5. Start a mission. On state entry: `[wt:dbg] [loadout] StateIngame
+   enter career=...` + per-slot lines.
+6. Equip a cross-character weapon (e.g. brace on Kruber). The
+   `[wt:dbg] [wt brace-3p-swap]` enter / swapped lines appear.
+7. Confirm legacy migration: with `debug = true` in a stale
+   user_settings.config, first load post-update should write
+   `wt_debug_mode = true` + `wt_debug_migration_v1 = true` and clear
+   the old keys (visible by re-opening user_settings.config).
+
+## 0.12.73-dev (2026-05-24) — §15 belt-and-suspenders runtime test for v0.12.72 rawget conversion
+
+### Why
+Audit `.test_coverage_audit_2026-05-24.md` PARTIAL row 1: the v0.12.72 `ItemMasterList rawget` conversion was lint-covered (regression-lint.ps1 `strict-table-lookup`) but lacked an in-mod `_rt_register` runtime check. Per the §15 doctrine update appended this round, lint-covered fixes ALSO require a runtime regression test — both surfaces are needed for PASS.
+
+### Added
+- Source-pattern marker constant `CT_WT_ITEMMASTERLIST_RAWGET_MARKER_v0_12_73 = "wt-itemmasterlist-rawget-hardened"` near the top of `weapon_tweaker.lua`.
+- `_rt_register("wt_itemmasterlist_uses_rawget", ...)` at the bottom of `weapon_tweaker.lua`. Two assertions:
+  1. The marker constant retains its expected value (catches accidental revert / refactor deletion of the hardening block).
+  2. `rawget(ItemMasterList, <known-bad-key>)` returns `nil` without raising (catches a future regression where ItemMasterList grows a metatable that breaks rawget).
+
+### Verification
+1. Restart VT2 with the mod enabled, load the keep.
+2. Run `/wt_regression_test` in chat. Expect `PASS: wt_itemmasterlist_uses_rawget` alongside the four pre-existing checks.
+
 ## 0.12.72-dev (2026-05-23) — Issue #8: defensive rawget on user-input ItemMasterList lookups
 
 ### Why

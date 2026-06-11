@@ -31,6 +31,17 @@ is documented in each toggle's description.
 
 local mod = get_mod("wt")
 
+-- v0.12.88-dev: local _dbg helper. The main `weapon_tweaker.lua` file-local
+-- `_dbg` isn't reachable from this sibling file (Lua 5.1 file-locals don't
+-- cross dofile boundaries). Mirror the same gate so [wt:dbg] log lines all
+-- live under one toggle. Sampling counters per-hook are inside the hook
+-- bodies; this helper is the raw emit primitive only.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[wt:dbg] " .. fmt, ...)
+    end
+end
+
 -- Forward-ref guard: defs is a pure-data module loaded via dofile so this
 -- module is self-contained.
 --
@@ -2340,14 +2351,61 @@ local SPRAY_RANGE    = 11.5
 local MAX_TARGETS    = 19
 
 local _hooks_installed = false
+
+-- v0.12.88-dev: per-hook sample counters. The Beam hook
+-- (`client_owner_post_update`) fires per-frame while the beam button is held;
+-- emitting a _dbg line per call would flood. Flamethrower `_select_targets`
+-- and TrueFlight `fire`/`client_owner_start_action` are per-fire (sparse
+-- enough for always-on but we sample anyway for consistency, since
+-- TrueFlight `fire` can fan out 5+ projectiles per tick under multi-shot
+-- talents). 1-in-60 = ~1/sec on a held beam, ~1/3rd of single-arrow shots.
+local _BR_HOOK_SAMPLE_N = 60
+local _br_flamethrower_count = 0
+local _br_beam_count = 0
+local _br_trueflight_start_count = 0
+local _br_trueflight_fire_count = 0
+
+-- v0.12.116: vanilla per-projectile speed falloff (action_true_flight_bow.lua:152:
+-- `speed = speed * (1 - i * 0.05)` for i > 1, applied cumulatively across the fire
+-- loop). Factored out because the reimpl shipped the sign-flipped form
+-- `speed * (i * 0.05 - 1)` for ~28 versions, sending every projectile after the
+-- first backwards at negative speed. File-scope (not inside the master-gated
+-- installer) so the regression test can assert it even when BR hooks are off.
+-- Test: wt_br_trueflight_speed_falloff_matches_vanilla in weapon_tweaker.lua.
+function mod._wt_tf_projectile_speed(speed, i)
+    if i > 1 then return speed * (1 - i * 0.05) end
+    return speed
+end
+
+-- v0.12.117 (Issue #74): vanilla's per-projectile extra-shot test
+-- (action_true_flight_bow.lua:128,132: `extra_shots_idx = num_projectiles -
+-- num_extra_shots + 1; is_extra_shot = extra_shots_idx <= i`). The reimpl
+-- previously gated set_shooting/ammo/overcharge on `self.extra_buff_shot`,
+-- which is only ever assigned false — so under extra-shot buffs the free
+-- extra projectiles also bumped spread state and charged ammo/overcharge
+-- where vanilla skips them. File-scope for the regression test
+-- (wt_br_trueflight_extra_shot_gating_matches_vanilla in weapon_tweaker.lua).
+function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
+    local extra_shots_idx = num_projectiles - (num_extra_shots or 0) + 1
+    return extra_shots_idx <= i
+end
+
 local function _install_function_hooks()
     if _hooks_installed then return end
-    if not _master() then return end
+    if not _master() then
+        _dbg("[wt:br_hooks] event=skip_install reason=master_off")
+        return
+    end
+    _dbg("[wt:br_hooks] event=install_begin")
 
     -- Flamethrower cone rework
     if rawget(_G, "ActionFlamethrower") then
         mod:hook(ActionFlamethrower, "_select_targets", function(func, self, world, show_outline)
             if not _on("br_hook_flamethrower_cone") then return func(self, world, show_outline) end
+            _br_flamethrower_count = _br_flamethrower_count + 1
+            if _br_flamethrower_count % _BR_HOOK_SAMPLE_N == 0 then
+                _dbg("[wt:br_hooks] event=flamethrower_select_targets sample=%d", _br_flamethrower_count)
+            end
             local owner_unit = self.owner_unit
             local fpe = ScriptUnit.extension(owner_unit, "first_person_system")
             local position_offset = Vector3(0, 0, -0.4)
@@ -2398,6 +2456,12 @@ local function _install_function_hooks()
     if rawget(_G, "ActionBeam") then
         mod:hook(ActionBeam, "client_owner_post_update", function(func, self, dt, t, world, can_damage)
             if not _on("br_hook_beam_aim_toggle") then return func(self, dt, t, world, can_damage) end
+            -- v0.12.88-dev: sampled trace. PER-FRAME hot path while beam
+            -- button held; 1-in-60 = ~1 line per second of held beam.
+            _br_beam_count = _br_beam_count + 1
+            if _br_beam_count % _BR_HOOK_SAMPLE_N == 0 then
+                _dbg("[wt:br_hooks] event=beam_client_owner_post_update sample=%d", _br_beam_count)
+            end
             local owner_unit = self.owner_unit
             local current_action = self.current_action
             local input_extension = ScriptUnit.extension(owner_unit, "input_system")
@@ -2418,6 +2482,12 @@ local function _install_function_hooks()
         mod:hook(ActionTrueFlightBow, "client_owner_start_action", function(func, self, new_action, t, chain_action_data, power_level, action_init_data)
             if not _on("br_hook_trueflight_start") then
                 return func(self, new_action, t, chain_action_data, power_level, action_init_data)
+            end
+            -- v0.12.88-dev: sampled trace. Per-fire (one per draw/release).
+            _br_trueflight_start_count = _br_trueflight_start_count + 1
+            if _br_trueflight_start_count % _BR_HOOK_SAMPLE_N == 0 then
+                _dbg("[wt:br_hooks] event=trueflight_start_action sample=%d template=%s",
+                    _br_trueflight_start_count, tostring(new_action and new_action.true_flight_template))
             end
             ActionTrueFlightBow.super.client_owner_start_action(self, new_action, t, chain_action_data, power_level, action_init_data)
             self.current_action = new_action
@@ -2455,8 +2525,16 @@ local function _install_function_hooks()
             self._is_critical_strike = is_critical_strike
         end)
 
-        mod:hook(ActionTrueFlightBow, "fire", function(func, self, current_action, add_spread)
-            if not _on("br_hook_trueflight_fire") then return func(self, current_action, add_spread) end
+        mod:hook(ActionTrueFlightBow, "fire", function(func, self, current_action)
+            if not _on("br_hook_trueflight_fire") then return func(self, current_action) end
+            -- v0.12.88-dev: sampled trace. Per-fire (can fan out 5+
+            -- projectiles per call under multi-shot talents); capture
+            -- num_projectiles so multi-shot bursts are identifiable.
+            _br_trueflight_fire_count = _br_trueflight_fire_count + 1
+            if _br_trueflight_fire_count % _BR_HOOK_SAMPLE_N == 0 then
+                _dbg("[wt:br_hooks] event=trueflight_fire sample=%d num_projectiles=%s",
+                    _br_trueflight_fire_count, tostring(self.num_projectiles))
+            end
             local owner_unit = self.owner_unit
             local speed = current_action.speed
             local fpe = self.first_person_extension
@@ -2465,19 +2543,32 @@ local function _install_function_hooks()
             local num_projectiles = self.num_projectiles
             for i = 1, num_projectiles do
                 local fire_rotation = rotation
+                -- v0.12.117 (Issue #74): per-projectile extra-shot test exactly as
+                -- vanilla (action_true_flight_bow.lua:128,132) — was gated on
+                -- self.extra_buff_shot, which is only ever false, so extra-shot-buff
+                -- projectiles wrongly bumped spread/ammo/overcharge below.
+                local is_extra_shot = mod._wt_tf_is_extra_shot(i, num_projectiles, self.num_extra_shots)
                 if spread_extension then
                     if self.num_projectiles_shot > 1 then
                         local spread_horizontal_angle = math.pi * (self.num_projectiles_shot % 2 + 0.5)
-                        local shot_count_offset = (self.num_projectiles_shot ~= 1 or 0)
-                                and math.round((self.num_projectiles_shot - 1) * 0.5, 0)
+                        local shot_count_offset = self.num_projectiles_shot == 1 and 0
+                                or math.round((self.num_projectiles_shot - 1) * 0.5, 0)
                         local angle_offset = self.multi_projectile_spread * shot_count_offset
                         fire_rotation = spread_extension:combine_spread_rotations(spread_horizontal_angle, angle_offset, fire_rotation)
                     end
-                    if add_spread then spread_extension:set_shooting() end
+                    -- audit 2026-06-07: vanilla ActionTrueFlightBow.fire takes only
+                    -- (self, current_action) and calls set_shooting() on every non-extra
+                    -- shot (action_true_flight_bow.lua:143). The `add_spread` 2nd param this
+                    -- reimpl declared was ALWAYS nil (vanilla's caller passes no 2nd arg), so
+                    -- set_shooting() never ran here.
+                    if not is_extra_shot then spread_extension:set_shooting() end
                 end
                 local angle = ActionUtils.pitch_from_rotation(fire_rotation)
                 local target_vector = Vector3.normalize(Quaternion.forward(fire_rotation))
-                if i > 1 then speed = speed * (i * 0.05 - 1) end
+                -- v0.12.116: was speed * (i * 0.05 - 1) — the sign-flip of vanilla's
+                -- falloff (action_true_flight_bow.lua:152), sending every projectile
+                -- after the first backwards at negative speed under multi-shot fires.
+                speed = mod._wt_tf_projectile_speed(speed, i)
                 local target_unit = self.targets
                     and ((current_action.single_target and self.targets[1]) or self.targets[i])
                 local lookup_data = current_action.lookup_data
@@ -2487,13 +2578,13 @@ local function _install_function_hooks()
                         lookup_data.item_template_name, lookup_data.action_name, lookup_data.sub_action_name,
                         1, self._is_critical_strike, self.power_level)
                 end
-                if self.ammo_extension and not self.extra_buff_shot then
+                if self.ammo_extension and not is_extra_shot then
                     self.ammo_extension:use_ammo(current_action.ammo_usage)
                     if self.ammo_extension:can_reload() then self.ammo_extension:start_reload(false) end
                 end
                 self.num_projectiles_shot = self.num_projectiles_shot + 1
                 local overcharge_type = current_action.overcharge_type
-                if overcharge_type and not self.extra_buff_shot then
+                if overcharge_type and not is_extra_shot then
                     local oa = PlayerUnitStatusSettings.overcharge_values[overcharge_type]
                     if current_action.scale_overcharge then
                         self.overcharge_extension:add_charge(oa, self.charge_level)
@@ -2501,7 +2592,7 @@ local function _install_function_hooks()
                         self.overcharge_extension:add_charge(oa)
                     end
                 end
-                if current_action.energy_weapon and not self.extra_buff_shot then
+                if current_action.energy_weapon and not is_extra_shot then
                     local energy_extension = ScriptUnit.extension(owner_unit, "energy_system")
                     energy_extension:drain(current_action.drain_amount)
                 end
@@ -2522,6 +2613,10 @@ local function _install_function_hooks()
     -- Documented dependency: stagger_ai rewrite (et).
 
     _hooks_installed = true
+    _dbg("[wt:br_hooks] event=install_done flamethrower=%s beam=%s trueflight=%s",
+        tostring(rawget(_G, "ActionFlamethrower") ~= nil),
+        tostring(rawget(_G, "ActionBeam") ~= nil),
+        tostring(rawget(_G, "ActionTrueFlightBow") ~= nil))
 end
 
 -- ============================================================
@@ -2529,6 +2624,7 @@ end
 -- ============================================================
 
 function BR.apply_all()
+    _dbg("[wt:br_hooks] event=apply_all_begin master_active=%s", tostring(_master()))
     BR.register_all()
     _apply_weapons_meta_init()
     _apply_melee_1h_hammer()
@@ -2547,6 +2643,7 @@ function BR.apply_all()
     _apply_wield_permissions()
     _apply_misc()
     _install_function_hooks()
+    _dbg("[wt:br_hooks] event=apply_all_done hooks_installed=%s", tostring(_hooks_installed))
 end
 
 return BR

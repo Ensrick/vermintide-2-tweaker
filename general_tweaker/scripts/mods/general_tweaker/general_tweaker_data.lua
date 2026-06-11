@@ -670,6 +670,107 @@ return {
                     },
                 },
             },
+            -- ============================================================
+            -- Host-Side Lobby Controls (absorbed from lobby_tweaker
+            -- 2026-05-25; lt v0.1.7-dev). All settings namespaced
+            -- `gt_lobby_*`; chat commands likewise renamed `/gt_lobby_*`.
+            -- ============================================================
+            {
+                setting_id  = "gt_lobby_controls_group",
+                type        = "group",
+                sub_widgets = {
+                    -- Slot Reservations
+                    {
+                        setting_id    = "gt_lobby_slot_reservations_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_lobby_slot_reservations_enabled_tooltip"),
+                    },
+                    -- Session Ignore List
+                    {
+                        setting_id    = "gt_lobby_session_ignore_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_lobby_session_ignore_enabled_tooltip"),
+                    },
+                    -- Kick on Idle
+                    {
+                        setting_id    = "gt_lobby_kick_idle_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_lobby_kick_idle_enabled_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_lobby_kick_idle_threshold_minutes",
+                        type          = "numeric",
+                        default_value = 10,
+                        range         = { 1, 60 },
+                        tooltip       = mod:localize("gt_lobby_kick_idle_threshold_minutes_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_lobby_ki_warn_seconds",
+                        type          = "numeric",
+                        default_value = 60,
+                        range         = { 10, 180 },
+                        tooltip       = mod:localize("gt_lobby_ki_warn_seconds_tooltip"),
+                    },
+                    -- Message of the Day
+                    {
+                        setting_id    = "gt_lobby_motd_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_lobby_motd_enabled_tooltip"),
+                    },
+                    -- MOTD text setting is NOT a widget — VMF has no native
+                    -- string-input widget type. Set via chat command:
+                    --   /gt_lobby_motd_set <text>
+                    -- which writes to `mod:set("gt_lobby_motd_text", text)`.
+                    -- A widget here with type="text_input" caused widget#103
+                    -- to fail VMF validation (no such VMF type) and broke gt
+                    -- options init entirely on 2026-05-25.
+                    {
+                        setting_id    = "gt_lobby_motd_send_chat",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = mod:localize("gt_lobby_motd_send_chat_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_lobby_motd_send_popup",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_lobby_motd_send_popup_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_lobby_motd_once_per_peer_per_session",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = mod:localize("gt_lobby_motd_once_per_peer_per_session_tooltip"),
+                    },
+                    -- Modded Lobby Manifest
+                    {
+                        setting_id    = "gt_lobby_manifest_broadcast_enabled",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = mod:localize("gt_lobby_manifest_broadcast_enabled_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_lobby_manifest_failnotify_enabled",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = mod:localize("gt_lobby_manifest_failnotify_enabled_tooltip"),
+                    },
+                },
+            },
+            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+            -- v0.2.54-dev: renamed from `gt_debug_mode` (was nested in
+            -- `gt_debug_group`) to the universal `enable_debug_logging` key,
+            -- un-nested to top-level at the BOTTOM of the widget tree.
+            {
+                setting_id    = "enable_debug_logging",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = mod:localize("enable_debug_logging_tooltip"),
+            },
         },
     },
 }

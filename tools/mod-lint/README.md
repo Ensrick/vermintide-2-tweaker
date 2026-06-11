@@ -1,6 +1,6 @@
 # mod-lint
 
-Static analysis for two recurring bug classes that have cost multiple
+Static analysis for recurring bug classes that have cost multiple
 version bumps across the VT2 tweaker mods.
 
 ## Patterns caught
@@ -47,6 +47,37 @@ False-positive rate is kept low by:
 - Recognising explicit forward declarations (`local NAME` on its own
   line, no `=`, no `function`).
 
+### 3. Late local shadows global  (warning, exit 1; error under `-Strict`)
+
+Per memory `feedback_lua_forward_reference.md` and the v0.7.99-dev ct fix (chest-of-trials crash, GUID `4c5d2157-e5ee-45fd-8f49-ecdcd2e7ade3`).
+
+A top-level `local NAME = <table-or-value>` declared LATE in the file while
+function bodies / closures EARLIER in the file reference `NAME`. Lua scope
+is LEXICAL — every earlier reference resolves to `_G.NAME` (typically nil)
+at function-definition time, NOT the late local. Symptom: silent until the
+referencing closure runs (e.g. first chest interaction), then `attempt to
+index a nil value`.
+
+This is a SEPARATE bug class from check 2 (forward-ref):
+
+- Check 2 fires on `local function NAME(...)` defined late with calls earlier — about FUNCTIONS.
+- Check 3 fires on `local NAME = <table-or-value>` declared late with reads earlier — about DATA TABLES / non-function locals.
+
+Heuristic to keep false-positive rate near zero: only `ALL_CAPS_SNAKE` names
+are flagged. By convention in this repo, capitalized names are reserved for
+module-level data tables; functions use lowercase_snake (already covered by
+check 2). A future generalization could widen the heuristic, but for now
+this is enough — both the ct DORMANT_BOON_RARITY bug and the most likely
+future regressions fit the ALL_CAPS_SNAKE shape.
+
+Each finding lists the late local's declaration line, the earliest earlier
+reference (file:line), and whether that reference sits inside a function
+body (closure semantics — captures _G.NAME at definition time) or at
+top-level code (would crash immediately at load).
+
+Emitted as WARNING by default; pass `-Strict` to promote to error (exit 2),
+which also blocks `publish-release.ps1`.
+
 ## Usage
 
 ```powershell
@@ -61,6 +92,12 @@ False-positive rate is kept low by:
 
 # emit JSON to a custom path
 .\tools\mod-lint\lint-mod.ps1 -JsonPath C:\tmp\lint.json
+
+# promote forward-ref + late-local + save/restore warnings to errors
+.\tools\mod-lint\lint-mod.ps1 -Strict
+
+# verify the linter against its built-in fixtures
+.\tools\mod-lint\lint-mod.ps1 -SelfTest
 ```
 
 ## Exit codes
@@ -68,8 +105,8 @@ False-positive rate is kept low by:
 | Code | Meaning |
 |------|---------|
 | 0    | Clean — no findings |
-| 1    | Warnings only (forward-ref candidates) — non-blocking |
-| 2    | Errors (duplicate hooks) — `publish-release.ps1` aborts |
+| 1    | Warnings only (forward-ref / late-local / save-restore candidates) — non-blocking |
+| 2    | Errors (duplicate hooks; with `-Strict`, also forward-ref + late-local + save/restore) — `publish-release.ps1` aborts |
 
 ## Integration
 
@@ -87,6 +124,16 @@ forward-ref pattern. Linter should report 1 forward-ref warning.
 
 Both fixtures live outside the `$KnownMods` list in `lint-mod.ps1` so the
 default no-argument scan does NOT include them.
+
+The `late-local-shadows-global` check has an in-memory self-test that
+synthesizes its fixtures programmatically (the bug only reproduces when the
+local is declared many lines below the earliest reference; a fixture file
+that small would be artificial). Run with `.\lint-mod.ps1 -SelfTest`.
+Coverage: bad case where closure at L4 references `MY_TABLE` declared at
+L100; good case where local declared at L10 with closure ref at L100; good
+case for the canonical `local foo; function foo() end` forward-decl
+pattern; bad top-level executable case; good cases for comment / string /
+field-access false-positive guards.
 
 ## Known limitations
 

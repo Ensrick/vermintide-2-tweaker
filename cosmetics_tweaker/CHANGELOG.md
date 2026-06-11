@@ -1,5 +1,505 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.34-dev (2026-06-11) — Glow release gate, part 1: picker auto-opens on selecting a glow-variant illusion; classifier keys off material_settings_name
+
+### Why
+User release gate for this mod: glow menu fully functional + picker auto-popups when selecting a cosmetic/illusion that has a glow variant + glow hidden by default until enabled per-weapon. This lands the selection-triggered popup and the data-driven variant detection it depends on. (Hide-by-default is part 2 — needs one in-game verification session; see Notes.)
+
+### Changed
+- **`_glow_picker.lua` — `classify()` rewritten around `WeaponSkins.skins[skin].material_settings_name`** (the same field the engine keys glow on, gear_utils.lua:107/155). Family mapping from the 2026-06-11 decompile sweep of all 9 template families: `weaves`/`versus` → magic (5-channel layout); `blue_glow`/`purple_glow`/`golden_glow`/`deep_crimson`/`life_green`/`lileath`/`white_glow` → rune. Suffix regex kept as fallback (LA custom skins with `skin=""`) and extended with bare `_runed` — the CW deus skins (`dr_deus_01_skin_01_runed` etc., weapon_skins_morris.lua:64) the old digit-suffix-only regex missed.
+- **`cosmetics_tweaker.lua` — selection-triggered auto-popup**, merged into the existing consolidated `_on_illusion_index_pressed` hook (no new hook): clicking an illusion whose skin classifies to a glow family opens the picker for that item/family immediately (the host window's `_draw` hook already renders the overlay). Selecting a NON-glow illusion while the picker is up closes it. Honors the existing `glow_picker_auto_popup_enabled` setting; no once-per-keep gate here — explicit selection is explicit intent. The wield-triggered auto-popup (active-glow-only, once per keep visit) is unchanged.
+
+### Tests
+- `glow_classify_uses_material_settings` — live-data truth table: blue_glow runed skin → rune, Weavebound magic_01 → magic, bare `_runed` CW deus → rune, base skin → nil; fails loudly on vanilla key drift.
+
+### Notes — glow part 2 (hide-by-default), planned
+The per-item zero-paint path (`pi.disabled`) already exists in `_apply_glow_to_unit`; "hidden by default" = defaulting glow-variant items to that path unless the user enables glow. Two open questions need ONE in-game session before wiring: (a) whether zeroing the 5 weave channels fully suppresses the `_magic_01` mesh's baked-in animated swirl, or magic-family hiding needs an illusion-level swap to the base mesh; (b) whether the rune-family zero-paint holds across the husk/late-join re-apply path. Run with debug logging on — `[illusion-probe]` + `/glow_status` capture what's needed.
+
+## 0.9.33-dev (2026-06-08) — LA apply-gate teardown: implement the layered-wrapper guard the F7 comment described
+
+### Why
+Post-ship re-review of the v0.9.32 audit fixes (fresh-eyes verification pass, 2026-06-08): the `uninstall_apply_gate()` comment promised to restore the original apply fn "only if the live apply fn is still our gate (don't clobber a different override another mod may have layered on since)" — but the code restored **unconditionally**. A third-party wrapper installed on top of our gate (LA-adjacent mods raw-replace this exact function; that's how our own gate works) would have been silently clobbered on an in-session disable.
+
+### Changed (`_la_bridge.lua`)
+- **`install_apply_gate()`** saves the gate closure as `M._gate_fn`, and the gate's blocking branch now also checks `M._gate_installed` — so if uninstall ever *can't* restore (foreign wrapper on top), clearing the flag makes the stranded gate a transparent passthrough instead of a permanent block.
+- **`uninstall_apply_gate()`** restores the original only when the live fn is identical to `M._gate_fn` (or `_gate_fn` is unset — pre-0.9.33 state). When a foreign wrapper is detected it leaves the chain intact and logs via **ungated `mod:warning`** (incomplete teardown is a failure the user should see without Debug Logging). `_gate_fn` is cleared on every path.
+
+### Tests
+- `la_bridge_uninstall_apply_gate_clears_state` extended: asserts `_gate_fn` is cleared, and adds a layered-wrapper scenario (live fn ≠ saved gate) asserting the foreign wrapper is NOT clobbered while flags still clear.
+
+## 0.9.32-dev (2026-06-07) — Audit fixes: LA apply-gate teardown on disable, glow-picker UILayer guard, unlock-label mojibake
+
+### Why
+Three findings from the 2026-06-07 audit:
+- **F7 (MEDIUM):** `LA_BRIDGE.install_apply_gate()` raw-replaces
+  `LA.apply_new_skin_from_texture` with a blocking closure (saving the original at
+  `M._original_apply`) but had no teardown. cosmetics_tweaker is `is_togglable`,
+  and `mod.on_disabled` only flushed TPE — so an in-session F4 disable left LA's
+  OWN recolor permanently blocked for bridge-managed keys until a game restart.
+- **F11 (LOW):** `_glow_picker._make_scenegraph_definition()` dereferenced
+  `UILayer.popup` at the top of the returned table. That function is passed as an
+  ARGUMENT to `pcall(UISceneGraph.init_scenegraph, _make_scenegraph_definition())`,
+  so it is evaluated BEFORE pcall protection engages — a nil/renamed `UILayer`
+  global would raise uncaught at build time.
+- **F12 (LOW):** 4 `es_hat_0002` unlock labels rendered `BA?genhafen Bonnet`
+  mojibake (corrupted `Bögenhafen`). Root cause: `_gen_unlocks.py` read the UTF-8
+  `_cos_probe.txt` with the platform-default encoding (cp1252 on Windows), so
+  `ö` (0xC3 0xB6) decoded as `Ã¶` and `asciify()` emitted `A?`. Display-only.
+
+### Changed
+- `scripts/mods/cosmetics_tweaker/_la_bridge.lua:739-760` — added
+  `M.uninstall_apply_gate()`: restores `LA.apply_new_skin_from_texture =
+  M._original_apply` (guarded on LA-present + original captured), clears
+  `_original_apply` / `_gate_installed` / `_bridge_active`. Injected
+  ItemMasterList/NetworkLookup entries are deliberately left in place (can't be
+  safely torn down mid-session) — only the apply fn is restored.
+- `scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua:835-844` — `mod.on_disabled`
+  now also calls `LA_BRIDGE.uninstall_apply_gate()` after the TPE flush.
+- `scripts/mods/cosmetics_tweaker/_glow_picker.lua:44-57` —
+  `_make_scenegraph_definition()` now reads the popup layer via
+  `rawget(_G, "UILayer")` with a literal `900` fallback instead of a bare
+  `UILayer.popup` deref, so a missing global can't raise outside the pcall.
+- `_gen_unlocks.py:51` — open `_cos_probe.txt` with `encoding="utf8"` (matching
+  the output write) so `ö` transliterates to `o`. Fixed at SOURCE, then
+  regenerated `_cosmetic_unlocks.lua`: the 4 `es_hat_0002` labels now read
+  `Bogenhafen Bonnet`. (The regen also re-sorted `es_hat_0002` after
+  `es_helmet_0003` within the Kruber-career hat lists — labels are sorted
+  alphabetically and `Bogenhafen` now sorts after `Blucher's`; keys/defaults
+  unchanged.)
+
+### Tests
+- `cosmetics_tweaker.lua` `/cos_regression_test`: added
+  `la_bridge_uninstall_apply_gate_clears_state` — behavioral test that drives the
+  gate state machine (install-flag + sentinel original) through
+  `uninstall_apply_gate()` and asserts `_gate_installed`/`_original_apply`/
+  `_bridge_active` are cleared and a second call is idempotent; restores live
+  state afterward. Would FAIL if the teardown were removed (F7 regression).
+- Added `cosmetic_unlock_labels_no_mojibake` — loads the generated unlock table
+  and asserts no `en` label contains `BA?genhafen` or any stray `?`; would FAIL
+  if a future regen reintroduced the encoding bug (F12 regression).
+- F11 is a defensive guard with no keep-observable behavior change in the normal
+  (UILayer-present) path; no regression test added (the code path only differs
+  when the engine global is missing, which can't be synthesized in-keep).
+
+### To verify
+- In-keep: enable cosmetics_tweaker, equip an LA bridge-managed hat/skin so the
+  apply gate installs, then F4-disable the mod and re-enable it. LA's own recolor
+  for those keys should resume (previously stayed blocked until restart). Run
+  `/cos_regression_test` and confirm both new checks PASS.
+- Open the per-career cosmetic unlock menu for Kruber and confirm the
+  "Bogenhafen Bonnet" label renders with no `?` glyph.
+- Open the glow picker on a glow-eligible item and confirm the panel still builds.
+
+## 0.9.31-dev (2026-05-29) — Logging hygiene: hot-path mod:info → two-channel _dbg/_dbg_alert
+
+### Why
+The body of `cosmetics_tweaker.lua` was never migrated to the `_dbg` / `_dbg_alert`
+two-channel helpers (PROJECT_STANDARDS § 3.6) — it had ~205 ungated `mod:info`
+calls vs only 2 helper calls. Many fired on hot paths (every inventory hover,
+weapon spawn, husk wield, glow apply, RPC emit/recv), violating § 3.2 (level
+discipline) and § 3.3 (no logging on high-frequency events) and spamming the
+console log during normal play. weapon_tweaker is the reference model.
+
+### Changed
+- Migrated ~120 hot-path diagnostic `mod:info` calls to the two-channel helpers
+  per § 3.6 word-list classification: ~100 to `_dbg` (log-only confirmation /
+  expected-flow skip / dump) and ~20 to `_dbg_alert` (log + chat for genuine
+  failure / mismatch / reject). Both gate on `enable_debug_logging`, so the hot
+  paths are silent in normal play.
+  - Families converted: `[LA preview]` (per-hover equip_item / _spawn_item),
+    `[LA paint]` (the skip chain in `_apply_la_offhand_to_units`), `[GLOW]`
+    (per-call apply/inject trace), `[thiccc]` (preview scale dump),
+    `[husk-mesh-swap]`, `[husk-wield-wrap]` / `[husk-wield-repaint]`,
+    `[husk-hat-create]`, `[cos_la_apply*]` (emit / drain / recv / hat / armor /
+    offhand / illusion apply core), `[cos_glow_apply]`, `[la-spawn-monitor]`,
+    `[la-state-dump]`, `[net-safe]`, `[loadout]`, `[la-persist]`,
+    `[ct offhand]` pulse-wield, `[offhand]` preload + `_setup_illusions`,
+    `[hot-join replay]` / `[hot-join glow replay]`, `[illusion-filter]`,
+    `[illusion-picker-setup]`, `[apply-trace]`, `[hot-reload-safety]`,
+    `[ct la-rebroadcast]`.
+- Fixed stale line-number comment near the `cos_la_apply` recv handler: it
+  cited the host's `cos_la_apply_req` handler "at line 3958" (the register is
+  actually ~5522). Re-worded to reference the handler by name/section per § 7.8
+  (don't cite drifting raw line numbers).
+
+### Left as mod:info (deliberate, per § 3.6 conservative bounds)
+- Load marker (`[cosmetics:LOAD] ...`), dev-load banner, regression-test
+  command registration — operational telemetry that ALWAYS fires.
+- One-shot boot / registration summaries: custom-illusion + LA-shield-skin
+  registration, dual-wield pool building, `[net-safe] hook registration`,
+  `[GLOW]` hook-install lines, `_setup_illusions` lazy-init / force-load
+  summaries, `[unload]` lifecycle line.
+- Deliberate always-on, low-volume click telemetry kept un-gated as documented
+  regression guards: `[offhand-press]` (issue #37) and `[illusion-probe]`
+  (Evengleam glow-data gathering) — one line per user click each.
+- Chat-command / dump bodies (`/dump_glows`, `/probe_hat`, `/glow_*`, `/la_*`,
+  `/cos_*`, etc.) — user-invoked, reply belongs in chat/log.
+- Existing `mod:warning` (`[la-spawn-monitor] CROSS-SKELETON MISMATCH`
+  regression detector) and the `[LA bridge] dependency missing` boot lines
+  (paired with deliberate user-facing `mod:echo`) — left untouched.
+- The glow-picker M1 scaffold first-fire traces (`[glow_picker:hook]` /
+  `[glow_picker:auto]`) — debug-only entry-point scaffold, first-fire-only.
+
+### Notes
+- Conservative migration: ~120 confidently-hot calls converted; ambiguous /
+  one-shot / command / scaffold calls left as `mod:info`.
+- Build passes (`VMBLauncher build cosmetics_tweaker`). Friends-only dev mod —
+  needs a fresh ship signal + in-game smoke test (inventory hover, weapon
+  spawn, multiplayer husk wield with debug logging on/off) before any Workshop
+  upload.
+
+## 0.9.30-dev (2026-05-28) — Aggressive customizer dump + host/client networking doc
+
+### Why
+User asked: "we need to aggressively be dumping more info, so the cosmetic/illusion screen is giving you all the info you need" + "if we know how the game actually works between hosts and clients, that might help too" + "we still need per-weapon-instance glow saved to the weapon and for it to be per-player in a way that others in the lobby can see it."
+
+The v0.9.29 picker filter shipped, but to design the per-instance glow popup (issue #48 second slice) and the cross-peer sync RPC, we need more visibility into:
+1. The full `MaterialSettingsTemplates` global (what fields are tunable per glow family)
+2. The full `WeaponSkins.skins` entry per illusion (units, display, custom fields)
+3. The customizer's state machine surface
+4. How vanilla already syncs cosmetics between host + clients, where our LA bridge plugs in, and where the per-instance glow needs the same pattern
+
+### Added
+- **One-shot `MaterialSettingsTemplates` global dump** in `_ui_dump.lua`. Fires the first time `HeroWindowItemCustomization` opens per session (when debug logging is on). Walks the entire global table, formats vector3 fields as `v3(x,y,z)`, prints one INFO line per template. Gives us the full tunable surface in one place. Subsequent customizer opens skip the global dump (already captured).
+- **Per-skin full enricher dump** for the illusion grid. Beyond the existing `[N] skin_key (mat=... rarity=...)` summary, now emits `[skin-entry][N] skin_key: display=... mat=... rarity=...` + `units: 1p=... 3p=... L=... R=... flat=...` + `extras: <every scalar field>`. Capped at 16 entries per open (matches existing truncation pattern).
+- **Customizing context dump** — beyond `key/bid/skin/rarity/power/slot_type`, now also dumps `item.data.skin_combination_table` + `default_skin` so a future maintainer can trace the grid contents back to the source `WeaponSkins.skin_combinations[name]` table.
+- **State-machine snapshot** — emits `state: current=<...> selected_idx=<...> current_recipe=<...>` so the active state is captured alongside per-open context.
+- **`material_settings_templates_loaded` regression test** — asserts the global is loaded, every weapon-mat family the customizer expects is present (`blue_glow / purple_glow / golden_glow / deep_crimson / life_green / lileath / weaves / versus / white_glow`), and `weaves` carries the expected 5 vector3 fields the per-instance glow popup design depends on (`color_glow_high / color_glow_low / color_smoke_high / color_smoke_low / color_dots`). Catches any future vanilla rename of a family or shape change before subscribers hit it.
+
+### Documented
+- **`cosmetics_tweaker/NETWORKING_MODEL.md`** — new doc explaining how VT2's vanilla cosmetic sync works (host's ProfileSynchronizer broadcasts the inventory identity via SharedState; every peer materializes glows locally from their own `WeaponSkins.skins` + `MaterialSettingsTemplates` tables — no glow data ever crosses the wire), where our LA bridge plugs in (the `cos_la_apply` RPC carries (peer, slot, kind, armoury_key) so every peer can apply the LA mesh locally), and what the per-instance glow needs to add (planned `cos_glow_apply` RPC with `(peer, backend_id, glow_blob)` payload; synthetic `MaterialSettingsTemplates._ct_glow_<bid>` registration on recv; CIM `_forged_weapons[bid].custom_glow` persistence — substrate already exists; host hot-join replay on peer-join). Includes bot model (bots are host-owned; cache is per-peer-id; the v0.9.11 char-mismatch guard + v0.9.28 self-heal handle the cross-skeleton case) and a state-cache inventory table (`_la_equips_by_peer` / `la_persisted_equips` / `CIM custom_glow` / live engine material state).
+- **Finding: there is no `shyish` mat family on vanilla weapon skins.** Exhaustive grep across `scripts/settings/equipment/weapon_skins_*.lua` + DLC weapon-skin files shows 9 unique mat families: `blue_glow / purple_glow / golden_glow / deep_crimson / life_green / lileath / versus / weaves / white_glow`. The "Shyish-Infused" Necromancer skins (`shovel` DLC) all use `material_settings_name = "weaves"`. The v0.9.29 `hide_shyish_skins` toggle is therefore inert on stock content; left in place defensively for future content or modded skins. Documented in NETWORKING_MODEL.md so the next maintainer doesn't redo the grep.
+
+### Changed
+- `_ui_dump.lua` — added `_fmt_v3` helper for vector3 formatting + `_dump_material_templates_once` (fire-once gated on `_mat_templates_dumped` file-local flag) + `_dump_skin_entry_full` (per-illusion detail dump).
+
+### Verification
+1. Boot, run `/cos_regression_test` — `material_settings_templates_loaded` + the existing `filter_illusion_widgets_hides_named_mat` + `la_cache_self_heal_purge_helper` all PASS.
+2. Enable debug logging, open the illusion customizer on ANY weapon. First open emits the `[mat-templates] === MaterialSettingsTemplates inventory ===` block (one line per template). Subsequent opens skip it.
+3. Every customizer open emits per-skin `[skin-entry][N]` lines for up to 16 illusions in the grid, capturing display name + units + extras.
+4. Open NETWORKING_MODEL.md side-by-side with the planned per-instance-glow PR — section 5 is the recipe for adding the `cos_glow_apply` RPC.
+
+## 0.9.29-dev (2026-05-27) — Hide weavebound + shyish illusions by default (issue #48 first slice)
+
+### Why
+The 2026-05-27 ui-dump on Kruber's Greatsword (`es_2h_sword`) confirmed every illusion in the picker carries a `material_settings_name` field that buckets it into a glow family:
+
+| `mat=` | Family |
+|---|---|
+| nil | no glow |
+| blue_glow / purple_glow / golden_glow | standard runed glows |
+| lileath | DLC-specific glow |
+| versus | Versus mode skin |
+| **weaves** | Weavebound (loud animated arcane particles) |
+| **shyish** | Shyish-Infused (Necromancer DLC; same loud-particle style) |
+
+Per issue #48: weaves + shyish are visually jarring on most weapons. The Bret Longsword "Evengleam" pairing is the canonical complaint. Hide them in the picker by default — opt-in via VMF if a user actually wants one.
+
+### Added
+- **VMF toggles** (default ON): `hide_weavebound_skins`, `hide_shyish_skins`. Localized labels + tooltips wired in `cosmetics_tweaker_data.lua` + `_localization.lua`.
+- **`mod._filter_illusion_widgets(widgets, current_skin_key, get_setting)`** pure helper in `cosmetics_tweaker.lua`. Walks the widget array, drops entries whose `WeaponSkins.skins[skin_key].material_settings_name` matches a filtered family per the per-family setting. Recomputes x-offsets using vanilla's `width=51 spacing=-5` math (mirrors `hero_window_item_customization.lua:1611-1618`).
+- **Selection-state guard:** the currently-equipped skin (`item.skin or item.data.default_skin`) is NEVER filtered, even if its family is otherwise hidden. Without this, vanilla's `_select_illusion_by_key` (called inside `_setup_illusions` before our hook runs) would dangle on a now-missing widget.
+- **`filter_illusion_widgets_hides_named_mat` regression test.** Synthesizes `WeaponSkins.skins` entries scoped to test-only keys, drives the helper with a setting-getter override, asserts: weaves + shyish unequipped widgets are dropped; nil-mat + blue_glow widgets remain; the currently-equipped skin is always kept; filters-off removes nothing. Restores `WeaponSkins.skins` cleanly.
+
+### Changed
+- `HeroWindowItemCustomization._setup_illusions` hook: after the vanilla call returns and the v0.9.18 debug-probe runs, the new filter step prunes `self._illusion_widgets` and (if `enable_debug_logging` is on) logs a `[illusion-filter] dropped N hidden-family skin(s); M remain` line.
+
+### Why not gate per-weapon
+The issue spec named the Bret Longsword, but the rationale (weavebound is loud on most weapons) applies universally. A whitelist of weapon keys would be one more thing to maintain — and the selection-state guard already covers the only failure mode (a user who likes a specific weavebound skin can equip it once; from then on the equipped one shows even with the filter on).
+
+### Verification
+1. Boot VT2, `/cos_regression_test` — `filter_illusion_widgets_hides_named_mat` PASSES.
+2. Open the illusion picker on Kruber's Greatsword. Default state: skins 7 (versus), 8 (lileath), 9-12 (blue/purple/golden runed) visible; skin 13 (weaves) hidden. Toggle "Hide Weavebound" off → skin 13 reappears.
+3. Equip the weavebound skin, re-open picker — weavebound entry visible (selection-state guard). Switch to a non-weavebound skin and re-open — weavebound entry disappears again.
+4. Open on Bret Longsword (Evengleam) once the user gets to it — weavebound + shyish entries should be hidden; standard glows + base skins remain.
+
+## 0.9.28-dev (2026-05-26) — Self-heal `_la_equips_by_peer` on cross-skeleton mismatch
+
+### Why
+Host log from 2026-05-26 multiplayer session showed three `[la-spawn-monitor] CROSS-SKELETON MISMATCH` warnings: client peer `11000013cb862af` had a cached Kerillian Maiden Guard hat (`Kerillian_elf_hat_Windrunner_Avelorn` / `units/beings/player/way_watcher_maiden_guard/headpiece/ww_mg_hat_12`) that the host's spawn-monitor tried to apply to the same peer's later Saltzpyre WHC and Sienna Necromancer spawns. The v0.9.11 character-mismatch guard caught the visible apply, but `_la_equips_by_peer` is keyed `[peer_id][slot]` only — when a peer switches career on the same peer_id and the new career has no LA hat (no cos_la_apply emit), the previous career's entry persists until the peer disconnects. The warning fired on every subsequent spawn of the polluted peer.
+
+### Changed
+- `cosmetics_tweaker.lua` — added `_purge_stale_peer_slot(cache, wearer_peer, slot_name)` pure helper. Wired into the spawn-monitor at the existing CROSS-SKELETON MISMATCH detection site (line ~5108): on mismatch, log the warning AND purge `_la_equips_by_peer[wearer_peer].slot_hat` so the cache self-heals on the first post-switch spawn. Empty peer tables are also cleaned up.
+- Exposed as `mod._purge_stale_peer_slot` for the regression test.
+- `la_cache_self_heal_purge_helper` regression test asserts the helper exists, clears only the named slot, removes empty peer tables, returns false on idempotent / nil-tolerant inputs, and matches the exact contract the spawn-monitor depends on.
+
+### Why this fix instead of re-keying by (peer, career)
+Re-keying `_la_equips_by_peer` as `[peer][career][slot]` would touch ~15 read/write sites and require the cos_la_apply RPC payload to carry career. Self-healing on the existing mismatch detector is one line at the call site, one helper, one test — and any future case where stale data slips through (e.g. cross-character body skin) gets caught by the same v0.9.11 guard pipeline. The cache schema stays simple.
+
+### Verification
+1. Boot VT2, run `/cos_regression_test` — `la_cache_self_heal_purge_helper` PASSES (alongside the existing `la_chars_compatible_*` tests).
+2. Multiplayer session: client subscribes with one LA hat applied as Kerillian; switches to Saltzpyre WHC or Sienna Necromancer. Host log: ONE `CROSS-SKELETON MISMATCH` warning on the first WHC/Necro spawn, then silent (cache cleared). Pre-fix behavior was one warning per spawn for the rest of the session.
+
+## 0.9.27-dev (2026-05-26) — Per-(class, method) existence guard + extended regression test
+
+### Why
+v0.9.26 hooked `_clear_item_slot` uniformly on all four loadout-style window classes, but `HeroWindowCosmeticsLoadout` doesn't define that method — vanilla never unequips from the cosmetics loadout (it always swaps in place). VMF raised `(hook_safe): trying to hook function or method that doesn't exist: [HeroWindowCosmeticsLoadout._clear_item_slot]` at every boot. v0.9.25's existence guard only checked CLASSES, not per-method.
+
+### Changed
+- `_ui_dump.lua` — refactored `LOADOUT_WINDOWS_WITH_EQUIP` into a structured `M._loadout_hook_pairs` list of `(class_name, method, behavior)` triples. Each pair now goes through `type(_G[class][method]) == "function"` before `mod:hook_safe`. Missing pairs are added to `M._unknown_method_pairs` and logged once with a `[ui-dump] WARN` line — same shape as the v0.9.25 class-level guard. Inline comment documents that the cosmetics-loadout class intentionally lacks `_clear_item_slot`.
+- Extracted the equip / unequip handlers into `_make_equip_handler(class_name)` / `_make_unequip_handler(class_name)` closures so the per-class `class_name` binding stays clean.
+- `ui_dump_hook_targets_exist` regression test (`cosmetics_tweaker.lua`) now fails on non-empty `UI_DUMP._unknown_method_pairs`, with the failure message naming the exact missing `<class>.<method>` pair(s). Pair-with-message catches both today's bug shape AND any future vanilla rename of an equip/unequip write-site method.
+
+### Verification
+1. Boot VT2 — no `[MOD][cosmetics_tweaker][ERROR]` lines.
+2. `/cos_regression_test` — `ui_dump_hook_targets_exist` PASSES.
+3. With `enable_debug_logging` on, swap loadout slots: `[ui-dump:HeroWindowLoadoutConsole] EQUIP slot_idx=...` lines fire. Cosmetics-loadout swaps emit EQUIP lines but no UNEQUIP (expected — that's how vanilla works).
+
+## 0.9.26-dev (2026-05-26) — UI dump: capture loadout slots at the write site (vanilla populates async)
+
+### Why
+v0.9.24's loadout dumps were silently empty. Vanilla initializes `self._equipment_items = {}` in `on_enter` and populates it lazily via `_equip_item_presentation` (called from `_update_loadout_sync` every `update` tick once the loadout sync arrives). v0.9.24's `_dump_slots(self._equipment_items)` enricher ran one tick too early — always saw an empty table — produced zero output. User correctly flagged the data should not be empty since the loadout is always populated.
+
+### Changed
+- `_ui_dump.lua` — hook `_equip_item_presentation` and `_clear_item_slot` directly on each of the four loadout-style window classes (`HeroWindowLoadout`, `HeroWindowLoadoutConsole`, `HeroWindowCosmeticsLoadout`, `HeroWindowCosmeticsLoadoutConsole` — verified against vanilla source 2026-05-26). Each `hook_safe` fires once per slot per equip / unequip event. Output: `[ui-dump:<Class>] EQUIP slot_idx=N ui_slot_idx=K slot_type=... key=... bid=... skin=... rarity=...` and the symmetric UNEQUIP line. Self-debouncing — vanilla only calls the write site when the slot data actually changes.
+- Dropped the always-empty `_dump_slots(self._equipment_items, ...)` lines from the `HeroWindowLoadout` + `HeroWindowCosmeticsLoadout` enrichers. Replaced with inline pointer comments to the write-site hook so a future reader doesn't re-add the broken pattern.
+- Added inline doc note on CIM × UI_DUMP coexistence on `HeroWindowItemCustomization.on_enter` — both register but on different VMF rungs (wrap + hook_safe) so they coexist without conflict. Comment explicitly says "do NOT consolidate" to prevent a future maintainer from collapsing them into the hook_safe-shadow trap.
+
+### Verification
+1. Toggle `enable_debug_logging` on, open the keep, switch loadout slots / equip a different weapon. Each click produces a `[ui-dump:HeroWindowLoadoutConsole] EQUIP slot_idx=...` line with backend_id + skin populated.
+2. `/cos_regression_test` still passes the `ui_dump_hook_targets_exist` check (the new `_equip_item_presentation` registrations are guarded the same way).
+
+## 0.9.25-dev (2026-05-25) — Hotfix two boot-time hook errors in v0.9.24's UI dump harness
+
+### Why
+The v0.9.24 ship logged two `[MOD][cosmetics_tweaker][ERROR]` lines at every boot:
+1. `(hook_safe): trying to hook function or method that doesn't exist: [HeroView._change_window]` — I'd guessed at the vanilla method name; the real one is `HeroView._change_screen_by_name` (hero_view.lua:477). VMF skipped the registration cleanly so no functionality regressed, but the ERROR line was noise in every subscriber's log.
+2. `(hook): trying to hook object that doesn't exist: HeroWindowEquipmentChoices` — I'd invented this class name. No file `hero_window_equipment_choices.lua` exists; equipment-choice UI lives inside `HeroWindowLoadoutInventory` and friends, which are already monitored.
+
+### Changed
+- `_ui_dump.lua` — replaced the `_change_window` hook with `_change_screen_by_name`. Removed `HeroWindowEquipmentChoices` from `WINDOWS_TO_MONITOR`. Both edits are inert at runtime when `enable_debug_logging` is off; the dump harness still covers every cosmetic / inventory / crafting window class that actually exists.
+- Verified the remaining 16 class names in `WINDOWS_TO_MONITOR` all map to real `scripts/ui/views/hero_view/windows/hero_window_*.lua` files.
+
+### Verification
+1. Boot VT2 with cosmetics_tweaker enabled. Search the console log for `[MOD][cosmetics_tweaker][ERROR]` — must be absent.
+2. With `enable_debug_logging` on, navigate keep menus. `[ui-dump:HeroView] _change_screen_by_name -> ...` lines fire on each top-level screen switch.
+
+## 0.9.24-dev (2026-05-25) — UI diagnostic dump harness for every cosmetic / inventory / crafting window
+
+### Why
+The Evengleam glow popup (issue #48) and other "parts that aren't working" need accurate knowledge of vanilla's UI surface — which window classes are entered when, what widgets each one builds, what item context each carries, which slots are populated. Source-tree reading gives the static shape but not the runtime context (live `_item_backend_id`, current `_active_category`, populated `_equipment_items`). Manual /probe commands are friction. This patch installs a passive harness that dumps everything once per window-enter, gated on the existing `enable_debug_logging` toggle so it's silent in normal play.
+
+### Added
+- **`_la_persistence.lua`'s sibling: `_ui_dump.lua`** — single new module that string-form-hooks `on_enter` on every relevant `HeroWindow*` class (item customization, cosmetics loadout + inventory, weapon loadout + inventory, crafting + console variants). Wrap-style `mod:hook` (chains correctly across mods; `hook_safe` would shadow existing CT registrations on these classes — see VMF_RECIPES.md § 1).
+- Per-window enrichers in `_ENRICHERS` table — each class gets a tailored dump beyond the generic widget list. HeroWindowItemCustomization dumps the customized item + the full illusion grid with each skin's `material_settings_name` + rarity (directly captures the data needed for the Evengleam glow popup). HeroWindowCosmeticsLoadout dumps every equipped cosmetic slot. HeroWindowLoadout dumps the weapon loadout. HeroWindowCrafting dumps the recipe list + active recipe + has_all_requirements.
+- HeroView `_change_window` `hook_safe` — surfaces every sub-window transition so the log shows the navigation sequence, not just per-window snapshots in isolation.
+- Output format: `[ui-dump:<ClassName>] key=value ...`. Greppable in console_logs.
+- All dumps gated on `enable_debug_logging`. Single bool check per `on_enter` when the toggle is off — zero performance impact in normal play.
+
+### How to use
+1. Toggle `enable_debug_logging` ON in VMF settings before testing.
+2. Open the keep. Navigate through cosmetics, inventory, weapon customization, illusion picker, etc.
+3. Send the resulting `console-YYYY-MM-DD-*.log`. The `[ui-dump:*]` lines describe the UI surface in enough detail to wire the next feature without source-tree guesswork.
+
+## 0.9.23-dev (2026-05-25) — Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("Cosmetics Tweaker v" .. MOD_VERSION)` startup line from every mod. That's correct for stable (>=1.0.0) builds but hides the active version for in-flight dev/alpha/beta work. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable versions stay silent.
+
+### Changed
+- `cosmetics_tweaker.lua` — added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. When any branch fires, `mod:echo("[cosmetics] v<MOD_VERSION> loaded")` runs once.
+
+## 0.9.22-dev (2026-05-25) — Absorbs la_prefix_patch (standalone mod retired)
+
+### Why
+la_prefix_patch's three deliverables — LA's three duplicate hook deduplication, LA quest marker suppression toggle, LA unread-letter notification suppression toggle — were already mirrored in cosmetics_tweaker's LA bridge (`_la_prefix_embedded.lua`) and have been live for users who had cosmetics_tweaker without the standalone subscribed. la_prefix_patch was redundant. Archived to `_archive/la_prefix_patch_v0.3.6-dev/` per the repo "archive don't delete" rule.
+
+### What this means for users
+- la_prefix_patch Workshop subscription: safe to unsubscribe (Workshop item 3721067411 stays published as a stub for now).
+- All three features remain available via cosmetics_tweaker's existing settings.
+
+### Notes
+- No code change in this version — embedded copy already provided full functionality.
+- Standalone-running guard in `_la_prefix_embedded.lua` retained so peers who still have la_prefix_patch subscribed + enabled get a clean no-double-wrap.
+
+### Build
+VMBLauncher.exe build cosmetics_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.9.21-dev (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[cosmetics] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- cosmetics_tweaker.lua -- removed the load-time `mod:echo("cosmetics_tweaker v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[cosmetics] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("cosmetics_tweaker v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build cosmetics_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.9.20-dev (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- cosmetics_tweaker_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- cosmetics_tweaker.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build cosmetics_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.9.19-dev (2026-05-25) — Fix #37 (LA shield auto-apply on browse) + data probes for Evengleam glow feature
+
+### Why
+Issue #37: opening the offhand shield picker auto-applied the first LA option (yellow Reynard01) without the user clicking Apply. Root cause: the picker's draw hook dispatched on `hotspot.on_pressed`, but `on_pressed` is sticky in this engine build — it stayed true across multiple draw frames after the picker opened, causing the first widget to fire `_ct_on_offhand_pressed` every frame. Vanilla's own button-press detector (`hero_window_item_customization.lua:611-616`) uses `hotspot.on_release` and clears it manually after consumption; CT now mirrors that pattern.
+
+### Changed
+- `cosmetics_tweaker.lua:2643-2660` — switched offhand picker dispatch from `hotspot.on_pressed` to `hotspot.on_release`, and added `hotspot.on_release = false` after consumption so any sticky engine state can't leak across frames. Same pattern vanilla uses for every button in `HeroWindowItemCustomization`.
+- `cosmetics_tweaker.lua:~2655` — always-on `[offhand-press]` log line on every legitimate dispatch: hand_field, index, widget name, backend_id. Low volume (one line per click); makes any future regression of #37-style leaks visible in console.
+
+### Added — data probes for the planned Evengleam glow popup feature
+Per request to capture data automatically during testing rather than running manual probes between sessions:
+- `cosmetics_tweaker.lua:~1503` — always-on `[illusion-probe]` line on every illusion click. Dumps `picked_skin → matching_item_key + material_settings_name + rarity`. Captures which skins belong to which glow family (rune / weaves / magic) directly from `WeaponSkins.skins[...]`.
+- `cosmetics_tweaker.lua:~2456` — `[illusion-picker-setup]` dump (gated on `enable_debug_logging`) on every picker open. Lists every illusion built into the picker for the current weapon with its `matching_item_key`, `material_settings_name`, and `rarity`. Enabling debug logging while browsing the Bretonian Longsword will surface the full magic-family skin set (weavebound `_magic_01`, shyish-infused `_magic_02`) we'll need to wire the glow popup against.
+
+### Closes
+- #37 (LA shield picker auto-applies first option on browse) — fixed in this version.
+
+## 0.9.17-dev (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[cosmetics] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. Self-documenting console_logs. ALWAYS fires (not gated on debug_logging).
+
+### Changed
+- `cosmetics_tweaker.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[cosmetics] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.9.17-dev.
+
+## 0.9.16-dev (2026-05-25) — Fix dead `SimpleHuskInventoryExtension.extensions_ready` hook (issue #35)
+
+### Why
+`[MOD][cosmetics_tweaker][ERROR] (hook_safe): trying to hook function or method that doesn't exist: [SimpleHuskInventoryExtension.extensions_ready]` fired every session. The hook (line 5007) attempted to mirror the owned-player `SimpleInventoryExtension.extensions_ready` hook from `_la_persistence.lua` so the LA spawn monitor (`mod._la_spawn_monitor`) would also fire for remote-player husks — but `SimpleHuskInventoryExtension` has NO `extensions_ready` method. Confirmed against `Vermintide-2-Source-Code/scripts/unit_extensions/default_player_unit/inventory/simple_husk_inventory_extension.lua`: the husk class is a separate root class with no inheritance from `SimpleInventoryExtension` (per CLAUDE.md "Self-owned vs husk extension classes"), and its lifecycle entry point is `init` (line 5, signature `function (self, extension_init_context, unit, extension_init_data)`).
+
+### Changed
+- `cosmetics_tweaker.lua` line 5007-5012 — rewired the dead hook from `extensions_ready` to `init`, with the correct 4-arg husk-init signature. The body still calls `mod._la_spawn_monitor(unit)` so the cross-skeleton LA mismatch detector (issue #14 regression safety net) now actually runs on remote-player husks.
+- `cosmetics_tweaker.lua` — `MOD_VERSION` bumped 0.9.15-dev → 0.9.16-dev.
+- `itemV2.cfg` — title + description banner bumped to v0.9.16-dev.
+
+### Notes
+- The v0.9.13 CHANGELOG entry claimed the husk-side mismatch detector was already running; it was not — the hook silently no-op'd at VMF registration time. The mismatch detector was effectively half-blind (host + owned bots only, not remote husks) from v0.9.13 through v0.9.15. v0.9.16 closes that gap.
+- Surface area for the next regression: there is no static check that catches a typo'd or stale hook target. Issue #35 / #41 both suggest a `qa/mod-lint` scan that grep-asserts every `mod:hook_safe("<global>"...)` resolves against a decompiled-source class file, and that every `(Class, method)` pair exists. Out of scope for this patch.
+
+### Closes
+- #35 (cosmetics_tweaker `hook_safe(SimpleHuskInventoryExtension, "extensions_ready")` — function does not exist; silent dead hook).
+
+## 0.9.15-dev (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `cosmetics_tweaker.lua` — installed `_dbg_alert` helper alongside existing `_dbg`. Added `_rt_register("dbg_helpers_two_channel", ...)` alongside the existing 12 cos regression checks.
+- `itemV2.cfg` — bumped to v0.9.15-dev.
+
+### Notes
+- 0 existing `_dbg(...)` call sites in the main `cosmetics_tweaker.lua` (helper was previously unused at the top level).
+- 0 bare `mod:echo` reclassified — `mod:echo` calls in `cosmetics_tweaker.lua` are inside `/cos_*` chat command bodies (user-operational) or are permanent operational output.
+- Subfiles (`_la_bridge.lua`, `_glow_picker.lua`, `_moreitemslibrary_embedded.lua`, `_material_hijack_embedded.lua`) don't import the helpers; their `mod:echo` calls are all chat-command-scoped or permanent operational warnings (e.g. "[Material-Hijack] not active" load banners).
+
+## 0.9.14-dev (2026-05-25) — Standardize Debug Logging toggle (universal convention)
+
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). cosmetics_tweaker previously had `debug_dumps` as a top-level checkbox placed mid-tree (above `appearance_group`) — renamed and moved to the bottom.
+
+### Changed
+- `cosmetics_tweaker_data.lua` — removed the mid-tree `debug_dumps` widget; appended `enable_debug_logging` after the `cosmetic_availability_group` so it lands at the bottom of `widgets`, top-level (NOT inside any group).
+- `cosmetics_tweaker_localization.lua` — replaced `debug_dumps` / `debug_dumps_tooltip` strings with `enable_debug_logging` + `enable_debug_logging_tooltip` per the standard.
+- `cosmetics_tweaker.lua`:
+  - `_debug_dumps_enabled()` now reads `mod:get("enable_debug_logging")` (was `debug_dumps`). All existing call sites untouched (they go through the helper).
+  - Added file-local `_dbg(fmt, ...)` helper at top of file for new call sites. Output prefix `[cosmetics:dbg]`.
+- `itemV2.cfg` — title + description bumped to v0.9.14-dev.
+
+### Notes
+- **Migration**: the saved value of `debug_dumps` is not auto-carried into `enable_debug_logging`. Users who had the old toggle on must re-tick the new `Debug Logging` checkbox after first load. VMF defaults the new key to `false`.
+
+## 0.9.13-dev (2026-05-25) — Regression test + auto-monitor for cross-skeleton LA leak (issue #14)
+
+### Why
+The v0.9.11 fix for the GK→WP hat leak shipped without a real test. The pre-existing `character_mismatch_gate_in_apply_la` regression check only asserted that the substring `"character mismatch"` appeared somewhere — it would have passed even with the broken v0.9.8.8 guard (which logged the same string while doing the wrong thing). Without a behavioral test, a future refactor could silently regress the fix.
+
+### Changed
+- **Extracted pure helper** `mod._la_chars_compatible(owner_char_path, la_unit_path, profile_base)` from the v0.9.11 inline guard (`cosmetics_tweaker.lua` ~L4836). Returns `(true)` or `(false, reason)`. Unit-testable in isolation.
+- **`_apply_la_on_unit` hat branch now delegates to the helper** rather than inlining the comparison.
+- **Replaced the marker-only test** with five real `_rt_register` cases:
+  - `la_chars_compatible_same_char_allowed` — Kruber GK hat on Kruber GK body passes.
+  - `la_chars_compatible_different_char_denied` — exact issue #14 scenario: Kruber GK hat on Saltzpyre WP body → deny.
+  - `la_chars_compatible_profile_fallback_match` — early-spawn race with no slot_hat yet; profile base prefix accepts matching character.
+  - `la_chars_compatible_profile_fallback_deny` — same fallback, cross-character → deny.
+  - `la_chars_compatible_no_sources_denied` — no owner_char + no profile_base → conservative deny (safer than wrong-skeleton attach).
+- **Passive runtime monitor** `mod._la_spawn_monitor` fires on every player spawn (host + bots + remote husks) via the existing `SimpleInventoryExtension.extensions_ready` hook in `_la_persistence.lua` (consolidated to avoid hook_safe shadow per VMF_RECIPES.md § 1) and a parallel `SimpleHuskInventoryExtension.extensions_ready` hook in the main file. Compares cached LA hat (`_la_equips_by_peer[wearer_peer]["slot_hat"]`) against the spawned unit's character. **Mismatch detections ALWAYS log** as a warning — this is the regression safety net, so the symptom is visible in console without needing a manual chat command.
+- **Mission-start state snapshot** `mod._la_dump_mission_state` called from `mod.on_game_state_changed`. Dumps every cached `_la_equips_by_peer` entry + every persisted career / illusion. Gated on the new `debug_dumps` VMF toggle.
+- **New `debug_dumps` VMF toggle** (off by default). Gates the routine state snapshots; the mismatch detector remains always-on.
+
+### Verification
+1. Toggle `debug_dumps` on in VMF settings. Enter the keep; observe `[la-state-dump]` lines for cached + persisted state.
+2. Start a mission with an LA hat equipped on GK and a WP bot in the party. With debug_dumps on, every spawning unit emits `[la-spawn-monitor]` with the resolved character. If a regression of issue #14 ever attaches the GK hat to the WP body, the monitor emits `[la-spawn-monitor] CROSS-SKELETON MISMATCH ...` as a warning regardless of the toggle.
+3. Run `/cos_regression_test` in chat — five new `la_chars_compatible_*` checks all pass.
+
+### Closes
+- #14 (GK LA hat leaks to Warrior Priest body at mission start, host-side) — fix shipped in v0.9.11-dev, now covered by behavioral test + runtime monitor.
+
+## 0.9.12-dev (2026-05-24) — Persist LA cosmetics + LA weapon illusions across restart
+
+### Why
+User report (issue #25): LA hats / armor / weapon illusions don't persist across game restarts. PlayFab can't store LA item names, so vanilla's loadout-restore drops them every session and the user has to re-equip from scratch. CIM-forged modded weapons persist their item record via `forged_weapons` save, but the LA illusion overlay was lost the same way.
+
+### Changed
+- New module `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua` — single VMF setting `la_persisted_equips` shape `{ schema, careers = { [career_name] = { slot_hat, slot_skin } }, illusions = { [backend_id] = la_skin_name } }`.
+- `CosmeticUtils.update_cosmetic_slot` hook (cosmetics_tweaker.lua ~L4251):
+  - **Save tap** in the existing `_send_la_apply` emit branches — every LA hat / armor equip writes per-career; every LA weapon-illusion equip writes per backend_id (resolved from `inv._equipment.slots[slot].item_data.backend_id`).
+  - **Inject tap** at the top of the hook — if the slot's vanilla item / vanilla skin has a saved LA overlay on disk, rewrite the argument to the LA bid before the existing net-safe substitution + emit chain runs. This is how the LA visual comes back on startup without a separate restore code path.
+  - **Clear tap** in the vanilla-replacement branch — equipping a vanilla item over a saved LA one clears the on-disk entry too, so next restart doesn't bring back a cosmetic the user already removed.
+- `SimpleInventoryExtension.extensions_ready` hook (in `_la_persistence.lua`) queues a per-player restore that fires once `career_name` is populated (1-frame defer). Pumped from `mod.update`. Calls `CosmeticUtils.update_cosmetic_slot` with the saved LA hat / armor name → existing flow takes over.
+- Three new chat commands:
+  - `/cos_persist_dump` — list saved careers + illusion count.
+  - `/cos_persist_replay` — manual re-apply for the local player's current career.
+  - `/cos_persist_clear` — wipe all saved entries.
+
+### How it works for CIM-forged modded weapons
+CIM's own `forged_weapons` setting already restores the modded item itself (with its `skin = vanilla_substitute` field) into the local backend mirror at boot. After the item is restored, vanilla's loadout-equip runs `CosmeticUtils.update_cosmetic_slot` with the vanilla substitute skin — our inject tap then upgrades the skin arg to the LA bid based on the backend_id key, the LA paint fires, and the visual matches what was equipped. No extra CIM-side wiring needed.
+
+### Verification
+1. Equip an LA Pureheart helm on Grail Knight in the keep. Restart VT2. GK still wears Pureheart at next session, no manual re-equip needed.
+2. Equip an LA Reiland shield on a specific weapon backend_id. Restart. Same weapon paints Reiland at next session.
+3. Run `/cos_persist_dump` — confirm careers + illusion entries are present.
+4. Equip a vanilla hat back over the LA one. `/cos_persist_dump` shows that career's `slot_hat` is gone. Restart confirms no LA hat re-applies.
+
+## 0.9.11-dev (2026-05-24) — Fix: LA hat leaks across characters at mission start (host-side)
+
+### Why
+User reported (issue #14): equipped an LA hat on Grail Knight, then on mission start the HOST saw the same LA hat attached to a Warrior Priest body (Kruber hat on Saltzpyre skeleton). Client view was unaffected. Reproducible whenever the host has a WP teammate (bot or player) while the cached LA hat is for a different character.
+
+### Root cause
+`_apply_la_on_unit`'s character-mismatch gate (`cosmetics_tweaker.lua` ~L4762) derived `owner_char_path` from `vanilla_key`'s `ItemMasterList` entry. But `vanilla_key` is the cached LA emit's vanilla substitute (the EMITTER's hat) — not the owner_unit's character. So for the host's `_wield_slot` repaint flowing through this function against a WP husk_unit, both `owner_char_path` and `la_unit_path` resolved to the host's GK character, the mismatch check passed, and the GK LA mesh was attached to the WP body.
+
+The companion guard at the husk-side `PlayerHuskAttachmentExtension.create_attachment` hook (~L5543) used a different (correct) source — the incoming `item_data.unit` — and was unaffected. But that hook runs AFTER `_apply_la_on_unit` has already patched `item_data.unit` to the LA path, so it can't catch this leak either.
+
+### Changed
+- `cosmetics_tweaker.lua` `_apply_la_on_unit` hat branch: resolve `owner_char_path` from the owner_unit's currently-attached `slot_hat` `item_data.unit` instead. Fall back to `SPProfiles[player.profile_index].unit_name` (character base prefix) when the slot is empty during an early-spawn race. Bail without patching if neither source resolves.
+
+### Verification
+1. Host as GK with an LA hat equipped (e.g. Pureheart).
+2. Start mission with a WP bot in the lobby.
+3. Host's view: WP bot wears its vanilla WP hat, NOT the GK LA hat. Host's own GK still wears the LA hat.
+4. Console log: `[cos_la_apply hat] character mismatch — owner_char=witch_hunter_priest la_char=empire_soldier_breton ...` for each wield-repaint pass against the WP bot.
+
 ## 0.9.10-dev (2026-05-23) — Versioning convention reset (drop 4th segment)
 
 ### Why

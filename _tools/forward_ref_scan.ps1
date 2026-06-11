@@ -2,7 +2,7 @@
 # Bug pattern: `local function _foo` defined at line N, but `_foo` is referenced at line M<N WITHOUT a forward `local _foo` declaration.
 param([string]$Root = "C:\Users\danjo\source\repos\vermintide-2-tweaker")
 
-$mods = @('buff_tweaker','career_tweaker','chaos_wastes_tweaker','character_weapon_variants','cosmetics_tweaker','crafting_in_modded','dynamic_cosmetic_portraits','enemy_tweaker','event_tweaker','general_tweaker','la_prefix_patch','lobby_tweaker','material_hijack_patched','modded_progression','verminious_dreams_lighting','weapon_tweaker')
+$mods = @('buff_tweaker','career_tweaker','chaos_wastes_tweaker','character_weapon_variants','cosmetics_tweaker','crafting_in_modded','dynamic_cosmetic_portraits','enemy_tweaker','event_tweaker','general_tweaker','lobby_tweaker','material_hijack_patched','modded_progression','verminious_dreams_lighting','weapon_tweaker')
 
 $results = @()
 

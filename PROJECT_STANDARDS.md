@@ -122,6 +122,305 @@ that dumps current state in a copy-pasteable form. Examples:
 - `/ct_diag` — current pool overrides, active mutators, altar config.
 - `/cosmetics_diag` — la_equips_by_peer, offhand_selection, glow runtime.
 
+### 3.6 Debug Logging toggle (universal — every mod, no exceptions)
+
+Established 2026-05-25. User feedback: "VMF menu options for debug are
+inconsistent. Just a toggle for Debug Logging at the BOTTOM and have one
+available for every single mod I have."
+
+Every mod in this repo MUST expose a single VMF widget with **exactly** these
+properties:
+
+| Field | Value |
+|---|---|
+| `setting_id` | `enable_debug_logging` (verbatim — no per-mod prefix) |
+| Widget type | `checkbox` |
+| `default_value` | `false` |
+| Localization (en) | `"Debug Logging"` |
+| Tooltip (en) | `"Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable."` (note `%%APPDATA%%` — every literal `%` MUST be doubled because VMF runs the value through `string.format`; see `LOCALIZATION_STANDARD.md` § 1) |
+| Position | At the **BOTTOM of the widget tree**, as a **direct child of the top-level `mod.options_widgets`**. NOT nested inside any `group` / `Advanced` / `Misc` / `Developer` heading. |
+
+**Anti-patterns:**
+- Don't use a per-mod prefix on the setting_id (NOT `wt_enable_debug_logging`,
+  NOT `cwv_debug_mode`). Same key everywhere.
+- Don't nest it inside a group widget. Top-level only.
+- Don't add it under "Advanced" / "Misc" / "Developer" group headings.
+
+**Wiring (every `<mod>.lua` exposes a file-local `_dbg` helper near the top):**
+
+```lua
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[%s:dbg] " .. fmt, "<mod_id>", ...)
+    end
+end
+```
+
+If the mod already has a `_dbg` / `_log` / `mod:debug` helper under a different
+gate name (`debug_mode`, `wt_debug_mode`, `cwv_debug_mode`, `debug_dumps`,
+`debug`), the helper body must be renormalized to read
+`mod:get("enable_debug_logging")`. Don't break existing call sites — the gate
+key changes, the helper signature and call sites stay the same.
+
+### 3.7 Debug mode is a DATA HARNESS (established 2026-06-11)
+
+User directive: *"when the debug mode is active, every mod with it on should be
+gathering any data that is not in the game's source code and is not available
+via other mods I have available. I don't want to have to do a lot of digging or
+scraping for data."*
+
+**Why:** Claude cannot see the running game, and the decompiled source lacks
+runtime-resolved data (skeleton anim-event vocabularies, resolved material
+slots, live table contents after DLC/mod merging, unit↔backend-id maps). Every
+time that data is missing, the user pays a full in-game session to fetch it by
+hand. Debug Logging ON = the user is granting a data-collection window — use it.
+
+**Rules:**
+
+1. **Probe-first development.** When designing any feature that depends on
+   runtime data, ship the probe/dump in the build BEFORE (or with) the feature
+   scaffold, have the user run one session, then build on captured data — never
+   on guesses. (Sibling of §14a and the diagnose-before-mitigating rule.)
+2. **Dumps are parseable, not prose.** Probe output is either (a) paste-ready
+   Lua in the EXACT table syntax of the destination source file (the
+   `/wt_dump_anim_picks` pattern — `local _PORT_WIELD_3P = {...}` blocks), or
+   (b) one-line `key=value` records greppable by a stable prefix tag
+   (`[illusion-probe]`, `[wt:dev_anim]`). Never multi-line free text.
+3. **Opportunistic capture is encouraged** when it's data-not-in-source and
+   cheap: low-volume always-on probes (≤1 line per user action — the
+   cosmetics `[illusion-probe]` precedent) may even stay UNGATED; anything
+   chattier rides the `enable_debug_logging` gate.
+4. **Tune→export→bake loop.** Any in-game tuning surface (anim picker, hold
+   pose, glow sliders, scale/grip) MUST pair with an export command that
+   serializes the user's current tuned values as paste-ready Lua. Tuning UIs
+   without an export path strand the data in the session.
+5. **Index your probes.** Each mod's CHANGELOG/DEVELOPMENT notes which probe
+   tags exist and what they capture, so a later session greps the log instead
+   of re-deriving.
+
+**Migration:** when renaming an old key, leave a brief CHANGELOG note that the
+old key (`wt_debug_mode`, etc.) was renamed and users may need to re-toggle the
+new `Debug Logging` checkbox after first load. Don't try to silently auto-
+migrate the saved value — the friction is one re-tick.
+
+Cross-ref: `VMF_RECIPES.md` § 9. For Layer 3 `mod:traced_hook` (shipped in `weapon_tweaker` v0.12.84-dev), which emits structured `[<mod>:trace] event=enter|exit class=<C> method=<m> n_args=N` / `n_returned=M` log lines gated on this same `enable_debug_logging` toggle, see `VMF_RECIPES.md` § 2b "Layer 3: traced_hook" — including the per-frame rate-limit caveat.
+
+#### Two-channel discipline (`_dbg` vs `_dbg_alert`)
+
+Established 2026-05-25. User feedback: "When debug logging is on, I want
+messages to be consistent for each mod, and show up in the in-game chat log
+via echo whenever something is unexpected or wrong. If things go as expected
+or just to confirm things are working or firing, I want log messages in the
+actual log, not the ingame chat log. Likewise info dumps and such go into
+the game log, not the in-game log."
+
+Every mod ships **two** debug helpers (not one), both gated on the same
+`enable_debug_logging` key:
+
+**Decision matrix:**
+
+| Case | Helper | Lands in |
+|---|---|---|
+| Confirmation / dump / expected behavior | `_dbg` | log file only |
+| Unexpected / wrong / mismatch / error condition | `_dbg_alert` | log file AND in-game chat |
+| User-operational (chat command reply, `/verify_*` output) | bare `mod:echo` | chat (not gated) |
+| Permanent operational log (`[wt] enabled vX.Y.Z`) | bare `mod:info` | log file (not gated) |
+| Stricter VMF levels | `mod:warning` / `mod:error` | VMF default semantics |
+
+**Canonical helper pair** (insert near top of every `<mod>/scripts/mods/<mod>/<mod>.lua`):
+
+```lua
+-- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
+-- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- `_dbg` is for confirmation / expected behavior — file only.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[<mod_id>:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[<mod_id>:dbg] " .. fmt, ...)
+        mod:echo("[<mod_id>] " .. fmt, ...)
+    end
+end
+```
+
+Replace `<mod_id>` with the mod's short ID (`wt`, `ct`, `gt`, `cwv`, `cosmetics`,
+`cim`, `bt`, etc.) — match the existing log prefix convention. The mod's
+`_RT_CHECKS` regression scaffold must include the smoke test:
+
+```lua
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+```
+
+**Classifying call sites:**
+
+When picking between `_dbg` and `_dbg_alert` for a new call site, look at the
+format string + context:
+
+- Words/phrases suggesting an **ALERT** (`_dbg_alert`):
+  "failed", "error", "unexpected", "missing", "nil", "mismatch", "raised",
+  "skipped", "dropped", "fallback", "corrupt", "stale", "couldn't",
+  "no longer", "broken", "invalid"
+- Words/phrases suggesting **CONFIRMATION** (`_dbg`):
+  "fired", "applied", "installed", "registered", "loaded", "completed",
+  "ok", "ready", "received", "sent", "match", "found"
+- Ambiguous → leave as `_dbg`. **Conservative default.**
+
+**Edge cases:**
+
+- **Expected guard / SKIP branches** — even if the format string says "nil"
+  or "no X", if the branch is the normal-flow exit when a guard condition
+  is unmet (e.g. `if not local_player then _dbg("no local player"); return end`),
+  keep as `_dbg`. Promoting it would spam chat during normal play.
+- **Hot-path observation hooks** — state machine transitions, frame-by-frame
+  hook entry logs, scale/grip dumps, wield events. These are confirmation,
+  not alerts. `_dbg`.
+- **Post-warning follow-up logs** — when a `mod:warning` has already fired
+  and a follow-up `_dbg` line documents the resulting bail path,
+  promote to `_dbg_alert` so the user sees the chain.
+
+**Anti-patterns:**
+
+- Don't use bare `mod:echo` for non-user-facing dumps — that bypasses the
+  toggle and pollutes chat. Use `_dbg` (log file) or `_dbg_alert` (chat
+  when toggle is on).
+- Don't use `_dbg_alert` for routine confirmations — that defeats the
+  whole point of the two-channel split.
+- Don't introduce a third helper. Two channels (log-only, log+chat) cover
+  every case in the policy matrix above.
+
+**Cross-ref:** `VMF_RECIPES.md` § 9 (universal debug toggle).
+
+#### Applied marker line (universal)
+
+Established 2026-05-25 (rolled out across all 16 active mods in the same pass that added `/perf_dump` to bt). Every mod prints ONE banner-style `mod:info` line at load surfacing the current MOD_VERSION and a short hash of the live settings values, so scrolling back any `console_log-*.log` you can see exactly which build + config was running at any point.
+
+| Field | Value |
+|---|---|
+| Line format | `[<mod_id>] enabled v<MOD_VERSION> settings_fp=<8-hex>` |
+| Log level | `mod:info` — ALWAYS fires. Not gated on `enable_debug_logging` — this is operational telemetry, not debug noise. |
+| When | Once, at load. Right after the `_dbg_alert` helper (or inside `mod.on_enabled` if the mod is togglable and the on-load surface is awkward). |
+| Where to place | File-local `_settings_fingerprint()` helper near MOD_VERSION setup; the marker line directly below it. |
+| Per-mod addenda | OK as trailing space-separated `key=value` tokens (e.g. et appends `host_required=true`). Keep them short. |
+
+**Fingerprint helper** (drop-in; replace `<MOD_LONG_ID>` with the mod's directory name):
+
+```lua
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/<MOD_LONG_ID>/<MOD_LONG_ID>_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    -- FNV-1a 32-bit, plain-arithmetic XOR (no bit32 in Lua 5.1 sandbox).
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[<mod_id>] enabled v%s settings_fp=%s", MOD_VERSION, _settings_fingerprint())
+```
+
+**Why this shape:**
+
+- **Walks the data widget tree via `pcall(require, "...")`** rather than a hardcoded key list per mod, so the helper stays maintenance-free as `_data.lua` grows / shrinks. Cached in `package.loaded`; safe to call from main lua (already-required by VMF before main runs). Idempotent — re-evaluating the data file just rebuilds the same widget table.
+- **`pcall` wrap** so a malformed / missing data file produces `nodata` instead of a hard crash on every mod load.
+- **FNV-1a-32 inline** instead of a shared module — keeps the helper file-local, no resource_package additions, no cross-mod coupling. Plain-arithmetic XOR (not `bit32`/`bxor`) because VT2's Lua 5.1 sandbox doesn't ship `bit32`. Reuse the canonical implementation from `enemy_tweaker.lua:_fnv1a32` if a mod already has it (et does — its helper became the prototype for this convention).
+- **Sorted keys** so the hash is deterministic across peers when settings match. Different config → different fp → mismatch visible at a glance.
+- **`mod:get(k)`** at fingerprint time — captures the LIVE setting value on this peer (post any `_strip_*_widgets` mutation in `_data.lua`, like wt's CIM-conditional strip), not just the canonical definition.
+
+**Anti-patterns:**
+
+- Don't gate the marker on `enable_debug_logging` — it MUST always fire so logs are self-documenting.
+- Don't walk `widget_definitions` or VMF internals — the simple recursive walk of the returned data table works for every shape used in this repo.
+- Don't hardcode `_BR_SETTING_NAMES`-style key lists per mod for the universal marker. That pattern is fine for feature-specific RPC compares (et's `_br_settings_fingerprint` still uses it because the BR cross-peer RPC needs a stable subset), but the universal marker hashes everything.
+- Don't include the master toggle in a per-mod addendum if it's already in the hashed key set — the fingerprint already changes when the master flips. Addenda are for fields that AREN'T in the widget tree (et's `host_required=true` is a static design-intent token).
+- Don't print this line more than once per mod load.
+
+**Cross-ref:** `VMF_RECIPES.md` § 11 (Per-hook perf timing via bt.perf_record — sibling experimental hardening that landed in the same pass).
+
+#### Chat-echo policy (when is `mod:echo` allowed?)
+
+Established 2026-05-25. User feedback: *"on enabling debug logging, I'm getting needless echos to the chat that it's enabled, this is inconsistent... on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV, and I don't see the need."*
+
+`mod:echo` writes to the in-game chat log and is **always visible to the player**. Use it sparingly. The decision matrix below is binding.
+
+| Call site | Policy | Why |
+|---|---|---|
+| Module load (top of `<mod>.lua`) -- stable (>=1.0.0) versions | **NEVER** | The applied marker `[<mod>] enabled v<X> settings_fp=<hash>` line already lands in the console log; chat banner is pure spam. |
+| Module load (top of `<mod>.lua`) -- dev / alpha / beta / rc / 0.x versions | **REQUIRED** -- one line, `[<mod_id>] v<MOD_VERSION> loaded` (see snippet below) | Established 2026-05-25 EOD: in-flight builds change patch-by-patch and the user needs the active version visible at a glance. Silent dev banners feel like errors are being hidden. Cross-ref § 14a persistence-after-fix protocol. The applied marker is log-only and not enough for live iteration. |
+| `mod.on_setting_changed` for routine settings | **NEVER** | Spams chat on every checkbox flip — including the universal `enable_debug_logging` toggle, which is what triggered this policy. Use `_dbg` if you need a trace. |
+| `mod.on_setting_changed` for explicit high-impact toggles | **OK** | Operational feedback the user expects in response to a deliberate action. Canonical examples: `bt`'s `bt_master_enable_br_registrations` ("can't apply yet — restart" / "master toggled OFF") at `buff_tweaker.lua:~275`; `gt`'s AI takeover toggle ("AI ON / OFF requested") at `general_tweaker.lua:~826-828`. |
+| `mod.on_enabled` echoing version / banner | **NEVER** | Same reasoning as module load — the applied marker line covers it. |
+| `mod.on_enabled` / `mod.on_disabled` for non-trivial state changes | **OK** | When the user toggles the whole mod off/on via the VMF menu, immediate chat confirmation of what unwound (or didn't) is high-impact operational feedback. Canonical examples: `et`'s "Enemy Tweaker enabled / disabled — compositions restored" at `enemy_tweaker.lua:~929/949`; `gt`'s `on_disabled` "Disable does not fully unwind active mutations" warning at `general_tweaker.lua:~849` (this is the canonical Issue #15 documented-limitation pattern from `docs/BUG_CLASSES.md § 7`). |
+| Inside `mod:command(...)` bodies (`/verify_*`, `/<mod>_regression_test`, `/dump`, status commands, etc.) | **OK** | User invoked the command via chat; reply belongs in chat. Don't gate these on `enable_debug_logging`. |
+| Routine confirmations / diagnostic traces | **NEVER bare `mod:echo`** | Use `_dbg` (log-only, gated) or `_dbg_alert` (chat+log, gated on `enable_debug_logging`). Two-channel discipline above. |
+| Unexpected guard / fallback recovery | `_dbg_alert` (or `mod:warning`) | Per two-channel discipline. Lands in chat only when debug logging is on. |
+
+**Canonical dev-banner snippet** (drop right after the `mod:info("[<mod_id>] enabled v%s settings_fp=%s", ...)` applied marker line in every mod's main lua):
+
+```lua
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[<mod_id>] v%s loaded", MOD_VERSION))
+end
+```
+
+Replace `<mod_id>` with the canonical short id (bt / crt / ct / cwv / cosmetics / cim / dcp / et / ewt / gt / gut / mp / wt). The `^0%.` branch catches versions like `0.1.12` (no track suffix) so dcp and other 0.x stable-looking versions still print. Bump to 1.0.0+ to flip a mod to silent-on-load — no other change needed; the detector matches no branches and the `if` falls through.
+
+**Anti-patterns:**
+- Don't add a debug-gated `if mod:get("enable_debug_logging") then mod:echo(version) end` — the dev-banner above already runs unconditionally for dev/alpha/beta/0.x and is silent for stable. Gating on debug-logging is the wrong axis.
+- Don't add new `mod:echo` in any hook body without confirming the call site appears in the OK column above. New chat echoes are a code-review red flag.
+- Don't downgrade an OK echo to `_dbg` just because the policy mentions `_dbg`. The matrix is exhaustive — if the call site is in an OK row, keep the bare `mod:echo`.
+- Don't echo more than one banner per module load — one line is enough. The applied-marker `mod:info` line above stays unchanged and remains log-only.
+
+**Verification:** before shipping any mod, `Grep mod:echo <mod>/scripts/mods/<mod>/<mod>.lua` and audit each hit against the matrix. Per `docs/BUG_CLASSES.md § 17 "Chat-echo spam"` for the failure-mode catalogue.
+
 ---
 
 ## 4. Error handling standards
@@ -300,6 +599,80 @@ Per-mod `CHANGELOG.md`. Top entry first (descending chronology). Format:
 
 Don't bury fixes in version "highlights" — list every meaningful change so
 future-me can find it via grep.
+
+### 6.5 Dev vs stable stream (public-Workshop mods only)
+
+Established 2026-05-26. The four public-Workshop mods — `chaos_wastes_tweaker`
+(`ct`), `crafting_in_modded` (`cim`), `general_tweaker` (`gt`),
+`verminious_dreams_lighting` — are split into two parallel directories each:
+`<mod>/` (stable, public Workshop) and `<mod>-dev/` (friends-only Workshop).
+All other mods are single-stream and this section does not apply to them.
+See `CLAUDE.md` § "Dev/stable split workflow" for the full rationale and the
+Workshop ID / mod_id mapping.
+
+**The binding rules:**
+
+- **All new work goes in `<mod>-dev/`.** Iteration, in-flight fixes, half-done
+  experiments. Never edit the stable directory directly for in-flight work —
+  if a stable-bound user bug needs a hotfix, write the fix in `<mod>-dev/`
+  first, verify it in the dev stream, then promote.
+- **Dev MOD_VERSION carries `-dev`/`-alpha`/`-beta`/`-rc<N>`** per § 6.1. Dev
+  uploads always target the friends-only item with `visibility = "friends_only"`
+  in the dev clone's `itemV2.cfg`. They never use `--allow-public`.
+- **Stable receives release merges only.** When a chunk of dev work is ready
+  to ship to public, it gets promoted via the checklist below — never by
+  editing the stable directory in parallel with dev.
+
+**Promote-to-stable checklist** (binding when merging dev work down to stable):
+
+1. **Cherry-pick or merge** the work into `<mod>/` from `<mod>-dev/`. Do this
+   as a deliberate copy / patch — don't symlink, don't share files, don't
+   build from the dev tree with a `--out=<stable>` trick. The stable tree
+   must be an independent, audit-able copy of the released code.
+2. **Normalize MOD_VERSION** in `<mod>/scripts/mods/<mod>/<mod>.lua`: strip
+   any `-dev`/`-alpha`/`-beta`/`-rc<N>` suffix per § 6.1. A `0.7.66-dev` in
+   dev becomes `0.7.66` (or bump to `0.7.67` if the dev tree already had
+   that version on a previous stable build). Stable mods do NOT carry
+   pre-release suffixes.
+3. **Update the stable mod's CHANGELOG.md** with a single rolled-up entry
+   covering the merged work. Reference the dev versions that contributed
+   if it helps the reader (`merge of dev 0.7.62-dev..0.7.66-dev`).
+4. **`VMBLauncher.exe build <stable-mod>`** — confirm clean compile against
+   the stable tree.
+5. **`VMBLauncher.exe deploy <stable-mod>`** — push to PC-A + PC-B and
+   smoke-test in-game from the stable bundle. The dev bundle may be live in
+   the same install (different mod_id) — that's fine, but the test you're
+   running here is "does the stable build behave correctly on its own".
+6. **Fresh per-build ship signal from the user** (§ 5.1, § 5.1a, the
+   per-build approval rule). "Ship it" from earlier in the session does NOT
+   carry forward to a stable push. Stable uploads are visible to public
+   subscribers irreversibly on flag — re-confirm before each push.
+7. **Upload via the `upload_*.ps1` wrapper** at repo root (`upload_ct.ps1`,
+   `upload_cim.ps1`, `upload_gt.ps1`, etc.) — it carries the
+   visibility-regression guard on top of
+   `VMBLauncher.exe upload <stable-mod> --allow-public`. Don't bypass with a
+   raw `--allow-public` call.
+8. **`.\tools\publish-release\publish-release.ps1`** — publishes the bundle
+   to the GitHub release so `vt2-mod-updater` consumers stay in sync.
+
+**Dev uploads** follow the same per-build approval rule but skip the
+`--allow-public` and `upload_*.ps1` wrapper steps — they go through
+`VMBLauncher.exe upload <mod>-dev` directly (the launcher's visibility check
+auto-passes for `friends_only`). GitHub release still required after every
+dev upload too.
+
+**Cross-mod refs** always resolve against the stable mod_id (`get_mod("cim")`,
+`get_mod("gt")`, `(get_mod('bt') or {}):is_br_active()`). Dev clones are
+isolated test surfaces; no consumer mod resolves against `cim_dev`/`gt_dev`/
+etc. If you need to point a consumer at a dev clone for testing, edit the
+consumer's `get_mod(...)` call locally — never ship that change to a stable
+directory.
+
+**RPC isolation caveat:** anything keyed by mod_id (lobby RPC channels, the
+`GT_LOBBY_RPC_SCHEMA` constant, mod-defined `network_register` channels) is
+automatically isolated between stable and dev because the mod_ids differ.
+Sessions that need the lobby/MOTD surface should pin every peer to the same
+stream.
 
 ---
 
@@ -559,6 +932,18 @@ per §7.4) and NOT raw line counts in long docs that will drift.
 
 ## 8. Workflow standards for Claude
 
+### 8.0 Bug-report intake
+
+When the user opens a session with a bug report (log path + symptom), the
+first read is `docs/BUG_TRIAGE_RUNBOOK.md`, not the mod source. The runbook
+is the 60-second orientation: Phase 1 (log + git log + open Issues), Phase 2
+(match against `docs/BUG_CLASSES.md`), Phase 3 (deep-dive log signatures),
+Phase 4 (fix with apply-site log + `_rt_register` + `/verify_<feature>` +
+Workshop upload + GitHub release), Phase 5 (catalog the bug class +
+POSTMORTEMS entry + lint follow-up). Cross-refs every rule in this doc that
+applies (§ 3.6, § 4.2, § 5.1a, § 6.4, § 7.7, § 8.1, § 8.2, § 8.3, § 8.6,
+§ 9.x anti-patterns, § 11 Issues, § 15 tests).
+
 ### 8.1 Empirical-first
 Before adding code:
 1. Read the actual crash/symptom evidence (log, dump, repro).
@@ -596,6 +981,12 @@ For other mods: optional but encouraged.
 When a memory or audit references "current code does X at line Y": verify
 before acting. Memory cited claims can be 20+ days old. The verification is
 30 seconds via a single grep.
+
+### 8.5a Pre-commit hook + `--no-verify` escape hatch
+
+Established 2026-05-25 alongside `tools/install-hooks.ps1` (Issue #29). After cloning the repo, run `./tools/install-hooks.ps1` to install the local pre-commit hook — it runs `qa/run_all.ps1 -Quick -SkipLua` and `tools/mod-lint/lint-mod.ps1` against staged `*.lua` / `*.cfg` / `*.ps1` / `*.mod` files before each commit, so cfg-drift, MOD_VERSION / title-suffix typos, duplicate hook registrations, and the other recurring bug classes catalogued in § 11a never reach CI. The installer is idempotent; the hook self-disables for commits that touch only docs / bundle binaries / other non-checked extensions.
+
+`git commit --no-verify` bypasses the hook for one commit. **Use only when you've verified locally and the hook is being overly cautious; cite the reason in the commit message** so future-me can audit the override (`workshop-stage cfg rewrite already validated by VMBLauncher`, `lint warning is a known false positive on <file>`, etc.). Don't `--no-verify` to "fix on push" — fix the root cause first, because the GHA workflow runs the same checks and will block the merge anyway.
 
 ### 8.6 The "I'm about to add a defensive guard" gate
 Before writing `if not X then return end` in a hook, answer in a comment:
@@ -657,6 +1048,73 @@ A missing `wield_anim_3p` is ALSO not a T-pose — it's the character not enteri
 
 **When auditing existing docs/code:** correct "T-pose" on contact. Most existing entries that say "T-pose" are technically wrong descriptions of "no-anim-played" symptoms. Established 2026-05-19 per user correction.
 
+### 9.9a RPC payload without a schema gate
+
+**Symptom**: host and client (or two peers) disagree on the positional shape
+of a mod-defined `mod:network_send` payload, the receiver parses by position,
+writes the wrong fields into local state, mod misbehaves with no log trace
+pointing at the real cause. Likelihood scales with multi-build-per-day dev
+iteration (host running latest dev, friend running stale Workshop bundle).
+
+**Root cause**: implicit schema. The wire format is whatever the sender
+happens to emit positionally; a receiver compiled against a different sender
+shape has no way to know.
+
+**Fix**: every mod that ships its own RPCs declares a `<MOD>_RPC_SCHEMA = N`
+constant near `MOD_VERSION`. The constant is prepended as the FIRST positional
+arg of every `mod:network_send`, validated as the first arg of every
+`mod:network_register` callback, and on mismatch the receiver drops the
+message with `_dbg_alert("[rpc:schema] <channel> mismatch ...")`. Graceful
+degradation in both cross-version directions. Bump only when the payload
+shape changes; one constant per mod across all the mod's RPCs.
+
+Pilot: chaos_wastes_tweaker v0.7.114-dev (3 RPCs gated). Pattern + when-to-
+bump + adding-new-RPCs + anti-patterns in `VMF_RECIPES.md § 10`. Follow-up
+Issues propagate to cosmetics_tweaker, lobby_tweaker, enemy_tweaker,
+crafting_in_modded, general_tweaker — track via GitHub Issues, not eager
+churn.
+
+### 9.9 Multi-return collapse via implicit `#t`
+
+**Symptom**: a hook wrapper captures a wrapped call's tuple via
+`local results = { f(...) }` and re-emits via `unpack(results)` or
+`unpack(results, i)` without an explicit `j`. When the wrapped function
+returns nils anywhere in its tuple (e.g. `GearUtils.spawn_inventory_unit`
+returns `(weapon_3p, ammo_3p, weapon_1p, ammo_1p)` with `ammo_*` nil for
+melee weapons), Lua 5.1's `#results` is **undefined** — it's a binary
+boundary search over the array part, so the truncation point is
+non-deterministic. Downstream consumers see randomly-nil unit handles.
+
+**Root cause**: assuming `#table` is well-defined. It isn't, for arrays with
+nil holes — see `CLAUDE.md` § "High-frequency engine quirks". The bug
+silently propagates: the wrapper looks correct, the immediate caller sees
+"sometimes" the right values, and a chained `mod:hook` consumer downstream
+re-emits the corrupted tuple further.
+
+**Fix**: When intercepting a function that may return nils anywhere in its
+tuple, you MUST capture the count via `select("#", ...)` from the source
+variadic, and pass `j` explicitly to `unpack`:
+
+```lua
+local function _capture(...) return select("#", ...), { ... } end
+local n, results = _capture(xpcall(handler, _err_handler, func, ...))
+return unpack(results, 2, n)   -- explicit j preserves nil holes
+```
+
+Pattern + extended example in `VMF_RECIPES.md § 2a`. Burned twice on the
+same fix in 2 hours (weapon_tweaker v0.12.77 → .78 → .79 cycle on
+2026-05-25). The new `mod:safe_hook` helper introduced in v0.12.77 was
+itself an instance of the bug class warned about in the repo's own
+`VMF_RECIPES.md § 2` — the helper failed to apply its own repo's recipe.
+
+Cross-refs:
+- `CLAUDE.md` § "High-frequency engine quirks" — short-form bullet on the
+  underlying `#table` quirk.
+- `VMF_RECIPES.md § 2a` — full recipe, burn history, canonical 4-return
+  example.
+- `weapon_tweaker/scripts/mods/weapon_tweaker/_safe_hook.lua` — the helper
+  whose v0.12.79 fix carries the canonical pattern in code.
+
 ---
 
 ## 10. Mod maturity tiers (different bars for different mods)
@@ -686,8 +1144,7 @@ A missing `wield_anim_3p` is ALSO not a T-pose — it's the character not enteri
 ### 10.4 Frozen
 - Mature mods we don't actively iterate on. Add `> FROZEN` banner at the top
   of the main lua.
-- Candidates: `verminious_dreams_lighting`,
-  `la_prefix_patch` (per audit findings).
+- Candidates: `verminious_dreams_lighting` (per audit findings).
 - Frozen mods still receive crash fixes but no new features.
 
 ---
@@ -768,6 +1225,54 @@ Full check-to-bug-class map: [`qa/CHECKS.md`](qa/CHECKS.md).
 
 ---
 
+## 12a. Mechanics knowledge substrate — capture doctrine
+
+`docs/MECHANICS.md` is the repo's **provenance-enforced** index of how VT2 /
+Stingray mechanics work. It exists to kill one specific failure: a session
+drifts on how a mechanic works, **hallucinates to fill the gap**, and the wrong
+claim propagates into code comments, docs, and crash triage. The substrate only
+accretes GROUNDED inputs. `qa/check_mechanics_citations.ps1` fails on any
+untagged factual bullet (wired into `run_all.ps1`, advisory).
+
+Every factual bullet carries one provenance tag: `[src: file:line]` (decompiled
+source, opened and verified — the gold standard), `[dump: file]` (in-game
+runtime dump), `[memory: note]` (a memory note that itself cites ground truth),
+`[bugclass: §N]` (carried from `docs/BUG_CLASSES.md`), `[user: YYYY-MM-DD]`
+(maintainer stated it — lowest tier, flag for source-confirmation), or
+`[unverified]` (an explicit, COUNTED honest gap). Full schema at the top of
+`docs/MECHANICS.md`.
+
+### The four capture rules (this is the loop that keeps it growing from real inputs)
+
+1. **Before stating ANY mechanic** — in a code comment, a doc, or a reply to the
+   user — grep the decompiled source FIRST and cite `file:line`, OR write
+   `[unverified]` / say "I don't know." NEVER confabulate. (This generalizes the
+   `feedback_vmf_ui_no_guessing` "read the source before proposing" rule from VMF
+   UI to ALL mechanics. The §13 "Don't invent internals" rule in the global
+   prefs is the same principle.)
+2. **When the decompiled source confirms a fact during work** → append a
+   MECHANICS entry with `[src: file:line]`, in the SAME response as the code
+   edit. Capture-as-you-verify; don't batch it for later (it rots).
+3. **When the maintainer states a mechanic** → capture it to MECHANICS with
+   `[user: <date>]`, and where possible add a source cross-check. Promote the tag
+   `[user]` → `[src]` once the decompiled source confirms it. This is the
+   "information the maintainer gives is added there" loop — it is explicit and
+   cheap on purpose.
+4. **When an in-game dump is collected** (the gt name-dump, ANIMATION_RESEARCH
+   probes, a `/dump_*` capture) → reference it `[dump: <file>]`.
+
+### Invariants
+
+- The substrate is APPEND-mostly. Entries get PROMOTED up the provenance tiers as
+  they're confirmed; they are never silently invented or downgraded.
+- `[unverified]` is the CORRECT state where no grounded source exists. It is an
+  honest, surfaced gap — NOT a license to fill it from model knowledge. The lint
+  counts these as the known-gaps backlog so they stay visible.
+- MECHANICS POINTS at memory / source / BUG_CLASSES; it does not restate them.
+  Don't create a fourth knowledge surface that duplicates prose.
+
+---
+
 ## 13. When this doc is wrong
 
 This doc is itself versioned. When you encounter a rule that conflicts with
@@ -807,6 +1312,84 @@ WHEN BLOCKED:
   - Dispatch Explore subagent if it needs >3 files
   - Don't add speculative defenses
 ```
+
+---
+
+## 14a. Persistence-after-fix protocol (assume I misfixed first)
+
+Established 2026-05-25 EOD after I shipped gt v0.2.61 → .62 → .63 → .64 → .65 in ~45 minutes, each time claiming the bug was fixed, each time the user restarted and hit a NEW bug or the SAME bug pattern from a missed call site. User-facing impact: indistinguishable from gaslighting — "I fixed it, restart" → still broken → "oh that's a new bug, restart again" → etc.
+
+### The binding rule
+
+When a user reports that a bug PERSISTS after I claimed "shipped / fixed":
+
+1. **First hypothesis: I didn't actually fix it.** Not "you have stale code." Not "your session predates the deploy." Not "Steam hasn't propagated."
+2. **Verify the three layers before considering environmental causes:**
+   - **Source:** read the source file. Does the fix actually exist in the code right now? (E.g. did the Edit fail silently? Was the file modified after my edit by another agent?)
+   - **Bundle:** `Get-ChildItem <mod>/bundleV2/` — is the .mod_bundle newer than the source file? If source is newer than bundle, the bundle is stale.
+   - **Loaded mod:** in the user's latest log, find the `<<crashify-property>>Mod:<id>:<name> v<version>` line. Does the loaded MOD_VERSION match the version I claimed shipped?
+3. **Only after all three verify clean** may I suggest restart / Steam propagation / friend re-pull as the next hypothesis.
+
+### Also: search for the SAME bug pattern across the whole file / module before declaring done
+
+When fixing one instance of a class (e.g. `event:register(mod, "ev", FN_VALUE)` — Stingray expects string), grep the whole repo for the pattern BEFORE marking the task done. The user shouldn't have to restart 3 times to find 3 instances of the same bug. One grep finds all of them.
+
+### Why this rule exists
+
+The lt-merge session above shipped 5 bumps in 45 minutes:
+- v0.2.61 — claimed fix for widget#103; was correct but I missed event_register bug entirely
+- v0.2.62 — added /gt_lobby_motd_set chat command (a new feature, not a fix)
+- v0.2.63 — claimed fix for event_register; fixed 2 of 3 sites (I missed session_ignore)
+- v0.2.64 — fixed the 3rd site; introduced no new fix beyond that
+- v0.2.65 — claimed fix for `set_lobby_data` nil spam; needed defensive type-check guard
+
+Each "fix" surfaced another latent bug because I patched whack-a-mole without auditing the broader migrated code holistically. User had to restart 5 times to reach a clean state. From their seat, each restart cycle was "fixed → not fixed → fixed → not fixed."
+
+### Detection mechanism
+
+When the user says "still broken" / "errors persist" / "you didn't fix it":
+- Apply this protocol BEFORE responding.
+- Verify the three layers programmatically (don't trust the agent report; read the actual file).
+- If all three verify clean and bug genuinely persists → THEN suggest restart.
+- If any of the three doesn't verify → that's the real root cause, fix it.
+
+Burn history: 2026-05-25 EOD (this very session).
+
+## 15. Every bug requires a test
+
+Established 2026-05-23 after the DORMANT_BOON_RARITY scope-bug shipped twice (crash GUIDs 4c5d2157 + prior chest-of-trials crash).
+
+### The rule
+
+When fixing any user-reported bug or any internal-discovered defect, the fix is incomplete until:
+
+1. A regression test exists that would FAIL if the bug returned.
+2. The test runs as part of the mod's `/<prefix>_regression_test` chat command.
+3. The test is documented in the mod's CHANGELOG.md entry for that fix version, with the exact identifier so it's findable later.
+
+No exceptions for "tiny" bugs. The bigger the bug seems, the more obvious the test should be — and yet, today's scope bug shipped without one even though the recon agent identified the cause.
+
+### Test categories per mod
+
+- **Source-pattern check**: embed a sentinel literal in the source body (e.g. `STARTING_COINS_MODE_MARKER = "setter-override-via-setup_run-arg"`); the regression check at boot asserts the literal is present in the compiled bundle. Catches accidental code deletion / refactor regression.
+- **Runtime-state check**: in-keep assertion that touches the actual runtime structure (e.g. `_rt_register("dormant_boon_rarity_is_table", function() if type(_G.DORMANT_BOON_RARITY) ~= "table" then return "..." end end)`).
+- **Disable-mode check**: when a feature is disabled, verify the disable is real — not just "the toggle says off" but "the feature's table is empty, the feature's setting key is not consumed, the feature's chat command is absent."
+
+### When the test feels redundant
+
+If the test feels redundant with the lint, write it anyway. Lints catch new code; tests catch live runtime behavior. They cover different surfaces. Memory `reference_redundant_safeguards_ok` already endorses this. **Belt-and-suspenders is the rule, not the exception: a lint-covered fix is PARTIAL until it ALSO has a runtime `_rt_register` check — both the static-pattern lint and the live-state assertion are required for PASS.** (Codified 2026-05-24 after the §15 test-coverage audit promoted five lint-only fixes to lint+runtime.)
+
+### Defensive wrapper patterns
+
+Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by closures that resolved the name to `_G.DORMANT_BOON_RARITY` (nil)):
+
+1. **Top-level data tables consumed by mid-file closures**: declare at the TOP of the file (above all closures), not late. If declared late, promote to `_G.<NAME>` at top so all closures resolve consistently.
+
+2. **Global table indexes** that could be nil during early boot: wrap in `(rawget(_G, "<NAME>") or {})` sentinel before subscript.
+
+3. **NetworkLookup / BuffTemplates / DeusPowerUpTemplates**: always `rawget(table, key)` — these install strict `__index` metatables that crashify on missing key. Memory `reference_vt2_strict_lookup_rawget`.
+
+4. **Every disabled feature**: ship with a regression check that ASSERTS THE DISABLE (e.g. `<feature>_NOT_registered`, `<feature>_NOT_in_pool`). Re-enabling the feature would fail those checks until they're rewritten — guards against half-revert.
 
 ---
 

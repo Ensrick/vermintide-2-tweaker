@@ -4,7 +4,7 @@
 #   B. mod:hook(..., function(func, self, ...) ... end)  where body never calls func(...) — could be hook_safe (but might want to suppress original)
 param([string]$Root = "C:\Users\danjo\source\repos\vermintide-2-tweaker")
 
-$mods = @('buff_tweaker','career_tweaker','chaos_wastes_tweaker','character_weapon_variants','cosmetics_tweaker','crafting_in_modded','dynamic_cosmetic_portraits','enemy_tweaker','event_tweaker','general_tweaker','la_prefix_patch','lobby_tweaker','material_hijack_patched','modded_progression','verminious_dreams_lighting','weapon_tweaker')
+$mods = @('buff_tweaker','career_tweaker','chaos_wastes_tweaker','character_weapon_variants','cosmetics_tweaker','crafting_in_modded','dynamic_cosmetic_portraits','enemy_tweaker','event_tweaker','general_tweaker','lobby_tweaker','material_hijack_patched','modded_progression','verminious_dreams_lighting','weapon_tweaker')
 
 $results = @()
 

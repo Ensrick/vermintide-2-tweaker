@@ -32,6 +32,10 @@ Run all checks with: `qa\run_all.ps1` (or via the GitHub Action on push).
 | 7 | `goto`/`continue` in SDK mods (Lua 5.1 limitation) | CLAUDE.md | `luacheck` syntax mode | AUTO (CI) |
 | 7a | `--[[ ... ]]` long-comment with embedded `]]` (closes block prematurely) | wt v0.12.69 burn | `luacheck` syntax mode (line "expected '=' ',' or 'in'") | AUTO (CI) |
 | 7b | Cross-mod chat-command name collision (7 mods registered `regression_test`) | GitHub Issue #11 + `reference_vt2_chat_command_syntax.md` | `check_command_collisions.ps1` grep + cross-mod aggregation | AUTO (script) |
+| 7c | `unpack(t, i)` without explicit `j` → nil-hole truncation (Lua 5.1 `#table` undefined for sparse arrays). Burned weapon_tweaker v0.12.77 → .78 → .79 on 2026-05-25 in a single 2-hour fix cycle. | `VMF_RECIPES.md § 2a` + `CLAUDE.md` engine-quirks + `PROJECT_STANDARDS.md § 9.9` | `check_unpack_safety.ps1` regex scan with `select("#", ...)` / inline-pragma suppression. GitHub Issue #36. | AUTO (script) |
+| 7d | Invalid VMF widget `type` (e.g. `text_input`, `slider`, `string`) — breaks entire mod options init at load time, options page vanishes in-game. Burned gt v0.2.60-dev on 2026-05-25 (widget #103 `type="text_input"`). | `VMF_RECIPES.md § 6a` (VMF widget type whitelist) + `docs/BUG_CLASSES.md` "Invalid VMF widget type breaks options init" | `check_vmf_widget_types.ps1` regex scan against canonical 6-type whitelist (`group`/`header`/`checkbox`/`dropdown`/`numeric`/`keybind`). Hard-fail (exit 2) on any non-canonical type — no warning tier, no suppression pragma. | AUTO (script) |
+| 7e | Stingray `event:register(obj, "ev", FN_VALUE)` — 3rd arg must be a STRING method name on `obj`, not a function value. Engine logs `No function found with name '[function]'` and the handler silently dies. Burned gt v0.2.61 → .62 → .63 → .64 on 2026-05-25 (four separate fixes across lobby MOTD / session-ignore / slot-reservations). | `VMF_RECIPES.md § 12` ("Stingray `event:register` signature") + `docs/BUG_CLASSES.md` "Stingray event:register function-value 3rd arg" | `check_event_register_signature.ps1` regex scan for `:register(<obj>, "<event>", <arg3>)` where `<arg3>` doesn't start with `"`. Hard-fail (exit 2). No suppression pragma. Runtime safety net via `bt:safe_event_register` (buff_tweaker v0.1.10-alpha+). | AUTO (script) |
+| 7f | Network-bound engine field WIDENING — a direct `<ident>._max_(overcharge\|energy\|ammo\|charge\|health\|stamina\|push_power) = <rhs>` that RAISES the cap crashes peers via fassert (engine `.network_config` hardcaps these). Burned ct v0.7.100-dev (`energy_ext._max_energy = ...`). | CLAUDE.md memory `feedback_vt2_max_resource_consumption_side` + chaos_wastes_tweaker v0.7.100-dev CHANGELOG | `lint-mod.ps1` Pattern A (Find-NetworkBoundMutation). Heuristic REFINED 2026-05-29 for precision: (a) the former "Pattern B" `stat_buff = "max_*"` data-table string match was REMOVED — those are buff-template literals resolved by the engine's network-safe buff system, not field writes (false-positived on crt's two `stat_buff = "max_health"` entries); (b) DOWNWARD CLAMPS are SAFE — `math.min(...)` RHS or a guarded `if X > CONST then X = CONST end` (canonical: chaos_wastes_tweaker.lua:7831 `_max_ammo` clamp, the load-bearing FIX for a CW-boon cap-widening crash); (c) bare WIDENING assignments STILL fire. WARN (exit 1); ERROR under `-Strict`. `-- LINT_OK_NETBOUND` escape hatch. | AUTO (script) |
 
 ### itemV2.cfg / Workshop-level issues
 
@@ -54,6 +58,10 @@ Run all checks with: `qa\run_all.ps1` (or via the GitHub Action on push).
 | 17 | Referenced but undefined localization key (widget setting_id without entry) | AUDIT_section_c.md | `check_localization.ps1` data↔loc diff | AUTO (script) |
 | 18 | Defined but unreferenced key (dead localization) | AUDIT_section_c.md | `check_localization.ps1` data↔loc diff | AUTO (script) |
 | 19 | Missing `mod_description` (mh, vdl reported in audit) | AUDIT_section_c.md | `check_localization.ps1` required-key list | AUTO (script) |
+| 19a | setting_id with NO loc entry (the red-tooltip class) — stricter ERROR variant of #17 | `docs/generated/README.md` | `check_name_integrity.ps1` check 1 (ERROR, skips concat-fragment ids) | AUTO (script, standalone) |
+| 19b | A mod-assigned `display_name`/`item_type`/`description` literal-string key that resolves in NO loc table (mod / any-mod / vanilla) and isn't literal English — typo'd/orphan render key. `Localize(item_type)` is a real render path. | `docs/generated/README.md` | `check_name_integrity.ps1` check 2 (ERROR). Runtime-registered names (cwv `_display_names`, cosmetics `_custom_loc`) resolved via the `NAME_MAP.generated.json` oracle. | AUTO (script, standalone) |
+| 19c | Orphan loc key — defined in a mod's `_localization.lua`, referenced nowhere in its Lua/data (some are dynamic) | `docs/generated/README.md` | `check_name_integrity.ps1` check 3 (WARN; concat-prefix aware) | AUTO (script, standalone) |
+| 19d | Documented port decision not wired into all 3 surfaces (unlock_map + checkbox + loc) — "decisions must bake immediately" | `feedback_decisions_must_bake_immediately` | `check_decisions_wired.ps1` — parses `weapon_tweaker/CROSS_CHARACTER_PORT_DECISIONS.md`, 3-way: REGRESSION (shipped but missing = ERROR) / LEAK (skip-marked but present = ERROR) / PENDING (To-ADD not yet wired = backlog). Also flags ORPHAN (in unlock_map, no decision row) + UNCLASSIFIABLE (ambiguous doc row). Self-test fires REGRESSION + LEAK. | AUTO (script, in run_all) |
 | 20 | Inconsistent CHANGELOG header format (3+ styles in use) | `_archive/audits/2026-05-08/AUDIT_section_b.md` | `check_changelog_format.ps1` (future) | DEFERRED |
 
 ### Hook / vanilla-API issues
@@ -112,6 +120,7 @@ Run all checks with: `qa\run_all.ps1` (or via the GitHub Action on push).
 | 50 | Memory cited claim no longer matches current code | PROJECT_STANDARDS §12.3 | PRE-SHIP review (verify before recommending) | PRE-SHIP |
 | 51 | CHANGELOG entry missing for current MOD_VERSION | PROJECT_STANDARDS §6.4 | `check_versions.ps1` cross-check | AUTO (script) |
 | 52 | File exceeds 2500-line hard limit | PROJECT_STANDARDS §2.1 | `check_file_sizes.ps1` line-count | AUTO (script) |
+| 52a | Uncited mechanic claim in the MECHANICS substrate — a factual bullet in `docs/MECHANICS.md` with no provenance tag (the hallucination-propagation class). Cure for "session drifts on a mechanic, hallucinates, wrong claim spreads." | `feedback_vmf_ui_no_guessing` (generalized to ALL mechanics) + PROJECT_STANDARDS §13 | `check_mechanics_citations.ps1` — scans ONLY `docs/MECHANICS.md`; every factual bullet under a `## Domain:` heading must carry `[src:]`/`[dump:]`/`[memory:]`/`[bugclass:]`/`[user:]` or `[unverified]`. `[unverified]` is ALLOWED + counted as the known-gaps backlog metric. ERROR (exit 2) on any untagged bullet. Self-test plants uncited + unverified + cited bullets. Wired into `run_all.ps1` (advisory). | AUTO (script, in run_all) |
 
 ### Process issues
 
@@ -127,7 +136,7 @@ Run all checks with: `qa\run_all.ps1` (or via the GitHub Action on push).
 
 | Category | AUTO | PRE-SHIP | MANUAL | DEFERRED | HANDED OFF | FIXED |
 |---|---|---|---|---|---|---|
-| Lua static | 5 | 2 | — | — | — | — |
+| Lua static | 8 | 2 | — | — | — | — |
 | cfg/Workshop | 7 | — | 2 | — | — | — |
 | Localization | 3 | — | — | 1 | — | — |
 | Hooks / vanilla-API | — | 6 | — | — | — | — |
@@ -136,9 +145,9 @@ Run all checks with: `qa\run_all.ps1` (or via the GitHub Action on push).
 | Cosmetics-specific | — | 3 | — | — | 6 | — |
 | Docs hygiene | 4 | 1 | — | — | — | — |
 | Process | — | 1 | 3 | — | — | 1 |
-| **TOTAL** | **19** | **21** | **6** | **2** | **6** | **4** |
+| **TOTAL** | **22** | **21** | **6** | **2** | **6** | **4** |
 
-**33% of documented bug classes are now automatable (19/58).** Another 38%
+**36% of documented bug classes are now automatable (22/61).** Another 34%
 covered by pre-ship review pattern. Remaining are architectural,
 intentionally manual, or handed off.
 
@@ -164,10 +173,42 @@ blocking once CWV bare globals are refactored.
 |---|---|---|
 | `check_cfg.ps1` | ✅ OK | all 16 cfgs pass |
 | `check_versions.ps1` | ⚠ 11 warnings | cfg title drift (waiting on launcher auto-rewrite) + 2 missing CHANGELOG entries (event_tweaker v0.4.2-dev, material_hijack_patched v0.1.3) |
+| `check_unpack_safety.ps1` | ✅ OK | all sites in ct/mp/wt either explicit-j or annotated (post-Issue #36 audit) |
+| `check_vmf_widget_types.ps1` | ✅ OK | all 14 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
+| `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). Runtime safety net via `bt:safe_event_register` (buff_tweaker v0.1.10-alpha+). |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
+| `check_name_integrity.ps1` | ⚠ 13 errors / 8 warns (2026-05-30, in run_all full pass; NOT yet in blocking upload preflight) | check2: cwv `cwv_es_musket*` (on-ice commented variant still referenced by live musket-illusion code), career_tweaker `*_perk_*_desc` + gui_tweaker `mod_tweaker_button_name` (vanilla/own keys not in decompiled source). check3: wt `enable_weapon_*` guard toggles + mp `reset_progression`. Self-test passes. Triage the 13 errors before wiring into preflight. |
+| `check_decisions_wired.ps1` | ⚠ exit 1 (2026-05-30, in run_all full pass) | 95 decisions parsed: 77 WIRED, 0 REGRESSION, 0 LEAK, 2 PENDING (`Kruber/dr_dual_wield_hammers` stale doc row, `Kruber/we_javelin` deferred-experimental), 78 ORPHAN (Saltzpyre/Kerillian decision sections stubbed — code ahead of doc), 1 UNCLASSIFIABLE. Self-test passes. |
+| `check_mechanics_citations.ps1` | ✅ OK (2026-05-30) | 45 cited factual bullets across 8 domains (`[src:]` decompiled-verified, `[memory:]`, `[bugclass:]`, `[dump:]`), 4 honest `[unverified]` gaps, 0 uncited. Self-test passes. Run the script for the live per-domain breakdown. |
 | `check_file_sizes.ps1` | ❌ 8 over hard limit | known oversized files on roadmap |
 | `check_stale_docs.ps1` | ✅ OK | 11 stale docs auto-bannered 2026-05-23 |
 | `luacheck` | ⚠ 415 warnings | baseline; 141 = CWV finding, 274 net real signal |
+
+## Generated name-map (key → display-name) + integrity validator
+
+The authoritative INTERNAL-key → in-game DISPLAY-name map is **generated**, not
+hand-maintained — see `docs/generated/README.md`. Two related pieces:
+
+```powershell
+# 1. Regenerate the authoritative map (date is a required param — env has no clock):
+pwsh -NoProfile -File tools/gen-name-map/gen-name-map.ps1 -GenDate 2026-05-30
+#    -> docs/generated/NAME_MAP.generated.json  (machine-authoritative)
+#    -> docs/generated/NAME_MAP.generated.md    (grep this, not the legacy catalogs)
+
+# 2. Validate localization integrity (3 checks: missing setting_id loc = ERROR,
+#    unresolvable assigned name = ERROR, orphan loc key = WARN):
+pwsh -NoProfile -File qa/check_name_integrity.ps1            # all mods
+pwsh -NoProfile -File qa/check_name_integrity.ps1 -SelfTest  # planted-fault proof
+```
+
+`check_name_integrity.ps1` reads `NAME_MAP.generated.json` as a runtime-name
+oracle (so cwv/cosmetics runtime-registered names don't false-positive) — run the
+generator first for best results. It is **standalone by design** and is NOT wired
+into `run_all.ps1` or the launcher's blocking upload preflight yet (the 13 current
+errors need maintainer triage before it becomes a gate). Wiring it later mirrors
+the v0.5.3 `check_localization`/`check_vmf_widget_types` integration in
+`tools/vmb-launcher/Services/ModRunner.cs` (the `QaScriptGate.RunAsync(mod,
+"check_name_integrity.ps1", L, ct)` pattern, exit 2 = block).
 
 ## What's NOT covered yet (gaps)
 

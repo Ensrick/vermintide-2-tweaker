@@ -152,6 +152,31 @@ will randomly drop position 3 (the 1P weapon unit), the 1P weapon hand goes
 unrendered, and downstream readers (CWV, cosmetics_tweaker glow apply, etc.)
 chain off the corrupted shape.
 
+### Variant: mutating `args` AFTER capturing `n` (the fix introducing a bug)
+
+The arity `n` is a snapshot of the tuple **at hook entry**. If the hook then
+WRITES a new trailing slot into `args` (e.g. forcing an optional 8th param the
+caller didn't pass), `unpack(args, 1, n)` with the stale `n` silently drops the
+write — the exact value the mutation was for. Extend `n` to cover every slot
+you write:
+
+```lua
+local n = select("#", ...)
+local args = { ... }
+-- ... later ...
+args[8] = "unique"            -- caller passed only 7 — n is still 7!
+if n < 8 then n = 8 end       -- REQUIRED, or the write never reaches func
+return func(unpack(args, 1, n))
+```
+
+**Burned:** chaos_wastes_tweaker_dev v0.7.133 → v0.7.134 (2026-06-08). The §2a
+arity fix itself killed the Belakor-temple forced-unique rarity: vanilla's
+cursed-chest path passes 7 args, the hook wrote `args[8] = "unique"` after
+capturing `n = 7`, and the pre-fix bare `unpack(args)` had (only on that path,
+where args 1–7 are contiguous non-nils) actually forwarded all 8. The mod's own
+log line still printed `forced=unique` while the forward dropped it. Regression
+test: `belakor_forced_rarity_survives_unpack_bound`.
+
 ### Burned
 
 weapon_tweaker v0.12.77 → v0.12.78 → v0.12.79 fix cycle on 2026-05-25.

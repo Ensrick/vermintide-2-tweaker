@@ -60,26 +60,18 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
 if (-not $Tag) { $Tag = "mods-$(Get-Date -Format yyyy-MM-dd)" }
 
-# Mod inventory: (folder, mod_id, friendly_name).
-# Material_hijack_patched has no MOD_VERSION variable — pulled from cfg description as fallback.
-# 2026-05-21: modded_progression added after first-time Workshop publish (ID 3730422873, private).
-$mods = @(
-    @{ Folder='weapon_tweaker';             Id='wt';                            Name='Weapon Tweaker' }
-    @{ Folder='chaos_wastes_tweaker';       Id='ct';                            Name='Chaos Wastes Tweaker' }
-    @{ Folder='general_tweaker';            Id='gt';                            Name='General Tweaker' }
-    @{ Folder='cosmetics_tweaker';          Id='cosmetics_tweaker';             Name='Cosmetics Tweaker' }
-    @{ Folder='dynamic_cosmetic_portraits'; Id='dynamic_cosmetic_portraits';    Name='Dynamic Cosmetic Portraits' }
-    @{ Folder='career_tweaker';             Id='crt';                           Name='Career Tweaker' }
-    @{ Folder='enemy_tweaker';              Id='enemy_tweaker';                 Name='Enemy Tweaker' }
-    @{ Folder='character_weapon_variants';  Id='character_weapon_variants';     Name='Character Weapon Variants' }
-    @{ Folder='crafting_in_modded';         Id='cim';                           Name='Crafting In Modded' }
-    @{ Folder='la_prefix_patch';            Id='la_prefix_patch';               Name="LA Prefix Patch" }
-    @{ Folder='event_tweaker';              Id='event_tweaker';                 Name='Event Tweaker' }
-    @{ Folder='modded_progression';         Id='modded_progression';            Name='Modded Progression' }
-    @{ Folder='lobby_tweaker';              Id='lobby_tweaker';                 Name='Lobby Tweaker' }
-    @{ Folder='buff_tweaker';               Id='bt';                            Name='Buff Tweaker' }
-    @{ Folder='verminious_dreams_lighting'; Id='verminious_dreams_lighting';    Name='Verminious Dreams Lighting' }
-)
+# Mod inventory: single source of truth at tools/mod-inventory.psd1 (shared with
+# tools/mod-lint/lint-mod.ps1 + qa/check_cfg.ps1). Each entry maps to this
+# script's expected { Folder, Id, Name } shape. Unpublished mods (no WorkshopId)
+# are still listed; the per-mod loop below skips them on the published_id check.
+$inventoryPath = Join-Path $repoRoot 'tools\mod-inventory.psd1'
+if (-not (Test-Path $inventoryPath)) {
+    throw "Mod inventory not found at $inventoryPath. It is the single source of truth for the release set."
+}
+$inventory = Import-PowerShellDataFile -Path $inventoryPath
+$mods = @($inventory.Mods | ForEach-Object {
+    @{ Folder = $_.Dir; Id = $_.ModId; Name = $_.Name }
+})
 
 function Read-ModVersion {
     param([string]$ModFolderPath, [string]$FolderName, [string]$ModId)
@@ -157,15 +149,22 @@ foreach ($m in $mods) {
     Compress-Archive -Path (Join-Path $modStage '*') -DestinationPath $zipPath -Force
     $assetPaths += $zipPath
 
+    # Bundle integrity: lowercase-hex SHA256 of the zip bytes. vt2-mod-updater compares
+    # this against the post-download hash before extracting; mismatch refuses the bundle
+    # (defends against the ugc_tool "Upload finished" false-success bug + transport
+    # corruption). Purely additive — older consumers without verification still function.
+    $sha256 = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLowerInvariant()
+
     $manifestMods += [ordered]@{
         mod_id          = $m.Id
         friendly_name   = $m.Name
         workshop_id     = $workshopId
         version         = $version
         asset_filename  = "$($m.Id).zip"
+        sha256          = $sha256
         visibility      = $visibility
     }
-    Write-Host "  staged $($m.Id) v$version -> $zipPath"
+    Write-Host "  staged $($m.Id) v$version -> $zipPath (sha256 $($sha256.Substring(0,12))...)"
 }
 
 $manifest = [ordered]@{

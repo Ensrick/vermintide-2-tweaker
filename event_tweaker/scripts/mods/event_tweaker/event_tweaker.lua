@@ -1,8 +1,149 @@
 local mod = get_mod("event_tweaker")
 
-local MOD_VERSION = "0.4.2-dev"
+local MOD_VERSION = "0.4.13-dev"
+-- Startup banner: log-only, NOT chat. The applied marker line further down
+-- ([event_tweaker] enabled v<X> settings_fp=<hash>) is the canonical version
+-- surface (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Tweaker: Events v%s loaded", MOD_VERSION)
-mod:echo("Tweaker: Events v" .. MOD_VERSION)
+
+-- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
+-- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- `_dbg` is for confirmation / expected behavior — file only.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[event_tweaker:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[event_tweaker:dbg] " .. fmt, ...)
+        mod:echo("[event_tweaker] " .. fmt, ...)
+    end
+end
+
+-- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
+-- one mod:info line at load. ALWAYS fires (operational telemetry).
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/event_tweaker/event_tweaker_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[event_tweaker:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[event_tweaker] v%s loaded", MOD_VERSION))
+end
+
+-- v0.4.6-dev: regression test scaffold (event_tweaker had none).
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("event_tweaker_regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail = 0, 0
+    mod:echo("=== event_tweaker regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/event_tweaker/event_tweaker_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)
+_rt_register("suppress_live_event_default_off", function()
+    -- v0.4.10-dev: ensure suppress_live_event defaults to false so existing
+    -- users see no behavior change after upgrading. The data file's
+    -- default_value=false is the source of truth; this check confirms
+    -- the widget actually registered the default and mod:get returns it.
+    local v = mod:get("suppress_live_event")
+    -- VMF: an unregistered setting returns nil; both nil and false are
+    -- "off" for our use, but a true here would mean someone shipped the
+    -- mod with the wrong default.
+    if v == true then
+        return "suppress_live_event defaulted to true — must default off"
+    end
+end)
 
 -- ============================================================
 -- DLC ownership gate
@@ -28,12 +169,16 @@ local DLC_BY_MUTATOR = {
 
 local DLC_BY_PRESET = {
     geheimnisnacht_2021 = "geheimnisnacht_2021",
-    -- 2025 preset injects the 2021 mutator and the 2025 active_events
-    -- string (the ritual-site engine on the new maps keys off the 2025
-    -- string). Both DLCs need to be owned for the preset to do anything
-    -- useful; gate on the seasonal-content DLC (geheimnisnacht_2025).
+    -- 2025 / 2026 presets inject the 2021 mutator and the year-specific
+    -- active_events string (the ritual-site engine keys off it via
+    -- string.find in geheimnisnacht_utils.lua:103). Both DLCs need to
+    -- be owned for the preset to do anything useful; gate on the
+    -- seasonal-content DLC (geheimnisnacht_<year>). DLC IDs verified
+    -- in dlc_settings.lua:597 (skulls_2026) and :606 (geheimnisnacht_2026).
     geheimnisnacht_2025 = "geheimnisnacht_2025",
+    geheimnisnacht_2026 = "geheimnisnacht_2026",
     skulls_2023         = "skulls_2023",
+    skulls_2026         = "skulls_2026",
 }
 
 local function owns_dlc(dlc_id)
@@ -133,8 +278,27 @@ local EVENT_PRESETS = {
         mutators      = { "geheimnisnacht_2021" },
         hub_level     = "inn_level_halloween",
     },
+    -- 2026 = same mutator + hub as prior years; only the active_events
+    -- string differs (drives the year's 5-map list in geheimnisnacht_
+    -- utils.lua:43-49: farmlands, dlc_wizards_tower, catacombs, bell,
+    -- ussingen). Added v0.4.11-dev once Fatshark shipped the 2026 maps.
+    geheimnisnacht_2026 = {
+        active_events = { "geheimnisnacht_2026" },
+        mutators      = { "geheimnisnacht_2021" },
+        hub_level     = "inn_level_halloween",
+    },
     skulls_2023 = {
         active_events = { "skulls_2023" },
+        mutators      = { "skulls_2023" },
+        hub_level     = "inn_level_skulls",
+    },
+    -- skulls_2026: vanilla skulls mutator is unchanged (no mutator_
+    -- skulls_2026 file in source — Fatshark only added cosmetics +
+    -- portraits for 2026, not new gameplay). active_events string set
+    -- for consistency; the skulls mutator is self-contained and doesn't
+    -- inspect active_events.
+    skulls_2026 = {
+        active_events = { "skulls_2026" },
         mutators      = { "skulls_2023" },
         hub_level     = "inn_level_skulls",
     },
@@ -215,6 +379,16 @@ local function gather_active_events()
     return preset.active_events
 end
 
+-- v0.4.10-dev: when on, the three live-event hooks drop Fatshark's original
+-- response before merging our own injections. Lets the host neutralize the
+-- currently-live Fatshark event (e.g. Skulls 2026 keep decor + Geheimnisnacht
+-- 2026 ritual sites & mission lighting) without having to wait it out.
+-- Default false — keeps prior pass-through behavior for anyone happy with
+-- the additive-only semantics.
+local function suppress_live_event()
+    return mod:get("suppress_live_event") and true or false
+end
+
 -- ============================================================
 -- List merge helper
 -- ============================================================
@@ -250,9 +424,19 @@ end
 
 mod:hook("BackendInterfaceLiveEventsPlayfab", "get_special_events", function (func, self)
     local original = func(self)
+    local suppress = suppress_live_event()
+    -- Suppress wins over Fatshark's list: drop their entries entirely so
+    -- append_live_event_mutators sees only ours. Defense-in-depth — also
+    -- short-circuits the DialogueSystem read path so no Fatshark event
+    -- ambient dialogue plays.
+    if suppress then
+        original = nil
+    end
     local mutators = gather_mutators()
     if #mutators == 0 then
-        return original
+        -- Original is either Fatshark's list (suppress off) or nil
+        -- (suppress on with no injection of our own).
+        return original or {}
     end
     -- Use the preset name if one is selected (matches the active_events
     -- string), else a synthetic identifier. Either way it must be a
@@ -265,9 +449,10 @@ mod:hook("BackendInterfaceLiveEventsPlayfab", "get_special_events", function (fu
     -- Helps diagnose unexpected mutator interactions (e.g. "Horn of Magnus had
     -- no pickups" → was a special_event injection accidentally appending an
     -- incompatible mutator?). Fires once per get_special_events call, which
-    -- happens on mission load + keep transitions.
-    mod:info("[event-inject] preset=%s injecting %d mutator(s): [%s]",
-        tostring(injected_name), #mutators, table.concat(mutators, ","))
+    -- happens on mission load + keep transitions. v0.4.10-dev added the
+    -- `suppress=` field so leak-through is verifiable from the log.
+    mod:info("[event-inject] preset=%s suppress=%s injecting %d mutator(s): [%s]",
+        tostring(injected_name), tostring(suppress), #mutators, table.concat(mutators, ","))
     local injected = {
         {
             name         = injected_name,
@@ -280,9 +465,16 @@ end)
 
 mod:hook("BackendInterfaceLiveEventsPlayfab", "get_active_events", function (func, self)
     local original = func(self)
+    if suppress_live_event() then
+        -- Drop Fatshark's strings so mutator_geheimnisnacht_2021's
+        -- `string.find(live_event, "geheimnisnacht_%d+")` ritual-site
+        -- lookup (geheimnisnacht_2025/geheimnisnacht_utils.lua) gets
+        -- no match and the ritual-site engine stays dormant.
+        original = nil
+    end
     local extra = gather_active_events()
     if not extra then
-        return original
+        return original or {}
     end
     return merge_lists(original, extra)
 end)
@@ -303,12 +495,23 @@ end)
 mod:hook("BackendManagerPlayFab", "get_level_variation_data", function (func, self)
     local original = func(self) or {}
     local preset = active_preset()
-    if not preset or not preset.hub_level then
+    local want_hub
+    if preset and preset.hub_level then
+        want_hub = preset.hub_level
+    elseif suppress_live_event() then
+        -- v0.4.10-dev: when suppress is on with no preset, pin keep to the
+        -- vanilla default (adventure_mechanism.lua:7 HUB_LEVEL_NAME).
+        -- adventure_mechanism's get_starting_level (line 627) reads our
+        -- merged.hub_level instead of Fatshark's seasonal one, so the keep
+        -- decoration reverts cleanly.
+        want_hub = "inn_level"
+    end
+    if not want_hub then
         return original
     end
     -- Don't mutate the original — it's possibly the cached EMPTY_TABLE.
     local merged = table.clone(original)
-    merged.hub_level = preset.hub_level
+    merged.hub_level = want_hub
     return merged
 end)
 
@@ -343,7 +546,9 @@ mod:command("event_probe", "Dump live-event state from the host's backend interf
     dump_list("active_events", interface:get_active_events())
     dump_list("special_events", interface:get_special_events())
     dump_list("weekly_events", interface:get_weekly_events())
-    mod:echo("[event] preset: %s", tostring(mod:get("event_preset")))
+    mod:echo("[event] preset: %s suppress=%s",
+        tostring(mod:get("event_preset")),
+        tostring(suppress_live_event()))
     local muts = gather_mutators()
     mod:echo("[event] would-inject mutators: {%s}", table.concat(muts, ","))
 end)
@@ -415,7 +620,19 @@ end
 
 local function target_hub_level()
     local preset = active_preset()
-    return preset and preset.hub_level or "inn_level"
+    if preset and preset.hub_level then
+        return preset.hub_level
+    end
+    -- v0.4.10-dev: with suppress on (no preset), pin to vanilla "inn_level"
+    -- so toggling suppress on while standing in inn_level_skulls/halloween
+    -- triggers a keep swap back to the plain inn.
+    if suppress_live_event() then
+        return "inn_level"
+    end
+    -- Suppress off, no preset: don't dictate. apply_now will take the
+    -- retry_level() branch and let Fatshark's get_level_variation_data
+    -- pass through unchanged.
+    return current_level_key()
 end
 
 local function apply_now(reason)
@@ -458,10 +675,12 @@ mod:command("event_apply", "Reload the current level so preset + mutator changes
 end)
 
 mod.on_setting_changed = function(setting_id)
-    -- Auto-reload on preset change only. Individual mutator toggles use
-    -- `event_apply` — otherwise a quick pass of 5 checkboxes would
-    -- trigger 5 reloads.
+    -- Auto-reload on preset change and on suppress toggle. Individual
+    -- mutator toggles use `event_apply` — otherwise a quick pass of 5
+    -- checkboxes would trigger 5 reloads.
     if setting_id == "event_preset" then
         apply_now("event_preset changed")
+    elseif setting_id == "suppress_live_event" then
+        apply_now("suppress_live_event changed")
     end
 end

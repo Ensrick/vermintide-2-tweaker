@@ -14,16 +14,75 @@
 #      the name as a nil global at call time. Per memory
 #      `feedback_lua_forward_reference` — CRITICAL, 5+ documented crashes.
 #
-#   3. Save/restore invariants (added 2026-05-23 after the cim "stale
+#   3. Late-local-shadows-global (added 2026-05-23 after ct GUID
+#      4c5d2157-e5ee-45fd-8f49-ecdcd2e7ade3 chest-of-trials crash):
+#      a top-level `local NAME = ...` declared LATE in the file while closures
+#      earlier in the file reference `NAME`. Lua scope is LEXICAL: every earlier
+#      reference resolved as `_G.NAME` (typically nil) at closure-capture time,
+#      NOT the late local. Symptom is silent until the closure runs.
+#
+#      The ct fix: `local DORMANT_BOON_RARITY = {}` was declared at L4707 to
+#      "no-op" the dormant-boon path, but the `generate_random_power_ups` hook
+#      at L880 and `_should_strip` at L1144 — both lexically ABOVE the local —
+#      resolved to nil `_G.DORMANT_BOON_RARITY` and crashed first chest spawn.
+#      Fix replaced the local with an explicit `_G.DORMANT_BOON_RARITY = ...`
+#      at the top of the file. This check guards against the regression.
+#
+#      Heuristic: only flag UPPERCASE_SNAKE names (data tables, not functions —
+#      functions use snake_case and are covered by the existing forward-ref
+#      check). Default WARN; promoted to error under -Strict.
+#
+#   5. Network-bound engine field mutation (added 2026-05-23 after two ct
+#      crashes in the same bug class):
+#        v0.7.80-alpha  — ct_meta_ammo set `stat_buff = "max_overcharge"`,
+#                         exceeded the engine's overcharge network cap (~60),
+#                         crashed Sienna + Bardin drakefire users.
+#        v0.7.100-dev   — ct_meta_ammo directly mutated `energy_ext._max_energy`,
+#                         exceeded the engine's max_energy network cap (~60),
+#                         crashed on Necromancer bot.
+#      The engine's `.network_config` binary has hardcoded ints for these
+#      fields; mods that exceed the cap crash via fassert in vanilla code,
+#      typically from a buff_extension / inventory rpc handler the mod
+#      doesn't touch. Always clamp on the way in.
+#
+#      HEURISTIC REFINED 2026-05-29: the rule now flags WIDENING writes ONLY,
+#      and no longer fires on the two recurring false positives. Pattern B
+#      (stat_buff = "max_*" string literal) is REMOVED entirely.
+#
+#      WHAT FIRES (Pattern A — dangerous WIDENING field assignment):
+#         <ident>._max_(overcharge|energy|ammo|charge|health|stamina|push_power) = <rhs>
+#      e.g. `self._max_health = big`, `ext._max_ammo = ext._max_ammo * 2`.
+#
+#      WHAT NO LONGER FIRES:
+#        (a) `stat_buff = "max_health"` / `"max_ammo"` etc. — buff-TEMPLATE
+#            string literals in data tables, resolved by the engine's own
+#            (network-safe) buff system; never a raw field write. The old
+#            Pattern B false-positived on crt's two `stat_buff = "max_health"`
+#            data entries. Pattern B removed.
+#        (b) Downward safety CLAMPS — recognised as SAFE so the load-bearing
+#            ct:7831 clamp survives:
+#              * `<target> = math.min(...)` / `math.max(..., math.min(...))`
+#              * guarded clamp: assignment whose line (or the line just above)
+#                compares the SAME field with `> CONST`, e.g.
+#                  `if self._max_ammo > 9999 then self._max_ammo = 9999 end`.
+#            Canonical safe case: chaos_wastes_tweaker.lua:7831 (a CW boon
+#            widened `_max_ammo` past the NetworkConstants ceiling and crashed
+#            the host; this clamp is the FIX).
+#
+#      Fires as WARNING (exit 1); promoted to error (exit 2) under -Strict.
+#      Further exclusions: comments / nearby `-- LINT_OK_NETBOUND` annotation /
+#      `==` equality comparison / read access.
+#
+#   4. Save/restore invariants (added 2026-05-23 after the cim "stale
 #      modded_loadout overwrites vanilla restore on next session" user report):
-#        3a. `BackendInterfaceItemPlayfab.set_loadout_item` hooks that
+#        4a. `BackendInterfaceItemPlayfab.set_loadout_item` hooks that
 #            persist a modded-loadout entry MUST also clear it before saving,
 #            otherwise switching back to a vanilla item leaves a stale cim
 #            entry that clobbers the next session's restore.
-#        3b. Every `mod:set("KEY", ...)` must have a matching `mod:get("KEY")`
+#        4b. Every `mod:set("KEY", ...)` must have a matching `mod:get("KEY")`
 #            somewhere in the same file. Catches save-without-load typos
 #            that silently lose persistence.
-#        3c. Any `mod:hook_safe("BackendManagerPlayFab", "_create_interfaces",
+#        4c. Any `mod:hook_safe("BackendManagerPlayFab", "_create_interfaces",
 #            ...)` callback that reads from `Managers.backend` must check
 #            `Managers.backend ~= nil` first. The hook can fire from a code
 #            path where Managers.backend has been torn down (e.g. lobby
@@ -36,11 +95,12 @@
 #   .\lint-mod.ps1 -ModPath crafting_in_modded        # single mod
 #   .\lint-mod.ps1 -ModPath .\crafting_in_modded -Json # also emit JSON sidecar
 #   .\lint-mod.ps1 -Strict                            # heuristic WARN -> ERROR
+#   .\lint-mod.ps1 -SelfTest                          # verify the linter itself
 #
 # Exit codes:
 #   0 - clean
-#   1 - warnings only (forward-ref + save/restore heuristics)
-#   2 - errors found (duplicate hooks; with -Strict, also save/restore)
+#   1 - warnings only (forward-ref + late-local + save/restore + network-bound)
+#   2 - errors found (duplicate hooks; with -Strict, also late-local + save/restore + network-bound)
 #
 # Output:
 #   - human-readable PASS/FAIL per mod plus per-finding file:line
@@ -52,20 +112,34 @@ param(
     [string]$JsonPath,
     [switch]$Json,
     [switch]$Quiet,
-    [switch]$Strict
+    [switch]$Strict,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
-# ---- mod inventory (kept in sync with publish-release.ps1) ----
-$KnownMods = @(
-    'weapon_tweaker', 'chaos_wastes_tweaker', 'general_tweaker', 'cosmetics_tweaker',
-    'dynamic_cosmetic_portraits', 'career_tweaker', 'enemy_tweaker',
-    'character_weapon_variants', 'crafting_in_modded', 'la_prefix_patch',
-    'event_tweaker', 'modded_progression', 'lobby_tweaker', 'buff_tweaker',
-    'material_hijack_patched', 'verminious_dreams_lighting'
-)
+# ---- mod inventory (single source of truth: tools/mod-inventory.psd1) ----
+# Previously a hand-maintained literal that drifted: it listed RETIRED
+# `lobby_tweaker` / `material_hijack_patched` and OMITTED all four `*_dev`
+# clones (so a duplicate-hook in a dev tree went unscanned). Now sourced from
+# the shared .psd1 so mod-lint, publish-release, and check_cfg can't diverge.
+# Falls back to a hardcoded list only if the .psd1 is missing.
+$inventoryPath = Join-Path $repoRoot 'tools\mod-inventory.psd1'
+if (Test-Path $inventoryPath) {
+    $inventory = Import-PowerShellDataFile -Path $inventoryPath
+    $KnownMods = @($inventory.Mods | ForEach-Object { $_.Dir })
+} else {
+    Write-Warning "mod-inventory.psd1 not found at $inventoryPath; using built-in fallback list (dev clones may be missing)."
+    $KnownMods = @(
+        'weapon_tweaker', 'chaos_wastes_tweaker', 'chaos_wastes_tweaker_dev',
+        'general_tweaker', 'general_tweaker_dev', 'gui_tweaker', 'cosmetics_tweaker',
+        'dynamic_cosmetic_portraits', 'career_tweaker', 'enemy_tweaker',
+        'character_weapon_variants', 'crafting_in_modded', 'crafting_in_modded_dev',
+        'event_tweaker', 'modded_progression', 'buff_tweaker',
+        'verminious_dreams_lighting', 'verminious_dreams_lighting_dev'
+    )
+}
 
 function Read-LuaText {
     param([string]$Path)
@@ -563,7 +637,184 @@ function Find-ForwardRefIssues {
     return ,$findings
 }
 
-# ---- pattern 3: save/restore invariants ----
+# ---- pattern 3: late-local-shadows-global ----
+# Catches the v0.7.99-dev ct DORMANT_BOON_RARITY scope bug (GUID
+# 4c5d2157-e5ee-45fd-8f49-ecdcd2e7ade3): a top-level `local NAME = ...`
+# declared LATE in the file while closures EARLIER in the file reference
+# `NAME`. Lua local scope is lexical — those earlier references resolve to
+# `_G.NAME` (often nil), not the late local.
+#
+# We restrict the check to ALL_CAPS_SNAKE names (`^local NAME = ...`) for two
+# reasons:
+#   * Convention in this repo: ALL_CAPS_SNAKE is reserved for module-level
+#     data tables (DORMANT_BOON_RARITY, CT_TRAIT_BOONS, etc.); functions use
+#     lowercase_snake. Snake-case functions are already covered by the
+#     existing `Find-ForwardRefIssues` check (different mechanism but same
+#     class of bug).
+#   * The user's spec calls out this exact heuristic to keep false-positive
+#     rate low. A future generalization would need to distinguish locals
+#     holding non-function values from forward-declared function locals.
+#
+# Algorithm:
+#   1. Single pass over comment-stripped lines (strings blanked too — don't
+#      want to false-match an ALL_CAPS name appearing inside a string body).
+#   2. Collect every column-0 `^local NAME = <not '(' or 'function'>` where
+#      NAME matches `^[A-Z_][A-Z0-9_]*$`. Skip `local function NAME` and
+#      `local NAME = function(` (those are the forward-ref check's domain).
+#      Record (Name, DeclLine).
+#   3. For each (Name, DeclLine), scan lines 1..DeclLine-1 for a word-bounded
+#      reference to `NAME` that is NOT preceded by `.` or `:` (table-field
+#      access — those bind to a table member, not the closure upvalue).
+#      Skip the matching line ITSELF if it is also a `local NAME` /
+#      `NAME =` declaration site for the same name.
+#   4. If any earlier reference is found, emit a finding pointing at both
+#      sites (file:earlier-line + file:decl-line + closure-or-toplevel
+#      sub-class).
+#
+# False-positive guards:
+#   * Comments are stripped (preserving newlines) — won't match a name
+#     inside a `-- description: DORMANT_BOON_RARITY ...` comment.
+#   * String literals are blanked — won't match `error("DORMANT_BOON_RARITY
+#     is not set")`.
+#   * Re-declaration / assignment lines (`local NAME = ...` or `NAME =` at
+#     column 0 with whitespace prefix) are excluded so we don't flag the
+#     declaration itself as a reference.
+#   * Table-field accesses (`obj.NAME`, `obj:NAME`) are excluded.
+#
+# Output rows: @{ File; Name; DeclLine; FirstUseLine; InClosure }
+#   - InClosure $true  -> high risk (closure captures _G.NAME at definition
+#                         time; runs after the line that creates the local).
+#   - InClosure $false -> top-level executable code; even worse (literally
+#                         runs before the late local is defined).
+function Find-LateLocalShadowing {
+    param(
+        [string]$File,
+        [string]$StripText   # comment-stripped AND string-interior-blanked
+    )
+
+    $findings = @()
+    $lines = $StripText -split "`r?`n"
+
+    # 1) Collect top-level late ALL_CAPS_SNAKE locals (data tables).
+    # Require column-0 `local NAME =` followed by anything except `(` or
+    # `function` (so we skip both `local NAME = function(` and the
+    # unusual `local NAME = (function() ... end)()` IIFE form, which
+    # behaves like a function declaration for our purposes).
+    $rxLateLocal = [regex]'^local\s+([A-Z_][A-Z0-9_]*)\s*=\s*([^(]|f(?!unction\b)|fu(?!nction\b))'
+
+    $lateLocals = @{}   # name -> first DeclLine
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $m = $rxLateLocal.Match($lines[$i])
+        if ($m.Success) {
+            $name = $m.Groups[1].Value
+            if (-not $lateLocals.ContainsKey($name)) {
+                $lateLocals[$name] = $i + 1
+            }
+        }
+    }
+
+    if ($lateLocals.Count -eq 0) { return ,$findings }
+
+    # 2) Locate every function-body extent so we can classify each earlier
+    # reference as "inside a function body" (high risk — captures the free
+    # variable at definition time, which is _G.NAME because the local
+    # doesn't exist yet) vs "at top-level executable code" (also wrong —
+    # executes immediately at load, before the late local exists).
+    #
+    # We track BOTH:
+    #   * anonymous closures: `function(`
+    #   * named function definitions: `function <name>(` and `local function <name>(`
+    # because the upvalue-capture semantics are the same — a named-function
+    # body defined ABOVE the late local sees the free reference as a global,
+    # exactly like an anonymous closure does. The ct pre-fix bug had
+    # `local function _should_strip(name)` AND a `mod:hook` anonymous
+    # closure — both bound to _G.DORMANT_BOON_RARITY.
+    $rxFnStart   = [regex]'(^|[^A-Za-z0-9_])function\b\s*(?:[A-Za-z_][A-Za-z0-9_.:]*\s*)?\('
+    $openWordRx  = [regex]'\b(function|if|while|for|repeat)\b'
+    $closeWordRx = [regex]'\b(end|until)\b'
+
+    $closures = @()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i]
+        foreach ($sm in $rxFnStart.Matches($line)) {
+            $startLine = $i + 1
+            $balance = 1
+            $startCol = $sm.Index + $sm.Length
+            $tail = $line.Substring([Math]::Min($startCol, $line.Length))
+            $balance += $openWordRx.Matches($tail).Count
+            $balance -= $closeWordRx.Matches($tail).Count
+
+            $endLine = $startLine
+            $j = $i + 1
+            while ($balance -gt 0 -and $j -lt $lines.Count) {
+                $balance += $openWordRx.Matches($lines[$j]).Count
+                $balance -= $closeWordRx.Matches($lines[$j]).Count
+                $endLine = $j + 1
+                $j++
+            }
+            $closures += @{ StartLine = $startLine; EndLine = $endLine }
+        }
+    }
+
+    # 3) For each late local, find the EARLIEST reference above DeclLine.
+    # Word-boundary identifier match, excluding `.NAME` / `:NAME` (table
+    # access) — same regex as Find-ForwardRefIssues uses.
+    $idCache = @{}  # name -> regex
+    foreach ($name in $lateLocals.Keys) {
+        $idCache[$name] = [regex]("(?<![.:A-Za-z0-9_])$([regex]::Escape($name))\b")
+    }
+
+    # Also need to skip lines that are themselves a `local NAME =` or
+    # `NAME =` (assignment) for the same name — those don't constitute
+    # a "use" of the upvalue, they create / overwrite it.
+    $rxDeclLine = @{}
+    foreach ($name in $lateLocals.Keys) {
+        $esc = [regex]::Escape($name)
+        # Either: `local <name> = ...` (any indent) OR `<name> = ...`
+        # (any indent), where `<name>` is the standalone identifier.
+        $rxDeclLine[$name] = [regex]("^\s*(local\s+)?$esc\s*=")
+    }
+
+    foreach ($name in $lateLocals.Keys) {
+        $declLine = $lateLocals[$name]
+        $idRx     = $idCache[$name]
+        $declRx   = $rxDeclLine[$name]
+
+        $witnessLine = 0
+        $witnessInClosure = $false
+        for ($i = 0; $i -lt ($declLine - 1) -and $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if (-not $idRx.IsMatch($line)) { continue }
+            if ($declRx.IsMatch($line)) { continue }   # re-decl / assignment line, not a use
+
+            $lineNo = $i + 1
+            $inClosure = $false
+            foreach ($c in $closures) {
+                if ($lineNo -ge $c.StartLine -and $lineNo -le $c.EndLine) {
+                    $inClosure = $true
+                    break
+                }
+            }
+            $witnessLine = $lineNo
+            $witnessInClosure = $inClosure
+            break  # earliest wins
+        }
+
+        if ($witnessLine -gt 0) {
+            $findings += [pscustomobject]@{
+                File         = $File
+                Name         = $name
+                DeclLine     = $declLine
+                FirstUseLine = $witnessLine
+                InClosure    = $witnessInClosure
+            }
+        }
+    }
+
+    return ,$findings
+}
+
+# ---- pattern 4: save/restore invariants ----
 # Three heuristics added 2026-05-23 to catch the cim "stale modded_loadout
 # overwrites vanilla restore" bug class. All three operate per-file on the
 # comments-stripped text (short-string interiors preserved so class names and
@@ -732,6 +983,109 @@ function Find-SaveRestoreIssues {
     return ,$findings
 }
 
+# ---- pattern 5: network-bound engine field WIDENING ----
+# Catches the v0.7.100-dev (`energy_ext._max_energy = ...`) ct crash. The engine
+# `.network_config` binary has hardcoded ints for these fields and fasserts when
+# a peer observes a value outside the bound, so a mod that RAISES (widens) the
+# cap crashes. The rule flags WIDENING field assignments ONLY.
+#
+# Heuristic refined 2026-05-29 to eliminate two recurring false positives while
+# preserving real widening detection. See the module header comment for the full
+# rationale + burn citations.
+#
+# Single regex pass:
+#   Pattern A — direct field assignment
+#     <ident>._max_(overcharge|energy|ammo|charge|health|stamina|push_power)
+#       \s*=\s*<rhs>
+#
+# (Former "Pattern B" — `stat_buff = "max_*"` string literal — has been REMOVED.
+# A buff-template stat_buff key is a data-table string resolved by the engine's
+# own network-safe buff system, NOT a raw field write; it false-positived on
+# crt's two `stat_buff = "max_health"` entries.)
+#
+# Exclusions (treat as SAFE — do NOT flag):
+#   - Comments / strings — handled because the input is already comment-stripped.
+#   - `-- LINT_OK_NETBOUND: <reason>` annotation on the SAME line or up to
+#     2 lines ABOVE — manual escape hatch for audited sites.
+#   - `==` equality comparison (negative lookahead on `=`) — read, not write.
+#   - DOWNWARD CLAMP idioms (the FIX for the crash, must never be flagged):
+#       (i)  RHS passes through math.min(...) / math.max(..., math.min(...)).
+#       (ii) GUARDED clamp — the assignment line, or a line up to 2 above it,
+#            compares the SAME `_max_<field>` with `> CONST` / `>= CONST`
+#            (e.g. `if self._max_ammo > 9999 then self._max_ammo = 9999 end`).
+#            This is the canonical chaos_wastes_tweaker.lua:7831 safe case.
+#
+# Output rows:
+#   @{ File; Line; Kind; Field; Detail }
+# where Kind:
+#   netbound_assign  - dangerous WIDENING mutation of a network-bounded field
+function Find-NetworkBoundMutation {
+    param(
+        [string]$File,
+        [string]$RawText,    # pre-strip — used to detect comment annotations
+        [string]$Text        # comments-stripped, short strings KEPT
+    )
+
+    $findings = @()
+    $lines    = $Text -split "`r?`n"
+    $rawLines = $RawText -split "`r?`n"
+
+    # Pattern A: `<ident>._max_<field> = <rhs>` — require NOT `==`. The negative
+    # lookahead `=(?!=)` rejects equality comparisons.
+    $rxAssign     = [regex]'\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*_max_(overcharge|energy|ammo|charge|health|stamina|push_power)\b\s*=(?!=)\s*(.*)$'
+    # Suppression annotation: `-- LINT_OK_NETBOUND[:...]` anywhere in a raw line.
+    $rxAnnotation = [regex]'--\s*LINT_OK_NETBOUND\b'
+    # math.min/max clamp heuristic on the RHS.
+    $rxClamp      = [regex]'\bmath\s*\.\s*min\s*\('
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i]
+
+        # Pattern A: direct field assignment.
+        foreach ($m in $rxAssign.Matches($line)) {
+            $ident = $m.Groups[1].Value
+            $fieldSuffix = $m.Groups[2].Value
+            $field = '_max_' + $fieldSuffix
+            $rhs   = $m.Groups[3].Value
+
+            # Suppression: LINT_OK_NETBOUND on same line or up to 2 lines above.
+            $annotated = $false
+            $lo = [Math]::Max(0, $i - 2)
+            for ($k = $lo; $k -le $i -and $k -lt $rawLines.Count; $k++) {
+                if ($rxAnnotation.IsMatch($rawLines[$k])) { $annotated = $true; break }
+            }
+            if ($annotated) { continue }
+
+            # Clamp suppression (i): RHS contains math.min(...). Tolerant —
+            # accepts `math.min(x, 60)`, `math.max(1, math.min(x, 60))`, etc.
+            if ($rxClamp.IsMatch($rhs)) { continue }
+
+            # Clamp suppression (ii): GUARDED downward clamp. The assignment is
+            # safe if the SAME `_max_<field>` is compared with `> CONST` /
+            # `>= CONST` on this line or up to 2 lines above (the `if X > CAP
+            # then X = CAP end` idiom — ct:7831). We match the field SUFFIX so
+            # the guard `self._max_ammo > 9999` protects `self._max_ammo = 9999`
+            # regardless of the receiver identifier.
+            $rxGuard = [regex]("_max_" + [regex]::Escape($fieldSuffix) + '\b\s*>=?\s*[-\d]')
+            $guarded = $false
+            for ($k = $lo; $k -le $i -and $k -lt $lines.Count; $k++) {
+                if ($rxGuard.IsMatch($lines[$k])) { $guarded = $true; break }
+            }
+            if ($guarded) { continue }
+
+            $findings += [pscustomobject]@{
+                File   = $File
+                Line   = $i + 1
+                Kind   = 'netbound_assign'
+                Field  = "$ident.$field"
+                Detail = "WIDENING write to network-bounded engine field $field; raising this cap crashes peers via fassert. Clamp downward (math.min / `if X > CAP then X = CAP`) or use the consumption-side stat_buff. See chaos_wastes_tweaker v0.7.100-dev CHANGELOG + ct:7831 clamp."
+            }
+        }
+    }
+
+    return ,$findings
+}
+
 # ---- mod-level scan ----
 function Lint-Mod {
     param([string]$ModFolder)
@@ -740,7 +1094,9 @@ function Lint-Mod {
     $files = Get-ModLuaFiles -ModFolder $ModFolder
     $hooks       = New-Object System.Collections.Generic.List[object]
     $forwardRefs = New-Object System.Collections.Generic.List[object]
+    $lateLocals  = New-Object System.Collections.Generic.List[object]
     $saveRestore = New-Object System.Collections.Generic.List[object]
+    $netBound    = New-Object System.Collections.Generic.List[object]
 
     foreach ($f in $files) {
         $raw = Read-LuaText -Path $f
@@ -756,8 +1112,14 @@ function Lint-Mod {
         foreach ($r in $hookRows) { [void]$hooks.Add($r) }
         $fwds = Find-ForwardRefIssues -File $f -RawText $raw -StripText $stripped
         foreach ($r in $fwds) { [void]$forwardRefs.Add($r) }
+        $lls = Find-LateLocalShadowing -File $f -StripText $stripped
+        foreach ($r in $lls) { [void]$lateLocals.Add($r) }
         $sr = Find-SaveRestoreIssues -File $f -Text $commentsOnly
         foreach ($r in $sr) { [void]$saveRestore.Add($r) }
+        # Network-bound mutation needs comments-stripped (so commented-out
+        # patterns don't fire) but raw for LINT_OK_NETBOUND annotation detect.
+        $nbm = Find-NetworkBoundMutation -File $f -RawText $raw -Text $commentsOnly
+        foreach ($r in $nbm) { [void]$netBound.Add($r) }
     }
 
     $dupes = Find-DuplicateHooks -AllHooks $hooks.ToArray()
@@ -769,7 +1131,9 @@ function Lint-Mod {
         HookCount    = $hooks.Count
         Duplicates   = $dupes
         ForwardRefs  = $forwardRefs.ToArray()
+        LateLocals   = $lateLocals.ToArray()
         SaveRestore  = $saveRestore.ToArray()
+        NetBound     = $netBound.ToArray()
     }
 }
 
@@ -804,25 +1168,33 @@ function Emit-Report {
     $exit = 0
     $totalDupes = 0
     $totalFwd   = 0
+    $totalLL    = 0
     $totalSR    = 0
+    $totalNB    = 0
 
     foreach ($r in $Reports) {
         $hasDupes = $r.Duplicates.Count -gt 0
         $hasFwd   = $r.ForwardRefs.Count -gt 0
+        $hasLL    = $r.LateLocals.Count -gt 0
         $hasSR    = $r.SaveRestore.Count -gt 0
+        $hasNB    = $r.NetBound.Count -gt 0
         $totalDupes += $r.Duplicates.Count
         $totalFwd   += $r.ForwardRefs.Count
+        $totalLL    += $r.LateLocals.Count
         $totalSR    += $r.SaveRestore.Count
+        $totalNB    += $r.NetBound.Count
 
         # Severity ladder:
-        #   duplicates           -> always ERROR (exit 2)
-        #   forward-refs         -> WARN (exit 1), or ERROR (exit 2) under -Strict
-        #   save/restore         -> WARN (exit 1), or ERROR (exit 2) under -Strict
+        #   duplicates                 -> always ERROR (exit 2)
+        #   forward-refs               -> WARN (exit 1), or ERROR under -Strict
+        #   late-local-shadows-global  -> WARN (exit 1), or ERROR under -Strict
+        #   save/restore               -> WARN (exit 1), or ERROR under -Strict
+        #   network-bound mutation     -> WARN (exit 1), or ERROR under -Strict
         if ($hasDupes) {
             $status = 'FAIL'; $color = 'Red'; $exit = [Math]::Max($exit, 2)
-        } elseif (($hasFwd -or $hasSR) -and $Strict) {
+        } elseif (($hasFwd -or $hasLL -or $hasSR -or $hasNB) -and $Strict) {
             $status = 'FAIL'; $color = 'Red'; $exit = [Math]::Max($exit, 2)
-        } elseif ($hasFwd -or $hasSR) {
+        } elseif ($hasFwd -or $hasLL -or $hasSR -or $hasNB) {
             $status = 'WARN'; $color = 'Yellow'; if ($exit -lt 1) { $exit = 1 }
         } else {
             $status = 'PASS'; $color = 'Green'
@@ -847,6 +1219,15 @@ function Emit-Report {
                 Write-Host ("  FORWARD-REF: '{0}' defined {1}:{2}, first used at line {3} (no forward decl)" -f $f.Name, $rel, $f.DefLine, $f.FirstUseLine) -ForegroundColor Yellow
             }
         }
+        if ($hasLL) {
+            $llColor = if ($Strict) { 'Red' } else { 'Yellow' }
+            foreach ($l in $r.LateLocals) {
+                $rel = $l.File
+                if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+                $ctxt = if ($l.InClosure) { 'function body' } else { 'top-level code' }
+                Write-Host ("  LATE-LOCAL-SHADOWS-GLOBAL: '{0}' referenced from {1} at {2}:{3} but declared at line {4} (earlier ref resolves to _G.{0}, not the local)" -f $l.Name, $ctxt, $rel, $l.FirstUseLine, $l.DeclLine) -ForegroundColor $llColor
+            }
+        }
         if ($hasSR) {
             $srColor = if ($Strict) { 'Red' } else { 'Yellow' }
             $srTag   = if ($Strict) { 'SAVE-RESTORE' } else { 'SAVE-RESTORE (warn)' }
@@ -856,15 +1237,283 @@ function Emit-Report {
                 Write-Host ("  {0} [{1}] {2}:{3}  {4}" -f $srTag, $s.Kind, $rel, $s.Line, $s.Detail) -ForegroundColor $srColor
             }
         }
+        if ($hasNB) {
+            $nbColor = if ($Strict) { 'Red' } else { 'Yellow' }
+            $nbTag   = if ($Strict) { 'NETWORK-BOUND-MUTATION' } else { 'NETWORK-BOUND-MUTATION (warn)' }
+            foreach ($n in $r.NetBound) {
+                $rel = $n.File
+                if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+                Write-Host ("  {0} [{1}] {2}:{3}  {4}" -f $nbTag, $n.Kind, $rel, $n.Line, $n.Detail) -ForegroundColor $nbColor
+            }
+        }
     }
 
     Write-Host ""
     $sev = if ($Strict) { 'error(s)' } else { 'warning(s)' }
-    Write-Host ("Summary: {0} mod(s) scanned, {1} duplicate-hook error(s), {2} forward-ref warning(s), {3} save/restore {4}" -f $Reports.Count, $totalDupes, $totalFwd, $totalSR, $sev)
-    if ($Strict -and ($totalFwd -gt 0 -or $totalSR -gt 0)) {
-        Write-Host "(-Strict: forward-ref + save/restore findings promoted to error level)" -ForegroundColor DarkGray
+    Write-Host ("Summary: {0} mod(s) scanned, {1} duplicate-hook error(s), {2} forward-ref warning(s), {3} late-local warning(s), {4} save/restore + {5} network-bound {6}" -f $Reports.Count, $totalDupes, $totalFwd, $totalLL, $totalSR, $totalNB, $sev)
+    if ($Strict -and ($totalFwd -gt 0 -or $totalLL -gt 0 -or $totalSR -gt 0 -or $totalNB -gt 0)) {
+        Write-Host "(-Strict: forward-ref + late-local + save/restore + network-bound findings promoted to error level)" -ForegroundColor DarkGray
     }
     return $exit
+}
+
+# ---- self-test ----
+# Synthesizes in-memory fixtures and runs the Find-LateLocalShadowing detector
+# against each. Other checks (duplicate-hooks, forward-ref) already have file-
+# system fixtures under test_fixtures/; this self-test is scoped to the new
+# late-local check the harness can't easily express on disk (we'd need a
+# multi-thousand-line bad mod to keep the scope realistic).
+function Invoke-LateLocalSelfTest {
+    Write-Host "lint-mod: running self-test for late-local-shadows-global"
+
+    $results = New-Object 'System.Collections.Generic.List[object]'
+
+    function _Record {
+        param([string]$Name, [bool]$Pass, [string]$Detail)
+        $results.Add(@{ Name = $Name; Pass = $Pass; Detail = $Detail })
+        $tag = if ($Pass) { 'PASS' } else { 'FAIL' }
+        $col = if ($Pass) { 'Green' } else { 'Red' }
+        Write-Host ("  [{0}] {1} {2}" -f $tag, $Name, $Detail) -ForegroundColor $col
+    }
+
+    function _Run {
+        param([string]$Source)
+        # Mimic Lint-Mod's per-file prep without touching disk.
+        $stripped = Strip-LuaCommentsAndStrings -Text $Source
+        return Find-LateLocalShadowing -File '(memory)' -StripText $stripped
+    }
+
+    # --- Bad fixture: closure at L10 references MY_TABLE, late local at L100 ---
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('local mod = get_mod("st_late_local")')                  # L1
+    [void]$sb.AppendLine('')                                                       # L2
+    [void]$sb.AppendLine('-- closure references MY_TABLE before declaration')     # L3
+    [void]$sb.AppendLine('mod:hook("Foo", "bar", function(func, self)')           # L4
+    [void]$sb.AppendLine('    for k, v in pairs(MY_TABLE) do')                    # L5
+    [void]$sb.AppendLine('        print(k, v)')                                    # L6
+    [void]$sb.AppendLine('    end')                                                # L7
+    [void]$sb.AppendLine('    return func(self)')                                  # L8
+    [void]$sb.AppendLine('end)')                                                   # L9
+    # Pad to ~L100 so we're testing the actual "late" case.
+    for ($k = 10; $k -lt 100; $k++) { [void]$sb.AppendLine('-- filler ' + $k) }
+    [void]$sb.AppendLine('local MY_TABLE = {')                                     # L100
+    [void]$sb.AppendLine('    foo = "bar",')                                       # L101
+    [void]$sb.AppendLine('}')                                                      # L102
+    $found = _Run -Source $sb.ToString()
+    $hit = @($found | Where-Object { $_.Name -eq 'MY_TABLE' })
+    $hitInClosure = $hit.Count -eq 1 -and $hit[0].InClosure -eq $true
+    $detail = if ($hit.Count -eq 1) { "decl=$($hit[0].DeclLine) ref=$($hit[0].FirstUseLine) closure=$($hit[0].InClosure)" } else { "no finding" }
+    _Record -Name 'bad: late-decl after closure ref' -Pass ($hit.Count -eq 1) -Detail $detail
+    _Record -Name 'bad: classified as closure ref' -Pass $hitInClosure -Detail ""
+
+    # --- Good fixture: local declared at L10, closure at L100 references it ---
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('local mod = get_mod("st_late_local_ok")')               # L1
+    for ($k = 2; $k -le 9; $k++) { [void]$sb.AppendLine('-- filler ' + $k) }      # L2-L9
+    [void]$sb.AppendLine('local MY_TABLE = { foo = "bar" }')                       # L10
+    for ($k = 11; $k -lt 100; $k++) { [void]$sb.AppendLine('-- filler ' + $k) }
+    [void]$sb.AppendLine('mod:hook("Foo", "bar", function(func, self)')           # L100
+    [void]$sb.AppendLine('    return MY_TABLE.foo')                                # L101
+    [void]$sb.AppendLine('end)')                                                   # L102
+    $found = _Run -Source $sb.ToString()
+    $hit = @($found | Where-Object { $_.Name -eq 'MY_TABLE' })
+    $detail = if ($hit.Count -eq 0) { "" } else { "false positive on line $($hit[0].FirstUseLine)" }
+    _Record -Name 'good: early-decl + late closure ref' -Pass ($hit.Count -eq 0) -Detail $detail
+
+    # --- Good fixture: forward-declared local-function pattern is fine ---
+    # `local foo; function foo() end` is the canonical Lua forward-decl. Our
+    # check is restricted to ALL_CAPS names, so a lowercase function shouldn't
+    # be flagged. We still verify by writing it that way to lock in the
+    # contract.
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('local mod = get_mod("st_forward_decl_ok")')             # L1
+    [void]$sb.AppendLine('local foo')                                              # L2 (forward decl)
+    [void]$sb.AppendLine('mod:hook("Foo", "bar", function(func, self)')           # L3
+    [void]$sb.AppendLine('    return foo(self)')                                   # L4 - refs foo
+    [void]$sb.AppendLine('end)')                                                   # L5
+    [void]$sb.AppendLine('function foo(x) return x end')                           # L6
+    $found = _Run -Source $sb.ToString()
+    $hit = @($found | Where-Object { $_.Name -eq 'foo' })
+    _Record -Name 'good: lowercase forward-declared fn (not in scope)' `
+        -Pass ($hit.Count -eq 0) -Detail ""
+
+    # --- Bad fixture: top-level executable code references late local ---
+    # Different from the closure case — this would crash immediately at load,
+    # not just at first closure invocation. Still reportable.
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('local mod = get_mod("st_late_local_toplevel")')         # L1
+    [void]$sb.AppendLine('')                                                       # L2
+    [void]$sb.AppendLine('-- top-level executable use of MY_DATA')                 # L3
+    [void]$sb.AppendLine('for k, v in pairs(MY_DATA) do print(k) end')             # L4
+    for ($k = 5; $k -lt 50; $k++) { [void]$sb.AppendLine('-- filler ' + $k) }
+    [void]$sb.AppendLine('local MY_DATA = { a = 1 }')                              # L50
+    $found = _Run -Source $sb.ToString()
+    $hit = @($found | Where-Object { $_.Name -eq 'MY_DATA' })
+    $hitTopLevel = $hit.Count -eq 1 -and $hit[0].InClosure -eq $false
+    $detail = if ($hit.Count -eq 1) { "decl=$($hit[0].DeclLine) ref=$($hit[0].FirstUseLine) closure=$($hit[0].InClosure)" } else { "no finding" }
+    _Record -Name 'bad: top-level pre-decl ref' -Pass $hitTopLevel -Detail $detail
+
+    # --- Good fixture: comment / string mention of NAME before decl ---
+    # Refs inside comments and string literals must NOT trigger.
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('local mod = get_mod("st_late_local_comment")')          # L1
+    [void]$sb.AppendLine('-- This file uses MY_TABLE for X reasons')               # L2
+    [void]$sb.AppendLine('local foo = "uses MY_TABLE internally"')                 # L3
+    [void]$sb.AppendLine('local bar = function() return 1 end')                    # L4
+    [void]$sb.AppendLine('local MY_TABLE = {}')                                    # L5
+    $found = _Run -Source $sb.ToString()
+    $hit = @($found | Where-Object { $_.Name -eq 'MY_TABLE' })
+    $detail = if ($hit.Count -eq 0) { "" } else { "false positive on line $($hit[0].FirstUseLine)" }
+    _Record -Name 'good: comment/string mention does not trigger' -Pass ($hit.Count -eq 0) -Detail $detail
+
+    # --- Good fixture: table-field access (obj.NAME) does not trigger ---
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('local mod = get_mod("st_late_local_field")')            # L1
+    [void]$sb.AppendLine('local function f(obj)')                                  # L2
+    [void]$sb.AppendLine('    return obj.MY_TABLE')                                # L3 - field access
+    [void]$sb.AppendLine('end')                                                    # L4
+    [void]$sb.AppendLine('local MY_TABLE = {}')                                    # L5
+    $found = _Run -Source $sb.ToString()
+    $hit = @($found | Where-Object { $_.Name -eq 'MY_TABLE' })
+    $detail = if ($hit.Count -eq 0) { "" } else { "false positive on line $($hit[0].FirstUseLine)" }
+    _Record -Name 'good: obj.NAME field-access does not trigger' -Pass ($hit.Count -eq 0) -Detail $detail
+
+    # --- Network-bound mutation fixtures (Pattern A + B + escape hatches) ---
+    Write-Host ""
+    Write-Host "lint-mod: running self-test for network-bound-mutation"
+
+    function _RunNB {
+        param([string]$Source)
+        $commentsOnly = Strip-LuaComments -Text $Source
+        return Find-NetworkBoundMutation -File '(memory)' -RawText $Source -Text $commentsOnly
+    }
+
+    # Bad: direct field assignment, no clamp.
+    $src = @"
+local ext = something()
+ext._max_overcharge = 80
+"@
+    $found = _RunNB -Source $src
+    $hit = @($found | Where-Object { $_.Kind -eq 'netbound_assign' })
+    $detail = if ($hit.Count -eq 1) { "field=$($hit[0].Field) line=$($hit[0].Line)" } else { "no finding ($($found.Count) total)" }
+    _Record -Name 'bad: ext._max_overcharge = 80 (no clamp)' -Pass ($hit.Count -eq 1) -Detail $detail
+
+    # Bad: widening via multiply (ext._max_ammo = ext._max_ammo * 2).
+    $src = @"
+local ext = something()
+ext._max_ammo = ext._max_ammo * 2
+"@
+    $found = _RunNB -Source $src
+    $hit = @($found | Where-Object { $_.Kind -eq 'netbound_assign' })
+    _Record -Name 'bad: ext._max_ammo = ext._max_ammo * 2 (widening)' -Pass ($hit.Count -eq 1) -Detail $(if ($hit.Count -eq 1) { "field=$($hit[0].Field) line=$($hit[0].Line)" } else { "no finding" })
+
+    # Good (FALSE-POSITIVE REGRESSION GUARD a): stat_buff = "max_*" data-table
+    # string literal must NOT fire (Pattern B removed 2026-05-29). Mirrors crt's
+    # two career_tweaker_balance/big_rebalance `stat_buff = "max_health"` entries.
+    $src = @"
+local t = {
+    { stat_buff = "max_overcharge", multiplier = 0.05 },
+    { stat_buff = "max_health",     bonus = 30 },
+}
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: stat_buff = "max_*" data literal does NOT fire' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp $($found[0].Kind) on line $($found[0].Line)" })
+
+    # Good (FALSE-POSITIVE REGRESSION GUARD b): guarded downward clamp — the
+    # canonical chaos_wastes_tweaker.lua:7831 safe case. `if X > CAP then X = CAP end`.
+    $src = @"
+local self = something()
+if type(self._max_ammo) == "number" and self._max_ammo > 9999 then
+    self._max_ammo = 9999
+end
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: guarded > CONST clamp (ct:7831) does NOT fire' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp $($found[0].Kind) on line $($found[0].Line)" })
+
+    # Good: math.min clamp detected.
+    $src = @"
+local ext = something()
+ext._max_overcharge = math.min(new_val, 60)
+"@
+    $found = _RunNB -Source $src
+    $detail = if ($found.Count -eq 0) { "" } else { "false positive on line $($found[0].Line) ($($found[0].Kind))" }
+    _Record -Name 'good: math.min clamp suppresses warning' -Pass ($found.Count -eq 0) -Detail $detail
+
+    # Good: math.max(x, math.min(...)) nested clamp.
+    $src = @"
+local ext = something()
+ext._max_energy = math.max(1, math.min(new_val, 60))
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: math.max + math.min nested clamp' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp on line $($found[0].Line)" })
+
+    # Good: LINT_OK_NETBOUND annotation on same line.
+    $src = @"
+local ext = something()
+ext._max_overcharge = X  -- LINT_OK_NETBOUND: vanilla path
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: LINT_OK_NETBOUND escape on same line' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp on line $($found[0].Line)" })
+
+    # Good: LINT_OK_NETBOUND annotation 2 lines above.
+    $src = @"
+-- LINT_OK_NETBOUND: applied before vanilla cap check, see ct v0.7.42
+do
+    ext._max_overcharge = X
+end
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: LINT_OK_NETBOUND escape 2 lines above' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp on line $($found[0].Line)" })
+
+    # Good: total_ammo stat_buff (vanilla-supported, no network bound).
+    $src = @'
+local t = {
+    { stat_buff = "total_ammo", multiplier = 0.5 },
+}
+'@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: stat_buff = "total_ammo" (vanilla-supported)' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp $($found[0].Kind) on line $($found[0].Line)" })
+
+    # Good: read access (local x = ext._max_overcharge) does NOT trigger.
+    $src = @"
+local ext = something()
+local x = ext._max_overcharge
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: read access does not trigger' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp on line $($found[0].Line)" })
+
+    # Good: equality comparison (ext._max_overcharge == 60) does NOT trigger.
+    $src = @"
+local ext = something()
+if ext._max_overcharge == 60 then return end
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: == comparison does not trigger' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp on line $($found[0].Line)" })
+
+    # Good: commented-out line does NOT trigger.
+    $src = @"
+-- ext._max_overcharge = 80
+local y = 1
+"@
+    $found = _RunNB -Source $src
+    _Record -Name 'good: commented-out line does not trigger' -Pass ($found.Count -eq 0) -Detail $(if ($found.Count -eq 0) { "" } else { "fp on line $($found[0].Line)" })
+
+    # --- Summary ---
+    $failed = @($results | Where-Object { -not $_.Pass })
+    $passed = @($results | Where-Object { $_.Pass })
+    Write-Host ""
+    if ($failed.Count -eq 0) {
+        Write-Host ("self-test PASS ({0}/{1})" -f $passed.Count, $results.Count) -ForegroundColor Green
+        return 0
+    } else {
+        Write-Host ("self-test FAIL ({0}/{1} failed)" -f $failed.Count, $results.Count) -ForegroundColor Red
+        foreach ($f in $failed) { Write-Host ("  - {0}" -f $f.Name) -ForegroundColor Red }
+        return 1
+    }
+}
+
+if ($SelfTest) {
+    exit (Invoke-LateLocalSelfTest)
 }
 
 # ---- main ----
@@ -912,11 +1561,25 @@ if ($Json -or $JsonPath) {
                             [ordered]@{ file = $rel; name = $fw.Name; def_line = $fw.DefLine; first_use_line = $fw.FirstUseLine }
                         }
                     )
+                    late_locals = @(
+                        foreach ($ll in $r.LateLocals) {
+                            $rel = $ll.File
+                            if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+                            [ordered]@{ file = $rel; name = $ll.Name; decl_line = $ll.DeclLine; first_use_line = $ll.FirstUseLine; in_closure = [bool]$ll.InClosure }
+                        }
+                    )
                     save_restore = @(
                         foreach ($sr in $r.SaveRestore) {
                             $rel = $sr.File
                             if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
                             [ordered]@{ file = $rel; line = $sr.Line; kind = $sr.Kind; detail = $sr.Detail }
+                        }
+                    )
+                    network_bound = @(
+                        foreach ($nb in $r.NetBound) {
+                            $rel = $nb.File
+                            if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+                            [ordered]@{ file = $rel; line = $nb.Line; kind = $nb.Kind; field = $nb.Field; detail = $nb.Detail }
                         }
                     )
                 }

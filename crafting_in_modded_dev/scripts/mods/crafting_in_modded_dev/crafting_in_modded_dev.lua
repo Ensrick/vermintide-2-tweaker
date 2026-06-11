@@ -76,8 +76,18 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.7.69-dev"
+local MOD_VERSION = "0.7.73-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
+
+-- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
+-- BUG_CLASSES § 9). The `cim_modded_slot` side-channel RPC prepends this as the
+-- FIRST positional arg of every send; the receiver validates the incoming value
+-- against this constant and DROPS the packet on mismatch (audit 2026-06-07,
+-- v0.7.72-dev — the RPC previously shipped with no schema arg or receiver gate,
+-- so a future payload-shape change between peers running different cim builds
+-- would silently mis-decode). Initial value is 1; never define lower. Bump when
+-- the payload shape of any cim RPC changes.
+local CIM_RPC_SCHEMA = 1
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
@@ -643,8 +653,11 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
         -- We always send (even is_modded=false) so equipping a non-modded item
         -- clears any stale modded flag on that slot.
         local target = sync_to_specific_peer_id or "others"
+        -- audit 2026-06-07 (v0.7.72-dev): CIM_RPC_SCHEMA is the FIRST positional
+        -- arg after the target (VMF_RECIPES § 10). The receiver gate below drops
+        -- any packet whose leading schema value doesn't match.
         local ok_send, err_send = pcall(mod.network_send, mod, "cim_modded_slot",
-            target, peer_id, local_player_id, slot_name, is_modded)
+            target, CIM_RPC_SCHEMA, peer_id, local_player_id, slot_name, is_modded)
         if not ok_send then mod:info("[cim] side-channel send failed: %s", tostring(err_send)) end
 
         if not is_modded then
@@ -663,7 +676,16 @@ end
 -- the loadout RPC already arrived (out-of-order delivery), patches the stored
 -- item's rarity back to "modded" immediately. Vanilla clients never register
 -- this handler so the RPC is dropped harmlessly there.
-mod:network_register("cim_modded_slot", function(sender_peer_id, peer_id, local_player_id, slot_name, is_modded)
+local function _rpc_cim_modded_slot(sender_peer_id, schema_version, peer_id, local_player_id, slot_name, is_modded)
+    -- audit 2026-06-07 (v0.7.72-dev): schema gate (VMF_RECIPES § 10 / BUG_CLASSES
+    -- § 9). VMF injects sender_peer_id; schema_version is the first WIRE arg. Drop
+    -- (no state mutation) when a peer on a different cim build sends an incompatible
+    -- payload shape, rather than mis-binding it to the wrong positional slots.
+    if schema_version ~= CIM_RPC_SCHEMA then
+        _dbg_alert("[rpc:schema] cim_modded_slot mismatch from peer=%s: peer sent v%s, we expect v%s. Dropping.",
+            tostring(sender_peer_id), tostring(schema_version), tostring(CIM_RPC_SCHEMA))
+        return
+    end
     local uid = _cim_unique_id(peer_id, local_player_id)
     _cim_modded_slot_state[uid] = _cim_modded_slot_state[uid] or {}
     _cim_modded_slot_state[uid][slot_name] = is_modded and true or nil
@@ -679,7 +701,14 @@ mod:network_register("cim_modded_slot", function(sender_peer_id, peer_id, local_
             stored.rarity = is_modded and "modded" or stored.rarity
         end
     end
-end)
+end
+mod:network_register("cim_modded_slot", _rpc_cim_modded_slot)
+
+-- Exposed for /cim_regression_test (rpc_schema_gate_drops_on_mismatch): lets the
+-- test drive the receiver synthetically and assert the schema gate drops on a
+-- bad version (audit 2026-06-07, v0.7.72-dev).
+mod._cim_rpc_modded_slot = _rpc_cim_modded_slot
+mod._cim_modded_slot_state = _cim_modded_slot_state
 
 -- Restore "modded" rarity post-decode on cim clients. hook_safe fires AFTER
 -- vanilla's `rpc_sync_loadout_slot` has stored the item under
@@ -1544,6 +1573,111 @@ mod:hook("HeroViewStateWeaveForge", "get_ui_renderer", function(func, self, ...)
     return func(self, ...)
 end)
 
+-- ------------------------------------------------------------
+-- Mid-mission forge: parent HeroView HDR gui setup + renderer guard
+-- ------------------------------------------------------------
+-- Crash trace (user 2026-06-07, in mission, cim open_forge with Allow in
+-- mission enabled):
+--
+--   hero_view.lua:175: attempt to index local 'hdr_gui_data' (a nil value)
+--   (HeroView.hdr_renderer / HeroView.hdr_top_renderer — line number shifts by
+--    game build; the cited local is `self._hdr_gui_data` being indexed.)
+--
+-- Same bug class as the _setup_gamepad_gui fix above, but one level UP on the
+-- parent HeroView instead of the forge state. Vanilla `HeroView._setup_hdr_gui`
+-- (hero_view.lua:136-165) gates its ENTIRE body on
+-- `if self.is_in_inn then ... self._hdr_gui_data = ... end`. In mission
+-- is_in_inn is false, so `_hdr_gui_data` is never built. The Athanor forge
+-- windows (HeroWindowWeaveForgeOverview/Panel/Weapons, HeroWindowWeaveProperties)
+-- call `parent:hdr_renderer()` / `parent:hdr_top_renderer()` every draw frame,
+-- and those accessors (hero_view.lua:183-195) do
+-- `local hdr_data = self._hdr_gui_data.bottom` → fatal nil-index.
+--
+-- Why the hook fires: cim's open_forge does
+-- `transition_with_fade("hero_view_force", {menu_state_name="weave_forge"})`
+-- with NO force_ingame_menu, so HeroView.on_enter (hero_view.lua:278) takes the
+-- `not self._force_ingame_menu` branch and DOES call _setup_hdr_gui. (The
+-- game's own in-mission ESC→character path sets force_ingame_menu=IS_WINDOWS at
+-- ingame_ui.lua:642 and skips it — but that path doesn't open the forge.)
+--
+-- Cleanup is leak-safe: HeroView.destroy_hdr_gui (hero_view.lua:639) guards on
+-- `if self._hdr_gui_data then ... Managers.world:destroy_world(world) end` — NOT
+-- on is_in_inn — so the HDR worlds we build in mission are torn down on view
+-- close.
+--
+-- Two-layer fix, mirroring the _setup_gamepad_gui pattern above:
+--   1. Hook _setup_hdr_gui; flip is_in_inn=true so the hdr_gui_data branch runs
+--      and real HDR renderers are created (the forge's HDR glow layer renders
+--      correctly).
+--   2. Defensive guard on hdr_renderer/hdr_top_renderer: if _hdr_gui_data is
+--      somehow still nil (e.g. a future path that skips _setup_hdr_gui), fall
+--      back to the view's own ui_renderer/ui_top_renderer so the forge stays
+--      usable instead of crashing.
+-- Regression: heroview_hdr_renderer_guard_failsafe (/cim_regression_test).
+-- v0.7.73 (Issue #73): destroy-on-failure sweep. If the pcall'd vanilla call
+-- fails AFTER creating a world but BEFORE `self._hdr_gui_data = hdr_gui_data`
+-- (vanilla's last statement, hero_view.lua:163), the half-built world is leaked
+-- unreferenced — destroy_hdr_gui never releases it and the NEXT forge open dies
+-- on world_manager's "World already exists" fassert (engine-fatal, bypasses
+-- pcall). Sweep by name: WorldManager.destroy_world accepts the name string
+-- (world_manager.lua:64) and destroying the world releases its viewport/guis
+-- engine-side. Parameterized for the regression test
+-- (heroview_hdr_failed_setup_sweeps_leaked_worlds).
+local _HDR_WORLD_NAMES = { "hero_view_hdr", "hero_view_hdr_top" }
+function mod._cim_sweep_leaked_hdr_worlds(world_manager, hdr_gui_data)
+    if hdr_gui_data then return 0 end  -- worlds are referenced; destroy_hdr_gui owns them
+    if not (world_manager and world_manager.has_world and world_manager.destroy_world) then return 0 end
+    local swept = 0
+    for _, world_name in ipairs(_HDR_WORLD_NAMES) do
+        if world_manager:has_world(world_name) then
+            local destroy_ok = pcall(function() world_manager:destroy_world(world_name) end)
+            -- Ungated: this only runs on an already-failing path the user needs
+            -- to see in the log without Debug Logging on.
+            mod:warning("[cim] swept half-built HDR world '%s' after failed in-mission setup (destroy ok=%s)",
+                world_name, tostring(destroy_ok))
+            swept = swept + 1
+        end
+    end
+    return swept
+end
+
+mod:hook("HeroView", "_setup_hdr_gui", function(func, self, ...)
+    if self.is_in_inn then
+        return func(self, ...)
+    end
+    -- Temporarily satisfy the is_in_inn gate so _hdr_gui_data gets built with
+    -- real HDR renderers. Restore the SAVED value afterwards (nil in mission —
+    -- v0.7.73, was literal false) so vanilla code outside this hook keeps seeing
+    -- the truthful value, identity comparisons included.
+    local saved_is_in_inn = self.is_in_inn
+    self.is_in_inn = true
+    local ok, err = pcall(func, self, ...)
+    self.is_in_inn = saved_is_in_inn
+    if ok then
+        _dbg("HeroView._setup_hdr_gui built in mission: _hdr_gui_data=%s",
+            tostring(self._hdr_gui_data ~= nil))
+    else
+        -- Ungated (mod:warning): a failure here breaks the in-mission forge HDR
+        -- layer; surface it in the log WITHOUT requiring Debug Logging to be on.
+        mod:warning("[cim] HeroView._setup_hdr_gui in mission failed: %s", tostring(err))
+        mod._cim_sweep_leaked_hdr_worlds(Managers.world, self._hdr_gui_data)
+    end
+end)
+
+mod:hook("HeroView", "hdr_renderer", function(func, self, ...)
+    if not self._hdr_gui_data then
+        return self.ui_renderer
+    end
+    return func(self, ...)
+end)
+
+mod:hook("HeroView", "hdr_top_renderer", function(func, self, ...)
+    if not self._hdr_gui_data then
+        return self.ui_top_renderer
+    end
+    return func(self, ...)
+end)
+
 mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
     _custom_forge_active = false
     _forge_loadout = {}
@@ -1562,6 +1696,110 @@ end)
 mod:hook("HeroWindowWeaveProperties", "_create_unit_previewer", function(func, self, ...)
     if self._cim_skip_previewer then return nil end
     return func(self, ...)
+end)
+
+-- ============================================================
+-- Forge weapon preview: skip the 3D model spawn for weapons whose
+-- preview units aren't resident / loadable in the weave-forge world
+-- ============================================================
+-- Crash class (HARD CTD — no Lua traceback, so nothing shows in console logs):
+-- the weave-forge weapon previewer (`LootItemUnitPreviewer`, created by
+-- HeroWindowWeaveForgeOverview / HeroWindowWeaveForgeWeapons and
+-- HeroWindowWeaveProperties via `_create_item_previewer`) spawns the selected
+-- weapon's 3D model. Two engine-level spawn sites run with NO Lua guard:
+--   1. `_spawn_link_unit` -> World.spawn_unit(world, <skin.display_unit>) inside
+--      LootItemUnitPreviewer.init, BEFORE any package load — it assumes the
+--      display unit is already resident (weave weapons live in the
+--      ui_loot_preview global package).
+--   2. `_load_item_units` -> load_package("<hand_unit>_3p") ->
+--      Managers.package:load(...), which fatals on a non-existent package.
+--
+-- The Trollhammer Torpedo (`dr_deus_01`, Bardin — "torpedo cannon") is the
+-- reported case (user 2026-06-05: "crashes when you try and change the stats
+-- for it"). It's a Chaos Wastes ("morris"/deus) weapon never shown in the
+-- vanilla weave forge, so its display unit (`display_trollhammer`) and held 3p
+-- unit (`wpn_dr_deus_01_3p`) live in the CW bundle and are NOT in the forge
+-- preview package set. cim's Athanor forge re-exposes the weapon for adventure
+-- crafting, so opening its property/stat editor spawns those absent units ->
+-- access-violation CTD with no Lua error (which is exactly why the crash left
+-- no traceback in any console log).
+--
+-- Fix: before the two spawn sites run, check resource availability the same way
+-- vanilla's pickup_system.lua:882-899 does — `Application.can_get("unit", ...)`
+-- for the resident display unit, `Application.can_get("package", "<unit>_3p")`
+-- for the load_package'd 3p units. If anything the previewer would touch is
+-- unavailable, skip the spawn (nil link / empty spawn list). spawn_units()
+-- already no-ops on a nil link_unit (loot_item_unit_previewer.lua:542), so the
+-- previewer object stays valid and the stat editor works fully — only the
+-- spinning 3D model is omitted for that one weapon. Gated on
+-- `_custom_forge_active`, so non-forge previewers (loot reveal, store, hero
+-- inventory) are untouched. Default to UNSAFE on any resolution error — losing
+-- a cosmetic preview always beats a CTD.
+local _forge_preview_warned = {}
+local function _forge_preview_unsafe(item)
+    local ok, unsafe = pcall(function()
+        if not item then return true end
+        local item_key = item.key or (item.data and item.data.key)
+        if not item_key then return true end
+        local master = rawget(ItemMasterList, item_key)
+        if not master then return true end
+
+        -- (1) Display / link unit — spawned with no prior load, so it must be
+        --     resident NOW. can_get("unit", ...) reflects current residency.
+        local skin = item.skin or item_key
+        local skins = rawget(_G, "WeaponSkins")
+        local skin_template = skins and skins.skins and skins.skins[skin]
+        local display_unit = (skin_template and skin_template.display_unit) or master.display_unit
+        if display_unit and display_unit ~= "" and not Application.can_get("unit", display_unit) then
+            return true
+        end
+
+        -- (2) Held / ammo units — load_package'd as "<unit>_3p" packages.
+        --     can_get("package", ...) reflects whether the package EXISTS
+        --     (loadable), independent of current residency: the previewer hasn't
+        --     loaded them yet at guard time, so a residency check would
+        --     false-positive on every weapon and strip all previews.
+        local BU = rawget(_G, "BackendUtils")
+        local item_units = BU and BU.get_item_units
+            and BU.get_item_units(master, item.backend_id, item.skin, nil)
+        if item_units then
+            local function pkg_missing(u)
+                if not u or u == "" then return false end
+                return not Application.can_get("package", u .. "_3p")
+            end
+            if item_units.is_ammo_weapon then
+                if pkg_missing(item_units.ammo_unit) then return true end
+            else
+                if pkg_missing(item_units.left_hand_unit) then return true end
+                if pkg_missing(item_units.right_hand_unit) then return true end
+            end
+        end
+        return false
+    end)
+    if not ok then return true end
+    if unsafe then
+        local key = (item and (item.key or (item.data and item.data.key))) or "<?>"
+        if not _forge_preview_warned[key] then
+            _forge_preview_warned[key] = true
+            mod:info("[cim] forge 3D preview skipped for '%s' — its preview units aren't loadable in the forge world (would CTD). Stat editing still works.", tostring(key))
+        end
+    end
+    return unsafe
+end
+mod._cim_forge_preview_unsafe = _forge_preview_unsafe  -- exposed for /cim_regression_test
+
+-- Guard both spawn sites at the LootItemUnitPreviewer chokepoint — covers all
+-- three forge windows (overview / weapons / properties) in one place. No
+-- existing cim hook on either method (only HeroWindowWeaveProperties.
+-- _create_unit_previewer above is hooked) — singleton, no duplicate-hook risk.
+mod:hook("LootItemUnitPreviewer", "_spawn_link_unit", function(func, self, item)
+    if _custom_forge_active and _forge_preview_unsafe(item) then return nil end
+    return func(self, item)
+end)
+
+mod:hook("LootItemUnitPreviewer", "_load_item_units", function(func, self, item)
+    if _custom_forge_active and _forge_preview_unsafe(item) then return {} end
+    return func(self, item)
 end)
 
 -- --- Forge UI polish (runs each frame while forge is open) ---
@@ -4988,4 +5226,151 @@ _rt_register("reequip_live_api_ok", function()
     if err then
         return "live re-equip API errored this session: " .. tostring(err)
     end
+end)
+
+_rt_register("forge_preview_guard_present", function()
+    -- v0.7.70-dev: the weave-forge weapon previewer (LootItemUnitPreviewer)
+    -- spawns the selected weapon's 3D model, which HARD-CRASHES (no Lua trace)
+    -- on weapons whose preview units aren't loadable in the forge world — the
+    -- Trollhammer Torpedo (dr_deus_01, "torpedo cannon") being the reported
+    -- case. _forge_preview_unsafe gates both spawn sites. Verify the guard is
+    -- wired AND fails safe (treats anything it can't resolve as UNSAFE) so an
+    -- unknown / garbage item can never reach the engine spawn.
+    local fn = mod._cim_forge_preview_unsafe
+    if type(fn) ~= "function" then
+        return "forge preview guard (_cim_forge_preview_unsafe) missing — torpedo CTD guard not installed"
+    end
+    if fn(nil) ~= true then
+        return "guard must treat a nil item as UNSAFE (skip preview); returned non-true"
+    end
+    if fn({ key = "cim_definitely_not_a_real_item_key_zzz" }) ~= true then
+        return "guard must treat an unknown item key as UNSAFE (master nil); returned non-true"
+    end
+end)
+
+_rt_register("heroview_hdr_renderer_guard_failsafe", function()
+    -- v0.7.71-dev: in-mission forge crashed at HeroView.hdr_renderer /
+    -- hdr_top_renderer because vanilla _setup_hdr_gui only builds
+    -- self._hdr_gui_data when is_in_inn (false in mission), and the forge
+    -- windows dereference _hdr_gui_data.bottom/.top every frame. The accessor
+    -- hooks must fall back to the view's own renderer when _hdr_gui_data is nil
+    -- rather than letting vanilla index a nil. Drive the (hooked) accessors with
+    -- a synthetic self that has nil _hdr_gui_data and assert no raise + fallback.
+    if type(HeroView) ~= "table" or type(HeroView.hdr_renderer) ~= "function"
+        or type(HeroView.hdr_top_renderer) ~= "function" then
+        return "skip: HeroView not loaded"
+    end
+    local r_sentinel, t_sentinel = {}, {}
+    local fake = { _hdr_gui_data = nil, ui_renderer = r_sentinel, ui_top_renderer = t_sentinel }
+    local ok, ret = pcall(HeroView.hdr_renderer, fake)
+    if not ok then
+        return "hdr_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret)
+    end
+    if ret ~= r_sentinel then
+        return "hdr_renderer did not fall back to self.ui_renderer on nil _hdr_gui_data"
+    end
+    local ok2, ret2 = pcall(HeroView.hdr_top_renderer, fake)
+    if not ok2 then
+        return "hdr_top_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret2)
+    end
+    if ret2 ~= t_sentinel then
+        return "hdr_top_renderer did not fall back to self.ui_top_renderer on nil _hdr_gui_data"
+    end
+end)
+
+_rt_register("heroview_hdr_failed_setup_sweeps_leaked_worlds", function()
+    -- v0.7.73 (Issue #73): when the in-mission _setup_hdr_gui pcall fails after a
+    -- world was created but before vanilla stored it in self._hdr_gui_data, the
+    -- sweep must destroy the orphaned world by name or the NEXT forge open dies
+    -- on world_manager's "World already exists" fassert. Drive the sweep with a
+    -- stub world manager.
+    local sweep = mod._cim_sweep_leaked_hdr_worlds
+    if type(sweep) ~= "function" then
+        return "_cim_sweep_leaked_hdr_worlds missing (Issue #73 sweep regressed)"
+    end
+    local destroyed = {}
+    local stub_wm = {
+        has_world = function(_, name) return name == "hero_view_hdr" end,  -- only bottom leaked
+        destroy_world = function(_, name) destroyed[#destroyed + 1] = name end,
+    }
+    local swept = sweep(stub_wm, nil)
+    if swept ~= 1 or destroyed[1] ~= "hero_view_hdr" or destroyed[2] ~= nil then
+        return string.format("expected exactly the leaked 'hero_view_hdr' destroyed, got swept=%s destroyed=%s,%s",
+            tostring(swept), tostring(destroyed[1]), tostring(destroyed[2]))
+    end
+    -- With _hdr_gui_data present the worlds are referenced — destroy_hdr_gui owns
+    -- them and the sweep must NOT touch anything.
+    destroyed = {}
+    if sweep(stub_wm, { bottom = {} }) ~= 0 or destroyed[1] ~= nil then
+        return "sweep ran despite _hdr_gui_data being set (would destroy worlds destroy_hdr_gui still owns)"
+    end
+    -- Nil / incomplete world manager must be a safe no-op.
+    if sweep(nil, nil) ~= 0 or sweep({}, nil) ~= 0 then
+        return "sweep not nil-safe on missing world manager"
+    end
+end)
+
+_rt_register("forge_preview_guard_allows_loaded_weapon", function()
+    -- Complement to forge_preview_guard_present: a normal weapon whose units ARE
+    -- loadable must NOT be flagged unsafe, or we'd strip the 3D preview from
+    -- every weapon. Only meaningful inside the modded forge (the weapon's
+    -- display unit is resident only there) — skips otherwise.
+    local fn = mod._cim_forge_preview_unsafe
+    if type(fn) ~= "function" then return "guard missing" end
+    if not _custom_forge_active then
+        return "skip: not in modded forge (preview units only resident there)"
+    end
+    local items_backend = Managers.backend and Managers.backend:get_interface("items")
+    local pl = Managers.player and Managers.player:local_player()
+    if not (items_backend and pl) then return "skip: backend/player not ready" end
+    local profile = SPProfiles[pl:profile_index()]
+    local career = profile and profile.careers[pl:career_index()]
+    if not career then return "skip: no career" end
+    -- Melee slot: a standard melee weapon is never the torpedo, so it should be
+    -- previewable when the forge is open.
+    local bid = items_backend:get_loadout_item_id(career.name, "slot_melee")
+    local item = bid and items_backend:get_item_from_id(bid)
+    if not item then return "skip: no melee item equipped" end
+    if fn(item) == true then
+        return "guard flagged a normally-equipped melee weapon as unsafe — would wrongly strip its 3D preview"
+    end
+end)
+
+_rt_register("rpc_schema_gate_drops_on_mismatch", function()
+    -- audit 2026-06-07 (v0.7.72-dev): the cim_modded_slot RPC must carry a schema
+    -- version (CIM_RPC_SCHEMA) as its first wire arg and the receiver must DROP a
+    -- mismatched payload without mutating _cim_modded_slot_state (VMF_RECIPES § 10).
+    -- Drives the exposed receiver synthetically: a wrong schema_version must leave
+    -- state untouched; the correct one must record the per-slot flag.
+    local recv = mod._cim_rpc_modded_slot
+    local state = mod._cim_modded_slot_state
+    if type(recv) ~= "function" then return "receiver mod._cim_rpc_modded_slot not exposed" end
+    if type(state) ~= "table" then return "state table mod._cim_modded_slot_state not exposed" end
+
+    -- Synthetic identifiers unlikely to collide with any live peer/slot.
+    local FAKE_PEER, FAKE_LPID, FAKE_SLOT = "rt_schema_peer", 7, "slot_melee"
+    local uid = tostring(FAKE_PEER) .. ":" .. tostring(FAKE_LPID)
+    local had_uid = state[uid] ~= nil          -- preserve any pre-existing entry
+    local saved = state[uid]
+    state[uid] = nil
+
+    local result_err
+    -- (1) Mismatched schema -> dropped, no state write.
+    recv(FAKE_PEER, CIM_RPC_SCHEMA + 1, FAKE_PEER, FAKE_LPID, FAKE_SLOT, true)
+    if state[uid] ~= nil then
+        result_err = "schema-mismatch packet was NOT dropped — receiver mutated _cim_modded_slot_state"
+    end
+
+    -- (2) Matching schema -> flag recorded.
+    if not result_err then
+        recv(FAKE_PEER, CIM_RPC_SCHEMA, FAKE_PEER, FAKE_LPID, FAKE_SLOT, true)
+        if not (state[uid] and state[uid][FAKE_SLOT] == true) then
+            result_err = "matching-schema packet did not record the per-slot modded flag"
+        end
+    end
+
+    -- Teardown: restore whatever was there before (don't leak the synthetic entry).
+    if had_uid then state[uid] = saved else state[uid] = nil end
+
+    return result_err
 end)

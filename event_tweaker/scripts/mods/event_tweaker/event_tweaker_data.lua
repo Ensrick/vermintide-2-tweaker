@@ -83,7 +83,9 @@ local DLC_BY_MUTATOR_UI = {
 local DLC_BY_PRESET_UI = {
     geheimnisnacht_2021 = "geheimnisnacht_2021",
     geheimnisnacht_2025 = "geheimnisnacht_2025",
+    geheimnisnacht_2026 = "geheimnisnacht_2026",
     skulls_2023         = "skulls_2023",
+    skulls_2026         = "skulls_2026",
 }
 
 local function ui_owns_dlc(dlc_id)
@@ -125,7 +127,9 @@ local PRESET_OPTIONS = {
     { text = "preset_off",                 value = "off" },
     { text = "preset_geheimnisnacht_2021", value = "geheimnisnacht_2021" },
     { text = "preset_geheimnisnacht_2025", value = "geheimnisnacht_2025" },
+    { text = "preset_geheimnisnacht_2026", value = "geheimnisnacht_2026" },
     { text = "preset_skulls_2023",         value = "skulls_2023" },
+    { text = "preset_skulls_2026",         value = "skulls_2026" },
 }
 
 local function filtered_preset_options()
@@ -148,6 +152,17 @@ local widgets = {
         tooltip       = "event_preset_tooltip",
         options       = filtered_preset_options(),
     },
+    -- v0.4.10-dev: opt-in switch that flips the three live-event hooks from
+    -- additive (pass Fatshark's events through, append ours) to subtractive
+    -- (drop Fatshark's first, then append ours). Lets the host neutralize
+    -- the currently-live Fatshark event without waiting it out.
+    -- Defaults off so prior pass-through behavior survives the upgrade.
+    {
+        setting_id    = "suppress_live_event",
+        type          = "checkbox",
+        default_value = false,
+        tooltip       = "suppress_live_event_tooltip",
+    },
 }
 
 for i = 1, #CATEGORIES do
@@ -158,6 +173,17 @@ for i = 1, #CATEGORIES do
         sub_widgets = build_mutator_widgets(cat.mutators),
     }
 end
+
+-- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+-- Appended LAST so it stays at the BOTTOM of the widget tree, top-level
+-- (NOT inside any group), key `enable_debug_logging` verbatim across every
+-- mod in the repo.
+widgets[#widgets + 1] = {
+    setting_id    = "enable_debug_logging",
+    type          = "checkbox",
+    default_value = false,
+    tooltip       = "enable_debug_logging_tooltip",
+}
 
 return {
     name = "Tweaker: Events",

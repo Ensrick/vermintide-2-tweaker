@@ -8,18 +8,22 @@ Lets the host pick any combination of vanilla / DLC mutators for the lobby — i
 
 Two flavors of selection sit on top of each other:
 
-1. **Event Preset** dropdown (Off / Geheimnisnacht 2021 / Geheimnisnacht 2025 / Skulls 2023). Drives three things at once: the mutator list, the `active_events` string list (so `mutator_geheimnisnacht_2021`'s `server_start_function` finds its ritual-site map list), and the keep level (so the keep gets pre-baked Geheimnisnacht/Skulls decorations).
+1. **Event Preset** dropdown (Off / Geheimnisnacht 2021 / 2025 / 2026 / Skulls 2023 / 2026). Drives three things at once: the mutator list, the `active_events` string list (so `mutator_geheimnisnacht_2021`'s `server_start_function` finds its ritual-site map list), and the keep level (so the keep gets pre-baked Geheimnisnacht/Skulls decorations).
 2. **Per-category checkboxes** for any individual mutator, organized into 7 groups. Stacks additively on top of whatever the preset already pulls in; deduped before injection.
+
+Plus one orthogonal switch:
+
+3. **`suppress_live_event`** (v0.4.10-dev+, default off). When on, the three hooks below drop Fatshark's `original` response *before* merging our own. Lets the host neutralize whatever event Fatshark is currently serving (Skulls 2026 keep + Geheimnisnacht 2026 ritual sites + event lighting + tab-menu modifier list, etc.) without waiting for the live event to roll over. The preset and per-mutator checkboxes still stack on top.
 
 ## Architecture
 
 Three hooks, all on backend classes. Single chokepoint per concern — every consumer of the hooked function sees the override consistently.
 
-| Hook | Purpose | Why this entry point |
-| :--- | :--- | :--- |
-| `BackendInterfaceLiveEventsPlayfab:get_special_events` | Inject `{name, weekly_event = "append", mutators}` so `GameModeBase.append_live_event_mutators` (`game_mode_base.lua:264`) picks up our mutators on every mission load. | Single class, no derived classes — string-form `mod:hook` patches the prototype that all instances see via `__index`. `GameModeBase.append_live_event_mutators` is the canonical mutator-activation path; mutator IDs flow from there into `mutator_handler.lua:85` `initialize_mutators` and out via `rpc_activate_mutator_client` to clients. |
-| `BackendInterfaceLiveEventsPlayfab:get_active_events` | Inject the preset's event-name string (e.g. `"geheimnisnacht_2021"`). | `mutator_geheimnisnacht_2021.lua:58-86` calls `live_events_interface:get_active_events()` and does `string.find(live_event, "geheimnisnacht_%d+")` on each entry to decide which 5 maps spawn ritual sites (year-specific lists in `geheimnisnacht_utils.lua:5-41`). Without this hook, the mutator activates but spawns nothing. Skulls does NOT inspect this list — its mutator's `server_start_function` is self-contained. |
-| `BackendManagerPlayFab:get_level_variation_data` | Merge `hub_level = "inn_level_halloween"` / `"inn_level_skulls"` into the returned table. | `AdventureMechanism.get_starting_level` (`adventure_mechanism.lua:625`) reads `Managers.backend:get_level_variation_data().hub_level` and loads that level. Vanilla seasonal events ship pre-decorated keep level files — `inn_level_halloween`, `inn_level_skulls`, `inn_level_celebrate`, `inn_level_sonnstill` — defined in `scripts/settings/level_settings.lua:152-196`. Decorations are baked geometry, not runtime spawns. Mutators can't do this because `GameModeBase` skips hubs. |
+| Hook | Purpose | Why this entry point | suppress_live_event behavior |
+| :--- | :--- | :--- | :--- |
+| `BackendInterfaceLiveEventsPlayfab:get_special_events` | Inject `{name, weekly_event = "append", mutators}` so `GameModeBase.append_live_event_mutators` (`game_mode_base.lua:264`) picks up our mutators on every mission load. | Single class, no derived classes — string-form `mod:hook` patches the prototype that all instances see via `__index`. `GameModeBase.append_live_event_mutators` is the canonical mutator-activation path; mutator IDs flow from there into `mutator_handler.lua:85` `initialize_mutators` and out via `rpc_activate_mutator_client` to clients. | Drops Fatshark's entries before merge → also short-circuits the `DialogueSystem.on_add_extension` read at `dialogue_system.lua:196-212` so live-event ambient dialogue stops. |
+| `BackendInterfaceLiveEventsPlayfab:get_active_events` | Inject the preset's event-name string (e.g. `"geheimnisnacht_2021"`). | `mutator_geheimnisnacht_2021.lua:58-86` calls `live_events_interface:get_active_events()` and does `string.find(live_event, "geheimnisnacht_%d+")` on each entry to decide which 5 maps spawn ritual sites (year-specific lists in `geheimnisnacht_utils.lua:5-41`). Without this hook, the mutator activates but spawns nothing. Skulls does NOT inspect this list — its mutator's `server_start_function` is self-contained. | Drops Fatshark's strings → `string.find` finds no `"geheimnisnacht_%d+"` match → ritual-site engine stays dormant on missions. |
+| `BackendManagerPlayFab:get_level_variation_data` | Merge `hub_level = "inn_level_halloween"` / `"inn_level_skulls"` into the returned table. | `AdventureMechanism.get_starting_level` (`adventure_mechanism.lua:625`) reads `Managers.backend:get_level_variation_data().hub_level` and loads that level. Vanilla seasonal events ship pre-decorated keep level files — `inn_level_halloween`, `inn_level_skulls`, `inn_level_celebrate`, `inn_level_sonnstill` — defined in `scripts/settings/level_settings.lua:152-196`. Decorations are baked geometry, not runtime spawns. Mutators can't do this because `GameModeBase` skips hubs. | When suppress is on AND no preset hub_level, forces `merged.hub_level = "inn_level"` (matches `adventure_mechanism.lua:7 HUB_LEVEL_NAME`) so the keep reverts to plain inn. |
 
 Two file-local tables drive the selection logic. **They MUST stay in sync** — VMF's mod-script vs mod-data load order isn't documented, and no sibling tweaker mod shares state across files, so the catalog is duplicated:
 
@@ -183,7 +187,7 @@ The legacy `deploy_all.ps1` shim that used to cover this flow was archived 2026-
 
 ## Known limitations
 
-- Anniversary 2025 / 2026 and Sonnstill keep variants exist in `level_settings.lua:152-196` (`inn_level_celebrate`, `inn_level_sonnstill`) but no presets yet. Trivial to add — see "Adding a new event preset".
+- Anniversary 2025 / 2026 and Sonnstill keep variants exist in `level_settings.lua:152-196` (`inn_level_celebrate`, `inn_level_sonnstill`) but no presets yet. Trivial to add — see "Adding a new event preset". (Geheimnisnacht 2026 and Skulls 2026 presets were added in v0.4.11-dev once Fatshark shipped the 2026 DLC content; gameplay still rides `mutator_geheimnisnacht_2021` / `mutator_skulls_2023` since no new mutator files were shipped.)
 - Drachenfels event mutators and Karak Aspect winter event aren't surfaced because they're tangled with game mode selection (Deus / Chaos Wastes mechanism), not the standard mutator pipeline.
 - Modded mutators from other workshop mods would need to be registered in `NetworkLookup.mutator_templates` independently — this mod only exposes mutators that ship in vanilla / first-party DLC.
 - Backend-only event consequences — portrait frames, contracts, achievements — won't come back. The mod ships *gameplay* (mutators + keep decoration), not *loot*.

@@ -1,5 +1,376 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.349-dev (2026-06-07) — Fix off-by-one that silently killed the mace+sword rename
+
+### Why
+Audit 2026-06-07 (F15). The `mace_sword_tweak` rename in the `_G.Localize` hook compared `key:sub(1, 30)` against the 31-character literal `"es_dual_wield_hammer_sword_skin"`. `sub(1, 30)` returns only the first 30 characters (`"es_dual_wield_hammer_sword_ski"`), which can never equal a 31-char string — so the condition was ALWAYS false and the rename never fired for any skinned mace+sword variant (skin_01/02/03, runed, magic, etc.). Silent feature death: with the toggle ON, players still saw the inherited "Mace and Sword" name instead of "Cudgel and Short Sword".
+
+### Changed
+- `character_weapon_variants.lua:6258` — added file-scope `_MACE_SWORD_SKIN_PREFIX` literal + `_has_prefix(s, prefix)` helper that derives the compare length from `#prefix`, so an off-by-one is structurally impossible going forward. Exposed `mod._cwv_has_prefix` / `mod._cwv_mace_sword_skin_prefix` for the regression test.
+- `character_weapon_variants.lua:6285` — replaced the buggy `key:sub(1, 30) == "<31-char literal>"` comparison with `_has_prefix(key, _MACE_SWORD_SKIN_PREFIX)`. The `key:sub(-5) == "_name"` suffix clause and the `mod:get("mace_sword_tweak")` toggle gate are unchanged.
+
+### Tests
+- `character_weapon_variants.lua` — new `/cwv_regression_test` check `mace_sword_rename_prefix_match`: behavioral assertion that the representative key `"es_dual_wield_hammer_sword_skin_02_name"` matches the prefix (would FAIL under the old 30-char off-by-one), the prefix literal is exactly 31 chars, and a non-mace+sword key does NOT match (negative control).
+
+### To verify
+- In keep, run `/cwv_regression_test` and confirm `PASS: mace_sword_rename_prefix_match`.
+- Enable the `mace_sword_tweak` toggle, apply a non-default illusion (skin_02 etc.) to a mace+sword variant, and confirm the inventory/cosmetics UI shows "Cudgel and Short Sword" rather than "Mace and Sword".
+
+## v0.1.348-dev — 2026-05-30 — Loc integrity: remove dead musket-illusion refs
+
+### Why
+`qa/check_name_integrity.ps1` check #2 flagged 3 cwv references that resolve in no loc table: `item_type = "cwv_es_musket"` (×1) and `description = "cwv_es_musket_description"` (×2). Investigation:
+- The two `description = "cwv_es_musket_description"` refs were in the LIVE musket-handgun-illusion registration (`_register_musket_handgun_illusions`, ~line 7965-8042). That code registered two cosmetic skins (Aunty Bessie / Von Meinkopt's Single-Shooter) with `matching_item_key = "cwv_es_musket"` + `template = "musket_template"` — both tied to the ON-ICE `cwv_es_musket` variant (commented-out def). The LIVE musket is `cwv_es_musket_old`, which uses a custom mesh under `old_musket_template`; the vanilla-handgun-mesh illusions never attached to it and would defeat its custom mesh. Their only other reference (instance_skins) is itself inside the commented on-ice block. **Dead code.**
+- The `item_type = "cwv_es_musket"` ref is at line ~598, INSIDE the commented-out on-ice variant def. The validator does not strip Lua comments, so it still scanned it.
+
+### Changed
+- `character_weapon_variants.lua` — removed the dead musket-handgun-illusion block (`_MUSKET_ILLUSIONS` table + `_force_load_musket_illusion_units` + `_register_musket_handgun_illusions` + both call sites), replaced with a removal note pointing at git history for restore-if-on-ice-variant-re-enabled. Kills both `cwv_es_musket_description` refs at their root. Did NOT uncomment or delete the on-ice variant def.
+- `character_weapon_variants_localization.lua` — added `cwv_es_musket = { en = "Musket" }` to resolve the commented on-ice variant's `item_type` literal (kept referenced by live `:match("^cwv_es_musket")` family code, so no orphan warning).
+
+### Notes
+- Resolves all 3 character_weapon_variants entries in the 13 check_name_integrity errors. On-ice `cwv_es_musket` variant left commented (backup idea per v0.1.300).
+
+## v0.1.347-dev — 2026-05-26
+
+- **NEW**: `cwv_es_crossbow` variant — Saltzpyre's crossbow on all 4 Kruber careers, 3P body anims play Kruber's handgun (rifle) wield/idle. Default-on toggle `enable_cwv_es_crossbow`. Migrated from weapon_tweaker v0.12.94-dev (which carried the same wield_anim and attachment-node fixes inline; ownership ceded to CWV per the "polish items don't fit a simple toggle" decision).
+- Carries known polish items (grip offsets, smoke FX on shot, missing 3P bolt) tracked in TODO.md → "cwv_es_crossbow polish".
+
+## 0.1.346-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("Character Weapon Variants v" .. MOD_VERSION)` startup line from every mod. That's correct for stable (>=1.0.0) builds but hides the active version for in-flight dev/alpha/beta work -- the user can't tell at a glance which patch is running. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable versions stay silent.
+
+### Changed
+- `character_weapon_variants.lua` -- added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. When any branch fires, `mod:echo("[cwv] v<MOD_VERSION> loaded")` runs once.
+
+## 0.1.345-dev (2026-05-25) -- Sprinkle `_dbg` instrumentation at register / build_entry / dummy-hit / projectile paths
+
+### Why
+User enabled `enable_debug_logging` and played, but the log captured almost nothing for cwv: the `_dbg`/`_dbg_alert` helpers existed (installed in v0.1.341-dev) but nobody had sprinkled the call sites at the load-bearing event points. Top suspect for the active dummy-static bug is cwv's damage / projectile path -- the historical "crash GUID 86d07a4e on dummy hit" comment at line ~5210 documents a Tuskgor Javelin pickup-spawn fatal that was fixed in v0.1.119, but we have no current-session visibility into whether anything routes through that same path on dummy hits.
+
+### Changed
+- `character_weapon_variants.lua` -- added `_dbg` calls at:
+  - **`_build_entry`** -- entry trace (key + base + backend_id), exit trace (template + item_type + slot_type + rhu/lhu + skin), and a `_dbg_alert` for the "base weapon missing from ItemMasterList" guard. Sparse (boot-time only); always-on.
+  - **`_register_item`** -- entry trace, `_dbg_alert` on MIL-missing or build_entry-nil failure paths, exit trace with the ItemMasterList mirror status. Sparse (one fire per `/give`); always-on.
+  - **`_auto_register_all`** -- entry trace (auto_registered flag + defs_count), exit trace with the rollup counters: `built_ok` / `build_failed` / `skipped_skin_only` / `skipped_already_registered` / `total_entries_added`. Sparse (one fire per session); always-on.
+  - **`PlayerProjectileUnitExtension.hit_level_unit`** -- extended the existing `[cwv stick] HIT_LEVEL_UNIT` line with `hit_unit_alive`, and added a new `[cwv:dummy_path] event=hit_level_unit_no_health_system` marker that fires when the hit unit has no `health_system` extension. Heuristic for training-dummy detection (real enemies have health_system; dummies don't). Sparse (per-projectile-hit, javelin only); always-on. **Comment cites historical crash GUID 86d07a4e (line ~5210) so the next reader knows this is the monitoring marker for that historical fix.**
+- Existing instrumentation **left unchanged** (verified still present + correct):
+  - `SimpleInventoryExtension.wield` post-hook -- emits `[cwv:wield] slot=... backend_id=... template=... skin=... career=...` for cwv_* items only (line 1437).
+  - Old Musket stance toggle -- emits `[cwv musket] stance: ranged → melee (slot=... slot_index=...)` (line ~2961).
+  - Tuskgor Javelin projectile init hook -- emits `[cwv stick] PROJ INIT`, `[cwv stick] post-fix BAIL`, `[cwv stick] init post-fix swap` etc. (line ~5363).
+  - RPC sender/receiver paths -- `[cwv stick] PATH A rpc_spawn_linked_pickup` / `PATH B rpc_spawn_pickup_projectile` (line ~5495 / ~5510).
+
+### What I deliberately skipped
+- **Per-frame `mod.update`-style hooks** -- none on cwv's hot path; skipped as a category.
+- **Inner musket-pool walk and the bayonet attach loop** -- already log a single rollup line each (`[cwv musket pool] registered ext...` and `[cwv musket-bayonet] attach: ...`), not per-iteration; doubling that to per-iteration would flood. Left as-is.
+
+### Build
+`VMBLauncher.exe build character_weapon_variants` -- verification only. NOT deployed, NOT uploaded (user-explicit doctrine 2026-05-25 EOD: develop, test, then user approves per-build for ship).
+
+## 0.1.344-dev (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[cwv] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- character_weapon_variants.lua -- removed the load-time `mod:echo("character_weapon_variants v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[cwv] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("character_weapon_variants v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build character_weapon_variants -- verification only. NOT deployed, NOT uploaded.
+
+## 0.1.343-dev (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- character_weapon_variants_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- character_weapon_variants.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build character_weapon_variants -- verification only. NOT deployed, NOT uploaded.
+
+## 0.1.342-dev (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[cwv] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. Self-documenting console_logs. ALWAYS fires (not gated on debug_logging).
+
+### Changed
+- `character_weapon_variants.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[cwv] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.1.342-dev.
+
+## 0.1.341-dev (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `character_weapon_variants.lua` — installed `_dbg_alert` helper alongside existing `_dbg`. Added `_rt_register("dbg_helpers_two_channel", ...)` alongside the existing nine cwv regression checks.
+- `character_weapon_variants.lua` ~L4758, 4766, 8860, 8946, 8956 — promoted FIVE `_dbg(...)` call sites to `_dbg_alert(...)`:
+  - `[cwv old-musket fx] our_unit invalid; skip proxy for %s` — "invalid" → FX proxy can't install
+  - `[cwv old-musket fx] unit_spawner not available; skip proxy` — "not available" → FX proxy can't install
+  - `[cwv preview] _resolve_preview_def returned nil for item_name=%s` — "returned nil" → CWV musket preview won't render
+  - `[cwv preview] Unit.num_meshes failed: ok=%s` — "failed" → texture application path skipped
+  - `[cwv preview] cwv_es_musket_old gate failed: slot.right=%s` — "failed" → CWV musket preview won't render
+- `itemV2.cfg` — bumped to v0.1.341-dev.
+
+### Notes
+- 45 existing `_dbg(...)` call sites audited. 40 kept as `_dbg`, 5 promoted to `_dbg_alert`.
+- 0 bare `mod:echo` reclassified.
+
+### Notes on judgment calls
+- The four `[cwv stick] post-fix BAIL: ...` lines (no owner_unit / no inventory_system / no slot_ranged / skin did not match cwv javelin pattern) were left as `_dbg`. The hook fires on EVERY javelin spawn including vanilla `we_javelin` users; the bails are the normal-flow exit path for non-cwv items. Promoting them would spam chat for users who don't have a cwv javelin equipped.
+- The `pruned %d orphan(s)` / `sync: orphans=...` info-report lines mention "orphan" but are quantitative audits, not error conditions. Left as `_dbg`.
+- The `loadout: no local player_unit yet (state=...)` / `loadout: no inventory_system on local player` lines fire during non-ingame states (loading, title) as expected. Left as `_dbg`.
+
+## 0.1.340-dev (2026-05-25) — Standardize Debug Logging toggle (universal convention)
+
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). cwv previously had `cwv_debug_mode` nested inside `cwv_diagnostics_group` — renamed and un-nested per the universal convention.
+
+### Changed
+- `character_weapon_variants_data.lua` — removed `cwv_diagnostics_group` group wrapper; `cwv_debug_mode` widget renamed to `enable_debug_logging` and moved to the bottom of `options.widgets`, top-level (NOT inside any group).
+- `character_weapon_variants_localization.lua` — removed `cwv_diagnostics_group` / `cwv_debug_mode` / `cwv_debug_mode_tooltip` strings; added `enable_debug_logging` + `enable_debug_logging_tooltip` per the standard.
+- `character_weapon_variants.lua`:
+  - `_dbg(fmt, ...)` helper now reads `mod:get("enable_debug_logging")` (was `cwv_debug_mode`). Output prefix `[cwv:dbg]` unchanged.
+  - All other `mod:get("cwv_debug_mode")` call sites (wield-hook dump, `on_game_state_changed` snapshot, Old Musket stance event) renamed to `enable_debug_logging`.
+- `itemV2.cfg` — title + description bumped to v0.1.340-dev.
+
+### Notes
+- **Migration**: the saved value of `cwv_debug_mode` is not auto-carried into `enable_debug_logging`. Users who had the old toggle on must re-tick the new `Debug Logging` checkbox after first load. VMF defaults the new key to `false`.
+
+## 0.1.339-dev (2026-05-25) — Issue #33: consolidate duplicate SimpleInventoryExtension.wield hook_safe callbacks (regression guard)
+
+### Why
+GitHub Issue #33 tracked the latent risk that the `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` registration could drift back to a duplicate state (the same burn that v0.1.336 introduced and v0.1.337 hotfixed). Per `VMF_RECIPES.md` § 1, two `mod:hook_safe(C, m, ...)` registrations on the same `(Class, method)` silently overwrite — only one body runs. In the v0.1.336 incident, a debug-mode wield dump added at ~line 9499 silently shadowed the load-bearing cross-access tracking at line 1336, breaking the entire 3P cross-character animation remap pipeline (the `_cross_access_local_weapon_key` / `_cross_access_local_career` upvalues feeding the `Unit.animation_event` remap stopped updating).
+
+v0.1.337 merged both bodies into the line-1336 callback. v0.1.339 lands the **regression test** that catches any future reintroduction.
+
+### Why the line-1336 callback was the one being shadowed (historical context for the Issue body)
+VMF registers `mod:hook_safe` by `(Class, method)` key. The first registration installs the handler; a second registration on the same key silently replaces the first. The line-1336 site is registered EARLIER in module load order than the (now-removed) line-9499 site, so when both existed the LATER-registered (line 9499) body won and the EARLIER-registered (line 1336) cross-access tracking went dead. The diagnostic install-log line `Hooking 'wield' from [SimpleInventoryExtension]` prints twice with identical Origin pointers, but the engine only routes calls to the most-recently-registered closure.
+
+### Added
+- File-scope counter `_cwv_wield_hook_registration_count` declared near the top of `character_weapon_variants.lua`. Incremented at the registration site (~line 1336) immediately before the `mod:hook_safe` call — counter lives at FILE scope, not inside the callback, so it counts registrations (one-shot at module load), not invocations (every wield).
+- `_rt_register("cwv_wield_hook_unique", ...)` runtime regression test (the last `_rt_register` in the file, by the existing `cwv_slot_extension_scoped` pattern). Asserts `_cwv_wield_hook_registration_count == 1` after the whole file has loaded. Any future duplicate `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` site would have to also increment the counter to be reachable at all — which makes the assertion fire and surfaces the regression on the very next `/cwv_regression_test` run.
+
+### Verification
+- `tools/mod-lint/lint-mod.ps1` exits 0 for `character_weapon_variants` (was already exit 0 since v0.1.337 fix; the lint gate stays clean and this version adds defense-in-depth on top of the lint check).
+- `tools/vmb-launcher/bin/Release/net9.0-windows/win-x64/publish/VMBLauncher.exe build character_weapon_variants` — build OK.
+- `/cwv_regression_test` runs in-keep — expect a new `PASS: cwv_wield_hook_unique` line.
+
+### Anti-patterns avoided (per task brief)
+- Did not change the SEMANTICS of either callback's body. Consolidation was already done in v0.1.337; v0.1.339 only adds the counter + regression check.
+- Did not deploy or upload — build verification only.
+- Did not break the v0.1.338 `cwv_slot_extension_scoped` `_rt_register` test or its marker constant.
+
+## 0.1.338-dev (2026-05-25) — Hotfix: scope `slot_melee` cross-slot extension to careers owning a `cross_slot = true` variant (Grail Knight FP rig corruption)
+
+### Why
+User confirmed via bisect that **disabling CWV stops** an active first-person-rig corruption bug: Grail Knight (`es_questingknight`) was loading BOTH `es_bastard_sword` (2H) AND `es_sword_shield_breton` (1H + shield) into its melee slot simultaneously. Both first-person state machines (`bastard_sword` + `1h_sword_shield_breton`) were being initialized against the same FP rig — two state machines competing for one set of FP hands produced the wrong-grip / corrupted-looking first-person weapon symptom.
+
+Root cause: the cross-slot inject at `character_weapon_variants.lua:~3730` (introduced v0.1.313, refined through v0.1.327) was applied **broadly across every career in `CareerSettings`** — log line `[cwv slot] extended slot_melee with 'ranged' on 28 careers`. Adding `"ranged"` to `slot_melee` makes the keep loadout/preview resolver consider both melee-typed and ranged-typed items as valid for the melee slot, which (combined with vanilla default-loadout resolution that doesn't expect overlapping slot-type sets) lets two items spawn into one slot.
+
+This was overshoot: as of v0.1.338 only ONE variant (`cwv_es_musket_old`) carries `cross_slot = true`, and it's only equipable on the four Empire careers (`_es_all_careers`). The remaining 24 careers never had any reason to accept ranged items in their melee slot.
+
+### Fixed
+- `character_weapon_variants.lua:~3730` — the `_do_extend()` block (and its `mod.on_all_mods_loaded` re-runner) now narrows the mutation to careers in the union of every `_variant_definitions[*].careers` array where the def has `cross_slot = true`. New helper: `_cwv_collect_cross_slot_careers()` walks `_variant_definitions` and returns the allowed-careers set. As of v0.1.338 that set is `{ es_mercenary, es_huntsman, es_knight, es_questingknight }` (the four Empire careers).
+- Reverts an in-memory leak: if a non-allowed career already has `"ranged"` appended in its `slot_melee` (e.g. CareerSettings was mutated by an older version of this same code earlier in the load sequence, or by a mod reload), the new block drops the trailing `"ranged"` so the regression-test invariant holds. Conservative — only removes the LAST entry equal to `"ranged"`, and only on careers we are NOT extending.
+- `cwv_dual` cleanup (legacy from v0.1.311) still runs unconditionally on every career — that cleanup never depended on extension scope.
+
+### Added
+- Marker constant `CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cross-slot-variant-careers"` near the top of `character_weapon_variants.lua` (mirrors the v0.1.332/.333 marker-constant pattern).
+- `_rt_register("cwv_slot_extension_scoped", ...)` runtime regression test. Three assertions per the §15 belt-and-suspenders rule:
+  1. Marker constant retains its expected value (catches accidental revert of the scoping fix).
+  2. `_cwv_collect_cross_slot_careers()` yields at least one career (catches the definition table being reshaped such that no variant carries `cross_slot = true`).
+  3. Walks `CareerSettings` and verifies every allowed career has `"ranged"` in `slot_melee` AND no non-allowed career has `"ranged"` in `slot_melee` — catches both the "fix didn't apply" failure mode and the "old broad mutation leaked through" failure mode.
+
+### Scope of bug surface remaining
+The four Empire careers (Mercenary, Huntsman, Knight, Grail Knight) still have `"ranged"` appended to `slot_melee` because that's exactly what makes the Old Musket equipable as a cross-slot variant on them. **If the dual-state-machine collision recurs on any of those four careers** (e.g. Grail Knight loading `es_bastard_sword` + `es_sword_shield_breton` simultaneously), the next iteration would need to either (a) move from career-wide `item_slot_types_by_slot_name` mutation to per-variant mechanism, or (b) suppress the dual state-machine load when both slots are populated with conflicting state machines (the user's Option B). v0.1.338 lands the safer scoping fix first; Option B is deferred pending repro on the now-narrowed surface.
+
+### Anti-patterns avoided (per task brief)
+- Did not touch `wt` or any other mod.
+- Did not deploy or upload — build verification only.
+- Did not collide with the parallel `debug-toggle` agent's v0.1.337 hotfix (separate marker constant, separate version bump, separate CHANGELOG entry, separate `_rt_register` check).
+
+### Verification
+- `tools/vmb-launcher/bin/Release/net9.0-windows/win-x64/publish/VMBLauncher.exe build character_weapon_variants` → build OK (see release notes / build log).
+- `/cwv_regression_test` runs in-keep — expect a new `PASS: cwv_slot_extension_scoped` line.
+- Eyeball: log line `[cwv slot] extended slot_melee with 'ranged' on 4 careers (scoped to cross_slot variants; N non-allowed careers reverted)` instead of the prior `on 28 careers`. The `N reverted` number depends on whether CareerSettings was already broadly mutated when this version loaded (cold game start: 0; after a mod hot-reload that ran the old broad-mutation code first: up to 24).
+- Functional: equip Grail Knight, load the keep — FP rig should render the correct single weapon instead of the corrupted dual-state-machine combination.
+
+## 0.1.337-dev (2026-05-25) — Hotfix: merge duplicate `SimpleInventoryExtension.wield` hooks (3P anim remap regression)
+
+### Why
+`tools/mod-lint/lint-mod.ps1` flagged a FAIL on this mod: `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` was registered at **both** line 1317 (existing, load-bearing) and line 9499 (added in v0.1.336 for `cwv_debug_mode` wield dump). Per `VMF_RECIPES.md` § 1, `mod:hook_safe` does NOT chain on the same `(Class, method)` — the second registration silently overwrites the first.
+
+**Impact in v0.1.336:** The new debug hook shadowed the original. The original updates `_cross_access_local_weapon_key` / `_cross_access_local_career` upvalues that feed the `Unit.animation_event` remap hook at line 1343 (the entire cross-character 3P animation translation system). With those upvalues stuck at `nil`, **every cross-character 3P animation remap silently no-op'd**. Bystander view of cross-access weapons would have reverted to the wrong skeleton's vocab.
+
+### Fixed
+- Merged both bodies into the canonical hook at line 1317:
+  - (1) Cross-access tracking: same logic as before, only runs for `slot_melee` on the local player.
+  - (2) Debug-mode wield dump: runs for any slot when `cwv_debug_mode` is on AND the wielded item's `backend_id` starts with `cwv_`.
+- Removed the duplicate registration at line 9499 (replaced with a comment pointing to the consolidation).
+
+### Verification
+- `tools/mod-lint/lint-mod.ps1` now reports `[PASS] character_weapon_variants` (was FAIL).
+- Build OK (4 bundles).
+- Functional verification (manual): wield a cwv cross-character weapon in melee slot; bystander 3P anims should match the receiver's native vocab (i.e. cross-access remap fires again).
+
+## 0.1.336-dev (2026-05-25) — `cwv_debug_mode` toggle + `_dbg` helper + event subscriptions
+
+### Why
+Noisy `mod:info` lines (per-keep-load rarity-set spam, per-equip preview-hook firings, per-wield bayonet-attach summaries, the entire `[cwv stick]` projectile trace family) shipped unconditionally. They were originally added to debug specific bugs (v0.1.96 javelin template resolution, v0.1.239 floating-bayonet duplication, v0.1.326 musket-texture preview gap, etc.) but the bugs are fixed and the lines were never gated. Each keep load printed ~30 `Set <bid> rarity to <r>` lines plus the preview-hook traces; each bayonet attach printed a duplicate-prone summary; each javelin throw printed five+ trace lines. Result: real warnings/errors got drowned in routine flow chatter.
+
+A dedicated `cwv_debug_mode` VMF toggle now gates all of that behind a single checkbox. Off by default — normal play console.log is clean. On — every existing diagnostic trace prints plus three new event-driven dumps (game-state transition snapshot, variant wield event, Old Musket stance toggle slot_index).
+
+### Added
+- `character_weapon_variants_data.lua`: new `Diagnostics` group containing `cwv_debug_mode` checkbox (default `false`).
+- `character_weapon_variants_localization.lua`: `cwv_debug_mode` / `cwv_debug_mode_tooltip` / `cwv_diagnostics_group` entries per LOCALIZATION_STANDARD.md (uses `_tooltip` suffix, not the legacy `_description`).
+- `character_weapon_variants.lua` top-of-file: `_dbg(fmt, ...)` helper. Short-circuits via `mod:get("cwv_debug_mode")` so format cost is paid only when enabled. Output prefixed `[cwv:dbg]`.
+- `character_weapon_variants.lua` near `/cwv_give`: three event-driven dump blocks, all gated on `cwv_debug_mode`:
+  1. `mod.on_game_state_changed(status, state_name)` — on `enter`, dumps registered cwv_* item count (walks `ItemMasterList`) plus each loadout slot currently holding a `cwv_*` backend_id (slot name, backend_id, template, skin).
+  2. `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` — fires when any cwv_* item is wielded; dumps slot, backend_id, template, skin, career. Hook target verified via `Vermintide-2-Source-Code/scripts/unit_extensions/default_player_unit/inventory/simple_inventory_extension.lua:627`.
+  3. The existing `_toggle_musket_stance_and_rewield` log line now also reports `slot_index` (resolved via `InventorySettings.slots_by_name[slot_name].slot_index`) so debug output correlates with the numeric slot keys used elsewhere in the preview-hook bridge.
+
+### Changed — `mod:info` → `_dbg` conversions
+Twenty-five call sites converted (all per-event / per-equip / per-keep-load diagnostics). Categories:
+- `_auto_register_all` rarity loop + summary (~lines 8214, 8219).
+- `Applying transforms (slot=%s, ...)` per-spawn line (~line 8647).
+- Preview-hook firings on `HeroPreviewer._spawn_item` + `MenuWorldPreviewer._spawn_item` (~8864, 8872) + the inline `cwv_es_musket_old` texture-application trace block (~8748, 8774, 8776, 8784, 8692).
+- `[cwv musket]` stance-toggle trace (~2812).
+- `[cwv musket pool] registered ext` per-spawn trace (~3497).
+- `[cwv musket-bayonet]` attach / prune / sync trio (~3983, 4086, 4226).
+- `[cwv old-musket fx]` proxy-spawn / early-bail trio (~4597, 4601, 4642).
+- `[cwv melee-grid filter]` per-render counter (~3757).
+- `[cwv stick]` projectile-debug family: PROJ INIT, post-fix BAILs (×4), init post-fix swap, HIT_LEVEL_UNIT, HANDLE_LINKING, the four pickup-spawn path traces, extensions_ready, carrier visual attached, linker-extension branch, plus `can_interact_func` / `on_pick_up_func` (~5141-5441, 4981, 4989). The `_log_quat` helper itself was routed through `_dbg` since it's only ever called from these gated paths.
+
+### Kept as `mod:info` (always-on by design)
+- `Character Weapon Variants v%s loading` / `loaded` banner lines (need to confirm correct build deployed).
+- `Created <foo>_template (...)` summary lines (~25 of them) — fire once at boot, document the registered template tables, useful even in normal play for "did this template register?".
+- `Registered N <skin family> illusions/cosmetics on cwv_<...>` summary lines — same rationale.
+- `Force-loaded` package-load lines (`[cwv musket-bayonet]`, `[cwv musket-melee]`, `[cwv musket-illusion]`) — one-shot boot confirmations.
+- Every `mod:warning` / `mod:error` / `mod:echo` line.
+- `[cwv musket] patched WeaponSpreadExtension nil spread_settings` recovery line.
+
+### Anti-patterns avoided (per task brief)
+- `_rt_register` checks remain runnable via `/cwv_regression_test` regardless of `cwv_debug_mode` — they read globals directly, never through `_dbg`.
+- No new chat commands introduced.
+- Event handlers (`on_game_state_changed`, `wield` hook) check `mod:get("cwv_debug_mode")` at fire time and bail early before any loop work.
+- No `_dbg` calls inside hot loops; the `wield` hook caches the toggle read at function entry.
+
+### Verification
+1. Load into keep with the mod enabled and `cwv_debug_mode` OFF. Search latest console log — should see boot summaries (`Created <foo>_template`, `Registered <N> <foo>` lines) and the loaded banner, but NOT see `Set %s rarity to %s` per-variant lines, NOT see `[cwv preview hook]` per-spawn lines, NOT see `[cwv musket-bayonet] attach`, NOT see `[cwv stick] PROJ INIT`.
+2. Open mod options, toggle `cwv_debug_mode` ON.
+3. Wield any cwv_* item — expect `[cwv:dbg] [cwv:wield] slot=<x> backend_id=cwv_<...> template=<...> skin=<...> career=<...>`.
+4. Re-enter the keep (transition state) — expect `[cwv:dbg] on_game_state_changed: status=enter ... registered_cwv_items=<N>` plus per-loadout-slot lines for any cwv_* item equipped.
+5. With cwv_es_musket_old equipped, press the stance toggle key — expect `[cwv:dbg] [cwv musket] stance: ranged → melee (slot=<name> slot_index=<n> ...)`.
+6. `/cwv_regression_test` continues to PASS all six checks regardless of toggle state.
+
+## 0.1.335-dev (2026-05-24) — §15 belt-and-suspenders runtime test for v0.1.333 ItemMasterList rawget fix
+
+### Why
+PROJECT_STANDARDS §15 + `feedback_vt2_verify_before_shipping.md` require every fix to ship with an in-mod runtime regression test so the fix doesn't silently regress under future refactors. v0.1.333 added the ItemMasterList rawget fix (Issue #20) but didn't ship the matching `_rt_register`. This release closes that gap.
+
+### Added
+- Source-pattern marker constant `CT_CWV_ITEMMASTERLIST_RAWGET_MARKER_v0_1_333 = "cwv-itemmasterlist-rawget-auto-register-all"` near the top of `character_weapon_variants.lua` (mirrors the v0.1.332 NetworkLookup marker pattern).
+- `_rt_register("cwv_itemmasterlist_uses_rawget", ...)` at the bottom of `character_weapon_variants.lua`. Two assertions:
+  1. The marker constant retains its expected value (catches accidental revert of the line-8167 rawget conversion).
+  2. `rawget(ItemMasterList, <bad-key>)` returns `nil` without raising (catches engine-side metatable behavior changes that would invalidate the defensive pattern).
+
+### Verification
+1. Restart VT2 with the mod enabled, load the keep.
+2. Run `/cwv_regression_test` in chat. Expect `PASS: cwv_itemmasterlist_uses_rawget` alongside the five prior checks.
+3. Search the latest console log for `ItemMaster List has no item cwv_` — should remain zero hits (Issue #20 verification).
+
+## 0.1.334-dev (2026-05-24) — Log clarity: rarity-set line prints `backend_id` not `item_key` (multi-instance variants)
+
+### Why
+Variants with `def.instances = N` (currently just `cwv_es_musket_old` with `instances = 2` for dual-slot carry) register N backend_ids: `cwv_es_musket_old_001`, `cwv_es_musket_old_002`. The rarity-set loop iterates `pending_defs` correctly per-instance, but the `mod:info("Set %s rarity to %s", pending.def.item_key, rarity)` log line printed the SHARED `def.item_key` for every instance — making the log look like a duplicate registration (Issue #21).
+
+### Fixed
+- `_auto_register_all`: rarity-set log now prints `pending.backend_id` instead of `pending.def.item_key`. Two musket entries now log as `cwv_es_musket_old_001` and `cwv_es_musket_old_002`, making it obvious they're separate instances of an intentionally multi-instance variant (cross-slot dual-carry).
+
+### Note
+This is log-clarity only. The "Registered 28 variant weapons" count is correct: 27 unique item_keys + 1 extra musket_old instance = 28 backend entries. The dual-instance + `cross_slot = true` plumbing is the mechanism that lets a player carry two musket-olds (one in slot_melee, one in slot_ranged) per the `instances = 2` field at line 493 and the slot-type override at line 3640.
+
+## 0.1.333-dev (2026-05-24) — 4th rawget site: ItemMasterList membership check in `_auto_register_all`
+
+### Why
+Live-log scan (PC-A `console-2026-05-24-15.13.52`, PC-B `console-2026-05-24-15.09.09`) showed 27 `<<crashify-exception>>` entries per keep load, one per variant item, all originating from `character_weapon_variants.lua:8167` in `_auto_register_all`. Each was `[ItemMasterList] ItemMaster List has no item cwv_<key>` — fired by the `ItemMasterList` `__index` metamethod when our membership check `if not ItemMasterList[key]` triggered a missing-key lookup. The v0.1.330 three-site rawget conversion missed this 4th site. The same defensive pattern is already used 20 lines below on `NetworkLookup.item_names` (`if not rawget(NetworkLookup.item_names, key) then`).
+
+### Fixed
+- `_auto_register_all`: changed the ItemMasterList membership check from `if not ItemMasterList[key]` to `if not rawget(ItemMasterList, key)`. Eliminates the 27-exception-per-keep-load log spam observed on both PCs. Function intent is unchanged — we still mirror our entries into `ItemMasterList` only when not already present.
+
+### Verification
+1. Restart VT2 with the mod enabled, load the keep.
+2. Search the latest console log for `ItemMaster List has no item cwv_` — expect zero hits.
+3. Run `/cwv_regression_test` — all five checks should still PASS.
+
+## 0.1.332-dev (2026-05-24) — §15 belt-and-suspenders runtime test for v0.1.330 three-site rawget conversion
+
+### Why
+Audit `.test_coverage_audit_2026-05-24.md` PARTIAL row 5: the v0.1.330 three-site `NetworkLookup.{damage_profiles,pickup_names}` rawget conversion on the RPC handlers was lint-covered (regression-lint.ps1 `strict-table-lookup`) but lacked an in-mod `_rt_register` runtime check (the v0.1.331 scaffold added four CWV-specific checks but didn't cover the rawget hardening). Per the §15 doctrine update appended this round, lint-covered fixes ALSO require a runtime regression test.
+
+### Added
+- Source-pattern marker constant `CT_CWV_NETWORKLOOKUP_RAWGET_MARKER_v0_1_332 = "cwv-networklookup-rawget-hardened-3-sites"` near the top of `character_weapon_variants.lua`.
+- `_rt_register("cwv_networklookup_uses_rawget", ...)` at the bottom of `character_weapon_variants.lua`. Two assertions:
+  1. The marker constant retains its expected value (catches accidental revert of any of the 3 RPC-handler conversions).
+  2. `rawget(NetworkLookup.damage_profiles, <bad-key>)` AND `rawget(NetworkLookup.pickup_names, <bad-key>)` both return `nil` without raising.
+
+### Verification
+1. Restart VT2 with the mod enabled, load the keep.
+2. Run `/cwv_regression_test` in chat. Expect `PASS: cwv_networklookup_uses_rawget` alongside the four v0.1.331 checks.
+
+## 0.1.331-dev (2026-05-23) — Ship `/cwv_regression_test` command for real (v0.1.329 CHANGELOG was lying)
+
+### Why
+Test-coverage audit `.test_coverage_audit_2026-05-24.md` MISSING row 2: CHANGELOG v0.1.329-dev claimed a `mod:command("regression_test", ...)` was added with 4 in-game checks. Source grep confirmed: zero `_rt_register`, zero `regression_test` registration. The command was never wired up — the CHANGELOG entry was aspirational. Doctrine PROJECT_STANDARDS §15 violation.
+
+### Added
+- `_RT_CHECKS` / `_rt_register` scaffold at the top of `character_weapon_variants.lua` (mirrors ct's pattern at `chaos_wastes_tweaker.lua:150`).
+- `mod:command("cwv_regression_test", ...)` chat command — named `cwv_regression_test` (not plain `regression_test`) per `feedback_vt2_chat_command_syntax.md` / ct v0.7.91 to avoid the global chat-command-name collision with `cim` (already claims the bare name).
+- Four checks at the bottom of the file:
+  1. **`cwv_variant_flag_present`** — walks every cwv_* IML entry that originated from `_variant_definitions`; verifies `entry.cwv_variant == true`. Per `feedback_cwv_clone_name_clobber.md`. Bails with "no cwv variants registered yet (run in-keep)" pre-keep.
+  2. **`cwv_inherits_base_name`** — walks variants; FAILs if any `entry.name` was clobbered to the `cwv_` prefix (vanilla previewer falls back via `ItemMasterList[item.name]`, must inherit base name).
+  3. **`cwv_ammo_mirroring`** — for any variant whose base template has `ammo_unit`, asserts the variant entry mirrors `ammo_unit`, `projectile_units_template`, `pickup_template_name`, `link_pickup_template_name`. Per `feedback_cwv_ammo_unit_required.md`.
+  4. **`cwv_in_inventory_package_list`** — scans `right_hand_unit` / `left_hand_unit` paths; FAILs only when a path looks like a mod-custom-mesh path (`/player_cwv/` or `character_weapon_variants/`) AND is missing from `NetworkLookup.inventory_packages`. Inherited vanilla paths are informational-only (some DLC paths legitimately aren't in the list when the DLC is unowned).
+
+All check bodies are pcall-wrapped by the command dispatcher (top scaffold). Bails on un-ready globals return PASS rather than FAIL.
+
+### Verification
+1. Restart VT2 with the mod enabled.
+2. Load the keep (so `ItemMasterList`, `NetworkLookup.inventory_packages`, and the MIL backend are all populated).
+3. Run `/cwv_regression_test` in chat. Expect:
+   - `PASS: cwv_variant_flag_present`
+   - `PASS: cwv_inherits_base_name`
+   - `PASS: cwv_ammo_mirroring`
+   - `PASS: cwv_in_inventory_package_list`
+4. (Optional positive trip) Set `entry.cwv_variant = nil` on one variant in `_build_entry`, rebuild, rerun — expect that check to FAIL with the offending key listed.
+
+### References
+- Test coverage audit: `.test_coverage_audit_2026-05-24.md` MISSING row 2.
+- Doctrine: PROJECT_STANDARDS.md §15.
+- Memories: `feedback_cwv_clone_name_clobber.md`, `feedback_cwv_ammo_unit_required.md`, `feedback_vt2_force_load_only_listed_paths.md`, `feedback_vt2_chat_command_syntax.md`.
+- Lying CHANGELOG: v0.1.329-dev "Added" section below.
+
 ## 0.1.330-dev (2026-05-23) — Convert 3 NetworkLookup lookups to rawget (latent strict-__index crash fix)
 
 ### Why

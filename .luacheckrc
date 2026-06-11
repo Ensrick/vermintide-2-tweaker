@@ -231,7 +231,7 @@ globals = {
     "MutatorTemplates",
     "NetworkLookup",        -- limited; only via launcher's pre-register pattern
     "AttachmentNodeLinking",
-    "_G",                   -- monkey-patches like _G.get_mod (la_prefix_patch)
+    "_G",                   -- monkey-patches like _G.get_mod (cosmetics_tweaker LA bridge)
     "Localize",             -- mods can extend
 }
 

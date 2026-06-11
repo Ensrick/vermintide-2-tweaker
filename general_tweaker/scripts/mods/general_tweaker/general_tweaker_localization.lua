@@ -499,4 +499,60 @@ return {
     gt_is_prev_hotkey_tooltip = { en = "Hotkey: cycle to the previous pickup. Same as '/gt_previtem'." },
     gt_is_spawn_hotkey = { en = "Spawn Selected Pickup" },
     gt_is_spawn_hotkey_tooltip = { en = "Hotkey: spawn the currently selected pickup at your feet via vanilla's rpc_spawn_pickup_with_physics. Training dummies are host-only. Same as '/gt_spawnitem' (no arg). '/gt_spawnitem <substring>' fuzzy-matches by pickup name or localized item name." },
+
+    -- ============================================================
+    -- Host-Side Lobby Controls (absorbed from lobby_tweaker
+    -- 2026-05-25; lt v0.1.7-dev). Keys + tooltips renamed lt_* /
+    -- bare-form -> gt_lobby_* per merge.
+    -- ============================================================
+    gt_lobby_controls_group = { en = "Host-Side Lobby Controls" },
+
+    -- Slot Reservations
+    gt_lobby_slot_reservations_enabled = { en = "Enable slot reservations" },
+    gt_lobby_slot_reservations_enabled_tooltip = { en = "Host-only. Reserve lobby slots for specific Steam IDs via /gt_lobby_reserve <steam_id> <1-4>. Non-reserved joiners are auto-kicked while a reservation is pending (the reserved peer isn't already in the lobby). /gt_lobby_reservations lists current entries." },
+
+    -- Session Ignore List
+    gt_lobby_session_ignore_enabled = { en = "Enable ignore list" },
+    gt_lobby_session_ignore_enabled_tooltip = { en = "Host-only. Two-tier ignore: session-only (/gt_lobby_ignore) and persistent (/gt_lobby_ignore_persist). Either tier auto-kicks the peer on join. /gt_lobby_unignore clears, /gt_lobby_ignored lists, /gt_lobby_ignore_last re-adds the most recent host-kicked peer." },
+
+    -- Kick on Idle
+    gt_lobby_kick_idle_enabled = { en = "Auto-kick idle players in keep" },
+    gt_lobby_kick_idle_enabled_tooltip = { en = "Host-only. While in the keep, polls every 30s for non-host, non-bot player_unit position; if a player hasn't moved more than 0.05m for the threshold below, they get a warning then a kick. /gt_lobby_idle_whitelist exempts specific Steam IDs." },
+    gt_lobby_kick_idle_threshold_minutes = { en = "Idle threshold (minutes)" },
+    gt_lobby_kick_idle_threshold_minutes_tooltip = { en = "Range 1-60. How long a player can stand still in the keep before being kicked." },
+    gt_lobby_ki_warn_seconds = { en = "Warning lead time (seconds)" },
+    gt_lobby_ki_warn_seconds_tooltip = { en = "Range 10-180. How far ahead of the kick the warning chat message fires." },
+
+    -- Message of the Day
+    gt_lobby_motd_enabled = { en = "Send MOTD to joiners" },
+    gt_lobby_motd_enabled_tooltip = { en = "Host-only. When a peer joins the party, send the MOTD text below. Chat / popup channels configurable. Joiners without general_tweaker installed will NOT see the MOTD (no vanilla path to push system messages to a remote chat HUD)." },
+    gt_lobby_motd_text = { en = "MOTD text (use \\n for line breaks)" },
+    gt_lobby_motd_text_tooltip = { en = "The message body. Use \\n in the text to insert line breaks; literal newlines also accepted. Chunked into <=400-char RPC pieces internally so the Stingray 500-char string cap doesn't truncate." },
+    gt_lobby_motd_send_chat = { en = "Send via chat" },
+    gt_lobby_motd_send_chat_tooltip = { en = "Render the MOTD in the receiver's local chat panel (one line per \\n)." },
+    gt_lobby_motd_send_popup = { en = "Send via popup" },
+    gt_lobby_motd_send_popup_tooltip = { en = "Render the MOTD as a modal popup with an OK button on the receiver's screen." },
+    gt_lobby_motd_once_per_peer_per_session = { en = "Only greet each peer once per session" },
+    gt_lobby_motd_once_per_peer_per_session_tooltip = { en = "Default ON: each peer is greeted at most once per host process lifetime. Turn OFF to re-greet on every party-join event (useful when a peer reconnects)." },
+    gt_lobby_motd_popup_topic = { en = "Message of the Day" },
+
+    -- Modded Lobby Manifest
+    gt_lobby_manifest_broadcast_enabled = { en = "Broadcast my mod list (as host)" },
+    gt_lobby_manifest_broadcast_enabled_tooltip = { en = "Host-only. Publishes a per-mod manifest (id, version, mode, workshop_id, name) to Steam lobby_data so joining clients can read it on hash mismatch. Hash-neutral; ~1KB per chunk; rate-limited to 1 republish per 500ms." },
+    gt_lobby_manifest_failnotify_enabled = { en = "Show missing mods when a join fails" },
+    gt_lobby_manifest_failnotify_enabled_tooltip = { en = "Client-side. On the vanilla 'incorrect hash' failed-join popup, fetch the host's manifest from Steam lobby_data and replace the popup with one listing missing required mods + an Open-Workshop button. Falls back to the vanilla popup if the host isn't broadcasting." },
+
+    -- Failed-join manifest reveal (rendered text)
+    gt_lobby_failnotify_title              = { en = "Cannot join -- modded host" },
+    gt_lobby_failnotify_required_header    = { en = "You are missing %%d mods required by the host:" },
+    gt_lobby_failnotify_version_header     = { en = "%%d mods have a version mismatch:" },
+    gt_lobby_failnotify_cosmetic_footer    = { en = "Host also has %%d cosmetic mods you don't (gameplay unaffected)." },
+    gt_lobby_failnotify_button_workshop    = { en = "Open Workshop" },
+    gt_lobby_failnotify_button_cancel      = { en = "Close" },
+
+    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+    -- v0.2.54-dev: renamed from `gt_debug_mode` (was nested in `gt_debug_group`)
+    -- to the universal `enable_debug_logging` key.
+    enable_debug_logging = { en = "Debug Logging" },
+    enable_debug_logging_tooltip = { en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable." },
 }

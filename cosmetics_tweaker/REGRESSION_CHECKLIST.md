@@ -4,10 +4,29 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-05-25.
 
 ---
 ## Multiplayer / Network Sync
+
+### la-hat-cross-skeleton-leak — LA hat cached for one career attaches to a different character's body at mission start
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Host sees an LA hat equipped on a teammate's body that belongs to a different character (e.g. GK Pureheart helm shows up on Warrior Priest at mission start). Client view is unaffected. Often a host-owned bot whose career differs from the host's. |
+| Root cause | `_apply_la_on_unit`'s character-mismatch guard derived `owner_char_path` from the cached LA emit's `vanilla_key` instead of the actual `owner_unit`. Both `vanilla_key.unit` and `la_unit_path` resolved to the emitter's character, so the mismatch comparison was a tautology. When `_wearer_unit_for_peer` happened to return the WP bot (host owns multiple player_units), the LA mesh attached to the wrong skeleton. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.11-dev (guard rewritten to source `owner_char_path` from the unit's actual existing slot_hat, with SPProfiles fallback); v0.9.13-dev (extracted to pure helper `_la_chars_compatible` + behavioral tests + runtime spawn-monitor). |
+| Category | INTEGRATION |
+| Repro | 1. Host equips an LA hat on Grail Knight (or any career). 2. Lobby has a teammate (bot or remote player) whose career differs from the host's, e.g. Warrior Priest. 3. Host starts a mission. 4. Without fix: GK LA hat may attach to WP body on host's view. |
+| Expected post-fix | LA hat stays on the host's GK body. WP body wears its vanilla WP hat. `[cos_la_apply hat] character mismatch — owner_char=... la_char=... — skipping cross-skeleton patch` logs when the cross-character case arises. Runtime monitor `[la-spawn-monitor]` does NOT log a `CROSS-SKELETON MISMATCH` warning. |
+| Detection | (a) `/cos_regression_test` — five `la_chars_compatible_*` checks must pass. (b) Runtime — `[la-spawn-monitor] CROSS-SKELETON MISMATCH` console line (warning level) on any player spawn = regression. (c) Manual — equip an LA hat on GK, start mission with a WP bot, eyeball the bot's hat. |
+| Tracking | GitHub issue #14. |
+
+
+---
 
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers
 

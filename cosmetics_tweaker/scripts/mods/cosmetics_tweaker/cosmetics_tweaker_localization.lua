@@ -33,11 +33,34 @@ local loc = {
     -- v0.9.3.9: la_bridge_enable / la_bridge_enable_tooltip loc keys removed
     -- along with the toggle widget. The bridge is now a built-in feature.
 
+    hide_weavebound_skins = {
+        en = "Hide Weavebound Skins by Default",
+    },
+    hide_weavebound_skins_tooltip = {
+        en = "Hides every weapon skin in the 'weaves' material family (Weavebound illusions) from the illusion picker. They're visually jarring on most weapons. Currently-equipped weavebound skins are preserved — only unselected ones disappear from the grid. Disable to see them again.",
+    },
+    hide_shyish_skins = {
+        en = "Hide Shyish Skins by Default",
+    },
+    hide_shyish_skins_tooltip = {
+        en = "Hides every weapon skin in the 'shyish' material family (Shyish-Infused illusions, Necromancer DLC) from the illusion picker. Same behavior as the Weavebound toggle — currently-equipped shyish skins are preserved.",
+    },
     glow_picker_auto_popup_enabled = {
         en = "Auto-Open Glow Picker on Wield",
     },
     glow_picker_auto_popup_enabled_tooltip = {
         en = "When you wield a weapon in the keep that already has a per-item glow applied, the glow picker popup opens automatically so you can review or edit the current color. Only fires once per weapon per keep visit; switching to a non-glowing weapon does nothing. Disable to require manually typing /glow_picker.",
+    },
+
+    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+    -- v0.9.14-dev: renamed from `debug_dumps` (which lived above
+    -- `appearance_group`) to the universal `enable_debug_logging` key,
+    -- moved to the BOTTOM of the widget tree.
+    enable_debug_logging = {
+        en = "Debug Logging",
+    },
+    enable_debug_logging_tooltip = {
+        en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable.",
     },
 
     appearance_group = {

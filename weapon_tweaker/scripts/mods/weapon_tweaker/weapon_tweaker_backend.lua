@@ -167,18 +167,26 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
             -- weapon for a (career, slot) is in our cache AND still passes
             -- is_mod_unlocked_weapon (settings haven't been disabled), return
             -- our cached backend_id; otherwise fall through to vanilla.
-            mod:hook(items_interface, "get_loadout_item_id", function(func, self, career_name, slot_name)
+            mod:hook(items_interface, "get_loadout_item_id", function(func, self, career_name, slot_name, is_bot)
                 if not feature_enabled(mod, "enable_weapon_backend_hooks", true) then
-                    return func(self, career_name, slot_name)
+                    return func(self, career_name, slot_name, is_bot)
                 end
 
-                local cached_id, item = get_cached_backend_item(self, career_name, slot_name)
-                local weapon_key = item and (item.key or (item.data and item.data.key))
-                if cached_id and is_mod_unlocked_weapon(career_name, weapon_key) then
-                    return cached_id
+                -- audit 2026-06-07: vanilla get_loadout_item_id(self, career, slot, is_bot)
+                -- (backend_interface_item_playfab.lua:512) takes a 4th `is_bot` arg that this
+                -- hook previously DROPPED on both fall-through calls, so bot loadout lookups
+                -- silently resolved via the player-default path. Only answer the LOCAL
+                -- player's loadout from our modded cache; bot queries fall through to vanilla
+                -- (bots have their own loadout) with is_bot preserved.
+                if not is_bot then
+                    local cached_id, item = get_cached_backend_item(self, career_name, slot_name)
+                    local weapon_key = item and (item.key or (item.data and item.data.key))
+                    if cached_id and is_mod_unlocked_weapon(career_name, weapon_key) then
+                        return cached_id
+                    end
                 end
 
-                return func(self, career_name, slot_name)
+                return func(self, career_name, slot_name, is_bot)
             end)
         end
 

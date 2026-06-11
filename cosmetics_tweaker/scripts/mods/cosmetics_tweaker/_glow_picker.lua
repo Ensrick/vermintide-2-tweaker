@@ -42,11 +42,18 @@ local PANEL_W, PANEL_H = 600, 620
 local TOP_INSET        = 80   -- distance from screen top to panel top
 
 local function _make_scenegraph_definition()
+    -- audit 2026-06-07 (F11): `UILayer` is a vanilla global (scripts/ui/ui_layer.lua,
+    -- popup = 950), but this fn is evaluated as an ARGUMENT to pcall at the _build
+    -- call site, so a nil/renamed `UILayer` would raise BEFORE pcall protection
+    -- kicks in and crash module-scope. Read defensively via rawget on _G with a
+    -- literal fallback so the panel still builds on a layer of 900.
+    local _ui_layer = rawget(_G, "UILayer")
+    local _popup_layer = (type(_ui_layer) == "table" and _ui_layer.popup) or 900
     return {
         root = {
             is_root = true,
             size    = { 1920, 1080 },
-            position = { 0, 0, UILayer.popup or 900 },
+            position = { 0, 0, _popup_layer },
         },
         -- Dim layer behind the popup so the screen reads as visually paused.
         glow_picker_dim = {
@@ -701,17 +708,36 @@ function GlowPicker.classify(slot_data)
     local skin = slot_data.skin
     local right3p = slot_data.right_unit_3p
     local left3p  = slot_data.left_unit_3p
-    -- Skin key suffix is the canonical signal (engine pairs skin → mesh).
+
+    -- v0.9.34: PRIMARY signal is the skin's material_settings_name — the same
+    -- field the engine itself keys glow on (gear_utils.lua:107/155). The 9
+    -- families confirmed in the 2026-06-11 decompile sweep: weaves + versus
+    -- carry the 5-channel magic layout; blue_glow / purple_glow / golden_glow /
+    -- deep_crimson / life_green / lileath / white_glow are single-channel rune.
+    -- This catches every templated skin regardless of key-suffix quirks (the
+    -- old suffix-only regex missed bare `_runed` CW deus skins like
+    -- dr_deus_01_skin_01_runed, weapon_skins_morris.lua:64).
+    if type(skin) == "string" and skin ~= "" then
+        local skins = rawget(_G, "WeaponSkins")
+        local entry = skins and skins.skins and skins.skins[skin]
+        local mat = entry and entry.material_settings_name
+        if type(mat) == "string" then
+            if mat == "weaves" or mat == "versus" then return "magic" end
+            return "rune"
+        end
+    end
+
+    -- Suffix fallback (LA custom skins set skin="" but rest on a glow-capable
+    -- underlying mesh; also covers pre-WeaponSkins-load calls).
     local function suffix_check(s)
         if type(s) ~= "string" then return nil end
         if s:find("_magic_01$") or s:find("_magic_02$") then return "magic" end
-        if s:find("_runed_01$") or s:find("_runed_02$") or s:find("_runed_03$")
+        if s:find("_runed$")  -- v0.9.34: bare-suffix CW deus skins
+            or s:find("_runed_01$") or s:find("_runed_02$") or s:find("_runed_03$")
             or s:find("_runed_04$") or s:find("_runed_05$") or s:find("_runed_06$")
             or s:find("_runed_02_white$") then return "rune" end
         return nil
     end
-    -- Fall through skin first, then unit paths (LA custom skins set skin=""
-    -- but rest on a glow-capable underlying mesh).
     return suffix_check(skin)
         or suffix_check(right3p)
         or suffix_check(left3p)

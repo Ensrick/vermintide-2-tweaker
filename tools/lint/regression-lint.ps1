@@ -46,7 +46,7 @@ if (-not $RepoRoot) {
 $Script:KnownMods = @(
     'weapon_tweaker', 'chaos_wastes_tweaker', 'general_tweaker', 'cosmetics_tweaker',
     'dynamic_cosmetic_portraits', 'career_tweaker', 'enemy_tweaker',
-    'character_weapon_variants', 'crafting_in_modded', 'la_prefix_patch',
+    'character_weapon_variants', 'crafting_in_modded',
     'event_tweaker', 'modded_progression', 'lobby_tweaker', 'buff_tweaker',
     'material_hijack_patched', 'verminious_dreams_lighting'
 )
@@ -59,7 +59,8 @@ $Script:AllChecks = @(
     'strict-table-lookup',
     'lua-200-locals',
     'base-class-hook',
-    'dropdown-options-reuse'
+    'dropdown-options-reuse',
+    'late-local-shadows-global'
 )
 
 # ============================================================================
@@ -627,9 +628,16 @@ function Invoke-Check-UnitActorZeroIndex {
 # ============================================================================
 # Check 5: strict-table-lookup
 # ----------------------------------------------------------------------------
-# BuffTemplates and NetworkLookup.<lookup> install strict __index = error()
-# metatables. Membership checks like `if BuffTemplates[name]` outside rawget()
-# crash. Memory: reference_vt2_strict_lookup_rawget.md (career_tweaker v0.3.4).
+# NetworkLookup.<lookup> installs strict __index = error() metatables.
+# Membership checks like `if NetworkLookup.damage_profiles[name]` outside
+# rawget() crash. Memory: reference_vt2_strict_lookup_rawget.md (career_tweaker
+# v0.3.4).
+#
+# NOTE 2026-05-23: BuffTemplates was previously on the strict list, but
+# `TRIAGE_2026-05-22.md` confirmed against the VT2 decompile that vanilla
+# `_G.BuffTemplates` has NO metatable — the strict mechanism only protects
+# the NetworkLookup.<lookup> id tables. Removing BuffTemplates from this
+# check eliminates the 17 career_tweaker false positives.
 # ============================================================================
 function Invoke-Check-StrictTableLookup {
     param([string]$File, [string[]]$Lines)
@@ -637,26 +645,10 @@ function Invoke-Check-StrictTableLookup {
     $findings = @()
     $lines = $Lines
 
-    $rxBuffLookup = [regex]'\bBuffTemplates\s*\[\s*([^\]]+?)\s*\]'
     $rxNetLookup  = [regex]'\bNetworkLookup\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\[\s*([^\]]+?)\s*\]'
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i]
-        foreach ($m in $rxBuffLookup.Matches($line)) {
-            # If the surrounding context is `... = something` (write), skip.
-            $idx = $m.Index
-            $tail = $line.Substring($idx + $m.Length)
-            # If the next non-space char is `=` and NOT `==`, it's a write.
-            $afterMatch = $tail -match '^\s*=\s*[^=]'
-            if ($afterMatch) { continue }
-            # rawget(...) on same or previous line?
-            $window = $line
-            if ($i -gt 0) { $window = $lines[$i - 1] + "`n" + $window }
-            if ($window -match '\brawget\s*\(\s*BuffTemplates') { continue }
-            $findings += (New-Finding -Severity 'error' -Check 'strict-table-lookup' `
-                -File $File -Line ($i + 1) `
-                -Message ("BuffTemplates[$($m.Groups[1].Value)] outside rawget() — strict __index will fatal on missing key"))
-        }
         foreach ($m in $rxNetLookup.Matches($line)) {
             $idx = $m.Index
             $tail = $line.Substring($idx + $m.Length)
@@ -819,6 +811,70 @@ function Invoke-Check-DropdownOptionsReuse {
 }
 
 # ============================================================================
+# Check 9: late-local-shadows-global
+# ----------------------------------------------------------------------------
+# A top-level `local NAME = <value>` declared LATE in the file while function
+# bodies (closures, named locals, mod:hook callbacks) EARLIER in the file
+# reference `NAME`. Lua scope is LEXICAL — every earlier reference resolves
+# to `_G.NAME` (typically nil) at function-definition time, NOT the late
+# local. Symptom: silent until the referencing function runs.
+#
+# Sourced from the ct v0.7.99-dev chest-of-trials crash (GUID
+# 4c5d2157-e5ee-45fd-8f49-ecdcd2e7ade3): `local DORMANT_BOON_RARITY = {}`
+# at L4707 with `generate_random_power_ups` hook at L880 and `_should_strip`
+# at L1144 — both above the declaration — silently bound to nil _G.
+#
+# Heuristic: ALL_CAPS_SNAKE names only (the repo convention reserves them
+# for module-level data tables; functions use lowercase_snake and are
+# covered by the existing forward-ref check). Comments and string literals
+# are stripped before matching to suppress false positives.
+#
+# Severity: error (this is a documented shipped crash).
+# ============================================================================
+function Invoke-Check-LateLocalShadowing {
+    param([string]$File, [string[]]$Lines)
+
+    $findings = @()
+    $lines = $Lines
+
+    # Late ALL_CAPS_SNAKE locals (data tables). Skip `local NAME = function(`
+    # (covered by forward-ref check) and tolerate any RHS that doesn't start
+    # with `function` / `(function`.
+    $rxLateLocal = [regex]'^local\s+([A-Z_][A-Z0-9_]*)\s*=\s*([^(]|f(?!unction\b)|fu(?!nction\b))'
+
+    $lateLocals = @{}
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $m = $rxLateLocal.Match($lines[$i])
+        if ($m.Success) {
+            $name = $m.Groups[1].Value
+            if (-not $lateLocals.ContainsKey($name)) {
+                $lateLocals[$name] = $i + 1
+            }
+        }
+    }
+    if ($lateLocals.Count -eq 0) { return $findings }
+
+    foreach ($name in $lateLocals.Keys) {
+        $declLine = $lateLocals[$name]
+        $idRx     = [regex]("(?<![.:A-Za-z0-9_])$([regex]::Escape($name))\b")
+        $declRx   = [regex]("^\s*(local\s+)?$([regex]::Escape($name))\s*=")
+
+        for ($i = 0; $i -lt ($declLine - 1) -and $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if (-not $idRx.IsMatch($line)) { continue }
+            if ($declRx.IsMatch($line)) { continue }
+
+            $findings += (New-Finding -Severity 'error' -Check 'late-local-shadows-global' `
+                -File $File -Line ($i + 1) `
+                -Message ("reference to '{0}' resolves to _G.{0} — `local {0} = ...` declared later at line {1}" -f $name, $declLine))
+            break  # earliest wins
+        }
+    }
+
+    return $findings
+}
+
+# ============================================================================
 # Mod-level orchestration
 # ============================================================================
 
@@ -873,6 +929,9 @@ function Lint-Mod {
         }
         if ($EnabledChecks -contains 'lua-200-locals') {
             $findings += Invoke-Check-Lua200Locals -File $f.Path -Lines $f.StrippedLines
+        }
+        if ($EnabledChecks -contains 'late-local-shadows-global') {
+            $findings += Invoke-Check-LateLocalShadowing -File $f.Path -Lines $f.StrippedLines
         }
     }
 
@@ -1086,23 +1145,35 @@ end
     Record -Name 'unit-actor-zero-index fires' -Pass (Has-Finding -F $found -Check 'unit-actor-zero-index') -Detail ""
 
     # ---- strict-table-lookup ----
+    # BuffTemplates was historically on the strict list but vanilla
+    # `_G.BuffTemplates` has no metatable; only NetworkLookup.<lookup> is
+    # strict. See TRIAGE_2026-05-22.md.
     $m = Make-Mod -Name 'st_strict'
+    Write-Bad -Path (Join-Path $m.ScriptDir 'a.lua') -Content @'
+if NetworkLookup.damage_profiles[name] then
+    do_thing()
+end
+'@
+    $found = Lint-One -Folder $m.Root -Checks @('strict-table-lookup')
+    Record -Name 'strict-table-lookup fires on NetworkLookup.<x>[name]' -Pass (Has-Finding -F $found -Check 'strict-table-lookup') -Detail ""
+
+    $m = Make-Mod -Name 'st_strict_ok'
+    Write-Bad -Path (Join-Path $m.ScriptDir 'a.lua') -Content @'
+if rawget(NetworkLookup.damage_profiles, name) then
+    do_thing()
+end
+'@
+    $found = Lint-One -Folder $m.Root -Checks @('strict-table-lookup')
+    Record -Name 'strict-table-lookup clean with rawget' -Pass (-not (Has-Finding -F $found -Check 'strict-table-lookup')) -Detail ""
+
+    $m = Make-Mod -Name 'st_strict_no_bufftemplates'
     Write-Bad -Path (Join-Path $m.ScriptDir 'a.lua') -Content @'
 if BuffTemplates[name] then
     do_thing()
 end
 '@
     $found = Lint-One -Folder $m.Root -Checks @('strict-table-lookup')
-    Record -Name 'strict-table-lookup fires on BuffTemplates[name]' -Pass (Has-Finding -F $found -Check 'strict-table-lookup') -Detail ""
-
-    $m = Make-Mod -Name 'st_strict_ok'
-    Write-Bad -Path (Join-Path $m.ScriptDir 'a.lua') -Content @'
-if rawget(BuffTemplates, name) then
-    do_thing()
-end
-'@
-    $found = Lint-One -Folder $m.Root -Checks @('strict-table-lookup')
-    Record -Name 'strict-table-lookup clean with rawget' -Pass (-not (Has-Finding -F $found -Check 'strict-table-lookup')) -Detail ""
+    Record -Name 'strict-table-lookup no longer fires on BuffTemplates' -Pass (-not (Has-Finding -F $found -Check 'strict-table-lookup')) -Detail ""
 
     # ---- lua-200-locals ----
     $m = Make-Mod -Name 'st_locals'

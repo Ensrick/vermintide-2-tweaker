@@ -1,12 +1,157 @@
 local mod = get_mod("character_weapon_variants")
 
-local MOD_VERSION = "0.1.330-dev"
+local MOD_VERSION = "0.1.349-dev"
+
+-- v0.1.332: source-pattern marker constant for the /cwv_regression_test
+-- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
+-- PARTIAL row 5 — promoted to PASS by adding a runtime check beside the
+-- existing strict-table-lookup lint coverage at the 3 RPC-handler sites).
+local CT_CWV_NETWORKLOOKUP_RAWGET_MARKER_v0_1_332 = "cwv-networklookup-rawget-hardened-3-sites"
+local CT_CWV_ITEMMASTERLIST_RAWGET_MARKER_v0_1_333 = "cwv-itemmasterlist-rawget-auto-register-all"
+-- v0.1.338: source-pattern marker constant for the /cwv_regression_test
+-- `cwv_slot_extension_scoped` check. The slot_melee "ranged" extension at
+-- line ~3730 was previously applied broadly to every career in CareerSettings
+-- (28 careers), which produced a dual-state-machine collision on Grail Knight
+-- (and likely other careers) — both melee state machines competing for the
+-- same FP rig produced wrong-grip / corrupted-looking first-person weapons.
+-- v0.1.338 narrows the extension to ONLY careers that own at least one
+-- variant flagged `cross_slot = true` (currently the Old Musket → 4 Empire
+-- careers). Source-pattern: must walk `_variant_definitions` and union the
+-- `careers` arrays of every entry with `cross_slot = true`.
+local CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cross-slot-variant-careers"
+-- v0.1.339 (Issue #33): belt-and-suspenders counter that the consolidated
+-- `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` registration site
+-- (~line 1336) increments exactly once. Regression test
+-- `cwv_wield_hook_unique` asserts this is 1 — catches accidental reintroduction
+-- of a duplicate hook_safe on the same (Class, method) which VMF silently
+-- shadows (VMF_RECIPES.md § 1). Original burn: v0.1.336 added a second
+-- registration ~line 9499 for the debug-mode wield dump, shadowing the
+-- line-1336 cross-access tracking and silently breaking 3P anim remap.
+-- v0.1.337 consolidated both bodies; v0.1.339 adds this regression guard.
+local _cwv_wield_hook_registration_count = 0
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
--- In-game chat echo so version is visible without opening console.log —
--- matches cosmetics_tweaker's pattern. Required by `feedback_version_bump.md`:
--- a build that doesn't visibly confirm its version isn't deployable.
-mod:echo("Character Weapon Variants v" .. MOD_VERSION)
+-- v0.1.344: removed the in-game chat banner echo per PROJECT_STANDARDS.md
+-- § 3.6 "Chat-echo policy". The applied marker line further down
+-- ([cwv] enabled v<X> settings_fp=<hash>) is the canonical version surface
+-- and lands in the log file (visible across console_log-*.log). The old
+-- `feedback_version_bump.md` rationale (visibility without opening the log)
+-- is now satisfied by the applied marker line itself plus the version
+-- suffix in the Workshop title — chat banner was redundant.
+
+-- /cwv_regression_test scaffold (v0.1.331). See corresponding _rt_register
+-- calls at the end of this file. Each registered check is a function returning
+-- nil for PASS or a string for FAIL. Same pattern as ct/cosmetics_tweaker.
+-- Doctrine: PROJECT_STANDARDS §15 — "every bug requires a test."
+-- Renamed from `regression_test` per `feedback_vt2_chat_command_syntax.md` /
+-- ct v0.7.91 — chat commands are globally namespaced and `regression_test`
+-- is already claimed by `cim`.
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", function()
+    local pass, fail = 0, 0
+    mod:echo("=== cwv regression_test (v%s) ===", MOD_VERSION)
+    for _, c in ipairs(_RT_CHECKS) do
+        local ok, err = pcall(c.fn)
+        if ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1
+            mod:info("[regression] PASS %s", c.name)
+        else
+            local msg = (not ok and tostring(err)) or tostring(err)
+            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+        end
+    end
+    mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+mod:info("[regression-test-command] registered as /cwv_regression_test")
+
+-- ============================================================================
+-- Debug-mode logging helper (v0.1.336; gate renamed v0.1.340)
+-- ============================================================================
+-- Gates verbose [cwv:dbg] diagnostic lines behind the universal
+-- `enable_debug_logging` VMF checkbox (PROJECT_STANDARDS.md § 3.6;
+-- previously `cwv_debug_mode`). When OFF, every _dbg call short-circuits
+-- before formatting -- safe to leave call sites in hot paths. When ON,
+-- lines route to `mod:info` with the `[cwv:dbg] ` prefix so they sort
+-- alongside the rest of the cwv log stream in console.log.
+--
+-- KEEP UNCONDITIONAL (do NOT route through _dbg):
+--   * mod:info("Character Weapon Variants v%s ...") boot lines.
+--   * mod:warning / mod:error -- guards must always surface.
+--   * Registration FAILURE logs at load time (we need to see them).
+--   * Template-creation summary lines ("Created <foo>_template ...") --
+--     these fire once at boot and document the registered table contents.
+--
+-- v0.1.341-dev: two-helper policy per PROJECT_STANDARDS.md § 3.6.
+-- `_dbg` = confirmation / expected behavior — file only.
+-- `_dbg_alert` = unexpected / wrong / mismatch — file AND in-game chat.
+local function _dbg(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[cwv:dbg] " .. fmt, ...)
+    end
+end
+
+local function _dbg_alert(fmt, ...)
+    if mod:get("enable_debug_logging") then
+        mod:info("[cwv:dbg] " .. fmt, ...)
+        mod:echo("[cwv] " .. fmt, ...)
+    end
+end
+
+-- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
+-- one mod:info line at load. ALWAYS fires (operational telemetry).
+local function _settings_fingerprint()
+    local ok, data = pcall(require, "scripts/mods/character_weapon_variants/character_weapon_variants_data")
+    if not ok or type(data) ~= "table" then return "nodata" end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if #keys == 0 then return "nosettings" end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do
+        local v = mod:get(k)
+        if v == true then       parts[i] = k .. "=1"
+        elseif v == false then  parts[i] = k .. "=0"
+        elseif v == nil then    parts[i] = k .. "=?"
+        else                    parts[i] = k .. "=" .. tostring(v) end
+    end
+    local s = table.concat(parts, ";")
+    local h = 2166136261
+    for i = 1, #s do
+        local byte = string.byte(s, i)
+        local xored, place = 0, 1
+        local hh, bb = h, byte
+        for _ = 1, 32 do
+            local hb, bbit = hh % 2, bb % 2
+            if hb ~= bbit then xored = xored + place end
+            place = place * 2
+            hh = (hh - hb) / 2
+            bb = (bb - bbit) / 2
+        end
+        h = (xored * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+mod:info("[cwv:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
+-- version to chat on load so the user can see what's active. Stable
+-- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+    mod:echo(string.format("[cwv] v%s loaded", MOD_VERSION))
+end
 
 -- ============================================================================
 -- DESIGN INTENT — READ BEFORE "FIXING" CROSS-CHARACTER BASE TEMPLATES
@@ -65,7 +210,7 @@ mod:echo("Character Weapon Variants v" .. MOD_VERSION)
 
 -- v0.1.329-dev: removed unused public exports `mod.weapon_analogues` table
 -- and `mod.get_analogues(item_key)` function. Repo grep + sibling-mod scan
--- (cosmetics_tweaker LA bridge, weapon_tweaker, lobby_tweaker manifest)
+-- (cosmetics_tweaker LA bridge, weapon_tweaker, gt_lobby manifest -- formerly lobby_tweaker, retired 2026-05-25)
 -- confirmed zero external consumers. Cleanup per audit roadmap #13.
 --
 -- KNOWN PENDING (this file): 22 bare-global function/data declarations in
@@ -390,6 +535,42 @@ local _variant_definitions = {
 		traits          = { "ranged_replenish_ammo_headshot" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 		item_type       = "cwv_es_outrider_grenade_launcher",
+	},
+	{
+		-- Saltzpyre crossbow ported onto all 4 Kruber careers. Cloned from
+		-- wh_crossbow (template = crossbow_template_1). 3P body anims play the
+		-- handgun (rifle) wield + idle so Kruber holds it naturally; firing
+		-- and zoom-aim are vocab-shared with handgun so no per-action remap
+		-- needed. 1P is universal across characters (see top-of-file
+		-- ANIMATION ARCHITECTURE) — vanilla crossbow 1P with bolt visible.
+		--
+		-- Migrated from weapon_tweaker v0.12.94-dev (which carried the Kruber
+		-- toggles + base-template wield_anim_career_3p patch + preview-time
+		-- attachment-node substitution for the engine-fatal `a_unwielded_crossbow`
+		-- node Kruber's body doesn't author). See CHANGELOG.
+		--
+		-- KNOWN POLISH ITEMS (see TODO.md):
+		--   * 3P grip offsets need adjusting to fit Kruber's rifle animations
+		--   * Smoke FX on shot should be removed (Saltzpyre's flavor, not Kruber's)
+		--   * 3P weapon model missing the bolt — may require special offsets;
+		--     uncertain whether it's achievable.
+		item_key        = "cwv_es_crossbow",
+		base_weapon     = "wh_crossbow",
+		display_name    = "Crossbow",
+		description     = "An imperial-issue crossbow taken up by Reikland state troopers — same Witch-Hunter-pattern weapon, shouldered like the standard handgun.",
+		character       = "empire_soldier",
+		careers         = _es_all_careers,
+		inventory_icon  = "icon_wpn_empire_crossbow_t1",
+		hud_icon        = "weapon_generic_icon_crossbow",
+		skin_display_name = "Crossbow",
+		rarity          = "default",
+		item_type       = "cwv_es_crossbow",
+		-- Inherits template = "crossbow_template_1" from the wh_crossbow IML
+		-- clone. The Kruber-specific wield_anim_career_3p[es_*] entries are
+		-- patched onto the BASE template (see `_patch_crossbow_template_for_kruber`
+		-- below) because the inventory previewer reads template via item.name —
+		-- which inherits to "wh_crossbow" — not via the variant's template
+		-- override (same constraint as cwv_es_outrider — see its block above).
 	},
 	-- v0.1.300: cwv_es_musket variant put ON ICE per user request — kept as a
 	-- backup idea (don't delete). The cross-slot stance-toggle approach using
@@ -1257,16 +1438,53 @@ local _cross_access_action_remap = {
 local _cross_access_local_weapon_key = nil
 local _cross_access_local_career     = nil
 
+-- CONSOLIDATED wield hook. VMF's `mod:hook_safe` does NOT chain on the same
+-- (Class, method) — a second registration silently overwrites the first
+-- (VMF_RECIPES.md § 1). v0.1.336 inadvertently introduced a duplicate at the
+-- bottom of this file for the cwv_debug_mode dump; that registration shadowed
+-- THIS body and silently broke 3P cross-access animation remapping (the
+-- `_cross_access_local_weapon_key` / `_career` upvalues stopped updating, so
+-- the `Unit.animation_event` hook below never had its remap table to work
+-- with). v0.1.337 merges both bodies into this single hook.
+-- v0.1.339 (Issue #33): increment the file-scope registration counter so the
+-- `cwv_wield_hook_unique` regression test can assert this site fires exactly
+-- once. Increment lives at FILE scope, not inside the callback — the callback
+-- fires every wield, the registration fires once at module load.
+_cwv_wield_hook_registration_count = _cwv_wield_hook_registration_count + 1
 mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
-	if slot_name ~= "slot_melee" then return end
-	local pm = Managers.player
-	if not pm then return end
-	local local_player = pm:local_player(1)
-	if not local_player or local_player.player_unit ~= self.owner_unit then return end
-	local slot_data = self:get_slot_data(slot_name)
-	_cross_access_local_weapon_key = slot_data and slot_data.item_data and slot_data.item_data.key or nil
-	local ok, career = pcall(local_player.career_name, local_player)
-	_cross_access_local_career = ok and career or nil
+	-- (1) Cross-access local weapon tracking (slot_melee only, local player only).
+	-- Feeds the Unit.animation_event remap hook below.
+	if slot_name == "slot_melee" then
+		local pm = Managers.player
+		if pm then
+			local local_player = pm:local_player(1)
+			if local_player and local_player.player_unit == self.owner_unit then
+				local slot_data = self:get_slot_data(slot_name)
+				_cross_access_local_weapon_key = slot_data and slot_data.item_data and slot_data.item_data.key or nil
+				local ok, career = pcall(local_player.career_name, local_player)
+				_cross_access_local_career = ok and career or nil
+			end
+		end
+	end
+
+	-- (2) Debug-mode wield dump (any slot, cwv_* items only). Cached `mod:get`
+	-- lookup gates the rest -- no work when debug is off.
+	if mod:get("enable_debug_logging") then
+		local equipment = self._equipment
+		local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
+		local item_data = slot_data and slot_data.item_data
+		if item_data then
+			local bid = item_data.backend_id
+				or (item_data.mod_data and item_data.mod_data.backend_id)
+			if type(bid) == "string" and bid:match("^cwv_") then
+				_dbg("[cwv:wield] slot=%s backend_id=%s template=%s skin=%s career=%s",
+					tostring(slot_name), tostring(bid),
+					tostring(item_data.template),
+					tostring(slot_data.skin),
+					tostring(self._career_name))
+			end
+		end
+	end
 end)
 
 -- Resolve the local player's 3P body unit fresh each call (the unit can
@@ -2538,6 +2756,100 @@ end
 _create_outrider_grenade_launcher_template()
 
 -- ============================================================
+-- Crossbow base-template patches for Kruber (v0.1.347-dev)
+-- ============================================================
+-- Saltzpyre Crossbow → Kruber Handgun base-template patches. Migrated
+-- from weapon_tweaker (it removed Kruber's wh_crossbow unlock and
+-- ceded ownership to CWV's cwv_es_crossbow variant). The inventory
+-- previewer looks up `Weapons[item.name].template` -> "crossbow_template_1"
+-- (variants inherit entry.name from the base IML key — same constraint
+-- as the outrider variant, see comment in
+-- `_create_outrider_grenade_launcher_template`), so the Kruber wield_anim
+-- must live on the base template, not a clone. Saltzpyre's wh_crossbow is
+-- unaffected: his careers (wh_*) don't match the es_*-keyed entries.
+--
+-- Patched UNCONDITIONALLY (idempotent + Saltzpyre-safe). Gating only the
+-- variant registration (in _auto_register_all) is enough — without the
+-- variant registered, Kruber never holds the crossbow so the es_* entries
+-- are dead data.
+--
+-- Wrapped in `do ... end` so the locals release back to the main chunk
+-- (Lua 5.1 200-locals-per-function ceiling — see CLAUDE.md "Stingray /
+-- Lua engine quirks").
+do
+	local function _patch_crossbow_template_for_kruber()
+		if not Weapons or not Weapons.crossbow_template_1 then return end
+		local tpl = Weapons.crossbow_template_1
+		tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
+		tpl.wield_anim_career_3p.es_mercenary       = "to_handgun"
+		tpl.wield_anim_career_3p.es_huntsman        = "to_handgun"
+		tpl.wield_anim_career_3p.es_knight          = "to_handgun"
+		tpl.wield_anim_career_3p.es_questingknight  = "to_handgun"
+		tpl.wield_anim_no_ammo_career_3p = tpl.wield_anim_no_ammo_career_3p or {}
+		tpl.wield_anim_no_ammo_career_3p.es_mercenary       = "to_handgun_noammo"
+		tpl.wield_anim_no_ammo_career_3p.es_huntsman        = "to_handgun_noammo"
+		tpl.wield_anim_no_ammo_career_3p.es_knight          = "to_handgun_noammo"
+		tpl.wield_anim_no_ammo_career_3p.es_questingknight  = "to_handgun_noammo"
+	end
+	_patch_crossbow_template_for_kruber()
+
+	-- Lazy-built Kruber-safe third_person attachment table for wh_crossbow.
+	-- The vanilla `crossbow_template_1.left_hand_attachment_node_linking.third_person
+	-- .unwielded[1].source` is `a_unwielded_crossbow` — a body node only Saltzpyre's
+	-- skeleton authors. The inventory previewer's `Unit.node(kruber_body,
+	-- "a_unwielded_crossbow")` call bypasses pcall (engine fatal — see
+	-- feedback_vt2_unit_node_not_pcall_safe). Substitute per-spawn during
+	-- MenuWorldPreviewer.equip_item below; see the hook for the apply logic.
+	local _cwv_crossbow_kruber_safe_third_person
+	local function _build_crossbow_kruber_safe_third_person()
+		if _cwv_crossbow_kruber_safe_third_person then
+			return _cwv_crossbow_kruber_safe_third_person
+		end
+		local tpl = Weapons and Weapons.crossbow_template_1
+		local src = tpl and tpl.left_hand_attachment_node_linking
+						and tpl.left_hand_attachment_node_linking.third_person
+		if type(src) ~= "table" then return nil end
+		_cwv_crossbow_kruber_safe_third_person = {
+			display   = src.display,   -- reference, unchanged
+			wielded   = src.wielded,   -- reference, unchanged (j_leftweaponattach is universal)
+			unwielded = { { source = "j_hips", target = 0 } },
+		}
+		return _cwv_crossbow_kruber_safe_third_person
+	end
+
+	-- Preview-time attachment-node guard for wh_crossbow on Kruber. Substitutes
+	-- each spawn entry's `unit_attachment_node_linking` with the Kruber-safe
+	-- table built above so the previewer's `Unit.node(..., "a_unwielded_crossbow")`
+	-- call never fires on Kruber's body. Ported from weapon_tweaker
+	-- `_wt_crossbow_kruber_attach_safe_apply` (v0.12.93-dev) minus the noisy
+	-- per-step diagnostic lines that were only needed during the original
+	-- debug pass — collapsed to a single summary `_dbg` on success.
+	mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot)
+		if item_name ~= "wh_crossbow" then return end
+		local career = self._current_career_name
+		if not career or career:sub(1, 3) ~= "es_" then return end
+		local slot_type = (type(slot) == "table" and slot.type) or nil
+		if not slot_type then return end
+		local info = self._item_info_by_slot and self._item_info_by_slot[slot_type]
+		if not info or not info.spawn_data then return end
+
+		local safe = _build_crossbow_kruber_safe_third_person()
+		if not safe then return end
+
+		local swapped = 0
+		for _, entry in ipairs(info.spawn_data) do
+			if entry.left_hand then
+				entry.unit_attachment_node_linking = safe
+				swapped = swapped + 1
+			end
+		end
+		if swapped > 0 then
+			_dbg("[cwv xbow-kruber attach] swapped=%d on career=%s", swapped, career)
+		end
+	end)
+end
+
+-- ============================================================
 -- Musket template (modified handgun_template_1)
 -- ============================================================
 -- Kruber's vanilla rifle moveset, with stats tuned for an "imperial
@@ -2773,8 +3085,19 @@ local function _toggle_musket_stance_and_rewield(player_unit)
 	-- effect. Vanilla `wield()` only show/hides existing units — it doesn't
 	-- respawn with a new template. We have to destroy + re-add.
 	local slot_name = wielded_slot
-	mod:info("[cwv musket] stance: %s → %s (slot=%s, current=%s reserve=%s reloading=%s)",
-		current, next_stance, slot_name, tostring(cap_current), tostring(cap_reserve), tostring(cap_reloading))
+	-- v0.1.336: slot_index is the numeric key vanilla uses on
+	-- `_equipment_units` / `_item_info_by_slot[*].spawn_data[1].slot_index`
+	-- (see the preview-hook KEY BRIDGE block ~line 8720). Reported alongside
+	-- the slot_name so debug logs can correlate stance toggles with the
+	-- numeric slot used by other CWV hooks.
+	local slot_index = nil
+	local slots_by_name = rawget(_G, "InventorySettings") and InventorySettings.slots_by_name
+	if slots_by_name and slots_by_name[slot_name] then
+		slot_index = slots_by_name[slot_name].slot_index
+	end
+	_dbg("[cwv musket] stance: %s → %s (slot=%s slot_index=%s, current=%s reserve=%s reloading=%s)",
+		current, next_stance, slot_name, tostring(slot_index),
+		tostring(cap_current), tostring(cap_reserve), tostring(cap_reloading))
 	local ok_destroy, err_destroy = pcall(function() inv:destroy_slot(slot_name, true) end)
 	if not ok_destroy then
 		mod:warning("[cwv musket] destroy_slot failed: %s", tostring(err_destroy))
@@ -3458,7 +3781,7 @@ do
 		end
 		-- Re-sync with new cap (which grew when we added this member)
 		_cwv_musket_sync_pool(ext)
-		mod:info("[cwv musket pool] registered ext on unit=%s, members=%d, pool_cap=%d, available=%s",
+		_dbg("[cwv musket pool] registered ext on unit=%s, members=%d, pool_cap=%d, available=%s",
 			tostring(ext.unit), _count_alive_pool_members(), _cwv_musket_pool_cap(), tostring(ext._available_ammo))
 	end
 
@@ -3627,18 +3950,59 @@ end
 -- on the path the user's UI uses). v0.1.304 broad behavior is restored —
 -- ALL ranged weapons will appear in melee grid until we confirm what's
 -- breaking, then re-scope.
+--
+-- v0.1.338 (BUG FIX — Grail Knight FP rig corruption): the broad mutation
+-- above hit ALL 28 careers in `CareerSettings`. Once a career's `slot_melee`
+-- accepts both `"melee"` and `"ranged"`, the keep loadout/preview resolver
+-- can pick up TWO defaults for the same slot (one melee item, one ranged
+-- item), leading to two FP state machines fighting over a single first-person
+-- rig. User confirmed via bisect that disabling CWV restores the FP rig;
+-- Grail Knight (`es_questingknight`) was the consistent repro case
+-- (`es_bastard_sword` 2H + `es_sword_shield_breton` 1H+shield both spawning
+-- their FP units, with two state_machines loaded simultaneously). See marker
+-- constant `CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338` near the top of file.
+--
+-- Fix: only mutate careers that actually need cross-slot support — careers
+-- that own at least one variant flagged `cross_slot = true`. Right now that's
+-- the four Empire careers (`_es_all_careers`) because only `cwv_es_musket_old`
+-- is cross-slot. Other 24 careers are left alone, restoring vanilla slot
+-- behavior everywhere a cross-slot variant can't be equipped. The bug surface
+-- remains on the 4 Empire careers (where the musket is the whole point of the
+-- feature), but is removed from the other 24 careers where the broad mutation
+-- was pure overshoot.
+local function _cwv_collect_cross_slot_careers()
+	local set = {}
+	for _, def in ipairs(_variant_definitions) do
+		if def.cross_slot == true and type(def.careers) == "table" then
+			for _, career_name in ipairs(def.careers) do
+				set[career_name] = true
+			end
+		end
+	end
+	return set
+end
 do
 	local function _do_extend()
 		if not CareerSettings then
 			mod:warning("[cwv slot] CareerSettings nil — skip extension")
 			return 0
 		end
-		local extended = 0
+		local allowed_careers = _cwv_collect_cross_slot_careers()
+		local allowed_count = 0
+		for _ in pairs(allowed_careers) do allowed_count = allowed_count + 1 end
+		if allowed_count == 0 then
+			mod:info("[cwv slot] no cross_slot variants defined — skip slot_melee extension")
+			return 0
+		end
+		local extended, skipped = 0, 0
 		for career_name, career in pairs(CareerSettings) do
 			if type(career) == "table" and career.item_slot_types_by_slot_name then
 				local slot_map = career.item_slot_types_by_slot_name
 				if slot_map.slot_melee then
-					-- Cleanup cwv_dual leftovers from v0.1.311 if they're there.
+					-- Cleanup cwv_dual leftovers from v0.1.311 — apply this
+					-- unconditionally to every career so legacy state from
+					-- prior versions is purged even on careers that we no
+					-- longer extend.
 					for i = #slot_map.slot_melee, 1, -1 do
 						if slot_map.slot_melee[i] == "cwv_dual" then
 							table.remove(slot_map.slot_melee, i)
@@ -3651,19 +4015,37 @@ do
 							end
 						end
 					end
-					-- Append "ranged" to slot_melee if not present.
-					local has_ranged = false
-					for _, t in ipairs(slot_map.slot_melee) do
-						if t == "ranged" then has_ranged = true; break end
-					end
-					if not has_ranged then
-						slot_map.slot_melee[#slot_map.slot_melee + 1] = "ranged"
-						extended = extended + 1
+					-- v0.1.338: only extend careers that own a cross_slot
+					-- variant. Other careers keep vanilla slot_melee.
+					if allowed_careers[career_name] then
+						local has_ranged = false
+						for _, t in ipairs(slot_map.slot_melee) do
+							if t == "ranged" then has_ranged = true; break end
+						end
+						if not has_ranged then
+							slot_map.slot_melee[#slot_map.slot_melee + 1] = "ranged"
+							extended = extended + 1
+						end
+					else
+						-- Also REVERT any pre-v0.1.338 in-memory mutation on
+						-- non-allowed careers, in case the broad extension
+						-- already ran (e.g. CareerSettings was populated
+						-- before this file reloaded). Drop only the trailing
+						-- "ranged" we would have added — never touch a slot
+						-- that legitimately listed "ranged" originally
+						-- (vanilla doesn't, but be defensive).
+						for i = #slot_map.slot_melee, 1, -1 do
+							if slot_map.slot_melee[i] == "ranged" then
+								table.remove(slot_map.slot_melee, i)
+								skipped = skipped + 1
+								break
+							end
+						end
 					end
 				end
 			end
 		end
-		mod:echo("[cwv slot] extended slot_melee with 'ranged' on %d careers", extended)
+		mod:echo("[cwv slot] extended slot_melee with 'ranged' on %d careers (scoped to cross_slot variants; %d non-allowed careers reverted)", extended, skipped)
 		return extended
 	end
 	_do_extend()
@@ -3718,7 +4100,7 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
 			end
 		end
 	end
-	mod:info("[cwv melee-grid filter] kept=%d  dropped_ranged=%d  drop_samples=[%s]",
+	_dbg("[cwv melee-grid filter] kept=%d  dropped_ranged=%d  drop_samples=[%s]",
 		kept, dropped, table.concat(dropped_examples, ", "))
 	return filtered
 end)
@@ -3944,7 +4326,7 @@ local function _attach_musket_bayonets(world, rifle_3p, rifle_1p)
 	-- "floating bayonet on both melee and ranged".
 	local pair_count = 0
 	for _ in pairs(_musket_bayonet_pairs) do pair_count = pair_count + 1 end
-	mod:info("[cwv musket-bayonet] attach: 3p=%s 1p=%s (skipped: 3p=%s 1p=%s) total_pairs=%d",
+	_dbg("[cwv musket-bayonet] attach: 3p=%s 1p=%s (skipped: 3p=%s 1p=%s) total_pairs=%d",
 		tostring(rifle_3p ~= nil), tostring(rifle_1p ~= nil),
 		tostring(skipped_3p), tostring(skipped_1p), pair_count)
 end
@@ -4047,7 +4429,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		end
 	end
 	if orphans_pruned > 0 then
-		mod:info("[cwv musket-bayonet] pruned %d orphan(s) before new attach", orphans_pruned)
+		_dbg("[cwv musket-bayonet] pruned %d orphan(s) before new attach", orphans_pruned)
 	end
 
 	-- v0.1.278: skip bayonet attach for cwv_es_musket_old — the custom mesh
@@ -4187,7 +4569,7 @@ local function _sync_all_bayonets_visibility(equipment)
 		end
 	end
 	if orphans + shown + hidden > 0 then
-		mod:info("[cwv musket-bayonet] sync: orphans=%d shown=%d hidden=%d", orphans, shown, hidden)
+		_dbg("[cwv musket-bayonet] sync: orphans=%d shown=%d hidden=%d", orphans, shown, hidden)
 	end
 end
 
@@ -4558,11 +4940,15 @@ _CWV_OLD_MUSKET_FX_PROXY = setmetatable({}, { __mode = "k" })  -- our_unit -> pr
 
 _spawn_old_musket_fx_proxy = function(world, our_unit, vanilla_path, owner_unit, owner_hand_node_name)
 	if not our_unit or not Unit.alive(our_unit) then
-		mod:info("[cwv old-musket fx] our_unit invalid; skip proxy for %s", vanilla_path)
+		-- v0.1.341-dev: promoted to `_dbg_alert` — "invalid unit" is an
+		-- alert condition (the FX proxy can't be installed; FX won't fire).
+		_dbg_alert("[cwv old-musket fx] our_unit invalid; skip proxy for %s", vanilla_path)
 		return
 	end
 	if not Managers.state or not Managers.state.unit_spawner then
-		mod:info("[cwv old-musket fx] unit_spawner not available; skip proxy")
+		-- v0.1.341-dev: promoted to `_dbg_alert` — "not available" is an
+		-- alert (FX proxy can't be installed without unit_spawner).
+		_dbg_alert("[cwv old-musket fx] unit_spawner not available; skip proxy")
 		return
 	end
 	-- v0.1.296: link the proxy directly to the player's hand-attach bone
@@ -4603,7 +4989,7 @@ _spawn_old_musket_fx_proxy = function(world, our_unit, vanilla_path, owner_unit,
 	pcall(Unit.set_local_scale, proxy, 0, Vector3(1, 1, 1))
 	local vok = pcall(Unit.set_unit_visibility, proxy, false)
 	_CWV_OLD_MUSKET_FX_PROXY[our_unit] = proxy
-	mod:info("[cwv old-musket fx] proxy spawned: path=%s linked_to=%s link_ok=%s vis_ok=%s",
+	_dbg("[cwv old-musket fx] proxy spawned: path=%s linked_to=%s link_ok=%s vis_ok=%s",
 		vanilla_path, linked_to, tostring(lok), tostring(vok))
 end
 
@@ -4921,7 +5307,7 @@ local function _register_tuskgor_javelin_assets()
 		local function _can_interact(interactor_unit, _interactable_unit, _data)
 			local inv = ScriptUnit.has_extension(interactor_unit, "inventory_system")
 			local result = inv and inv:has_ammo_consuming_weapon_equipped("throwing_javelin") or false
-			mod:info("[cwv stick] can_interact_func -> %s (inv=%s)", tostring(result), tostring(inv ~= nil))
+			_dbg("[cwv stick] can_interact_func -> %s (inv=%s)", tostring(result), tostring(inv ~= nil))
 			return result
 		end
 		local function _outline_available(local_player_unit)
@@ -4929,7 +5315,7 @@ local function _register_tuskgor_javelin_assets()
 			return inv and inv:has_ammo_consuming_weapon_equipped("throwing_javelin") or false
 		end
 		local function _on_pick_up(_world, _interactor_unit, _is_server, interactable_unit)
-			mod:info("[cwv stick] on_pick_up_func fired")
+			_dbg("[cwv stick] on_pick_up_func fired")
 			local peer_id = Network.peer_id()
 			local pickup_system = Managers.state.entity:system("pickup_system")
 			pickup_system:delete_limited_owned_pickup_unit(peer_id, interactable_unit)
@@ -5030,10 +5416,13 @@ end
 -- rotation axes, pickup name. Lets us see in console.log whether the hook
 -- fires AND whether the math produces the correction we expect.
 local function _log_quat(prefix, q)
+	-- v0.1.336: helper only ever called from the `[cwv stick]` diagnostic
+	-- hooks below, all of which are now gated on `cwv_debug_mode`. Route
+	-- through `_dbg` so the formatting cost is also skipped when off.
 	local fwd = Quaternion.forward(q)
 	local rgt = Quaternion.right(q)
 	local up  = Quaternion.up(q)
-	mod:info("  %s: fwd=(%.2f,%.2f,%.2f) right=(%.2f,%.2f,%.2f) up=(%.2f,%.2f,%.2f)",
+	_dbg("  %s: fwd=(%.2f,%.2f,%.2f) right=(%.2f,%.2f,%.2f) up=(%.2f,%.2f,%.2f)",
 		prefix,
 		Vector3.x(fwd), Vector3.y(fwd), Vector3.z(fwd),
 		Vector3.x(rgt), Vector3.y(rgt), Vector3.z(rgt),
@@ -5108,7 +5497,7 @@ mod:hook_safe("PlayerProjectileUnitExtension", "init", function(self, extension_
 	local tmpl = extension_init_data and extension_init_data.item_template_name or "?"
 	local action = extension_init_data and extension_init_data.action_name or "?"
 	local sub = extension_init_data and extension_init_data.sub_action_name or "?"
-	mod:info("[cwv stick] PROJ INIT item=%s tmpl=%s action=%s sub=%s",
+	_dbg("[cwv stick] PROJ INIT item=%s tmpl=%s action=%s sub=%s",
 		tostring(item), tostring(tmpl), tostring(action), tostring(sub))
 
 	-- 2) Post-fix: if this projectile belongs to one of our cwv javelin
@@ -5118,17 +5507,17 @@ mod:hook_safe("PlayerProjectileUnitExtension", "init", function(self, extension_
 
 	local owner_unit = extension_init_data and extension_init_data.owner_unit
 	if not owner_unit then
-		mod:info("[cwv stick] post-fix BAIL: no owner_unit in extension_init_data")
+		_dbg("[cwv stick] post-fix BAIL: no owner_unit in extension_init_data")
 		return
 	end
 	local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
 	if not inv then
-		mod:info("[cwv stick] post-fix BAIL: no inventory_system extension on owner")
+		_dbg("[cwv stick] post-fix BAIL: no inventory_system extension on owner")
 		return
 	end
 	local slot_data = inv:get_slot_data("slot_ranged")
 	if not slot_data then
-		mod:info("[cwv stick] post-fix BAIL: no slot_ranged slot_data")
+		_dbg("[cwv stick] post-fix BAIL: no slot_ranged slot_data")
 		return
 	end
 	-- v0.1.106 diagnostic dump revealed: slot_data.id is the slot NAME
@@ -5137,7 +5526,7 @@ mod:hook_safe("PlayerProjectileUnitExtension", "init", function(self, extension_
 	-- Match the skin field instead.
 	local skin = slot_data.skin
 	if type(skin) ~= "string" or not skin:match("^cwv_.+_javelin_skin$") then
-		mod:info("[cwv stick] post-fix BAIL: skin=%s did not match cwv javelin pattern", tostring(skin))
+		_dbg("[cwv stick] post-fix BAIL: skin=%s did not match cwv javelin pattern", tostring(skin))
 		return
 	end
 
@@ -5156,7 +5545,7 @@ mod:hook_safe("PlayerProjectileUnitExtension", "init", function(self, extension_
 		local dmg_id = rawget(NetworkLookup.damage_profiles, our_action.impact_data.damage_profile)
 		if dmg_id then self._impact_damage_profile_id = dmg_id end
 	end
-	mod:info("[cwv stick] init post-fix swap: skin=%s -> tuskgor_javelin_template (action=%s sub=%s, link=%s link_pickup=%s)",
+	_dbg("[cwv stick] init post-fix swap: skin=%s -> tuskgor_javelin_template (action=%s sub=%s, link=%s link_pickup=%s)",
 		tostring(skin), tostring(lookup.action_name), tostring(lookup.sub_action_name),
 		tostring(our_action.impact_data and our_action.impact_data.link),
 		tostring(our_action.impact_data and our_action.impact_data.link_pickup))
@@ -5171,16 +5560,37 @@ end)
 mod:hook_safe("PlayerProjectileUnitExtension", "hit_level_unit", function(self, impact_data, hit_unit)
 	local lookup = self.action_lookup_data
 	local tmpl = lookup and lookup.item_template_name or "?"
-	mod:info("[cwv stick] HIT_LEVEL_UNIT tmpl=%s link=%s link_pickup=%s",
+	-- v0.1.345-dev: dummy-path marker. Historical crash GUID 86d07a4e (see
+	-- ~line 5210 above) fired when the Tuskgor Javelin's pickup spawn on
+	-- dummy hits routed through `limited_owned_pickup_projectile_unit` —
+	-- whose physics actor name "throw" doesn't exist on the boar spear _3p
+	-- mesh, crashing `Actor.create_actor`. The fix swapped to
+	-- `limited_owned_pickup_unit` (no physics). hit_level_unit is the
+	-- engine entry point that dispatches to pickup spawn (PATH A
+	-- `rpc_spawn_linked_pickup` for `link_pickup=true`, PATH B
+	-- `rpc_spawn_pickup_projectile` otherwise). Capture hit_unit shape
+	-- so dummy hits are identifiable.
+	local hit_unit_alive = hit_unit and Unit.alive(hit_unit)
+	_dbg("[cwv stick] HIT_LEVEL_UNIT tmpl=%s link=%s link_pickup=%s hit_unit_alive=%s",
 		tostring(tmpl),
 		tostring(impact_data and impact_data.link),
-		tostring(impact_data and impact_data.link_pickup))
+		tostring(impact_data and impact_data.link_pickup),
+		tostring(hit_unit_alive))
+	-- v0.1.345-dev: dummy-path explicit marker — if hit_unit is a training
+	-- dummy (heuristic: live unit with no health_system extension, or a
+	-- level unit named "training_dummy"), log explicitly so the next session
+	-- log captures whether the historical crash path is reached.
+	if hit_unit_alive and ScriptUnit and ScriptUnit.has_extension
+			and not ScriptUnit.has_extension(hit_unit, "health_system") then
+		_dbg("[cwv:dummy_path] event=hit_level_unit_no_health_system tmpl=%s — was historical crash site (GUID 86d07a4e on dummy hit), monitoring",
+			tostring(tmpl))
+	end
 end)
 
 mod:hook("PlayerProjectileUnitExtension", "_handle_linking", function(func, self, impact_data, hit_unit, hit_position, hit_direction, hit_normal, hit_actor, damage_amount, allow_link, shield_blocked, hit_enemy_or_player)
 	local lookup = self.action_lookup_data
 	local tmpl = lookup and lookup.item_template_name or "?"
-	mod:info("[cwv stick] HANDLE_LINKING tmpl=%s allow_link=%s link=%s link_pickup=%s",
+	_dbg("[cwv stick] HANDLE_LINKING tmpl=%s allow_link=%s link=%s link_pickup=%s",
 		tostring(tmpl), tostring(allow_link),
 		tostring(impact_data and impact_data.link),
 		tostring(impact_data and impact_data.link_pickup))
@@ -5223,7 +5633,7 @@ end)
 -- Path A entry on thrower's side — log only.
 mod:hook("PlayerProjectileUnitExtension", "_spawn_linked_pickup_projectile", function(func, self, pickup_name, ...)
 	if _is_our_pickup(pickup_name) then
-		mod:info("[cwv stick:trace] _spawn_linked_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
+		_dbg("[cwv stick:trace] _spawn_linked_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
 	end
 	return func(self, pickup_name, ...)
 end)
@@ -5231,7 +5641,7 @@ end)
 -- Path B entry on thrower's side — log only.
 mod:hook("PlayerProjectileUnitExtension", "_spawn_pickup_projectile", function(func, self, pickup_name, ...)
 	if _is_our_pickup(pickup_name) then
-		mod:info("[cwv stick:trace] _spawn_pickup_projectile (PATH B) fired (pickup=%s)", tostring(pickup_name))
+		_dbg("[cwv stick:trace] _spawn_pickup_projectile (PATH B) fired (pickup=%s)", tostring(pickup_name))
 	end
 	return func(self, pickup_name, ...)
 end)
@@ -5240,11 +5650,11 @@ end)
 mod:hook("PickupSystem", "rpc_spawn_linked_pickup", function(func, self, channel_id, pickup_name_id, link_position, link_rotation, spawn_type_id, hit_unit_go_id, node_index, is_level_unit, spawn_limit, material_settings_name_id)
 	local pickup_name = NetworkLookup and NetworkLookup.pickup_names and rawget(NetworkLookup.pickup_names, pickup_name_id)
 	if _is_our_pickup(pickup_name) then
-		mod:info("[cwv stick] PATH A rpc_spawn_linked_pickup fired (pickup=%s)", tostring(pickup_name))
+		_dbg("[cwv stick] PATH A rpc_spawn_linked_pickup fired (pickup=%s)", tostring(pickup_name))
 		_log_quat("  input ", link_rotation)
 		local cleaned, ok = _clean_horizontal_rotation(link_rotation)
 		if ok then link_rotation = cleaned; _log_quat("  output", link_rotation)
-		else mod:info("  forward is near-vertical; skipping correction") end
+		else _dbg("  forward is near-vertical; skipping correction") end
 	end
 	return func(self, channel_id, pickup_name_id, link_position, link_rotation, spawn_type_id, hit_unit_go_id, node_index, is_level_unit, spawn_limit, material_settings_name_id)
 end)
@@ -5255,7 +5665,7 @@ end)
 mod:hook("ProjectileSystem", "rpc_spawn_pickup_projectile", function(func, self, channel_id, projectile_unit_name_id, projectile_unit_template_name_id, network_position, network_rotation, network_velocity, network_angular_velocity, pickup_name_id, pickup_spawn_type_id, spawn_limit, always_show, objective_active, material_settings_name_id)
 	local pickup_name = NetworkLookup and NetworkLookup.pickup_names and rawget(NetworkLookup.pickup_names, pickup_name_id)
 	if _is_our_pickup(pickup_name) then
-		mod:info("[cwv stick] PATH B rpc_spawn_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
+		_dbg("[cwv stick] PATH B rpc_spawn_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
 		local vel = AiAnimUtils.velocity_network_scale(network_velocity)
 		if vel and Vector3.length(vel) > 0.1 then
 			local fwd = Vector3.normalize(vel)
@@ -5289,7 +5699,7 @@ local function _attach_carrier_visual(self)
 	if not _is_our_pickup(self.pickup_name) then return end
 	local parent = self.unit
 	if not parent then return end
-	mod:info("[cwv stick] extensions_ready fired (pickup=%s)", tostring(self.pickup_name))
+	_dbg("[cwv stick] extensions_ready fired (pickup=%s)", tostring(self.pickup_name))
 
 	-- Clean rotation — orient the parent so the spear visual hangs off it
 	-- pointing into the wall.
@@ -5340,7 +5750,7 @@ local function _attach_carrier_visual(self)
 	self._cwv_visual_unit = visual
 	self._cwv_world       = world
 	_carrier_visuals[parent] = visual
-	mod:info("[cwv stick] carrier visual attached: parent=%s child=%s", tostring(_TJ_PICKUP_UNIT), tostring(_TJ_BOAR_SPEAR_UNIT))
+	_dbg("[cwv stick] carrier visual attached: parent=%s child=%s", tostring(_TJ_PICKUP_UNIT), tostring(_TJ_BOAR_SPEAR_UNIT))
 end
 
 local function _detach_carrier_visual(self)
@@ -5381,7 +5791,7 @@ mod:hook_safe("PlayerTeleportingPickupExtension","destroy",          _detach_car
 mod:hook("ProjectileLinkerSystem", "link_pickup", function(func, self, pickup_unit, link_position, link_rotation, hit_unit, node_index)
 	local ok, pickup_name = pcall(Unit.get_data, pickup_unit, "pickup_name")
 	if ok and _is_our_pickup(pickup_name) then
-		mod:info("[cwv stick] link_pickup fired (linker-extension branch, pickup=%s)", tostring(pickup_name))
+		_dbg("[cwv stick] link_pickup fired (linker-extension branch, pickup=%s)", tostring(pickup_name))
 		_log_quat("  input ", link_rotation)
 		local cleaned, did = _clean_horizontal_rotation(link_rotation)
 		if did then link_rotation = cleaned; _log_quat("  output", link_rotation) end
@@ -5846,6 +6256,20 @@ local _pickup_hud_strings = {
 	cwv_interaction_ammunition_javelin = "Tuskgor Javelin",
 }
 
+-- audit 2026-06-07 (F15, v0.1.349-dev): prefix helper derives its compare
+-- length from #prefix so the mace+sword rename can't silently die on an
+-- off-by-one again. The prior inline `key:sub(1, 30) ==
+-- "es_dual_wield_hammer_sword_skin"` compared 30 chars against a 31-char
+-- literal -> ALWAYS false -> the rename never fired for any skinned mace+sword.
+-- Centralizing the length on the literal makes the bug structurally impossible.
+local _MACE_SWORD_SKIN_PREFIX = "es_dual_wield_hammer_sword_skin"
+local function _has_prefix(s, prefix)
+	return type(s) == "string" and s:sub(1, #prefix) == prefix
+end
+-- Exposed for the /cwv_regression_test prefix-match behavioral check.
+mod._cwv_has_prefix = _has_prefix
+mod._cwv_mace_sword_skin_prefix = _MACE_SWORD_SKIN_PREFIX
+
 mod:hook(_G, "Localize", function(func, key)
 	if _display_names[key] then
 		return _display_names[key]
@@ -5864,8 +6288,11 @@ mod:hook(_G, "Localize", function(func, key)
 	-- and ending in `_name`.
 	-- Toggle is read at hook fire so it responds to runtime changes without
 	-- a mod reload.
-	if type(key) == "string"
-			and key:sub(1, 30) == "es_dual_wield_hammer_sword_skin"
+	-- audit 2026-06-07 (F15, v0.1.349-dev): use the #prefix-based helper. The
+	-- old `key:sub(1, 30) == "<31-char literal>"` was off-by-one and never
+	-- matched, so the mace_sword_tweak rename was silently dead for every
+	-- skinned mace+sword variant (skin_01/02/03, runed, magic, etc.).
+	if _has_prefix(key, _MACE_SWORD_SKIN_PREFIX)
 			and key:sub(-5) == "_name"
 			and mod:get("mace_sword_tweak") then
 		return "Cudgel and Short Sword"
@@ -7496,140 +7923,23 @@ _register_axe_shield_illusions()
 end  -- do (axe+shield illusion scope)
 
 -- ============================================================
--- Musket cosmetic illusions (alternate handgun meshes)
+-- Musket cosmetic illusions (alternate handgun meshes) — REMOVED v0.1.348-dev
 -- ============================================================
--- Two cosmetic options for `cwv_es_musket`:
---   * Aunty Bessie — wpn_empire_handgun_t3 (es_handgun_skin_05)
---   * Von Meinkopt's Single-Shooter — wpn_empire_handgun_t2 (es_handgun_skin_04)
--- Both are vanilla `es_handgun` cosmetic skins. The variant ships with
--- the default rifle (wpn_empire_handgun_t1, "Reikland Repeater Rifle"
--- equivalent at base rarity); these illusions let the player swap to
--- the t2 / t3 silhouettes via the cosmetics picker.
---
--- Force-load the alternate handgun unit packages at mod init — same
--- Tuskgor pattern. Kruber's es_handgun loadout only auto-loads the t1
--- mesh; t2/t3 variants are skin-pool meshes that may not be in memory.
--- Without force-load, applying the illusion in-game would crash
--- "Resource not loaded" on first equip.
-
-local _MUSKET_ILLUSIONS = {
-	{
-		key             = "cwv_es_musket_aunty_bessie",
-		display_name    = "Aunty Bessie",  -- TODO: localize via mod display_names
-		right_hand_unit = "units/weapons/player/wpn_empire_handgun_t3/wpn_empire_handgun_t3",
-		inventory_icon  = "icon_wpn_empire_handgun_t3",
-		rarity          = "exotic",
-		source_skin     = "es_handgun_skin_05",
-	},
-	{
-		key             = "cwv_es_musket_von_meinkopt_single_shooter",
-		display_name    = "Von Meinkopt's Single-Shooter",
-		right_hand_unit = "units/weapons/player/wpn_empire_handgun_t2/wpn_empire_handgun_t2",
-		inventory_icon  = "icon_wpn_empire_handgun_t2",
-		rarity          = "exotic",
-		source_skin     = "es_handgun_skin_04",
-	},
-}
-
-local function _force_load_musket_illusion_units()
-	if not (Managers and Managers.package) then return end
-	for _, illusion in ipairs(_MUSKET_ILLUSIONS) do
-		local ok, err = pcall(function()
-			Managers.package:load(illusion.right_hand_unit, "cwv_musket_illusion_" .. illusion.key, nil, true, true)
-		end)
-		if ok then
-			mod:info("[cwv musket-illusion] force-loaded %s", illusion.right_hand_unit)
-		else
-			mod:warning("[cwv musket-illusion] failed to force-load %s: %s", illusion.right_hand_unit, tostring(err))
-		end
-		-- Also force-load _3p variant — handgun meshes have separate 3P units.
-		local unit_3p = illusion.right_hand_unit .. "_3p"
-		pcall(function()
-			Managers.package:load(unit_3p, "cwv_musket_illusion_" .. illusion.key .. "_3p", nil, true, true)
-		end)
-	end
-end
-
-_force_load_musket_illusion_units()
-
-local function _register_musket_handgun_illusions()
-	if not ItemMasterList or not WeaponSkins then return end
-
-	local display_unit = "units/weapons/weapon_display/display_1h_handguns"
-	local registered = 0
-	for _, illusion in ipairs(_MUSKET_ILLUSIONS) do
-		local new_key = illusion.key
-		if _custom_skin_keys[new_key] then goto continue end
-
-		local iml_entry = {
-			key               = new_key,
-			name              = new_key,
-			item_type         = "weapon_skin",
-			slot_type         = "weapon_skin",
-			matching_item_key = "cwv_es_musket",
-			rarity            = illusion.rarity,
-			-- Per-illusion display name — registered into _display_names
-			-- below so the inventory shows "Aunty Bessie" / "Von Meinkopt's
-			-- Single-Shooter" instead of the variant's generic name.
-			display_name      = new_key .. "_name",
-			description       = "cwv_es_musket_description",
-			display_unit      = display_unit,
-			hud_icon          = "weapon_generic_icon_units/weapons/weapon_display/display_rifle",
-			inventory_icon    = illusion.inventory_icon,
-			information_text  = "information_weapon_skin",
-			right_hand_unit   = illusion.right_hand_unit,
-			template          = "musket_template",
-			can_wield         = _es_all_careers,
-		}
-		ItemMasterList[new_key] = iml_entry
-
-		WeaponSkins.skins[new_key] = {
-			description     = "cwv_es_musket_description",
-			display_name    = new_key .. "_name",
-			display_unit    = display_unit,
-			hud_icon        = "weapon_generic_icon_units/weapons/weapon_display/display_rifle",
-			inventory_icon  = illusion.inventory_icon,
-			rarity          = illusion.rarity,
-			right_hand_unit = illusion.right_hand_unit,
-			template        = "musket_template",
-		}
-
-		-- Register display name so `Localize(<key>_name)` returns the
-		-- human-readable name. The Localize hook earlier in the file reads
-		-- _display_names[key].
-		_display_names[new_key .. "_name"] = illusion.display_name
-
-		local combos = WeaponSkins.skin_combinations.cwv_es_musket_skins
-		if combos then
-			local tier = combos[illusion.rarity]
-			if tier then
-				tier[#tier + 1] = new_key
-			end
-		end
-
-		if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, new_key) then
-			local tbl = NetworkLookup.weapon_skins
-			local idx = #tbl + 1
-			rawset(tbl, idx, new_key)
-			rawset(tbl, new_key, idx)
-		end
-
-		if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, new_key) then
-			local tbl = NetworkLookup.item_names
-			local idx = #tbl + 1
-			rawset(tbl, idx, new_key)
-			rawset(tbl, new_key, idx)
-		end
-
-		_custom_skin_keys[new_key] = true
-		registered = registered + 1
-		::continue::
-	end
-
-	mod:info("Registered %d musket handgun illusions on cwv_es_musket (Aunty Bessie + Von Meinkopt's Single-Shooter)", registered)
-end
-
-_register_musket_handgun_illusions()
+-- These two cosmetic illusions (Aunty Bessie / Von Meinkopt's Single-Shooter,
+-- vanilla es_handgun t2/t3 skin meshes) existed ONLY to skin the on-ice
+-- `cwv_es_musket` variant (commented-out def near line ~582). They matched
+-- `matching_item_key = "cwv_es_musket"`, used `template = "musket_template"`,
+-- and referenced the `cwv_es_musket_description` loc key — all tied to the
+-- on-ice variant. The LIVE musket is `cwv_es_musket_old`, which ships its own
+-- custom mesh (units/cwv_es_musket_custom/...) under `old_musket_template`; the
+-- vanilla-handgun-mesh illusions would defeat that custom mesh and never
+-- attached to it. Their only other reference (instance_skins) is itself inside
+-- the commented on-ice block. So the registration was dead code with two
+-- dangling description loc refs (the cwv_es_musket_description key) flagged by
+-- qa/check_name_integrity.ps1 check #2. Removed alongside its on-ice owner. If
+-- the on-ice `cwv_es_musket` variant is ever re-enabled, restore these skins
+-- from git history (last present in v0.1.347-dev) and repoint the loc key /
+-- matching_item_key as needed.
 
 -- ============================================================
 -- Empire 1h sword + 1h mace → cwv_es_sword_and_mace illusions
@@ -7793,11 +8103,17 @@ end)
 local _registered_keys = {}
 
 local function _build_entry(def, backend_id)
+	-- v0.1.345-dev: per-call _dbg trace. _build_entry is sparse (boot-time only,
+	-- ~30 variants/session), so always-on.
+	_dbg("[cwv:build_entry] event=enter key=%s base=%s backend_id=%s",
+		tostring(def and def.item_key), tostring(def and def.base_weapon), tostring(backend_id))
 	-- rawget: every variant declares a base_weapon key that's expected to exist, but the
 	-- crashify metamethod on a missing key would surface as an opaque crash here. Failing
 	-- soft with a warning lets the mod skip variants whose base weapon isn't installed.
 	local base = rawget(ItemMasterList, def.base_weapon)
 	if not base then
+		_dbg_alert("[cwv:build_entry] event=fail_base_missing key=%s base=%s",
+			tostring(def and def.item_key), tostring(def and def.base_weapon))
 		mod:warning("Base weapon '%s' not found in ItemMasterList", def.base_weapon)
 		return nil
 	end
@@ -7970,6 +8286,12 @@ local function _build_entry(def, backend_id)
 		entry.mod_data.skin = skin_key
 	end
 
+	-- v0.1.345-dev: exit trace for diagnostics. Reports the resolved fields
+	-- the engine will read at equip + render time.
+	_dbg("[cwv:build_entry] event=exit key=%s template=%s item_type=%s slot_type=%s rhu=%s lhu=%s skin=%s",
+		tostring(def and def.item_key), tostring(entry.template), tostring(entry.item_type),
+		tostring(entry.slot_type), tostring(entry.right_hand_unit), tostring(entry.left_hand_unit),
+		tostring(entry.mod_data and entry.mod_data.skin))
 	return entry
 end
 
@@ -7987,14 +8309,22 @@ local function _find_def(item_key)
 end
 
 local function _register_item(def, backend_id)
+	-- v0.1.345-dev: per-call trace. /give-driven registration is sparse
+	-- (one fire per chat command).
+	_dbg("[cwv:register_item] event=enter key=%s backend_id=%s",
+		tostring(def and def.item_key), tostring(backend_id))
 	local mil = get_mod("MoreItemsLibrary")
 	if not mil then
+		_dbg_alert("[cwv:register_item] event=fail_no_mil key=%s", tostring(def and def.item_key))
 		mod:warning("MoreItemsLibrary not found — cannot register %s", def.item_key)
 		return false
 	end
 
 	local entry = _build_entry(def, backend_id)
-	if not entry then return false end
+	if not entry then
+		_dbg_alert("[cwv:register_item] event=fail_build_entry_nil key=%s", tostring(def and def.item_key))
+		return false
+	end
 
 	mil:add_mod_items_to_local_backend({entry}, "character_weapon_variants")
 
@@ -8018,6 +8348,9 @@ local function _register_item(def, backend_id)
 	end
 
 	_registered_keys[def.item_key] = backend_id
+	_dbg("[cwv:register_item] event=exit_success key=%s backend_id=%s iml_inserted=1 item_master_list_mirrored=%s",
+		tostring(def and def.item_key), tostring(backend_id),
+		tostring(ItemMasterList and ItemMasterList[def.item_key] ~= nil))
 	return true
 end
 
@@ -8070,18 +8403,37 @@ end
 local _auto_registered = false
 
 local function _auto_register_all()
-	if _auto_registered then return end
+	-- v0.1.345-dev: entry trace. Sparse (one fire per session on
+	-- StateInGameRunning.on_enter; subsequent fires hit _auto_registered guard).
+	_dbg("[cwv:auto_register] event=enter auto_registered=%s defs_count=%d",
+		tostring(_auto_registered), #_variant_definitions)
+	if _auto_registered then
+		_dbg("[cwv:auto_register] event=exit_already_registered")
+		return
+	end
 
 	local mil = get_mod("MoreItemsLibrary")
 	if not mil then
+		_dbg_alert("[cwv:auto_register] event=fail_no_mil")
 		mod:warning("MoreItemsLibrary not found — variant weapons will not be available")
 		return
 	end
 
 	local entries = {}
 	local pending_defs = {}
+	local n_skipped_skin_only = 0
+	local n_skipped_already_registered = 0
+	local n_built_ok = 0
+	local n_build_failed = 0
 	for _, def in ipairs(_variant_definitions) do
-		if def.skin_only then goto continue end
+		if def.skin_only then n_skipped_skin_only = n_skipped_skin_only + 1; goto continue end
+		-- v0.1.347-dev: per-variant toggle gate. Currently only cwv_es_crossbow
+		-- needs this (default-on; user can opt out). If disabled at session start,
+		-- registration is skipped and the variant never appears in inventory until
+		-- re-enabled + game restart. (Hot re-enable mid-session is not supported.)
+		if def.item_key == "cwv_es_crossbow" and not mod:get("enable_cwv_es_crossbow") then
+			goto continue
+		end
 		-- v0.1.271: support `def.instances = N` to register N backend
 		-- entries of the same variant with backend_ids `<key>_001`,
 		-- `<key>_002`, ... Each entry is a unique inventory item the
@@ -8094,9 +8446,13 @@ local function _auto_register_all()
 			-- Skip if a backend_id for this slot is already registered.
 			-- (Per-instance tracking uses backend_id as key; per-key
 			-- tracking just stores the first registered backend_id.)
-			if _registered_keys[backend_id] then goto next_instance end
+			if _registered_keys[backend_id] then
+				n_skipped_already_registered = n_skipped_already_registered + 1
+				goto next_instance
+			end
 			local entry = _build_entry(def, backend_id)
 			if entry then
+				n_built_ok = n_built_ok + 1
 				-- Per-instance skin override (instance 2+ can pre-apply
 				-- a different cosmetic illusion without a separate
 				-- variant def).
@@ -8114,6 +8470,8 @@ local function _auto_register_all()
 				if not _registered_keys[def.item_key] then
 					_registered_keys[def.item_key] = backend_id
 				end
+			else
+				n_build_failed = n_build_failed + 1
 			end
 			::next_instance::
 		end
@@ -8129,7 +8487,13 @@ local function _auto_register_all()
 		if ItemMasterList then
 			for _, pending in ipairs(pending_defs) do
 				local key = pending.def.item_key
-				if not ItemMasterList[key] then
+				-- rawget: ItemMasterList has an __index metamethod that calls
+				-- crashify.print_exception("ItemMasterList has no item %s") on
+				-- missing keys, polluting the console with one exception per
+				-- cwv_* item per keep load. rawget bypasses the metamethod.
+				-- See CHANGELOG v0.1.333 + Issue tracking; the same defensive
+				-- pattern is already used on NetworkLookup.item_names 20 lines below.
+				if not rawget(ItemMasterList, key) then
 					-- find this entry in `entries` (parallel to pending_defs order)
 					for _, e in ipairs(entries) do
 						if e.mod_data and e.mod_data.backend_id == pending.backend_id then
@@ -8169,15 +8533,17 @@ local function _auto_register_all()
 					item.rarity = rarity
 					item.data.rarity = rarity
 					item.CustomData.rarity = rarity
-					mod:info("Set %s rarity to %s", pending.def.item_key, rarity)
+					_dbg("Set %s rarity to %s", pending.backend_id, rarity)
 				end
 			end
 		end
 
-		mod:info("Registered %d variant weapons", #entries)
+		_dbg("Registered %d variant weapons", #entries)
 	end
 
 	_auto_registered = true
+	_dbg("[cwv:auto_register] event=exit built_ok=%d build_failed=%d skipped_skin_only=%d skipped_already_registered=%d total_entries_added=%d",
+		n_built_ok, n_build_failed, n_skipped_skin_only, n_skipped_already_registered, #entries)
 end
 
 -- CLARIFY: StateInGameRunning.on_enter fires on entering the keep AND on every
@@ -8581,7 +8947,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 	local def = _resolve_cwv_def(item_data, result.skin)
 	if not def then return result end
 
-	mod:info("Applying transforms (slot=%s, skin=%s, item_key=%s, 3p_only=%s)",
+	_dbg("Applying transforms (slot=%s, skin=%s, item_key=%s, 3p_only=%s)",
 		tostring(slot_name), tostring(result.skin), def.item_key, tostring(def.scale_3p_only or false))
 
 	-- Per-perspective resolution: `_1p` / `_3p` variants override the unified
@@ -8647,7 +9013,9 @@ local function _cwv_spawn_item_post(self, item_name)
 		-- so we can tell whether the regex / lookup is broken vs the hook
 		-- never firing.
 		if type(item_name) == "string" and item_name:find("musket", 1, true) then
-			mod:info("[cwv preview] _resolve_preview_def returned nil for item_name=%s (info bid=%s)",
+			-- v0.1.341-dev: promoted to `_dbg_alert` — "returned nil" is an
+			-- alert (preview won't render for this CWV musket item).
+			_dbg_alert("[cwv preview] _resolve_preview_def returned nil for item_name=%s (info bid=%s)",
 				tostring(item_name),
 				tostring(info and info.backend_id))
 		end
@@ -8703,7 +9071,7 @@ local function _cwv_spawn_item_post(self, item_name)
 		if item_data and item_data.mod_data and item_data.mod_data.cwv_musket_stance == "melee" then
 			_stance = "melee"
 		end
-		mod:info("[cwv preview] firing for cwv_es_musket_old: unit=%s stance=%s", tostring(slot.right), _stance)
+		_dbg("[cwv preview] firing for cwv_es_musket_old: unit=%s stance=%s", tostring(slot.right), _stance)
 		-- Inline diagnostic texture binding (so we can SEE per-call results)
 		local unit = slot.right
 		local meshes_seen, mats_seen, tex_set_oks = 0, 0, 0
@@ -8729,9 +9097,11 @@ local function _cwv_spawn_item_post(self, item_name)
 				end
 			end
 		else
-			mod:info("[cwv preview] Unit.num_meshes failed: ok=%s num_meshes=%s", tostring(ok_nm), tostring(num_meshes))
+			-- v0.1.341-dev: promoted to `_dbg_alert` — "failed" is an alert
+			-- (texture application path skipped; preview texture won't apply).
+			_dbg_alert("[cwv preview] Unit.num_meshes failed: ok=%s num_meshes=%s", tostring(ok_nm), tostring(num_meshes))
 		end
-		mod:info("[cwv preview] textures applied: meshes=%d mats=%d ok_triples=%d", meshes_seen, mats_seen, tex_set_oks)
+		_dbg("[cwv preview] textures applied: meshes=%d mats=%d ok_triples=%d", meshes_seen, mats_seen, tex_set_oks)
 		if _track_old_musket_unit then
 			_track_old_musket_unit(slot.right, "3p", _stance)
 		end
@@ -8739,7 +9109,9 @@ local function _cwv_spawn_item_post(self, item_name)
 			_apply_old_musket_transform(slot.right, "3p", _stance)
 		end
 	elseif def.item_key == "cwv_es_musket_old" then
-		mod:info("[cwv preview] cwv_es_musket_old gate failed: slot.right=%s _is_unit=%s",
+		-- v0.1.341-dev: promoted to `_dbg_alert` — "gate failed" is an
+		-- alert (CWV musket preview won't render correctly).
+		_dbg_alert("[cwv preview] cwv_es_musket_old gate failed: slot.right=%s _is_unit=%s",
 			tostring(slot and slot.right), tostring(slot and slot.right and _is_unit(slot.right)))
 	end
 end
@@ -8819,7 +9191,7 @@ end)
 -- "cwv_es_musket"). Need to see every call to figure out what's happening.
 mod:hook("HeroPreviewer", "_spawn_item", function(func, self, item_name, spawn_data)
 	local result = func(self, item_name, spawn_data)
-	mod:info("[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
+	_dbg("[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
 	_cwv_spawn_item_post(self, item_name)
 	return result
@@ -8827,7 +9199,7 @@ end)
 
 mod:hook("MenuWorldPreviewer", "_spawn_item", function(func, self, item_name, spawn_data)
 	local result = func(self, item_name, spawn_data)
-	mod:info("[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
+	_dbg("[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
 	_cwv_spawn_item_post(self, item_name)
 	return result
@@ -9338,6 +9710,99 @@ mod:command("cwv_despawn_probes", "Despawn all probe units spawned via cwv_probe
 	mod:echo("Despawned %d probe units", count)
 end)
 
+-- ============================================================================
+-- Debug-mode event subscriptions (v0.1.336)
+-- ============================================================================
+-- Three event-driven _dbg dumps that fire only when `cwv_debug_mode` is ON.
+-- Each handler short-circuits at the top via mod:get so the engine-side
+-- callback overhead is the only cost when the toggle is off.
+--
+-- 1. Game-state transitions  -> dump registered cwv_* item count + which
+--    loadout slots have cwv_* items equipped on the local player.
+-- 2. Wield (SimpleInventoryExtension.wield post-hook) -> dump variant key,
+--    backend_id, slot, applied skin, base template, and career when the
+--    player wields any cwv_* item.
+-- 3. Old Musket stance toggle -> dump prior/new stance + slot_index alongside
+--    the existing per-toggle "[cwv musket] stance:" trace (which is also
+--    now gated through _dbg).
+--
+-- Localized helper: count cwv_* item_keys present in ItemMasterList. Bails
+-- gracefully when IML isn't loaded yet (boot timing).
+local function _dbg_count_registered_cwv_items()
+    local iml = rawget(_G, "ItemMasterList")
+    if type(iml) ~= "table" then return -1 end
+    local n = 0
+    -- ItemMasterList has the missing-key crashify metamethod (see v0.1.333),
+    -- so iterate via `pairs` (which calls __pairs / next directly on the
+    -- table contents — does not trigger __index). Filter to cwv_* prefix.
+    for k, _ in pairs(iml) do
+        if type(k) == "string" and k:sub(1, 4) == "cwv_" then
+            n = n + 1
+        end
+    end
+    return n
+end
+
+-- (1) Game state transitions. VMF surfaces engine state changes through the
+-- top-level `mod.on_game_state_changed = function(status, state_name)` slot.
+mod.on_game_state_changed = function(status, state_name)
+    if not mod:get("enable_debug_logging") then return end
+    local n = _dbg_count_registered_cwv_items()
+    _dbg("on_game_state_changed: status=%s state=%s registered_cwv_items=%d",
+        tostring(status), tostring(state_name), n)
+
+    -- Only attempt the loadout snapshot on `enter` (the new state is now
+    -- active) — `exit` fires before extensions are wired in the next state.
+    if status ~= "enter" then return end
+
+    local pl = Managers.player and Managers.player:local_player()
+    local player_unit = pl and pl.player_unit
+    if not player_unit or not Unit.alive(player_unit) then
+        _dbg("  loadout: no local player_unit yet (state=%s)", tostring(state_name))
+        return
+    end
+    local ok_inv, inv = pcall(ScriptUnit.extension, player_unit, "inventory_system")
+    if not ok_inv or not inv or not inv.equipment then
+        _dbg("  loadout: no inventory_system on local player (state=%s)", tostring(state_name))
+        return
+    end
+    local equip = inv:equipment()
+    local slots = equip and equip.slots
+    if type(slots) ~= "table" then return end
+
+    local hits = 0
+    for slot_name, slot_data in pairs(slots) do
+        local item_data = slot_data and slot_data.item_data
+        local bid = item_data and item_data.backend_id
+        if type(bid) == "string" and bid:match("^cwv_") then
+            hits = hits + 1
+            _dbg("  loadout slot=%s backend_id=%s template=%s skin=%s",
+                tostring(slot_name), tostring(bid),
+                tostring(item_data.template),
+                tostring(slot_data.skin))
+        end
+    end
+    _dbg("  loadout: %d cwv_* item(s) currently equipped", hits)
+end
+
+-- (2) Variant equip event — MERGED into the canonical wield hook at line ~1317
+-- (where the cross-access tracking lives). VMF `mod:hook_safe` does NOT chain
+-- on the same (Class, method) — a second registration silently overwrites.
+-- See v0.1.337 CHANGELOG and VMF_RECIPES.md § 1.
+
+-- (3) Old Musket stance toggle. The toggle helper
+-- `_toggle_musket_stance_and_rewield` (~line 2729) already logs its core
+-- transition via `_dbg("[cwv musket] stance: %s → %s ...")`. To honor the
+-- task's "log prior stance / new stance / slot_index" requirement without
+-- introducing duplicate noise, attach an extra structured dump at the same
+-- call site keyed off the SAME `cwv_debug_mode` toggle. Lookup happens at
+-- the function entry only -- not in a hot loop -- so the cached-pattern
+-- guidance doesn't apply here.
+--
+-- We intentionally do NOT add a hook to a vanilla method to observe this --
+-- the stance toggle is a CWV-internal event with no vanilla equivalent.
+-- The existing call site is the canonical fire point.
+
 mod:command("cwv_give", "Give a variant weapon: cwv_give <item_key>", function(item_key)
 	if not item_key or item_key == "" then
 		mod:echo("Usage: cwv_give <item_key>")
@@ -9348,6 +9813,359 @@ mod:command("cwv_give", "Give a variant weapon: cwv_give <item_key>", function(i
 		return
 	end
 	_give_variant(item_key)
+end)
+
+-- ============================================================
+-- /cwv_regression_test checks (scaffold near top of file).
+-- Each check returns nil for PASS or a string for FAIL.
+-- Bail with a clear "not loaded (run in-keep)" message when globals
+-- aren't ready — keep-load timing means ItemMasterList / NetworkLookup
+-- may not be populated when the user runs the command pre-keep.
+-- ============================================================
+
+-- Per-mod helper: walk every cwv_* IML entry that originated from this mod.
+-- Returns an array of { key = string, entry = table, def = table }. Bails
+-- (returns nil + "reason string") when ItemMasterList isn't ready or no
+-- variants are registered yet.
+local function _rt_iter_cwv_entries()
+    local iml = rawget(_G, "ItemMasterList")
+    if type(iml) ~= "table" then
+        return nil, "ItemMasterList not loaded yet (run in-keep)"
+    end
+    local out = {}
+    for _, def in ipairs(_variant_definitions) do
+        if not def.skin_only then
+            local entry = rawget(iml, def.item_key)
+            if entry then
+                out[#out + 1] = { key = def.item_key, entry = entry, def = def }
+            end
+        end
+    end
+    if #out == 0 then
+        return nil, "no cwv variants registered in ItemMasterList yet (run in-keep)"
+    end
+    return out, nil
+end
+
+_rt_register("cwv_variant_flag_present", function()
+    -- Verify every cwv_* ItemMasterList entry carries `cwv_variant = true`.
+    -- Per `feedback_cwv_clone_name_clobber.md` — sibling mods (cosmetics_tweaker,
+    -- weapon_tweaker, gt_lobby manifest formerly lobby_tweaker) gate item-name-keyed overrides
+    -- on `item_data.cwv_variant`. Missing flag = sibling mods spuriously
+    -- match the inherited base-weapon name and apply the wrong override.
+    local entries, bail = _rt_iter_cwv_entries()
+    if bail then return bail end
+    local missing = {}
+    for _, e in ipairs(entries) do
+        if e.entry.cwv_variant ~= true then
+            missing[#missing + 1] = e.key
+        end
+    end
+    if #missing > 0 then
+        return "cwv_variant flag missing on " .. #missing .. " entries: " .. table.concat(missing, ", ")
+    end
+end)
+
+_rt_register("cwv_inherits_base_name", function()
+    -- Verify NO cwv_* entry has `entry.name` clobbered to the cwv key.
+    -- Per `feedback_cwv_clone_name_clobber.md` — vanilla code (e.g.
+    -- world_hero_previewer.lua:674) does `item_data = ItemMasterList[item.name]`
+    -- for fallback lookups. Clobbering entry.name to def.item_key made the
+    -- lookup return nil and equip path crashed in BackendUtils.get_item_units.
+    -- Must KEEP the inherited base name; mod uses `entry.cwv_variant` as the
+    -- discriminator instead. Allow `entry.name == nil` (cloned tables may
+    -- inherit via metamethod; only fail on the explicit cwv_-prefix clobber).
+    local entries, bail = _rt_iter_cwv_entries()
+    if bail then return bail end
+    local clobbered = {}
+    for _, e in ipairs(entries) do
+        local n = e.entry.name
+        if type(n) == "string" and n:sub(1, 4) == "cwv_" then
+            clobbered[#clobbered + 1] = string.format("%s (name=%s)", e.key, n)
+        end
+    end
+    if #clobbered > 0 then
+        return "entry.name clobbered with cwv_ prefix on: " .. table.concat(clobbered, "; ")
+    end
+end)
+
+_rt_register("cwv_ammo_mirroring", function()
+    -- For any variant whose BASE template has `ammo_unit`, the variant entry
+    -- must mirror `ammo_unit`, `projectile_units_template`, `pickup_template_name`,
+    -- `link_pickup_template_name` from the base. Per `feedback_cwv_ammo_unit_required.md` —
+    -- the skin pipeline nukes these fields; without explicit mirroring the
+    -- previewer/throw/pickup paths all crash on ammo-bearing variants.
+    -- Skip non-ammo bases entirely (their nil ammo_unit is correct).
+    local entries, bail = _rt_iter_cwv_entries()
+    if bail then return bail end
+    local iml = rawget(_G, "ItemMasterList")
+    local mismatched = {}
+    local AMMO_FIELDS = { "ammo_unit", "projectile_units_template", "pickup_template_name", "link_pickup_template_name" }
+    for _, e in ipairs(entries) do
+        local base_key = e.def.base_weapon
+        local base = base_key and rawget(iml, base_key)
+        if base and base.ammo_unit then
+            for _, f in ipairs(AMMO_FIELDS) do
+                if base[f] ~= nil and e.entry[f] == nil then
+                    mismatched[#mismatched + 1] = string.format("%s missing %s (base=%s has it)", e.key, f, base_key)
+                end
+            end
+        end
+    end
+    if #mismatched > 0 then
+        return "ammo-mirroring gaps on " .. #mismatched .. " entries: " .. table.concat(mismatched, "; ")
+    end
+end)
+
+_rt_register("cwv_in_inventory_package_list", function()
+    -- For each cwv variant's `right_hand_unit` and `left_hand_unit` paths,
+    -- check whether the path appears in `NetworkLookup.inventory_packages`.
+    -- Per `feedback_vt2_force_load_only_listed_paths.md` — Managers.package:load
+    -- succeeds synchronously but async-fatals "Resource not found" if the path
+    -- isn't listed; the fatal bypasses pcall. Vanilla unit paths ARE listed;
+    -- mod-defined custom-mesh paths (e.g. Old Musket) are NOT, but those
+    -- variants use the LA custom-mesh overlay pattern with vanilla paths in
+    -- the actual `right_hand_unit` slot.
+    --
+    -- Informational-only for INHERITED vanilla paths (which legitimately may
+    -- not all be listed depending on DLC). FAIL only when the path looks like
+    -- a mod-prefixed custom mesh: `units/weapons/player_cwv/...`. If any future
+    -- variant ships a custom-mesh path that didn't get listed, this will catch it.
+    local entries, bail = _rt_iter_cwv_entries()
+    if bail then return bail end
+    local NL = rawget(_G, "NetworkLookup")
+    local list = NL and NL.inventory_packages
+    if type(list) ~= "table" then
+        return "NetworkLookup.inventory_packages not loaded yet (run in-keep)"
+    end
+    -- Build a fast lookup set: path -> true. The list is array-form only; no
+    -- reverse-index in vanilla.
+    local listed = {}
+    for _, p in ipairs(list) do listed[p] = true end
+    local missing = {}
+    for _, e in ipairs(entries) do
+        for _, slot in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+            local p = e.entry[slot]
+            if type(p) == "string" and p ~= "" then
+                -- Mod-custom-mesh paths under a dedicated subtree must be
+                -- present; vanilla paths are informational.
+                if p:find("/player_cwv/", 1, true) or p:find("character_weapon_variants/", 1, true) then
+                    if not listed[p] then
+                        missing[#missing + 1] = string.format("%s.%s=%s (custom-mesh path not in InventoryPackageList)", e.key, slot, p)
+                    end
+                end
+            end
+        end
+    end
+    if #missing > 0 then
+        return "InventoryPackageList gaps on " .. #missing .. " custom-mesh paths: " .. table.concat(missing, "; ")
+    end
+end)
+
+_rt_register("cwv_itemmasterlist_uses_rawget", function()
+    -- v0.1.333 (Issue #20): the membership check in `_auto_register_all`
+    -- (`character_weapon_variants.lua:8167-area`) probes `ItemMasterList[key]`
+    -- before deciding whether to mirror our entry. `ItemMasterList.__index`
+    -- calls `crashify.print_exception("ItemMaster List has no item %s")` on
+    -- missing keys, so a plain index produced 27 crashify exceptions per
+    -- keep load. Fix: `not rawget(ItemMasterList, key)`. This runtime test is
+    -- the §15 belt-and-suspenders companion (the strict-table-lookup lint
+    -- catches static-pattern regressions; this catches metatable behavior
+    -- changes at runtime).
+    --
+    -- 1. Source-pattern: marker constant must be present.
+    if CT_CWV_ITEMMASTERLIST_RAWGET_MARKER_v0_1_333 ~= "cwv-itemmasterlist-rawget-auto-register-all" then
+        return "ITEMMASTERLIST RAWGET marker absent — was the v0.1.333 fix reverted?"
+    end
+    -- 2. Runtime-state: rawget on a known-bad key against ItemMasterList must
+    --    return nil without raising. If the engine ever switched the
+    --    metatable behavior (or the table itself was replaced), the rawget
+    --    guard would no longer be load-bearing and we'd want to know.
+    local IML = rawget(_G, "ItemMasterList")
+    if type(IML) == "table" then
+        local ok, value = pcall(rawget, IML, "__cwv_iml_rawget_probe_does_not_exist__")
+        if not ok then
+            return "rawget(ItemMasterList, <bad-key>) RAISED — strict-metatable behavior changed"
+        end
+        if value ~= nil then
+            return "rawget(ItemMasterList, <bad-key>) returned non-nil — unexpected"
+        end
+    end
+end)
+
+_rt_register("cwv_networklookup_uses_rawget", function()
+    -- v0.1.330/.332: three call sites in `character_weapon_variants.lua`
+    -- (damage_profiles reverse lookup ~L5185, pickup_names reverse lookups
+    -- ~L5270 + ~L5285) resolve RPC-payload IDs through
+    -- `rawget(NetworkLookup.*, key)` so a malformed/out-of-range ID returns
+    -- nil instead of raising the strict `__index` metatable. The
+    -- strict-table-lookup lint covers static-pattern regressions; this runtime
+    -- check is the belt-and-suspenders companion required by §15 of
+    -- PROJECT_STANDARDS.md.
+    --
+    -- 1. Source-pattern: marker constant must be present.
+    if CT_CWV_NETWORKLOOKUP_RAWGET_MARKER_v0_1_332 ~= "cwv-networklookup-rawget-hardened-3-sites" then
+        return "RAWGET marker absent — was the v0.1.330 three-site RPC hardening reverted?"
+    end
+    -- 2. Runtime-state: rawget on a known-bad key against the two NL subtables
+    --    that the three sites read (damage_profiles + pickup_names). Both
+    --    must return nil without raising.
+    local NL = rawget(_G, "NetworkLookup")
+    for _, sub in ipairs({ "damage_profiles", "pickup_names" }) do
+        local tbl = NL and NL[sub]
+        if type(tbl) == "table" then
+            local ok, value = pcall(rawget, tbl, "__cwv_rawget_probe_does_not_exist__")
+            if not ok then
+                return string.format("rawget(NetworkLookup.%s, <bad-key>) RAISED — strict-metatable behavior changed", sub)
+            end
+            if value ~= nil then
+                return string.format("rawget(NetworkLookup.%s, <bad-key>) returned non-nil — unexpected", sub)
+            end
+        end
+    end
+end)
+
+_rt_register("cwv_slot_extension_scoped", function()
+    -- v0.1.338: the slot_melee "ranged" extension MUST be scoped to only
+    -- careers that own a `cross_slot = true` variant. Broad application
+    -- across all 28 careers caused a dual-state-machine collision on
+    -- Grail Knight (and other multi-melee-archetype careers): two FP
+    -- state machines were loaded simultaneously into one FP rig, producing
+    -- wrong-grip / corrupted-looking first-person weapons. See marker
+    -- constant `CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338`.
+    --
+    -- 1. Source-pattern: marker constant must be present.
+    if CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 ~= "cwv-slot-extension-scoped-to-cross-slot-variant-careers" then
+        return "SLOT EXTENSION marker absent — was the v0.1.338 scoping fix reverted?"
+    end
+    -- 2. Compute the expected allowed-careers set from `_variant_definitions`.
+    --    Walk every def, union the `careers` arrays of entries with
+    --    `cross_slot = true`. As of v0.1.338 only `cwv_es_musket_old` is
+    --    cross-slot, so the expected set is the four Empire careers.
+    local expected = _cwv_collect_cross_slot_careers()
+    local expected_count = 0
+    for _ in pairs(expected) do expected_count = expected_count + 1 end
+    if expected_count == 0 then
+        return "no cross_slot variants defined — definition table changed shape?"
+    end
+    -- 3. Runtime-state: walk CareerSettings; every allowed career MUST have
+    --    "ranged" in its slot_melee, every non-allowed career MUST NOT.
+    local CS = rawget(_G, "CareerSettings")
+    if type(CS) ~= "table" then
+        return "CareerSettings not loaded yet (run in-keep)"
+    end
+    local missing, leaked = {}, {}
+    for career_name, career in pairs(CS) do
+        if type(career) == "table" and career.item_slot_types_by_slot_name then
+            local sm = career.item_slot_types_by_slot_name.slot_melee
+            if type(sm) == "table" then
+                local has_ranged = false
+                for _, t in ipairs(sm) do
+                    if t == "ranged" then has_ranged = true; break end
+                end
+                if expected[career_name] and not has_ranged then
+                    missing[#missing + 1] = career_name
+                elseif (not expected[career_name]) and has_ranged then
+                    leaked[#leaked + 1] = career_name
+                end
+            end
+        end
+    end
+    if #missing > 0 then
+        return "expected slot_melee 'ranged' missing on allowed careers: " .. table.concat(missing, ", ")
+    end
+    if #leaked > 0 then
+        return "slot_melee 'ranged' leaked to NON-allowed careers (broad-extension regression): " .. table.concat(leaked, ", ")
+    end
+end)
+
+_rt_register("cwv_wield_hook_unique", function()
+    -- v0.1.339 (Issue #33): assert there is exactly ONE
+    -- `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` registration
+    -- in this file. VMF's `mod:hook_safe` does NOT chain — a second
+    -- registration on the same (Class, method) silently overwrites the first
+    -- (VMF_RECIPES.md § 1). v0.1.336 burned this exact bug: a debug-mode
+    -- wield dump added at ~line 9499 shadowed the cross-access tracking at
+    -- line 1336, silently breaking 3P animation remap. v0.1.337 consolidated
+    -- both bodies into one callback; this regression test guards against
+    -- reintroduction.
+    --
+    -- Mechanism: file-scope counter `_cwv_wield_hook_registration_count` is
+    -- incremented at the registration site immediately before the
+    -- `mod:hook_safe` call. Any future duplicate site would increment it
+    -- again at module-load time. Counter is set at file scope, so this check
+    -- runs against the cumulative count after the whole file has loaded.
+    if _cwv_wield_hook_registration_count ~= 1 then
+        -- Error string intentionally avoids the literal hook_safe call signature
+        -- so the mod-lint regex doesn't flag this regression-check site as a
+        -- second registration. See `tools/mod-lint/lint-mod.ps1` $rxHook.
+        return string.format(
+            "expected exactly 1 SimpleInventoryExtension wield safe-hook registration, got %d -- duplicate-hook regression (VMF silently shadows the first body; see VMF_RECIPES.md sec 1)",
+            _cwv_wield_hook_registration_count)
+    end
+end)
+
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local saved = mod:get("enable_debug_logging")
+    if saved ~= false then mod:set("enable_debug_logging", false) end
+    local ok = pcall(_dbg, "smoke test off")
+    if not ok then return "_dbg raised with toggle off" end
+    ok = pcall(_dbg_alert, "smoke test off")
+    if not ok then return "_dbg_alert raised with toggle off" end
+    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/character_weapon_variants/character_weapon_variants_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)
+_rt_register("mace_sword_rename_prefix_match", function()
+    -- audit 2026-06-07 (F15, v0.1.349-dev): guard the mace+sword rename prefix
+    -- match against off-by-one death. The prior `key:sub(1, 30) ==
+    -- "es_dual_wield_hammer_sword_skin"` compared 30 chars against a 31-char
+    -- literal, so it was ALWAYS false and the rename never fired for any
+    -- skinned mace+sword. Behavioral assertion: a representative skin key MUST
+    -- match the prefix, and a non-matching key MUST NOT.
+    local has_prefix = mod._cwv_has_prefix
+    local prefix = mod._cwv_mace_sword_skin_prefix
+    if type(has_prefix) ~= "function" then
+        return "_cwv_has_prefix helper missing"
+    end
+    if prefix ~= "es_dual_wield_hammer_sword_skin" then
+        return string.format("unexpected mace+sword skin prefix: %q", tostring(prefix))
+    end
+    -- Representative key the player's inventory/cosmetics UI actually passes to
+    -- Localize when a non-default illusion is applied (skin_02 + _name suffix).
+    local rep_key = "es_dual_wield_hammer_sword_skin_02_name"
+    if not has_prefix(rep_key, prefix) then
+        return string.format(
+            "prefix match FAILED for representative key %q (off-by-one regression: sub() length must equal #prefix=%d)",
+            rep_key, #prefix)
+    end
+    -- Negative control: an unrelated key must NOT match.
+    if has_prefix("es_dual_wield_hammer_falchion_skin_01_name", prefix) then
+        return "prefix match spuriously succeeded for a non-mace+sword key"
+    end
 end)
 
 mod:info("Character Weapon Variants v%s loaded", MOD_VERSION)

@@ -1,5 +1,76 @@
 ﻿# Crafting in Modded Changelog
 
+## 0.7.73-dev (2026-06-08) — HDR setup error path: destroy-on-failure sweep + truthful is_in_inn restore (Issue #73)
+
+### Why
+The 2026-06-08 post-ship re-review of the in-mission HDR fix found that the pcall converts a mid-body failure into a *deferred* crash: if vanilla `_setup_hdr_gui` fails after creating a world but before `self._hdr_gui_data = hdr_gui_data` (its last statement, hero_view.lua:163), the half-built world leaks unreferenced — `destroy_hdr_gui` never releases it, and the NEXT forge open dies on world_manager's `World "hero_view_hdr" already exists` fassert (engine-fatal, bypasses pcall). Only reachable when the fix is already failing, but the failure mode was worse than the disease.
+
+### Changed
+- **`crafting_in_modded_dev.lua`:** new `mod._cim_sweep_leaked_hdr_worlds(world_manager, hdr_gui_data)` — on the `_setup_hdr_gui` error path, destroys any orphaned `hero_view_hdr` / `hero_view_hdr_top` world by name (`WorldManager.destroy_world` accepts the name string, world_manager.lua:64; destroying the world releases its viewport/guis engine-side). No-op when `_hdr_gui_data` was assigned (those worlds are owned by `destroy_hdr_gui`) or when the world manager is absent. Logs **ungated** per failure-path doctrine.
+- **is_in_inn restore nit:** the hook now restores the *saved* prior value (`nil` in mission) instead of literal `false` — strictly truthful for any future identity comparison.
+
+### Tests
+- `heroview_hdr_failed_setup_sweeps_leaked_worlds` — drives the sweep with a stub world manager: leaked world destroyed by name, owned worlds untouched when `_hdr_gui_data` is set, nil-safe on missing manager.
+
+## 0.7.72-dev (2026-06-07) — Add RPC schema version + receiver gate to `cim_modded_slot`
+
+### Why
+Audit 2026-06-07 (finding F10, BUG_CLASSES § 9 / VMF_RECIPES § 10): the `cim_modded_slot` mod-to-mod VMF RPC — the side-channel that tells cim clients which loadout slots hold a "modded"-rarity item — shipped with **no schema-version arg and no receiver validation gate**. Every other versioned RPC in the repo (`gt_lobby_motd_show`) carries `<MOD>_RPC_SCHEMA` as its first positional arg so a payload-shape change between peers on mismatched mod builds is detected and dropped instead of silently mis-decoded (wrong value bound to the wrong positional, corrupting the per-slot modded-flag state). `cim_modded_slot` was the lone exception. This is hardening, not a live crash: today's payload is stable, but a future field add/remove between a host on one cim build and a client on another would mis-bind with no signal.
+
+### Changed
+- crafting_in_modded_dev.lua:89 — added `local CIM_RPC_SCHEMA = 1` next to `MOD_VERSION` (mirrors gt's `mod.GT_LOBBY_RPC_SCHEMA`; initial 1, never lower, bump on payload-shape change).
+- crafting_in_modded_dev.lua:659 — sender now prepends `CIM_RPC_SCHEMA` as the FIRST positional arg after `target` (`network_send("cim_modded_slot", target, CIM_RPC_SCHEMA, peer_id, local_player_id, slot_name, is_modded)`).
+- crafting_in_modded_dev.lua:679-688 — the receiver (extracted into a named local `_rpc_cim_modded_slot` so the regression test can drive it; registration at :705 unchanged in target) now takes `schema_version` as its first wire arg (after VMF's injected `sender_peer_id`) and, on `schema_version ~= CIM_RPC_SCHEMA`, fires `_dbg_alert("[rpc:schema] cim_modded_slot mismatch …")` and returns WITHOUT mutating `_cim_modded_slot_state`.
+- crafting_in_modded_dev.lua:710-711 — exposed `mod._cim_rpc_modded_slot` + `mod._cim_modded_slot_state` for the regression test.
+- MOD_VERSION → 0.7.72-dev.
+
+### Tests
+- `rpc_schema_gate_drops_on_mismatch` (`/cim_regression_test`) — drives the exposed receiver synthetically: a wrong `schema_version` must leave `_cim_modded_slot_state` untouched (drop), and the correct `CIM_RPC_SCHEMA` must record the per-slot modded flag. Restores any pre-existing state entry on teardown. Fails if the schema arg or the receiver gate is removed.
+
+### To verify
+Multiplayer (needs_ingame_test): host and a client both on cim_dev v0.7.72 — equip a modded-rarity weapon on the host; the client should still see it render as "unique" chrome upgraded to "modded" exactly as before (no behavior change on matched schema). With Debug Logging on, no `[rpc:schema] cim_modded_slot mismatch` line should appear when both peers run the same build. A mismatched line appearing (different cim builds) confirms the gate now drops rather than mis-decodes.
+
+## 0.7.71-dev (2026-06-07) — Fix: in-mission forge CTD `hero_view.lua:175: attempt to index local 'hdr_gui_data' (a nil value)`
+
+### Why
+User report (CIM, 2026-06-07): opening the crafting UI **in a map/mission** (with *Allow in mission* enabled) crashes with `[Script Error]: scripts/ui/views/hero_view/hero_view.lua:175: attempt to index local 'hdr_gui_data' (a nil value)`. Makes the in-mission forge unusable for changing properties / swapping builds mid-run.
+
+### Root cause
+Same bug class as the v0.7.13/gamepad `_setup_gamepad_gui` fix, but one level **up** on the parent `HeroView`. Vanilla `HeroView._setup_hdr_gui` (`hero_view.lua:136-165`) gates its entire body on `if self.is_in_inn then ... self._hdr_gui_data = ... end`. In a mission `is_in_inn` is false, so `_hdr_gui_data` is never built. The Athanor forge windows (`HeroWindowWeaveForgeOverview` / `Panel` / `Weapons`, `HeroWindowWeaveProperties`) call `parent:hdr_renderer()` / `hdr_top_renderer()` every draw frame, and those accessors (`hero_view.lua:183-195`) do `local hdr_data = self._hdr_gui_data.bottom` → fatal nil-index. cim's `open_forge` transition (`transition_with_fade("hero_view_force", {menu_state_name="weave_forge"})`) passes no `force_ingame_menu`, so `HeroView.on_enter` (`hero_view.lua:278`) *does* call `_setup_hdr_gui` — confirming the hook fires.
+
+### Changed
+- crafting_in_modded_dev.lua (after the `_setup_gamepad_gui` block) — three hooks on the base `HeroView` class (no prior cim hook on `HeroView`, so no duplicate-hook risk):
+  1. `mod:hook("HeroView", "_setup_hdr_gui", ...)` — flips `is_in_inn=true` for the duration of the vanilla call (pcall-wrapped, flag restored) so `_hdr_gui_data` is built with real HDR renderers in mission. Cleanup is leak-safe: `HeroView.destroy_hdr_gui` (`hero_view.lua:639`) tears down whatever `_hdr_gui_data` holds regardless of `is_in_inn`.
+  2. `mod:hook("HeroView", "hdr_renderer", ...)` / `hdr_top_renderer` — defensive fallback to `self.ui_renderer` / `self.ui_top_renderer` if `_hdr_gui_data` is ever still nil. Belt-and-suspenders so the forge stays usable instead of crashing.
+- MOD_VERSION → 0.7.71-dev.
+
+### Tests
+- `heroview_hdr_renderer_guard_failsafe` (`/cim_regression_test`) — drives the hooked `HeroView.hdr_renderer` / `hdr_top_renderer` with a synthetic `self` that has nil `_hdr_gui_data` and asserts no raise + fallback to the view renderer. Fails if the guard is removed.
+
+### To verify
+Enable *Allow in mission*, start a map, open the crafting menu, and change a weapon's properties — it should no longer crash. Log shows `[cim:dbg] HeroView._setup_hdr_gui built in mission: _hdr_gui_data=true` when Debug Logging is on.
+
+### Notes
+- Stable `crafting_in_modded` (public) has the same latent crash — it carries the `_setup_gamepad_gui` fix but not this HDR-level one. **Candidate for promotion + release once verified in dev** (per dev/stable workflow; not auto-promoted).
+
+## 0.7.70-dev (2026-06-05) — Fix: Trollhammer Torpedo ("torpedo cannon") crashes the forge stat editor
+
+**Symptom (user 2026-06-05):** the torpedo cannon for the dwarf (Bardin's **Trollhammer Torpedo**, `dr_deus_01`) crashes the game when you open it to change its stats. The crash left **no Lua traceback in any console log** — the tell for a hard engine-level CTD rather than a caught script error.
+
+**Root cause:** opening a weapon's stat editor (and the forge overview/weapon-list views) spawns that weapon's spinning 3D model through vanilla `LootItemUnitPreviewer`. Two of its spawn sites run with no Lua guard:
+1. `_spawn_link_unit` → `World.spawn_unit(world, <skin.display_unit>)` in the previewer's `init`, **before any package load** — it assumes the display unit is already resident (weave weapons live in the `ui_loot_preview` global package).
+2. `_load_item_units` → `load_package("<hand_unit>_3p")` → `Managers.package:load(...)`, which fatals on a non-existent package.
+
+The Trollhammer Torpedo is a Chaos Wastes ("morris"/deus) weapon that is **never shown in the vanilla weave forge**, so its display unit (`display_trollhammer`) and held 3P unit (`wpn_dr_deus_01_3p`) live in the CW bundle and are absent from the forge preview package set. cim's Athanor forge re-exposes the weapon for adventure crafting, so spawning its preview hits those absent units → access-violation CTD with no traceback.
+
+**Fix:** before either spawn site runs, check resource availability exactly the way vanilla's `pickup_system.lua:882-899` does — `Application.can_get("unit", display_unit)` for the resident display unit, `Application.can_get("package", "<unit>_3p")` for the load-packaged 3P units. If anything the previewer would touch is unavailable, skip the spawn (nil link / empty spawn list). `spawn_units()` already no-ops on a nil link unit, so the previewer object stays valid and **the stat editor works fully — only the spinning 3D model is omitted for that one weapon.** Guard is gated on `_custom_forge_active` (non-forge previewers — loot reveal, store, hero inventory — are untouched) and defaults to "skip preview" on any resolution error; a missing cosmetic preview always beats a crash. A one-time `mod:info` line names any weapon whose preview is skipped, so the (now non-crashing) case is still diagnosable.
+
+Implemented as two hooks on the `LootItemUnitPreviewer` chokepoint (covers all three forge windows — overview / weapons / properties — in one place; no duplicate-hook risk, the only prior cim previewer hook is on `HeroWindowWeaveProperties._create_unit_previewer`).
+
+**Tests:** `forge_preview_guard_present` (the guard is wired and fails safe — nil / unknown item → UNSAFE, so garbage can never reach the engine spawn) and `forge_preview_guard_allows_loaded_weapon` (a normal equipped melee weapon is NOT flagged unsafe inside the forge, so previews aren't stripped wholesale).
+
+**To verify:** equip/select the Trollhammer Torpedo on Bardin and open its stat editor — it should no longer crash; you can roll properties/traits as normal (the weapon just won't show its 3D model). Other weapons keep their spinning preview. The log will show `[cim] forge 3D preview skipped for 'dr_deus_01' …`.
+
 ## 0.7.69-dev (2026-05-30) — Pre-promotion hardening
 
 Issue #22 confirmed working in-game (frame + hat + outfit + every weapon slot on Grail Knight persisted through a restart). Hardening pass before promoting to the public mod, from a full review of the v0.7.62–v0.7.68 changes (no critical bugs found):

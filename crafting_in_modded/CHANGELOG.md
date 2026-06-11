@@ -1,6 +1,22 @@
 # Crafting in Modded Changelog
 
-## 0.8.0 (2026-05-30) — Crafted items appear & persist; accessory craft buttons; big stability pass
+## 0.8.1 (2026-06-08) — Hotfix: in-mission crafting-menu crash `hero_view.lua:175: attempt to index local 'hdr_gui_data'`
+
+### Why
+User report (2026-06-07): with **Allow in mission** enabled, opening the crafting menu in a map crashes with `[Script Error]: scripts/ui/views/hero_view/hero_view.lua:175: attempt to index local 'hdr_gui_data' (a nil value)`. Targeted hotfix backported from `crafting_in_modded_dev` v0.7.71-dev (only this fix — not the rest of the in-flight dev work).
+
+### Root cause
+Same class as the existing `_setup_gamepad_gui` fix, one level up on the parent `HeroView`. Vanilla `HeroView._setup_hdr_gui` (`hero_view.lua:136-165`) only builds `self._hdr_gui_data` when `is_in_inn` (false in a mission), so the Athanor forge windows' per-frame `parent:hdr_renderer()`/`hdr_top_renderer()` calls dereference `self._hdr_gui_data.bottom`/`.top` on a nil → fatal.
+
+### Changed
+- `crafting_in_modded.lua` (after the `_setup_gamepad_gui` block) — three hooks on base `HeroView`: `_setup_hdr_gui` flips `is_in_inn=true` for the vanilla call (pcall-wrapped, flag restored) so the HDR renderers build in mission; `hdr_renderer`/`hdr_top_renderer` fall back to the view's own renderer if `_hdr_gui_data` is ever still nil. Cleanup is leak-safe (`destroy_hdr_gui` is not gated on `is_in_inn`). The failure path logs via **`mod:warning` (ungated)** so a problem surfaces in the log without enabling Debug Logging.
+- MOD_VERSION → 0.8.1.
+
+### Tests
+- `heroview_hdr_renderer_guard_failsafe` (`/cim_regression_test`) — drives the hooked accessors with a synthetic nil-`_hdr_gui_data` self and asserts no raise + fallback.
+
+### To verify
+Enable *Allow in mission*, start a map, open the crafting menu, change a weapon's properties — no crash.
 
 A large batch promoted from the dev branch (0.7.48 → 0.8.0). Headline fixes:
 

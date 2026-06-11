@@ -1,5 +1,164 @@
 # Tweaker: Events — Changelog
 
+## 0.4.13-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("<Name> v" .. MOD_VERSION)` startup line from every mod. That's correct for stable (>=1.0.0) builds but hides the active version for in-flight dev/alpha/beta work. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable versions stay silent.
+
+### Changed
+- `event_tweaker.lua` -- added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. When any branch fires, `mod:echo("[ewt] v<MOD_VERSION> loaded")` runs once. The short id `ewt` is used in the chat banner per the canonical short-id list in CLAUDE.md (the applied-marker line above still uses `[event_tweaker]` for log-grep continuity).
+
+## 0.4.12-dev (2026-05-25) -- Fix applied-marker prefix typo (`[ewt]` -> `[event_tweaker]`)
+
+### Why
+The applied-marker line at `event_tweaker.lua:69` printed `[ewt] enabled v%s settings_fp=%s`. `ewt` is not this mod's id -- per the Mod Directory + the 0.4.9-dev CHANGELOG entry, the canonical prefix is `[event_tweaker]` (the directory name + VMF mod id), matching how the file's `_dbg` / `_dbg_alert` helpers use `[event_tweaker:dbg]` / `[event_tweaker]`. The typo silently broke log greps of the form `\[event_tweaker\] enabled v` that the Fix 3 audit (2026-05-25 EOD) was running across all 16 mods.
+
+### Changed
+- `event_tweaker.lua` -- applied-marker line now reads `[event_tweaker] enabled v%s settings_fp=%s`. Format unchanged (the bracketed id is the only edit) so existing log-parsing regexes still match.
+
+### Build
+VMBLauncher.exe build event_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.4.11-dev (2026-05-25) -- Add Geheimnisnacht 2026 + Khorne's Skulls 2026 presets
+
+### Why
+Source `scripts/settings/dlcs/geheimnisnacht_2026/` and `dlcs/skulls_2026/` are present in decompiled VT2 (FEATURE flags `FEATURE_geheimnisnacht_2026` + `FEATURE_skulls_2026` both TRUE in 2026-05-25 game log). The 2026 DLCs only add cosmetics + portraits -- gameplay still rides the existing `mutator_geheimnisnacht_2021` (ritual sites) and `mutator_skulls_2023` (skull pickups). Adding preset entries lets the host select the 2026 year cleanly.
+
+### Changed
+- `event_tweaker.lua` -- `EVENT_PRESETS` gained `geheimnisnacht_2026` and `skulls_2026` entries. Geheimnisnacht 2026 maps verified in `dlcs/geheimnisnacht_2025/geheimnisnacht_utils.lua:43-49` (`maps_by_year[2026] = { "farmlands", "dlc_wizards_tower", "catacombs", "bell", "ussingen" }`); `mutator_geheimnisnacht_2021.lua:103`'s `string.find(live_event, "geheimnisnacht_%d+")` matches `"geheimnisnacht_2026"` and resolves via `_cached_maps_by_event` to that map list. Skulls 2026 reuses `mutator_skulls_2023` since no `mutator_skulls_2026.lua` exists in source.
+- `event_tweaker.lua` -- `DLC_BY_PRESET` gained `geheimnisnacht_2026 = "geheimnisnacht_2026"` and `skulls_2026 = "skulls_2026"`. DLC IDs verified in `dlc_settings.lua:597, :606`.
+- `event_tweaker_data.lua` -- `PRESET_OPTIONS` + `DLC_BY_PRESET_UI` mirror the new entries so the dropdown surfaces 2026 picks and hides them for hosts who don't own the DLC.
+- `event_tweaker_localization.lua` -- `preset_geheimnisnacht_2026` and `preset_skulls_2026` strings (Geheimnisnacht's mentions the 5-map list; Skulls' notes the cosmetic-only nature of the 2026 DLC).
+
+### Build
+VMBLauncher.exe build event_tweaker -- verification only.
+
+## 0.4.10-dev (2026-05-25) -- Add "Suppress Fatshark's live event" toggle (preset=off no longer leaks live event through)
+
+### Why
+User report 2026-05-25: with `event_preset = "off"` and only `mut_night_mode = true` checked, ran a mission while Fatshark had Skulls 2026 + Geheimnisnacht 2026 live. Result: keep loaded as `inn_level_skulls`, Geheimnisnacht skull pickup spawned on the map, mission lighting flipped to event-mode, tab menu showed the live event + event modifiers active. User mental model: "off should disable the current event." Mod behavior: all three hooks were additive-only -- `get_special_events`, `get_active_events`, `get_level_variation_data` each returned Fatshark's `original` untouched when there was no preset or injection. So whatever Fatshark was serving still reached `append_live_event_mutators` / `mutator_geheimnisnacht_2021`'s ritual-site `string.find(live_event, "geheimnisnacht_%d+")` / `AdventureMechanism.get_starting_level`.
+
+### Changed
+- `event_tweaker.lua` -- new file-local `suppress_live_event()` helper reading the new setting. The three hooks now treat `original` as nil/empty when suppress is on:
+  - `get_special_events` -- drops Fatshark's entries before merging our injection. Also short-circuits the `DialogueSystem.on_add_extension` read path (`dialogue_system.lua:196-212`) so no live-event ambient dialogue fires.
+  - `get_active_events` -- drops Fatshark's strings so `mutator_geheimnisnacht_2021`'s `string.find` finds no `"geheimnisnacht_%d+"` match and the ritual-site engine stays dormant on missions.
+  - `get_level_variation_data` -- when suppress is on AND no preset, force `merged.hub_level = "inn_level"` so `AdventureMechanism.get_starting_level` (`adventure_mechanism.lua:627`) returns the plain inn instead of Fatshark's seasonal hub.
+- `event_tweaker.lua` -- `target_hub_level()` returns `"inn_level"` when suppress is on with no preset, so toggling suppress on while standing in `inn_level_skulls` / `inn_level_halloween` triggers a keep swap back via `set_next_level + promote_next_level_data`.
+- `event_tweaker.lua` -- `on_setting_changed` now also calls `apply_now("suppress_live_event changed")` when the toggle flips. Matches preset-change behavior.
+- `event_tweaker.lua` -- `/event_probe` now prints the suppress state next to the preset.
+- `event_tweaker.lua` -- `[event-inject]` log line now includes `suppress=true|false` so leak-through is verifiable from console_logs.
+- `event_tweaker.lua` -- added `_rt_register("suppress_live_event_default_off", ...)` to confirm the default value never accidentally ships as `true`.
+- `event_tweaker_data.lua` -- new top-level checkbox `suppress_live_event` directly under the `event_preset` dropdown. `default_value = false`.
+- `event_tweaker_localization.lua` -- `suppress_live_event` + `suppress_live_event_tooltip` strings.
+
+### Notes
+- **Default off by design.** Existing users see no behavior change. The data file's `default_value = false` is the source of truth; the regression check confirms it.
+- **Skulls 2026 / Geheimnisnacht 2026 do not need new mutator catalog entries.** Decompiled source `scripts/settings/dlcs/skulls_2026/` and `dlcs/geheimnisnacht_2026/` ship only `item_master_list_*` + `weapon_skins_*` + portrait frames. The canonical mutators are still `mutator_skulls_2023` and `mutator_geheimnisnacht_2021`, both already in `MUTATOR_CATALOG`. The new `skulls_2026` / `geheimnisnacht_2026` *preset* entries (active_events string + hub_level) are still TODO -- they'd be additive to the dropdown.
+- **Why not piggyback on `event_preset = "off"`?** Considered but rejected -- it would silently change behavior for anyone who has preset=off today and *wants* Fatshark's live event to pass through. New opt-in toggle = no breakage.
+
+### Build
+VMBLauncher.exe build event_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.4.9-dev (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
+
+### Why
+User feedback 2026-05-25: `"on enabling debug logging, I'm getting needless echos to the chat that it's enabled"` and `"on startup before enabling debug logging, I'm getting things echo'd to the chat for CWV"`. Audit found 13 mods with redundant `mod:echo("<Name> v" .. MOD_VERSION)` lines at module load and one mod with `mod:echo("Setting changed: " .. setting_id)` in on_setting_changed (career_tweaker -- the source of the Debug Logging chat echo).
+
+Policy decision codified in PROJECT_STANDARDS.md § 3.6 "Chat-echo policy":
+- **NEVER** at module load -- the applied marker `[event_tweaker] enabled v<X> settings_fp=<hash>` line is the canonical version surface, lives in the log, never spams chat.
+- **NEVER** in on_setting_changed for routine settings -- use `_dbg` (gated on enable_debug_logging) if a diagnostic trace is needed.
+- **OK** in on_setting_changed only for explicit high-impact toggles (bt master toggle, gt AI toggle).
+- **OK** in user-typed chat command bodies (`/<feature>_regression_test`, `/verify_*`, etc.).
+
+### Changed
+- event_tweaker.lua -- removed the load-time `mod:echo("event_tweaker v" .. MOD_VERSION)` banner. The applied marker line (`mod:info("[event_tweaker] enabled v%s settings_fp=%s", ...)`) further down already surfaces the version + settings hash in the log. `mod:info("event_tweaker v%s loaded", MOD_VERSION)` retained for log-side visibility.
+- itemV2.cfg -- updated the description's "Mention the mod version" bug-report instruction. Previous text told users to find the version "at the top of the in-game chat when you load into the keep" -- now points them at the console log (search for the `enabled v` line) or `/<mod>_regression_test`.
+
+### Build
+VMBLauncher.exe build event_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.4.8-dev (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- event_tweaker_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- event_tweaker.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build event_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.4.7-dev (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[ewt] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load — self-documenting console_logs. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. ALWAYS fires (not gated on debug_logging).
+
+### Changed
+- `event_tweaker.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[ewt] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.4.7-dev.
+
+### Notes
+- Marker prefix `[ewt]` matches the user's mod-list short-ID convention; the legacy `_dbg` prefix `[event_tweaker:dbg]` stays unchanged this pass (existing call sites; renaming is out of scope).
+
+## 0.4.6-dev (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod.
+
+### Changed
+- `event_tweaker.lua` — installed `_dbg_alert` helper alongside existing `_dbg`. Added new `_RT_CHECKS` regression scaffold (`/event_tweaker_regression_test`) with `dbg_helpers_two_channel` check (event_tweaker had no regression command before).
+- `itemV2.cfg` — bumped to v0.4.6-dev.
+
+### Notes
+- 0 existing `_dbg(...)` call sites in this mod (helper was previously unused).
+- 0 bare `mod:echo` reclassified.
+
+## 0.4.5-dev (2026-05-25) — Tighten localization strings to vanilla style (3 entries rewritten)
+
+### Why
+
+The Event Preset tooltip and the Geheimnisnacht raw-mutator tooltips were the only verbose strings in this mod — the rest were already terse `[mut_name] one-line description` form. This pass aligns et with the vanilla voice per the new `LOCALIZATION_STANDARD.md` § 11 rules.
+
+### Changed
+
+- `event_preset_tooltip`: dropped the "(1) the mutator list, (2) the active_events string..." enumeration paragraph; kept the keep-level rename (inn_level_halloween / inn_level_skulls), the host-only gate, and the "Off = hand-pick" hint.
+- `mut_geheimnisnacht_2021_tooltip`, `mut_geheimnisnacht_2021_hard_mode_tooltip`: trimmed; kept the canonical-5-maps cross-reference and the side-objective auto-enable behavior.
+
+### Not touched
+
+- Every other `mut_*_tooltip` — already at vanilla style.
+- The category headers — already ≤4 words.
+
+### Build
+
+VMBLauncher.exe build event_tweaker — verification only.
+
+## 0.4.4-dev (2026-05-25) — Standardize Debug Logging toggle (universal convention)
+
+### Why
+Repo-wide convention: every mod now exposes a single `enable_debug_logging` checkbox at the bottom of its VMF widget tree (PROJECT_STANDARDS.md § 3.6). event_tweaker previously had no debug toggle at all — added.
+
+### Changed
+- `event_tweaker_data.lua` — appended `enable_debug_logging` checkbox (default `false`) at the bottom of the widgets list, top-level (NOT inside any group).
+- `event_tweaker_localization.lua` — added `enable_debug_logging` + `enable_debug_logging_tooltip` strings.
+- `event_tweaker.lua` — added file-local `_dbg(fmt, ...)` helper at top. Output prefix `[event_tweaker:dbg]`.
+- `itemV2.cfg` — title + description bumped to v0.4.3-dev.
+
+### Notes
+- No existing debug key to rename.
+
 ## 0.4.2-dev (2026-05-23) — Diagnostic logging on injection hook
 
 ### Why

@@ -13,9 +13,13 @@ return {
     start_level_35         = en("Level 35, default inventory"),
     start_level_35_unlocked = en("Level 35, everything unlocked"),
 
-    -- ============================================================
-    -- Reset
-    -- ============================================================
-    reset_progression         = en("Reset Modded Progression"),
-    reset_progression_tooltip = en("Wipe all locally-stored modded progression: XP, currency, items, unlocks, claimed challenges. Next game launch will re-apply the chosen starting state. Does not affect your real PlayFab account."),
+    -- Reset is exposed via the /mp_reset chat command (modded_progression.lua),
+    -- which echoes a plain string; there is no settings-UI widget for it, so the
+    -- former `reset_progression` / `reset_progression_tooltip` loc keys had no
+    -- consumer. Removed as dead leftover (audit 2026-06-07, v0.2.9-dev). If a
+    -- reset widget is ever added to the data tree, reintroduce a tooltip key then.
+
+    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
+    enable_debug_logging         = en("Debug Logging"),
+    enable_debug_logging_tooltip = en("Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable."),
 }
