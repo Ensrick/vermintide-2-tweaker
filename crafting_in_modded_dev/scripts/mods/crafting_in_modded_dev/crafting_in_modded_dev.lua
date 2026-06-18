@@ -16,6 +16,7 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("cim_dev")
+_MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- ============================================================
 -- Quiet-by-default `mod.echo` (chat suppression unless debug toggle is on)
@@ -76,7 +77,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.7.73-dev"
+local MOD_VERSION = "0.8.5-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -1802,6 +1803,62 @@ mod:hook("LootItemUnitPreviewer", "_load_item_units", function(func, self, item)
     return func(self, item)
 end)
 
+-- ============================================================
+-- Forge stat editor: guard the weave property/trait/talent pickers against
+-- weapons whose category isn't a weave category
+-- ============================================================
+-- Crash class (Lua error WITH traceback — distinct from the no-trace preview
+-- CTD guarded above): hero_window_weave_properties.lua "bad argument #1 to
+-- 'ipairs' (table expected, got nil)" in HeroWindowWeaveProperties.
+-- _setup_menu_options. Vanilla on_enter clones WeaveWeaponProgression for the
+-- selected weapon and stamps each slot_unlock.category = item_data.
+-- property_table_name / trait_table_name; _setup_menu_options then does, with
+-- NO nil-check:
+--   WeaveTraits.categories[category]                       -> ipairs(...)
+--   WeaveProperties.categories[category]                   -> ipairs(...)
+--   WeaveLoadoutSettings[career].talent_tree[category]     -> ipairs(...)
+-- cim's Athanor forge re-exposes adventure / Chaos Wastes weapons (the
+-- Trollhammer Torpedo dr_deus_01, property_table_name "deus_trollhammer_torpedo",
+-- is the reported case) whose table-names are NOT keys in those weave category
+-- tables, so the lookup is nil and ipairs(nil) hard-errors when the stat editor
+-- opens. This runs in on_enter BEFORE the 3D previewer, so _forge_preview_unsafe
+-- never gets a chance — it's a separate crash from the v0.7.70 preview guard.
+--
+-- Fix: before the vanilla setup runs, seed an empty {} pool for every category
+-- referenced by the current progression that the weave tables don't know about.
+-- ipairs({}) is a no-op, so the affected picker renders empty (no weave
+-- traits/properties/talents for that weapon) instead of crashing. Empty entry
+-- lists are an ordinary vanilla case (nothing unlocked yet), so the rest of
+-- _setup_menu_options handles them. Idempotent (only seeds nil keys), scoped to
+-- the categories actually in play.
+local function _cim_ensure_weave_category_pools(career_name, slots_progression)
+    if not slots_progression then return end
+    local wt = rawget(_G, "WeaveTraits")
+    local wp = rawget(_G, "WeaveProperties")
+    local wls = rawget(_G, "WeaveLoadoutSettings")
+
+    local function _seed(pool, progression)
+        if not (pool and progression) then return end
+        for _, slot_unlock in ipairs(progression) do
+            local category = slot_unlock.category
+            if category ~= nil and pool[category] == nil then
+                pool[category] = {}
+            end
+        end
+    end
+
+    _seed(wt and wt.categories, slots_progression.traits)
+    _seed(wp and wp.categories, slots_progression.properties)
+    local loadout = wls and career_name and wls[career_name]
+    _seed(loadout and loadout.talent_tree, slots_progression.talents)
+end
+mod._cim_ensure_weave_category_pools = _cim_ensure_weave_category_pools  -- exposed for /cim_regression_test
+
+mod:hook("HeroWindowWeaveProperties", "_setup_menu_options", function(func, self, career_name, slots_progression)
+    _cim_ensure_weave_category_pools(career_name, slots_progression)
+    return func(self, career_name, slots_progression)
+end)
+
 -- --- Forge UI polish (runs each frame while forge is open) ---
 
 local function _forge_get_widget(window, widget_name)
@@ -2576,6 +2633,18 @@ end)
 mod:hook("BackendInterfaceWeavesPlayFab", "get_trait_required_forge_level", function(func, self, trait_key)
     if _custom_forge_active then return 0 end
     return func(self, trait_key)
+end)
+
+-- Issue #71: pressing the amulet (HeroWindowWeaveProperties) under the modded
+-- forge feeds the player's ADVENTURE career talents into the talent picker.
+-- Vanilla get_talent_required_forge_level (backend_interface_weaves_playfab.lua:1238)
+-- does `progression_data = progression_settings.talents[talent_name]` then
+-- `progression_data.required_forge_level` — adventure talents have no weave
+-- progression entry, so progression_data is nil and the index crashes. Mirror
+-- the property/trait guards above: return 0 under the modded forge.
+mod:hook("BackendInterfaceWeavesPlayFab", "get_talent_required_forge_level", function(func, self, talent_name)
+    if _custom_forge_active then return 0 end
+    return func(self, talent_name)
 end)
 
 mod:hook("BackendInterfaceWeavesPlayFab", "get_trait_mastery_cost", function(func, self, trait_key)
@@ -3827,25 +3896,18 @@ mod:hook_safe("HeroWindowWeaveProperties", "_set_essence_upgrade_cost", function
     local btn = widgets_by_name and widgets_by_name.upgrade_button
     if not btn then return end
 
-    -- Melee/ranged in-place editor: bubble-grid edits already mutate the
-    -- equipped item directly (via `_forge_apply_to_item`). The repurposed
-    -- upgrade_button used to mint a NEW item with the same edits, which was
-    -- confusing and inverted the "modify your equipped item" mental model
-    -- the user wanted. Hide the button entirely for this case — when player
-    -- wants a brand-new weapon they pick one in the weapon-select pane.
-    -- (Amulet case keeps the legacy label as a no-op fallback for gamepad
-    -- activations; the 3 cim per-slot buttons are the real UX there.)
+    -- Issue #71 (Option A, 2026-06-17): the weapon (melee/ranged) editor's
+    -- CRAFT button was previously HIDDEN. Bubble-grid edits mutate the
+    -- in-editor item in place (via `_forge_apply_to_item`), and a brand-new
+    -- weapon was only mintable from the weapon-select pane — which crafts a
+    -- BLANK weapon (empty properties/traits). Users who set properties in the
+    -- editor and then expected a "craft" to produce a weapon WITH those
+    -- properties got a blank one (the reporter backed out to the weapon-select
+    -- pane and crafted there). Re-enable the button for weapons so
+    -- "set properties -> CRAFT" mints a new weapon carrying the current edits
+    -- (the `_upgrade_magic_level` hook below clones item.properties /
+    -- item.traits into the new craft, exactly like the amulet path).
     local item = self:_selected_item()
-    local slot_type = item and item.data and item.data.slot_type
-    if slot_type == "melee" or slot_type == "ranged" then
-        if btn.content then btn.content.visible = false end
-        if btn.content and btn.content.button_hotspot then
-            btn.content.button_hotspot.disable_button = true
-        end
-        local warn_hide = widgets_by_name.upgrade_essence_warning
-        if warn_hide and warn_hide.content then warn_hide.content.visible = false end
-        return
-    end
 
     if btn.content then btn.content.visible = true end
     local label = item and "CRAFT" or "CRAFT MODDED JEWELLERY"
@@ -3922,16 +3984,12 @@ mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, sel
     local item_data = item and item.data
     local item_key = item_data and (item_data.key or item_data.name)
 
-    -- Melee/ranged case: bubble-grid edits already mutate the equipped item
-    -- in place. The legacy "CRAFT NEW WEAPON" upgrade_button is hidden for
-    -- this case (see _set_essence_upgrade_cost hook above), so this branch
-    -- shouldn't fire on mouse — but a stray gamepad activation could. No-op
-    -- it to keep the modify-in-place model consistent. To craft a brand-new
-    -- weapon, the player picks one in HeroWindowWeaveForgeWeapons.
-    local slot_type = item_data and item_data.slot_type
-    if slot_type == "melee" or slot_type == "ranged" then
-        return
-    end
+    -- Issue #71 (Option A): weapons (melee/ranged) now fall through to the
+    -- mint-new path below. The editor's bubble-grid edits already mutated
+    -- item.properties / item.traits in place (via _forge_apply_to_item), so
+    -- cloning them into a fresh craft yields a new weapon carrying the current
+    -- edits — matching the "set properties then craft" mental model. (The
+    -- button was previously hidden for weapons and this branch early-returned.)
 
     -- Amulet case: no selected_item. Iterate dirty accessory slots and craft
     -- each via the shared single-slot helper. This branch still runs if the
@@ -4675,6 +4733,29 @@ end)
 -- /regression_test checks (see scaffold near MOD_VERSION).
 -- ============================================================
 
+_rt_register("weave_talent_forge_level_guard_present", function()
+    -- Issue #71 (2026-06-01): pressing the amulet under the modded forge crashed
+    -- in vanilla get_talent_required_forge_level, which nil-indexes
+    -- progression_settings.talents[talent_name] for the adventure career talents
+    -- cim feeds in. The fix hooks that method to return 0 under _custom_forge_active
+    -- (alongside the existing get_property_/get_trait_ guards). This source-pattern
+    -- check fails if that hook is removed. The needle is assembled from two literals
+    -- so this test's own source does not self-match. Degrades to a no-op when source
+    -- introspection is unavailable (deploy/bundle paths).
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local needle = 'BackendInterfaceWeavesPlayFab", ' .. '"get_talent_required_forge_level"'
+    if not txt:find(needle, 1, true) then
+        return "Issue #71 regression: get_talent_required_forge_level guard hook missing (amulet/weave-properties crash on adventure career talents)"
+    end
+end)
+
 _rt_register("pool_excludes_scrubbed", function()
     -- v0.7.4: hook installed on DeusRunController.get_weapon_pool to drop
     -- scrubbed entries. Verify the class & method are present.
@@ -5248,6 +5329,35 @@ _rt_register("forge_preview_guard_present", function()
     end
 end)
 
+_rt_register("weave_category_pool_guard_present", function()
+    -- v0.7.75-dev: opening the forge stat editor for a weapon whose
+    -- property/trait/talent table-name isn't a weave category (Trollhammer
+    -- Torpedo dr_deus_01 the reported case) made vanilla _setup_menu_options do
+    -- ipairs(WeaveTraits.categories[category]) on nil -> "bad argument #1 to
+    -- 'ipairs' (table expected, got nil)". The guard seeds an empty {} pool for
+    -- unknown categories so the picker renders empty instead of crashing. Verify
+    -- the seeder is wired and idempotently fills the trait + property pools for
+    -- an unknown category (then clean up the synthetic key).
+    local fn = mod._cim_ensure_weave_category_pools
+    if type(fn) ~= "function" then
+        return "weave category pool guard (_cim_ensure_weave_category_pools) missing"
+    end
+    local wt = rawget(_G, "WeaveTraits")
+    local wp = rawget(_G, "WeaveProperties")
+    if not (wt and wt.categories and wp and wp.categories) then
+        return "skip: WeaveTraits/WeaveProperties not loaded"
+    end
+    local cat = "cim_rt_not_a_weave_category_zzz"
+    wt.categories[cat], wp.categories[cat] = nil, nil
+    fn("es_mercenary", { traits = { { category = cat } }, properties = { { category = cat } } })
+    local seeded = type(wt.categories[cat]) == "table" and #wt.categories[cat] == 0
+        and type(wp.categories[cat]) == "table" and #wp.categories[cat] == 0
+    wt.categories[cat], wp.categories[cat] = nil, nil  -- don't leave RT residue in the weave tables
+    if not seeded then
+        return "guard did not seed empty trait+property pools for an unknown category"
+    end
+end)
+
 _rt_register("heroview_hdr_renderer_guard_failsafe", function()
     -- v0.7.71-dev: in-mission forge crashed at HeroView.hdr_renderer /
     -- hdr_top_renderer because vanilla _setup_hdr_gui only builds
@@ -5374,3 +5484,5 @@ _rt_register("rpc_schema_gate_drops_on_mismatch", function()
 
     return result_err
 end)
+
+mod:info("[mem-probe] cim_dev boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CIMD) / 1024)

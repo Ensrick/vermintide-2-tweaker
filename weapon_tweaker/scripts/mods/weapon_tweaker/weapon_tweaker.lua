@@ -77,7 +77,8 @@ local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_ba
 -- `_big_rebalance_extract/impl_wt_summary.md` for the full toggle inventory.
 local big_rebalance = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance")
 
-local MOD_VERSION = "0.12.119-dev"
+local MOD_VERSION = "0.12.120-dev"
+_MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
 -- `wt_itemmasterlist_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -2473,6 +2474,67 @@ local function _wt_validate_attachment_sources(body_unit, attachment_node_linkin
 end
 
 -- ============================================================
+-- Universal attachment-node guard (engine-fatal crash fix)
+-- ============================================================
+-- GearUtils.link_units(world, attachment_node_linking, link_table, source, target)
+-- runs Unit.node(source, link.source) / Unit.node(target, link.target) per entry
+-- (gear_utils.lua:293-308). Unit.node is ENGINE-FATAL on a missing node (it bypasses
+-- pcall). Cross-character weapons + sub-attachments can reference nodes the spawned
+-- source/target units don't have on a non-native body -> hard crash. Repro: GUID
+-- 459bd95e — equipping Skullsplitter + a tome on Kruber Mercenary (hero-view preview):
+-- the tome's j_page_nr* nodes link to j_rightweaponcomponent11-14 that Kruber's body
+-- lacks. The per-spawn previewer validation (_wt_validate_attachment_sources) only
+-- covers the weapon's own .third_person linking; a sub-attachment carries its OWN flat
+-- linking table that never passes through that hook. This is the UNIVERSAL choke point:
+-- GearUtils.link calls GearUtils.link_units via the table (gear_utils.lua:290), so a
+-- table hook here intercepts EVERY spawn path (preview AND in-mission). Purely
+-- subtractive -- only links whose node is genuinely absent (which would fatal anyway)
+-- are dropped; valid links are untouched, so it can NOT regress visibility (cf. the
+-- v0.12.112/.113 global-mutation bug that broke elf bows -- this never mutates valid data).
+-- WT_LINK_UNITS_NODE_GUARD_MARKER
+
+-- Pure, engine-free filter (unit-testable): drop links whose source/target node is
+-- absent. src_has(name)/tgt_has(name) are node-presence predicates. Returns
+-- (linking, dropped): the ORIGINAL table when nothing drops (zero-copy fast path),
+-- else a filtered contiguous copy. On `mod` (not a new file-scope local) so the
+-- end-of-file regression test can reach it without tripping the 200-locals cap.
+mod._wt_link_filter = function(linking, src_has, tgt_has)
+    local safe, dropped = nil, 0
+    local n = #linking
+    for i = 1, n do
+        local e = linking[i]
+        local ok = (type(e.source) ~= "string" or src_has(e.source))
+               and (type(e.target) ~= "string" or tgt_has(e.target))
+        if ok then
+            if safe then safe[#safe + 1] = e end
+        else
+            if not safe then
+                safe = {}
+                for j = 1, i - 1 do safe[j] = linking[j] end
+            end
+            dropped = dropped + 1
+        end
+    end
+    return (safe or linking), dropped
+end
+
+if GearUtils and GearUtils.link_units and Unit and Unit.has_node then
+    mod:hook(GearUtils, "link_units", function(func, world, attachment_node_linking, link_table, source, target)
+        if type(attachment_node_linking) == "table" and source and target then
+            local filtered, dropped = mod._wt_link_filter(
+                attachment_node_linking,
+                function(name) return Unit.has_node(source, name) end,
+                function(name) return Unit.has_node(target, name) end)
+            if dropped > 0 then
+                _dbg("[wt:link_guard] dropped %d attachment link(s) with a missing source/target node (would engine-fatal)", dropped)
+                return func(world, filtered, link_table, source, target)
+            end
+        end
+        return func(world, attachment_node_linking, link_table, source, target)
+    end)
+end
+
+-- ============================================================
 -- Authentic Brace of Pistols — toggleable flintlock-style override
 -- ============================================================
 -- Patches `Weapons.brace_of_pistols_template_1` in place when the
@@ -2965,86 +3027,6 @@ for _, class_name in ipairs(_moonfire_hooked_classes) do
         end
     end
 end
-
--- ============================================================
--- Kruber Longbow (es_longbow) zoom overrides
--- ============================================================
--- Vanilla Kruber Longbow has a delayed sniper-style zoom on right-click aim.
--- In game v6.10.0 the delay was 2.0s and the visible zoom mainly came from
--- the `lua_heavy_zoom` flow event (0.9s `heavy_aim_flow_delay`). In v6.11.0
--- Fatshark dropped `aim_zoom_delay` from 2.0 → 0.22 (longbows_empire.lua:236),
--- so the primary zoom path now fires almost instantly via the engine's
--- aim-zoom timer (`action_aim.lua:133` — `if not is_zooming and t >=
--- aim_zoom_time then set_zooming(true, default_zoom)`).
---
--- Two mutually-exclusive overrides (manual wins if both on):
---
---   kruber_longbow_disable_zoom  — strips ALL zoom. The strongest disable
---                                  is `zoom_condition_function` returning
---                                  false: the engine's outermost gate at
---                                  `action_aim.lua:128` (`if not self.zoom_
---                                  condition_function or self.zoom_condition_
---                                  function() then ...`) skips the entire
---                                  zoom block. We also nil the flow-event
---                                  path and push `aim_zoom_delay` to
---                                  math.huge as belt-and-suspenders, but
---                                  the condition_function override is what
---                                  actually closes the door — the time-
---                                  based guards alone were not enough after
---                                  the v6.11.0 timing change (some buff or
---                                  time-scale interaction was apparently
---                                  letting zoom slip through in the field).
---   kruber_longbow_manual_zoom   — Kerillian-longbow-style instant manual
---                                  zoom on hold: explicit `default_zoom =
---                                  "zoom_in"`, `aim_zoom_delay = 0.01`,
---                                  heavy-zoom flow event removed.
---
--- Restart required — patcher runs once at module init and mutates the
--- shared `Weapons.longbow_empire_template` (plus the tutorial twin for
--- mission consistency). Saltzpyre's cross-character port shares the same
--- template, so any toggle propagates to wh_* careers too.
-
-local function _patch_kruber_longbow_zoom()
-    if not Weapons then return end
-    local disable_zoom = mod:get("kruber_longbow_disable_zoom")
-    local manual_zoom = mod:get("kruber_longbow_manual_zoom")
-    if not disable_zoom and not manual_zoom then return end
-
-    local targets = {}
-    if Weapons.longbow_empire_template then targets[#targets + 1] = Weapons.longbow_empire_template end
-    if Weapons.longbow_empire_tutorial_template then targets[#targets + 1] = Weapons.longbow_empire_tutorial_template end
-
-    -- Captured once so every call into the patched template returns the
-    -- same closure (vanilla holds a single `function() return true end`
-    -- across all actions; we mirror the shape exactly).
-    local _always_false = function() return false end
-    local _always_true  = function() return true  end
-
-    for i = 1, #targets do
-        local tpl = targets[i]
-        local aim = tpl.actions and tpl.actions.action_two and tpl.actions.action_two.default
-        if aim then
-            if manual_zoom then
-                aim.zoom_condition_function = _always_true
-                aim.heavy_aim_flow_event = nil
-                aim.heavy_aim_flow_delay = nil
-                aim.aim_zoom_delay = 0.01
-                aim.default_zoom = "zoom_in"
-            elseif disable_zoom then
-                aim.zoom_condition_function = _always_false  -- primary gate
-                aim.heavy_aim_flow_event = nil
-                aim.heavy_aim_flow_delay = nil
-                aim.default_zoom = nil
-                aim.aim_zoom_delay = math.huge               -- belt-and-suspenders
-            end
-        end
-    end
-
-    mod:info("[wt kruber-longbow-zoom] applied: disable=%s manual=%s (manual wins if both); zoom_condition_function override is the primary gate",
-        tostring(disable_zoom), tostring(manual_zoom))
-end
-
-_patch_kruber_longbow_zoom()
 
 -- Forward declarations for swap helpers defined below — the brace hook closes
 -- over them before their `local function` declaration line, so without these
@@ -4729,6 +4711,32 @@ _rt_register("wt_traced_hook_present", function()
     end
 end)
 
+-- Guard for WT_LINK_UNITS_NODE_GUARD_MARKER: the GearUtils.link_units crash filter
+-- must drop links whose source/target node is absent and leave all-present links
+-- untouched (zero-copy). Engine-free — uses synthetic node-presence predicates.
+_rt_register("link_units_node_guard", function()
+    if type(mod._wt_link_filter) ~= "function" then
+        return "mod._wt_link_filter missing (GearUtils.link_units crash guard reverted?)"
+    end
+    local linking = {
+        { source = "j_hips",                   target = "j_page_nr1_01" }, -- both present -> keep
+        { source = "j_rightweaponcomponent11", target = "j_page_nr2_01" }, -- source absent -> drop
+        { source = "j_spine",                  target = "j_no_such_node"  }, -- target absent -> drop
+    }
+    local present_src = { j_hips = true, j_spine = true }
+    local present_tgt = { j_page_nr1_01 = true, j_page_nr2_01 = true }
+    local out, dropped = mod._wt_link_filter(linking,
+        function(n) return present_src[n] == true end,
+        function(n) return present_tgt[n] == true end)
+    if dropped ~= 2 then return "LINK-GUARD: expected 2 dropped, got " .. tostring(dropped) end
+    if #out ~= 1 then return "LINK-GUARD: expected 1 surviving link, got " .. tostring(#out) end
+    if out[1].source ~= "j_hips" then return "LINK-GUARD: wrong link survived (expected j_hips)" end
+    -- all-present must be a zero-copy no-op (returns the SAME table, 0 dropped)
+    local same = { { source = "j_hips", target = "j_page_nr1_01" } }
+    local out2, d2 = mod._wt_link_filter(same, function() return true end, function() return true end)
+    if d2 ~= 0 or out2 ~= same then return "LINK-GUARD: all-present case must return the original table unchanged" end
+end)
+
 _rt_register("wt_itemmasterlist_uses_rawget", function()
     -- v0.12.72/.73: defensive `rawget(ItemMasterList, key)` (GH #8) at 5 known
     -- mutation sites (~L175, 208, 226, 277, 3835 of weapon_tweaker.lua). The
@@ -5171,4 +5179,6 @@ end)
 -- with their initial values — the anim picker reads from those live tables
 -- at install time to seed its dropdown defaults.
 _wt_dev_anim_picker.install()
+
+mod:info("[mem-probe] wt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_WT) / 1024)
 _wt_dev_hold_pose.install()

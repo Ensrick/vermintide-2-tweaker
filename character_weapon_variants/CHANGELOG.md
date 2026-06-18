@@ -1,5 +1,25 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.350-dev (2026-06-13) — Harden two remaining cold `ItemMasterList` reads with `rawget` (crashify-spam fix)
+
+### Why
+Multi-agent audit 2026-06-13 (fragile-global sweep). Two `ItemMasterList[key]` reads were still bare (non-`rawget`), so they fire the vanilla `ItemMasterList.__index` crashify metamethod (`item_master_list.lua:133` — `print_exception("ItemMaster List has no item %s")`) when the key is absent. Neither raises a Lua error (the trailing `or {}` / boolean-LHS use suppress the throw), so this is console/log spam + exit-code pollution, not a hard crash — but it is the exact bug class catalogued in `docs/BUG_CLASSES.md` §4 / Issue #20.
+- `character_weapon_variants.lua:8340` — the `_register_item` membership probe (the `/give`-driven registration path). On first registration of each variant the `cwv_*` key is genuinely absent (the very next line writes it), so it logged one crashify exception per variant. The sibling `_auto_register_all` probe at `:8496` was hardened in v0.1.333 but this `/give` path was missed in that pass.
+- `character_weapon_variants.lua:6397` — `_build_entry` reads `def.base_weapon` (a vanilla key the mod does NOT register). The shipped Breton variant `cwv_es_longsword_shield` has `base_weapon = "es_sword_shield_breton"`, which carries `required_dlc = "lake"` — so on a peer that does not own the Lake DLC this fired crashify on every keep load. (`_build_entry`'s sibling read at `:8113` already used `rawget`.)
+
+### Changed
+- `character_weapon_variants.lua:6397` — `ItemMasterList[def.base_weapon]` → `rawget(ItemMasterList, def.base_weapon)`.
+- `character_weapon_variants.lua:8340` — `not ItemMasterList[def.item_key]` → `not rawget(ItemMasterList, def.item_key)`.
+- `character_weapon_variants.lua:8353` — debug-log read switched to `rawget` for consistency (this one runs *after* the write so it never tripped the metamethod, but kept uniform with the fix above).
+
+Behavior-preserving: `rawget` returns the identical value (the entry when present, `nil` when absent) and only suppresses the crashify side-effect. Matches the established in-file idiom at `:8113` / `:8496` and the `cwv_itemmasterlist_uses_rawget` regression test (`:9965`).
+
+### To verify
+- In keep, run `/cwv_regression_test` and confirm `PASS: cwv_itemmasterlist_uses_rawget`, then `/give` a variant and confirm no `<<crashify-exception>> [ItemMasterList]` block appears in the console (ideally test the Breton variant on a non-Lake-DLC account).
+
+### Also — Issue #70.2 (clarity)
+- Renamed the misnamed local `ct` → `cos` in `_detect_companion_mods` (`:6207`) and its `/cwv` echo consumer (`_ct` → `_cos`). It held `get_mod("cosmetics_tweaker")`, but `ct` is the chaos_wastes id — purely a diagnostic echo, no behavior change.
+
 ## 0.1.349-dev (2026-06-07) — Fix off-by-one that silently killed the mace+sword rename
 
 ### Why

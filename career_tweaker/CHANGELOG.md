@@ -1,5 +1,64 @@
 # Career Tweaker Changelog
 
+## 0.3.25-dev (2026-06-17) — Tourney Balance Testing port: Phase 1 (career talent toggles)
+
+### Why
+Port the "Tourney Balance Testing" Workshop mod's career/talent changes into crt as opt-in, default-OFF toggles. Phase 1 = the clean per-career data mutations (BuffTemplate field patches with vanilla snapshot/restore); hook-based / talent-row-rework / ability-body changes are deferred to a later phase.
+
+### Changed
+- New `career_tweaker_tourney.lua` — a 3rd `{apply, restore, active_count}` module loaded alongside `balance` + `big_rebalance`, with **17 default-OFF `trn_*` toggles** (one per career across all 5 characters). Each faithfully transcribes that career's Tourney values, verified against the vanilla decompile, and applies via the same snapshot/restore engine as `career_tweaker_balance.lua`.
+  - Two brand-new BuffTemplates (`victor_bountyhunter_blessed_melee_attack_speed_buff`, `victor_priest_5_2_speed_buff`) are registered **unconditionally as stubs** at load (alphabetical) per the NetworkLookup-determinism rule, with bodies installed by `custom_apply`.
+  - **Conflict guard:** 4 toggles overlap existing crt reworks on the same buff field (`trn_es_huntsman`, `trn_wh_bountyhunter`, `trn_wh_zealot`, `trn_bw_adept`). A `_CONFLICTS` map makes the Tourney entry skip entirely while its matching `rework_` toggle is on, so they can't corrupt each other's vanilla snapshot. Documented in the tooltips.
+- `career_tweaker.lua` — load the tourney module + call `tourney.apply()` in `on_game_state_changed` / `on_setting_changed` (`^trn_` and `^rework_` branches) and `tourney.restore()` in `on_disabled`.
+- `_data.lua` / `_localization.lua` — new "Tourney Balance (Careers)" VMF group with per-character sub-groups (17 checkboxes + tooltips).
+
+### Deferred (later phase)
+Hook-based / talent-row / ability-body Tourney career changes (custom proc functions, core-combat damage math, ActivatedAbilitySettings/PassiveAbilitySettings restructures, ability re-impls) — captured per-career in the generation notes.
+
+### To verify (in-game)
+Enable a `trn_*` toggle (e.g. Tourney: Foot Knight), load a mission, confirm the tuned values; `/crt_regression_test`; disable and confirm vanilla restores. (Local/friends test build; not on Workshop.)
+
+## 0.3.24-dev (2026-06-17) — Waystalker: Serrated Shots on all arrow types (toggle)
+
+### Why
+Requested: make Waystalker's Serrated Shots (bleed on critical ranged hits) work regardless of arrow type. Vanilla gates the bleed in `damage_utils.lua:3698`:
+`has_perk("kerillian_critical_bleed_dot") and damage_profile.charge_value == "projectile" and not has_perk("kerillian_critical_bleed_dot_disable")`.
+Every Kerillian arrow damage profile already uses `charge_value="projectile"` (arrow_carbine / arrow_sniper / *_shortbow / *_trueflight, verified in `damage_profile_templates.lua`), so the only thing that disables the bleed by arrow type is the `kerillian_critical_bleed_dot_disable` perk — granted by Hagbane (`shortbows_hagbane.lua:301-303` `server_buffs`) and the Chaos Wastes `we_deus_01` bow, both via the buff `we_deus_01_kerillian_critical_bleed_dot_disable` (`morris_buff_settings.lua:6332`), whose ONLY effect is that perk.
+
+### Added
+- New toggle `rework_we_waywatcher_serrated_shots_all_arrows` (Bot/Career reworks → Kerillian → Waystalker; default OFF). A single BALANCE_MODS patch clears the `perks` list of `we_deus_01_kerillian_critical_bleed_dot_disable`, neutralizing the disable so Serrated Shots crits also bleed on Hagbane / we_deus_01. Uses the existing apply/restore engine (one-time data mutation; no per-frame cost; fully reversible on toggle-off). Takes effect on the next weapon equip / mission load.
+
+## 0.3.23-dev (2026-06-16) — Crash fix: Zealot Castigate rework set max_stacks on the wrong buff
+
+### Why
+Crash report: `buff_function_templates.lua: bad argument #2 to 'min' (number expected, got nil)`.
+Traced to `rework_wh_zealot_castigate_4pct_as_per_fiery_faith`. The rework switches
+`victor_zealot_attack_speed_on_health_percent`'s `update_func` to
+`activate_buff_stacks_based_on_health_chunks`, but that engine func reads `chunk_size`,
+`buff_to_add`, **and `max_stacks`** all from `buff.template` — i.e. the **parent** buff that
+carries `update_func`, not the child `_buff` (verified `buff_function_templates.lua:2591-2596`).
+The rework set `chunk_size` on the parent but `max_stacks` on the child. The vanilla parent
+used the *threshold* func and has no `max_stacks` field, so `template.max_stacks` was `nil`
+at `math.min(floor(uncursed_max_health / chunk_size) - 1, template.max_stacks)` → crash.
+
+### Changed
+- `career_tweaker_balance.lua` (`rework_wh_zealot_castigate_*`) — added
+  `{ buff = "victor_zealot_attack_speed_on_health_percent", field = "max_stacks", value = 5 }`
+  on the **parent** buff (the chunk gate). Mirrors the canonical
+  `victor_zealot_passive_move_speed` shape: parent carries `buff_to_add` + `chunk_size` +
+  `max_stacks` + `update_func` together. Child `_buff` `max_stacks`/`multiplier` patches kept.
+- `career_tweaker_balance.lua` (`rework_wh_zealot_fiery_faith_*`) — same wrong-target class,
+  no crash (vanilla parent already has `max_stacks=6`) but the documented "30 stacks / +30%
+  cap" was silently gated to 6 (+6%) because the parent's `max_stacks` was never widened.
+  Added `{ buff = "victor_zealot_passive_increased_damage", field = "max_stacks", value = 30 }`.
+
+### To verify
+- In a run as Zealot (Victor) with the Castigate talent (`victor_zealot_attack_speed_on_health_percent`)
+  and Career Tweaker enabled: take damage and confirm no crash; attack speed should ramp one
+  stack per 30 HP missing up to 5 stacks (+20% at 150 HP missing).
+- With Fiery Faith (`victor_zealot_passive_increased_damage`): power should now ramp to +30%
+  at 150 HP missing (30 chunks × 1%), not cap early at +6%.
+
 ## 0.3.22-dev (2026-06-07) — on_disabled now unwinds talent swaps + documents the rest
 
 ### Why

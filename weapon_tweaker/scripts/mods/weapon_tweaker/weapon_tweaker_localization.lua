@@ -1077,10 +1077,6 @@ local loc = {
     moonfire_cosmetic_puff_description = { en = "Spawns the small blue moonfire puff on every Moonfire Bow hit. Cosmetic only. Overridden by the AOE revert toggle when both are on." },
     moonfire_aoe_revert = { en = "Moonfire Bow: revert pre-nerf AOE" },
     moonfire_aoe_revert_description = { en = "Restores pre-nerf Moonfire Bow: every arrow detonates in a 1.5m AOE on impact (0.75m max-damage core). No friendly fire. Damage host-side; VFX everywhere. Overrides the cosmetic puff toggle." },
-    kruber_longbow_disable_zoom = { en = "Kruber Longbow: disable zoom" },
-    kruber_longbow_disable_zoom_description = { en = "Removes Kruber Longbow's sniper heavy zoom. Right-click still draws, no camera zoom. Overridden by the manual-zoom toggle. Requires restart." },
-    kruber_longbow_manual_zoom = { en = "Kruber Longbow: manual zoom (like Kerillian Longbow)" },
-    kruber_longbow_manual_zoom_description = { en = "Replaces Kruber Longbow's delayed sniper zoom with Kerillian's instant-on-hold zoom. Overrides the disable-zoom toggle. Requires restart." },
 
     -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
     -- v0.12.81-dev: renamed from `wt_debug_mode` (was nested in

@@ -1,5 +1,100 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.140-dev (2026-06-17) — Three user-suggested features: skull-stun slider, Adventure RNG-trait odds, Blessed Bots survival boons
+
+All source citations verified against the decompiled vanilla source 2026-06-17.
+
+### Mechanic tweaks (sliders, default = vanilla; main lua, mirrors the shard-strike/anath-raema save-restore pattern; wired into `sync_host_dependent_state` + `on_setting_changed`)
+- **Shadow Homing Skulls stun (seconds)** (`tweak_shadow_skull_stun_sec`, default 2.5) — scales the timed "overpowered" disable the curse applies on skull impact: mutates `BuffTemplates.belakor_homing_skull_debuff_delayed_stun_effect.buffs[1].duration` (belakor_buff_settings.lua:655, perk `buff_perks.overpowered`). Server-authoritative, so the host's value governs (read via `effective_setting`). NOTE: the other skull curse, "Skulls of Fury", is a stagger (`stagger_value=2`), not a timed disable — no duration field, so it's intentionally not covered.
+- **Adventure save-item trait chance (percent)** (`tweak_adventure_save_trait_chance`, default 25) — sets the proc chance of the Adventure traits Home Brewer / Healers Touch / Grenadier (`WeaponTraits.buff_templates.{trait_ring_not_consume_potion,trait_necklace_not_consume_healing,trait_trinket_not_consume_grenade}.buffs[1].proc_chance`, vanilla 0.25; weapon_traits.lua:69/84/104). Raise to 50 to match the CW Grenadier counterpart. Adventure and CW are separate templates (CW boons live in `DeusPowerUpBuffTemplates`), so CW is untouched.
+
+### Bots
+- **Blessed Bots: Survival Boons** (`ct_blessed_bots`, new module `_ct_blessed_bots.lua`) — grants every bot three CW survival boons in ANY game mode: Ereth Khial's Pride (`last_player_standing_power_reg`), Grimnir's Implacability (`deus_second_wind`), Morr's Protection (`deus_knockdown_damage_immunity_aura`). All are buff_template boons granted via `buff_system:add_buff(bot, "power_up_<key>_<rarity>", bot)` (deus_power_up_settings.lua:2865/2048/2371; deus_power_up_utils.lua:441). To resolve the templates outside a CW run we additively mirror `DeusPowerUpBuffTemplates` into the global `BuffTemplates` (BuffUtils.get_buff_template reads only BuffTemplates, buff_utils.lua:257). Host-side (single `PlayerBotBase.update` hook for this mod), throttled, idempotent (skips boons a bot already has). EXPERIMENTAL — verify in-game.
+
+## 0.7.139-dev (2026-06-16) — Curse-banner crash fix reworked to a data backfill (kills the "trying to hook object that doesn't exist: DeusCurseUI" error)
+
+### Why
+The v0.7.137-dev curse-crash fix hooked `DeusCurseUI._update_description_widget`. But `DeusCurseUI` lives in `scripts/ui/hud_ui/` and isn't loaded until a deus HUD spins up **inside an actual CW expedition** — so at the adventure keep VMF's string-form hook couldn't resolve the class, logged a visible **`[MOD][ct][ERROR] (hook): trying to hook object that doesn't exist: DeusCurseUI`**, and the hook likely never installed (so the crash fix may have been inert). Seen in the 0.7.127-beta boot log 2026-06-17 entering the keep.
+
+### Changed
+- `chaos_wastes_tweaker_dev.lua` — **removed** the `DeusCurseUI._update_description_widget` hook + `mod._ct_curse_desc_color_or_default`, and **replaced** them with a load-time data backfill: walk `DeusThemeSettings` and set `curse_description_color = {255,255,255,255}` on any theme missing it (only `wastes`). `DeusThemeSettings` is a boot-global available at mod-load, so this is reliable and timing-free; it covers BOTH callers (`show_curse_info` :152 and the special-message path :117 read `theme_color` from the same table); and host + every client run it identically so the data is consistent peer-to-peer. No hook → no error. `CURSE_THEME_COLOR_BACKFILL_MARKER`.
+
+### Tests
+- Replaced `/ct_regression_test` check `curse_ui_nil_color_fallback` with `curse_theme_color_backfilled` (asserts `DeusThemeSettings.wastes.curse_description_color` is a valid 4-component color and no theme is left with a nil color).
+
+## 0.7.138-dev (2026-06-16) — Trollhammer properties, fire-weapon traits, mid-run boon-count sync, bot-boon chat readout
+
+### Why
+Four issues reported 2026-06-17 in live play:
+1. **Trollhammer Torpedo gets traits but no properties on CW upgrade.** Vanilla bug: the deus upgrade reads `WeaponProperties.combinations[property_table_name][rarity]` (`deus_weapon_generation.lua:161`); the torpedo's `property_table_name = "deus_trollhammer_torpedo"` (`deus_weapons.lua:256`) exists ONLY in the trait combinations table, never the property table → the property lookup returns nil → zero properties.
+2. **Fire/heat weapons (Sienna staves, Bardin drakefire pistols / drakegun / flamethrower) get no trait on upgrade with the trait reworks on.** Their baked pool is the narrow `deus_ranged_heat` set, which (after the per-weapon compatible filter) has no common-tier trait. With `tweak_trait_tier_by_rarity` on, `get_tier_filtered_combos` returned zero combos at low rarity → `override_traits_in_result` early-returned → vanilla left traits nil. Melee/ranged-ammo weapons carry common-tier traits, so they got one — hence the asymmetry the user saw.
+3. **Host changing boons-per-chest/shrine (or any synced setting) mid-run didn't reach clients for the rest of the run.** The host's chunked settings broadcast fired ONLY inside `DeusRunController.setup_run` (once per run). `mod.on_setting_changed` never re-broadcast, so clients' `_ct_host_settings` (read by `effective_setting`) stayed frozen at the run-start snapshot.
+4. **No way for the host to see which boons bots receive** when random/mirror bot boons are on (only debug-log lines existed).
+
+### Changed
+- **Trollhammer (`chaos_wastes_tweaker_dev.lua`)** — at load, alias `WeaponProperties.combinations.deus_trollhammer_torpedo = WeaponProperties.combinations.deus_ranged` (guarded by `rawget` + key-exists; idempotent; reference-alias is safe since vanilla only reads `combinations`). No new hook. `TROLLHAMMER_PROPERTY_ALIAS_MARKER`.
+- **Fire-weapon traits (`chaos_wastes_tweaker_dev.lua`)** — `get_tier_filtered_combos` now falls back to the weapon's OWN baked pool when no tier-eligible combo exists at the rolled rarity, so restricted-pool weapons draw a (possibly higher-tier) trait **only from their own compatible pool** — never a generic/incompatible one — instead of getting nothing. Behavior-preserving for melee/ranged-ammo (their `#filtered` is never 0). No new hook (merges into the existing four `DeusWeaponGeneration` hooks via `_filtered_weapon_gen`). `FIRE_WEAPON_TIER_FALLBACK_MARKER`.
+- **Mid-run sync (`chaos_wastes_tweaker_dev.lua`)** — extracted the inline host broadcast into `mod._ct_broadcast_host_settings(reason)` (reuses the existing `ct_sync_host_settings_chunk` RPC + `CT_RPC_SCHEMA` — no new registration). `setup_run` now calls it; `mod.on_setting_changed` now also calls it, gated to host + synced settings (`mod._ct_synced_set`), so a mid-run host edit re-pushes immediately and the next client boon/altar roll uses the new value. `MIDRUN_SETTING_REBROADCAST_MARKER`.
+- **Bot-boon chat readout (`chaos_wastes_tweaker_dev.lua` + `_data` + `_localization`)** — new host-only `announce_bot_boons` checkbox (default off). When on, the existing `add_power_ups` bot loop emits a local `mod:echo` per (bot, boon) naming the bot and the friendly boon name (`mod._ct_boon_display_name`). No new hook (merges into the existing `add_power_ups` hook_safe); `mod:echo` is local-only (no RPC/version-sync risk).
+
+### Tests
+- New `/ct_regression_test` checks: `trollhammer_property_pool_aliased`, `fire_weapon_tier_fallback_nonempty`, `midrun_setting_rebroadcast_wired`, `bot_boon_announce_wired`.
+
+### To verify (in-game)
+- Upgrade a Trollhammer Torpedo at a CW reliquary → it now gets properties as well as traits.
+- With the trait reworks on, upgrade a fire weapon (staff / drakefire) → it now receives a heat-pool trait at every rarity.
+- As host mid-run, raise boons-per-chest/shrine → clients' next chest/shrine offers the new count (no re-run needed).
+- Enable random/mirror bot boons + `Announce Bot Boons in Chat` → host sees a chat line per bot boon grant.
+
+## 0.7.137-dev (2026-06-16) — Fix deus curse-banner crash on suppressed-curse nodes (theme="wastes" has no curse color)
+
+### Why
+Reported crash 2026-06-17 (client, joining a CW run): `deus_curse_ui_definitions.lua:599: attempt to index field 'color' (a nil value)` on Citadel of Eternity (`sig_citadel_khorne_path5`), with `theme="wastes"`, `curse="curse_corrupted_flesh"`, `theme_color=nil`. Multi-agent root cause (high confidence): `DeusCurseUI.show_curse_info` reads `theme_color = DeusThemeSettings[theme].curse_description_color` and passes it to `_update_description_widget`, which assigns it to five glow `style.color` tables; the `description_start` animation then indexes `style.<glow>.color[1]`. **`DeusThemeSettings.wastes` is the only theme with no `curse_description_color`** (the god themes all have it). Vanilla never produces theme="wastes" with a real curse (`deus_generate_graph` forces a god theme for curse nodes), but ct **forces `node.theme="wastes"` to suppress curse aesthetics** (`start_next_round` / `_transition_next_node`) while the curse can still be shown — so `theme_color` is nil and the glow color tables are nil → crash.
+
+### Changed
+- `chaos_wastes_tweaker_dev.lua` — new `DeusCurseUI._update_description_widget` hook (mandatory pre-flight: 0 prior `DeusCurseUI` hooks) that substitutes a default opaque-white color when `color` is nil, via `mod._ct_curse_desc_color_or_default`. It sits **downstream of every theme/curse mutation path**, so it can't be defeated by the save/restore desync, and it leaves curse suppression intact (both the curse-info and special-message paths funnel through this method). Existing themed colors pass through unchanged.
+
+### Tests
+- New `/ct_regression_test` check `curse_ui_nil_color_fallback` (nil → 4-component color; existing color passes through).
+
+### Follow-up (deferred, not in this hotfix)
+- pcall-wrap the `func(...)` calls in the `start_next_round` (`:1913`) / `_transition_next_node` (`:1881`) save-restore hooks so a wrapped error can't leave `node.theme="wastes"` for the rest of the run (the secondary aggravator; the color guard already makes the UI crash-proof regardless).
+
+## 0.7.136-dev (2026-06-16) — Fix host-crash on CW path missions with no deus_weapon_chest_distribution (e.g. cemetery_tzeentch_path1)
+
+### Why
+Reported crash 2026-06-16 (nicho, hosting): `deus_run_controller.lua:2468: No deus_weapon_chest_distribution set for cemetery_tzeentch_path1` — a **fatal** host crash. Root cause is vanilla `DeusRunController.get_deus_weapon_chest_type`: it reads `LevelSettings[level_key].deus_weapon_chest_distribution` and `assert`s if it is nil, then **rebuilds from that same table whenever the distribution is exhausted**. Some native CW path missions (the Beastmen / Tzeentch path variants like `cemetery_tzeentch_path1`) ship with **no** distribution, so the moment a deus weapon chest spawns the assert fires and the host dies — ending the run for everyone. This is the same class as Issues #58/#60/#68 (CW path missions missing pickup/chest config) but fatal rather than just dropping pickups. ct already hooks `get_deus_weapon_chest_type` (for custom altar distributions) and, when the player hasn't set custom altar counts, falls straight through to the vanilla function — so the assert was reachable.
+
+### Changed
+- `chaos_wastes_tweaker_dev.lua` — extended the **existing** `DeusRunController.get_deus_weapon_chest_type` hook (no new hook — duplicate-hook rule) with a guard, `mod._ct_ensure_deus_chest_distribution(self)`, that runs before any path reaching vanilla. It resolves the current `level_key` exactly as vanilla does and, **only if** `LevelSettings[level_key].deus_weapon_chest_distribution` is nil, injects a balanced fallback (`{ [upgrade]=1, [swap_melee]=1, [swap_ranged]=1, [power_up]=1 }`) **into `LevelSettings[level_key]`**. Injecting into LevelSettings (not just `self._deus_weapon_chest_distribution`) is required because vanilla re-reads it on exhaustion. Idempotent — never overwrites an existing distribution; degrades to a no-op if `LevelSettings`/`DEUS_CHEST_TYPES` aren't available. Logs an ungated `mod:warning` naming the offending level. Decomposed into pure helpers (`_ct_deus_chest_needs_fallback`, `_ct_build_deus_chest_fallback`) for testability.
+
+### Tests
+- New `/ct_regression_test` check `deus_chest_distribution_fallback` — asserts the inject/skip decision (nil distribution → inject; existing distribution → don't overwrite; nil level_settings → skip) and the fallback shape (covers all 4 `DEUS_CHEST_TYPES` with positive amounts; returns nil when `DEUS_CHEST_TYPES` is unavailable).
+
+### To verify (in-game)
+- Start a CW run that routes through a Beastmen/Tzeentch path mission (`cemetery_tzeentch_path1` or sibling) and confirm the host no longer crashes on chest spawn; deus weapon chests appear and open normally. Run `/ct_regression_test` → `PASS: deus_chest_distribution_fallback`. (Fix is in **ct_dev**; promote to stable + upload for nicho, who runs the public build, to receive it.)
+
+## 0.7.135-dev (2026-06-13) — Fix dead VMF settings-gate in the dev clone (Issues #39/#40 never fired in ct_dev)
+
+### Why
+Multi-agent audit 2026-06-13. The two `VMFOptionsView` hooks added in v0.7.120-dev — the starting_coins slider snap-to-25 (#39) and the Miracle-of-Isha mutex visual refresh (#40) — gate on `widget_content.mod_name == "ct"` / `mod_name == "ct"`. VMF sets a widget's `mod_name` to the OWNING mod's registered id, and this dev clone is registered `new_mod("ct_dev", ...)`, so in the dev build every ct widget reports `"ct_dev"` and the `== "ct"` comparison was never true. Both hooks were therefore **dead in dev**: the slider didn't snap to 25 and the Isha sibling checkbox never visually deselected (exactly the #40 report). The literals were copied verbatim from stable `chaos_wastes_tweaker` (registered `"ct"`, where they work) without re-pointing to the dev id.
+
+### Changed
+- `chaos_wastes_tweaker_dev.lua:8699` — slider gate `widget_content.mod_name == "ct"` → `== "ct_dev"`.
+- `chaos_wastes_tweaker_dev.lua:8729` — mutex-refresh gate `mod_name == "ct"` → `== "ct_dev"`.
+- `chaos_wastes_tweaker_dev.lua:8691` — banner comment updated to `mod_name == "ct_dev"`.
+
+Behavior-preserving in the sense that both gates were previously never true in dev (runtime no-ops); re-pointing them to the correct mod id only enables the already-authored, stable-proven behavior, scoped to this mod's own widgets. Stable `chaos_wastes_tweaker` is already correct (registered `"ct"`, gate matches) and is **not** touched.
+
+### To verify
+- In keep, open the ct_dev settings: drag the starting_coins slider and confirm it snaps in steps of 25; toggle Miracle of Isha Aegis ↔ Unlimited Wounds and confirm the sibling checkbox visually deselects.
+
+### Follow-up (deferred)
+- A runtime `_rt_register` can't catch this regression class (the gate literal lives in a closure, not readable at runtime, and this file is near the Lua 200-locals-per-chunk limit). A repo-level qa/mod-lint source-pattern check ("VMF `mod_name ==` gate literal must equal the file's `new_mod(...)` id") would prevent the copy-from-stable regression — tracked as a tooling enhancement.
+
+### Also — Issue #51 (unpack-safety annotations)
+- Appended an inline `-- unpack-safe` pragma to the 5 verified-defensible `return unpack(...)` sites (`:1890`, `:2724`, `:3632`, `:3829`, `:3868`) so `qa/check_unpack_safety.ps1` no longer WARNs on them (each was already audited single-return / empty-result per the v0.7.107-dev nil-hole audit; the prose comment just didn't match the suppression pragma). The check itself was also taught to skip `--[[ ]]` block comments and string-literal interiors, removing the `_safe_hook.lua` and `:10097` false positives (no source change to those). The matching stable `chaos_wastes_tweaker` sites still WARN until this is promoted.
+
 ## 0.7.134-dev (2026-06-08) — Fix v0.7.133 regression: Belakor-temple forced rarity dropped by the new unpack bound; ungate trait-filter failure log
 
 ### Why

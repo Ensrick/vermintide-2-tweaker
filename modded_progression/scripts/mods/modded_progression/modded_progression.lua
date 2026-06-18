@@ -21,6 +21,7 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("mp")
+_MEM_PROBE_T0_MP = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 local MOD_VERSION = "0.2.9-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
@@ -452,3 +453,5 @@ end
 -- Boot-time overlay is gated on backend readiness — defer.
 -- TODO step 1.b: wire to Managers.backend:ready() or PlayFabMirrorBase init completion.
 -- apply_mirror_overlay() will fire from that hook once available.
+
+mod:info("[mem-probe] mp boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_MP) / 1024)

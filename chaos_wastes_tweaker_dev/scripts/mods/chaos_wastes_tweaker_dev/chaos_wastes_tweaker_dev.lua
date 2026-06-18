@@ -41,7 +41,8 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.134-dev"
+local MOD_VERSION = "0.7.140-dev"
+_MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
 -- approach which crashed to 0 cost at ~20 boons. See `.ammo_system_design_2026-05-24.md`.
@@ -846,6 +847,14 @@ end
 mod:info("[ct_sync] synced setting registry built: %d keys (%d excluded as per-peer)",
     #SYNCED_SETTING_NAMES, (function() local n = 0; for _ in pairs(PER_PEER_SETTING_NAMES) do n = n + 1 end; return n end)())
 
+-- O(1) membership for the mid-run re-broadcast gate in on_setting_changed (see
+-- MIDRUN_SETTING_REBROADCAST_MARKER). Lives on `mod` rather than a new file-scope
+-- local because this chunk is near Lua 5.1's 200-locals cap. Mirrors SYNCED_SETTING_NAMES.
+mod._ct_synced_set = {}
+for _, id in ipairs(SYNCED_SETTING_NAMES) do
+    mod._ct_synced_set[id] = true
+end
+
 local _ct_host_settings = {}
 local _ct_host_sync_received = false
 
@@ -952,6 +961,66 @@ mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, sch
     end
     if sync_host_dependent_state then
         sync_host_dependent_state()
+    end
+end)
+
+-- MIDRUN_SETTING_REBROADCAST_MARKER
+-- Re-usable host->clients broadcast of the synced settings registry over the EXISTING
+-- ct_sync_host_settings_chunk RPC (same schema/channel — no new registration). Called
+-- from two places: DeusRunController.setup_run (run start) AND mod.on_setting_changed
+-- (host edits a synced setting mid-run). Before this existed the broadcast lived only
+-- inline in setup_run, so a host changing e.g. boons-per-chest/shrine mid-run never
+-- reached clients — they stayed frozen at the run-start snapshot for the rest of the
+-- run (reported 2026-06-17). Attached to `mod` (not a file-scope local) deliberately:
+-- this chunk is near Lua 5.1's 200-locals-per-function cap, so new shared helpers go on
+-- the mod table. Server-gated; no-op on clients / at menu (no peers). A fresh session id
+-- per call means a client discards any partial stale buffer. `reason` is log-only.
+function mod._ct_broadcast_host_settings(reason)
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if not is_server then return end
+    local payload = {}
+    for _, name in ipairs(SYNCED_SETTING_NAMES) do
+        payload[name] = mod:get(name)
+    end
+    local ok, json = pcall(cjson.encode, payload)
+    if not ok or type(json) ~= "string" then
+        mod:info("[ct_sync] payload encode failed; not broadcasting (%s)", tostring(reason))
+        return
+    end
+    local json_len = #json
+    local total = math.max(1, math.ceil(json_len / SYNC_CHUNK_SIZE))
+    local session = math.floor(((Application and Application.time_since_launch and Application.time_since_launch()) or os.time()) * 1000) % 2147483647
+    if session == 0 then session = 1 end
+    local _bt = get_mod("bt")
+    local _nr = _bt and _bt.net_replay and _bt:net_replay()
+    for seq = 1, total do
+        local start_i = (seq - 1) * SYNC_CHUNK_SIZE + 1
+        local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
+        local chunk_str = string.sub(json, start_i, stop_i)
+        mod:network_send("ct_sync_host_settings_chunk", "others", CT_RPC_SCHEMA, session, seq, total, chunk_str)
+        if _nr then
+            _nr:record_send("ct", "ct_sync_host_settings_chunk",
+                string.format("session=%d seq=%d total=%d chunk=%s", session, seq, total, chunk_str), "others")
+        end
+    end
+    mod:info("[ct_sync] broadcast host settings to clients (%s; session %d, %d chunks, %d bytes, %d keys)",
+        tostring(reason), session, total, json_len, #SYNCED_SETTING_NAMES)
+end
+
+-- Regression guard for MIDRUN_SETTING_REBROADCAST_MARKER: the mid-run re-sync wiring must
+-- be present and the two boon-count keys (the reported mid-run desync) must be in the
+-- synced registry, else a host edit won't reach clients until the next run.
+_rt_register("midrun_setting_rebroadcast_wired", function()
+    if type(mod._ct_broadcast_host_settings) ~= "function" then
+        return "MIDRUN-SYNC REGRESSION: mod._ct_broadcast_host_settings missing (mid-run host settings won't re-sync to clients)"
+    end
+    if type(mod._ct_synced_set) ~= "table" then
+        return "MIDRUN-SYNC REGRESSION: mod._ct_synced_set membership table missing"
+    end
+    for _, k in ipairs({ "shrine_boon_count", "chest_boon_count" }) do
+        if not mod._ct_synced_set[k] then
+            return string.format("MIDRUN-SYNC REGRESSION: '%s' absent from synced set -- mid-run host edit won't reach clients", k)
+        end
     end
 end)
 
@@ -1398,6 +1467,11 @@ effective_setting = function(name)
     return mod:get(name)
 end
 
+-- Exposed for dofile'd modules (e.g. _ct_mechanic_tweaks.lua) that live in their
+-- own chunk and can't see this file-scope local. Field assignment only -- adds no
+-- main-chunk local (keeps us under the Lua 5.1 200-locals-per-function cap).
+mod._ct_effective_setting = effective_setting
+
 -- v0.7.53: routed through `effective_setting` so client peers gate on the host's synced
 -- toggle, not their own. Previously used `mod:get` directly, which made client-side curse
 -- name display (`get_current_node_curse` hook + `_transition_next_node` save-restore)
@@ -1518,40 +1592,15 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- right before full_sync() ships the engine RPC to clients), our packet
     -- arrives first and the client processes it before their setup_run fires.
     -- Verified safe to spam — receiving the same values twice is a no-op assignment.
+    -- Broadcast our settings to all clients so their deus_populate_graph hook
+    -- (about to fire on their machines) mutates the same way. Shared helper
+    -- (_ct_broadcast_host_settings) is ALSO reused by mod.on_setting_changed so a
+    -- mid-run host edit re-syncs immediately; server-gated inside the helper. FIFO
+    -- ordering vs the engine's rpc_deus_setup_run is preserved — we still send here
+    -- at the end of host setup_run, before full_sync() ships the engine RPC.
+    mod._ct_broadcast_host_settings("setup_run")
     local is_server = Managers and Managers.player and Managers.player.is_server
     if is_server then
-        local payload = {}
-        for _, name in ipairs(SYNCED_SETTING_NAMES) do
-            payload[name] = mod:get(name)
-        end
-        local ok, json = pcall(cjson.encode, payload)
-        if not ok or type(json) ~= "string" then
-            mod:info("[ct_sync] payload encode failed; not broadcasting")
-            return ret_a, ret_b
-        end
-        local json_len = #json
-        local total = math.max(1, math.ceil(json_len / SYNC_CHUNK_SIZE))
-        local session = math.floor(((Application and Application.time_since_launch and Application.time_since_launch()) or os.time()) * 1000) % 2147483647
-        if session == 0 then session = 1 end
-        -- Issue #28 demo integration: resolve bt's net-replay ring once
-        -- outside the loop, then record one entry per chunk we send. Silent
-        -- no-op when bt isn't installed.
-        local _bt = get_mod("bt")
-        local _nr = _bt and _bt.net_replay and _bt:net_replay()
-        for seq = 1, total do
-            local start_i = (seq - 1) * SYNC_CHUNK_SIZE + 1
-            local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
-            local chunk_str = string.sub(json, start_i, stop_i)
-            -- Issue #27: CT_RPC_SCHEMA prepended as first arg. Receiver gates on it.
-            mod:network_send("ct_sync_host_settings_chunk", "others", CT_RPC_SCHEMA, session, seq, total, chunk_str)
-            if _nr then
-                local tag = string.format("session=%d seq=%d total=%d chunk=%s",
-                    session, seq, total, chunk_str)
-                _nr:record_send("ct", "ct_sync_host_settings_chunk", tag, "others")
-            end
-        end
-        mod:info("[ct_sync] broadcast host settings to clients (session %d, %d chunks, %d bytes, %d keys)",
-            session, total, json_len, #SYNCED_SETTING_NAMES)
         -- v0.7.64: also log the host's own manifest as a baseline so clients'
         -- replies can be diff'd against it in post-session log triage.
         local host_manifest = _build_local_manifest()
@@ -1887,7 +1936,7 @@ mod:hook("DeusMechanism", "_transition_next_node", function(func, self, next_nod
     -- a single `next_state` value (deus_mechanism.lua:687). Bare unpack is safe
     -- because the result table only ever holds one entry — no internal nil hole
     -- can truncate the return. Left as-is per audit.
-    return unpack(results)
+    return unpack(results) -- unpack-safe: results holds at most one entry (single-return)
 end)
 
 mod:hook("DeusMechanism", "start_next_round", function(func, self, ...)
@@ -1969,8 +2018,178 @@ mod:hook("DeusRunController", "get_own_weapon_pool_excludes", function(func, sel
     return excludes
 end)
 
+-- ============================================================
+-- Fix: Trollhammer Torpedo gets traits but NO properties on CW upgrade
+-- ============================================================
+-- Vanilla deus weapon-chest upgrade reads WeaponProperties.combinations[property_table_name][rarity]
+-- (deus_weapon_generation.lua:161). The Trollhammer Torpedo's property_table_name is
+-- "deus_trollhammer_torpedo" (deus_weapons.lua:256), but that key exists ONLY in the TRAIT
+-- combinations table, not the PROPERTY combinations table -> the property lookup returns nil, so the
+-- torpedo gets traits but ZERO properties on upgrade (reported 2026-06-17). Fix: alias its property
+-- pool to the standard ranged-deus pool ("deus_ranged") at load. Idempotent (only when missing),
+-- reference-alias is safe (vanilla only reads combinations), no-op if either table is unavailable.
+-- TROLLHAMMER_PROPERTY_ALIAS_MARKER
+do
+    local WP = rawget(_G, "WeaponProperties")
+    local combos = WP and WP.combinations
+    if combos and rawget(combos, "deus_ranged") and not rawget(combos, "deus_trollhammer_torpedo") then
+        combos.deus_trollhammer_torpedo = combos.deus_ranged
+        mod:info("[deus-props] aliased deus_trollhammer_torpedo property pool -> deus_ranged (vanilla gap: torpedo had traits but no properties)")
+    end
+end
+
+_rt_register("trollhammer_property_pool_aliased", function()
+    local WP = rawget(_G, "WeaponProperties")
+    local combos = WP and WP.combinations
+    if not combos then return "skip: WeaponProperties.combinations not loaded" end
+    if not rawget(combos, "deus_ranged") then return "skip: deus_ranged property pool absent (vanilla data changed?)" end
+    local pool = rawget(combos, "deus_trollhammer_torpedo")
+    if pool == nil then return "deus_trollhammer_torpedo property pool still nil -- alias did not apply (torpedo gets no properties)" end
+    local n = 0
+    for _ in pairs(pool) do n = n + 1 end
+    if n == 0 then return "deus_trollhammer_torpedo property pool is empty -- alias did not take" end
+end)
+
+-- ============================================================
+-- Fix: deus curse banner UI nil theme-color (client/host-crash fix)
+-- ============================================================
+-- Vanilla DeusCurseUI's curse-info (deus_curse_ui.lua:152) and special-message (:117) paths both
+-- read theme_color = DeusThemeSettings[theme].curse_description_color and pass it to
+-- _update_description_widget, which assigns it to 5 glow style.color fields (:184-188); the
+-- description_start animation then indexes style.<glow>.color[1]. DeusThemeSettings.wastes is the
+-- ONLY theme with NO curse_description_color (all 5 god themes + belakor have it), so when ct forces
+-- node.theme="wastes" to suppress curse aesthetics (start_next_round / _transition_next_node) while a
+-- real curse is still shown, theme_color is nil -> the glow color tables are nil -> the animation
+-- crashes "attempt to index field 'color' (a nil value)". Vanilla never hits this (deus_generate_graph
+-- forces a god theme for any curse node). Crash 2026-06-17 (sig_citadel_khorne_path5, theme=wastes +
+-- curse=curse_corrupted_flesh).
+--
+-- Fix (v0.7.139-dev): backfill the missing color in DATA at load, instead of hooking the UI.
+-- DeusThemeSettings is a boot-global available at mod-load, so this is reliable and timing-free, and
+-- it covers BOTH callers (they read theme_color from the same table). The PRIOR approach hooked
+-- DeusCurseUI._update_description_widget, but DeusCurseUI lives in scripts/ui/hud_ui/ and isn't loaded
+-- until a deus HUD spins up inside an actual CW expedition -- so VMF's string-form hook couldn't
+-- resolve the class at the adventure keep, logged a visible "trying to hook object that doesn't
+-- exist: DeusCurseUI" error, and likely never installed (reported 2026-06-17). Opaque white matches
+-- the icon default; the wastes theme intentionally shows no curse glow, so any opaque value just
+-- prevents the nil-index. Idempotent; loops every theme so any future gap is covered. Host and every
+-- client run this identically at load, so the data is consistent peer-to-peer.
+-- CURSE_THEME_COLOR_BACKFILL_MARKER
+do
+    local TS = rawget(_G, "DeusThemeSettings")
+    if type(TS) == "table" then
+        local patched = {}
+        for theme_name, theme in pairs(TS) do
+            if type(theme) == "table" and theme.curse_description_color == nil then
+                theme.curse_description_color = { 255, 255, 255, 255 }
+                patched[#patched + 1] = tostring(theme_name)
+            end
+        end
+        if #patched > 0 then
+            mod:info("[curse-ui] backfilled curse_description_color on theme(s) with none: %s (prevents nil-color curse-banner crash when ct forces that theme on a cursed node)",
+                table.concat(patched, ", "))
+        end
+    end
+end
+
+_rt_register("curse_theme_color_backfilled", function()
+    local TS = rawget(_G, "DeusThemeSettings")
+    if type(TS) ~= "table" then return "skip: DeusThemeSettings not loaded" end
+    local wastes = TS.wastes
+    if type(wastes) ~= "table" then return "skip: DeusThemeSettings.wastes absent (vanilla data changed?)" end
+    local c = wastes.curse_description_color
+    if type(c) ~= "table" or #c < 4 then return "DeusThemeSettings.wastes.curse_description_color missing/short -- nil-color curse-banner crash can recur" end
+    for i = 1, 4 do if type(c[i]) ~= "number" then return "curse_description_color components must be numbers" end end
+    for theme_name, theme in pairs(TS) do
+        if type(theme) == "table" and theme.curse_description_color == nil then
+            return "theme '" .. tostring(theme_name) .. "' still has nil curse_description_color"
+        end
+    end
+end)
+
+-- ============================================================
+-- Guard: native CW path missions with NO deus_weapon_chest_distribution (host-crash fix)
+-- ============================================================
+-- Vanilla `DeusRunController.get_deus_weapon_chest_type` (deus_run_controller.lua:~2391)
+-- reads `LevelSettings[level_key].deus_weapon_chest_distribution` and `assert`s if it
+-- is nil, AND it rebuilds from that same table every time the distribution is exhausted.
+-- Some native CW path missions (e.g. cemetery_tzeentch_path1 and the other Beastmen /
+-- Tzeentch path variants) ship with NO distribution, so the assert HARD-CRASHES the host
+-- the moment a deus weapon chest spawns (crash 2026-06-17, nicho, cemetery_tzeentch_path1:
+-- "No deus_weapon_chest_distribution set for cemetery_tzeentch_path1" — same class as
+-- Issues #58/#60/#68, but fatal rather than just missing pickups). A one-shot patch on
+-- self._deus_weapon_chest_distribution is NOT enough (vanilla re-reads LevelSettings on
+-- exhaustion), so we inject a balanced fallback INTO LevelSettings[level_key] — idempotent,
+-- never overwrites an existing distribution, deterministic across host/clients.
+-- Decomposed into pure helpers for the deus_chest_distribution_fallback regression test.
+mod._ct_deus_chest_needs_fallback = function(level_settings)
+    return level_settings ~= nil and level_settings.deus_weapon_chest_distribution == nil
+end
+
+mod._ct_build_deus_chest_fallback = function(chest_types)
+    if not chest_types then return nil end
+    -- Vanilla {chest_type = amount} shape; one of each type so every chest draws a
+    -- sensible variety. Vanilla expands this into a list, shuffles by level_seed, and
+    -- re-expands it on exhaustion.
+    return {
+        [chest_types.upgrade]     = 1,
+        [chest_types.swap_melee]  = 1,
+        [chest_types.swap_ranged] = 1,
+        [chest_types.power_up]    = 1,
+    }
+end
+
+mod._ct_ensure_deus_chest_distribution = function(drc)
+    local LS = rawget(_G, "LevelSettings")
+    local DCT = rawget(_G, "DEUS_CHEST_TYPES")
+    if not (LS and DCT and drc) then return end
+    -- Resolve the current level_key exactly as vanilla does.
+    local run_state = drc._run_state
+    local node_key = run_state and run_state:get_current_node_key()
+    local graph = drc._get_graph_data and drc:_get_graph_data()
+    local node = graph and node_key and graph[node_key]
+    local level_key = node and node.level
+    if not level_key then return end
+    local ls = LS[level_key]
+    if not mod._ct_deus_chest_needs_fallback(ls) then return end
+    local fallback = mod._ct_build_deus_chest_fallback(DCT)
+    if not fallback then return end
+    ls.deus_weapon_chest_distribution = fallback
+    mod:warning("[deus-chest] '%s' had no deus_weapon_chest_distribution (native CW path mission) -- injected a balanced fallback to prevent the vanilla assert / host crash", tostring(level_key))
+end
+
+_rt_register("deus_chest_distribution_fallback", function()
+    -- Native CW path missions (e.g. cemetery_tzeentch_path1) can lack a
+    -- deus_weapon_chest_distribution; vanilla get_deus_weapon_chest_type asserts and
+    -- HARD-CRASHES the host on chest spawn (crash 2026-06-17). ct injects a fallback into
+    -- LevelSettings. This pins the inject/skip decision + the fallback shape.
+    if not mod._ct_deus_chest_needs_fallback({ deus_weapon_chest_distribution = nil }) then
+        return "must flag a level whose deus_weapon_chest_distribution is nil as needing a fallback"
+    end
+    if mod._ct_deus_chest_needs_fallback({ deus_weapon_chest_distribution = { foo = 1 } }) then
+        return "must NOT flag (overwrite) a level that already has a distribution"
+    end
+    if mod._ct_deus_chest_needs_fallback(nil) then
+        return "must NOT inject into a nil level_settings entry"
+    end
+    local fb = mod._ct_build_deus_chest_fallback({ upgrade = "u", swap_melee = "m", swap_ranged = "r", power_up = "p" })
+    if type(fb) ~= "table" then return "fallback must be a table" end
+    local n = 0
+    for _, amount in pairs(fb) do
+        n = n + 1
+        if type(amount) ~= "number" or amount < 1 then return "fallback amounts must be positive numbers" end
+    end
+    if n ~= 4 then return "fallback must cover all 4 chest types, got " .. tostring(n) end
+    if not (fb.u and fb.m and fb.r and fb.p) then return "fallback must key on each DEUS_CHEST_TYPES value" end
+    if mod._ct_build_deus_chest_fallback(nil) ~= nil then return "must return nil when DEUS_CHEST_TYPES is unavailable (degrade, don't error)" end
+end)
+
 mod:hook("DeusRunController", "get_deus_weapon_chest_type", function(func, self)
     local distribution = self._deus_weapon_chest_distribution
+    -- Prevent the vanilla "No deus_weapon_chest_distribution" assert (host crash) on CW
+    -- path missions that ship without one. Idempotent; runs before any path that reaches
+    -- vanilla's lookup/rebuild (incl. the custom-altar early-return path below).
+    mod._ct_ensure_deus_chest_distribution(self)
 
     if (not distribution or #distribution == 0) and DEUS_CHEST_TYPES then
         -- v0.7.42: effective_setting so client's chest opens see host's distribution.
@@ -2190,6 +2409,25 @@ local TRAIT_RARITY_POOL = {
     deus_ranged_crit_explosion                    = { exotic = true, unique = true },
 }
 
+-- FIRE_WEAPON_TIER_FALLBACK_MARKER
+-- Fire/heat deus weapons (Sienna staves, Bardin drakefire pistols / drakegun /
+-- flamethrower) bake from the NARROW `deus_ranged_heat` trait pool — after the
+-- per-weapon compatible_weapon_list filter they retain only rare+/exotic+/unique
+-- traits (headhunter, stagger_aoe_on_crit, reduced/remove-overcharge, piercing,
+-- extra_shot, chain_lightning, crit_explosion). There is NO common-tier heat trait
+-- compatible with them. So at common (and sometimes rare) rarity the tier filter
+-- returns ZERO combos -> override_traits_in_result early-returns -> the weapon keeps
+-- vanilla's nil traits (vanilla only grants at exotic/unique) -> fire weapons get NO
+-- trait while melee/ranged-ammo weapons (whose pools carry common-tier traits) do.
+-- Reported 2026-06-17 ("fire gets nothing, others get a trait"). Fix: when the
+-- tier-filtered pool is empty, fall back to the weapon's OWN baked pool. The vanilla
+-- baking loop already filtered that pool by compatible_weapon_list, so every trait it
+-- contains is guaranteed valid for THIS weapon — fire weapons can never receive a
+-- melee/incompatible trait via this path; they just draw a (possibly higher-tier)
+-- heat trait instead of nothing. Trades a little tier purity for "a valid trait > no
+-- trait", which is the requested behavior. Only triggers when #filtered == 0, which
+-- for melee/ranged-ammo weapons essentially never happens, so their behavior is
+-- unchanged.
 local function get_tier_filtered_combos(item_key, rarity)
     if not DeusWeapons or not DeusWeapons[item_key] then return {} end
     local original = DeusWeapons[item_key].baked_trait_combinations
@@ -2208,16 +2446,57 @@ local function get_tier_filtered_combos(item_key, rarity)
             filtered[#filtered + 1] = combo
         end
     end
+    if #filtered == 0 then
+        -- restricted-pool weapons (fire/heat staves + drakefire) have no tier-eligible
+        -- combo at low rarities; fall back to their OWN valid pool so they still get a
+        -- trait, drawn only from their compatible baked combos (never a generic/incompatible one).
+        return original
+    end
     return filtered
 end
+
+-- Regression guard for FIRE_WEAPON_TIER_FALLBACK_MARKER: a fire/heat deus weapon (narrow
+-- deus_ranged_heat pool, no common-tier compatible trait) must still get a NON-EMPTY pool
+-- at common rarity via the own-pool fallback, and every offered trait must come from THAT
+-- weapon's own compatible baked pool (never a generic/incompatible trait).
+_rt_register("fire_weapon_tier_fallback_nonempty", function()
+    if not DeusWeapons then return "skip: DeusWeapons not loaded" end
+    local fire_key
+    for k, data in pairs(DeusWeapons) do
+        if type(data) == "table" and data.trait_table_name == "deus_ranged_heat"
+            and data.baked_trait_combinations and #data.baked_trait_combinations > 0 then
+            fire_key = k
+            break
+        end
+    end
+    if not fire_key then return "skip: no baked deus_ranged_heat weapon found (vanilla data changed?)" end
+    local own = DeusWeapons[fire_key].baked_trait_combinations
+    local own_traits = {}
+    for _, combo in ipairs(own) do
+        for _, t in ipairs(combo) do own_traits[t] = true end
+    end
+    local combos = get_tier_filtered_combos(fire_key, "common")
+    if #combos == 0 then
+        return string.format("FIRE-TRAIT REGRESSION: heat weapon '%s' got empty trait pool at common rarity (tier fallback missing)", tostring(fire_key))
+    end
+    for _, combo in ipairs(combos) do
+        for _, t in ipairs(combo) do
+            if not own_traits[t] then
+                return string.format("FIRE-TRAIT REGRESSION: weapon '%s' fallback offered out-of-pool trait '%s'", tostring(fire_key), tostring(t))
+            end
+        end
+    end
+end)
 
 -- Post-process the result of a vanilla weapon generation/upgrade: overwrite result.traits
 -- with a tier-eligible combo for the rolled rarity. No-op if:
 --   - the toggle is off
 --   - result is nil or has no deus_item_key
---   - no tier-eligible combos exist for this weapon at this rarity
--- The no-tier-combos guard means weapons with no T1 traits available won't suddenly get
--- assigned an out-of-tier trait at common rarity — they keep vanilla behavior (no traits).
+--   - the weapon has no baked combos at all (get_tier_filtered_combos returns {})
+-- get_tier_filtered_combos now falls back to a weapon's OWN baked pool when no
+-- tier-eligible combo exists (see FIRE_WEAPON_TIER_FALLBACK_MARKER), so restricted-pool
+-- weapons (fire/heat staves + drakefire) get a valid heat trait at low rarities instead
+-- of nothing. A weapon with a genuinely empty baked pool still gets no trait.
 local function override_traits_in_result(result, rarity)
     if not effective_setting("tweak_trait_tier_by_rarity") then return result end
     if not result or not result.deus_item_key then return result end
@@ -2721,7 +3000,7 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     -- returns nothing — every observed code path is a bare `return` or implicit end.
     -- The `results` table is therefore always empty, so bare unpack is a no-op return
     -- and equivalent to `return`. Left as-is per audit (no nil-hole exposure exists).
-    return unpack(results)
+    return unpack(results) -- unpack-safe: results always empty, equivalent to bare return
 end)
 
 -- ============================================================
@@ -3629,7 +3908,7 @@ mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
     -- v0.7.107-dev nil-hole audit: DeusMapScene.on_enter (deus_map_scene.lua:453)
     -- returns nothing — the body assigns to `self.*` fields and ends. No multi-return
     -- to preserve, no nil-hole risk. Left as-is per audit.
-    return unpack(result)
+    return unpack(result) -- unpack-safe: no multi-return, body assigns self.* fields
 end)
 
 -- Filter curse pool by user's disable_curse_* settings BEFORE the graph generator
@@ -3826,7 +4105,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         -- returns a single `complete_graph` table. The mod code already reads result[1]
         -- explicitly, confirming single-value usage. Bare unpack is safe — no interior
         -- nil hole can exist with one entry. Left as-is per audit.
-        return unpack(result)
+        return unpack(result) -- unpack-safe: single-value usage, no interior nil hole
     end
 
     local mutated = {}
@@ -3865,7 +4144,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     -- v0.7.107-dev nil-hole audit: same as sibling branch above — global
     -- `deus_populate_graph` returns a single `complete_graph` table; mod code
     -- reads result[1] explicitly. Bare unpack is safe. Left as-is per audit.
-    return unpack(result)
+    return unpack(result) -- unpack-safe: single complete_graph table, read as result[1]
 end)
 
 -- ============================================================
@@ -4485,6 +4764,22 @@ end)
 -- bot triggers also mirror correctly.
 local _ct_bot_mirror_active = false
 
+-- Friendly display name for a deus boon/power-up key, for the host-side bot-boon
+-- chat announcement (announce_bot_boons). Mirrors the in-file canonical pattern:
+-- resolve DeusPowerUpTemplates[name].display_name via Localize, guarding the vanilla
+-- "<key>" miss-sentinel; falls back to the raw key. On `mod` (not a new file-scope
+-- local) per the 200-locals cap note; also lets /ct_regression_test reach it.
+function mod._ct_boon_display_name(name)
+    local tpl = rawget(_G, "DeusPowerUpTemplates")
+    tpl = tpl and tpl[name]
+    local key = tpl and tpl.display_name
+    if key then
+        local raw = Localize(key)
+        if raw ~= "<" .. key .. ">" then return raw end
+    end
+    return tostring(name)
+end
+
 mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups, local_player_id, present)
     -- v0.7.90: unconditional audit trail for every boon grant. Logs name, rarity, recipient,
     -- and toggle state — surfaces any boon that slipped through a toggle. Tag `[boon-trace]`
@@ -4567,6 +4862,10 @@ mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups
     -- Clone the power-up list per-bot. Each call needs fresh client_ids so the
     -- run_state stores distinct entries (otherwise the same client_id appears
     -- across multiple players and `remove_power_ups` matching could mis-target).
+    -- announce_bot_boons (default off): host-local chat line naming each bot and the
+    -- boon it received, so the host can see what bots got (esp. in random mode). mod:echo
+    -- is local-only — no RPC/version-sync risk; the feature is already host-gated above.
+    local announce = effective_setting("announce_bot_boons") == true
     _ct_bot_mirror_active = true
     local ok, err = pcall(function()
         for _, bot in ipairs(bots) do
@@ -4584,6 +4883,12 @@ mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups
                 _dbg("[bot-boon] bot=%s slot=%d rarity=%s host=%s -> bot=%s",
                     tostring(bot.name and bot:name() or "?"),
                     i, tostring(host_pu.rarity), tostring(host_pu.name), tostring(bot_name))
+                if announce then
+                    mod:echo(string.format("[ct] Bot %s got boon: %s (%s)",
+                        tostring(bot.name and bot:name() or "?"),
+                        mod._ct_boon_display_name(bot_name),
+                        mode_random and "rolled" or "mirrored"))
+                end
             end
             -- present=false: don't trigger the reward-popup UI for bot grants.
             self:add_power_ups(cloned, bot:local_player_id(), false)
@@ -4598,6 +4903,23 @@ mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups
 
     mod:info("[bot-boon] %s %d boon(s) onto %d bot(s)",
         mode_random and "rolled" or "mirrored", #new_power_ups, #bots)
+end)
+
+-- Regression guard for the announce_bot_boons feature. The singleton-hook invariant for
+-- (DeusRunController, add_power_ups) is enforced statically by tools/mod-lint; this runtime
+-- check verifies the announce wiring: the boon-name helper resolves (never empty / sentinel)
+-- and the announce checkbox is actually registered.
+_rt_register("bot_boon_announce_wired", function()
+    if type(mod._ct_boon_display_name) ~= "function" then
+        return "BOT-BOON REGRESSION: mod._ct_boon_display_name missing"
+    end
+    local fallback = mod._ct_boon_display_name("__ct_no_such_boon__")
+    if type(fallback) ~= "string" or fallback == "" then
+        return "BOT-BOON REGRESSION: _ct_boon_display_name returned empty for unknown key (should fall back to the raw key)"
+    end
+    if type(mod:get("announce_bot_boons")) ~= "boolean" then
+        return "BOT-BOON REGRESSION: announce_bot_boons checkbox not registered (mod:get is non-boolean)"
+    end
 end)
 
 -- Per-bot late-respawn re-apply. CW's `_add_initial_power_ups` (host-side per
@@ -7876,6 +8198,10 @@ sync_host_dependent_state = function()
     sync_moot_milk_alt_tweak()
     sync_shard_strike()
     sync_anath_raema_permanent()
+    -- User-suggestion mechanic tweaks live in _ct_mechanic_tweaks.lua (own chunk to
+    -- stay under the 200-local main-chunk cap); re-applied here on host-settings receipt.
+    if mod._ct_sync_adv_save_traits then mod._ct_sync_adv_save_traits() end
+    if mod._ct_sync_shadow_skull_stun then mod._ct_sync_shadow_skull_stun() end
     -- 2026-05-23 v0.7.100-dev FULLY PURGED: sync_dormant_boons() — function no longer
     -- exists (block-commented along with DORMANT_BOON_RARITY). Re-enable alongside the
     -- L4721-style apply-site uncomment.
@@ -8599,8 +8925,25 @@ mod.on_setting_changed = function(setting_id)
     -- to a per-peer mis-toggle vs an actual sync failure.
     if setting_id == "chest_upgrade_count" or setting_id == "chest_swap_melee_count"
             or setting_id == "chest_swap_ranged_count" or setting_id == "chest_power_up_count" then
-        _dbg("[altar:setting_changed] %s = %s (effective will broadcast on next sync)",
+        _dbg("[altar:setting_changed] %s = %s (broadcasting now via _ct_broadcast_host_settings)",
             setting_id, tostring(mod:get(setting_id)))
+    end
+
+    -- MIDRUN_SETTING_REBROADCAST_MARKER: on_setting_changed:rebroadcast-synced-host-settings
+    -- Host edited a setting mid-run -> immediately re-push the whole synced registry to all
+    -- clients over the existing ct_sync_host_settings_chunk RPC, so their _ct_host_settings
+    -- (and thus effective_setting) pick up the new value on the very next boon/altar roll
+    -- instead of staying frozen until the next setup_run (the boons-per-chest/shrine mid-run
+    -- desync reported 2026-06-17). Gated to host + synced settings so per-peer / UI-only edits
+    -- (e.g. the starting_coins snap below) don't spam the net; a client receiving duplicate
+    -- values is a harmless no-op assignment. Helper is server-gated internally too.
+    do
+        local is_server = Managers and Managers.player and Managers.player.is_server
+        if is_server and type(setting_id) == "string"
+            and mod._ct_synced_set and mod._ct_synced_set[setting_id]
+            and mod._ct_broadcast_host_settings then
+            mod._ct_broadcast_host_settings("setting_changed:" .. setting_id)
+        end
     end
 
     if setting_id == "starting_coins" then
@@ -8634,6 +8977,10 @@ mod.on_setting_changed = function(setting_id)
         sync_shard_strike()
     elseif setting_id == "tweak_anath_raema_permanent" then
         sync_anath_raema_permanent()
+    elseif setting_id == "tweak_adventure_save_trait_chance" then
+        if mod._ct_sync_adv_save_traits then mod._ct_sync_adv_save_traits() end
+    elseif setting_id == "tweak_shadow_skull_stun_sec" then
+        if mod._ct_sync_shadow_skull_stun then mod._ct_sync_shadow_skull_stun() end
     -- 2026-05-23 v0.7.98-dev DISABLED: dormant + skulls event toggles removed from VMF menu.
     -- Their setting_id prefixes will never fire here because the widgets no longer exist, but
     -- comment them out to make the disable explicit (re-enable alongside data.lua + loc).
@@ -8688,15 +9035,16 @@ end
 --      the persisted store — making the mutex-deselected siblings visually
 --      flip in the same frame.
 --
--- Both hooks are narrowly gated (`mod_name == "ct"`) so other mods are
--- unaffected. pcall-wrapped per the verify-by-design rule.
+-- Both hooks are narrowly gated (`mod_name == "ct_dev"` — this is the dev
+-- clone's registered id; stable chaos_wastes_tweaker uses "ct") so other mods
+-- are unaffected. pcall-wrapped per the verify-by-design rule.
 -- See memory entries `reference_vmf_numeric_widget_no_step.md`,
 -- `reference_vmf_checkbox_cached_display_state.md` for the full mechanic.
 
 -- (1) Slider step-by-25 for starting_coins.
 mod:hook("VMFOptionsView", "callback_draw_numeric_menu", function(func, self, widget_content)
     pcall(function()
-        if widget_content and widget_content.mod_name == "ct"
+        if widget_content and widget_content.mod_name == "ct_dev"
                 and widget_content.setting_id == "starting_coins" then
             local popup = widget_content.popup_menu_widget
             local pmc = popup and popup.content
@@ -8726,7 +9074,7 @@ end)
 mod:hook("VMFOptionsView", "callback_setting_changed", function(func, self, mod_name, setting_id, old_value, new_value)
     local a, b = func(self, mod_name, setting_id, old_value, new_value)
     pcall(function()
-        if mod_name == "ct" and self and self.update_picked_option_for_settings_list_widgets then
+        if mod_name == "ct_dev" and self and self.update_picked_option_for_settings_list_widgets then
             self:update_picked_option_for_settings_list_widgets()
         end
     end)
@@ -10179,3 +10527,13 @@ _rt_register("trait_filter_restores_on_error", function()
         return "F14 REGRESSION: trait combos left FILTERED after vanilla raised — restore was skipped on the error path"
     end
 end)
+-- Mechanic-tweak sliders (Shadow Homing Skulls stun duration, Adventure RNG-trait
+-- odds). Own chunk to stay under the 200-local main-chunk cap; reads via the
+-- exposed mod._ct_effective_setting; exposes mod._ct_sync_* for the re-apply hubs.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_mechanic_tweaks")
+
+-- Blessed Bots: Survival Boons (any gamemode). Host-side; single PlayerBotBase.update
+-- hook for this mod; no network registration.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_blessed_bots")
+
+mod:info("[mem-probe] ct boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CT) / 1024)

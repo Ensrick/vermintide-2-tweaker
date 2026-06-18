@@ -555,4 +555,13 @@ return {
     -- to the universal `enable_debug_logging` key.
     enable_debug_logging = { en = "Debug Logging" },
     enable_debug_logging_tooltip = { en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable." },
+
+    -- Bot Options (AI teammate behavior fixes; _gt_bot_fixes.lua). Host-side only.
+    gt_bot_options_group = { en = "Bot Options (AI Teammates)" },
+    gt_bot_necro_potion_handoff = { en = "Necromancer bots can hand off potions" },
+    gt_bot_necro_potion_handoff_tooltip = { en = "Fixes Necromancer bots never giving you a potion. Her career skull permanently sits in the potion slot, blocking the handoff; a human swaps past it by tapping the potion key, but the bot can't. This promotes a picked-up potion to the active slot for Necromancer bots so they can hand it over (and drink it themselves). Host-side only; takes effect on the next bot update. Off by default." },
+    gt_bot_ironbreaker_revive_in_ult = { en = "Ironbreaker bots revive during their ult" },
+    gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "Fixes Ironbreaker bots ignoring downed teammates for the whole duration of their ult. Vanilla keeps the bot blocking/holding the ability for the ult's duration instead of reviving. This lets the bot break off to revive an ally needing aid -- the damage-reduction/taunt buff keeps running, so the ult is not wasted. Host-side only. Off by default." },
+    gt_bot_rescue_awaiting = { en = "Bots rescue allies awaiting respawn" },
+    gt_bot_rescue_awaiting_tooltip = { en = "Lets bots go free a teammate who is waiting to be rescued at a respawn point. Vanilla bots skip awaiting-rescue allies entirely (even after the bot itself respawns), so a dead player can sit unrescued. With this on, a bot with nothing more urgent to do will path over and perform the assisted-respawn interaction. Host-side only. Experimental -- verify in-game. Off by default." },
 }

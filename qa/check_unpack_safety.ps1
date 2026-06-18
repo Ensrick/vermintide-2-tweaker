@@ -23,7 +23,13 @@
 #   - Greps `*.lua` files under each active mod's `scripts/` directory.
 #   - Skips `tweaker/` (legacy / frozen), `_archive/`, `_*_extract/`,
 #     `Vermintide-2-*` reference clones, `bundleV2/`, `.build/`, `.temp/`.
-#   - For each line containing `unpack(`:
+#   - Skips `unpack(` that appears only inside a `--[[ ... ]]` block comment
+#     (tracks open/close across lines, incl. `--[=[ ... ]=]` long brackets) or
+#     inside a string literal (interiors blanked before matching). This kills
+#     the two documented false-positive classes (Issue #51): prose in
+#     `_safe_hook.lua`'s docstring, and `unpack(args)` inside a marker/error
+#     string. Genuine `unpack()` outside comments/strings is unaffected.
+#   - For each remaining line containing `unpack(`:
 #       * 1-arg form `unpack(t)`          -> suspicious
 #       * 2-arg form `unpack(t, i)`       -> suspicious
 #       * 3-arg form `unpack(t, i, n)`    -> PASS (explicit `j`)
@@ -125,19 +131,50 @@ function Scan-File {
     if (-not $rxUnpackAny.IsMatch($text)) { return ,$warnings }   # fast bail
 
     $lines = $text -split "`r?`n"
+    $inBlock = $false          # inside a --[[ ... ]] (or --[=[ ... ]=]) block comment
+    $blockCloser = ""          # the ]=*] token that closes the currently-open block
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i]
+        $work = $line          # portion of the line that is still live code
 
-        # Strip the trailing line comment so we can examine the code part
-        # in isolation. Lua's single-line comment marker is `--` — we accept
-        # naive splitting because the annotation regex is run separately
-        # against the FULL original line (so the marker still counts).
-        # We do not try to parse strings/long-brackets here; if someone
-        # writes `unpack(` inside a string literal that's a false positive,
-        # they can add an inline pragma.
-        $codePart = $line
-        $commentIdx = $line.IndexOf('--')
-        if ($commentIdx -ge 0) { $codePart = $line.Substring(0, $commentIdx) }
+        # ---- (0) resume from an already-open block comment ----
+        # Lines fully inside a --[[ ... ]] docstring carry no live code (this is
+        # the _safe_hook.lua false-positive class: prose that mentions unpack()).
+        if ($inBlock) {
+            $ci = $work.IndexOf($blockCloser)
+            if ($ci -lt 0) { continue }                          # whole line still inside the block
+            $work = $work.Substring($ci + $blockCloser.Length)   # code resumes after the closer
+            $inBlock = $false
+            $blockCloser = ""
+        }
+
+        # ---- (1) strip line comment / detect an opening block comment ----
+        # Find the first `--`. If it begins a long-bracket block (`--[[`, `--[=[`,
+        # ...) that does NOT close on this same line, enter block mode. Either way
+        # only the code BEFORE the `--` is live on this line.
+        $codePart = $work
+        $cIdx = $work.IndexOf('--')
+        if ($cIdx -ge 0) {
+            $codePart = $work.Substring(0, $cIdx)
+            $rest = $work.Substring($cIdx + 2)
+            $open = [regex]::Match($rest, '^(=*)\[')
+            if ($open.Success) {
+                $closer = "]" + $open.Groups[1].Value + "]"
+                $afterOpen = $rest.Substring($open.Length)
+                if ($afterOpen.IndexOf($closer) -lt 0) {
+                    $inBlock = $true            # block runs onto a later line
+                    $blockCloser = $closer
+                }
+            }
+        }
+
+        # ---- (2) blank string-literal interiors ----
+        # A `unpack(` inside a quoted string (e.g. an error/marker message like
+        # "...reverted to bare unpack(args)...") is not a real call. Replace
+        # double- then single-quoted spans with empty strings before matching;
+        # genuine unpack() outside any string is untouched.
+        $codePart = [regex]::Replace($codePart, '"[^"]*"', '""')
+        $codePart = [regex]::Replace($codePart, "'[^']*'", "''")
 
         if (-not $rxUnpackAny.IsMatch($codePart)) { continue }
 
@@ -196,9 +233,11 @@ function Invoke-SelfTest {
     }
 
     $cases = @(
-        @{ Path = "unpack_bad.lua";       ExpectedWarn = $true;  Desc = "bare unpack(t) without annotation" },
-        @{ Path = "unpack_good.lua";      ExpectedWarn = $false; Desc = "unpack(t, 1, n) with explicit j" },
-        @{ Path = "unpack_annotated.lua"; ExpectedWarn = $false; Desc = "unpack(t) -- single-return: ok" }
+        @{ Path = "unpack_bad.lua";          ExpectedWarn = $true;  Desc = "bare unpack(t) without annotation" },
+        @{ Path = "unpack_good.lua";         ExpectedWarn = $false; Desc = "unpack(t, 1, n) with explicit j" },
+        @{ Path = "unpack_annotated.lua";    ExpectedWarn = $false; Desc = "unpack(t) -- single-return: ok" },
+        @{ Path = "unpack_blockcomment.lua"; ExpectedWarn = $false; Desc = "unpack() only inside a --[[ ]] block comment" },
+        @{ Path = "unpack_instring.lua";     ExpectedWarn = $false; Desc = "unpack( only inside a string literal" }
     )
 
     $allPass = $true
@@ -219,7 +258,7 @@ function Invoke-SelfTest {
 
     Write-Host ""
     if ($allPass) {
-        Write-Host "[check_unpack_safety -SelfTest] OK -- all 3 fixture verdicts match." -ForegroundColor Green
+        Write-Host "[check_unpack_safety -SelfTest] OK -- all $($cases.Count) fixture verdicts match." -ForegroundColor Green
         return 0
     } else {
         Write-Host "[check_unpack_safety -SelfTest] FAILED -- regex / heuristic regression. Inspect fixtures + Scan-File." -ForegroundColor Red

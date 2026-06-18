@@ -1,6 +1,7 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.22-dev"
+local MOD_VERSION = "0.3.25-dev"
+_MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -123,6 +124,15 @@ local ok_br, big_rebalance = pcall(mod.dofile, mod, "scripts/mods/career_tweaker
 if not ok_br then
     mod:error("Failed to load Big Rebalance module: %s", tostring(big_rebalance))
     big_rebalance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
+end
+
+-- Tourney Balance Testing port (PHASE 1: clean per-career data mutations,
+-- ~17 default-OFF trn_* toggles). Same {apply,restore,active_count} contract
+-- as balance / big_rebalance. See career_tweaker_tourney.lua header.
+local ok_trn, tourney = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_tourney")
+if not ok_trn then
+    mod:error("Failed to load Tourney module: %s", tostring(tourney))
+    tourney = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 end
 
 -- Mutex cluster framework. Lets us declare "pick one of N alternatives"
@@ -421,6 +431,7 @@ mod.on_game_state_changed = function(status, state_name)
     -- instead of crashing the lifecycle.
     if balance and balance.apply then balance.apply() end
     if big_rebalance and big_rebalance.apply then big_rebalance.apply() end
+    if tourney and tourney.apply then tourney.apply() end
 end
 
 mod.on_setting_changed = function(setting_id)
@@ -445,10 +456,17 @@ mod.on_setting_changed = function(setting_id)
 
     if setting_id:find("^rework_") then
         if balance and balance.apply then balance.apply() end
+        -- A rework_ flip can change a trn_ entry's conflict state (a trn_ entry
+        -- yields to its overlapping rework_), so re-apply tourney too.
+        if tourney and tourney.apply then tourney.apply() end
     end
 
     if setting_id:find("^cbr_") then
         if big_rebalance and big_rebalance.apply then big_rebalance.apply() end
+    end
+
+    if setting_id:find("^trn_") then
+        if tourney and tourney.apply then tourney.apply() end
     end
 end
 
@@ -465,6 +483,7 @@ mod.on_disabled = function()
     --   * Balance reworks + Big Rebalance — restore the patched BuffTemplate fields.
     if balance and balance.restore then balance.restore() end
     if big_rebalance and big_rebalance.restore then big_rebalance.restore() end
+    if tourney and tourney.restore then tourney.restore() end
     restore_talent_swaps()
     -- Refresh the inventory talent picker if it's open so a live disable visibly
     -- reverts swapped trees instead of waiting for a menu re-open.
@@ -677,3 +696,5 @@ _rt_register("on_disabled_unwinds_talent_swaps", function()
         return "restore_talent_swaps did not clear _talent_swap_originals — swaps would persist after disable"
     end
 end)
+
+mod:info("[mem-probe] crt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CRT) / 1024)

@@ -1,6 +1,7 @@
 local mod = get_mod("gt")
+_MEM_PROBE_T0_GTS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.69-alpha"
+local MOD_VERSION = "0.2.71-alpha"
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
 -- needing access to this file-local. Mirrors the same pattern lt used
@@ -90,6 +91,38 @@ local function _settings_fingerprint()
 end
 
 mod:info("[gt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- v0.2.71: full settings snapshot to the log (debug-gated). Walks the same data
+-- widget tree as the fingerprint and logs every setting_id = current value, so
+-- active toggle states are visible in the console log when debugging (e.g. to
+-- confirm a HOST actually had a bot toggle ON). Paired with the per-change log
+-- in on_setting_changed below. Fires at load and on demand via /gt_dump_settings.
+local function _log_settings_snapshot(reason)
+    if not mod:get("enable_debug_logging") then return end
+    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
+    if not ok or type(data) ~= "table" then return end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    table.sort(keys)
+    local parts = {}
+    for _, k in ipairs(keys) do
+        parts[#parts + 1] = k .. "=" .. tostring(mod:get(k))
+    end
+    mod:info("[gt:settings@%s] %s", reason or "load", table.concat(parts, "; "))
+end
+mod._gt_log_settings_snapshot = _log_settings_snapshot
+_log_settings_snapshot("load")
+mod:command("gt_dump_settings", "Log all gt settings + current values (needs Debug Logging on)", function()
+    _log_settings_snapshot("command")
+    mod:echo("[gt] settings snapshot written to console log (if Debug Logging is on).")
+end)
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable
@@ -828,6 +861,9 @@ mod.on_game_state_changed = function(status, state_name)
 end
 
 mod.on_setting_changed = function(setting_id)
+    -- v0.2.71: log every toggle/value change (debug-gated) so the log shows
+    -- exactly when a setting flips and to what — pairs with the load snapshot.
+    _dbg("[gt:setting-changed] %s = %s", tostring(setting_id), tostring(mod:get(setting_id)))
     if setting_id == "mission_inventory_enabled" then
         _patch_inventory_access()
     elseif setting_id == "tp_camera_enabled" then
@@ -5385,3 +5421,10 @@ mod:dofile("scripts/mods/general_tweaker/_gt_lobby_kick_idle")
 mod:dofile("scripts/mods/general_tweaker/_gt_lobby_motd")
 mod:dofile("scripts/mods/general_tweaker/_gt_lobby_modded_manifest")
 mod:dofile("scripts/mods/general_tweaker/_gt_lobby_failed_join_reveal")
+
+-- Bot Options: Necromancer potion handoff, Ironbreaker revive-during-ult,
+-- rescue allies awaiting respawn. Host-side bot AI fixes; no network registration.
+-- Promoted from general_tweaker_dev v0.2.84-dev (2026-06-17).
+mod:dofile("scripts/mods/general_tweaker/_gt_bot_fixes")
+
+mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GTS) / 1024)

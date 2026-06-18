@@ -1,5 +1,49 @@
 ﻿# Crafting in Modded Changelog
 
+## 0.8.5-dev (2026-06-17) — Version realignment (no functional change)
+
+Bumped the dev clone's version from `0.7.76-dev` to `0.8.5-dev` so it sits one patch **ahead** of stable cim (`0.8.4`) instead of a MINOR behind it. The lineages had drifted: stable jumped `0.7.48-alpha → 0.8.1` at the 2026-06-08 release and continued into `0.8.x`, while this dev clone kept incrementing `0.7.x-dev` — so the friends-only Workshop title (`v0.7.76-dev`) read as older than public `v0.8.4` even though dev is the bleeding edge. Code/work was already in sync (both top out at Issue #71). Source-only bump; cfg title updated to match. Live friends-only Workshop title refreshes on the next cim_dev upload. Dev now tracks one patch ahead of stable going forward.
+
+## 0.7.76-dev (2026-06-17) — Issue #71 (Option A): re-enable in-editor CRAFT for weapons so "set properties → craft" works
+
+### Why
+Issue #71's second report (carlotheemo, on public v0.8.0): "Press B, press weapon, press greatsword, temper, add 5 atsp + 5 crit, add Swift Slayer, back, then craft → Outcome: No properties." Root-caused (2026-06-17): cim splits "craft a weapon" from "edit a weapon's properties". The **weapon-select pane** CRAFT button (`HeroWindowWeaveForgeWeapons._equip_item`) always mints a **blank** weapon (`properties = {}`, `traits = {}`, fresh `Application.guid()`). Property/trait edits in the **weave-properties editor** mutate the in-editor item in place via `_forge_apply_to_item`. The editor's own CRAFT button — which clones those live edits into a new item (`_upgrade_magic_level`, the same machinery the amulet uses) — was **hidden for melee/ranged** and the hook early-returned. So a user who set properties in the editor and then crafted got a blank weapon: the reporter backed out of the editor and used the weapon-select pane's blank CRAFT. Confirmed identical in stable v0.8.0/v0.8.2.
+
+### Changed
+- `crafting_in_modded_dev.lua` — `_set_essence_upgrade_cost` hook: removed the melee/ranged branch that hid the `upgrade_button`; the button now shows **"CRAFT"** for weapons (label logic already handled weapon vs jewellery).
+- `crafting_in_modded_dev.lua` — `_upgrade_magic_level` hook: removed the melee/ranged early-return so weapons fall through to the existing mint-new path (clones `item.properties` / `item.traits` into a fresh `_athanor_inject_item` craft). No new code path — re-enables one that already shipped for the amulet.
+
+### Behavior
+- Working flow is now: open the weave-properties editor on a weapon → set bubbles/trait → press **CRAFT** (in the editor) → a new modded weapon carrying those edits lands in inventory (equip from there). The weapon-select pane's CRAFT still mints a blank weapon as before (pick-and-craft-clean).
+
+### To verify (in-game)
+- Open the modded forge, edit a weapon's properties/trait, press CRAFT in the editor, and confirm the crafted weapon in inventory carries the set properties + trait.
+
+## 0.7.75-dev (2026-06-16) — Fix forge stat-editor crash on weapons whose category isn't a weave category (Trollhammer Torpedo)
+
+### Why
+Friend crash log (nicho, 2026-06-16): selecting the Trollhammer Torpedo (`dr_deus_01`, on Ironbreaker's `slot_ranged`) in the modded forge crashed `hero_window_weave_properties.lua:385: bad argument #1 to 'ipairs' (table expected, got nil)` in `HeroWindowWeaveProperties._setup_menu_options`. Vanilla `on_enter` clones `WeaveWeaponProgression` for the selected weapon and stamps `slot_unlock.category = item_data.property_table_name / trait_table_name`; `_setup_menu_options` then does `ipairs(WeaveTraits.categories[category])` / `WeaveProperties.categories[category]` / `WeaveLoadoutSettings[career].talent_tree[category]` with no nil-check. cim's Athanor forge re-exposes adventure / Chaos Wastes weapons (the Trollhammer's `property_table_name` is `deus_trollhammer_torpedo`) whose table-names aren't keys in those weave tables → nil → `ipairs(nil)` hard-errors. This is a **distinct crash from the v0.7.70 `_forge_preview_unsafe` guard** — it runs in `on_enter` *before* the 3D previewer, so that guard never gets a chance.
+
+### Changed
+- `crafting_in_modded_dev.lua` — new singleton `mod:hook("HeroWindowWeaveProperties", "_setup_menu_options", ...)` (no prior hook on this method) that seeds an empty `{}` pool for every progression category the weave tables don't know about, before vanilla runs. `ipairs({})` is a no-op, so the affected picker renders empty (no weave traits/properties/talents for that weapon) instead of crashing. Idempotent, scoped to the categories in play.
+
+### Tests
+- New `/cim_regression_test` check `weave_category_pool_guard_present` — verifies the seeder is wired and idempotently fills the trait + property pools for an unknown category, then cleans up the synthetic key.
+
+## 0.7.74-dev (2026-06-13) — Fix amulet (weave-properties) crash on adventure career talents (Issue #71)
+
+### Why
+Multi-agent audit 2026-06-13 (root-caused against the attached crash log). Pressing the amulet (open `HeroWindowWeaveProperties` via B → amulet) under the modded forge crashed: `backend_interface_weaves_playfab.lua:1252: attempt to index local 'progression_data' (a nil value)` in `get_talent_required_forge_level`, called from `hero_window_weave_properties.lua:461`. Under `_custom_forge_active` cim feeds the player's loadout talents (which are ADVENTURE career talents, e.g. `mercenary_helborgs_tutelage`) into the weave talent picker. Vanilla `get_talent_required_forge_level` does `progression_data = self._progression_settings.talents[talent_name]` then `progression_data.required_forge_level` — adventure talents have no weave-progression entry, so `progression_data` is nil and the index is a hard crash. cim already guarded the sibling `get_property_required_forge_level` and `get_trait_required_forge_level` (both `return 0` under the modded forge) but missed the talent one.
+
+### Changed
+- `crafting_in_modded_dev.lua` — added the missing `BackendInterfaceWeavesPlayFab.get_talent_required_forge_level` hook returning `0` under `_custom_forge_active` (passthrough otherwise), mirroring the existing property/trait guards. No duplicate-hook conflict (it was previously unhooked).
+
+### Tests
+- New `/cim_regression_test` check `weave_talent_forge_level_guard_present` — source-pattern guard that FAILS if the new hook is removed (needle split across two literals to avoid self-match; no-op when source introspection is unavailable).
+
+### To verify (in-game)
+- Open the modded forge, press B, click the amulet, and confirm the weave-properties editor opens (talent/property/trait sections render) with **no crash**.
+
 ## 0.7.73-dev (2026-06-08) — HDR setup error path: destroy-on-failure sweep + truthful is_in_inn restore (Issue #73)
 
 ### Why

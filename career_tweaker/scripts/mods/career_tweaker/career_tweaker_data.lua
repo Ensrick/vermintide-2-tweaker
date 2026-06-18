@@ -637,6 +637,7 @@ return {
                                     { setting_id = "rework_we_waywatcher_fervent_huntress_passive_ms",  type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_waywatcher_kurnous_reward_5pct",          type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_waywatcher_ricochet_no_ff_5_bounces",     type = "checkbox", default_value = false },
+                                    { setting_id = "rework_we_waywatcher_serrated_shots_all_arrows",    type = "checkbox", default_value = false },
                                 },
                             },
                         },
@@ -726,6 +727,43 @@ return {
                             },
                         },
                     },
+                },
+            },
+            -- ============================================================
+            -- Tourney Balance Testing port (PHASE 1 - default OFF). Applies
+            -- via career_tweaker_tourney.lua. Per-career clean data mutations.
+            -- ============================================================
+            {
+                setting_id = "trn_career_group",
+                type        = "group",
+                sub_widgets = {
+                    { setting_id = "trn_kruber_group", type = "group", sub_widgets = {
+                        { setting_id = "trn_es_mercenary", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_mercenary_tooltip") },
+                        { setting_id = "trn_es_huntsman", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_huntsman_tooltip") },
+                        { setting_id = "trn_es_knight", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_knight_tooltip") },
+                        { setting_id = "trn_es_questingknight", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_questingknight_tooltip") },
+                    } },
+                    { setting_id = "trn_bardin_group", type = "group", sub_widgets = {
+                        { setting_id = "trn_dr_ranger", type = "checkbox", default_value = false, tooltip = mod:localize("trn_dr_ranger_tooltip") },
+                        { setting_id = "trn_dr_ironbreaker", type = "checkbox", default_value = false, tooltip = mod:localize("trn_dr_ironbreaker_tooltip") },
+                        { setting_id = "trn_dr_slayer", type = "checkbox", default_value = false, tooltip = mod:localize("trn_dr_slayer_tooltip") },
+                    } },
+                    { setting_id = "trn_kerillian_group", type = "group", sub_widgets = {
+                        { setting_id = "trn_we_waywatcher", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_waywatcher_tooltip") },
+                        { setting_id = "trn_we_maidenguard", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_maidenguard_tooltip") },
+                        { setting_id = "trn_we_shade", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_shade_tooltip") },
+                        { setting_id = "trn_we_thornsister", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_thornsister_tooltip") },
+                    } },
+                    { setting_id = "trn_saltzpyre_group", type = "group", sub_widgets = {
+                        { setting_id = "trn_wh_bountyhunter", type = "checkbox", default_value = false, tooltip = mod:localize("trn_wh_bountyhunter_tooltip") },
+                        { setting_id = "trn_wh_zealot", type = "checkbox", default_value = false, tooltip = mod:localize("trn_wh_zealot_tooltip") },
+                        { setting_id = "trn_wh_priest", type = "checkbox", default_value = false, tooltip = mod:localize("trn_wh_priest_tooltip") },
+                    } },
+                    { setting_id = "trn_sienna_group", type = "group", sub_widgets = {
+                        { setting_id = "trn_bw_adept", type = "checkbox", default_value = false, tooltip = mod:localize("trn_bw_adept_tooltip") },
+                        { setting_id = "trn_bw_scholar", type = "checkbox", default_value = false, tooltip = mod:localize("trn_bw_scholar_tooltip") },
+                        { setting_id = "trn_bw_necromancer", type = "checkbox", default_value = false, tooltip = mod:localize("trn_bw_necromancer_tooltip") },
+                    } },
                 },
             },
             -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).

@@ -528,6 +528,7 @@ local data = {
                     { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false, tooltip = "any_trait_any_weapon_tooltip" },
                     { setting_id = "tweak_trait_tier_by_rarity", type = "checkbox", default_value = false, tooltip = "tweak_trait_tier_by_rarity_tooltip" },
                     { setting_id = "tweak_shard_strike_duration", type = "numeric", default_value = 16, range = { 1, 16 }, decimals_number = 0, tooltip = "tweak_shard_strike_duration_tooltip" },
+                    { setting_id = "tweak_shadow_skull_stun_sec", type = "numeric", default_value = 2.5, range = { 0.0, 10.0 }, decimals_number = 1, tooltip = "tweak_shadow_skull_stun_sec_tooltip" },
                     {
                         setting_id = "reworks_boons_group",
                         type = "group",
@@ -558,6 +559,7 @@ local data = {
                             -- relationship reads visually in the VMF UI.
                             { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
                             { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
+                            { setting_id = "ct_blessed_bots", type = "checkbox", default_value = false, tooltip = "ct_blessed_bots_tooltip" },
                             { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
                             -- v0.7.120-dev: mutex alternative to mirror. Bots roll INDEPENDENT random boons each
                             -- time the host claims one. Mutex group "bots_boon_mode" — declared in chaos_wastes_tweaker.lua.
@@ -566,6 +568,9 @@ local data = {
                             -- generate a random weapon for the bot's career; upgrade chests upgrade the bot's
                             -- currently-equipped CW weapon to the same target rarity.
                             { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
+                            -- Host-only chat readout: prints which boon each bot receives while
+                            -- mirror/random bot boons are on, so the host can see what bots got.
+                            { setting_id = "announce_bot_boons",               type = "checkbox", default_value = false, tooltip = "announce_bot_boons_tooltip" },
                         },
                     },
                     {
@@ -575,6 +580,7 @@ local data = {
                             { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
                             { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
                             { setting_id = "tweak_home_brewer_potency", type = "checkbox", default_value = false, tooltip = "tweak_home_brewer_potency_tooltip" },
+                            { setting_id = "tweak_adventure_save_trait_chance", type = "numeric", default_value = 25, range = { 0, 100 }, decimals_number = 0, tooltip = "tweak_adventure_save_trait_chance_tooltip" },
                             { setting_id = "tweak_invis_potion_2x", type = "checkbox", default_value = false, tooltip = "tweak_invis_potion_2x_tooltip" },
                             { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
                         },

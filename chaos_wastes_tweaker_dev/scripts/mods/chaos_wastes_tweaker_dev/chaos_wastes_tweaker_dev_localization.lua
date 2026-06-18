@@ -1060,6 +1060,20 @@ local loc = {
     -- v0.7.120-dev: Bot Weapon Upgrade Mirror
     bots_mirror_host_weapon_upgrades = { en = "Shared Reliquaries: Bots Get Host's Weapon Upgrades" },
     bots_mirror_host_weapon_upgrades_tooltip = { en = "Whenever the host opens any Deus weapon reliquary, every bot also receives the equivalent operation:\n - Swap (Melee/Ranged) reliquary: bot receives a freshly-rolled random weapon of the same rarity for its career.\n - Upgrade reliquary (\"temper\"): bot's currently-wielded CW weapon is upgraded to the same target rarity with re-rolled traits/properties.\n\nHost-only. Default: off." },
+    announce_bot_boons = { en = "Announce Bot Boons in Chat" },
+    announce_bot_boons_tooltip = { en = "Host-only. Prints a chat line naming each bot and the boon it received, every time bots are granted boons (only while 'Bots Mirror Host's Boons' or 'Bots Roll Random Boons' is enabled). Shown locally to the host only — clients do not see these lines.\n\nDefault: off." },
+
+    -- Blessed Bots: Survival Boons (any gamemode; _ct_blessed_bots.lua)
+    ct_blessed_bots = { en = "Blessed Bots: Survival Boons" },
+    ct_blessed_bots_tooltip = { en = "Gives every bot three Chaos Wastes survival boons in ANY game mode (not just the Wastes), to keep them alive longer:\n - Ereth Khial's Pride: gain power and health regeneration when all allies are downed.\n - Grimnir's Implacability: at low health, gain attack/movement speed and briefly prevent incoming damage.\n - Morr's Protection: downed friends near the bot become invulnerable.\n\nHost-only (bots exist on the host). EXPERIMENTAL -- verify in-game. Off by default." },
+
+    -- Shadow Homing Skulls curse stun duration (mechanic tweak; ct main lua)
+    tweak_shadow_skull_stun_sec = { en = "Shadow Homing Skulls stun (seconds)" },
+    tweak_shadow_skull_stun_sec_tooltip = { en = "How long the 'Shadow Homing Skulls' Chaos Wastes curse keeps you disabled when a skull hits you. Vanilla is 2.5 seconds. Lower it to soften the curse, raise it to make it nastier. Applies on the host (the disable is server-side). 2.5 = vanilla (no change). Note: the other skull curse, 'Skulls of Fury', is a knockback/stagger with no timed-stun value, so it is not affected." },
+
+    -- Adventure RNG 'save a consumable' trait odds (mechanic tweak; ct main lua)
+    tweak_adventure_save_trait_chance = { en = "Adventure save-item trait chance (percent)" },
+    tweak_adventure_save_trait_chance_tooltip = { en = "Sets the proc chance of the Adventure-mode 'save a consumable' weapon traits -- Home Brewer (potion), Healers Touch (healing item), and Grenadier (grenade). Vanilla is 25 percent each. Raise it (e.g. to 50) to bring these underused traits in line with their Chaos Wastes boon counterparts. This only affects Adventure traits; Chaos Wastes boons are a separate system and are untouched. 25 = vanilla (no change)." },
 
     -- v0.7.89: Grudge Mark Ban Menu (re-instated; previous v0.7.76 implementation
     -- never took effect because terror events capture the spawn func as an upvalue

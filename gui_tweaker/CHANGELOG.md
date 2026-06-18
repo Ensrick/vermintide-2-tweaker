@@ -1,5 +1,57 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.13-dev (2026-06-17) — Fix: view missing required IngameUI contract methods (input_service crash)
+
+v0.2.12 fixed construction (the view now attaches — log confirms `[mt] setup_views: ModTweakerView attached`), but opening it then crashed `ingame_ui.lua: attempt to call method 'input_service' (a nil value)`: IngameUI calls `active_view:input_service()` **unconditionally** every frame (ingame_ui.lua:416/770) and the view didn't implement it.
+
+### Fixed
+- `_mod_tweaker_view.lua` — added the three view-contract methods IngameUI calls unconditionally on the active/new/old view: `input_service()` (returns the view's input service), and no-op `post_update_on_enter(params)` / `post_update_on_exit(params, was_replaced)` (called on every view transition — would have crashed on open/close next). The other contract methods (`current_state` / `disable_toggle_menu` / `hotkey_allowed` / `set_map_interaction_state` / `is_survey_*`) are guarded with `if view.method` in IngameUI and are safely omitted.
+
+## 0.2.12-dev (2026-06-17) — Fix: Mod Tweaker view crashed IngameUI (nil view on open)
+
+In-game test of v0.2.11 crashed on opening the Mod Tweaker: `ingame_ui.lua:625: attempt to index a nil value` (current_view = "mod_tweaker_view"). Root cause: `IngameUI.init` passes the context to `setup_views(ingame_ui_context)` as an **argument** (ingame_ui.lua:107) and does NOT store `self.ingame_ui_context` at that point — the scaffold hook read `self.ingame_ui_context` (nil), so `ModTweakerView:new` threw, the view never attached, and transitioning to the missing view indexed `views[current_view]` = nil → hard crash.
+
+### Fixed
+- `gui_tweaker.lua` — the `setup_views` hook now captures the **`ingame_ui_context` argument** (`function(self, ingame_ui_context)`) and builds the view from it; refuses to attach a context-less view.
+- `gui_tweaker.lua` — the `mod_tweaker_view` transition closure now switches `current_view` only if `self.views.mod_tweaker_view` exists, so a missing view can never crash IngameUI (the ESC entry becomes a no-op instead).
+- `_mod_tweaker_view.lua` — `init` errors clearly on a nil context (caught by the hook's pcall) instead of failing mid-body.
+
+(Unrelated: the log also shows a pre-existing VMF/Loremasters-Armoury tooltip error in `vmf_options_view` via the deprecated `_G.UIResolutionScale_pow2` — not part of gut.)
+
+## 0.2.11-dev (2026-06-17) — Mod Tweaker view: first renderable pass (tasks #6–8)
+
+The Mod Tweaker (the in-game settings menu for all the Tweaker mods, opened from the ESC menu) now actually **renders** — previously the view was a stub and clicking the ESC entry opened nothing. Built from the verified VT2 `OptionsView` contract (read 2026-06-17): borrows the IngameUI renderer, registers a modal input service, draws in one `begin_pass`/`end_pass`, and returns to the ESC menu via `ingame_ui:transition_with_fade("ingame_menu")`.
+
+### Changed
+- **`_mod_tweaker_definitions.lua`** — real scenegraph (root/screen-dim/panel/title/left tab strip/right list/hint) + widget factories (panel, title, hint, tab, checkbox, slider). Deliberately atlas-free (`rect`+`text`+`hotspot` passes only) so the first on-screen pass can't fail on a missing texture; visual polish (proper checkbox/slider art) is a later pass. Per-row/per-tab hotspot styles give correct hit regions.
+- **`_mod_tweaker_view.lua`** — replaced the stub with a working `ModTweakerView`: init borrows the context renderer + registers the `gut_mod_tweaker` input service; `on_enter` shows the cursor + makes the view modal + builds tabs/rows from the registered categories; `update` draws and handles input; checkbox click toggles + persists, slider drag sets value + persists (both through the controller `mod.mod_tweaker` so there's a single registry); `exit` transitions back to the ESC menu. Reads the registry via the controller (NOT a fresh `_mod_tweaker_settings` dofile, which would be empty).
+- **`gui_tweaker.lua`** — registers a dogfood `gut` category (debug-logging checkbox that bridges to VMF + a demo slider) so the view shows real, interactive content end-to-end.
+
+### To verify (in-game)
+- In a mission or the keep, press ESC → click **Mod Tweaker** (above Options). A panel should open with a "Tweaker: GUI" tab on the left and two rows: a Debug-logging checkbox (click toggles ON/OFF) and a demo slider (drag to change the value). ESC closes back to the ESC menu. `/gut_regression_test` still passes the mod_tweaker entry/transition checks.
+
+## 0.2.10-dev (2026-06-16) — `/gut_lua_mem` diagnostic (Lua-heap footprint measurement)
+
+### Why
+A friend (nicho) hit the VT2 hard crash `Not enough memory reserved for heap lua_heap` (reserved 1073741824 = 1 GiB, `heap_allocator.cpp:227`) at mission load while running ~58 mods incl. the now-public Tweaker mods — the Lua heap was pinned at 100% (1 GiB used of 1 GiB). The `lua_atpanic/lua_close` callstack is the symptom, not the cause. To attribute footprint per-mod (which can't be read off source line counts — it's a runtime quantity) we need a live measurement.
+
+### Changed
+- `gui_tweaker.lua` — new `/gut_lua_mem [label]` command: forces a full GC and prints live Lua memory (`collectgarbage("count")`) in MB. Per-mod workflow: disable suspects → launch → load a level → `/gut_lua_mem baseline`; enable one mod → relaunch → `/gut_lua_mem <mod>`; the jump is that mod's footprint. (Lower-bound proxy: the engine `lua_heap` also holds bytecode + C-side Lua structures; compare deltas, not absolutes.)
+
+## 0.2.9-dev (2026-06-16) — Phase 0: fix Versus host-crash in vanilla damage-feedback (UI-absorption groundwork)
+
+### Why
+First step of absorbing NumericUI + UI Tweaks (HideBuffs) into gut against the current GUI. The reported Versus host-crash is a **vanilla** bug, independent of any rendering: `UnitFrameUI.add_damage_feedback` (`unit_frame_ui.lua`) assigns `self._damage_widgets[order_index]` and sets `widget.content.visible = true` (vanilla L1687-1690 / L1699-1702) for a NEW event *before* the over-MAX eviction at the bottom — and that eviction is dead-coded behind `fassert(false)` (vanilla L1724-1725). When more than `#self._damage_widgets` (4 with damage feedback on) distinct damage events are active at once, `order_index` exceeds the pool, the widget is `nil`, and `widget.content.visible = true` is a fatal index-of-nil. On the **host** it crashes the whole session. Reproduced in Versus by a Pactsworn Ratling Gunner's sustained machinegun fire stacking 5+ simultaneous damage messages on one hero frame (crash GUID `59ae9a93-…`, 2026-06-15). NumericUI re-news the vanilla `UnitFrameUI`, keeping this vanilla path live — but the bug is vanilla and the fix is independent of NumericUI.
+
+### Changed
+- `gui_tweaker.lua` — new `mod:hook("UnitFrameUI", "add_damage_feedback", …)` (the mandatory pre-flight grep confirmed gut had no prior `UnitFrameUI` hook). The wrapper drops the **overflow** event before it reaches the nil-widget index — only when the pool is already full AND a new `order_index` would be assigned (a brand-new event, or a re-activated `disabled` one). Existing active events pass through untouched. No vanilla state is mutated (pure pre-call guard; degrades safely if the vanilla shape drifts). The cap is self-healing: vanilla `_update_damage_feedback` removes expired events from `_hash_order` (`table.remove`, vanilla L1819), freeing slots. Perf-gated: the hash/lookup work only runs in the rare at-capacity case. Always-on (a safety guard, not a toggled feature). Decision rule extracted to `mod._gut_damage_feedback_should_drop` for testability.
+
+### Tests
+- New `/gut_regression_test` check `damage_feedback_overflow_guard` — pins the drop/keep decision across boundary cases (full pool + new → drop; free slot + new → keep; existing event → always pass through; empty pool → drop).
+
+### To verify (in-game)
+- Host a Versus match (host-side crash), keep Numeric UI enabled for now, play a Pactsworn Ratling Gunner and hold sustained fire on heroes — confirm **no host crash** (the 5th+ simultaneous damage message is silently dropped instead). Then `/gut_regression_test` → `PASS: damage_feedback_overflow_guard`.
+
 ## 0.2.8-dev (2026-06-07) — HUD drag preserves each widget's vanilla baseline
 
 ### Why

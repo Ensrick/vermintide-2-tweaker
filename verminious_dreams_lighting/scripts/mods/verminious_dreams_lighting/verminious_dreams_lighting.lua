@@ -1,4 +1,5 @@
 local mod = get_mod("verminious_dreams_lighting")
+_MEM_PROBE_T0_VDLS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 local MOD_VERSION = "1.0.6"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
@@ -802,3 +803,5 @@ mod:command("vdl_help", "List Verminious Dreams Lighting commands", function()
     }
     for i = 1, #lines do mod:echo(lines[i]) end
 end)
+
+mod:info("[mem-probe] vdl boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_VDLS) / 1024)

@@ -1,5 +1,113 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.88-dev (2026-06-17) -- Solo & QoL: port of True Solo QoL Tweaks (error-free)
+
+### Why
+Reimplement the useful features of the third-party "True Solo QoL Tweaks" (workshop 1384087820, last updated 2021) as native gt toggles, so it can be dropped. Bonus: the original logs a CareerSettings error every launch (it indexes `career.activated_ability.ability_class` with no nil-check; VT2's Versus entries `vs_undecided`/`spectator` have no `activated_ability`). This port fixes that with a proper nil-guard. New file `_gt_solo_qol.lua`; new "Solo & QoL (from True Solo)" group, all toggles default OFF; Penlight dependency dropped (plain string fns).
+
+### Added (toggles)
+- **Auto-restart mission on team wipe** (`gt_solo_auto_restart_on_wipe`) — on a "lost" end-condition, return `"reload"` instead of going to the keep. `/gt_inn` bails to the keep manually.
+- **Assassin / Packmaster spawn text warnings** (`gt_solo_assassin_text_warning`, `gt_solo_packmaster_text_warning`) — colored ASS!/PACK! count callout in the area-indicator banner. The spawn detector is **merged into the existing `ConflictDirector.spawn_queued_unit` hook** (no duplicate) via `mod._gt_solo_on_spawn_queued`; also hooks `Localize` / `PlayerHud.set_current_location` / `AreaIndicatorUI.update`.
+- **Assassin/Packmaster hero voice callout** (`gt_solo_assassin_hero_vo`) — forces the hero's "I hear a Gutter Runner" / "I see a Skaven slaver" line on spawn.
+- **Disable ult voice line** (`gt_solo_disable_ult_vo`) — the crash-fixed feature. Loops `CareerSettings` with `local aa = career.activated_ability; if aa and aa.ability_class …` (the nil-guard), de-dupes shared ability classes, skips `empire_soldier_tutorial`.
+- **Disable mutator death explosions** (`gt_solo_disable_mutator_explosions`), **disable level intro audio** (`gt_solo_disable_intro_audio`), **disable fog** (`gt_solo_disable_fog`), **disable sun shadows** (`gt_solo_disable_sun_shadows`).
+- **Draw boss-event spheres** (`gt_solo_draw_boss_spheres`) + **boss path progress** (`gt_solo_boss_path_progress`, StreamingInfo-guarded) — share one `EnemyRecycler.update` hook; sphere LineObject recreated on world change (no stale handle, no `on_game_state_changed` clobber).
+
+### Not ported
+- **AUTO_KILL_BOTS** — gt already has "Disable Bots (Solo)" (`gt_no_bots`).
+
+### Notes
+Pre-flight confirmed the only existing-hook collision was `ConflictDirector.spawn_queued_unit` (merged). All other hooks are fresh `(Class, method)` pairs. All feature bodies are pcall-guarded and gate on their toggle (no cost when off).
+
+## v0.2.87-dev (2026-06-17) -- Fly-disable tweak corrected to cover BOTH bosses + both attack paths
+
+Correction to the v0.2.86 fly tweak after deeper source review (user report: Halescourge also has a fly disable). The earlier version only scaled Nurgloth's melee swarm and wrongly claimed Halescourge had no fly attack.
+
+- **Replaced** `gt_nurgloth_fly_stun_sec` (Nurgloth-only seconds slider) with **`gt_fly_disable_mult`** (multiplier, default 1.00 = vanilla) that scales BOTH "cloud of flies" disable paths used by Burblespue Halescourge AND Nurgloth the Eternal:
+  - Nurgloth's close-range fly-swarm BT action — `BreedActions.chaos_exalted_sorcerer_drachenfels.swarm_players.duration` (vanilla 8s; bt_swarm_action.lua:73).
+  - The rare seeking **insect-swarm bomb missile** both bosses fire (`seeking_bomb_missile` -> projectile `insect_swarm_missile_01` -> explosion `chaos_slow_bomb_missile` / `_new` "fly_bomb") — `TrueFlightTemplates.sorcerer_slow_bomb_missile.attached_life_time` (vanilla 10s; true_flight_templates.lua:121, ai_breed_snippets.lua:1091, penny_ai_breed_snippets.lua:178, explosion_templates.lua:1325/1355).
+  - A multiplier (not seconds) because the two paths have different vanilla durations (8 vs 10); 1.00 reproduces vanilla exactly. Both fly-blobs keep health 5, so the disable can still be ended early by killing the cloud — this only scales the max length.
+
+## v0.2.86-dev (2026-06-17) -- Five new bot options + Nurgloth fly-swarm tweak
+
+Five new bot toggles + one boss-mechanic slider, all default OFF, host-side only (bots/wipe checks run on the host), no network registration. New per-frame bot logic is consolidated into the SINGLE existing `PlayerBotBase.update` hook in `_gt_bot_fixes.lua` (no duplicate hook); new standalone hooks are on distinct `(Class, method)` pairs. All source citations verified against the decompiled vanilla source 2026-06-17.
+
+### Bot Options (added to the existing group)
+- **Don't fail the mission while a bot is alive** (`gt_bot_mission_fail_prevention`) — vanilla's wipe check `GameModeHelper.side_is_dead("heroes", ignore_bots=true)` (game_mode_adventure.lua:92) ignores bots, so the run ends when all *humans* are down. Hook forces `ignore_bots=false` for the heroes side so a living bot keeps the run going. Pairs with rescue-awaiting. Experimental.
+- **Bots auto pull-up from ledges** (`gt_bot_ledge_pullup` + delay) — no vanilla self-rescue exists (player_character_state_ledge_hanging.lua:91-111); after the delay we call `StatusUtils.set_pulled_up_network(bot, true, helper)` (status_utils.lua:84), crediting the nearest living ally as helper.
+- **Bots unstick from ladders** (`gt_bot_ladder_unstick` + delay) — detects a stuck ladder transition (`PlayerBotNavigation._current_transition.type == "ladder"`, player_bot_navigation.lua:276-339) and teleports the bot to the followed teammate via the vanilla teleport primitives (bt_bot_teleport_to_ally_action.lua:82-98).
+- **Tighter bot follow distance** (`gt_bot_follow_distance_enabled` + meters) — vanilla snaps a bot back only at >=40 m (`FOLLOW_TELEPORT_DISTANCE_SQ=1600`, bt_bot_conditions.lua:1206). Faithful re-implementation of `BTConditions.should_teleport` with a configurable distance (default 40, set 10 to keep bots close); preserves the go-for-revive exception.
+- **Bots instantly grab targeted items** (`gt_bot_instant_pickup`) — points `interaction_unit`/`forced_pickup_unit` at the bot's live pickup candidate so vanilla's `is_forced_pickup` path in `BTConditions.can_loot` (bt_bot_conditions.lua:877-890) bypasses the 3.2 m walk-up gate. Skipped while aiding. Experimental.
+
+### Boss Mechanic Tweaks (new group)
+- **Nurgloth fly-swarm disable (seconds)** (`gt_nurgloth_fly_stun_sec`) — slider, default = vanilla 8 s. Mutates `BreedActions.chaos_exalted_sorcerer_drachenfels.swarm_players.duration` (breed_chaos_exalted_sorcerer_drachenfels.lua:2018; the disable is the overpowering-blob "cloud of flies", bt_swarm_action.lua:71-77, breakable by killing the blob). Nurgloth-only — Halescourge's signature attack is the vortex, not flies. New module `_gt_boss_tweaks.lua`.
+
+## v0.2.85-dev (2026-06-17) -- Settings logging + bot-rescue diagnostics
+
+Diagnostics only, no gameplay change; all logging debug-gated. (Same change promoted to stable gt v0.2.71-alpha.)
+- **Settings snapshot at load** (`[gt:settings@load] …`) + `/gt_dump_settings` — logs every `setting_id = value` so toggle states (incl. bot toggles) are visible in the console log.
+- **Per-change setting log** (`[gt:setting-changed] <id> = <value>`) in `on_setting_changed`.
+- **Bot-rescue scan diagnostics** (`_gt_bot_fixes.lua`): per-candidate `ready / health_alive / aid_path` + throttled summary (`awaiting=N picked=… not_health_alive=N path_blocked=N`) to pinpoint why a rescue doesn't fire. Verified CW uses `is_ready_for_assisted_respawn` (`deus_spawning.lua:203`, `respawn_handler.lua:502`) and awaiting allies are `HEALTH_ALIVE` (`side_manager.lua:363`), so the repro log reveals which gate fails.
+- **Ironbreaker fix log** when it releases the ult-hold to revive.
+
+## v0.2.84-dev (2026-06-16) -- Bot Options: three AI-teammate behavior fixes
+
+### Why
+Three long-standing bot AI gaps, requested as toggles. All default OFF, host-side only (bots only exist on the host), and none registers a network event or sends an RPC, so none can affect non-modded lobby members. New code in `_gt_bot_fixes.lua`, grouped under a new "Bot Options (AI Teammates)" settings group. Source citations are into the decompiled vanilla source (verified 2026-06-16).
+
+### Fixes
+- **Necromancer bots can hand off potions** (`gt_bot_necro_potion_handoff`). Her career skull (`bw_necromancer_career_utility_weapon`, `is_not_droppable`, `slot_type="potion"`) becomes the PRIMARY item in `slot_potion` at spawn (`simple_inventory_extension.lua:143-154`), so a picked-up potion lands in ADDITIONAL storage. Every handoff check reads only the primary (scoring `player_bot_base.lua:881-888`; give interaction `interactions.lua:1640-1705`), and the skull has no `can_give_other` -> bot never offers. A human swaps past the skull by tapping the potion key; the bot can't. Fix: a throttled `PlayerBotBase.update` hook promotes a stored giveable potion to primary (`swap_equipment_from_storage`, `simple_inventory_extension.lua:2434`) for Necromancer bots, so all vanilla logic works. Gated to real potions (`can_give_other`) so grimoires aren't promoted.
+- **Ironbreaker bots revive during their ult** (`gt_bot_ironbreaker_revive_in_ult`). The IB bot ult holds a `wait_action` (block) for the buff's whole duration (`player_bots_settings.lua` dr_ironbreaker), and `BTConditions.can_activate_ability` short-circuits on `is_using_ability` (`bt_bot_conditions.lua:628`), parking the BT selector on the ability node so the higher-priority revive node (`bt_bot.lua:14-32`) never runs. Fix: hook `can_activate_ability` to return false for an Ironbreaker mid-ult when an ally needs aid, so the bot yields to revive. The ult is a timed buff and keeps running -- not wasted; ability is on cooldown so it won't re-pop.
+- **Bots rescue allies awaiting respawn** (`gt_bot_rescue_awaiting`). `PlayerBotBase._select_ally_by_utility:903` excludes `is_ready_for_assisted_respawn` allies from aid entirely, with no branch to handle them. Fix: wrap the picker; when it finds nothing more urgent, scan for a reachable awaiting-respawn ally and return it relabeled `"knocked_down"`. The revive bot-action has no forced `input` (`player_bots_settings.lua` revive), so the interact fires the CONTEXTUAL interaction, which the engine resolves to `assisted_respawn` (`interactions.lua:562`). The wrapper calls the original first, so it composes with other bot mods. Experimental -- verify in-game.
+
+### To verify
+- **Necromancer:** play/spectate a Necromancer bot, let it pick up a potion; confirm it can hand it to a player who needs one (and isn't permanently holding the skull).
+- **Ironbreaker:** down a teammate while an IB bot's ult is active; the bot should break off to revive instead of standing and blocking.
+- **Rescue:** die and reach the awaiting-respawn state with bots free; a bot should path over and perform the assist-respawn.
+
+## v0.2.83-dev (2026-06-14) -- Floating Damage Numbers (client-side; replaces the crash-prone third-party damage mod)
+
+### Why
+The third-party floating-damage-numbers mod crashed any lobby that contained a player who didn't have it — the classic signature of a mod that registers a VMF network event / sends RPCs to peers with no matching handler. Rather than decompile and patch it, the capability is rebuilt inside gt, networking-free, so it can't crash non-modded lobby members.
+
+### How it works (all engine-native, no custom GUI)
+- **Display:** reuses `DamageNumbersUI` (`scripts/ui/hud_ui/damage_numbers_ui.lua`), which already does world→screen projection + float/crit/fade animation. It's already in the **Adventure** HUD component list, but its `validation_function` only activates it in a mission when `script_data.debug_show_damage_numbers` is set — so we set that flag.
+- **Feed:** reuses `DamageUtils.add_unit_floating_damage_numbers` (`damage_utils.lua:3942`) for color/crit/dot/size + the `add_damage_number` event.
+- **Capture:** merged into the **existing** godmode `DamageUtils.add_damage_network` / `add_damage_network_player` hooks (the no-duplicate-hook rule forbids a second hook on the same `Class.method`), filtered to the local player as attacker.
+- **Why it's crash-proof:** `add_damage_network_player` computes `damage_amount` locally (via `calculate_damage` + `apply_buffs_to_damage`, *before* the `is_server` branch) on host AND client, so accurate numbers need no host round-trip. Feature registers **no** network handlers and sends **no** RPCs.
+
+### Added
+- New module `_gt_damage_numbers.lua` (activation-flag sync + `mod._gt_dn_show` trigger; wraps `on_setting_changed` / `on_game_state_changed` via the chain pattern).
+- Settings group **Floating Damage Numbers**: `gt_damage_numbers_enabled` (default off) with sub-toggle `gt_damage_numbers_include_dots` (default on — also shows DoT ticks & explosions via the `add_damage_network` path).
+
+### Changed
+- The two godmode `DamageUtils` hooks are now consolidated (godmode + damage-number feed) and capture the function's single return `damage_amount`. Behavior-identical for godmode.
+
+### To verify (in-game)
+- Enable the setting, **load a mission** (activation is evaluated at HUD build, so it takes effect on the next map), and confirm numbers float over enemies you hit (crit/headshot emphasized, DoT/explosion numbers grey when the sub-toggle is on).
+- Join/host a lobby with a player who does **not** have gt and confirm no crash (this is the whole point — there is no network traffic from this feature).
+- Toggle the sub-toggle off and confirm only direct weapon hits show numbers.
+
+## v0.2.82-dev (2026-06-13) -- Fix keep-menu-hotkey mid-mission crash (Issue #62) + table-form hook nil-guards (Issue #70.1)
+
+### Why
+Multi-agent audit 2026-06-13.
+
+**Issue #62 (crash) — "Keep Menus in Mission hotkeys causes crash".** The "Keep Menus in Missions" feature used three patches; patch (2) hooked `IngameUI.handle_menu_hotkeys` and unconditionally force-flipped the hotkeys-enabled arg to `true` whenever `mission_inventory_enabled` was on. That enabled EVERY keep hotkey mid-mission, not just inventory — Hero Select / Map / Achievements / Weave Forge / Store each transition to a view that spawns a dedicated `levels/ui_*/world` preview level which is NOT in a mission's package set, so pressing those keys fataled with "Level not loaded" + the `c_api_world.cpp:691` assert (confirmed against the attached crash log; same bug class as the closed cim Issue #50). The flip never reliably opened the inventory either (vanilla `can_interact`/transition gates still blocked it) — the working in-mission inventory path is the separate `/gt_inv` command + `gt_open_inv_hotkey` keybind (direct `handle_transition("hero_view_force")`), which does not depend on this hook.
+
+**Issue #70.1 (hygiene).** Four table-form hooks were registered without an existence guard, inconsistent with the rest of the repo (cf. `career_tweaker_balance.lua:2472`). The targets are boot-loaded vanilla class globals so the unguarded form works in practice; the guard is latent load-order safety only.
+
+### Changed
+- **Removed** the `IngameUI.handle_menu_hotkeys` hotkey-flip hook (Issue #62). `mission_inventory_enabled` still drives the `InventorySettings` game-mode patch (1) and the ESC-menu "Open Inventory" entry (3) — only the crash-causing patch (2) is gone. The feature-overview comment block was updated accordingly.
+- **Nil-guarded** four table-form hooks (Issue #70.1): `CareerExtension.update` (`:3272`), `GenericStatusExtension.add_fatigue_points` (`:3385`), `ProfileRequester.request_profile` + `GameModeInn._cb_start_menu_closed` (`:3456-3457`) now wrap in `if X and X.method then ... end`. Behavior-identical (targets always loaded).
+
+### Tests
+- New `/gt_regression_test` check `gt_no_mission_hotkey_flip` — source-pattern guard that FAILS if the `IngameUI.handle_menu_hotkeys` hook is reintroduced (needle split across two string literals to avoid self-match; degrades to no-op when source introspection is unavailable).
+
+### To verify (in-game — behavior-changing)
+- Mid-mission, press each keep-menu hotkey (Hero Select / Map / Achievements / Weave Forge / Store) and confirm **no crash** (they now no-op, as in vanilla).
+- Confirm `/gt_inv` (and the `gt_open_inv_hotkey` keybind) still opens the inventory mid-mission, and the ESC-menu "Open Inventory" entry still works.
+
 ## v0.2.81-dev (2026-06-08) -- Failnotify hardening (Issue #72): leaving_game guard, unknown-result teardown, ungated F17 warning, test backfill
 
 ### Why

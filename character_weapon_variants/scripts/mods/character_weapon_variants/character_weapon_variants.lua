@@ -1,6 +1,7 @@
 local mod = get_mod("character_weapon_variants")
+_MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.349-dev"
+local MOD_VERSION = "0.1.350-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -6204,16 +6205,16 @@ _create_rapier_template()
 
 local function _detect_companion_mods()
 	local wt = get_mod("wt")
-	local ct = get_mod("cosmetics_tweaker")
+	local cos = get_mod("cosmetics_tweaker")  -- #70: was misnamed `ct` (ct is the chaos_wastes id)
 
 	if wt then
 		mod:info("weapon_tweaker detected")
 	end
-	if ct then
+	if cos then
 		mod:info("cosmetics_tweaker detected")
 	end
 
-	return wt, ct
+	return wt, cos
 end
 
 -- ============================================================
@@ -6394,7 +6395,7 @@ local function _register_variant_skins()
 		-- never uses ammo_unit there). Crash GUID 2df233ae-80f6-40d3-aa58-e98417f2ad8f.
 		-- Now: only default to def.left_hand_unit when base has ammo_unit;
 		-- otherwise leave nil and let vanilla's no-ammo_unit path run.
-		local base = (ItemMasterList and ItemMasterList[def.base_weapon]) or {}
+		local base = (ItemMasterList and rawget(ItemMasterList, def.base_weapon)) or {}
 		local ammo_unit = def.ammo_unit or (base.ammo_unit and def.left_hand_unit)
 		local hud_icon = def.hud_icon or "weapon_generic_icon_axe1h"
 		local inventory_icon = def.inventory_icon or "icon_wpn_dw_shield_01_axe"
@@ -8337,7 +8338,7 @@ local function _register_item(def, backend_id)
 	-- Guarded with `not ItemMasterList[key]` to avoid clobbering anything
 	-- another mod registered (or a previous session's entry that still lives
 	-- across hot-reloads).
-	if ItemMasterList and not ItemMasterList[def.item_key] then
+	if ItemMasterList and not rawget(ItemMasterList, def.item_key) then
 		ItemMasterList[def.item_key] = entry
 	end
 
@@ -8350,7 +8351,7 @@ local function _register_item(def, backend_id)
 	_registered_keys[def.item_key] = backend_id
 	_dbg("[cwv:register_item] event=exit_success key=%s backend_id=%s iml_inserted=1 item_master_list_mirrored=%s",
 		tostring(def and def.item_key), tostring(backend_id),
-		tostring(ItemMasterList and ItemMasterList[def.item_key] ~= nil))
+		tostring(ItemMasterList and rawget(ItemMasterList, def.item_key) ~= nil))
 	return true
 end
 
@@ -9260,7 +9261,7 @@ end)
 -- Init
 -- ============================================================
 
-local _wt, _ct = _detect_companion_mods()
+local _wt, _cos = _detect_companion_mods()
 
 mod:command("cwv", "Character Weapon Variants status", function()
 	mod:echo("Character Weapon Variants v%s", MOD_VERSION)
@@ -9269,7 +9270,7 @@ mod:command("cwv", "Character Weapon Variants status", function()
 	for _ in pairs(_registered_keys) do count = count + 1 end
 	mod:echo("  Registered items: %d", count)
 	mod:echo("  weapon_tweaker: %s", tostring(_wt ~= nil))
-	mod:echo("  cosmetics_tweaker: %s", tostring(_ct ~= nil))
+	mod:echo("  cosmetics_tweaker: %s", tostring(_cos ~= nil))
 	for _, d in ipairs(_variant_definitions) do
 		local status = _registered_keys[d.item_key] and "registered" or "not registered"
 		mod:echo("    %s — %s (%s)", d.item_key, d.display_name, status)
@@ -10169,3 +10170,5 @@ _rt_register("mace_sword_rename_prefix_match", function()
 end)
 
 mod:info("Character Weapon Variants v%s loaded", MOD_VERSION)
+
+mod:info("[mem-probe] cwv boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CWV) / 1024)

@@ -1,6 +1,7 @@
 local mod = get_mod("enemy_tweaker")
 
 local MOD_VERSION = "0.7.5-dev"
+_MEM_PROBE_T0_ET = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([et] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -2830,3 +2831,4 @@ _rt_register("localization_format_safe", function()
         end
     end
 end)
+mod:info("[mem-probe] et boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_ET) / 1024)

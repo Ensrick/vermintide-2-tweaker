@@ -1,6 +1,7 @@
 local mod = get_mod("verminious_dreams_lighting_dev")
 
 local MOD_VERSION = "1.0.7-dev"
+_MEM_PROBE_T0_VDL = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([vdl] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy" — never echo at module load,
@@ -802,3 +803,5 @@ mod:command("vdl_help", "List Verminious Dreams Lighting commands", function()
     }
     for i = 1, #lines do mod:echo(lines[i]) end
 end)
+
+mod:info("[mem-probe] vdl boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_VDL) / 1024)

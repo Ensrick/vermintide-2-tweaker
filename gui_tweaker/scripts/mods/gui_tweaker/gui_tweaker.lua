@@ -1,6 +1,7 @@
 local mod = get_mod("gut")
+_MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.8-dev"
+local MOD_VERSION = "0.2.13-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
@@ -91,6 +92,24 @@ mod:command("gut_regression_test", "GUI tweaker self-check", function()
         end
     end
     mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
+
+mod:command("gut_lua_mem", "Print live Lua heap usage (per-mod memory measurement). Optional label: /gut_lua_mem <label>", function(label)
+    -- Diagnostic for the VT2 1 GiB lua_heap cap crash ("Not enough memory
+    -- reserved for heap lua_heap", reserved 1073741824). Forces a full GC so the
+    -- reading is the LIVE footprint (not transient garbage), then reports
+    -- collectgarbage("count").
+    -- Find a heavy mod: disable all suspects -> launch -> load a level ->
+    --   /gut_lua_mem baseline ; then enable ONE mod -> relaunch -> load a level ->
+    --   /gut_lua_mem <modname>. The jump between readings is that mod's footprint.
+    -- The engine lua_heap holds bytecode + C-side Lua structures ON TOP of this,
+    -- so treat the number as a lower-bound proxy and compare DELTAS, not absolutes.
+    collectgarbage("collect")
+    collectgarbage("collect")
+    local kb = collectgarbage("count")
+    local lbl = (label and label ~= "") and (" | " .. tostring(label)) or ""
+    mod:echo("[lua_mem] %.1f MB live Lua (%.0f KB) -- lua_heap cap is ~1024 MB%s", kb / 1024, kb, lbl)
+    mod:info("[lua_mem] live_lua_mb=%.1f live_lua_kb=%.0f label=%s", kb / 1024, kb, tostring(label or ""))
 end)
 
 _rt_register("dbg_helpers_two_channel", function()
@@ -456,6 +475,69 @@ mod:command("gut_list_loadouts", "List saved loadouts for current career", funct
 end)
 
 -- ============================================================
+-- Versus host-crash fix: UnitFrameUI.add_damage_feedback overflow (v0.2.9, Phase 0)
+-- ============================================================
+-- VANILLA bug (scripts/ui/hud_ui/unit_frame_ui.lua, add_damage_feedback). A NEW
+-- damage-feedback event computes `order_index = #hash_order + 1` and immediately
+-- indexes `self._damage_widgets[order_index]`, then `widget.content.visible = true`
+-- (vanilla L1687-1690 / L1699-1702) -- BEFORE the over-MAX eviction at the bottom
+-- of the function, which is itself dead-coded behind `fassert(false)` (vanilla
+-- L1724-1725). The pool only holds `#self._damage_widgets` widgets (4 when
+-- features_list.damage is on, 0 when off). When more than that many distinct
+-- damage events are active at once, `order_index` exceeds the pool, the lookup
+-- returns nil, and `widget.content.visible = true` is a fatal index-of-nil. On
+-- the HOST this crashes the whole session.
+-- Reproduced in Versus: a Pactsworn Ratling Gunner's sustained machinegun fire
+-- stacks 5+ simultaneous damage-feedback messages on one hero frame
+-- (crash GUID 59ae9a93-..., 2026-06-15; NumericUI re-news the vanilla UnitFrameUI
+-- which keeps this vanilla path live).
+--
+-- Fix: a real wrapper that DROPS the overflow event before it reaches the nil
+-- index -- only when (a) the pool is already full AND (b) a new order_index would
+-- be assigned (a brand-new event, or a re-activated `disabled` one). Existing
+-- active events (the common case -- repeated hits accumulate into one hash) pass
+-- straight through untouched. The cap is self-healing: vanilla
+-- `_update_damage_feedback` removes expired events from `_hash_order`
+-- (table.remove at the remove_time check, vanilla L1819), freeing slots. No
+-- vanilla state is mutated here -- it is a pure pre-call guard that degrades
+-- safely (just stops dropping) if the vanilla shape ever drifts. Perf: the
+-- full_hash/events work only runs in the rare at-capacity case; the common path
+-- is two `#` reads. Always-on (a safety guard, not a toggled feature).
+mod._gut_damage_feedback_should_drop = function(num_active, pool_size, is_new_event)
+    -- Drop iff a NEW order_index would be assigned and it would exceed the
+    -- widget pool (== the vanilla nil-index crash condition).
+    return is_new_event and num_active >= pool_size
+end
+
+mod:hook("UnitFrameUI", "add_damage_feedback", function(func, self, hash, is_local_player, event_type, attacker_player, target_player, damage_amount)
+    local hash_order = self._hash_order
+    local damage_widgets = self._damage_widgets
+    -- Only the at/over-capacity case can crash; skip all work otherwise.
+    if hash_order and damage_widgets and #hash_order >= #damage_widgets then
+        local events = self._damage_events
+        if events then
+            local existing = events[tostring(hash) .. tostring(event_type)]
+            local will_add_new = (not existing) or existing.disabled or false
+            if mod._gut_damage_feedback_should_drop(#hash_order, #damage_widgets, will_add_new and true or false) then
+                return  -- pool full + new event: vanilla would index a nil widget. Drop it.
+            end
+        end
+    end
+    return func(self, hash, is_local_player, event_type, attacker_player, target_player, damage_amount)
+end)
+
+_rt_register("damage_feedback_overflow_guard", function()
+    -- Pins the Versus host-crash fix decision rule across boundary cases.
+    local f = mod._gut_damage_feedback_should_drop
+    if type(f) ~= "function" then return "damage-feedback overflow guard fn missing (Versus host-crash fix reverted?)" end
+    if not f(4, 4, true) then return "must DROP a new event when the 4-widget pool is full (the Versus crash case)" end
+    if not f(5, 4, true) then return "must DROP a new event when active count exceeds the pool" end
+    if not f(0, 0, true) then return "must DROP a new event when the pool is empty (features_list.damage off)" end
+    if f(3, 4, true)     then return "must NOT drop a new event when the pool has a free slot" end
+    if f(9, 4, false)    then return "must NOT drop an existing event -- only new events get a new order_index" end
+end)
+
+-- ============================================================
 -- HUD Customizer (v0.2.0) -- in-game edit-mode + click-and-drag
 -- repositioning of native HUD widgets, persisted per-resolution.
 -- ============================================================
@@ -629,6 +711,35 @@ else
     _dbg_alert("[gui_tweaker] mod_tweaker dofile failed: %s", tostring(ModTweaker))
 end
 
+-- Dogfood category so the view renders real content (and proves the end-to-end:
+-- open -> change -> persist -> on_change). gut's own demo settings live in the
+-- Mod Tweaker keyspace (mt::gut::*); the debug toggle bridges into VMF so it
+-- actually drives gut's logging. Replace/extend once per-mod registration (or
+-- VMF auto-mirror) lands.
+if mod.mod_tweaker and not mod.mod_tweaker:is_registered("gut") then
+    mod.mod_tweaker:register_category({
+        mod_id = "gut",
+        label  = "Tweaker: GUI",
+        widgets = {
+            {
+                setting_id = "mt_debug_logging",
+                type       = "checkbox",
+                label      = "Debug logging",
+                default    = false,
+                on_change  = function(v) mod:set("enable_debug_logging", v and true or false) end,
+            },
+            {
+                setting_id = "mt_demo_slider",
+                type       = "slider",
+                label      = "Demo slider (proof of render)",
+                default    = 5,
+                range      = { 0, 20 },
+                decimals   = 0,
+            },
+        },
+    })
+end
+
 -- ESC menu entry injection. Hook the central layout consumer
 -- (IngameViewLayoutLogic.setup_button_layout) so we catch every layout variant
 -- the engine swaps through: alone / host / client / demo / tutorial / offline /
@@ -678,22 +789,42 @@ local ok_settings_inject, settings_inject_err = pcall(function()
         _dbg("[mt] transition mod_tweaker_view already registered (idempotent)")
         return
     end
-    settings.transitions.mod_tweaker_view = function(self) self.current_view = "mod_tweaker_view" end
+    settings.transitions.mod_tweaker_view = function(self)
+        -- Guard: only switch if the view actually attached. If construction ever
+        -- failed, switching current_view to a missing view makes IngameUI index
+        -- a nil views[current_view] (ingame_ui.lua) and hard-crash. Fall back to
+        -- the ingame menu instead so the ESC entry is a no-op, never a crash.
+        if self.views and self.views.mod_tweaker_view then
+            self.current_view = "mod_tweaker_view"
+        end
+    end
     _dbg("[mt] transition registered: mod_tweaker_view")
 end)
 if not ok_settings_inject then
     _dbg_alert("[mt] transitions injection failed: %s", tostring(settings_inject_err))
 end
 
-mod:hook_safe("IngameUI", "setup_views", function(self)
+-- NOTE the second param: IngameUI.init passes the context to setup_views as an
+-- ARGUMENT (ingame_ui.lua:107) and does NOT store self.ingame_ui_context until
+-- later, so reading self.ingame_ui_context here is nil — that nil context made
+-- ModTweakerView:new throw, the view never attached, and transitioning to the
+-- (missing) view crashed IngameUI at ingame_ui.lua:625. Capture the arg instead.
+mod:hook_safe("IngameUI", "setup_views", function(self, ingame_ui_context)
     if type(self.views) ~= "table" then return end
     if self.views.mod_tweaker_view then return end -- idempotent
+    local ctx = ingame_ui_context or self.ingame_ui_context
+    if not ctx then
+        -- No context this call; don't attach a broken view. A later setup_views
+        -- (or the canonical construction) will have one.
+        _dbg_alert("[mt] setup_views: no ingame_ui_context; deferring view build")
+        return
+    end
     local ok_view, ModTweakerView = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
     if not ok_view or type(ModTweakerView) ~= "table" then
         _dbg_alert("[mt] setup_views: ModTweakerView dofile failed: %s", tostring(ModTweakerView))
         return
     end
-    local ok_new, view_or_err = pcall(ModTweakerView.new, ModTweakerView, self.ingame_ui_context)
+    local ok_new, view_or_err = pcall(ModTweakerView.new, ModTweakerView, ctx)
     if not ok_new then
         _dbg_alert("[mt] setup_views: ModTweakerView:new raised: %s", tostring(view_or_err))
         return
@@ -777,3 +908,5 @@ _rt_register("mod_tweaker_api_present", function()
 end)
 
 mod:info(string.format("gui_tweaker v%s ready (loadout save/restore + HUD edit mode + mod_tweaker api)", MOD_VERSION))
+
+mod:info("[mem-probe] gut boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GUT) / 1024)

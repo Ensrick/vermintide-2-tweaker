@@ -577,4 +577,70 @@ return {
     gc_mitigation_enabled_tooltip = { en = "Tightens Lua's garbage collector so the heap stays close to the live set instead of growing to 2x before collecting. Helps survive a long (~1hr) Chaos Wastes run despite the memory leak under investigation. Buys time when the growth is collectable garbage / GC lag; does NOT help if it's a true reference leak. Slight extra CPU for GC. Turn on for long runs." },
     gc_full_collect_sec = { en = "Force Full GC Every (sec, 0=off)" },
     gc_full_collect_sec_tooltip = { en = "When Aggressive GC is on, force a complete garbage collection this often. Reclaims everything the incremental collector hasn't. Each collect causes a brief frame hitch (bigger heap = longer) but a short stutter beats a crash. 0 = off. Try 30-60 if the heap still climbs." },
+
+    -- Floating Damage Numbers (client-side; reuses the engine DamageNumbersUI).
+    gt_damage_numbers_group = { en = "Floating Damage Numbers" },
+    gt_damage_numbers_enabled = { en = "Show Floating Damage Numbers" },
+    gt_damage_numbers_enabled_tooltip = { en = "Shows floating damage numbers over enemies you damage, using the game's own damage-number display. Fully client-side -- it reads only damage your own client already computes and never sends network messages, so it cannot crash players who don't have the mod. Takes effect on the next mission / map load." },
+    gt_damage_numbers_include_dots = { en = "Include damage-over-time & explosions" },
+    gt_damage_numbers_include_dots_tooltip = { en = "Also show numbers for your damage-over-time ticks (burning, bleed) and explosions (bombs), not just direct weapon hits. Turn off to reduce number spam." },
+
+    -- Bot Options (AI teammate behavior fixes; _gt_bot_fixes.lua). Host-side only.
+    gt_bot_options_group = { en = "Bot Options (AI Teammates)" },
+    gt_bot_necro_potion_handoff = { en = "Necromancer bots can hand off potions" },
+    gt_bot_necro_potion_handoff_tooltip = { en = "Fixes Necromancer bots never giving you a potion. Her career skull permanently sits in the potion slot, blocking the handoff; a human swaps past it by tapping the potion key, but the bot can't. This promotes a picked-up potion to the active slot for Necromancer bots so they can hand it over (and drink it themselves). Host-side only; takes effect on the next bot update. Off by default." },
+    gt_bot_ironbreaker_revive_in_ult = { en = "Ironbreaker bots revive during their ult" },
+    gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "Fixes Ironbreaker bots ignoring downed teammates for the whole duration of their ult. Vanilla keeps the bot blocking/holding the ability for the ult's duration instead of reviving. This lets the bot break off to revive an ally needing aid -- the damage-reduction/taunt buff keeps running, so the ult is not wasted. Host-side only. Off by default." },
+    gt_bot_rescue_awaiting = { en = "Bots rescue allies awaiting respawn" },
+    gt_bot_rescue_awaiting_tooltip = { en = "Lets bots go free a teammate who is waiting to be rescued at a respawn point. Vanilla bots skip awaiting-rescue allies entirely (even after the bot itself respawns), so a dead player can sit unrescued. With this on, a bot with nothing more urgent to do will path over and perform the assisted-respawn interaction. Host-side only. Experimental -- verify in-game. Off by default." },
+
+    gt_bot_mission_fail_prevention = { en = "Don't fail the mission while a bot is alive" },
+    gt_bot_mission_fail_prevention_tooltip = { en = "The run normally ends the moment all HUMAN players are dead or incapacitated, even if a bot is still up. Vanilla's wipe check ignores bots on purpose. With this on, a living bot counts as a living teammate, so the mission only ends when NO teammate (human or bot) remains -- giving a bot a chance to revive a downed/awaiting player and keep the run going. Best paired with 'Bots rescue allies awaiting respawn'. Host-side only. Experimental -- verify in-game. Off by default." },
+
+    gt_bot_ledge_pullup = { en = "Bots auto pull-up from ledges" },
+    gt_bot_ledge_pullup_tooltip = { en = "Vanilla has no self-rescue for a bot left hanging off a ledge -- it hangs until a teammate pulls it up or it falls. With this on, a bot that has been ledge-hanging for the delay below pulls itself up (the nearest living ally is credited as the helper). Host-side only. Off by default." },
+    gt_bot_ledge_pullup_delay = { en = "  Ledge pull-up delay (seconds)" },
+    gt_bot_ledge_pullup_delay_tooltip = { en = "How many seconds a bot must be ledge-hanging before it pulls itself up. Default 3." },
+
+    gt_bot_ladder_unstick = { en = "Bots unstick from ladders (teleport)" },
+    gt_bot_ladder_unstick_tooltip = { en = "Bot pathing can wedge on a ladder. With this on, a bot that has been stuck on a ladder transition for the delay below is teleported to the teammate it is following (or the nearest living ally), using the game's own bot-teleport. Host-side only. Off by default." },
+    gt_bot_ladder_unstick_delay = { en = "  Ladder unstick delay (seconds)" },
+    gt_bot_ladder_unstick_delay_tooltip = { en = "How many seconds a bot must sit on a ladder transition before it is teleported to a teammate. Default 5." },
+
+    gt_bot_follow_distance_enabled = { en = "Tighter bot follow distance" },
+    gt_bot_follow_distance_enabled_tooltip = { en = "Bots normally only snap back to you when they fall ~40 m behind. With this on, they snap back at the shorter distance below instead, keeping them closer. The 'go for a revive' exception is preserved -- a bot heading to aid a downed ally ignores the leash. Host-side only. Off by default." },
+    gt_bot_follow_distance_m = { en = "  Follow snap-back distance (meters)" },
+    gt_bot_follow_distance_m_tooltip = { en = "Distance a bot may fall behind the followed teammate before it teleports back. Vanilla is 40. Set lower (e.g. 10) to keep bots much closer. Values at or above 40 leave vanilla behavior unchanged. Default 40." },
+
+    gt_bot_instant_pickup = { en = "Bots instantly grab targeted items" },
+    gt_bot_instant_pickup_tooltip = { en = "Bots normally have to walk within ~3 m of an item before they can pick it up. With this on, a bot grabs its current targeted/pinged pickup from where it stands (using the game's own auto-place failsafe) instead of walking over. Skipped while the bot is busy reviving. Host-side only. EXPERIMENTAL -- verify in-game. Off by default." },
+
+    gt_boss_tweaks_group = { en = "Boss Mechanic Tweaks" },
+    gt_fly_disable_mult = { en = "Fly disable duration (Halescourge/Nurgloth) x" },
+    gt_fly_disable_mult_tooltip = { en = "Scales how long the 'cloud of flies' disable from Burblespue Halescourge and Nurgloth the Eternal keeps you locked up. 1.00 = vanilla (unchanged); lower it to soften the disable, raise it to make it nastier. One multiplier covers both fly attacks: Nurgloth's close-range fly-swarm (vanilla 8s) and the rare seeking insect-swarm bomb missile both bosses can throw (vanilla 10s). You or a teammate can still end it early by killing the fly cloud -- this only scales the maximum length. Default 1.00." },
+
+    -- Solo & QoL (ported from True Solo QoL Tweaks; _gt_solo_qol.lua). Host-side, default OFF.
+    gt_solo_group = { en = "Solo & QoL (from True Solo)" },
+    gt_solo_auto_restart_on_wipe = { en = "Auto-restart mission on team wipe" },
+    gt_solo_auto_restart_on_wipe_tooltip = { en = "When the whole team is dead/down (a 'lost' end condition), restart the mission in place instead of returning to the keep -- ideal for solo practice and speedrun resets. Use the '/gt_inn' chat command to deliberately bail back to the keep while this is on. Host-side. Off by default." },
+    gt_solo_assassin_text_warning = { en = "Assassin spawn warning (on-screen text)" },
+    gt_solo_assassin_text_warning_tooltip = { en = "Flashes a colored 'ASS!' callout (with a live count) in the on-screen area-indicator text whenever a Gutter Runner is queued to spawn. Reuses the location-name banner, so normal area names are hidden while this (or the packmaster warning) is on. Host-side. Off by default." },
+    gt_solo_packmaster_text_warning = { en = "Packmaster spawn warning (on-screen text)" },
+    gt_solo_packmaster_text_warning_tooltip = { en = "Flashes a colored 'PACK!' callout (with a live count) in the on-screen area-indicator text whenever a Packmaster is queued to spawn. Reuses the location-name banner, so normal area names are hidden while this (or the assassin warning) is on. Host-side. Off by default." },
+    gt_solo_assassin_hero_vo = { en = "Assassin/Packmaster hero voice callout" },
+    gt_solo_assassin_hero_vo_tooltip = { en = "Forces your hero to say their 'I hear a Gutter Runner' / 'I see a Skaven slaver' line the instant one spawns, even when solo. Host-side. Off by default." },
+    gt_solo_disable_ult_vo = { en = "Disable your ult voice line" },
+    gt_solo_disable_ult_vo_tooltip = { en = "Silences your own character's voice line when you activate your career ultimate. (This is the feature whose vanilla True-Solo version logged a harmless CareerSettings error every launch -- this reimplementation fixes that with a proper nil-guard for the Versus career entries.) Off by default." },
+    gt_solo_disable_mutator_explosions = { en = "Disable mutator death explosions" },
+    gt_solo_disable_mutator_explosions_tooltip = { en = "Removes the purple 'explosive' burst that elites/specials leave on death under the Explosive Boons / mutator (generic_mutator_explosion family). Off by default." },
+    gt_solo_disable_intro_audio = { en = "Disable level intro audio" },
+    gt_solo_disable_intro_audio_tooltip = { en = "Skips the level-intro narration/audio that plays on the loading screen. (Separate from gt's 'disable intro monologue' / 'skip cutscenes'.) Off by default." },
+    gt_solo_disable_fog = { en = "Disable fog" },
+    gt_solo_disable_fog_tooltip = { en = "Sets the level's fog to off for clearer visibility (ShadingEnvironment fog_enabled = 0). Purely visual, client-side. Off by default." },
+    gt_solo_disable_sun_shadows = { en = "Disable sun shadows" },
+    gt_solo_disable_sun_shadows_tooltip = { en = "Turns off sun-cast shadows for clearer visibility / a small perf gain (ShadingEnvironment sun_shadows_enabled = 0). Purely visual, client-side. Off by default." },
+    gt_solo_draw_boss_spheres = { en = "Draw boss-event spheres (debug)" },
+    gt_solo_draw_boss_spheres_tooltip = { en = "Draws red wireframe spheres at the boss/main-path event positions on the level (debug/streamer aid). Off by default." },
+    gt_solo_boss_path_progress = { en = "Boss path progress readout (needs StreamingInfo)" },
+    gt_solo_boss_path_progress_tooltip = { en = "Feeds the boss main-path activation distance (Next/Current/Delta) to the StreamingInfo overlay mod. Does nothing unless StreamingInfo is installed. Off by default." },
 }

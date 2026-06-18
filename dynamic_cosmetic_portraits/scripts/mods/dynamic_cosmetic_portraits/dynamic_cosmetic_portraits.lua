@@ -1,4 +1,5 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
+_MEM_PROBE_T0_DCP = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 local MOD_VERSION = "0.1.14-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
@@ -755,3 +756,5 @@ mod.on_unload = function()
     _restore_portrait_settings()
     mod:info("[unload] dynamic_cosmetic_portraits unloading")
 end
+
+mod:info("[mem-probe] dcp boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_DCP) / 1024)

@@ -1,6 +1,7 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.81-dev"
+local MOD_VERSION = "0.2.88-dev"
+_MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
 -- needing access to this file-local. Mirrors the same pattern lt used
@@ -90,6 +91,37 @@ local function _settings_fingerprint()
 end
 
 mod:info("[gt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+
+-- v0.2.85-dev: full settings snapshot to the log (debug-gated). Logs every
+-- setting_id = current value so active toggle states are visible when debugging
+-- (e.g. confirming a HOST had a bot toggle ON). Paired with the per-change log
+-- in on_setting_changed. Fires at load and on demand via /gt_dump_settings.
+local function _log_settings_snapshot(reason)
+    if not mod:get("enable_debug_logging") then return end
+    local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return end
+    local keys = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    table.sort(keys)
+    local parts = {}
+    for _, k in ipairs(keys) do
+        parts[#parts + 1] = k .. "=" .. tostring(mod:get(k))
+    end
+    mod:info("[gt:settings@%s] %s", reason or "load", table.concat(parts, "; "))
+end
+mod._gt_log_settings_snapshot = _log_settings_snapshot
+_log_settings_snapshot("load")
+mod:command("gt_dump_settings", "Log all gt settings + current values (needs Debug Logging on)", function()
+    _log_settings_snapshot("command")
+    mod:echo("[gt] settings snapshot written to console log (if Debug Logging is on).")
+end)
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable
@@ -862,8 +894,11 @@ mod:command("noclip", "Toggle noclip (fly through walls)", function() mod.gt_noc
 --   (1) InventorySettings.inventory_loadout_access_supported_game_modes —
 --       hero_view.lua:323 early-returns on adventure/deus and the loadout
 --       panel never inits without this.
---   (2) IngameUI.handle_menu_hotkeys — flip `hotkeys_enabled` to true so
---       the I/H/M/O/C hotkeys actually fire transitions during a mission.
+--   (2) [REMOVED v0.2.82-dev, Issue #62] formerly flipped the hotkeys-enabled
+--       arg to true in IngameUI.handle_menu_hotkeys — but that enabled the
+--       H/M/O/C/K view hotkeys too, which spawn unloaded ui_* preview worlds
+--       mid-mission and crash. In-mission inventory now opens via the /gt_inv
+--       direct transition (see the "Open Inventory In Mission" block below).
 --   (3) menu_layouts.in_game.{alone,host,client} — adds an "Open Inventory"
 --       entry to the ESC menu as a fallback for players who don't recall
 --       the hotkey.
@@ -933,18 +968,19 @@ end
 
 _patch_inventory_access()
 
--- ingame_ui.lua:660 calls handle_menu_hotkeys with
--- `enable_hotkeys = is_in_inn and not disable_ingame_ui and not in_score_screen`.
--- Force the `hotkeys_enabled` arg true so the keep hotkeys (whatever the
--- player has them bound to) fire during missions too. The function still
--- bails on a missing player_unit, score-screen, or pending transition,
--- so end-of-level and respawn states remain protected.
-mod:hook("IngameUI", "handle_menu_hotkeys", function(func, self, dt, input_service, hotkeys_enabled, menu_active)
-    if mod:get("mission_inventory_enabled") then
-        hotkeys_enabled = true
-    end
-    return func(self, dt, input_service, hotkeys_enabled, menu_active)
-end)
+-- REMOVED v0.2.82-dev (Issue #62): the legacy hook here force-flipped the
+-- hotkeys-enabled arg of IngameUI.handle_menu_hotkeys to true mid-mission,
+-- which enabled EVERY keep hotkey — not just inventory. Hero Select / Map /
+-- Achievements / Weave Forge / Store each spawn a dedicated `levels/ui_*/world`
+-- preview level that is NOT in a mission's package set, so pressing those keys
+-- mid-mission fatally tried to spawn an unloaded level (Lua error "Level not
+-- loaded" + c_api_world.cpp:691 assert; same class as cim Issue #50). The flip
+-- never reliably opened the INVENTORY anyway (vanilla can_interact / transition
+-- gates still blocked it). In-mission inventory access is the /gt_inv command +
+-- gt_open_inv_hotkey keybind below (direct handle_transition("hero_view_force")),
+-- which does not depend on this hook. `mission_inventory_enabled` still drives
+-- the InventorySettings patch (1) and the ESC-menu entry (3); only patch (2) is
+-- gone. Guarded by the gt_no_mission_hotkey_flip regression test.
 
 -- CLARIFY: tp is forcibly cleared on every state change (level transition,
 -- etc.) because the engine reinitializes the FP system. The
@@ -1008,6 +1044,9 @@ mod.on_game_state_changed = function(status, state_name)
 end
 
 mod.on_setting_changed = function(setting_id)
+    -- v0.2.85-dev: log every toggle/value change (debug-gated) so the log shows
+    -- exactly when a setting flips and to what — pairs with the load snapshot.
+    _dbg("[gt:setting-changed] %s = %s", tostring(setting_id), tostring(mod:get(setting_id)))
     if setting_id == "mission_inventory_enabled" then
         _patch_inventory_access()
     elseif setting_id == "tp_camera_enabled" then
@@ -1841,14 +1880,36 @@ mod:hook("GenericStatusExtension", "update_falling", function(func, self, t)
     return func(self, t)
 end)
 
-mod:hook("DamageUtils", "add_damage_network", function(func, attacked_unit, ...)
+-- CONSOLIDATED HOOK (godmode + floating damage numbers). Per the no-duplicate-
+-- hook rule, the Floating Damage Numbers feature (_gt_damage_numbers.lua) does
+-- NOT add its own hook on these DamageUtils methods -- it feeds off these two.
+-- This path (add_damage_network) carries DoTs, explosions (bombs) and other
+-- already-final damage values; the number trigger is gated behind the
+-- include-dots sub-toggle. damage_amount is the function's single return value.
+mod:hook("DamageUtils", "add_damage_network", function(func, attacked_unit, attacker_unit, original_damage_amount, hit_zone_name, damage_type, ...)
     if _godmode and _is_local_player_unit(attacked_unit) then return 0 end
-    return func(attacked_unit, ...)
+    local damage_amount = func(attacked_unit, attacker_unit, original_damage_amount, hit_zone_name, damage_type, ...)
+    if mod._gt_dn_enabled and mod._gt_dn_include_dots and mod._gt_dn_show
+       and _is_local_player_unit(attacker_unit) then
+        mod._gt_dn_show(attacked_unit, damage_type, damage_amount, nil)
+    end
+    return damage_amount
 end)
 
-mod:hook("DamageUtils", "add_damage_network_player", function(func, damage_profile, target_index, power_level, attacked_unit, ...)
+-- CONSOLIDATED HOOK (godmode + floating damage numbers). This is the player-
+-- weapon path: damage_amount is computed locally on host AND client (via
+-- calculate_damage + apply_buffs_to_damage, before the is_server branch), so the
+-- numbers are accurate either way with zero networking -- which is exactly why
+-- this feature can't crash lobby members who lack the mod. damage_type=nil tells
+-- the vanilla helper to treat it as a normal (non-dot) direct hit. Single return.
+mod:hook("DamageUtils", "add_damage_network_player", function(func, damage_profile, target_index, power_level, attacked_unit, attacker_unit, hit_zone_name, hit_position, attack_direction, damage_source, hit_ragdoll_actor, boost_curve_multiplier, is_critical_strike, ...)
     if _godmode and _is_local_player_unit(attacked_unit) then return 0 end
-    return func(damage_profile, target_index, power_level, attacked_unit, ...)
+    local damage_amount = func(damage_profile, target_index, power_level, attacked_unit, attacker_unit, hit_zone_name, hit_position, attack_direction, damage_source, hit_ragdoll_actor, boost_curve_multiplier, is_critical_strike, ...)
+    if mod._gt_dn_enabled and mod._gt_dn_show
+       and _is_local_player_unit(attacker_unit) then
+        mod._gt_dn_show(attacked_unit, nil, damage_amount, is_critical_strike)
+    end
+    return damage_amount
 end)
 
 -- Block disabler-state transitions on the local player while godmode is on.
@@ -1899,9 +1960,13 @@ end)
 -- enemies only. Pair with `gt god` if you want existing enemies to ignore
 -- you while you reach a cleaner area.
 
-mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, ...)
+mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, breed, ...)
     if mod:get("disable_enemy_spawns") then return end
-    return func(self, ...)
+    -- Solo/QoL: assassin/packmaster spawn text warning. Merged here because VMF
+    -- drops a 2nd hook on the same Class.method; the detector lives in
+    -- _gt_solo_qol.lua and no-ops unless one of its warning toggles is on.
+    if mod._gt_solo_on_spawn_queued then mod._gt_solo_on_spawn_queued(self, breed) end
+    return func(self, breed, ...)
 end)
 
 mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, ...)
@@ -3269,14 +3334,18 @@ mod._gt_clamp_cooldowns = function(career_ext, max_seconds)
     end
 end
 
-mod:hook_safe(CareerExtension, "update", function(self, unit, input, dt, context, t)
-    if mod:get("ult_player_cap_enabled") and self.player and self.player:is_player_controlled() then
-        mod._gt_clamp_cooldowns(self, mod:get("ult_player_cap_value") or 0)
-    end
-    if mod:get("ult_bot_cap_enabled") and self.player and not self.player:is_player_controlled() then
-        mod._gt_clamp_cooldowns(self, mod:get("ult_bot_cap_value") or 0)
-    end
-end)
+-- #70: nil-guard boot-loaded class globals before table-form hooks (defensive
+-- load-order consistency; these are always loaded so the guard never fails).
+if CareerExtension and CareerExtension.update then
+    mod:hook_safe(CareerExtension, "update", function(self, unit, input, dt, context, t)
+        if mod:get("ult_player_cap_enabled") and self.player and self.player:is_player_controlled() then
+            mod._gt_clamp_cooldowns(self, mod:get("ult_player_cap_value") or 0)
+        end
+        if mod:get("ult_bot_cap_enabled") and self.player and not self.player:is_player_controlled() then
+            mod._gt_clamp_cooldowns(self, mod:get("ult_bot_cap_value") or 0)
+        end
+    end)
+end
 
 mod:command("gt_ultreset", "Reset your ultimate (set cooldown to 0)", function() mod.gt_ult_reset() end)
 
@@ -3382,10 +3451,12 @@ end
 -- Always-on wrapper. When the flag is off, the closure passes through to the
 -- original; when on, it short-circuits so fatigue cost calls never deplete
 -- the stamina bar. Avoids re-registering hooks (VMF errors on duplicates).
-mod:hook(GenericStatusExtension, "add_fatigue_points", function(func, ...)
-    if _gt_stamina_active then return end
-    return func(...)
-end)
+if GenericStatusExtension and GenericStatusExtension.add_fatigue_points then
+    mod:hook(GenericStatusExtension, "add_fatigue_points", function(func, ...)
+        if _gt_stamina_active then return end
+        return func(...)
+    end)
+end
 
 mod:command("gt_stamina", "Toggle infinite stamina (zero fatigue cost on blocks/dodges/pushes)", function()
     mod.gt_infinite_stamina_toggle()
@@ -3453,8 +3524,8 @@ mod.gt_sync_crit_default_for_career = function()
     mod:set("base_crit_chance", pct)
 end
 
-mod:hook_safe(ProfileRequester, "request_profile", function() mod.gt_sync_crit_default_for_career() end)
-mod:hook_safe(GameModeInn,      "_cb_start_menu_closed", function() mod.gt_sync_crit_default_for_career() end)
+if ProfileRequester and ProfileRequester.request_profile then mod:hook_safe(ProfileRequester, "request_profile", function() mod.gt_sync_crit_default_for_career() end) end
+if GameModeInn and GameModeInn._cb_start_menu_closed then mod:hook_safe(GameModeInn,      "_cb_start_menu_closed", function() mod.gt_sync_crit_default_for_career() end) end
 
 -- ---------- 5.5 Movement Speed Slider -----------------------
 
@@ -6129,6 +6200,28 @@ _rt_register("ai_locomotion_override_set_and_cleared", function()
     end
 end)
 
+_rt_register("gt_no_mission_hotkey_flip", function()
+    -- Issue #62 (2026-05-28): a legacy hook force-set the hotkeys-enabled arg of
+    -- IngameUI.handle_menu_hotkeys to true mid-mission, enabling crash-prone keep
+    -- view hotkeys (Hero Select / Map / etc. spawn unloaded ui_* preview worlds).
+    -- Removed in v0.2.82-dev. This source-pattern guard fails if that hook is
+    -- reintroduced. The needle is assembled from two literals so this test's own
+    -- source does not self-match. Degrades to a no-op when source introspection
+    -- is unavailable (deploy/bundle paths).
+    local ok, info = pcall(debug.getinfo, mod.gt_open_mission_inventory or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local needle = 'mod:hook("' .. 'IngameUI", "handle_menu_hotkeys"'
+    if txt:find(needle, 1, true) then
+        return "Issue #62 regression: the IngameUI handle_menu_hotkeys hook was reintroduced (crash-prone mid-mission hotkey flip)"
+    end
+end)
+
 _rt_register("gt_cs_is_in_level_prefix_match", function()
     -- Issue #59 (2026-05-26): _gt_cs_is_in_level("dlc_castle") used to be
     -- `level_key == level_name` (exact-match). In CW variants of the same
@@ -6320,6 +6413,28 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_kick_idle")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_motd")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_modded_manifest")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal")
+-- Floating Damage Numbers (client-side; reuses the engine DamageNumbersUI HUD
+-- component + DamageUtils.add_unit_floating_damage_numbers). Wraps
+-- on_setting_changed / on_game_state_changed and is fed by the consolidated
+-- DamageUtils hooks above. No network registration -> can't crash non-modded
+-- lobby members.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_damage_numbers")
+
+-- Bot Options: Necromancer potion handoff, Ironbreaker revive-during-ult,
+-- rescue allies awaiting respawn. Host-side bot AI fixes; no network registration.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_fixes")
+
+-- Boss mechanic tweaks (Nurgloth fly-swarm disable duration). Load-time data
+-- mutation of BreedActions; no network registration.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_boss_tweaks")
+
+-- Solo & QoL: error-free reimplementation of True Solo QoL Tweaks features
+-- (auto-restart on wipe, assassin/packmaster warnings, disable ult VO/fog/
+-- shadows/mutator-explosions/intro-audio, boss path draw). Exposes
+-- mod._gt_solo_on_spawn_queued (called from the ConflictDirector hook above).
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_solo_qol")
+
 -- Self-refreshing vanilla-name localization dump (feeds tools/gen-name-map).
 -- Loads last so it wraps the already-installed mod.on_game_state_changed chain.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_name_dump")
+mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GT) / 1024)

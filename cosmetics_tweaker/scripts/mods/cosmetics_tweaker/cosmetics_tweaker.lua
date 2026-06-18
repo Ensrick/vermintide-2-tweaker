@@ -43,6 +43,7 @@ local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
 local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 
 local MOD_VERSION = "0.9.34-dev"
+_MEM_PROBE_T0_COS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([cosmetics] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -7775,4 +7776,5 @@ _rt_register("localization_format_safe", function()
             end
         end
     end
+mod:info("[mem-probe] cos boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_COS) / 1024)
 end)

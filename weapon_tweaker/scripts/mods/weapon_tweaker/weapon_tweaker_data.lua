@@ -1434,8 +1434,6 @@ local data = {
                     { setting_id = "authentic_brace_of_pistols", type = "checkbox", default_value = false },
                     { setting_id = "moonfire_cosmetic_puff", type = "checkbox", default_value = false },
                     { setting_id = "moonfire_aoe_revert", type = "checkbox", default_value = false },
-                    { setting_id = "kruber_longbow_disable_zoom", type = "checkbox", default_value = false },
-                    { setting_id = "kruber_longbow_manual_zoom", type = "checkbox", default_value = false },
                 },
             },
             -- ============================================================

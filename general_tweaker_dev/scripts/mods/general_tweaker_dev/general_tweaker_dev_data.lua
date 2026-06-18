@@ -532,6 +532,26 @@ return {
                 },
             },
             {
+                setting_id  = "gt_damage_numbers_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_damage_numbers_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_damage_numbers_enabled_tooltip"),
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_damage_numbers_include_dots",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = mod:localize("gt_damage_numbers_include_dots_tooltip"),
+                            },
+                        },
+                    },
+                },
+            },
+            {
                 setting_id  = "gt_cs_group",
                 type        = "group",
                 sub_widgets = {
@@ -824,6 +844,122 @@ return {
                 range         = { 0, 120 },
                 decimals_number = 0,
                 tooltip       = mod:localize("gc_full_collect_sec_tooltip"),
+            },
+            -- Bot Options -- AI teammate behavior fixes (see _gt_bot_fixes.lua).
+            -- All default OFF; host-side only (bots exist on the host), no
+            -- network registration so they can't affect non-modded peers.
+            {
+                setting_id  = "gt_bot_options_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_bot_necro_potion_handoff",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_necro_potion_handoff_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_ironbreaker_revive_in_ult",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_ironbreaker_revive_in_ult_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_rescue_awaiting",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_rescue_awaiting_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_mission_fail_prevention",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_mission_fail_prevention_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_ledge_pullup",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_ledge_pullup_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_bot_ledge_pullup_delay",
+                        type            = "numeric",
+                        default_value   = 3.0,
+                        range           = { 1.0, 10.0 },
+                        decimals_number = 1,
+                        tooltip         = mod:localize("gt_bot_ledge_pullup_delay_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_ladder_unstick",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_ladder_unstick_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_bot_ladder_unstick_delay",
+                        type            = "numeric",
+                        default_value   = 5.0,
+                        range           = { 2.0, 20.0 },
+                        decimals_number = 1,
+                        tooltip         = mod:localize("gt_bot_ladder_unstick_delay_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_follow_distance_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_follow_distance_enabled_tooltip"),
+                    },
+                    {
+                        setting_id      = "gt_bot_follow_distance_m",
+                        type            = "numeric",
+                        default_value   = 40.0,
+                        range           = { 10.0, 50.0 },
+                        decimals_number = 1,
+                        tooltip         = mod:localize("gt_bot_follow_distance_m_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_instant_pickup",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_instant_pickup_tooltip"),
+                    },
+                },
+            },
+            -- Boss Mechanic Tweaks (see _gt_boss_tweaks.lua). Load-time data
+            -- mutation; host-side, no network registration.
+            {
+                setting_id  = "gt_boss_tweaks_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id      = "gt_fly_disable_mult",
+                        type            = "numeric",
+                        default_value   = 1.0,
+                        range           = { 0.0, 3.0 },
+                        decimals_number = 2,
+                        tooltip         = mod:localize("gt_fly_disable_mult_tooltip"),
+                    },
+                },
+            },
+            -- Solo & QoL (ported from True Solo QoL Tweaks; see _gt_solo_qol.lua).
+            -- All default OFF. AUTO_KILL_BOTS not ported -- use "Disable Bots (Solo)".
+            {
+                setting_id  = "gt_solo_group",
+                type        = "group",
+                sub_widgets = {
+                    { setting_id = "gt_solo_auto_restart_on_wipe",       type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_auto_restart_on_wipe_tooltip") },
+                    { setting_id = "gt_solo_assassin_text_warning",      type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_assassin_text_warning_tooltip") },
+                    { setting_id = "gt_solo_packmaster_text_warning",    type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_packmaster_text_warning_tooltip") },
+                    { setting_id = "gt_solo_assassin_hero_vo",           type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_assassin_hero_vo_tooltip") },
+                    { setting_id = "gt_solo_disable_ult_vo",             type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_ult_vo_tooltip") },
+                    { setting_id = "gt_solo_disable_mutator_explosions", type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_mutator_explosions_tooltip") },
+                    { setting_id = "gt_solo_disable_intro_audio",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_intro_audio_tooltip") },
+                    { setting_id = "gt_solo_disable_fog",                type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_fog_tooltip") },
+                    { setting_id = "gt_solo_disable_sun_shadows",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_sun_shadows_tooltip") },
+                    { setting_id = "gt_solo_draw_boss_spheres",          type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_draw_boss_spheres_tooltip") },
+                    { setting_id = "gt_solo_boss_path_progress",         type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_boss_path_progress_tooltip") },
+                },
             },
         },
     },

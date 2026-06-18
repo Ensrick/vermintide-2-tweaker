@@ -1047,6 +1047,8 @@ local loc = {
     -- v0.7.120-dev: Bot Weapon Upgrade Mirror
     bots_mirror_host_weapon_upgrades = { en = "Shared Reliquaries: Bots Get Host's Weapon Upgrades" },
     bots_mirror_host_weapon_upgrades_tooltip = { en = "Whenever the host opens any Deus weapon reliquary, every bot also receives the equivalent operation:\n - Swap (Melee/Ranged) reliquary: bot receives a freshly-rolled random weapon of the same rarity for its career.\n - Upgrade reliquary (\"temper\"): bot's currently-wielded CW weapon is upgraded to the same target rarity with re-rolled traits/properties.\n\nHost-only. Default: off." },
+    announce_bot_boons = { en = "Announce Bot Boons in Chat" },
+    announce_bot_boons_tooltip = { en = "Host-only. Prints a chat line naming each bot and the boon it received, every time bots are granted boons (only while 'Bots Mirror Host's Boons' or 'Bots Roll Random Boons' is enabled). Shown locally to the host only — clients do not see these lines.\n\nDefault: off." },
 
     -- v0.7.89: Grudge Mark Ban Menu (re-instated; previous v0.7.76 implementation
     -- never took effect because terror events capture the spawn func as an upvalue

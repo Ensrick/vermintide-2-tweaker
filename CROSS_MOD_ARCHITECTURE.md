@@ -267,7 +267,9 @@ Full design in `modded_progression/PLAN.md`. Key architectural points relevant t
 - **PlayFab commits remain blocked** in modded (vanilla behavior at `playfab_mirror_base.lua:2826,2839,2857`). `mp` writes local-only.
 - **Persistence:** mirror state is overlaid from VMF settings on game-start, re-serialized on every mutation. Three starting-state options (fresh / level 35 default / level 35 with all cosmetic unlocks).
 
-### Sibling API
+### Sibling API (planned — not yet wired)
+
+> **Status (verified 2026-06-13, Issue #70.3):** `modded_progression` (`mp`) **exports** this API (`mp.is_unlocked` / `grant_item` / `spend` / `credit` / `has_currency`, defined in `modded_progression.lua`), but **no mod currently consumes it** — a repo-wide grep for `get_mod("mp")` outside `modded_progression/` returns zero hits. The signatures below and the per-mod gating in the next section are the intended design contract, not live behavior. Don't assume an installed `mp` changes any sibling's unlock gating until the consumer side is wired.
 
 ```lua
 local mp = get_mod("mp")
@@ -280,7 +282,7 @@ if mp then
 end
 ```
 
-### Sibling-specific changes when `mp` is installed
+### Sibling-specific changes when `mp` is installed (planned — see status note above)
 
 - **character_weapon_variants:** `ItemMasterList[variant_key].can_wield` returns `false` until `mp.is_unlocked(variant_key)`. Variants ship locked; earned via loot chests, challenge rewards, Lohner's, mission completion. Without `mp`, current free-unlock behavior remains.
 - **cosmetics_tweaker:** Custom illusions, shield options, portraits gate on `mp.is_unlocked(key)`. Without `mp`, current free-unlock behavior remains.

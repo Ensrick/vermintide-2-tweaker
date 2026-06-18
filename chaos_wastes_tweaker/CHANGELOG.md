@@ -1,5 +1,59 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.128-beta (2026-06-16) — Curse-banner crash fix reworked to a data backfill (kills the "trying to hook object that doesn't exist: DeusCurseUI" error)
+
+Cherry-picked from `ct_dev` v0.7.139-dev.
+
+### Why
+The v0.7.126-beta curse-crash fix hooked `DeusCurseUI._update_description_widget`, but that class lives in `scripts/ui/hud_ui/` and only loads inside an actual CW expedition — so at the adventure keep VMF couldn't resolve it, logged a visible **`(hook): trying to hook object that doesn't exist: DeusCurseUI`** error, and the hook likely never installed.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — removed the `DeusCurseUI` hook + `mod._ct_curse_desc_color_or_default`; replaced with a load-time backfill of `DeusThemeSettings.<theme>.curse_description_color` (only `wastes` lacks it). Reliable at mod-load (DeusThemeSettings is a boot-global), covers both UI callers, consistent host↔client, no hook → no error. `CURSE_THEME_COLOR_BACKFILL_MARKER`.
+
+### Tests
+- Replaced `curse_ui_nil_color_fallback` with `curse_theme_color_backfilled`.
+
+## 0.7.127-beta (2026-06-16) — Trollhammer properties, fire-weapon traits, mid-run boon-count sync, bot-boon chat readout
+
+Cherry-picked from `ct_dev` v0.7.138-dev — four fixes reported 2026-06-17 in live play.
+
+### Why
+1. **Trollhammer Torpedo gets traits but no properties on CW upgrade** — vanilla gap: its `property_table_name = "deus_trollhammer_torpedo"` exists only in the trait combinations table, never the property table, so the upgrade's property lookup returns nil.
+2. **Fire/heat weapons (Sienna staves, Bardin drakefire pistols / drakegun / flamethrower) get no trait on upgrade** with the trait reworks on — their narrow `deus_ranged_heat` pool has no common-tier trait, so the tier filter returned zero combos at low rarity and the weapon kept vanilla's nil traits. Melee/ranged-ammo weapons carry common-tier traits, hence the asymmetry.
+3. **Host changing boons-per-chest/shrine (or any synced setting) mid-run didn't reach clients** for the rest of the run — the chunked settings broadcast fired only at `setup_run` (once per run); `on_setting_changed` never re-broadcast.
+4. **No host-visible readout of which boons bots receive** when random/mirror bot boons are on.
+
+### Changed
+- **Trollhammer** — at load, alias `WeaponProperties.combinations.deus_trollhammer_torpedo = WeaponProperties.combinations.deus_ranged` (guarded `rawget` + key-exists; idempotent; safe reference-alias). No new hook. `TROLLHAMMER_PROPERTY_ALIAS_MARKER`.
+- **Fire-weapon traits** — `get_tier_filtered_combos` falls back to the weapon's OWN baked pool when no tier-eligible combo exists, so restricted-pool weapons draw a trait **only from their own compatible pool**, never a generic one. Behavior-preserving for melee/ranged-ammo (`#filtered` never 0). No new hook. `FIRE_WEAPON_TIER_FALLBACK_MARKER`.
+- **Mid-run sync** — extracted the host broadcast into `mod._ct_broadcast_host_settings(reason)` (reuses the existing `ct_sync_host_settings_chunk` RPC + `CT_RPC_SCHEMA`); `setup_run` and `on_setting_changed` (host + synced-setting gated via `mod._ct_synced_set`) both call it, so a mid-run host edit re-syncs immediately. `MIDRUN_SETTING_REBROADCAST_MARKER`.
+- **Bot-boon chat readout** — new host-only `announce_bot_boons` checkbox (default off); the existing `add_power_ups` bot loop emits a local `mod:echo` per (bot, boon). No new hook; `mod:echo` is local-only (no RPC/version-sync risk).
+
+### Tests
+- New `/ct_regression_test` checks: `trollhammer_property_pool_aliased`, `fire_weapon_tier_fallback_nonempty`, `midrun_setting_rebroadcast_wired`, `bot_boon_announce_wired`.
+
+## 0.7.126-beta (2026-06-16) — HOTFIX: deus curse-banner crash on suppressed-curse nodes (theme="wastes" has no curse color)
+
+### Why
+Reported crash 2026-06-17 (client joining a CW run): `deus_curse_ui_definitions.lua:599: attempt to index field 'color' (a nil value)` on Citadel of Eternity (`sig_citadel_khorne_path5`), `theme="wastes"`, `curse="curse_corrupted_flesh"`, `theme_color=nil`. `DeusCurseUI.show_curse_info` reads `DeusThemeSettings[theme].curse_description_color` (nil only for the `wastes` theme — all god themes have it) and passes it into the glow `style.color` tables that the curse-banner animation then indexes. ct forces `node.theme="wastes"` to suppress curse aesthetics, creating a theme="wastes" + real-curse combo vanilla never makes → nil color → crash. Cherry-picked from `ct_dev` v0.7.137-dev (only this crash fix).
+
+### Changed
+- `chaos_wastes_tweaker.lua` — new `DeusCurseUI._update_description_widget` hook (0 prior `DeusCurseUI` hooks) substituting a default opaque-white color when `color` is nil (`mod._ct_curse_desc_color_or_default`); downstream of all theme/curse mutation, suppression unaffected, themed colors pass through.
+
+### Tests
+- New `/ct_regression_test` check `curse_ui_nil_color_fallback`.
+
+## 0.7.125-beta (2026-06-16) — HOTFIX: host-crash on CW path missions with no deus_weapon_chest_distribution (e.g. cemetery_tzeentch_path1)
+
+### Why
+Reported crash 2026-06-16 (hosting): `deus_run_controller.lua:2468: No deus_weapon_chest_distribution set for cemetery_tzeentch_path1` — a **fatal host crash** that ends the run for everyone. Vanilla `DeusRunController.get_deus_weapon_chest_type` reads `LevelSettings[level_key].deus_weapon_chest_distribution`, `assert`s if it is nil, and **rebuilds from that table whenever the distribution is exhausted**. The native Beastmen/Tzeentch CW path variants (`cemetery_tzeentch_path1` and siblings) ship with **no** distribution, so the host dies the moment a deus weapon chest spawns. Same class as Issues #58/#60/#68 (CW path missions missing pickup/chest config), but fatal. This is a **cherry-picked hotfix** from `ct_dev` v0.7.136-dev — only the crash fix, none of the other in-flight dev work.
+
+### Changed
+- `chaos_wastes_tweaker.lua` — extended the **existing** `DeusRunController.get_deus_weapon_chest_type` hook (no new hook) with `mod._ct_ensure_deus_chest_distribution(self)`: resolves the current `level_key` as vanilla does and, **only if** `LevelSettings[level_key].deus_weapon_chest_distribution` is nil, injects a balanced fallback (`{ [upgrade]=1, [swap_melee]=1, [swap_ranged]=1, [power_up]=1 }`) **into `LevelSettings[level_key]`** so vanilla never asserts (and survives its rebuild-on-exhaustion). Idempotent, never overwrites an existing distribution, degrades to a no-op if `LevelSettings`/`DEUS_CHEST_TYPES` aren't loaded, logs an ungated `mod:warning`. Pure helpers `_ct_deus_chest_needs_fallback` / `_ct_build_deus_chest_fallback` for testability.
+
+### Tests
+- New `/ct_regression_test` check `deus_chest_distribution_fallback` (inject/skip decision + fallback shape).
+
 ## 0.7.124-beta (2026-05-26) — Per-mission curse+mutators diagnostic dump + sync level_seed in graph snapshot (citadel curse bug investigation)
 
 ### Why

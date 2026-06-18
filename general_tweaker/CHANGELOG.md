@@ -1,5 +1,29 @@
 # General Tweaker Changelog
 
+## v0.2.71-alpha (2026-06-17) -- Settings logging + bot-rescue diagnostics
+
+### Why
+The "Bots rescue allies awaiting respawn" toggle didn't work on a host that had it ON with debug logging on, and the log had no way to confirm the toggle state or see why the rescue path bailed. This adds the missing instrumentation (per the debug-as-data-harness doctrine) so the next repro is conclusive. No gameplay behavior change — diagnostics only; all logging is debug-gated.
+
+### Added
+- **Settings snapshot at load** (`[gt:settings@load] …`) — walks the data widget tree and logs every `setting_id = value` so active toggle states (incl. the bot toggles) are visible in the console log. Also exposed as `/gt_dump_settings`. Debug-gated.
+- **Per-change setting log** (`[gt:setting-changed] <id> = <value>`) at the top of `on_setting_changed`, so the log shows exactly when a toggle flips and to what. Debug-gated.
+- **Bot-rescue scan diagnostics** (`_gt_bot_fixes.lua`): for every ally the rescue scan sees in `is_ready_for_assisted_respawn`, logs `ready / health_alive / aid_path`, plus a throttled per-bot summary (`awaiting=N picked=yes/no not_health_alive=N path_blocked=N`). This pinpoints the failure: `awaiting=0` ⇒ CW respawn never sets the flag (need a different hook); `health_alive=false` ⇒ the HEALTH_ALIVE gate is wrong for this state; `aid_path=false` ⇒ the bot can't path to the respawn spot. Verified in source that CW *does* use `is_ready_for_assisted_respawn` (`deus_spawning.lua:203`, `respawn_handler.lua:502`) and that such allies are `HEALTH_ALIVE` (`side_manager.lua:363`), so the repro log will show which gate actually fails.
+- **Ironbreaker fix log** (`[gt:bot-ib] yielding … ult-hold to aid ally`) when it releases the ult-hold to revive.
+
+### How to use
+Enable **Debug Logging** + the bot toggles on the **host**, reproduce the downed/awaiting-rescue situation, and read the `[gt:bot-rescue]` lines in the host's console log.
+
+## v0.2.70-alpha (2026-06-17) -- Bot Options: three AI-teammate behavior fixes (promoted from dev)
+
+Cherry-picked the "Bot Options (AI Teammates)" group from general_tweaker_dev v0.2.84-dev into public stable. Three default-OFF, host-side fixes (bots only exist on the host; no network registration, so non-modded peers are unaffected). New code in `_gt_bot_fixes.lua`. Full mechanics + source citations in the dev changelog entry; summary:
+
+- **Necromancer bots can hand off potions** (`gt_bot_necro_potion_handoff`). Her career skull sits permanently in `slot_potion` as the primary item, so picked-up potions land in additional storage and every handoff check (which reads the primary) fails. A throttled `PlayerBotBase.update` hook promotes a stored real potion to primary for Necromancer bots (the bot-equivalent of a human tapping the potion key), so vanilla give/drink logic works. Gated to real potions so grimoires aren't promoted.
+- **Ironbreaker bots revive during their ult** (`gt_bot_ironbreaker_revive_in_ult`). The IB bot holds a block `wait_action` for its ult's whole duration and `can_activate_ability` short-circuits on `is_using_ability`, parking the BT selector so the higher-priority revive node never runs. Hook returns false for an IB mid-ult when an ally needs aid, yielding to revive. The ult is a timed buff -- it keeps running, so it isn't wasted.
+- **Bots rescue allies awaiting respawn** (`gt_bot_rescue_awaiting`). `_select_ally_by_utility` excludes awaiting-rescue allies entirely. A wrapper hook (calls original first; composes with other bot mods) adds a reachable awaiting-respawn ally relabeled `knocked_down`; the revive action fires the contextual interaction, which resolves to `assisted_respawn`. Experimental -- verify in-game.
+
+All three default OFF. Enable under Mod Options -> Tweaker: General -> Bot Options (AI Teammates).
+
 ## v0.2.66-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
 
 ### Why

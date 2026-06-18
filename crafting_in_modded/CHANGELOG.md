@@ -1,5 +1,46 @@
 # Crafting in Modded Changelog
 
+## 0.8.4 (2026-06-17) — Issue #71 (Option A): re-enable in-editor CRAFT for weapons so "set properties → craft" works
+
+### Why
+Issue #71's second report (carlotheemo, on public v0.8.0): "press weapon, press greatsword, temper, add 5 atsp + 5 crit, add Swift Slayer, back, then craft → Outcome: No properties." Root cause: cim splits "craft a weapon" from "edit a weapon's properties". The **weapon-select pane** CRAFT button always mints a **blank** weapon (empty properties/traits, fresh backend id). Property/trait edits in the **weave-properties editor** mutate the in-editor item in place via `_forge_apply_to_item`; the editor's own CRAFT button — which clones those edits into a new item (the same machinery the amulet uses) — was **hidden for melee/ranged** weapons and its hook early-returned. So setting properties in the editor and then crafting produced a blank weapon (the reporter backed out and used the blank weapon-select CRAFT).
+
+### Changed
+- **`crafting_in_modded.lua`** — `_set_essence_upgrade_cost` hook: removed the melee/ranged branch that hid the `upgrade_button`; it now shows **"CRAFT"** for weapons.
+- **`crafting_in_modded.lua`** — `_upgrade_magic_level` hook: removed the melee/ranged early-return so weapons fall through to the existing mint-new path (clones `item.properties` / `item.traits` into a fresh `_athanor_inject_item` craft). Re-enables a path that already shipped for the amulet — no new code.
+
+### Behavior
+- Working flow: open the weave-properties editor on a weapon → set bubbles/trait → press **CRAFT** in the editor → a new modded weapon carrying those edits lands in inventory (equip from there). The weapon-select pane's CRAFT still mints a blank weapon (pick-and-craft-clean) as before.
+
+### Also includes (folded in from unreleased 0.8.3)
+- **Amulet (weave-properties) crash guard (Issue #71, primary report)** — `BackendInterfaceWeavesPlayFab.get_talent_required_forge_level` now returns `0` under the modded forge (mirrors the existing property/trait guards). Fixes the hard crash `backend_interface_weaves_playfab.lua:1252: attempt to index local 'progression_data' (a nil value)` when pressing the amulet, caused by feeding adventure career talents (e.g. `mercenary_helborgs_tutelage`) into the weave talent picker. New `/cim_regression_test` check `weave_talent_forge_level_guard_present`.
+
+## 0.8.3 (2026-06-17) — Hotfix: amulet (weave-properties) crash on adventure career talents (Issue #71)
+
+### Why
+User report (Issue #71, carlotheemo, 2026-06-01, on public v0.8.0): pressing the amulet in the modded forge (open `HeroWindowWeaveProperties` via B → amulet) crashed `backend_interface_weaves_playfab.lua:1252: attempt to index local 'progression_data' (a nil value)` in `get_talent_required_forge_level`, called from `hero_window_weave_properties.lua:_setup_menu_options`. Crash locals confirm it: `talent_name = "mercenary_helborgs_tutelage"` (an es_mercenary **Adventure** talent), `progression_data = nil`, `forge_level = 999`. Under `_custom_forge_active` cim feeds the player's loadout talents (adventure career talents) into the weave talent picker; vanilla `get_talent_required_forge_level` does `progression_data = progression_settings.talents[talent_name]` then `progression_data.required_forge_level` — adventure talents have no weave-progression entry, so `progression_data` is nil and the index is a hard crash. cim already guarded the sibling `get_property_required_forge_level` and `get_trait_required_forge_level` (both `return 0` under the modded forge) but missed the talent one. Targeted backport from `crafting_in_modded_dev` v0.7.74-dev (only this fix — not the rest of the in-flight dev work).
+
+### Changed
+- **`crafting_in_modded.lua`** — added the missing `BackendInterfaceWeavesPlayFab.get_talent_required_forge_level` hook returning `0` under `_custom_forge_active` (passthrough otherwise), mirroring the existing property/trait guards. No duplicate-hook conflict (it was previously unhooked in stable).
+
+### Tests
+- New `/cim_regression_test` check `weave_talent_forge_level_guard_present` — source-pattern guard that FAILS if the new hook is removed (needle split across two literals to avoid self-match; no-op when source introspection is unavailable).
+
+### To verify (in-game)
+- Open the modded forge, press B, click the amulet, and confirm the weave-properties editor opens (talent/property/trait sections render) with **no crash**.
+
+## 0.8.2 (2026-06-16) — Hotfix: Trollhammer Torpedo crashes the forge stat editor
+
+### Why
+Friend crash log (2026-06-16): selecting the Trollhammer Torpedo (`dr_deus_01`) in the modded forge crashed `hero_window_weave_properties.lua:385: bad argument #1 to 'ipairs' (table expected, got nil)` in `HeroWindowWeaveProperties._setup_menu_options`. Vanilla stamps `slot_unlock.category = item_data.property_table_name / trait_table_name`, then does `ipairs(WeaveTraits.categories[category])` / `WeaveProperties.categories[category]` / `WeaveLoadoutSettings[career].talent_tree[category]` with no nil-check. cim's Athanor forge re-exposes adventure / Chaos Wastes weapons (the Trollhammer's `property_table_name` is `deus_trollhammer_torpedo`) whose table-names aren't keys in those weave tables → nil → `ipairs(nil)` hard-errors. Two targeted backports from `crafting_in_modded_dev` (only these fixes — not the rest of the in-flight dev work):
+
+### Changed
+- **Forge stat-editor crash guard** (cim_dev v0.7.75) — new singleton `mod:hook("HeroWindowWeaveProperties", "_setup_menu_options", ...)` seeds an empty `{}` pool for every progression category the weave tables don't know about before vanilla runs. `ipairs({})` is a no-op, so the affected picker renders empty (no weave traits/properties/talents for that weapon) instead of crashing. Idempotent, scoped to the categories in play.
+- **Forge 3D-preview CTD guard** (cim_dev v0.7.70) — ported `_forge_preview_unsafe` + the two `LootItemUnitPreviewer` (`_spawn_link_unit` / `_load_item_units`) hooks. A *separate*, no-traceback hard CTD that fires when the previewer spawns the Trollhammer's 3D model (display unit / 3p package absent from the forge world). Skips the spawn (3D model omitted) when the units aren't resident/loadable; gated on `_custom_forge_active`. Stable previously lacked this guard entirely.
+
+### Notes
+- Stat editing works fully for the Trollhammer after this — the weapon just shows no weave-trait/property picker entries and no spinning 3D model. Other weapons are unaffected.
+
 ## 0.8.1 (2026-06-08) — Hotfix: in-mission crafting-menu crash `hero_view.lua:175: attempt to index local 'hdr_gui_data'`
 
 ### Why

@@ -542,6 +542,9 @@ local data = {
                             -- generate a random weapon for the bot's career; upgrade chests upgrade the bot's
                             -- currently-equipped CW weapon to the same target rarity.
                             { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
+                            -- Host-only chat readout: prints which boon each bot receives while
+                            -- mirror/random bot boons are on, so the host can see what bots got.
+                            { setting_id = "announce_bot_boons",               type = "checkbox", default_value = false, tooltip = "announce_bot_boons_tooltip" },
                         },
                     },
                     {

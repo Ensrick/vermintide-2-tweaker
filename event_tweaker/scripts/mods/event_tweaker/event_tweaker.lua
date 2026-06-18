@@ -1,4 +1,5 @@
 local mod = get_mod("event_tweaker")
+_MEM_PROBE_T0_EVT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 local MOD_VERSION = "0.4.13-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
@@ -684,3 +685,5 @@ mod.on_setting_changed = function(setting_id)
         apply_now("suppress_live_event changed")
     end
 end
+
+mod:info("[mem-probe] event_tweaker boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_EVT) / 1024)

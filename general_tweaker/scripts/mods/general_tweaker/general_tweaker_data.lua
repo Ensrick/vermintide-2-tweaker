@@ -771,6 +771,33 @@ return {
                 default_value = false,
                 tooltip       = mod:localize("enable_debug_logging_tooltip"),
             },
+            -- Bot Options -- AI teammate behavior fixes (see _gt_bot_fixes.lua).
+            -- All default OFF; host-side only (bots exist on the host), no
+            -- network registration so they can't affect non-modded peers.
+            {
+                setting_id  = "gt_bot_options_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gt_bot_necro_potion_handoff",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_necro_potion_handoff_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_ironbreaker_revive_in_ult",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_ironbreaker_revive_in_ult_tooltip"),
+                    },
+                    {
+                        setting_id    = "gt_bot_rescue_awaiting",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = mod:localize("gt_bot_rescue_awaiting_tooltip"),
+                    },
+                },
+            },
         },
     },
 }

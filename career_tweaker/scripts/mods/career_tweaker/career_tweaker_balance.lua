@@ -166,6 +166,28 @@ local function _build_stat_buff_rework(talent_name, buff_field, new_value)
 end
 
 local BALANCE_MODS = {
+    -- Waystalker: Serrated Shots works on EVERY arrow type.
+    -- Serrated Shots (talent kerillian_waywatcher_critical_bleed, perk
+    -- "kerillian_critical_bleed_dot") makes critical ranged hits bleed. The
+    -- bleed is gated in damage_utils.lua:3698:
+    --   has_perk("kerillian_critical_bleed_dot")
+    --     and damage_profile.charge_value == "projectile"
+    --     and not has_perk("kerillian_critical_bleed_dot_disable")
+    -- EVERY Kerillian arrow damage profile uses charge_value="projectile"
+    -- (arrow_carbine / arrow_sniper / *_shortbow / *_trueflight -- verified in
+    -- damage_profile_templates.lua), so the ONLY thing that disables the bleed by
+    -- "arrow type" is the disable perk, which Hagbane (shortbows_hagbane.lua:301-303
+    -- server_buffs) and the Chaos Wastes we_deus_01 bow grant via the buff
+    -- "we_deus_01_kerillian_critical_bleed_dot_disable" (morris_buff_settings.lua:6332
+    -- -- its ONLY effect is that one perk). Clearing that buff's perks list
+    -- neutralizes the disable, so Serrated Shots also applies on Hagbane /
+    -- we_deus_01. Takes effect on next weapon equip / mission load.
+    rework_we_waywatcher_serrated_shots_all_arrows = {
+        character = "kerillian",
+        patches = {
+            { buff = "we_deus_01_kerillian_critical_bleed_dot_disable", field = "perks", value = {} },
+        },
+    },
     rework_wh_zealot_smite_random_crits = {
         character = "victor",
         career    = "wh_zealot",
@@ -1647,6 +1669,12 @@ local BALANCE_MODS = {
         career    = "wh_zealot",
         patches   = {
             { buff = "victor_zealot_passive_increased_damage", field = "chunk_size",  value = 5    },
+            -- The chunk gate (num_chunks cap) lives on template.max_stacks of the PARENT
+            -- (victor_zealot_passive_increased_damage), vanilla = 6. Without widening the
+            -- parent too, the documented "30 stacks / +30% cap" is silently gated to 6 (+6%).
+            -- No crash here (unlike Castigate -- vanilla parent already has max_stacks=6), but
+            -- the same wrong-target class: the gate is on the parent, not the child _buff.
+            { buff = "victor_zealot_passive_increased_damage", field = "max_stacks",  value = 30   },
             { buff = "victor_zealot_passive_damage",            field = "max_stacks", value = 30   },
             { buff = "victor_zealot_passive_damage",            field = "multiplier", value = 0.01 },
         },
@@ -1700,6 +1728,14 @@ local BALANCE_MODS = {
         patches   = {
             { buff = "victor_zealot_attack_speed_on_health_percent",        field = "update_func", value = "activate_buff_stacks_based_on_health_chunks" },
             { buff = "victor_zealot_attack_speed_on_health_percent",        field = "chunk_size",  value = 30   },
+            -- CRASH FIX (bad argument #2 to 'min'): activate_buff_stacks_based_on_health_chunks
+            -- reads max_stacks from buff.template -- the PARENT buff carrying update_func, NOT
+            -- the child _buff (buff_function_templates.lua:2591-2596). The vanilla parent used
+            -- the threshold update_func and has NO max_stacks field, so without this line
+            -- template.max_stacks is nil and `math.min(..., nil)` throws. Mirror the canonical
+            -- victor_zealot_passive_move_speed shape: parent carries buff_to_add (vanilla) +
+            -- chunk_size + max_stacks + update_func together. 30 HP/chunk * 5 = 150 HP missing.
+            { buff = "victor_zealot_attack_speed_on_health_percent",        field = "max_stacks",  value = 5    },
             { buff = "victor_zealot_attack_speed_on_health_percent_buff",   field = "max_stacks",  value = 5    },
             { buff = "victor_zealot_attack_speed_on_health_percent_buff",   field = "multiplier",  value = 0.04 },
         },
