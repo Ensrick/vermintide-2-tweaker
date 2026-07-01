@@ -1,5 +1,84 @@
 # Crafting in Modded Changelog
 
+## 0.8.33 (2026-06-29) — PUBLIC RELEASE: the complete Athanor property/slot fix (#86) + full dev rollup
+
+Promotes the entire `crafting_in_modded_dev` line (through 0.8.33-dev) to the public build. The headline is the **finally-correct #86 fix** — the 0.8.9 public build only had a partial stamina-key fix; the real blocker turned out to be a hard 2-distinct-property ceiling.
+
+### Fixed #86 — the Athanor property grid, properly this time
+
+The public 0.8.9 fix re-keyed the stamina bubble-cap but the symptom persisted because the actual blocker was a **2-distinct-property ceiling** enforced in three places (an add-time gate, a destructive load-time trimmer that clobbered extra properties on every restart, and the per-property slot reservation). All three are now raised to the grid's real ceiling.
+
+- **Stamina** = 2 slots, **Movement Speed** = 1 slot, **every other property** = its full 5-bubble range (1 bubble = 20%, 5 = full — vanilla weave behavior). `movespeed_2pct_mode` still uncaps movespeed to 5 by design.
+- **The "max 2 properties per item" wall is gone** — up to 10 distinct properties per weapon/accessory layer. The grid's 10 slots are a shared budget, so you trade off: more distinct properties at fewer bubbles each, or fewer maxed-out ones.
+- A dev over-correction (briefly capping every property to a single bubble) was caught and reverted before this release; regression test `default_property_cap_is_five_bubbles` pins the default at 5 with scaling.
+
+### Also rolled up from dev since 0.8.10
+
+- The full #86 investigation chain (takes 3–6) and the read-/write-path slot-occupancy guards.
+- `/cim_regression_test` coverage for #96 (gut-gated in-mission option) and the property-cap behavior.
+- All prior dev hardening already present in 0.8.8/0.8.9 stays in place (in-mission Athanor Keep-only, loadout persistence opt-in/default-off, Versus-weapon grid fixes, in-mission forge crash guards, Trollhammer/CW-weapon forge-editor crash fixes).
+
+### Files
+- Full source port from `crafting_in_modded_dev` (9 Lua files) with identity re-stamped to `cim` / `crafting_in_modded`; `MOD_VERSION` → `0.8.33`; `itemV2.cfg` title + description refreshed (published_id and public visibility unchanged).
+
+## 0.8.10 — 2026-06-28
+- Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.8.9 (2026-06-24) — PUBLIC RELEASE: stamina slot fix (#86) + ESC-backout inventory leak fix (#88) + gut-gated in-mission option (#96)
+
+Promotes three confirmed dev fixes to the public build. The in-mission Athanor stays Keep-only (unchanged from 0.8.8). All dev-only "[untested]" option labels were stripped on this public version.
+
+### Fixed #86 — the Stamina property consumed 5 inventory slots instead of 2
+
+Adding the Stamina property in the Athanor consumed 5 of the 10 property slots instead of exactly 2, blocking a second property even though the 2-distinct-property cap should have allowed it. Root cause: the per-property bubble-cap table was keyed by the bare name (`stamina`/`movespeed`), but the weave UI passes the category key `weave_properties_stamina`, which the strip helper reduces to `properties_stamina` — so the cap lookup missed and fell back to the default 5. That default-5 drove the slot count (`get_property_mastery_costs`), the persisted slot-index array, and the value/seed math. Re-keyed the table to `properties_stamina = 2` / `properties_movespeed = 1` (the post-strip key). Stamina now uses exactly 2 slots; movespeed 1 (5 with the 2pct toggle).
+
+### Fixed #88 — backing out of the in-mission ESC menu pulled up the loadout inventory
+
+The in-mission standard crafting bench enabled loadout/inventory access by flipping `InventorySettings.inventory_loadout_access_supported_game_modes` permanently and never restoring it. The single vanilla read site is `HeroView.on_enter`, so a persistent flip made every later HeroView open in the mission — including the ESC-menu backout — read the mode as supported and init the loadout inventory mid-mission. Fixed by scoping the flip to cim's own view open: a one-shot flag set before cim's transition, plus a `HeroView.on_enter` hook that saves the original values, lets vanilla read the flipped ones, then restores them. The ESC-menu HeroView now reads the untouched vanilla table and bails — no leak. The standard bench still opens in-mission.
+
+### Changed #96 — "Allow standard crafting bench in mission" option hidden when GUI Tweaker isn't installed
+
+The `allow_in_mission` option only does something useful when GUI Tweaker (gut) supplies the in-mission menu access, so its checkbox is now hidden in cim's settings when gut isn't installed. VMF has no native conditional-widget feature, so the widget is conditionally built: a load-order-safe presence check (`get_mod("gut")` plus a scan of the engine ModManager mod manifest by Workshop title) prunes the entry when gut is absent. When gut is present, nothing changes.
+
+## 0.8.8 (2026-06-24) — PUBLIC RELEASE: promote the dev crafting fixes; the in-mission Athanor is Keep-only on this build
+
+Public-stable promotion of the `crafting_in_modded_dev` work through v0.8.22-dev. Standard (Keep Smithy) crafting and the Keep Athanor are the confirmed-working surfaces; the **in-mission Athanor (weave forge) is deliberately disabled** on the public build because its mid-mission crash class is not subscriber-safe yet.
+
+### In-mission Athanor disabled (Keep-only) — the headline safety change
+
+`mod.open_forge` (the Athanor / `weave_forge` state) now **hard-requires the Keep / Chaos Wastes hub** and no longer honors the `allow_in_mission` toggle. It cannot open mid-mission via the forge hotkey on this build. This walls off the HDR-glow / `Material not found` / `ui_store_preview` mid-mission fatal class (Issues #81/#83) that the dev clone is still hardening. The Keep Athanor is fully functional and unchanged.
+
+- `allow_in_mission` now governs **only** the standard crafting bench in missions; its label/description were rewritten to say so. The `forge_hotkey` label/description were rewritten to "Keep only".
+- The in-mission crash-fix hooks promoted from dev (Fix B/B2..B6) remain in the code but are inert on the public build (the only in-mission entry that reached them is now gated). They stay so a future re-enable is a one-line gate change, not a re-port.
+
+### Promoted from dev (v0.8.7-dev .. v0.8.22-dev)
+
+- **Standard crafting bench in-mission (material-clean)** — new `open_standard_crafting` entry point opens the vanilla Keep Smithy bench (salvage / craft / re-roll properties + traits / upgrade rarity / apply illusion / convert dust) mid-run. Renders cleanly (flat atlas widgets, no preview world, no HDR/shading shims). New `Standard Crafting` hotkey (default unbound) + `/cim_craft_standard` chat command. Adventure/survival only (Chaos Wastes is loadout-locked). Honors `allow_in_mission`. (0.8.21-dev)
+- **Owned Versus (`vs_*`) weapon twins no longer leak into the Adventure inventory grid** — re-hides an owned `vs_*` twin (most visible once an illusion is applied to the crafted twin) at the inventory display layer, while keeping deliberately-crafted `vs_*` weapons visible and craftable. Extends the existing `get_filtered_items` hook (no new hook). (0.8.22-dev)
+- **Index-aware modded-loadout persistence** — the loadout save/restore store is now keyed per loadout index (`optional_loadout_index`), fixing bot loadouts cloning the host's gear, with a migration from the old flat schema. (0.8.13-dev / 0.8.14-dev)
+- **Loadout persistence is now OPT-IN, DEFAULT OFF** — cim no longer perturbs vanilla bot/player loadouts unless the player turns persistence on. (0.8.15-dev)
+- **In-mission forge crash hardening (Fix B/B2..B6)** — promoted in full (HDR armoury_atlas world skip, `weave_menu_*` / `athanor_skilltree_*` raw-material prune, per-frame `set_scalar` bloom-pulse skip, skill-tree ring/cluster suppression). On the public build these are inert because the in-mission Athanor entry is gated off; they ride along for the eventual re-enable and to harden the dev clone. (0.8.16-dev .. 0.8.20-dev)
+- **Test-status labels on menu entries** + assorted debug/diagnostic tooling promoted from dev. (0.8.7-dev / 0.8.8-dev / 0.8.10-dev .. 0.8.12-dev)
+
+(Supersedes the unreleased stable 0.8.7 bump, which carried no CHANGELOG entry. All `cim_dev` / `crafting_in_modded_dev` identity tokens were normalized to the stable `cim` / `crafting_in_modded` identity during promotion.)
+
+## 0.8.6 (2026-06-18) — Fix Trollhammer select-crash (weave tooltip) + add craft-button audio feedback
+
+### Fixed — crash on selecting the Trollhammer Torpedo (and other deus/CW weapons)
+Selecting the Trollhammer Torpedo (`dr_deus_01`) in the Athanor editor hard-crashed `hero_window_weave_properties.lua:1701: attempt to concatenate local 'tooltip_slot_sub_title' (a nil value)` in `_sync_backend_loadout` (via `on_enter`). Next-in-sequence deus/CW crash after the v0.8.2 `_setup_menu_options` guard: cim re-exposes deus/CW weapons whose property/trait/talent table-names aren't weave categories, so the per-slot tooltip lookup misses → nil → concatenate crash. The tooltip-string tables are per-call locals (not pre-seedable), so the fix wraps `HeroWindowWeaveProperties._sync_backend_loadout` in a pcall under the modded forge — property/trait editing still works; only the unknown-category tooltip degrades. New hook (distinct class from the existing `HeroWindowWeaveForgeWeapons._sync_backend_loadout` hook — no duplicate).
+
+### Fixed — silent Athanor craft buttons
+The weapon-select pane CRAFT (`_equip_item`) and the editor CRAFT (`_upgrade_magic_level`) crafted and returned without playing the completion sound (vanilla's sound sits past the custom-forge early-return), so those buttons gave no audio feedback. Both now call `self:_play_sound("play_gui_craft_forge_button_completed")` on a successful craft.
+
+## 0.8.5 (2026-06-18) — Drop Versus-carousel twins that shadow a real Adventure weapon (the "wh_book" locked entry)
+
+### Why
+User report: a non-craftable book entry (reported as `wh_book_name`) showed up **locked** in the Athanor weapon list. Root cause: cim enumerates raw `ItemMasterList` and **intentionally** surfaces `vs_*` Versus-carousel weapons as craftable (it clears their `mechanisms` on craft so the result is Adventure-visible). But a handful of `vs_*` items have a **real non-versus Adventure twin sharing the same `display_name`** — notably `vs_wh_hammer_book` vs the real `wh_hammer_book`. cim's list dedups by `display_name`, so the Versus twin can win the dedup and render as a locked, uncraftable row (`backend_id = nil`) that **hides** the real craftable weapon.
+
+### Fixed
+- New `_cim_versus_shadowed(data, real_names)` gate in `standard_forge.lua` (+ `_cim_is_versus` / `_cim_real_display_names` helpers), applied to all three craft-list builders: the menu weapon list (`_setup_weapon_list`), the standard-forge random-pick pool, and the blacksmith template cache. A versus item is dropped **only when a real (non-versus) item with the same `display_name` exists** — unique `vs_*` weapons (no real twin) stay craftable; the real `wh_hammer_book` replaces its locked versus twin. The real-`display_name` set is built once per list-build (O(n)).
+- Explicitly **not** a blanket versus exclusion — that would remove the intentional cross-character/versus crafting feature. Backported in lockstep with `crafting_in_modded_dev` v0.8.6-dev.
+
 ## 0.8.4 (2026-06-17) — Issue #71 (Option A): re-enable in-editor CRAFT for weapons so "set properties → craft" works
 
 ### Why

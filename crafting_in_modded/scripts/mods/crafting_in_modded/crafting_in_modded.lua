@@ -16,36 +16,7 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("cim")
-_MEM_PROBE_T0_CIM = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
-
--- ============================================================
--- Quiet-by-default `mod.echo` (chat suppression unless debug toggle is on)
--- ============================================================
--- User feedback 2026-05-25: cim was spamming the in-game chat with auto-fired
--- load / restore / status messages. New behavior: every `mod:echo(...)` call
--- in cim is silently redirected to `mod:info(...)` (log only) UNLESS the
--- universal `enable_debug_logging` setting is ON. When ON, the original
--- behavior is restored — every echo lands in chat AND the log.
---
--- The patch runs here, at the very top of cim's main script, BEFORE any
--- `mod:command(...)` registration or any other `mod:echo(...)` call in cim
--- or its sub-modules. That guarantees we intercept everything, including
--- the per-startup banner directly below, plus echoes inside `/cim_*` chat
--- commands and the dump commands defined further down.
---
--- Note: this also quiets user-invoked dump commands (`/inv_dump`,
--- `/forge_list`, `/cim_dump_loadout`, etc.) when debug logging is OFF — the
--- output goes to the game log file instead of chat. If a user wants the
--- chat output back (e.g. to read /forge_list interactively), they enable
--- `enable_debug_logging` in the mod settings. `mod:error` / `mod:warning`
--- are NOT patched and still surface to chat on issue.
-local _orig_echo = mod.echo
-mod.echo = function(self, fmt, ...)
-    if self:get("enable_debug_logging") then
-        return _orig_echo(self, fmt, ...)
-    end
-    return self:info(fmt, ...)
-end
+_MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- ============================================================
 -- Rehook-warning interceptor (v0.7.51-dev)
@@ -77,28 +48,29 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.4"
+local MOD_VERSION = "0.8.33"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
+-- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
+-- BUG_CLASSES § 9). The `cim_modded_slot` side-channel RPC prepends this as the
+-- FIRST positional arg of every send; the receiver validates the incoming value
+-- against this constant and DROPS the packet on mismatch (audit 2026-06-07,
+-- v0.7.72-dev — the RPC previously shipped with no schema arg or receiver gate,
+-- so a future payload-shape change between peers running different cim builds
+-- would silently mis-decode). Initial value is 1; never define lower. Bump when
+-- the payload shape of any cim RPC changes.
+local CIM_RPC_SCHEMA = 1
+
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
--- NOTE: cim ALSO has a global `mod.echo` redirect (above) that silences chat
--- echoes when the toggle is OFF. `_dbg_alert` bypasses that by calling the
--- patched `mod.echo` while the toggle is ON, which still routes to chat
--- (the redirect's "ON" branch returns the original behavior).
+-- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
+-- `_dbg` is for confirmation / expected behavior — file only (mod:debug channel).
+-- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[cim:dbg] " .. fmt, ...)
-    end
+    mod:debug("[cim:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[cim:dbg] " .. fmt, ...)
-        mod:echo("[cim] " .. fmt, ...)
-    end
+    mod:warning("[cim:dbg] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -152,6 +124,71 @@ mod:info("[cim:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint()
 if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
     mod:echo(string.format("[cim] v%s loaded", MOD_VERSION))
 end
+
+-- ============================================================
+-- UNCONDITIONAL settings dump (config visibility for triage).
+-- ============================================================
+-- cim's settings are PURELY LOCAL — every value is read via mod:get, there is no
+-- host-sync of crafting settings (the mod's only network_send is the loadout-slot
+-- side-channel, not settings). So a single on-load dump of each peer's own mod:get
+-- values captures the full effective config; there is no host-authoritative phase.
+--
+-- Walks the REALIZED data widget tree (mod:dofile, NOT a static text-scrape) so the
+-- conditionally-pruned `allow_in_mission` widget (dropped when gut is absent,
+-- _data.lua:257-269) is reflected accurately — the dump shows exactly what's
+-- registered. Descends sub_widgets/widgets and skips type=="group" containers,
+-- mirroring ct's _collect_setting_ids walker.
+--
+-- Emits via RAW printf with a distinctive `[cim-settings]` prefix. printf
+-- (foundation/scripts/util/misc_util.lua:29) is a vanilla engine global =
+-- print(string.format(...)); it bypasses BOTH the VMF per-mod logging toggle AND
+-- cim's own mod.echo chat-redirect, so the host's REAL config (movespeed_2pct_mode,
+-- base_power_level, persist_modded_loadouts, etc.) lands in the log on any host
+-- regardless of logging state. Bounded (one pass, NOT per-frame); pcall-guarded so a
+-- dump failure can never break load. Attached to `mod` (not a main-chunk local) to
+-- stay under the Lua 5.1 200-locals-per-function cap; the inner locals live in this
+-- function's own scope.
+function mod._cim_dump_settings(phase)
+    local ok, err = pcall(function()
+        local data = mod:dofile("scripts/mods/crafting_in_modded/crafting_in_modded_data")
+        local ids, seen = {}, {}
+        local function visit(node)
+            if type(node) ~= "table" then return end
+            if type(node.setting_id) == "string" and node.type and node.type ~= "group"
+                and not seen[node.setting_id]
+            then
+                seen[node.setting_id] = true
+                ids[#ids + 1] = node.setting_id
+            end
+            if node.sub_widgets then for _, w in ipairs(node.sub_widgets) do visit(w) end end
+            if node.widgets then for _, w in ipairs(node.widgets) do visit(w) end end
+        end
+        if type(data) == "table" then visit(data.options) end
+        table.sort(ids)
+        local function fmtv(v)
+            if v == true then return "1"
+            elseif v == false then return "0"
+            elseif v == nil then return "?"
+            else return tostring(v) end
+        end
+        printf("[cim-settings] BEGIN phase=%s v=%s count=%d", tostring(phase), tostring(MOD_VERSION), #ids)
+        for _, id in ipairs(ids) do
+            printf("[cim-settings] %s get=%s", id, fmtv(mod:get(id)))
+        end
+        printf("[cim-settings] END phase=%s", tostring(phase))
+    end)
+    if not ok then
+        printf("[cim-settings] DUMP FAILED phase=%s err=%s", tostring(phase), tostring(err))
+    end
+end
+
+-- Auto-fire on load (the full local config; cim has no host-authoritative phase).
+mod._cim_dump_settings("load")
+
+mod:command("cim_dump_settings", "Dump every cim setting_id + value to the log via raw printf", function()
+    mod._cim_dump_settings("command")
+    mod:echo("[cim] settings dumped to log ([cim-settings] lines).")
+end)
 
 -- /regression_test scaffold. Registrations at end of file.
 local _RT_CHECKS = {}
@@ -393,6 +430,37 @@ mod._cim_is_modded_item = function(item)
     return mod._cim_is_modded_backend_id(item.backend_id)
 end
 
+-- Versus-carousel item key check, by ItemId/key PREFIX rather than the
+-- `mechanisms` field. WHY a prefix and not `mechanisms`: cim's
+-- `_ensure_item_adventure_visible` clears `ItemMasterList[key].mechanisms = nil`
+-- to make a crafted vs_* weapon adventure-visible (the deliberate craft
+-- behavior). But `item.data` is a SHARED reference to that same IML entry
+-- (PlayFabMirrorBase._update_data sets `item.data = ItemMasterList[item_key]`),
+-- so after the clear `_cim_is_versus(item.data)` returns false for EVERY item of
+-- that key — including the player's raw owned vs_* twin that leaked into the
+-- adventure inventory grid. The `vs_` prefix is the only discriminator that
+-- survives the mechanisms clear. (Every Versus weapon key in vanilla — claws,
+-- ratling gun, etc. — is `vs_*`; see item_master_list_versus_rewards.lua.)
+local function _cim_is_versus_key(item_key)
+    return type(item_key) == "string" and item_key:sub(1, 3) == "vs_"
+end
+mod._cim_is_versus_key = _cim_is_versus_key
+
+-- True for the player's RAW OWNED vanilla vs_* twin that should NOT show in the
+-- adventure inventory grid, but FALSE for a cim-crafted vs_* (modded backend_id)
+-- which the user deliberately surfaced and must stay visible. Used by the
+-- inventory-display re-hide in the get_filtered_items hook. Keys off
+-- `_cim_is_modded_backend_id` so a deliberately-crafted unique vs_* is never
+-- hidden (memory: reference_vt2_versus_items_hidden_in_adventure).
+local function _cim_is_leaked_versus_twin(item)
+    if not item then return false end
+    local key = item.key or item.ItemId or (item.data and item.data.key)
+    if not _cim_is_versus_key(key) then return false end
+    -- A modded backend_id means this IS the crafted item — keep it visible.
+    return not (mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(item.backend_id))
+end
+mod._cim_is_leaked_versus_twin = _cim_is_leaked_versus_twin
+
 local function _forge_create_item(weapon_data, backend_id)
     if not ItemMasterList then return nil end
     local item_key = weapon_data.item_key
@@ -511,6 +579,14 @@ local _bubble_cap
 local _value_for_bubbles
 local _bubbles_for_value
 local _strip_weave
+-- Picker store helper (defined alongside the bubble-cap math; shared by the
+-- live set_loadout_property hook and /cim_regression_test). Forward-declared
+-- here so the hook closure binds the upvalue.
+local _store_property_slot
+-- Read-chokepoint cap (defined alongside `_store_property_slot`; called by the
+-- get_loadout_properties hook to trim grid occupancy to the bubble cap right
+-- before vanilla reads it — #86 read-path guard). Forward-declared here.
+local _cap_grid_property_arrays
 
 mod:hook_safe("BackendManagerPlayFab", "_create_interfaces", function()
     _forge_load()
@@ -523,18 +599,20 @@ mod:hook_safe("BackendManagerPlayFab", "_create_interfaces", function()
     if mod._cim_autodump_backend_ready then pcall(mod._cim_autodump_backend_ready) end
 
     -- ============================================================
-    -- One-shot trim: existing items in the mirror with >2 properties
+    -- One-shot trim: existing items in the mirror with >10 properties
     -- ============================================================
     -- Consolidated here from standard_forge.lua (was a sibling
     -- registration on the same Class+method that VMF silently dropped
     -- as a duplicate per memory `feedback_vmf_hook_safe_no_chain`).
-    -- The crash described in
-    -- standard_forge.lua's >2-property guard can also fire on items that
-    -- already exist in the player's save from pre-v0.7.25 sessions. Once
-    -- the backend mirror finishes loading, walk every item and trim
-    -- properties down to the first 2 (in iteration order). Vanilla allows
-    -- at most 2 anyway so the behavior is unchanged from the buff
-    -- system's perspective.
+    -- Safety net only: clamp any item to the 10-slot grid ceiling (= the
+    -- MAX_DISTINCT_PROPERTIES gate). This used to trim to 2 to dodge the
+    -- HeroWindowItemCustomization button_hotspot_3 crash, but that crash is
+    -- now guarded directly in `_update_property_option` (standard_forge.lua),
+    -- so the trim no longer needs to be destructive at 2 — it only fires on
+    -- genuinely malformed items carrying more than the grid can hold (>10).
+    -- WARNING: pairs() order is nondeterministic, so this drops ARBITRARY
+    -- properties beyond the keep limit — keep the limit at the grid ceiling
+    -- so a legitimately-forged 10-property item is never touched.
     local items_iface = Managers.backend and Managers.backend:get_interface("items")
     local mirror = items_iface and items_iface._backend_mirror
     local inv = mirror and mirror._inventory_items
@@ -545,20 +623,21 @@ mod:hook_safe("BackendManagerPlayFab", "_create_interfaces", function()
         for bid, item in pairs(inv) do
             local props = item and item.properties
             if type(props) == "table" then
+                local KEEP_LIMIT = 10  -- 10-slot grid ceiling = MAX_DISTINCT_PROPERTIES
                 local prop_count = 0
                 local keep = {}
                 local kept_keys = {}
                 local dropped_keys = {}
                 for k, v in pairs(props) do
                     prop_count = prop_count + 1
-                    if prop_count <= 2 then
+                    if prop_count <= KEEP_LIMIT then
                         keep[k] = v
                         kept_keys[#kept_keys + 1] = tostring(k)
                     else
                         dropped_keys[#dropped_keys + 1] = tostring(k)
                     end
                 end
-                if prop_count > 2 then
+                if prop_count > KEEP_LIMIT then
                     item.properties = keep
                     if item.CustomData then
                         local cjson_mod = rawget(_G, "cjson")
@@ -577,7 +656,7 @@ mod:hook_safe("BackendManagerPlayFab", "_create_interfaces", function()
             end
         end
         if trimmed > 0 then
-            mod:info("[cim] Trimmed %d items with >2 properties to vanilla cap.", trimmed)
+            mod:info("[cim] Trimmed %d items exceeding the 10-property grid ceiling.", trimmed)
         end
     end
 end)
@@ -633,8 +712,34 @@ local function _cim_unique_id(peer_id, local_player_id)
     return tostring(peer_id) .. ":" .. tostring(local_player_id)
 end
 
+-- ============================================================
+-- MASTER loadout opt-in gate (v0.8.15-dev)
+-- ============================================================
+-- DEFAULT OFF. The `persist_modded_loadouts` toggle is the single switch that
+-- decides whether cim participates in the loadout path AT ALL. When it is OFF
+-- (the default), every cim loadout hook becomes a pure pass-through / no-op and
+-- the boot/keep restore + flat->indexed migration do nothing — so a vanilla
+-- player AND bot loadout is byte-identical to not having cim installed (a bot
+-- gets its DESIGNATED vanilla loadout, never a host clone, because cim no longer
+-- writes/syncs/migrates the mirror).
+--
+-- nil-safe: `mod:get` on an unset key returns the widget default (false) here,
+-- and a defensive `== true` keeps any non-boolean stored value from enabling
+-- persistence by accident.
+local function _persist_loadouts_enabled()
+    return mod:get("persist_modded_loadouts") == true
+end
+-- Exposed read-only for the regression test / debug probes.
+mod._cim_persist_loadouts_enabled = _persist_loadouts_enabled
+
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
     mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
+        -- v0.8.15-dev master gate: when loadout persistence is OFF (default),
+        -- cim takes the wire EXACTLY as vanilla would — no rarity rewrite, no
+        -- `cim_modded_slot` side-channel send. Pure pass-through.
+        if not _persist_loadouts_enabled() then
+            return func(player, slot_name, item, sync_to_specific_peer_id)
+        end
         local is_modded = item and item.rarity == "modded" or false
         local peer_id = player:network_id()
         local local_player_id = player:local_player_id()
@@ -644,8 +749,11 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
         -- We always send (even is_modded=false) so equipping a non-modded item
         -- clears any stale modded flag on that slot.
         local target = sync_to_specific_peer_id or "others"
+        -- audit 2026-06-07 (v0.7.72-dev): CIM_RPC_SCHEMA is the FIRST positional
+        -- arg after the target (VMF_RECIPES § 10). The receiver gate below drops
+        -- any packet whose leading schema value doesn't match.
         local ok_send, err_send = pcall(mod.network_send, mod, "cim_modded_slot",
-            target, peer_id, local_player_id, slot_name, is_modded)
+            target, CIM_RPC_SCHEMA, peer_id, local_player_id, slot_name, is_modded)
         if not ok_send then mod:info("[cim] side-channel send failed: %s", tostring(err_send)) end
 
         if not is_modded then
@@ -664,7 +772,16 @@ end
 -- the loadout RPC already arrived (out-of-order delivery), patches the stored
 -- item's rarity back to "modded" immediately. Vanilla clients never register
 -- this handler so the RPC is dropped harmlessly there.
-mod:network_register("cim_modded_slot", function(sender_peer_id, peer_id, local_player_id, slot_name, is_modded)
+local function _rpc_cim_modded_slot(sender_peer_id, schema_version, peer_id, local_player_id, slot_name, is_modded)
+    -- audit 2026-06-07 (v0.7.72-dev): schema gate (VMF_RECIPES § 10 / BUG_CLASSES
+    -- § 9). VMF injects sender_peer_id; schema_version is the first WIRE arg. Drop
+    -- (no state mutation) when a peer on a different cim build sends an incompatible
+    -- payload shape, rather than mis-binding it to the wrong positional slots.
+    if schema_version ~= CIM_RPC_SCHEMA then
+        _dbg_alert("[rpc:schema] cim_modded_slot mismatch from peer=%s: peer sent v%s, we expect v%s. Dropping.",
+            tostring(sender_peer_id), tostring(schema_version), tostring(CIM_RPC_SCHEMA))
+        return
+    end
     local uid = _cim_unique_id(peer_id, local_player_id)
     _cim_modded_slot_state[uid] = _cim_modded_slot_state[uid] or {}
     _cim_modded_slot_state[uid][slot_name] = is_modded and true or nil
@@ -680,7 +797,14 @@ mod:network_register("cim_modded_slot", function(sender_peer_id, peer_id, local_
             stored.rarity = is_modded and "modded" or stored.rarity
         end
     end
-end)
+end
+mod:network_register("cim_modded_slot", _rpc_cim_modded_slot)
+
+-- Exposed for /cim_regression_test (rpc_schema_gate_drops_on_mismatch): lets the
+-- test drive the receiver synthetically and assert the schema gate drops on a
+-- bad version (audit 2026-06-07, v0.7.72-dev).
+mod._cim_rpc_modded_slot = _rpc_cim_modded_slot
+mod._cim_modded_slot_state = _cim_modded_slot_state
 
 -- Restore "modded" rarity post-decode on cim clients. hook_safe fires AFTER
 -- vanilla's `rpc_sync_loadout_slot` has stored the item under
@@ -689,6 +813,12 @@ end)
 -- in-place. No-op if the side-channel hasn't arrived yet — the side-channel
 -- receiver above handles the inverse out-of-order case.
 mod:hook_safe("PlayerManager", "rpc_sync_loadout_slot", function(self, channel_id, peer_id, local_player_id, slot_id, item_id, rarity_id)
+    -- v0.8.15-dev master gate: when loadout persistence is OFF (default), cim
+    -- does not patch any received-slot rarity. (`_cim_modded_slot_state` stays
+    -- empty because the sender-side `sync_loadout_slot` hook never fired the
+    -- side-channel, so this would no-op anyway — but bail explicitly to keep the
+    -- receive path a clean vanilla pass-through.)
+    if not _persist_loadouts_enabled() then return end
     local uid = _cim_unique_id(peer_id, local_player_id)
     local slot_state = _cim_modded_slot_state[uid]
     if not slot_state then return end
@@ -707,7 +837,80 @@ end)
 -- so that switching to vanilla and back doesn't wipe their modded loadout.
 
 local _WEAPON_SLOT_TYPES = { melee = true, ranged = true, trinket = true, ring = true, necklace = true }
+
+-- ============================================================
+-- Persisted modded-loadout store — INDEX-AWARE schema (v0.8.13-dev)
+-- ============================================================
+-- Schema: _modded_loadout[career_name][loadout_index][slot_name] = backend_id.
+--
+-- WHY the index dimension exists (the v0.8.13-dev bot-loadout fix):
+-- VT2 stores gear as PlayFabMirrorBase._career_data[career][loadout_index][slot].
+-- `_career_loadouts[career]` is the player's SELECTED (active) index;
+-- `PlayerData.loadout_selection.bot_equipment[career]` is a bot's DESIGNATED
+-- index. Vanilla bot equip READS each bot's gear from its DESIGNATED index
+-- (backend_interface_item_playfab.lua:150 →
+-- get_character_data(career, slot, bot_loadout_index)).
+--
+-- The pre-0.8.13 store was FLAT (career -> slot -> bid) with no index. Both
+-- capture hooks dropped `optional_loadout_index`, and restore wrote with no
+-- index arg, so set_loadout_item/set_character_data DEFAULTED every write to
+-- the SELECTED index (playfab_mirror_base.lua:1930). Result: a bot's
+-- designated-index modded gear was never persisted/restored to that index ->
+-- bots cloned the host's selected loadout; and the player's modded items got
+-- conflated across loadout switches. Adding the index dimension fixes both:
+-- captures store the bid under the index it was actually written to, and
+-- restore stamps each saved item back into ITS index.
 local _modded_loadout = {}
+
+-- Resolve the LIVE selected loadout index for a career from the backend mirror,
+-- LA-safe (same _backend_mirror access pattern used at ~:549). Returns an
+-- integer index, or `fallback` (default 1) when the mirror / career isn't
+-- available yet. Never throws — capture/restore call this at timing-fragile
+-- moments where the mirror may be nil.
+local function _resolve_selected_index(career_name, fallback)
+    fallback = fallback or 1
+    if not career_name then return fallback end
+    local items_iface = Managers.backend and Managers.backend.get_interface
+        and Managers.backend:get_interface("items")
+    local mirror = items_iface and items_iface._backend_mirror
+    if not mirror then return fallback end
+    -- Prefer the direct table read; fall back to the public accessor.
+    local ok, idx = pcall(function()
+        if mirror._career_loadouts then
+            return mirror._career_loadouts[career_name]
+        end
+    end)
+    if ok and type(idx) == "number" then return idx end
+    if mirror.get_career_loadouts then
+        local ok2, sel = pcall(mirror.get_career_loadouts, mirror, career_name)
+        if ok2 and type(sel) == "number" then return sel end
+    end
+    return fallback
+end
+
+-- Detect whether a career's stored value is the OLD flat shape
+-- (slot_name -> bid string) vs the NEW indexed shape (index -> {slot -> bid}).
+-- Heuristic, type-safe against partial/corrupt data:
+--   * indexed: at least one entry keyed by a NUMBER whose value is a table.
+--   * flat:    at least one entry keyed by a STRING (slot name) whose value is
+--              a string bid (or nil).
+-- A career table with only number->table entries is indexed; anything carrying
+-- a string-keyed string value is treated as flat and migrated.
+local function _career_value_is_flat(career_tbl)
+    if type(career_tbl) ~= "table" then return false end
+    for k, v in pairs(career_tbl) do
+        if type(k) == "string" then
+            -- A slot-name key. Flat shape (value should be a bid string, but
+            -- even a stray non-table here means this isn't the indexed shape).
+            return true
+        elseif type(k) == "number" and type(v) ~= "table" then
+            -- A numeric key pointing at a non-table = corrupt; not valid
+            -- indexed data. Treat as flat so migration re-homes it safely.
+            return true
+        end
+    end
+    return false
+end
 
 -- v0.7.67-dev (issue #22): tracks the bid we last re-equipped onto the LIVE keep
 -- avatar per "career/slot", so the repeated restore passes (1.0s + 3.0s deferred)
@@ -727,6 +930,107 @@ local function _modded_loadout_save()
     mod:set("modded_loadout", _modded_loadout)
 end
 
+-- One-time, NO-DATA-LOSS migration from the old FLAT schema
+-- (career -> slot -> bid) to the indexed schema
+-- (career -> index -> slot -> bid). Existing users' saved data is flat; we
+-- re-home each flat entry under the career's REAL (live selected) loadout index.
+-- That's the safest target: pre-0.8.13 cim only ever stamped the SELECTED index,
+-- so the flat entries WERE the selected-index gear — assigning them there
+-- preserves the exact prior behavior for the player's active loadout while
+-- unlocking per-index storage going forward.
+--
+-- ⚠ TIMING (v0.8.14-dev fix for the v0.8.13-dev blocker): this MUST run at a
+-- MIRROR-READY moment, NOT at script-eval / boot. `_resolve_selected_index`
+-- only returns the real per-career selected index once the backend mirror
+-- exists; at boot it always falls back to 1, which would home EVERY migrated
+-- flat entry under index 1. For a player whose actual selected index is not 1,
+-- that re-homed their saved gear to the wrong loadout and the keep avatar
+-- re-equipped vanilla (`_reequip_live_avatar` reads the live selected index and
+-- found nothing there). The migration is therefore driven from
+-- `_restore_modded_loadout` (mirror-confirmed) via `_run_loadout_migration`
+-- below, NOT from `_modded_loadout_load`.
+--
+-- Mutates `data` in place (per career). Returns true if anything was migrated
+-- (caller persists). Guards every step against partial/corrupt entries; never
+-- drops a saved bid. The `mirror_ready` flag gates the fallback: when the mirror
+-- is confirmed up we DO accept the resolved index (even if it's 1, that's the
+-- real selected index); when it's NOT up we SKIP the career entirely and leave
+-- it flat for a later pass (don't home to a guessed index).
+local function _migrate_modded_loadout(data, mirror_ready)
+    if type(data) ~= "table" then return false end
+    local migrated = false
+    for career_name, career_tbl in pairs(data) do
+        if _career_value_is_flat(career_tbl) then
+            if not mirror_ready then
+                -- Mirror not up yet — DON'T guess an index. Leave this career
+                -- flat; the next mirror-ready restore pass migrates it.
+                mod:info("[loadout-migrate] %s deferred (mirror not ready)", tostring(career_name))
+            else
+                local index = _resolve_selected_index(career_name)
+                local indexed = { [index] = {} }
+                for slot_name, bid in pairs(career_tbl) do
+                    -- Only re-home well-formed (string slot -> bid) entries; keep
+                    -- any stray numeric->table entry (mixed/corrupt save) intact so
+                    -- no data is lost.
+                    if type(slot_name) == "string" then
+                        indexed[index][slot_name] = bid
+                    elseif type(slot_name) == "number" and type(bid) == "table" then
+                        indexed[slot_name] = bid
+                    end
+                end
+                data[career_name] = indexed
+                migrated = true
+                mod:info("[loadout-migrate] %s flat->indexed under live selected index %d",
+                    tostring(career_name), index)
+            end
+        end
+    end
+    return migrated
+end
+
+-- One-shot guard: once a mirror-ready migration pass converts every flat career
+-- and persists, this flips true so subsequent restore passes don't re-scan /
+-- re-migrate. It is also idempotent WITHOUT the flag — `_career_value_is_flat`
+-- returns false for already-indexed careers, so a re-run is a no-op — but the
+-- flag avoids the per-pass walk and the redundant persist on the 1.0s/3.0s
+-- deferred restore passes and the manual /cim_restore_loadout command.
+local _loadout_migration_done = false
+
+-- Mirror-ready migration driver. Called from `_restore_modded_loadout` (where
+-- the backend mirror is confirmed loaded). Detects any remaining flat-shape
+-- career, homes it to its REAL live selected index, and persists once. If the
+-- mirror is somehow still unavailable, migrates nothing this pass and leaves the
+-- one-shot flag UNSET so the next deferred pass re-attempts (no data lost).
+local function _run_loadout_migration()
+    if _loadout_migration_done then return end
+    -- Confirm the mirror really is reachable before committing to an index.
+    local items_iface = Managers.backend and Managers.backend.get_interface
+        and Managers.backend:get_interface("items")
+    local mirror_ready = (items_iface and items_iface._backend_mirror) and true or false
+    local migrated = _migrate_modded_loadout(_modded_loadout, mirror_ready)
+    if migrated then
+        _modded_loadout_save()
+    end
+    -- Only declare the one-shot done once we've actually had a mirror-ready pass
+    -- AND nothing flat remains. If the mirror wasn't ready, leave the flag unset
+    -- so the next restore pass re-attempts.
+    if mirror_ready then
+        local any_flat = false
+        for _, career_tbl in pairs(_modded_loadout) do
+            if _career_value_is_flat(career_tbl) then any_flat = true break end
+        end
+        if not any_flat then _loadout_migration_done = true end
+    end
+end
+
+-- Boot/script-eval load: pull the raw saved payload into memory AS-IS (flat or
+-- indexed). NO migration here — migration is deferred to `_run_loadout_migration`
+-- at the first mirror-ready restore pass (see the timing note above). Until then
+-- `_modded_loadout` may carry the OLD flat shape for some careers; every early
+-- consumer that walks it before the migration runs must tolerate the flat shape
+-- (audited v0.8.14-dev: `_cim_clear_modded_loadout_for_bid` is the only such
+-- pre-mirror consumer and now handles both shapes; the restore loop and
+-- `_reequip_live_avatar` run AFTER `_run_loadout_migration` in the same call).
 local function _modded_loadout_load()
     local data = mod:get("modded_loadout")
     if type(data) == "table" then
@@ -744,11 +1048,43 @@ _modded_loadout_load()
 mod._cim_clear_modded_loadout_for_bid = function(backend_id)
     if not backend_id then return end
     local dirty = false
-    for career_name, slots in pairs(_modded_loadout) do
-        for slot_name, bid in pairs(slots) do
-            if bid == backend_id then
-                slots[slot_name] = nil
-                dirty = true
+    -- Indexed schema: career -> index -> slot -> bid. BUT v0.8.14-dev defers the
+    -- flat->indexed migration to the first mirror-ready restore pass, so this
+    -- helper may run (salvage) while a career is STILL flat (career -> slot ->
+    -- bid). Handle BOTH shapes so a pre-migration salvage still clears the bid
+    -- and never strands a dangling restore target. Detected per career via the
+    -- same `_career_value_is_flat` heuristic used by the migration.
+    for career_name, value in pairs(_modded_loadout) do
+        if type(value) == "table" then
+            if _career_value_is_flat(value) then
+                -- Flat: value is slot -> bid (possibly with stray numeric->table
+                -- corrupt entries, which we walk into too).
+                for slot_name, bid in pairs(value) do
+                    if type(bid) == "string" then
+                        if bid == backend_id then
+                            value[slot_name] = nil
+                            dirty = true
+                        end
+                    elseif type(bid) == "table" then
+                        -- Stray numeric->table (mixed/corrupt) — treat as an
+                        -- index sub-table.
+                        for s, b in pairs(bid) do
+                            if b == backend_id then bid[s] = nil; dirty = true end
+                        end
+                    end
+                end
+            else
+                -- Indexed: value is index -> {slot -> bid}.
+                for _index, slots in pairs(value) do
+                    if type(slots) == "table" then
+                        for slot_name, bid in pairs(slots) do
+                            if bid == backend_id then
+                                slots[slot_name] = nil
+                                dirty = true
+                            end
+                        end
+                    end
+                end
             end
         end
     end
@@ -765,19 +1101,26 @@ end
 -- avoids re-trying the same MISSING restore log line every session.
 local function _modded_loadout_purge_stale()
     local removed = 0
-    for career_name, slots in pairs(_modded_loadout) do
-        for slot_name, bid in pairs(slots) do
-            local keep = false
-            if type(bid) == "string" then
-                if _forged_weapons[bid] then keep = true
-                elseif bid:sub(1, 4) == "cwv_" then keep = true
+    -- Indexed schema: career -> index -> slot -> bid.
+    for career_name, indices in pairs(_modded_loadout) do
+        if type(indices) == "table" then
+            for index, slots in pairs(indices) do
+                if type(slots) == "table" then
+                    for slot_name, bid in pairs(slots) do
+                        local keep = false
+                        if type(bid) == "string" then
+                            if _forged_weapons[bid] then keep = true
+                            elseif bid:sub(1, 4) == "cwv_" then keep = true
+                            end
+                        end
+                        if not keep then
+                            slots[slot_name] = nil
+                            removed = removed + 1
+                            mod:info("[loadout-purge] %s[%s]/%s -> %s (bid not in forged_weapons or cwv_*)",
+                                tostring(career_name), tostring(index), tostring(slot_name), tostring(bid))
+                        end
+                    end
                 end
-            end
-            if not keep then
-                slots[slot_name] = nil
-                removed = removed + 1
-                mod:info("[loadout-purge] %s/%s -> %s (bid not in forged_weapons or cwv_*)",
-                    tostring(career_name), tostring(slot_name), tostring(bid))
             end
         end
     end
@@ -840,7 +1183,12 @@ local function _reequip_live_avatar()
     local career = profile and profile.careers and profile.careers[career_index]
     local career_name = career and career.name
     if not career_name then return end
-    local slots = _modded_loadout[career_name]
+    -- The live keep unit shows the player's SELECTED loadout index, so only
+    -- re-equip the slots saved under that index. (Bot-designated indices have
+    -- no live local unit — they re-read from data when next spawned.)
+    local sel_index = _resolve_selected_index(career_name, 1)
+    local indices = _modded_loadout[career_name]
+    local slots = type(indices) == "table" and indices[sel_index]
     if not slots then return end
 
     local items = Managers.backend and Managers.backend:get_interface("items")
@@ -877,11 +1225,30 @@ local function _reequip_live_avatar()
 end
 
 _restore_modded_loadout = function()
+    -- v0.8.15-dev MASTER gate: when loadout persistence is OFF (default), cim
+    -- does NOT touch loadouts at all — no flat->indexed migration, no stale
+    -- purge, no set_loadout_item writes, no live-avatar re-equip. The whole
+    -- restore (and the migration it drives via _run_loadout_migration) is a
+    -- no-op, leaving vanilla player AND bot loadouts exactly as the base game
+    -- writes them.
+    if not _persist_loadouts_enabled() then
+        mod:info("[restore] skipped — persist_modded_loadouts master toggle OFF (cim not touching loadouts)")
+        return
+    end
     if not mod:get("restore_modded_loadout") then
         mod:info("[restore] skipped — restore_modded_loadout setting OFF")
         return
     end
     _modded_loadout_load()
+    -- v0.8.14-dev: run the flat->indexed migration HERE, at the first
+    -- mirror-ready moment, so each migrated flat entry homes to the career's
+    -- REAL live selected index (not the boot-time fallback of 1). One-shot +
+    -- idempotent; re-attempts on a later deferred pass if the mirror still
+    -- isn't up. MUST run before purge/restore below so those walk the indexed
+    -- shape. (The v0.8.13-dev blocker: this used to run at script-eval where the
+    -- mirror is absent, homing every entry to index 1 and breaking multi-loadout
+    -- users whose selected index != 1.)
+    _run_loadout_migration()
     -- Purge stale entries (bids no longer in _forged_weapons / cwv_*) before
     -- attempting restore. Idempotent — runs every restore pass; first session
     -- after v0.7.33-alpha may purge dozens of entries, subsequent sessions zero.
@@ -909,39 +1276,56 @@ _restore_modded_loadout = function()
     -- the bottom of the loop, and every call that can throw inside the bracket is
     -- pcall-guarded. Keep it that way: do not add an un-pcall'd throwing call here.
     _restoring = true
-    for career_name, slots in pairs(_modded_loadout) do
-        for slot_name, backend_id in pairs(slots) do
-            total = total + 1
-            -- pcall-guarded: a throw here (LA-clone drift, stale template-cache
-            -- hit from standard_forge's get_item_from_id hook, malformed mirror
-            -- entry) would otherwise propagate out and strand _restoring=true.
-            local ok_get, item = pcall(items.get_item_from_id, items, backend_id)
-            if not ok_get then item = nil end
-            if not item then
-                missing = missing + 1
-                mod:info("[restore] MISSING %s/%s -> %s (item not in mirror; will retry next state transition)",
-                    tostring(career_name), tostring(slot_name), tostring(backend_id))
-            else
-                local item_key = item.key or item.ItemId or (item.data and item.data.key) or "<unknown>"
-                local ok, err = pcall(items.set_loadout_item, items, backend_id, career_name, slot_name)
-                if ok then
-                    restored = restored + 1
-                    mod:info("[restore] OK %s/%s -> %s (%s)",
-                        tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(item_key))
-                else
-                    errored = errored + 1
-                    mod:info("[restore] ERROR %s/%s -> %s: %s",
-                        tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(err))
-                end
-                -- v0.7.54-dev: immediately read back via get_loadout_item_id
-                -- to PROVE the write reached the layer the inventory reads
-                -- from. If set_loadout_item returns ok but read-back returns
-                -- a different bid (or nil), the mirror silently rejected our
-                -- write OR a different persistence layer is the source of truth.
-                -- This is the proof issue #22 needs.
-                if mod._cim_autodump_restore_entry then
-                    pcall(mod._cim_autodump_restore_entry,
-                        career_name, slot_name, backend_id, items, ok, err)
+    -- Indexed schema: career -> index -> slot -> bid. Each saved item is
+    -- restored to ITS OWN index by passing `loadout_index` as the 4th arg to
+    -- set_loadout_item -> set_character_data(..., optional_loadout_index)
+    -- (backend_interface_item_playfab.lua:665, playfab_mirror_base.lua:1928).
+    -- This is the core bot fix: a bot's designated-index modded gear lands on
+    -- that index instead of being stamped into the host's selected index.
+    for career_name, indices in pairs(_modded_loadout) do
+        if type(indices) == "table" then
+            for loadout_index, slots in pairs(indices) do
+                if type(slots) == "table" then
+                    for slot_name, backend_id in pairs(slots) do
+                        total = total + 1
+                        -- pcall-guarded: a throw here (LA-clone drift, stale template-cache
+                        -- hit from standard_forge's get_item_from_id hook, malformed mirror
+                        -- entry) would otherwise propagate out and strand _restoring=true.
+                        local ok_get, item = pcall(items.get_item_from_id, items, backend_id)
+                        if not ok_get then item = nil end
+                        if not item then
+                            missing = missing + 1
+                            mod:info("[restore] MISSING %s[%s]/%s -> %s (item not in mirror; will retry next state transition)",
+                                tostring(career_name), tostring(loadout_index), tostring(slot_name), tostring(backend_id))
+                        else
+                            local item_key = item.key or item.ItemId or (item.data and item.data.key) or "<unknown>"
+                            -- Pass the SAVED index as the 4th arg so the write targets
+                            -- that index, not the live SELECTED one. Type-guard: only
+                            -- pass a numeric index (a corrupt non-number key falls back
+                            -- to vanilla's selected-index default rather than throwing).
+                            local index_arg = (type(loadout_index) == "number") and loadout_index or nil
+                            local ok, err = pcall(items.set_loadout_item, items, backend_id, career_name, slot_name, index_arg)
+                            if ok then
+                                restored = restored + 1
+                                mod:info("[restore] OK %s[%s]/%s -> %s (%s)",
+                                    tostring(career_name), tostring(loadout_index), tostring(slot_name), tostring(backend_id), tostring(item_key))
+                            else
+                                errored = errored + 1
+                                mod:info("[restore] ERROR %s[%s]/%s -> %s: %s",
+                                    tostring(career_name), tostring(loadout_index), tostring(slot_name), tostring(backend_id), tostring(err))
+                            end
+                            -- v0.7.54-dev: immediately read back via get_loadout_item_id
+                            -- to PROVE the write reached the layer the inventory reads
+                            -- from. If set_loadout_item returns ok but read-back returns
+                            -- a different bid (or nil), the mirror silently rejected our
+                            -- write OR a different persistence layer is the source of truth.
+                            -- This is the proof issue #22 needs.
+                            if mod._cim_autodump_restore_entry then
+                                pcall(mod._cim_autodump_restore_entry,
+                                    career_name, slot_name, backend_id, items, ok, err, index_arg)
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -1005,29 +1389,56 @@ end
 -- Skipped entirely while restore replays saved state (_restoring): those writes
 -- aren't new equips, must not mutate _modded_loadout mid-pairs()-iteration, and
 -- must not pre-mark _reequipped (which would starve the live re-equip).
-local function _capture_loadout_equip(career_name, slot_name, item_id, from_live_equip)
+-- `loadout_index` is the index THIS equip wrote to. The 4-arg
+-- BackendInterfaceItemPlayfab.set_loadout_item path carries it explicitly
+-- (`optional_loadout_index`); the 3-arg BackendUtils menu path does NOT, so the
+-- caller resolves the LIVE selected index off the mirror and passes it in. A nil
+-- here falls back to the resolved selected index (matching vanilla's
+-- get/set_character_data default) so the capture never lands index-less.
+local function _capture_loadout_equip(career_name, slot_name, item_id, from_live_equip, loadout_index)
+    -- v0.8.15-dev master gate: when loadout persistence is OFF (default), cim
+    -- captures NOTHING — `_modded_loadout` is never read or written, so neither
+    -- the BackendInterfaceItemPlayfab hook_safe nor the BackendUtils full hook
+    -- perturbs the vanilla equip. The BackendUtils hook still calls func(...) so
+    -- the underlying vanilla write is byte-identical; this just skips the record.
+    if not _persist_loadouts_enabled() then return end
     if _restoring then return end
     if not item_id or not career_name or not slot_name then return end
 
-    if mod._cim_autodump_equip_event then
-        local items_iface = Managers.backend and Managers.backend:get_interface("items")
-        pcall(mod._cim_autodump_equip_event, career_name, slot_name, item_id, items_iface)
+    -- Resolve the index this write targets: explicit arg wins; otherwise the
+    -- live selected index (vanilla's default target when no index is passed).
+    if type(loadout_index) ~= "number" then
+        loadout_index = _resolve_selected_index(career_name, 1)
     end
 
-    local was_stale = _modded_loadout[career_name] and _modded_loadout[career_name][slot_name]
-    if _modded_loadout[career_name] then
-        _modded_loadout[career_name][slot_name] = nil
+    if mod._cim_autodump_equip_event then
+        local items_iface = Managers.backend and Managers.backend:get_interface("items")
+        pcall(mod._cim_autodump_equip_event, career_name, slot_name, item_id, items_iface, from_live_equip, loadout_index)
+    end
+
+    -- Indexed schema: career -> index -> slot -> bid. Clear the (index, slot)
+    -- first; re-save only if the new item is modded (vanilla equips clean up the
+    -- cim record at THAT index, modded equips refresh it). Other indices for the
+    -- same career/slot are untouched — that's the whole point of the fix.
+    local career_tbl = _modded_loadout[career_name]
+    local index_tbl = career_tbl and career_tbl[loadout_index]
+    local was_stale = index_tbl and index_tbl[slot_name]
+    if index_tbl then
+        index_tbl[slot_name] = nil
     end
 
     local is_modded = mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(item_id)
     if is_modded then
         _modded_loadout[career_name] = _modded_loadout[career_name] or {}
-        _modded_loadout[career_name][slot_name] = item_id
+        _modded_loadout[career_name][loadout_index] = _modded_loadout[career_name][loadout_index] or {}
+        _modded_loadout[career_name][loadout_index][slot_name] = item_id
     end
 
     if from_live_equip then
         -- The menu equip already recreated the unit; sync dedup so the next
-        -- restore pass doesn't needlessly re-spawn this slot.
+        -- restore pass doesn't needlessly re-spawn this slot. The live keep unit
+        -- only ever shows the selected index, and menu equips write the selected
+        -- index, so the bare "career/slot" dedup key stays correct.
         _reequipped[career_name .. "/" .. slot_name] = item_id
     end
 
@@ -1038,9 +1449,11 @@ end
 
 -- Direct interface writes (restore — guarded by _restoring — or any code calling
 -- the items interface method directly). from_live_equip=false: a bare data write
--- doesn't re-spawn the unit.
+-- doesn't re-spawn the unit. Capture the 4th arg `optional_loadout_index` so a
+-- write to a NON-selected index (e.g. configuring a bot's designated loadout) is
+-- recorded under that index, not the selected one.
 mod:hook_safe("BackendInterfaceItemPlayfab", "set_loadout_item", function(self, item_id, career_name, slot_name, optional_loadout_index)
-    _capture_loadout_equip(career_name, slot_name, item_id, false)
+    _capture_loadout_equip(career_name, slot_name, item_id, false, optional_loadout_index)
 end)
 
 -- THE menu-equip capture (issue #22 root fix). With Loremaster's Armoury active,
@@ -1065,7 +1478,10 @@ local function _install_backendutils_capture()
     _backendutils_capture_installed = true
     mod._cim_backendutils_capture_installed = true  -- for the regression check
     mod:hook(BU, "set_loadout_item", function(func, backend_id, career_name, slot_name)
-        _capture_loadout_equip(career_name, slot_name, backend_id, true)
+        -- BackendUtils.set_loadout_item is 3-arg and always writes the SELECTED
+        -- index, so pass nil for loadout_index — the capture helper resolves the
+        -- live selected index off the mirror and stores the bid under it.
+        _capture_loadout_equip(career_name, slot_name, backend_id, true, nil)
         return func(backend_id, career_name, slot_name)
     end)
     mod:info("[cim] BackendUtils.set_loadout_item capture installed (post-LA menu-equip capture)")
@@ -1075,12 +1491,32 @@ mod:command("cim_restore_loadout", "Manually re-equip the saved modded loadout (
     if not _restore_modded_loadout then mod:echo("Restore helper not initialised yet."); return end
     _modded_loadout_load()
     local count = 0
-    for career_name, slots in pairs(_modded_loadout) do
-        for _ in pairs(slots) do count = count + 1 end
+    -- Indexed schema: career -> index -> slot -> bid.
+    for career_name, indices in pairs(_modded_loadout) do
+        if type(indices) == "table" then
+            for _, slots in pairs(indices) do
+                if type(slots) == "table" then
+                    for _ in pairs(slots) do count = count + 1 end
+                end
+            end
+        end
     end
     mod:echo(string.format("[cim] %d saved modded loadout entries; restoring...", count))
     _restore_modded_loadout()
     mod:echo("[cim] Done. If items are still missing, run /cim_dump_loadout to see what's saved.")
+end)
+
+-- Open the VANILLA standard crafting bench (salvage / craft / re-roll / upgrade
+-- / apply-illusion). Works in the Keep always; in adventure missions when
+-- 'Allow in mission' is ON. Material-clean (unlike the Athanor /forge_hotkey).
+-- mod.open_standard_crafting is defined further down (Athanor section); the
+-- command is registered at load and dispatches at runtime, so order is fine.
+mod:command("cim_craft_standard", "Open the standard crafting bench (salvage / craft / re-roll properties + traits / upgrade rarity / apply illusion). Keep always; in mission with 'Allow in mission' ON. Adventure only.", function()
+    if type(mod.open_standard_crafting) == "function" then
+        mod.open_standard_crafting()
+    else
+        mod:echo("Standard crafting opener not initialised yet.")
+    end
 end)
 
 mod:command("cim_dump_active_window", "Dump the currently-open hero_view active windows + their widgets to log (use while a menu is open)", function()
@@ -1146,12 +1582,20 @@ mod:command("cim_dump_loadout", "Print the saved modded loadout table to chat", 
     _modded_loadout_load()
     local items = Managers.backend and Managers.backend:get_interface("items")
     local total = 0
-    for career_name, slots in pairs(_modded_loadout) do
-        for slot_name, bid in pairs(slots) do
-            local item = items and items:get_item_from_id(bid)
-            local in_mirror = item and "yes" or "MISSING"
-            mod:echo(string.format("  %s %s -> %s (in_mirror=%s)", career_name, slot_name, tostring(bid), in_mirror))
-            total = total + 1
+    -- Indexed schema: career -> index -> slot -> bid.
+    for career_name, indices in pairs(_modded_loadout) do
+        if type(indices) == "table" then
+            for index, slots in pairs(indices) do
+                if type(slots) == "table" then
+                    for slot_name, bid in pairs(slots) do
+                        local item = items and items:get_item_from_id(bid)
+                        local in_mirror = item and "yes" or "MISSING"
+                        mod:echo(string.format("  %s[%s] %s -> %s (in_mirror=%s)",
+                            career_name, tostring(index), slot_name, tostring(bid), in_mirror))
+                        total = total + 1
+                    end
+                end
+            end
         end
     end
     mod:echo(string.format("[cim] %d entries saved (across %d careers)", total,
@@ -1176,6 +1620,35 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
     if mod._cim_autodump_filtered_items then
         pcall(mod._cim_autodump_filtered_items, self, filter, params, items)
     end
+
+    -- Versus-twin re-hide (runs ALWAYS for the adventure inventory grid, even
+    -- when the show-only-modded filter is off — the leak is independent of it).
+    --
+    -- ROOT CAUSE this guards: `_ensure_item_adventure_visible` clears
+    -- `ItemMasterList[vs_key].mechanisms = nil` to surface a crafted vs_* weapon
+    -- in Adventure (intended). But that IML entry is a GLOBAL shared by the
+    -- player's raw OWNED vs_* twin too (item.data is a reference, not a copy —
+    -- PlayFabMirrorBase._update_data:1786), so the owned twin ALSO passes the
+    -- vanilla `available_in_current_mechanism` filter and leaks into the normal
+    -- inventory grid. We can't un-leak it at the data layer (one shared table),
+    -- so we re-hide it HERE, at the display layer: drop owned vs_* twins from the
+    -- adventure-inventory result while keeping cim-crafted vs_* (modded bid)
+    -- visible. Keyed on the vs_ ItemId prefix (the mechanisms field is already
+    -- nil post-clear) + _cim_is_modded_backend_id so a deliberately-crafted
+    -- unique vs_* is NEVER hidden. INVENTORY display only — the craft list is
+    -- untouched (memory: reference_vt2_versus_items_hidden_in_adventure).
+    if type(items) == "table" and type(filter) == "string"
+       and filter:find("available_in_current_mechanism", 1, true) then
+        local kept = {}
+        for i = 1, #items do
+            local item = items[i]
+            if not _cim_is_leaked_versus_twin(item) then
+                kept[#kept + 1] = item
+            end
+        end
+        items = kept
+    end
+
     local should_filter = mod:get("show_only_modded_weapons") or mod._cim_standard_forge_active
     if not should_filter then return items end
     if type(items) ~= "table" then return items end
@@ -1264,6 +1737,13 @@ end)
 local _custom_forge_active = false
 local _forge_loadout = {}
 local _forge_item_props = {}
+-- Issue #88: one-shot handshake between mod.open_standard_crafting and the
+-- HeroView.on_enter hook. Set true immediately before cim's standard-crafting
+-- transition; the on_enter hook applies the inventory_loadout_access flip ONLY
+-- for that one view open (save -> vanilla read -> restore) and clears it, so
+-- the persistent global mutation that leaked the inventory onto ESC-menu
+-- backout mid-mission is gone.
+local _cim_open_standard_inv_pending = false
 local _forge_panel_styled = false
 local _forge_bg_colored = false
 
@@ -1305,9 +1785,20 @@ mod.open_forge = function()
     -- gated by allow_in_mission). User report 2026-05-25 EOD: requested
     -- access in the CW staging area where the menu should be available.
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    if not in_keep and not mod:get("allow_in_mission") then
-        mod:echo("Crafting menu only opens in the Keep. " ..
-                 "Enable 'Allow in mission' in the mod options to override (may crash).")
+    -- KEEP-ONLY GATE: the in-mission ATHANOR (weave forge) is hard-disabled,
+    -- independent of the `allow_in_mission` toggle. Even after the Fix B/B2..B6
+    -- material/HDR hardening, opening the forge mid-mission still hits a
+    -- render-level fatal in the shading-environment substitution path
+    -- (script_world.lua:176 `blend`, ShadingEnvironment — user report on
+    -- cim, relates to Issue #81). Until that's resolved the weave forge is
+    -- Keep / CW-hub only, matching the public 0.8.8 build. The material-clean
+    -- standard crafting bench (`open_standard_crafting`) still opens in Adventure
+    -- missions and still honors `allow_in_mission`. The Fix B/B2..B6 hooks are
+    -- left in place (inert) so re-enabling the in-mission Athanor later is a
+    -- one-line gate change, not a re-port.
+    if not in_keep then
+        mod:echo("The Athanor (weave forge) only opens in the Keep. " ..
+                 "Use the standard crafting bench in missions (bind 'Standard crafting' or run /cim_craft_standard).")
         return
     end
 
@@ -1316,6 +1807,107 @@ mod.open_forge = function()
     _forge_item_props = {}
     ingame_ui:transition_with_fade("hero_view_force", {
         menu_state_name = "weave_forge",
+    })
+end
+
+-- ============================================================
+-- Standard crafting bench (Keep Smithy) — in-mission entry
+-- ============================================================
+-- Opens the VANILLA standard crafting bench (`HeroWindowCrafting`, the
+-- `forge` page in HeroView's window layout) mid-mission. This is the
+-- salvage / craft / re-roll-properties / re-roll-traits / upgrade-rarity /
+-- apply-illusion / convert-dust bench — NOT the Athanor (weave forge).
+--
+-- Why this is a SEPARATE, CLEAN path from `open_forge` (Athanor):
+--   The Athanor (`weave_forge` state) is materially entangled with the keep:
+--   its windows hardcode `shading_environment = "environment/ui_weave_forge_preview"`
+--   (an inn-only resource) and draw inn-only raw materials
+--   (`forge_overview_top_glow_effect_smoke_*`, `athanor_skilltree_*`,
+--   `weave_menu_*`) that a mission Gui can't resolve. That class of crash
+--   was chased across v0.7.13 → v0.8.20 (Fixes B/B2..B6) and is why
+--   `open_forge` is opt-in + "[untested] may crash".
+--
+--   The standard bench shares NONE of that. `HeroWindowCrafting`
+--   (hero_window_crafting.lua:302-324) draws plain atlas widgets
+--   (`crafting_bg*`, `crafting_fg*`, `item_grid_fg`, standard window-frame /
+--   button materials — hero_window_crafting_definitions.lua:552-586) on
+--   `ui_top_renderer` with NO viewport, NO create_world, NO
+--   shading_environment, NO HDR Gui, NO preview render-target. The crash
+--   material `forge_overview_top_glow_effect_smoke_1` lives ONLY in the
+--   weave-forge / weave-background definition files (grep-verified: 4 files,
+--   all `weave`). The craft sub-pages (`craft_page_*`) are icon-based, no
+--   spawned-unit preview world. So the standard bench renders flat in a
+--   mission with no material/shading shims at all.
+--
+-- The modded-crafting LOGIC already exists and is keep-tested: standard_forge.lua's
+-- `HeroWindowCrafting`/`HeroWindowCraftingConsole`/`HeroWindowItemCustomization`
+-- on_enter hooks (standard_forge.lua:222-239) + the synth paths fire on the
+-- WINDOW lifecycle, not gated to the keep — so opening the `forge` page in a
+-- mission activates all of it automatically. The only missing piece was an
+-- in-mission entry point, added here.
+--
+-- Template: gt's `gt_open_mission_inventory` (general_tweaker_dev/_gt_mission_ui.lua:56-113),
+-- the proven `handle_transition("hero_view_force", ...)` that bypasses the
+-- hotkey gates the same way vanilla's ESC-menu "Open Inventory" does.
+--
+-- ONE trap avoided: do NOT route the in-mission flow onto the gear-icon
+-- Customization view (`HeroWindowItemCustomization`), which pulls
+-- `levels/ui_store_preview/world` (the preview-world crash class cim already
+-- patched at v0.7.45 / gt #50). A direct transition to `menu_state_name="forge"`
+-- lands on the crafting/inventory/options windows, none of which route there.
+mod.open_standard_crafting = function()
+    if not Managers.ui then
+        mod:echo("Standard crafting: UI not available")
+        return
+    end
+    local ingame_ui = Managers.ui._ingame_ui
+    if not ingame_ui then
+        mod:echo("Standard crafting: not in game")
+        return
+    end
+    if ingame_ui:pending_transition() then return end
+
+    -- Chaos Wastes guard. CW is loadout-locked via the deus boon system and
+    -- its level package sets don't carry the keep crafting/preview resources;
+    -- block the WHOLE run (hub + mission), mirroring gt_open_mission_inventory's
+    -- adventure-exclusive directive (2026-06-18). Adventure / survival only.
+    local mech = Managers.mechanism and Managers.mechanism:current_mechanism_name()
+    if mech == "deus" then
+        mod:echo("Standard crafting is disabled in Chaos Wastes (CW is loadout-locked). Adventure only.")
+        return
+    end
+
+    -- Keep gate / opt-in. The standard bench is material-CLEAN in adventure
+    -- missions, so there is no technical requirement for the keep — but the
+    -- `forge` page also loads the `inventory` window (layout slot 3), which
+    -- depends on the loadout_access_supported_game_modes patch. We honor the
+    -- same `allow_in_mission` opt-in `open_forge` uses, so a single toggle
+    -- governs both crafting surfaces. In the keep / CW hub it always opens.
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+    if not in_keep and not mod:get("allow_in_mission") then
+        mod:echo("Standard crafting opens in the Keep by default. " ..
+                 "Enable 'Allow in mission' in the mod options to open it mid-run.")
+        return
+    end
+
+    -- The `inventory` window (forge layout slot 3) + the loadout panel depend on
+    -- InventorySettings.inventory_loadout_access_supported_game_modes — vanilla
+    -- HeroView.on_enter -> _fetch_initial_loadout_index reads it once
+    -- (hero_view.lua:323) and bails if the current game mode isn't supported.
+    --
+    -- Issue #88: cim USED to flip those flags PERMANENTLY here and never restore
+    -- them. The single vanilla read site is HeroView.on_enter, so a persistent
+    -- flip means EVERY subsequent HeroView open in the mission sees the mode as
+    -- supported — including the ESC-menu / ingame-menu backout, which then pulls
+    -- up the loadout inventory mid-mission (it should be Keep-only). Fix: don't
+    -- mutate the global persistently. Set a ONE-SHOT pending flag; the
+    -- HeroView.on_enter hook below applies the flip ONLY around cim's own view
+    -- open (save -> vanilla on_enter reads it -> restore), so the ESC-menu
+    -- HeroView reads the untouched vanilla values and bails as normal.
+    _cim_open_standard_inv_pending = true
+
+    ingame_ui:transition_with_fade("hero_view_force", {
+        menu_state_name = "forge",   -- hosts HeroWindowCrafting; NOT "weave_forge"
     })
 end
 
@@ -1355,6 +1947,13 @@ local _FORGE_MISSION_SAFE_ENV = "environment/ui_hdr"
 local function _is_in_keep()
     return DamageUtils and DamageUtils.is_in_inn and true or false
 end
+
+-- Exposed for cross-file callers (e.g. cim_debug.lua's HeroWindowWeaveProperties
+-- on_enter hook, which re-suppresses the skill-tree cluster HDR glow after
+-- _create_slot_grid re-appends it — Fix B2). cim_debug.lua loads via mod.dofile
+-- BEFORE this line runs, but its hook BODIES only execute at runtime (in-game),
+-- by which point this assignment has long completed.
+mod._cim_is_in_keep = _is_in_keep
 
 local function _swap_forge_env(viewport_def)
     if _is_in_keep() then return viewport_def end
@@ -1548,36 +2147,170 @@ end)
 -- ------------------------------------------------------------
 -- Mid-mission forge: parent HeroView HDR gui setup + renderer guard
 -- ------------------------------------------------------------
--- Crash trace (user report 2026-06-07, in mission, cim open_forge with Allow in
+-- Crash trace (user 2026-06-07, in mission, cim open_forge with Allow in
 -- mission enabled):
---   hero_view.lua:175: attempt to index local 'hdr_gui_data' (a nil value)
--- (HeroView.hdr_renderer / hdr_top_renderer; the line shifts by game build — the
---  cited local is `self._hdr_gui_data` being indexed.)
 --
--- Same bug class as the _setup_gamepad_gui fix above, one level UP on the parent
--- HeroView. Vanilla HeroView._setup_hdr_gui (hero_view.lua:136-165) gates its
--- whole body on `if self.is_in_inn then ... self._hdr_gui_data = ... end`. In
--- mission is_in_inn is false, so _hdr_gui_data is never built, and the Athanor
--- forge windows' per-frame parent:hdr_renderer()/hdr_top_renderer() calls
--- dereference `self._hdr_gui_data.bottom` -> fatal. cim's open_forge transition
--- passes no force_ingame_menu, so HeroView.on_enter DOES call _setup_hdr_gui, so
--- the hook below fires. Cleanup is leak-safe: HeroView.destroy_hdr_gui
--- (hero_view.lua:639) tears down whatever _hdr_gui_data holds regardless of
--- is_in_inn. Two-layer fix mirrors _setup_gamepad_gui above.
--- Backported from cim_dev v0.7.71-dev. Regression: heroview_hdr_renderer_guard_failsafe.
+--   hero_view.lua:175: attempt to index local 'hdr_gui_data' (a nil value)
+--   (HeroView.hdr_renderer / HeroView.hdr_top_renderer — line number shifts by
+--    game build; the cited local is `self._hdr_gui_data` being indexed.)
+--
+-- Same bug class as the _setup_gamepad_gui fix above, but one level UP on the
+-- parent HeroView instead of the forge state. Vanilla `HeroView._setup_hdr_gui`
+-- (hero_view.lua:136-165) gates its ENTIRE body on
+-- `if self.is_in_inn then ... self._hdr_gui_data = ... end`. In mission
+-- is_in_inn is false, so `_hdr_gui_data` is never built. The Athanor forge
+-- windows (HeroWindowWeaveForgeOverview/Panel/Weapons, HeroWindowWeaveProperties)
+-- call `parent:hdr_renderer()` / `parent:hdr_top_renderer()` every draw frame,
+-- and those accessors (hero_view.lua:183-195) do
+-- `local hdr_data = self._hdr_gui_data.bottom` → fatal nil-index.
+--
+-- Why the hook fires: cim's open_forge does
+-- `transition_with_fade("hero_view_force", {menu_state_name="weave_forge"})`
+-- with NO force_ingame_menu, so HeroView.on_enter (hero_view.lua:278) takes the
+-- `not self._force_ingame_menu` branch and DOES call _setup_hdr_gui. (The
+-- game's own in-mission ESC→character path sets force_ingame_menu=IS_WINDOWS at
+-- ingame_ui.lua:642 and skips it — but that path doesn't open the forge.)
+--
+-- Cleanup is leak-safe: HeroView.destroy_hdr_gui (hero_view.lua:639) guards on
+-- `if self._hdr_gui_data then ... Managers.world:destroy_world(world) end` — NOT
+-- on is_in_inn — so the HDR worlds we build in mission are torn down on view
+-- close.
+--
+-- Two-layer fix:
+--   1. Hook _setup_hdr_gui; in mission, SKIP the vanilla call entirely so the
+--      HDR worlds are NEVER built mid-mission. (Superseded the earlier
+--      flip-is_in_inn-and-force-build approach in v0.8.16-dev — force-building
+--      the worlds is exactly what crashes when Loremaster's Armoury injects its
+--      global armoury_atlas into the fresh world; see the hook body below.)
+--   2. Defensive guard on hdr_renderer/hdr_top_renderer: with _hdr_gui_data left
+--      nil in mission (step 1), these fall back to the view's own
+--      ui_renderer/ui_top_renderer so the forge stays usable. This is now the
+--      NORMAL in-mission path, not just a failsafe — it drops the HDR glow layer
+--      in mission only but is crash-safe.
+-- Regression: heroview_hdr_renderer_guard_failsafe +
+-- heroview_hdr_not_forcebuilt_in_mission (/cim_regression_test).
+-- v0.7.73 (Issue #73): destroy-on-failure sweep — RETAINED as a no-op safety net.
+-- With Fix B (v0.8.16-dev) the in-mission path no longer builds the HDR worlds,
+-- so this is no longer reached on the mission path; it stays in case any future
+-- path force-builds and fails. Historic rationale: if a pcall'd vanilla call
+-- fails AFTER creating a world but BEFORE `self._hdr_gui_data = hdr_gui_data`
+-- (vanilla's last statement, hero_view.lua:163), the half-built world is leaked
+-- unreferenced — destroy_hdr_gui never releases it and the NEXT forge open dies
+-- on world_manager's "World already exists" fassert (engine-fatal, bypasses
+-- pcall). Sweep by name: WorldManager.destroy_world accepts the name string
+-- (world_manager.lua:64) and destroying the world releases its viewport/guis
+-- engine-side. Parameterized for the regression test
+-- (heroview_hdr_failed_setup_sweeps_leaked_worlds).
+local _HDR_WORLD_NAMES = { "hero_view_hdr", "hero_view_hdr_top" }
+function mod._cim_sweep_leaked_hdr_worlds(world_manager, hdr_gui_data)
+    if hdr_gui_data then return 0 end  -- worlds are referenced; destroy_hdr_gui owns them
+    if not (world_manager and world_manager.has_world and world_manager.destroy_world) then return 0 end
+    local swept = 0
+    for _, world_name in ipairs(_HDR_WORLD_NAMES) do
+        if world_manager:has_world(world_name) then
+            local destroy_ok = pcall(function() world_manager:destroy_world(world_name) end)
+            -- Ungated: this only runs on an already-failing path the user needs
+            -- to see in the log without Debug Logging on.
+            mod:warning("[cim] swept half-built HDR world '%s' after failed in-mission setup (destroy ok=%s)",
+                world_name, tostring(destroy_ok))
+            swept = swept + 1
+        end
+    end
+    return swept
+end
+
 mod:hook("HeroView", "_setup_hdr_gui", function(func, self, ...)
     if self.is_in_inn then
         return func(self, ...)
     end
-    -- Temporarily satisfy the is_in_inn gate so _hdr_gui_data gets built with real
-    -- HDR renderers in mission. Restore the flag afterwards.
-    self.is_in_inn = true
-    local ok, err = pcall(func, self, ...)
-    self.is_in_inn = false
+    -- v0.8.16-dev (Issue: LA armoury_atlas HDR-world crash) — DO NOT force-build
+    -- the in-mission HDR worlds anymore.
+    --
+    -- Previous behavior flipped is_in_inn=true and pcall'd vanilla so the
+    -- `hero_view_hdr` / `hero_view_hdr_top` worlds were created mid-mission to
+    -- get the forge's HDR glow layer. That is the crash trigger when
+    -- Loremaster's Armoury is installed: building those worlds calls
+    -- UIRenderer.create_screen_gui, and VMF's custom_textures
+    -- (custom_textures.lua:228) injects every mod-registered GLOBAL UI texture —
+    -- including LA's `materials/Loremasters-Armoury/armoury_atlas` — into the
+    -- brand-new world. A mid-mission world cannot resolve that global atlas, so
+    -- the engine fatally asserts at c_api_world.cpp:568
+    -- (`world.resource_manager().can_get(material_type, name)`). Because that is a
+    -- C-level assert, NOT a Lua error, the old code's pcall around vanilla could
+    -- not catch it -> hard crash (session b688f241, 2026-06-22). Repros ONLY with
+    -- LA installed +
+    -- `allow_in_mission` ON (the opt-in path the menu already labels "may crash").
+    --
+    -- Fix B (stable, lower-risk): in mission, skip vanilla _setup_hdr_gui
+    -- entirely. _hdr_gui_data stays nil, so the hdr_renderer / hdr_top_renderer
+    -- hooks below (the heroview_hdr_renderer_guard_failsafe fallback) return
+    -- self.ui_renderer / self.ui_top_renderer. The forge opens against the
+    -- standard renderer instead of the LA-incompatible HDR world — it drops the
+    -- HDR glow layer IN MISSION ONLY, but never calls create_screen_gui on a
+    -- world that can't host LA's material. The keep (is_in_inn) path above is
+    -- unchanged: full HDR there.
+    --
+    -- The leaked-world sweep (mod._cim_sweep_leaked_hdr_worlds, Issue #73) is
+    -- retained as a no-op safety net but is no longer reached on this path since
+    -- we never build the worlds in mission.
+    _dbg("HeroView._setup_hdr_gui skipped in mission (Fix B: avoid LA armoury_atlas HDR-world crash); using ui_renderer fallback")
+end)
+
+-- ============================================================
+-- Issue #88: scope the inventory_loadout_access flip to cim's own view open
+-- ============================================================
+-- `mod.open_standard_crafting` needs the `forge` page's inventory window to
+-- init in a mission, which depends on
+-- InventorySettings.inventory_loadout_access_supported_game_modes[game_mode].
+-- The ONLY vanilla read of that table is HeroView.on_enter ->
+-- _fetch_initial_loadout_index (hero_view.lua:309/323). Previously cim flipped
+-- the table PERMANENTLY in open_standard_crafting and never restored it, so the
+-- ESC-menu / ingame-menu HeroView (which cim did NOT open) ALSO read the mode
+-- as supported and pulled up the loadout inventory mid-mission (Issue #88 — it
+-- should be Keep-only).
+--
+-- Fix: apply the flip ONLY around cim's own HeroView open, gated on the
+-- one-shot `_cim_open_standard_inv_pending` flag set right before cim's
+-- transition. Save the original values, let vanilla on_enter read the flipped
+-- ones, then restore — even if vanilla raises (pcall) — and clear the flag.
+-- Any OTHER HeroView open (ESC backout, hero select, etc.) sees the untouched
+-- vanilla table and bails as normal. Keep / CW-hub opens are unaffected (the
+-- mode is already supported there, and the flag is only set by cim's
+-- in-mission standard-crafting entry).
+--
+-- No duplicate hook: cim's only other HeroView hooks are _setup_hdr_gui /
+-- hdr_renderer / hdr_top_renderer (grep-verified) — none on on_enter.
+mod:hook("HeroView", "on_enter", function(func, self, params)
+    if not _cim_open_standard_inv_pending then
+        return func(self, params)
+    end
+    -- Consume the one-shot flag up front so an early return / raise can't leave
+    -- it set for a later, unrelated HeroView open.
+    _cim_open_standard_inv_pending = false
+
+    local modes = rawget(_G, "InventorySettings")
+        and InventorySettings.inventory_loadout_access_supported_game_modes
+    if not modes then
+        return func(self, params)
+    end
+
+    local saved_adventure = modes.adventure
+    local saved_survival  = modes.survival
+    local saved_deus      = modes.deus
+    modes.adventure = true
+    modes.survival  = true
+    modes.deus      = nil   -- CW stays blocked (open_standard_crafting bails on deus)
+
+    local ok, err = pcall(func, self, params)
+
+    -- Restore the vanilla values so the global table never stays mutated — this
+    -- is what closes the ESC-backout leak.
+    modes.adventure = saved_adventure
+    modes.survival  = saved_survival
+    modes.deus      = saved_deus
+
     if not ok then
-        -- Ungated (mod:warning): a failure here breaks the in-mission forge HDR
-        -- layer; surface it in the log WITHOUT requiring Debug Logging to be on.
-        mod:warning("[cim] HeroView._setup_hdr_gui in mission failed: %s", tostring(err))
+        mod:warning("[cim] HeroView.on_enter raised under scoped inventory-access flip: %s", tostring(err))
     end
 end)
 
@@ -1594,6 +2327,340 @@ mod:hook("HeroView", "hdr_top_renderer", function(func, self, ...)
     end
     return func(self, ...)
 end)
+
+-- ------------------------------------------------------------
+-- Mid-mission forge: suppress the keep-only HDR glow widgets at the draw site
+-- ------------------------------------------------------------
+-- v0.8.17-dev (Issue: weave_menu_* "Material not found in Gui" cascade) —
+-- completes Fix B's "drops the HDR glow layer in mission only" contract at the
+-- DRAW SITE.
+--
+-- After Fix B (v0.8.16-dev), the in-mission forge no longer builds the keep's
+-- HDR worlds; `_hdr_gui_data` stays nil and the hdr_renderer / hdr_top_renderer
+-- hooks above fall through to the BASE mission renderer (self.ui_renderer /
+-- self.ui_top_renderer). That base renderer is created once at IngameUI.init
+-- (ingame_ui.lua:76-77) with is_in_inn=false, so the inn-only material block in
+-- ingame_ui_settings.lua is skipped — and three RAW (non-atlas) materials the
+-- forge's HDR widgets draw live ONLY in that inn-only block:
+--     weave_menu_upgrade_skull_circle
+--     weave_menu_upgrade_skull_circle_shade   <- the reported crash
+--     weave_menu_athanor_upgrade_bg
+-- (Everything else the forge draws is atlas-backed in gui_menus_atlas, which
+-- rides in the always-loaded materials/ui/ui_1080p_menu_atlas_textures, so it
+-- never faults.) The four forge windows draw their _bottom_hdr_widgets /
+-- _top_hdr_widgets on parent:hdr_renderer() (e.g.
+-- hero_window_weave_forge_overview.lua:704-737). On the base mission renderer
+-- those three materials aren't resident, so the texture pass fatals at
+-- ui_passes.lua:134 (`Material `weave_menu_upgrade_skull_circle_shade` not
+-- found in Gui`), session 35046c6c.
+--
+-- A Stingray Gui resolves materials ONLY from the fixed list baked in at
+-- World.create_screen_gui() time (ui_renderer.lua:246-251); there is no API to
+-- add a material to a live Gui, and Managers.package:load cannot retro-add one
+-- either — so this is NOT a package-residency problem and the
+-- la_package_force_load guard is moot (no force-load is needed or possible).
+--
+-- Fix: in mission, EMPTY the two HDR draw arrays (`_top_hdr_widgets` /
+-- `_bottom_hdr_widgets`) right after the window builds them in
+-- create_ui_elements. The vanilla _draw loops then iterate nothing, so the
+-- three keep-only materials are never resolved (UIRenderer.draw_widget only
+-- calls a pass's draw — and thus Gui.material — when the widget is visible and
+-- present; an empty array skips the loop entirely). We prefer emptying the
+-- arrays over setting content.visible=false / alpha=0 because those still leave
+-- the widget in the iterated array (alpha=0 in particular still resolves the
+-- material). The widgets remain registered in _widgets_by_name, so the existing
+-- _forge_apply_ui_polish _forge_hide_widget("upgrade_bg" / "top_hdr_background_
+-- write_mask") calls stay valid no-ops.
+--
+-- KEEP path is fully unchanged: gated on `not _is_in_keep()`, so in the keep the
+-- HDR arrays are left intact and the forge keeps its full HDR glow (drawn on the
+-- real keep HDR renderer that DOES carry the inn-only materials).
+--
+-- Visual cost in mission: the decorative skull-circle glow ring and the athanor
+-- upgrade-panel background glow are absent. The forge is otherwise fully drawn
+-- and usable. Regression: hdr_glow_widgets_suppressed_in_mission
+-- (/cim_regression_test).
+--
+-- Helper is parameterized + exposed so the regression test can drive it
+-- synthetically against a fake window without needing a live forge.
+function mod._cim_suppress_hdr_glow_in_mission(window, in_keep)
+    if in_keep then return false end
+    if type(window) ~= "table" then return false end
+    local cleared = false
+    if type(window._top_hdr_widgets) == "table" and #window._top_hdr_widgets > 0 then
+        window._top_hdr_widgets = {}
+        cleared = true
+    end
+    if type(window._bottom_hdr_widgets) == "table" and #window._bottom_hdr_widgets > 0 then
+        window._bottom_hdr_widgets = {}
+        cleared = true
+    end
+    return cleared
+end
+
+-- Mid-mission forge: drop the skill-tree RING / wheel / cluster decorations from
+-- the NON-HDR _bottom_widgets draw array (Fix B5)
+-- ------------------------------------------------------------
+-- v0.8.19-dev (ui_passes.lua:805 "Material 'athanor_skilltree_ring_3' not found
+-- in Gui", in-mission forge, opening a weapon's skill tree). A NEW vector of the
+-- same keep-only-material class B/B2/B3/B4 chased — but on a DIFFERENT draw path
+-- the prior fixes never touched:
+--
+--   * B2 empties the HDR draw arrays (_top_hdr_widgets / _bottom_hdr_widgets),
+--     drawn on parent:hdr_renderer().
+--   * B3/B4 guard the per-frame bloom set_scalar / upgrade-anim HDR set_scalar.
+--   * This vector is the NON-HDR `_bottom_widgets` array, drawn on the BASE
+--     mission `ui_renderer` (HeroWindowWeaveProperties._draw, the final
+--     `for _, widget in ipairs(self._bottom_widgets)` pass). None of the prior
+--     fixes iterate it.
+--
+-- `_bottom_widgets` mixes FUNCTIONAL widgets (background_write_mask,
+-- viewport_background rect, viewport_background_fade = atlas-backed edge_fade_
+-- small) with raw, inn-only DECORATIVE textures that only resolve on a Gui built
+-- with is_in_inn=true:
+--   athanor_skilltree_background        (background_wheel)
+--   athanor_skilltree_ring_1 / _2 / _3  (wheel_ring_1..3)   <- the reported crash
+--   athanor_skilltree_cluster_1 / _2 .. (cluster_background_<i>, RE-APPENDED per
+--                                        cluster by _create_slot_grid ->
+--                                        _create_cluster_background at on_enter)
+-- (Verified non-atlas: only athanor_skilltree_slot_* live in gui_menus_atlas;
+-- the ring / background / cluster textures are in no atlas_settings file — same
+-- raw-material signature as the weave_menu_* keep-only set.)
+--
+-- So we can't empty _bottom_widgets wholesale (it'd strip the functional
+-- viewport background). Instead REBUILD it minus only the raw decorative
+-- textures, matched by content.texture_id prefix. The vanilla _draw loop then
+-- never resolves the missing materials.
+--
+-- Two append sites feed these into _bottom_widgets, so the helper is called from
+-- two places (mirroring B2's two-site pattern):
+--   (1) create_ui_elements  -> the static wheel_ring_* / background_wheel
+--   (2) on_enter (post)     -> the per-cluster cluster_background_<i> re-append
+--       (folded into cim_debug.lua's existing HeroWindowWeaveProperties.on_enter
+--        hook, right next to the B2 HDR re-suppression).
+--
+-- KEEP path untouched: gated on `not in_keep`, so the keep forge keeps the full
+-- animated ring/cluster decoration (drawn on the real keep Gui that carries the
+-- inn-only materials). The _update_background_animations rotation still mutates
+-- widgets_by_name[...] every frame harmlessly (those widgets just aren't in the
+-- drawn array in mission). Regression: skilltree_ring_widgets_suppressed_in_mission.
+-- v0.8.20-dev — CONVERGENT raw-athanor prune. The old per-prefix allow-list
+-- (ring_ / background / cluster_) chased one athanor_* crash at a time and STILL missed
+-- athanor_background_write_mask (the 7th reported in-mission crash; log session f9ed28af,
+-- ui_passes.lua:134). Per the verified note above, the ONLY athanor_ family in
+-- gui_menus_atlas is athanor_skilltree_slot_*; every OTHER athanor_* forge texture is
+-- raw / inn-only and faults on the base mission Gui. So in mission, drop ANY athanor_
+-- texture that isn't a slot. This catches athanor_background_write_mask (a functional-
+-- but-raw window write-mask — losing it only drops background masking in mission, it
+-- never crashes) AND every future raw athanor_ sibling in ONE structural guard, instead
+-- of one prefix per crash. Atlas-backed slots + all non-athanor functional widgets
+-- (edge_fade_small, viewport rects) are untouched. Function name kept for the call sites.
+local _CIM_ATLAS_ATHANOR_PREFIX = "athanor_skilltree_slot"   -- the only atlas-backed athanor_ family
+local function _cim_is_raw_skilltree_texture(texture_id)
+    if type(texture_id) ~= "string" then return false end
+    if texture_id:sub(1, 8) ~= "athanor_" then return false end
+    return texture_id:sub(1, #_CIM_ATLAS_ATHANOR_PREFIX) ~= _CIM_ATLAS_ATHANOR_PREFIX
+end
+
+-- Parameterized + exposed so the regression test can drive it synthetically.
+function mod._cim_suppress_skilltree_rings_in_mission(window, in_keep)
+    if in_keep then return false end
+    if type(window) ~= "table" then return false end
+    local widgets = window._bottom_widgets
+    if type(widgets) ~= "table" or #widgets == 0 then return false end
+
+    local kept = {}
+    local removed = false
+    for i = 1, #widgets do
+        local widget = widgets[i]
+        local texture_id = type(widget) == "table" and widget.content and widget.content.texture_id
+        if _cim_is_raw_skilltree_texture(texture_id) then
+            removed = true
+        else
+            kept[#kept + 1] = widget
+        end
+    end
+
+    if removed then
+        window._bottom_widgets = kept
+    end
+    return removed
+end
+
+-- The four weave-forge windows that build HDR glow arrays in create_ui_elements.
+-- (HeroWindowWeaveForgeBackground builds none and is intentionally omitted.)
+-- create_ui_elements assigns self._top_hdr_widgets / self._bottom_hdr_widgets as
+-- its LAST step, so a post (hook_safe) hook sees them populated. None of these
+-- (Class, "create_ui_elements") pairs is hooked elsewhere in cim
+-- (grep-verified — no duplicate-hook violation).
+for _, _hdr_window_class in ipairs({
+    "HeroWindowWeaveForgeOverview",
+    "HeroWindowWeaveProperties",
+    "HeroWindowWeaveForgeWeapons",
+    "HeroWindowWeaveForgePanel",
+}) do
+    mod:hook_safe(_hdr_window_class, "create_ui_elements", function(self)
+        local in_keep = _is_in_keep()
+        mod._cim_suppress_hdr_glow_in_mission(self, in_keep)
+        -- Fix B5: drop the static wheel_ring_* / background_wheel raw textures
+        -- from the non-HDR _bottom_widgets array (only HeroWindowWeaveProperties
+        -- builds them; a no-op on the other three windows).
+        mod._cim_suppress_skilltree_rings_in_mission(self, in_keep)
+    end)
+end
+
+-- Mid-mission forge: no-op the per-frame HDR bloom-pulse set_scalar (Fix B3)
+-- ------------------------------------------------------------
+-- v0.8.18-dev (Issue: hero_window_weave_forge_panel.lua:392 "bad argument #1 to
+-- 'set_scalar' (userdata expected, got nil)", crashify 12a6d563) — a THIRD
+-- keep-only-HDR-object deref surfacing because Fix B (v0.8.16) skips building
+-- the HDR worlds in mission.
+--
+-- Distinct from the B/B2 draw-array vector. The B2 helper empties the HDR DRAW
+-- arrays (_top_hdr_widgets / _bottom_hdr_widgets) so the vanilla _draw loops skip
+-- the missing materials. But two windows ALSO run a per-frame bloom-pulse that
+-- reads `_widgets_by_name` DIRECTLY (not the draw arrays) and writes a material
+-- scalar on the HDR Gui, so emptying the draw arrays does not cover it:
+--
+--   HeroWindowWeaveForgePanel._set_background_bloom_intensity
+--     (hero_window_weave_forge_panel.lua:408-437)
+--   HeroWindowWeaveProperties._set_background_bloom_intensity
+--     (hero_window_weave_properties.lua:1218-1248)
+--
+-- Both do, every frame:
+--     local gui = parent:hdr_renderer().gui
+--     local m   = Gui.material(gui, widgets_by_name.<wheel>.content.texture_id)
+--     Material.set_scalar(m, "noise_intensity", value)
+--
+-- After Fix B, `parent:hdr_renderer()` falls through to the BASE mission renderer
+-- (hdr_renderer hook returns self.ui_renderer when _hdr_gui_data is nil). That
+-- Gui's baked material list (built at create_screen_gui time with is_in_inn=false)
+-- does NOT contain the raw, inn-only weave-forge wheel materials
+-- (weave_menu_* — the same three the B/B2 fix dodged at the draw site). So
+-- `Gui.material(gui, <texture>)` returns NIL, and `Material.set_scalar(nil, ...)`
+-- fatals with exactly the reported `userdata expected, got nil`. The crashify
+-- cites a _draw line number (392) because the build's line table shifts, but the
+-- only set_scalar in this window is in _set_background_bloom_intensity.
+--
+-- Call chains that reach it every frame in mission:
+--   Panel:      update -> _draw -> (if _draw_background_wheel) _update_background_
+--               animations -> _set_background_bloom_intensity. _draw_background_
+--               wheel is set true by _set_background_wheel_visibility for every
+--               layout EXCEPT "weave_properties" (i.e. the default overview), so
+--               the panel crashes as soon as the forge opens in mission.
+--   Properties: _update_animations -> _update_background_animations ->
+--               _set_background_bloom_intensity (UNCONDITIONAL — no _draw_
+--               background_wheel gate), so the properties editor crashes the
+--               moment a weapon's skill tree is opened in mission.
+--
+-- Fix: full mod:hook (not hook_safe — we must SKIP the vanilla body, not run
+-- after it) on _set_background_bloom_intensity for both windows; in mission,
+-- return without calling vanilla. The bloom pulse is purely the decorative wheel
+-- glow intensity — dropping it in mission matches Fix B's "HDR glow layer is
+-- intentionally absent in mission" contract (the wheel widgets are already
+-- emptied from the draw arrays by B2, so nothing visible is lost beyond what
+-- B/B2 already removed). KEEP path (is_in_inn) runs vanilla untouched: full
+-- bloom pulse there.
+--
+-- Neither (HeroWindowWeaveForgePanel, _set_background_bloom_intensity) nor
+-- (HeroWindowWeaveProperties, _set_background_bloom_intensity) is hooked
+-- anywhere else in cim (grep-verified — no duplicate-hook violation; cim's
+-- existing HeroWindowWeaveProperties hooks are on _create_viewport_definition /
+-- _create_unit_previewer / _setup_menu_options / _sync_backend_loadout / _draw /
+-- _set_essence_upgrade_cost / _upgrade_magic_level / create_ui_elements /
+-- on_enter, none of them this method).
+--
+-- Regression: hdr_bloom_setscalar_skipped_in_mission (/cim_regression_test).
+function mod._cim_skip_bloom_intensity_in_mission(window)
+    -- Returns true when the per-frame bloom-pulse set_scalar must be SKIPPED
+    -- (in mission, HDR Gui lacks the inn-only wheel materials -> nil material ->
+    -- Material.set_scalar(nil,...) fatal). Returns false in the keep (full HDR).
+    if _is_in_keep() then return false end
+    return true
+end
+
+for _, _bloom_window_class in ipairs({
+    "HeroWindowWeaveForgePanel",
+    "HeroWindowWeaveProperties",
+}) do
+    mod:hook(_bloom_window_class, "_set_background_bloom_intensity", function(func, self, ...)
+        if mod._cim_skip_bloom_intensity_in_mission(self) then
+            -- In mission: skip the vanilla body. parent:hdr_renderer() would
+            -- return the base mission renderer whose Gui has no weave_menu_*
+            -- wheel materials, so Gui.material(...) -> nil -> set_scalar fatal.
+            return
+        end
+        return func(self, ...)
+    end)
+end
+
+-- Mid-mission forge: skip the keep-only "upgrade" transition animation (Fix B4)
+-- ------------------------------------------------------------
+-- v0.8.18-dev (same crash CLASS as B3, second deref site) — the forge-upgrade
+-- transition animation's init/update closures ALSO do the keep-only HDR-material
+-- deref, on a DIFFERENT path than the per-frame bloom pulse:
+--
+--   hero_window_weave_forge_overview_definitions.lua animation_definitions.upgrade
+--     (sub-anims dissolve_in / dissolve_out / intensity)
+--   hero_window_weave_forge_weapons_definitions.lua  animation_definitions.upgrade
+--     (sub-anim intensity_out)
+--
+-- Each closure does `local gui = params.parent:hdr_renderer().gui` then
+-- `Gui.material(gui, <skull_circle / upgrade_effect>.content.texture_id)` then
+-- `Material.set_scalar(<material>, "progress"/"intensity", value)`. The textures
+-- (weave_menu_upgrade_skull_circle[_shade], the athanor upgrade effect) are the
+-- same raw, inn-only materials that are absent from the base mission Gui after
+-- Fix B, so `Gui.material(...)` returns nil and `Material.set_scalar(nil, ...)`
+-- fatals — identical signature to B3, just fired by the upgrade flow instead of
+-- the idle bloom pulse.
+--
+-- Trigger: pressing the athanor / weave UPGRADE button and the backend call
+-- SUCCEEDING runs `_upgrade_forge_done` / `_upgrade_item_done` ->
+-- `_start_transition_animation("upgrade")` (overview line 815, weapons line 950),
+-- which starts the `upgrade` animation group -> its HDR closures deref the nil
+-- material. So this only fires when the player actually upgrades mid-mission, but
+-- it IS reachable through the cim forge.
+--
+-- Fix: full mod:hook on `_start_transition_animation` for the two windows whose
+-- `upgrade` animation touches HDR materials (overview + weapons). In mission,
+-- DROP only the `"upgrade"` animation — every other animation name these windows
+-- start ("on_enter", text fades, font tweens) touches no HDR material, so they
+-- run untouched. The visible cost in mission is the skull-circle dissolve / glow
+-- flourish on upgrade; the upgrade itself (backend + loadout sync) is unaffected
+-- because that work happens in _upgrade_forge_done BEFORE the animation starts.
+--
+-- HeroWindowWeaveProperties is intentionally NOT in this list: its animation
+-- definitions contain NO HDR Material.set_scalar (grep-verified — its only HDR
+-- set_scalar was the bloom pulse handled by B3 above), so its "upgrade"/"on_enter"
+-- animations are safe in mission and must run for the normal fade-in.
+--
+-- KEEP path (is_in_inn) runs vanilla untouched: full upgrade flourish there.
+-- Neither (HeroWindowWeaveForgeOverview, _start_transition_animation) nor
+-- (HeroWindowWeaveForgeWeapons, _start_transition_animation) is hooked elsewhere
+-- in cim (grep-verified — no duplicate-hook violation).
+--
+-- Regression: hdr_upgrade_anim_skipped_in_mission (/cim_regression_test).
+function mod._cim_skip_upgrade_anim_in_mission(animation_name)
+    -- The "upgrade" transition animation's HDR closures deref the inn-only
+    -- weave_menu_* materials via parent:hdr_renderer().gui. Skip it ONLY in
+    -- mission and ONLY for that animation name; everything else is HDR-free.
+    if _is_in_keep() then return false end
+    return animation_name == "upgrade"
+end
+
+for _, _upgrade_anim_class in ipairs({
+    "HeroWindowWeaveForgeOverview",
+    "HeroWindowWeaveForgeWeapons",
+}) do
+    mod:hook(_upgrade_anim_class, "_start_transition_animation", function(func, self, animation_name, ...)
+        if mod._cim_skip_upgrade_anim_in_mission(animation_name) then
+            -- In mission: do not start the "upgrade" HDR flourish. Its closures
+            -- would deref a nil weave_menu_* material -> Material.set_scalar fatal.
+            return
+        end
+        return func(self, animation_name, ...)
+    end)
+end
 
 mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
     _custom_forge_active = false
@@ -1620,28 +2687,38 @@ end)
 -- preview units aren't resident / loadable in the weave-forge world
 -- ============================================================
 -- Crash class (HARD CTD — no Lua traceback, so nothing shows in console logs):
--- the weave-forge weapon previewer (`LootItemUnitPreviewer`) spawns the selected
--- weapon's 3D model at two engine-level sites with NO Lua guard:
---   1. `_spawn_link_unit` -> World.spawn_unit(world, <skin.display_unit>), which
---      assumes the display unit is already resident.
---   2. `_load_item_units` -> load_package("<hand_unit>_3p"), which fatals on a
---      non-existent package.
--- The Trollhammer Torpedo (`dr_deus_01`, "torpedo cannon") is the reported case:
--- a Chaos Wastes ("morris"/deus) weapon never shown in the vanilla weave forge,
--- so its display unit (`display_trollhammer`) and 3p unit (`wpn_dr_deus_01_3p`)
--- live in the CW bundle and are absent from the forge preview package set. cim's
--- Athanor forge re-exposes the weapon for adventure crafting, so spawning its
--- preview hits those absent units -> access-violation CTD with no traceback.
--- Fix: before either spawn site runs, check resource availability the way
--- vanilla pickup_system.lua:882-899 does — `Application.can_get("unit", ...)` for
--- the resident display unit, `Application.can_get("package", "<unit>_3p")` for
--- the load_package'd 3p units. If anything is unavailable, skip the spawn (nil
--- link / empty spawn list); spawn_units() already no-ops on a nil link unit, so
--- the previewer stays valid and the stat editor works fully — only the spinning
--- 3D model is omitted for that one weapon. Gated on `_custom_forge_active`, so
--- non-forge previewers (loot reveal, store, hero inventory) are untouched.
--- Default to UNSAFE on any resolution error — losing a preview beats a CTD.
--- (Ported from cim_dev v0.7.70.)
+-- the weave-forge weapon previewer (`LootItemUnitPreviewer`, created by
+-- HeroWindowWeaveForgeOverview / HeroWindowWeaveForgeWeapons and
+-- HeroWindowWeaveProperties via `_create_item_previewer`) spawns the selected
+-- weapon's 3D model. Two engine-level spawn sites run with NO Lua guard:
+--   1. `_spawn_link_unit` -> World.spawn_unit(world, <skin.display_unit>) inside
+--      LootItemUnitPreviewer.init, BEFORE any package load — it assumes the
+--      display unit is already resident (weave weapons live in the
+--      ui_loot_preview global package).
+--   2. `_load_item_units` -> load_package("<hand_unit>_3p") ->
+--      Managers.package:load(...), which fatals on a non-existent package.
+--
+-- The Trollhammer Torpedo (`dr_deus_01`, Bardin — "torpedo cannon") is the
+-- reported case (user 2026-06-05: "crashes when you try and change the stats
+-- for it"). It's a Chaos Wastes ("morris"/deus) weapon never shown in the
+-- vanilla weave forge, so its display unit (`display_trollhammer`) and held 3p
+-- unit (`wpn_dr_deus_01_3p`) live in the CW bundle and are NOT in the forge
+-- preview package set. cim's Athanor forge re-exposes the weapon for adventure
+-- crafting, so opening its property/stat editor spawns those absent units ->
+-- access-violation CTD with no Lua error (which is exactly why the crash left
+-- no traceback in any console log).
+--
+-- Fix: before the two spawn sites run, check resource availability the same way
+-- vanilla's pickup_system.lua:882-899 does — `Application.can_get("unit", ...)`
+-- for the resident display unit, `Application.can_get("package", "<unit>_3p")`
+-- for the load_package'd 3p units. If anything the previewer would touch is
+-- unavailable, skip the spawn (nil link / empty spawn list). spawn_units()
+-- already no-ops on a nil link_unit (loot_item_unit_previewer.lua:542), so the
+-- previewer object stays valid and the stat editor works fully — only the
+-- spinning 3D model is omitted for that one weapon. Gated on
+-- `_custom_forge_active`, so non-forge previewers (loot reveal, store, hero
+-- inventory) are untouched. Default to UNSAFE on any resolution error — losing
+-- a cosmetic preview always beats a CTD.
 local _forge_preview_warned = {}
 local function _forge_preview_unsafe(item)
     local ok, unsafe = pcall(function()
@@ -1663,7 +2740,9 @@ local function _forge_preview_unsafe(item)
 
         -- (2) Held / ammo units — load_package'd as "<unit>_3p" packages.
         --     can_get("package", ...) reflects whether the package EXISTS
-        --     (loadable), independent of current residency.
+        --     (loadable), independent of current residency: the previewer hasn't
+        --     loaded them yet at guard time, so a residency check would
+        --     false-positive on every weapon and strip all previews.
         local BU = rawget(_G, "BackendUtils")
         local item_units = BU and BU.get_item_units
             and BU.get_item_units(master, item.backend_id, item.skin, nil)
@@ -1761,6 +2840,30 @@ mod._cim_ensure_weave_category_pools = _cim_ensure_weave_category_pools  -- expo
 mod:hook("HeroWindowWeaveProperties", "_setup_menu_options", function(func, self, career_name, slots_progression)
     _cim_ensure_weave_category_pools(career_name, slots_progression)
     return func(self, career_name, slots_progression)
+end)
+
+-- v0.8.7-dev: the NEXT-in-sequence deus/CW weave crash after the
+-- _setup_menu_options pool seeder above. Vanilla on_enter also runs
+-- `_sync_backend_loadout`, which builds per-slot tooltips:
+--   tooltip_slot_sub_title = slot_type_strings[slot_category] or localized_strings[slot_category]
+--   tooltip_data.sub_title  = tooltip_slot_title .. " - " .. tooltip_slot_sub_title
+-- For a deus/CW weapon cim re-exposes (dr_deus_01 Trollhammer Torpedo), the
+-- slot_category is a non-weave table-name, so BOTH string lookups miss ->
+-- tooltip_slot_sub_title is nil -> "attempt to concatenate a nil value" HARD
+-- CRASH on SELECT (hero_window_weave_properties.lua:~1701; crash report nicho
+-- 2026-06-18 on cim v0.8.6-dev). Those tooltip-string tables are locals
+-- rebuilt per call (not pre-seedable like WeaveTraits/WeaveProperties.categories),
+-- so wrap the vanilla sync in pcall under the modded forge. The property/trait
+-- bubbles sync BEFORE the failing talent-tooltip section, so editing still
+-- works -- only the unknown-category tooltip degrades instead of crashing.
+-- Distinct hook target from the HeroWindowWeaveForgeWeapons._sync_backend_loadout
+-- hook (different class) -> no duplicate-hook conflict.
+mod:hook("HeroWindowWeaveProperties", "_sync_backend_loadout", function(func, self)
+    if not _custom_forge_active then return func(self) end
+    local ok, err = pcall(func, self)
+    if not ok then
+        mod:warning("[cim] _sync_backend_loadout guarded (deus/CW weave-tooltip nil): %s", tostring(err))
+    end
 end)
 
 -- --- Forge UI polish (runs each frame while forge is open) ---
@@ -2525,7 +3628,8 @@ mod:hook("BackendInterfaceWeavesPlayFab", "get_property_mastery_costs", function
         -- Button slot count = #costs (renderer reads it as `total_uses` in
         -- hero_window_weave_properties.lua). Return exactly `cap` zero-cost
         -- entries so stamina renders 2 slots, movespeed renders 1 (or 5
-        -- when the 2pct toggle is on), everything else stays at 5.
+        -- when the 2pct toggle is on), everything else renders 5 fillable
+        -- bubbles (the default — see `_bubble_cap`).
         local cap = _bubble_cap(property_name)
         local out = {}
         for i = 1, cap do out[i] = 0 end
@@ -2712,6 +3816,29 @@ end
 -- Per-property bubble cap. Default `movespeed = 1` matches vanilla's single
 -- +5% multiplier. The `movespeed_2pct_mode` VMF toggle uncaps to 5 (each
 -- bubble = +2% multiplier, max +10%) so we read it dynamically.
+-- Keyed by the BARE property name (`stamina` / `movespeed`). Issue #86 take 3:
+-- the game's weave property-picker passes the `WeaveProperties.categories`
+-- key form `weave_stamina` / `weave_movespeed` (NOT `weave_properties_stamina`)
+-- to set_loadout_property / get_property_mastery_costs. Trace:
+--   hero_window_weave_properties.lua:534 iterates WeaveProperties.categories[cat]
+--     → keys are `weave_stamina` / `weave_movespeed` (weave_properties.lua:543+)
+--   :550 stores entry.key = that
+--   :2663 calls set_loadout_property(career, key, ...) with that exact form
+--   backend_interface_weaves_playfab.lua:1031 receives it as `property_name`.
+-- So every runtime caller passes the `weave_<bare>` form. `_strip_weave` strips
+-- only `^weave_`, leaving the BARE `stamina` / `movespeed`. The prior fix keyed
+-- the table `properties_stamina` / `properties_movespeed`, so `_bubble_cap`
+-- MISSED for the real game key and fell back to the default 5 (stamina ate 5
+-- slots; movespeed showed 79% — `|100*(1.05/5 - 1)|` with one bubble). The
+-- previous regression test fooled itself by passing `weave_properties_stamina`,
+-- whose strip-form `properties_stamina` happened to match the (then-misKEYED)
+-- table — a key form the game never actually sends.
+--
+-- Robust fix: normalize ANY caller key form to the bare name and key the table
+-- by bare names. `_bare_property` strips `^weave_` THEN `^properties_`, so it
+-- collapses `weave_properties_X`, `weave_X`, `properties_X`, and bare `X` all to
+-- `X`. `_bubble_cap`, `_value_for_bubbles`, and `_bubbles_for_value` then resolve
+-- correctly regardless of which form reaches them.
 local _PROPERTY_BUBBLE_CAP_STATIC = {
     stamina   = 2,
     movespeed = 1,
@@ -2721,23 +3848,39 @@ _strip_weave = function(weave_key)
     return (weave_key or ""):gsub("^weave_", "")
 end
 
+-- Collapse any property key form to its bare name (strip `weave_` then
+-- `properties_`). Handles weave_properties_X / weave_X / properties_X / X.
+local function _bare_property(weave_key)
+    local k = _strip_weave(weave_key)
+    return (k:gsub("^properties_", ""))
+end
+
 _bubble_cap = function(weave_key)
-    local key = _strip_weave(weave_key)
-    if key == "movespeed" and mod:get("movespeed_2pct_mode") then return 5 end
-    return _PROPERTY_BUBBLE_CAP_STATIC[key] or 5
+    local bare = _bare_property(weave_key)
+    if bare == "movespeed" and mod:get("movespeed_2pct_mode") then return 5 end
+    -- Default 5: each generic property has a 5-bubble row you fill to scale its
+    -- value (1 bubble = 20%, 5 = full — see `_value_for_bubbles`), exactly like
+    -- vanilla weaves. v0.8.32-dev briefly forced this to 1, which let each
+    -- property take only a SINGLE bubble and destroyed per-property scaling for
+    -- every property at once (#86 over-correction, reverted v0.8.33-dev). The
+    -- real #86 fix is the distinct-property ceiling (MAX_DISTINCT_PROPERTIES /
+    -- the load-time trimmer / KEEP_LIMIT, all raised 2 → 10), NOT the bubble cap.
+    -- stamina (2) / movespeed (1) keep their explicit caps; the 10-slot grid is a
+    -- shared budget, so 10 distinct properties only fit if you don't max-fill them.
+    return _PROPERTY_BUBBLE_CAP_STATIC[bare] or 5
 end
 
 -- value 0..1 that the engine should resolve for `count` filled bubbles.
 -- Default linear maps count/5 for backward compatibility with the existing
 -- 5-bubble properties.
 _value_for_bubbles = function(weave_key, count)
-    local key = _strip_weave(weave_key)
+    local bare = _bare_property(weave_key)
     -- Movespeed 2pct mode: 5 bubbles, each adds 0.2 to the stored value.
     -- buff_extension lerps multiplier as 1 + (max-1)*value. If we also bump
     -- `variable_multiplier_max` from 1.05 → 1.10 (in the load-time patch
     -- below), then 1 bubble (value 0.2) → 1 + 0.10*0.2 = 1.02 = +2%, and
     -- 5 bubbles (value 1.0) → 1 + 0.10*1.0 = 1.10 = +10%.
-    if key == "movespeed" and mod:get("movespeed_2pct_mode") then
+    if bare == "movespeed" and mod:get("movespeed_2pct_mode") then
         return math.min(count / 5, 1.0)
     end
     local cap = _bubble_cap(weave_key)
@@ -2762,6 +3905,100 @@ _bubbles_for_value = function(weave_key, value)
     end
     -- Generic: scale value over cap, floor to integer, clamp.
     return math.max(1, math.min(cap, math.ceil(value * cap)))
+end
+
+-- Persist a clicked slot_index into the property picker's slot-index array,
+-- applying the two vanilla guards (cross-property collision + per-property use
+-- cap). Pure: mutates `props` only, no UI/backend side effects, so the
+-- /cim_regression_test can drive it with synthetic tables and assert the
+-- PERSISTED array length (the real grid-occupancy driver) — not just the
+-- display value the prior #86 fixes wrongly trusted. Returns the array for the
+-- property after the attempted store. Shared by the live `set_loadout_property`
+-- hook so the test exercises the exact production path.
+--
+-- `props`        : the live `data.properties` table (weave_key -> {slot_index,...})
+-- `property_key` : the game's key form (`weave_movespeed` / `weave_stamina` / ...)
+-- `slot_index`   : the grid slot the game's _find_next_available_slot picked
+_store_property_slot = function(props, property_key, slot_index)
+    local cap = _bubble_cap and _bubble_cap(property_key) or 5
+    local arr = props[property_key]
+    if not arr then arr = {}; props[property_key] = arr end
+    -- (a) cross-property collision / dedupe (vanilla 1059-1063): never store a
+    --     slot_index already held by ANY property (including this one).
+    for _, slots in pairs(props) do
+        for _, used_idx in ipairs(slots) do
+            if used_idx == slot_index then return arr end
+        end
+    end
+    -- (b) per-property use cap (vanilla 1067): stop at `_bubble_cap` entries.
+    if #arr < cap then
+        arr[#arr + 1] = slot_index
+    end
+    return arr
+end
+
+-- v0.8.30-dev (#86, READ-CHOKEPOINT guard — the fix the prior four #86 attempts
+-- never tried): grid occupancy is built by vanilla
+-- HeroWindowWeaveProperties._sync_backend_loadout
+-- (hero_window_weave_properties.lua:1478 reads get_loadout_properties(...),
+-- :1551-1556 maps ONE grid slot per slot-index array entry). Every prior #86 fix
+-- capped only the WRITE path (`_store_property_slot`). The write-path cap is
+-- provably correct in source (see /cim_regression_test `picker_caps_persisted_slot_array`),
+-- yet the user STILL sees stamina+movespeed eat 5 slots each — which can only mean
+-- the array reaching the grid is over-filled by a path the write cap doesn't cover
+-- (a deployed build predating the cap, a bypassed hook instance, or a stale seed).
+-- This trims each property's array to its bubble cap at the EXACT point the grid
+-- reads it, so occupancy can never exceed the cap regardless of how it got filled.
+--
+-- Layer-aware: the single-weapon editor (item_backend_id present) is one layer, so
+-- cap the whole array. The amulet editor (item_backend_id == nil) lets one property
+-- legitimately appear once per accessory layer (size `_AMULET_LAYER_SIZE`), so cap
+-- PER LAYER — a blanket trim there would wrongly drop a property the user put on a
+-- second accessory.
+--
+-- Self-reporting: when it actually has to trim (i.e. the over-fill leak is present)
+-- it logs via engine `printf` BEFORE trimming. `printf` writes to the engine console
+-- even with VMF mod-logging OFF (the user's normal config — which is why every prior
+-- `mod:info`/autodump "verification" saw nothing). So if the symptom persists, the
+-- console will carry the raw over-fill count and prove which path leaked, instead of
+-- us guessing. Idempotent: once trimmed, the cached array stays capped, so it logs at
+-- most once per leaking property, not every sync.
+_cap_grid_property_arrays = function(props, item_backend_id)
+    if type(props) ~= "table" then return props end
+    for property_key, arr in pairs(props) do
+        if type(arr) == "table" then
+            local cap = _bubble_cap and _bubble_cap(property_key) or 5
+            if item_backend_id then
+                -- Single weapon: one layer. Keep the first `cap` entries.
+                local n = #arr
+                if n > cap then
+                    printf("[cim #86] grid over-occupancy: key=%s slots=%d > cap=%d (weapon) — trimming to %d",
+                        tostring(property_key), n, cap, cap)
+                    for i = n, cap + 1, -1 do arr[i] = nil end
+                end
+            else
+                -- Amulet: cap per accessory layer, preserve click order.
+                local per_layer, kept, trimmed = {}, {}, false
+                for _, idx in ipairs(arr) do
+                    local layer = math.ceil(idx / _AMULET_LAYER_SIZE)
+                    local c = per_layer[layer] or 0
+                    if c < cap then
+                        per_layer[layer] = c + 1
+                        kept[#kept + 1] = idx
+                    else
+                        trimmed = true
+                    end
+                end
+                if trimmed then
+                    printf("[cim #86] grid over-occupancy: key=%s slots=%d > cap=%d/layer (amulet) — trimming to %d",
+                        tostring(property_key), #arr, cap, #kept)
+                    for i = #arr, 1, -1 do arr[i] = nil end
+                    for i = 1, #kept do arr[i] = kept[i] end
+                end
+            end
+        end
+    end
+    return props
 end
 
 -- ============================================================
@@ -2987,6 +4224,10 @@ end
 mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_properties", function(func, self, career_name, item_backend_id)
     if _custom_forge_active then
         local data = _forge_seed_item(career_name, item_backend_id)
+        -- #86 read-path guard: trim each property array to its bubble cap at the
+        -- exact point vanilla _sync_backend_loadout reads it to build grid
+        -- occupancy. Catches any over-fill the write-path cap missed.
+        _cap_grid_property_arrays(data.properties, item_backend_id)
         return data.properties
     end
     return func(self, career_name, item_backend_id)
@@ -3048,16 +4289,25 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
     if _custom_forge_active then
         local data = _forge_seed_item(career_name, item_backend_id)
         local props = data.properties
-        -- Distinct-property cap per item / accessory layer. Vanilla allows max
-        -- 2 distinct properties on any weapon/jewelry item. Single-item editor
-        -- (weapon): one layer covering all slots → cap = 2 total distinct keys.
-        -- Amulet editor: per-layer cap of 2 (each accessory holds 2 distinct
-        -- properties max). Vanilla's HeroWindowItemCustomization Apply-Skin
-        -- preview only ships widgets for `button_hotspot_1` / `_2`; writing
-        -- a 3rd distinct key produces an item that crashes that view
-        -- (`item_customization.lua:1213 attempt to index a nil value`,
-        -- hotspot_3 missing). Burned cim v0.7.23-alpha → v0.7.24 / v0.7.25 fix.
-        local MAX_DISTINCT_PROPERTIES = 2
+        -- Distinct-property cap per item / accessory layer. The grid has 10
+        -- property slots per layer (weapon = one layer of 10; amulet = 10 per
+        -- accessory), so 10 is the natural ceiling — one distinct property per
+        -- slot. User request 2026-06-29: "we definitely want there to be a max
+        -- of 10 distinct properties." Single-item editor (weapon): one layer →
+        -- 10 total distinct keys. Amulet editor: 10 distinct per accessory.
+        --
+        -- Why 2 was the old value: vanilla's HeroWindowItemCustomization
+        -- Apply-Skin preview indexes `content["button_hotspot_" .. N]` per
+        -- property (hero_window_item_customization.lua:1210-1213); the widget
+        -- only ships hotspots 1 and 2, so a 3rd distinct key used to crash that
+        -- view ("attempt to index a nil value"). That crash is now INDEPENDENTLY
+        -- guarded by cim's replacement `_update_property_option` hook
+        -- (standard_forge.lua:192-220), which skips writes for missing hotspot
+        -- widgets. With that guard in place the >2 ceiling is no longer load-
+        -- bearing — extra properties simply aren't surfaced in that one preview
+        -- tab, but they still apply to the buff system and render in the weave
+        -- grid. So we can safely open the gate to the full 10-slot grid.
+        local MAX_DISTINCT_PROPERTIES = 10
         if not props[property_key] then
             local target_layer = item_backend_id and 1 or math.ceil(slot_index / _AMULET_LAYER_SIZE)
             local distinct_in_layer = 0
@@ -3128,10 +4378,28 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
         -- only the persisted array is trimmed so the second-property slot
         -- accounting frees up. User report 2026-05-27 EOD framed it as
         -- "WHEN APPLIED IT TAKES 5" — matches this fix.
+        -- v0.8.28-dev (#86 take 4 — the persisted-ARRAY over-occupancy bug,
+        -- TRACED not assumed): the GRID's slot accounting is driven by the
+        -- VALUES in this array, not by the visible bubble count. Vanilla
+        -- `_sync_backend_loadout` (hero_window_weave_properties.lua:1553-1556)
+        -- does `for _, slot_index in ipairs(slot_indices) do
+        -- properties_index_map[slot_index] = key end` — EACH entry in
+        -- `props[property_key]` marks ONE grid slot occupied. So a property
+        -- occupies exactly `#props[property_key]` grid slots; any entry beyond
+        -- its real use-count steals a slot another property could fill.
+        -- Movespeed (cap 1) must hold exactly ONE slot_index, stamina (cap 2)
+        -- two — and the store now re-applies vanilla's two dropped guards
+        -- (cross-property collision + per-property use cap) via the shared
+        -- `_store_property_slot` helper. The autodump below logs the resulting
+        -- array length so the divergence is visible in-log without trusting the
+        -- display. NOTE: with `movespeed_2pct_mode` ON, `_bubble_cap` returns 5
+        -- for movespeed by design — it then legitimately occupies up to 5 slots
+        -- (each +2%). That CONFIG, not this code, is the only path where
+        -- movespeed consumes more than one slot.
         local cap = _bubble_cap and _bubble_cap(property_key) or 5
-        local cur_len = #props[property_key]
-        if cur_len < cap then
-            props[property_key][cur_len + 1] = slot_index
+        local arr = _store_property_slot(props, property_key, slot_index)
+        if mod._cim_autodump_property_array then
+            pcall(mod._cim_autodump_property_array, "set_property", property_key, arr, cap)
         end
         if not item_backend_id then _mark_amulet_property_dirty(slot_index) end
         _forge_apply_to_item(career_name, item_backend_id)
@@ -3263,6 +4531,11 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
     end
     local weapon_layout = {}
     local seen_names = {}
+    -- v0.8.6-dev: drop Versus carousel twins that shadow a real Adventure weapon
+    -- (e.g. vs_wh_hammer_book hiding the real wh_hammer_book via the display_name
+    -- dedup below). Unique vs_* weapons stay craftable. See _cim_versus_shadowed
+    -- in standard_forge.lua + memory reference_vt2_versus_items_hidden_in_adventure.
+    local real_names = mod._cim_real_display_names and mod._cim_real_display_names() or {}
 
     for key, item_data in pairs(ItemMasterList) do
         local slot_type = item_data.slot_type
@@ -3273,7 +4546,8 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
                 local dlc_locked = mod._cim_item_requires_unowned_dlc
                     and mod._cim_item_requires_unowned_dlc(key)
                 if item_data.item_type ~= "weapon_skin" and rarity ~= "magic" and rarity ~= "promo"
-                   and not dlc_locked then
+                   and not dlc_locked
+                   and not (mod._cim_versus_shadowed and mod._cim_versus_shadowed(item_data, real_names)) then
                     local dn = item_data.display_name or key
                     if not seen_names[dn] then
                         seen_names[dn] = true
@@ -3740,6 +5014,12 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
     local _master = rawget(ItemMasterList, item_key)
     local _name = (_master and _master.display_name) or item_key
     mod:echo("Crafted & saved: " .. tostring(Localize(_name)) .. " [" .. tostring(weapon_data.rarity) .. "] — equip from inventory")
+    -- v0.8.7-dev: audio feedback. Vanilla _equip_item plays an equip sound on its
+    -- success path, but our custom-forge branch returns before reaching it, so the
+    -- Athanor weapon-select CRAFT button was SILENT (the echo + _equip_pulse_duration
+    -- give visual feedback only). _play_sound delegates to _parent:play_sound
+    -- (hero_window_weave_forge_weapons.lua:581).
+    if self._play_sound then pcall(self._play_sound, self, "play_gui_craft_forge_button_completed") end
 
     -- v0.7.52-dev: comprehensive post-craft diagnostic. Verifies mirror write,
     -- item resolution, career visibility, BID heuristic, persistence — and
@@ -3962,6 +5242,11 @@ mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, sel
     end
     mod:echo("[cim] Crafted new " .. tostring(slot_name and slot_name:gsub("^slot_", "") or "item")
              .. ": " .. display .. " [promo] — equip from inventory")
+    -- v0.8.7-dev: audio feedback for the editor CRAFT button (the repurposed
+    -- upgrade_button). Our hook crafts + returns without the vanilla completion
+    -- sound, so this craft path was silent. _play_sound delegates to
+    -- _parent:play_sound (hero_window_weave_properties.lua:2838).
+    if self._play_sound then pcall(self._play_sound, self, "play_gui_craft_forge_button_completed") end
 end)
 
 -- Console commands let the user pick which slot the amulet click edits.
@@ -4707,12 +5992,27 @@ local function _rt_with_loadout_sandbox(body)
     -- leave fake entries in the player's save.
     local saved_forged      = mod:get("forged_weapons")
     local saved_loadout     = mod:get("modded_loadout")
+    -- v0.8.15-dev: the loadout capture/persist path is now gated OFF by default
+    -- via `persist_modded_loadouts`. These tests EXERCISE that path, so force the
+    -- toggle ON for the duration of the body and restore the user's real value on
+    -- teardown. (Without this, the default-OFF capture no-ops and the round-trip
+    -- assertions would fail spuriously.)
+    local saved_persist     = mod:get("persist_modded_loadouts")
+    mod:set("persist_modded_loadouts", true, false)
     local snap_forged_mem   = {}
     for k, v in pairs(_forged_weapons) do snap_forged_mem[k] = v end
+    -- Indexed schema: career -> index -> slot -> bid (3-level deep copy).
     local snap_loadout_mem  = {}
-    for c, slots in pairs(_modded_loadout) do
+    for c, indices in pairs(_modded_loadout) do
         snap_loadout_mem[c] = {}
-        for s, b in pairs(slots) do snap_loadout_mem[c][s] = b end
+        if type(indices) == "table" then
+            for idx, slots in pairs(indices) do
+                snap_loadout_mem[c][idx] = {}
+                if type(slots) == "table" then
+                    for s, b in pairs(slots) do snap_loadout_mem[c][idx][s] = b end
+                end
+            end
+        end
     end
 
     local ok, err = pcall(body)
@@ -4721,12 +6021,21 @@ local function _rt_with_loadout_sandbox(body)
     _forged_weapons = {}
     for k, v in pairs(snap_forged_mem) do _forged_weapons[k] = v end
     _modded_loadout = {}
-    for c, slots in pairs(snap_loadout_mem) do
+    for c, indices in pairs(snap_loadout_mem) do
         _modded_loadout[c] = {}
-        for s, b in pairs(slots) do _modded_loadout[c][s] = b end
+        if type(indices) == "table" then
+            for idx, slots in pairs(indices) do
+                _modded_loadout[c][idx] = {}
+                if type(slots) == "table" then
+                    for s, b in pairs(slots) do _modded_loadout[c][idx][s] = b end
+                end
+            end
+        end
     end
     mod:set("forged_weapons", saved_forged)
     mod:set("modded_loadout", saved_loadout)
+    -- Restore the user's real persist-loadouts toggle (default OFF).
+    mod:set("persist_modded_loadouts", saved_persist, false)
 
     if not ok then error(err, 0) end
 end
@@ -4760,23 +6069,31 @@ _rt_register("modded_loadout_round_trip_save_then_clear", function()
         -- vanilla path here — we're testing the cim hook's invariants.
         local fake_items = setmetatable({}, { __index = function() return function() end end })
 
+        -- v0.8.13-dev: pass an EXPLICIT loadout index (4th arg) so the test is
+        -- deterministic without a live mirror, and assert the INDEXED schema
+        -- (career -> index -> slot -> bid). Use a non-1 index to also prove the
+        -- capture honors the passed index rather than defaulting to the selected.
+        local _RT_FAKE_INDEX = 2
+
         -- Step 1: equip modded.
-        pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT)
+        pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
 
         -- Round-trip via VMF settings: clear in-memory, reload from disk, check.
         _modded_loadout = {}
         _modded_loadout_load()
-        if not (_modded_loadout[_RT_FAKE_CAREER] and _modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_SLOT] == _RT_FAKE_BID) then
-            result_err = "modded equip not persisted: expected bid=" .. _RT_FAKE_BID
+        local saved_idx = _modded_loadout[_RT_FAKE_CAREER] and _modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_INDEX]
+        if not (saved_idx and saved_idx[_RT_FAKE_SLOT] == _RT_FAKE_BID) then
+            result_err = "modded equip not persisted at index " .. _RT_FAKE_INDEX .. ": expected bid=" .. _RT_FAKE_BID
             return
         end
 
-        -- Step 2: equip vanilla (non-modded) at the same career/slot.
-        pcall(hook_fn, fake_items, _RT_FAKE_VANILLA_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT)
+        -- Step 2: equip vanilla (non-modded) at the same career/slot/index.
+        pcall(hook_fn, fake_items, _RT_FAKE_VANILLA_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
 
         _modded_loadout = {}
         _modded_loadout_load()
-        local stale = _modded_loadout[_RT_FAKE_CAREER] and _modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_SLOT]
+        local stale_idx = _modded_loadout[_RT_FAKE_CAREER] and _modded_loadout[_RT_FAKE_CAREER][_RT_FAKE_INDEX]
+        local stale = stale_idx and stale_idx[_RT_FAKE_SLOT]
         if stale ~= nil then
             result_err = "STALE modded entry not cleared on vanilla equip: still " .. tostring(stale)
                 .. " (this is the 2026-05-23 user-report bug)"
@@ -4894,11 +6211,20 @@ _rt_register("modded_loadout_has_no_stale_entries", function()
     -- on next session they restore-clobber the vanilla loadout with an item
     -- that no longer exists OR was already deleted.
     local stale = {}
-    for career_name, slots in pairs(_modded_loadout) do
-        for slot_name, bid in pairs(slots) do
-            local live = (type(bid) == "string") and (_forged_weapons[bid] or bid:sub(1, 4) == "cwv_")
-            if not live then
-                stale[#stale + 1] = string.format("%s/%s=%s", tostring(career_name), tostring(slot_name), tostring(bid))
+    -- Indexed schema: career -> index -> slot -> bid.
+    for career_name, indices in pairs(_modded_loadout) do
+        if type(indices) == "table" then
+            for index, slots in pairs(indices) do
+                if type(slots) == "table" then
+                    for slot_name, bid in pairs(slots) do
+                        local live = (type(bid) == "string") and (_forged_weapons[bid] or bid:sub(1, 4) == "cwv_")
+                        if not live then
+                            stale[#stale + 1] = string.format("%s[%s]/%s=%s",
+                                tostring(career_name), tostring(index), tostring(slot_name), tostring(bid))
+                            if #stale >= 5 then break end
+                        end
+                    end
+                end
                 if #stale >= 5 then break end
             end
         end
@@ -4909,36 +6235,14 @@ _rt_register("modded_loadout_has_no_stale_entries", function()
     end
 end)
 
-_rt_register("heroview_hdr_renderer_guard_failsafe", function()
-    -- v0.8.1: in-mission forge crashed at HeroView.hdr_renderer / hdr_top_renderer
-    -- because vanilla _setup_hdr_gui only builds self._hdr_gui_data when is_in_inn
-    -- (false in mission) and the forge windows dereference _hdr_gui_data.bottom/.top
-    -- every frame. The accessor hooks must fall back to the view's own renderer when
-    -- _hdr_gui_data is nil. Drive the (hooked) accessors with a synthetic self.
-    if type(HeroView) ~= "table" or type(HeroView.hdr_renderer) ~= "function"
-        or type(HeroView.hdr_top_renderer) ~= "function" then
-        return "skip: HeroView not loaded"
-    end
-    local r_sentinel, t_sentinel = {}, {}
-    local fake = { _hdr_gui_data = nil, ui_renderer = r_sentinel, ui_top_renderer = t_sentinel }
-    local ok, ret = pcall(HeroView.hdr_renderer, fake)
-    if not ok then return "hdr_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret) end
-    if ret ~= r_sentinel then return "hdr_renderer did not fall back to self.ui_renderer on nil _hdr_gui_data" end
-    local ok2, ret2 = pcall(HeroView.hdr_top_renderer, fake)
-    if not ok2 then return "hdr_top_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret2) end
-    if ret2 ~= t_sentinel then return "hdr_top_renderer did not fall back to self.ui_top_renderer on nil _hdr_gui_data" end
-end)
-
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    -- Helpers route through VMF (mod:debug / mod:warning); just verify they don't raise.
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
 
@@ -4972,35 +6276,228 @@ _rt_register("stamina_movespeed_clamp_at_overcap", function()
     -- over-cap counts so buffs don't exceed vanilla tiers. This check pins
     -- the clamp: if a future edit re-introduces over-cap values >1.0, buffs
     -- would exceed vanilla and we'd ship a balance regression silently.
+    --
+    -- Issue #86 take 3 (key-form root cause): the game's property-picker passes
+    -- the WeaveProperties.categories key form `weave_stamina` / `weave_movespeed`
+    -- (NOT `weave_properties_stamina`) to set_loadout_property /
+    -- get_property_mastery_costs — traced through hero_window_weave_properties.lua
+    -- :534/:550/:2663 → backend_interface_weaves_playfab.lua:1031. The prior fix
+    -- keyed the cap table `properties_*` and the test passed `weave_properties_*`
+    -- (strip-form `properties_*`), so the test matched the table but the GAME key
+    -- (`weave_stamina` → strip-form bare `stamina`) missed → fell back to cap 5
+    -- (stamina ate 5 slots, movespeed showed 79%). This test now drives ALL THREE
+    -- key forms (bare / `properties_` / `weave_properties_`) AND the game's actual
+    -- `weave_<bare>` form, so a future miskeying of the cap table fails here.
     if type(_value_for_bubbles) ~= "function" then return "_value_for_bubbles missing" end
-    if _value_for_bubbles("stamina", 2) ~= 1.0 then
-        return string.format("stamina at cap (2) expected 1.0, got %s", tostring(_value_for_bubbles("stamina", 2)))
+    if type(_bubble_cap) ~= "function" then return "_bubble_cap missing" end
+    -- #86 core: stamina caps at exactly 2 slots on every key form, incl. the
+    -- game's real `weave_stamina`.
+    for _, form in ipairs({ "stamina", "properties_stamina", "weave_properties_stamina", "weave_stamina" }) do
+        if _bubble_cap(form) ~= 2 then
+            return string.format("stamina slot cap expected 2 for key '%s', got %s (Issue #86 regression)", form, tostring(_bubble_cap(form)))
+        end
     end
-    if _value_for_bubbles("stamina", 3) ~= 1.0 then
-        return string.format("stamina over-cap (3) expected clamp to 1.0, got %s", tostring(_value_for_bubbles("stamina", 3)))
+    -- Clamp pins (drive the real game key form).
+    if _value_for_bubbles("weave_stamina", 2) ~= 1.0 then
+        return string.format("stamina at cap (2) expected 1.0, got %s", tostring(_value_for_bubbles("weave_stamina", 2)))
     end
-    if _value_for_bubbles("stamina", 5) ~= 1.0 then
-        return string.format("stamina over-cap (5) expected clamp to 1.0, got %s", tostring(_value_for_bubbles("stamina", 5)))
+    if _value_for_bubbles("weave_stamina", 3) ~= 1.0 then
+        return string.format("stamina over-cap (3) expected clamp to 1.0, got %s", tostring(_value_for_bubbles("weave_stamina", 3)))
+    end
+    if _value_for_bubbles("weave_stamina", 5) ~= 1.0 then
+        return string.format("stamina over-cap (5) expected clamp to 1.0, got %s", tostring(_value_for_bubbles("weave_stamina", 5)))
     end
     -- movespeed cap=1 only when the 2pct toggle is OFF (default). Test the
-    -- default path; restore the user's setting afterward.
+    -- default path on every key form; restore the user's setting afterward.
     local saved = mod:get("movespeed_2pct_mode")
     if saved ~= false then mod:set("movespeed_2pct_mode", false) end
-    local m1 = _value_for_bubbles("movespeed", 1)
-    local m3 = _value_for_bubbles("movespeed", 3)
+    local ms_err
+    for _, form in ipairs({ "movespeed", "properties_movespeed", "weave_properties_movespeed", "weave_movespeed" }) do
+        if not ms_err and _bubble_cap(form) ~= 1 then
+            ms_err = string.format("movespeed slot cap (default) expected 1 for key '%s', got %s", form, tostring(_bubble_cap(form)))
+        end
+    end
+    local m1 = _value_for_bubbles("weave_movespeed", 1)
+    local m3 = _value_for_bubbles("weave_movespeed", 3)
     if saved == true then mod:set("movespeed_2pct_mode", true) end
+    if ms_err then return ms_err end
     if m1 ~= 1.0 then return string.format("movespeed at cap (1) expected 1.0, got %s", tostring(m1)) end
     if m3 ~= 1.0 then return string.format("movespeed over-cap (3) expected clamp to 1.0, got %s", tostring(m3)) end
 end)
 
+_rt_register("picker_caps_persisted_slot_array", function()
+    -- #86 take 4 (the movespeed-BLOCKS-other-slots report): the prior #86 fixes
+    -- only checked `_bubble_cap` / `_value_for_bubbles` — the DISPLAY math. They
+    -- never asserted the PERSISTED `props[property_key]` array length, which is
+    -- what actually drives grid occupancy (vanilla _sync_backend_loadout maps
+    -- one grid slot per array entry). This test drives the REAL picker store
+    -- (`_store_property_slot`, shared with the live set_loadout_property hook)
+    -- and asserts the array NEVER exceeds the property's bubble cap — so a
+    -- future regression that over-fills the array (the exact "movespeed takes 5
+    -- slots and blocks the rest" bug) fails here, not just in-game.
+    if type(_store_property_slot) ~= "function" then return "_store_property_slot missing" end
+
+    local saved = mod:get("movespeed_2pct_mode")
+    if saved ~= false then mod:set("movespeed_2pct_mode", false) end
+
+    -- Helper: simulate N picker clicks for `key`, each landing on a fresh free
+    -- grid slot (vanilla _find_next_available_slot only ever offers free slots,
+    -- so distinct indices), then return the persisted array length.
+    local function _sim_clicks(props, key, n, start_index)
+        for i = 0, n - 1 do
+            _store_property_slot(props, key, start_index + i)
+        end
+        return #(props[key] or {})
+    end
+
+    -- Movespeed: default cap 1. Even 5 clicks must persist EXACTLY 1 slot.
+    local p = {}
+    local ms_len = _sim_clicks(p, "weave_movespeed", 5, 1)
+    if ms_len ~= 1 then
+        if saved == true then mod:set("movespeed_2pct_mode", true) end
+        return string.format("movespeed (2pct OFF): 5 clicks persisted %d slot indices, expected 1 — over-occupancy regression (#86)", ms_len)
+    end
+
+    -- Stamina: cap 2. 5 clicks must persist EXACTLY 2 (proves the fix doesn't
+    -- regress the property that already worked).
+    p = {}
+    local st_len = _sim_clicks(p, "weave_stamina", 5, 10)
+    if st_len ~= 2 then
+        if saved == true then mod:set("movespeed_2pct_mode", true) end
+        return string.format("stamina: 5 clicks persisted %d slot indices, expected 2", st_len)
+    end
+
+    -- Cross-property collision: a slot_index already held by movespeed must not
+    -- also be stored under stamina (vanilla's global slot-occupancy guard).
+    p = {}
+    _store_property_slot(p, "weave_movespeed", 7)
+    _store_property_slot(p, "weave_stamina", 7) -- same index -> must be rejected
+    if (p.weave_stamina and #p.weave_stamina or 0) ~= 0 then
+        if saved == true then mod:set("movespeed_2pct_mode", true) end
+        return "cross-property collision guard failed: slot_index 7 stored under both movespeed and stamina"
+    end
+
+    -- Re-click dedupe: clicking the SAME slot twice for one property stays at 1.
+    p = {}
+    _store_property_slot(p, "weave_movespeed", 3)
+    _store_property_slot(p, "weave_movespeed", 3)
+    if #p.weave_movespeed ~= 1 then
+        if saved == true then mod:set("movespeed_2pct_mode", true) end
+        return string.format("re-click dedupe failed: movespeed persisted %d entries for one slot, expected 1", #p.weave_movespeed)
+    end
+
+    -- 2pct mode ON: movespeed legitimately uncaps to 5 (documented trade). Pin
+    -- it so a future change that forgets the 2pct path is caught too.
+    mod:set("movespeed_2pct_mode", true)
+    p = {}
+    local ms5 = _sim_clicks(p, "weave_movespeed", 7, 1)
+    if saved ~= true then mod:set("movespeed_2pct_mode", false) else mod:set("movespeed_2pct_mode", true) end
+    if ms5 ~= 5 then
+        return string.format("movespeed (2pct ON): 7 clicks persisted %d slot indices, expected 5 (the +2%%-per-bubble trade)", ms5)
+    end
+end)
+
+_rt_register("read_chokepoint_caps_grid_occupancy", function()
+    -- #86 v0.8.30-dev: the WRITE-path cap is provably correct (the test above),
+    -- yet the symptom persisted in-game — proving the array reaching the grid is
+    -- over-filled by a path the write cap doesn't cover. `_cap_grid_property_arrays`
+    -- is the read-side guard: it trims whatever get_loadout_properties is about to
+    -- hand vanilla `_sync_backend_loadout`, which maps one grid slot per array
+    -- entry. This drives it with a DELIBERATELY over-filled array (simulating the
+    -- leak) and asserts the grid never sees more than the cap.
+    if type(_cap_grid_property_arrays) ~= "function" then return "_cap_grid_property_arrays missing" end
+
+    local saved = mod:get("movespeed_2pct_mode")
+    if saved ~= false then mod:set("movespeed_2pct_mode", false) end
+    local function _restore() if saved == true then mod:set("movespeed_2pct_mode", true) end end
+
+    -- Weapon editor (item_backend_id present = one layer). Over-fill movespeed to
+    -- 5 and stamina to 5, then assert the read guard trims to 1 and 2.
+    local p = {
+        weave_movespeed = { 1, 2, 3, 4, 5 },
+        weave_stamina   = { 6, 7, 8, 9, 10 },
+    }
+    _cap_grid_property_arrays(p, "fake_weapon_bid")
+    if #p.weave_movespeed ~= 1 then
+        _restore(); return string.format("read guard (weapon): movespeed trimmed to %d, expected 1", #p.weave_movespeed)
+    end
+    if #p.weave_stamina ~= 2 then
+        _restore(); return string.format("read guard (weapon): stamina trimmed to %d, expected 2", #p.weave_stamina)
+    end
+
+    -- Amulet editor (item_backend_id == nil = per-layer cap). Movespeed cap 1 PER
+    -- accessory: necklace (layer 1, idx 1..10) + charm (layer 2, idx 11..20) must
+    -- keep ONE each = 2 total, not collapse to 1. An over-fill within one layer
+    -- (idx 1 and 2 both layer 1) must trim to 1 for that layer.
+    local a = { weave_movespeed = { 1, 2, 11 } } -- layer1: {1,2}->1, layer2: {11}->1
+    _cap_grid_property_arrays(a, nil)
+    if #a.weave_movespeed ~= 2 then
+        _restore(); return string.format("read guard (amulet): movespeed across 2 layers trimmed to %d, expected 2 (per-layer cap)", #a.weave_movespeed)
+    end
+
+    -- Already-capped arrays must pass through untouched (idempotent / no false trim).
+    local ok = { weave_stamina = { 3, 4 }, weave_movespeed = { 5 } }
+    _cap_grid_property_arrays(ok, "fake_weapon_bid")
+    if #ok.weave_stamina ~= 2 or #ok.weave_movespeed ~= 1 then
+        _restore(); return "read guard: trimmed an already-capped array (false positive)"
+    end
+
+    _restore()
+end)
+
+_rt_register("default_property_cap_is_five_bubbles", function()
+    -- #86 (2026-06-29, v0.8.33-dev): every generic property keeps a 5-bubble row
+    -- you fill to SCALE its value (1 bubble = 20%, 5 = full) — the vanilla weave
+    -- behavior. v0.8.32-dev briefly forced the default to 1, which let each
+    -- property take only one bubble and killed per-property scaling for all of
+    -- them; this pins the default back at 5 so that over-correction can't recur.
+    -- The real #86 fix is the distinct-property ceiling (MAX_DISTINCT / trimmer
+    -- raised to 10), exercised by `picker_caps_persisted_slot_array`; this guards
+    -- the DEFAULT bubble cap + its scaling math.
+    if type(_bubble_cap) ~= "function" then return "_bubble_cap missing" end
+    if type(_value_for_bubbles) ~= "function" then return "_value_for_bubbles missing" end
+
+    local saved = mod:get("movespeed_2pct_mode")
+    if saved ~= false then mod:set("movespeed_2pct_mode", false) end
+    local function _restore() if saved == true then mod:set("movespeed_2pct_mode", true) end end
+
+    -- A spread of real default (non-special-cased) weave property keys — each
+    -- must resolve to cap 5 in any key form (weave_X / properties_X / bare X).
+    for _, key in ipairs({
+        "weave_fatigue_regen", "weave_crit_chance", "weave_attack_speed",
+        "weave_block_cost", "weave_power_vs_chaos", "fatigue_regen",
+        "properties_crit_chance",
+    }) do
+        local c = _bubble_cap(key)
+        if c ~= 5 then
+            _restore()
+            return string.format("default cap for '%s' = %s, expected 5 (#86 single-bubble regression)", key, tostring(c))
+        end
+        -- Value must SCALE with bubbles: 1 → 0.2, 5 → 1.0 (full).
+        if _value_for_bubbles(key, 1) ~= 0.2 then
+            _restore()
+            return string.format("'%s': 1 bubble value = %s, expected 0.2 (scaling broken)", key, tostring(_value_for_bubbles(key, 1)))
+        end
+        if _value_for_bubbles(key, 5) ~= 1.0 then
+            _restore()
+            return string.format("'%s': 5 bubble value = %s, expected 1.0 (max)", key, tostring(_value_for_bubbles(key, 5)))
+        end
+    end
+
+    -- Special cases unchanged.
+    if _bubble_cap("weave_stamina") ~= 2 then _restore(); return "stamina cap regressed from 2" end
+    if _bubble_cap("weave_movespeed") ~= 1 then _restore(); return "movespeed cap regressed from 1" end
+
+    _restore()
+end)
+
 _rt_register("action_rejection_uses_warning_channel", function()
     -- v0.7.44-alpha converted ~dozen action-rejection callsites from mod:echo
-    -- to mod:warning (issue #47). The v0.7.38 chat-suppression patch silences
-    -- mod:echo unless enable_debug_logging is on; mod:warning bypasses it so
-    -- the user sees WHY a click was rejected. Regression: if someone re-points
-    -- mod.warning at the suppressed echo (or replaces both with the same
-    -- function), rejections become invisible and the user perceives "broken
-    -- mod" — exactly the user-report substrate from 2026-05-25.
+    -- to mod:warning (issue #47). mod:echo is redirected to log only; mod:warning
+    -- bypasses it so the user sees WHY a click was rejected. Regression: if
+    -- someone re-points mod.warning at the redirected echo (or replaces both with
+    -- the same function), rejections become invisible and the user perceives
+    -- "broken mod" — exactly the user-report substrate from 2026-05-25.
     if type(mod.warning) ~= "function" then return "mod.warning missing" end
     if type(mod.echo) ~= "function" then return "mod.echo missing" end
     if mod.warning == mod.echo then
@@ -5145,6 +6642,41 @@ _rt_register("adventure_visible_stamp_and_mechanism_clear", function()
     end
 end)
 
+_rt_register("versus_twin_rehidden_from_inventory", function()
+    -- v0.8.22-dev: the global `mechanisms = nil` clear above (intended — makes a
+    -- CRAFTED vs_* adventure-visible) also leaks the player's RAW OWNED vs_* twin
+    -- into the adventure inventory grid, because item.data is a SHARED reference
+    -- to the cleared IML entry (PlayFabMirrorBase._update_data:1786). The
+    -- get_filtered_items hook re-hides the owned twin at the DISPLAY layer.
+    -- Assert _cim_is_leaked_versus_twin distinguishes the two:
+    --   owned vs_* twin (vanilla bid)   -> hidden  (true)
+    --   cim-crafted vs_* (modded bid)   -> visible (false — stays craftable/shown)
+    --   non-versus item                 -> visible (false)
+    local twin_fn = mod._cim_is_leaked_versus_twin
+    if type(twin_fn) ~= "function" then
+        return "mod._cim_is_leaked_versus_twin missing — versus-twin inventory re-hide not wired"
+    end
+    -- Owned twin: vs_ key, NON-modded backend_id -> must be re-hidden.
+    local owned_twin = { key = "vs_gutter_runner_claws", backend_id = "vanilla-owned-bid-12345" }
+    if not twin_fn(owned_twin) then
+        return "owned vs_* twin not flagged for re-hide — would leak into the adventure inventory grid"
+    end
+    -- Crafted vs_*: register a fake modded bid so _cim_is_modded_backend_id
+    -- returns true, then it must NOT be re-hidden (stays visible/craftable).
+    local crafted_bid = "__cim_rt_fake_vs_craft__"
+    _forged_weapons[crafted_bid] = { item_key = "vs_gutter_runner_claws" }
+    local crafted = { key = "vs_gutter_runner_claws", backend_id = crafted_bid }
+    local crafted_hidden = twin_fn(crafted)
+    _forged_weapons[crafted_bid] = nil  -- cleanup
+    if crafted_hidden then
+        return "cim-crafted vs_* incorrectly flagged for re-hide — deliberately-surfaced craft would vanish from inventory"
+    end
+    -- Non-versus item: never touched.
+    if twin_fn({ key = "es_1h_sword", backend_id = "whatever" }) then
+        return "non-versus item incorrectly flagged for re-hide"
+    end
+end)
+
 _rt_register("overview_btns_created_when_forge_opened", function()
     -- State-witness (like no_duplicate_hook_safe_registrations): if the weave
     -- forge overview has been opened this session, _ensure_overview_jewelry_buttons
@@ -5220,6 +6752,48 @@ _rt_register("backendutils_capture_installed", function()
     end
 end)
 
+_rt_register("persist_loadouts_gate_off_is_passthrough", function()
+    -- v0.8.15-dev: the `persist_modded_loadouts` master toggle defaults OFF, and
+    -- when OFF cim must NOT touch the loadout path — _capture_loadout_equip records
+    -- nothing and _restore_modded_loadout no-ops, so vanilla player AND bot loadouts
+    -- are byte-identical to not having cim. Pin both invariants:
+    --   1. the gate helper reflects the live setting value, and
+    --   2. with the toggle forced OFF, a real set_loadout_item call for a modded
+    --      bid leaves _modded_loadout empty (no capture).
+    if type(mod._cim_persist_loadouts_enabled) ~= "function" then
+        return "persist-loadouts gate helper missing"
+    end
+    local cls = rawget(_G, "BackendInterfaceItemPlayfab")
+    if not cls or type(cls.set_loadout_item) ~= "function" then
+        return "skip: BackendInterfaceItemPlayfab.set_loadout_item not loaded (run in-keep)"
+    end
+    local hook_fn = cls.set_loadout_item
+
+    local result_err
+    -- The sandbox forces the toggle ON for its body; we deliberately flip it OFF
+    -- INSIDE to assert the OFF behavior, and the sandbox restores everything.
+    _rt_with_loadout_sandbox(function()
+        mod:set("persist_modded_loadouts", false, false)
+        if mod._cim_persist_loadouts_enabled() ~= false then
+            result_err = "gate helper says enabled while setting is OFF"
+            return
+        end
+        mod._cim_register_craft(_RT_FAKE_BID, {
+            item_key = "es_1h_falchion", properties = {}, traits = {}, power_level = 300, rarity = "modded",
+        })
+        local fake_items = setmetatable({}, { __index = function() return function() end end })
+        _modded_loadout = {}
+        -- Equip a MODDED bid while the master toggle is OFF.
+        pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, 1)
+        local captured = _modded_loadout[_RT_FAKE_CAREER]
+        if captured ~= nil and next(captured) ~= nil then
+            result_err = "OFF gate leaked a capture into _modded_loadout (should be untouched)"
+            return
+        end
+    end)
+    if result_err then return result_err end
+end)
+
 _rt_register("reequip_live_api_ok", function()
     -- v0.7.67-dev (issue #22): _reequip_live_avatar re-equips the keep avatar
     -- after restore via the vanilla create_equipment_in_slot /
@@ -5233,4 +6807,540 @@ _rt_register("reequip_live_api_ok", function()
     end
 end)
 
-mod:info("[mem-probe] cim boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CIM) / 1024)
+_rt_register("forge_preview_guard_present", function()
+    -- v0.7.70-dev: the weave-forge weapon previewer (LootItemUnitPreviewer)
+    -- spawns the selected weapon's 3D model, which HARD-CRASHES (no Lua trace)
+    -- on weapons whose preview units aren't loadable in the forge world — the
+    -- Trollhammer Torpedo (dr_deus_01, "torpedo cannon") being the reported
+    -- case. _forge_preview_unsafe gates both spawn sites. Verify the guard is
+    -- wired AND fails safe (treats anything it can't resolve as UNSAFE) so an
+    -- unknown / garbage item can never reach the engine spawn.
+    local fn = mod._cim_forge_preview_unsafe
+    if type(fn) ~= "function" then
+        return "forge preview guard (_cim_forge_preview_unsafe) missing — torpedo CTD guard not installed"
+    end
+    if fn(nil) ~= true then
+        return "guard must treat a nil item as UNSAFE (skip preview); returned non-true"
+    end
+    if fn({ key = "cim_definitely_not_a_real_item_key_zzz" }) ~= true then
+        return "guard must treat an unknown item key as UNSAFE (master nil); returned non-true"
+    end
+end)
+
+_rt_register("weave_category_pool_guard_present", function()
+    -- v0.7.75-dev: opening the forge stat editor for a weapon whose
+    -- property/trait/talent table-name isn't a weave category (Trollhammer
+    -- Torpedo dr_deus_01 the reported case) made vanilla _setup_menu_options do
+    -- ipairs(WeaveTraits.categories[category]) on nil -> "bad argument #1 to
+    -- 'ipairs' (table expected, got nil)". The guard seeds an empty {} pool for
+    -- unknown categories so the picker renders empty instead of crashing. Verify
+    -- the seeder is wired and idempotently fills the trait + property pools for
+    -- an unknown category (then clean up the synthetic key).
+    local fn = mod._cim_ensure_weave_category_pools
+    if type(fn) ~= "function" then
+        return "weave category pool guard (_cim_ensure_weave_category_pools) missing"
+    end
+    local wt = rawget(_G, "WeaveTraits")
+    local wp = rawget(_G, "WeaveProperties")
+    if not (wt and wt.categories and wp and wp.categories) then
+        return "skip: WeaveTraits/WeaveProperties not loaded"
+    end
+    local cat = "cim_rt_not_a_weave_category_zzz"
+    wt.categories[cat], wp.categories[cat] = nil, nil
+    fn("es_mercenary", { traits = { { category = cat } }, properties = { { category = cat } } })
+    local seeded = type(wt.categories[cat]) == "table" and #wt.categories[cat] == 0
+        and type(wp.categories[cat]) == "table" and #wp.categories[cat] == 0
+    wt.categories[cat], wp.categories[cat] = nil, nil  -- don't leave RT residue in the weave tables
+    if not seeded then
+        return "guard did not seed empty trait+property pools for an unknown category"
+    end
+end)
+
+_rt_register("heroview_hdr_renderer_guard_failsafe", function()
+    -- v0.7.71-dev: in-mission forge crashed at HeroView.hdr_renderer /
+    -- hdr_top_renderer because vanilla _setup_hdr_gui only builds
+    -- self._hdr_gui_data when is_in_inn (false in mission), and the forge
+    -- windows dereference _hdr_gui_data.bottom/.top every frame. The accessor
+    -- hooks must fall back to the view's own renderer when _hdr_gui_data is nil
+    -- rather than letting vanilla index a nil. Drive the (hooked) accessors with
+    -- a synthetic self that has nil _hdr_gui_data and assert no raise + fallback.
+    if type(HeroView) ~= "table" or type(HeroView.hdr_renderer) ~= "function"
+        or type(HeroView.hdr_top_renderer) ~= "function" then
+        return "skip: HeroView not loaded"
+    end
+    local r_sentinel, t_sentinel = {}, {}
+    local fake = { _hdr_gui_data = nil, ui_renderer = r_sentinel, ui_top_renderer = t_sentinel }
+    local ok, ret = pcall(HeroView.hdr_renderer, fake)
+    if not ok then
+        return "hdr_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret)
+    end
+    if ret ~= r_sentinel then
+        return "hdr_renderer did not fall back to self.ui_renderer on nil _hdr_gui_data"
+    end
+    local ok2, ret2 = pcall(HeroView.hdr_top_renderer, fake)
+    if not ok2 then
+        return "hdr_top_renderer guard missing — raised on nil _hdr_gui_data: " .. tostring(ret2)
+    end
+    if ret2 ~= t_sentinel then
+        return "hdr_top_renderer did not fall back to self.ui_top_renderer on nil _hdr_gui_data"
+    end
+end)
+
+_rt_register("heroview_hdr_failed_setup_sweeps_leaked_worlds", function()
+    -- v0.7.73 (Issue #73): when the in-mission _setup_hdr_gui pcall fails after a
+    -- world was created but before vanilla stored it in self._hdr_gui_data, the
+    -- sweep must destroy the orphaned world by name or the NEXT forge open dies
+    -- on world_manager's "World already exists" fassert. Drive the sweep with a
+    -- stub world manager.
+    local sweep = mod._cim_sweep_leaked_hdr_worlds
+    if type(sweep) ~= "function" then
+        return "_cim_sweep_leaked_hdr_worlds missing (Issue #73 sweep regressed)"
+    end
+    local destroyed = {}
+    local stub_wm = {
+        has_world = function(_, name) return name == "hero_view_hdr" end,  -- only bottom leaked
+        destroy_world = function(_, name) destroyed[#destroyed + 1] = name end,
+    }
+    local swept = sweep(stub_wm, nil)
+    if swept ~= 1 or destroyed[1] ~= "hero_view_hdr" or destroyed[2] ~= nil then
+        return string.format("expected exactly the leaked 'hero_view_hdr' destroyed, got swept=%s destroyed=%s,%s",
+            tostring(swept), tostring(destroyed[1]), tostring(destroyed[2]))
+    end
+    -- With _hdr_gui_data present the worlds are referenced — destroy_hdr_gui owns
+    -- them and the sweep must NOT touch anything.
+    destroyed = {}
+    if sweep(stub_wm, { bottom = {} }) ~= 0 or destroyed[1] ~= nil then
+        return "sweep ran despite _hdr_gui_data being set (would destroy worlds destroy_hdr_gui still owns)"
+    end
+    -- Nil / incomplete world manager must be a safe no-op.
+    if sweep(nil, nil) ~= 0 or sweep({}, nil) ~= 0 then
+        return "sweep not nil-safe on missing world manager"
+    end
+end)
+
+_rt_register("heroview_hdr_not_forcebuilt_in_mission", function()
+    -- v0.8.16-dev (LA armoury_atlas crash): the in-mission HeroView._setup_hdr_gui
+    -- hook must NOT force-build the HDR worlds anymore. Force-building them mid-
+    -- mission is what lets VMF custom_textures inject Loremaster's Armoury's global
+    -- `armoury_atlas` material into a fresh world that can't resolve it -> C-level
+    -- assert at c_api_world.cpp:568 (bypasses the pcall -> hard crash, session
+    -- b688f241). Fix B skips vanilla in mission and falls through to the
+    -- hdr_renderer/hdr_top_renderer ui_renderer fallback instead.
+    --
+    -- Source-pattern check: the _setup_hdr_gui hook body must (a) contain the Fix B
+    -- skip marker and (b) NOT contain the old "flip is_in_inn=true then pcall the
+    -- vanilla builder" force-build sequence. Needles are assembled from split
+    -- literals so this test's own source does not self-match. No-ops when source
+    -- introspection is unavailable (deploy/bundle paths).
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- (a) Fix B skip marker present in the hook body.
+    local skip_needle = "_setup_hdr_gui skipped in mission (Fix B" .. ": avoid LA armoury_atlas HDR-world crash)"
+    if not txt:find(skip_needle, 1, true) then
+        return "Fix B regression: in-mission _setup_hdr_gui no longer skips vanilla — the LA armoury_atlas HDR-world crash guard is gone"
+    end
+    -- (b) The old force-build sequence must be gone from the _setup_hdr_gui hook.
+    --     Key off two tokens that were UNIQUE to that hook body and never appeared
+    --     in the still-valid _setup_gamepad_gui force-build (which keeps its own
+    --     is_in_inn flip for a different, non-LA crash class): the `saved_is_in_inn`
+    --     local and the post-failure HDR-world sweep call. Split the literals so this
+    --     test's own source does not self-match.
+    local saved_flag_needle = "saved_is_in_inn = self.is_in_inn" .. "\n    self.is_in_inn = true"
+    if txt:find(saved_flag_needle, 1, true) then
+        return "Fix B regression: in-mission _setup_hdr_gui still flips is_in_inn to force-build the HDR worlds (would crash on LA armoury_atlas)"
+    end
+    local sweep_in_hook_needle = "_cim_sweep_leaked_hdr_worlds(Managers.world" .. ", self._hdr_gui_data)"
+    if txt:find(sweep_in_hook_needle, 1, true) then
+        return "Fix B regression: in-mission _setup_hdr_gui still pcall-builds then sweeps the HDR worlds (force-build path is back)"
+    end
+end)
+
+_rt_register("hdr_glow_widgets_suppressed_in_mission", function()
+    -- v0.8.17-dev (weave_menu_* "Material not found in Gui" cascade): after Fix B
+    -- drops the in-mission HDR worlds, the forge's HDR glow widgets fall through to
+    -- the BASE mission renderer, which lacks the three keep-only raw materials
+    -- (weave_menu_upgrade_skull_circle{,_shade}, weave_menu_athanor_upgrade_bg) ->
+    -- ui_passes.lua:134 fatal. The create_ui_elements suppression must EMPTY the
+    -- HDR draw arrays in mission and LEAVE THEM INTACT in the keep.
+    --
+    -- Drive the exposed helper synthetically against fake windows so the check runs
+    -- anywhere (no live forge needed).
+    local fn = mod._cim_suppress_hdr_glow_in_mission
+    if type(fn) ~= "function" then return "suppression helper mod._cim_suppress_hdr_glow_in_mission not exposed" end
+
+    -- (1) In mission (in_keep=false): populated HDR arrays must be emptied, and the
+    --     helper reports it cleared.
+    local mission_win = { _top_hdr_widgets = { {}, {} }, _bottom_hdr_widgets = { {}, {} } }
+    local cleared = fn(mission_win, false)
+    if cleared ~= true then
+        return "helper did not report clearing populated HDR arrays in mission"
+    end
+    if #mission_win._top_hdr_widgets ~= 0 or #mission_win._bottom_hdr_widgets ~= 0 then
+        return "in-mission HDR draw arrays NOT emptied — weave_menu_* materials would still resolve on the base renderer and crash"
+    end
+
+    -- (2) In the keep (in_keep=true): arrays must be left fully intact (full HDR glow).
+    local keep_win = { _top_hdr_widgets = { {}, {} }, _bottom_hdr_widgets = { {}, {}, {} } }
+    if fn(keep_win, true) ~= false then
+        return "helper claimed to clear HDR arrays in the keep — keep forge must keep its full HDR glow"
+    end
+    if #keep_win._top_hdr_widgets ~= 2 or #keep_win._bottom_hdr_widgets ~= 3 then
+        return "keep HDR draw arrays were mutated — keep path must be untouched"
+    end
+
+    -- (3) Idempotent / robust: a window with already-empty or missing arrays in
+    --     mission is a safe no-op (no error, reports nothing cleared).
+    if fn({ _top_hdr_widgets = {}, _bottom_hdr_widgets = {} }, false) ~= false then
+        return "helper reported clearing already-empty arrays"
+    end
+    if fn({}, false) ~= false then
+        return "helper not safe on a window with no HDR arrays"
+    end
+end)
+
+_rt_register("hdr_cluster_glow_resuppressed_on_props_enter", function()
+    -- v0.8.17-dev (Fix B2, second vector): create_ui_elements empties the HDR
+    -- glow arrays, but HeroWindowWeaveProperties.on_enter then calls
+    -- _create_slot_grid -> _create_cluster_background, which RE-APPENDS the raw,
+    -- inn-only `athanor_skilltree_cluster_effect_*` glow widgets to
+    -- _bottom_hdr_widgets AFTER suppression. The cim_debug.lua on_enter (post)
+    -- hook re-runs the shared helper to re-empty it in mission. That hook is in a
+    -- DIFFERENT source file, so verify the wiring it depends on instead:
+    --   (1) the in-keep detector is exposed cross-file as mod._cim_is_in_keep,
+    --   (2) it returns a boolean, and
+    --   (3) the suppression helper, driven with that detector's CURRENT value on
+    --       a synthetic props window carrying a freshly re-appended cluster-effect
+    --       widget, leaves the array intact in the keep and empties it in mission.
+    local in_keep = mod._cim_is_in_keep
+    if type(in_keep) ~= "function" then
+        return "mod._cim_is_in_keep not exposed — cim_debug on_enter re-suppression can't detect the keep (second-vector fix dead)"
+    end
+    local live = in_keep()
+    if type(live) ~= "boolean" then
+        return "mod._cim_is_in_keep did not return a boolean"
+    end
+    local fn = mod._cim_suppress_hdr_glow_in_mission
+    if type(fn) ~= "function" then return "suppression helper not exposed" end
+    -- Synthetic props window mirroring the post-_create_slot_grid state: one
+    -- cluster-effect widget re-appended to _bottom_hdr_widgets.
+    local props = { _top_hdr_widgets = {}, _bottom_hdr_widgets = { { _cim_rt_cluster_effect = true } } }
+    fn(props, live)
+    if live then
+        -- In the keep the cluster glow must survive (full HDR there).
+        if #props._bottom_hdr_widgets ~= 1 then
+            return "keep: re-appended cluster-effect glow was wrongly stripped"
+        end
+    else
+        -- In mission it must be re-emptied or the inn-only material faults.
+        if #props._bottom_hdr_widgets ~= 0 then
+            return "mission: re-appended cluster-effect glow NOT re-suppressed — athanor_skilltree_cluster_effect_* would fault on the base renderer"
+        end
+    end
+end)
+
+_rt_register("skilltree_ring_widgets_suppressed_in_mission", function()
+    -- v0.8.19-dev (Fix B5, ui_passes.lua:805 "Material 'athanor_skilltree_ring_3'
+    -- not found in Gui", in-mission skill tree): the NON-HDR _bottom_widgets array
+    -- (drawn on the BASE mission ui_renderer) carries raw, inn-only skill-tree
+    -- decorations — wheel_ring_* (athanor_skilltree_ring_*), background_wheel
+    -- (athanor_skilltree_background), and per-cluster cluster_background_<i>
+    -- (athanor_skilltree_cluster_<i>) — alongside FUNCTIONAL widgets. The helper
+    -- must rebuild the array minus ONLY the raw decorative textures (matched by
+    -- content.texture_id prefix), keeping the functional widgets, and leave the
+    -- array fully intact in the keep.
+    local fn = mod._cim_suppress_skilltree_rings_in_mission
+    if type(fn) ~= "function" then return "suppression helper mod._cim_suppress_skilltree_rings_in_mission not exposed" end
+
+    local function make_win()
+        return { _bottom_widgets = {
+            { content = { texture_id = "athanor_background_write_mask" } },  -- raw write-mask, DROP in mission (the 7th crash vector)
+            { content = { texture_id = "athanor_skilltree_ring_1" } },       -- raw decoration, drop
+            { content = { texture_id = "athanor_skilltree_ring_3" } },       -- raw decoration, drop (earlier reported crash)
+            { content = { texture_id = "athanor_skilltree_background" } },    -- raw decoration, drop
+            { content = { texture_id = "athanor_skilltree_cluster_2" } },     -- raw decoration, drop
+            { content = { texture_id = "athanor_skilltree_slot_1" } },        -- atlas-backed slot, KEEP (convergent rule must not over-prune)
+            { content = { texture_id = "edge_fade_small" } },                 -- functional (atlas, non-athanor), keep
+            { content = {} },                                                -- viewport_background rect (no texture_id), keep
+        } }
+    end
+
+    -- (1) In mission (in_keep=false): the four raw decorations are dropped, the
+    --     three functional widgets survive, and the helper reports it removed some.
+    local mission_win = make_win()
+    local removed = fn(mission_win, false)
+    if removed ~= true then
+        return "helper did not report removing raw skill-tree decorations in mission"
+    end
+    if #mission_win._bottom_widgets ~= 3 then
+        return "in-mission _bottom_widgets not filtered to exactly the 3 keep-safe widgets (athanor_skilltree_slot_1 + edge_fade_small + viewport rect); raw athanor_* textures would still resolve on the base renderer and crash"
+    end
+    for _, w in ipairs(mission_win._bottom_widgets) do
+        local tid = w.content and w.content.texture_id
+        if type(tid) == "string"
+            and tid:sub(1, 8) == "athanor_"
+            and tid:sub(1, 22) ~= "athanor_skilltree_slot" then
+            return "a raw inn-only athanor_ texture survived the in-mission filter: " .. tid
+        end
+    end
+
+    -- (2) In the keep (in_keep=true): the array must be left fully intact (full
+    --     animated ring/cluster decoration there).
+    local keep_win = make_win()
+    if fn(keep_win, true) ~= false then
+        return "helper claimed to filter _bottom_widgets in the keep — keep forge must keep its full skill-tree decoration"
+    end
+    if #keep_win._bottom_widgets ~= 7 then
+        return "keep _bottom_widgets was mutated — keep path must be untouched"
+    end
+
+    -- (3) Idempotent / robust: empty or missing array in mission is a safe no-op.
+    if fn({ _bottom_widgets = {} }, false) ~= false then
+        return "helper reported filtering an already-empty _bottom_widgets"
+    end
+    if fn({}, false) ~= false then
+        return "helper not safe on a window with no _bottom_widgets"
+    end
+end)
+
+_rt_register("hdr_bloom_setscalar_skipped_in_mission", function()
+    -- v0.8.18-dev (Fix B3, panel.lua:392 set_scalar nil crash, crashify 12a6d563):
+    -- HeroWindowWeaveForgePanel / HeroWindowWeaveProperties run a per-frame bloom
+    -- pulse (_set_background_bloom_intensity) that reads _widgets_by_name directly
+    -- and writes a material scalar on parent:hdr_renderer().gui. After Fix B that
+    -- renderer is the base mission Gui, which lacks the inn-only weave_menu_* wheel
+    -- materials, so Gui.material(...) returns nil and Material.set_scalar(nil, ...)
+    -- fatals. The guard must SKIP vanilla in mission and RUN it in the keep.
+    --
+    -- Source-pattern check (the live hook can't be driven synthetically — it
+    -- dereferences a real HDR Gui — so assert (1) the decision helper is exposed
+    -- and gates on the keep, and (2) the hook is registered with the skip path
+    -- for BOTH windows).
+    local decide = mod._cim_skip_bloom_intensity_in_mission
+    if type(decide) ~= "function" then
+        return "decision helper mod._cim_skip_bloom_intensity_in_mission not exposed (Fix B3 dead)"
+    end
+    -- In the keep the bloom pulse must run (helper returns false -> don't skip).
+    -- Drive through the real _is_in_keep by checking it agrees with the live state.
+    local in_keep = _is_in_keep()
+    local skip = decide({})
+    if in_keep and skip ~= false then
+        return "in keep: bloom-intensity skip helper returned true — would wrongly drop the keep's HDR bloom pulse"
+    end
+    if not in_keep and skip ~= true then
+        return "in mission: bloom-intensity skip helper returned false — Material.set_scalar(nil,...) would fatal on the base mission renderer"
+    end
+    -- Hook presence: the skip guard must be wired on both windows' bloom method.
+    -- Verify via the mod source (the bodies are closures, so check the registration
+    -- pattern is intact in the loaded file text is not available at runtime; instead
+    -- confirm the two target methods still exist on the vanilla classes so a future
+    -- rename surfaces here).
+    if type(HeroWindowWeaveForgePanel) ~= "table"
+        or type(HeroWindowWeaveForgePanel._set_background_bloom_intensity) ~= "function" then
+        return "HeroWindowWeaveForgePanel._set_background_bloom_intensity missing — bloom-crash guard target renamed/gone"
+    end
+    if type(HeroWindowWeaveProperties) ~= "table"
+        or type(HeroWindowWeaveProperties._set_background_bloom_intensity) ~= "function" then
+        return "HeroWindowWeaveProperties._set_background_bloom_intensity missing — bloom-crash guard target renamed/gone"
+    end
+end)
+
+_rt_register("hdr_upgrade_anim_skipped_in_mission", function()
+    -- v0.8.18-dev (Fix B4, second deref site of the same B3 crash class): the
+    -- forge-upgrade "upgrade" transition animation's HDR closures deref the
+    -- inn-only weave_menu_* materials via params.parent:hdr_renderer().gui; after
+    -- Fix B that Gui lacks them in mission -> Material.set_scalar(nil,...) fatal.
+    -- The guard must DROP only the "upgrade" animation, only in mission, only on
+    -- the two windows whose upgrade anim touches HDR materials.
+    local decide = mod._cim_skip_upgrade_anim_in_mission
+    if type(decide) ~= "function" then
+        return "decision helper mod._cim_skip_upgrade_anim_in_mission not exposed (Fix B4 dead)"
+    end
+    local in_keep = _is_in_keep()
+    -- (1) Non-"upgrade" animations must NEVER be skipped (they're HDR-free; e.g.
+    --     "on_enter" / text fades drive the normal forge fade-in).
+    if decide("on_enter") ~= false then
+        return "guard skipped a non-upgrade animation (on_enter) — would break the forge fade-in"
+    end
+    -- (2) The "upgrade" animation: skipped in mission, run in the keep.
+    local skip_upgrade = decide("upgrade")
+    if in_keep and skip_upgrade ~= false then
+        return "in keep: upgrade-anim guard returned true — would drop the keep's upgrade flourish"
+    end
+    if not in_keep and skip_upgrade ~= true then
+        return "in mission: upgrade-anim guard returned false — the upgrade flourish's HDR set_scalar(nil,...) would fatal"
+    end
+    -- (3) Target methods still exist (a future rename surfaces here).
+    if type(HeroWindowWeaveForgeOverview) ~= "table"
+        or type(HeroWindowWeaveForgeOverview._start_transition_animation) ~= "function" then
+        return "HeroWindowWeaveForgeOverview._start_transition_animation missing — upgrade-anim guard target renamed/gone"
+    end
+    if type(HeroWindowWeaveForgeWeapons) ~= "table"
+        or type(HeroWindowWeaveForgeWeapons._start_transition_animation) ~= "function" then
+        return "HeroWindowWeaveForgeWeapons._start_transition_animation missing — upgrade-anim guard target renamed/gone"
+    end
+end)
+
+_rt_register("forge_preview_guard_allows_loaded_weapon", function()
+    -- Complement to forge_preview_guard_present: a normal weapon whose units ARE
+    -- loadable must NOT be flagged unsafe, or we'd strip the 3D preview from
+    -- every weapon. Only meaningful inside the modded forge (the weapon's
+    -- display unit is resident only there) — skips otherwise.
+    local fn = mod._cim_forge_preview_unsafe
+    if type(fn) ~= "function" then return "guard missing" end
+    if not _custom_forge_active then
+        return "skip: not in modded forge (preview units only resident there)"
+    end
+    local items_backend = Managers.backend and Managers.backend:get_interface("items")
+    local pl = Managers.player and Managers.player:local_player()
+    if not (items_backend and pl) then return "skip: backend/player not ready" end
+    local profile = SPProfiles[pl:profile_index()]
+    local career = profile and profile.careers[pl:career_index()]
+    if not career then return "skip: no career" end
+    -- Melee slot: a standard melee weapon is never the torpedo, so it should be
+    -- previewable when the forge is open.
+    local bid = items_backend:get_loadout_item_id(career.name, "slot_melee")
+    local item = bid and items_backend:get_item_from_id(bid)
+    if not item then return "skip: no melee item equipped" end
+    if fn(item) == true then
+        return "guard flagged a normally-equipped melee weapon as unsafe — would wrongly strip its 3D preview"
+    end
+end)
+
+_rt_register("rpc_schema_gate_drops_on_mismatch", function()
+    -- audit 2026-06-07 (v0.7.72-dev): the cim_modded_slot RPC must carry a schema
+    -- version (CIM_RPC_SCHEMA) as its first wire arg and the receiver must DROP a
+    -- mismatched payload without mutating _cim_modded_slot_state (VMF_RECIPES § 10).
+    -- Drives the exposed receiver synthetically: a wrong schema_version must leave
+    -- state untouched; the correct one must record the per-slot flag.
+    local recv = mod._cim_rpc_modded_slot
+    local state = mod._cim_modded_slot_state
+    if type(recv) ~= "function" then return "receiver mod._cim_rpc_modded_slot not exposed" end
+    if type(state) ~= "table" then return "state table mod._cim_modded_slot_state not exposed" end
+
+    -- Synthetic identifiers unlikely to collide with any live peer/slot.
+    local FAKE_PEER, FAKE_LPID, FAKE_SLOT = "rt_schema_peer", 7, "slot_melee"
+    local uid = tostring(FAKE_PEER) .. ":" .. tostring(FAKE_LPID)
+    local had_uid = state[uid] ~= nil          -- preserve any pre-existing entry
+    local saved = state[uid]
+    state[uid] = nil
+
+    local result_err
+    -- (1) Mismatched schema -> dropped, no state write.
+    recv(FAKE_PEER, CIM_RPC_SCHEMA + 1, FAKE_PEER, FAKE_LPID, FAKE_SLOT, true)
+    if state[uid] ~= nil then
+        result_err = "schema-mismatch packet was NOT dropped — receiver mutated _cim_modded_slot_state"
+    end
+
+    -- (2) Matching schema -> flag recorded.
+    if not result_err then
+        recv(FAKE_PEER, CIM_RPC_SCHEMA, FAKE_PEER, FAKE_LPID, FAKE_SLOT, true)
+        if not (state[uid] and state[uid][FAKE_SLOT] == true) then
+            result_err = "matching-schema packet did not record the per-slot modded flag"
+        end
+    end
+
+    -- Teardown: restore whatever was there before (don't leak the synthetic entry).
+    if had_uid then state[uid] = saved else state[uid] = nil end
+
+    return result_err
+end)
+
+_rt_register("issue88_inventory_access_flip_is_scoped", function()
+    -- Issue #88: open_standard_crafting must NOT permanently mutate
+    -- InventorySettings.inventory_loadout_access_supported_game_modes (that
+    -- leaked the loadout inventory onto the ESC-menu backout mid-mission). The
+    -- flip is now scoped to cim's own HeroView open via the one-shot
+    -- `_cim_open_standard_inv_pending` flag + a save/restore HeroView.on_enter
+    -- hook. This source-pattern guard fails if the persistent flip is
+    -- reintroduced or the scoped pieces are removed. Degrades to a no-op when
+    -- source introspection is unavailable (bundle/deploy path).
+    local ok, info = pcall(debug.getinfo, mod.open_standard_crafting or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- The one-shot handshake flag must be set in open_standard_crafting.
+    if not txt:find("_cim_open_standard_inv_pending", 1, true) then
+        return "Issue #88 regression: one-shot inventory-access flag _cim_open_standard_inv_pending missing"
+    end
+    -- The scoped HeroView.on_enter hook (assembled from two literals so this
+    -- test's own source doesn't self-match) must exist.
+    local hook_needle = 'mod:hook("' .. 'HeroView", "on_enter"'
+    if not txt:find(hook_needle, 1, true) then
+        return "Issue #88 regression: scoped HeroView.on_enter inventory-access hook missing"
+    end
+    -- And the restore must be present (modes saved + put back).
+    if not txt:find("saved_adventure", 1, true) then
+        return "Issue #88 regression: inventory-access restore (saved_adventure) missing — flip may no longer be scoped"
+    end
+    return nil
+end)
+
+_rt_register("issue96_allow_in_mission_gated_on_gut", function()
+    -- Issue #96: cim's "Allow standard crafting bench in mission" option
+    -- (`allow_in_mission`) must be HIDDEN when GUI Tweaker (gut) is not
+    -- installed — the in-mission keep-menu access cim's standard bench rides
+    -- on comes from gut, so without gut the toggle does nothing and only
+    -- confuses. The fix (in crafting_in_modded_data.lua) is two pieces:
+    --   1. a `_gut_present()` helper — load-order-safe gut-presence detector
+    --      that fast-paths get_mod("gut")/get_mod("gut_dev") and falls back to
+    --      scanning the ModManager manifest for the "Tweaker: GUI" Workshop
+    --      title (so cim-loads-before-gut still detects it), and
+    --   2. a prune that removes the `allow_in_mission` widget from the forge
+    --      group's sub_widgets when `_gut_present()` is false, so VMF never
+    --      builds it.
+    -- This source-pattern guard fails if either piece is removed, so the
+    -- option can't silently re-appear when gut is absent. The fix lives in the
+    -- sibling _data.lua (no exported fn to debug.getinfo on directly), so we
+    -- derive that file's path from a known main-file function's source dir.
+    -- Degrades to a no-op when source introspection is unavailable
+    -- (bundle/deploy path).
+    local ok, info = pcall(debug.getinfo, mod.open_standard_crafting or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    -- main script is .../crafting_in_modded.lua; the data file is the
+    -- sibling .../crafting_in_modded_data.lua. Swap the trailing filename.
+    local dir = src_path:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local data_path = dir .. "crafting_in_modded_data.lua"
+    local f = io.open(data_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- (1) The load-order-safe gut-presence helper must exist. Needle split
+    -- across two literals so this test's own source never self-matches.
+    local helper_needle = "local function " .. "_gut_present()"
+    if not txt:find(helper_needle, 1, true) then
+        return "Issue #96 regression: _gut_present() helper missing from _data.lua — allow_in_mission gating gone"
+    end
+    -- The helper must carry BOTH presence signals: the fast get_mod path AND
+    -- the load-order-safe ModManager-manifest scan for gut's Workshop title.
+    if not txt:find('get_mod("gut")', 1, true) then
+        return "Issue #96 regression: _gut_present() no longer fast-paths get_mod(\"gut\")"
+    end
+    if not txt:find("Tweaker: GUI", 1, true) then
+        return "Issue #96 regression: _gut_present() no longer scans the ModManager manifest for the gut Workshop title (load-order-safe path gone)"
+    end
+    -- (2) The prune must still be gated on _gut_present() AND target the
+    -- allow_in_mission widget — i.e. the widget is conditionally dropped when
+    -- gut is absent. Both anchors must be present for the gating to hold.
+    if not txt:find("if not " .. "_gut_present() then", 1, true) then
+        return "Issue #96 regression: allow_in_mission prune no longer gated on _gut_present() — option would show with gut absent"
+    end
+    if not txt:find('== "allow_in_mission"', 1, true) then
+        return "Issue #96 regression: prune no longer targets the allow_in_mission widget — gating may no longer remove it"
+    end
+    return nil
+end)
+
+mod:info("[mem-probe] cim boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CIMD) / 1024)
