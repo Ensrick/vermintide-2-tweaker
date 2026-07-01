@@ -49,7 +49,51 @@ local function _build_injections()
     return injections
 end
 
-return {
+-- =========================================================================
+-- Issue #96: the "Allow standard crafting bench in mission" option only does
+-- something useful when GUI Tweaker (gut) is present (gut supplies the
+-- in-mission menu access cim's standard bench rides on), so the widget is
+-- HIDDEN when gut isn't installed.
+--
+-- VMF has NO native conditional-visibility / mod-dependency widget field
+-- (verified against upstream vmf/.../core/options.lua: the validated checkbox
+-- fields are setting_id/type/title/tooltip/default_value/localize/is_collapsed;
+-- the only conditional feature is dropdown `show_widgets`, which keys off a
+-- dropdown VALUE, not mod presence). So we gate by conditionally BUILDING the
+-- widget tree — the `allow_in_mission` entry is pruned below before the data
+-- table is returned when gut is absent.
+--
+-- Load-order safety (the footgun): `get_mod("gut")` is just `_mods["gut"]` and
+-- returns nil if gut hasn't run its `new_mod` yet — VMF unfolds this data table
+-- IMMEDIATELY at cim's registration (not lazily), so if cim loads before gut,
+-- a bare get_mod check would wrongly hide the widget. The load-order-INDEPENDENT
+-- signal is the engine ModManager's mod table (`Managers.mod._mods`), which is
+-- built once from the user's full enabled-mod list at scan time BEFORE any mod's
+-- Lua runs (mod_manager.lua:278-343; each entry carries `name` = Workshop title
+-- + `enabled`). We check both: the fast get_mod path (gut already loaded) OR an
+-- enabled ModManager entry whose Workshop title is gut's ("Tweaker: GUI",
+-- covering gut and gut_dev) — so presence is detected regardless of load order.
+local function _gut_present()
+    -- Fast path: gut (or its dev clone) already registered with VMF.
+    if get_mod("gut") or get_mod("gut_dev") then
+        return true
+    end
+    -- Load-order-safe path: scan the engine's enabled-mod manifest by name.
+    local mod_mgr = rawget(_G, "Managers") and Managers.mod
+    local mods = mod_mgr and mod_mgr._mods
+    if type(mods) == "table" then
+        for i = 1, (mod_mgr._num_mods or #mods) do
+            local entry = mods[i]
+            if entry and entry.enabled and type(entry.name) == "string"
+               and entry.name:find("Tweaker: GUI", 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local options_data = {
     name        = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
     is_togglable = true,
@@ -66,6 +110,22 @@ return {
                         keybind_trigger = "pressed",
                         keybind_type = "function_call",
                         function_name = "open_forge",
+                    },
+                    -- Standard crafting bench (Keep Smithy) hotkey. Opens the
+                    -- VANILLA salvage / craft / re-roll / upgrade / apply-illusion
+                    -- bench. Unlike the Athanor (forge_hotkey above), this surface
+                    -- is material-clean in adventure missions — it draws flat atlas
+                    -- widgets with no preview world or inn-only shading. Default
+                    -- unbound (the /cim_craft_standard chat command is the primary
+                    -- trigger). In the Keep it always opens; in a mission it honors
+                    -- the same 'Allow in mission' toggle below.
+                    {
+                        setting_id = "standard_crafting_hotkey",
+                        type = "keybind",
+                        default_value = {},
+                        keybind_trigger = "pressed",
+                        keybind_type = "function_call",
+                        function_name = "open_standard_crafting",
                     },
                     -- Default OFF. Vanilla `HeroViewStateWeaveForge` was never
                     -- expected to run mid-mission and several code paths fault
@@ -125,10 +185,23 @@ return {
                         type = "checkbox",
                         default_value = false,
                     },
+                    -- Loadout persistence toggles (persist_modded_loadouts /
+                    -- restore_modded_loadout) REMOVED 2026-06-30: the feature
+                    -- never worked reliably and a proper loadout system is being
+                    -- built in Tweaker: GUI (gut). cim no longer surfaces these
+                    -- and force-disables the machinery at load (see the master
+                    -- gate in crafting_in_modded_dev.lua).
+                    -- When ON, saved crafts whose source mod isn't currently
+                    -- active are skipped SILENTLY (logged via mod:info, not
+                    -- echoed to chat). The deferred-injection retry still runs,
+                    -- so a craft auto-recovers if the user re-enables its mod;
+                    -- only the chat announcement is suppressed. DEFAULT OFF to
+                    -- preserve the existing "N saved crafts deferred" feedback.
                     {
-                        setting_id = "restore_modded_loadout",
+                        setting_id = "ignore_unloadable_items",
                         type = "checkbox",
-                        default_value = true,
+                        default_value = false,
+                        tooltip = mod:localize("ignore_unloadable_items_description"),
                     },
                 },
             },
@@ -150,19 +223,6 @@ return {
                     },
                 },
             },
-            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-            -- v0.7.37-alpha: renamed from `debug_mode` (was nested in
-            -- `debug_group`) to the universal `enable_debug_logging` key,
-            -- un-nested to top-level at the BOTTOM of the widget tree.
-            -- Equivalent behavior: gates the curated set of diagnostic auto-
-            -- dumps (forge open, Athanor open, customization menu open,
-            -- salvage page open, restore-pass completion) at `mod:info` level.
-            {
-                setting_id    = "enable_debug_logging",
-                type          = "checkbox",
-                default_value = false,
-                tooltip       = mod:localize("enable_debug_logging_tooltip"),
-            },
         },
     },
 
@@ -171,3 +231,23 @@ return {
         ui_renderer_injections = _build_injections(),
     },
 }
+
+-- Issue #96 prune: drop the `allow_in_mission` checkbox from the forge group's
+-- sub_widgets when gut is absent, so VMF never builds it. The forge_group is the
+-- first widget in the options tree; locate it by setting_id rather than a fixed
+-- index so a future reorder doesn't silently target the wrong group.
+if not _gut_present() then
+    local widgets = options_data.options and options_data.options.widgets
+    for _, group in ipairs(widgets or {}) do
+        if group.setting_id == "forge_group" and type(group.sub_widgets) == "table" then
+            for i = #group.sub_widgets, 1, -1 do
+                if group.sub_widgets[i].setting_id == "allow_in_mission" then
+                    table.remove(group.sub_widgets, i)
+                end
+            end
+            break
+        end
+    end
+end
+
+return options_data

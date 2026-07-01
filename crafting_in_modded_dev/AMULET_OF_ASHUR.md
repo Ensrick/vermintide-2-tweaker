@@ -114,6 +114,10 @@ HeroWindowWeaveProperties._upgrade_magic_level
   → for each dirty slot: clone equipped item's state into new modded item, equip
 ```
 
+## Resolved
+
+- **✅ Accessory craft buttons — click/hover feedback + sound (v0.8.39-dev, 2026-07-01).** The three overlay buttons (CRAFT NECKLACE / CHARM / TRINKET) now flash a pressed colour while held, brighten on hover, play `Play_hud_hover` on hover-enter and `Play_hud_select` on release. Sound routes through the host window's own vanilla `_play_sound` (`HeroWindowWeaveProperties:_play_sound → self._parent:play_sound`), NOT a `music_world` wwise_world (that world is unregistered in the weave-forge UI context — the old path silently no-op'd, `has_music=false`). User-confirmed working in-game. See `_accessory_craft_panel.lua` and memory `reference_vt2_ui_button_sound_use_window_play_sound`.
+
 ## Open work
 
 - The CRAFT button text doesn't currently re-label when entering the amulet from the standard weapon path (still says "CRAFT NEW WEAPON" for melee/ranged, "CRAFT" generic for amulet). Could be polished to read "CRAFT NEW JEWELLERY" or per-dirty-slot summary.

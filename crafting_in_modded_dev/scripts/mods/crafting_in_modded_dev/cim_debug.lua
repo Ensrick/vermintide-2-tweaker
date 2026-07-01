@@ -1,11 +1,9 @@
 --[[
-cim_debug — autodump diagnostic helpers gated on the universal
-`enable_debug_logging` VMF setting (PROJECT_STANDARDS.md § 3.6;
-v0.7.37-alpha: renamed from `debug_mode`).
+cim_debug — autodump diagnostic helpers, always active (routes through VMF mod:debug)
+(PROJECT_STANDARDS.md § 3.6; v0.7.37-alpha: renamed from `debug_mode`).
 
-When `enable_debug_logging` is OFF (default), every entrypoint in this file is a fast no-op.
-When ON, the autodump_* hooks fire at well-known UI/state transitions and emit
-log-only (`mod:info`) diagnostic snapshots labelled with a context string. No
+The autodump_* hooks fire at well-known UI/state transitions and emit
+log-only (`mod:debug`) diagnostic snapshots labelled with a context string. No
 chat spam — output goes to `%appdata%\Fatshark\Vermintide 2\console_logs\`.
 
 Purpose: when a user reports "X didn't appear" or "Y wasn't restored", the most
@@ -21,7 +19,7 @@ log-only and are tuned for diagnosing post-hoc from a forwarded log file.
 local mod = get_mod("cim_dev")
 
 local function _enabled()
-    return mod:get("enable_debug_logging")
+    return true
 end
 
 local function _info(label, fmt, ...)
@@ -36,6 +34,205 @@ local function _local_career()
     local profile = SPProfiles and SPProfiles[profile_index]
     local career  = profile and profile.careers and profile.careers[career_index]
     return career and career.name, profile and profile.display_name
+end
+
+-- ============================================================
+-- [cim:loadout_probe] — loadout INDEX-blindness diagnostics
+-- ============================================================
+-- READ-ONLY probe suite for the loadout-index bug class: cim's `_modded_loadout`
+-- is FLAT (career -> slot -> bid, no index), its capture drops
+-- `optional_loadout_index`, and `_restore_modded_loadout` writes with no index —
+-- so every modded item lands on the SELECTED loadout index. This set of probes
+-- makes the per-index reality visible so we can SEE, per career, what each
+-- loadout index actually holds vs which index is selected vs bot-designated vs
+-- what cim recorded.
+--
+-- CONFIRMED loadout model (verified against decompiled source):
+--   * `PlayFabMirrorBase._career_data[career][loadout_index][slot]` — gear store.
+--   * `PlayFabMirrorBase._career_loadouts[career]` — the SELECTED index (active).
+--   * `PlayerData.loadout_selection.bot_equipment[career]` — bot DESIGNATED index.
+--   * `mirror:get_character_data(career, key, optional_loadout_index)` defaults to
+--     the selected index when no index is passed (playfab_mirror_base.lua:1909-1919).
+--   * `mirror:get_career_loadouts(career)` returns (selected_index, career_data_array)
+--     (playfab_mirror_base.lua:1944-1953).
+--   * `mirror:set_loadout_index(career, index)` switches the selected index
+--     (playfab_mirror_base.lua:1968-1992).
+-- Mirror reached LA-safe via `Managers.backend:get_interface('items')._backend_mirror`.
+--
+-- Every call below is pcall-guarded, nil/type-safe, and never writes loadout or
+-- gameplay state. Output is log-only (`_info`) tagged `[cim:loadout_probe]`,
+-- paste-ready Lua-friendly, gated on `enable_debug_logging`.
+
+-- The five weapon/jewelry slots cim's _modded_loadout actually tracks. (Matches
+-- the slot set the GUI equip path writes through and that we restore.)
+local _LOADOUT_PROBE_SLOTS = {
+    "slot_melee", "slot_ranged", "slot_necklace", "slot_ring", "slot_trinket_1",
+}
+
+-- LA-safe mirror handle. Returns (mirror, items_iface) or (nil, nil).
+local function _loadout_probe_mirror()
+    local backend = Managers.backend
+    local items_iface = backend and backend.get_interface and backend:get_interface("items")
+    local mirror = items_iface and items_iface._backend_mirror
+    return mirror, items_iface
+end
+
+-- Tag a backend_id MODDED or vanilla via cim's heuristic (pcall-guarded — the
+-- heuristic touches the mirror).
+local function _loadout_probe_tag(backend_id)
+    if backend_id == nil then return "<empty>" end
+    if mod._cim_is_modded_backend_id then
+        local ok, r = pcall(mod._cim_is_modded_backend_id, backend_id)
+        if ok and r then return "MODDED" end
+    end
+    return "vanilla"
+end
+
+-- Read a slot's item id at a SPECIFIC loadout index via the mirror's
+-- get_character_data(career, slot, index). pcall-guarded; returns the id or nil.
+local function _loadout_probe_slot_at(mirror, career_name, slot, index)
+    if not mirror or not mirror.get_character_data then return nil end
+    local ok, id = pcall(mirror.get_character_data, mirror, career_name, slot, index)
+    if ok then return id end
+    return nil
+end
+
+-- The careers we dump: the current career + every career with a _modded_loadout
+-- entry. Returns a sorted, de-duped array of career_name strings.
+local function _loadout_probe_career_set()
+    local set = {}
+    local cur = _local_career()
+    if cur then set[cur] = true end
+    local ml = mod:get("modded_loadout") or {}
+    for career_name in pairs(ml) do
+        if type(career_name) == "string" then set[career_name] = true end
+    end
+    local list = {}
+    for career_name in pairs(set) do list[#list + 1] = career_name end
+    table.sort(list)
+    return list
+end
+
+-- THE per-career index dump. For each career: SELECTED index, bot DESIGNATED
+-- index, loadout count, and for EACH index 1..N the 5 tracked slots' item ids
+-- (each tagged MODDED/vanilla), plus cim's flat _modded_loadout[career]. This is
+-- the core read that exposes "modded item went to the selected index, not the
+-- one the user thinks". Backs the `/cim_loadout_dump` command.
+mod._cim_loadout_probe_dump = function()
+    if not _enabled() then return end
+    local label = "loadout_probe"
+    local mirror, items_iface = _loadout_probe_mirror()
+    if not mirror then
+        _info(label, "backend mirror not ready (in keep with backend loaded?)")
+        return
+    end
+
+    local careers = _loadout_probe_career_set()
+    _info(label, "===== loadout index dump: %d career(s) =====", #careers)
+
+    local ml = mod:get("modded_loadout") or {}
+
+    for _, career_name in ipairs(careers) do
+        -- Selected index (the player's ACTIVE loadout).
+        local selected = mirror._career_loadouts and mirror._career_loadouts[career_name]
+
+        -- Bot DESIGNATED index.
+        local pd = rawget(_G, "PlayerData")
+        local bot_sel = pd and pd.loadout_selection
+        local bot_eq = bot_sel and bot_sel.bot_equipment
+        local bot_index = bot_eq and bot_eq[career_name]
+
+        -- Number of loadouts (length of the career_data array).
+        local n_loadouts = 0
+        if mirror.get_career_loadouts then
+            local ok, _sel, career_data = pcall(mirror.get_career_loadouts, mirror, career_name)
+            if ok and type(career_data) == "table" then
+                n_loadouts = #career_data
+            end
+        end
+        -- Fallback: probe directly off _career_data if the accessor failed.
+        if n_loadouts == 0 and mirror._career_data and type(mirror._career_data[career_name]) == "table" then
+            n_loadouts = #mirror._career_data[career_name]
+        end
+
+        _info(label, "career=%s selected_index=%s bot_designated_index=%s n_loadouts=%d",
+            tostring(career_name), tostring(selected), tostring(bot_index), n_loadouts)
+
+        -- Per-index slot contents.
+        for index = 1, n_loadouts do
+            local marker = ""
+            if selected and index == selected then marker = marker .. " <-SELECTED" end
+            if bot_index and index == bot_index then marker = marker .. " <-BOT" end
+            _info(label, "  [index %d]%s", index, marker)
+            for _, slot in ipairs(_LOADOUT_PROBE_SLOTS) do
+                local id = _loadout_probe_slot_at(mirror, career_name, slot, index)
+                _info(label, "    %s = %s [%s]", slot, tostring(id), _loadout_probe_tag(id))
+            end
+        end
+
+        -- cim's INDEXED record (career -> index -> slot -> bid) for this career
+        -- (v0.8.13-dev schema). Dumped per index so a DISTINCT bot index is
+        -- visible vs the selected one — this is the in-game validation that the
+        -- index-aware fix landed.
+        local saved = ml[career_name]
+        if type(saved) == "table" then
+            local idx_keys = {}
+            for idx in pairs(saved) do idx_keys[#idx_keys + 1] = idx end
+            table.sort(idx_keys, function(a, b) return tostring(a) < tostring(b) end)
+            if #idx_keys == 0 then
+                _info(label, "  cim _modded_loadout[%s] = {} (no entries)", tostring(career_name))
+            else
+                for _, idx in ipairs(idx_keys) do
+                    local slots = saved[idx]
+                    if type(slots) == "table" then
+                        local marker = ""
+                        if selected and tostring(idx) == tostring(selected) then marker = marker .. " <-SELECTED" end
+                        if bot_index and tostring(idx) == tostring(bot_index) then marker = marker .. " <-BOT" end
+                        local keys = {}
+                        for slot in pairs(slots) do keys[#keys + 1] = tostring(slot) end
+                        table.sort(keys)
+                        if #keys == 0 then
+                            _info(label, "  cim _modded_loadout[%s][%s] = {} (no entries)%s",
+                                tostring(career_name), tostring(idx), marker)
+                        else
+                            for _, slot in ipairs(keys) do
+                                local bid = slots[slot]
+                                _info(label, "  cim _modded_loadout[%s][%s].%s = %s [%s]%s",
+                                    tostring(career_name), tostring(idx), slot, tostring(bid),
+                                    _loadout_probe_tag(bid), marker)
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            _info(label, "  cim _modded_loadout[%s] = nil (career not recorded)", tostring(career_name))
+        end
+    end
+    _info(label, "===== end loadout index dump =====")
+end
+
+-- Read-only loadout-SWITCH probe. Called from cim's hook_safe on
+-- `PlayFabMirrorBase.set_loadout_index` — logs the career + old->new selected
+-- index. (hook_safe fires AFTER vanilla writes, so `self._career_loadouts[career]`
+-- already reflects the NEW index; we pass the requested new index in, and read
+-- the pre-call value out of a tiny shadow we keep here.) Read-only — never writes.
+mod._cim_loadout_probe_switch_shadow = mod._cim_loadout_probe_switch_shadow or {}
+mod._cim_loadout_probe_on_switch = function(career_name, new_index)
+    if not _enabled() then return end
+    local label = "loadout_probe/switch"
+    local shadow = mod._cim_loadout_probe_switch_shadow
+    local old_index = shadow[career_name]
+    -- Update the shadow to the (post-write) selected index for next time. Read it
+    -- back off the mirror so the shadow stays truthful even across other writers.
+    local mirror = _loadout_probe_mirror()
+    local now_selected = mirror and mirror._career_loadouts and mirror._career_loadouts[career_name]
+    shadow[career_name] = now_selected or new_index
+    _info(label, "career=%s old_selected=%s -> new_selected=%s (requested=%s)",
+        tostring(career_name), tostring(old_index), tostring(now_selected), tostring(new_index))
+    -- Auto-fire the full per-index dump after a switch so we see each loadout
+    -- index's contents right after the active loadout changes (no command needed).
+    if mod._cim_loadout_probe_dump then pcall(mod._cim_loadout_probe_dump) end
 end
 
 -- Track the bids crafted THIS session (ring buffer, capped) so the
@@ -229,13 +426,23 @@ mod._cim_autodump_restore_done = function(stage)
     -- (potential candidates for "my X career loadout wasn't restored" reports).
     local ml = mod:get("modded_loadout") or {}
     local careers = 0
-    for career_name, slots in pairs(ml) do
+    -- Indexed schema: career -> index -> slot -> bid.
+    for career_name, indices in pairs(ml) do
         careers = careers + 1
         local n = 0
-        for _ in pairs(slots) do n = n + 1 end
-        _info(label, "saved %s: %d slot(s)", career_name, n)
+        if type(indices) == "table" then
+            for _, slots in pairs(indices) do
+                if type(slots) == "table" then
+                    for _ in pairs(slots) do n = n + 1 end
+                end
+            end
+        end
+        _info(label, "saved %s: %d slot(s) across loadout indices", career_name, n)
     end
     _info(label, "%d career(s) have saved modded loadouts", careers)
+    -- Auto-fire the full per-index dump after restore: the key moment that exposes
+    -- the index-blindness (which index cim stamped each modded item onto).
+    if mod._cim_loadout_probe_dump then pcall(mod._cim_loadout_probe_dump) end
 end
 
 -- Standard-forge recipe page change (HeroWindowCrafting._change_recipe_page).
@@ -357,6 +564,31 @@ mod._cim_autodump_property_write = function(verb, career_name, key, slot_index, 
     local label = "property_write/" .. tostring(verb)
     _info(label, "career=%s key=%s slot=%s bid=%s",
         tostring(career_name), tostring(key), tostring(slot_index), tostring(item_bid))
+end
+
+-- v0.8.28-dev: the GROUND-TRUTH probe for the #86 slot-occupancy bug. Logs the
+-- persisted `props[property_key]` array AS STORED right after the picker writes
+-- it — array length is exactly how many GRID slots this property occupies
+-- (vanilla _sync_backend_loadout maps one grid slot per array entry). If the
+-- DISPLAY shows 1 movespeed bubble but this logs len=5, that's the divergence —
+-- the prior fixes trusted the display and missed it. Pairs the visible cap with
+-- the actual array so a future regression is visible in the log without code
+-- changes. `arr` is the live array; we snapshot its values for the log line.
+mod._cim_autodump_property_array = function(verb, key, arr, cap)
+    if not _enabled() then return end
+    local label = "property_array/" .. tostring(verb)
+    local n = (type(arr) == "table") and #arr or -1
+    local vals = {}
+    if type(arr) == "table" then
+        for i = 1, n do vals[i] = tostring(arr[i]) end
+    end
+    local over = (type(cap) == "number" and n > cap) and " OVER-CAP!" or ""
+    _info(label, "key=%s persisted_slots=%d cap=%s indices=[%s]%s",
+        tostring(key), n, tostring(cap), table.concat(vals, ","), over)
+    if over ~= "" then
+        mod:warning("[cim:diag] Property '%s' persisted %d slot indices but cap is %s — it will occupy %d grid slots and block the rest. (#86 over-occupancy)",
+            tostring(key), n, tostring(cap), n)
+    end
 end
 
 -- Comprehensive craft-synth result probe (v0.7.52-dev). Called immediately
@@ -633,7 +865,7 @@ end
 -- see the full equip cycle. The hook itself runs AFTER vanilla wrote to
 -- `_backend_mirror:set_character_data`, so a read-back via `get_loadout_item_id`
 -- captures the post-write state.
-mod._cim_autodump_equip_event = function(career_name, slot_name, item_id, items_iface)
+mod._cim_autodump_equip_event = function(career_name, slot_name, item_id, items_iface, from_live_equip, captured_index)
     if not _enabled() then return end
     local label = "equip_event"
 
@@ -657,14 +889,31 @@ mod._cim_autodump_equip_event = function(career_name, slot_name, item_id, items_
     local in_forged = saved[item_id] ~= nil
 
     -- Immediate read-back: does the mirror reflect what we just wrote?
-    local read_back = "<no-iface>"
-    if items_iface and items_iface.get_loadout_item_id then
+    -- CAVEAT (v0.8.10-dev): on the from_live_equip path — the BackendUtils / LA-clone
+    -- menu equip (crafting_in_modded_dev.lua:1096) — the capture runs BEFORE vanilla
+    -- func() commits the write, so a read-back here is PRE-write and ALWAYS reports
+    -- the previous item, producing a false "MISMATCH". Only read back + warn on the
+    -- post-write BackendInterfaceItemPlayfab hook_safe path (from_live_equip == false).
+    local do_readback = not from_live_equip
+    local read_back = from_live_equip and "<pre-write>" or "<no-iface>"
+    if do_readback and items_iface and items_iface.get_loadout_item_id then
         local ok, r = pcall(items_iface.get_loadout_item_id, items_iface, career_name, slot_name)
         if ok then read_back = tostring(r) end
     end
-    local readback_matches = read_back == tostring(item_id)
+    local readback_matches = (not do_readback) or (read_back == tostring(item_id))
 
-    _info(label, "career=%s slot=%s item_id=%s key=%s rarity=%s is_modded_bid=%s in_forged_weapons=%s readback=%s matches=%s",
+    -- [cim:loadout_probe] Which loadout index did this equip write to? The GUI
+    -- equip path (BackendUtils.set_loadout_item, 3-arg) never passes an index, so
+    -- vanilla writes the SELECTED index — surface it so equips are attributable
+    -- to a specific loadout. Read-only off the mirror's _career_loadouts.
+    local selected_index = "<no-mirror>"
+    local mirror = items_iface and items_iface._backend_mirror
+    if mirror and mirror._career_loadouts then
+        local ok, sel = pcall(function() return mirror._career_loadouts[career_name] end)
+        if ok then selected_index = tostring(sel) end
+    end
+
+    _info(label, "career=%s slot=%s item_id=%s key=%s rarity=%s is_modded_bid=%s in_forged_weapons=%s readback=%s matches=%s selected_index=%s captured_index=%s",
         tostring(career_name),
         tostring(slot_name),
         tostring(item_id),
@@ -673,10 +922,13 @@ mod._cim_autodump_equip_event = function(career_name, slot_name, item_id, items_
         tostring(is_modded_bid),
         tostring(in_forged),
         read_back,
-        tostring(readback_matches))
+        tostring(readback_matches),
+        selected_index,
+        tostring(captured_index))
 
-    -- Loud signal if the mirror didn't accept our write.
-    if not readback_matches then
+    -- Loud signal if the mirror didn't accept our write (post-write path only;
+    -- the pre-write LA menu path can't be validated here — see caveat above).
+    if do_readback and not readback_matches then
         mod:warning("[cim:diag] Equip read-back MISMATCH — wrote %s but mirror reports %s for career=%s slot=%s. Vanilla rejected or wrote to a different layer.",
             tostring(item_id), tostring(read_back), tostring(career_name), tostring(slot_name))
     end
@@ -713,29 +965,56 @@ end
 -- Immediately reads back via `get_loadout_item_id` to confirm the write stuck.
 -- This is the proof-of-write check — if `set_loadout_item` returns ok but the
 -- read-back doesn't match, the mirror silently rejected our write.
-mod._cim_autodump_restore_entry = function(career_name, slot_name, expected_bid, items_iface, set_ok, set_err)
+mod._cim_autodump_restore_entry = function(career_name, slot_name, expected_bid, items_iface, set_ok, set_err, written_index)
     if not _enabled() then return end
     local label = "restore_entry"
 
+    -- v0.8.13-dev: read back AT the index we wrote to. set_loadout_item ->
+    -- set_character_data writes _career_data[career][index][slot], so the
+    -- index-correct read-back is mirror:get_character_data(career, slot, index)
+    -- (playfab_mirror_base.lua:1909). NOTE: the items-interface
+    -- get_loadout_item_id's 3rd arg is `is_bot` (a boolean), NOT a loadout
+    -- index, and it reads the selected-index loadout cache — so it can't prove a
+    -- non-selected-index write. Go straight to the mirror with the index.
+    local mirror = items_iface and items_iface._backend_mirror
     local read_back = "<no-iface>"
-    if items_iface and items_iface.get_loadout_item_id then
+    if mirror and mirror.get_character_data and type(written_index) == "number" then
+        local ok, r = pcall(mirror.get_character_data, mirror, career_name, slot_name, written_index)
+        if ok then read_back = tostring(r) end
+    elseif items_iface and items_iface.get_loadout_item_id then
+        -- No explicit index (corrupt/fallback) — best-effort selected-index read.
         local ok, r = pcall(items_iface.get_loadout_item_id, items_iface, career_name, slot_name)
         if ok then read_back = tostring(r) end
     end
     local matches = read_back == tostring(expected_bid)
 
-    _info(label, "career=%s slot=%s expected_bid=%s read_back=%s matches=%s set_ok=%s err=%s",
+    -- [cim:loadout_probe] The TARGET index this restore write stamped. As of
+    -- v0.8.13-dev cim's restore passes the SAVED index as the 4th arg to
+    -- set_loadout_item (crafting_in_modded_dev.lua restore loop), so the write
+    -- targets THAT index — `written_index` — instead of always the selected one.
+    -- `selected_index` is logged alongside so a distinct bot index is visible.
+    -- (`mirror` resolved above for the index-correct read-back.)
+    local written_index_s = tostring(written_index)
+    local selected_index = "<no-mirror>"
+    if mirror and mirror._career_loadouts then
+        local ok, sel = pcall(function() return mirror._career_loadouts[career_name] end)
+        if ok then selected_index = tostring(sel) end
+    end
+
+    _info(label, "career=%s slot=%s expected_bid=%s read_back=%s matches=%s set_ok=%s err=%s written_index=%s selected_index=%s",
         tostring(career_name),
         tostring(slot_name),
         tostring(expected_bid),
         read_back,
         tostring(matches),
         tostring(set_ok),
-        tostring(set_err))
+        tostring(set_err),
+        written_index_s,
+        selected_index)
 
     if set_ok and not matches then
-        mod:warning("[cim:diag] Restore WRITE-NO-READ — set_loadout_item returned ok for %s/%s -> %s but get_loadout_item_id reads back %s. Mirror silently rejected the write OR a different layer is being read.",
-            tostring(career_name), tostring(slot_name), tostring(expected_bid), read_back)
+        mod:warning("[cim:diag] Restore WRITE-NO-READ — set_loadout_item returned ok for %s[%s]/%s -> %s but get_loadout_item_id reads back %s. Mirror silently rejected the write OR a different layer is being read.",
+            tostring(career_name), written_index_s, tostring(slot_name), tostring(expected_bid), read_back)
     end
 end
 
@@ -856,8 +1135,15 @@ mod._cim_autodump_backend_ready = function()
     for _ in pairs(fw) do fw_count = fw_count + 1 end
     local ml = mod:get("modded_loadout") or {}
     local ml_total = 0
-    for _, slots in pairs(ml) do
-        for _ in pairs(slots) do ml_total = ml_total + 1 end
+    -- Indexed schema: career -> index -> slot -> bid.
+    for _, indices in pairs(ml) do
+        if type(indices) == "table" then
+            for _, slots in pairs(indices) do
+                if type(slots) == "table" then
+                    for _ in pairs(slots) do ml_total = ml_total + 1 end
+                end
+            end
+        end
     end
     local items_iface = Managers.backend and Managers.backend:get_interface("items")
     local mirror_size = 0
@@ -866,6 +1152,8 @@ mod._cim_autodump_backend_ready = function()
     end
     _info(label, "backend interfaces created: mirror_size=%d forged_weapons=%d modded_loadout_entries=%d",
         mirror_size, fw_count, ml_total)
+    -- Auto-fire the full per-index loadout dump once the mirror is loaded (keep entry).
+    if mod._cim_loadout_probe_dump then pcall(mod._cim_loadout_probe_dump) end
 end
 
 -- ============================================================
@@ -884,6 +1172,34 @@ mod:hook_safe("HeroViewStateWeaveForge", "on_enter", function(self)
 end)
 
 mod:hook_safe("HeroWindowWeaveProperties", "on_enter", function(self)
+    -- v0.8.17-dev (weave_menu_* / athanor_skilltree_cluster_effect_* "Material
+    -- not found in Gui" cascade, Fix B2): re-run the in-mission HDR-glow
+    -- suppression at the END of on_enter. The create_ui_elements hook_safe
+    -- (crafting_in_modded.lua) empties _top_hdr_widgets / _bottom_hdr_widgets,
+    -- but on_enter then calls _create_slot_grid -> _create_cluster_background
+    -- (hero_window_weave_properties.lua:894-924), which RE-APPENDS the raw,
+    -- inn-only `athanor_skilltree_cluster_effect_*` glow widgets to
+    -- _bottom_hdr_widgets AFTER suppression. on_enter (post) fires after that
+    -- re-append, so re-emptying here covers the second vector. Gated on
+    -- `not _is_in_keep()` inside the shared helper, so the keep path keeps its
+    -- full skill-tree cluster glow. Folded into this EXISTING on_enter hook to
+    -- avoid a duplicate (Class, on_enter) registration (VMF drops the second).
+    if mod._cim_suppress_hdr_glow_in_mission and mod._cim_is_in_keep then
+        mod._cim_suppress_hdr_glow_in_mission(self, mod._cim_is_in_keep())
+    end
+    -- v0.8.19-dev (Fix B5, second vector): on_enter -> _create_slot_grid ->
+    -- _create_cluster_background RE-APPENDS the raw, inn-only
+    -- `athanor_skilltree_cluster_<i>` textures to the NON-HDR _bottom_widgets
+    -- array AFTER create_ui_elements ran. (The sibling cluster_background_effect_<i>
+    -- goes to _bottom_hdr_widgets, already re-suppressed by the call above.)
+    -- on_enter (post) fires after that re-append, so re-run the _bottom_widgets
+    -- ring/cluster filter here to cover the second append site. Gated on the keep
+    -- inside the helper, so the keep keeps its full skill-tree cluster decoration.
+    -- Folded into this EXISTING on_enter hook to avoid a duplicate
+    -- (HeroWindowWeaveProperties, on_enter) registration (VMF drops the second).
+    if mod._cim_suppress_skilltree_rings_in_mission and mod._cim_is_in_keep then
+        mod._cim_suppress_skilltree_rings_in_mission(self, mod._cim_is_in_keep())
+    end
     if mod._cim_autodump_props_open then pcall(mod._cim_autodump_props_open, self) end
     if mod._cim_autodump_jewelry_probe then
         pcall(mod._cim_autodump_jewelry_probe, self, "HeroWindowWeaveProperties")
@@ -968,4 +1284,38 @@ for _, klass in ipairs({ "CraftPageSalvage", "CraftPageSalvageConsole" }) do
     end
 end
 
-mod:info("[cim-debug] module loaded (enable_debug_logging=%s)", _enabled() and "ON" or "OFF")
+-- [cim:loadout_probe] Read-only loadout-SWITCH probe. `PlayFabMirrorBase.set_loadout_index`
+-- (playfab_mirror_base.lua:1968) is THE chokepoint — `BackendInterfaceItemPlayfab.set_loadout_index`
+-- (backend_interface_item_playfab.lua:257) forwards straight to it. No existing
+-- cim hook on this (Class, method) — grepped `set_loadout_index` / `PlayFabMirrorBase`
+-- across the mod (only a CHANGELOG mention), so a fresh hook_safe is safe per the
+-- VMF no-duplicate-hook rule. hook_safe fires AFTER the write, so the mirror's
+-- selected index already reflects the new value; the probe diffs against its own
+-- per-career shadow. Read-only — logs old->new only, never writes loadout state.
+mod:hook_safe("PlayFabMirrorBase", "set_loadout_index", function(self, career_name, loadout_index)
+    if mod._cim_loadout_probe_on_switch then
+        pcall(mod._cim_loadout_probe_on_switch, career_name, loadout_index)
+    end
+end)
+
+-- [cim:loadout_probe] On-demand per-career loadout index dump. Debug-gated
+-- (echoes a hint to chat when OFF so the user knows to enable logging); the heavy
+-- dump goes log-only via `mod._cim_loadout_probe_dump`.
+mod:command("cim_loadout_dump", "Dump per-career loadout INDEX state (selected/bot/per-index slots vs cim's flat record) to log", function()
+    if not _enabled() then
+        mod:echo("[cim] Enable 'Debug Logging' in cim_dev settings first, then re-run /cim_loadout_dump.")
+        return
+    end
+    if not mod._cim_loadout_probe_dump then
+        mod:echo("[cim] loadout probe not loaded.")
+        return
+    end
+    local ok, err = pcall(mod._cim_loadout_probe_dump)
+    if ok then
+        mod:echo("[cim] Loadout index dump written to log (search '[cim:loadout_probe]').")
+    else
+        mod:echo("[cim] Loadout dump errored: " .. tostring(err))
+    end
+end)
+
+mod:info("[cim-debug] module loaded (autodumps: always active via VMF debug channel)")

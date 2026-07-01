@@ -1,5 +1,615 @@
 ﻿# Crafting in Modded Changelog
 
+## 0.8.39-dev (2026-07-01) — FIX: accessory buttons now play a sound + press feedback
+
+The 0.8.38 diagnostic was conclusive: `[acc-panel] DIAG click has_music=false` — the click WAS registering (the craft fired every time), but the sound path was resolving a `wwise_world` off `Managers.world:world("music_world")`, and **that world is not registered in the weave-forge UI context**, so the Wwise trigger silently no-op'd. (`world=true ww=true` in the DIAG were false positives — Lua treats `false ~= nil` as true, so the tostring probes lied; the real values were `false`.)
+
+Fix — route audio through the **host window's own vanilla `_play_sound`**, the exact path vanilla uses for every click/hover in this window:
+
+- **Click sound** — on button release, call `HeroWindowWeaveProperties:_play_sound("Play_hud_select")`, which forwards to `self._parent:play_sound(event)` → `HeroViewStateWeaveForge.play_sound` (`hero_view_state_weave_forge.lua:859`). No `music_world` dependency, so it actually fires.
+- **Hover sound** — `Play_hud_hover` on the hover-enter edge (`hotspot.on_hover_enter`), matching vanilla forge hover feedback.
+- **Press feedback (visual)** — the button background now flashes a bright `_COL_PRESSED` while held (`hotspot.is_held`), so a click is visibly acknowledged, not just audibly. Hover still brightens to `_COL_HOVER`; idle is `_COL_BASE`.
+
+Both sound events (`Play_hud_select`, `Play_hud_hover`) are grep-confirmed real Wwise events in the vanilla source. All calls stay pcall-guarded (a nil parent is silent, never a crash).
+
+### Files
+- `_accessory_craft_panel.lua` — replaced `_play_click()` (music_world) with `_play_sound(pw, event)` (host-window path); added `_COL_BASE/_COL_HOVER/_COL_PRESSED` and pressed/hover/idle rect states; hover-enter + release edges consumed in the post-pass loop. Removed the two 0.8.38 DIAG lines.
+- `crafting_in_modded_dev.lua` — `MOD_VERSION` `0.8.38-dev` → `0.8.39-dev`.
+
+## 0.8.38-dev (2026-06-30) — DIAGNOSTIC: accessory buttons frame/sound not manifesting
+
+The 0.8.37 accessory-button frame border + click sound didn't appear in-game even though the log confirms v0.8.37-dev is the only active cim and the panel builds 3 buttons. Added two INFO diagnostics (visible in the user's log — INFO is on) to pinpoint the failure instead of guessing:
+
+- `[acc-panel] DIAG passes=[…] content.frame=… style.frame=…` on build — shows whether the `texture_frame` border pass survived `UIWidget.init` and the frame content/style are set.
+- `[acc-panel] DIAG click has_music=… world=… ww=… WwiseWorld=…` on button press — shows exactly where the `Play_hud_select` sound path resolves or drops.
+
+No behavior change beyond logging. Next build applies the fix these lines point to.
+
+### Files
+- `_accessory_craft_panel.lua` — two DIAG `mod:info` lines; `MOD_VERSION` `0.8.37-dev` → `0.8.38-dev`.
+
+## 0.8.37-dev (2026-06-30) — Accessory craft buttons: GUT-style frame border + click sound
+
+Polished the three Athanor accessory craft buttons (**CRAFT NECKLACE / CHARM / TRINKET**):
+
+- **Border** now uses the ornate **`menu_frame_12`** 9-slice frame — the same frame GUT's Mod Tweaker popups use — instead of the old flat 2px line. Safe on this renderer because the panel draws on `HeroWindowWeaveProperties.self._ui_top_renderer`, which is `ingame_ui_context.ui_top_renderer` (the exact renderer GUT draws `menu_frame_12` on), so the material is guaranteed present (no raw-material CTD risk).
+- **Click sound** — pressing a button now fires GUT's option-commit sound `Play_hud_select` (resolved off the `music_world` wwise_world, fully pcall-guarded so a missing world is silent). Matches the audio feedback GUT gives when you click an option.
+
+### Files
+- `_accessory_craft_panel.lua` — `texture_frame` (`menu_frame_12`) border replacing the plain border pass; `_play_click()` helper fired on button release; `MOD_VERSION` `0.8.36-dev` → `0.8.37-dev`.
+
+## 0.8.36-dev (2026-06-30) — Fix: crafted WEAPONS ignored the Base Power Level setting (always 300)
+
+**BUGFIX.** Crafting a weapon (e.g. a mace) always produced power **300** regardless of the *Base Power Level* slider — a user set it to 404 and still got 300. Root cause: both weapon craft paths hardcoded `power_level = 300` in their `weapon_data`, while only the amulet path read `_cim_base_power()`:
+
+- `HeroWindowWeaveForgeWeapons._equip_item` hook (weapon-select "CRAFT" → blank weapon)
+- `HeroWindowWeaveProperties._upgrade_magic_level` hook (editor "CRAFT" → weapon with edits)
+
+Both now read `(mod._cim_base_power and mod._cim_base_power()) or 300`, matching the amulet path, so crafted weapons take the configured base power. Also made the `/cim_forge` chat-command craft default to the setting (still overridable via its power command) so every craft surface is consistent.
+
+Note: the *item's* power now reflects the slider (0–950); in-combat power is still clamped by the game's per-difficulty power cap (`ActionUtils.scale_power_levels`), which is vanilla behavior and outside cim.
+
+### Files
+- `crafting_in_modded_dev.lua` — 3 craft `weapon_data`/`_forge_pending` power_level constants → read `_cim_base_power()`; `MOD_VERSION` `0.8.35-dev` → `0.8.36-dev`.
+
+## 0.8.35-dev (2026-06-30) — Remove the loadout-persistence toggles (moving to Tweaker: GUI)
+
+Removed the two **Modded Inventory** options **"Persist modded-crafted weapons across loadouts/sessions"** (`persist_modded_loadouts`) and **"Restore modded loadout each session"** (`restore_modded_loadout`). The feature never worked reliably; a proper loadout system is being built in Tweaker: GUI (gut), which will own it.
+
+- Both menu widgets + their localization entries deleted.
+- The master gate now **force-disables** the whole path at load (`mod:set("persist_modded_loadouts", false, false)`), so any user who had previously enabled the toggle — who'd otherwise be stuck with the machinery running and no toggle to switch it off — is reset. cim no longer captures/syncs/restores/migrates loadouts; vanilla player AND bot loadouts are byte-identical to not having cim installed.
+- The `restore_modded_loadout` sub-gate read was removed from `_restore_modded_loadout`.
+- The capture/sync/restore/migration machinery is left **dormant** (gated off by the master helper) pending full excision once gut's system lands. The regression sandbox still exercises the dormant round-trip logic (it sets the setting on transiently), so the test suite is unchanged.
+
+### Files
+- `crafting_in_modded_dev_data.lua` — removed both checkboxes from `inventory_group`.
+- `crafting_in_modded_dev_localization.lua` — removed the 5 associated loc entries.
+- `crafting_in_modded_dev.lua` — load-time force-OFF of `persist_modded_loadouts`; removed the `restore_modded_loadout` sub-gate; `MOD_VERSION` `0.8.34-dev` → `0.8.35-dev`.
+
+## 0.8.34-dev (2026-06-29) — Option: ignore items from inactive mods (stop the deferred-craft chat spam)
+
+New checkbox **"Ignore items from inactive mods (no chat spam)"** (Modded Inventory group, `ignore_unloadable_items`, default OFF).
+
+When you have saved crafts that reference items from a mod that isn't currently active (e.g. toggling mods on/off while testing), cim's boot/state-transition re-injection can't find those ItemMasterList entries and defers them, echoing `[cim] N saved crafts deferred …` to chat on every `_create_interfaces` re-fire / state transition. With the new option ON, those two announcements (`_athanor_inject_all` deferred count + `_athanor_retry_pending` recovery) route to the log (`mod:info`) instead of chat. The deferred-injection **retry still runs**, so a craft auto-recovers if you re-enable its mod — only the chat noise is suppressed. Default OFF preserves the existing feedback for normal users.
+
+### Files
+- `crafting_in_modded_dev.lua` — gate the two `mod:echo` deferred/recovery messages on `mod:get("ignore_unloadable_items")`; `MOD_VERSION` `0.8.33-dev` → `0.8.34-dev`.
+- `crafting_in_modded_dev_data.lua` — new `ignore_unloadable_items` checkbox in `inventory_group`.
+- `crafting_in_modded_dev_localization.lua` — `ignore_unloadable_items` title + description.
+
+## 0.8.33-dev (2026-06-29) — Revert the bubble-cap over-correction from 0.8.32 (#86)
+
+**REGRESSION FIX.** v0.8.32-dev fixed the real #86 ceiling (you can now add up to 10 distinct properties) but ALSO changed `_bubble_cap`'s default from 5 → 1. That second change was wrong: it forced every generic property down to a **single bubble**, destroying per-property scaling for all of them at once. In vanilla weaves each property has a 5-bubble row you fill to raise its value (1 bubble = 20%, 5 = full); the default-1 change removed that. Reverted the default to **5**.
+
+What stays from 0.8.32 (the actual #86 fix): `MAX_DISTINCT_PROPERTIES` 10, the load-time trimmer / `KEEP_LIMIT` 10. stamina (2) and movespeed (1) keep their explicit caps; `movespeed_2pct_mode` still uncaps movespeed to 5.
+
+Net behavior: each property scales 1–5 bubbles again (vanilla feel), AND the artificial 2-distinct ceiling is gone. The 10 grid slots per layer are a **shared budget** — 10 distinct properties only all fit if you don't max-fill their bubbles; fewer properties can each be scaled higher.
+
+### Test
+Renamed `default_property_cap_is_one_slot` → `default_property_cap_is_five_bubbles`; it now pins the default cap at 5 and asserts the value scales (1 bubble = 0.2, 5 = 1.0), so a relapse to single-bubble fails the test.
+
+**NOT claimed fixed.** Confirm in-game: load echo reads `v0.8.33-dev`, then in the Athanor a generic property (e.g. Crit Chance) should let you fill multiple bubbles again, stamina = 2, movespeed = 1, and you can still place more than 2 distinct properties. (#86)
+
+### Files
+- `crafting_in_modded_dev.lua` — `_bubble_cap` default 1→5; `get_property_mastery_costs` comment; regression test renamed + asserts scaling; `MOD_VERSION` `0.8.32-dev` → `0.8.33-dev`.
+
+## 0.8.32-dev (2026-06-29) — Fix #86 (take 6 — the REAL cause: the 2-property ceiling, found from the user's log)
+
+**Root cause, finally traced from empirical evidence (not assumed).** The user's 2026-06-29 console log proved the prior five #86 fixes were aimed at the wrong target. The autodump showed `weave_movespeed` already persisting **1 slot, cap 1** — movespeed was never the problem. The slots were being eaten by `weave_fatigue_regen` ("Stamina Regeneration"), which had **cap 5**, and — more importantly — by a hard **2-distinct-property ceiling** that blocked adding anything past the second property (log: `[cim] Max 2 distinct properties per accessory. Remove one to add fatigue_regen.` × 15). The grid has 10 slots per layer; cim was artificially capping use of it at 2 properties.
+
+Three independent enforcers were holding the ceiling at 2 (all three had to move):
+
+1. **Add-time gate** — `MAX_DISTINCT_PROPERTIES` 2 → **10**. The set_loadout_property hook rejected the 3rd distinct key on a layer.
+2. **Load-time trimmer** — was destructively trimming every saved item down to its first 2 properties on each load (the `[trim] … kept=[…,…] dropped=[…]` lines in the log), so even items that had more got clobbered on restart. Raised to the 10-slot grid ceiling.
+3. **Per-property slot reservation** — `_bubble_cap` default 5 → **1**. Each property now occupies ONE grid slot at full value (`_value_for_bubbles(key,1)=1.0`), matching how a regular campaign weapon's properties read. stamina (2) and movespeed (1) keep their explicit caps; `movespeed_2pct_mode` still uncaps movespeed to 5 by design.
+
+**Why this is now safe at >2 (the reason it was capped at 2 before):** vanilla's `HeroWindowItemCustomization._update_property_option` indexes `button_hotspot_N` per property and the widget only ships hotspots 1–2, so a 3rd property used to crash that preview tab. That crash is **already independently guarded** by cim's replacement `_update_property_option` hook (standard_forge.lua:192-220), which skips writes for missing hotspot widgets. So the >2 ceiling is no longer load-bearing — extra properties simply aren't surfaced in that one preview tab but still apply and still render in the weave grid. (This is the same nil-index family as issue #150 `hero_window_item_customization.lua:2392`; the property path is guarded, the rarity/skin-hover parts of #150 remain separate.)
+
+### Test
+New `/cim_regression_test` check `default_property_cap_is_one_slot` pins the default cap at 1 across several real property keys (and asserts 1 slot still grants full value), so a revert to 5 fails the test instead of shipping.
+
+**NOT claimed fixed.** Confirm in-game: load echo reads `v0.8.32-dev`, then add movespeed + stamina + Stamina Regeneration + others — each should take 1 slot (stamina 2), and you should be able to place up to 10 distinct properties on a layer without the "Max 2 distinct" rejection. (#86)
+
+### Files
+- `crafting_in_modded_dev.lua` — `MAX_DISTINCT_PROPERTIES` 2→10; load-time trimmer 2→10 (`KEEP_LIMIT`); `_bubble_cap` default 5→1; new regression check; `MOD_VERSION` `0.8.31-dev` → `0.8.32-dev`.
+
+## 0.8.31-dev — 2026-06-28
+- Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.8.30-dev (2026-06-28) — Fix #86 (take 5 — READ-path guard, NOT another write-path tweak)
+
+**BUGFIX — different approach.** Stamina and movespeed still reserve 5 grid slots each in-game (user report 2026-06-28), despite the take-4 write-path cap. The take-4 cap (`_store_property_slot`) is *provably correct in source* — the `/cim_regression_test` `picker_caps_persisted_slot_array` check passes. So the symptom persisting in-game proves the array reaching the grid is over-filled by a path the WRITE cap doesn't cover: a deployed build predating take-4, a hook instance the write path bypasses, or a stale seed. Takes 1-4 all patched the write path; this patches the **read** path, which is downstream of all of those.
+
+### Fix — cap at the grid's read chokepoint
+
+Grid occupancy is built by vanilla `HeroWindowWeaveProperties._sync_backend_loadout` (`hero_window_weave_properties.lua:1478` reads `get_loadout_properties(...)`; `:1551-1556` maps **one grid slot per slot-index array entry**). cim's `get_loadout_properties` hook returned `data.properties` raw. Now it runs new helper `_cap_grid_property_arrays(data.properties, item_backend_id)` first, trimming each property's array to its bubble cap right before vanilla reads it. Occupancy can no longer exceed the cap **regardless of how the array got filled** — the guarantee the write-path cap couldn't make.
+
+- **Layer-aware.** Single-weapon editor (`item_backend_id` present) = one layer → cap the whole array (movespeed→1, stamina→2). Amulet editor (`item_backend_id == nil`) = cap PER accessory layer (`_AMULET_LAYER_SIZE`), so a property the user put on two accessories isn't wrongly collapsed to one.
+- **Self-reporting via engine `printf`.** When it actually has to trim (the leak is present) it logs the raw over-fill count to the engine console *before* trimming. `printf` is visible even with VMF mod-logging OFF — the user's normal config, and the reason every prior `mod:info`/autodump "verification" saw nothing. If the symptom somehow persists, the console line proves which path leaked instead of us guessing.
+
+### Test
+
+New `/cim_regression_test` check `read_chokepoint_caps_grid_occupancy` drives `_cap_grid_property_arrays` with a deliberately over-filled array (movespeed=5, stamina=5) and asserts it trims to 1/2 for a weapon, caps per-layer for the amulet (movespeed across 2 accessories stays 2, not 1), and leaves an already-capped array untouched (no false trim).
+
+**NOT claimed fixed.** This is a downstream guard + a visible diagnostic, not a verified fix. Confirm in-game that the load echo reads `v0.8.30-dev`, then add stamina/movespeed and check the grid slots. If still wrong, the `[cim #86]` console line carries the proof. (#86)
+
+### Files
+- `crafting_in_modded_dev.lua` — new `_cap_grid_property_arrays` helper (+ forward decl); `get_loadout_properties` hook calls it; new regression check; `MOD_VERSION` `0.8.29-dev` → `0.8.30-dev`.
+
+## 0.8.29-dev (2026-06-25) — Ship: friends-only dev release (verified)
+
+Friends-only dev ship of the v0.8.28-dev build (#86 take-4 movespeed forge-slot fix). Verification passed; promoting to the friends-only `cim_dev` Workshop item. No behavioral change vs v0.8.28-dev — this is a version-bump ship build (`MOD_VERSION` `0.8.28-dev` → `0.8.29-dev`) so the in-game load echo confirms the deployed bundle.
+
+### Files
+- `crafting_in_modded_dev.lua` — `MOD_VERSION` `0.8.28-dev` → `0.8.29-dev`. No other code change.
+
+## 0.8.28-dev (2026-06-24) — Fix #86 (take 4, REAL root cause): movespeed property over-occupied the forge slot grid and blocked other properties
+
+**BUGFIX.** In the Athanor weave forge, adding the movespeed property DISPLAYED as 1 slot (the 0.8.26 bubble-cap display fix works) but BLOCKED the remaining slots from being filled with other properties. Stamina (2 slots) did NOT block — so this was movespeed-specific. The 0.8.26 fix corrected the DISPLAY math (`_bubble_cap` / `_value_for_bubbles`) but never checked the PERSISTED slot-index array, which is what actually drives grid occupancy.
+
+### Root cause — persisted array length, not the displayed bubble count, drives grid occupancy (traced through source)
+
+The forge grid decides which slots are occupied in vanilla `HeroWindowWeaveProperties._sync_backend_loadout` (`hero_window_weave_properties.lua:1553-1556`):
+
+```lua
+for key, slot_indices in pairs(properties) do
+    for _, slot_index in ipairs(slot_indices) do
+        properties_index_map[slot_index] = key   -- one grid slot per ARRAY ENTRY
+    end
+end
+```
+
+So a property occupies **exactly `#props[property_key]` grid slots** — one per entry in its slot-index array. `get_loadout_properties` returns cim's live `data.properties` table directly (`crafting_in_modded_dev.lua:4082`), so whatever cim's picker hook stores is exactly what the grid counts. The visible bubble count (`_bubbles_for_value` → 1 for movespeed) is irrelevant to occupancy; only the array length matters. The prior #86 fixes only validated the display path — the exact "trusted a display-only check" trap.
+
+When `movespeed_2pct_mode` is ON, `_bubble_cap("weave_movespeed")` intentionally returns 5 (each bubble = +2%, max +10% — the documented trade). The picker's array-length cap then allows up to 5 distinct slot indices into `props[weave_movespeed]` → 5 grid slots marked occupied → the remaining slots in movespeed's `utility_accessory` category are blocked. Stamina (always cap 2, in a different category) never over-occupies. **That toggle is the movespeed-specific divergence.** Its default is `false`; a tester who enabled it reproduces the report exactly.
+
+The fix also re-applies two guards vanilla's `set_loadout_property` (`backend_interface_weaves_playfab.lua:1059-1071`) has that cim's hook had DROPPED, hardening the default path regardless of the toggle:
+- **cross-property collision** — never store a `slot_index` already held by ANY property (vanilla's `table.contains(slots, slot_index)` early-return). Without it a re-seed or stray re-click could double-list a grid slot.
+- **per-property use cap** — stop at `_bubble_cap` entries.
+
+### Fix
+
+- New pure helper `_store_property_slot(props, property_key, slot_index)` applies both guards (collision/dedupe + length cap) and is the single store path. The live `set_loadout_property` hook calls it; the array's resulting length is exactly the property's bubble cap (movespeed 1 / stamina 2 by default), so movespeed occupies one slot and leaves the rest fillable — mirroring how stamina already worked.
+- The hook logs the persisted array length after every write via the new debug probe `_cim_autodump_property_array` (gated on `enable_debug_logging`), with a loud `OVER-CAP!` warning if the array ever exceeds the cap — so the divergence is visible in-log next time without a code change.
+- New `/cim_regression_test` check `picker_caps_persisted_slot_array` drives the REAL store helper and asserts the PERSISTED array (not the display value): movespeed (2pct OFF) = 1 after 5 clicks, stamina = 2 after 5 clicks, cross-property collision rejected, re-click deduped, and movespeed (2pct ON) = 5 (the trade pinned).
+
+### Movespeed 2pct mode
+
+Default is `false` (verified in `crafting_in_modded_dev_data.lua`). If a tester sees movespeed blocking, the first thing to check is whether they toggled "movespeed 2pct mode" ON — under that config movespeed correctly consumes up to 5 slots and that is intended, not a bug. The non-2pct path is now provably correct (array length pinned to 1).
+
+**Build/structural verification only — user verifies the in-game forge behavior.**
+
+## 0.8.27-dev (2026-06-24) — Regression test for #96 (allow_in_mission gated on gut presence)
+
+**TEST-ONLY.** No runtime behavior change — the #86 stamina bubble-cap fix from 0.8.26-dev is untouched and still in force.
+
+Adds a `/cim_regression_test` source-introspection guard `issue96_allow_in_mission_gated_on_gut` so the Issue #96 fix can't silently regress. The check reads `crafting_in_modded_dev_data.lua` (deriving its path from a main-file function via `debug.getinfo`) and FAILs if either:
+
+- the `_gut_present()` helper is absent — the load-order-safe gut-presence detector (fast-paths `get_mod("gut")`/`get_mod("gut_dev")`, falls back to scanning the ModManager manifest for the `"Tweaker: GUI"` Workshop title), or
+- the `allow_in_mission` widget is no longer conditionally pruned from the forge group's `sub_widgets` based on `_gut_present()`.
+
+So if a future edit drops the helper or the gating, the "Allow standard crafting bench in mission" option re-appearing when gut is absent (the #96 symptom) is caught at test time. Self-matching needles are split across two string literals. Degrades to a no-op on the bundle/deploy path where source introspection isn't available.
+
+## 0.8.26-dev (2026-06-24) — Fix #86 (take 3, REAL root cause): Athanor weave bubble-cap keyed by the wrong property-key form
+
+**BUGFIX.** Stamina took 5 forge slots instead of 2, and movespeed showed 79% instead of +5%. The previous "#86 fix" (0.8.9 / earlier dev) shipped UNVERIFIED and was still wrong — its regression test was checking a key form the game never sends, so it passed while the game path silently broke.
+
+### Root cause — key-form mismatch (traced through source, not assumed)
+
+`_bubble_cap` / `_value_for_bubbles` / `_bubbles_for_value` resolved a property's slot cap from `_PROPERTY_BUBBLE_CAP_STATIC`, keyed `properties_stamina` / `properties_movespeed`. The key passed in is run through `_strip_weave`, which strips ONLY the `^weave_` prefix. That table keying is correct **only if every caller passes the `weave_properties_<X>` form** — but the game does not.
+
+Trace of the actual game key form:
+- `hero_window_weave_properties.lua:534` iterates `WeaveProperties.categories[category]`, whose entries are `weave_stamina` / `weave_movespeed` (`weave_properties.lua:543+`) — the `weave_`-prefixed but NOT `properties_`-prefixed key form.
+- `:550` stores `entry.key` = that form; `:2663` calls `set_loadout_property(career, key, slot_index, item_backend_id)` with it.
+- `backend_interface_weaves_playfab.lua:1031` receives it as `property_name`.
+
+So the game's real key is `weave_stamina` / `weave_movespeed`. `_strip_weave("weave_stamina")` → bare `stamina`, but the cap table was keyed `properties_stamina` → **MISS → fell back to the default cap 5**. That default-5 made stamina fill 5 slot_indices and inflated movespeed's mastery-cost array to 5 entries.
+
+**Why 79% for movespeed (value→% chain):** vanilla `UIUtils.get_weave_property_value_text` (`ui_utils.lua:115-131`) computes `display_value = max_value / num_costs * amount`, and movespeed is `baked_percent` → `text = |100 * (display_value - 1)|%`. Movespeed's `max_value = variable_multiplier_max = 1.05` (`weave_properties.lua:70`). With the bug, `num_costs = cap = 5` and one bubble filled (`amount = 1`): `display_value = 1.05/5 * 1 = 0.21` → `|100 * (0.21 - 1)| = 79%`. With the cap correctly = 1: `num_costs = 1`, `amount = 1` → `display_value = 1.05` → `|100 * (1.05 - 1)| = 5%`. So the cap fix alone corrects the displayed percentage; there is no separate display formula to patch.
+
+**Why the prior test fooled the last fix:** it asserted `_bubble_cap("weave_properties_stamina") == 2`. `_strip_weave` leaves `properties_stamina`, which matched the (mis-keyed) table → the test passed. But the game never sends `weave_properties_stamina`; it sends `weave_stamina` → bare `stamina`, which missed. The test validated a key form that doesn't occur at runtime.
+
+### Robust fix — normalize ANY key form to the bare name; key the table by bare names
+
+- `_PROPERTY_BUBBLE_CAP_STATIC` is now keyed `{ stamina = 2, movespeed = 1 }`.
+- New `_bare_property(weave_key)` strips `^weave_` THEN `^properties_`, collapsing all of `weave_properties_X` / `weave_X` / `properties_X` / bare `X` to `X`. `_bubble_cap`, `_value_for_bubbles` (its movespeed-2pct guard), and `_bubbles_for_value` (via `_bubble_cap`) all resolve through the bare form, so any caller key form maps correctly. The fix is robust to the exact form the game sends regardless of future call sites.
+- Stamina cap=2 tiering and movespeed cap=1 math are unchanged.
+
+### Other confirmations
+
+- `movespeed_2pct_mode` already defaults `false` in `crafting_in_modded_dev_data.lua` (the opt-in 5-bubble/+2%-per-bubble mode). No change needed — base movespeed is 1 slot / +5%.
+- Regression test rewritten to assert `_bubble_cap` returns 2 for stamina and 1 for movespeed across ALL key forms — `stamina`, `properties_stamina`, `weave_properties_stamina`, AND the game's real `weave_stamina` (same four for movespeed) — so a future miskeying fails the test on the path the game actually exercises.
+
+**Must verify in-game on cim_dev 0.8.26-dev:** stamina uses exactly 2 forge slots (requires 2 empty), and movespeed uses exactly 1 slot and shows +5%.
+
+## 0.8.25-dev (2026-06-24) — Fix #96: hide the "Allow standard crafting bench in mission" option when GUI Tweaker (gut) isn't installed
+
+**UX.** The `allow_in_mission` option only does something useful when GUI Tweaker (gut) is present (gut supplies the in-mission menu access cim's standard bench rides on), so the checkbox is now HIDDEN in cim's VMF settings when gut isn't installed.
+
+### VMF capability check (read upstream FIRST, per the no-guessing rule)
+
+Confirmed against upstream VMF source (`vmf/scripts/mods/vmf/modules/core/options.lua`, the widget schema/validator): **VMF has NO native conditional-visibility or mod-dependency widget feature.** The validated checkbox fields are `setting_id` / `type` / `title` / `tooltip` / `default_value` / `localize` / `is_collapsed` — no `depends_on` / `requires` / `hide_when` / `enabled_if`. The only conditional widget feature VMF has is dropdown `show_widgets`, which keys off a selected dropdown VALUE, not mod presence. So the gate must be implemented by conditionally BUILDING the widget tree.
+
+### Implementation — conditional widget build with a load-order-safe presence check
+
+- `crafting_in_modded_dev_data.lua` now builds the options table into a local and, when gut is absent, prunes the `allow_in_mission` checkbox out of the `forge_group` sub_widgets before returning (located by `setting_id`, not a fixed index). VMF unfolds the data table immediately at registration, so a pruned widget is simply never built.
+- **Load-order safety** (the footgun): `get_mod("gut")` is just `_mods["gut"]` and returns nil if gut hasn't run its `new_mod` yet — and VMF processes cim's data table at cim's registration, which may precede gut's. A bare `get_mod` check would wrongly hide the widget when cim loads before gut. The new `_gut_present()` helper therefore checks BOTH: the fast `get_mod("gut")` / `get_mod("gut_dev")` path (gut already loaded), OR — load-order-independent — an enabled entry in the engine ModManager's manifest (`Managers.mod._mods`, built once from the user's full enabled-mod list at scan time before any mod's Lua runs; `mod_manager.lua:278-343`) whose Workshop title is gut's ("Tweaker: GUI", covering gut and gut_dev). So presence is detected regardless of which mod loads first.
+- When gut IS present the widget is unchanged and the in-mission standard bench works exactly as before. When gut is absent the option is hidden; the runtime `open_standard_crafting` keep-gate is unaffected (it independently bails outside the keep).
+
+## 0.8.24-dev (2026-06-24) — Fix #88: in-mission ESC-menu backout leaked the loadout inventory (scope the inventory-access patch)
+
+**BUGFIX.** Backing out of the in-game (ESC) menu during a mission pulled up the loadout INVENTORY; it should only be available in the Keep. The standard crafting bench could still open in-mission via its own hotkey — only the ESC-backout-to-inventory leak is fixed.
+
+### Root cause
+
+`mod.open_standard_crafting` flipped `InventorySettings.inventory_loadout_access_supported_game_modes.adventure / .survival` to `true` **permanently** and never restored them (`crafting_in_modded_dev.lua`, ~line 1848-1860 pre-fix). The ONLY vanilla read of that table is `HeroView.on_enter` → `_fetch_initial_loadout_index` (`hero_view.lua:309/323`), which bails when the current game mode isn't supported. A persistent flip means EVERY subsequent HeroView open in the mission — including the ESC-menu / ingame-menu backout, which cim never initiated — read the mode as supported and initialized the loadout inventory mid-mission.
+
+### Fix — scope the flip to cim's own view open (no persistent global mutation)
+
+- `open_standard_crafting` no longer mutates `InventorySettings`. It sets a one-shot upvalue flag `_cim_open_standard_inv_pending = true` immediately before its `transition_with_fade("hero_view_force", { menu_state_name = "forge" })`.
+- New `mod:hook("HeroView", "on_enter", ...)` (cim had no prior `on_enter` hook — grep-verified, no duplicate): when the one-shot flag is set, it consumes the flag, SAVES the current `adventure / survival / deus` values, applies the mission-enabled flip, runs vanilla `on_enter` (the single read site) under `pcall`, then RESTORES the saved values — even if vanilla raises. Deus stays nil (CW is blocked in `open_standard_crafting`).
+- Net effect: the inventory-access mode is enabled for EXACTLY the one HeroView that cim opens for the standard bench; every other HeroView open (ESC backout, hero select, map, etc.) reads the untouched vanilla table and bails as before. The standard bench still opens in-mission; the inventory no longer leaks onto ESC-backout. Keep / CW-hub opens are unaffected (mode already supported there; the flag is only set by the in-mission entry).
+- Verified there is exactly one vanilla read site (`hero_view.lua:323`), called once per `HeroView.on_enter`, feeding `self._initial_loadout_index` — so a save/restore around vanilla `on_enter` fully covers it with no functional regression to the bench.
+
+### Regression test
+
+`issue88_inventory_access_flip_is_scoped` (`/cim_regression_test`) — source-pattern guard: fails if the one-shot flag, the scoped `HeroView.on_enter` hook, or the save/restore is removed (i.e. if a persistent flip is reintroduced). No-op when source introspection is unavailable.
+
+## 0.8.23-dev (2026-06-24) — Fix #86 (stamina eats 5 slots) + keep-gate the in-mission Athanor (script_world blend crash)
+
+### Fix #86 — the Stamina property consumed 5 inventory slots instead of 2
+
+**BUGFIX.** Adding the Stamina property in the Athanor consumed 5 of the 10 property slots instead of exactly 2, blocking a second property from being added even though `MAX_DISTINCT_PROPERTIES` (2) should have allowed it. (Re-report of the "WHEN APPLIED IT TAKES 5" symptom the v0.7.55-dev array cap was meant to fix.)
+
+**Root cause — the bubble-cap table was keyed wrong.** The weave UI passes the category key `weave_properties_stamina` (`weave_properties.lua:15`) to `set_loadout_property` / `get_property_mastery_costs`. `_strip_weave` strips only the `weave_` prefix, yielding `properties_stamina` (which is also the vanilla `weapon_properties.lua` key). But `_PROPERTY_BUBBLE_CAP_STATIC` was keyed by the BARE `stamina` / `movespeed`, so `_bubble_cap("weave_properties_stamina")` missed the table and fell back to the default cap of **5**. That fed three places:
+- `get_property_mastery_costs` returns `cap` zero-cost entries, which the forge renders as `total_uses` → **stamina drew/used 5 slots**.
+- the `set_loadout_property` array cap (`#props[key]` capped at `_bubble_cap`) was a silent no-op at 5 → the persisted array held 5 slot_indices.
+- `_value_for_bubbles` / `_bubbles_for_value` treated stamina as a 5-bubble linear property instead of the 2-tier snap.
+
+**Fix.** Re-key `_PROPERTY_BUBBLE_CAP_STATIC` to the post-`_strip_weave` keys `properties_stamina = 2` / `properties_movespeed = 1`, and update the two inline `"movespeed"` comparisons in `_bubble_cap` / `_value_for_bubbles` to `"properties_movespeed"`. One change fixes the slot count, the array cap, and the value/seed math. Stamina now renders and consumes exactly 2 slots; movespeed exactly 1 (5 with the 2pct toggle).
+
+**Regression test corrected.** `stamina_movespeed_clamp_at_overcap` previously drove `_value_for_bubbles("stamina", ...)` with the BARE key — which matched the old mis-keyed table, so it passed while the game (using `weave_properties_stamina`) silently got cap=5. The test now uses the REAL weave keys and asserts `_bubble_cap("weave_properties_stamina") == 2` and `_bubble_cap("weave_properties_movespeed") == 1`, so it actually pins #86 on the path the game exercises.
+
+### In-mission Athanor keep-gated (script_world.lua:176 `blend` ShadingEnvironment crash — relates to #81)
+
+**CRASH GUARD.** Opening the Athanor (weave forge) in a mission on cim_dev hit a render-level fatal in the mid-mission shading-environment substitution path (`foundation/scripts/util/script_world.lua:176` → `blend`), surviving the Fix B/B2..B6 material/HDR hardening. `mod.open_forge` now hard-requires the Keep / CW hub regardless of the `allow_in_mission` toggle — the in-mission Athanor cannot open on dev either, matching the public 0.8.8 build. The material-clean **standard crafting bench** (`open_standard_crafting`) still opens in Adventure missions and still honors `allow_in_mission`. The Fix B/B2..B6 hooks are left in place (inert) so re-enabling the in-mission Athanor later is a one-line gate change, not a re-port. Loc/UI updated: `forge_hotkey` → "Keep only"; `allow_in_mission` relabeled to govern the standard bench only.
+
+## 0.8.22-dev (2026-06-23) — Fix: owned Versus (vs_*) weapon twins with illusions leaking into the Adventure inventory grid
+
+**BUGFIX.** Raw owned vanilla Versus weapons (the `vs_*` keys — gutter runner claws, ratling gun, etc., player-facing as Gallant's Blade / Soldier's Coach Gun and similar) were appearing in the normal Adventure inventory grid — most visibly once an illusion was applied to the crafted twin. The leak was a side effect of the deliberate craft-visibility mechanism, not the illusion write.
+
+### Root cause
+
+`_ensure_item_adventure_visible` (`crafting_in_modded_dev.lua`) clears `ItemMasterList[vs_key].mechanisms = nil` so a **crafted** vs_* weapon passes the vanilla `available_in_current_mechanism` filter (`backend_interface_common.lua:537-565`) and shows up in Adventure. That is intended and stays.
+
+The problem: `item.data` is a **shared reference** to that same IML entry — `PlayFabMirrorBase._update_data` sets `item.data = ItemMasterList[item_key]` (`playfab_mirror_base.lua:1786`), not a copy. So the moment `mechanisms` is cleared, the player's **raw owned vs_* twin** (a distinct backend item sharing the same key) also reads `mechanisms = nil`, passes the same filter, and leaks into the inventory grid. There is no per-item data layer to diverge — one table backs both items. (The clear also makes `_cim_is_versus(item.data)` return false afterward, so the existing craft-list de-shadow gate is blind to the leaked twin.)
+
+### Fix — re-hide the owned twin at the DISPLAY layer (inventory only; craft list untouched)
+
+Extended the **existing** `BackendInterfaceItemPlayfab.get_filtered_items` hook (no new hook — VMF duplicate-hook rule respected) to drop owned vs_* twins from the adventure-inventory result while keeping cim-crafted vs_* visible:
+
+- Runs **always** for the adventure inventory grid (gated on the `available_in_current_mechanism` filter infix), independent of the show-only-modded setting, since the leak is independent of it.
+- New `_cim_is_leaked_versus_twin(item)` helper: true only when the item's `ItemId`/key has the `vs_` prefix **and** its backend_id is **not** a cim-modded bid. Keyed on the `vs_` prefix because the `mechanisms` field is already nil post-clear; keyed on `_cim_is_modded_backend_id` so a **deliberately-crafted unique vs_*** is NEVER hidden (memory `reference_vt2_versus_items_hidden_in_adventure`).
+- The craft list and `_cim_versus_shadowed` de-shadow gate are not touched — vs_* stay fully craftable.
+
+### Regression test
+
+Added `_rt_register("versus_twin_rehidden_from_inventory", ...)`: asserts the helper hides an owned vs_* twin (vanilla bid), keeps a cim-crafted vs_* (modded bid) visible, and never touches a non-versus item. The prior `adventure_visible_stamp_and_mechanism_clear` test (asserting the intended global clear) is unchanged.
+
+## 0.8.21-dev (2026-06-23) — Surface the STANDARD crafting bench in-mission (material-clean; not the Athanor)
+
+**NEW FEATURE.** Adds an in-mission entry point to the VANILLA standard crafting bench — the Keep Smithy: salvage / craft random item / re-roll properties / re-roll traits / upgrade rarity / apply illusion / convert dust. This is the `forge` page's `HeroWindowCrafting`, **NOT** the Athanor (weave forge) that `forge_hotkey`/`open_forge` opens.
+
+### Why this is a separate, CLEAN path from the Athanor
+
+The whole B/B2..B6 crash saga (v0.7.13 → v0.8.20) exists because the **Athanor** (`weave_forge` state) is materially entangled with the keep: its windows hardcode `shading_environment = "environment/ui_weave_forge_preview"` (inn-only) and draw inn-only raw materials (`forge_overview_top_glow_effect_smoke_*`, `athanor_skilltree_*`, `weave_menu_*`) that a mission Gui can't resolve — hence `open_forge` is opt-in and labeled "[untested] may crash".
+
+The **standard bench shares none of that** (verified against decompiled source):
+- The crash material `forge_overview_top_glow_effect_smoke_1` lives ONLY in the weave-forge / weave-background definition files (grep-verified: 4 files, all `weave`/`start_game_window_weave`). It does NOT appear in `hero_window_crafting_definitions.lua`.
+- `HeroWindowCrafting.draw` (`hero_window_crafting.lua:302-324`) draws plain atlas widgets (`crafting_bg*`, `crafting_fg*`, `item_grid_fg`, standard window-frame/button materials — `hero_window_crafting_definitions.lua:552-586`) on `ui_top_renderer` with **NO viewport, NO create_world, NO shading_environment, NO HDR Gui, NO preview render-target**.
+- The craft sub-pages (`craft_page_*`) are icon-based — no spawned-unit preview world.
+
+So the standard bench renders flat in a mission with **zero material/shading shims** — none of the Athanor's three crash sources apply.
+
+The modded-crafting LOGIC already existed and is keep-tested: `standard_forge.lua`'s `HeroWindowCrafting`/`HeroWindowCraftingConsole`/`HeroWindowItemCustomization` on_enter hooks (`standard_forge.lua:222-239`) + the synth paths fire on the WINDOW lifecycle, not gated to the keep — so opening the `forge` page in a mission activates all of it automatically. The only missing piece was the in-mission entry point.
+
+### What changed (no hooks added — pure entry-point function + UI wiring)
+
+- **New `mod.open_standard_crafting`** (`crafting_in_modded_dev.lua`, Athanor section, right after `open_forge`). Modeled on gt's proven `gt_open_mission_inventory` (`general_tweaker_dev/_gt_mission_ui.lua:56-113`): `Managers.ui._ingame_ui:transition_with_fade("hero_view_force", { menu_state_name = "forge" })` (the `forge` page hosts `HeroWindowCrafting`, **not** `"weave_forge"`). Bypasses the hotkey gates the same way vanilla's ESC-menu "Open Inventory" does.
+  - **Gates:** `Managers.ui` present + `pending_transition()` bail (same as `open_forge`); **blocks `mech == "deus"`** (Chaos Wastes is loadout-locked — whole run, hub + mission — mirroring `gt_open_mission_inventory`'s 2026-06-18 adventure-exclusive directive); honors the existing **`allow_in_mission`** opt-in so a single toggle governs both crafting surfaces (Keep / CW-hub always opens).
+  - **Flips `InventorySettings.inventory_loadout_access_supported_game_modes`** (`adventure`/`survival` on, `deus` nil) for the call so the `forge` page's `inventory` window (layout slot 3) + loadout panel init in a mission. Idempotent; mirrors `_gt_mission_ui.lua:100-107`.
+- **New keybind** `standard_crafting_hotkey` (`*_data.lua`, forge group, default UNBOUND) → `function_name = "open_standard_crafting"`.
+- **New chat command** `/cim_craft_standard` (dispatches `mod.open_standard_crafting`).
+- **Localization** for `standard_crafting_hotkey` (+ description) added.
+
+### The one trap, avoided
+
+Do NOT route the in-mission flow onto the gear-icon Customization view (`HeroWindowItemCustomization`), which pulls `levels/ui_store_preview/world` (the preview-world crash class cim already patched at v0.7.45 / gt #50). A direct transition to `menu_state_name="forge"` lands on the crafting/inventory/options windows — none of which route there.
+
+### Hook safety
+
+**No `mod:hook` / `mod:hook_safe` added or removed.** This is a plain entry-point function plus VMF UI wiring (keybind + command + loc). The existing `standard_forge.lua` window-lifecycle hooks (already singletons) do all the crafting work when the window opens. Respects the VMF duplicate-hook rule by adding zero hooks.
+
+## 0.8.20-dev (2026-06-23) — Converge the in-mission forge raw-material prune (Fix B6): stop the `athanor_background_write_mask` crash + all future siblings
+
+The B5 prune used a per-prefix allow-list (`athanor_skilltree_ring_` / `_background` / `_cluster_`) — one prefix added per crash. It missed `athanor_background_write_mask` (the 7th in-mission crash; log session f9ed28af, `ui_passes.lua:134`), the texture of the `background_write_mask` window widget in `_bottom_widgets`. cim had classified that widget "functional, keep" but never accounted for its raw, inn-only texture faulting on the base mission Gui.
+
+**Root cause is structural, not per-material.** A Stingray Gui bakes its material list at `World.create_screen_gui()` time and never re-reads it — there is NO API to add a material to a live Gui (verified: `ui_renderer.lua:246-251`). So the "B1" idea of force-loading the keep weave/athanor package into the mission renderer is **impossible** — the already-created mission Gui can't resolve the raw materials no matter what's resident. The only viable fix is to keep the offending widgets out of the in-mission draw arrays.
+
+**Fix B6 — converge the prune.** Per the verified note (only `athanor_skilltree_slot_*` lives in `gui_menus_atlas`), `_cim_is_raw_skilltree_texture` now drops ANY `athanor_` texture that isn't an atlas-backed slot — one structural guard that catches `athanor_background_write_mask`, the skill-tree ring/background/cluster set, and every future raw `athanor_` sibling at once, instead of chasing one prefix per crash. Atlas-backed slots and all non-`athanor_` functional widgets (`edge_fade_small`, viewport rects) are untouched; keep path unchanged; same existing hook sites (no new hooks). Losing the background write-mask in mission drops background masking only (a possible minor visual artifact), never a crash. Regression test extended to assert a slot survives + every raw `athanor_` is dropped.
+
+## 0.8.19-dev (2026-06-22) — Fix in-mission skill-tree ring `Material not found` crash (non-HDR `_bottom_widgets` draw path — Fix B5)
+
+**CRASH FIX (opt-in path).** After v0.8.18-dev (Fix B3/B4) closed the per-frame HDR `set_scalar` vectors, opening the forge **in a mission** with **`Allow in mission` ON** and **Loremaster's Armoury installed**, then opening a **weapon's skill tree**, hit a NEW crash:
+
+```
+[Script Error] scripts/ui/ui_passes.lua:805: Material 'athanor_skilltree_ring_3' not found in Gui
+```
+
+The keep forge and the default `allow_in_mission` OFF path were never affected. This is a NEW vector of the same keep-only-material class B/B2/B3/B4 chased, on a draw path none of the prior fixes touched — the **non-HDR `_bottom_widgets`** array, drawn on the **base mission `ui_renderer`** (not the HDR renderer B2 covered, not the per-frame bloom/upgrade `set_scalar` B3/B4 guarded).
+
+### Root cause (`crafting_in_modded_dev.lua`, non-HDR `_bottom_widgets` draw-array vector)
+- `HeroWindowWeaveProperties._draw` (`hero_window_weave_properties.lua:2807-2823`) iterates `self._bottom_widgets` on `self._parent:get_ui_renderer()` — the **base mission renderer**. That array mixes FUNCTIONAL widgets (`background_write_mask`, `viewport_background` rect, `viewport_background_fade` = atlas-backed `edge_fade_small`) with raw, inn-only DECORATIVE textures:
+  - `athanor_skilltree_ring_1` / `_2` / `_3` — the `wheel_ring_*` widgets (`hero_window_weave_properties_definitions.lua:4485-4497`) — **the reported crash**
+  - `athanor_skilltree_background` — the `background_wheel` widget
+  - `athanor_skilltree_cluster_<i>` — the `cluster_background_<i>` widgets, **RE-APPENDED** per cluster by `on_enter` → `_create_slot_grid` → `_create_cluster_background` (`hero_window_weave_properties.lua:894-924`, line 913), so they arrive AFTER `create_ui_elements` (same re-append pattern that bit B2's HDR cluster glow).
+- Verified non-atlas: only `athanor_skilltree_slot_*` live in `gui_menus_atlas.lua`; the ring / background / cluster textures are in **no** `atlas_settings` file — same raw-material signature as the `weave_menu_*` keep-only set. They resolve only on a Gui built with `is_in_inn=true`; on the base mission Gui `Gui.material(...)` doesn't find them → `ui_passes.lua:805` fatal.
+- Why the prior sweep (v0.8.18) missed it: B2 empties the HDR draw arrays (`_top_hdr_widgets` / `_bottom_hdr_widgets`); B3/B4 guard per-frame HDR `set_scalar`. None of them iterate the **non-HDR** `_bottom_widgets`.
+
+### Fix (filter the raw skill-tree decorations out of `_bottom_widgets` in mission)
+- New helper `mod._cim_suppress_skilltree_rings_in_mission(window, in_keep)` — REBUILDS `_bottom_widgets` minus only the raw decorative textures (matched by `content.texture_id` prefix: `athanor_skilltree_ring_` / `athanor_skilltree_background` / `athanor_skilltree_cluster_`), keeping every functional widget. Can't empty the array wholesale — it carries the viewport background. The vanilla `_draw` loop then never resolves the missing materials.
+- Wired at the **two append sites** (mirroring B2's two-call pattern), both gated on `not _is_in_keep()`:
+  1. **`create_ui_elements`** — covers the static `wheel_ring_*` / `background_wheel`. Folded into cim's EXISTING `create_ui_elements` suppression loop (right after the B2 HDR-array call) — no new hook.
+  2. **`on_enter` (post)** — covers the per-cluster `cluster_background_<i>` re-append. Folded into cim_debug.lua's EXISTING `HeroWindowWeaveProperties.on_enter` hook (right after the B2 HDR re-suppression call) — no new hook.
+- **KEEP path fully unchanged:** in the keep both call sites are no-ops, so the forge keeps its full animated ring/cluster decoration (drawn on the real keep Gui that carries the inn-only materials). The per-frame `_update_background_animations` rotation still mutates `widgets_by_name[...]` harmlessly — those widgets just aren't in the drawn array in mission.
+- **No hooks added or removed, no duplicates.** Both wiring points extend existing cim hooks (`create_ui_elements` loop + cim_debug `on_enter`); grep-verified the only cim hooks on those `(Class, method)` pairs are the ones extended. Respects the VMF duplicate-hook rule.
+- **Regression:** `skilltree_ring_widgets_suppressed_in_mission` (`/cim_regression_test`) — drives the helper synthetically (mixed functional/raw `_bottom_widgets`): in mission only the raw `ring`/`background`/`cluster` textures are dropped and the functional widgets survive; in the keep the array is left fully intact; empty/missing array is a safe no-op.
+
+### Audit of the remaining skill-tree widget set (no further `_bottom_widgets` raw-material vectors)
+- The other `_bottom_widgets` entries are functional and resident in mission: `background_write_mask` (write-mask material, base-resident — the forge drew it without faulting before reaching the ring), `viewport_background` (a `rect`, no texture material), `viewport_background_fade` (`edge_fade_small`, atlas-backed in `gui_frames_atlas`).
+- The per-node skill-tree slot icons (`athanor_skilltree_slot_*`) ARE atlas-backed (`gui_menus_atlas.lua`) and resolve fine in mission — they are NOT a vector and are deliberately left drawn.
+- The sibling HDR cluster-effect (`athanor_skilltree_cluster_effect_<i>`) and the HDR `hdr_wheel_ring_*` / `hdr_background_wheel` go to `_bottom_hdr_widgets` and are already covered by B2.
+
+## 0.8.18-dev (2026-06-22) — Fix in-mission forge `set_scalar` nil crashes (per-frame HDR bloom pulse + upgrade flourish — Fix B3/B4, completes the keep-only-HDR hardening)
+
+**CRASH FIX (opt-in path).** After v0.8.17-dev (Fix B/B2) suppressed the keep-only HDR glow at the **draw site**, opening the forge **in a mission** with **`Allow in mission` ON** and **Loremaster's Armoury installed** hit a NEW crash on the first animated frame:
+
+```
+[Script Error] scripts/ui/views/hero_view/windows/hero_window_weave_forge_panel.lua:392: bad argument #1 to 'set_scalar' (userdata expected, got nil)
+```
+
+Crashify `12a6d563`. The keep forge and the default `allow_in_mission` OFF path were never affected. This is the third keep-only-HDR-object deref surfaced by Fix B (v0.8.16) skipping the HDR-world build in mission — fixed in ONE pass alongside an audit of all four weave-forge windows so the forge stops surfacing new crashes.
+
+### Root cause (`crafting_in_modded_dev.lua`, per-frame bloom-pulse vector — distinct from the B/B2 draw-array vector)
+- B2 empties the HDR **draw arrays** (`_top_hdr_widgets` / `_bottom_hdr_widgets`) so the vanilla `_draw` loops skip the missing materials. But two windows ALSO run a **per-frame bloom pulse** that reads `_widgets_by_name` **directly** (not the draw arrays) and writes a material scalar on the HDR Gui — so emptying the draw arrays does not cover it:
+  - `HeroWindowWeaveForgePanel._set_background_bloom_intensity` (`hero_window_weave_forge_panel.lua:408-437`)
+  - `HeroWindowWeaveProperties._set_background_bloom_intensity` (`hero_window_weave_properties.lua:1218-1248`)
+- Both do, every frame: `local gui = parent:hdr_renderer().gui` → `Gui.material(gui, <wheel>.content.texture_id)` → `Material.set_scalar(m, "noise_intensity", value)`. After Fix B, `parent:hdr_renderer()` falls through to the **base mission renderer** (the `hdr_renderer` hook returns `self.ui_renderer` when `_hdr_gui_data` is nil). That Gui's baked material list (built at `create_screen_gui` time with `is_in_inn=false`) does NOT contain the raw, inn-only `weave_menu_*` wheel materials — the same three the B/B2 fix dodged at the draw site. So `Gui.material(gui, <texture>)` returns **nil**, and `Material.set_scalar(nil, ...)` fatals with exactly the reported `userdata expected, got nil`. The crashify cites a `_draw` line number (392) because the build's line table shifts; the only `set_scalar` in the window is in `_set_background_bloom_intensity`.
+- Reached every frame in mission: **Panel** — `update` → `_draw` → (`if _draw_background_wheel`) `_update_background_animations` → `_set_background_bloom_intensity`; `_draw_background_wheel` is set true for every layout EXCEPT `weave_properties` (i.e. the default overview), so the panel crashes as soon as the forge opens. **Properties** — `_update_animations` → `_update_background_animations` → `_set_background_bloom_intensity` **unconditionally** (no `_draw_background_wheel` gate), so the properties editor crashes the moment a weapon's skill tree is opened.
+
+### Fix (skip the per-frame bloom pulse in mission)
+- New full `mod:hook` (not `hook_safe` — the vanilla body must be SKIPPED, not run after) on `_set_background_bloom_intensity` for **both** `HeroWindowWeaveForgePanel` and `HeroWindowWeaveProperties`. In mission it returns without calling vanilla, so the nil-material `set_scalar` never runs. The bloom pulse is purely the decorative wheel-glow intensity; the wheel widgets are already emptied from the draw arrays by B2, so nothing visible is lost beyond what B/B2 already removed.
+- **KEEP path fully unchanged:** gated on `_is_in_keep()` via `mod._cim_skip_bloom_intensity_in_mission`. In the keep the vanilla bloom pulse runs untouched (full HDR there).
+- **No hooks removed, no duplicates.** Neither `(HeroWindowWeaveForgePanel, _set_background_bloom_intensity)` nor `(HeroWindowWeaveProperties, _set_background_bloom_intensity)` was hooked anywhere else in cim (grep-verified — cim's existing `HeroWindowWeaveProperties` hooks are on `_create_viewport_definition` / `_create_unit_previewer` / `_setup_menu_options` / `_sync_backend_loadout` / `_draw` / `_set_essence_upgrade_cost` / `_upgrade_magic_level` / `create_ui_elements` / `on_enter`, none of them this method; `HeroWindowWeaveForgePanel` had no method hooks except the `create_ui_elements` suppression loop).
+
+### Second deref site — forge-upgrade "upgrade" transition animation (Fix B4, same crash class)
+- The same audit found a SECOND path to the identical `Material.set_scalar(nil, ...)` crash: the forge-**upgrade** transition animation. The `upgrade` animation group's `init`/`update` closures in `hero_window_weave_forge_overview_definitions.lua` (sub-anims `dissolve_in` / `dissolve_out` / `intensity`) and `hero_window_weave_forge_weapons_definitions.lua` (sub-anim `intensity_out`) do `local gui = params.parent:hdr_renderer().gui` → `Gui.material(gui, <skull_circle / upgrade_effect>.content.texture_id)` → `Material.set_scalar(<material>, ...)`. After Fix B those raw, inn-only materials are absent from the base mission Gui → nil material → fatal, same signature as B3.
+- Trigger: pressing the athanor / weave **Upgrade** button and the backend call **succeeding** runs `_upgrade_forge_done` (overview line 815) / `_upgrade_item_done` (weapons line 950) → `_start_transition_animation("upgrade")`. Reachable through the cim forge whenever the player upgrades mid-mission.
+- Fix: full `mod:hook` on `_start_transition_animation` for the two windows whose `upgrade` animation touches HDR materials (`HeroWindowWeaveForgeOverview`, `HeroWindowWeaveForgeWeapons`). In mission it **drops only the `"upgrade"` animation** — every other animation these windows start (`on_enter`, text fades, font tweens) is HDR-free and runs untouched. The upgrade itself (backend write + loadout sync) is unaffected because that happens in `_upgrade_forge_done` BEFORE the animation starts; only the decorative skull-circle dissolve / glow flourish is skipped in mission. **KEEP path unchanged** (gated on `is_in_inn`). No duplicate hooks (neither method was hooked elsewhere in cim — grep-verified).
+- `HeroWindowWeaveProperties` is deliberately NOT guarded here: its animation definitions contain **no** HDR `Material.set_scalar` (its only HDR `set_scalar` was the bloom pulse handled above), so its animations are safe in mission and must run for the normal fade-in.
+
+### Audit of the remaining surfaces (no further vectors found)
+- `HeroWindowWeaveForgeOverview` / `HeroWindowWeaveForgeWeapons` runtime-window code touches HDR only via the `_draw` passes (covered by B2's array-emptying) and the upgrade animation (B4 above). `HeroWindowWeaveForgeBackground` builds no HDR arrays and touches no HDR Gui.
+- `HeroViewStateWeaveForge.set_fullscreen_effect_enable_state` uses `ShadingEnvironment.set_scalar` on the base UI world's shading env and is **already vanilla-guarded** (`if shading_env then`), reading `self.ui_renderer.world` (present in both keep and mission) — not a mission-only nil vector.
+- Confirmed the `hdr_renderer` / `hdr_top_renderer` accessor fallback (v0.7.71-dev) still returns the base renderer instead of indexing a nil `_hdr_gui_data` — that guard remains the draw-time backstop.
+
+### Tests
+- New `/cim_regression_test` check `hdr_bloom_setscalar_skipped_in_mission` (B3): asserts `mod._cim_skip_bloom_intensity_in_mission` is exposed and agrees with `_is_in_keep()` (skip in mission, run in keep), and that both windows' `_set_background_bloom_intensity` methods still exist on the vanilla classes.
+- New `/cim_regression_test` check `hdr_upgrade_anim_skipped_in_mission` (B4): asserts `mod._cim_skip_upgrade_anim_in_mission` never skips a non-`upgrade` animation, skips `"upgrade"` only in mission (runs it in keep), and that both windows' `_start_transition_animation` methods still exist.
+
+### Verification (requires the opt-in path)
+- Reproduces ONLY with **Loremaster's Armoury installed** + **`Allow in mission` ON**, in an **Adventure mission**: open the forge (B hotkey), **browse weapons**, **open a weapon's skill tree** (properties editor), and **upgrade the athanor / a weave**. With this fix the forge should stay open and usable mid-mission through all of those, minus the decorative wheel-glow pulse and the upgrade flourish.
+
+## 0.8.17-dev (2026-06-22) — Fix in-mission forge `weave_menu_*` "Material not found in Gui" crash (completes Fix B at the draw site)
+
+**CRASH FIX (opt-in path).** After v0.8.16-dev (Fix B) stopped the in-mission forge from force-building the keep's HDR worlds, opening the forge **in a mission** with **`Allow in mission` ON** hit a NEW crash on the fade-in frame:
+
+```
+[Script Error] scripts/ui/ui_passes.lua:134: Material `weave_menu_upgrade_skull_circle_shade` not found in Gui
+```
+
+Session `35046c6c-44fe-4d05-b02d-cd08dee7294c`. The keep forge and the default `allow_in_mission` OFF path were never affected.
+
+### Root cause (`crafting_in_modded_dev.lua`, weave-forge `create_ui_elements` draw path)
+- A Stingray `Gui` resolves named materials ONLY from the fixed list baked in at `World.create_screen_gui()` time (`ui_renderer.lua:246-251`). There is no API to add a material to a live `Gui`, and `Managers.package:load` cannot retro-add one — so this is a **Gui material-list gap, NOT a package-residency failure** (the `reference_vt2_la_package_force_load_crash` guard is moot; no force-load is needed or possible).
+- The keep's HDR renderer is built with `is_in_inn=true` (`hero_view.lua:178`), so the inn-only material block in `ingame_ui_settings.lua` adds the weave-forge materials. The **base mission renderer** is built once at `IngameUI.init` with `is_in_inn=false` (`ingame_ui.lua:76-77`), so that block is skipped.
+- Three RAW (non-atlas) materials the forge's HDR widgets draw live ONLY in that inn-only block: `weave_menu_upgrade_skull_circle`, `weave_menu_upgrade_skull_circle_shade`, `weave_menu_athanor_upgrade_bg`. (Everything else the forge draws is atlas-backed in `gui_menus_atlas`, which rides in the always-loaded `materials/ui/ui_1080p_menu_atlas_textures`, so it never faults.)
+- Fix B left `_hdr_gui_data` nil in mission, so the `hdr_renderer` / `hdr_top_renderer` hooks fall through to the base mission renderer. The four forge windows draw their `_bottom_hdr_widgets` / `_top_hdr_widgets` on `parent:hdr_renderer()` (e.g. `hero_window_weave_forge_overview.lua:704-737`) → those three materials aren't resident → `ui_passes.lua:134` fatal. Fix B traded a C-level world assert for a Lua material-resolve error; this completes it.
+
+### Fix (suppress the keep-only HDR glow at the draw site)
+- New `hook_safe` on `create_ui_elements` for the four HDR forge windows (`HeroWindowWeaveForgeOverview`, `HeroWindowWeaveProperties`, `HeroWindowWeaveForgeWeapons`, `HeroWindowWeaveForgePanel`; `HeroWindowWeaveForgeBackground` builds no HDR arrays and is omitted). In mission, it **empties** `self._top_hdr_widgets` / `self._bottom_hdr_widgets` (assigned as the last step of vanilla `create_ui_elements`), so the vanilla `_draw` loops iterate nothing and the three keep-only materials are never resolved.
+- Emptying the arrays is preferred over `content.visible=false` / `alpha=0`, which still leave the widget in the iterated array (alpha-0 in particular still resolves the material). The widgets stay registered in `_widgets_by_name`, so the existing `_forge_apply_ui_polish` `_forge_hide_widget("upgrade_bg" / "top_hdr_background_write_mask")` calls remain valid no-ops.
+- **KEEP path fully unchanged:** gated on `not _is_in_keep()`. In the keep the HDR arrays are left intact and the forge keeps its full HDR glow (drawn on the real keep HDR renderer that carries the inn-only materials).
+- Cost: the decorative skull-circle glow ring and the athanor upgrade-panel background glow are absent **in mission only**. The forge is otherwise fully drawn and usable. This is exactly the "drops the HDR glow layer in mission only" cost Fix B already documented — the glow elements just weren't suppressed at the draw site.
+- **No hooks removed.** The four `(window, create_ui_elements)` pairs were previously un-hooked by cim (grep-verified — no duplicate-hook violation).
+
+### Fix B2 second vector — skill-tree cluster glow re-appended after suppression (`cim_debug.lua`, `HeroWindowWeaveProperties.on_enter`)
+- `HeroWindowWeaveProperties.on_enter` calls `create_ui_elements` (line 151) FIRST — where the suppression above empties the HDR arrays — then calls `_create_slot_grid` (line 200) → `_create_cluster_background` (`hero_window_weave_properties.lua:894-924`), which **re-appends** the raw, inn-only `athanor_skilltree_cluster_effect_*` glow widgets to `_bottom_hdr_widgets` AFTER suppression. Those textures are also raw / non-atlas (not in any `atlas_settings` file) and live only in the inn-only material block, so they would fault on the base mission renderer the same way once a weapon's skill-tree is opened mid-mission.
+- The fix folds a second suppression call into the **EXISTING** `mod:hook_safe("HeroWindowWeaveProperties", "on_enter", ...)` in `cim_debug.lua` (NOT a new hook — VMF would silently drop a duplicate `(Class, on_enter)` registration). Because `on_enter` (post) fires after `_create_slot_grid` has re-appended the cluster glow, re-running the helper there re-empties `_bottom_hdr_widgets` in mission. The in-keep detector `_is_in_keep` is now exposed cross-file as `mod._cim_is_in_keep` so the cim_debug hook (a different file) can gate on it.
+- **KEEP path unchanged here too:** gated on `mod._cim_is_in_keep()`. In the keep the skill-tree cluster glow survives.
+
+### Tests
+- New `/cim_regression_test` check `hdr_glow_widgets_suppressed_in_mission`: drives the exposed `mod._cim_suppress_hdr_glow_in_mission` helper synthetically and asserts (1) in mission the populated HDR arrays are emptied, (2) in the keep they are left intact, (3) already-empty / missing arrays are a safe no-op.
+- New `/cim_regression_test` check `hdr_cluster_glow_resuppressed_on_props_enter` (Fix B2 second vector): asserts `mod._cim_is_in_keep` is exposed and returns a boolean, and that the helper — driven with that detector's live value on a synthetic props window carrying a freshly re-appended cluster-effect widget — leaves the array intact in the keep and re-empties it in mission.
+
+### Verification (requires the opt-in path)
+- Reproduces ONLY with **Loremaster's Armoury installed** + **`Allow in mission` ON**, opening the forge (B hotkey) in an **Adventure mission**. With this fix the forge should now **OPEN and be usable** mid-mission, minus the three decorative glow elements.
+
+## 0.8.16-dev (2026-06-22) — Fix in-mission forge HARD CRASH with Loremaster's Armoury installed (LA armoury_atlas in HDR world)
+
+**CRASH FIX (opt-in path).** Pressing the **B** hotkey (`forge_hotkey` → `open_forge`) **in a mission** with **`Allow in mission` ON** and **Loremaster's Armoury (LA) installed** hard-crashed the game on the fade-in frame. The keep forge and the default `allow_in_mission` OFF path were never affected — this only hit the opt-in override the menu already labels "(may crash)". Session `b688f241-50e0-4ad4-9808-e843f61eec6c` (2026-06-22), level `dlc_termite_3`, `dr_ironbreaker`.
+
+### Root cause (`crafting_in_modded_dev.lua`, `HeroView._setup_hdr_gui` hook)
+- cim's hook flipped `self.is_in_inn = true` then `pcall`'d vanilla `_setup_hdr_gui`, which **force-built the `hero_view_hdr` / `hero_view_hdr_top` HDR worlds mid-mission** (vanilla never builds them outside the keep) to render the forge's HDR glow layer.
+- Building those worlds calls `UIRenderer.create_screen_gui`, and VMF's `custom_textures.lua:228` injects **every** mod-registered GLOBAL UI texture into the new world's material list — including LA's `materials/Loremasters-Armoury/armoury_atlas` (#ID[456d0ff315e50d78]).
+- A brand-new mid-mission world cannot resolve that global atlas, so the engine fatally asserts at `c_api_world.cpp:568` (`world.resource_manager().can_get(material_type, name)`). That is a **C-level assert, not a Lua error**, so cim's `pcall` could not catch it → hard crash.
+
+### Fix B (stable, lower-risk) — do NOT force-build the in-mission HDR worlds
+- In mission, the `_setup_hdr_gui` hook now **skips vanilla entirely**. `_hdr_gui_data` stays nil, so the existing `HeroView.hdr_renderer` / `hdr_top_renderer` hooks fall through to `self.ui_renderer` / `self.ui_top_renderer` (the `heroview_hdr_renderer_guard_failsafe` fallback, now the NORMAL in-mission path). The forge opens against the standard renderer and **never calls `create_screen_gui` on a world that can't host LA's material**.
+- Cost: the forge loses its HDR glow layer **in mission only** (it already used the mission-safe `environment/ui_hdr` shading env there). The **keep (`is_in_inn`) forge is fully unchanged — full HDR**.
+- The `_cim_sweep_leaked_hdr_worlds` half-built-world sweep (Issue #73) is **retained as a no-op safety net** but is no longer reached on the mission path (we never build the worlds there now).
+- **No hooks added or removed.** The three `(HeroView, _setup_hdr_gui / hdr_renderer / hdr_top_renderer)` pairs each still have exactly one cim hook; only the `_setup_hdr_gui` body changed. The separate `HeroViewStateWeaveForge._setup_gamepad_gui` force-build (a different, non-LA `_gui_data` nil-index crash class) is **untouched**.
+
+### Tests
+- New `/cim_regression_test` check `heroview_hdr_not_forcebuilt_in_mission`: source-pattern asserts the `_setup_hdr_gui` hook (a) contains the Fix B skip marker and (b) no longer contains the old `saved_is_in_inn`-flip / post-failure HDR-world-sweep force-build sequence. Needles are split literals so the test doesn't self-match, and the negative needles are keyed to tokens unique to the old `_setup_hdr_gui` body so the still-valid `_setup_gamepad_gui` force-build is not flagged.
+- Existing `heroview_hdr_renderer_guard_failsafe` (the ui_renderer fallback) is unchanged and is now the primary guarantee that the skipped-build path stays crash-safe.
+
+### Verification (REQUIRES the right environment)
+- Must be validated **with Loremaster's Armoury installed** + cim `Allow in mission` **ON**, in an **ADVENTURE mission** (NOT Chaos Wastes). Press B mid-mission; the forge must open against the standard renderer with no `c_api_world.cpp:568` assert. Without LA installed the crash does not reproduce, so a clean open there does not validate the fix.
+
+### Changed
+- MOD_VERSION → 0.8.16-dev.
+
+## 0.8.15-dev (2026-06-21) — Loadout persistence is now OPT-IN, DEFAULT OFF (stop perturbing vanilla bot/player loadouts)
+
+**DEFAULT BEHAVIOR CHANGE.** cim no longer persists/restores/syncs/migrates loadouts by default. It was effectively **always-on** before (the only gate was `restore_modded_loadout`, which still left the capture + sync + migration hooks live). Users reported cim breaking their **existing VANILLA bot loadouts** — saved in the base game, with **no cim-crafted weapons involved**: bots cloned the host's loadout instead of getting their designated vanilla loadout, because cim's capture/restore/sync/migration paths were writing into / re-syncing the loadout mirror even when the player had nothing modded equipped. The fix makes cim fully OPT-IN on the loadout path so out of the box vanilla player AND bot loadouts behave exactly as the base game intends.
+
+### New master toggle — `persist_modded_loadouts` (DEFAULT OFF) (`crafting_in_modded_dev_data.lua` / `_localization.lua`)
+- New checkbox in the **Modded Inventory** group: "[untested] Persist modded-crafted weapons across loadouts/sessions", default **false**.
+- Tooltip: "When OFF (default), cim does NOT touch your loadouts — your vanilla player and bot loadouts behave exactly as the base game. Turn ON only if you want cim-CRAFTED weapons to survive relogs (they won't while this is off; re-equip them as needed)."
+- The pre-existing `restore_modded_loadout` checkbox is now a SUB-gate that only matters when this master toggle is ON; its description was updated to say so.
+
+### When OFF (the default): cim is a pure pass-through on every loadout path (`crafting_in_modded_dev.lua`)
+A single `_persist_loadouts_enabled()` helper (`mod:get("persist_modded_loadouts") == true`, nil/type-safe) gates every write/sync/migrate site — **no new hooks added, no hooks removed** (each `(Class, method)` pair still has exactly one cim hook, consolidated at the existing body):
+- **`_capture_loadout_equip` (entry)** — bails immediately when OFF, so NEITHER the `BackendInterfaceItemPlayfab.set_loadout_item` hook_safe NOR the `BackendUtils.set_loadout_item` full hook records anything into `_modded_loadout`. The BackendUtils hook still calls `func(...)`, so the underlying vanilla write is byte-identical.
+- **`LoadoutUtils.sync_loadout_slot` hook** — returns `func(...)` verbatim when OFF: no `item.rarity` "modded"->"unique" wire-rewrite, no `cim_modded_slot` side-channel send. The wire payload is exactly what vanilla would send.
+- **`PlayerManager.rpc_sync_loadout_slot` hook_safe** — bails when OFF: no received-slot rarity patching (the side-channel state stays empty anyway because the sender never fired it).
+- **`_restore_modded_loadout` (entry)** — no-ops when OFF: no flat->indexed migration (`_run_loadout_migration`), no `_modded_loadout_purge_stale`, no `set_loadout_item` writes, no `_reequip_live_avatar`. The boot/keep restore (`_create_interfaces` hook + the 1.0s/3.0s deferred passes + `/cim_restore_loadout`) all fall through this gate.
+
+Net effect with the toggle OFF: cim writes/syncs/migrates nothing into the loadout mirror, so a bot reads its DESIGNATED vanilla loadout index (never a host clone) and the player's vanilla loadouts are untouched — byte-identical to not having cim installed on the loadout path.
+
+### When ON: unchanged 0.8.14 behavior
+- Index-aware capture (threading `optional_loadout_index` / resolving the live selected index), mirror-ready flat->indexed migration, index-correct restore, the modded-rarity wire-rewrite + side-channel, and the bot designated-index handling all work exactly as in 0.8.14-dev.
+
+### Crafting is untouched
+- The craft path (Athanor synth, `_athanor_inject_item`, `_forged_weapons` register/save/load, the weave-forge `BackendInterfaceWeavesPlayFab.set_loadout_item` craft-staging hook gated on `_custom_forge_active`) is NOT on the loadout-persist path and is unchanged. You still craft weapons with the toggle off; they just won't auto-persist into loadouts across relogs.
+
+### Debug probe unchanged
+- The read-only `[cim:loadout_probe]` mirror dump (`/cim_loadout_dump`, the `set_loadout_index` hook_safe, `_cim_loadout_probe_dump`) is purely diagnostic (no writes) and works either way.
+
+### Tests
+- New `/cim_regression_test` check `persist_loadouts_gate_off_is_passthrough`: with the master toggle forced OFF, a real modded `set_loadout_item` call leaves `_modded_loadout` empty (no capture leak), and the gate helper reflects the live setting.
+- `_rt_with_loadout_sandbox` now forces `persist_modded_loadouts` ON for the body of the existing persistence round-trip tests (and restores the user's real value on teardown) so those tests still exercise the capture/persist path under the new default-OFF gate.
+
+### Changed
+- MOD_VERSION → 0.8.15-dev.
+
+## 0.8.14-dev (2026-06-21) — Fix host-restore regression in the 0.8.13 flat->indexed migration (migration TIMING)
+
+Adversarial review of 0.8.13-dev caught a blocker for the multi-loadout minority: the flat->indexed migration `_migrate_modded_loadout` ran at **MOD SCRIPT-EVAL time** (from `_modded_loadout_load`, called at the file-scope `_modded_loadout_load()` near line 882), **before the backend mirror exists**. So `_resolve_selected_index(career, 1)` always hit its fallback and returned **1**, homing EVERY migrated flat entry under loadout index 1, then persisting. For a player whose actual selected loadout index was NOT 1, their saved modded gear migrated to the index-1 loadout (not their active one), and `_reequip_live_avatar` (which reads the LIVE selected index) found nil there → the keep avatar showed VANILLA weapons after migration. No bid was dropped (self-heals on a re-equip), but it was a real regression versus pre-0.8.13 behavior.
+
+### Fix — DEFER migration to the first mirror-ready moment (`crafting_in_modded_dev.lua`)
+- **Removed the migrate call from boot.** `_modded_loadout_load()` now loads the raw saved payload AS-IS (flat or indexed) with no migration; the script-eval `_modded_loadout_load()` no longer mutates/persists anything.
+- **New `_run_loadout_migration()` driver, called from `_restore_modded_loadout` right after `_modded_loadout_load()` and BEFORE purge/restore** — i.e. at a mirror-confirmed moment (the `_create_interfaces` hook + the 1.0s/3.0s deferred passes). It resolves each flat career's REAL live selected index via `_resolve_selected_index(career)` and homes the entry there, then persists once. Multi-loadout user whose selected index is 3 now gets their migrated gear homed to index 3 (their active loadout), and `_reequip_live_avatar` finds it → keep avatar re-equips correctly.
+- **Idempotent + one-shot.** `_migrate_modded_loadout` takes a `mirror_ready` flag: when the mirror is up it migrates to the resolved real index; when it's NOT up it SKIPS the career (leaves it flat) rather than guess. A `_loadout_migration_done` one-shot flag flips true only after a mirror-ready pass with nothing flat remaining, so the deferred passes / `/cim_restore_loadout` don't re-scan or redundantly persist. Even without the flag the pass is a no-op on already-indexed data (`_career_value_is_flat` returns false). If the mirror is somehow still unavailable at the restore path, migration does nothing this pass and the flag stays unset, so the next deferred pass re-attempts — no data lost.
+
+### Early-consumer audit (consumers that read `_modded_loadout` before the deferred migration)
+- **`_cim_clear_modded_loadout_for_bid` (salvage)** — the only pre-mirror consumer. Now tolerates BOTH shapes: flat (career -> slot -> bid) and indexed (career -> index -> slot -> bid), detected per career via `_career_value_is_flat`, so a salvage that runs while a career is still flat still clears the bid (never strands a dangling restore target, never crashes).
+- The restore loop, `_modded_loadout_purge_stale`, and `_reequip_live_avatar` all run AFTER `_run_loadout_migration` in the same `_restore_modded_loadout` call, so they always see the indexed shape.
+- The read-only debug commands `/cim_dump_loadout` and `/cim_restore_loadout` already guard with `type(indices) == "table"` (flat entries are simply not listed until migration runs); `/cim_restore_loadout` itself triggers the migration via `_restore_modded_loadout`.
+
+### Hardening (non-blocking, flagged by review)
+- `_rt_with_loadout_sandbox` teardown loop now carries the symmetric `type() == "table"` guards (`pairs(indices)` / `pairs(slots)`) that the snapshot half already had, so a malformed in-memory shape can't crash the test teardown.
+
+### Unchanged (confirmed correct by the bot-fix review, ok=true)
+- Index-aware capture (`BackendInterfaceItemPlayfab` threading `optional_loadout_index`; `BackendUtils` resolving the live selected index), restore passing the saved index as the 4th arg to `set_loadout_item`, the bot designated-index handling, and the `_restoring` guard are all untouched. ONLY the migration timing, the sandbox guard, and the one early-consumer shape-tolerance changed.
+
+### Changed
+- MOD_VERSION → 0.8.14-dev.
+
+## 0.8.13-dev (2026-06-21) — INDEX-AWARE modded-loadout persistence (fixes bot loadouts cloning the host)
+
+The v0.8.11/.12 probes confirmed the diagnosis: cim's persisted modded loadout was **FLAT** (`_modded_loadout[career][slot] = bid`, no loadout-index dimension). Both capture hooks dropped `optional_loadout_index`, and restore wrote with no index arg — so every saved modded item was stamped onto the **SELECTED** loadout index. Vanilla reads each **bot's** gear from its **DESIGNATED** index (`PlayerData.loadout_selection.bot_equipment[career]` → `get_character_data(career, slot, bot_loadout_index)`, `backend_interface_item_playfab.lua:150`), so a bot's designated-index modded gear was never persisted/restored to that index → **bots cloned the host's selected loadout**; the player's modded items also got conflated across loadout switches. This version makes the whole persist/capture/restore path index-aware.
+
+This is the real fix for the user-confirmed "bot loadouts clone the host instead of their designated per-career loadouts" report.
+
+### Schema change — index dimension added
+- `_modded_loadout` is now `[career_name][loadout_index][slot_name] = backend_id` (was `[career_name][slot_name] = backend_id`). Same single migrate-able table, persisted via `mod:set("modded_loadout", ...)` as before.
+
+### Capture — record the index each equip wrote to (`crafting_in_modded_dev.lua`)
+- `_capture_loadout_equip` gains a `loadout_index` param and stores the bid under `[career][index][slot]`, clearing/refreshing only that `(index, slot)` (other indices for the same career/slot are untouched).
+- The `BackendInterfaceItemPlayfab.set_loadout_item` hook_safe now passes its 4th arg `optional_loadout_index` through, so a write to a NON-selected index (configuring a bot's designated loadout) is recorded under that index.
+- The LA-path `BackendUtils.set_loadout_item` hook is 3-arg (no index) and always writes the SELECTED index, so it passes `nil`; the capture helper resolves the live selected index off the mirror (`_career_loadouts[career]` / `:get_career_loadouts(career)`, LA-safe) and stores under it. New helper `_resolve_selected_index(career, fallback)` — nil/type-safe, never throws, falls back to index 1.
+
+### Restore — stamp each saved item back to ITS index (`crafting_in_modded_dev.lua`)
+- `_restore_modded_loadout` now iterates `career -> index -> slot` and passes the saved index as the 4th arg: `items:set_loadout_item(bid, career, slot, index)` → `set_character_data(..., optional_loadout_index)` (`playfab_mirror_base.lua:1928`). This stops stamping everything into the host's selected index, so a bot's designated index keeps its distinct modded gear. A non-numeric (corrupt) index falls back to vanilla's selected-index default rather than throwing.
+
+### Migration — NO DATA LOSS
+- On load, `_migrate_modded_loadout` detects the OLD flat shape (career value carrying string slot-keys) and re-homes each flat entry under that career's CURRENT selected loadout index (fallback 1 when the mirror isn't loaded yet), then persists the migrated table once. That's the safe target: pre-0.8.13 cim only ever stamped the selected index, so the flat entries WERE the selected-index gear — assigning them there preserves the exact prior behavior for the active loadout while unlocking per-index storage. Every step is guarded against partial/corrupt entries (stray numeric→table entries are kept intact); no saved bid is ever dropped.
+
+### Safety preserved
+- The `_restoring` guard and all existing restore safety (pcall-per-entry, host/owner-authoritative, idempotent deferred passes) are unchanged — the restore path burned issues #22 / #67, so nothing there was loosened. The working host modded-loadout restore (player's selected-index modded weapons) still works; `_reequip_live_avatar` reads the selected index only (the live keep unit shows the selected loadout). All sibling consumers (`_cim_clear_modded_loadout_for_bid`, `_modded_loadout_purge_stale`, the `/cim_dump_loadout` / `/cim_restore_loadout` commands, the regression sandbox + tests) updated to walk the index dimension.
+
+### Probes (validation surface — `cim_debug.lua`)
+- The 0.8.12 auto-fire `[cim:loadout_probe]` dump now shows cim's record per index (`_modded_loadout[career][index].slot`), with `<-SELECTED` / `<-BOT` markers — after this fix it should show DISTINCT bot indices, validating the fix in-game.
+- `_cim_autodump_equip_event` logs the `captured_index`; `_cim_autodump_restore_entry` logs the `written_index` and reads back AT that index via `mirror:get_character_data(career, slot, index)` (the items-interface `get_loadout_item_id`'s 3rd arg is `is_bot`, not an index — it can't prove a non-selected-index write).
+- `modded_loadout_round_trip_save_then_clear` regression test now passes an explicit non-1 index and asserts the indexed shape.
+
+### Changed
+- MOD_VERSION → 0.8.13-dev.
+
+## 0.8.12-dev (2026-06-21) — Loadout-index probe: auto-fire the full per-index dump (no command needed)
+
+The v0.8.11 per-index dump required typing `/cim_loadout_dump`. Now it auto-fires (debug-gated) at the three moments that matter, so the user just plays and the log captures it: after cim's restore (`_cim_autodump_restore_done` — exposes which index each modded item was stamped onto), on backend-ready (`_cim_autodump_backend_ready` — keep-entry snapshot), and after every loadout switch (`_cim_loadout_probe_on_switch`). The `/cim_loadout_dump` command stays as a manual fallback. Still read-only diagnostics.
+
+## 0.8.11-dev (2026-06-21) — READ-ONLY loadout-INDEX probe suite (debug-only)
+
+Diagnostic-only. Adds a read-only probe set (tag `[cim:loadout_probe]`, gated on `enable_debug_logging`) to diagnose cim's loadout index-blindness: cim's `_modded_loadout[career][slot]` is **FLAT** (no loadout index), its capture drops `optional_loadout_index`, and `_restore_modded_loadout` (`crafting_in_modded_dev.lua:955`) writes with no index — so modded items always land on the **SELECTED** loadout index, not whatever index the user (or a bot designation) actually wanted. These probes make the per-index reality visible. No gameplay or loadout writes; every mirror/engine call is pcall-guarded; nil/type-safe.
+
+Confirmed loadout model (verified against decompiled source): `PlayFabMirrorBase._career_data[career][loadout_index][slot]` stores gear; `_career_loadouts[career]` = the SELECTED index; `PlayerData.loadout_selection.bot_equipment[career]` = the bot DESIGNATED index; `get_character_data(career, slot, optional_loadout_index)` defaults to the selected index (`playfab_mirror_base.lua:1909`). Mirror reached LA-safe via `Managers.backend:get_interface('items')._backend_mirror`.
+
+### Added (all in `cim_debug.lua`)
+- **`/cim_loadout_dump`** chat command. For the current career + every career with a `_modded_loadout` entry, logs: the SELECTED index (`_career_loadouts[career]`); the bot DESIGNATED index (`PlayerData.loadout_selection.bot_equipment[career]`); the loadout count; for EACH index `1..N` the item ids of `slot_melee/slot_ranged/slot_necklace/slot_ring/slot_trinket_1` via `mirror:get_character_data(career, slot, index)` (each tagged MODDED via `mod._cim_is_modded_backend_id`, or vanilla); plus cim's flat `_modded_loadout[career]`. `<-SELECTED` / `<-BOT` markers flag the active and bot-designated indices.
+- **Loadout-SWITCH probe** — read-only `hook_safe` on `PlayFabMirrorBase.set_loadout_index` (the chokepoint `BackendInterfaceItemPlayfab.set_loadout_index` forwards to). Logs `career + old_selected -> new_selected`. No existing cim hook on this `(Class, method)` (grepped — VMF no-duplicate-hook rule satisfied).
+
+### Changed (all in `cim_debug.lua`, debug-only)
+- `_cim_autodump_equip_event` now also logs `selected_index` (the index the equip wrote to — the GUI 3-arg `set_loadout_item` never passes an index, so equips always hit the SELECTED index).
+- `_cim_autodump_restore_entry` now also logs `target_index` (the SELECTED index each restore write resolves to) — making the wrong-index stamping visible.
+- MOD_VERSION → 0.8.11-dev.
+
+## 0.8.10-dev (2026-06-21) — Fix false `[cim:diag] Equip read-back MISMATCH` warnings (debug-only)
+
+The equip diagnostic (`cim_debug.lua` `_cim_autodump_equip_event`) did an immediate `get_loadout_item_id` read-back and warned on a mismatch. On the **LA menu-equip path** the capture (`crafting_in_modded_dev.lua:1096` `BackendUtils.set_loadout_item` pre-hook) runs `_capture_loadout_equip` **before** vanilla `func()` commits the write, so the read-back was PRE-write and always reported the *previous* item — a false MISMATCH (the off-by-one log pattern: each read == the prior equip). The actual loadout capture is unaffected (it records the passed `item_id`, line 1054, not the read-back), so equips/restore were always correct; only the warning was spurious.
+
+### Changed
+- `_capture_loadout_equip` now threads `from_live_equip` into `_cim_autodump_equip_event` (`crafting_in_modded_dev.lua:1043`).
+- `_cim_autodump_equip_event` (`cim_debug.lua`) skips the read-back + MISMATCH warning when `from_live_equip` (the pre-write LA path); the read-back logs as `<pre-write>` there. The post-write `BackendInterfaceItemPlayfab` hook_safe path keeps the real read-back validation.
+- MOD_VERSION → 0.8.10-dev.
+
+## 0.8.8-dev (2026-06-19) — Test-status labels on all menu entries
+
+Prefixed every VMF menu widget with `[untested]` so we know what's safe to promote to stable `cim`. Tooltips, group headers, and `enable_debug_logging` are not labeled. Flip to `[confirmed working]` as features are verified in-game. See `TESTING_STATUS.md`.
+
+## 0.8.7-dev (2026-06-18) — Fix Trollhammer select-crash (weave tooltip) + add craft-button audio feedback
+
+### Fixed — crash on selecting the Trollhammer Torpedo (and other deus/CW weapons)
+Crash report (nicho, on cim_dev v0.8.6-dev): selecting the Trollhammer Torpedo (`dr_deus_01`) in the Athanor editor hard-crashed `hero_window_weave_properties.lua:1701: attempt to concatenate local 'tooltip_slot_sub_title' (a nil value)` in `_sync_backend_loadout`, via `on_enter`. This is the **next-in-sequence** deus/CW crash after the v0.8.2 `_setup_menu_options` `ipairs(nil)` guard — both run in `on_enter`. cim re-exposes deus/CW weapons whose property/trait/talent **table-names aren't weave categories**, so the per-slot tooltip build does `slot_type_strings[cat] or localized_strings[cat]` → both miss → nil → concatenate crash. Those tooltip-string tables are per-call locals (not pre-seedable like the category pools the v0.8.2 fix handles), so the fix wraps `HeroWindowWeaveProperties._sync_backend_loadout` in a pcall under the modded forge. The property/trait bubbles sync before the failing talent-tooltip section, so editing still works — only the unknown-category tooltip degrades. New hook (distinct class from the existing `HeroWindowWeaveForgeWeapons._sync_backend_loadout` hook — no duplicate).
+
+### Fixed — silent Athanor craft buttons
+The weapon-select pane CRAFT (`_equip_item`) and the editor CRAFT (`_upgrade_magic_level`) both crafted and returned **without playing the completion sound** — vanilla's equip/upgrade sound sits past the custom-forge early-return, so those buttons gave no audio feedback (visual echo/pulse only). Both now call `self:_play_sound("play_gui_craft_forge_button_completed")` on a successful craft (the same sound cim already plays on the standard-forge/console craft pages).
+
+## 0.8.6-dev (2026-06-18) — Drop Versus-carousel twins that shadow a real Adventure weapon (the "wh_book" locked entry)
+
+### Why
+User report: a non-craftable book entry (reported as `wh_book_name`) showed up **locked** in the Athanor weapon list. Root cause: cim enumerates raw `ItemMasterList` and **intentionally** surfaces `vs_*` Versus-carousel weapons as craftable (it clears their `mechanisms` on craft so the result is Adventure-visible — Gallant's Blade, Soldier's Coach Gun, etc.). But a handful of `vs_*` items have a **real non-versus Adventure twin sharing the same `display_name`** — notably `vs_wh_hammer_book` vs the real `wh_hammer_book`. cim's list dedups by `display_name`, so the Versus twin can win the dedup and render as a locked, uncraftable row (`backend_id = nil`) that **hides** the real craftable weapon.
+
+### Fixed
+- New `_cim_versus_shadowed(data, real_names)` gate in `standard_forge.lua` (+ `_cim_is_versus` / `_cim_real_display_names` helpers, exposed on `mod`), applied to all three craft-list builders: the menu weapon list (`_setup_weapon_list`), the standard-forge random-pick pool, and the blacksmith template cache. A versus item is dropped **only when a real (non-versus) item with the same `display_name` exists** — so unique `vs_*` weapons (no real twin) stay craftable, and the real `wh_hammer_book` replaces its locked versus twin. The real-`display_name` set is built once per list-build (O(n), not O(n²)).
+- Explicitly **not** a blanket versus exclusion — that would remove the intentional cross-character/versus crafting feature (the user confirmed other `vs_*` weapons work fine).
+
+### To verify (in-game)
+- Open the Warrior Priest melee craft list: the locked `wh_hammer_book` twin should be gone, replaced by the real craftable hammer+book. Confirm unique Versus weapons (Gallant's Blade etc.) still appear and craft. If a *specific* item still shows locked, capture the `_cim_autodump_weapon_list_setup` dump (Debug Logging on) to pin the exact key/source.
+
 ## 0.8.5-dev (2026-06-17) — Version realignment (no functional change)
 
 Bumped the dev clone's version from `0.7.76-dev` to `0.8.5-dev` so it sits one patch **ahead** of stable cim (`0.8.4`) instead of a MINOR behind it. The lineages had drifted: stable jumped `0.7.48-alpha → 0.8.1` at the 2026-06-08 release and continued into `0.8.x`, while this dev clone kept incrementing `0.7.x-dev` — so the friends-only Workshop title (`v0.7.76-dev`) read as older than public `v0.8.4` even though dev is the bleeding edge. Code/work was already in sync (both top out at Issue #71). Source-only bump; cfg title updated to match. Live friends-only Workshop title refreshes on the next cim_dev upload. Dev now tracks one patch ahead of stable going forward.

@@ -68,6 +68,44 @@ end
 
 mod._cim_item_requires_unowned_dlc = _item_requires_unowned_dlc
 
+-- Versus-shadow gate (2026-06-18). cim INTENTIONALLY surfaces vs_* Versus
+-- carousel weapons as craftable (it clears their mechanisms on craft so the
+-- result shows in the Adventure grid -- Gallant's Blade, Soldier's Coach Gun,
+-- etc.; see _ensure_item_adventure_visible + memory
+-- reference_vt2_versus_items_hidden_in_adventure). So we must NOT blanket-exclude
+-- versus items. BUT a vs_* item that shares its display_name with a REAL
+-- (non-versus) Adventure weapon -- e.g. vs_wh_hammer_book vs the real
+-- wh_hammer_book -- is a pure duplicate: cim's craft list dedups by display_name,
+-- so the versus twin can win the dedup and render as a LOCKED, uncraftable row
+-- (backend_id = nil) that HIDES the real craftable weapon. Drop a versus item
+-- ONLY when such a real twin exists; unique vs_* weapons (no real twin) are
+-- untouched and stay craftable. Build the real-display_name set ONCE per
+-- list-build and pass it in so the per-item check stays O(1) (overall O(n), not
+-- O(n^2)).
+local function _cim_is_versus(data)
+    local m = type(data) == "table" and data.mechanisms
+    return m ~= nil and table.contains(m, "versus")
+end
+
+local function _cim_real_display_names()
+    local set = {}
+    for _, d in pairs(ItemMasterList) do
+        if type(d) == "table" and d.display_name and not _cim_is_versus(d) then
+            set[d.display_name] = true
+        end
+    end
+    return set
+end
+
+local function _cim_versus_shadowed(data, real_names)
+    return _cim_is_versus(data) and data.display_name ~= nil
+        and real_names ~= nil and real_names[data.display_name] == true
+end
+
+mod._cim_is_versus = _cim_is_versus
+mod._cim_real_display_names = _cim_real_display_names
+mod._cim_versus_shadowed = _cim_versus_shadowed
+
 -- Both the desktop ("HeroWindowCrafting") and inventory-tab/gamepad
 -- ("HeroWindowCraftingConsole") variants need lifecycle hooks. The user's
 -- Crashify trace showed `Enter Substate HeroWindowCraftingConsole` on PC —
@@ -649,6 +687,37 @@ synth.reroll_jewellery_properties = _reroll_properties
 -- mutates that table in place when the user toggles trait checkboxes (adventure
 -- and Chaos Wastes), and any layer of indirection breaks the toggle. Same
 -- contract applies to `_make_craft_synth` further down.
+--
+-- The ONE allowed filter — mirror official's forge gate. Official's trait reroll
+-- (HeroWindowItemCustomization, hero_window_item_customization.lua:2259) only
+-- offers a trait when `not WeaponTraits.traits[key].crafting_disabled`. The
+-- deus / Chaos-Wastes BOON traits — deus_extra_shot (the "two arrows" extra-shot
+-- trait), shield_splinters, piercing_projectiles, deus_crit_chain_lightning,
+-- deus_ranged_crit_explosion — all set crafting_disabled=true and live in deus
+-- pools like `ranged_energy` (the Moonfire Bow's trait_table_name). Without this
+-- gate CIM offered them on craftable weapons (illegal in official). This filters
+-- a COPY at roll time (never mutates WeaponTraits.combinations), so wt's live
+-- adventure<->CW toggle is untouched; it just drops the same boon-only traits the
+-- official forge drops. (Sienna staves + Bardin drakefire use the clean vanilla
+-- `ranged_heat` pool, so they have nothing to drop — only deus-pool weapons change.)
+local function _craftable_trait_pool(pool)
+    local WT = rawget(_G, "WeaponTraits")
+    local traits = WT and WT.traits
+    if not traits or type(pool) ~= "table" then return pool end
+    local out = {}
+    for _, entry in ipairs(pool) do
+        local tkey  = entry and entry[1]
+        local tdata = tkey and traits[tkey]
+        if tkey and not (tdata and tdata.crafting_disabled) then
+            out[#out + 1] = entry
+        end
+    end
+    -- Safety: a pool that filtered to empty (all crafting_disabled) falls back to
+    -- the raw pool rather than handing the caller an empty pool (would break reroll).
+    if #out == 0 then return pool end
+    return out
+end
+
 local function _reroll_traits(self, item_backend_ids)
     local mirror = self._backend_mirror
     local item_interface = Managers.backend:get_interface("items")
@@ -668,6 +737,7 @@ local function _reroll_traits(self, item_backend_ids)
         mod:echo("[cim] Reroll: no trait pool for " .. tostring(trait_table))
         return {}
     end
+    pool = _craftable_trait_pool(pool)  -- mirror official: drop crafting_disabled deus/boon traits
 
     local saved = mod._cim_get_craft and mod._cim_get_craft(weapon_bid)
     local picked_idx, new_seen = _shuffle_pick(saved and saved.rerolled_trait_indices, #pool)
@@ -767,12 +837,14 @@ local function _make_craft_synth(allowed_slots)
 
         if not item_key then
             local eligible = {}
+            local real_names = _cim_real_display_names()
             for key, data in pairs(ItemMasterList) do
                 if slots[data.slot_type]
                    and data.can_wield and table.contains(data.can_wield, career_name)
                    and data.item_type ~= "weapon_skin"
                    and data.rarity ~= "magic" and data.rarity ~= "promo"
-                   and not _item_requires_unowned_dlc(key) then
+                   and not _item_requires_unowned_dlc(key)
+                   and not _cim_versus_shadowed(data, real_names) then
                     eligible[#eligible + 1] = key
                 end
             end
@@ -813,7 +885,7 @@ local function _make_craft_synth(allowed_slots)
                 end
 
                 if WT and WT.combinations and trait_table and WT.combinations[trait_table] then
-                    local pool = WT.combinations[trait_table]
+                    local pool = _craftable_trait_pool(WT.combinations[trait_table])
                     local pick = pool[math.random(1, #pool)]
                     local tkey = pick and pick[1]
                     if tkey then rolled_traits[#rolled_traits + 1] = tkey end
@@ -985,13 +1057,15 @@ local function _build_template_cache()
     -- be (feedback #9). Pre-v0.7.24 this was hardcoded 5, which produced
     -- "5 power" in the preview while the craft result was 300.
     local base_power = _cim_base_power()
+    local real_names = _cim_real_display_names()
     for key, data in pairs(ItemMasterList) do
         if type(data) == "table"
             and data.slot_type and _CRAFTABLE_SLOT_TYPES[data.slot_type]
             and data.can_wield and table.contains(data.can_wield, career_name)
             and data.item_type ~= "weapon_skin"
             and data.rarity ~= "magic" and data.rarity ~= "promo"
-            and not _item_requires_unowned_dlc(key) then
+            and not _item_requires_unowned_dlc(key)
+            and not _cim_versus_shadowed(data, real_names) then
             local bid = "cim_template_" .. key
             _template_cache[bid] = {
                 backend_id = bid,
