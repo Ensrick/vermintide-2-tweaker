@@ -5,6 +5,37 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.164-dev (2026-07-01) -- POLISH: settings menu reorganization (no functional changes)
+
+Sort + organize + polish pass on the VMF options tree only. No behavior, setting,
+default, range, hook, or command changes; every `setting_id` is unchanged, so saved
+settings and the HideBuffs-fork hooks (which read `mod:get(SETTING_NAMES.<id>)`) are
+untouched. The Mod Tweaker custom renderer walks the generic node tree, so it picks
+up the new layout automatically.
+
+- **New "Hide HUD & UI" umbrella (`gut_hide_hud_ui_group`).** Folds the two
+  formerly-sibling, confusingly-similar hide-UI surfaces into one collapsible group:
+  the HUD-visibility dropdown + cycle hotkey (the dissolved `gut_hud_visibility_group`
+  container) sit at the top, then the absorbed HideBuffs "UI Tweaks" sub-tree.
+- **`hb_group` label de-jargoned:** "UI Tweaks (absorbed)" -> "Hide UI Elements &
+  Buffs" (label only; `setting_id` unchanged). It now nests "Hide UI Elements", "Hide
+  Active Buffs", and a new "Portrait & Markers" sub-group (`gut_hb_misc_group`) that
+  collects the three formerly-loose toggles (`force_default_frame`,
+  `UNOBTRUSIVE_FLOATING_OBJECTIVE`, `UNOBTRUSIVE_MISSION_TOOLTIP`).
+- **`gut_hud_group` label de-jargoned:** "HUD" -> "On-Screen Overlays" (label only;
+  `setting_id` unchanged) so it no longer reads as a duplicate of the hide-HUD area.
+  Still holds the parry indicator, respawn timer, and floating damage numbers.
+- **Top-level groups sorted A->Z by display label** (repo standing rule): 3rd-Person
+  Camera, Cutscenes & Monologues, Hide HUD & UI, In-Mission Hero Select, In-Mission
+  Inventory, Main Menu & Startup, Mod Tweaker, On-Screen Overlays. Deliberate-order
+  exemptions (camera rig order; the HUD dropdown/hotkey at the top of Hide HUD & UI)
+  are commented in `gui_tweaker_dev_data.lua`.
+- **Localization file reordered** to mirror the new widget tree with `-- ====` section
+  banners; the one over-long tooltip (`gut_parry_indicator_tooltip`) tightened to the
+  LOCALIZATION_STANDARD section 11 length while preserving its "works on every weapon,
+  not just the Parry trait" claim. The now-unused `gut_hud_visibility_group` label is
+  retained (not deleted) per the orphan policy.
+
 ## 0.2.163-dev (2026-07-01) -- FIX (#212): /armory + /bestiary collide with the standalone Armory / Bestiary mods
 
 VMF rejects a command name that another mod already registered (boot log:

@@ -12,75 +12,114 @@ return {
         en = "Mod Tweaker",
     },
 
-    -- HUD group wrapping the parry indicator + respawn timer.
-    gut_hud_group = { en = "HUD" },
-
-    -- Parry Indicator (absorbed from the "Parry Indicator" mod).
-    gut_parry_indicator = {
-        en = "Parry Indicator",
+    -- ============================================================
+    -- 3rd-Person Camera (migrated from general_tweaker 2026-06-29, #191)
+    -- ============================================================
+    gut_camera_group = {
+        en = "3rd-Person Camera",
     },
-    gut_parry_indicator_tooltip = {
-        en = "Recolours your block shields during the brief timed-block window right after you raise block, and works on every weapon (not just weapons with the Parry trait). Pick the colour with the red, green and blue values below.",
+    gut_tp_camera_enabled = {
+        en = "Enable Third-Person Camera",
     },
-    gut_parry_r = {
-        en = "Parry colour - Red (0-255)",
+    gut_tp_camera_enabled_tooltip = {
+        en = "Turns on a third-person camera view. Can also be toggled with the /tp chat command.",
     },
-    gut_parry_g = {
-        en = "Parry colour - Green (0-255)",
+    gut_tp_distance = {
+        en = "Camera Distance",
     },
-    gut_parry_b = {
-        en = "Parry colour - Blue (0-255)",
+    gut_tp_distance_tooltip = {
+        en = "How far behind your character the camera sits.",
     },
-
-    -- Respawn countdown over a dead teammate's portrait.
-    gut_respawn_timer = {
-        en = "Respawn Timer over Portrait",
+    gut_tp_height = {
+        en = "Camera Height",
     },
-    gut_respawn_timer_tooltip = {
-        en = "Shows a large countdown over a dead teammate's portrait while they wait to respawn, starting when their portrait shows the dead skull. Off by default.",
+    gut_tp_height_tooltip = {
+        en = "How far above your character the camera sits.",
     },
-    gut_respawn_font_size = {
-        en = "Respawn number size",
+    gut_tp_side_offset = {
+        en = "Side Offset",
     },
-    gut_respawn_font_size_tooltip = {
-        en = "Text size of the respawn countdown number shown over the portrait.",
+    gut_tp_side_offset_tooltip = {
+        en = "Sideways offset of the camera (positive is right, negative is left).",
     },
-    gut_respawn_r = {
-        en = "Respawn colour - Red (0-255)",
+    gut_tp_disable_zoom_in = {
+        en = "Disable Aim Zoom-In",
     },
-    gut_respawn_g = {
-        en = "Respawn colour - Green (0-255)",
-    },
-    gut_respawn_b = {
-        en = "Respawn colour - Blue (0-255)",
+    gut_tp_disable_zoom_in_tooltip = {
+        en = "When on, aiming or throwing no longer pulls the third-person camera in close, so it stays at your chosen distance and height. Useful for watching weapon animations.",
     },
 
-    -- Floating Damage Numbers (migrated from general_tweaker 2026-06-29).
-    gut_damage_numbers_enabled = {
-        en = "Show Floating Damage Numbers",
+    -- ============================================================
+    -- Cutscenes & Monologues (migrated from general_tweaker 2026-06-25, #106;
+    -- monologue toggle migrated 2026-06-29, #192)
+    -- ============================================================
+    gut_cutscenes_group = {
+        en = "Cutscenes & Monologues",
     },
-    gut_damage_numbers_enabled_tooltip = {
-        en = "Shows floating damage numbers over enemies you hit, using the game's own damage-number display. Takes effect on the next map load, and only ever changes your own screen.",
+    gut_skip_cutscenes_enabled = {
+        en = "Skip Cutscenes",
     },
-    gut_damage_numbers_include_dots = {
-        en = "Include damage-over-time & explosions",
+    gut_skip_cutscenes_enabled_tooltip = {
+        en = "Lets you skip cutscenes with ESC or Space (or the /skipcutscenes command), even ones the game normally will not let you skip. In Chaos Wastes, boss and phase cinematics are left alone because skipping them can desync the fight.",
     },
-    gut_damage_numbers_include_dots_tooltip = {
-        en = "Also shows numbers for damage over time (burning, bleed) and explosions (bombs), not just direct hits. Turn off to reduce the number spam.",
+    gut_skip_cutscenes_auto = {
+        en = "Auto-skip Cutscenes",
+    },
+    gut_skip_cutscenes_auto_tooltip = {
+        en = "When on, cutscenes are skipped automatically the moment they start, so you never see them. Leave off to skip them manually with ESC or Space.",
+    },
+    gut_skip_cutscenes_hotkey = {
+        en = "Toggle Skip Cutscenes (Hotkey)",
+    },
+    gut_skip_cutscenes_hotkey_tooltip = {
+        en = "Hotkey to turn the Skip Cutscenes option on or off. Same as the /skipcutscenes chat command.",
+    },
+    gut_disable_intro_monologue = {
+        en = "Disable Loading-Screen Monologues",
+    },
+    gut_disable_intro_monologue_tooltip = {
+        en = "Silences the Lohner, Olesya and weave voice lines that play during the level loading screen. Chat: /intromono.",
     },
 
+    -- ============================================================
+    -- Hide HUD & UI (umbrella folding the HUD-visibility dropdown + the absorbed
+    -- HideBuffs "UI Tweaks" area)
+    -- ============================================================
+    gut_hide_hud_ui_group = {
+        en = "Hide HUD & UI",
+    },
 
-    -- ===== UI Tweaks (HideBuffs) absorbed — Phase 1 =====
-    hb_group                 = { en = "UI Tweaks (absorbed)" },
-    HIDE_UI_ELEMENTS_GROUP   = { en = "Hide UI Elements" },
-    HIDE_BUFFS_GROUP         = { en = "Hide Active Buffs" },
+    -- Hide UI (3 modes) — migrated from general_tweaker.
+    gut_hud_mode = {
+        en = "HUD Visibility Mode",
+    },
+    gut_hud_mode_tooltip = {
+        en = "Controls how much of the HUD is hidden: Off shows everything, Partial hides most UI but keeps prompts and subtitles, Complete hides everything for screenshots, and Camera also hides your first-person arms and weapon.",
+    },
+    -- Dropdown option labels for gut_hud_mode (VMF localizes each option's text).
+    gut_hud_mode_opt_off      = { en = "Off" },
+    gut_hud_mode_opt_partial  = { en = "Partial" },
+    gut_hud_mode_opt_complete = { en = "Complete" },
+    gut_hud_mode_opt_camera   = { en = "Camera" },
+    gut_hud_cycle_hotkey = {
+        en = "Cycle HUD Mode",
+    },
+    gut_hud_cycle_hotkey_tooltip = {
+        en = "Hotkey to cycle the HUD mode through Off, Partial, Complete and Camera. Same as the /hud chat command.",
+    },
+    -- Retained: gut_hud_visibility_group was the standalone "Hide UI" container.
+    -- Its members (dropdown + cycle hotkey) now sit directly under
+    -- gut_hide_hud_ui_group, so this label is no longer referenced by a widget.
+    -- Kept (not deleted) per the localization orphan policy.
+    gut_hud_visibility_group = {
+        en = "Hide UI",
+    },
 
-    force_default_frame              = { en = "Use Default Portrait Frames" },
-    force_default_frame_tooltip      = { en = "Always use the default portrait frame." },
-    UNOBTRUSIVE_FLOATING_OBJECTIVE   = { en = "Unobtrusive Objective Marker" },
-    UNOBTRUSIVE_FLOATING_OBJECTIVE_tooltip = { en = "Make the floating objective marker smaller and always transparent." },
-    UNOBTRUSIVE_MISSION_TOOLTIP      = { en = "Unobtrusive Mission Marker" },
-    UNOBTRUSIVE_MISSION_TOOLTIP_tooltip = { en = "Make the floating mission marker (used for the revive warning) smaller and always transparent." },
+    -- UI Tweaks (HideBuffs) absorbed. Label de-jargoned from "UI Tweaks
+    -- (absorbed)"; setting_id (hb_group) unchanged so the fork hooks resolve.
+    hb_group               = { en = "Hide UI Elements & Buffs" },
+    HIDE_UI_ELEMENTS_GROUP = { en = "Hide UI Elements" },
+    HIDE_BUFFS_GROUP       = { en = "Hide Active Buffs" },
 
     HIDE_HUD_WHEN_INSPECTING         = { en = "Hide HUD When Inspecting Hero" },
     HIDE_HUD_WHEN_INSPECTING_tooltip = { en = "Hides the HUD, and outlines, while you are inspecting a hero." },
@@ -136,63 +175,37 @@ return {
     HIDE_ZEALOT_HOLY_CRUSADER_BUFF                         = { en = "Zealot Holy Crusader Buff" },
     HIDE_ZEALOT_HOLY_CRUSADER_BUFF_tooltip                 = { en = "Hide the Zealot Holy Crusader buff from your active buffs." },
 
-    -- Hide UI (3 modes) — migrated from general_tweaker.
-    gut_hud_visibility_group = {
-        en = "Hide UI",
+    -- Formerly-loose hb toggles, now grouped under gut_hb_misc_group.
+    gut_hb_misc_group                = { en = "Portrait & Markers" },
+    force_default_frame              = { en = "Use Default Portrait Frames" },
+    force_default_frame_tooltip      = { en = "Always use the default portrait frame." },
+    UNOBTRUSIVE_FLOATING_OBJECTIVE   = { en = "Unobtrusive Objective Marker" },
+    UNOBTRUSIVE_FLOATING_OBJECTIVE_tooltip = { en = "Make the floating objective marker smaller and always transparent." },
+    UNOBTRUSIVE_MISSION_TOOLTIP      = { en = "Unobtrusive Mission Marker" },
+    UNOBTRUSIVE_MISSION_TOOLTIP_tooltip = { en = "Make the floating mission marker (used for the revive warning) smaller and always transparent." },
+
+    -- ============================================================
+    -- In-Mission Hero Select (sibling of the inventory feature, 2026-06-24)
+    -- ============================================================
+    gut_mission_hero_select_group = {
+        en = "In-Mission Hero Select",
     },
-    gut_hud_mode = {
-        en = "HUD Visibility Mode",
+    gut_mission_hero_select_enabled = {
+        en = "Enable In-Mission Hero Select Access",
     },
-    gut_hud_mode_tooltip = {
-        en = "Controls how much of the HUD is hidden: Off shows everything, Partial hides most UI but keeps prompts and subtitles, Complete hides everything for screenshots, and Camera also hides your first-person arms and weapon.",
+    gut_mission_hero_select_enabled_tooltip = {
+        en = "Lets you open your hero's Talents screen during a mission (via the keybind below or /hero_select), with talent and ability changes applying immediately and no respawn. You cannot change career mid-mission (that stays in the keep, since a live career swap is unsafe), and this is blocked in Chaos Wastes.",
     },
-    -- Dropdown option labels for gut_hud_mode (VMF localizes each option's text).
-    gut_hud_mode_opt_off      = { en = "Off" },
-    gut_hud_mode_opt_partial  = { en = "Partial" },
-    gut_hud_mode_opt_complete = { en = "Complete" },
-    gut_hud_mode_opt_camera   = { en = "Camera" },
-    gut_hud_cycle_hotkey = {
-        en = "Cycle HUD Mode",
+    gut_open_hero_select_hotkey = {
+        en = "Open Hero Select (Mid-Mission)",
     },
-    gut_hud_cycle_hotkey_tooltip = {
-        en = "Hotkey to cycle the HUD mode through Off, Partial, Complete and Camera. Same as the /hud chat command.",
+    gut_open_hero_select_hotkey_tooltip = {
+        en = "Hotkey to open your hero's Talents screen while in a mission. Same as /hero_select; talent and ability changes apply immediately, but changing career stays keep-only.",
     },
 
-    -- (#93) Compact ESC/keep menu loc keys removed 2026-06-24 — the feature is now an
-    -- always-on implicit fix with no toggle.
-
-    -- Skip Cutscenes (migrated from general_tweaker 2026-06-25, issue #106) +
-    -- Disable Loading-Screen Monologues (migrated 2026-06-29, issue #192).
-    gut_cutscenes_group = {
-        en = "Cutscenes & Monologues",
-    },
-    gut_skip_cutscenes_enabled = {
-        en = "Skip Cutscenes",
-    },
-    gut_skip_cutscenes_enabled_tooltip = {
-        en = "Lets you skip cutscenes with ESC or Space (or the /skipcutscenes command), even ones the game normally will not let you skip. In Chaos Wastes, boss and phase cinematics are left alone because skipping them can desync the fight.",
-    },
-    gut_skip_cutscenes_auto = {
-        en = "Auto-skip Cutscenes",
-    },
-    gut_skip_cutscenes_auto_tooltip = {
-        en = "When on, cutscenes are skipped automatically the moment they start, so you never see them. Leave off to skip them manually with ESC or Space.",
-    },
-    gut_skip_cutscenes_hotkey = {
-        en = "Toggle Skip Cutscenes (Hotkey)",
-    },
-    gut_skip_cutscenes_hotkey_tooltip = {
-        en = "Hotkey to turn the Skip Cutscenes option on or off. Same as the /skipcutscenes chat command.",
-    },
-    -- Disable Loading-Screen Monologues (migrated from general_tweaker 2026-06-29, #192).
-    gut_disable_intro_monologue = {
-        en = "Disable Loading-Screen Monologues",
-    },
-    gut_disable_intro_monologue_tooltip = {
-        en = "Silences the Lohner, Olesya and weave voice lines that play during the level loading screen. Chat: /intromono.",
-    },
-
-    -- In-mission inventory access (migrated from general_tweaker 2026-06-24).
+    -- ============================================================
+    -- In-Mission Inventory (migrated from general_tweaker 2026-06-24)
+    -- ============================================================
     gut_mission_inventory_group = {
         en = "In-Mission Inventory",
     },
@@ -215,44 +228,9 @@ return {
         en = "Hotkey to open your inventory while in a mission. Same as the /inv command, and works even though the standard inventory keys are blocked mid-mission.",
     },
 
-    -- In-mission HERO SELECT (sibling of the inventory feature, 2026-06-24).
-    gut_mission_hero_select_group = {
-        en = "In-Mission Hero Select",
-    },
-    gut_mission_hero_select_enabled = {
-        en = "Enable In-Mission Hero Select Access",
-    },
-    gut_mission_hero_select_enabled_tooltip = {
-        en = "Lets you open your hero's Talents screen during a mission (via the keybind below or /hero_select), with talent and ability changes applying immediately and no respawn. You cannot change career mid-mission (that stays in the keep, since a live career swap is unsafe), and this is blocked in Chaos Wastes.",
-    },
-    gut_open_hero_select_hotkey = {
-        en = "Open Hero Select (Mid-Mission)",
-    },
-    gut_open_hero_select_hotkey_tooltip = {
-        en = "Hotkey to open your hero's Talents screen while in a mission. Same as /hero_select; talent and ability changes apply immediately, but changing career stays keep-only.",
-    },
-
-    -- Mod Tweaker open hotkey (#125).
-    gut_mod_tweaker_group = {
-        en = "Mod Tweaker",
-    },
-    gut_open_mod_tweaker_hotkey = {
-        en = "Open Mod Tweaker",
-    },
-    gut_open_mod_tweaker_hotkey_tooltip = {
-        en = "Hotkey to open the Mod Tweaker settings menu directly, the same as the /mod_tweaker command or the Mod Tweaker button in the ESC menu. Works in the keep and mid-mission, and exiting returns you to the game; unbound by default.",
-    },
-    gut_mt_reset = {
-        en = "Default",
-    },
-    gut_mt_auto_collapse = {
-        en = "Auto-collapse sections",
-    },
-    gut_mt_auto_collapse_tooltip = {
-        en = "In the Mod Tweaker, keeps only one section open at a time, so opening a section closes the others at the same level. Turn off to expand sections independently (on by default).",
-    },
-
-    -- Main Menu & Startup (migrated from general_tweaker 2026-06-29, #190).
+    -- ============================================================
+    -- Main Menu & Startup (migrated from general_tweaker 2026-06-29, #190)
+    -- ============================================================
     gut_mainmenu_group = {
         en = "Main Menu & Startup",
     },
@@ -269,41 +247,92 @@ return {
         en = "Makes the ESC menu's Return to Main Menu entry quit straight to desktop instead (still with the usual confirmation popup), and adds a /quit command for an instant exit with no confirmation. Off by default.",
     },
 
-    -- 3rd-Person Camera (migrated from general_tweaker 2026-06-29, #191).
-    gut_camera_group = {
-        en = "3rd-Person Camera",
+    -- ============================================================
+    -- Mod Tweaker open hotkey (#125)
+    -- ============================================================
+    gut_mod_tweaker_group = {
+        en = "Mod Tweaker",
     },
-    gut_tp_camera_enabled = {
-        en = "Enable Third-Person Camera",
+    gut_open_mod_tweaker_hotkey = {
+        en = "Open Mod Tweaker",
     },
-    gut_tp_camera_enabled_tooltip = {
-        en = "Turns on a third-person camera view. Can also be toggled with the /tp chat command.",
+    gut_open_mod_tweaker_hotkey_tooltip = {
+        en = "Hotkey to open the Mod Tweaker settings menu directly, the same as the /mod_tweaker command or the Mod Tweaker button in the ESC menu. Works in the keep and mid-mission, and exiting returns you to the game; unbound by default.",
     },
-    gut_tp_distance = {
-        en = "Camera Distance",
+    gut_mt_auto_collapse = {
+        en = "Auto-collapse sections",
     },
-    gut_tp_distance_tooltip = {
-        en = "How far behind your character the camera sits.",
-    },
-    gut_tp_height = {
-        en = "Camera Height",
-    },
-    gut_tp_height_tooltip = {
-        en = "How far above your character the camera sits.",
-    },
-    gut_tp_side_offset = {
-        en = "Side Offset",
-    },
-    gut_tp_side_offset_tooltip = {
-        en = "Sideways offset of the camera (positive is right, negative is left).",
-    },
-    gut_tp_disable_zoom_in = {
-        en = "Disable Aim Zoom-In",
-    },
-    gut_tp_disable_zoom_in_tooltip = {
-        en = "When on, aiming or throwing no longer pulls the third-person camera in close, so it stays at your chosen distance and height. Useful for watching weapon animations.",
+    gut_mt_auto_collapse_tooltip = {
+        en = "In the Mod Tweaker, keeps only one section open at a time, so opening a section closes the others at the same level. Turn off to expand sections independently (on by default).",
     },
 
+    -- ============================================================
+    -- On-Screen Overlays (parry indicator, respawn timer, damage numbers)
+    -- ============================================================
+    -- Label de-jargoned from "HUD"; setting_id (gut_hud_group) unchanged.
+    gut_hud_group = { en = "On-Screen Overlays" },
+
+    -- Parry Indicator (absorbed from the "Parry Indicator" mod).
+    gut_parry_indicator = {
+        en = "Parry Indicator",
+    },
+    gut_parry_indicator_tooltip = {
+        en = "Recolours your block shields during the brief timed-block window after you raise block, on every weapon (not just those with the Parry trait). Pick the colour with the RGB values below.",
+    },
+    gut_parry_r = {
+        en = "Parry colour - Red (0-255)",
+    },
+    gut_parry_g = {
+        en = "Parry colour - Green (0-255)",
+    },
+    gut_parry_b = {
+        en = "Parry colour - Blue (0-255)",
+    },
+
+    -- Respawn countdown over a dead teammate's portrait.
+    gut_respawn_timer = {
+        en = "Respawn Timer over Portrait",
+    },
+    gut_respawn_timer_tooltip = {
+        en = "Shows a large countdown over a dead teammate's portrait while they wait to respawn, starting when their portrait shows the dead skull. Off by default.",
+    },
+    gut_respawn_font_size = {
+        en = "Respawn number size",
+    },
+    gut_respawn_font_size_tooltip = {
+        en = "Text size of the respawn countdown number shown over the portrait.",
+    },
+    gut_respawn_r = {
+        en = "Respawn colour - Red (0-255)",
+    },
+    gut_respawn_g = {
+        en = "Respawn colour - Green (0-255)",
+    },
+    gut_respawn_b = {
+        en = "Respawn colour - Blue (0-255)",
+    },
+
+    -- Floating Damage Numbers (migrated from general_tweaker 2026-06-29).
+    gut_damage_numbers_enabled = {
+        en = "Show Floating Damage Numbers",
+    },
+    gut_damage_numbers_enabled_tooltip = {
+        en = "Shows floating damage numbers over enemies you hit, using the game's own damage-number display. Takes effect on the next map load, and only ever changes your own screen.",
+    },
+    gut_damage_numbers_include_dots = {
+        en = "Include damage-over-time & explosions",
+    },
+    gut_damage_numbers_include_dots_tooltip = {
+        en = "Also shows numbers for damage over time (burning, bleed) and explosions (bombs), not just direct hits. Turn off to reduce the number spam.",
+    },
+
+    -- ============================================================
+    -- Mod Tweaker custom-renderer strings (not VMF option widgets)
+    -- ============================================================
+    -- Reset-to-default button label in the Mod Tweaker view.
+    gut_mt_reset = {
+        en = "Default",
+    },
     -- (#208) Mod Tweaker "Equipment" merge: the unified tab + its collapsible section
     -- labels. Shown when 2+ of the inventory mods (cosmetics_tweaker / cim / wt / CWV) are
     -- active; the four individual tabs fold into one "Equipment" tab. gut-owned strings.
