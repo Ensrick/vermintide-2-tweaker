@@ -5,6 +5,28 @@
 > `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` — those stay as detail/archive.
 > **Last updated: 2026-07-01.**
 
+## 📌 2026-07-01 SESSION — repo-wide settings-menu reorg (7 parallel agents, 8 mods shipped)
+
+**User asked for a full pass over every mod's menu localization + organization.** Pure sort/organize/polish; NO setting_id renames, NO new/removed settings, NO behavior changes (new umbrella MASTER toggles from `MENU_CONSOLIDATION_PLAN.md` §2-4 stay deferred: they need code gating). `sub_widgets` nesting done ONLY where the master was verified in code to gate the children.
+
+**✅ Shipped & Workshop-verified** (hash + `Uploaded new content` confirmed per mod; **PC-B SKIPPED, unreachable, needs catch-up deploy**; GitHub release refreshed once at session end; each mod committed path-scoped + pushed):
+- **wt 0.12.197-dev** - Weapon Tweaks group A->Z; orphaned brett loc block colocated. Availability tree untouched (deliberate #179 grouping).
+- **gut_dev 0.2.164-dev** - new "Hide HUD & UI" umbrella folds the HUD-visibility surface + absorbed HideBuffs surface; "HUD" group relabeled "On-Screen Overlays"; top level A->Z. (Parallel session's 0.2.165 compendium work continued on top, untouched.)
+- **et 0.7.23-dev** - 10 top-level groups A->Z with cleaner names; ~24 labels to sentence case per LOCALIZATION_STANDARD 11.1; monster/elite-pool chance sliders nested under their code-gated toggles.
+- **cim_dev 0.8.43-dev** - top-level groups + children A->Z; Athanor functional order kept + commented.
+- **cwv 0.1.359-dev** - variant toggles A->Z.
+- **gt_dev 0.2.170-dev** - 144 widgets into 6 top-level areas A->Z (Bots / Cheats and Debug / Gameplay / Host-Side Lobby Controls / Info / Visuals and Audio); noclip, kick-idle, MOTD fine-tunes nested under code-gated masters; index-locked Creature Spawner show_widgets block untouched.
+- **ct_dev 0.7.202-dev** - 8 top-level groups A->Z; ~34 trait-ban boxes alphabetized; per-mission list nested under inject_adventure_maps; "Corrupted Flesh: max clouds per minute" + "Finale God" label polish (legend -> tooltip).
+- **crt 0.3.49-dev** - top level A->Z; vanilla roster order unified across all 4 character-grouped areas; 7 group labels de-noised; cbr_* on-ice block byte-identical.
+
+**Audited clean (no changes, no bump):** cosmetics_tweaker, event_tweaker, vdl_dev, mp, WOC. Skipped by design: dcp (no options page), tweaker (frozen), all stable siblings, weapon_tweaker_dev (parked split).
+
+**⚠ Open ends:**
+- **User in-game verification** of the reorganized menus (all 8 mods). Full Steam restart first.
+- **PC-B catch-up deploy** when reachable (any `deploy` auto-pushes).
+- Commit `0e1115c` ("cwv") accidentally swept the parallel session's FINISHED gut_dev 0.2.165-dev compendium files (shared git index; that session staged mid-batch). Content coherent, message inaccurate for those 6 files. Later commits switched to pathspec commits (`git commit -- <path>`), which are immune.
+- Follow-ups from the agents' audits filed as GitHub issues (dead wt strip scaffolding, gt_dev MOTD loc orphans, ct_dev loc-file physical reorder, mp dead key, umbrella-masters phase).
+
 ## 📌 2026-07-01 SESSION — CW log forensics + boon scrollbar + 4 fixes (ct_dev/gut_dev)
 
 **✅ Shipped & Workshop-verified** (hash + `Uploaded new content` confirmed; **PC-B SKIPPED — unreachable, needs catch-up deploy**; GitHub release `mods-2026-07-01` refreshed on each ship):
