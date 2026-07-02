@@ -20,7 +20,34 @@ local GUT_HUD_MODE_OPTIONS = {
 --
 -- Top-level groups are ordered A->Z by their English display label (repo standing
 -- rule). "3rd-Person Camera" leads because the label begins with a digit.
-return {
+
+-- Load-order-safe cim-presence detector (pattern ported from cim's former #96
+-- `_gut_present()`, which gated cim's old bench widget on gut - now inverted: the
+-- bench option lives HERE and is gated on cim). `get_mod` alone is load-order
+-- fragile (VMF unfolds this data table at gut's registration; cim may not have
+-- registered yet), so fall back to the engine ModManager manifest, which is built
+-- from the full enabled-mod list BEFORE any mod's Lua runs (mod_manager.lua:278-343;
+-- entries carry Workshop title `name` + `enabled`). "Crafting in Modded" covers cim
+-- and cim_dev (both Workshop titles start with it).
+local function _cim_present()
+    if get_mod("cim") or get_mod("cim_dev") then
+        return true
+    end
+    local mod_mgr = rawget(_G, "Managers") and Managers.mod
+    local mods = mod_mgr and mod_mgr._mods
+    if type(mods) == "table" then
+        for i = 1, (mod_mgr._num_mods or #mods) do
+            local entry = mods[i]
+            if entry and entry.enabled and type(entry.name) == "string"
+               and entry.name:find("Crafting in Modded", 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local options_data = {
     name = "Tweaker: GUI",
     description = mod:localize("mod_description"),
     is_togglable = true,
@@ -298,6 +325,19 @@ return {
                             },
                         },
                     },
+                    -- Allow crafting bench in mission (moved FROM cim 2026-07-02,
+                    -- user direction). Shown ONLY when Crafting in Modded is
+                    -- installed (pruned below via _cim_present(), same treatment
+                    -- as cosmetics-gated options). gut writes through to cim's
+                    -- `allow_in_mission` setting on change + at load (main lua),
+                    -- so cim's open_forge/open_standard_crafting gates are
+                    -- untouched.
+                    {
+                        setting_id    = "gut_cim_bench_in_mission",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gut_cim_bench_in_mission_tooltip",
+                    },
                 },
             },
             -- ================================================================
@@ -406,3 +446,22 @@ return {
         },
     },
 }
+
+-- Prune the cim-gated bench option when Crafting in Modded is absent (without cim
+-- there is no bench to open, so the toggle would only confuse - mirror of cim's
+-- former #96 prune, target inverted).
+if not _cim_present() then
+    local widgets = options_data.options and options_data.options.widgets
+    for _, group in ipairs(widgets or {}) do
+        if group.setting_id == "gut_inmission_menus_group" and type(group.sub_widgets) == "table" then
+            for i = #group.sub_widgets, 1, -1 do
+                if group.sub_widgets[i].setting_id == "gut_cim_bench_in_mission" then
+                    table.remove(group.sub_widgets, i)
+                end
+            end
+            break
+        end
+    end
+end
+
+return options_data

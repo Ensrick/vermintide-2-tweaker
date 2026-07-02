@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.178-dev"
+local MOD_VERSION = "0.2.180-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -630,6 +630,16 @@ mod.on_setting_changed = function(setting_id)
         -- engine path that reads it directly.
         script_data = script_data or {}
         script_data.skippable_cutscenes = mod:get("gut_skip_cutscenes_enabled") or nil
+    elseif setting_id == "gut_cim_bench_in_mission" then
+        -- Write-through to cim's `allow_in_mission` setting (the widget moved out of
+        -- cim into gut's In-Mission Menus, user direction 2026-07-02; cim's
+        -- open_forge/open_standard_crafting gates still read cim's OWN setting, so
+        -- gut mirrors the value into cim's store on every change). Dev clone first:
+        -- the cohort runs cim_dev; stable id as fallback.
+        local cim = get_mod("cim_dev") or get_mod("cim")
+        if cim then
+            cim:set("allow_in_mission", mod:get("gut_cim_bench_in_mission") and true or false)
+        end
     end
 end
 
@@ -1392,6 +1402,53 @@ _rt_register("mod_tweaker_gear_and_slider", function()
     end
 end)
 
+-- (#164) Mod Tweaker per-setting slider STEP: the resolver's precedence (widget-def `step`
+-- field > gut STEP_OVERRIDES registry > natural 1/10^-decimals) and the grid-snap math
+-- (anchored at RANGE MIN, clamped to range). The two seeded consumers are ct starting_coins
+-- and cim base_power_level, both step 25 via the registry (VMF strips a custom `step` field
+-- off a foreign mod's widget, so the registry is the working path — see _resolve_step /
+-- STEP_OVERRIDES comments). Guards against a regression that reverts the registry keys to
+-- directory names (which silently never match) or drops the min-anchoring.
+_rt_register("mod_tweaker_step_resolution", function()
+    local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    if not ok_view or type(View) ~= "table" then return "view module unavailable" end
+    local resolve, snap = View._resolve_step, View._snap_and_clamp
+    if type(resolve) ~= "function" then return "_resolve_step not exposed on the view module" end
+    if type(snap) ~= "function" then return "_snap_and_clamp not exposed on the view module" end
+
+    -- (1) Precedence: an explicit widget-def `step` field wins over the registry.
+    if resolve({ step = 10 }, "ct_dev", "starting_coins", 0) ~= 10 then
+        return "widget-def `step` field did not take precedence over the registry"
+    end
+    -- (2) Registry hit for BOTH seeded consumers, on stable AND dev ids (by new_mod id).
+    for _, case in ipairs({ { "ct", "starting_coins" }, { "ct_dev", "starting_coins" },
+                            { "cim", "base_power_level" }, { "cim_dev", "base_power_level" } }) do
+        local got = resolve({}, case[1], case[2], 0)
+        if got ~= 25 then
+            return string.format("registry %s:%s resolved step=%s (want 25) -- key regressed to a directory name?",
+                case[1], case[2], tostring(got))
+        end
+    end
+    -- (3) Default: no field, no registry -> natural unit (1 for ints, 10^-decimals otherwise).
+    if resolve({}, "some_other_mod", "some_setting", 0) ~= 1 then return "int default step is not 1" end
+    if math.abs(resolve({}, "some_other_mod", "x", 2) - 0.01) > 1e-9 then return "2-decimal default step is not 0.01" end
+
+    -- (4) Snap is anchored at RANGE MIN (not 0) and clamps to range. min=10,step=25: 20 rounds
+    -- toward 10 (|20-10|/25 < 0.5), NOT to 25 (which is what a 0-anchored snap would give).
+    if snap({ min = 10, max = 200, step = 25, num_decimals = 0 }, 20) ~= 10 then
+        return "snap not anchored at range min (min=10,step=25,value=20 should snap to 10)"
+    end
+    -- 324 with min=0,step=25 -> nearest grid multiple 325 (this is the "then snap" on move;
+    -- the pre-existing 324 shows as-is at build time, only snapping once the user moves it).
+    if snap({ min = 0, max = 3000, step = 25, num_decimals = 0 }, 324) ~= 325 then
+        return "snap(324) with step 25 did not land on 325"
+    end
+    -- Clamp to range.
+    if snap({ min = 0, max = 100, step = 25, num_decimals = 0 }, 999) ~= 100 then
+        return "snap did not clamp to range max"
+    end
+end)
+
 -- (#95) Keybind / table read-only values must route through _format_keybind_value
 -- in _mod_tweaker_view.lua, NOT tostring(), or a VMF keybind (a Lua TABLE like
 -- {"left alt"}) renders its raw address ("CYCLE HUD MODE: table: 0x..."). Source
@@ -1575,6 +1632,38 @@ _rt_register("mod_tweaker_compact_esc_implicit", function()
     end
 end)
 
+-- Bench-in-mission option moved from cim (2026-07-02, user direction): gut owns the
+-- widget (cim-gated in _data.lua) and must write through to cim's `allow_in_mission`
+-- setting, both on change and at load. Source-pattern guard on both halves; no-op
+-- when source unreadable. Split needles so this check never self-matches.
+_rt_register("cim_bench_write_through_present", function()
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local function read_all(path)
+        local f = io.open(path, "r")
+        if not f then return nil end
+        local t = f:read("*a")
+        f:close()
+        return t
+    end
+    local main_txt = read_all(src_path)
+    if main_txt then
+        local wt_needle = 'cim:set("allow_in_' .. 'mission"'
+        local n_hits = select(2, main_txt:gsub(wt_needle:gsub("%p", "%%%0"), ""))
+        if n_hits < 2 then
+            return "cim-bench regression: expected the allow_in_mission write-through in BOTH on_setting_changed and on_all_mods_loaded (found " .. tostring(n_hits) .. ")"
+        end
+    end
+    local dir = src_path:match("^(.*[/\\])[^/\\]*$")
+    if dir then
+        local data_txt = read_all(dir .. "gui_tweaker_dev_data.lua")
+        if data_txt and not data_txt:find('setting_id    = "gut_cim_bench' .. '_in_mission"', 1, true) then
+            return "cim-bench regression: gut_cim_bench_in_mission widget missing from gut's In-Mission Menus"
+        end
+    end
+end)
+
 -- hb/ SETTING_NAMES-nil crash (2026-06-24): the BOOT loading screen fires the
 -- hb/level_loading_screen.lua LoadingView.create_ui_elements hook before
 -- hb_data.lua has populated mod.SETTING_NAMES, so reading
@@ -1653,6 +1742,22 @@ mod.on_all_mods_loaded = function(...)
     if _gut_buffbar_fix and _gut_buffbar_fix.apply then pcall(_gut_buffbar_fix.apply) end
     -- Apply the config override LAST so it wins over whatever the mods restored.
     if _gut_config and _gut_config.apply then pcall(_gut_config.apply) end
+    -- Bench-in-mission option (moved from cim 2026-07-02): one-time ADOPTION of the
+    -- user's pre-existing cim `allow_in_mission` value into gut's toggle (marker-based,
+    -- NOT nil-based - VMF may materialize widget defaults, so a nil check can't tell
+    -- "never adopted" from "default"), then on every later boot PUSH gut's value into
+    -- cim's store so the two never drift (cim's readers keep reading cim's own key).
+    local cim = get_mod("cim_dev") or get_mod("cim")
+    if cim then
+        if mod:get("gut_cim_bench_adopted") ~= true then
+            mod:set("gut_cim_bench_in_mission", cim:get("allow_in_mission") and true or false)
+            mod:set("gut_cim_bench_adopted", true)
+            printf("[gut_dev:CIM_BENCH] adopted cim allow_in_mission=%s into gut toggle (one-time)",
+                tostring(cim:get("allow_in_mission")))
+        else
+            cim:set("allow_in_mission", mod:get("gut_cim_bench_in_mission") and true or false)
+        end
+    end
 end
 if _gut_temporal_fix and _gut_temporal_fix.apply then pcall(_gut_temporal_fix.apply) end
 if _gut_buffbar_fix and _gut_buffbar_fix.apply then pcall(_gut_buffbar_fix.apply) end

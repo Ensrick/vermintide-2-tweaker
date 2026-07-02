@@ -18,14 +18,27 @@ local ShowCursorStack = ShowCursorStack
 local UIWidget = UIWidget
 local math = math
 
--- (#164) gut-side per-setting slider STEP overrides. VMF has no native `step` field and
--- FATALS on a 3-element `range` ("'range' field must contain an array-like table with 2
--- elements" — kills the whole mod's options init), so a fixed drag/arrow increment for a
--- foreign mod's slider can only live here. Keyed "<mod_id>:<setting_id>". ct's Pilgrim's
--- coin slider snaps to 25 (the mod re-rounds to 25 in its on_setting_changed anyway).
+-- (#164) gut-side per-setting slider STEP registry, keyed [mod_id][setting_id] = step.
+-- This is the RELIABLE mechanism for a FOREIGN VMF mod's slider. Verified against the
+-- decompiled VMF source (scripts/mods/vmf/modules/core/options.lua):
+--   * A custom `step` field on a mod's numeric widget def is NON-fatal but INVISIBLE to us:
+--     initialize_numeric_data (options.lua:439-448) rebuilds every numeric widget into a
+--     FRESH table copying ONLY range/default_value/decimals_number/unit_text, so a `step`
+--     field is stripped before it reaches vmf.options_widgets_data (the list gut reads at
+--     _vmf_categories). It never arrives, so a foreign slider's step can't ride the widget def.
+--   * A 3-element `range = {min,max,step}` is worse: validate_numeric_data FATALS on it
+--     ("'range' field must contain an array-like table with 2 elements") and aborts the
+--     mod's ENTIRE options init (ct .188 shipped this and was DEAD; reverted .189).
+-- So a foreign slider's coarse step lives HERE, keyed by the mod's new_mod() id (NOT its
+-- directory name — category.mod_id is the REGISTERED id: ct/ct_dev, cim/cim_dev). Both the
+-- stable and dev ids are listed so the override matches whichever the user runs. The
+-- widget-def `step` field is still honored FIRST (see _resolve_step) for any category gut
+-- ever walks from RAW data (its own hand-authored tree), where VMF never touched the node.
 local STEP_OVERRIDES = {
-    ["chaos_wastes_tweaker_dev:starting_coins"] = 25,
-    ["chaos_wastes_tweaker:starting_coins"]     = 25,
+    cim     = { base_power_level = 25 },  -- crafting starting power level (range 0-950)
+    cim_dev = { base_power_level = 25 },
+    ct      = { starting_coins   = 25 },  -- CW starting pilgrim's coins (range 0-3000)
+    ct_dev  = { starting_coins   = 25 },
 }
 
 local SERVICE = "gut_mod_tweaker"
@@ -153,6 +166,25 @@ local function _nf(node, key)  -- defensive node-field read
     local v = node[key]
     if v == nil and type(node.content) == "table" then v = node.content[key] end
     return v
+end
+
+-- (#164) Resolve the fixed step/increment for a numeric widget. Precedence:
+--   1. an explicit `step` field on the widget def (canonical + self-documenting; only ever
+--      reachable for a category gut walks from RAW data — VMF strips it off foreign mods,
+--      see STEP_OVERRIDES),
+--   2. the gut-side STEP_OVERRIDES[mod_id][setting_id] registry (the working path for a
+--      foreign VMF mod like ct/cim), else
+--   3. the natural increment: one unit for integers, 10^-decimals otherwise.
+-- The value is snapped to this grid (anchored at range min) by _snap_and_clamp, NOT here;
+-- this only picks the increment magnitude. (No range[3] fallback: a 3-element range is fatal
+-- to VMF's own validator, so it can never appear on a live widget.)
+local function _resolve_step(node, mod_id, setting_id, dec)
+    local field = _nf(node, "step")
+    if type(field) == "number" and field > 0 then return field end
+    local m = mod_id and STEP_OVERRIDES[mod_id]
+    local reg = m and setting_id and m[setting_id]
+    if type(reg) == "number" and reg > 0 then return reg end
+    return (dec and dec > 0) and (10 ^ -dec) or 1
 end
 
 local function _vmf_label(node, mod_obj)
@@ -908,17 +940,15 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth)
             row.content.min, row.content.max, row.content.num_decimals = min, max, dec
             row.content.value = val
             row.content.internal_value = (max > min) and math.clamp((val - min) / (max - min), 0, 1) or 0
-            -- ±step for the [<]/[>] glyphs: ~range/40 (coarse), at least the natural
-            -- increment. The track gives fine/continuous control; after a commit we
-            -- re-read the value so any mod-side snapping (ct rounds starting_coins to
-            -- 25 in its on_setting_changed) is reflected — matching VMF's own slider.
-            -- (#164) A slider can declare a FIXED increment via `step` (or range[3]) — e.g. ct
-            -- starting_coins in steps of 25. Otherwise ONE natural unit (1 / 10^-decimals); the
-            -- old range/40 made a single arrow click jump too far (#152). To wire a 25-step:
-            -- add `step = 25` (or `range = {0, 3000, 25}`) to the mod's slider widget def.
-            local step = _nf(w, "step")
-                or STEP_OVERRIDES[(category and category.mod_id or "") .. ":" .. tostring(setting_id or _nf(w, "setting_id"))]
-                or (range and range[3]) or ((dec > 0) and (10 ^ -dec) or 1)
+            -- (#164) Fixed per-click / snap increment for this slider. Resolved by
+            -- _resolve_step: an explicit widget-def `step` field first, else the gut-side
+            -- STEP_OVERRIDES registry (the working path for a foreign VMF mod — VMF strips a
+            -- custom `step` field off foreign widgets, see STEP_OVERRIDES), else the natural
+            -- unit (1 / 10^-decimals). The track/arrows step by this; _snap_and_clamp snaps the
+            -- value to the grid (anchored at range min). A pre-existing off-step value (e.g. a
+            -- 324-coin value dialed in VMF's own fine-grained menu) is shown as-is here and
+            -- only snaps once the user moves it. #152: this replaced the old ~range/40 over-jump.
+            local step = _resolve_step(w, category and category.mod_id, setting_id or _nf(w, "setting_id"), dec)
             row.content.step = step
             mod:debug("[mt:num] '%s' bounds=%s..%s dec=%s step=%s val=%s",
                 tostring(setting_id), tostring(min), tostring(max), tostring(dec), tostring(step), tostring(val))
@@ -2385,10 +2415,10 @@ function ModTweakerView:_handle_input(input_service)
                         local cx = UIInverseScaleVectorToResolution(cursor)[1]
                         local frac = math.clamp((cx - (anchor[1] + (c.track_x or 0))) / math.max(1, c.track_w), 0, 1)
                         cur = (c.min or 0) + frac * ((c.max or 1) - (c.min or 0))
-                        local nd = c.num_decimals or 0
-                        local m = (nd > 0) and (10 ^ nd) or 1
-                        cur = math.floor(cur * m + 0.5) / m
-                        if c.step and c.step > 0 then cur = math.floor(cur / c.step + 0.5) * c.step end  -- (#164) snap drag to the declared step
+                        -- (#164) snap the dragged value to the step grid (anchored at range
+                        -- min), or to decimals when no step — the SAME math the arrow + text-
+                        -- entry paths use, so drag/arrow/type all land on identical grid points.
+                        cur = _snap_and_clamp(c, cur)
                         moved = true
                         row._dragging = true
                     end
@@ -2418,7 +2448,7 @@ function ModTweakerView:_handle_input(input_service)
                 if rel_dir ~= 0 then
                     if not row._arrow_latched then
                         row._arrow_latched = true
-                        cur = math.clamp(cur + rel_dir * unit, c.min, c.max); moved = true; commit = true; play_sound = true
+                        cur = _snap_and_clamp(c, cur + rel_dir * unit); moved = true; commit = true; play_sound = true  -- (#164) step + snap to grid (min-anchored)
                         _printf("[gut:slider-arrow] %s CLICK dir=%d step=%s -> %s", tostring(row._setting_id), rel_dir, tostring(unit), tostring(cur))
                     end
                 else
@@ -2428,7 +2458,7 @@ function ModTweakerView:_handle_input(input_service)
                 if hold_dir ~= 0 then
                     row._arrow_hf = (row._arrow_hf or 0) + 1
                     if row._arrow_hf >= (row._arrow_hnext or 22) then   -- ~0.37s delay before first repeat
-                        cur = math.clamp(cur + hold_dir * unit, c.min, c.max); moved = true; commit = true
+                        cur = _snap_and_clamp(c, cur + hold_dir * unit); moved = true; commit = true  -- (#164) step + snap to grid (min-anchored)
                         row._arrow_hnext = row._arrow_hf + math.max(2, 11 - math.floor(row._arrow_hf / 20))  -- accelerate
                         _printf("[gut:slider-arrow] %s HOLD-REPEAT f=%d dir=%d -> %s", tostring(row._setting_id), row._arrow_hf, hold_dir, tostring(cur))
                     end
@@ -2777,5 +2807,10 @@ function ModTweakerView:_draw(dt, input_service)
         mod:warning("[mt] draw error (end_pass protected so the menu chrome survives): %s", tostring(_draw_err))
     end
 end
+
+-- (#164) Exposed for /regression_test (mod_tweaker_step_resolution): the pure step-resolution
+-- + grid-snap helpers, unit-testable without building a live view. Statics, not methods.
+ModTweakerView._resolve_step = _resolve_step
+ModTweakerView._snap_and_clamp = _snap_and_clamp
 
 return ModTweakerView

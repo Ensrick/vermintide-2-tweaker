@@ -5,6 +5,41 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.180-dev (2026-07-02) -- Loadouts rename + crafting-bench-in-mission option moved here from cim
+
+### Changed (user direction 2026-07-02)
+- **"Loadout Manager" group renamed "Loadouts".**
+- **"Use non-modded loadouts" flipped to `[confirmed working]`** - user-verified in-game
+  2026-07-02 (modded shows official loadouts read-only; all writes blocked). #175 closed
+  on this confirmation.
+- **New In-Mission Menus option: "Allow crafting bench in mission"** (moved FROM
+  Crafting in Modded, whose own widget is removed in cim v0.8.46-dev). Shown ONLY when
+  cim is installed (load-order-safe `_cim_present()` prune - get_mod fast path +
+  ModManager manifest title scan, the inverse of cim's former #96 gating). gut writes
+  through to cim's `allow_in_mission` setting on change and at load, with a one-time
+  marker-based ADOPTION of the user's pre-existing cim value, so cim's
+  open_forge/open_standard_crafting gates are untouched and stored values carry over.
+  New regression check `cim_bench_write_through_present`.
+
+## 0.2.179-dev (2026-07-02) -- #164: Mod Tweaker per-setting slider step (cim power + ct coins step 25), min-anchored snap
+
+### Why
+The Mod Tweaker's slider arrows/drag stepped by the natural unit (1 for an integer slider), ignoring a setting's intended coarse increment. Per the binding 2026-07-02 direction, VMF's own options menu stays at its natural fine granularity (users deliberately dial exact values there, e.g. pilgrim's coins = 324); the coarse stepping lives ONLY here in the Mod Tweaker.
+
+### Changed (`_mod_tweaker_view.lua`)
+- **Per-setting STEP resolution** via a new `_resolve_step(node, mod_id, setting_id, dec)` helper. Precedence: an explicit widget-def `step` field > the gut-side `STEP_OVERRIDES[mod_id][setting_id]` registry > the natural unit (1 / 10^-decimals). Used in `_build_node_row`'s numeric branch (replaces the old inline `range/40`-derived step).
+- **`STEP_OVERRIDES` registry** restructured to nested `[mod_id][setting_id] = step` and re-seeded with the two first consumers, both step 25: `cim`/`cim_dev` -> `base_power_level` (0-950) and `ct`/`ct_dev` -> `starting_coins` (0-3000). **Bug fixed:** the prior entries were keyed by DIRECTORY name (`chaos_wastes_tweaker_dev:starting_coins`), but `category.mod_id` is the `new_mod()` id (`ct_dev`), so the ct override silently never matched. Now keyed by the real mod id.
+- **Registry (not widget def) is the working path for a FOREIGN mod**, proven against the decompiled VMF source (`scripts/mods/vmf/modules/core/options.lua`): `initialize_numeric_data` (options.lua:439-448) rebuilds every numeric widget into a fresh table copying only `range`/`default_value`/`decimals_number`/`unit_text`, so a custom `step` field is stripped before it reaches `vmf.options_widgets_data` (what gut reads). A 3-element `range` is worse — `validate_numeric_data` FATALS on it. The widget-def `step` field is still honored first for any category gut walks from RAW data (its own hand-authored tree).
+- **Snap anchored at RANGE MIN.** The drag and arrow (click + hold-repeat) paths now route through the existing `_snap_and_clamp(c, n)` helper (clamp -> snap to a min-anchored `step` grid, or to decimals when no step), so drag / arrow / text-entry all land on identical grid points. A pre-existing off-step value (e.g. a 324-coin value dialed in VMF's fine-grained menu) shows as-is at build time and only snaps once the user moves it.
+- Exposed `_resolve_step` + `_snap_and_clamp` as statics on the view module for the regression test.
+
+### Regression
+- New `_rt_register("mod_tweaker_step_resolution")` (`/regression_test`): asserts the resolver precedence (field > registry > default), registry hits for both consumers on stable + dev ids (guards the directory-name-key regression), and min-anchored + clamped snap math (324 -> 325; min=10/step=25/value=20 -> 10; clamp to max).
+
+### Verify in-game
+- Keep -> ESC -> Mod Tweaker -> Chaos Wastes (ct) tab -> Pilgrim's Coin: the starting-coins slider arrows move 25 per click and Apply commits the snapped value. Crafting (cim) tab -> base power level: steps 25 per click.
+- VMF's OWN ct menu (Mod Options -> Chaos Wastes Tweaker): the starting-coins slider still moves by 1 and accepts an exact value like 324 (unchanged by this mod; see ct_dev 0.7.207-dev).
+
 ## 0.2.178-dev (2026-07-02) -- FIX #140 round 2: guard-based fx_fade swallow (Parting of the Waves post-skip black fade)
 
 ### Why (clean user trace 2026-07-02 22:04, v0.2.175-dev, no other cutscene mods)

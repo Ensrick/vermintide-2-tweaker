@@ -236,6 +236,12 @@ return {
     gut_open_inv_hotkey_tooltip = {
         en = "Hotkey to open your inventory while in a mission. Same as the /inv command, and works even though the standard inventory keys are blocked mid-mission.",
     },
+    gut_cim_bench_in_mission = {
+        en = "[untested] Allow crafting bench in mission",
+    },
+    gut_cim_bench_in_mission_tooltip = {
+        en = "Requires Crafting in Modded (this option only appears when it is installed). OFF (default): the standard crafting bench does not open during missions. ON: it also opens inside Adventure missions via Crafting in Modded's bench hotkey or /cim_craft_standard; the Athanor stays Keep-only either way. In-mission menus were never meant to run mid-mission, so if you hit a crash with this on, please send the log.",
+    },
 
     -- ============================================================
     -- Main Menu & Startup (migrated from general_tweaker 2026-06-29, #190)
@@ -279,10 +285,11 @@ return {
     -- Loadout Manager -- issue #175 (modded-scoped store itself is implicit/always-on)
     -- ============================================================
     gut_loadout_manager_group = {
-        en = "Loadout Manager",
+        en = "Loadouts",
     },
     gut_use_non_modded_loadouts = {
-        en = "[untested] Use non-modded loadouts",
+        -- User-confirmed in-game 2026-07-02 (read-only official loadouts in modded).
+        en = "[confirmed working] Use non-modded loadouts",
     },
     gut_use_non_modded_loadouts_tooltip = {
         en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows exactly your official loadouts, and nothing you do in modded can change them - equips, talent changes, loadout switches, and bot designation all snap back. Turn off (default) to keep separate modded loadouts that never touch your official ones.",
