@@ -52,16 +52,28 @@ local LOADOUT_SLOT_NAMES = {
     "slot_necklace", "slot_ring", "slot_trinket_1", "slot_frame", "slot_pose",
 }
 
--- Gear slots ONLY: the slots whose stored value is always an inventory backend GUID that
--- `get_item_from_id` can validate. Cosmetic slots (skin/hat/frame/pose) may hold plain item
--- KEYS (e.g. "es_2h_sword_weapon_pose_02", "mercenary_hat_0009") that get_item_from_id can
--- NEVER resolve; validating them drops legitimate values. Burned 2026-07-02 (v0.2.170-dev
--- friend logs): sanitize stripped slot_pose from every career every session, including
--- default_weapon_pose_01 in a rewrite/drop loop. Vanilla degrades a missing cosmetic
--- gracefully, so cosmetic slots are never sanitized.
+-- Gear slots: the slots whose stored value is a backend id resolvable via
+-- `get_item_from_id` ONCE THE OWNING SYSTEM HAS REGISTERED IT. Cosmetic slots
+-- (skin/hat/frame/pose) may hold plain item KEYS (e.g. "es_2h_sword_weapon_pose_02")
+-- that get_item_from_id can NEVER resolve. Two burns dictate how these are handled:
+-- 2026-07-02 #1 (v0.2.170): validating cosmetic slots stripped every career's pose.
+-- 2026-07-02 #2 (v0.2.172, 20:23 friend log): boot-time validation of GEAR slots dropped
+--   a cosmetics/LA per-instance UUID melee id (59630ccf-...) that registers LATER than
+--   the check, nulling slot_melee -> engine fatal at spawn ("Tried to wield default slot
+--   slot_melee ... that contained no weapon"). "Not resolvable right now" NEVER means
+--   "gone" in modded - synthetic ids (cim crafts, LA/cosmetics instances) appear late.
+-- Consequently there is NO destructive sanitize pass at all: unresolvable gear ids are
+-- handled per-read (see the get_character_data hook), leaving the store intact to
+-- self-heal once the id registers.
 local GEAR_SLOT_NAMES = {
     "slot_ranged", "slot_melee", "slot_necklace", "slot_ring", "slot_trinket_1",
 }
+local GEAR_SLOT_SET = {}
+for i = 1, #GEAR_SLOT_NAMES do GEAR_SLOT_SET[GEAR_SLOT_NAMES[i]] = true end
+
+-- Weapon slots must NEVER be served empty: vanilla fatals at spawn wielding an empty
+-- melee/ranged slot. Jewelry may legitimately be empty, cosmetics degrade gracefully.
+local WEAPON_SLOT_SET = { slot_melee = true, slot_ranged = true }
 
 -- The VMF settings key `characters_data` discriminates Adventure from Versus
 -- (`vs_characters_data`), set by the mirror subclass (playfab_mirror_adventure.lua).
@@ -170,42 +182,19 @@ local function _ensure_seeded(mirror, career_name)
         tostring(career_name), #cd, selected)
 end
 
--- Sanitize dangling backend_ids (issue #175 requirement 7): items can disappear between
--- modded sessions. Validate GEAR slots only (GEAR_SLOT_NAMES) against the backend once per
--- career per session; drop dead ids (printf, no crash). Cosmetic/pose/frame slots are NEVER
--- validated -- their values can be item keys get_item_from_id cannot resolve (see
--- GEAR_SLOT_NAMES comment for the 2026-07-02 pose-drop burn), and vanilla degrades a
--- missing cosmetic gracefully to empty via get_unlocked_cosmetics.
-local _sanitized = {}
-local function _sanitize_career(career_name)
-    if _sanitized[career_name] then return end
-    local entry = _store()[career_name]
-    if not entry then return end
-    local ok, iface = pcall(function() return Managers.backend:get_interface("items") end)
-    if not ok or not iface or not iface.get_item_from_id then return end  -- retry next session
-    _sanitized[career_name] = true
-    local removed = 0
-    for idx, lo in pairs(entry.loadouts) do
-        for i = 1, #GEAR_SLOT_NAMES do
-            local slot = GEAR_SLOT_NAMES[i]
-            local id = lo[slot]
-            if id then
-                local ok2, item = pcall(iface.get_item_from_id, iface, id)
-                if ok2 and not item then     -- definitively gone (never drop on pcall error)
-                    lo[slot] = nil
-                    removed = removed + 1
-                    printf("[gut_dev:NATIVE_LOADOUTS] sanitize career=%s loadout=%s slot=%s dropped dangling id=%s",
-                        tostring(career_name), tostring(idx), tostring(slot), tostring(id))
-                end
-            end
-        end
-    end
-    if removed > 0 then _persist() end
+-- Resolve a backend id via the items interface; nil if unresolvable RIGHT NOW (which in
+-- modded may just mean "not registered yet" - see GEAR_SLOT_NAMES burn history). Never
+-- raises: any lookup failure reads as unresolvable.
+local function _resolve_item(id)
+    local ok, item = pcall(function()
+        local iface = Managers.backend:get_interface("items")
+        return iface and iface.get_item_from_id and iface:get_item_from_id(id) or nil
+    end)
+    return ok and item or nil
 end
 
 local function _prepare(mirror, career_name)
     _ensure_seeded(mirror, career_name)
-    _sanitize_career(career_name)
 end
 
 -- ==================================================================
@@ -226,7 +215,25 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
     local idx = optional_loadout_index or entry.selected_index
     local lo = entry.loadouts[idx]
     if lo == nil then return nil end
-    return lo[key]
+    local value = lo[key]
+    -- Non-destructive gear fallback (2026-07-02 v0.2.172 spawn-fatal burn): a gear id that
+    -- is empty or unresolvable RIGHT NOW is served from the OFFICIAL value for this read
+    -- only. The store is never mutated, so a late-registering modded id (cim craft,
+    -- LA/cosmetics instance UUID) serves again the moment it resolves. Empty-slot fallback
+    -- applies only to weapon slots (empty jewelry is a legitimate state; empty melee/ranged
+    -- fatals at spawn wield).
+    if GEAR_SLOT_SET[key] then
+        if value == nil then
+            if WEAPON_SLOT_SET[key] then
+                return func(self, career_name, key, optional_loadout_index)
+            end
+            return nil
+        end
+        if _resolve_item(value) == nil then
+            return func(self, career_name, key, optional_loadout_index)
+        end
+    end
+    return value
 end)
 
 -- get_career_loadouts(self, career_name) -> (selected_index, loadouts_array) -- base:1944
@@ -416,7 +423,6 @@ mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from offi
             return
         end
         store[career_arg] = nil
-        _sanitized[career_arg] = nil
         _persist()
         _dirtify()
         mod:echo("Modded loadouts reset for " .. career_arg .. "; they re-seed from official on next use")
@@ -425,7 +431,6 @@ mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from offi
         local n = 0
         for career_name in pairs(store) do
             store[career_name] = nil
-            _sanitized[career_name] = nil
             n = n + 1
         end
         _persist()
@@ -473,15 +478,22 @@ M.rt_checks = {
                 tostring(M.max_loadouts()), tostring(expected))
         end
     end },
-    { name = "native_loadouts_sanitize_gear_only", fn = function()
-        -- Sanitizer must never validate cosmetic/pose slots (2026-07-02 pose-drop burn):
-        -- their values can be item keys that get_item_from_id cannot resolve.
+    { name = "native_loadouts_gear_fallback_nondestructive", fn = function()
+        -- Two prior burns (2026-07-02): destructive sanitize stripped poses (item keys)
+        -- then nulled a late-registering UUID melee id -> spawn fatal. Guard the shape:
+        -- no destructive pass exists, cosmetic slots stay out of the gear set, and the
+        -- weapon set (never-serve-empty) is a subset of the gear set.
+        if _sanitize_career ~= nil then return "destructive _sanitize_career reintroduced" end
         local cosmetic = { slot_skin = true, slot_hat = true, slot_frame = true, slot_pose = true }
         local in_loadout = {}
         for _, s in ipairs(LOADOUT_SLOT_NAMES) do in_loadout[s] = true end
         for _, s in ipairs(GEAR_SLOT_NAMES) do
             if cosmetic[s] then return "cosmetic slot in GEAR_SLOT_NAMES: " .. s end
             if not in_loadout[s] then return "unknown slot in GEAR_SLOT_NAMES: " .. s end
+            if not GEAR_SLOT_SET[s] then return "GEAR_SLOT_SET missing " .. s end
+        end
+        for s in pairs(WEAPON_SLOT_SET) do
+            if not GEAR_SLOT_SET[s] then return "weapon slot not in gear set: " .. s end
         end
     end },
     { name = "native_loadouts_hook_targets_unique", fn = function()

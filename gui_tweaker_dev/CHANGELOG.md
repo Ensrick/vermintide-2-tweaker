@@ -5,6 +5,31 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.173-dev (2026-07-02) -- CRITICAL FIX #175: startup spawn fatal; destructive sanitize removed entirely
+
+### Why (friend log 2026-07-02 20:23, game unbootable)
+v0.2.172's gear-slot sanitizer nulled we_shade's `slot_melee` at boot
+(`sanitize ... dropped dangling id=59630ccf-43e0-427a-99b8-809d30cd223f`, 20:23:43.587)
+and the spawn wield fataled 9s later ("Tried to wield default slot slot_melee for
+we_shade that contained no weapon"), making the game unbootable on every launch (the
+nulled slot was persisted). The dropped id is a dashed UUID - a cosmetics/LA/cim
+per-instance synthetic id that registers LATER in boot than the sanitize pass ran, so
+"not resolvable right now" did not mean "gone". Second destructive-sanitize burn in one
+day (after the pose-key drop); the design is wrong, not the tuning.
+
+### Changed
+- **Destructive sanitize removed entirely** (no `_sanitize_career`, no store mutation on
+  validation grounds - ever).
+- **Non-destructive per-read gear fallback** in the `get_character_data` hook: a gear id
+  that is empty or unresolvable at read time is served from the OFFICIAL value for that
+  read only; the store is untouched, so late-registering modded ids self-heal and serve
+  again the moment they resolve. Empty-slot fallback applies to weapon slots only
+  (slot_melee/slot_ranged - empty jewelry is legitimate; empty weapons fatal at spawn).
+- This also boot-rescues stores already damaged by v0.2.172 (nil melee now falls back to
+  official at read time) - no config surgery needed.
+- Regression check replaced: `native_loadouts_gear_fallback_nondestructive` (asserts no
+  destructive pass exists + slot-set shape).
+
 ## 0.2.172-dev (2026-07-02) -- FIX #175 follow-up: pose-sanitize defect + /reset_modded_loadouts re-seed command
 
 ### Why (friend logs 2026-07-02 19:40-19:57 + user_settings capture)
