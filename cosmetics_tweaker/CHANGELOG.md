@@ -1,5 +1,42 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.62-dev — 2026-07-02 — FIX: native Access-Violation crash opening the weapon-customization screen in a mission (ShadingEnvironment.blend, #228)
+
+> Diagnosed from the reporter's crash log `console-2026-07-02-05.13.47-...8e770416`. Crash `<<Crash>>Access violation (0xc0000005)` at 05:19:20, ~1s after opening the loadout-panel gear icon mid-mission on warcamp (Against the Grain) for `es_deus_01` (spear + shield). Build-only; in-game verification is the user's.
+
+### Root cause (crash-stack + source proven)
+Lua stack: `[0] =[C] blend <- foundation/scripts/util/script_world.lua render <- foundation/scripts/managers/world/world_manager.lua render`. The customization view (`HeroWindowItemCustomization`) builds a 3D weapon-preview world via its viewport UI pass (`ui_passes.lua:2436-2492` → `WorldManager.create_world` → `ScriptWorld.create_shading_environment`). In the keep it spawns `levels/ui_store_preview/world` + `environment/ui_store_preview` (both keep-resident, `hero_window_item_customization.lua:405-406`). Mid-mission that preview level is not loaded, so cim/gut strip `level_name` and substitute `shading_environment = "environment/ui_hdr"` (`crafting_in_modded_dev.lua:2086`, `gui_tweaker_dev/_gut_mission_inventory.lua:236`; gut's def won the VMF chain here — its printf `serving level-free preview widget def` is in the log). The world MOUNTS cleanly (no "Resource not loaded" fatal), but on the first rendered frame `ScriptWorld.render` calls `ShadingEnvironment.blend(shading_env, {"default",1})` on that level-less substitute world and access-violates on a null. The "`environment/ui_hdr` is always available" assumption in cim/gut holds for MOUNT, not for the render-time blend of a level-less mission preview world. (This is the same `script_world.lua blend` fault cim already flagged as the reason its in-mission Athanor stays keep-gated, `crafting_in_modded_dev.lua:1814-1817`; that path was gated, this preview path was not.)
+
+### Fix (chaining-independent)
+New `hook_safe("HeroWindowItemCustomization", "_create_preview_widget", ...)`. Vanilla calls `_create_preview_widget` AFTER the viewport pass has already created the world (`hero_window_item_customization.lua:373-380`), and no mod hooks it (no VMF duplicate-drop). Post-hook, in mission only, it neuters the freshly created preview world: clears the world's `"shading_environment"` data so `ScriptWorld.render` early-returns at its `if not shading_env then return end` guard (skips blend, apply, and `render_world`), and sets `"avoid_blend"` as belt-and-suspenders. This is robust to WHICH mod's preview-def hook won the chain, because it mutates the actual created world downstream of def creation. Teardown is unaffected: `WorldManager.destroy_world` frees the world via `Application.release_world` and never reads the `"shading_environment"` data key. Keep path untouched (full store-preview lighting). Cost in mission: the 3D weapon-spin panel is blank; the 2D illusion grid + Apply still work (the usable-in-mission goal of #172).
+
+### Diagnostics
+- `[228:blend][cos]` printf (engine `printf`, survives mod-logging-OFF) on the guarded path: logs whether a preview world was found and that it was neutered. If the AV recurs, the next log shows whether this guard fired.
+
+### Follow-up (report, not fixed here)
+- **gut_dev** `_gut_mission_inventory.lua:207,236` sets `_CUSTOMIZE_MISSION_SAFE_ENV = "environment/ui_hdr"` and its comment claims that env is "always available" — true at mount, false for the render blend. gut_dev owns the def that won this crash's chain; it should either drop `shading_environment` from its level-free def or apply the same post-create neuter. This cosmetics_tweaker guard already covers gut's def in the field (it runs downstream), so it is not a blocker.
+
+### Files
+- `cosmetics_tweaker.lua` — new `_create_preview_widget` hook_safe (#228 guard); `MOD_VERSION` `0.9.61-dev` → `0.9.62-dev`.
+
+## 0.9.61-dev — 2026-07-02 — FIX: stale LA offhand broadcast when the final pick is vanilla (#203) + [cos-la-sync] send/recv instrumentation
+
+> Diagnosed from the 2026-07-02 client session log (`console-2026-07-02-05.13.47`, this build's predecessor v0.9.60-dev, user as CLIENT of host `110000106beb4a3`). Build-only; in-game verification is the user's (host log needed to close the loop — see below).
+
+### Root cause (log-proven, deterministic — NOT a race)
+`_ct_on_offhand_pressed` wrote the deferred peer broadcast queue `mod._pending_la_emit_on_exit[bid|hand]` **only inside the `if opt.la_armoury_key` branch** (LA picks). A subsequent **vanilla** press updated `_offhand_selection` (so the live body rendered the vanilla shield) but left the **stale LA key still queued**. On screen exit the drain broadcast that stale LA key to the host. The log shows it exactly: the user's final press was `GK Shield (Green)` (vanilla → live body `RESOLVE ... resolved_unit=wpn_emp_gk_shield_04 kind=nil`), yet the exit emit sent `armoury=Kruber_empire_shield_basic2_Kotbs01`. Wearer renders vanilla, peers/host get the stale LA shield — the reported "host could not see it on me" divergence class. The local body's own #203 re-apply then correctly hit the #204 warp-guard (`match=false → SKIP-mesh-mismatch`, target_mesh `wpn_emp_gk_shield_04` vs expected `Kruber_Empire_shield02_mesh_Kotbs01`) because the mesh was never swapped for that vanilla-final pick.
+
+### Fix
+- **Clear the stale queue entry on a non-LA press.** New `elseif opt then` branch in `_ct_on_offhand_pressed`: when the pressed option has no `la_armoury_key`, delete `mod._pending_la_emit_on_exit[bid|hand]`. "Last pick wins" now holds for vanilla picks too, so the exit-drain broadcasts only what the wearer actually left equipped. No RPC-schema change; happy path (last press IS the LA shield) is untouched — that press takes the existing `if` branch, the `elseif` never runs.
+- **Known follow-up (NOT fixed here):** this stops the stale broadcast at the source, but does not purge a host's *cross-session* stale `_la_equips_by_peer` entry (LA committed+broadcast in an earlier customization visit, then switched to vanilla in a later one). A true "revert to vanilla / clear" broadcast is needed for that; tracked on #203.
+
+### Instrumentation (`[cos-la-sync]`, mod:info so it lands with VMF logging OFF)
+- **Send:** `EXIT-QUEUE CLEAR` (a vanilla press superseded a stale LA emit) and `EMIT-ON-EXIT` (the authoritative offhand key actually broadcast on exit).
+- **Receive (HOST log — the missing evidence):** `RECV wearer/slot/kind/armoury/applied`, deduped on `(wearer,slot,armoury,applied)` so a per-frame retry can't flood and an `applied=false→true` flip logs both. The mesh-swap + paint decision remains in the existing `[cos:sync]` `husk_meshgate`/`husk_meshswap`/`husk_offhand` printf lines.
+
+### Files
+- `cosmetics_tweaker.lua` — `_ct_on_offhand_pressed` non-LA-press queue-clear; exit-drain `EMIT-ON-EXIT` log; `cos_la_apply` receiver `RECV` log; `MOD_VERSION` `0.9.60-dev` → `0.9.61-dev`. No hooks added (edits sit inside existing bodies).
+
 ## 0.9.60-dev — 2026-07-01 — Passive diagnostic probes: #174 loadout attribution + LA sync family (#149/#154/#200/#203/#204)
 - **No gameplay change.** All additions are passive, default-on, log-only probes that write via engine `printf` (so they survive the user running with VMF mod logging OFF) with a rate-limiter that logs first-sight + on-change (bounded within a startup window, hard flood cap). New file `_diag_probe.lua`.
 - **#174 loadout attribution.** Added the single vanilla chokepoint the family needs: a `hook_safe` on `BackendInterfaceItemPlayfab.set_loadout_item` (the concrete backend setter every loadout write funnels through, carrying `optional_loadout_index` = the bot-vs-host discriminator). It logs `[174:loadout]` with profile/slot/item/index, a single-line caller hint (2-4 stack frames), and `mp_eac_window` (read from modded_progression's un-gate flag) so one keep visit after startup names WHO restores the bot slots. Grep confirmed no pre-existing hook on that Class.method in this mod. Also instrumented cosmetics' own `BackendUtils.set_loadout_item` cache path.

@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.60-dev"
+local MOD_VERSION = "0.9.62-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2388,6 +2388,71 @@ local _active_customization_backend_id = nil
 -- set→read→restore bracket is safe.
 local _in_create_equipment = false
 
+-- ============================================================
+-- #228: in-mission ShadingEnvironment.blend Access-Violation guard
+-- ============================================================
+-- Opening the weapon-illusion customization screen (HeroWindowItemCustomization,
+-- the loadout-panel gear icon) IN A MISSION crashed with a native Access
+-- violation (0xc0000005, addr 0) in the world render pass:
+--   [0] =[C] blend <- foundation/scripts/util/script_world.lua render
+--   <- foundation/scripts/managers/world/world_manager.lua render
+-- Repro on the reporter's machine: warcamp (Against the Grain), es_deus_01
+-- spear+shield, cog opened mid-mission via the gut in-mission loadout panel
+-- (gut logged "customize view mounting mid-mission (cosmetics path, no cim)").
+--
+-- Mechanism (source-cited): the customization view builds a 3D preview world
+-- through its viewport UI pass (ui_passes.lua:2436-2492 -> WorldManager.create_world
+-- -> ScriptWorld.create_shading_environment). In the keep it spawns
+-- levels/ui_store_preview/world + environment/ui_store_preview (both keep-resident,
+-- hero_window_item_customization.lua:405-406). Mid-mission that preview level is
+-- not loaded, so cim/gut strip the level_name and substitute
+-- shading_environment = "environment/ui_hdr" (crafting_in_modded_dev.lua:2086 and
+-- gui_tweaker_dev/_gut_mission_inventory.lua:236). The world MOUNTS with no
+-- "Resource not loaded" fatal, but on the first rendered frame ScriptWorld.render
+-- calls ShadingEnvironment.blend(shading_env, {"default",1}) on that level-less
+-- substitute world and access-violates on a null. The "environment/ui_hdr is
+-- always available" claim in those two mods holds for MOUNT but not for the render
+-- blend of a level-less mission preview world.
+--
+-- Fix (chaining-independent): the winning preview-widget definition is whichever
+-- mod's _create_item_preview_widget_definition / _register_object_sets hook is
+-- outermost in the VMF chain (gut's, in the reported crash), so patching the def
+-- is not reliable from here. Instead hook _create_preview_widget, which vanilla
+-- calls AFTER the viewport pass has already created the world
+-- (hero_window_item_customization.lua:373-380) and which NO mod hooks (so this is
+-- not a VMF duplicate-drop). Post-hook, in mission only, neuter the freshly
+-- created preview world so ScriptWorld.render can never reach the blend:
+--   * clear the world's "shading_environment" data -> render() early-returns at
+--     its `if not shading_env then return end` guard, skipping blend, apply, AND
+--     render_world. This is robust to WHICH mod's def created the world.
+--   * also set "avoid_blend" (the flag ScriptWorld.render checks before
+--     blend/apply) as belt-and-suspenders.
+-- Teardown is unaffected: WorldManager.destroy_world frees the world via
+-- Application.release_world and never reads the "shading_environment" data key.
+-- Keep path is untouched (full store-preview lighting there). Cost in mission:
+-- the 3D weapon spin panel is blank; the 2D illusion grid + Apply still work
+-- (that is the usable-in-mission goal of #172).
+-- Pre-flight: cosmetics_tweaker hooks _create_preview_widget NOWHERE else.
+mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(self)
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+    if in_keep then return end
+    local pw = self and self._preview_widget
+    local pass_data = pw and pw.element and pw.element.pass_data
+    local vp_data = pass_data and pass_data[1]
+    local world = vp_data and vp_data.world
+    if not world then
+        if printf then printf("[228:blend][cos] in mission: no preview world on _create_preview_widget (nothing to guard)") end
+        return
+    end
+    local had_env = World.has_data(world, "shading_environment")
+    World.set_data(world, "avoid_blend", true)
+    World.set_data(world, "shading_environment", nil)
+    if printf then
+        printf("[228:blend][cos] mission preview world neutered (had_shading_env=%s) -> ScriptWorld.render early-returns, blend skipped",
+            tostring(had_env))
+    end
+end)
+
 -- v0.9.43-dev SCREEN trace NOTE: the customization view ENTER anchor is
 -- emitted from the `_setup_illusions` hook below ("SCREEN setup_illusions …"),
 -- NOT from a dedicated on_enter hook — `_ui_dump.lua` already wraps
@@ -2437,6 +2502,14 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
         local n = 0
         for _, entry in pairs(mod._pending_la_emit_on_exit) do
             if entry and entry.player_unit and Unit.alive(entry.player_unit) then
+                -- v0.9.61-dev (#203): [cos-la-sync] the authoritative offhand key
+                -- actually broadcast on screen exit. Pair with the receiver's
+                -- [cos-la-sync] RECV line (same armoury_key) in the HOST's log to
+                -- confirm the host cached it; a mismatch vs the wearer's rendered
+                -- shield is the #203 divergence.
+                mod:info("[cos-la-sync] EMIT-ON-EXIT weapon=%s template=%s hand=%s armoury=%s vanilla=%s",
+                    tostring(entry.weapon_key), tostring(entry.template_key),
+                    tostring(entry.hand_field), tostring(entry.armoury_key), tostring(entry.vanilla_key))
                 _send_la_apply(entry.player_unit, entry.weapon_key, "offhand",
                     entry.armoury_key, entry.vanilla_key, entry.hand_field)
                 if entry.template_key and entry.template_key ~= entry.weapon_key then
@@ -3387,6 +3460,28 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
             _trace("WRITE pending_la_emit_on_exit[%s] armoury=%s vanilla=%s hand=%s weapon=%s",
                 tostring(q_key), tostring(opt.la_armoury_key), tostring(opt.vanilla_skin),
                 tostring(hand_field), tostring(weapon_key))
+        end
+    elseif opt then
+        -- v0.9.61-dev (#203): a NON-LA (vanilla) offhand press must SUPERSEDE any
+        -- LA emit still queued for this (bid, hand). The queue is "last pick wins",
+        -- but before this only LA picks WROTE the queue, so a vanilla press left the
+        -- prior LA key queued and the exit-drain broadcast a shield the wearer is no
+        -- longer using. The 2026-07-02 client log proved the divergence: the user's
+        -- final press was "GK Shield (Green)" (vanilla, live body resolved
+        -- wpn_emp_gk_shield_04) yet the exit emit sent the stale
+        -- Kruber_empire_shield_basic2_Kotbs01, so the wearer rendered vanilla while
+        -- peers/host got the stale LA shield. Clear at the source (no RPC change).
+        -- NOTE: a true "revert to vanilla" broadcast is still needed to purge a
+        -- host's cross-session stale _la_equips_by_peer entry (separate #203 item).
+        if mod._pending_la_emit_on_exit then
+            local vkey = (self._item_backend_id or "__no_backend__") .. "|" .. tostring(hand_field)
+            local stale = mod._pending_la_emit_on_exit[vkey]
+            if stale then
+                mod:info("[cos-la-sync] EXIT-QUEUE CLEAR bid=%s hand=%s vanilla_pick=%s superseded_stale_LA=%s",
+                    tostring(self._item_backend_id), tostring(hand_field),
+                    tostring(opt.name), tostring(stale.armoury_key))
+                mod._pending_la_emit_on_exit[vkey] = nil
+            end
         end
     end
 
@@ -6447,6 +6542,24 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
         tostring(wearer), tostring(slot_name), n)
 
     local applied = _try_apply_by_peer(wearer, slot_name, kind, armoury_key, vanilla_key)
+    -- v0.9.61-dev (#203): [cos-la-sync] receiver-side outcome via mod:info so it
+    -- lands in the HOST's log (the missing evidence for #203 -- a client log can't
+    -- show the host painting the wearer's husk). Deduped on
+    -- (wearer,slot,armoury,applied) so a per-frame retry cannot flood; an
+    -- applied=false->true flip logs both, showing when (or if) the paint landed.
+    -- The mesh-swap + paint decision itself is in the [cos:sync] husk_meshgate /
+    -- husk_meshswap / husk_offhand PROBE lines (also host-side, printf).
+    do
+        mod._cos_la_sync_recv_seen = mod._cos_la_sync_recv_seen or {}
+        local seen_key = tostring(wearer) .. "|" .. tostring(slot_name) .. "|"
+            .. tostring(armoury_key) .. "|" .. tostring(applied)
+        if not mod._cos_la_sync_recv_seen[seen_key] then
+            mod._cos_la_sync_recv_seen[seen_key] = true
+            mod:info("[cos-la-sync] RECV wearer=%s slot=%s kind=%s armoury=%s applied=%s",
+                tostring(wearer), tostring(slot_name), tostring(kind),
+                tostring(armoury_key), tostring(applied))
+        end
+    end
     _dbg("[cos_la_apply recv] from=%s wearer=%s slot=%s kind=%s key=%s applied=%s",
         tostring(sender_peer_id), tostring(wearer), tostring(slot_name),
         tostring(kind), tostring(armoury_key), tostring(applied))
