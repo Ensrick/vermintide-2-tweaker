@@ -23,8 +23,16 @@ local mod = get_mod("gut_dev")
 --   * CutsceneSystem.flow_cb_activate_cutscene_logic
 --   * CutsceneSystem.skip_pressed
 --   * CutsceneSystem.flow_cb_activate_cutscene_camera    (#106 post-skip guard + lifecycle
---     log, added 2026-07-01; dup-check re-run: whole-mod grep found no other hook on it —
---     only comment references in _gut_camera.lua)
+--     log, added 2026-07-01; #140 fade-arm added 2026-07-02; dup-check re-run: whole-mod
+--     grep found no other hook on it — only comment references in _gut_camera.lua)
+--
+-- #140 (Parting of the Waves / dlc_portals brief fade-IN, user-confirmed 2026-07-02,
+-- reproduces in official/vanilla Adventure): gut armed the fade-swallow (_skip_next_fade)
+-- only in flow_cb_activate_cutscene_logic, but this map's native fade-in fires around the
+-- EARLIER flow_cb_activate_cutscene_camera node — at which point _skip_next_fade is still
+-- false, so the fade-in played. Fix: arm _skip_next_fade at the camera node too (Aussiemon
+-- SkipCutscenes.lua:8 pattern), gated on "will this cutscene actually skip" so a CW
+-- author-LOCKED boss cinematic that plays through keeps its fade.
 --   * CutsceneSystem.flow_cb_deactivate_cutscene_cameras (hook_safe, lifecycle log only;
 --     same dup-check, no other hook)
 --   * ShowCursorStack.pop                       (table-form, guarded)
@@ -327,6 +335,24 @@ if CutsceneSystem then
     -- client's entire 7-mission log), so this camera-level line is what closes the
     -- client instrumentation blind spot.
     mod:hook(CutsceneSystem, "flow_cb_activate_cutscene_camera", function(func, self, camera_unit, transition_data, ingame_hud_enabled, letterbox_enabled)
+        -- #140 (Parting of the Waves / dlc_portals brief fade-IN): the map's native
+        -- fade-in effect fires around THIS earlier camera node, before
+        -- flow_cb_activate_cutscene_logic arms _skip_next_fade -- so the fade-in
+        -- still played for a couple seconds after an auto-skip. Mirror Aussiemon
+        -- SkipCutscenes.lua:8 and RE-ARM the fade-swallow here when auto-skip is
+        -- active and this cutscene will actually skip: outside CW always
+        -- (not _gut_in_deus() is true), in CW only when the level's own
+        -- script_data.skippable_cutscenes is true -- so a CW author-LOCKED boss
+        -- cinematic that is intentionally played through keeps its fade intact.
+        do
+            local in_deus = _gut_in_deus()
+            if _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto")
+               and (not in_deus or script_data.skippable_cutscenes) then
+                _skip_next_fade = true
+                _printf("[gut:cutscene] CAMERA-NODE fade-arm (_skip_next_fade=true, #140) | level=%s in_deus=%s skippable=%s",
+                    _level_key(), tostring(in_deus), tostring(script_data and script_data.skippable_cutscenes))
+            end
+        end
         if _skipped_cutscene_system == self then
             _printf("[gut:cutscene] CAMERA-ACTIVATE suppressed (post-skip guard) | level=%s hud=%s letterbox=%s | %s",
                 _level_key(), tostring(ingame_hud_enabled), tostring(letterbox_enabled), _cs_snapshot(self))

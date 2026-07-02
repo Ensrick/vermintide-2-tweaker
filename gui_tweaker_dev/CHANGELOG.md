@@ -5,6 +5,22 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.169-dev (2026-07-02) -- FIX: "Parting of the Waves" brief fade-IN on auto-skip (#140)
+
+- **Skip Cutscenes fade-in fix.** On the mission "Parting of the Waves" (`dlc_portals`),
+  auto Skip Cutscenes correctly skipped the cutscene but a brief black fade-IN still played
+  over the screen for a couple seconds (user-confirmed 2026-07-02; reproduces in
+  official/vanilla Adventure, NOT Chaos-Wastes-specific). Root cause: gut armed its
+  single-shot fade-swallow flag `_skip_next_fade` only inside the
+  `flow_cb_activate_cutscene_logic` hook, but this map's native fade-in effect fires around
+  the EARLIER `flow_cb_activate_cutscene_camera` flow node, at which point `_skip_next_fade`
+  was still false -- so the fade played. Fix: re-arm `_skip_next_fade` at the camera node
+  too (merged into gut's existing `flow_cb_activate_cutscene_camera` hook), matching the
+  known-good Aussiemon "Skip Cutscenes" mod (`SkipCutscenes.lua:8`). Gated on "will this
+  cutscene actually skip" (`not _gut_in_deus() or script_data.skippable_cutscenes`) so a CW
+  author-LOCKED boss cinematic that is intentionally played through keeps its own fade
+  intact. A `[gut:cutscene] CAMERA-NODE fade-arm` printf line marks it firing in the log.
+
 ## 0.2.168-dev (2026-07-02) -- FIX: Armory in-menu open crashed the vanilla background window (#217)
 
 - **Crash fix.** One frame after the Armory tab opened its in-menu window layout, the
