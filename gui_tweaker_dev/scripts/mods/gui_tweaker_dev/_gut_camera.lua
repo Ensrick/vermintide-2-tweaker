@@ -182,6 +182,36 @@ mod:hook("PlayerUnitFirstPerson", "create_screen_particles", function(func, self
     return func(self, ...)
 end)
 
+-- (#216, crash GUID 0a41da66) The nil return above is NOT safe for every consumer, only
+-- for BuffExtension. Two vanilla paths crash on a nil id:
+--   * PlayerUnitOverchargeExtension._update_screen_effect lazily creates its overlay id,
+--     then unconditionally calls World.set_particles_material_scalar with it every update
+--     while overcharge > 0 (user-hit: Bolt Staff heat in 3P).
+--   * player/enemy_character_state_in_vortex exit paths pass their stored id to
+--     stop_spawning_screen_particles without a nil check.
+-- Fix: skip the overcharge screen effect entirely while tp is active (no screen overlays
+-- in 3P is this feature's intent; on the 3P->1P switch vanilla lazily recreates the
+-- overlay), and nil-guard the two particle sinks so any unguarded vanilla caller is
+-- covered.
+mod:hook("PlayerUnitOverchargeExtension", "_update_screen_effect", function(func, self, ...)
+    if _tp_enabled then
+        if self.onscreen_particles_id or self.critical_onscreen_particles_id then
+            -- vanilla helper destroys and nils both id fields
+            self:_destroy_all_screen_space_particles()
+        end
+        return
+    end
+    return func(self, ...)
+end)
+mod:hook("PlayerUnitFirstPerson", "stop_spawning_screen_particles", function(func, self, id, ...)
+    if id == nil then return end
+    return func(self, id, ...)
+end)
+mod:hook("PlayerUnitFirstPerson", "destroy_screen_particles", function(func, self, id, ...)
+    if id == nil then return end
+    return func(self, id, ...)
+end)
+
 -- gut_tp_disable_zoom_in (issue #202). Aim zoom-in in 3P is driven PER-WEAPON: the
 -- weapon hands GenericStatusExtension a camera_name (zoom_in / increased_zoom_in /
 -- zoom_in_trueflight / ...), the engine appends "_third_person" in 3P mode, then writes

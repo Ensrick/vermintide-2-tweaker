@@ -35,14 +35,35 @@ end)
 -- Open commands. Phase 0: open the HeroViewStateCompendium stub panel in the hero
 -- menu (registered by _ba_heroview_inject.lua). The Armory/Bestiary split + lists
 -- + 3D preview land in later phases; the data layer (/ba_dump_*) is already live.
-mod:command("armory", "Open the Armory (weapon compendium)", function()
+local function _gut_cmd_armory()
 	if mod._gut_open_compendium then mod._gut_open_compendium("armory")
 	else mod:echo("Compendium not ready (inject module didn't load).") end
-end)
+end
 
-mod:command("bestiary", "Open the Bestiary (enemy compendium)", function()
+local function _gut_cmd_bestiary()
 	if mod._gut_open_compendium then mod._gut_open_compendium("bestiary")
 	else mod:echo("Compendium not ready (inject module didn't load).") end
-end)
+end
+
+-- (#212) The short names collide with the standalone Armory / Bestiary mods: VMF
+-- rejects the second registration of a taken name with an error, and which mod
+-- loses depends on load order (registering "armory" here unconditionally would
+-- break the standalone mod on machines where gut loads first). So the prefixed
+-- commands are always registered, and the short aliases are claimed in
+-- on_all_mods_loaded (chained, same pattern as gui_tweaker_dev.lua) ONLY when the
+-- owning mod is absent -- get_mod() is definitive at that point.
+mod:command("gut_armory", "Open the Armory (weapon compendium)", _gut_cmd_armory)
+mod:command("gut_bestiary", "Open the Bestiary (enemy compendium)", _gut_cmd_bestiary)
+
+local _ba_prev_on_all_mods_loaded = mod.on_all_mods_loaded
+mod.on_all_mods_loaded = function(...)
+	if _ba_prev_on_all_mods_loaded then _ba_prev_on_all_mods_loaded(...) end
+	if not get_mod("armory") then
+		mod:command("armory", "Open the Armory (weapon compendium)", _gut_cmd_armory)
+	end
+	if not get_mod("bestiary") then
+		mod:command("bestiary", "Open the Bestiary (enemy compendium)", _gut_cmd_bestiary)
+	end
+end
 
 return M

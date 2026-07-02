@@ -5,6 +5,43 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.163-dev (2026-07-01) -- FIX (#212): /armory + /bestiary collide with the standalone Armory / Bestiary mods
+
+VMF rejects a command name that another mod already registered (boot log:
+`command name 'armory' is already used by another mod 'armory'`), and which mod
+loses depends on load order -- so gut's unconditional short-name registration
+either silently lost (Armory loaded first) or would have broken the standalone
+mod (gut loaded first).
+
+- `_ba_compendium.lua`: `/gut_armory` + `/gut_bestiary` are now always registered.
+  The short `/armory` + `/bestiary` aliases are claimed in `on_all_mods_loaded`
+  (chained handler, same pattern as gui_tweaker_dev.lua) and ONLY when
+  `get_mod("armory")` / `get_mod("bestiary")` is absent, so the standalone mods
+  always keep their names.
+
+## 0.2.162-dev (2026-07-01) -- CRASH FIX (#216): 3P camera + overcharge weapon = set_particles_material_scalar nil-id fatal
+
+User-hit crash (GUID 0a41da66): the #209 screen-effect suppression returns nil from
+`PlayerUnitFirstPerson.create_screen_particles` while the 3P camera is active, but its
+safety analysis only covered BuffExtension. `PlayerUnitOverchargeExtension._update_screen_effect`
+lazily creates its overlay particle id and then unconditionally feeds it to
+`World.set_particles_material_scalar` every update while overcharge > 0 -- with the create
+suppressed, the nil id is a per-frame Lua error (repro: 3P camera + any overcharge weapon
+above 0 heat; hit on Kruber wielding Sienna's Bolt Staff via wt, but native Sienna in 3P
+crashes identically). The player/enemy `*_state_in_vortex` exit paths pass their stored id
+to `stop_spawning_screen_particles` unguarded -- same latent crash on leaving a plague
+vortex in 3P.
+
+- `_gut_camera.lua`: full-wrapper hook on `PlayerUnitOverchargeExtension._update_screen_effect` --
+  while 3P is active, destroy any existing screen-space overcharge particles (vanilla
+  `_destroy_all_screen_space_particles` nils both id fields) and skip; overlay lazily
+  recreates on the 3P->1P switch.
+- `_gut_camera.lua`: nil-id guards on the sinks `PlayerUnitFirstPerson.stop_spawning_screen_particles`
+  and `.destroy_screen_particles`, covering the vortex exits and any other unguarded vanilla caller.
+- Audited every other vanilla `create_screen_particles` consumer: all nil-guard their stored
+  id or are fire-and-forget. `career_ability_rat_ogre_vs` shares the unguarded pattern but is
+  Versus-only (noted in #216, not patched).
+
 ## 0.2.161-dev (2026-07-01) -- FIX: settings-menu localization ("<...>"-wrapped tooltips) + rewritten option descriptions
 
 Localization + descriptions only; no behavior, setting, default, or range changes.
