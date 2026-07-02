@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.63-dev"
+local MOD_VERSION = "0.9.64-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2531,7 +2531,7 @@ local _active_customization_backend_id = nil
 local _in_create_equipment = false
 
 -- ============================================================
--- #228: in-mission ShadingEnvironment.blend Access-Violation guard
+-- #228 / #235: in-mission weapon-preview shading-environment guard
 -- ============================================================
 -- Opening the weapon-illusion customization screen (HeroWindowItemCustomization,
 -- the loadout-panel gear icon) IN A MISSION crashed with a native Access
@@ -2542,38 +2542,49 @@ local _in_create_equipment = false
 -- spear+shield, cog opened mid-mission via the gut in-mission loadout panel
 -- (gut logged "customize view mounting mid-mission (cosmetics path, no cim)").
 --
--- Mechanism (source-cited): the customization view builds a 3D preview world
--- through its viewport UI pass (ui_passes.lua:2436-2492 -> WorldManager.create_world
--- -> ScriptWorld.create_shading_environment). In the keep it spawns
--- levels/ui_store_preview/world + environment/ui_store_preview (both keep-resident,
--- hero_window_item_customization.lua:405-406). Mid-mission that preview level is
--- not loaded, so cim/gut strip the level_name and substitute
--- shading_environment = "environment/ui_hdr" (crafting_in_modded_dev.lua:2086 and
--- gui_tweaker_dev/_gut_mission_inventory.lua:236). The world MOUNTS with no
--- "Resource not loaded" fatal, but on the first rendered frame ScriptWorld.render
--- calls ShadingEnvironment.blend(shading_env, {"default",1}) on that level-less
--- substitute world and access-violates on a null. The "environment/ui_hdr is
--- always available" claim in those two mods holds for MOUNT but not for the render
--- blend of a level-less mission preview world.
+-- CORRECTED ROOT CAUSE (supersedes the 0.9.62-dev note, which blamed the level-
+-- less environment/ui_hdr world itself). The customization view builds a 3D
+-- preview world through its viewport UI pass (ui_passes.lua:2436-2492 ->
+-- WorldManager.create_world -> ScriptWorld.create_shading_environment). In the
+-- keep it spawns levels/ui_store_preview/world + environment/ui_store_preview
+-- (keep-resident, hero_window_item_customization.lua:405-406). Mid-mission the
+-- preview level isn't loaded, so cim/gut strip level_name and substitute
+-- shading_environment = "environment/ui_hdr" (crafting_in_modded_dev.lua:2086,
+-- gui_tweaker_dev/_gut_mission_inventory.lua:236). ui_hdr + the "default"
+-- variation is NOT the fault: hero_view.lua:174-177 and loading_view.lua:113-118
+-- create-and-blend exactly that every frame in a mission with no crash, and the
+-- customization window is a child of HeroView so HeroView's own ui_hdr world is
+-- resident while the preview is open. The AV is a MISSING BLEND VARIATION:
+-- _present_item -> _update_environment sets the world's blend target to a
+-- per-weapon variation (item_data.item_preview_environment or "weapons_default_01",
+-- hero_window_item_customization.lua:1377-1381), writing shading_settings[1]
+-- (:583-594). ScriptWorld.render blends shading_settings each frame
+-- (script_world.lua:122). on_enter runs _create_ui_elements (:130) then
+-- _present_item (:132) synchronously, so the FIRST rendered frame blends
+-- {"weapons_default_01",1} -- never the harmless {"default",1}. weapons_default_01
+-- is a variation of environment/ui_store_preview (ships with the keep level);
+-- environment/ui_hdr does not define it, so native ShadingEnvironment.blend
+-- indexes a nil blend object -> AV. (A genuinely-unloaded env RESOURCE throws a
+-- clean "Resource not loaded" fatal instead of an AV -- cf. the forge case at
+-- crafting_in_modded_dev.lua:1945-1949 -- confirming the resource is resident and
+-- only the variation is absent.)
 --
--- Fix (chaining-independent): the winning preview-widget definition is whichever
--- mod's _create_item_preview_widget_definition / _register_object_sets hook is
--- outermost in the VMF chain (gut's, in the reported crash), so patching the def
--- is not reliable from here. Instead hook _create_preview_widget, which vanilla
--- calls AFTER the viewport pass has already created the world
--- (hero_window_item_customization.lua:373-380) and which NO mod hooks (so this is
--- not a VMF duplicate-drop). Post-hook, in mission only, neuter the freshly
--- created preview world so ScriptWorld.render can never reach the blend:
---   * clear the world's "shading_environment" data -> render() early-returns at
---     its `if not shading_env then return end` guard, skipping blend, apply, AND
---     render_world. This is robust to WHICH mod's def created the world.
---   * also set "avoid_blend" (the flag ScriptWorld.render checks before
---     blend/apply) as belt-and-suspenders.
--- Teardown is unaffected: WorldManager.destroy_world frees the world via
--- Application.release_world and never reads the "shading_environment" data key.
--- Keep path is untouched (full store-preview lighting there). Cost in mission:
--- the 3D weapon spin panel is blank; the 2D illusion grid + Apply still work
--- (that is the usable-in-mission goal of #172).
+-- 0.9.62-dev FIX (superseded): neuter the world (nil its shading_environment) so
+-- ScriptWorld.render early-returns before any blend. Stopped the crash but skipped
+-- blend+apply+render_world -> the 3D weapon panel rendered BLANK (#235).
+--
+-- #235 FIX (render-preserving, chaining-independent, zero package load): KEEP the
+-- ui_hdr env intact so the world renders, and pin the blend target to the only
+-- variation ui_hdr defines ("default"). Two sites:
+--   (a) this _create_preview_widget hook_safe no longer neuters -- it is now a
+--       pure [235] diagnostic (printf survives mod-logging-OFF). Vanilla calls
+--       _create_preview_widget AFTER the viewport pass created the world
+--       (hero_window_item_customization.lua:373-380) and NO mod hooks it.
+--   (b) the _update_environment hook below forces force_default=true in mission,
+--       so shading_settings[1] stays "default" for the whole preview lifetime.
+-- ui_hdr + "default" is proven blend-safe (the two vanilla witnesses above), so
+-- the weapon renders LIT instead of blank, with no AV and no mid-mission package
+-- hitch. Keep path is a pure pass-through (full store-preview lighting there).
 -- Pre-flight: cosmetics_tweaker hooks _create_preview_widget NOWHERE else.
 mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(self)
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
@@ -2583,16 +2594,36 @@ mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(
     local vp_data = pass_data and pass_data[1]
     local world = vp_data and vp_data.world
     if not world then
-        if printf then printf("[228:blend][cos] in mission: no preview world on _create_preview_widget (nothing to guard)") end
+        if printf then printf("[235][cos] in mission: no preview world on _create_preview_widget") end
         return
     end
-    local had_env = World.has_data(world, "shading_environment")
-    World.set_data(world, "avoid_blend", true)
-    World.set_data(world, "shading_environment", nil)
+    -- Do NOT neuter: leave the shading_environment (ui_hdr) intact so the world
+    -- renders. The _update_environment hook below pins the blend to "default".
+    local has_env = World.has_data(world, "shading_environment")
     if printf then
-        printf("[228:blend][cos] mission preview world neutered (had_shading_env=%s) -> ScriptWorld.render early-returns, blend skipped",
-            tostring(had_env))
+        printf("[235][cos] mission preview world kept renderable (has_shading_env=%s) -> _update_environment pins blend to \"default\"",
+            tostring(has_env))
     end
+end)
+
+-- #235: pin the in-mission preview world's blend variation to "default".
+-- The world above keeps its environment/ui_hdr shading env. ui_hdr defines the
+-- "default" variation (proven blend-safe by hero_view.lua:174-177 and
+-- loading_view.lua:113-118) but NOT the per-weapon variations (weapons_default_01,
+-- etc.) that vanilla _present_item -> _update_environment requests
+-- (hero_window_item_customization.lua:1377-1381 / :583-594). ScriptWorld.render
+-- blends shading_settings[1] each frame (script_world.lua:122); a variation ui_hdr
+-- lacks -> native ShadingEnvironment.blend AV (the real #228 trigger). Forcing
+-- force_default=true keeps shading_settings[1] = "default", so blend only ever
+-- asks for the variation ui_hdr has: the weapon renders LIT, no AV, no blank.
+-- _update_environment is the SOLE writer of shading_settings[1] (only caller is
+-- _present_item), so this one hook covers every re-present (reroll/illusion tabs).
+-- Keep path is a pure pass-through (full per-weapon studio lighting preserved).
+-- Pre-flight: cosmetics_tweaker hooks _update_environment NOWHERE else.
+mod:hook("HeroWindowItemCustomization", "_update_environment", function(func, self, item_preview_environment, force_default)
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+    if in_keep then return func(self, item_preview_environment, force_default) end
+    return func(self, item_preview_environment, true)  -- pin blend target to "default"
 end)
 
 -- v0.9.43-dev SCREEN trace NOTE: the customization view ENTER anchor is
@@ -6534,6 +6565,98 @@ local function _try_apply_by_peer(wearer_peer_id, slot_name, kind, armoury_key, 
     return _apply_la_on_unit(unit, slot_name, kind, armoury_key, vanilla_key)
 end
 
+-- v0.9.64-dev (#233/#234): POST-SPAWN OFFHAND MESH RE-SWAP.
+-- A kind="unit" LA shield gets its MESH swapped only in the spawn-time
+-- BackendUtils.get_item_units path; a later texture-paint (husk repaint / local
+-- wield-reapply) can only recolor, so when the live offhand unit still carries the
+-- PREVIOUS (or vanilla) mesh the #204 warp-guard refuses the paint and the swap
+-- silently no-ops -- #233 (host's shield spawns on the client before the client has
+-- the host's entry) and #234 (mid-mission model change). This forces the mesh to
+-- re-resolve by RE-EQUIPPING at the slot level: pulse-wield through the other weapon
+-- slot and back, so vanilla re-runs create_equipment / _wield_slot -> get_item_units
+-- re-resolves + respawns the offhand with the LA mesh. Slot-level re-equip ONLY --
+-- never World.destroy_unit (that is the gt POSITION_LOOKUP nil-deref crash class).
+--
+-- The CALLER passes the armoury_key that the respawn will actually resolve for this
+-- owner (husk: the _la_equips_by_peer entry; local: the same key echoed back on
+-- cos_la_apply, which matches _offhand_selection after the #203 exit-queue fix) so
+-- the post-pulse mesh CONVERGES and can't ping-pong.
+--
+-- Only ever call this from a SAFE context (network-callback recv handler or
+-- mod.update pending-retry). NEVER from inside a _wield_slot hook body -- the pulse
+-- re-fires _wield_slot and re-entering wield during wield can corrupt inventory
+-- state. Gated: kind="unit" only, package-resident only, mesh-already-correct no-op,
+-- per-owner cooldown + a hard try-cap (so a mesh that can't converge -- e.g. an
+-- unresolved get_item_units case -- pulses a few times then stops, no endless
+-- flicker), and a re-entrancy guard for the pulse's own _wield_slot fire.
+local _offhand_reswap_active = false
+local _offhand_reswap_state = setmetatable({}, { __mode = "k" })  -- owner_unit -> { t, key, tries }
+local _OFFHAND_RESWAP_COOLDOWN = 1.5
+local _OFFHAND_RESWAP_MAX_TRIES = 3
+local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
+    if _offhand_reswap_active then return end
+    if not (owner_unit and armoury_key and Unit.alive(owner_unit)) then return end
+    hand_field = hand_field or "left_hand_unit"
+    -- kind="unit" only: texture variants paint onto the base mesh (no swap needed).
+    local la = get_mod("Loremasters-Armoury")
+    local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
+    if not (variant and variant.kind == "unit" and variant.new_units and variant.new_units[1]) then
+        return
+    end
+    -- Package residency: only pulse if the LA mesh is loadable NOW. If not, bail --
+    -- the pulse's get_item_units would skip the swap anyway; the _la_pending_apply
+    -- retry re-attempts once LA's package finishes loading.
+    local la_unit, _la3p, mesh_ready = _resolve_la_unit_mesh(armoury_key)
+    if not (la_unit and mesh_ready) then return end
+    local inv = ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(owner_unit, "inventory_system")
+    local equipment = inv and inv._equipment
+    if not (equipment and equipment.slots and inv.wield) then return end
+    -- Already the LA mesh? -> nothing to do (the common healthy case; no flicker).
+    local wielded_field = (hand_field == "right_hand_unit")
+        and "right_hand_wielded_unit_3p" or "left_hand_wielded_unit_3p"
+    local live = equipment[wielded_field]
+    if live and Unit.alive(live) and _offhand_paint_mesh_ok(live, armoury_key) then
+        return
+    end
+    -- Per-owner cooldown + hard try-cap so a per-frame caller can't pulse-storm and a
+    -- non-converging mesh can't flicker forever.
+    local st = _offhand_reswap_state[owner_unit]
+    if st and st.key == armoury_key then
+        if st.tries >= _OFFHAND_RESWAP_MAX_TRIES then return end
+        if (os.clock() - st.t) < _OFFHAND_RESWAP_COOLDOWN then return end
+    end
+    -- Need an alternate weapon slot to pulse through; end on the ORIGINAL wielded
+    -- slot so nothing the player is holding visibly changes.
+    local orig_slot = inv.wielded_slot
+    if not orig_slot then return end
+    local slots = equipment.slots
+    local pulse_slot
+    if orig_slot == "slot_melee" and slots["slot_ranged"] then
+        pulse_slot = "slot_ranged"
+    elseif orig_slot == "slot_ranged" and slots["slot_melee"] then
+        pulse_slot = "slot_melee"
+    else
+        for sn, sd in pairs(slots) do
+            if sn ~= orig_slot and sd and (sn == "slot_melee" or sn == "slot_ranged") then
+                pulse_slot = sn
+                break
+            end
+        end
+    end
+    if not pulse_slot then return end
+    local from_mesh = (live and Unit.alive(live)) and _unit_mesh_name(live) or "<none>"
+    local tries = (st and st.key == armoury_key) and (st.tries + 1) or 1
+    _offhand_reswap_state[owner_unit] = { t = os.clock(), key = armoury_key, tries = tries }
+    _offhand_reswap_active = true
+    local ok1 = pcall(inv.wield, inv, pulse_slot)
+    local ok2 = pcall(inv.wield, inv, orig_slot)
+    _offhand_reswap_active = false
+    mod:info("[cos-la-sync] RE-SWAP tag=%s owner=%s hand=%s armoury=%s try=%d from_mesh=%s -> %s pulse=%s<->%s ok=%s/%s",
+        tostring(tag), tostring(owner_unit), tostring(hand_field), tostring(armoury_key), tries,
+        tostring(from_mesh), tostring(la_unit), tostring(orig_slot), tostring(pulse_slot),
+        tostring(ok1), tostring(ok2))
+end
+
 -- HOST: receives equip requests from clients, validates, records into
 -- `_la_equips_by_peer`, broadcasts the authoritative cos_la_apply to ALL.
 mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version, payload)
@@ -6747,51 +6870,21 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
     -- failure can't crash the receiver; even if the pulse fails the rest of the
     -- apply chain ran. (The texture half of the client fix is the
     -- "network_husk" paint now allowed in _la_bridge.lua.)
+    -- v0.9.64-dev (#233/#234): route through the gated _ensure_offhand_mesh helper
+    -- instead of the old UNCONDITIONAL pulse. The helper no-ops when the mesh is
+    -- already the LA mesh (so no flicker on a same-model re-apply), only pulses a
+    -- kind="unit" mesh that is stale/vanilla AND package-resident, and is bounded by
+    -- a per-owner cooldown + try-cap. Covers BOTH the host's husk (wearer=remote,
+    -- #233) and the local player's own body (wearer=local peer -> players_at_peer
+    -- returns the local player, #234), since cos_la_apply broadcasts to "all"
+    -- including the originating client. Safe context (network callback, not a
+    -- _wield_slot body).
     if applied and (kind == "offhand" or kind == "illusion") then
-        local la = get_mod("Loremasters-Armoury")
-        local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
-        if variant and variant.kind == "unit" then
-            local pm = Managers and Managers.player
-            local players = pm and pm.players_at_peer and pm:players_at_peer(wearer)
-            if players then
-                for _, p in pairs(players) do
-                    if p.player_unit and Unit.alive(p.player_unit) then
-                        local inv = ScriptUnit.has_extension(p.player_unit, "inventory_system")
-                        if inv and inv.wield and inv.wielded_slot then
-                            local orig_slot = inv.wielded_slot
-                            local slots = inv._equipment and inv._equipment.slots
-                            local pulse_slot
-                            if slots then
-                                if orig_slot == "slot_melee" and slots["slot_ranged"] then
-                                    pulse_slot = "slot_ranged"
-                                elseif orig_slot == "slot_ranged" and slots["slot_melee"] then
-                                    pulse_slot = "slot_melee"
-                                else
-                                    for sn, sd in pairs(slots) do
-                                        if sn ~= orig_slot and sd
-                                            and (sn == "slot_melee" or sn == "slot_ranged") then
-                                            pulse_slot = sn
-                                            break
-                                        end
-                                    end
-                                end
-                            end
-                            if pulse_slot then
-                                _dbg("[cos_la_apply recv] kind=unit — pulse-rewield husk %s->%s->%s (wearer=%s armoury=%s)",
-                                    tostring(orig_slot), tostring(pulse_slot), tostring(orig_slot),
-                                    tostring(wearer), tostring(armoury_key))
-                                pcall(inv.wield, inv, pulse_slot)
-                                pcall(inv.wield, inv, orig_slot)
-                            else
-                                -- No alternate weapon slot to pulse through;
-                                -- fall back to same-slot (may no-op in vanilla).
-                                _dbg("[cos_la_apply recv] kind=unit — no alternate slot; same-slot rewield (wearer=%s slot=%s armoury=%s)",
-                                    tostring(wearer), tostring(orig_slot), tostring(armoury_key))
-                                pcall(inv.wield, inv, orig_slot)
-                            end
-                        end
-                    end
-                end
+        local pm = Managers and Managers.player
+        local players = pm and pm.players_at_peer and pm:players_at_peer(wearer)
+        if players then
+            for _, p in pairs(players) do
+                _ensure_offhand_mesh(p.player_unit, hand_field, armoury_key, "recv")
             end
         end
     end
@@ -7828,7 +7921,22 @@ mod.update = function(dt)
         for i = 1, #_la_pending_apply do
             local entry = _la_pending_apply[i]
             local wp, slot, kind, ak, vk, deadline = entry[1], entry[2], entry[3], entry[4], entry[5], entry[6]
-            if not _try_apply_by_peer(wp, slot, kind, ak, vk) and now < deadline then
+            local applied_now = _try_apply_by_peer(wp, slot, kind, ak, vk)
+            -- v0.9.64-dev (#233): a kind="unit" offhand that spawned VANILLA before
+            -- this entry arrived (host's shield at the client's mission start) can't
+            -- be fixed by texture-paint alone -- _apply_la_on_unit's offhand branch
+            -- even returns true after the #204 SKIP, so the entry would drop
+            -- "applied" with the mesh still wrong. Drive a real mesh re-swap here
+            -- (mod.update is a safe context to pulse-wield). _ensure_offhand_mesh
+            -- self-gates: no-op once the mesh matches / not resident / cooldown.
+            if kind == "offhand" or kind == "illusion" then
+                local wu = _wearer_unit_for_peer(wp)
+                if wu then
+                    local eq = _la_equips_by_peer[wp] and _la_equips_by_peer[wp][slot]
+                    _ensure_offhand_mesh(wu, eq and eq.hand_field, ak, "retry")
+                end
+            end
+            if not applied_now and now < deadline then
                 kept[#kept + 1] = entry
             end
         end
