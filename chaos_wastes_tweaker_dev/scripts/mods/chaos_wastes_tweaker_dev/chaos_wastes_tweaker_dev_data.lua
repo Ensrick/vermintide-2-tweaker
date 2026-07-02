@@ -369,41 +369,14 @@ end
 
 -- `text` values are localization keys (resolved by VMF via mod:localize). VMF wraps any missing
 -- key in `<<>>`, so even numeric labels like "1".."9" need explicit loc entries — see
--- _localization.lua. v0.7.65: value=-1 is the sentinel meaning "leave vanilla random distribution
--- untouched" (was value=0 in 0.7.64 and earlier — see chaos_wastes_tweaker.lua
--- get_deus_weapon_chest_type). value=0 is now a distinct option meaning "literally zero altars of
--- this type" — the user-facing split between "let CW decide" and "force zero" requested
--- 2026-05-19. Existing user settings stored as 0 will surface as "0 altars" after this change
--- rather than "Default" — the change is documented in CHANGELOG so users can re-pick "Default"
--- if that's what they wanted.
-local altar_count_options = {
-    { text = "altar_count_default", value = -1 },
-    { text = "0", value = 0 },
-    { text = "1", value = 1 },
-    { text = "2", value = 2 },
-    { text = "3", value = 3 },
-    { text = "4", value = 4 },
-    { text = "5", value = 5 },
-    { text = "6", value = 6 },
-    { text = "7", value = 7 },
-    { text = "8", value = 8 },
-    { text = "9", value = 9 },
-}
-
--- v0.7.66: Miracle of Isha behavior dropdown. Replaces the v0.7.65 checkbox
--- (boolean) — string values let us add the third "unlimited wounds" variant
--- without restructuring later. Old boolean storage is migrated in the runtime
--- read helper (`_get_isha_mode` in chaos_wastes_tweaker.lua).
-local isha_alternative_options = {
-    { text = "isha_alt_vanilla", value = "vanilla" },
-    { text = "isha_alt_aegis",   value = "aegis"   },
-    { text = "isha_alt_wounds",  value = "wounds"  },
-}
-
--- v0.7.65: Chests-of-Trials and arena-ammo dropdown options. Same shape as
--- altar_count_options but with a higher max (10) since vanilla numeric versions
--- allowed up to 10. value=-1 is the "use vanilla count" sentinel matching the
--- altar dropdowns' Default semantics.
+-- _localization.lua.
+--
+-- Chests-of-Trials and arena-ammo dropdown options (max 10, matching the vanilla numeric
+-- versions). value=-1 is the "use vanilla count" / "leave vanilla distribution untouched"
+-- sentinel (was value=0 pre-0.7.65 — see chaos_wastes_tweaker.lua get_deus_weapon_chest_type);
+-- value=0 now means "force zero". (The v0.7.65 altar-count dropdown that shared this shape was
+-- removed as dead code, along with the Miracle of Isha legacy-dropdown option table; only this
+-- table remains.)
 local count_with_default_options = {
     { text = "altar_count_default", value = -1 },
     { text = "0", value = 0 },

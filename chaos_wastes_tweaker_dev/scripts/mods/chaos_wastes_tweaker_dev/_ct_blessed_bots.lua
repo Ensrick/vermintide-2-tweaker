@@ -97,13 +97,11 @@ end
 -- for this mod (no duplicate). Re-checks every ~2s so boons re-apply after a
 -- bot dies and respawns.
 mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, context, t)
-    if not mod:get("ct_blessed_bots") then
-        return
-    end
-    if not _is_server() then
-        return
-    end
-
+    -- Throttle FIRST so the ~60Hz-per-bot common path is just a blackboard field
+    -- read + a float compare. The mod:get / _is_server checks (and everything
+    -- below) then run at most once per 2s per bot, not every frame. Advancing
+    -- next_t before those checks means a disabled feature also only re-polls every
+    -- 2s (worst case: enabling mid-session delays the first grant up to 2s).
     local blackboard = self._blackboard
     if not blackboard then
         return
@@ -114,6 +112,13 @@ mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, contex
         return
     end
     blackboard._ct_blessed_next_t = t + 2.0
+
+    if not mod:get("ct_blessed_bots") then
+        return
+    end
+    if not _is_server() then
+        return
+    end
 
     if not HEALTH_ALIVE[unit] then
         return

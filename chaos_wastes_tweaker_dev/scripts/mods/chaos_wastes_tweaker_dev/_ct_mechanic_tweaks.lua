@@ -5,9 +5,10 @@ local mod = get_mod("ct_dev")
 -- ============================================================================
 -- Lives in its own chunk (dofile'd module) so its file-scope locals do NOT count
 -- against the main file's Lua 5.1 200-locals-per-function cap. Mirrors the
--- shard-strike / anath-raema save-restore pattern from the main file. The two
--- sync functions are exposed on `mod` so the main file's sync_host_dependent_state
--- and on_setting_changed can re-apply them. Reads settings through the main
+-- shard-strike / anath-raema save-restore pattern from the main file. The one
+-- sync function (shadow-skull stun; the #6 adventure-trait slider moved to gt on
+-- 2026-06-18) is exposed on `mod` so the main file's sync_host_dependent_state
+-- and on_setting_changed can re-apply it. Reads settings through the main
 -- file's host-synced `effective_setting` (exposed as mod._ct_effective_setting)
 -- so client peers gate on the HOST's value. Source citations verified 2026-06-17.
 

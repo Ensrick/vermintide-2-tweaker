@@ -66,10 +66,7 @@ mod._ct_dup_chip_node_key_resolution = "final_node_selected>vote>nil"
 
 local Unit = Unit
 local World = World
-local Vector3 = Vector3
-local Vector3Box = Vector3Box
 local Matrix4x4 = Matrix4x4
-local Network = Network
 
 local REAL_PLAYER_LOCAL_ID = 1
 
@@ -104,6 +101,16 @@ local function _setting_on()
 	return true
 end
 
+-- Cache key for an extra chip. Keyed by peer_id AND profile_index: a peer that
+-- changes career mid-view keeps the same peer_id but gets a new profile_index, so
+-- a peer_id-only key would return the STALE token spawned for the old hero (wrong
+-- character mesh). The compound key spawns a fresh, correct-mesh token per
+-- (peer, career); the old-career token is left cached (hidden by the not-`used`
+-- sweep, torn down by _clear) so a switch back reuses it. Bounded at <=5 per peer.
+local function _dup_token_key(peer_id, profile_index)
+	return tostring(peer_id) .. "_" .. tostring(profile_index)
+end
+
 -- Spawn (or fetch cached) the extra chip unit for a duplicate peer. Returns the
 -- unit handle or nil on failure. pcall-wrapped: World.spawn_unit can fatal on a
 -- bad path / torn-down world.
@@ -114,7 +121,8 @@ local function _get_or_spawn_dup_token(scene, peer_id, profile_index)
 		scene._ct_dup_tokens = cache
 	end
 
-	local existing = cache[peer_id]
+	local key = _dup_token_key(peer_id, profile_index)
+	local existing = cache[key]
 	if existing then
 		return existing
 	end
@@ -136,7 +144,7 @@ local function _get_or_spawn_dup_token(scene, peer_id, profile_index)
 		return nil
 	end
 
-	cache[peer_id] = unit
+	cache[key] = unit
 	return unit
 end
 
@@ -378,7 +386,7 @@ mod:hook_safe("DeusMapDecisionView", "_update_player_state", function(self)
 					local unit = _get_or_spawn_dup_token(scene, peer_id, _profile_index)
 					if unit then
 						if _place_dup_token(scene, unit, entry.slot, node_key) then
-							used[peer_id] = true
+							used[_dup_token_key(peer_id, _profile_index)] = true
 						else
 							_hide_dup_token(scene, unit)
 						end
@@ -392,8 +400,8 @@ mod:hook_safe("DeusMapDecisionView", "_update_player_state", function(self)
 	-- (career change, peer left, vote cleared). Cache entry survives for reuse.
 	local cache = scene._ct_dup_tokens
 	if cache then
-		for peer_id, unit in pairs(cache) do
-			if not used[peer_id] then
+		for cache_key, unit in pairs(cache) do
+			if not used[cache_key] then
 				_hide_dup_token(scene, unit)
 			end
 		end
@@ -417,11 +425,11 @@ mod:hook_safe("DeusMapScene", "_clear", function(self)
 	end
 
 	local world = self._world
-	for peer_id, unit in pairs(cache) do
+	for cache_key, unit in pairs(cache) do
 		if world and unit then
 			pcall(World.destroy_unit, world, unit)
 		end
-		cache[peer_id] = nil
+		cache[cache_key] = nil
 	end
 
 	self._ct_dup_tokens = nil

@@ -482,6 +482,22 @@ local POOL_SAFETY_THRESHOLD = 4  -- Minimum unique entries needed per (journey Ã
 -- accumulating extra entries.
 local _snapshot = nil
 
+-- Registry of duplicate aliases already minted this session, keyed by
+-- "<journey>\0<pool_type>" -> ordered array of alias keys (array index = dup slot).
+-- Lives on the module table (like IS_INJECTED_ADVENTURE_LEVEL) so it survives across
+-- the many inject_pool() calls per session (fired on every pool-setting change).
+--
+-- WHY: reset_to_snapshot() restores LEVEL_AVAILABILITY but NOT the `_dupN` entries
+-- added to DEUS_LEVEL_SETTINGS / LevelSettings / NetworkLookup.level_keys. Without
+-- reuse, the mint loop's `until not rawget(DEUS_LEVEL_SETTINGS, alias_key)` guard
+-- skips every prior `_dupN` and coins a fresh name on each run, so every re-inject
+-- grows NetworkLookup.level_keys (a network-synced table we must never SHRINK â€”
+-- removing entries can desync peers) without bound. Reusing the SAME alias per
+-- (pool, slot) makes alias creation idempotent and bounds the alias set at
+-- POOL_SAFETY_THRESHOLD-1 per pool. Keyed by journey+pool (not base+occurrence) so
+-- it's immune to Lua 5.1 pairs() iteration-order changes between runs.
+_M._dup_alias_registry = _M._dup_alias_registry or {}
+
 local function take_snapshot()
     if _snapshot then return end
     _snapshot = {}
@@ -564,48 +580,72 @@ local function inject_duplicate_aliases()
                     local n = #keys
                     if n > 0 and n < POOL_SAFETY_THRESHOLD then
                         local deficit = POOL_SAFETY_THRESHOLD - n
+                        -- Aliases minted for THIS (journey, pool) on prior runs. We reuse
+                        -- them per dup slot instead of minting new "_dupN" names each run
+                        -- (see _dup_alias_registry note above) so NetworkLookup.level_keys
+                        -- doesn't grow unboundedly across pool-setting changes.
+                        local pool_id = tostring(journey_name) .. "\0" .. pool_type
+                        local slots = _M._dup_alias_registry[pool_id]
+                        if not slots then
+                            slots = {}
+                            _M._dup_alias_registry[pool_id] = slots
+                        end
                         -- Round-robin duplicate-create across existing keys.
                         local dup_idx = 0
                         while deficit > 0 do
-                            local base_key = keys[(dup_idx % n) + 1]
-                            local base_dls = rawget(DEUS_LEVEL_SETTINGS, base_key)
-                            if not base_dls then break end
-                            local suffix_n = 1
-                            local alias_key
-                            repeat
-                                alias_key = base_key .. "_dup" .. suffix_n
-                                suffix_n = suffix_n + 1
-                            until not rawget(DEUS_LEVEL_SETTINGS, alias_key) and not pool[alias_key]
+                            local alias_key = slots[dup_idx + 1]
+                            local alias_dls = alias_key and rawget(DEUS_LEVEL_SETTINGS, alias_key)
 
-                            DEUS_LEVEL_SETTINGS[alias_key] = {
-                                base_level_name = base_dls.base_level_name,
-                                paths           = table.clone(base_dls.paths or { 1 }),
-                                themes          = table.clone(base_dls.themes or { "wastes" }),
-                                pickup_settings = base_dls.pickup_settings,
-                                deus_weapon_chest_distribution = base_dls.deus_weapon_chest_distribution,
-                                display_name    = base_dls.display_name,
-                                locations       = base_dls.locations or {},
-                                packages        = base_dls.packages or {},
-                            }
-                            -- Mirror LevelSettings permutation entries so the engine can
-                            -- resolve <alias>_<theme>_path<n>.
-                            for _, theme_name in ipairs(ALL_THEMES) do
-                                for _, path in ipairs(DEUS_LEVEL_SETTINGS[alias_key].paths) do
-                                    local original_perm = base_key .. "_" .. theme_name .. "_path" .. path
-                                    local alias_perm    = alias_key .. "_" .. theme_name .. "_path" .. path
-                                    local source = rawget(LevelSettings, original_perm)
-                                    if source and not rawget(LevelSettings, alias_perm) then
-                                        local clone = table.clone(source)
-                                        clone.level_key = alias_perm
-                                        clone.level_id  = alias_perm
-                                        LevelSettings[alias_perm] = clone
+                            if not alias_dls then
+                                -- No reusable alias for this slot yet (first run, or a larger
+                                -- deficit than any previous run) -- mint one and record it in
+                                -- the registry so later runs REUSE it (bounded growth).
+                                local base_key = keys[(dup_idx % n) + 1]
+                                local base_dls = rawget(DEUS_LEVEL_SETTINGS, base_key)
+                                if not base_dls then break end
+                                local suffix_n = 1
+                                repeat
+                                    alias_key = base_key .. "_dup" .. suffix_n
+                                    suffix_n = suffix_n + 1
+                                until not rawget(DEUS_LEVEL_SETTINGS, alias_key) and not pool[alias_key]
+
+                                DEUS_LEVEL_SETTINGS[alias_key] = {
+                                    base_level_name = base_dls.base_level_name,
+                                    paths           = table.clone(base_dls.paths or { 1 }),
+                                    themes          = table.clone(base_dls.themes or { "wastes" }),
+                                    pickup_settings = base_dls.pickup_settings,
+                                    deus_weapon_chest_distribution = base_dls.deus_weapon_chest_distribution,
+                                    display_name    = base_dls.display_name,
+                                    locations       = base_dls.locations or {},
+                                    packages        = base_dls.packages or {},
+                                }
+                                -- Mirror LevelSettings permutation entries so the engine can
+                                -- resolve <alias>_<theme>_path<n>.
+                                for _, theme_name in ipairs(ALL_THEMES) do
+                                    for _, path in ipairs(DEUS_LEVEL_SETTINGS[alias_key].paths) do
+                                        local original_perm = base_key .. "_" .. theme_name .. "_path" .. path
+                                        local alias_perm    = alias_key .. "_" .. theme_name .. "_path" .. path
+                                        local source = rawget(LevelSettings, original_perm)
+                                        if source and not rawget(LevelSettings, alias_perm) then
+                                            local clone = table.clone(source)
+                                            clone.level_key = alias_perm
+                                            clone.level_id  = alias_perm
+                                            LevelSettings[alias_perm] = clone
+                                        end
+                                        register_network_lookup_key(alias_perm)
                                     end
-                                    register_network_lookup_key(alias_perm)
                                 end
+                                slots[dup_idx + 1] = alias_key
+                                alias_dls = DEUS_LEVEL_SETTINGS[alias_key]
                             end
+
+                            -- Add (or re-add, after reset_to_snapshot cleared the pool) the
+                            -- alias to this pool. On the reuse path the DEUS_LEVEL_SETTINGS /
+                            -- LevelSettings / NetworkLookup entries persist from the first
+                            -- mint, so only the pool membership needs restoring.
                             pool[alias_key] = {
-                                themes = DEUS_LEVEL_SETTINGS[alias_key].themes,
-                                paths  = DEUS_LEVEL_SETTINGS[alias_key].paths,
+                                themes = alias_dls.themes,
+                                paths  = alias_dls.paths,
                             }
                             injected = injected + 1
                             deficit = deficit - 1

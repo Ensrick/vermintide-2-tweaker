@@ -374,14 +374,12 @@ local loc = {
     tweak_wildfire_generations_cap = { en = "[untested] Myrmidia's Wildfire: Generations Cap" },
     tweak_wildfire_generations_cap_tooltip = { en = "Max times Myrmidia's Wildfire can chain. 3 = prevents infinite cascades; 10 = near-uncapped vanilla; 1 = no chaining past the original spread. Host-only." },
     -- v0.7.81: Miracle of Isha replaced its dropdown widget with a mutex
-    -- checkbox cluster (per LOCALIZATION_STANDARD.md § 10). Old dropdown
-    -- localization keys preserved one release for the migration path read
-    -- inside _get_isha_mode(); they no longer drive any widget.
+    -- checkbox cluster (per LOCALIZATION_STANDARD.md § 10). The legacy dropdown
+    -- option-label keys (isha_alt_vanilla/aegis/wounds) and the _tooltip were
+    -- removed as dead code (v0.7.203) — no widget referenced them. The base
+    -- setting key below is kept because _get_isha_mode()'s migration path still
+    -- reads its stored value (mod:get) for users who last picked the old dropdown.
     tweak_miracle_of_isha_alternative = { en = "Miracle of Isha behavior (legacy dropdown)" },
-    tweak_miracle_of_isha_alternative_tooltip = { en = "DEPRECATED. Replaced by the (A)/(B) Miracle of Isha checkboxes. Preserved one release for migration." },
-    isha_alt_vanilla = { en = "Vanilla (revive once)" },
-    isha_alt_aegis   = { en = "Aegis (-25%% damage taken, all run)" },
-    isha_alt_wounds  = { en = "Unlimited Wounds (recruit-style)" },
 
     -- Mutex cluster `isha_choice` — pick one (or neither = vanilla). Per
     -- LOCALIZATION_STANDARD.md § 10, cluster members use the

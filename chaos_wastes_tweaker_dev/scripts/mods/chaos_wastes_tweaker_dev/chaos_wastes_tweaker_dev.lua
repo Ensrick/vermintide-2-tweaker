@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.202-dev"
+local MOD_VERSION = "0.7.203-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -522,7 +522,6 @@ local _career_exclusive_denial_counts = {}
 -- Stops the denial log spamming for every spawner that polls the grenades pool.
 local _career_exclusive_logged_this_run = {}
 
-local granting_starting_coins = false
 -- v0.7.95: per-run idempotence flag for the starting_coins setter override.
 -- `setup_run` is the lifecycle event for "campaign begins" and fires exactly
 -- once per new CW run, but defensive belt-and-suspenders: track the last
@@ -662,7 +661,7 @@ mod:hook("DeusRunController", "on_soft_currency_picked_up", function(func, self,
     local args = { ... }
     local raw_amount = args[1]
 
-    if type(raw_amount) == "number" and not granting_starting_coins then
+    if type(raw_amount) == "number" then
         -- v0.7.55: route through effective_setting so a client picking up coins applies
         -- the host's coin_multiplier (matches what the host's own pickups grant).
         local multiplier = effective_setting("coin_multiplier") or 1
@@ -1167,14 +1166,6 @@ mod:hook("DeusChestExtension", "_setup_rarity", function(func, self, seed, chest
     self._prev_update_upgrade_chest_color_event = nil
     return bumped
 end)
-
--- CLARIFY: Granting starting coins by re-entering on_soft_currency_picked_up. The
--- `granting_starting_coins` flag suppresses the multiplier hook above so 500 starting coins doesn't
--- get doubled by a 2x multiplier setting. Without the flag, a multiplier > 1 would inflate the gift.
--- POTENTIAL BUG (LOW): the second arg to on_soft_currency_picked_up is `type` (a
--- DeusSoftCurrencySettings.types.{GROUND,MONSTER,...} value). Passing nil means the server-only
--- branch in vanilla treats this as neither GROUND nor MONSTER, so the per-pickup counters are NOT
--- incremented — fine for starting coins, but worth knowing.
 
 -- ============================================================
 -- Multiplayer settings sync (v0.7.21)
@@ -10721,6 +10712,14 @@ local HOME_BREWER_BREWED_TEMPLATES = {
     moot_milk_potion_increased = true,
 }
 
+-- v0.7.203-dev multi-return marker: the Home Brewer add_buff hook's guarded
+-- (scaled-potency) path forwards ALL of vanilla's returns (id, sub_buffs_added,
+-- first_buff) via _capture_returns + unpack(results, 1, n), NOT a collapsing
+-- `local result = func(...); return result`. Global (not a main-chunk local) to
+-- dodge the Lua 5.1 200-local cap. Asserted by /ct_regression_test
+-- "home_brewer_add_buff_multireturn_preserved".
+CT_HOME_BREWER_MULTIRETURN_MARKER = "home_brewer_add_buff:capture_returns_unpack_v0.7.203"
+
 mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params)
     if not effective_setting("tweak_home_brewer_potency") then
         return func(self, template_name, params)
@@ -10744,12 +10743,19 @@ mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params
             if sb.bonus      then sb.bonus      = sb.bonus      * 1.5 end
         end
     end
-    local result = func(self, template_name, params)
+    -- v0.7.203-dev: vanilla BuffExtension.add_buff returns THREE values
+    -- (id, sub_buffs_added, first_buff — buff_extension.lua:517). The prior
+    -- `local result = func(...)` / `return result` collapsed that to the first
+    -- return, dropping sub_buffs_added + first_buff for any caller that reads them
+    -- (VMF_RECIPES §2/§2a). Capture the real arity and forward every return;
+    -- restore the scaled sub-buff fields in between. Marker
+    -- CT_HOME_BREWER_MULTIRETURN_MARKER documents this fix for the regression check.
+    local n, results = _capture_returns(func(self, template_name, params))
     for i, s in pairs(saved) do
         sub_buffs[i].multiplier = s.multiplier
         sub_buffs[i].bonus      = s.bonus
     end
-    return result
+    return unpack(results, 1, n)
 end)
 
 -- ============================================================
@@ -11887,6 +11893,11 @@ mod.on_disabled = function()
     revert_moot_milk_alt_tweak()
     revert_shard_strike_tweak()
     revert_anath_raema_permanent_tweak()
+    -- Drop the lazily-built, never-otherwise-invalidated trait-pool caches so a
+    -- re-enable rebuilds them from current game data instead of serving a stale
+    -- snapshot captured under the previous (possibly different-mod-set) session.
+    all_trait_combos_cache = nil
+    mod._ct_trait_class_pools = nil
 end
 
 -- ============================================================
@@ -13364,6 +13375,22 @@ _rt_register("variadic_hooks_arity_preserved", function()
     end
     if last ~= "z" then
         return string.format("arity idiom dropped the trailing arg after a nil hole: expected 'z', got %s", tostring(last))
+    end
+end)
+
+-- v0.7.203-dev: the Home Brewer potency hook on BuffExtension.add_buff scales the
+-- brewed-potion sub-buff multiplier/bonus, calls vanilla, then restores. Its guarded
+-- path previously did `local result = func(...); return result`, collapsing vanilla's
+-- three returns (id, sub_buffs_added, first_buff — buff_extension.lua:517) to one. The
+-- fix routes through _capture_returns + unpack(results, 1, n). Lua can't read its own
+-- bundle at runtime, so this asserts the marker constant the fix site is documented
+-- against (same shape as variadic_hooks_arity_preserved / endless_bombs_strip_on_expiry).
+_rt_register("home_brewer_add_buff_multireturn_preserved", function()
+    if type(CT_HOME_BREWER_MULTIRETURN_MARKER) ~= "string" then
+        return "CT_HOME_BREWER_MULTIRETURN_MARKER not defined — the Home Brewer add_buff hook may have reverted to a single-return `local result = func(...)` collapse (drops sub_buffs_added + first_buff)"
+    end
+    if CT_HOME_BREWER_MULTIRETURN_MARKER ~= "home_brewer_add_buff:capture_returns_unpack_v0.7.203" then
+        return "CT_HOME_BREWER_MULTIRETURN_MARKER mismatch — expected capture_returns/unpack form, got: " .. tostring(CT_HOME_BREWER_MULTIRETURN_MARKER)
     end
 end)
 
