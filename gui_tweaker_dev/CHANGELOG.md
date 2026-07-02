@@ -5,6 +5,34 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.175-dev (2026-07-02) -- FIX #175: equips in modded now persist with Loremaster's Armoury installed (LA clone-dispatch capture gap)
+
+### Why (friend logs 2026-07-02 21:25 + 21:27)
+With the modded store serving reads, the friend equipped the correct sword in modded,
+relaunched, and got the stale one back. Both logs show ZERO equip captures for a live
+equip: with Loremaster's Armoury installed, menu equips
+(hero_view_state_overview.lua:1108 -> BackendUtils.set_loadout_item ->
+get_loadout_interface_by_slot) route through an LA-CLONED interface whose copied methods
+bypass class-level hooks, so gear writes never reached the
+PlayFabMirrorAdventure.set_character_data capture - reads came from the store, writes
+leaked down the clone path. cim burned identically 2026-05-30 and documents the fix
+(crafting_in_modded_dev.lua:1495): capture at the stable OUTER BackendUtils entry point.
+Pose captures in the same logs prove the mirror hook itself works for non-clone flows.
+
+### Changed
+- **TABLE-form `BackendUtils.set_loadout_item` capture**, installed deferred once the
+  backend answers (cim/cosmetics timing), gear slots only (cosmetic ids are rewritten at
+  the interface layer, so cosmetics stay captured at the mirror hook). Equip flow itself
+  is untouched (func always called).
+- **`set_career_read_only_data` capture + block while gated** (base:3630, the
+  `_characters_data`/cloud-push writer, NOT eac-gated by vanilla): career-scoped writes
+  are stored and blocked so clone-bypass paths cannot mutate official character data;
+  career-nil writes pass through.
+- HOOK_TARGETS + regression uniqueness check extended to both new targets.
+- Friend remediation on this build: run `/reset_modded_loadouts` once (his correction
+  went to official via the bypass, so a re-seed picks it up), or simply re-equip once in
+  modded - now captured.
+
 ## 0.2.174-dev (2026-07-02) -- CRITICAL FIX #175: v0.2.173 infinite recursion (stack overflow -> 1 GiB lua_heap crash)
 
 ### Why (PC-A log 2026-07-02 21:09, 457k lines in ~2 min; friend unbootable with no surviving log)

@@ -210,7 +210,48 @@ local function _resolve_item_raw(id)
     return ok and state or RESOLVE_UNKNOWN
 end
 
+-- ------------------------------------------------------------------
+-- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
+-- route through an LA-CLONED interface whose copied methods bypass class-level hooks, so
+-- gear equips never reached the PlayFabMirrorAdventure.set_character_data capture (friend
+-- logs 2026-07-02 21:25/21:27: a live equip produced ZERO captures; store stayed stale so
+-- the correction did not survive relaunch). cim burned identically 2026-05-30 and solved
+-- it the same way - see crafting_in_modded_dev.lua:1495 comment block. Capture at the
+-- stable OUTER entry point the hero view calls (hero_view_state_overview.lua:1108),
+-- TABLE-form per the repo Hooking rule, installed deferred once the backend answers
+-- (cim/cosmetics timing). GEAR slots only: the interface layer rewrites cosmetic ids
+-- (override_id/ItemId, backend_interface_item_playfab.lua set_loadout_item) before the
+-- mirror write, so cosmetic captures stay at the mirror hook, which the real cosmetic
+-- flow does reach (pose captures in the same friend logs prove it).
+-- ------------------------------------------------------------------
+local _bu_capture_installed = false
+local function _install_bu_capture()
+    if _bu_capture_installed then return end
+    local BU = rawget(_G, "BackendUtils")
+    if not (BU and BU.set_loadout_item and Managers and Managers.backend and Managers.backend.get_interface) then return end
+    local ok_iface = pcall(function() return Managers.backend:get_interface("items") end)
+    if not ok_iface then return end
+    _bu_capture_installed = true
+    mod:hook(BU, "set_loadout_item", function(func, backend_id, career_name, slot_name)
+        -- 3-arg entry point, always the SELECTED loadout (no index arg by design).
+        if _adventure_active() and career_name and backend_id and GEAR_SLOT_SET[slot_name] then
+            local store = _store()
+            local entry = store[career_name]
+            if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
+            local idx = entry.selected_index
+            entry.loadouts[idx] = entry.loadouts[idx] or {}
+            entry.loadouts[idx][slot_name] = backend_id
+            _persist()
+            printf("[gut_dev:NATIVE_LOADOUTS] BU equip capture career=%s idx=%s slot=%s -> store",
+                tostring(career_name), tostring(idx), tostring(slot_name))
+        end
+        return func(backend_id, career_name, slot_name)
+    end)
+    printf("[gut_dev:NATIVE_LOADOUTS] BackendUtils.set_loadout_item capture installed (post-LA)")
+end
+
 local function _prepare(mirror, career_name)
+    _install_bu_capture()
     _ensure_seeded(mirror, career_name)
 end
 
@@ -376,6 +417,30 @@ mod:hook("PlayFabMirrorAdventure", "delete_loadout", function(func, self, career
     -- NO-OP vanilla.
 end)
 
+-- set_career_read_only_data(self, character, key, value, career, set_mirror, loadout_index)
+-- (base:3630) is the `_characters_data` writer - the payload source for the cloud push,
+-- and vanilla does NOT eac-gate character-data pushes. Normally unreachable while gated
+-- (our set_character_data no-op stops the chain before base:1941), but LA-clone bypass
+-- paths can still reach it as a method call. When gated: career-scoped writes (loadout
+-- slots + talents per base:1941) are captured into the store and BLOCKED so nothing
+-- modded ever mutates _characters_data. career-nil (character-level) writes pass through.
+mod:hook("PlayFabMirrorAdventure", "set_career_read_only_data", function(func, self, character, key, value, career, set_mirror, loadout_index)
+    if not _mirror_active(self) or not career then
+        return func(self, character, key, value, career, set_mirror, loadout_index)
+    end
+    _prepare(self, career)
+    local store = _store()
+    local entry = store[career]
+    if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career] = entry end
+    local idx = loadout_index or entry.selected_index
+    entry.loadouts[idx] = entry.loadouts[idx] or {}
+    entry.loadouts[idx][key] = value
+    _persist()
+    printf("[gut_dev:NATIVE_LOADOUTS] set_career_read_only_data career=%s idx=%s key=%s -> store (blocked official write)",
+        tostring(career), tostring(idx), tostring(key))
+    -- NO-OP vanilla: _characters_data stays clean => no cloud push.
+end)
+
 -- ==================================================================
 -- BOT LOADOUTS -- resolve bot designation from the store (issue #175 requirement 9).
 -- ==================================================================
@@ -468,11 +533,13 @@ M.HOOK_TARGETS = {
     { "PlayFabMirrorAdventure", "get_career_loadouts" },
     { "PlayFabMirrorAdventure", "has_loadout" },
     { "PlayFabMirrorAdventure", "set_character_data" },
+    { "PlayFabMirrorAdventure", "set_career_read_only_data" },
     { "PlayFabMirrorAdventure", "set_loadout_index" },
     { "PlayFabMirrorAdventure", "add_loadout" },
     { "PlayFabMirrorAdventure", "delete_loadout" },
     { "BackendInterfaceItemPlayfab", "refresh_bot_loadouts" },
     { "HeroWindowLoadoutSelectionConsole", "_save_bot_equipment" },
+    { "BackendUtils", "set_loadout_item" },  -- TABLE-form, installed deferred (_install_bu_capture)
 }
 
 M.rt_checks = {
