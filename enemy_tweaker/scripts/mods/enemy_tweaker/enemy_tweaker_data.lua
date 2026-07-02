@@ -106,6 +106,8 @@ local function _build_difficulty_block(diff)
     return {
         setting_id = "et_diff_" .. diff.key .. "_group",
         type       = "group",
+        -- Deliberate order (NOT A→Z): the two active-count caps come first,
+        -- then the per-special Spawn Weights and Disabled Specials sub-lists.
         sub_widgets = {
             {
                 setting_id    = B.setting_key(diff.key, "max_total"),
@@ -137,6 +139,8 @@ end
 
 local function _build_special_spawns_block()
     local subs = {}
+    -- Deliberate order (NOT A→Z): per-difficulty blocks follow the difficulty
+    -- ladder (Recruit → Cataclysm 3), matching B.DIFFICULTIES.
     for _, diff in ipairs(B.DIFFICULTIES) do
         subs[#subs + 1] = _build_difficulty_block(diff)
     end
@@ -154,164 +158,19 @@ return {
     description  = mod:localize("mod_description"),
     is_togglable = true,
     options = {
+        -- Top-level entries are ordered A→Z by their English display label
+        -- (see enemy_tweaker_localization.lua). Order within each group is also
+        -- A→Z, except the deliberate-order exemptions commented at each site:
+        --   • Special Spawns per-difficulty blocks follow the difficulty ladder.
+        --   • Faction / breed substitution follows the mod's Skaven → Chaos →
+        --     Beastmen faction order.
+        --   • min/max pairs read min-before-max.
+        --   • per-difficulty specials blocks lead with the count caps.
         widgets = {
-            -- SPAWN SCALING (added v0.6.0-dev — four multipliers, all 0–15x in
-            -- 0.1 steps, default 1.0 = vanilla, 0 = suppress entirely)
-            --
-            -- The widget type is `numeric` with `decimals_number = 1`, which
-            -- gives a slider that snaps to 0.1 increments (verified across 40
-            -- in-repo usages — chaos_wastes_tweaker_data.lua:402,
-            -- general_tweaker_data.lua:66 etc). mod:get returns a Lua number.
-            --
-            -- Why these four:
-            --   horde_size   — paced hordes (HordeCompositionsPacing, ~25 keys)
-            --   event_size   — terror-event hordes (HordeCompositions, ~194 keys
-            --                  — majority of visible adventure-mission hordes)
-            --   roaming_size — ambient roaming patrols (SizeOfInterestPoint
-            --                  pack sizes, drives ConflictDirector.roaming)
-            --   patrol_size  — formed marching squads (AIGroupSystem
-            --                  create_formation_data formation rows)
-            --
-            -- All four apply *independently and multiplicatively* on their own
-            -- spawn surface so setting one to 0 suppresses only that channel.
-            -- See enemy_tweaker.lua for the apply implementations and
-            -- /verify_horde_size /verify_event_size /verify_roaming_size
-            -- /verify_patrol_size commands for live-state verification.
-            {
-                setting_id  = "spawn_scaling_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "horde_size_multiplier",
-                        type          = "numeric",
-                        default_value = 1,
-                        range         = { 0, 5 },   -- v0.7.11-dev: capped at 5x (paced hordes get overwhelming/unstable past ~5x; patrols + roaming still go to 15x)
-                        decimals_number = 1,
-                        tooltip       = "horde_size_multiplier_tooltip",
-                    },
-                    {
-                        setting_id    = "event_size_multiplier",
-                        type          = "numeric",
-                        default_value = 1,
-                        range         = { 0, 5 },   -- v0.7.11-dev: capped at 5x (event hordes are wave spawns like paced hordes; patrols + roaming still go to 15x)
-                        decimals_number = 1,
-                        tooltip       = "event_size_multiplier_tooltip",
-                    },
-                    {
-                        setting_id    = "roaming_size_multiplier",
-                        type          = "numeric",
-                        default_value = 1,
-                        range         = { 0, 15 },
-                        decimals_number = 1,
-                        tooltip       = "roaming_size_multiplier_tooltip",
-                    },
-                    {
-                        setting_id    = "patrol_size_multiplier",
-                        type          = "numeric",
-                        default_value = 1,
-                        range         = { 0, 15 },
-                        decimals_number = 1,
-                        tooltip       = "patrol_size_multiplier_tooltip",
-                    },
-                },
-            },
 
-            -- SPAWN PACING (added v0.7.0-dev — SpawnTweaks parity pass)
-            -- These hit different engine layers than the four 0–15x sliders
-            -- above:
-            --   max_grunts_override          -> RecycleSettings.max_grunts
-            --                                   (concurrent-alive trash cap;
-            --                                   vanilla baseline ~90)
-            --   spawn_pace_multiplier        -> ConflictDirector.threat_value
-            --                                   + Pacing.total_intensity (>1 =
-            --                                   spawn-delay thresholds trip
-            --                                   sooner = MORE FREQUENT spawns)
-            --   horde_grunt_push_threshold   -> RecycleSettings
-            --                                   .push_horde_if_num_alive_grunts_above
-            --                                   (lower = hordes trigger sooner)
-            --   horde_frequency_min/max      -> CurrentPacing.horde_frequency
-            --                                   (paced-horde interval seconds)
-            --   ambients_ignore_threat       -> mini_patrol.only_spawn_below_intensity
-            --                                   = math.huge during update
-            --                                   (ambient packs spawn even
-            --                                   while combat is hot)
-            --
-            -- SPAWN SCALING (above) controls "how many enemies per spawn event."
-            -- SPAWN PACING (here)  controls "how often / how many concurrently."
-            -- They compound multiplicatively at runtime — use both.
-            {
-                setting_id  = "spawn_pacing_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "max_grunts_override",
-                        type          = "numeric",
-                        default_value = 90,
-                        range         = { 10, 360 },
-                        tooltip       = "max_grunts_override_tooltip",
-                    },
-                    {
-                        setting_id    = "spawn_pace_multiplier",
-                        type          = "numeric",
-                        default_value = 1,
-                        range         = { 0, 5 },
-                        decimals_number = 1,
-                        tooltip       = "spawn_pace_multiplier_tooltip",
-                    },
-                    {
-                        setting_id    = "horde_grunt_push_threshold",
-                        type          = "numeric",
-                        default_value = 60,
-                        range         = { 10, 240 },
-                        tooltip       = "horde_grunt_push_threshold_tooltip",
-                    },
-                    {
-                        setting_id    = "horde_frequency_min",
-                        type          = "numeric",
-                        default_value = 50,
-                        range         = { 5, 200 },
-                        tooltip       = "horde_frequency_min_tooltip",
-                    },
-                    {
-                        setting_id    = "horde_frequency_max",
-                        type          = "numeric",
-                        default_value = 100,
-                        range         = { 5, 200 },
-                        tooltip       = "horde_frequency_max_tooltip",
-                    },
-                    {
-                        setting_id    = "ambients_ignore_threat",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = "ambients_ignore_threat_tooltip",
-                    },
-                },
-            },
-
-            -- HORDES
-            {
-                setting_id = "horde_group",
-                type       = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "horde_preset",
-                        type          = "dropdown",
-                        default_value = "off",
-                        tooltip       = "horde_preset_tooltip",
-                        options = {
-                            { text = "preset_off",               value = "off" },
-                            { text = "preset_skaven_only",       value = "skaven_only" },
-                            { text = "preset_chaos_only",        value = "chaos_only" },
-                            { text = "preset_beastmen_invasion", value = "beastmen_invasion" },
-                            { text = "preset_mixed_factions",    value = "mixed_factions" },
-                            { text = "preset_all_elites",        value = "all_elites" },
-                        },
-                    },
-                },
-            },
-
+            -- ============================================================
             -- BEASTMAN BANNER (v0.7.2-dev)
-            -- Two toggles for the beastmen standard-bearer's planted banner:
+            -- Toggles for the beastmen standard-bearer's planted banner:
             --   banner_bearer_staggerable_during_placement
             --     Patches BreedActions.beastmen_standard_bearer
             --     .place_standard_stagger_immune.ignore_staggers from
@@ -323,22 +182,22 @@ return {
             --     attack_type "projectile" / "instant_projectile" /
             --     "heavy_instant_projectile" (vanilla only accepts melee
             --     light/heavy plus a small explosive/torch whitelist).
-            -- Both default false (vanilla behavior preserved).
+            -- All default false (vanilla behavior preserved).
             {
                 setting_id  = "banner_group",
                 type        = "group",
                 sub_widgets = {
                     {
-                        setting_id    = "banner_bearer_staggerable_during_placement",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = "banner_bearer_staggerable_during_placement_tooltip",
-                    },
-                    {
                         setting_id    = "banner_breakable_by_ranged",
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "banner_breakable_by_ranged_tooltip",
+                    },
+                    {
+                        setting_id    = "banner_bearer_staggerable_during_placement",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "banner_bearer_staggerable_during_placement_tooltip",
                     },
                     {
                         setting_id    = "banner_no_camera_jerk_on_placement",
@@ -349,7 +208,54 @@ return {
                 },
             },
 
+            -- ============================================================
+            -- BOSS MECHANIC TWEAKS (received from general_tweaker_dev
+            -- 2026-06-20 — was gt_fly_disable_mult; renamed et_fly_disable_mult)
+            -- ============================================================
+            {
+                setting_id  = "boss_tweaks_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id      = "et_fly_disable_mult",
+                        type            = "numeric",
+                        default_value   = 1.0,
+                        range           = { 0.0, 3.0 },
+                        decimals_number = 2,
+                        tooltip         = "et_fly_disable_mult_tooltip",
+                    },
+                },
+            },
+
+            -- ============================================================
+            -- BREED SUBSTITUTION
+            -- Deliberate order (from → to): pick the breed to replace, then
+            -- its replacement.
+            -- ============================================================
+            {
+                setting_id = "breed_swap_group",
+                type       = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "breed_swap_from",
+                        type          = "dropdown",
+                        default_value = "off",
+                        tooltip       = "breed_swap_from_tooltip",
+                        options       = _build_breed_options(),
+                    },
+                    {
+                        setting_id    = "breed_swap_to",
+                        type          = "dropdown",
+                        default_value = "off",
+                        tooltip       = "breed_swap_to_tooltip",
+                        options       = _build_breed_options(),
+                    },
+                },
+            },
+
+            -- ============================================================
             -- ENEMY SPAWNS (per-difficulty controls)
+            -- ============================================================
             {
                 setting_id  = "enemy_spawns_group",
                 type        = "group",
@@ -362,18 +268,19 @@ return {
                         setting_id  = "difficulty_mimic_group",
                         type        = "group",
                         sub_widgets = {
-                            _mimic_dropdown("mimic_horde",         "mimic_horde_tooltip"),
-                            _mimic_dropdown("mimic_specials",      "mimic_specials_tooltip"),
-                            _mimic_dropdown("mimic_pacing",        "mimic_pacing_tooltip"),
-                            _mimic_dropdown("mimic_pack_spawning", "mimic_pack_spawning_tooltip"),
-                            _mimic_dropdown("mimic_intensity",     "mimic_intensity_tooltip"),
                             _mimic_dropdown("mimic_boss",          "mimic_boss_tooltip"),
+                            _mimic_dropdown("mimic_horde",         "mimic_horde_tooltip"),
+                            _mimic_dropdown("mimic_pacing",        "mimic_pacing_tooltip"),
+                            _mimic_dropdown("mimic_intensity",     "mimic_intensity_tooltip"),
+                            _mimic_dropdown("mimic_pack_spawning", "mimic_pack_spawning_tooltip"),
+                            _mimic_dropdown("mimic_specials",      "mimic_specials_tooltip"),
                         },
                     },
                     _build_special_spawns_block(),
                 },
             },
 
+            -- ============================================================
             -- FACTION SUBSTITUTION (per-faction horde slot swap)
             -- VT2 missions activate one ConflictDirector at start and may
             -- switch to another at zone boundaries (Athel Yenlui = skaven →
@@ -383,6 +290,9 @@ return {
             -- becomes another faction's instead. Set Skaven → Beastmen to
             -- get Beastmen hordes in missions that would normally spawn
             -- Skaven, etc.
+            -- Deliberate order (NOT A→Z): Skaven, Chaos, Beastmen — the mod's
+            -- established faction order.
+            -- ============================================================
             {
                 setting_id = "faction_swap_group",
                 type       = "group",
@@ -411,30 +321,36 @@ return {
                 },
             },
 
-            -- BREED SUBSTITUTION
+            -- ============================================================
+            -- HORDE COMPOSITION
+            -- ============================================================
             {
-                setting_id = "breed_swap_group",
+                setting_id = "horde_group",
                 type       = "group",
                 sub_widgets = {
                     {
-                        setting_id    = "breed_swap_from",
+                        setting_id    = "horde_preset",
                         type          = "dropdown",
                         default_value = "off",
-                        tooltip       = "breed_swap_from_tooltip",
-                        options       = _build_breed_options(),
-                    },
-                    {
-                        setting_id    = "breed_swap_to",
-                        type          = "dropdown",
-                        default_value = "off",
-                        tooltip       = "breed_swap_to_tooltip",
-                        options       = _build_breed_options(),
+                        tooltip       = "horde_preset_tooltip",
+                        options = {
+                            { text = "preset_off",               value = "off" },
+                            { text = "preset_skaven_only",       value = "skaven_only" },
+                            { text = "preset_chaos_only",        value = "chaos_only" },
+                            { text = "preset_beastmen_invasion", value = "beastmen_invasion" },
+                            { text = "preset_mixed_factions",    value = "mixed_factions" },
+                            { text = "preset_all_elites",        value = "all_elites" },
+                        },
                     },
                 },
             },
 
             -- ============================================================
-            -- MONSTER POOL: SKARRIK SPINEMANGLER (v0.7.12-dev)
+            -- SKARRIK MONSTER POOL (v0.7.12-dev)
+            -- warlord_monster_chance is nested as a sub_widget of the
+            -- warlord_in_monster_pool master checkbox: enemy_tweaker.lua reads
+            -- the chance (line ~1258) ONLY when the checkbox is on (gated at
+            -- line ~1248), so VMF auto-hides the slider while the feature is off.
             -- ============================================================
             {
                 setting_id  = "monster_swap_group",
@@ -445,20 +361,162 @@ return {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "warlord_in_monster_pool_tooltip",
-                    },
-                    {
-                        setting_id      = "warlord_monster_chance",
-                        type            = "numeric",
-                        default_value   = 25,
-                        range           = { 0, 100 },
-                        decimals_number = 0,
-                        tooltip         = "warlord_monster_chance_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id      = "warlord_monster_chance",
+                                type            = "numeric",
+                                default_value   = 25,
+                                range           = { 0, 100 },
+                                decimals_number = 0,
+                                tooltip         = "warlord_monster_chance_tooltip",
+                            },
+                        },
                     },
                 },
             },
 
             -- ============================================================
-            -- ROAMING ELITE POOL: STORMVERMIN CHAMPION (v0.7.18-dev)
+            -- SPAWN PACING (added v0.7.0-dev — SpawnTweaks parity pass)
+            -- These hit different engine layers than the four spawn-scaling
+            -- sliders:
+            --   max_grunts_override          -> RecycleSettings.max_grunts
+            --                                   (concurrent-alive trash cap;
+            --                                   vanilla baseline ~90)
+            --   spawn_pace_multiplier        -> ConflictDirector.threat_value
+            --                                   + Pacing.total_intensity (>1 =
+            --                                   spawn-delay thresholds trip
+            --                                   sooner = MORE FREQUENT spawns)
+            --   horde_grunt_push_threshold   -> RecycleSettings
+            --                                   .push_horde_if_num_alive_grunts_above
+            --                                   (lower = hordes trigger sooner)
+            --   horde_frequency_min/max      -> CurrentPacing.horde_frequency
+            --                                   (paced-horde interval seconds)
+            --   ambients_ignore_threat       -> mini_patrol.only_spawn_below_intensity
+            --                                   = math.huge during update
+            --                                   (ambient packs spawn even
+            --                                   while combat is hot)
+            --
+            -- SPAWN SCALING controls "how many enemies per spawn event."
+            -- SPAWN PACING (here) controls "how often / how many concurrently."
+            -- They compound multiplicatively at runtime — use both.
+            -- Deliberate sub-order: the horde_frequency min/max pair reads
+            -- min-before-max; everything else is A→Z.
+            {
+                setting_id  = "spawn_pacing_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "ambients_ignore_threat",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "ambients_ignore_threat_tooltip",
+                    },
+                    {
+                        setting_id    = "horde_frequency_min",
+                        type          = "numeric",
+                        default_value = 50,
+                        range         = { 5, 200 },
+                        tooltip       = "horde_frequency_min_tooltip",
+                    },
+                    {
+                        setting_id    = "horde_frequency_max",
+                        type          = "numeric",
+                        default_value = 100,
+                        range         = { 5, 200 },
+                        tooltip       = "horde_frequency_max_tooltip",
+                    },
+                    {
+                        setting_id    = "horde_grunt_push_threshold",
+                        type          = "numeric",
+                        default_value = 60,
+                        range         = { 10, 240 },
+                        tooltip       = "horde_grunt_push_threshold_tooltip",
+                    },
+                    {
+                        setting_id    = "max_grunts_override",
+                        type          = "numeric",
+                        default_value = 90,
+                        range         = { 10, 360 },
+                        tooltip       = "max_grunts_override_tooltip",
+                    },
+                    {
+                        setting_id    = "spawn_pace_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 5 },
+                        decimals_number = 1,
+                        tooltip       = "spawn_pace_multiplier_tooltip",
+                    },
+                },
+            },
+
+            -- ============================================================
+            -- SPAWN SCALING (added v0.6.0-dev — four multipliers, default
+            -- 1.0 = vanilla, 0 = suppress entirely)
+            --
+            -- The widget type is `numeric` with `decimals_number = 1`, which
+            -- gives a slider that snaps to 0.1 increments. mod:get returns a
+            -- Lua number.
+            --
+            -- The four surfaces:
+            --   horde_size   — paced hordes (HordeCompositionsPacing, ~25 keys)
+            --   event_size   — terror-event hordes (HordeCompositions, ~194 keys
+            --                  — majority of visible adventure-mission hordes)
+            --   roaming_size — ambient roaming patrols (SizeOfInterestPoint
+            --                  pack sizes, drives ConflictDirector.roaming)
+            --   patrol_size  — formed marching squads (AIGroupSystem
+            --                  create_formation_data formation rows)
+            --
+            -- All four apply *independently and multiplicatively* on their own
+            -- spawn surface so setting one to 0 suppresses only that channel.
+            -- See enemy_tweaker.lua for the apply implementations and
+            -- /verify_horde_size /verify_event_size /verify_roaming_size
+            -- /verify_patrol_size commands for live-state verification.
+            {
+                setting_id  = "spawn_scaling_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "event_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 5 },   -- v0.7.11-dev: capped at 5x (event hordes are wave spawns like paced hordes; patrols + roaming still go to 15x)
+                        decimals_number = 1,
+                        tooltip       = "event_size_multiplier_tooltip",
+                    },
+                    {
+                        setting_id    = "horde_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 5 },   -- v0.7.11-dev: capped at 5x (paced hordes get overwhelming/unstable past ~5x; patrols + roaming still go to 15x)
+                        decimals_number = 1,
+                        tooltip       = "horde_size_multiplier_tooltip",
+                    },
+                    {
+                        setting_id    = "patrol_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 15 },
+                        decimals_number = 1,
+                        tooltip       = "patrol_size_multiplier_tooltip",
+                    },
+                    {
+                        setting_id    = "roaming_size_multiplier",
+                        type          = "numeric",
+                        default_value = 1,
+                        range         = { 0, 15 },
+                        decimals_number = 1,
+                        tooltip       = "roaming_size_multiplier_tooltip",
+                    },
+                },
+            },
+
+            -- ============================================================
+            -- STORMVERMIN CHAMPION POOL (v0.7.18-dev)
+            -- champion_elite_chance is nested as a sub_widget of the
+            -- champion_in_elite_pool master checkbox: enemy_tweaker.lua reads
+            -- the chance (line ~1280) ONLY when the checkbox is on (gated at
+            -- line ~1273), so VMF auto-hides the slider while the feature is off.
             -- ============================================================
             {
                 setting_id  = "elite_swap_group",
@@ -469,14 +527,16 @@ return {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "champion_in_elite_pool_tooltip",
-                    },
-                    {
-                        setting_id      = "champion_elite_chance",
-                        type            = "numeric",
-                        default_value   = 5,
-                        range           = { 0, 100 },
-                        decimals_number = 0,
-                        tooltip         = "champion_elite_chance_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id      = "champion_elite_chance",
+                                type            = "numeric",
+                                default_value   = 5,
+                                range           = { 0, 100 },
+                                decimals_number = 0,
+                                tooltip         = "champion_elite_chance_tooltip",
+                            },
+                        },
                     },
                 },
             },
@@ -595,24 +655,6 @@ return {
                 },
             },
 ]==]
-            -- ============================================================
-            -- BOSS MECHANIC TWEAKS (received from general_tweaker_dev
-            -- 2026-06-20 — was gt_fly_disable_mult; renamed et_fly_disable_mult)
-            -- ============================================================
-            {
-                setting_id  = "boss_tweaks_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id      = "et_fly_disable_mult",
-                        type            = "numeric",
-                        default_value   = 1.0,
-                        range           = { 0.0, 3.0 },
-                        decimals_number = 2,
-                        tooltip         = "et_fly_disable_mult_tooltip",
-                    },
-                },
-            },
         },
     },
 }

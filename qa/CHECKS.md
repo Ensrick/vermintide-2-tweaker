@@ -10,6 +10,35 @@ method.
 
 Run all checks with: `qa\run_all.ps1` (or via the GitHub Action on push).
 
+## Gate semantics (run_all exit codes)
+
+Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory
+WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:
+
+- **Warnings (exit 1) are REPORTED but never fail the gate.** They are collected
+  and printed loudly under a `WARNINGS (non-blocking)` summary block, and
+  `run_all` still exits `0`. This is deliberate: pre-existing advisory warnings
+  (bare-unpack in stable files, cfg title drift, stale `.in_progress` sentinels,
+  data<->loc diffs) must not block unrelated commits, because a gate that blocks
+  on noise trains sessions to bypass the pre-commit hook with `--no-verify`.
+- **Errors (exit >=2) fail the gate.** `run_all` exits with the highest error
+  code seen. The pre-commit hook (`qa/run_all.ps1 -Quick -SkipLua`) therefore
+  blocks only on genuine breakage.
+
+Two checks break the plain 0/1/2 convention and are pinned in `run_all.ps1` via
+the `Run-Check -Policy` parameter:
+
+| Check | Policy | Reason |
+|---|---|---|
+| `check_published_ids` | `Blocking` | Signals a real published_id collision (Workshop-item hijack) via **exit 1**. Any non-zero from it is a hard error, so it must fail the gate despite using exit 1. |
+| `check_in_progress` | `Advisory` | Multi-agent coordination surface only ("Never blocks - just surfaces awareness", per CLAUDE.md). No exit code it returns (including exit 2 on a malformed sentinel) ever fails the gate; a non-zero is reported as an advisory notice. |
+
+Everything else uses the default `Standard` policy (exit 1 = warning, exit >=2 =
+error). Checks that already hard-fail on exit 2 and never emit exit 1
+(`check_vmf_widget_types`, `check_event_register_signature`,
+`check_cross_mod_deps`, `check_command_collisions`, `check_mechanics_citations`)
+keep blocking on their errors under this default.
+
 ## Legend
 
 - **AUTO**: detected by a script in this directory; runs in CI

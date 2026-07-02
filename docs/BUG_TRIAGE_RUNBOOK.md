@@ -1,164 +1,342 @@
 # BUG_TRIAGE_RUNBOOK.md
 
 **Audience:** any Claude session that has just received a user bug report.
-**Goal:** orient in 60 seconds, identify the bug class, and reach a confirmed
-fix without re-learning the workflow from scratch.
+**Goal:** run a fully autonomous bug-fix loop. The user plays Vermintide 2,
+reports an issue in chat (possibly just "X broke"), and you diagnose from the
+logs and data, fix, ship, and hand back ONE concrete in-game check. You do not
+stop to ask permission for the reversible steps in between.
 
-**Read order on a fresh bug report:** this file -> phase 1 commands ->
-`docs/BUG_CLASSES.md` (if present) -> mod source.
+**This file is THE entry point.** On any bug report, work STEP 0 -> STEP 9 in
+order. Do not skip ahead to reading mod source before STEP 2 has confirmed what
+was actually running. Most reports never reach STEP 5, because STEP 3 finds a
+known class or STEP 2 finds a stale build.
+
+**Read order on a fresh report:** this file -> the newest console log ->
+`docs/BUG_CLASSES.md` -> mod source (only if steps 0-4 did not resolve it).
 
 > **Binding docs cross-referenced from this runbook** (cite by section number
 > when applying a rule):
 > - `PROJECT_STANDARDS.md` (operational rulebook)
-> - `CLAUDE.md` (technical reference + Build Commands)
+> - `CLAUDE.md` (technical reference + Build Commands + Mod Directory)
+> - `docs/BUG_CLASSES.md` (known bug patterns; pattern-match here first)
 > - `VMF_RECIPES.md` (Vermintide Mod Framework gotchas)
 > - `DEVELOPMENT.md` (engine quirks, known errors)
 > - per-mod `CHANGELOG.md` + `REGRESSION_CHECKLIST.md` + `POSTMORTEMS.md`
 
 ---
 
-## Phase 1 — Receive (within 60 seconds)
+## STEP 0 - INTAKE
 
-What the user typically provides:
-- Log file path (usually `%APPDATA%\Fatshark\Vermintide 2\console_logs\console_log-<GUID>.log`).
-- One-line symptom description.
-- Optional: screenshot, crash dump GUID, mod version they think shipped.
+- [ ] **Mirror the report back as a numbered list if it holds more than one
+  distinct problem.** Track each item separately through the whole pipeline.
+  Never merge distinct issues into one "fix" - one session collapsed three
+  staff bugs into one and shipped a wrong diagnosis for all three.
+- [ ] **Ask for a screenshot or the exact on-screen text ONLY if the report is
+  ambiguous** (you cannot tell which mod, which screen, or which symptom). A
+  clear one-line report like "the scythe holds wrong in third person" is enough
+  to start; do not stall the loop asking for detail you can get from the log.
+- [ ] **Restate each item in your own words before acting** so the user can
+  correct a misread early.
 
-**First three reads, in this order:**
-
-- [ ] **1. The log file.** Find every `[<mod_id>] enabled v<version> settings_fp=<hash>` line — one per loaded mod (per `PROJECT_STANDARDS.md` § 3.6 "Applied marker line"). Capture which mod versions + settings hashes were running. Mismatched fingerprints between host and client are themselves a bug class (see Phase 3).
-- [ ] **2. Recent shipped work.** Run `git log --oneline -10` from the repo root. If the bug appeared today, today's commits are the suspect list. Also run `git status` to know if there are uncommitted edits sitting in the tree.
-- [ ] **3. Known issues.** Run `gh issue list --repo Ensrick/vermintide-2-tweaker --state open` to check whether the bug is already filed. If yes, append the new evidence to that Issue instead of opening a duplicate.
-
-Do not start coding before all three reads complete. The total budget for
-phase 1 is one minute.
-
----
-
-## Phase 2 — Identify the bug class
-
-- [ ] Open `docs/BUG_CLASSES.md` (if it exists yet — this catalog is built
-  incrementally; if missing, skip to Phase 3 and create the entry in
-  Phase 5).
-- [ ] Match the symptom one-liner against the catalog's pattern column.
-- [ ] If a match: jump to the catalog's "known fix template" and apply.
-  Skip ahead to Phase 4 — the fix shape is already established.
-- [ ] If no match: this is a novel bug. Proceed to Phase 3.
-
-The catalog is the highest-ROI first read because most user-reported bugs
-recur in patterns we have already named. Always check before deep-diving.
+Every later step operates per-item. If item 1 is a known class and item 2 is
+novel, run STEP 3 on item 1 and STEP 5 on item 2 in parallel.
 
 ---
 
-## Phase 3 — Deep dive (only for novel bugs)
+## STEP 1 - GET THE LOG
 
-Grep the log for the affected mod's prefix. The repo's logging convention
-(`PROJECT_STANDARDS.md` § 3.1, § 3.6) puts every meaningful line behind a
-`[<mod_id>:<feature>]` or `[<mod_id>:dbg]` tag.
+VT2 console logs live at:
 
-- [ ] `[<mod_id>:dbg]` lines -> confirmation events from the mod's
-  `_dbg` helper (file-only). Pair them with `[<mod_id>:dbg]` in chat (via
-  `_dbg_alert`) if chat is part of the report.
-- [ ] `[<mod_id>]` lines -> permanent operational logs (not gated on
-  `enable_debug_logging`). Includes the applied marker, hook-install
-  confirmations, RPC sends.
-- [ ] `_dbg_alert` lines (`PROJECT_STANDARDS.md` § 3.6 two-channel
-  discipline) -> the mod itself flagged an unexpected condition. Investigate
-  these first; they are pre-filtered to be interesting.
+```
+%APPDATA%\Fatshark\Vermintide 2\console_logs\
+```
 
-### Specific log patterns -> diagnosis
+- [ ] **Read the newest `console-*.log`** that covers the session in question.
+  Filenames are `console-YYYY-MM-DD-HH.MM.SS-<GUID>.log`; newest timestamp =
+  most recent session. Confirm the timestamp matches when the user was playing;
+  a capture the user pasted can predate the crash they are describing.
+- [ ] **If the game hard-crashed with no Lua error in the log,** the matching
+  crash dump is at `%APPDATA%\Fatshark\Vermintide 2\crash_dumps\` - the file
+  name carries the same GUID as the log. Read its callstack and locals.
+- [ ] Note the crash GUID; you will cite it in the Issue and any memory entry.
+
+---
+
+## STEP 2 - VERIFY WHAT WAS RUNNING (before ANY code reading)
+
+This step is non-negotiable and comes before opening a single mod file. A large
+fraction of "still broken" reports are the user running a build that predates
+the fix.
+
+- [ ] **Confirm the loaded version of each suspect mod** via its version echo
+  line. Pattern: `[<id>:LOAD] vX.Y.Z` or `<name> v%s loaded`. Diagnostics use
+  engine `printf`, so this line is present even when mod-logging is off. If the
+  echoed version is older than the current source `MOD_VERSION`, the user ran a
+  stale build - go straight to STEP 7, ship the current build, and ask them to
+  re-test BEFORE diagnosing anything. Do not diagnose against source the user
+  was not running.
+- [ ] **Determine which mods were ACTIVE**, not merely subscribed:
+  - `Init VMF mod '<name>'` lines = mods that actually initialized this session.
+  - `[ModManager] mods[N] = (id=..., name="...", enabled="true", ...)` = the
+    subscribed list with the enabled flag.
+  - **Rule:** a mod is active only if it has an `Init VMF mod` line AND
+    `enabled="true"`. Do NOT infer active mods from the subscribed `name=`
+    field alone - that list includes disabled subscriptions. (Burned once by
+    calling a stable-but-disabled sub "double-loaded".)
+- [ ] **Multiplayer reports: check every peer's build.** A host/client symptom
+  is often one peer on a stale bundle. If you only have one peer's log, ask for
+  the other's before assuming a code bug. Every peer needs the patched build
+  (see the WHAT-THE-USER-SAYS table).
+
+---
+
+## STEP 3 - PATTERN-MATCH
+
+- [ ] **Open `docs/BUG_CLASSES.md` and match the symptom against the pattern
+  column BEFORE any deep dive.** Most reports are repeats of a class already
+  shipped, debugged, and fixed elsewhere in the monorepo.
+- [ ] **On a match:** jump to that class's known-fix template and go to STEP 6.
+  The fix shape is already established; you are not re-deriving it.
+- [ ] **On no match:** this is a novel bug. Proceed to STEP 4.
+
+The catalog is the highest-ROI read because named classes carry their own fix
+template and postmortem citation. Always check before deep-diving. If the class
+is missing after you solve it, you add it in STEP 9.
+
+---
+
+## STEP 4 - SCOPE
+
+- [ ] **If the symptom could come from more than one installed mod, request a
+  disable-bisection from the user FIRST** (disable half the suspects, retest,
+  narrow), OR reason from the log's `Init VMF mod` list to rule mods out. Do
+  NOT tunnel on one suspect and build fixes on a hypothesis - a session burned
+  three cim builds chasing a bot-loadout bug that turned out to be a one-line
+  drop in cosmetics_tweaker, which a bisection found in one step.
+- [ ] **When several of your own mods could touch the affected vanilla
+  feature,** the bisection is mandatory, not optional. Your prior on "my mod
+  broke it" is not evidence of which one.
+- [ ] Once scoped to a single mod, everything below operates on that mod's DEV
+  directory (for split mods) or its single-stream directory.
+
+---
+
+## STEP 5 - DIAGNOSE (novel bugs only)
+
+- [ ] **Diagnostics use engine `printf`, never `mod:info` / `mod:echo`.** The
+  user runs with mod-logging OFF, so `mod:info` output is invisible in their
+  sessions. A `printf` line reaches the console log regardless.
+- [ ] **Grep the decompiled source for any engine mechanic and cite it.** The
+  vanilla source is at `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`.
+  Before writing any field name, line number, or mechanic claim: grep for the
+  exact term and cite `file:line`. If you cannot find it, write `[unverified]`
+  and describe the behavior in plain English - never confabulate an internal.
+- [ ] **Distinguish Lua errors from C-level fatals.** Lua errors are
+  pcall-able and land as `<<crashify-exception>>` blocks with a Lua callstack.
+  C-level fatals BYPASS pcall entirely and must be PRE-FILTERED, not caught.
+  Known C-fatal triggers:
+  - `Unit.node(unit, name)` on a missing/unready node -> use `Unit.has_node`
+    first (skeleton-readiness fatal on husk hot-join / revive).
+  - `create_screen_gui` handed an unloaded material ("Gui material not found")
+    -> pre-filter the material list, do not xpcall it.
+  - `Managers.package:load` on a unit PATH or a non-resident 3rd-party package
+    -> `Resource '#ID[hash]' not found`, fires ASYNC. Needs a real `.package`
+    name; only `load()` when `has_loaded()`.
+- [ ] **Read the source of the suspected hook / feature** (do not trust stale
+  audit line numbers - empirical-first, `PROJECT_STANDARDS.md` sec. 8.1).
+- [ ] **Read the vanilla function being hooked.** Half of novel bugs are guards
+  that disagree with vanilla's actual contract (`PROJECT_STANDARDS.md` sec. 4.2
+  "guard != bail"). An early `return` removes vanilla's own mutation.
+- [ ] **If answering one question needs more than three files, dispatch a
+  subagent** (`PROJECT_STANDARDS.md` sec. 8.2) rather than burning context inline.
+
+### Log signature -> diagnosis
 
 | Log signature | Likely cause | Next move |
 |---|---|---|
-| `[wt:safe_hook] <Class>.<method> raised: ...` | wt's pcall-isolated hook caught a consumer raise. The mod itself did not crash, but a hook body failed. | Follow the captured callstack. See `VMF_RECIPES.md` § 2b "Pcall-isolated hooks". |
-| `[<mod_id>:trace] event=enter ... n_args=N` / `event=exit ... n_returned=M` where `M` differs from expected | Multi-return collapse, nil-hole truncation, or hook chain divergence. | Apply `VMF_RECIPES.md` § 2 / § 2a recipe (`select("#", ...)` + explicit `j`). |
-| `[BR:fp] MISMATCH host=<hash> client=<hash>` | Big Rebalance settings divergence between host and client (et / bt / wt / ct cross-peer). | Reconcile sub-toggles; bt master gate + sub-toggle must match per peer. See bt's CHANGELOG + `CLAUDE.md` Mod Directory entry for bt. |
-| `<<crashify-exception>>` block in `.log` | Hard runtime error reaching the engine crash reporter. | Read the surrounding callstack + locals. Locals are gold — they show the state the function held at fault time. Cross-ref the crash GUID against memory + CHANGELOGs (`PROJECT_STANDARDS.md` § 9.7 "Skipping the bug-search-first protocol"). |
-| `<<crashify-property>>Mod:<id>:<name> = true<</crashify-property>>` | Just the loaded-mod inventory at crash time — context, not the cause. | Use to confirm which mods were active, then move on. |
-| Mismatched `settings_fp` between two peers' logs | Host and client are running different config or different MOD_VERSION. | First confirm the version skew. If versions match but fp differs, walk the widget list to find the divergent setting. |
-| `[<mod_id>] enabled v<X> ...` missing entirely | The mod did not load at all on that peer. | Confirm the mod is subscribed + enabled in VMF (`mods/<mod>.mod`, VMF Mod Options). Check `vt2-mod-updater` sync for friends. |
-| Nothing relevant in log, but the game crashed | Hard engine crash that bypassed Lua logging. | Read the matching crash dump at `%APPDATA%\Fatshark\Vermintide 2\crash_dumps\` — file name matches the GUID in the log file. |
-
-When nothing in the log explains the symptom, fall back to:
-
-- [ ] Read the source of the suspected hook / feature (do not trust stale
-  audit line numbers — `PROJECT_STANDARDS.md` § 8.1 "Empirical-first").
-- [ ] Read the vanilla VT2 source (`C:\Users\danjo\source\repos\Vermintide-2-Source-Code\`) for the function being hooked. Half of novel bugs are guards that disagree with vanilla's actual contract (`PROJECT_STANDARDS.md` § 4.2 "guard != bail").
-- [ ] Grep `CHANGELOG.md` + memory for the literal crash signature before writing any fix (`PROJECT_STANDARDS.md` § 9.7).
-- [ ] If reading more than three files to answer one question, dispatch a subagent (`PROJECT_STANDARDS.md` § 8.2 "Subagent-first for context-heavy tasks").
+| `[wt:safe_hook] <Class>.<method> raised: ...` | wt's pcall-isolated hook caught a consumer raise. The mod did not crash; a hook body failed. | Follow the captured callstack. `VMF_RECIPES.md` sec. 2b. |
+| `[<mod_id>:trace] ... n_returned=M` where M differs from expected | Multi-return collapse or nil-hole truncation. | Apply `VMF_RECIPES.md` sec. 2 / sec. 2a (`select("#", ...)` + explicit `j`). |
+| `[BR:fp] MISMATCH host=<hash> client=<hash>` | Big Rebalance settings divergence between host and client. | Reconcile sub-toggles; the shared registration master gate must match per peer. See bt's CHANGELOG. |
+| `<<crashify-exception>>` block | Lua error reached the engine crash reporter. | Read the callstack + locals (locals show the fault-time state). Grep CHANGELOGs + memory for the literal signature first. |
+| `<<crashify-property>>Mod:<id>:<name> = true` | Loaded-mod inventory at crash time - context, not cause. | Confirm which mods were active, then move on. |
+| `Attempting to rehook active hook` | Duplicate `mod:hook` / `mod:hook_safe` on the same `(Class, method)`; the second silently dropped. | Consolidate into one hook body. See STEP 6 pre-flight + `VMF_RECIPES.md` sec. 1. |
+| `[<mod_id>] enabled ...` missing entirely | The mod did not load on that peer. | Confirm subscribed + enabled in VMF; check vt2-mod-updater sync for friends. |
+| Game crashed, nothing relevant in log | Engine crash bypassing Lua logging. | Read the crash dump at `crash_dumps\<GUID>.dmp`. |
 
 ---
 
-## Phase 4 — Fix (with the right pattern)
+## STEP 6 - FIX
 
-- [ ] **One Issue per discovered bug.** `gh issue create --repo Ensrick/vermintide-2-tweaker ...` with a label from the §11 set (`crash`, `regression`, `audit`, `bug`, `blocked`, `deferred`). Search before opening to avoid dupes.
-- [ ] **Read vanilla first.** If the fix is a hook, grep `C:\Users\danjo\source\repos\Vermintide-2-Source-Code\` for the actual function body and any sibling tables vanilla reads at call time. Wrong-table gates are a known repeat offender (`PROJECT_STANDARDS.md` § 5.1a "Verify the right table").
-- [ ] **Fix in the affected mod's source.** One focused change per session (`PROJECT_STANDARDS.md` § 8.3). Don't batch unrelated fixes into the same patch.
-- [ ] **Apply-site log line.** Every mutation / hook install must emit a concrete-evidence log line: `[<feature>] applied: <numbers / names>` (`PROJECT_STANDARDS.md` § 5.1a step 1).
-- [ ] **`_rt_register` regression check.** Add a runtime assertion that would FAIL if the bug returned, registered into the mod's `_RT_CHECKS` scaffold (`PROJECT_STANDARDS.md` § 15 "Every bug requires a test"). Belt-and-suspenders: even a lint-covered fix needs the runtime check.
-- [ ] **`/verify_<feature>` chat command.** Per-item rows showing `name | toggle_state | live_state | PASS/FAIL`. Should work from the keep where possible (`PROJECT_STANDARDS.md` § 5.1a step 2).
-- [ ] **Bump MOD_VERSION patch** (`PROJECT_STANDARDS.md` § 6.2). Update `itemV2.cfg` title suffix is handled automatically by `VMBLauncher.exe upload`.
-- [ ] **CHANGELOG entry** for the new version using the § 6.4 format. Body MUST include the `/verify_<feature>` command name (`PROJECT_STANDARDS.md` § 5.1a step 5).
-- [ ] **`VMBLauncher.exe build <mod>`** to verify the bundle compiles (`CLAUDE.md` Build Commands).
-- [ ] **`VMBLauncher.exe all <mod>`** for build + local deploy + PC-B deploy + Workshop upload (`CLAUDE.md` Build Commands).
-- [ ] **`.\tools\publish-release\publish-release.ps1`** to refresh the GitHub release the `vt2-mod-updater` consumers pull from (`CLAUDE.md` § "Required: GitHub release after every Workshop upload"). Non-optional, especially for friends-only mods.
-- [ ] **Verify Workshop file size** in Steam after upload — `ugc_tool` prints "Upload finished" even when transfer fails (`CLAUDE.md` "Important Constraints").
-- [ ] **Close the Issue** with a version-stamped comment linking the commit + CHANGELOG entry.
-
-If any step is genuinely impractical for this specific bug (e.g. nothing
-observable from the keep so `/verify_<feature>` can't work), say so
-explicitly in the CHANGELOG entry. The default is full coverage.
-
----
-
-## Phase 5 — Hardening (after the fix is verified)
-
-- [ ] **Novel bug class -> catalog it.** If `docs/BUG_CLASSES.md` had no matching entry in Phase 2, append a new one (symptom pattern, root cause, fix template, mods affected, postmortem reference).
-- [ ] **Static check possible? File an Issue.** If a `qa/check_*.ps1` pattern could have caught this at lint time (like `qa/check_unpack_safety.ps1`), open an Issue and implement when bandwidth allows. Cross-reference the check name in `qa/CHECKS.md`.
-- [ ] **Documentation gap?** If the bug surfaced because a recipe / standard / per-mod CLAUDE.md was missing or stale, update the doc in the same session — `PROJECT_STANDARDS.md` § 7.7 "Doc maintenance trigger" (update in place at the moment of change).
-- [ ] **POSTMORTEMS.md entry.** Per `PROJECT_STANDARDS.md` § 7.3 Bucket B, write a single immutable entry in the affected mod's `POSTMORTEMS.md` summarizing symptom, root cause, fix, "why it took so long" if applicable, and future-prevention hooks (lint, test, memory).
-- [ ] **Memory entry if cross-session.** If the bug exposed a recurring class likely to bite again, drop a `feedback_*.md` or `reference_*.md` in `C:\Users\danjo\.claude\projects\C--Users-danjo-source-repos\memory\` and add an index line to `MEMORY.md` (`PROJECT_STANDARDS.md` § 12).
+- [ ] **Smallest change that fixes the root cause,** in the mod's DEV directory
+  (split mods: `ct_dev` / `cim_dev` / `gt_dev` / `gui_tweaker_dev` /
+  `verminious_dreams_lighting_dev`) or its single-stream directory. Never edit
+  the stable directory for in-flight work. One focused change per item; do not
+  batch unrelated fixes into one patch.
+- [ ] **Hook pre-flight (MANDATORY before writing any `mod:hook` /
+  `mod:hook_safe`).** Grep the target file for `("ClassName"` AND
+  `<ClassNameSymbol>,` to find every existing hook on that class. If ANY hook
+  already exists on `(ClassName, method)`, do NOT add a second - VMF silently
+  drops it. Merge your logic into the existing hook body and add a
+  `_<mod>_consolidated_<method>_hook` marker comment. This has burned the repo
+  at least five times.
+- [ ] **Capture every vanilla return value** before transforming. `return
+  wrapper(func(self, ...))` collapses multi-returns to one and silently drops
+  the rest. Assign all returns to locals, transform the one you need, return
+  them all.
+- [ ] **Name every vanilla parameter, including trailing `skip_sync` /
+  `is_server`.** Dropping the sync-control param from a hooked networked
+  function causes the RPC receiver to re-broadcast and creates a host<->client
+  feedback loop. Capture `...` and splat it back if you do not need to name each.
+- [ ] **Guard, do not bail.** A blanket early `return` removes vanilla's own
+  side effects. Confirm vanilla's contract before short-circuiting it.
+- [ ] **Add an apply-site log line** for every mutation / hook install:
+  `printf("[<feature>] applied: <numbers / names>")`. Concrete evidence, not
+  "done".
 
 ---
 
-## Appendix A — Quick reference: where to look first
+## STEP 7 - SHIP
 
-| Symptom (one-liner) | Likely mod | First command to run | Doc section |
+Shipping is how the user tests. Steam re-syncs a subscribed Workshop item over
+any local deploy, so a `-dev` build only reaches the user's game after an
+UPLOAD - a local deploy alone is silently clobbered.
+
+- [ ] **Bump `MOD_VERSION` (patch segment)** in
+  `<mod>/scripts/mods/<mod>/<mod>.lua`. Three-segment semver plus track suffix
+  (`0.12.68-dev`); never a 4th segment. The echoed version confirms the build
+  in the next log.
+- [ ] **Add a CHANGELOG entry** for the new version (symptom, root cause, fix,
+  and the in-game verify check from STEP 8).
+- [ ] **Ship with the canonical one-shot:**
+
+  ```powershell
+  .\tools\ship\ship.ps1 -Mod <mod>            # build + deploy + upload + GitHub + verify
+  ```
+
+  - Add `-AllowPublic` ONLY for a clean-versioned STABLE public release.
+  - Add `-NoRemote` ONLY if PC-B is unreachable (and say so).
+- [ ] **APPROVAL RULE:**
+  - **`-dev` / `-alpha` / `-beta`-versioned mods: ship with NO asking, every
+    update.** This is how the user tests. Includes single-stream public mods
+    like wt / cosmetics_tweaker / crt whose `MOD_VERSION` carries `-dev`.
+  - **Clean-versioned STABLE public releases (public ct / gt / cim / gut / vdl
+    with no pre-release suffix): DO NOT upload without a fresh, per-build ship
+    signal from the user naming the version.** "Ship it" earlier does not carry
+    forward. Default for these is `build` + `deploy`, never `upload`. Treat a
+    stable public upload like `git push --force`.
+- [ ] **Verify the upload landed.** Confirm `Uploaded new content` for this item
+  in `C:\Program Files (x86)\Steam\logs\workshop_log.txt`. `ugc_tool` prints
+  "Upload finished" even when nothing transferred.
+- [ ] **Deploy-verify hash mismatch after a confirmed upload:** re-run
+  `VMBLauncher deploy <mod> --no-remote` once, then continue. Do not loop on it.
+- [ ] **Commit and push:** `git add` the changed mod files + CHANGELOG, commit
+  with a message naming the version and the bug, `git push`.
+- [ ] **Remind the user to fully restart Steam** (tray -> Exit, reopen) if they
+  are subscribed to the item - Steam re-pulls a self-authored upload only on a
+  full Steam restart, not a game relaunch and not via deploy.
+
+---
+
+## STEP 8 - VERIFY
+
+- [ ] **Hand the user ONE concrete in-game check.** Name the screen, the action,
+  and the expected result: "load the keep, wield the scythe, and in third person
+  the blade should point down, not sideways." One check, not a checklist.
+- [ ] **NEVER claim "fixed" until the user confirms in-game.** Compile success
+  and a structural code review are not verification. Say "shipped v0.12.152-dev,
+  please check X" - not "fixed".
+- [ ] **If it is still broken, believe them.** Return to STEP 2 with the NEW
+  log (they must be on the version you just shipped - re-verify the echoed
+  version first). Do not re-defend the previous diagnosis.
+
+---
+
+## STEP 9 - CLOSE (after the user confirms the fix)
+
+- [ ] **`_rt_register` regression marker** where the repo pattern applies. Add a
+  runtime assertion that would FAIL if the bug returned, registered into the
+  mod's `_RT_CHECKS` scaffold, surfaced via the mod's `/verify_<feature>` or
+  `/<mod>_regression_test` command. Belt-and-suspenders: even a lint-covered fix
+  gets the runtime check.
+- [ ] **GitHub Issue.** Close the matching Issue with a version-stamped comment
+  linking the commit + CHANGELOG entry, or file one (labeled `crash` /
+  `regression` / `bug` / `blocked` / `deferred`) if the fix was deferred or
+  exposed follow-up work. Search before opening to avoid dupes.
+- [ ] **Novel bug class -> catalog it.** If `docs/BUG_CLASSES.md` had no match in
+  STEP 3, append a new entry (symptom pattern, root cause, fix template, mods
+  affected, postmortem reference).
+- [ ] **Docs + memory in the SAME response as the fix,** not batched later. If a
+  recipe / standard / per-mod doc was missing or stale, update it now. If the
+  bug exposed a recurring cross-session class, drop a `feedback_*.md` /
+  `reference_*.md` in the memory store and add a one-line index entry to
+  `MEMORY.md`.
+- [ ] **POSTMORTEMS.md entry** in the affected mod (symptom, root cause, fix,
+  why it took as long as it did, future-prevention hook) if the bug was
+  non-trivial or recurring.
+
+---
+
+## WHAT THE USER SAYS -> WHAT YOU DO
+
+| Report shape | First move |
+|---|---|
+| **Crash to desktop with an error dialog** | Get the GUID from the dialog, read that `console-*.log` + matching `crash_dumps\<GUID>.dmp`. Read the callstack + locals. Classify Lua error vs C-fatal (STEP 5). Grep CHANGELOGs + memory for the literal signature before writing a fix. |
+| **Silent wrong behavior** (no crash, "it does X instead of Y") | Confirm the running build (STEP 2). Add a `printf` apply-site trace to see whether the feature's hook even fires and with what values. Compare against vanilla's contract in the decompiled source. |
+| **Menu text / UI issue** (wrong label, missing widget, blank panel) | No em dashes in menu strings (repo rule). Check loc-key registration timing and widget `setting_id` uniqueness. Blank custom view often = a missing/raw material or an options-widget reused outside its atlas. Verify in-game, never off a build alone. |
+| **Multiplayer-only issue** (fine solo, breaks with 2+ players) | Every peer needs the patched build - confirm each peer's echoed version. Suspect a dropped `skip_sync` param, an RPC feedback loop, or gated-registration divergence (host vs client `settings_fp`). |
+| **"It worked before <version>"** | Diff the mod's CHANGELOG from the named version to now; the regression is almost always in one of those entries. Read those diffs before touching anything else. |
+| **Two or more problems in one message** | STEP 0: mirror them back as a numbered list and track each separately through the pipeline. Never merge. |
+
+---
+
+## Appendix A - Quick reference: where to look first
+
+| Symptom (one-liner) | Likely mod | First move | Doc section |
 |---|---|---|---|
-| Crash on join (CW lobby / Workshop friend) | bt / wt / ct (BR registration) | Grep log for `[BR:fp]`, compare host vs client `settings_fp` | `CLAUDE.md` bt entry; `PROJECT_STANDARDS.md` § 9.3 conditional-registration |
-| Missing 3P attack anim, body holds previous weapon's idle | wt (cross-character port) or cwv (variant) | Grep log for `[wt:dbg]` / `[cwv:dbg]` around weapon wield | `weapon_tweaker/DEVELOPMENT.md` § "1P animations are universal"; `PROJECT_STANDARDS.md` § 9.5; `character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md` |
-| Missing helmet / hat on husk (other player's view) | cosmetics_tweaker (LA bridge) | Grep log for `[cosmetics:husk-hat-create]` | `cosmetics_tweaker/LA_SYNC_MODEL.md` § 6 |
-| `<<crashify-exception>>` with `ItemMasterList[key]` in stack | cosmetics_tweaker / wt / cwv (unknown key) | Read crash dump locals at the indexed line | `DEVELOPMENT.md` § "ItemMasterList crashify on unknown keys"; use `rawget` |
-| Inventory preview shows wrong / missing weapon | cosmetics_tweaker / wt (preview hook on wrong class) | Grep source for `HeroPreviewer` hooks; must be `MenuWorldPreviewer` | `CLAUDE.md` § "HOOK THE DERIVED CLASS, NEVER THE BASE" |
-| Hook installed but never fires | any mod | Grep source for `local <name> = <Class>.<method>` upvalue captures + duplicate `mod:hook_safe` on same pair | `VMF_RECIPES.md` § 1 (hook_safe no-chain); `CLAUDE.md` § "Hooks that silently no-op" |
-| Multi-return values silently drop to nil | any mod with hook wrappers | Search hook body for `return wrapper(func(...))` or bare `unpack(t)` | `VMF_RECIPES.md` § 2 / § 2a |
-| Mutator / event preset toggle doesn't take effect | event_tweaker | Run `/verify_<feature>` if implemented; check `DLC_BY_MUTATOR` gate | `event_tweaker/DEVELOPMENT.md`; `CLAUDE.md` § "DLC Ownership Gate" |
-| Buff / damage profile / explosion crash on second peer joining | bt / ct / wt / et (gated registration) | Confirm bt master toggle, check sorted-order registration | `PROJECT_STANDARDS.md` § 9.3; `DEVELOPMENT.md` § "Gated registration diverges across peers" |
-| Crafting screen shows item player doesn't own DLC for | cim / cosmetics_tweaker / career_tweaker / event_tweaker | Grep for `_*_requires_unowned_dlc` helper; confirm filter fires before enumeration | `CLAUDE.md` § "DLC Ownership Gate" |
-| Settings differ between sessions for "the same setup" | any mod | Compare `settings_fp=<hash>` in `[<mod_id>] enabled` lines across logs | `PROJECT_STANDARDS.md` § 3.6 "Applied marker line" |
-| Game crashed with no `<<crashify-exception>>` in log | engine-level (Stingray) | Read crash dump at `%APPDATA%\Fatshark\Vermintide 2\crash_dumps\<GUID>.dmp` | `PROJECT_STANDARDS.md` § 9.7 grep-first |
+| Crash on join (CW lobby / Workshop friend) | shared BR registration (wt / ct / et) | Grep log for `[BR:fp]`, compare host vs client `settings_fp` | `PROJECT_STANDARDS.md` sec. 9.3 conditional-registration |
+| Missing 3P attack anim, body holds previous weapon's idle | wt (cross-char port) or cwv (variant) | Grep log around weapon wield; check `anim_event_3p` remap | `weapon_tweaker/DEVELOPMENT.md`; `character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md` |
+| Missing helmet / hat on husk (other player's view) | cosmetics_tweaker (LA bridge) | Grep log for `[cosmetics:husk-hat-create]`; check `Unit.has_node` guard | `cosmetics_tweaker/LA_SYNC_MODEL.md` sec. 6 |
+| `<<crashify-exception>>` with `ItemMasterList[key]` in stack | cosmetics_tweaker / wt / cwv (unknown key) | Read crash-dump locals at the indexed line; use `rawget` | `DEVELOPMENT.md` "ItemMasterList crashify on unknown keys" |
+| Inventory preview shows wrong / missing weapon | cosmetics_tweaker / wt (preview hook on wrong class) | Confirm hook targets `MenuWorldPreviewer`, not `HeroPreviewer` | `CLAUDE.md` "HOOK THE DERIVED CLASS, NEVER THE BASE" |
+| Hook installed but never fires | any mod | Grep for `local <name> = <Class>.<method>` upvalue captures + duplicate `mod:hook` on same pair | `VMF_RECIPES.md` sec. 1; `CLAUDE.md` "Hooks that silently no-op" |
+| Multi-return values silently drop to nil | any mod with hook wrappers | Search hook body for `return wrapper(func(...))` or bare `unpack(t)` | `VMF_RECIPES.md` sec. 2 / sec. 2a |
+| Mutator / event preset toggle doesn't take effect | event_tweaker | Run `/verify_<feature>`; check the `DLC_BY_MUTATOR` gate | `event_tweaker/DEVELOPMENT.md`; `CLAUDE.md` "DLC Ownership Gate" |
+| Buff / damage / explosion crash on second peer joining | ct / wt / et (gated registration) | Confirm shared registration master toggle; check sorted-order registration | `PROJECT_STANDARDS.md` sec. 9.3; `DEVELOPMENT.md` "Gated registration diverges across peers" |
+| Crafting screen shows item player doesn't own DLC for | cim / cosmetics_tweaker / crt / event_tweaker | Grep for `_*_requires_unowned_dlc`; confirm the filter fires before enumeration | `CLAUDE.md` "DLC Ownership Gate" |
+| Settings differ between "the same setup" | any mod | Compare `settings_fp=<hash>` across peer logs | `PROJECT_STANDARDS.md` sec. 3.6 "Applied marker line" |
+| Game crashed with no `<<crashify-exception>>` | engine-level (Stingray) | Read `crash_dumps\<GUID>.dmp` | `PROJECT_STANDARDS.md` sec. 9.7 grep-first |
 
 ---
 
-## Appendix B — Anti-patterns the runbook explicitly prevents
+## Appendix B - Anti-patterns the runbook prevents
 
-The behaviors below have wasted prior sessions; the phases above are
-structured to short-circuit them.
+The behaviors below have wasted prior sessions; the steps above are structured
+to short-circuit them.
 
-- **Speculative defense stacking** (`PROJECT_STANDARDS.md` § 9.1). Don't add a guard without answering the § 8.6 four-question gate. Revert speculative patches; find the real root cause.
-- **Guard != bail** (`PROJECT_STANDARDS.md` § 4.2). An early `return` removes vanilla's mutation. Confirm vanilla's contract before bailing.
-- **Skipping the grep-first protocol** (`PROJECT_STANDARDS.md` § 9.7). Most surprising crashes are documented; grep CHANGELOGs + memory for the literal signature first.
-- **Inventing internals** (global CLAUDE.md "Don't invent internals"). Don't write field names, line numbers, or mechanic claims that haven't been grepped in source.
-- **Hot-reload assumption** (`PROJECT_STANDARDS.md` § 9.4). Ctrl+Shift+R is broken for wt / cosmetics_tweaker and unsafe in general — full game restart after redeploy.
-- **Auto-launching VT2** (global CLAUDE.md "Never auto-launch games"). Build, deploy, and then ask the user before launching.
+- **Diagnosing against a build the user was not running.** STEP 2 exists to
+  catch this. Ship current + re-test before reading code.
+- **Speculative defense stacking** (`PROJECT_STANDARDS.md` sec. 9.1). Do not add a
+  guard without the sec. 8.6 four-question gate. Find the real root cause.
+- **Guard != bail** (`PROJECT_STANDARDS.md` sec. 4.2). An early `return` removes
+  vanilla's mutation. Confirm vanilla's contract first.
+- **Skipping the grep-first protocol** (`PROJECT_STANDARDS.md` sec. 9.7). Most
+  surprising crashes are already documented; grep for the literal signature.
+- **Inventing internals** (global CLAUDE.md). No field names, line numbers, or
+  mechanic claims that were not grepped in source. Write `[unverified]` instead.
+- **Claiming "fixed" off a build.** Only the user's in-game confirmation closes
+  an item (STEP 8).
+- **Tunneling one suspect without a bisection** (STEP 4).
+- **Hot-reload assumption.** Ctrl+Shift+R is unsafe for wt / cosmetics_tweaker
+  and risky in general - full game restart after redeploy.
+- **Auto-launching VT2** (global CLAUDE.md). Build, deploy, ship, THEN ask the
+  user before launching.
 
 ---
 
-## Appendix C — When this runbook is wrong
+## Appendix C - When this runbook is wrong
 
-This runbook is a living checklist of what already works in practice. If a
-phase or step is counterproductive on a real bug, propose the update in the
-same PR as the fix. Don't silently ignore the rule, and don't add steps that
-haven't actually paid off in a real session.
-
-Cross-ref: `PROJECT_STANDARDS.md` § 13 "When this doc is wrong" — same policy.
+This runbook is a living checklist of what already works in practice. If a step
+is counterproductive on a real bug, propose the update in the same commit as the
+fix. Do not silently ignore a step, and do not add steps that have not actually
+paid off in a real session. Cross-ref: `PROJECT_STANDARDS.md` sec. 13 "When this
+doc is wrong".

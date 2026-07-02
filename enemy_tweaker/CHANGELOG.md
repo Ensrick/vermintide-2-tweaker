@@ -1,5 +1,25 @@
 # Enemy Tweaker Changelog
 
+## 0.7.23-dev (2026-07-01) — Settings menu reorganization (sort + polish, no functional changes)
+
+### Changed
+- **Top-level menu entries now sort A→Z by display label.** New order: Beastman Banner, Boss Mechanic Tweaks, Breed Substitution, Enemy Spawns, Faction Substitution, Horde Composition, Skarrik Monster Pool, Spawn Pacing, Spawn Scaling, Stormvermin Champion Pool. Group order within Spawn Scaling, Spawn Pacing, Beastman Banner, and Difficulty Mimic is also A→Z. Deliberate-order exemptions (commented at each site): the Special Spawns per-difficulty blocks keep the difficulty ladder; Faction/Breed Substitution keep the Skaven → Chaos → Beastmen faction order; the Horde Frequency min/max pair reads min-before-max; the per-difficulty specials blocks lead with their count caps.
+- **Group headings polished** (Title Case, no punctuation): "Spawn Pacing (frequency + caps)" → "Spawn Pacing"; "Monster Pool: Skarrik Spinemangler" → "Skarrik Monster Pool"; "Roaming Elite Pool: Stormvermin Champion" → "Stormvermin Champion Pool".
+- **Setting labels converted to sentence case** per LOCALIZATION_STANDARD §11.1 (e.g. "Max Active Trash Enemies" → "Max active trash enemies", "Paced Horde Size (multiplier)" → "Paced horde size (multiplier)"). Proper nouns (Skaven, Chaos, Beastmen, Stormvermin Champion, Skarrik Spinemangler, difficulty names) stay capitalized. The `et_fly_disable_mult` label dropped its "x vanilla duration" phrasing: "Fly disable: x vanilla duration (Halescourge/Nurgloth)" → "Fly-disable duration (Halescourge/Nurgloth)".
+- **A few tooltips tightened** (removed "When on," conditional preambles, trimmed prose) while preserving every magnitude, breed/mission-name reference, and host-only caveat.
+
+### Structure
+- **`warlord_monster_chance` and `champion_elite_chance` are now `sub_widgets` of their master checkboxes** (`warlord_in_monster_pool` / `champion_in_elite_pool`). VMF auto-hides each chance slider while its feature is off. Code-gated: `enemy_tweaker.lua` reads the chance value only when the checkbox is on (`~1248`/`~1258` for the warlord, `~1273`/`~1280` for the champion), so hiding it changes nothing functionally.
+- **Localization file reordered** to mirror the widget tree with `-- ====` section banners. The commented-out Big Rebalance (`br_*`) widget block and its loc keys are retained unchanged (ON ICE; they do not render).
+
+### Not changed
+- No `setting_id` renamed, no setting added/removed, no default/range/decimals changed, no behavior changed, no new master toggles. The commented-out BR block is untouched.
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.22-dev → 0.7.23-dev.
+- `enemy_tweaker_data.lua` — top-level widget array reordered A→Z; within-group order A→Z (exemptions commented); `warlord_monster_chance` / `champion_elite_chance` nested under their master checkboxes.
+- `enemy_tweaker_localization.lua` — reordered to mirror the widget tree; group headings de-punctuated; setting labels sentence-cased; select tooltips tightened.
+
 ## 0.7.22-dev (2026-07-01) — Double-freeze guard + probe on the recycler freeze path (#213)
 
 ### Fixed

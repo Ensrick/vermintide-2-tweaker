@@ -693,12 +693,18 @@ Workshop ID / mod_id mapping.
    raw `--allow-public` call.
 8. **`.\tools\publish-release\publish-release.ps1`** — publishes the bundle
    to the GitHub release so `vt2-mod-updater` consumers stay in sync.
+9. **`git add` / `git commit` / `git push`** the stable source + version +
+   CHANGELOG changes. The source commit is PART of the ship, not a follow-up:
+   uncommitted shipped work piles up silently (three sessions' worth was found
+   uncommitted on 2026-07-01).
 
-**Dev uploads** follow the same per-build approval rule but skip the
-`--allow-public` and `upload_*.ps1` wrapper steps — they go through
-`VMBLauncher.exe upload <mod>-dev` directly (the launcher's visibility check
-auto-passes for `friends_only`). GitHub release still required after every
-dev upload too.
+**Dev uploads are pre-authorized: NO per-build approval.** Per the ship
+doctrine in § 6.6, a `-dev`/`-alpha`/`-beta`-versioned build ships the full
+pipeline on every update. Dev uploads target the friends-only item, skip
+`--allow-public` and the `upload_*.ps1` wrapper, and ride the `ship.ps1`
+pipeline (which wraps `VMBLauncher.exe upload <mod>-dev`; the launcher's
+visibility check auto-passes for `friends_only`). GitHub release AND the source
+commit/push are part of every dev ship, not optional follow-ups.
 
 **Cross-mod refs** always resolve against the stable mod_id (`get_mod("cim")`,
 `get_mod("gt")`, `(get_mod('bt') or {}):is_br_active()`). Dev clones are
@@ -712,6 +718,47 @@ directory.
 automatically isolated between stable and dev because the mod_ids differ.
 Sessions that need the lobby/MOTD surface should pin every peer to the same
 stream.
+
+### 6.6 Ship doctrine: keyed off the MOD_VERSION suffix (canonical, 2026-07-01)
+
+Whether a build ships to the Workshop without asking is decided by the
+**MOD_VERSION suffix**, not by the directory, the Workshop visibility, or how
+long ago the user said "ship it". This is the single source of truth for ship
+approval; where earlier text conflicts, this section wins.
+
+**Pre-release-versioned mods (`-dev` / `-alpha` / `-beta` / `-rc<N>`) cover
+EVERY active mod in the repo, including single-stream PUBLIC ones like
+`wt`, `cosmetics_tweaker`, `et`, `crt`:** every update ships the FULL pipeline
+with NO per-build approval. The full pipeline is:
+
+1. `tools\ship\ship.ps1 -Mod <name>` builds, deploys to PC-A + PC-B, uploads
+   to the Workshop item, publishes the GitHub release, and verifies the deploy
+   hashes plus the `workshop_log.txt` upload status. Add `-AllowPublic` when the
+   mod's `itemV2.cfg` is public. Use `-NoRemote` ONLY when PC-B is unreachable,
+   and say so in the report.
+2. `git add` / `git commit` / `git push` the source change. The source commit
+   is PART of the ship, not an optional follow-up.
+
+Do NOT downgrade a `-dev` update to deploy-only "to be safe". For a mod the
+user is subscribed to, Steam re-syncs the Workshop bundle over any local
+deploy, so the upload is the ONLY path that reaches the user's game; and
+uncommitted shipped work piles up silently (three sessions' worth was found
+uncommitted on 2026-07-01), so the commit + push is mandatory.
+
+**Clean-versioned stable / public promotions (no pre-release suffix, public
+`ct` / `cim` / `gt` / `gut` / `verminious_dreams_lighting` at promotion):**
+require a FRESH, explicit, per-build ship signal from the user that names the
+version. "Ship it" said earlier does NOT carry forward. Default for these is
+build + deploy only; treat the upload like `git push --force`. Full promote
+checklist in § 6.5.
+
+**Post-ship checks (both streams):**
+- Confirm `Uploaded new content` in `workshop_log.txt`. `ugc_tool` prints
+  "Upload finished" even when nothing transferred.
+- A deploy-verify hash MISMATCH after a CONFIRMED upload is a Steam reconcile
+  race, not a ship failure: do one local re-deploy, then continue.
+- A self-authored upload only re-downloads after a full Steam restart (tray
+  Exit, reopen); a game relaunch is not enough. Remind the user.
 
 ---
 
@@ -1025,7 +1072,9 @@ before acting. Memory cited claims can be 20+ days old. The verification is
 
 Established 2026-05-25 alongside `tools/install-hooks.ps1` (Issue #29). After cloning the repo, run `./tools/install-hooks.ps1` to install the local pre-commit hook — it runs `qa/run_all.ps1 -Quick -SkipLua` and `tools/mod-lint/lint-mod.ps1` against staged `*.lua` / `*.cfg` / `*.ps1` / `*.mod` files before each commit, so cfg-drift, MOD_VERSION / title-suffix typos, duplicate hook registrations, and the other recurring bug classes catalogued in § 11a never reach CI. The installer is idempotent; the hook self-disables for commits that touch only docs / bundle binaries / other non-checked extensions.
 
-`git commit --no-verify` bypasses the hook for one commit. **Use only when you've verified locally and the hook is being overly cautious; cite the reason in the commit message** so future-me can audit the override (`workshop-stage cfg rewrite already validated by VMBLauncher`, `lint warning is a known false positive on <file>`, etc.). Don't `--no-verify` to "fix on push" — fix the root cause first, because the GHA workflow runs the same checks and will block the merge anyway.
+**Gates block on ERRORS only.** A gate that finds an error fails the commit; WARNINGS print but do not block (this is the behavior a parallel `qa/run_all` change is landing). So the source commit + push that is part of every ship (§ 6.6) proceeds cleanly whenever the checks surface only advisory warnings; it does not get stuck behind a warning.
+
+`git commit --no-verify` bypasses the hook for one commit. **Use it ONLY when a gate is itself wrong or out-of-scope for the change, and cite the reason in the commit message** so future-me can audit the override (`workshop-stage cfg rewrite already validated by VMBLauncher`, `lint false positive on <file>`, etc.). Prefer FIXING the gate over bypassing it. Never `--no-verify` to "fix on push" to dodge a real error; the GHA workflow runs the same checks and will block the merge anyway.
 
 ### 8.6 The "I'm about to add a defensive guard" gate
 Before writing `if not X then return end` in a hook, answer in a comment:
@@ -1345,6 +1394,11 @@ BEFORE shipping:
   - No forward-ref bugs (visually verify; future: luacheck)
   - No new "guard ≠ bail" violations
   - Subagent pre-ship review for hot mods
+  - Approval axis checked: -dev/-alpha/-beta = ship with NO ask; clean version = fresh per-build signal (sec. 6.6)
+
+AFTER shipping:
+  - workshop_log.txt shows "Uploaded new content" for the item
+  - git add / commit / push the source (the commit is part of the ship, sec. 6.6)
 
 WHEN BLOCKED:
   - Memory + CHANGELOG grep for the literal symptom
@@ -1432,7 +1486,11 @@ Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by cl
 
 ---
 
-*Last updated: 2026-05-23 — §7 documentation standards expanded: canonical doc
+*Last updated: 2026-07-01 — sec. 6.5/6.6 ship doctrine rewritten (dev builds
+pre-authorized for the full pipeline + git commit/push; stable promotions need a
+fresh per-build signal), sec. 8.5a gate semantics (errors block, warnings
+report), sec. 14 card gained the approval axis + AFTER-shipping steps.
+Prior update 2026-05-23 — §7 documentation standards expanded: canonical doc
 map (repo-root + per-mod tables with update triggers), three-bucket model for
 non-canonical docs (Reference / POSTMORTEMS.md / `_investigating/`), audit
 snapshot policy (gitignored, distill on action), supersession banner preserved,

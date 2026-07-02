@@ -3,6 +3,10 @@
 -- so VMF resolves them at render time — never call mod:localize() in the data
 -- file (it returns "<key>" if loc isn't ready, and that bracket text becomes
 -- the literal widget label).
+--
+-- Section order mirrors the top-level widget tree in enemy_tweaker_data.lua,
+-- which is A→Z by display label. Group headings are Title Case; setting labels
+-- are sentence case (LOCALIZATION_STANDARD §11).
 
 local B = require("scripts/mods/enemy_tweaker/enemy_tweaker_breeds")
 
@@ -12,106 +16,50 @@ local loc = {
     },
 
     -- ============================================================
-    -- HORDES
-    -- ============================================================
-    horde_group = { en = "Horde Composition" },
-    horde_preset = { en = "Horde Preset" },
-    horde_preset_tooltip = {
-        en = "Replaces the enemies in hordes with a chosen preset. Faction presets force a single race, while Theme presets are broader overhauls such as elites only.",
-    },
-    preset_off               = { en = "Off (vanilla hordes)" },
-    preset_skaven_only       = { en = "Faction: Skaven Only" },
-    preset_chaos_only        = { en = "Faction: Chaos Only" },
-    preset_beastmen_invasion = { en = "Faction: Beastmen Invasion" },
-    preset_mixed_factions    = { en = "Faction: Mixed (all three)" },
-    preset_all_elites        = { en = "Theme: All Elites" },
-    -- ============================================================
-    -- SPAWN SCALING (4 multipliers, v0.6.0-dev)
-    -- ============================================================
-    spawn_scaling_group = { en = "Spawn Scaling" },
-
-    horde_size_multiplier = { en = "Paced Horde Size (multiplier)" },
-    horde_size_multiplier_tooltip = {
-        en = "Multiplies how many enemies come in each paced horde, the regular waves between big events. 0 means none, 1 is normal, and 5 is the capped maximum since paced hordes get unstable past that.",
-    },
-
-    event_size_multiplier = { en = "Event Horde Size (multiplier)" },
-    event_size_multiplier_tooltip = {
-        en = "Multiplies how many enemies come in event hordes, the scripted ambushes and bell-summoned waves that make up most mission hordes. 0 means none, 1 is normal, and 5 is the capped maximum.",
-    },
-
-    roaming_size_multiplier = { en = "Roaming Enemy Density (multiplier)" },
-    roaming_size_multiplier_tooltip = {
-        en = "Multiplies how many wandering enemies roam the level. 0 means none, 1 is normal, and 15 is the maximum; very high values mostly add loose ambient enemies rather than larger packs.",
-    },
-
-    patrol_size_multiplier = { en = "Patrol Size (multiplier)" },
-    patrol_size_multiplier_tooltip = {
-        en = "Multiplies the size of marching patrols, the organized squads such as Stormvermin, Chaos Warrior, or Beastmen patrols. 0 means no patrols, 1 is normal, and 15 is the maximum; very large patrols may run into the game's movement limits.",
-    },
-
-    -- ============================================================
-    -- SPAWN PACING (v0.7.0-dev — SpawnTweaks parity pass)
-    -- ============================================================
-    spawn_pacing_group = { en = "Spawn Pacing (frequency + caps)" },
-
-    max_grunts_override = { en = "Max Active Trash Enemies" },
-    max_grunts_override_tooltip = {
-        en = "Sets how many basic trash enemies can be alive at the same time (the normal cap is about 90). Raising it packs the map with more enemies at once for an Onslaught-style feel; the range is 10 to 360.",
-    },
-
-    spawn_pace_multiplier = { en = "Spawn Rate Multiplier" },
-    spawn_pace_multiplier_tooltip = {
-        en = "Multiplies how often new enemies spawn. 1 is normal, 2 is roughly twice as many spawn waves per minute, 0.5 is half, and the range is 0 to 5.",
-    },
-
-    horde_grunt_push_threshold = { en = "Horde Push Threshold (alive grunts)" },
-    horde_grunt_push_threshold_tooltip = {
-        en = "The game starts a new horde once fewer than this many basic enemies are still alive (normally 60). Lower values mean hordes come almost back to back; the range is 10 to 240.",
-    },
-
-    horde_frequency_min = { en = "Horde Frequency Min (seconds)" },
-    horde_frequency_min_tooltip = {
-        en = "The shortest time, in seconds, the game waits between paced hordes (normally about 50). Lower values make hordes arrive more often; the range is 5 to 200.",
-    },
-
-    horde_frequency_max = { en = "Horde Frequency Max (seconds)" },
-    horde_frequency_max_tooltip = {
-        en = "The longest time, in seconds, the game waits between paced hordes (normally about 100). The actual gap is picked at random between the minimum and this value; the range is 5 to 200.",
-    },
-
-    ambients_ignore_threat = { en = "Ambient Spawns Ignore Threat" },
-    ambients_ignore_threat_tooltip = {
-        en = "When on, small ambient patrols keep spawning even during heavy combat. Normally the game pauses them while fighting is intense, so turn this on if the Roaming Enemy Density setting feels weaker than it should.",
-    },
-
-    -- ============================================================
-    -- BEASTMAN BANNER (v0.7.2-dev)
+    -- Beastman Banner
     -- ============================================================
     banner_group = { en = "Beastman Banner" },
 
-    banner_bearer_staggerable_during_placement = { en = "Bearer Staggerable During Placement" },
-    banner_bearer_staggerable_during_placement_tooltip = {
-        en = "When on, the Beastmen standard-bearer can be staggered and interrupted while planting the banner. Normally he cannot be stopped once the planting starts, so this lets a well-timed hit cancel it.",
-    },
-
-    banner_breakable_by_ranged = { en = "Banner Takes Ranged Damage" },
+    banner_breakable_by_ranged = { en = "Banner takes ranged damage" },
     banner_breakable_by_ranged_tooltip = {
-        en = "When on, the planted Beastmen banner can be destroyed by ranged weapons like bows, handguns, and crossbows. Normally only melee attacks and a few special sources can damage it.",
+        en = "Lets ranged weapons (bows, handguns, crossbows) destroy the planted Beastmen banner. Normally only melee and a few special sources can damage it.",
     },
 
-    banner_no_camera_jerk_on_placement = { en = "No Camera Jerk On Placement" },
+    banner_bearer_staggerable_during_placement = { en = "Bearer staggerable during placement" },
+    banner_bearer_staggerable_during_placement_tooltip = {
+        en = "Lets the Beastmen standard-bearer be staggered and interrupted while planting the banner. Normally the planting cannot be stopped once it starts.",
+    },
+
+    banner_no_camera_jerk_on_placement = { en = "No camera jerk on placement" },
     banner_no_camera_jerk_on_placement_tooltip = {
-        en = "When on, planting the Beastmen standard no longer shoves the player or jerks the camera. The shockwave still affects nearby Beastmen as usual.",
+        en = "Stops the planted Beastmen standard from shoving the player or jerking the camera. The shockwave still affects nearby Beastmen.",
     },
 
     -- ============================================================
-    -- ENEMY SPAWNS (per-difficulty)
+    -- Boss Mechanic Tweaks
+    -- ============================================================
+    boss_tweaks_group = { en = "Boss Mechanic Tweaks" },
+    et_fly_disable_mult = { en = "Fly-disable duration (Halescourge/Nurgloth)" },
+    et_fly_disable_mult_tooltip = {
+        en = "Multiplies how long the cloud of flies from Burblespue Halescourge and Nurgloth keeps you disabled: 1.00 normal, 0.50 half, 2.00 double, 0 near-instant. Each boss scales from its own base length, so one value cannot make them identical. Host only; the cloud can still be destroyed.",
+    },
+
+    -- ============================================================
+    -- Breed Substitution
+    -- ============================================================
+    breed_swap_group        = { en = "Breed Substitution" },
+    breed_swap_off          = { en = "Off" },
+    breed_swap_from         = { en = "Replace this breed" },
+    breed_swap_from_tooltip = { en = "The enemy type to replace. Every enemy of this type in hordes becomes the one chosen below." },
+    breed_swap_to           = { en = "With this breed" },
+    breed_swap_to_tooltip   = { en = "The enemy type used as the replacement. It must be different from the one chosen above." },
+
+    -- ============================================================
+    -- Enemy Spawns
     -- ============================================================
     enemy_spawns_group   = { en = "Enemy Spawns" },
-    special_spawns_group = { en = "Special Spawns" },
 
-    -- Difficulty mimic — override the difficulty key used by
+    -- Difficulty Mimic — override the difficulty key used by
     -- patch_settings_with_difficulty for individual spawn-side subsystems.
     -- Player/enemy stats stay on the real difficulty; only spawn frequency,
     -- composition, density etc. mimic the chosen difficulty.
@@ -126,33 +74,37 @@ local loc = {
     mimic_opt_cataclysm_2 = { en = "Cataclysm 2" },
     mimic_opt_cataclysm_3 = { en = "Cataclysm 3" },
 
-    mimic_horde         = { en = "Horde Composition Difficulty" },
-    mimic_horde_tooltip = {
-        en = "Uses another difficulty's horde makeup without changing your real difficulty. Player and enemy stats stay as they are.",
-    },
-    mimic_specials         = { en = "Specials Difficulty" },
-    mimic_specials_tooltip = {
-        en = "Uses another difficulty's special-enemy rules, such as how many can be active and how often they appear, without changing your real difficulty. Player and enemy stats stay as they are.",
-    },
-    mimic_pacing         = { en = "Horde Frequency Difficulty" },
-    mimic_pacing_tooltip = {
-        en = "Uses another difficulty's horde timing and pacing without changing your real difficulty. Player and enemy stats stay as they are.",
-    },
-    mimic_pack_spawning         = { en = "Roaming Density Difficulty" },
-    mimic_pack_spawning_tooltip = {
-        en = "Uses another difficulty's roaming and ambient enemy density without changing your real difficulty. Player and enemy stats stay as they are.",
-    },
-    mimic_intensity         = { en = "Intensity Difficulty" },
-    mimic_intensity_tooltip = {
-        en = "Uses another difficulty's combat intensity buildup and decay without changing your real difficulty. Player and enemy stats stay as they are.",
-    },
-    mimic_boss         = { en = "Boss/Event Difficulty" },
+    mimic_boss         = { en = "Boss/event difficulty" },
     mimic_boss_tooltip = {
         en = "Uses another difficulty's monster and boss spawn timing without changing your real difficulty. Player and enemy stats stay as they are.",
     },
+    mimic_horde         = { en = "Horde composition difficulty" },
+    mimic_horde_tooltip = {
+        en = "Uses another difficulty's horde makeup without changing your real difficulty. Player and enemy stats stay as they are.",
+    },
+    mimic_pacing         = { en = "Horde frequency difficulty" },
+    mimic_pacing_tooltip = {
+        en = "Uses another difficulty's horde timing and pacing without changing your real difficulty. Player and enemy stats stay as they are.",
+    },
+    mimic_intensity         = { en = "Intensity difficulty" },
+    mimic_intensity_tooltip = {
+        en = "Uses another difficulty's combat intensity buildup and decay without changing your real difficulty. Player and enemy stats stay as they are.",
+    },
+    mimic_pack_spawning         = { en = "Roaming density difficulty" },
+    mimic_pack_spawning_tooltip = {
+        en = "Uses another difficulty's roaming and ambient enemy density without changing your real difficulty. Player and enemy stats stay as they are.",
+    },
+    mimic_specials         = { en = "Specials difficulty" },
+    mimic_specials_tooltip = {
+        en = "Uses another difficulty's special-enemy rules, such as how many can be active and how often they appear, without changing your real difficulty. Player and enemy stats stay as they are.",
+    },
+
+    -- Special Spawns — the group header. Per-difficulty blocks + per-special
+    -- weight/disable widgets are generated dynamically at the bottom of this file.
+    special_spawns_group = { en = "Special Spawns" },
 
     -- ============================================================
-    -- FACTION SUBSTITUTION
+    -- Faction Substitution
     -- ============================================================
     faction_swap_group   = { en = "Faction Substitution" },
     faction_opt_off      = { en = "Off (don't swap)" },
@@ -160,49 +112,117 @@ local loc = {
     faction_opt_chaos    = { en = "Chaos" },
     faction_opt_beastmen = { en = "Beastmen" },
 
-    faction_swap_skaven           = { en = "Replace Skaven Hordes With" },
+    faction_swap_skaven           = { en = "Replace Skaven hordes with" },
     faction_swap_skaven_tooltip   = {
         en = "Replaces Skaven paced hordes with the chosen faction's hordes instead. Only the regular paced hordes change; scripted event hordes stay as they are.",
     },
-    faction_swap_chaos            = { en = "Replace Chaos Hordes With" },
+    faction_swap_chaos            = { en = "Replace Chaos hordes with" },
     faction_swap_chaos_tooltip    = {
         en = "Replaces Chaos paced hordes with the chosen faction's hordes instead. Handy on missions that turn to Chaos in later areas, like Athel Yenlui or Hunger in the Dark.",
     },
-    faction_swap_beastmen         = { en = "Replace Beastmen Hordes With" },
+    faction_swap_beastmen         = { en = "Replace Beastmen hordes with" },
     faction_swap_beastmen_tooltip = {
         en = "Replaces Beastmen paced hordes with the chosen faction's hordes instead. Only the regular paced hordes change; scripted event hordes stay as they are.",
     },
 
     -- ============================================================
-    -- BREED SUBSTITUTION
+    -- Horde Composition
     -- ============================================================
-    breed_swap_group        = { en = "Breed Substitution" },
-    breed_swap_off          = { en = "Off" },
-    breed_swap_from         = { en = "Replace This Breed" },
-    breed_swap_from_tooltip = { en = "Choose an enemy type to replace. Every enemy of this type in hordes becomes the one selected below." },
-    breed_swap_to           = { en = "With This Breed" },
-    breed_swap_to_tooltip   = { en = "The enemy type used as the replacement. It must be different from the one chosen above." },
+    horde_group = { en = "Horde Composition" },
+    horde_preset = { en = "Horde preset" },
+    horde_preset_tooltip = {
+        en = "Replaces the enemies in hordes with a chosen preset. Faction presets force a single race, while Theme presets are broader overhauls such as elites only.",
+    },
+    preset_off               = { en = "Off (vanilla hordes)" },
+    preset_skaven_only       = { en = "Faction: Skaven Only" },
+    preset_chaos_only        = { en = "Faction: Chaos Only" },
+    preset_beastmen_invasion = { en = "Faction: Beastmen Invasion" },
+    preset_mixed_factions    = { en = "Faction: Mixed (all three)" },
+    preset_all_elites        = { en = "Theme: All Elites" },
 
     -- ============================================================
-    -- MONSTER POOL: SKARRIK SPINEMANGLER
+    -- Skarrik Monster Pool
     -- ============================================================
-    monster_swap_group              = { en = "Monster Pool: Skarrik Spinemangler" },
-    warlord_in_monster_pool         = { en = "Add Skarrik Spinemangler to Monster Pool" },
-    warlord_in_monster_pool_tooltip = { en = "When on, a level's monster (Rat Ogre, Stormfiend, Chaos Spawn, Troll, or Minotaur) can be replaced by Skarrik Spinemangler, the Skaven Warlord. This is host only and experimental: away from his home level he may appear without music or act passively, and on some levels he will not show up at all. The Festering Ground finale troll is never replaced." },
-    warlord_monster_chance          = { en = "Skarrik Spawn Chance (%%)" },
+    monster_swap_group              = { en = "Skarrik Monster Pool" },
+    warlord_in_monster_pool         = { en = "Add Skarrik Spinemangler to monster pool" },
+    warlord_in_monster_pool_tooltip = { en = "Lets a level's monster (Rat Ogre, Stormfiend, Chaos Spawn, Troll, or Minotaur) be replaced by Skarrik Spinemangler, the Skaven Warlord. Host only and experimental: away from his home level he may spawn without music, act passively, or not appear at all. The Festering Ground finale troll is never replaced." },
+    warlord_monster_chance          = { en = "Skarrik spawn chance (%%)" },
     warlord_monster_chance_tooltip  = { en = "The percent chance that an eligible monster is replaced by Skarrik Spinemangler. 0 never happens and 100 replaces every eligible monster; kept low so several Warlords do not appear at once." },
 
     -- ============================================================
-    -- ROAMING ELITE POOL: STORMVERMIN CHAMPION (v0.7.18-dev)
+    -- Spawn Pacing
     -- ============================================================
-    elite_swap_group                = { en = "Roaming Elite Pool: Stormvermin Champion" },
-    champion_in_elite_pool          = { en = "Add Stormvermin Champion to Roaming Elites" },
-    champion_in_elite_pool_tooltip  = { en = "When on, roaming Skaven Stormvermin elites can be replaced by the Stormvermin Champion at the chance below; only loose wandering elites are affected, not horde or event spawns. This host-only option retunes the Champion into a tough mini-boss with a health bar and boss music, so treat it as a rare heavy encounter. It affects every Stormvermin Champion while on, including its rare normal appearances, and is restored when turned off." },
-    champion_elite_chance           = { en = "Champion Spawn Chance (%%)" },
+    spawn_pacing_group = { en = "Spawn Pacing" },
+
+    ambients_ignore_threat = { en = "Ambient spawns ignore threat" },
+    ambients_ignore_threat_tooltip = {
+        en = "Keeps small ambient patrols spawning even during heavy combat. Normally the game pauses them while fighting is intense; turn this on if Roaming enemy density feels weaker than expected.",
+    },
+
+    horde_frequency_min = { en = "Horde frequency min (seconds)" },
+    horde_frequency_min_tooltip = {
+        en = "The shortest time, in seconds, the game waits between paced hordes (normally about 50). Lower values make hordes arrive more often; the range is 5 to 200.",
+    },
+
+    horde_frequency_max = { en = "Horde frequency max (seconds)" },
+    horde_frequency_max_tooltip = {
+        en = "The longest time, in seconds, the game waits between paced hordes (normally about 100). The actual gap is picked at random between the minimum and this value; the range is 5 to 200.",
+    },
+
+    horde_grunt_push_threshold = { en = "Horde push threshold (alive grunts)" },
+    horde_grunt_push_threshold_tooltip = {
+        en = "The game starts a new horde once fewer than this many basic enemies are still alive (normally 60). Lower values mean hordes come almost back to back; the range is 10 to 240.",
+    },
+
+    max_grunts_override = { en = "Max active trash enemies" },
+    max_grunts_override_tooltip = {
+        en = "Sets how many basic trash enemies can be alive at the same time (the normal cap is about 90). Raising it packs the map with more enemies at once for an Onslaught-style feel; the range is 10 to 360.",
+    },
+
+    spawn_pace_multiplier = { en = "Spawn rate multiplier" },
+    spawn_pace_multiplier_tooltip = {
+        en = "Multiplies how often new enemies spawn. 1 is normal, 2 is roughly twice as many spawn waves per minute, 0.5 is half, and the range is 0 to 5.",
+    },
+
+    -- ============================================================
+    -- Spawn Scaling
+    -- ============================================================
+    spawn_scaling_group = { en = "Spawn Scaling" },
+
+    event_size_multiplier = { en = "Event horde size (multiplier)" },
+    event_size_multiplier_tooltip = {
+        en = "Multiplies how many enemies come in event hordes, the scripted ambushes and bell-summoned waves that make up most mission hordes. 0 means none, 1 is normal, and 5 is the capped maximum.",
+    },
+
+    horde_size_multiplier = { en = "Paced horde size (multiplier)" },
+    horde_size_multiplier_tooltip = {
+        en = "Multiplies how many enemies come in each paced horde, the regular waves between big events. 0 means none, 1 is normal, and 5 is the capped maximum since paced hordes get unstable past that.",
+    },
+
+    patrol_size_multiplier = { en = "Patrol size (multiplier)" },
+    patrol_size_multiplier_tooltip = {
+        en = "Multiplies the size of marching patrols, the organized squads such as Stormvermin, Chaos Warrior, or Beastmen patrols. 0 means no patrols, 1 is normal, and 15 is the maximum; very large patrols may run into the game's movement limits.",
+    },
+
+    roaming_size_multiplier = { en = "Roaming enemy density (multiplier)" },
+    roaming_size_multiplier_tooltip = {
+        en = "Multiplies how many wandering enemies roam the level. 0 means none, 1 is normal, and 15 is the maximum; very high values mostly add loose ambient enemies rather than larger packs.",
+    },
+
+    -- ============================================================
+    -- Stormvermin Champion Pool
+    -- ============================================================
+    elite_swap_group                = { en = "Stormvermin Champion Pool" },
+    champion_in_elite_pool          = { en = "Add Stormvermin Champion to roaming elites" },
+    champion_in_elite_pool_tooltip  = { en = "Lets roaming Skaven Stormvermin elites be replaced by the Stormvermin Champion at the chance below; only loose wandering elites are affected, not horde or event spawns. Host only. Retunes the Champion into a tough mini-boss with a health bar and boss music, affecting every Champion (including its rare normal appearances) while on; restored when off." },
+    champion_elite_chance           = { en = "Champion spawn chance (%%)" },
     champion_elite_chance_tooltip   = { en = "The percent chance that a roaming Skaven elite is replaced by the Stormvermin Champion. 0 never happens and 100 replaces every roaming elite; kept low so the Champion stays a rare mini-boss." },
 
     -- ============================================================
-    -- BIG REBALANCE (Core's BR integration)
+    -- Big Rebalance (ON ICE) — the br_* widget block in enemy_tweaker_data.lua
+    -- is commented out (bt retired 2026-06-08), so none of these keys render.
+    -- They are retained (not stripped) so the block can be restored intact; the
+    -- technical engine terms are the content, so they are left as-is.
     -- ============================================================
     br_group                          = { en = "Big Rebalance" },
     br_group_tooltip                  = { en = "Opt-in Big Rebalance enemy/stagger/THP changes. All toggles default OFF. REQUIRES 'Tweaker: Buffs' (bt) installed with its master toggle ON; without bt master, every toggle here is inert." },
@@ -258,17 +278,12 @@ local loc = {
         en = "Registers rebaltourn_bloodlust: THP on kill scaled by breed.bloodlust_health, multiplier 0.2. Perk smiter_healing. Inert without 'per-breed bloodlust_health assignments'.",
     },
 
-    -- ============================================================
-    -- BOSS MECHANIC TWEAKS (received from general_tweaker_dev 2026-06-20)
-    -- ============================================================
-    boss_tweaks_group = { en = "Boss Mechanic Tweaks" },
-    et_fly_disable_mult = { en = "Fly disable: x vanilla duration (Halescourge/Nurgloth)" },
-    et_fly_disable_mult_tooltip = { en = "Multiplies how long the cloud of flies from Burblespue Halescourge and Nurgloth keeps you disabled. 1.00 is normal, 0.50 is half as long, 2.00 is twice, and 0 is nearly instant; it scales each boss's fly attack from its own base length, so one setting cannot make them all the exact same duration. Host only, since the boss runs on the host, and the cloud can still be destroyed either way." },
-
 }
 
 -- ============================================================
--- Dynamic entries: per-difficulty group headers + per-special widgets
+-- Dynamic entries: breed-swap option labels + per-difficulty
+-- group headers and per-special widgets. Appended by key, so table order
+-- here does not affect VMF resolution.
 -- ============================================================
 
 local SPECIALS = B.collect_specials()
@@ -288,18 +303,19 @@ for _, g in ipairs(FACTION_GROUPS) do
     end
 end
 
--- Per-difficulty entries.
+-- Per-difficulty entries (Special Spawns). Group headers stay Title Case;
+-- the count-cap labels are sentence case.
 for _, diff in ipairs(B.DIFFICULTIES) do
     local k = diff.key
 
     loc["et_diff_" .. k .. "_group"]            = { en = diff.label }
     loc[B.setting_key(k, "weights_group")]      = { en = "Spawn Weights" }
     loc[B.setting_key(k, "disabled_group")]     = { en = "Disabled Specials" }
-    loc[B.setting_key(k, "max_total")]          = { en = "Max Specials Active" }
+    loc[B.setting_key(k, "max_total")]          = { en = "Max specials active" }
     loc[B.setting_key(k, "max_total_tooltip")]  = {
         en = string.format("The most specials that can be alive at once on %s (normally %d).", diff.label, diff.max_total),
     }
-    loc[B.setting_key(k, "max_same")]           = { en = "Max Specials of Same Type" }
+    loc[B.setting_key(k, "max_same")]           = { en = "Max specials of same type" }
     loc[B.setting_key(k, "max_same_tooltip")]   = {
         en = string.format("The most specials of the same type that can be alive at once on %s (normally %d).", diff.label, diff.max_same),
     }
