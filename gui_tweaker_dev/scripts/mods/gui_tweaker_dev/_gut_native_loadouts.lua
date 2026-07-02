@@ -182,15 +182,32 @@ local function _ensure_seeded(mirror, career_name)
         tostring(career_name), #cd, selected)
 end
 
--- Resolve a backend id via the items interface; nil if unresolvable RIGHT NOW (which in
--- modded may just mean "not registered yet" - see GEAR_SLOT_NAMES burn history). Never
--- raises: any lookup failure reads as unresolvable.
-local function _resolve_item(id)
-    local ok, item = pcall(function()
-        local iface = Managers.backend:get_interface("items")
-        return iface and iface.get_item_from_id and iface:get_item_from_id(id) or nil
+-- Tri-state gear-id resolution: "yes" (item exists), "no" (checkable and absent right
+-- now), "unknown" (cannot check). RAW FIELD READS ONLY - NEVER interface methods.
+-- Burn 2026-07-02 #3 (v0.2.173, PC-A 21:09 log): calling iface:get_item_from_id() from
+-- inside the mirror get_character_data hook recursed unboundedly - get_item_from_id ->
+-- get_all_backend_items -> `if self._dirty then self:_refresh()` (backend_interface_
+-- item_playfab.lua) -> _refresh -> mirror get_character_data -> our hook -> resolve ->
+-- get_item_from_id -> _dirty STILL true (cleared only when _refresh completes) -> stack
+-- overflow (~10k frames, surfaced at cosmetics_tweaker.lua:1513 on the same chain), and
+-- the error-handler frame dumps then exhausted the 1 GiB lua_heap. Reading `_items` /
+-- `_fake_items` directly (interfaces registry field per backend_manager_playfab.lua:202)
+-- performs no dirty check, so re-entry is structurally impossible. A stale table during
+-- a pending refresh at worst yields a transient "no" -> per-read official fallback that
+-- self-heals on the next read.
+local RESOLVE_YES, RESOLVE_NO, RESOLVE_UNKNOWN = 1, 2, 3
+local function _resolve_item_raw(id)
+    local ok, state = pcall(function()
+        local backend = Managers and Managers.backend
+        local iface = backend and backend._interfaces and backend._interfaces.items
+        if not iface then return RESOLVE_UNKNOWN end
+        local items = iface._items
+        local fakes = iface._fake_items
+        if not items and not fakes then return RESOLVE_UNKNOWN end
+        if (items and items[id]) or (fakes and fakes[id]) then return RESOLVE_YES end
+        return RESOLVE_NO
     end)
-    return ok and item or nil
+    return ok and state or RESOLVE_UNKNOWN
 end
 
 local function _prepare(mirror, career_name)
@@ -229,7 +246,10 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
             end
             return nil
         end
-        if _resolve_item(value) == nil then
+        -- Fall back to the official value ONLY on an affirmative miss; on UNKNOWN
+        -- (backend not inspectable) serve the store value unchanged - guessing
+        -- "official" there would bleed official gear into modded loadouts at boot.
+        if _resolve_item_raw(value) == RESOLVE_NO then
             return func(self, career_name, key, optional_loadout_index)
         end
     end
@@ -484,6 +504,12 @@ M.rt_checks = {
         -- no destructive pass exists, cosmetic slots stay out of the gear set, and the
         -- weapon set (never-serve-empty) is a subset of the gear set.
         if _sanitize_career ~= nil then return "destructive _sanitize_career reintroduced" end
+        -- v0.2.173 recursion burn: resolution must be raw-read tri-state, never interface methods.
+        if type(_resolve_item_raw) ~= "function" then return "_resolve_item_raw missing" end
+        local st = _resolve_item_raw("__rt_nonexistent_id__")
+        if st ~= RESOLVE_NO and st ~= RESOLVE_UNKNOWN then
+            return "tri-state resolve returned " .. tostring(st) .. " for nonexistent id"
+        end
         local cosmetic = { slot_skin = true, slot_hat = true, slot_frame = true, slot_pose = true }
         local in_loadout = {}
         for _, s in ipairs(LOADOUT_SLOT_NAMES) do in_loadout[s] = true end

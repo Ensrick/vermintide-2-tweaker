@@ -5,6 +5,29 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.174-dev (2026-07-02) -- CRITICAL FIX #175: v0.2.173 infinite recursion (stack overflow -> 1 GiB lua_heap crash)
+
+### Why (PC-A log 2026-07-02 21:09, 457k lines in ~2 min; friend unbootable with no surviving log)
+v0.2.173's read-time fallback called `iface:get_item_from_id()` from INSIDE the mirror
+`get_character_data` hook. Recursion chain (all cited): `get_item_from_id` ->
+`get_all_backend_items` -> `if self._dirty then self:_refresh()`
+(backend_interface_item_playfab.lua) -> `_refresh` -> `_refresh_loadouts` -> mirror
+`get_character_data` -> our hook -> resolve -> `get_item_from_id` -> `_dirty` STILL true
+(cleared only when `_refresh` completes) -> unbounded mutual recursion. Stack overflow
+(~10k frames, surfacing at cosmetics_tweaker.lua:1513 on the same hook chain), then the
+error-handler's per-frame locals dumps exhausted the 1 GiB `lua_heap`
+("Not enough memory reserved for heap lua_heap", 21:11:43.211).
+
+### Changed
+- **`_resolve_item_raw`: raw field reads only** (`Managers.backend._interfaces.items`
+  registry field per backend_manager_playfab.lua:202, then `_items` / `_fake_items`
+  tables directly). No interface method calls in any hook path = no dirty check = re-entry
+  structurally impossible.
+- **Tri-state contract**: YES -> serve store value; NO (checkable, absent now) -> official
+  value for that read only; UNKNOWN (backend not inspectable) -> serve store value - never
+  guess official on UNKNOWN, that would bleed official gear into modded views at boot.
+- Regression check extended: tri-state resolve verified on a nonexistent id.
+
 ## 0.2.173-dev (2026-07-02) -- CRITICAL FIX #175: startup spawn fatal; destructive sanitize removed entirely
 
 ### Why (friend log 2026-07-02 20:23, game unbootable)
