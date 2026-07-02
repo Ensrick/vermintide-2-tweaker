@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.200-dev (2026-07-02) - Fix Deepwood Staff hard crash on non-elf wield (#236)
+
+Equipping the newly-available Deepwood Staff on Kruber crashed to desktop with Script Error `ep_r_index` (`staff_life.lua` `init_state_data`). Cause: the Deepwood Staff is the only staff whose first-person wield/targeting effect spawns a vine finger-trail by resolving the right-hand finger nodes `ep_r_index/middle/ring/pinky/thumb` on the wielder's first-person mesh. Those nodes exist only on the elf first-person rig, so `Unit.node()` hard-crashes (C-level, bypasses the wield hook's pcall) on any non-elf body - Kruber, and the pre-existing Saltzpyre ports too.
+
+- **Wrapped `staff_life`'s `synced_states.wielding.enter` and `.targeting.enter`** with a `Unit.has_node` guard (`weapon_tweaker.lua`): when the local player's first-person mesh lacks `ep_r_index`, state_data is initialised safely (empty `particle_ids`, timer set) and the finger-particle spawn is skipped; the staff otherwise wields normally, just without the elf vine effect that cannot attach to non-elf hands.
+- **No-op for the native elf wielder**: Kerillian's rig has the nodes, so the guard falls through to the original `enter` byte-for-byte. First-person VFX only - no animation, model, or third-person change. Idempotent (`staff_life` and `staff_life_vs` share one `synced_states` table via shallow clone, so one wrap covers both).
+- One guard fixes both the new Kruber availability and the latent crash on the existing Saltzpyre ports.
+
 ## 0.12.199-dev (2026-07-02) - Weapon Availability: consistent source-character row order (#179)
 
 The Weapon Availability rows within each career were only unevenly ordered - some groups were grouped by source character, others drifted, and the runtime status-tag prefix ([Working] / [Untested] / [Needs Animations]) appeared to be driving the sort. Rows now sort deterministically by source character, never by tag.

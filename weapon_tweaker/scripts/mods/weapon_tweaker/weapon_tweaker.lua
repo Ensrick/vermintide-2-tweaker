@@ -101,7 +101,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.199-dev"
+local MOD_VERSION = "0.12.200-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -3523,6 +3523,69 @@ local function _apply_not_loaded_no_ammo_career_patches(patches)
 end
 
 _apply_not_loaded_no_ammo_career_patches(_NOT_LOADED_NO_AMMO_CAREER_PATCHES)
+
+-- ============================================================
+-- Deepwood Staff (staff_life) first-person finger-node crash guard (v0.12.200-dev)
+-- ============================================================
+-- Crash class (#236 follow-up — Script Error "ep_r_index", Kruber Mercenary):
+--   staff_life (Kerillian's Sister-of-the-Thorn Deepwood Staff) is unique among
+--   staves: on wield/targeting its `synced_states.<state>.enter` spawns a
+--   first-person vine finger-trail by resolving the RIGHT-HAND finger nodes
+--   ep_r_index/middle/ring/pinky/thumb on the wielder's 1P MESH unit
+--   (staff_life.lua init_state_data -> Unit.node(mesh_unit, "ep_r_index")).
+--   Those `ep_r_*` nodes exist ONLY on the elf first-person rig. On any non-elf
+--   1P rig (Kruber, Saltzpyre — both already offered this staff) Unit.node has
+--   no such node and hard-crashes (bypasses the wield hook's xpcall as a
+--   C-level fatal). Exposed the instant the staff became equippable on Kruber.
+--
+-- Guard: wrap each synced_state's `enter` so that when the LOCAL player's 1P
+-- mesh lacks `ep_r_index`, we initialise state_data exactly as vanilla would
+-- (empty particle_ids so update/leave stay safe, timer set) MINUS the finger
+-- particles that can't attach, then skip. The native elf wielder's rig HAS the
+-- nodes, so has_node is true and it falls through to the ORIGINAL enter,
+-- byte-for-byte unchanged. 1P VFX only — no anim, no model, no 3P. Idempotent
+-- via a per-state flag (staff_life & staff_life_vs share one synced_states
+-- table through shallow table.clone, so one wrap covers both).
+local function _guard_thorn_finger_enter(orig_enter)
+    return function (self, owner_unit, weapon_unit, state_data, is_local_player, world)
+        if is_local_player and owner_unit and Unit.alive(owner_unit) then
+            local fp = ScriptUnit.has_extension(owner_unit, "first_person_system")
+            local mesh_unit = fp and fp:get_first_person_mesh_unit()
+            if mesh_unit and Unit.has_node and not Unit.has_node(mesh_unit, "ep_r_index") then
+                state_data.particle_ids = {}
+                state_data.nodes = state_data.nodes or {}
+                state_data.timer = 0.7
+                return
+            end
+        end
+        return orig_enter(self, owner_unit, weapon_unit, state_data, is_local_player, world)
+    end
+end
+
+local function _patch_staff_life_thorn_finger_crash_guard()
+    if not (Weapons and Unit and Unit.has_node and Unit.alive and ScriptUnit) then
+        _dbg_alert("[wt:tpl_patch] event=skip template=staff_life reason=missing_api")
+        return
+    end
+    local n = 0
+    for _, name in ipairs({ "staff_life", "staff_life_vs" }) do
+        local tpl = Weapons[name]
+        local ss  = tpl and tpl.synced_states
+        if ss then
+            for _, state in ipairs({ "wielding", "targeting" }) do
+                local st = ss[state]
+                if type(st) == "table" and type(st.enter) == "function" and not st._wt_thorn_guarded then
+                    st.enter = _guard_thorn_finger_enter(st.enter)
+                    st._wt_thorn_guarded = true
+                    n = n + 1
+                end
+            end
+        end
+    end
+    _dbg("[wt:tpl_patch] event=applied template=staff_life thorn_finger_crash_guard states=%d", n)
+end
+
+_patch_staff_life_thorn_finger_crash_guard()
 
 -- ============================================================
 -- Cross-character anim-variable crash guard (v0.12.128-dev)
