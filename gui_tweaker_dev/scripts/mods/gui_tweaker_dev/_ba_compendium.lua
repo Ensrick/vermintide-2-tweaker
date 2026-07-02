@@ -66,4 +66,11 @@ mod.on_all_mods_loaded = function(...)
 	end
 end
 
+-- Phase 1 (#217): the hero-menu top-tab buttons (Armory / Bestiary). Loaded from
+-- here (an _ba_ feature file the concurrent menu/localization sweep does NOT touch)
+-- rather than the main lua, to keep the contended main-file edit down to the
+-- MOD_VERSION bump. Runs AFTER _ba_heroview_inject dofiled mod._gut_open_compendium
+-- (main dofile order), which the tabs' click handler calls.
+M.tabs = mod:dofile("scripts/mods/gui_tweaker_dev/_ba_compendium_tabs")
+
 return M

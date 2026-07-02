@@ -5,6 +5,37 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.165-dev (2026-07-01) -- FEATURE: Armory + Bestiary hero-menu tabs (Compendium Phase 1, #217)
+
+Adds two tabs, **Armory** and **Bestiary**, to the hero/character menu's top tab
+strip (Equipment / Talents / Crafting / Cosmetics ...). Clicking one opens gut's
+existing Compendium hero-view sub-state (`HeroViewStateCompendium`) in the matching
+mode via `mod._gut_open_compendium("armory" | "bestiary")` -- the same path the
+`/gut_armory` `/gut_bestiary` chat commands use. This is Phase 1 of the Compendium
+(builds on the #212-era foundation: `_ba_compendium_state` / `_ba_heroview_inject`
+/ `_ba_compendium`).
+
+- **New `_ba_compendium_tabs.lua`.** Targets the **console menu layout**
+  (`HeroWindowPanelConsole`) -- VT2's default (Options -> "Use PC menu layout" OFF),
+  what most players see, and the strip gut already integrates with. The strip is
+  width-measured (`_setup_text_buttons_width` divides `panel_entry_area` by
+  `#title_button_widgets`), so appending two `title_button_definitions` +
+  `game_option`-style scenegraph nodes to the shared console-definition tables
+  **auto-reflows** with no fixed-width overlap (same shared-table-mutation technique
+  gut uses for `menu_layouts` / `InventorySettings`; nodes can't be added to a built
+  scenegraph). Two new hooks, neither duplicating an existing gut hook on the class:
+  `HeroWindowPanelConsole.create_ui_elements` (one FULL hook: inject defs before,
+  label/grey after) and `._on_panel_button_selected` (routes our tabs to the
+  Compendium, matched by namespaced `scenegraph_id`).
+- **Keep-only, greyed in mission.** The Compendium opens only in the keep/inn, so the
+  tabs are greyed (`disable_button`) mid-mission -- mirroring the existing
+  crafting/cosmetics tab-gating -- and the opener keep-gates as belt-and-suspenders.
+- **Labels are literals** (`localize = false`): these are vanilla game widgets whose
+  text is resolved by the engine `Localize()`, which cannot resolve a VMF mod loc key.
+- **Follow-up:** the PC menu layout (`HeroWindowOptions`, "Use PC menu layout" ON) is a
+  fixed-position vertical column with no measured reflow -- deferred (see #217) rather
+  than ship a rushed overflow-prone layout. Pending in-game verification.
+
 ## 0.2.164-dev (2026-07-01) -- POLISH: settings menu reorganization (no functional changes)
 
 Sort + organize + polish pass on the VMF options tree only. No behavior, setting,

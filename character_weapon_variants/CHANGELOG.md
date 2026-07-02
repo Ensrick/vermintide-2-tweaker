@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.359-dev — 2026-07-01 — Settings menu: sort variant toggles A->Z
+
+Settings-menu ordering polish, no functional changes.
+
+- The three loose variant toggles now sort A->Z by display label: Bomb Slot (Tuskgor Javelin), Kruber Crossbow, Mace and Sword (previously Mace and Sword, Kruber Crossbow, Bomb Slot). Setting IDs, defaults, and all tooltip text unchanged.
+
 ## 0.1.358-dev — 2026-07-01 — Fix menu tooltip double-localize + rewrite option descriptions
 
 Localization/menu-text pass. VMF's options module localizes each widget's `tooltip` field itself at menu-build time, so passing an already-localized string (`tooltip = mod:localize("K")`) double-localized the value and rendered it wrapped in angle brackets.
