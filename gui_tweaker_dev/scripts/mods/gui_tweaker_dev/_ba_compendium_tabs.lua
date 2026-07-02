@@ -85,11 +85,16 @@ local _injected = false
 -- Resolve a label from the mod loc file if the key is registered, else fall back
 -- to the literal. Called once (from _ensure_defs_injected, at the first
 -- create_ui_elements) -- well after mod-init loc registration, so mod:localize is
--- safe (no pre-registration flood). A missing key returns the key back, which we
--- treat as "not registered" and fall back.
+-- safe (no pre-registration flood).
+--
+-- (#224) For an UNREGISTERED key VMF returns the missing-key SENTINEL "<key>" (angle
+-- brackets), NOT the bare key -- so a plain `s ~= key` guard lets "<gut_tab_armory>"
+-- through, and because the tab text renders with localize=false it then shows the raw
+-- "<GUT_TAB_ARMORY>" marker verbatim. Reject the bare key AND any "<...>" marker form
+-- so we fall back to the display literal.
 local function _resolve_label(key, fallback)
     local ok, s = pcall(function() return mod:localize(key) end)
-    if ok and type(s) == "string" and s ~= "" and s ~= key then
+    if ok and type(s) == "string" and s ~= "" and s ~= key and not s:find("^<.->$") then
         return s
     end
     return fallback
@@ -207,10 +212,21 @@ mod:hook("HeroWindowPanelConsole", "_on_panel_button_selected", function(func, s
             return
         end
         pcall(function() self:_play_sound("Play_hud_select") end)
-        if mod._gut_open_compendium then
-            mod._gut_open_compendium(mode)
-        else
-            mod:echo("Compendium not ready (inject module didn't load).")
+        -- (#223) This tab ALWAYS lives inside an already-open hero_view, so switch
+        -- states with HeroView's own internal mechanism -- NEVER an IngameUI re-enter,
+        -- which fatals on the duplicate hero_view_hdr world. self.parent is the
+        -- HeroViewStateOverview; self.parent.parent is the live HeroView.
+        local overview = self.parent
+        local hero_view = overview and overview.parent
+        if not (mod._gut_switch_to_compendium_state and mod._gut_switch_to_compendium_state(hero_view, mode)) then
+            -- Internal switch unavailable (unexpected parent shape / another mod
+            -- wrapping HeroView). Fall back to the opener, which carries its own hard
+            -- guard against re-entering an already-open hero_view (so still no crash).
+            if mod._gut_open_compendium then
+                mod._gut_open_compendium(mode)
+            else
+                mod:echo("Compendium not ready (inject module didn't load).")
+            end
         end
         return
     end

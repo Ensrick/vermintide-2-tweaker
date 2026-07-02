@@ -97,7 +97,11 @@ HeroViewStateCompendium.on_enter = function (self, params)
     self.render_settings   = { snap_pixel_positions = true }
     -- Mode is best-effort (custom transition params may not propagate); the stub
     -- panel is the same either way. Real Armory/Bestiary split comes with the data.
-    self._mode = (params and params.gut_compendium_mode) or "armory"
+    -- The internal HeroView state-switch path (from an already-open hero_view, #223)
+    -- carries no per-transition params, so the mode is stashed on the mod there and
+    -- read here as a fallback; the from-outside transition path sets it in params.
+    self._mode = (params and params.gut_compendium_mode) or mod._gut_pending_compendium_mode or "armory"
+    mod._gut_pending_compendium_mode = nil
     self:create_ui_elements(params)
     pcall(function() self:play_sound("play_gui_lobby_button_00_heroic_deed") end)
     mod:info("[gut:compendium] Phase-0 stub entered (mode=%s)", tostring(self._mode))

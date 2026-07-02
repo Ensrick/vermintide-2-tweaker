@@ -5,6 +5,34 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.166-dev (2026-07-02) -- FIX: Compendium tab crash (#223) + `<key>` markers (#224)
+
+- **#223 crash fix.** Clicking the Armory/Bestiary tab from inside the hero menu fataled
+  with `World "hero_view_hdr" already exists`. The tab routed through
+  `transition_with_fade("hero_view", { force_open = true })`, which re-runs
+  `HeroView.on_enter` -> `_setup_hdr_gui` -> `create_world("hero_view_hdr")` while the
+  old world still exists (`ingame_ui.lua:953` forces the on_exit/on_enter block even when
+  `old_view == new_view`). The tab now switches via HeroView's OWN internal mechanism
+  (`HeroView:requested_screen_change_by_name("gut_compendium")` -> `_change_screen_by_name`
+  -> `_wanted_state`, hero_view.lua:236-245/470-490), which swaps the sub-state without
+  re-entering the view (no HDR-world recreation). The from-outside path (`/armory` while
+  not in hero_view) keeps its `force_open` transition. New shared helper
+  `mod._gut_switch_to_compendium_state`.
+- **Hard guard (belt-and-suspenders).** `mod._gut_open_compendium` now checks
+  `ingame_ui.current_view == "hero_view"` and routes to the internal switch (or no-ops
+  with a `[gut:217]` printf) instead of ever re-entering hero_view. A dead tab beats a
+  dead game.
+- **#224 `<key>` markers fix.** The tabs rendered `<GUT_TAB_ARMORY>` / `<GUT_TAB_BESTIARY>`.
+  Root cause was in `_resolve_label`: for an unregistered loc key VMF returns the sentinel
+  `"<key>"` (angle brackets), which slipped past the `s ~= key` guard and, with
+  `localize = false`, rendered verbatim. `_resolve_label` now rejects the bare key AND any
+  `"<...>"` marker form, falling back to the display literal (Armory / Bestiary). No
+  `_G.Localize` hook needed -- the tab text is a `localize = false` literal, so Localize is
+  never consulted for it.
+- **Diagnostic.** `dump_hero_view`'s `state=? state_index=?` line now resolves the live
+  state or reports a clear reason (state machine not created until post_update_on_enter),
+  via `printf` (visible with mod logging off).
+
 ## 0.2.165-dev (2026-07-01) -- FEATURE: Armory + Bestiary hero-menu tabs (Compendium Phase 1, #217)
 
 Adds two tabs, **Armory** and **Bestiary**, to the hero/character menu's top tab

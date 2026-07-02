@@ -446,17 +446,27 @@ function CustomizerModule.dump_hero_view(view)
             _dbg("[gui_tweaker] hero_view: dump skipped (nil view)")
             return
         end
-        local state = view._machine and view._machine._state or nil
-        local state_name = "?"
-        local state_index = "?"
+        -- (#224 follow-up) Resolve the live state or report a clear reason via printf
+        -- (user-visible; mod:debug is invisible with mod logging OFF). This dump runs
+        -- from HeroView.on_enter, which fires BEFORE post_update_on_enter creates the
+        -- state machine (hero_view.lua:499-514) -- so a nil machine here is expected
+        -- timing, not a resolution failure.
+        local machine = view._machine
+        local state = machine and machine._state or nil
         if state then
+            local state_name = "?"
+            local state_index = "?"
             pcall(function()
                 local mt = getmetatable(state)
                 state_name = (mt and mt.__index and mt.__index.NAME) or state.NAME or tostring(state)
             end)
             pcall(function() state_index = tostring(state.state_index or state._state_index or "?") end)
+            printf("[gut:heroview] dump: state=%s state_index=%s", tostring(state_name), tostring(state_index))
+        elseif not machine then
+            printf("[gut:heroview] dump: state machine not created yet (on_enter precedes post_update_on_enter)")
+        else
+            printf("[gut:heroview] dump: machine present but no active _state")
         end
-        _dbg("[gui_tweaker] hero_view: state=%s state_index=%s", tostring(state_name), tostring(state_index))
 
         if state and type(state._layout_settings) == "table" then
             local count = 0
