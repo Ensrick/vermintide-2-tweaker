@@ -66,6 +66,13 @@ mod.on_all_mods_loaded = function(...)
 	end
 end
 
+-- Armory in-menu window (#217 follow-up): defines HeroWindowArmory + registers the
+-- gut_armory window layout so the Armory tab opens content INSIDE the hero menu
+-- (like Equipment/Cosmetics) instead of a separate view. Loaded before the tabs so
+-- mod._gut_open_armory_layout / mod._gut_ensure_armory_layout exist when the tab hook
+-- runs. Bestiary stays state-based (HeroViewStateCompendium) for now.
+M.armory_window = mod:dofile("scripts/mods/gui_tweaker_dev/_ba_armory_window")
+
 -- Phase 1 (#217): the hero-menu top-tab buttons (Armory / Bestiary). Loaded from
 -- here (an _ba_ feature file the concurrent menu/localization sweep does NOT touch)
 -- rather than the main lua, to keep the contended main-file edit down to the

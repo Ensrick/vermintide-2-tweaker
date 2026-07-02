@@ -188,9 +188,35 @@ local function _apply_tab_state(self)
     end
 end
 
+-- Mark OUR tab selected + clear the others (highlight parity with vanilla tabs).
+-- Safe while our custom layout is active: vanilla _update_selected_option can't map
+-- "gut_armory" back to an index, so it early-returns and never resets this
+-- (hero_window_panel_console.lua:468-477). A later vanilla-tab click re-runs
+-- _set_selected_option, which clears our tab by index.
+local function _select_tab(self, index)
+    local tabs = self._title_button_widgets
+    if type(tabs) ~= "table" then
+        return
+    end
+    for i = 1, #tabs do
+        local hs = tabs[i] and tabs[i].content and tabs[i].content.button_hotspot
+        if hs then
+            hs.is_selected = (i == index)
+        end
+    end
+    local sys = self._widgets_by_name and self._widgets_by_name.system_button
+    if sys and sys.content and sys.content.button_hotspot then
+        sys.content.button_hotspot.is_selected = false
+    end
+end
+
 -- Single FULL hook: inject defs (before func) + apply per-instance state (after).
 mod:hook("HeroWindowPanelConsole", "create_ui_elements", function(func, self, ...)
     pcall(_ensure_defs_injected)
+    -- Register the in-menu Armory window layout into the shared console-layout module
+    -- so set_layout_by_name("gut_armory") composes it. Idempotent; belt-and-suspenders
+    -- (the opener re-ensures it too). Defined in _ba_armory_window.lua.
+    pcall(function() if mod._gut_ensure_armory_layout then mod._gut_ensure_armory_layout() end end)
     func(self, ...)
     pcall(_apply_tab_state, self)
 end)
@@ -212,16 +238,27 @@ mod:hook("HeroWindowPanelConsole", "_on_panel_button_selected", function(func, s
             return
         end
         pcall(function() self:_play_sound("Play_hud_select") end)
-        -- (#223) This tab ALWAYS lives inside an already-open hero_view, so switch
-        -- states with HeroView's own internal mechanism -- NEVER an IngameUI re-enter,
-        -- which fatals on the duplicate hero_view_hdr world. self.parent is the
-        -- HeroViewStateOverview; self.parent.parent is the live HeroView.
         local overview = self.parent
+
+        if mode == "armory" then
+            -- Armory opens IN-MENU as a window layout inside the current overview state
+            -- (like Equipment/Cosmetics): the tab strip + chrome stay, no hero_view
+            -- re-enter. Mirrors vanilla _on_panel_button_selected ->
+            -- self.parent:set_layout_by_name(layout_name) (hero_window_panel_console.lua:452).
+            if mod._gut_open_armory_layout and mod._gut_open_armory_layout(overview) then
+                _select_tab(self, index)
+                return
+            end
+            -- Fall through to the state path only if the in-menu open failed.
+        end
+
+        -- Bestiary (and any Armory fallback): open the registered compendium sub-state
+        -- via HeroView's OWN internal mechanism -- NEVER an IngameUI re-enter, which
+        -- fatals on the duplicate hero_view_hdr world (#223). self.parent is the
+        -- HeroViewStateOverview; self.parent.parent is the live HeroView. If the switch
+        -- is unavailable, _gut_open_compendium carries its own hard guard (no crash).
         local hero_view = overview and overview.parent
         if not (mod._gut_switch_to_compendium_state and mod._gut_switch_to_compendium_state(hero_view, mode)) then
-            -- Internal switch unavailable (unexpected parent shape / another mod
-            -- wrapping HeroView). Fall back to the opener, which carries its own hard
-            -- guard against re-entering an already-open hero_view (so still no crash).
             if mod._gut_open_compendium then
                 mod._gut_open_compendium(mode)
             else

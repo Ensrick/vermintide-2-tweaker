@@ -123,6 +123,15 @@ function mod._gut_open_compendium(mode)
     -- (a dead tab beats a dead game).
     if ingame_ui.current_view == "hero_view" then
         local hero_view = ingame_ui.views and ingame_ui.views.hero_view
+        -- Armory prefers the IN-MENU window layout when the overview state is live
+        -- (matches the tab). Duck-type the overview via set_layout_by_name; the compendium
+        -- sub-state (Bestiary) has no such method, so it falls through to the state switch.
+        if mode == "armory" and mod._gut_open_armory_layout then
+            local state = hero_view and hero_view._machine and hero_view._machine._state
+            if state and state.set_layout_by_name and mod._gut_open_armory_layout(state) then
+                return
+            end
+        end
         if not mod._gut_switch_to_compendium_state(hero_view, mode) then
             printf("[gut:217] blocked hero_view re-enter (already inside; state switch unavailable)")
         end

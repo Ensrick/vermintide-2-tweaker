@@ -5,6 +5,37 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.167-dev (2026-07-02) -- FEATURE: Armory opens in-menu + live game-sourced weapon stats (#217)
+
+- **Armory now opens IN-MENU like Equipment/Cosmetics** instead of replacing the whole
+  hero screen (fixes the "closes the menu with the pop" feedback). It is registered as a
+  WINDOW LAYOUT (`gut_armory`) inside `HeroViewStateOverview`: a new `HeroWindowArmory`
+  window + a layout entry are injected into the shared console-layout module
+  (`hero_window_layout_console.lua` `windows` / `window_layouts`), and the Armory tab now
+  routes to `overview:set_layout_by_name("gut_armory")` -- the exact call vanilla tabs make
+  (`hero_window_panel_console.lua:452`). The tab strip and chrome stay put; ESC/back behave
+  like the other tabs; no hero_view re-enter, so the #223 crash path is not touched. The
+  Armory tab also highlights as selected. `/armory` + `/gut_armory` open the in-menu window
+  when the hero menu is already on the overview state.
+- **Bestiary stays state-based** for now (its content is not built yet); it still routes
+  through the #223-safe internal state switch.
+- **Weapon list + stats are sourced live from the game, no hardcoded numbers.** The list is
+  the current career's eligible weapons (filtered by the engine's `can_wield`, grouped
+  melee/ranged, localized names via `ItemMasterList.display_name`). Selecting a weapon shows
+  template stats read straight off `Weapons[template]`: dodge count + distance bonus
+  (`dodge_count`, `buffs.change_dodge_distance`), stamina (`max_fatigue_points`), block angle
+  + inner/outer fatigue multipliers, push radius/arc (the push action), and ammo
+  (`ammo_data`) or overcharge (`overcharge_data`) for ranged. Per attack (light/heavy/push;
+  ranged primary/alternate, chains derived by `_ba_attack_labeler`) it shows the damage
+  profile name, cleave damage/stagger target counts computed via the engine's own
+  `ActionUtils.get_max_targets` at the player's LIVE scaled cleave power, and traits
+  (crit bonus, bleed/burn/poison, area damage, linesman/tank) read from the action + its
+  `DamageProfileTemplates` entry.
+- **Deliberately deferred (documented):** full per-armor-type breakpoint DAMAGE numbers (the
+  standalone Armory reimplements a chunk of the combat pipeline for these); a 3D weapon
+  preview/illusion browser; a weapon-list scrollbar (current career lists fit without one);
+  and Bestiary content. All are follow-ups. Rendering is atlas-safe primitive passes only.
+
 ## 0.2.166-dev (2026-07-02) -- FIX: Compendium tab crash (#223) + `<key>` markers (#224)
 
 - **#223 crash fix.** Clicking the Armory/Bestiary tab from inside the hero menu fataled
