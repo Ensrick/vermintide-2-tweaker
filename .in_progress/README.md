@@ -12,7 +12,12 @@ This is **advisory**, not enforced. The point is awareness, not locking.
 
 - One sentinel file per mod, named exactly: `<mod_name>.md`
   (e.g. `weapon_tweaker.md`, `crafting_in_modded.md`, `cosmetics_tweaker.md`).
-- The basename **must** match the directory name of the mod at the repo root.
+- For mod work the basename **must** match the mod's directory name at the repo
+  root - that's what powers the staged-file collision warning.
+- NON-mod work (tooling, docs, QA sessions) may also drop a sentinel with a
+  descriptive name (e.g. `qa-tooling.md`, `docs-audit.md`). It gets the same
+  content validation and stale check, is listed as a "(non-mod claim)", and is
+  skipped by the collision check (#215). Same template applies.
 - When the work finishes, **delete the sentinel** (don't leave it stale).
 - Sentinels older than 24 hours auto-warn as suspicious — clean them up.
 

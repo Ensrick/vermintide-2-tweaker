@@ -12,7 +12,15 @@
 #       collision.
 #   1 = stale sentinel (>24h old) or staged-file collision with an in-flight
 #       claim — review and either remove the sentinel or coordinate.
-#   2 = malformed sentinel file (missing timestamp, wrong filename, etc.).
+#   2 = malformed sentinel CONTENT (missing or unparseable Started timestamp).
+#
+# Sentinel names that do not match a mod directory (e.g. qa-tooling.md,
+# docs-audit.md) are ALLOWED — the coordination convention also covers
+# tooling/docs sessions (#215). They get the same content validation and
+# stale check, are reported as "(non-mod claim)", and are skipped by the
+# staged-file collision check (no mod directory to collide with). A typo'd
+# mod name therefore no longer hard-blocks; it shows up in the listing as a
+# non-mod claim, so eyeball the names in the report.
 #
 # Usage:
 #   .\qa\check_in_progress.ps1              # full scan
@@ -79,11 +87,10 @@ foreach ($sentinel in $sentinels) {
     $modName = $sentinel.BaseName
     $sentinelText = Read-FileUtf8 $sentinel.FullName
 
-    # Validate: sentinel basename should match an existing mod directory.
-    if ($validMods -notcontains $modName) {
-        $errors += "${modName}: sentinel filename does not match any mod directory at the repo root ($($sentinel.Name))"
-        continue
-    }
+    # Non-mod sentinel names (tooling/docs sessions) are valid claims (#215):
+    # content-validate + stale-check them, but keep them out of $claimed so the
+    # staged-file collision check only runs against real mod directories.
+    $isModClaim = ($validMods -contains $modName)
 
     # Parse timestamp from the sentinel body. Expected format:
     #   - **Started:** 2026-05-25T14:32:00Z
@@ -110,16 +117,19 @@ foreach ($sentinel in $sentinels) {
     }
 
     $ageHours = ($nowUtc - $timestamp).TotalHours
-    $claimed[$modName] = @{
-        Sentinel  = $sentinel.FullName
-        Timestamp = $timestamp
-        SessionId = $sessionId
-        AgeHours  = $ageHours
+    if ($isModClaim) {
+        $claimed[$modName] = @{
+            Sentinel  = $sentinel.FullName
+            Timestamp = $timestamp
+            SessionId = $sessionId
+            AgeHours  = $ageHours
+        }
     }
 
     if (-not $Quiet) {
         $ageDisplay = if ($ageHours -lt 1) { "{0:N0}m" -f ($ageHours * 60) } else { "{0:N1}h" -f $ageHours }
-        Write-Host "  - ${modName}: claimed by '$sessionId' since $($timestamp.ToString('u')) ($ageDisplay ago)" -ForegroundColor DarkCyan
+        $kind = if ($isModClaim) { "" } else { " (non-mod claim: tooling/docs)" }
+        Write-Host "  - ${modName}${kind}: claimed by '$sessionId' since $($timestamp.ToString('u')) ($ageDisplay ago)" -ForegroundColor DarkCyan
     }
 
     if ($ageHours -gt $staleThresholdHours) {
