@@ -401,4 +401,28 @@ function mod._gut_open_armory_layout(overview)
 	return false
 end
 
+-- ----------------------------------------------------------------------------
+-- Background-window object-set crash guard (belt-and-suspenders for ANY custom
+-- hero layout, incl. a future Bestiary window).
+-- ----------------------------------------------------------------------------
+-- Vanilla HeroWindowBackgroundConsole._update_object_sets reads the file-local
+-- `object_sets_per_layout[layout_name]` and then indexes `.keep_current_object_set`
+-- with NO nil-guard (hero_window_background_console.lua:395-400 in decompiled source;
+-- ~:364 in the shipped build). Our custom layout name "gut_armory" isn't in that map,
+-- so the background window crashes one frame after the Armory tab opens
+-- (user crash 2026-07-02: "attempt to index local 'object_set_to_enable' (a nil
+-- value)", layout_name = "gut_armory"). The map's own entries for non-set-dressing
+-- tabs use `keep_current_object_set = true`, so the correct behavior for an unknown
+-- custom layout is exactly "leave the current object set alone". The map is a
+-- file-local we cannot register into, so we wrap the method: the known-layout path
+-- runs unchanged; an unknown layout errors at the nil index BEFORE mutating any object
+-- set, and we swallow it (= keep current set) instead of crashing the hero menu.
+-- HOOK PRE-FLIGHT: gut_dev has no other hook on HeroWindowBackgroundConsole.
+mod:hook("HeroWindowBackgroundConsole", "_update_object_sets", function(func, self, layout_name)
+	local ok = pcall(func, self, layout_name)
+	if not ok then
+		printf("[gut:217] unknown layout object set (%s), using default", tostring(layout_name))
+	end
+end)
+
 return { class_name = "HeroWindowArmory" }

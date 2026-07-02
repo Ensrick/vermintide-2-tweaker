@@ -5,6 +5,24 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.168-dev (2026-07-02) -- FIX: Armory in-menu open crashed the vanilla background window (#217)
+
+- **Crash fix.** One frame after the Armory tab opened its in-menu window layout, the
+  vanilla `HeroWindowBackgroundConsole._update_object_sets` crashed:
+  `attempt to index local 'object_set_to_enable' (a nil value)` with `layout_name =
+  "gut_armory"`. That method resolves the current layout name to a keep object set via
+  the file-local `object_sets_per_layout` map and indexes `.keep_current_object_set`
+  with no nil-guard (hero_window_background_console.lua:395-400); our custom layout name
+  isn't in that map. The map is a file-local we can't register into, and its own
+  non-set-dressing entries use `keep_current_object_set = true`, so the correct behavior
+  for an unknown layout is to leave the current object set as-is. Fix: wrap
+  `_update_object_sets` (gut's only hook on this class) so the known-layout path runs
+  unchanged and an unknown layout no-ops (the nil index errors before mutating anything).
+  This also guards any future custom hero layout (e.g. a Bestiary window). No other
+  per-layout map in that window is unguarded (the rest use `or false` / `or EMPTY_TABLE`
+  / default), and the gut_armory layout entry matches the vanilla equipment entry
+  field-for-field (name, close_on_exit, sound_event_enter/exit, windows).
+
 ## 0.2.167-dev (2026-07-02) -- FEATURE: Armory opens in-menu + live game-sourced weapon stats (#217)
 
 - **Armory now opens IN-MENU like Equipment/Cosmetics** instead of replacing the whole
