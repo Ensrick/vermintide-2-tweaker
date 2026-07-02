@@ -1,0 +1,445 @@
+-- _gut_native_loadouts.lua -- modded-realm-scoped native saved loadouts (issue #175)
+--
+-- Makes the game's NATIVE saved-loadout system (the roman-numeral I-VI loadout bar
+-- in the hero view, plus its per-loadout talents and bot designation) read and write
+-- a MODDED-ONLY store while the player is in the modded (EAC-untrusted) realm, so
+-- official-realm loadouts are never touched by modded play and vice-versa. In the
+-- OFFICIAL realm, and in Versus, the feature is completely inert (pure vanilla).
+--
+-- ISOLATION APPROACH (issue #175 requirement 6) -- why the MIRROR, not the interface:
+--   Every loadout read/write funnels through ONE object, the backend mirror
+--   (`PlayFabMirrorAdventure`, backend_manager_playfab.lua:417). The item interface,
+--   the talents interface, any MoreItemsLibrary-swapped interface, and the LA dispatch
+--   all call `mirror:get_character_data` / `:get_career_loadouts` for reads and
+--   `mirror:set_character_data` / `:set_loadout_index` / `:add_loadout` / `:delete_loadout`
+--   for writes (backend_interface_item_playfab.lua:117/173/258/263/271/665,
+--   backend_interface_talents_playfab.lua:37/150/331). So the mirror is the SMALLEST,
+--   most provable no-write surface. We hook the four mirror WRITE methods and, in
+--   modded+adventure, capture the intended write into our VMF store and DO NOT call the
+--   original -- so `_career_data` / `_characters_data` are NEVER mutated. Because the
+--   PlayFab push is a DIFF (`_check_career_data(self._career_data, self._career_data_mirror)`,
+--   playfab_mirror_base.lua:2885) and the character-data push at :2891/:2903 is NOT
+--   eac-gated (unlike stats/weaves/poses at :2826/2839/2857), leaving those tables
+--   unmutated is exactly what guarantees the commit finds nothing dirty and never pushes
+--   modded loadouts over the official cloud data. We hook the three mirror READ methods to
+--   serve from the store, so the interface caches (which refresh FROM the mirror) naturally
+--   pick up modded values and the in-session equip/spawn flow keeps working unchanged --
+--   no reimplementation of the interface cache structures, cosmetic/pose id indirection, or
+--   game-mode gating. We deliberately hook the mirror at its CONCRETE runtime subclass
+--   `PlayFabMirrorAdventure` (NOT `PlayFabMirrorBase`): class.lua copies parent methods into
+--   the child at definition time (class.lua:51-57), so a base-class hook would silently miss
+--   the live instance (dedicated servers use `PlayFabMirrorDedicated`; the user is P2P-only,
+--   so dedicated is out of scope). Realm signal is `script_data["eac-untrusted"]`
+--   (application_parameter.lua:150; named `in_modded_realm` at mod_manager.lua:22; VMF's own
+--   dev_console gate uses it). Failsafe: if the realm can't be determined we go fully inert.
+--
+-- Cross-mod: cim hooks `BackendUtils.set_loadout_item` + `BackendInterfaceItemPlayfab.set_loadout_item`
+-- (equip capture) and cosmetics_tweaker hooks `BackendUtils.set_loadout_item` + the items
+-- interface instance reads. Those sit at the BackendUtils / interface layer ABOVE the mirror;
+-- our hooks sit BELOW, so we do not collide with them and (per NON-NEGOTIABLE 8) we hook no
+-- (Class, method) pair they hold. mp (modded_progression) currently installs zero backend hooks.
+--
+-- Owned by: gui_tweaker_dev.lua entry point. Consumed via: mod:dofile (single call).
+
+local mod = get_mod("gut_dev")
+
+local MARKER = "native_loadouts_v1"
+
+-- Canonical loadout slot list (backend_interface_item_playfab.lua:25-35). The vanilla
+-- list is a file-local upvalue, so we keep our own copy.
+local LOADOUT_SLOT_NAMES = {
+    "slot_ranged", "slot_melee", "slot_skin", "slot_hat",
+    "slot_necklace", "slot_ring", "slot_trinket_1", "slot_frame", "slot_pose",
+}
+
+-- The VMF settings key `characters_data` discriminates Adventure from Versus
+-- (`vs_characters_data`), set by the mirror subclass (playfab_mirror_adventure.lua).
+-- We scope the whole feature to the Adventure mirror; Versus stays vanilla.
+local ADVENTURE_DATA_KEY = "characters_data"
+
+local M = { MARKER = MARKER }
+
+-- ------------------------------------------------------------------
+-- Store: VMF setting `native_loadouts`, kept in an in-memory working copy so the
+-- hot mirror-read hooks don't re-`mod:get` a large table per slot per refresh.
+--   _STORE[career_name] = {
+--       selected_index = <int>,
+--       bot_index      = <int or nil>,
+--       loadouts       = { [i] = { [slot_name] = backend_id, ..., talents = "1,2,.." } },
+--   }
+-- Each loadout entry mirrors `_career_data[career][i]` 1:1 (slots + "talents" key), so
+-- reads/writes are trivial passthroughs of the exact vanilla value shape.
+-- ------------------------------------------------------------------
+local _STORE = nil
+
+local function _store()
+    if _STORE == nil then
+        local s = mod:get("native_loadouts")
+        _STORE = (type(s) == "table") and s or {}
+    end
+    return _STORE
+end
+
+local function _persist()
+    mod:set("native_loadouts", _STORE)
+end
+
+local function _deepcopy(t)
+    if type(t) ~= "table" then return t end
+    local c = {}
+    for k, v in pairs(t) do c[k] = _deepcopy(v) end
+    return c
+end
+
+-- ------------------------------------------------------------------
+-- Realm detection + gate. Failsafe: any uncertainty => inert (official behavior).
+-- ------------------------------------------------------------------
+local function _in_modded_realm()
+    local sd = rawget(_G, "script_data")
+    return (sd and sd["eac-untrusted"]) and true or false
+end
+
+-- Pure gate logic, exposed for regression testing. Inert unless BOTH the modded realm
+-- AND the master toggle are on. `toggle` nil is treated as ON (widget default_value=true).
+function M.gate(is_modded, toggle)
+    if not is_modded then return false end
+    return toggle ~= false
+end
+
+local function _feature_active()
+    if not _in_modded_realm() then return false end   -- official realm: cheap exit, no mod:get
+    return M.gate(true, mod:get("gut_native_loadouts_enabled"))
+end
+
+-- Mirror hooks additionally require the Adventure data key so Versus stays vanilla.
+local function _mirror_active(mirror)
+    if not _feature_active() then return false end
+    return mirror._characters_data_key == ADVENTURE_DATA_KEY
+end
+
+-- Interface/UI hooks lack the mirror on `self`; resolve it to check the same discriminator.
+local function _adventure_active()
+    if not _feature_active() then return false end
+    local ok, mirror = pcall(function()
+        return Managers.backend:get_interface("items")._backend_mirror
+    end)
+    return (ok and mirror and mirror._characters_data_key == ADVENTURE_DATA_KEY) or false
+end
+
+-- Loadout cap read from the game, NEVER hardcoded 6 (issue #231 raises it to 30 later).
+function M.max_loadouts()
+    return (InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS) or 6
+end
+
+local function _dirtify()
+    -- dirtify_interfaces() marks the backend interfaces dirty so the next read rebuilds
+    -- their caches from the mirror (which we serve from the store). It is NOT a network
+    -- push (playfab_mirror_base.lua:1990/2033/2066 call it locally), and since our writes
+    -- leave _career_data unmutated, any commit it schedules finds nothing dirty to send.
+    pcall(function() Managers.backend:dirtify_interfaces() end)
+end
+
+-- ------------------------------------------------------------------
+-- Seeding (issue #175 requirement 5): ONE-TIME snapshot of the official loadouts for a
+-- career into the modded store on first activation. Official data is only ever READ.
+-- ------------------------------------------------------------------
+local function _ensure_seeded(mirror, career_name)
+    local store = _store()
+    if store[career_name] then return end
+    local cd = mirror._career_data and mirror._career_data[career_name]
+    if type(cd) ~= "table" or cd[1] == nil then return end  -- official data not ready yet
+    local selected = (mirror._career_loadouts and mirror._career_loadouts[career_name]) or 1
+    store[career_name] = {
+        selected_index = selected,
+        bot_index = nil,
+        loadouts = _deepcopy(cd),   -- array of { slot=id,..., talents=str }
+    }
+    _persist()
+    printf("[gut_dev:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (read-only)",
+        tostring(career_name), #cd, selected)
+end
+
+-- Sanitize dangling backend_ids (issue #175 requirement 7): items can disappear between
+-- modded sessions. Validate GEAR slots against the backend once per career per session;
+-- drop dead ids (printf, no crash). Cosmetic/pose slots are skipped -- vanilla degrades a
+-- missing cosmetic gracefully to empty via get_unlocked_cosmetics.
+local _sanitized = {}
+local function _sanitize_career(career_name)
+    if _sanitized[career_name] then return end
+    local entry = _store()[career_name]
+    if not entry then return end
+    local ok, iface = pcall(function() return Managers.backend:get_interface("items") end)
+    if not ok or not iface or not iface.get_item_from_id then return end  -- retry next session
+    _sanitized[career_name] = true
+    local removed = 0
+    for idx, lo in pairs(entry.loadouts) do
+        for i = 1, #LOADOUT_SLOT_NAMES do
+            local slot = LOADOUT_SLOT_NAMES[i]
+            local id = lo[slot]
+            local is_cos = false
+            if id then
+                local ok_c, res = pcall(function() return CosmeticUtils.is_cosmetic_slot(slot) end)
+                is_cos = ok_c and res
+            end
+            if id and not is_cos then
+                local ok2, item = pcall(iface.get_item_from_id, iface, id)
+                if ok2 and not item then     -- definitively gone (never drop on pcall error)
+                    lo[slot] = nil
+                    removed = removed + 1
+                    printf("[gut_dev:NATIVE_LOADOUTS] sanitize career=%s loadout=%s slot=%s dropped dangling id=%s",
+                        tostring(career_name), tostring(idx), tostring(slot), tostring(id))
+                end
+            end
+        end
+    end
+    if removed > 0 then _persist() end
+end
+
+local function _prepare(mirror, career_name)
+    _ensure_seeded(mirror, career_name)
+    _sanitize_career(career_name)
+end
+
+-- ==================================================================
+-- MIRROR READ HOOKS -- serve from the store so interface caches pick up modded values.
+-- Hooked on the concrete runtime subclass PlayFabMirrorAdventure (NOT the base class).
+-- ==================================================================
+
+-- get_character_data(self, career_name, key, optional_loadout_index) -- base:1909
+mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, career_name, key, optional_loadout_index)
+    if not _mirror_active(self) or not career_name then
+        return func(self, career_name, key, optional_loadout_index)
+    end
+    _prepare(self, career_name)
+    local entry = _store()[career_name]
+    if not entry then
+        return func(self, career_name, key, optional_loadout_index)  -- not seedable yet: official read (harmless)
+    end
+    local idx = optional_loadout_index or entry.selected_index
+    local lo = entry.loadouts[idx]
+    if lo == nil then return nil end
+    return lo[key]
+end)
+
+-- get_career_loadouts(self, career_name) -> (selected_index, loadouts_array) -- base:1944
+mod:hook("PlayFabMirrorAdventure", "get_career_loadouts", function(func, self, career_name)
+    if not _mirror_active(self) or not career_name then
+        return func(self, career_name)
+    end
+    _prepare(self, career_name)
+    local entry = _store()[career_name]
+    if not entry then
+        return func(self, career_name)
+    end
+    return entry.selected_index, entry.loadouts
+end)
+
+-- has_loadout(self, career_name, loadout_index) -- base:1921
+mod:hook("PlayFabMirrorAdventure", "has_loadout", function(func, self, career_name, loadout_index)
+    if not _mirror_active(self) or not career_name then
+        return func(self, career_name, loadout_index)
+    end
+    _prepare(self, career_name)
+    local entry = _store()[career_name]
+    if not entry then
+        return func(self, career_name, loadout_index)
+    end
+    return entry.loadouts[loadout_index] ~= nil
+end)
+
+-- ==================================================================
+-- MIRROR WRITE HOOKS -- capture into the store, NO-OP vanilla (never touch _career_data).
+-- ==================================================================
+
+-- set_character_data(self, career, key, value, set_mirror, optional_loadout_index) -- base:1928
+-- key is a slot name or "talents"; value is the backend id / talent string that the
+-- interface (set_loadout_item at :657-665) / talents interface (set_talents at :331)
+-- already resolved. We store it verbatim -- the cosmetic/pose id rewrite is done upstream.
+mod:hook("PlayFabMirrorAdventure", "set_character_data", function(func, self, career_name, key, value, set_mirror, optional_loadout_index)
+    if not _mirror_active(self) or not career_name then
+        return func(self, career_name, key, value, set_mirror, optional_loadout_index)
+    end
+    _prepare(self, career_name)
+    local store = _store()
+    local entry = store[career_name]
+    if not entry then    -- never pass an official write through: keep the isolation guarantee
+        entry = { selected_index = 1, bot_index = nil, loadouts = {} }
+        store[career_name] = entry
+    end
+    local idx = optional_loadout_index or entry.selected_index
+    entry.loadouts[idx] = entry.loadouts[idx] or {}
+    entry.loadouts[idx][key] = value
+    _persist()
+    printf("[gut_dev:NATIVE_LOADOUTS] set_character_data career=%s idx=%s key=%s -> store (blocked official write)",
+        tostring(career_name), tostring(idx), tostring(key))
+    -- NO-OP vanilla: _career_data / _characters_data stay clean => no PlayFab push.
+end)
+
+-- set_loadout_index(self, career, loadout_index) -- base:1968
+mod:hook("PlayFabMirrorAdventure", "set_loadout_index", function(func, self, career_name, loadout_index)
+    if not _mirror_active(self) or not career_name or not loadout_index then
+        return func(self, career_name, loadout_index)
+    end
+    _prepare(self, career_name)
+    local store = _store()
+    local entry = store[career_name]
+    if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
+    if entry.loadouts[loadout_index] then   -- mirror vanilla's `if career_data[loadout_index]` guard (:1975)
+        entry.selected_index = loadout_index
+        _persist()
+        printf("[gut_dev:NATIVE_LOADOUTS] set_loadout_index career=%s -> %d (store)", tostring(career_name), loadout_index)
+        _dirtify()   -- vanilla calls dirtify here (:1990); needed so the interface rebuilds the selected gear
+    end
+    -- NO-OP vanilla.
+end)
+
+-- add_loadout(self, career) -- base:2036
+mod:hook("PlayFabMirrorAdventure", "add_loadout", function(func, self, career_name)
+    if not _mirror_active(self) or not career_name then
+        return func(self, career_name)
+    end
+    _prepare(self, career_name)
+    local store = _store()
+    local entry = store[career_name]
+    if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
+    local n = #entry.loadouts
+    if n < M.max_loadouts() then   -- cap from InventorySettings.MAX_NUM_CUSTOM_LOADOUTS, never hardcoded
+        local old_selected = entry.selected_index
+        local source = entry.loadouts[old_selected] or entry.loadouts[n] or {}
+        entry.loadouts[n + 1] = _deepcopy(source)   -- vanilla clones the current loadout (:2051/2053)
+        entry.selected_index = old_selected + 1      -- vanilla sets selected = selected+1 (:2050)
+        _persist()
+        printf("[gut_dev:NATIVE_LOADOUTS] add_loadout career=%s now=%d selected=%d (store)",
+            tostring(career_name), n + 1, entry.selected_index)
+        _dirtify()
+    end
+    -- NO-OP vanilla.
+end)
+
+-- delete_loadout(self, career, loadout_index) -- base:1994
+mod:hook("PlayFabMirrorAdventure", "delete_loadout", function(func, self, career_name, loadout_index)
+    if not _mirror_active(self) or not career_name or not loadout_index then
+        return func(self, career_name, loadout_index)
+    end
+    _prepare(self, career_name)
+    local entry = _store()[career_name]
+    if not entry then return end
+    local loadouts = entry.loadouts
+    local n = #loadouts
+    if loadout_index > n then return end   -- vanilla guard (:2001)
+    if n == 1 then return end              -- vanilla guard (:2005): never delete the last
+    table.remove(loadouts, loadout_index)
+    if loadout_index == entry.selected_index then   -- vanilla selection fixup (:2020-2028)
+        entry.selected_index = 1
+    else
+        entry.selected_index = math.clamp(entry.selected_index, 1, #loadouts)
+    end
+    _persist()
+    printf("[gut_dev:NATIVE_LOADOUTS] delete_loadout career=%s removed=%d now=%d selected=%d (store)",
+        tostring(career_name), loadout_index, #loadouts, entry.selected_index)
+    _dirtify()
+    -- NO-OP vanilla.
+end)
+
+-- ==================================================================
+-- BOT LOADOUTS -- resolve bot designation from the store (issue #175 requirement 9).
+-- ==================================================================
+
+-- Overlay bot designations onto _bot_loadouts AFTER vanilla built it from _loadouts.
+-- hook_safe (post) -- no other gut_dev hook targets refresh_bot_loadouts.
+mod:hook_safe("BackendInterfaceItemPlayfab", "refresh_bot_loadouts", function(self)
+    if not _adventure_active() then return end
+    local bot = self._bot_loadouts
+    if type(bot) ~= "table" then return end
+    for career_name, entry in pairs(_store()) do
+        local bi = entry.bot_index
+        if bi and entry.loadouts[bi] then
+            local slots = {}
+            for i = 1, #LOADOUT_SLOT_NAMES do
+                local s = LOADOUT_SLOT_NAMES[i]
+                slots[s] = entry.loadouts[bi][s]
+            end
+            bot[career_name] = slots
+        end
+    end
+end)
+
+-- Bot checkbox: write bot_index to the store, SKIP the PlayerData.loadout_selection write
+-- (hero_window_loadout_selection_console.lua:671-683), then refresh bot loadouts from the
+-- store. Isolation: PlayerData.loadout_selection is realm-shared and not eac-gated, so we
+-- never write it while modded.
+mod:hook("HeroWindowLoadoutSelectionConsole", "_save_bot_equipment", function(func, self)
+    if not _adventure_active() then
+        return func(self)
+    end
+    local profile = SPProfiles and SPProfiles[self._profile_index]
+    local career_settings = profile and profile.careers and profile.careers[self._career_index]
+    local career_name = career_settings and career_settings.name
+    if not career_name then return end   -- can't resolve; skip (still no vanilla PlayerData write)
+    local store = _store()
+    local entry = store[career_name]
+    if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
+    entry.bot_index = self._context_menu_loadout_index
+    _persist()
+    printf("[gut_dev:NATIVE_LOADOUTS] bot_equipment career=%s bot_index=%s -> store (skipped PlayerData write)",
+        tostring(career_name), tostring(entry.bot_index))
+    local ok, iface = pcall(function() return Managers.backend:get_interface("items") end)
+    if ok and iface and iface.refresh_bot_loadouts then
+        pcall(function() iface:refresh_bot_loadouts() end)
+    end
+    -- NO-OP vanilla.
+end)
+
+-- ==================================================================
+-- Regression markers (issue #175 requirement 11). Registered by gui_tweaker_dev.lua.
+-- ==================================================================
+M.HOOK_TARGETS = {
+    { "PlayFabMirrorAdventure", "get_character_data" },
+    { "PlayFabMirrorAdventure", "get_career_loadouts" },
+    { "PlayFabMirrorAdventure", "has_loadout" },
+    { "PlayFabMirrorAdventure", "set_character_data" },
+    { "PlayFabMirrorAdventure", "set_loadout_index" },
+    { "PlayFabMirrorAdventure", "add_loadout" },
+    { "PlayFabMirrorAdventure", "delete_loadout" },
+    { "BackendInterfaceItemPlayfab", "refresh_bot_loadouts" },
+    { "HeroWindowLoadoutSelectionConsole", "_save_bot_equipment" },
+}
+
+M.rt_checks = {
+    { name = "native_loadouts_installed", fn = function()
+        if M.MARKER ~= MARKER then return "marker mismatch" end
+        if type(_in_modded_realm) ~= "function" then return "realm detector missing" end
+        local ok = pcall(_in_modded_realm)
+        if not ok then return "_in_modded_realm raised" end
+    end },
+    { name = "native_loadouts_failsafe_inert", fn = function()
+        -- Failsafe/gate: inert unless BOTH modded realm AND toggle on.
+        if M.gate(false, true) ~= false then return "active in official realm (should be inert)" end
+        if M.gate(false, false) ~= false then return "active in official realm, toggle off" end
+        if M.gate(true, false) ~= false then return "active with toggle off" end
+        if M.gate(true, true) ~= true then return "inert in modded+on (should be active)" end
+        if M.gate(true, nil) ~= true then return "toggle default should be ON" end
+    end },
+    { name = "native_loadouts_no_hardcoded_6", fn = function()
+        local expected = InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS
+        if type(expected) ~= "number" then return "MAX_NUM_CUSTOM_LOADOUTS unavailable" end
+        if M.max_loadouts() ~= expected then
+            return string.format("cap %s != InventorySettings.MAX_NUM_CUSTOM_LOADOUTS %s (hardcoded?)",
+                tostring(M.max_loadouts()), tostring(expected))
+        end
+    end },
+    { name = "native_loadouts_hook_targets_unique", fn = function()
+        -- Singleton invariant proxy (NON-NEGOTIABLE 8): each (Class, method) declared once.
+        local seen = {}
+        for _, t in ipairs(M.HOOK_TARGETS) do
+            local key = t[1] .. "." .. t[2]
+            if seen[key] then return "duplicate hook target: " .. key end
+            seen[key] = true
+        end
+    end },
+}
+
+printf("[gut_dev:NATIVE_LOADOUTS] module loaded (%s) modded_realm=%s hooks=%d",
+    MARKER, tostring(_in_modded_realm()), #M.HOOK_TARGETS)
+
+return M
