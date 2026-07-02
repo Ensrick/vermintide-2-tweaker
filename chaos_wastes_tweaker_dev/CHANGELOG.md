@@ -1,5 +1,19 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.202-dev (2026-07-01) - Settings menu reorganization (sort + organize + polish; no functional changes)
+
+Pure settings-UI pass. No setting_ids renamed, no settings added or removed, no behavior changed. Every user's saved config is preserved (settings are keyed by setting_id, which are untouched).
+
+- **Top-level groups now sort A->Z by display label** (repo standing rule): Adventure Maps, Banned Weapon Traits, Curses, Disabled Boons, Pilgrim's Coin, Reworks, Shrines, Altars and Chests, Starting Boons. Previously accretion-ordered.
+- **Within each group, options sort A->Z by display label** (status tag `[untested]`/`[confirmed working]` ignored for sorting), except deliberate orders which stay put and are flagged inline: the Miracle of Isha `(A)/(B)` mutex cluster, the god-grouped Disabled Curses banlist, and the paired count/cost-multiplier rows in Altar Reroll Options. The BOON_TREE-generated Disabled/Starting Boons trees are unchanged (their internal order is settled at build time by `recursive_sort`).
+- **Adventure Maps: mission-selection list is now nested under its master toggle.** `available_missions_group` (the CW / campaign / event mission checklists) is now a `sub_widgets` child of the `inject_adventure_maps` checkbox, so it auto-hides when the master is off. This is purely visual and code-verified safe: `_adventure_pool.lua:747` returns early (all per-mission toggles ignored) when the master is off. `replace_shrines_with_missions` stays a loose sibling because it is NOT gated on the master (checked independently at `chaos_wastes_tweaker.lua:5661`).
+- **Label polish (titles only; tooltips carry the detail):**
+  - "Corrupted Flesh Curse: Max Gas Clouds per Minute" -> "Corrupted Flesh: max clouds per minute" (7 -> 6 words; #104 numeric, default 6, 0 = vanilla, unchanged).
+  - "Finale God (0=weekly, 1=Nurgle, ...)" -> "Finale God"; the value legend moved into a new `finale_dominant_god_tooltip`.
+  - "Cursed Mission Count (0 = vanilla)" -> "Cursed Mission Count" (the "0 = vanilla" detail is already in its tooltip).
+  - "Adventure Maps in Chaos Wastes (experimental)" -> "Adventure Maps" (the "Experimental" warning already lives in the inject tooltip).
+- No em dashes in any menu-facing string; all literal percents remain escaped as `%%`. `qa/check_localization.ps1` clean for this mod.
+
 ## 0.7.201-dev (2026-07-01) - Localization sweep: fix over-escaped percents, add missing dropdown keys, rewrite option descriptions
 
 - **Fixed percent-sign rendering across the settings menu.** About 200 boon and rework tooltips were over-escaped as `%%%%`, which renders as a literal double percent in-game (e.g. "+X%% Damage" instead of "+X% Damage"). Normalized every one to the correct single `%%` per LOCALIZATION_STANDARD.md section 1 (VMF runs each localized string through one `string.format` pass, so one doubling is correct).

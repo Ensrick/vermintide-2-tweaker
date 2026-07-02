@@ -424,145 +424,135 @@ local data = {
     description = mod:localize("mod_description"),
     is_togglable = true,
     options = {
+        -- Top-level groups are ordered A->Z by English display label (repo standing
+        -- rule). recursive_sort() only alphabetizes WITHIN the boon trees (SORT_GROUPS);
+        -- top-level and other groups keep this declared order. Deliberate-order blocks
+        -- (mutex clusters, the god-grouped curse banlist, the paired altar-reuse rows)
+        -- are flagged inline where they intentionally deviate from A->Z.
         widgets = {
-            {
-                setting_id = "pilgrims_coin_group",
-                type = "group",
-                sub_widgets = {
-                    { setting_id = "coin_multiplier", type = "numeric", default_value = 1, range = { 0.1, 5 }, decimals_number = 2 },
-                    -- starting_coins snaps to the nearest multiple of 25 via on_setting_changed (chaos_wastes_tweaker.lua).
-                    -- range MUST be exactly 2 elements: VMF rejects a 3-element range outright
-                    -- ('range' field must contain an array-like table with 2 elements) and aborts the
-                    -- mod's ENTIRE options init → no [ct:LOAD], mod dead. A 3rd "step" element (the #164
-                    -- attempt) is NOT ignored by VMF — it is fatal. Step-snapping lives in on_setting_changed.
-                    { setting_id = "starting_coins", type = "numeric", default_value = 0, range = { 0, 3000 }, decimals_number = 0 },
-                },
-            },
-            {
-                setting_id = "shrines_altars_chests_group",
-                type = "group",
-                -- Fully grouped (v0.7.197-dev): every setting lives in a labeled collapsible
-                -- (no loose options). Declared in render order — groups-first keeps this order.
-                sub_widgets = {
-                    {
-                        -- v0.7.196-dev: all FIVE per-mission spawn-count sliders under ONE
-                        -- nested collapsible (user request). Groups-first ordering lifts this
-                        -- collapsible (and altar_reuse_group) above the loose options.
-                        -- v0.7.194-dev: these were dropdowns; the 4 altar counts keep -1..9
-                        -- (-1 = Default) — identical value semantics to the old
-                        -- altar_count_options dropdown, so NO consuming-code change (main lua
-                        -- reads the same ints; -1 = "skip override", 0 = none, 1-9 = force N).
-                        setting_id = "altar_chest_counts_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "chest_upgrade_count",     type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
-                            { setting_id = "chest_swap_melee_count",  type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
-                            { setting_id = "chest_swap_ranged_count", type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
-                            { setting_id = "chest_power_up_count",     type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
-                            -- Chests of Trials: explicit 0..5 slider, default 1 (no -1/Default).
-                            -- The consuming cap already maps -1 -> 1 (chaos_wastes_tweaker.lua:5447),
-                            -- so default 1 == vanilla's typical 1 per mission. A legacy saved -1
-                            -- still reads safely in code; the slider just can't SET it anymore.
-                            { setting_id = "cursed_chest_count",      type = "numeric", default_value = 1,  range = { 0, 5 },  decimals_number = 0, tooltip = "cursed_chest_count_tooltip" },
-                        },
-                    },
-                    {
-                        -- v0.7.158-dev Task 2: Altar Reuse nested under Shrines, Altars
-                        -- and Chests (was a top-level sibling group through v0.7.157).
-                        -- VMF supports nested groups (cf. available_missions_group inside
-                        -- adventure_maps_group below).
-                        --
-                        -- v0.7.127-dev: altar reuse. count = max times the altar can be USED
-                        -- per visit (1 = vanilla). cost_mult = geometric multiplier applied per
-                        -- subsequent use: cost_N = base_cost * (mult ^ (N - 1)). mult=1 keeps
-                        -- vanilla cost across all uses. mult=2 doubles each use (1x, 2x, 4x, 8x).
-                        -- mult=0.5 halves each use (1x, 0.5x, 0.25x). All values host-broadcast.
-                        setting_id = "altar_reuse_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "altar_reuse_count_power_up",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
-                            { setting_id = "altar_reuse_cost_mult_power_up", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
-                            { setting_id = "altar_reuse_count_swap_melee",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
-                            { setting_id = "altar_reuse_cost_mult_swap_melee", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
-                            { setting_id = "altar_reuse_count_swap_ranged",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
-                            { setting_id = "altar_reuse_cost_mult_swap_ranged", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
-                            { setting_id = "altar_reuse_count_upgrade",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_upgrade_tooltip" },
-                            { setting_id = "altar_reuse_cost_mult_upgrade", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
-                        },
-                    },
-                    {
-                        -- Number of boon CHOICES each shrine / chest offers (not spawn counts).
-                        setting_id = "boons_offered_group",
-                        type = "group",
-                        sub_widgets = {
-                            -- v0.7.199-dev: caps raised 5 -> 50. Offerings beyond the visible
-                            -- rows (shrine 4 / chest 3) scroll via the boon-offer scrollbar
-                            -- (_ct_boon_scroll block in the main lua).
-                            { setting_id = "shrine_boon_count", type = "numeric", default_value = 4, range = { 1, 50 }, decimals_number = 0 },
-                            { setting_id = "chest_boon_count",  type = "numeric", default_value = 3, range = { 1, 50 }, decimals_number = 0 },
-                        },
-                    },
-                    {
-                        setting_id = "chest_of_trials_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },
-                            -- Per-Chest-of-Trials enemy spawn-count multiplier (Issue #64). 1.0 =
-                            -- vanilla. Applies only to spawn_counter_category "cursed_chest_enemies"
-                            -- (the trial waves), not unrelated terror events.
-                            { setting_id = "cot_enemy_multiplier", type = "numeric", default_value = 1.0, range = { 0.5, 5.0 }, decimals_number = 1, tooltip = "cot_enemy_multiplier_tooltip" },
-                        },
-                    },
-                },
-            },
+            -- ============================================================
+            -- Adventure Maps
+            -- ============================================================
             {
                 setting_id = "adventure_maps_group",
                 type = "group",
                 sub_widgets = {
-                    { setting_id = "inject_adventure_maps", type = "checkbox", default_value = false, tooltip = "inject_adventure_maps_tooltip" },
-                    { setting_id = "replace_shrines_with_missions", type = "checkbox", default_value = false, tooltip = "replace_shrines_with_missions_tooltip" },
+                    -- inject_adventure_maps is the master for the mission-selection list:
+                    -- _adventure_pool.lua:747 returns early (every per-mission toggle
+                    -- ignored) when it is off, so nesting available_missions_group under
+                    -- it only ever hides inert widgets. replace_shrines_with_missions is
+                    -- NOT gated on inject (checked independently at
+                    -- chaos_wastes_tweaker.lua:5661), so it stays a loose sibling.
                     {
-                        setting_id = "available_missions_group",
-                        type = "group",
+                        setting_id = "inject_adventure_maps", type = "checkbox", default_value = false, tooltip = "inject_adventure_maps_tooltip",
                         sub_widgets = {
                             {
-                                setting_id = "cw_scenarios_group",
+                                setting_id = "available_missions_group",
                                 type = "group",
-                                sub_widgets = AdventurePool.build_cw_scenario_widgets(),
+                                sub_widgets = {
+                                    { setting_id = "campaign_scenarios_group", type = "group", sub_widgets = AdventurePool.build_campaign_dlc_group_widgets() },
+                                    { setting_id = "cw_scenarios_group",       type = "group", sub_widgets = AdventurePool.build_cw_scenario_widgets() },
+                                    { setting_id = "event_missions_group",     type = "group", sub_widgets = AdventurePool.build_event_mission_widgets() },
+                                },
                             },
-                            {
-                                setting_id = "campaign_scenarios_group",
-                                type = "group",
-                                sub_widgets = AdventurePool.build_campaign_dlc_group_widgets(),
-                            },
-                            {
-                                setting_id = "event_missions_group",
-                                type = "group",
-                                sub_widgets = AdventurePool.build_event_mission_widgets(),
-                            },
+                        },
+                    },
+                    { setting_id = "replace_shrines_with_missions", type = "checkbox", default_value = false, tooltip = "replace_shrines_with_missions_tooltip" },
+                },
+            },
+            -- ============================================================
+            -- Banned Weapon Traits
+            -- ============================================================
+            {
+                setting_id = "banned_traits_group",
+                type = "group",
+                -- Sub-groups A->Z: "Chaos Wastes Weapon Traits" before "Vanilla Weapon
+                -- Traits". Per-trait boxes A->Z by display (trait) label.
+                sub_widgets = {
+                    {
+                        setting_id = "ban_trait_chaos_wastes_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "ban_trait_deus_ranged_crit_explosion",                 type = "checkbox", default_value = false, tooltip = "ban_trait_deus_ranged_crit_explosion_tooltip" },
+                            { setting_id = "ban_trait_deus_ammo_pickup_reload_speed",              type = "checkbox", default_value = false, tooltip = "ban_trait_deus_ammo_pickup_reload_speed_tooltip" },
+                            { setting_id = "ban_trait_piercing_projectiles",                       type = "checkbox", default_value = false, tooltip = "ban_trait_piercing_projectiles_tooltip" },
+                            { setting_id = "ban_trait_refilling_shot",                             type = "checkbox", default_value = false, tooltip = "ban_trait_refilling_shot_tooltip" },
+                            { setting_id = "ban_trait_deus_collateral_damage_on_melee_killing_blow", type = "checkbox", default_value = false, tooltip = "ban_trait_deus_collateral_damage_on_melee_killing_blow_tooltip" },
+                            { setting_id = "ban_trait_bloodthirst",                                type = "checkbox", default_value = false, tooltip = "ban_trait_bloodthirst_tooltip" },
+                            { setting_id = "ban_trait_headhunter",                                 type = "checkbox", default_value = false, tooltip = "ban_trait_headhunter_tooltip" },
+                            { setting_id = "ban_trait_shield_of_isha",                             type = "checkbox", default_value = false, tooltip = "ban_trait_shield_of_isha_tooltip" },
+                            { setting_id = "ban_trait_follow_up",                                  type = "checkbox", default_value = false, tooltip = "ban_trait_follow_up_tooltip" },
+                            { setting_id = "ban_trait_serrated_blade",                             type = "checkbox", default_value = false, tooltip = "ban_trait_serrated_blade_tooltip" },
+                            { setting_id = "ban_trait_deus_crit_chain_lightning",                  type = "checkbox", default_value = false, tooltip = "ban_trait_deus_crit_chain_lightning_tooltip" },
+                            { setting_id = "ban_trait_deus_big_swing_stagger",                     type = "checkbox", default_value = false, tooltip = "ban_trait_deus_big_swing_stagger_tooltip" },
+                            { setting_id = "ban_trait_home_run",                                   type = "checkbox", default_value = false, tooltip = "ban_trait_home_run_tooltip" },
+                            { setting_id = "ban_trait_shield_splinters",                           type = "checkbox", default_value = false, tooltip = "ban_trait_shield_splinters_tooltip" },
+                            { setting_id = "ban_trait_armor_breaker",                              type = "checkbox", default_value = false, tooltip = "ban_trait_armor_breaker_tooltip" },
+                            { setting_id = "ban_trait_stagger_aoe_on_crit",                        type = "checkbox", default_value = false, tooltip = "ban_trait_stagger_aoe_on_crit_tooltip" },
+                            { setting_id = "ban_trait_deus_extra_shot",                            type = "checkbox", default_value = false, tooltip = "ban_trait_deus_extra_shot_tooltip" },
+                            { setting_id = "ban_trait_always_blocking",                            type = "checkbox", default_value = false, tooltip = "ban_trait_always_blocking_tooltip" },
+                            { setting_id = "ban_trait_crescendo_strike",                           type = "checkbox", default_value = false, tooltip = "ban_trait_crescendo_strike_tooltip" },
+                        },
+                    },
+                    {
+                        setting_id = "ban_trait_vanilla_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "ban_trait_ranged_consecutive_hits_increase_power",     type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_consecutive_hits_increase_power_tooltip" },
+                            { setting_id = "ban_trait_ranged_replenish_ammo_headshot",             type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_replenish_ammo_headshot_tooltip" },
+                            { setting_id = "ban_trait_ranged_remove_overcharge_on_crit",           type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_remove_overcharge_on_crit_tooltip" },
+                            { setting_id = "ban_trait_melee_shield_on_assist",                     type = "checkbox", default_value = false, tooltip = "ban_trait_melee_shield_on_assist_tooltip" },
+                            { setting_id = "ban_trait_ranged_increase_power_level_vs_armour_crit", type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_increase_power_level_vs_armour_crit_tooltip" },
+                            { setting_id = "ban_trait_ranged_restore_stamina_headshot",            type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_restore_stamina_headshot_tooltip" },
+                            { setting_id = "ban_trait_melee_increase_damage_on_block",             type = "checkbox", default_value = false, tooltip = "ban_trait_melee_increase_damage_on_block_tooltip" },
+                            { setting_id = "ban_trait_melee_counter_push_power",                   type = "checkbox", default_value = false, tooltip = "ban_trait_melee_counter_push_power_tooltip" },
+                            { setting_id = "ban_trait_melee_timed_block_cost",                     type = "checkbox", default_value = false, tooltip = "ban_trait_melee_timed_block_cost_tooltip" },
+                            { setting_id = "ban_trait_melee_heal_on_crit",                         type = "checkbox", default_value = false, tooltip = "ban_trait_melee_heal_on_crit_tooltip" },
+                            { setting_id = "ban_trait_melee_reduce_cooldown_on_crit",              type = "checkbox", default_value = false, tooltip = "ban_trait_melee_reduce_cooldown_on_crit_tooltip" },
+                            { setting_id = "ban_trait_ranged_reduce_cooldown_on_crit",             type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_reduce_cooldown_on_crit_tooltip" },
+                            { setting_id = "ban_trait_ranged_replenish_ammo_on_crit",              type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_replenish_ammo_on_crit_tooltip" },
+                            { setting_id = "ban_trait_melee_attack_speed_on_crit",                 type = "checkbox", default_value = false, tooltip = "ban_trait_melee_attack_speed_on_crit_tooltip" },
+                            { setting_id = "ban_trait_ranged_reduced_overcharge",                  type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_reduced_overcharge_tooltip" },
                         },
                     },
                 },
             },
+            -- ============================================================
+            -- Curses
+            -- ============================================================
             {
                 setting_id = "curses_group",
                 type = "group",
+                -- Groups-first lifts the two banlist sub-groups above the loose curse
+                -- options. Sub-groups A->Z ("Boss Grudge Marks Banlist" < "Disabled
+                -- Curses"); loose options A->Z by display label.
                 sub_widgets = {
-                    { setting_id = "force_belakor", type = "checkbox", default_value = false },
-                    -- v0.7.200-dev (#104): host-side rolling-window cap on the Corrupted Flesh
-                    -- curse's globadier-class gas clouds. 0 = vanilla/uncapped. Alphabetical:
-                    -- "Corrupted Flesh Curse..." sits between "Always Include..." and "Cursed
-                    -- Mission Count" by display label.
-                    { setting_id = "flesh_guard_clouds_per_minute", type = "numeric", default_value = 6, range = { 0, 30 }, decimals_number = 0, tooltip = "flesh_guard_clouds_per_minute_tooltip" },
-                    { setting_id = "disable_dominant_god", type = "checkbox", default_value = true, tooltip = "disable_dominant_god_tooltip" },
-                    { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0 },
-                    { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
+                    {
+                        setting_id = "boss_grudge_marks_group",
+                        type = "group",
+                        -- A->Z by "Ban: <Mark>" display label (matches setting_id order here).
+                        sub_widgets = {
+                            { setting_id = "ban_grudge_mark_commander",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_commander_tooltip" },
+                            { setting_id = "ban_grudge_mark_crippling",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crippling_tooltip" },
+                            { setting_id = "ban_grudge_mark_crushing",        type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crushing_tooltip" },
+                            { setting_id = "ban_grudge_mark_frenzy",          type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_frenzy_tooltip" },
+                            { setting_id = "ban_grudge_mark_intangible",      type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_intangible_tooltip" },
+                            { setting_id = "ban_grudge_mark_periodic_curse",  type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_periodic_curse_tooltip" },
+                            { setting_id = "ban_grudge_mark_periodic_shield", type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_periodic_shield_tooltip" },
+                            { setting_id = "ban_grudge_mark_raging",          type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_raging_tooltip" },
+                            { setting_id = "ban_grudge_mark_ranged_immune",   type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_ranged_immune_tooltip" },
+                            { setting_id = "ban_grudge_mark_regenerating",    type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_regenerating_tooltip" },
+                            { setting_id = "ban_grudge_mark_unstaggerable",   type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_unstaggerable_tooltip" },
+                            { setting_id = "ban_grudge_mark_vampiric",        type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_vampiric_tooltip" },
+                            { setting_id = "ban_grudge_mark_warping",         type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_warping_tooltip" },
+                        },
+                    },
                     {
                         setting_id = "disabled_curses_group",
                         type = "group",
-                        -- Alphabetized by display label "Disable: <God>: <Curse>" (god, then curse)
-                        -- to match the menu localization. God grouping is authoritative from vanilla
-                        -- deus_map_populate_settings.lua `all_curses`. Loc strings carry the god prefix.
+                        -- DELIBERATE ORDER (not plain A->Z): grouped by host god, then
+                        -- curse, matching vanilla deus_map_populate_settings.lua `all_curses`
+                        -- and the "Disable: <God>: <Curse>" loc labels.
                         sub_widgets = {
                             { setting_id = "disable_curse_belakor_totems", type = "checkbox", default_value = false },        -- Belakor
                             { setting_id = "disable_curse_shadow_homing_skulls", type = "checkbox", default_value = false },  -- Belakor
@@ -580,99 +570,97 @@ local data = {
                             { setting_id = "disable_curse_egg_of_tzeentch", type = "checkbox", default_value = false },        -- Tzeentch
                         },
                     },
-                    {
-                        setting_id = "boss_grudge_marks_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "ban_grudge_mark_commander",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_commander_tooltip" },
-                            { setting_id = "ban_grudge_mark_crippling",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crippling_tooltip" },
-                            { setting_id = "ban_grudge_mark_crushing",        type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crushing_tooltip" },
-                            { setting_id = "ban_grudge_mark_frenzy",          type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_frenzy_tooltip" },
-                            { setting_id = "ban_grudge_mark_intangible",      type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_intangible_tooltip" },
-                            { setting_id = "ban_grudge_mark_periodic_curse",  type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_periodic_curse_tooltip" },
-                            { setting_id = "ban_grudge_mark_periodic_shield", type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_periodic_shield_tooltip" },
-                            { setting_id = "ban_grudge_mark_raging",          type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_raging_tooltip" },
-                            { setting_id = "ban_grudge_mark_ranged_immune",   type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_ranged_immune_tooltip" },
-                            { setting_id = "ban_grudge_mark_regenerating",    type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_regenerating_tooltip" },
-                            { setting_id = "ban_grudge_mark_unstaggerable",   type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_unstaggerable_tooltip" },
-                            { setting_id = "ban_grudge_mark_vampiric",        type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_vampiric_tooltip" },
-                            { setting_id = "ban_grudge_mark_warping",         type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_warping_tooltip" },
-                        },
-                    },
+                    { setting_id = "force_belakor", type = "checkbox", default_value = false },
+                    -- v0.7.200-dev (#104): host-side rolling-window cap on the Corrupted
+                    -- Flesh curse's globadier-class gas clouds. 0 = vanilla/uncapped.
+                    { setting_id = "flesh_guard_clouds_per_minute", type = "numeric", default_value = 6, range = { 0, 30 }, decimals_number = 0, tooltip = "flesh_guard_clouds_per_minute_tooltip" },
+                    { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
+                    { setting_id = "disable_dominant_god", type = "checkbox", default_value = true, tooltip = "disable_dominant_god_tooltip" },
+                    { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0, tooltip = "finale_dominant_god_tooltip" },
                 },
             },
+            -- ============================================================
+            -- Disabled Boons (BOON_TREE-generated; internal order settled by recursive_sort)
+            -- ============================================================
+            {
+                setting_id = "disabled_boons_group",
+                type = "group",
+                sub_widgets = build_disable_tree(),
+            },
+            -- ============================================================
+            -- Pilgrim's Coin
+            -- ============================================================
+            {
+                setting_id = "pilgrims_coin_group",
+                type = "group",
+                sub_widgets = {
+                    { setting_id = "coin_multiplier", type = "numeric", default_value = 1, range = { 0.1, 5 }, decimals_number = 2 },
+                    -- starting_coins snaps to the nearest multiple of 25 via on_setting_changed (chaos_wastes_tweaker.lua).
+                    -- range MUST be exactly 2 elements: VMF rejects a 3-element range outright
+                    -- ('range' field must contain an array-like table with 2 elements) and aborts the
+                    -- mod's ENTIRE options init -> no [ct:LOAD], mod dead. A 3rd "step" element (the #164
+                    -- attempt) is NOT ignored by VMF -- it is fatal. Step-snapping lives in on_setting_changed.
+                    { setting_id = "starting_coins", type = "numeric", default_value = 0, range = { 0, 3000 }, decimals_number = 0 },
+                },
+            },
+            -- ============================================================
+            -- Reworks
+            -- ============================================================
             {
                 setting_id = "reworks_group",
                 type = "group",
+                -- Groups-first lifts the two Reworks sub-groups above the loose options.
+                -- Sub-groups A->Z ("Reworks: Boons" < "Reworks: Potions"); loose options
+                -- A->Z by display label.
                 sub_widgets = {
-                    { setting_id = "arena_ammo_count", type = "dropdown", default_value = -1, options = count_with_default_options, tooltip = "arena_ammo_count_tooltip" },
-                    { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false, tooltip = "any_trait_any_weapon_tooltip" },
-                    { setting_id = "tweak_trait_tier_by_rarity", type = "checkbox", default_value = false, tooltip = "tweak_trait_tier_by_rarity_tooltip" },
-                    { setting_id = "tweak_shard_strike_duration", type = "numeric", default_value = 16, range = { 1, 16 }, decimals_number = 0, tooltip = "tweak_shard_strike_duration_tooltip" },
-                    { setting_id = "tweak_shadow_skull_stun_sec", type = "numeric", default_value = 2.5, range = { 0.0, 10.0 }, decimals_number = 1, tooltip = "tweak_shadow_skull_stun_sec_tooltip" },
                     {
                         setting_id = "reworks_boons_group",
                         type = "group",
-                        -- v0.7.159-dev Task 1: split into two NESTED sub-groups —
+                        -- v0.7.159-dev Task 1: split into two NESTED sub-groups --
                         --   (a) reworks_boons_existing_group: modify how an EXISTING
                         --       boon / property / bot-distribution behaves.
                         --   (b) reworks_boons_new_group: ADD a brand-new selectable boon
-                        --       (the four `enable_boon_*` trait-as-boon toggles, "...as
-                        --       Boon (Unique)").
-                        -- All setting_ids preserved verbatim (user values persist).
-                        -- `tweak_manann_tempest_cooldown` stays in (a): it changes a
-                        -- cooldown VALUE (and also affects the vanilla trait per its
-                        -- tooltip "boon + trait"), i.e. modifies behavior rather than
-                        -- adding a boon — per the existing-vs-new classification rule.
+                        --       (the four `enable_boon_*` trait-as-boon toggles).
+                        -- Sub-groups A->Z ("Existing" < "New"). All setting_ids preserved.
                         sub_widgets = {
                             {
                                 setting_id = "reworks_boons_existing_group",
                                 type = "group",
+                                -- A->Z by display label ([untested] status tag ignored for
+                                -- sort). The Miracle of Isha mutex cluster (isha_choice) keeps
+                                -- its "    (A) / (B)" 4-space-indent labels and stays adjacent
+                                -- in letter order (enforced in on_setting_changed via
+                                -- chaos_wastes_tweaker_mutex); the leading indent sorts it first.
                                 sub_widgets = {
-                                    { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
-                                    { setting_id = "tweak_boon_movespeed", type = "checkbox", default_value = false, tooltip = "tweak_boon_movespeed_tooltip" },
-                                    { setting_id = "bomb_boon_cooldown", type = "numeric", default_value = 0, range = { 0, 600 }, decimals_number = 0, tooltip = "bomb_boon_cooldown_tooltip" },
-                                    { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
-                                    { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
-                                    { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
-                                    { setting_id = "tweak_manann_tempest_cooldown",   type = "checkbox", default_value = false, tooltip = "tweak_manann_tempest_cooldown_tooltip" },
-                                    { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
-                                    { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
-                                    { setting_id = "tweak_miracle_of_ulric_persistent", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_ulric_persistent_tooltip" },
-                                    { setting_id = "ulric_pack_unlimited_range", type = "checkbox", default_value = false, tooltip = "ulric_pack_unlimited_range_tooltip" },
-                                    { setting_id = "tweak_wildfire_generations_cap", type = "numeric", default_value = 3, range = { 1, 10 }, decimals_number = 0, tooltip = "tweak_wildfire_generations_cap_tooltip" },
-                                    -- Miracle of Isha — mutex cluster `isha_choice`.
-                                    -- v0.7.81: replaced the legacy `tweak_miracle_of_isha_alternative`
-                                    -- dropdown with these two checkboxes per LOCALIZATION_STANDARD.md § 10.
-                                    -- Both unchecked = vanilla revive-once behavior. Toggling one auto-
-                                    -- unchecks the other (enforced in on_setting_changed via
-                                    -- chaos_wastes_tweaker_mutex). Labels use the "    (A) / (B)" prefix
-                                    -- convention with 4-space leading indent so the multiple-choice
-                                    -- relationship reads visually in the VMF UI.
                                     { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
                                     { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
-                                    { setting_id = "ct_blessed_bots", type = "checkbox", default_value = false, tooltip = "ct_blessed_bots_tooltip" },
-                                    { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
-                                    -- v0.7.120-dev: mutex alternative to mirror. Bots roll INDEPENDENT random boons each
-                                    -- time the host claims one. Mutex group "bots_boon_mode" — declared in chaos_wastes_tweaker.lua.
-                                    { setting_id = "bots_get_random_boons",            type = "checkbox", default_value = false, tooltip = "bots_get_random_boons_tooltip" },
-                                    -- v0.7.120-dev: mirror host weapon-chest interactions onto every bot. Swap chests
-                                    -- generate a random weapon for the bot's career; upgrade chests upgrade the bot's
-                                    -- currently-equipped CW weapon to the same target rarity.
-                                    { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
-                                    -- Host-only chat readout: prints which boon each bot receives while
-                                    -- mirror/random bot boons are on, so the host can see what bots got.
                                     { setting_id = "announce_bot_boons",               type = "checkbox", default_value = false, tooltip = "announce_bot_boons_tooltip" },
+                                    { setting_id = "ct_blessed_bots", type = "checkbox", default_value = false, tooltip = "ct_blessed_bots_tooltip" },
+                                    { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
+                                    { setting_id = "bomb_boon_cooldown", type = "numeric", default_value = 0, range = { 0, 600 }, decimals_number = 0, tooltip = "bomb_boon_cooldown_tooltip" },
+                                    { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
+                                    { setting_id = "tweak_miracle_of_ulric_persistent", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_ulric_persistent_tooltip" },
+                                    { setting_id = "tweak_wildfire_generations_cap", type = "numeric", default_value = 3, range = { 1, 10 }, decimals_number = 0, tooltip = "tweak_wildfire_generations_cap_tooltip" },
+                                    { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
+                                    { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
+                                    { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
+                                    { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
+                                    { setting_id = "tweak_manann_tempest_cooldown",   type = "checkbox", default_value = false, tooltip = "tweak_manann_tempest_cooldown_tooltip" },
+                                    { setting_id = "tweak_boon_movespeed", type = "checkbox", default_value = false, tooltip = "tweak_boon_movespeed_tooltip" },
+                                    { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
+                                    { setting_id = "bots_get_random_boons",            type = "checkbox", default_value = false, tooltip = "bots_get_random_boons_tooltip" },
+                                    { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
+                                    { setting_id = "ulric_pack_unlimited_range", type = "checkbox", default_value = false, tooltip = "ulric_pack_unlimited_range_tooltip" },
                                 },
                             },
                             {
                                 setting_id = "reworks_boons_new_group",
                                 type = "group",
                                 sub_widgets = {
-                                    { setting_id = "enable_boon_vauls_anvil",         type = "checkbox", default_value = false, tooltip = "enable_boon_vauls_anvil_tooltip" },
+                                    { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
                                     { setting_id = "enable_boon_manann_tempest",      type = "checkbox", default_value = false, tooltip = "enable_boon_manann_tempest_tooltip" },
                                     { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
-                                    { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
+                                    { setting_id = "enable_boon_vauls_anvil",         type = "checkbox", default_value = false, tooltip = "enable_boon_vauls_anvil_tooltip" },
                                 },
                             },
                         },
@@ -681,120 +669,138 @@ local data = {
                         setting_id = "reworks_potions_group",
                         type = "group",
                         sub_widgets = {
-                            { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
-                            { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
+                            { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
                             { setting_id = "tweak_home_brewer_potency", type = "checkbox", default_value = false, tooltip = "tweak_home_brewer_potency_tooltip" },
                             { setting_id = "tweak_invis_potion_2x", type = "checkbox", default_value = false, tooltip = "tweak_invis_potion_2x_tooltip" },
-                            { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
+                            { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
+                            { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
+                        },
+                    },
+                    { setting_id = "any_trait_any_weapon", type = "checkbox", default_value = false, tooltip = "any_trait_any_weapon_tooltip" },
+                    { setting_id = "arena_ammo_count", type = "dropdown", default_value = -1, options = count_with_default_options, tooltip = "arena_ammo_count_tooltip" },
+                    { setting_id = "tweak_shard_strike_duration", type = "numeric", default_value = 16, range = { 1, 16 }, decimals_number = 0, tooltip = "tweak_shard_strike_duration_tooltip" },
+                    { setting_id = "tweak_trait_tier_by_rarity", type = "checkbox", default_value = false, tooltip = "tweak_trait_tier_by_rarity_tooltip" },
+                    { setting_id = "tweak_shadow_skull_stun_sec", type = "numeric", default_value = 2.5, range = { 0.0, 10.0 }, decimals_number = 1, tooltip = "tweak_shadow_skull_stun_sec_tooltip" },
+                },
+            },
+            -- ============================================================
+            -- Shrines, Altars and Chests
+            -- ============================================================
+            {
+                setting_id = "shrines_altars_chests_group",
+                type = "group",
+                -- Every setting lives in a labeled collapsible (no loose options).
+                -- Sub-groups A->Z by display label.
+                sub_widgets = {
+                    {
+                        -- v0.7.127-dev: altar reuse. count = max times the altar can be
+                        -- USED per visit (1 = vanilla). cost_mult = geometric multiplier
+                        -- applied per subsequent use: cost_N = base_cost * (mult ^ (N-1)).
+                        -- DELIBERATE ORDER: each altar's count row is followed by its
+                        -- cost-multiplier row (intuitive pairing); the four altar names are
+                        -- themselves A->Z (Boon shrine < Melee swap < Ranged swap < Weapon
+                        -- upgrade). All values host-broadcast.
+                        setting_id = "altar_reuse_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "altar_reuse_count_power_up",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_power_up", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                            { setting_id = "altar_reuse_count_swap_melee",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_swap_melee", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                            { setting_id = "altar_reuse_count_swap_ranged",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_swap_ranged", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                            { setting_id = "altar_reuse_count_upgrade",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_upgrade_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_upgrade", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                        },
+                    },
+                    {
+                        -- Per-mission spawn-count sliders. The 4 altar counts keep -1..9
+                        -- (-1 = Default): -1 = "skip override", 0 = none, 1-9 = force N.
+                        setting_id = "altar_chest_counts_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "chest_power_up_count",     type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                            -- Chests of Trials: explicit 0..5 slider, default 1 (no -1/Default).
+                            -- The consuming cap already maps -1 -> 1 (chaos_wastes_tweaker.lua:5447).
+                            { setting_id = "cursed_chest_count",      type = "numeric", default_value = 1,  range = { 0, 5 },  decimals_number = 0, tooltip = "cursed_chest_count_tooltip" },
+                            { setting_id = "chest_swap_melee_count",  type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                            { setting_id = "chest_swap_ranged_count", type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                            { setting_id = "chest_upgrade_count",     type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                        },
+                    },
+                    {
+                        -- Number of boon CHOICES each shrine / chest offers (not spawn counts).
+                        -- v0.7.199-dev: caps raised 5 -> 50; extra offerings scroll.
+                        setting_id = "boons_offered_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "chest_boon_count",  type = "numeric", default_value = 3, range = { 1, 50 }, decimals_number = 0 },
+                            { setting_id = "shrine_boon_count", type = "numeric", default_value = 4, range = { 1, 50 }, decimals_number = 0 },
+                        },
+                    },
+                    {
+                        setting_id = "chest_of_trials_group",
+                        type = "group",
+                        sub_widgets = {
+                            -- Per-Chest-of-Trials enemy spawn-count multiplier (Issue #64).
+                            -- 1.0 = vanilla; applies only to the "cursed_chest_enemies" waves.
+                            { setting_id = "cot_enemy_multiplier", type = "numeric", default_value = 1.0, range = { 0.5, 5.0 }, decimals_number = 1, tooltip = "cot_enemy_multiplier_tooltip" },
+                            { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },
                         },
                     },
                 },
             },
-                {
-                    setting_id = "disabled_boons_group",
-                    type = "group",
-                    sub_widgets = build_disable_tree(),
-                },
-                {
-                    setting_id = "starting_boons_group",
-                    type = "group",
-                    sub_widgets = build_start_tree(),
-                },
-                -- 2026-05-23 v0.7.98-dev DISABLED: Activate Dormant Boons + Skulls Event Boons
-                -- VMF groups removed per user request after Chest-of-Trials crash. The
-                -- corresponding lua implementation is block-commented in
-                -- `chaos_wastes_tweaker.lua` (~L4448 dormants, ~L4724 Skulls). The
-                -- "start_boon_dormant_group" widget (above, in build_start_tree) is also
-                -- effectively unused now — those dormants will not register, so picking a
-                -- starting boon from that list would fail to apply. Keeping the start-tree
-                -- widget visible would mislead users; consider commenting build_start_tree's
-                -- dormant_widgets too if dormant disable becomes permanent.
-                -- To re-enable: uncomment the block below AND uncomment the matching loc keys
-                -- (activate_dormant_*, enable_skulls_event_boons, skulls_event_boons_group) AND
-                -- uncomment the apply-site calls in chaos_wastes_tweaker.lua.
-                --[[
-                {
-                    setting_id = "activate_dormant_boons_group",
-                    type = "group",
-                    sub_widgets = (function()
-                        local widgets = {}
-                        for _, boon_id in ipairs(DORMANT_BOONS) do
-                            local sid = "activate_dormant_" .. boon_id
-                            widgets[#widgets + 1] = {
-                                setting_id = sid,
-                                type = "checkbox",
-                                default_value = false,
-                                tooltip = sid .. "_tooltip",
-                            }
-                        end
-                        return widgets
-                    end)(),
-                },
-                {
-                    setting_id = "skulls_event_boons_group",
-                    type = "group",
-                    sub_widgets = {
-                        {
-                            setting_id = "enable_skulls_event_boons",
+            -- ============================================================
+            -- Starting Boons (BOON_TREE-generated; internal order settled by recursive_sort)
+            -- ============================================================
+            {
+                setting_id = "starting_boons_group",
+                type = "group",
+                sub_widgets = build_start_tree(),
+            },
+            -- 2026-05-23 v0.7.98-dev DISABLED: Activate Dormant Boons + Skulls Event Boons
+            -- VMF groups removed per user request after Chest-of-Trials crash. The
+            -- corresponding lua implementation is block-commented in
+            -- `chaos_wastes_tweaker.lua` (~L4448 dormants, ~L4724 Skulls). The
+            -- "start_boon_dormant_group" widget (in build_start_tree) is also effectively
+            -- unused now - those dormants will not register, so picking a starting boon
+            -- from that list would fail to apply. Keeping the start-tree widget visible
+            -- would mislead users; consider commenting build_start_tree's dormant_widgets
+            -- too if dormant disable becomes permanent.
+            -- To re-enable: uncomment the block below AND uncomment the matching loc keys
+            -- (activate_dormant_*, enable_skulls_event_boons, skulls_event_boons_group) AND
+            -- uncomment the apply-site calls in chaos_wastes_tweaker.lua.
+            --[[
+            {
+                setting_id = "activate_dormant_boons_group",
+                type = "group",
+                sub_widgets = (function()
+                    local widgets = {}
+                    for _, boon_id in ipairs(DORMANT_BOONS) do
+                        local sid = "activate_dormant_" .. boon_id
+                        widgets[#widgets + 1] = {
+                            setting_id = sid,
                             type = "checkbox",
                             default_value = false,
-                            tooltip = "enable_skulls_event_boons_tooltip",
-                        },
-                    },
-                },
-                --]]
+                            tooltip = sid .. "_tooltip",
+                        }
+                    end
+                    return widgets
+                end)(),
+            },
             {
-                setting_id = "banned_traits_group",
+                setting_id = "skulls_event_boons_group",
                 type = "group",
                 sub_widgets = {
                     {
-                        setting_id = "ban_trait_vanilla_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "ban_trait_melee_attack_speed_on_crit",                 type = "checkbox", default_value = false, tooltip = "ban_trait_melee_attack_speed_on_crit_tooltip" },
-                            { setting_id = "ban_trait_melee_counter_push_power",                   type = "checkbox", default_value = false, tooltip = "ban_trait_melee_counter_push_power_tooltip" },
-                            { setting_id = "ban_trait_melee_heal_on_crit",                         type = "checkbox", default_value = false, tooltip = "ban_trait_melee_heal_on_crit_tooltip" },
-                            { setting_id = "ban_trait_melee_increase_damage_on_block",             type = "checkbox", default_value = false, tooltip = "ban_trait_melee_increase_damage_on_block_tooltip" },
-                            { setting_id = "ban_trait_melee_reduce_cooldown_on_crit",              type = "checkbox", default_value = false, tooltip = "ban_trait_melee_reduce_cooldown_on_crit_tooltip" },
-                            { setting_id = "ban_trait_melee_shield_on_assist",                     type = "checkbox", default_value = false, tooltip = "ban_trait_melee_shield_on_assist_tooltip" },
-                            { setting_id = "ban_trait_melee_timed_block_cost",                     type = "checkbox", default_value = false, tooltip = "ban_trait_melee_timed_block_cost_tooltip" },
-                            { setting_id = "ban_trait_ranged_consecutive_hits_increase_power",     type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_consecutive_hits_increase_power_tooltip" },
-                            { setting_id = "ban_trait_ranged_increase_power_level_vs_armour_crit", type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_increase_power_level_vs_armour_crit_tooltip" },
-                            { setting_id = "ban_trait_ranged_reduce_cooldown_on_crit",             type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_reduce_cooldown_on_crit_tooltip" },
-                            { setting_id = "ban_trait_ranged_reduced_overcharge",                  type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_reduced_overcharge_tooltip" },
-                            { setting_id = "ban_trait_ranged_remove_overcharge_on_crit",           type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_remove_overcharge_on_crit_tooltip" },
-                            { setting_id = "ban_trait_ranged_replenish_ammo_headshot",             type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_replenish_ammo_headshot_tooltip" },
-                            { setting_id = "ban_trait_ranged_replenish_ammo_on_crit",              type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_replenish_ammo_on_crit_tooltip" },
-                            { setting_id = "ban_trait_ranged_restore_stamina_headshot",            type = "checkbox", default_value = false, tooltip = "ban_trait_ranged_restore_stamina_headshot_tooltip" },
-                        },
-                    },
-                    {
-                        setting_id = "ban_trait_chaos_wastes_group",
-                        type = "group",
-                        sub_widgets = {
-                            { setting_id = "ban_trait_always_blocking",                            type = "checkbox", default_value = false, tooltip = "ban_trait_always_blocking_tooltip" },
-                            { setting_id = "ban_trait_armor_breaker",                              type = "checkbox", default_value = false, tooltip = "ban_trait_armor_breaker_tooltip" },
-                            { setting_id = "ban_trait_bloodthirst",                                type = "checkbox", default_value = false, tooltip = "ban_trait_bloodthirst_tooltip" },
-                            { setting_id = "ban_trait_crescendo_strike",                           type = "checkbox", default_value = false, tooltip = "ban_trait_crescendo_strike_tooltip" },
-                            { setting_id = "ban_trait_deus_ammo_pickup_reload_speed",              type = "checkbox", default_value = false, tooltip = "ban_trait_deus_ammo_pickup_reload_speed_tooltip" },
-                            { setting_id = "ban_trait_deus_big_swing_stagger",                     type = "checkbox", default_value = false, tooltip = "ban_trait_deus_big_swing_stagger_tooltip" },
-                            { setting_id = "ban_trait_deus_collateral_damage_on_melee_killing_blow", type = "checkbox", default_value = false, tooltip = "ban_trait_deus_collateral_damage_on_melee_killing_blow_tooltip" },
-                            { setting_id = "ban_trait_deus_crit_chain_lightning",                  type = "checkbox", default_value = false, tooltip = "ban_trait_deus_crit_chain_lightning_tooltip" },
-                            { setting_id = "ban_trait_deus_extra_shot",                            type = "checkbox", default_value = false, tooltip = "ban_trait_deus_extra_shot_tooltip" },
-                            { setting_id = "ban_trait_deus_ranged_crit_explosion",                 type = "checkbox", default_value = false, tooltip = "ban_trait_deus_ranged_crit_explosion_tooltip" },
-                            { setting_id = "ban_trait_follow_up",                                  type = "checkbox", default_value = false, tooltip = "ban_trait_follow_up_tooltip" },
-                            { setting_id = "ban_trait_headhunter",                                 type = "checkbox", default_value = false, tooltip = "ban_trait_headhunter_tooltip" },
-                            { setting_id = "ban_trait_home_run",                                   type = "checkbox", default_value = false, tooltip = "ban_trait_home_run_tooltip" },
-                            { setting_id = "ban_trait_piercing_projectiles",                       type = "checkbox", default_value = false, tooltip = "ban_trait_piercing_projectiles_tooltip" },
-                            { setting_id = "ban_trait_refilling_shot",                             type = "checkbox", default_value = false, tooltip = "ban_trait_refilling_shot_tooltip" },
-                            { setting_id = "ban_trait_serrated_blade",                             type = "checkbox", default_value = false, tooltip = "ban_trait_serrated_blade_tooltip" },
-                            { setting_id = "ban_trait_shield_of_isha",                             type = "checkbox", default_value = false, tooltip = "ban_trait_shield_of_isha_tooltip" },
-                            { setting_id = "ban_trait_shield_splinters",                           type = "checkbox", default_value = false, tooltip = "ban_trait_shield_splinters_tooltip" },
-                            { setting_id = "ban_trait_stagger_aoe_on_crit",                        type = "checkbox", default_value = false, tooltip = "ban_trait_stagger_aoe_on_crit_tooltip" },
-                        },
+                        setting_id = "enable_skulls_event_boons",
+                        type = "checkbox",
+                        default_value = false,
+                        tooltip = "enable_skulls_event_boons_tooltip",
                     },
                 },
             },
+            --]]
         },
     },
 }
