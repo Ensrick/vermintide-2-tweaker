@@ -50,48 +50,13 @@ local function _build_injections()
 end
 
 -- =========================================================================
--- Issue #96: the "Allow standard crafting bench in mission" option only does
--- something useful when GUI Tweaker (gut) is present (gut supplies the
--- in-mission menu access cim's standard bench rides on), so the widget is
--- HIDDEN when gut isn't installed.
---
--- VMF has NO native conditional-visibility / mod-dependency widget field
--- (verified against upstream vmf/.../core/options.lua: the validated checkbox
--- fields are setting_id/type/title/tooltip/default_value/localize/is_collapsed;
--- the only conditional feature is dropdown `show_widgets`, which keys off a
--- dropdown VALUE, not mod presence). So we gate by conditionally BUILDING the
--- widget tree — the `allow_in_mission` entry is pruned below before the data
--- table is returned when gut is absent.
---
--- Load-order safety (the footgun): `get_mod("gut")` is just `_mods["gut"]` and
--- returns nil if gut hasn't run its `new_mod` yet — VMF unfolds this data table
--- IMMEDIATELY at cim's registration (not lazily), so if cim loads before gut,
--- a bare get_mod check would wrongly hide the widget. The load-order-INDEPENDENT
--- signal is the engine ModManager's mod table (`Managers.mod._mods`), which is
--- built once from the user's full enabled-mod list at scan time BEFORE any mod's
--- Lua runs (mod_manager.lua:278-343; each entry carries `name` = Workshop title
--- + `enabled`). We check both: the fast get_mod path (gut already loaded) OR an
--- enabled ModManager entry whose Workshop title is gut's ("Tweaker: GUI",
--- covering gut and gut_dev) — so presence is detected regardless of load order.
-local function _gut_present()
-    -- Fast path: gut (or its dev clone) already registered with VMF.
-    if get_mod("gut") or get_mod("gut_dev") then
-        return true
-    end
-    -- Load-order-safe path: scan the engine's enabled-mod manifest by name.
-    local mod_mgr = rawget(_G, "Managers") and Managers.mod
-    local mods = mod_mgr and mod_mgr._mods
-    if type(mods) == "table" then
-        for i = 1, (mod_mgr._num_mods or #mods) do
-            local entry = mods[i]
-            if entry and entry.enabled and type(entry.name) == "string"
-               and entry.name:find("Tweaker: GUI", 1, true) then
-                return true
-            end
-        end
-    end
-    return false
-end
+-- Issue #96 epilogue (2026-07-02, user direction): the "Allow standard crafting
+-- bench in mission" WIDGET no longer lives in cim at all. The option moved to
+-- gut's "In-Mission Menus" group (shown there only when cim is installed - the
+-- same conditional-build pattern this file used to carry); gut writes through to
+-- cim's `allow_in_mission` SETTING, which the main-lua readers still honor
+-- unchanged (crafting_in_modded_dev.lua ~:1920). The former `_gut_present()`
+-- helper + prune machinery are gone with the widget.
 
 local options_data = {
     name        = mod:localize("mod_name"),
@@ -133,18 +98,10 @@ local options_data = {
                         keybind_type = "function_call",
                         function_name = "open_standard_crafting",
                     },
-                    -- Default OFF. Vanilla `HeroViewStateWeaveForge` was never
-                    -- expected to run mid-mission and several code paths fault
-                    -- (gamepad cursor renderer, shading_environment loads). The
-                    -- v0.7.13/.14 hooks catch the known crashes but new ones
-                    -- keep surfacing. While off, the keybind silently no-ops
-                    -- outside the Keep; opt-in if you want to test in-mission
-                    -- and report crash logs.
-                    {
-                        setting_id = "allow_in_mission",
-                        type = "checkbox",
-                        default_value = false,
-                    },
+                    -- (The "Allow standard crafting bench in mission" checkbox
+                    -- lived here until 2026-07-02; the option now lives in gut's
+                    -- In-Mission Menus group, which writes through to cim's
+                    -- `allow_in_mission` setting - see the #96 epilogue above.)
                     -- Base power level applied to every freshly-crafted item.
                     -- Vanilla weapons cap at 300; CW boosts apply on top. 0-950
                     -- in steps of 50 covers the range the user might want.
@@ -264,23 +221,5 @@ local options_data = {
         ui_renderer_injections = _build_injections(),
     },
 }
-
--- Issue #96 prune: drop the `allow_in_mission` checkbox from the forge group's
--- sub_widgets when gut is absent, so VMF never builds it. The forge_group is the
--- first widget in the options tree; locate it by setting_id rather than a fixed
--- index so a future reorder doesn't silently target the wrong group.
-if not _gut_present() then
-    local widgets = options_data.options and options_data.options.widgets
-    for _, group in ipairs(widgets or {}) do
-        if group.setting_id == "forge_group" and type(group.sub_widgets) == "table" then
-            for i = #group.sub_widgets, 1, -1 do
-                if group.sub_widgets[i].setting_id == "allow_in_mission" then
-                    table.remove(group.sub_widgets, i)
-                end
-            end
-            break
-        end
-    end
-end
 
 return options_data

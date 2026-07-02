@@ -1,5 +1,19 @@
 # Crafting in Modded Changelog
 
+## 0.8.46-dev (2026-07-02) - 'Allow crafting bench in mission' widget moved to Tweaker: GUI (user direction)
+
+- The `allow_in_mission` CHECKBOX no longer exists in cim's menu. The option now lives in
+  Tweaker: GUI's "In-Mission Menus" group (shown there only when cim is installed - the
+  same conditional-build treatment #96 used to apply on cim's side), and gut writes
+  through to cim's `allow_in_mission` SETTING, so all main-lua readers
+  (open_forge/open_standard_crafting gates, ~:1920) are untouched and existing stored
+  values keep working.
+- Removed with the widget: the #96 `_gut_present()` conditional-build machinery + loc
+  entries; `standard_crafting_hotkey_description` retargeted at the gut option.
+- Regression check replaced: `issue96_allow_in_mission_widget_moved_to_gut` (widget must
+  NOT re-appear in _data.lua; the `mod:get("allow_in_mission")` readers must remain as
+  gut's write-through target).
+
 ## 0.8.45-dev (2026-07-02) - Athanor picker follow-ups: trait descriptions (#238) + hide 0-cost (#239)
 
 Two follow-ups to the v0.8.44-dev forge freedom toggles.

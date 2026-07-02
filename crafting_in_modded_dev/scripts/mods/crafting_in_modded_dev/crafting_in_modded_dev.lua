@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.45-dev"
+local MOD_VERSION = "0.8.46-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -7662,60 +7662,42 @@ _rt_register("issue88_inventory_access_flip_is_scoped", function()
     return nil
 end)
 
-_rt_register("issue96_allow_in_mission_gated_on_gut", function()
-    -- Issue #96: cim's "Allow standard crafting bench in mission" option
-    -- (`allow_in_mission`) must be HIDDEN when GUI Tweaker (gut) is not
-    -- installed — the in-mission keep-menu access cim's standard bench rides
-    -- on comes from gut, so without gut the toggle does nothing and only
-    -- confuses. The fix (in crafting_in_modded_dev_data.lua) is two pieces:
-    --   1. a `_gut_present()` helper — load-order-safe gut-presence detector
-    --      that fast-paths get_mod("gut")/get_mod("gut_dev") and falls back to
-    --      scanning the ModManager manifest for the "Tweaker: GUI" Workshop
-    --      title (so cim-loads-before-gut still detects it), and
-    --   2. a prune that removes the `allow_in_mission` widget from the forge
-    --      group's sub_widgets when `_gut_present()` is false, so VMF never
-    --      builds it.
-    -- This source-pattern guard fails if either piece is removed, so the
-    -- option can't silently re-appear when gut is absent. The fix lives in the
-    -- sibling _data.lua (no exported fn to debug.getinfo on directly), so we
-    -- derive that file's path from a known main-file function's source dir.
-    -- Degrades to a no-op when source introspection is unavailable
-    -- (bundle/deploy path).
+_rt_register("issue96_allow_in_mission_widget_moved_to_gut", function()
+    -- Issue #96 epilogue (2026-07-02, user direction): the "Allow standard
+    -- crafting bench in mission" WIDGET must NOT exist in cim's data tree at
+    -- all - the option lives in gut's In-Mission Menus group (cim-gated
+    -- there), and gut writes through to cim's `allow_in_mission` SETTING.
+    -- Two invariants:
+    --   1. no `setting_id = "allow_in_mission"` widget in _data.lua, and
+    --   2. the main-lua readers still honor mod:get("allow_in_mission")
+    --      (gut's write-through target - removing the readers would silently
+    --      orphan gut's toggle).
+    -- Source-pattern guard; degrades to a no-op when source introspection is
+    -- unavailable (bundle/deploy path).
     local ok, info = pcall(debug.getinfo, mod.open_standard_crafting or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    -- main script is .../crafting_in_modded_dev.lua; the data file is the
-    -- sibling .../crafting_in_modded_dev_data.lua. Swap the trailing filename.
     local dir = src_path:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local data_path = dir .. "crafting_in_modded_dev_data.lua"
-    local f = io.open(data_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    -- (1) The load-order-safe gut-presence helper must exist. Needle split
-    -- across two literals so this test's own source never self-matches.
-    local helper_needle = "local function " .. "_gut_present()"
-    if not txt:find(helper_needle, 1, true) then
-        return "Issue #96 regression: _gut_present() helper missing from _data.lua — allow_in_mission gating gone"
+    local function read_all(path)
+        local f = io.open(path, "r")
+        if not f then return nil end
+        local t = f:read("*a")
+        f:close()
+        return t
     end
-    -- The helper must carry BOTH presence signals: the fast get_mod path AND
-    -- the load-order-safe ModManager-manifest scan for gut's Workshop title.
-    if not txt:find('get_mod("gut")', 1, true) then
-        return "Issue #96 regression: _gut_present() no longer fast-paths get_mod(\"gut\")"
+    local data_txt = read_all(dir .. "crafting_in_modded_dev_data.lua")
+    if data_txt then
+        -- needle split so this test's own source never self-matches
+        if data_txt:find('setting_id = ' .. '"allow_in_mission"', 1, true) then
+            return "Issue #96 regression: allow_in_mission widget re-appeared in _data.lua — it must live ONLY in gut's In-Mission Menus"
+        end
     end
-    if not txt:find("Tweaker: GUI", 1, true) then
-        return "Issue #96 regression: _gut_present() no longer scans the ModManager manifest for the gut Workshop title (load-order-safe path gone)"
-    end
-    -- (2) The prune must still be gated on _gut_present() AND target the
-    -- allow_in_mission widget — i.e. the widget is conditionally dropped when
-    -- gut is absent. Both anchors must be present for the gating to hold.
-    if not txt:find("if not " .. "_gut_present() then", 1, true) then
-        return "Issue #96 regression: allow_in_mission prune no longer gated on _gut_present() — option would show with gut absent"
-    end
-    if not txt:find('== "allow_in_mission"', 1, true) then
-        return "Issue #96 regression: prune no longer targets the allow_in_mission widget — gating may no longer remove it"
+    local main_txt = read_all(src_path)
+    if main_txt then
+        if not main_txt:find('mod:get("allow_in_mission")', 1, true) then
+            return "Issue #96 regression: no mod:get(\"allow_in_mission\") reader left in main lua — gut's write-through toggle is orphaned"
+        end
     end
     return nil
 end)

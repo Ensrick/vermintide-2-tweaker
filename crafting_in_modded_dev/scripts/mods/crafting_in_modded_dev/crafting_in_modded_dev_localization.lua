@@ -18,14 +18,11 @@ return {
         en = "Open Standard Crafting Bench",
     },
     standard_crafting_hotkey_description = {
-        en = "Opens the standard Keep Smithy bench: salvage, craft, re-roll properties and traits, upgrade rarity, apply illusions, convert dust (not the Athanor). Works in the Keep and the Chaos Wastes, and follows the 'Allow in mission' toggle below inside missions; you can also run /cim_craft_standard.",
+        en = "Opens the standard Keep Smithy bench: salvage, craft, re-roll properties and traits, upgrade rarity, apply illusions, convert dust (not the Athanor). Works in the Keep and the Chaos Wastes; inside missions it follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus. You can also run /cim_craft_standard.",
     },
-    allow_in_mission = {
-        en = "Allow standard crafting bench in mission",
-    },
-    allow_in_mission_description = {
-        en = "OFF (default): the standard crafting bench does not open during missions. ON: it also opens inside Adventure missions; the Athanor stays Keep-only either way.",
-    },
+    -- (allow_in_mission / allow_in_mission_description removed 2026-07-02: the
+    -- widget moved to gut's In-Mission Menus group; gut writes through to cim's
+    -- setting, so the main-lua readers are unchanged.)
     base_power_level = {
         en = "[untested] Base power level for new crafts",
     },
