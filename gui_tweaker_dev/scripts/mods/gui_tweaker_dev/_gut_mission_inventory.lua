@@ -442,12 +442,12 @@ local function _patch_in_game_menu(enabled)
 end
 
 local function _patch_inventory_access()
-    -- The InventorySettings loadout-access patch + ESC-menu entry are needed if
-    -- EITHER in-mission feature is on: the inventory feature (this module) OR the
-    -- hero-select feature (_gut_mission_hero_select.lua) -- both render HeroView
-    -- panels mid-mission and depend on the same game-mode gate.
-    local enabled = (mod:get("gut_mission_inventory_enabled")
-        or mod:get("gut_mission_hero_select_enabled")) and true or false
+    -- The InventorySettings loadout-access patch + ESC-menu entry serve the
+    -- in-mission INVENTORY feature only (HeroView panels; hero_view.lua:323 gate).
+    -- The hero-select feature (_gut_mission_hero_select.lua) no longer couples in:
+    -- since the #173 rewire it opens CharacterSelectionView, which reads only static
+    -- InventorySettings tables (slot names/loadouts), not this game-mode gate.
+    local enabled = mod:get("gut_mission_inventory_enabled") and true or false
     -- ADVENTURE-EXCLUSIVE (user directive 2026-06-18): in-mission inventory/loadout
     -- is OFF in Chaos Wastes -- viewing the hero screen or changing items/talents
     -- during a CW run crashes (CW is loadout-locked, managed by the deus boon

@@ -191,16 +191,16 @@ return {
         en = "In-Mission Hero Select",
     },
     gut_mission_hero_select_enabled = {
-        en = "Enable In-Mission Hero Select Access",
+        en = "[untested] Enable In-Mission Hero Select Access",
     },
     gut_mission_hero_select_enabled_tooltip = {
-        en = "Lets you open your hero's Talents screen during a mission (via the keybind below or /hero_select), with talent and ability changes applying immediately and no respawn. You cannot change career mid-mission (that stays in the keep, since a live career swap is unsafe), and this is blocked in Chaos Wastes.",
+        en = "Lets you open the hero/career selection screen (the same grid as the keep's C key) during a mission, via the keybind below or /hero_select. Picking a career swaps you and respawns you in place, right where you stand. Blocked in Chaos Wastes (a mid-run career swap would desync your boons and loadout).",
     },
     gut_open_hero_select_hotkey = {
         en = "Open Hero Select (Mid-Mission)",
     },
     gut_open_hero_select_hotkey_tooltip = {
-        en = "Hotkey to open your hero's Talents screen while in a mission. Same as /hero_select; talent and ability changes apply immediately, but changing career stays keep-only.",
+        en = "Hotkey to open the hero/career selection screen while in a mission. Same as /hero_select. Selecting a character or career respawns you in place with the new pick. In the keep the game's own C key already does this, so the hotkey stays quiet there.",
     },
 
     -- ============================================================

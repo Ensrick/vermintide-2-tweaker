@@ -408,3 +408,46 @@ endpoint to build toward once B3/B7 have settled the residency and teleport ques
    and Chaos-Wastes bail.
 3. **If B3 says not resident:** default to C4 (reuse HeroView's resident inventory-preview world
    for a gut career-picker window) as the crash-free path, with C10 as the long-term endpoint.
+
+---
+
+## 2026-07-02 UPDATE — questions settled; C7 SHIPPED (gut_dev v0.2.171-dev)
+
+1. **Probe B3 as originally shipped was INVALID.** It passed a `"gut_probe"`
+   reference_name to `Managers.package:has_loaded` — with a reference_name that call
+   returns true ONLY if that exact reference loaded the package
+   (`package_manager.lua:286-294`), so an unregistered ref made it structurally
+   always-false. Every B3 data point collected before this date is void. The probe in
+   `_gut_menu_transition_probe.lua` now queries global residency (no ref) AND logs the
+   decisive `Application.can_get("level", "levels/ui_character_selection/world")` boolean.
+
+2. **Bundle-listing residency findings (offline, `vt2_bundle_unpacker/all_bundles_listing.txt`).**
+   `levels/ui_character_selection/world.level` exists ONLY in hub/menu bundles (inn/keep
+   bundle `8e0929053dd7ecd0`, morris_hub bundle `4ed8509e0f030866`, keep-menu/store
+   bundles). NO mission bundle contains it, and NO
+   `resource_packages/levels/ui_character_selection.package` exists anywhere in the game
+   files — so C2 (preload the native package) is IMPOSSIBLE, and C1 (blind rewire) is a
+   guaranteed C-level mount fatal mid-mission. `levels/ui_inventory_preview/world`, by
+   contrast, HAS its managed package (`resource_packages/levels/ui_inventory_preview`),
+   the one HeroView force-loads mid-mission (`hero_window_character_preview.lua:100-105`).
+
+3. **Probe B7 answered the teleport question: respawn is IN PLACE.** Live logs
+   (2026-07-02, multiple firings): post-respawn `moved=0.0`. The "force_respawn teleports
+   to level start" concern (and the old file docstring built on it) is REFUTED. C3/C8's
+   position-restore machinery is unnecessary.
+
+4. **C7 shipped (v0.2.171-dev), amended from the list-C sketch:** instead of intercepting
+   `post_update_on_enter` to rewrite the widget, gut mutates the CACHED definitions module
+   (`package.loaded["scripts/ui/views/character_selection_view/character_selection_view_definitions"]`
+   — the same table the view's `local widget_definitions` upvalue points into, since
+   `local_require` shares `package.loaded` with `require`,
+   `foundation/scripts/util/local_require.lua:5-17`): viewport `level_name` →
+   `levels/ui_inventory_preview/world` (+ `shading_environment` →
+   `environment/ui_inventory_preview`; the native def carries no env field, defs
+   :381-405), fires the vanilla `character_selection_force` transition, and restores the
+   original values in a `post_update_on_enter`/`on_exit` hook_safe pair. The
+   `resource_packages/levels/ui_inventory_preview` reference (`"gut_hero_select"`) is
+   retained for the session. See `_gut_mission_hero_select.lua` for the full design.
+   The C7 risk note ("preview likely breaks") remains the open in-game question — the
+   previewer/camera may look off against the inventory-preview backdrop; that is a
+   cosmetic risk, not a crash class, and awaits the user's in-game verify.

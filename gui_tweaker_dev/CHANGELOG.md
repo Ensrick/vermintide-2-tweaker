@@ -5,6 +5,51 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.171-dev (2026-07-02) -- FIX #173: Hero Select now opens the REAL hero/career selection screen mid-mission
+
+### Why
+The "Open Hero Select (Mid-Mission)" keybind / `/hero_select` deliberately opened the
+HeroView TALENTS layout and called that hero select -- the wrong view, coded in by a
+prior session as a crash-avoidance substitute. The real target is
+`CharacterSelectionView` (the keep "C"-key character/career pick grid). Two findings
+unblocked the real thing (both in `HERO_SELECT_RESEARCH_173.md`, updated):
+- **Bundle evidence (2026-07-02):** `levels/ui_character_selection/world.level` lives
+  ONLY in hub/menu bundles; no mission bundle has it and NO
+  `resource_packages/levels/ui_character_selection.package` exists in the game files,
+  so a preload is impossible and a blind transition is a C-level mount fatal. By
+  contrast `levels/ui_inventory_preview/world` HAS a managed package that HeroView
+  itself force-loads mid-mission (`hero_window_character_preview.lua:100-105`).
+- **B7 probe (live logs 2026-07-02):** career-swap `force_respawn` lands with
+  `moved=0.0` -- respawn happens IN PLACE. The old "teleports you to level start"
+  blocker was refuted empirically.
+
+### Changed
+- **`_gut_mission_hero_select.lua` rewritten (C7 design).** Open path now fires the
+  vanilla keep-pedestal transition verbatim (`character_selection_force`,
+  `menu_state_name="character"`, `use_fade=true`). Mid-mission (native backdrop not
+  gettable per a self-tested `Application.can_get("level", ...)` check) it first
+  async-loads `resource_packages/levels/ui_inventory_preview` under gut's own ref
+  (`gut_hero_select`), swaps the CACHED charsel defs viewport `level_name` to
+  `levels/ui_inventory_preview/world` (+ its shading env), fires the transition, and
+  restores the original def values the moment the viewport mounts
+  (`CharacterSelectionView.post_update_on_enter` hook_safe; `on_exit` as
+  belt-and-suspenders). The package ref is kept for the session (documented; unload
+  races avoided, leak-proofing, zero reopen latency). Keep-bail and deus/CW block
+  stay; the CW echo now states the honest reason (boon/loadout desync). New hooks are
+  preflight-verified singletons (gut hooked CharacterSelectionView nowhere before).
+  `[gut:heroselect]` printf at every branch.
+- **B3 probe fixed (`_gut_menu_transition_probe.lua`).** The original passed a
+  `"gut_probe"` reference_name to `has_loaded` -- reference-scoped semantics made it
+  always-false, so its data was VOID. Now queries global residency AND logs the
+  decisive `Application.can_get("level", ...)` boolean; legend updated.
+- **Decoupled hero-select from the HeroView loadout-access patch**
+  (`_gut_mission_inventory.lua`, `on_setting_changed`): CharacterSelectionView does
+  not read `inventory_loadout_access_supported_game_modes`; the patch now keys off
+  the inventory toggle alone. The open path also gates on the feature checkbox now.
+- **Loc/tooltips rewritten** to describe the real behavior (career-select grid
+  mid-mission; picking a career respawns in place); the false "keep-only by design"
+  claim is gone. Checkbox re-labeled `[untested]` pending in-game verify.
+
 ## 0.2.170-dev (2026-07-02) -- FEATURE: modded-realm-scoped native loadouts (#175)
 
 ### Why

@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.170-dev"
+local MOD_VERSION = "0.2.171-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -615,12 +615,12 @@ end)
 -- VMF emits this callback when the user flips any setting. We use it to log
 -- the debug-mode transition unconditionally (only place that does so).
 mod.on_setting_changed = function(setting_id)
-    if setting_id == "gut_mission_inventory_enabled"
-        or setting_id == "gut_mission_hero_select_enabled" then
-        -- In-mission inventory + hero-select share the same InventorySettings
-        -- loadout-access data patch (body in _gut_mission_inventory.lua); both
-        -- panels need it to render mid-mission. mod._gut_apply_keep_menus is a table
-        -- field resolved at call time (the module dofile's later in this file).
+    if setting_id == "gut_mission_inventory_enabled" then
+        -- In-mission inventory's InventorySettings loadout-access data patch (body in
+        -- _gut_mission_inventory.lua). Hero-select no longer couples in: since the
+        -- #173 rewire it opens CharacterSelectionView, which doesn't read this gate.
+        -- mod._gut_apply_keep_menus is a table field resolved at call time (the
+        -- module dofile's later in this file).
         if mod._gut_apply_keep_menus then mod._gut_apply_keep_menus() end
     elseif setting_id == "gut_skip_cutscenes_enabled" then
         -- Skip Cutscenes (migrated from gt, issue #106): persistently mirror the
@@ -1738,17 +1738,18 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_monologue")
 -- HeroWindowPanelConsole hook). See _gut_mission_inventory.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_inventory")
 
--- In-mission HERO SELECT (sibling of the inventory feature, 2026-06-24): Open the
--- HeroView TALENTS layout mid-mission (mod.gut_open_mission_hero_select +
--- /hero_select + the gut_open_hero_select_hotkey keybind). Reuses the inventory
--- feature's exact keep-gate bypass (the shared mod._gut_apply_keep_menus
--- InventorySettings patch), the vanilla `hero_view_force` transition (exit_to_game =
--- true -> free exit-to-mission, no custom exit closure), and the deus/CW hard-block.
--- Registers NO hooks (direct transition + pure-data game-mode flip), so there are no
--- new (Class, method) pairs to collide with. SAFETY: scoped to VIEW + live-safe
--- talents/cosmetics only -- a mid-mission career CHANGE is unsafe (force_respawn
--- teleports to level start) and CharacterSelectionView mounts a keep-only preview
--- world, so true career-PICK is left to the keep. See _gut_mission_hero_select.lua.
+-- In-mission HERO SELECT (#173 rewire, 2026-07-02): opens the REAL hero/career
+-- selection screen (CharacterSelectionView, the keep "C"-key grid) mid-mission via
+-- the vanilla `character_selection_force` transition
+-- (mod.gut_open_mission_hero_select + /hero_select + the gut_open_hero_select_hotkey
+-- keybind). Mid-mission the view's keep-only backdrop world is swapped in the cached
+-- defs table to the mission-loadable `levels/ui_inventory_preview/world` (managed
+-- package force-load under our own ref) and restored the moment the viewport mounts.
+-- Career swap respawns IN PLACE (B7-proven). Registers two hook_safe singletons on
+-- CharacterSelectionView (post_update_on_enter / on_exit -- restore points;
+-- preflight-verified: gut hooks that class nowhere else). Deus/CW stays hard-blocked
+-- (career swap would desync the deus profile/boon state). Full design + bundle
+-- evidence in _gut_mission_hero_select.lua and HERO_SELECT_RESEARCH_173.md.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_hero_select")
 
 -- EXPERIMENTAL/diagnostic (#173 feasibility): /gut_swap_career <n> asks the game to

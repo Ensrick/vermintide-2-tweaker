@@ -212,11 +212,13 @@ return {
                 },
             },
             -- ================================================================
-            -- In-Mission Hero Select (sibling of the inventory group, 2026-06-24)
+            -- In-Mission Hero Select (#173 rewire, 2026-07-02)
             -- ================================================================
-            -- Opens the HeroView TALENTS layout mid-mission (live-safe: talents
-            -- apply immediately, no respawn). Career PICK is keep-only by design
-            -- (mid-mission career change is unsafe). See _gut_mission_hero_select.lua.
+            -- Opens the REAL hero/career selection screen (CharacterSelectionView,
+            -- the keep "C"-key grid) mid-mission; the keep-only backdrop world is
+            -- swapped to the mission-loadable inventory-preview world for the mount.
+            -- Career swap respawns IN PLACE (B7-proven). Blocked in Chaos Wastes.
+            -- See _gut_mission_hero_select.lua.
             {
                 setting_id  = "gut_mission_hero_select_group",
                 type        = "group",

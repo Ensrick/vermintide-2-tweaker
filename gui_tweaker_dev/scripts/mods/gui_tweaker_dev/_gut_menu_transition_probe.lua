@@ -55,18 +55,22 @@ end
 
 local MT_VIEW = "mod_tweaker_view"
 
--- (#173 Probe B3) Read-only residency check for the character-selection level bundle.
--- The hero/career PICK screen is the top-level `character_selection` view, whose viewport
--- mounts `levels/ui_character_selection/world` with NO managed package load
--- (character_selection_view_definitions.lua:385; research doc HERO_SELECT_RESEARCH_173.md
--- A2/A9). The one open question before any rewire of gut's Hero Select entry is whether
--- that bundle is resident mid-mission. This probe answers it with a pure read-only query.
--- Package path follows the vanilla `resource_packages/levels/<name>` convention (mirrors
--- HeroView's `resource_packages/levels/ui_inventory_preview` for `levels/ui_inventory_preview/world`,
--- research doc A6). has_loaded(pkg) WITHOUT a reference_name returns true residency
--- (package_manager.lua:286 -- passing an unregistered ref would false-negative).
-local CHARSEL_PKG = "resource_packages/levels/ui_character_selection"
-local _b3_last = nil   -- edge latch: "<level_key>|<residency>" already logged (de-spam)
+-- (#173 Probe B3) Read-only residency check for the character-selection level backdrop.
+-- HISTORY: the first B3 revision passed a "gut_probe" reference_name to has_loaded --
+-- reference-scoped semantics (package_manager.lua:286-294: with a ref it is true ONLY if
+-- THAT ref loaded it) made it always-false, so all data it produced was VOID. Now queries
+-- global residency (no ref). ALSO: the 2026-07-02 bundle listing
+-- (vt2_bundle_unpacker/all_bundles_listing.txt) proved there is NO
+-- `resource_packages/levels/ui_character_selection.package` anywhere in the game files --
+-- the .level exists only inside hub/menu bundles -- so has_loaded on this path is expected
+-- false/void everywhere; the load-bearing signal is the Application.can_get("level", ...)
+-- boolean added to the same line (vanilla's non-faulting existence check; arg order
+-- (type, name) per pickup_system.lua:882). can_get=true where the level is actually
+-- gettable (keep) vs false in missions is the residency ground truth the C7 rewire
+-- (_gut_mission_hero_select.lua) forks on.
+local CHARSEL_PKG   = "resource_packages/levels/ui_character_selection"
+local CHARSEL_LEVEL = "levels/ui_character_selection/world"
+local _b3_last = nil   -- edge latch: "<level_key>|<residency>|<can_get>" already logged (de-spam)
 
 -- Module state: are we currently INSIDE the Mod Tweaker view (per the engine)? Set on
 -- open, used so the very next transition away is recognised + logged as the EXIT.
@@ -159,10 +163,12 @@ mod:hook_safe("IngameUI", "handle_transition", function(self, new_transition, pa
 
     -- (#173 Probe B3) Independent read-only residency probe -- own pcall so it can never
     -- affect the #124 logic above. Fires on any menu-open transition (a view is now
-    -- current), edge-latched per (level_key, residency). CONCLUSION MAP: has_loaded=true in
-    -- a mission = the bundle is resident, a direct `character_selection_force` rewire (Sol C1)
-    -- is safe; false = must preload (C2) or avoid the view (C4/C6); pcall error = the package
-    -- name is not loadable at all (avoid the view entirely).
+    -- current), edge-latched per (level_key, residency, can_get). CONCLUSION MAP:
+    -- can_get=true in a mission = the native charsel backdrop level is gettable there and
+    -- the C7 rewire's native fork may fire vanilla unswapped; can_get=false = the
+    -- inventory-preview backdrop swap path is required (expected in ALL missions per the
+    -- bundle evidence). has_loaded on CHARSEL_PKG is kept for the record but that package
+    -- does not exist in the game files, so expect false/pcall_error everywhere.
     pcall(function()
         local landing = self.current_view
         if landing == nil then return end          -- only when a menu view is open
@@ -172,11 +178,14 @@ mod:hook_safe("IngameUI", "handle_transition", function(self, new_transition, pa
         local level_key = (gm and gm.level_key and gm:level_key()) or "?"
         local ok, resident = pcall(pm.has_loaded, pm, CHARSEL_PKG)   -- NO ref: true residency
         local res_s = ok and tostring(resident) or ("pcall_error:" .. tostring(resident))
-        local key = tostring(level_key) .. "|" .. res_s
-        if _b3_last == key then return end          -- once per (level, residency)
+        local can_get = Application and Application.can_get
+        local ok_cg, cg = pcall(can_get, "level", CHARSEL_LEVEL)
+        local cg_s = can_get and (ok_cg and tostring(cg) or ("pcall_error:" .. tostring(cg))) or "unavailable"
+        local key = tostring(level_key) .. "|" .. res_s .. "|" .. cg_s
+        if _b3_last == key then return end          -- once per (level, residency, can_get)
         _b3_last = key
-        printf("[gut:173] B3 has_loaded(%s)=%s level_key=%s view=%s (true=direct character_selection_force safe in-mission; false=preload/avoid; pcall_error=not a loadable package)",
-            CHARSEL_PKG, res_s, tostring(level_key), tostring(landing))
+        printf("[gut:173] B3 has_loaded(%s)=%s can_get('level',%s)=%s level_key=%s view=%s (can_get true=native charsel backdrop gettable here; false=swap path required; has_loaded is void -- no such .package exists)",
+            CHARSEL_PKG, res_s, CHARSEL_LEVEL, cg_s, tostring(level_key), tostring(landing))
     end)
 end)
 
