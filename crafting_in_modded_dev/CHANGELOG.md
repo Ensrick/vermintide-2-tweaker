@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.45-dev (2026-07-02) - Athanor picker follow-ups: trait descriptions (#238) + hide 0-cost (#239)
+
+Two follow-ups to the v0.8.44-dev forge freedom toggles.
+
+- **#238 - Chaos Wastes / injected traits now show their description in the Athanor picker.** The injected weave-twin display stub was omitting `advanced_description` + `description_values` (the crash-safe choice), so boon / adventure-only traits showed only a name. The stub now copies BOTH from the adventure `WeaponTraits` entry. That pair is authored consistently and the base game already renders it via `UIUtils.get_trait_description` in normal crafting, so copying both verbatim is exactly as safe as vanilla's own trait display (the `string.format` crash only occurs for a MISMATCHED pair, which the game never ships).
+- **#239 - the modded Athanor no longer shows the meaningless "Cost: 0" on each option.** Crafting in the modded forge is free (cim fakes all essence/mastery costs to 0), so the per-option cost readout is clutter. A new `hook_safe` on `HeroWindowWeaveProperties._populate_menu_option_widget` blanks each option's `price_text` and hides the mastery cost icon (its own texture pass) while the modded forge is open. Per-widget, layout-safe (fixed row height), modded-forge only. The craft button was already relabeled to "CRAFT ...".
+
+### Files
+- `crafting_in_modded_dev.lua` - `_cim_ensure_trait_twin` copies the description pair (#238); new `_populate_menu_option_widget` hook_safe hides per-option cost (#239); regression test `trait_twin_copies_description_pair`; `MOD_VERSION` `0.8.44-dev` -> `0.8.45-dev`.
+
 ## 0.8.44-dev (2026-07-02) - Forge freedom toggles: Chaos Wastes traits + any-trait/any-property
 
 Two new Athanor options (both default OFF, `[untested]`) widen what the forge will put on a craft. They act on BOTH craft surfaces - the Athanor bubble picker (where you choose) and the standard crafting bench (reroll / craft prefill).

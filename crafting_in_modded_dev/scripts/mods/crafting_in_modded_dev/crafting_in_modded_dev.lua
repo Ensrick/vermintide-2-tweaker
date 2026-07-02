@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.44-dev"
+local MOD_VERSION = "0.8.45-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -2922,7 +2922,16 @@ local function _cim_ensure_trait_twin(bare)
         display_name = adv.display_name,
         icon         = adv.icon,        -- optional; picker falls back to placeholder
         buff_name    = adv.buff_name,   -- not read by the trait picker; kept for parity
-        -- advanced_description + description_values deliberately omitted (safe pair).
+        -- #238: copy advanced_description + description_values TOGETHER (a matched
+        -- pair). The base game already renders these exact adventure entries via
+        -- UIUtils.get_trait_description in normal crafting, so their format-spec
+        -- count is guaranteed consistent -- copying both verbatim is exactly as
+        -- safe as vanilla's own trait display. (The string.format crash only
+        -- happens for a MISMATCHED pair, e.g. advanced_description kept but
+        -- description_values dropped; the game never ships a mismatched pair, so
+        -- copying both from the same entry can't introduce one.)
+        advanced_description = adv.advanced_description,
+        description_values   = adv.description_values,
     }
     return weave_key
 end
@@ -3087,6 +3096,27 @@ mod:hook("HeroWindowWeaveProperties", "_sync_backend_loadout", function(func, se
     if not ok then
         mod:warning("[cim] _sync_backend_loadout guarded (deus/CW weave-tooltip nil): %s", tostring(err))
     end
+end)
+
+-- #239: the modded Athanor crafts for FREE (cim fakes all essence/mastery costs
+-- to 0 via the BackendInterfaceWeavesPlayFab hooks), so the vanilla per-option
+-- "Cost: 0" readout on every trait/property/talent row is meaningless clutter.
+-- Blank it after vanilla populates each option widget. The cost NUMBER is
+-- content.price_text (all three text passes share text_id="price_text"); the
+-- mastery ICON is a SEPARATE texture pass gated independently of the text, so we
+-- also zero its per-widget alpha. hook_safe (post) because vanilla rewrites these
+-- every time _sync_backend_loadout re-populates the list. Modded forge only; each
+-- entry owns its widget (UIWidget.init), so the per-widget style edit can't leak
+-- to other rows. Row height is fixed, so blanking does not reflow the layout.
+mod:hook_safe("HeroWindowWeaveProperties", "_populate_menu_option_widget", function(self, entry_data, menu_option)
+    if not _custom_forge_active then return end
+    local widget = entry_data and entry_data.widget
+    if not widget then return end
+    if widget.content then
+        widget.content.price_text = ""
+    end
+    local pic = widget.style and widget.style.price_icon
+    if pic and pic.color then pic.color[1] = 0 end
 end)
 
 -- --- Forge UI polish (runs each frame while forge is open) ---
@@ -7167,6 +7197,34 @@ _rt_register("trait_twin_stub_has_display_name", function()
     local ok = WT.traits[wk] and type(WT.traits[wk].display_name) == "string"
     WT.traits[wk] = nil  -- injected by this test only; remove to avoid RT residue
     if not ok then return "twin for " .. bare .. " lacks a string display_name" end
+end)
+
+_rt_register("trait_twin_copies_description_pair", function()
+    -- #238: an injected trait twin must copy advanced_description + description_values
+    -- TOGETHER from the adventure entry, so the Athanor picker shows a description
+    -- (not just the trait name). Use a boon with a description that has no native
+    -- weave twin (so this exercises the INJECT path); clean up after.
+    local WT = rawget(_G, "WeaveTraits")
+    local adv = rawget(_G, "WeaponTraits")
+    if not (WT and WT.traits and adv and adv.traits) then return "skip: trait tables not loaded" end
+    local bare
+    for _, e in ipairs(mod._cim_cw_trait_entries()) do
+        local k = e and e[1]
+        if k and adv.traits[k] and adv.traits[k].advanced_description and not WT.traits["weave_" .. k] then
+            bare = k; break
+        end
+    end
+    if not bare then return "skip: no injectable boon trait with a description found" end
+    local wk = mod._cim_ensure_trait_twin(bare)
+    local twin = wk and WT.traits[wk]
+    local advd = adv.traits[bare]
+    local ok = twin
+        and twin.advanced_description == advd.advanced_description
+        and twin.description_values == advd.description_values
+    WT.traits[wk] = nil  -- injected by this test only; clean up
+    if not ok then
+        return "twin for " .. bare .. " did not copy the advanced_description + description_values pair"
+    end
 end)
 
 _rt_register("forge_freedom_restore_is_safe", function()
