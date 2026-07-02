@@ -1,6 +1,6 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.49-dev"
+local MOD_VERSION = "0.3.50-dev"
 _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface

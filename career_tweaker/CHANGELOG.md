@@ -1,5 +1,10 @@
 # Career Tweaker Changelog
 
+## 0.3.50-dev - 2026-07-02 - #222 loc sweep: drop leading option-title restatements
+
+### Changed - tooltip bodies no longer repeat the orange popup header
+#222 loc sweep: removed leading option-title restatement from 12 option tooltips so the popup body no longer repeats the orange header (mutex-cluster opener hints preserved). Bodies now open with the behavior. Affected: the two Unchained overcharge toggles under Armor & Overcharge, and ten Tourney Balance career tooltips that led with a "<Career> changes:" preamble. No setting_ids, titles, defaults, or mechanical values changed.
+
 ## 0.3.49-dev - 2026-07-01 - Settings menu reorganization (sort + roster order)
 
 Menu SORT / ORGANIZE / POLISH pass only. No settings added, removed, renamed, or re-defaulted; no behavior changes. Verified programmatically: all 179 widget setting_ids and 41 dropdown option values are the same set as 0.3.48-dev, and the commented-out Big Rebalance `cbr_*` block is preserved byte-for-byte in both `career_tweaker_data.lua` and `career_tweaker_localization.lua`.

@@ -50,7 +50,7 @@ local loc = {
     breed_swap_group        = { en = "Breed Substitution" },
     breed_swap_off          = { en = "Off" },
     breed_swap_from         = { en = "Replace this breed" },
-    breed_swap_from_tooltip = { en = "The enemy type to replace. Every enemy of this type in hordes becomes the one chosen below." },
+    breed_swap_from_tooltip = { en = "Every enemy of this type in hordes becomes the one chosen below." },
     breed_swap_to           = { en = "With this breed" },
     breed_swap_to_tooltip   = { en = "The enemy type used as the replacement. It must be different from the one chosen above." },
 

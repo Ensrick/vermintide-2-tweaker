@@ -1,5 +1,14 @@
 # Enemy Tweaker Changelog
 
+## 0.7.24-dev (2026-07-02) — #222 loc sweep (tooltip header de-duplication)
+
+### Changed
+- **#222 loc sweep: removed leading option-title restatement from 1 option tooltip so the popup body no longer repeats the orange header.** `breed_swap_from_tooltip` dropped its redundant opening sentence ("The enemy type to replace.") so the body now opens with the behavior; the second sentence already fully defines the option. No magnitude numbers, breed/mission names, or mechanical claims changed. The rest of the file was already behavior-first (Lets/Stops/Multiplies/Uses/Replaces/Scales/Registers) and left unchanged.
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.23-dev → 0.7.24-dev.
+- `enemy_tweaker_localization.lua` — `breed_swap_from_tooltip` leading title restatement removed.
+
 ## 0.7.23-dev (2026-07-01) — Settings menu reorganization (sort + polish, no functional changes)
 
 ### Changed

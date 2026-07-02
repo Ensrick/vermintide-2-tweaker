@@ -26,7 +26,7 @@ return {
     -- [gt:btlab:dNN] / [gt:btlab:fNN]), visible even with mod-logging off.
     gt_btlab_group = { en = "Bot Teleport Lab (Diagnostics)" },
     gt_btlab_enabled = { en = "[diagnostic] Enable Bot Teleport Lab" },
-    gt_btlab_enabled_tooltip = { en = "Master switch for the Bot Teleport Lab, a set of tools for watching and fixing bots that teleport away from you. It reveals the diagnostics below, which only observe bot behavior; each of them also needs this switch on, and everything here works only when you are the host." },
+    gt_btlab_enabled_tooltip = { en = "A set of tools for watching and fixing bots that teleport away from you. This master switch reveals the diagnostics below, which only observe bot behavior; each of them also needs it on, and everything here works only when you are the host." },
 
     gt_btlab_d1_teleport_events = { en = "[diagnostic] D1: Teleport events" },
     gt_btlab_d1_teleport_events_tooltip = { en = "Logs a line each time a bot teleports to catch up: which bot, where it went, who it was following, how far away it was, and whether it ended up closer to or farther from you. This is the main readout for the teleport-away problem." },
@@ -178,9 +178,9 @@ return {
     -- ---- Buffs & Stats ----
     buffs_group = { en = "Buffs & Stats" },
     base_crit_chance = { en = "[untested] Base Crit Chance (%%)" },
-    base_crit_chance_tooltip = { en = "Sets your current career's base critical hit chance. Most careers start at 5%%; it resets to the career's normal value when you switch careers and after a game restart." },
+    base_crit_chance_tooltip = { en = "Sets how often your current career lands a critical hit. Most careers start at 5%%; it resets to the career's normal value when you switch careers and after a game restart." },
     gt_fall_damage_enabled = { en = "[untested] Fall damage multiplier" },
-    gt_fall_damage_enabled_tooltip = { en = "Turns on the fall damage multiplier below; when off, fall damage is normal. The host's setting applies to everyone in the lobby." },
+    gt_fall_damage_enabled_tooltip = { en = "Turns on the multiplier below; when off, fall damage is normal. The host's setting applies to everyone in the lobby." },
     gt_fall_damage_mult = { en = "[untested] Fall damage multiplier (1 = normal, 0 = none, 5 = 5x)" },
     gt_fall_damage_mult_tooltip = { en = "Scales fall damage: 1.0 is normal, 0 removes it entirely, and up to 5.0 makes tall falls five times as deadly. Only used while the fall damage toggle above is on." },
     movement_speed = { en = "[untested] Movement Speed (m/s)" },

@@ -1,5 +1,9 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.204-dev (2026-07-02) - #222 loc sweep: drop leading option-title restatement from tooltips
+
+#222 loc sweep: removed leading option-title restatement from 23 option tooltips so the popup body no longer repeats the orange header (mutex-cluster opener hints preserved). Affected: `cursed_chest_count` and `tweak_poison_proof_duration`; the 13 Boss Grudge Marks banlist tooltips (`ban_grudge_mark_*`, "Bans the X mark, where..." -> "The boss..."); and the 8 mod-boon Rework variants (`disable_boon_ct_boon_*` / `start_boon_ct_boon_*`). No setting_ids, titles, magnitudes, or mechanical claims changed. `qa/check_localization.ps1` clean for this mod.
+
 ## 0.7.203-dev (2026-07-01) - Code-review batch: multi-return fix, alias-leak fix, dup-chip career fix, cache invalidation, dead-code cleanup
 
 Reviewed, pre-approved fixes from a two-agent code review. No user-facing settings changed.

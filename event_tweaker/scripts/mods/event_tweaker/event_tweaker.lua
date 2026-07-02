@@ -1,7 +1,7 @@
 local mod = get_mod("event_tweaker")
 _MEM_PROBE_T0_EVT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.4.19-dev"
+local MOD_VERSION = "0.4.20-dev"
 
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([event_tweaker] enabled v<X> settings_fp=<hash>) is the canonical version

@@ -1,5 +1,23 @@
 # Tweaker: Events — Changelog
 
+## 0.4.20-dev (2026-07-02) -- #222 loc sweep: removed leading option-title restatement from 8 option tooltips so the popup body no longer repeats the orange header
+
+### Why
+VMF draws each option's title as the popup's orange header automatically. The eight Winds of Magic tooltips (`mut_life` through `mut_beasts`) opened by restating that title ("The Wind of Life. ...", "The Wind of Metal. ...", etc.), so the option name showed twice. Removed the leading restatement so each body opens with the behavior.
+
+### Changed -- `event_tweaker_localization.lua`
+- `mut_life_tooltip`: "The Wind of Life. A healing-themed modifier." -> "A healing-themed modifier."
+- `mut_metal_tooltip`: "The Wind of Metal. A damage-resistance modifier." -> "A damage-resistance modifier."
+- `mut_heavens_tooltip`: "The Wind of Heavens. Adds lightning effects." -> "Adds lightning effects."
+- `mut_light_tooltip`: "The Wind of Light. Adds truesight effects." -> "Adds truesight effects."
+- `mut_shadow_tooltip`: "The Wind of Shadow. Adds stealth effects." -> "Adds stealth effects."
+- `mut_fire_tooltip`: "The Wind of Fire. Adds burning effects." -> "Adds burning effects."
+- `mut_death_tooltip`: "The Wind of Death. Adds necromantic effects." -> "Adds necromantic effects."
+- `mut_beasts_tooltip`: "The Wind of Beasts. A Beastmen-themed modifier." -> "A Beastmen-themed modifier."
+
+### Not changed
+- No title entries touched; only tooltip bodies. All other tooltips already open with a behavior verb, so nothing else qualified. `MOD_VERSION` `0.4.19-dev` -> `0.4.20-dev`.
+
 ## 0.4.19-dev (2026-07-01) -- Rewrote every option description for players; stripped internal mutator ids and non-ASCII/em-dash characters from menu text
 
 ### Why

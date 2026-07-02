@@ -1,5 +1,12 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.171-dev (2026-07-02) -- #222 loc sweep: drop leading option-title restatement from tooltips
+
+- **#222 loc sweep: removed leading option-title restatement from 3 option tooltips so the popup body no longer repeats the orange header.** VMF draws each option's title as the popup header automatically, so a body that reopened with that same title showed the name twice.
+  - `gt_btlab_enabled_tooltip`: dropped "Master switch for the Bot Teleport Lab, ..." opener; now opens with the behavior ("A set of tools for watching and fixing bots that teleport away from you."), master-switch role kept in the second sentence.
+  - `base_crit_chance_tooltip`: "Sets your current career's base critical hit chance." -> "Sets how often your current career lands a critical hit." (paraphrase instead of restating "Base Crit Chance").
+  - `gt_fall_damage_enabled_tooltip`: "Turns on the fall damage multiplier below; ..." -> "Turns on the multiplier below; ..." (drops the verbatim title phrase). All magnitude numbers, host-scope claims, and mechanics preserved.
+
 ## v0.2.170-dev (2026-07-01) -- Settings menu: sort A->Z, nest verified fine-tunes, mirror the loc file to the tree
 
 Menu reorganization only. No functional changes: no setting added, removed, renamed, or re-defaulted; every one of the 144 widget setting_ids is preserved. Data-file widget defaults, ranges, decimals, keybind function_names, and dropdown option values/show_widgets are all unchanged. Localization strings are preserved verbatim except one meta-language fix (below).
