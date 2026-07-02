@@ -98,10 +98,16 @@ local options_data = {
     description = mod:localize("mod_description"),
     is_togglable = true,
     options = {
+        -- Top-level groups sorted A->Z by display label: Athanor (forge_group),
+        -- Import (import_group), Modded Inventory (inventory_group).
         widgets = {
             {
                 setting_id = "forge_group",
                 type = "group",
+                -- forge_group children use a deliberate functional order (NOT
+                -- A->Z): the two crafting-menu hotkeys first, then the
+                -- in-mission permission they honor, then the craft-output
+                -- tuning toggles.
                 sub_widgets = {
                     {
                         setting_id = "forge_hotkey",
@@ -177,14 +183,29 @@ local options_data = {
                 },
             },
             {
-                setting_id = "inventory_group",
+                setting_id = "import_group",
                 type = "group",
                 sub_widgets = {
+                    -- Bindable hotkey for the SaveWeapon importer. Default
+                    -- unbound; the chat command `/cim_import_saved_weapons`
+                    -- is the primary trigger. Set a key if you want a one-
+                    -- press shortcut from the keep.
                     {
-                        setting_id = "show_only_modded_weapons",
-                        type = "checkbox",
-                        default_value = false,
+                        setting_id = "saveweapon_import_hotkey",
+                        type = "keybind",
+                        default_value = {},
+                        keybind_trigger = "pressed",
+                        keybind_type = "function_call",
+                        function_name = "_cim_saveweapon_import",
                     },
+                },
+            },
+            {
+                setting_id = "inventory_group",
+                type = "group",
+                -- Children A->Z by display label: "Ignore items from inactive
+                -- mods" before "Show only modded weapons".
+                sub_widgets = {
                     -- Loadout persistence toggles (persist_modded_loadouts /
                     -- restore_modded_loadout) REMOVED 2026-06-30: the feature
                     -- never worked reliably and a proper loadout system is being
@@ -203,23 +224,10 @@ local options_data = {
                         default_value = false,
                         tooltip = "ignore_unloadable_items_description",
                     },
-                },
-            },
-            {
-                setting_id = "import_group",
-                type = "group",
-                sub_widgets = {
-                    -- Bindable hotkey for the SaveWeapon importer. Default
-                    -- unbound; the chat command `/cim_import_saved_weapons`
-                    -- is the primary trigger. Set a key if you want a one-
-                    -- press shortcut from the keep.
                     {
-                        setting_id = "saveweapon_import_hotkey",
-                        type = "keybind",
-                        default_value = {},
-                        keybind_trigger = "pressed",
-                        keybind_type = "function_call",
-                        function_name = "_cim_saveweapon_import",
+                        setting_id = "show_only_modded_weapons",
+                        type = "checkbox",
+                        default_value = false,
                     },
                 },
             },

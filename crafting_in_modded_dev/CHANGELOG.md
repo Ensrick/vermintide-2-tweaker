@@ -1,5 +1,17 @@
 # Crafting in Modded Changelog
 
+## 0.8.43-dev (2026-07-01) - Settings menu: sort top-level groups A->Z
+
+Settings-menu ordering polish, no functional changes.
+
+- Top-level groups now sort A->Z by display label: Athanor, Import, Modded Inventory (previously Athanor, Modded Inventory, Import).
+- Modded Inventory group's two toggles now sort A->Z: "Ignore items from inactive mods" before "Show only modded weapons".
+- Documented the Athanor group's deliberate functional child order (crafting hotkeys, then the in-mission permission, then craft-output toggles) so it is exempt from the A->Z rule.
+
+### Files
+- `crafting_in_modded_dev_data.lua` - reordered the group blocks and the inventory group's children; added ordering comments.
+- `crafting_in_modded_dev.lua` - `MOD_VERSION` `0.8.42-dev` -> `0.8.43-dev`.
+
 ## 0.8.42-dev (2026-07-01) - Correct standard-bench description: it works in the Chaos Wastes
 
 The standard crafting bench description wrongly claimed the bench "never opens in the Chaos Wastes" (a leftover from the pre-sweep text; user confirmed crafting works there). `standard_crafting_hotkey_description` now says it works in the Keep and the Chaos Wastes. Localization text only; no code changes.
