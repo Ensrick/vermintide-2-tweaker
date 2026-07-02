@@ -1,5 +1,24 @@
 # Enemy Tweaker Changelog
 
+## 0.7.25-dev (2026-07-02) — #240 alert helpers made genuinely log-only (chat-spam fix)
+
+### Fixed
+- **Routine diagnostics no longer post to in-game chat (#240).** User report 2026-07-02: "Enemy Tweaker keeps spitting out awful messages in the chat log." Log `console-2026-07-02-21.44.42-8d5b6420-*.log` showed 6 chat-visible WARNING lines on v0.7.24-dev: the `[et:spawn:roaming] multiplier=2.0 exceeds engine canonical max (8 units/IP)...` plateau notice fired 5x (twice per conflict-director apply, every mission/CD load at roaming slider 2.0) plus the boot-time `[et:dbg] on_enabled: _original_compositions_pacing nil...` line (lines 2335, 4725, 4742, 11124, 11143, 11683).
+  - **Root cause:** v0.7.0-dev converted `_dbg_alert` / `_spawn_dbg_alert` to `mod:warning` with comments claiming the warning channel is "LOG-ONLY". False: upstream VMF `logging.lua` `load_logging_settings()` defaults `warning` to mode 3 with `send_to_chat = mode >= 2`, so `mod:warning` posts to chat AND log unless the user sets a custom VMF logging mode. Every alert-helper call landed in chat.
+  - **Fix:** both helpers now emit via pcall-guarded raw engine `printf` — genuinely log-only, keeps the grep-stable `[et:dbg]` / `[et:spawn:<channel>]` prefixes, and (bonus) survives mod-logging-OFF sessions, which `mod:warning` never did. Genuine failure paths (`_safe`, `_hook_wrap`, BR fingerprint mismatch, etc.) keep their direct `mod:warning` calls, so real anomalies stay chat-visible.
+  - **Also fixed latent double-post:** `_chat_alert` called `mod:warning` + `mod:echo` = two chat lines per call under VMF defaults (no live call sites). Now `mod:echo` only (echo mode 3 already writes chat + log).
+
+### Added
+- **`et_alert_helpers_log_only_240` regression check** (`/et_regression_test`): asserts the `mod._et_alerts_log_only_marker` guard constant plus smoke-calls `_spawn_dbg_alert`; fails if the helpers revert to chat-visible `mod:warning` routing.
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.24-dev → 0.7.25-dev.
+- `enemy_tweaker.lua:~22-55, ~120-140` — `_dbg_alert` / `_chat_alert` / `_spawn_dbg_alert` rerouted; stale "file only" / "surfaces in chat when Debug Logging is on" comments corrected.
+- `enemy_tweaker.lua:~3079` — new regression check.
+
+### Verify (in-game)
+- Load into the keep with roaming slider at 2.0: chat shows ONLY the `[et] v0.7.25-dev loaded` banner; the roaming-plateau line appears in `console-*.log` (`[et:spawn:roaming]`) but never in chat.
+
 ## 0.7.24-dev (2026-07-02) — #222 loc sweep (tooltip header de-duplication)
 
 ### Changed

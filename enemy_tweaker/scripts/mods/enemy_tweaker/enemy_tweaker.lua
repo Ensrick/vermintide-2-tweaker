@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.24-dev"
+local MOD_VERSION = "0.7.25-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -15,28 +15,38 @@ _MEM_PROBE_T0_ET = collectgarbage("count")  -- [mem-probe] temp Lua-footprint ba
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 
--- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both route through VMF logging, gated by VMF output_mode (no per-mod toggle).
--- `_dbg` is for confirmation / expected behavior — mod:debug channel (file only).
--- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel (file only).
+-- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6, et log-only
+-- alert variant per Issue #240).
+-- `_dbg` is for confirmation / expected behavior — mod:debug channel
+-- (log-only under VMF defaults; off unless the user raises VMF's log level).
 local function _dbg(fmt, ...)
     mod:debug("[et:dbg] " .. fmt, ...)
 end
 
--- v0.7.0-dev: dbg_alert is now LOG-ONLY. Used to mod:echo to chat on every
--- call when debug logging was on, which spammed chat at high multipliers
--- (per-IP plateau, per-spawn breed-swap, etc. all fired through here). Chat
--- is reserved for `_chat_alert` below — genuinely surprising conditions only.
+-- v0.7.25-dev (#240): _dbg_alert is now ACTUALLY log-only, via engine printf.
+-- v0.7.0-dev routed it through mod:warning believing the warning channel was
+-- file-only; it is not — VMF logging.lua load_logging_settings() defaults
+-- warning to mode 3 with send_to_chat = mode >= 2, so every alert posted to
+-- chat (the 2026-07-02 chat-spam report: roaming-plateau line on every
+-- mission load). printf always lands in console-*.log (even with mod logging
+-- OFF) and never in chat. pcall-guarded like _et_probe so a format slip can
+-- never fault the caller. Chat is reserved for `_chat_alert` below —
+-- genuinely surprising conditions only.
+mod._et_alerts_log_only_marker = "et-alert-helpers-log-only-printf-240"
 local function _dbg_alert(fmt, ...)
-    mod:warning("[et:dbg] " .. fmt, ...)
+    if not pcall(printf, "[et:dbg] " .. fmt, ...) then
+        pcall(printf, "[et:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
--- _chat_alert(fmt, ...) — log + chat. ONLY call from genuinely surprising
--- paths: hook fallback fired (pcall'd vanilla errored), boss-skip in event
--- replication, ambients_ignore_threat clobbering vanilla state, hook install
--- failure. Always logs; only chat-echoes when debug logging is on.
+-- _chat_alert(fmt, ...) — chat + log. ONLY call from genuinely surprising
+-- paths the user must see live: hook fallback fired (pcall'd vanilla
+-- errored), boss-skip in event replication, ambients_ignore_threat
+-- clobbering vanilla state, hook install failure.
+-- v0.7.25-dev (#240): dropped the mod:warning half — VMF's echo channel
+-- (default mode 3) already writes chat AND log, so warning + echo
+-- double-posted to chat under default settings.
 local function _chat_alert(fmt, ...)
-    mod:warning("[et] " .. fmt, ...)
     mod:echo("[et] " .. fmt, ...)
 end
 
@@ -46,13 +56,13 @@ end
 -- Goal: nothing in enemy_tweaker fails silently. Every hook body, every
 -- runtime apply function, every global-table mutation is bracketed so that
 -- any unexpected engine state produces a log entry (mod:warning at minimum,
--- _dbg_alert when Debug Logging is on) rather than a silent no-op or an
+-- plus a log-only _dbg_alert printf line) rather than a silent no-op or an
 -- unhandled crash. See enemy_tweaker_data.lua for the four new 0-15x
 -- spawn-scaling sliders that pair with these helpers.
 
 -- _safe(label, fn, ...) — call fn(...) under pcall. On failure log a
--- mod:warning + an _dbg_alert (so it surfaces in chat when Debug Logging is
--- on) and return nil. Use for any mod-side helper that touches engine
+-- mod:warning + a log-only _dbg_alert line (visible even with mod logging
+-- OFF) and return nil. Use for any mod-side helper that touches engine
 -- tables (Breeds, HordeCompositions*, ConflictDirectors, Current* settings,
 -- SizeOfInterestPoint, PatrolFormationSettings).
 local function _safe(label, fn, ...)
@@ -117,17 +127,20 @@ local function _spawn_dbg(channel, fmt, ...)
     mod:debug("[et:spawn:" .. tostring(channel) .. "] " .. fmt, ...)
 end
 
--- _spawn_dbg_alert(channel, fmt, ...) — _spawn_dbg variant that also
--- lands in chat. Use for unexpected spawn-side conditions: missing pack
--- data, oversize patrols past navmesh limits, breed-swap miss, fallback
--- paths. The "we did something but it might not have done what you wanted"
--- moments.
--- v0.7.0-dev: spawn_dbg_alert is now LOG-ONLY. Used to chat-echo every call
--- when debug logging was on, which fired per-IP, per-spawn-event, per-pack —
--- dozens of chat lines per zone load at high multipliers. Same rationale as
--- _dbg_alert above. Use `_chat_alert` for chat-worthy surprises.
+-- _spawn_dbg_alert(channel, fmt, ...) — _spawn_dbg variant for unexpected
+-- spawn-side conditions: missing pack data, oversize patrols past navmesh
+-- limits, breed-swap miss, fallback paths. The "we did something but it
+-- might not have done what you wanted" moments.
+-- v0.7.25-dev (#240): ACTUALLY log-only via engine printf (see _dbg_alert
+-- above). v0.7.0-dev's mod:warning routing posted to chat under VMF default
+-- logging — these fire per-IP / per-spawn-event / per-pack, dozens of chat
+-- lines per zone load at high multipliers. Use `_chat_alert` for
+-- chat-worthy surprises.
 local function _spawn_dbg_alert(channel, fmt, ...)
-    mod:warning("[et:spawn:" .. tostring(channel) .. "] " .. fmt, ...)
+    local prefix = "[et:spawn:" .. tostring(channel) .. "] "
+    if not pcall(printf, prefix .. fmt, ...) then
+        pcall(printf, prefix .. "(alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- _et_probe(key, fmt, ...) — direct engine console print for diagnostics that
@@ -3074,6 +3087,20 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg raised with toggle off" end
     ok = pcall(_dbg_alert, "smoke test off")
     if not ok then return "_dbg_alert raised with toggle off" end
+end)
+
+_rt_register("et_alert_helpers_log_only_240", function()
+    -- Issue #240: _dbg_alert/_spawn_dbg_alert must never post to chat. They
+    -- route through raw engine printf (log-only, survives mod-logging-OFF);
+    -- the marker guards a revert to the v0.7.0-dev mod:warning routing, which
+    -- VMF sends to CHAT under default settings (logging.lua
+    -- load_logging_settings: warning mode 3, send_to_chat = mode >= 2).
+    if mod._et_alerts_log_only_marker ~= "et-alert-helpers-log-only-printf-240" then
+        return "log-only alert marker missing - alert helpers may have reverted to chat-visible mod:warning"
+    end
+    if type(_chat_alert) ~= "function" then return "_chat_alert helper missing" end
+    local ok = pcall(_spawn_dbg_alert, "rt", "regression smoke %d", 240)
+    if not ok then return "_spawn_dbg_alert raised on smoke call" end
 end)
 
 _rt_register("et_rpc_schema_present", function()

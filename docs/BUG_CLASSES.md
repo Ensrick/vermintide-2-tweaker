@@ -824,9 +824,24 @@ end
 - Echoes in `mod.on_disabled` documenting limitations the user must know about (`gt`'s "Disable does not fully unwind active mutations" — Issue #15 canonical pattern).
 - Echoes in hook bodies giving user-operational feedback when something they triggered actually happened (e.g. `ct`'s "Granted N starting boon(s)" — the user is responsible for the toggle that caused it).
 
+### Variant B: `mod:warning` believed log-only, actually posts to CHAT (Issue #240)
+
+**First seen:** 2026-07-02 (et v0.7.24-dev — "Enemy Tweaker keeps spitting out awful messages in the chat log")
+
+A mod routes "log-only" diagnostics through `mod:warning` on the assumption the warning channel is file-only. It is not: upstream VMF `logging.lua` `load_logging_settings()` defaults `warning` to mode 3, and `send_to_chat = mode >= 2` — so `mod:warning` (and `mod:error` / `mod:echo`, both also mode 3) posts to chat AND log unless the user picks a custom VMF logging mode. Only `info` (mode 1) and `debug` (mode 0) are chat-silent by default. Corollary: a helper that pairs `mod:warning` + `mod:echo` for "log + chat" posts to chat TWICE.
+
+**Symptom:** routine `[<mod>:...]` WARNING lines (plateau notices, expected boot-timing states, per-spawn consequences of the user's own sliders) appear in chat every mission load. et v0.7.24-dev log evidence: `console-2026-07-02-21.44.42-8d5b6420-*.log` lines 2335, 4725, 4742, 11124, 11143, 11683.
+
+**Diagnosis:** grep the mod for `mod:warning` and classify each site: routine/expected condition = misrouted; genuine anomaly = acceptable (chat visibility is arguably desirable there).
+
+**Fix template (et v0.7.25-dev, Issue #240):** route log-only alert helpers through pcall-guarded raw engine `printf` (keeps grep-stable prefixes, survives mod-logging-OFF sessions); keep direct `mod:warning` only on genuine failure paths; guard with an `_rt_register` marker check (`et_alert_helpers_log_only_240`).
+
+**Watch list:** `ct_dev` is the § 3.6 reference implementation with the same `_dbg_alert -> mod:warning` routing — same chat spam when its alerts fire. Fold into #169's VMF-native logging sweep.
+
 ### Related Issues / commits
 - 2026-05-25 monorepo-wide sweep — 14 mods bumped to remove load-time banner echoes + downgrade `mod:echo("Enemy Tweaker: settings updated")` (et) + delete `mod:echo("Setting changed: ...")` (crt). PROJECT_STANDARDS.md § 3.6 "Chat-echo policy" subsection added with the decision matrix.
 - See per-mod CHANGELOG entries dated 2026-05-25 titled "Remove startup banner echo + tidy on_setting_changed".
+- Issue #240 (2026-07-02) — et alert helpers rerouted to log-only printf (Variant B above).
 
 ---
 

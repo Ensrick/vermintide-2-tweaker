@@ -140,6 +140,17 @@ that dumps current state in a copy-pasteable form. Examples:
 >   So "as long as VMF logging is on, it happens" — specifically, `_dbg` rides
 >   VMF's debug channel and `_dbg_alert` rides VMF's warning channel. The user
 >   never touches a toggle on OUR side.
+>   **CAUTION (Issue #240, 2026-07-02):** because VMF defaults `warning` to
+>   mode 3 (`send_to_chat = mode >= 2`, upstream `logging.lua`
+>   `load_logging_settings()`), a `mod:warning`-routed alert helper posts to
+>   CHAT, not just the log. That is acceptable ONLY for genuine anomalies.
+>   Routine diagnostics (plateau notices, expected boot-timing states,
+>   consequences of the user's own slider values) must NOT route through it —
+>   et's roaming-plateau line spammed chat on every mission load. et
+>   (v0.7.25-dev) now routes `_dbg_alert`/`_spawn_dbg_alert` through
+>   pcall-guarded log-only raw `printf` instead; see
+>   `docs/BUG_CLASSES.md § 17 Variant B` for the fix template. `ct_dev`
+>   still carries the chat-visible routing (fold into #169's sweep).
 > - **Critical always-on telemetry** (instrumentation that MUST be captured even
 >   when the user runs with VMF logging off — e.g. ct's `[ct-spawn-tally]` /
 >   `[populate_pickups]` Horn-of-Magnus census) uses **raw `printf`**, which
@@ -436,8 +447,8 @@ Established 2026-05-25. User feedback: *"on enabling debug logging, I'm getting 
 | `mod.on_enabled` echoing version / banner | **NEVER** | Same reasoning as module load — the applied marker line covers it. |
 | `mod.on_enabled` / `mod.on_disabled` for non-trivial state changes | **OK** | When the user toggles the whole mod off/on via the VMF menu, immediate chat confirmation of what unwound (or didn't) is high-impact operational feedback. Canonical examples: `et`'s "Enemy Tweaker enabled / disabled — compositions restored" at `enemy_tweaker.lua:~929/949`; `gt`'s `on_disabled` "Disable does not fully unwind active mutations" warning at `general_tweaker.lua:~849` (this is the canonical Issue #15 documented-limitation pattern from `docs/BUG_CLASSES.md § 7`). |
 | Inside `mod:command(...)` bodies (`/verify_*`, `/<mod>_regression_test`, `/dump`, status commands, etc.) | **OK** | User invoked the command via chat; reply belongs in chat. Don't gate these on `enable_debug_logging`. |
-| Routine confirmations / diagnostic traces | **NEVER bare `mod:echo`** | Use `_dbg` (log-only, gated) or `_dbg_alert` (chat+log, gated on `enable_debug_logging`). Two-channel discipline above. |
-| Unexpected guard / fallback recovery | `_dbg_alert` (or `mod:warning`) | Per two-channel discipline. Lands in chat only when debug logging is on. |
+| Routine confirmations / diagnostic traces | **NEVER bare `mod:echo`** — and NEVER `mod:warning` either | Use `_dbg` (debug channel, log-only) or a log-only printf helper. `mod:warning` posts to CHAT under VMF default settings (Issue #240; `BUG_CLASSES.md § 17 Variant B`). |
+| Unexpected guard / fallback recovery | `_dbg_alert` (or `mod:warning`) | Per two-channel discipline. NB: `mod:warning` lands in chat whenever VMF's warning channel is chat-enabled — which is the DEFAULT (mode 3), not only when debug logging is on. Acceptable for genuine anomalies; et routes its alert helpers through log-only printf instead (#240). |
 
 **Canonical dev-banner snippet** (drop right after the `mod:info("[<mod_id>] enabled v%s settings_fp=%s", ...)` applied marker line in every mod's main lua):
 
