@@ -631,6 +631,67 @@ local function _resolve_weapon_input(item_interface, item_backend_ids)
     return nil, nil
 end
 
+-- =========================================================================
+-- Forge freedom toggles (v0.8.44-dev): two VMF checkboxes widen what the forge
+-- will roll / offer onto a craft.
+--   * allow_cw_traits          — surface the Chaos Wastes / deus "boon" traits
+--                                 (crafting_disabled) the base forge drops.
+--   * allow_any_trait_property — pool EVERY trait and property across all slot
+--                                 types onto any item. Supersedes allow_cw_traits.
+-- Both are read LIVE at roll time (never cached) so weapon_tweaker's runtime
+-- WeaponTraits/WeaponProperties mutation is always reflected — same contract as
+-- the CONTRACT-WITH-WEAPON_TWEAKER note on _reroll_traits below.
+-- =========================================================================
+
+-- Union of every property combo (`.exotic` tier) across all property tables.
+-- Each combo is an array of property keys, appended verbatim (a duplicate combo
+-- only biases the shuffle slightly; harmless).
+local function _cim_all_property_combos()
+    local WP = rawget(_G, "WeaponProperties")
+    local combinations = WP and WP.combinations
+    if type(combinations) ~= "table" then return nil end
+    local out = {}
+    for _, tbl in pairs(combinations) do
+        local exotic = type(tbl) == "table" and tbl.exotic
+        if type(exotic) == "table" then
+            for _, combo in ipairs(exotic) do
+                out[#out + 1] = combo
+            end
+        end
+    end
+    return out
+end
+
+-- Property-combo pool to roll from for `master`. allow_any_trait_property ON →
+-- every property, any slot type; otherwise the item's own `.exotic` pool
+-- (unchanged behavior). Properties are unaffected by allow_cw_traits.
+local function _cim_property_pool_for(master)
+    if mod:get("allow_any_trait_property") then
+        local all = _cim_all_property_combos()
+        if all and #all > 0 then return all end
+    end
+    local WP = rawget(_G, "WeaponProperties")
+    local prop_table = master and master.property_table_name
+    return WP and WP.combinations and prop_table and WP.combinations[prop_table]
+           and WP.combinations[prop_table].exotic
+end
+
+-- Deduped list of every individual property KEY across all property combos
+-- (combos hold 1-2 keys each). Used by the Athanor freedom injection, which
+-- wants one bubble-row per distinct property, not per combo.
+local function _cim_all_property_keys()
+    local combos = _cim_all_property_combos()
+    if not combos then return {} end
+    local seen, out = {}, {}
+    for _, combo in ipairs(combos) do
+        for _, k in ipairs(combo) do
+            if k and not seen[k] then seen[k] = true; out[#out + 1] = k end
+        end
+    end
+    return out
+end
+mod._cim_all_property_keys = _cim_all_property_keys  -- Athanor injection + RT
+
 -- ---- reroll_weapon_properties / reroll_jewellery_properties ----
 local function _reroll_properties(self, item_backend_ids)
     local mirror = self._backend_mirror
@@ -643,12 +704,10 @@ local function _reroll_properties(self, item_backend_ids)
 
     local master_key = item.key or item.ItemId
     local master = master_key and rawget(ItemMasterList, master_key)
-    local prop_table = master and master.property_table_name
-    local WP = rawget(_G, "WeaponProperties")
-    local pool = WP and WP.combinations and prop_table and WP.combinations[prop_table]
-                 and WP.combinations[prop_table].exotic
+    local pool = _cim_property_pool_for(master)
     if not pool or #pool == 0 then
-        mod:echo("[cim] Reroll: no property combos for " .. tostring(prop_table))
+        mod:echo("[cim] Reroll: no property combos for "
+                 .. tostring(master and master.property_table_name))
         return {}
     end
 
@@ -718,6 +777,96 @@ local function _craftable_trait_pool(pool)
     return out
 end
 
+-- Chaos Wastes / deus "boon" trait entries: single-trait combos {trait_key} for
+-- every trait the base forge marks crafting_disabled, plus every trait that only
+-- lives in a deus/CW combination category (deus_*, *trollhammer*, ranged_energy).
+-- Exactly the boon traits the official bench refuses to craft. Built live from
+-- WeaponTraits so wt's runtime toggles are reflected.
+local function _cim_cw_trait_entries()
+    local WT = rawget(_G, "WeaponTraits")
+    local combinations = WT and WT.combinations
+    local traits = WT and WT.traits
+    if type(combinations) ~= "table" or type(traits) ~= "table" then return {} end
+    local seen, out = {}, {}
+    for cat, pool in pairs(combinations) do
+        local is_cw_cat = type(cat) == "string"
+            and (cat:find("^deus") or cat:find("trollhammer") or cat:find("ranged_energy"))
+        if type(pool) == "table" then
+            for _, entry in ipairs(pool) do
+                local k = entry and entry[1]
+                if k and not seen[k] then
+                    local tdata = traits[k]
+                    if (tdata and tdata.crafting_disabled) or is_cw_cat then
+                        seen[k] = true
+                        out[#out + 1] = { k }
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- Union of every trait combo across all trait tables (deduped by trait key).
+local function _cim_all_trait_entries()
+    local WT = rawget(_G, "WeaponTraits")
+    local combinations = WT and WT.combinations
+    if type(combinations) ~= "table" then return {} end
+    local seen, out = {}, {}
+    for _, pool in pairs(combinations) do
+        if type(pool) == "table" then
+            for _, entry in ipairs(pool) do
+                local k = entry and entry[1]
+                if k and not seen[k] then
+                    seen[k] = true
+                    out[#out + 1] = { k }
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- Trait pool to roll from for `master`, honoring both toggles:
+--   allow_any_trait_property → every trait, any slot type (widest).
+--   allow_cw_traits          → the item's own pool + the CW/boon traits.
+--   (neither)                → the item's own pool, boon-filtered (base behavior).
+local function _cim_trait_pool_for(master)
+    local WT = rawget(_G, "WeaponTraits")
+    local combinations = WT and WT.combinations
+    if type(combinations) ~= "table" then return nil end
+
+    if mod:get("allow_any_trait_property") then
+        local all = _cim_all_trait_entries()
+        if #all > 0 then return all end
+    end
+
+    local trait_table = master and master.trait_table_name
+    local base = trait_table and combinations[trait_table]
+    if not base then return nil end
+
+    if mod:get("allow_cw_traits") then
+        local seen, out = {}, {}
+        local function _add(list)
+            for _, entry in ipairs(list) do
+                local k = entry and entry[1]
+                if k and not seen[k] then seen[k] = true; out[#out + 1] = entry end
+            end
+        end
+        _add(base)                     -- the weapon's own pool (boons kept)
+        _add(_cim_cw_trait_entries())  -- + every CW/boon trait
+        return out
+    end
+
+    return _craftable_trait_pool(base)  -- default: boon-filtered, unchanged
+end
+
+-- Exposed for /cim_regression_test (freedom-toggle pool invariants).
+mod._cim_cw_trait_entries   = _cim_cw_trait_entries
+mod._cim_all_trait_entries  = _cim_all_trait_entries
+mod._cim_trait_pool_for     = _cim_trait_pool_for
+mod._cim_property_pool_for  = _cim_property_pool_for
+
 local function _reroll_traits(self, item_backend_ids)
     local mirror = self._backend_mirror
     local item_interface = Managers.backend:get_interface("items")
@@ -730,14 +879,12 @@ local function _reroll_traits(self, item_backend_ids)
 
     local master_key = item.key or item.ItemId
     local master = master_key and rawget(ItemMasterList, master_key)
-    local trait_table = master and master.trait_table_name
-    local WT = rawget(_G, "WeaponTraits")
-    local pool = WT and WT.combinations and trait_table and WT.combinations[trait_table]
+    local pool = _cim_trait_pool_for(master)
     if not pool or #pool == 0 then
-        mod:echo("[cim] Reroll: no trait pool for " .. tostring(trait_table))
+        mod:echo("[cim] Reroll: no trait pool for "
+                 .. tostring(master and master.trait_table_name))
         return {}
     end
-    pool = _craftable_trait_pool(pool)  -- mirror official: drop crafting_disabled deus/boon traits
 
     local saved = mod._cim_get_craft and mod._cim_get_craft(weapon_bid)
     local picked_idx, new_seen = _shuffle_pick(saved and saved.rerolled_trait_indices, #pool)
@@ -868,15 +1015,11 @@ local function _make_craft_synth(allowed_slots)
         if mod:get("prefill_random_properties") then
             local master = rawget(ItemMasterList, item_key)
             if master then
-                local prop_table = master.property_table_name
-                local trait_table = master.trait_table_name
-                local WP = rawget(_G, "WeaponProperties")
-                local WT = rawget(_G, "WeaponTraits")
-
-                if WP and WP.combinations and prop_table and WP.combinations[prop_table]
-                   and WP.combinations[prop_table].exotic then
-                    local pool = WP.combinations[prop_table].exotic
-                    local combo = pool[math.random(1, #pool)]
+                -- Same freedom-toggle-aware pools the reroll path uses, so a
+                -- prefilled craft honors allow_cw_traits / allow_any_trait_property.
+                local prop_pool = _cim_property_pool_for(master)
+                if prop_pool and #prop_pool > 0 then
+                    local combo = prop_pool[math.random(1, #prop_pool)]
                     if combo then
                         for _, pkey in ipairs(combo) do
                             rolled_props[pkey] = _safe_property_value(pkey)
@@ -884,9 +1027,9 @@ local function _make_craft_synth(allowed_slots)
                     end
                 end
 
-                if WT and WT.combinations and trait_table and WT.combinations[trait_table] then
-                    local pool = _craftable_trait_pool(WT.combinations[trait_table])
-                    local pick = pool[math.random(1, #pool)]
+                local trait_pool = _cim_trait_pool_for(master)
+                if trait_pool and #trait_pool > 0 then
+                    local pick = trait_pool[math.random(1, #trait_pool)]
                     local tkey = pick and pick[1]
                     if tkey then rolled_traits[#rolled_traits + 1] = tkey end
                 end

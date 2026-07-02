@@ -180,6 +180,31 @@ local options_data = {
                         type = "checkbox",
                         default_value = false,
                     },
+                    -- Feature toggles for what the forge lets you put on a craft.
+                    -- Both default OFF so the forge behaves exactly as before
+                    -- unless the user opts in.
+                    --
+                    -- allow_cw_traits: normally the standard bench mirrors the
+                    -- official forge and drops the Chaos Wastes / deus "boon"
+                    -- traits (crafting_disabled=true, e.g. deus_extra_shot,
+                    -- shield_splinters). ON surfaces those boon traits so you can
+                    -- roll / pick them on crafted weapons. Traits only; does not
+                    -- touch properties.
+                    {
+                        setting_id = "allow_cw_traits",
+                        type = "checkbox",
+                        default_value = false,
+                    },
+                    -- allow_any_trait_property: normally a weapon can only receive
+                    -- traits/properties from its own slot pool (a melee weapon gets
+                    -- melee traits, etc.). ON pools EVERY trait and EVERY property
+                    -- across all slot types onto any craftable item. Supersedes
+                    -- allow_cw_traits (its union already includes the boon traits).
+                    {
+                        setting_id = "allow_any_trait_property",
+                        type = "checkbox",
+                        default_value = false,
+                    },
                 },
             },
             {

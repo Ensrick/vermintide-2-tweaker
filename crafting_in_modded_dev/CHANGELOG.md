@@ -1,5 +1,23 @@
 # Crafting in Modded Changelog
 
+## 0.8.44-dev (2026-07-02) - Forge freedom toggles: Chaos Wastes traits + any-trait/any-property
+
+Two new Athanor options (both default OFF, `[untested]`) widen what the forge will put on a craft. They act on BOTH craft surfaces - the Athanor bubble picker (where you choose) and the standard crafting bench (reroll / craft prefill).
+
+- **Allow Chaos Wastes traits on crafted weapons** (`allow_cw_traits`) - normally the forge mirrors the official bench and drops the Chaos Wastes / deus "boon" traits (`crafting_disabled` traits like `deus_extra_shot`, `shield_splinters`, chain-lightning). ON surfaces those boon traits so they can be rolled at the standard bench and picked in the Athanor trait slot. Traits only.
+- **Allow any trait and property on any weapon** (`allow_any_trait_property`) - normally a craft only draws traits/properties from its own slot type. ON pools every trait and every property across all slot types onto any weapon or accessory. Supersedes the Chaos Wastes toggle (its union already includes the boon traits).
+
+How it works:
+- **Standard bench** (`standard_forge.lua`) - the reroll and craft-prefill paths now resolve their trait/property pools through toggle-aware helpers (`_cim_trait_pool_for` / `_cim_property_pool_for`) that read live from `WeaponTraits`/`WeaponProperties` at roll time, so weapon_tweaker's runtime trait mutation is still honored. Default (both off) is byte-for-byte the previous behavior.
+- **Athanor picker** (`crafting_in_modded_dev.lua`) - the `_setup_menu_options` hook widens the weave trait/property category the selected item uses. Because the picker renders each key from `WeaveTraits.traits`/`WeaveProperties.properties` and the apply path strips the `weave_` prefix to the bare adventure key, options that already have a native weave twin are reused, and boon / adventure-only keys get a crash-safe display stub injected (verified field-for-field against the vanilla picker: trait `display_name`; property `display_name` + registered `buff_name` + non-empty `description_values`). The store path is fully cim-owned when the modded forge is open (no `WeavePropertiesByCareer` fassert), so display stubs suffice. Category arrays are widened only while the modded forge is open and **restored on forge exit**, so real Weaves play is never polluted.
+- Six `/cim_regression_test` markers added for the settings/helpers, the CW boon set, the default boon-filter, the twin-stub display field, and the restore.
+
+### Files
+- `crafting_in_modded_dev_data.lua` - two `allow_cw_traits` / `allow_any_trait_property` checkboxes in the Athanor group.
+- `crafting_in_modded_dev_localization.lua` - titles + plain-English descriptions for both.
+- `standard_forge.lua` - toggle-aware trait/property pool helpers; reroll + prefill routed through them; helpers exposed for regression tests.
+- `crafting_in_modded_dev.lua` - Athanor picker widener + weave-twin injection + restore-on-exit (merged into the existing `_setup_menu_options` and `on_exit` hooks); regression tests; `MOD_VERSION` `0.8.43-dev` -> `0.8.44-dev`.
+
 ## 0.8.43-dev (2026-07-01) - Settings menu: sort top-level groups A->Z
 
 Settings-menu ordering polish, no functional changes.

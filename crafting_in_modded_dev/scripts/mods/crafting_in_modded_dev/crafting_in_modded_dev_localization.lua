@@ -44,6 +44,18 @@ return {
     movespeed_2pct_mode_description = {
         en = "OFF (default): the movement speed property gives +5%% and fills 1 bubble. ON: it can reach 5 bubbles at +2%% each for up to +10%%, but the full +10%% uses 5 of the trinket's 10 property slots instead of 1.",
     },
+    allow_cw_traits = {
+        en = "[untested] Allow Chaos Wastes traits on crafted weapons",
+    },
+    allow_cw_traits_description = {
+        en = "OFF (default): the forge hides the Chaos Wastes boon traits (like the extra-shot, shield-splinters and chain-lightning traits) that the normal crafting bench never offers. ON: those boon traits become available to add to weapons you craft. Affects traits only, not properties.",
+    },
+    allow_any_trait_property = {
+        en = "[untested] Allow any trait and property on any weapon",
+    },
+    allow_any_trait_property_description = {
+        en = "OFF (default): a crafted item can only take traits and properties from its own type (a melee weapon gets melee traits, a necklace gets necklace traits, and so on). ON: every trait and every property becomes available on any weapon or accessory you craft. Includes the Chaos Wastes traits, so this covers the option above.",
+    },
     inventory_group = {
         en = "Modded Inventory",
     },

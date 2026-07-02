@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.43-dev"
+local MOD_VERSION = "0.8.44-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -583,6 +583,15 @@ local _restore_modded_loadout -- forward declaration; defined in the inventory s
 local _bubble_cap
 local _value_for_bubbles
 local _bubbles_for_value
+
+-- Forge freedom (v0.8.44-dev): the Athanor trait/property picker widener +
+-- restore. Forward-declared here so the existing HeroViewStateWeaveForge.on_exit
+-- hook (restore) and the HeroWindowWeaveProperties._setup_menu_options hook
+-- (apply) can reference them before their definitions further down — both are
+-- assigned in the freedom block above the _setup_menu_options hook, so the
+-- closures capture the upvalue and resolve it at runtime.
+local _cim_apply_forge_freedom
+local _cim_restore_forge_freedom
 local _strip_weave
 -- Picker store helper (defined alongside the bubble-cap math; shared by the
 -- live set_loadout_property hook and /cim_regression_test). Forward-declared
@@ -2693,6 +2702,11 @@ mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
     _forge_panel_styled = false
     _forge_bg_colored = false
     _amulet_dirty[1], _amulet_dirty[2], _amulet_dirty[3] = false, false, false
+    -- Restore any weave trait/property category arrays the forge-freedom toggles
+    -- widened, so real Weaves play is never polluted (injected display stubs are
+    -- left in the *.traits/*.properties dicts, which is inert — real Weaves reads
+    -- its own category arrays + Weave*ByCareer, neither referencing them).
+    if _cim_restore_forge_freedom then pcall(_cim_restore_forge_freedom) end
 end)
 
 -- Hide the 3D amulet model in amulet mode (v0.7.32+). The vanilla previewer
@@ -2861,8 +2875,193 @@ local function _cim_ensure_weave_category_pools(career_name, slots_progression)
 end
 mod._cim_ensure_weave_category_pools = _cim_ensure_weave_category_pools  -- exposed for /cim_regression_test
 
+-- ============================================================
+-- Forge freedom: widen the Athanor trait/property picker (v0.8.44-dev)
+-- ============================================================
+-- Two VMF toggles let the picker offer traits/properties it normally would not:
+--   allow_cw_traits          — the Chaos Wastes / deus boon traits.
+--   allow_any_trait_property — every adventure trait AND property, any slot type.
+--
+-- The picker enumerates WeaveTraits.categories[cat] / WeaveProperties.categories
+-- [cat] (weave keys) and renders each via WeaveTraits.traits[key] /
+-- WeaveProperties.properties[key]. The apply path (_forge_apply_to_item) strips
+-- the leading "weave_" to get the bare adventure key the crafted item receives.
+-- So to offer an adventure trait/property `bare` we surface "weave_" .. bare:
+--   * if that weave key already exists (the normal twin, e.g.
+--     weave_melee_attack_speed_on_crit) reuse it — full display data already;
+--   * else inject a display stub from the adventure entry (boons + adventure-only
+--     keys). Crash-critical fields (verified against the vanilla picker):
+--       trait — display_name REQUIRED; advanced_description/description_values are
+--               a matched pair, so we set NEITHER (empty desc, zero string.format
+--               risk).
+--       prop  — display_name REQUIRED; buff_name must resolve in BuffTemplates
+--               with a .buffs[1] (picker does buff_template.buffs[1]);
+--               description_values MUST be non-empty with a numeric [1].value.
+--
+-- Under the modded forge the store path is fully cim-owned (set_loadout_property/
+-- trait never call vanilla, so the WeavePropertiesByCareer fassert never fires)
+-- and the backend cost/forge-level hooks already return faked values without
+-- indexing the key — so display stubs are all that is needed; no Weave*ByCareer
+-- injection. Category arrays are widened only while the modded forge is open and
+-- restored on exit (see the on_exit hook), so real Weaves play is untouched.
+
+-- Saved originals of each widened category array, so on_exit can restore them.
+-- Value is the original array, or false if the category had no array before.
+local _cim_forge_widen_backup = { traits = {}, properties = {} }
+
+local function _cim_ensure_trait_twin(bare)
+    local WT = rawget(_G, "WeaveTraits")
+    local adv_tbl = rawget(_G, "WeaponTraits")
+    if not (WT and WT.traits and adv_tbl and adv_tbl.traits) then return nil end
+    local weave_key = "weave_" .. bare
+    if WT.traits[weave_key] then return weave_key end          -- reuse existing twin
+    local adv = adv_tbl.traits[bare]
+    if not (adv and adv.display_name) then return nil end       -- no name = would crash Localize
+    WT.traits[weave_key] = {
+        name         = weave_key,
+        display_name = adv.display_name,
+        icon         = adv.icon,        -- optional; picker falls back to placeholder
+        buff_name    = adv.buff_name,   -- not read by the trait picker; kept for parity
+        -- advanced_description + description_values deliberately omitted (safe pair).
+    }
+    return weave_key
+end
+
+local function _cim_ensure_property_twin(bare)
+    local WP = rawget(_G, "WeaveProperties")
+    local adv_tbl = rawget(_G, "WeaponProperties")
+    if not (WP and WP.properties and adv_tbl and adv_tbl.properties) then return nil end
+    local weave_key = "weave_" .. bare
+    if WP.properties[weave_key] then return weave_key end       -- reuse existing twin
+    local adv = adv_tbl.properties[bare]
+    if not (adv and adv.display_name and adv.buff_name) then return nil end
+    -- buff_name must resolve to a registered template with a .buffs[1] (the picker
+    -- does buff_template.buffs[1] with no nil-guard).
+    local BuffTemplates = rawget(_G, "BuffTemplates")
+    local tmpl = BuffTemplates and BuffTemplates[adv.buff_name]
+    if not (tmpl and tmpl.buffs and tmpl.buffs[1]) then return nil end
+    -- description_values MUST be non-empty with a numeric [1].value (picker does
+    -- description_values[1].value_type and arithmetic on [1].value).
+    local dvals = adv.description_values
+    if not (type(dvals) == "table" and dvals[1] and type(dvals[1].value) == "number") then
+        dvals = { { value_type = "percent", value = 0.05 } }
+    end
+    WP.properties[weave_key] = {
+        name         = weave_key,
+        display_name = adv.display_name,
+        icon         = adv.icon or "icons_placeholder",
+        category     = adv.category or "offensive",
+        buff_name    = adv.buff_name,
+        description_values = dvals,
+    }
+    return weave_key
+end
+
+-- Bare adventure keys the toggles want surfaced (from the standard_forge helpers,
+-- read live). Traits: any → every trait; else cw → boon traits. Properties: any
+-- → every property; else none (allow_cw_traits is traits-only).
+local function _cim_wanted_trait_bares()
+    local out = {}
+    local entries
+    if mod:get("allow_any_trait_property") then
+        entries = mod._cim_all_trait_entries and mod._cim_all_trait_entries()
+    elseif mod:get("allow_cw_traits") then
+        entries = mod._cim_cw_trait_entries and mod._cim_cw_trait_entries()
+    end
+    for _, e in ipairs(entries or {}) do
+        if e and e[1] then out[#out + 1] = e[1] end
+    end
+    return out
+end
+
+local function _cim_wanted_property_bares()
+    if not mod:get("allow_any_trait_property") then return {} end
+    return (mod._cim_all_property_keys and mod._cim_all_property_keys()) or {}
+end
+
+-- Widen one category array (kind = "traits"|"properties") by appending the given
+-- bare keys' weave twins. Saves the original once so on_exit can restore it. Always
+-- rebuilds from the SAVED original (never the possibly-already-widened current),
+-- so repeated calls across weapon selections don't compound.
+local function _cim_widen_category(kind, categories_tbl, category, wanted_bares, ensure_twin)
+    if not (categories_tbl and category) then return end
+    local backup = _cim_forge_widen_backup[kind]
+    if backup[category] == nil then
+        backup[category] = categories_tbl[category] or false
+    end
+    local original = backup[category]
+    local base = (type(original) == "table") and original or {}
+    local seen, widened = {}, {}
+    for _, k in ipairs(base) do
+        if not seen[k] then seen[k] = true; widened[#widened + 1] = k end
+    end
+    for _, bare in ipairs(wanted_bares) do
+        local wk = ensure_twin(bare)
+        if wk and not seen[wk] then seen[wk] = true; widened[#widened + 1] = wk end
+    end
+    categories_tbl[category] = widened
+end
+
+_cim_apply_forge_freedom = function(slots_progression)
+    if not slots_progression then return end
+    local WT = rawget(_G, "WeaveTraits")
+    local WP = rawget(_G, "WeaveProperties")
+    local trait_bares = _cim_wanted_trait_bares()
+    local prop_bares  = _cim_wanted_property_bares()
+
+    if #trait_bares > 0 and WT and WT.categories and slots_progression.traits then
+        local done = {}
+        for _, slot_unlock in ipairs(slots_progression.traits) do
+            local cat = slot_unlock and slot_unlock.category
+            if cat and not done[cat] then
+                done[cat] = true
+                _cim_widen_category("traits", WT.categories, cat, trait_bares, _cim_ensure_trait_twin)
+            end
+        end
+    end
+    if #prop_bares > 0 and WP and WP.categories and slots_progression.properties then
+        local done = {}
+        for _, slot_unlock in ipairs(slots_progression.properties) do
+            local cat = slot_unlock and slot_unlock.category
+            if cat and not done[cat] then
+                done[cat] = true
+                _cim_widen_category("properties", WP.categories, cat, prop_bares, _cim_ensure_property_twin)
+            end
+        end
+    end
+end
+
+_cim_restore_forge_freedom = function()
+    local WT = rawget(_G, "WeaveTraits")
+    local WP = rawget(_G, "WeaveProperties")
+    for cat, orig in pairs(_cim_forge_widen_backup.traits) do
+        if WT and WT.categories then
+            WT.categories[cat] = (type(orig) == "table") and orig or nil
+        end
+    end
+    for cat, orig in pairs(_cim_forge_widen_backup.properties) do
+        if WP and WP.categories then
+            WP.categories[cat] = (type(orig) == "table") and orig or nil
+        end
+    end
+    _cim_forge_widen_backup.traits = {}
+    _cim_forge_widen_backup.properties = {}
+end
+
+-- Exposed for /cim_regression_test.
+mod._cim_ensure_trait_twin     = _cim_ensure_trait_twin
+mod._cim_ensure_property_twin  = _cim_ensure_property_twin
+mod._cim_apply_forge_freedom   = _cim_apply_forge_freedom
+mod._cim_restore_forge_freedom = _cim_restore_forge_freedom
+
 mod:hook("HeroWindowWeaveProperties", "_setup_menu_options", function(func, self, career_name, slots_progression)
     _cim_ensure_weave_category_pools(career_name, slots_progression)
+    -- Widen the picker per the freedom toggles (modded forge only; restored on
+    -- exit). pcall so a malformed stub can never crash the picker — it just falls
+    -- back to the un-widened (or seeded) pools.
+    if _custom_forge_active then
+        pcall(_cim_apply_forge_freedom, slots_progression)
+    end
     return func(self, career_name, slots_progression)
 end)
 
@@ -6888,6 +7087,92 @@ _rt_register("weave_category_pool_guard_present", function()
     if not seeded then
         return "guard did not seed empty trait+property pools for an unknown category"
     end
+end)
+
+_rt_register("forge_freedom_settings_and_helpers_present", function()
+    -- v0.8.44-dev: both freedom toggles must be registered (mod:get returns a
+    -- boolean, not nil) and every helper the two surfaces route through must be
+    -- exposed on the mod handle.
+    if type(mod:get("allow_cw_traits")) ~= "boolean" then
+        return "allow_cw_traits setting not registered"
+    end
+    if type(mod:get("allow_any_trait_property")) ~= "boolean" then
+        return "allow_any_trait_property setting not registered"
+    end
+    for _, name in ipairs({
+        "_cim_cw_trait_entries", "_cim_all_trait_entries", "_cim_all_property_keys",
+        "_cim_trait_pool_for", "_cim_property_pool_for", "_cim_apply_forge_freedom",
+        "_cim_restore_forge_freedom", "_cim_ensure_trait_twin", "_cim_ensure_property_twin",
+    }) do
+        if type(mod[name]) ~= "function" then
+            return "missing exposed helper: " .. name
+        end
+    end
+end)
+
+_rt_register("cw_trait_pool_includes_boons", function()
+    -- The Chaos Wastes trait set must be non-empty and contain at least one real
+    -- crafting_disabled boon (that is exactly what allow_cw_traits surfaces).
+    local WT = rawget(_G, "WeaponTraits")
+    if not (WT and WT.traits and WT.combinations) then return "skip: WeaponTraits not loaded" end
+    local entries = mod._cim_cw_trait_entries()
+    if type(entries) ~= "table" or #entries == 0 then
+        return "cw trait set is empty (expected the deus/boon traits)"
+    end
+    for _, e in ipairs(entries) do
+        local k = e and e[1]
+        local td = k and WT.traits[k]
+        if td and td.crafting_disabled then return end  -- found a real boon: pass
+    end
+    return "cw trait set contains no crafting_disabled boon trait"
+end)
+
+_rt_register("default_trait_pool_excludes_boons_when_toggles_off", function()
+    -- With both freedom toggles OFF, a melee weapon's trait pool must still be
+    -- boon-filtered (unchanged base behavior). Skip if a toggle is live-ON.
+    if mod:get("allow_cw_traits") or mod:get("allow_any_trait_property") then
+        return "skip: a freedom toggle is ON (default-behavior test not applicable)"
+    end
+    local WT = rawget(_G, "WeaponTraits")
+    if not (WT and WT.traits and WT.combinations and WT.combinations.melee) then
+        return "skip: WeaponTraits melee pool not loaded"
+    end
+    local pool = mod._cim_trait_pool_for({ trait_table_name = "melee" })
+    if type(pool) ~= "table" then return "trait pool for melee was nil" end
+    for _, e in ipairs(pool) do
+        local k = e and e[1]
+        local td = k and WT.traits[k]
+        if td and td.crafting_disabled then
+            return "default melee pool leaked a crafting_disabled boon: " .. tostring(k)
+        end
+    end
+end)
+
+_rt_register("trait_twin_stub_has_display_name", function()
+    -- Injecting a weave twin for a boon (no native weave twin) must yield an entry
+    -- with a string display_name — the one field whose absence crashes the picker.
+    local WT = rawget(_G, "WeaveTraits")
+    local adv = rawget(_G, "WeaponTraits")
+    if not (WT and WT.traits and adv and adv.traits) then return "skip: trait tables not loaded" end
+    local bare
+    for _, e in ipairs(mod._cim_cw_trait_entries()) do
+        local k = e and e[1]
+        if k and adv.traits[k] and adv.traits[k].display_name and not WT.traits["weave_" .. k] then
+            bare = k; break
+        end
+    end
+    if not bare then return "skip: no injectable boon trait found" end
+    local wk = mod._cim_ensure_trait_twin(bare)
+    if not wk then return "ensure_trait_twin returned nil for " .. bare end
+    local ok = WT.traits[wk] and type(WT.traits[wk].display_name) == "string"
+    WT.traits[wk] = nil  -- injected by this test only; remove to avoid RT residue
+    if not ok then return "twin for " .. bare .. " lacks a string display_name" end
+end)
+
+_rt_register("forge_freedom_restore_is_safe", function()
+    -- Restore must always run without error (it fires on every forge exit).
+    local ok, err = pcall(mod._cim_restore_forge_freedom)
+    if not ok then return "restore raised: " .. tostring(err) end
 end)
 
 _rt_register("heroview_hdr_renderer_guard_failsafe", function()
