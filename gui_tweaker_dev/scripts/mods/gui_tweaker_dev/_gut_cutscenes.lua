@@ -19,7 +19,9 @@ local mod = get_mod("gut_dev")
 -- Hooks (all guarded; PRE-FLIGHT verified disjoint from the rest of gut — a
 -- whole-mod grep before migration found NO other gut hook on CutsceneSystem or on
 -- ShowCursorStack.pop; gut only CALLS ShowCursorStack.show/.hide, never hooks .pop):
---   * CutsceneSystem.flow_cb_cutscene_effect   (table-form, guarded by `if CutsceneSystem`)
+--   * CutsceneSystem.flow_cb_cutscene_effect   (table-form, guarded by `if CutsceneSystem`;
+--     #140 round-2 guard-swallow merged into the SAME hook body 2026-07-02 - VMF drops a
+--     second hook on the same (Class, method), so never add another hook on this method)
 --   * CutsceneSystem.flow_cb_activate_cutscene_logic
 --   * CutsceneSystem.skip_pressed
 --   * CutsceneSystem.flow_cb_activate_cutscene_camera    (#106 post-skip guard + lifecycle
@@ -231,6 +233,19 @@ if CutsceneSystem then
             _skip_next_fade = false
             return
         end
+        -- #140 round 2 (v0.2.178-dev): guard-based swallow. On dlc_dwarf_whaling
+        -- ("A Parting of the Waves") the flow keeps firing delayed node groups after
+        -- the skip, and in each group fx_fade fires ~97 ms BEFORE its camera node -
+        -- so the one-shot _skip_next_fade (armed at the camera node) is still false
+        -- when the fade arrives. While the #106 post-skip guard is armed for THIS
+        -- system instance, swallow every fx_fade. Trade-off (documented in the top
+        -- docstring + CHANGELOG): a scripted standalone fx_fade routed through
+        -- CutsceneSystem while the guard is armed is also swallowed (cosmetic pop
+        -- instead of a masking fade) - accepted vs. the erroneous black screen.
+        if _skipped_cutscene_system == self and name == "fx_fade" then
+            _printf("[gut:cutscene] fx_fade swallowed (post-skip guard) | level=%s", _level_key())
+            return
+        end
         return func(self, name, ...)
     end)
 
@@ -357,7 +372,8 @@ if CutsceneSystem then
     -- client's entire 7-mission log), so this camera-level line is what closes the
     -- client instrumentation blind spot.
     mod:hook(CutsceneSystem, "flow_cb_activate_cutscene_camera", function(func, self, camera_unit, transition_data, ingame_hud_enabled, letterbox_enabled)
-        -- #140 (Parting of the Waves / dlc_portals brief fade-IN): the map's native
+        -- #140 round 1 (Parting of the Waves = dlc_dwarf_whaling, NOT dlc_portals -
+        -- earlier docs had the level key wrong): the map's native
         -- fade-in effect fires around THIS earlier camera node, before
         -- flow_cb_activate_cutscene_logic arms _skip_next_fade -- so the fade-in
         -- still played for a couple seconds after an auto-skip. Mirror Aussiemon

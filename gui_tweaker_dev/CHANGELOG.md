@@ -5,6 +5,34 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.178-dev (2026-07-02) -- FIX #140 round 2: guard-based fx_fade swallow (Parting of the Waves post-skip black fade)
+
+### Why (clean user trace 2026-07-02 22:04, v0.2.175-dev, no other cutscene mods)
+On "A Parting of the Waves" (level key `dlc_dwarf_whaling` - NOT dlc_portals, earlier docs
+had the key wrong) gut's auto-skip works end to end: cutscene activates, deferred skip
+fires, fade #1 swallowed via `_skip_next_fade`, teardown clean, post-skip guard
+`_skipped_cutscene_system` ARMED. But the map's flow keeps firing delayed node groups
+AFTER the skip, and in each group the `fx_fade` effect fires ~97 ms BEFORE its
+`flow_cb_activate_cutscene_camera` node (trace-proven ordering):
+- 22:04:39.972 `effect | name=fx_fade skip_next_fade=false` -> PLAYED (the bug: visible black fade)
+- 22:04:40.069 camera node -> fade-arm sets flag + CAMERA-ACTIVATE suppressed by the guard (97 ms too late for the fade above)
+- 22:04:45.417 fade #3 swallowed only by luck (leftover flag from the 40.069 arm)
+The single-shot `_skip_next_fade` armed at the camera node (#140 round 1) can never catch
+a fade that PRECEDES its own camera node.
+
+### Changed
+- **Guard-based fx_fade swallow**, merged into the EXISTING
+  `CutsceneSystem.flow_cb_cutscene_effect` hook body (no second hook - VMF drops
+  duplicates): while the #106 post-skip guard is armed
+  (`_skipped_cutscene_system == self`), every `fx_fade` on that system is swallowed and
+  logged as `[gut:cutscene] fx_fade swallowed (post-skip guard)`. The one-shot
+  `_skip_next_fade` branch stays as-is - it handles the fade that arrives during
+  skip_pressed BEFORE the guard arms (trace 22:04:36.434 proves it is still needed).
+- **Trade-off (accepted, documented in the module docstring):** while the guard is armed
+  (from the skip until the next cutscene activation or level change), any scripted
+  standalone fx_fade routed through CutsceneSystem is also swallowed - a cosmetic pop
+  instead of a masking fade. Accepted vs. the erroneous black screen.
+
 ## 0.2.177-dev (2026-07-02) -- Interface reorg round 2: single HUD category + Cutscenes under Main Menu & Startup
 
 ### Changed (user direction 2026-07-02; all setting_ids unchanged, settings carry over)
