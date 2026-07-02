@@ -2,40 +2,16 @@ local mod = get_mod("ct_dev")
 local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_adventure_pool")
 
 local loc = {
+
+    -- ============================================================
+    -- Meta
+    -- ============================================================
     mod_name = { en = "Tweaker: Chaos Wastes" },
     mod_description = { en = "Options to customize your Chaos Wastes runs: boons, curses, altars, chests, coins, and weapon traits." },
-    curses_group = { en = "Curses" },
-    disabled_curses_group = { en = "Disabled Curses" },
-    banned_traits_group = { en = "Banned Weapon Traits" },
-    pilgrims_coin_group = { en = "Pilgrim's Coin" },
-    shrines_altars_chests_group = { en = "Shrines, Altars and Chests" },
-    -- show_duplicate_career_chips / map_screen_group REMOVED v0.7.194-dev: the
-    -- duplicate-career vote chips are now an IMPLICIT always-on feature (no toggle,
-    -- no "Map Screen" menu group). See _ct_dup_vote_chips.lua.
-    altar_reuse_group = { en = "Altar Reroll Options" },
-    altar_chest_counts_group = { en = "Altars & Chests per Mission" },
-    boons_offered_group = { en = "Boons Offered" },
-    chest_of_trials_group = { en = "Chest of Trials" },
-    altar_reuse_count_power_up    = { en = "Boon shrine: max uses per altar" },
-    altar_reuse_cost_mult_power_up = { en = "Boon shrine: cost multiplier per reuse" },
-    altar_reuse_count_swap_melee    = { en = "Melee swap altar: max uses per altar" },
-    altar_reuse_cost_mult_swap_melee = { en = "Melee swap altar: cost multiplier per reuse" },
-    altar_reuse_count_swap_ranged    = { en = "Ranged swap altar: max uses per altar" },
-    altar_reuse_cost_mult_swap_ranged = { en = "Ranged swap altar: cost multiplier per reuse" },
-    altar_reuse_count_upgrade    = { en = "Weapon upgrade altar: max uses per altar" },
-    altar_reuse_count_upgrade_tooltip = { en = "How many times you can use a weapon-upgrade altar in one visit (1 = vanilla single use). Each extra use rerolls the upgraded weapon's properties and trait and keeps the altar lit instead of going dark. Host-only." },
-    altar_reuse_cost_mult_upgrade = { en = "Weapon upgrade altar: cost multiplier per reuse" },
-    altar_reuse_count_tooltip = { en = "How many times you can use the same altar in one visit (1 = vanilla single use). Each extra use rerolls the offered items so you can fix a bad pick. Host-only." },
-    altar_reuse_cost_mult_tooltip = { en = "Multiplies the coin cost each time you reuse an altar. 1.0 = same cost every use, 2.0 = doubles each use (1x, 2x, 4x), 0.5 = halves each use. Host-only." },
-    cot_enemy_multiplier = { en = "Chest of Trials enemy multiplier" },
-    cot_enemy_multiplier_tooltip = { en = "Multiplies how many enemies spawn during a Chest of Trials wave (1.0 = vanilla, 2.0 = double, 5.0 = huge horde). Only affects trial waves, not normal mission spawns. Host-only." },
 
-    disable_boon_bombs_group = { en = "Disable Boons: Bomb Boons" },
-    start_boon_bombs_group = { en = "Starting Boons: Bomb Boons" },
-    coin_multiplier = { en = "Coin Pickup Multiplier" },
-    starting_coins = { en = "Starting Coins" },
-    shrine_boon_count = { en = "Shrines: Number of Available Boons" },
-    chest_boon_count = { en = "Chests: Number of Available Boons" },
+    -- ============================================================
+    -- Adventure Maps
+    -- ============================================================
     adventure_maps_group         = { en = "Adventure Maps" },
     available_missions_group     = { en = "Available Missions" },
     cw_scenarios_group           = { en = "Chaos Wastes Scenarios" },
@@ -46,67 +22,11 @@ local loc = {
     inject_adventure_maps_tooltip = { en = "Experimental. Adds regular adventure missions into the Chaos Wastes journey with Chaos Wastes pickups and altars; tome and grimoire spots become Chests of Trials. Finale arenas, the Citadel of Eternity, and Belakor's Temple are never replaced.\n\nHost-only. Requires game restart." },
     replace_shrines_with_missions = { en = "Replace Shrines with Missions" },
     replace_shrines_with_missions_tooltip = { en = "Turns every shrine into an extra mission instead. Longer expeditions with fewer free boons. Host-only. Applies to your next expedition." },
-    force_belakor = { en = "Always Include Belakor's Temple" },
-    -- v0.7.200-dev (#104): rolling-window cap on Corrupted Flesh gas clouds.
-    flesh_guard_clouds_per_minute = { en = "Corrupted Flesh: max clouds per minute" },
-    flesh_guard_clouds_per_minute_tooltip = { en = "Caps how many poison gas clouds the Corrupted Flesh curse can spawn per minute (marked enemies burst into a globadier-style cloud on death). 0 = vanilla, uncapped. Lower this if the curse tanks your framerate on dense missions. Host's value applies to the whole lobby." },
-    cursed_mission_count = { en = "[untested] Cursed Mission Count" },
-    cursed_mission_count_tooltip = { en = "Number of curse clusters per run. 0 = vanilla (2-7). Each cluster curses 1-3 adjacent nodes. Max 30. Host-only." },
-    disable_dominant_god = { en = "[untested] Disable Dominant-God Rule" },
-    disable_dominant_god_tooltip = { en = "Removes vanilla's rule that reserves the journey's dominant god for the finale. All 4 gods rotate uniformly across curses, including the finale." },
-    finale_dominant_god = { en = "[untested] Finale God" },
-    finale_dominant_god_tooltip = { en = "Which god's curse is forced for the finale. 0 = weekly rotation, 1 = Nurgle, 2 = Tzeentch, 3 = Khorne, 4 = Slaanesh. Host-only." },
-    chest_upgrade_count = { en = "Upgrade Altars" },
-    chest_swap_melee_count = { en = "Melee Swap Altars" },
-    chest_swap_ranged_count = { en = "Ranged Swap Altars" },
-    chest_power_up_count = { en = "Boon Altars" },
-    altar_count_tooltip = { en = "-1 = Default (vanilla random count). 0 = none of this altar type. 1-9 = force this many per mission. If you set any altar type to a number, the types left at Default count as zero." },
-    cursed_chest_count_tooltip = { en = "0 = none, 1-5 = how many. Default 1 (matches vanilla's usual 1 per mission). Host-only." },
-    altar_count_default = { en = "Default" },
-    ["0"] = { en = "0" },
-    ["1"] = { en = "1" },
-    ["2"] = { en = "2" },
-    ["3"] = { en = "3" },
-    ["4"] = { en = "4" },
-    ["5"] = { en = "5" },
-    ["6"] = { en = "6" },
-    ["7"] = { en = "7" },
-    ["8"] = { en = "8" },
-    ["9"] = { en = "9" },
-    ["10"] = { en = "10" },
-    cursed_chest_count = { en = "Chests of Trials per Mission" },
-    respawn_on_chest_complete = { en = "[untested] Revive Team on Chest Completion" },
-    respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials is completed, revive knocked-down players and respawn dead players with a wound and 50%% temporary health. Host-only." },
-    arena_ammo_count = { en = "Rework: Arena Ammo Boxes" },
-    arena_ammo_count_tooltip = { en = "Only affects Chaos Wastes finale missions. Default = vanilla (2 ammo boxes). 0 = no ammo boxes. 1-10 = override to this many. Host-authoritative." },
-    enable_campaign_potions = { en = "Rework: Enable Strength/Speed/Ability Potions" },
-    any_trait_any_weapon = { en = "[untested] Rework: Any Trait on Any Weapon" },
-    any_trait_any_weapon_tooltip = { en = "Every weapon can roll any trait, not just its category's traits. Gated to Exotic+Unique unless 'Trait Tier by Rarity' is on." },
-    tweak_trait_tier_by_rarity = { en = "[untested] Rework: Trait Tier by Rarity" },
-    tweak_trait_tier_by_rarity_tooltip = { en = "Trait strength scales with weapon rarity (Common is weakest, Unique is strongest). Traits can roll at every rarity, and each upgrade rerolls them." },
-    tweak_shard_strike_duration = { en = "Rework: Shard Strike duration (sec)" },
-    tweak_shard_strike_duration_tooltip = { en = "Shard Strike (Armor Breaker) stagger aura duration (s). Vanilla 16; range 1-16." },
-    -- Curse labels carry their HOST GOD as a prefix ("Disable: <God>: <Curse>") and are
-    -- alphabetized (god, then curse) to match the menu widget order in *_data.lua. God
-    -- grouping is authoritative from vanilla deus_map_populate_settings.lua `all_curses`
-    -- (NB skulking_sorcerer = Nurgle, not Tzeentch; abundance_of_life = Slaanesh). The
-    -- in-game Slaanesh curse internally keyed `abundance_of_life` is named "Unquenchable
-    -- Thirst" (the engine codename is ironic — it drains life). Belakor is treated as a
-    -- god for prefixing. [confirmed working] tags kept as trailing notes (don't break sort).
-    disable_curse_belakor_totems = { en = "Disable: Belakor: Belakor's Totems" },
-    disable_curse_shadow_homing_skulls = { en = "Disable: Belakor: Shadow Homing Skulls [confirmed working]" },
-    disable_curse_blood_storm = { en = "Disable: Khorne: Blood Storm" },
-    disable_curse_khorne_champions = { en = "Disable: Khorne: Khorne Champions" },
-    disable_curse_skulls_of_fury = { en = "Disable: Khorne: Skulls of Fury [confirmed working]" },
-    disable_curse_corrupted_flesh = { en = "Disable: Nurgle: Corrupted Flesh" },
-    disable_curse_rotten_miasma = { en = "Disable: Nurgle: Rotten Miasma" },
-    disable_curse_skulking_sorcerer = { en = "Disable: Nurgle: Skulking Sorcerer" },
-    disable_curse_empathy = { en = "Disable: Slaanesh: Empathy" },
-    disable_curse_greed_pinata = { en = "Disable: Slaanesh: Greed" },
-    disable_curse_abundance_of_life = { en = "Disable: Slaanesh: Unquenchable Thirst" },
-    disable_curse_bolt_of_change = { en = "Disable: Tzeentch: Bolt of Change" },
-    disable_curse_change_of_tzeentch = { en = "Disable: Tzeentch: Change of Tzeentch" },
-    disable_curse_egg_of_tzeentch = { en = "Disable: Tzeentch: Egg of Tzeentch" },
+
+    -- ============================================================
+    -- Banned Weapon Traits
+    -- ============================================================
+    banned_traits_group = { en = "Banned Weapon Traits" },
     ban_trait_vanilla_group = { en = "Vanilla Weapon Traits" },
     ban_trait_chaos_wastes_group = { en = "Chaos Wastes Weapon Traits" },
     ban_trait_always_blocking = { en = "[untested] Vaul's Anvil (Always Blocking)" },
@@ -177,6 +97,304 @@ local loc = {
     ban_trait_shield_splinters_tooltip = { en = "Breaking shields sends splinters at the nearest enemies dealing damage." },
     ban_trait_stagger_aoe_on_crit = { en = "[untested] Shockwave" },
     ban_trait_stagger_aoe_on_crit_tooltip = { en = "Critical hits stagger nearby enemies." },
+
+    -- ============================================================
+    -- Curses
+    -- ============================================================
+    curses_group = { en = "Curses" },
+    disabled_curses_group = { en = "Disabled Curses" },
+    force_belakor = { en = "Always Include Belakor's Temple" },
+    -- v0.7.200-dev (#104): rolling-window cap on Corrupted Flesh gas clouds.
+    flesh_guard_clouds_per_minute = { en = "Corrupted Flesh: max clouds per minute" },
+    flesh_guard_clouds_per_minute_tooltip = { en = "Caps how many poison gas clouds the Corrupted Flesh curse can spawn per minute (marked enemies burst into a globadier-style cloud on death). 0 = vanilla, uncapped. Lower this if the curse tanks your framerate on dense missions. Host's value applies to the whole lobby." },
+    cursed_mission_count = { en = "[untested] Cursed Mission Count" },
+    cursed_mission_count_tooltip = { en = "Number of curse clusters per run. 0 = vanilla (2-7). Each cluster curses 1-3 adjacent nodes. Max 30. Host-only." },
+    disable_dominant_god = { en = "[untested] Disable Dominant-God Rule" },
+    disable_dominant_god_tooltip = { en = "Removes vanilla's rule that reserves the journey's dominant god for the finale. All 4 gods rotate uniformly across curses, including the finale." },
+    finale_dominant_god = { en = "[untested] Finale God" },
+    finale_dominant_god_tooltip = { en = "Which god's curse is forced for the finale. 0 = weekly rotation, 1 = Nurgle, 2 = Tzeentch, 3 = Khorne, 4 = Slaanesh. Host-only." },
+    -- Curse labels carry their HOST GOD as a prefix ("Disable: <God>: <Curse>") and are
+    -- alphabetized (god, then curse) to match the menu widget order in *_data.lua. God
+    -- grouping is authoritative from vanilla deus_map_populate_settings.lua `all_curses`
+    -- (NB skulking_sorcerer = Nurgle, not Tzeentch; abundance_of_life = Slaanesh). The
+    -- in-game Slaanesh curse internally keyed `abundance_of_life` is named "Unquenchable
+    -- Thirst" (the engine codename is ironic — it drains life). Belakor is treated as a
+    -- god for prefixing. [confirmed working] tags kept as trailing notes (don't break sort).
+    disable_curse_belakor_totems = { en = "Disable: Belakor: Belakor's Totems" },
+    disable_curse_shadow_homing_skulls = { en = "Disable: Belakor: Shadow Homing Skulls [confirmed working]" },
+    disable_curse_blood_storm = { en = "Disable: Khorne: Blood Storm" },
+    disable_curse_khorne_champions = { en = "Disable: Khorne: Khorne Champions" },
+    disable_curse_skulls_of_fury = { en = "Disable: Khorne: Skulls of Fury [confirmed working]" },
+    disable_curse_corrupted_flesh = { en = "Disable: Nurgle: Corrupted Flesh" },
+    disable_curse_rotten_miasma = { en = "Disable: Nurgle: Rotten Miasma" },
+    disable_curse_skulking_sorcerer = { en = "Disable: Nurgle: Skulking Sorcerer" },
+    disable_curse_empathy = { en = "Disable: Slaanesh: Empathy" },
+    disable_curse_greed_pinata = { en = "Disable: Slaanesh: Greed" },
+    disable_curse_abundance_of_life = { en = "Disable: Slaanesh: Unquenchable Thirst" },
+    disable_curse_bolt_of_change = { en = "Disable: Tzeentch: Bolt of Change" },
+    disable_curse_change_of_tzeentch = { en = "Disable: Tzeentch: Change of Tzeentch" },
+    disable_curse_egg_of_tzeentch = { en = "Disable: Tzeentch: Egg of Tzeentch" },
+    -- v0.7.89: Grudge Mark Ban Menu (re-instated; previous v0.7.76 implementation
+    -- never took effect because terror events capture the spawn func as an upvalue
+    -- at boot — fixed by mutating _G.BossGrudgeMarks directly).
+    boss_grudge_marks_group = { en = "Boss Grudge Marks Banlist" },
+    ban_grudge_mark_commander       = { en = "[untested] Ban: Commander" },
+    ban_grudge_mark_commander_tooltip       = { en = "The boss summons extra reinforcements during the fight." },
+    ban_grudge_mark_crippling       = { en = "[untested] Ban: Crippling Blow" },
+    ban_grudge_mark_crippling_tooltip       = { en = "The boss's hits reduce your damage." },
+    ban_grudge_mark_crushing        = { en = "[untested] Ban: Crushing Blow" },
+    ban_grudge_mark_crushing_tooltip        = { en = "The boss's hits deal heavy stagger and shrink your block angle." },
+    ban_grudge_mark_frenzy          = { en = "[untested] Ban: Frenzy" },
+    ban_grudge_mark_frenzy_tooltip          = { en = "The boss attacks faster as its health drops." },
+    ban_grudge_mark_intangible      = { en = "[untested] Ban: Intangible" },
+    ban_grudge_mark_intangible_tooltip      = { en = "The boss periodically fades and briefly can't be hit." },
+    ban_grudge_mark_periodic_curse  = { en = "[untested] Ban: Periodic Curse Aura" },
+    ban_grudge_mark_periodic_curse_tooltip  = { en = "The boss gives off a cursed-blood pulse on a set timer." },
+    ban_grudge_mark_periodic_shield = { en = "[untested] Ban: Periodic Shield" },
+    ban_grudge_mark_periodic_shield_tooltip = { en = "The boss gains a damage-absorbing shield on a set timer." },
+    ban_grudge_mark_raging          = { en = "[untested] Ban: Raging" },
+    ban_grudge_mark_raging_tooltip          = { en = "The boss enrages at low health for more damage and resistance." },
+    ban_grudge_mark_ranged_immune   = { en = "[untested] Ban: Ranged Immune" },
+    ban_grudge_mark_ranged_immune_tooltip   = { en = "The boss ignores all ranged damage and must be killed in melee." },
+    ban_grudge_mark_regenerating    = { en = "[untested] Ban: Regenerating" },
+    ban_grudge_mark_regenerating_tooltip    = { en = "The boss heals damage taken unless you keep pressuring it." },
+    ban_grudge_mark_unstaggerable   = { en = "[untested] Ban: Unstaggerable" },
+    ban_grudge_mark_unstaggerable_tooltip   = { en = "The boss can't be staggered by attacks or pushes." },
+    ban_grudge_mark_vampiric        = { en = "[untested] Ban: Vampiric" },
+    ban_grudge_mark_vampiric_tooltip        = { en = "The boss heals from the damage it deals to you." },
+    ban_grudge_mark_warping         = { en = "[untested] Ban: Warping" },
+    ban_grudge_mark_warping_tooltip         = { en = "The boss teleports around the fight at intervals." },
+
+    -- ============================================================
+    -- Pilgrim's Coin
+    -- ============================================================
+    pilgrims_coin_group = { en = "Pilgrim's Coin" },
+    coin_multiplier = { en = "Coin Pickup Multiplier" },
+    starting_coins = { en = "Starting Coins" },
+
+    -- ============================================================
+    -- Reworks
+    -- ============================================================
+    arena_ammo_count = { en = "Rework: Arena Ammo Boxes" },
+    arena_ammo_count_tooltip = { en = "Only affects Chaos Wastes finale missions. Default = vanilla (2 ammo boxes). 0 = no ammo boxes. 1-10 = override to this many. Host-authoritative." },
+    enable_campaign_potions = { en = "Rework: Enable Strength/Speed/Ability Potions" },
+    any_trait_any_weapon = { en = "[untested] Rework: Any Trait on Any Weapon" },
+    any_trait_any_weapon_tooltip = { en = "Every weapon can roll any trait, not just its category's traits. Gated to Exotic+Unique unless 'Trait Tier by Rarity' is on." },
+    tweak_trait_tier_by_rarity = { en = "[untested] Rework: Trait Tier by Rarity" },
+    tweak_trait_tier_by_rarity_tooltip = { en = "Trait strength scales with weapon rarity (Common is weakest, Unique is strongest). Traits can roll at every rarity, and each upgrade rerolls them." },
+    tweak_shard_strike_duration = { en = "Rework: Shard Strike duration (sec)" },
+    tweak_shard_strike_duration_tooltip = { en = "Shard Strike (Armor Breaker) stagger aura duration (s). Vanilla 16; range 1-16." },
+    -- v0.7.34: Trait-as-Boon. Each toggle enables the corresponding trait's effect as a Unique-rarity boon.
+    enable_boon_vauls_anvil = { en = "Rework: Vaul's Anvil as Boon (Unique)" },
+    enable_boon_vauls_anvil_tooltip = { en = "Adds Vaul's Anvil (passive block while melee wielded, 10s lockout on block break) as a Unique boon. Requires a new CW run." },
+    enable_boon_manann_tempest = { en = "Rework: Manann's Tempest as Boon (Unique)" },
+    enable_boon_manann_tempest_tooltip = { en = "Adds Manann's Tempest (crits trigger chain lightning) as a Unique boon. Stacks with the trait. Requires a new Chaos Wastes run." },
+    tweak_manann_tempest_cooldown = { en = "Rework: Manann's Tempest: 8s cooldown (boon + trait)" },
+    tweak_manann_tempest_cooldown_tooltip = { en = "Caps Manann's Tempest at one chain per 8s. Applies to both trait and boon. Off = vanilla (every crit). Host-only." },
+    enable_boon_taal_twinned_arrow = { en = "Rework: Taal's Twinned Arrow as Boon (Unique)" },
+    enable_boon_taal_twinned_arrow_tooltip = { en = "Adds Taal's Twinned Arrow (+1 ranged projectile per shot) as a Unique boon. Stacks with the trait. Requires a new CW run." },
+    enable_boon_asuryan_wrath = { en = "Rework: Asuryan's Wrath as Boon (Unique)" },
+    enable_boon_asuryan_wrath_tooltip = { en = "Adds Asuryan's Wrath (a melee kill has a 50%% chance to deal killing-blow damage to a nearby enemy) as a Unique boon. Stacks with the trait. Requires a new Chaos Wastes run." },
+    tweak_anath_raema_permanent = { en = "[untested] Rework: Anath Raema's Swiftness, permanent reload speed" },
+    tweak_anath_raema_permanent_tooltip = { en = "Makes Anath Raema's +50%% reload speed a permanent passive while the traited weapon is wielded. No ammo pickup needed." },
+    tweak_defeat_recovery = { en = "[untested] Rework: Defeat Recovery (soft wipe rescue)" },
+    tweak_defeat_recovery_tooltip = { en = "On a team wipe, everyone respawns, but you lose all your coins and 5 random boons. Works once per mission; wiping again ends the run normally. Each player only takes the penalty if they have this turned on." },
+    reworks_group = { en = "Reworks" },
+    reworks_boons_group = { en = "Reworks: Boons" },
+    -- v0.7.159-dev Task 1: nested sub-groups inside Reworks: Boons.
+    reworks_boons_existing_group = { en = "[untested] Reworks: Existing Boons" },
+    reworks_boons_new_group = { en = "[untested] Reworks: New Boons (Added)" },
+    reworks_potions_group = { en = "Reworks: Potions" },
+    tweak_poison_proof_duration = { en = "Rework: Poison Proof potion lasts 4 minutes" },
+    tweak_poison_proof_duration_tooltip = { en = "Lasts 4 minutes instead of 2 (6 with Decanter)." },
+    tweak_moot_milk_alt = { en = "Rework: Moot Milk alternative effect" },
+    tweak_moot_milk_alt_tooltip = { en = "Replaces Moot Milk's dodge buffs with: +25%% movement speed, unlimited dodges, +40%% stamina regen, 60s (90s with Decanter)." },
+    tweak_invis_potion_2x = { en = "Rework: Killer in the Shadows lasts 2x as long" },
+    tweak_invis_potion_2x_tooltip = { en = "Doubles Killer in the Shadows duration (5s becomes 10s, 15s becomes 30s). Decanter still adds +50%% on top." },
+    tweak_home_brewer_potency = { en = "Rework: Home Brewer +50%% potency" },
+    tweak_home_brewer_potency_tooltip = { en = "With Home Brewer, the Moot Milk rework is 1.5x stronger: +25%% movement speed becomes +37.5%%, and +40%% stamina regen becomes +60%%. Duration is unchanged." },
+    tweak_reckless_swings = { en = "Rework: Khaine's Fury" },
+    tweak_reckless_swings_tooltip = { en = "Softens Khaine's Fury: self-damage drops from 3 to 1 per melee hit, and it stays active down to 25%% health instead of 50%%." },
+    tweak_miracle_of_ulric_persistent = { en = "[untested] Miracle of Ulric (Persistent Power)" },
+    tweak_miracle_of_ulric_persistent_tooltip = { en = "Replaces Blessing of Power: applies +50 Power as a persistent buff that survives weapon swaps. Renames to \"Miracle of Ulric\". Host-only." },
+    ulric_pack_unlimited_range = { en = "[untested] Ulric's Pack: Unlimited Aura Range" },
+    ulric_pack_unlimited_range_tooltip = { en = "Removes the 20m range limit on Ulric's Pack, so every ally who has the boon counts no matter how far away they are. No restart needed." },
+    tweak_wildfire_generations_cap = { en = "[untested] Myrmidia's Wildfire: Generations Cap" },
+    tweak_wildfire_generations_cap_tooltip = { en = "Max times Myrmidia's Wildfire can chain. 3 = prevents infinite cascades; 10 = near-uncapped vanilla; 1 = no chaining past the original spread. Host-only." },
+    -- v0.7.81: Miracle of Isha replaced its dropdown widget with a mutex
+    -- checkbox cluster (per LOCALIZATION_STANDARD.md § 10). The legacy dropdown
+    -- option-label keys (isha_alt_vanilla/aegis/wounds) and the _tooltip were
+    -- removed as dead code (v0.7.203) — no widget referenced them. The base
+    -- setting key below is kept because _get_isha_mode()'s migration path still
+    -- reads its stored value (mod:get) for users who last picked the old dropdown.
+    tweak_miracle_of_isha_alternative = { en = "Miracle of Isha behavior (legacy dropdown)" },
+    -- Mutex cluster `isha_choice` — pick one (or neither = vanilla). Per
+    -- LOCALIZATION_STANDARD.md § 10, cluster members use the
+    -- "    (A) / (B) / (C)" prefix convention with leading 4-space indent
+    -- so the multiple-choice relationship reads visually in the VMF UI.
+    tweak_miracle_of_isha_aegis = { en = "[untested]     (A) Aegis: -25%% damage taken for the next mission" },
+    tweak_miracle_of_isha_aegis_tooltip = {
+        en = "Miracle of Isha, choice (A) of (B). Alternative to '(B) Unlimited Wounds': turning either one on turns the other off, and both off keeps the vanilla revive-once effect. Every hero takes 25%% less damage for the next mission only. Host-only."
+    },
+    tweak_miracle_of_isha_wounds = { en = "[untested]     (B) Unlimited Wounds: recruit-style, every knockdown revivable (next mission only)" },
+    tweak_miracle_of_isha_wounds_tooltip = {
+        en = "Miracle of Isha, choice (B) of (B). Alternative to '(A) Aegis': turning either one on turns the other off, and both off keeps the vanilla revive-once effect. Every hero gets unlimited wounds for the next mission only, so like Recruit difficulty every knockdown is revivable. Host-only."
+    },
+    tweak_boon_movespeed = { en = "Rework: Movement Speed property" },
+    tweak_boon_movespeed_tooltip = { en = "Changes the 5%% movement speed bonus to 10%%." },
+    bomb_boon_cooldown = { en = "Bomb Boon Cooldown (s)" },
+    bomb_boon_cooldown_tooltip = { en = "Minimum seconds between drops for the 'drop a bomb or item on ability use' boon (0 = vanilla, which is 120 to 180). Lower it, for example to 60, to drop more often. Host-only." },
+    bomb_boon_exclusive = { en = "Bomb Boons Mutually Exclusive" },
+    bomb_boon_exclusive_tooltip = { en = "Once you own any bomb boon, others are removed from the pool. Prevents stacking." },
+    endless_bombs_consumes_morgrim = { en = "[untested] No Morgrim's Carry-Over (Endless Bombs)" },
+    endless_bombs_consumes_morgrim_tooltip = { en = "Endless Bombs still duplicates Morgrim's Bomb, but any un-thrown copy is removed when the potion ends, so you can't carry it over to the next potion. Host-only." },
+    rv_no_save_morgrim = { en = "[untested] Block Ranger Veteran from Saving Morgrim's" },
+    rv_no_save_morgrim_tooltip = { en = "Ranger Veteran's Survivalist passive cannot save Morgrim's Bomb. Other grenades unaffected." },
+    -- v0.7.76: Bot Boon Mirror (Phase 3.1)
+    bots_mirror_host_boons = { en = "Shared Blessings: Bots Mirror Host's Boons" },
+    bots_mirror_host_boons_tooltip = { en = "Every bot gets the same boon the host picks at any shrine, altar, or chest. Host-only." },
+    -- v0.7.120-dev: Bot Boon Random Roll (mutex alternative to mirror)
+    bots_get_random_boons = { en = "Shared Blessings: Bots Roll Random Boons" },
+    bots_get_random_boons_tooltip = { en = "Whenever the host picks a boon, each bot gets its own random boon of the same rarity from the same pool, so bots usually differ from each other and the host. Turning this on turns off 'Bots Mirror Host's Boons'. Host-only." },
+    -- v0.7.120-dev: Bot Weapon Upgrade Mirror
+    bots_mirror_host_weapon_upgrades = { en = "Shared Reliquaries: Bots Get Host's Weapon Upgrades" },
+    bots_mirror_host_weapon_upgrades_tooltip = { en = "Whenever the host uses a Chaos Wastes weapon altar, each bot gets the matching result: a swap altar gives the bot a new random weapon of the same rarity, and an upgrade altar upgrades the bot's current weapon to the same rarity with rerolled traits. Host-only." },
+    announce_bot_boons = { en = "Announce Bot Boons in Chat" },
+    announce_bot_boons_tooltip = { en = "Prints a chat line naming each bot and the boon it got whenever bots are given boons. Only you see it, and only while 'Bots Mirror Host's Boons' or 'Bots Roll Random Boons' is on. Host-only." },
+    -- Blessed Bots: Survival Boons (any gamemode; _ct_blessed_bots.lua)
+    ct_blessed_bots = { en = "Blessed Bots: Survival Boons" },
+    ct_blessed_bots_tooltip = { en = "Gives every bot three Chaos Wastes survival boons in any game mode to keep them alive longer: they gain power and healing when all allies are down, gain speed and brief damage protection at low health, and make downed allies near them invulnerable. Host-only. Experimental." },
+    -- Shadow Homing Skulls curse stun duration (mechanic tweak; ct main lua)
+    tweak_shadow_skull_stun_sec = { en = "Shadow Homing Skulls stun (seconds)" },
+    tweak_shadow_skull_stun_sec_tooltip = { en = "How many seconds the Shadow Homing Skulls curse keeps you disabled when a skull hits you (2.5 = vanilla). Lower it to soften the curse, raise it to make it harsher. Host-only." },
+
+    -- ============================================================
+    -- Shrines, Altars and Chests
+    -- ============================================================
+    shrines_altars_chests_group = { en = "Shrines, Altars and Chests" },
+    -- show_duplicate_career_chips / map_screen_group REMOVED v0.7.194-dev: the
+    -- duplicate-career vote chips are now an IMPLICIT always-on feature (no toggle,
+    -- no "Map Screen" menu group). See _ct_dup_vote_chips.lua.
+    altar_reuse_group = { en = "Altar Reroll Options" },
+    altar_chest_counts_group = { en = "Altars & Chests per Mission" },
+    boons_offered_group = { en = "Boons Offered" },
+    chest_of_trials_group = { en = "Chest of Trials" },
+    altar_reuse_count_power_up    = { en = "Boon shrine: max uses per altar" },
+    altar_reuse_cost_mult_power_up = { en = "Boon shrine: cost multiplier per reuse" },
+    altar_reuse_count_swap_melee    = { en = "Melee swap altar: max uses per altar" },
+    altar_reuse_cost_mult_swap_melee = { en = "Melee swap altar: cost multiplier per reuse" },
+    altar_reuse_count_swap_ranged    = { en = "Ranged swap altar: max uses per altar" },
+    altar_reuse_cost_mult_swap_ranged = { en = "Ranged swap altar: cost multiplier per reuse" },
+    altar_reuse_count_upgrade    = { en = "Weapon upgrade altar: max uses per altar" },
+    altar_reuse_count_upgrade_tooltip = { en = "How many times you can use a weapon-upgrade altar in one visit (1 = vanilla single use). Each extra use rerolls the upgraded weapon's properties and trait and keeps the altar lit instead of going dark. Host-only." },
+    altar_reuse_cost_mult_upgrade = { en = "Weapon upgrade altar: cost multiplier per reuse" },
+    altar_reuse_count_tooltip = { en = "How many times you can use the same altar in one visit (1 = vanilla single use). Each extra use rerolls the offered items so you can fix a bad pick. Host-only." },
+    altar_reuse_cost_mult_tooltip = { en = "Multiplies the coin cost each time you reuse an altar. 1.0 = same cost every use, 2.0 = doubles each use (1x, 2x, 4x), 0.5 = halves each use. Host-only." },
+    cot_enemy_multiplier = { en = "Chest of Trials enemy multiplier" },
+    cot_enemy_multiplier_tooltip = { en = "Multiplies how many enemies spawn during a Chest of Trials wave (1.0 = vanilla, 2.0 = double, 5.0 = huge horde). Only affects trial waves, not normal mission spawns. Host-only." },
+    shrine_boon_count = { en = "Shrines: Number of Available Boons" },
+    chest_boon_count = { en = "Chests: Number of Available Boons" },
+    chest_upgrade_count = { en = "Upgrade Altars" },
+    chest_swap_melee_count = { en = "Melee Swap Altars" },
+    chest_swap_ranged_count = { en = "Ranged Swap Altars" },
+    chest_power_up_count = { en = "Boon Altars" },
+    altar_count_tooltip = { en = "-1 = Default (vanilla random count). 0 = none of this altar type. 1-9 = force this many per mission. If you set any altar type to a number, the types left at Default count as zero." },
+    cursed_chest_count_tooltip = { en = "0 = none, 1-5 = how many. Default 1 (matches vanilla's usual 1 per mission). Host-only." },
+    altar_count_default = { en = "Default" },
+    ["0"] = { en = "0" },
+    ["1"] = { en = "1" },
+    ["2"] = { en = "2" },
+    ["3"] = { en = "3" },
+    ["4"] = { en = "4" },
+    ["5"] = { en = "5" },
+    ["6"] = { en = "6" },
+    ["7"] = { en = "7" },
+    ["8"] = { en = "8" },
+    ["9"] = { en = "9" },
+    ["10"] = { en = "10" },
+    cursed_chest_count = { en = "Chests of Trials per Mission" },
+    respawn_on_chest_complete = { en = "[untested] Revive Team on Chest Completion" },
+    respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials is completed, revive knocked-down players and respawn dead players with a wound and 50%% temporary health. Host-only." },
+
+    -- ============================================================
+    -- Mod Boons (ct-injected: Cascades + Trait-as-Boon variants)
+    -- ============================================================
+    -- Mod Boons (v0.7.30) — 4 ct-injected per-boon scaling boons (model: Lileath's Favour)
+    disable_boon_mod_boons_group = { en = "Disable Boons: (Mod Boon) New Scaling Boons" },
+    start_boon_mod_boons_group   = { en = "Starting Boons: (Mod Boon) New Scaling Boons" },
+    disable_boon_ct_meta_stagger  = { en = "Disable Boon: (Mod Boon) Reactive Bulwark" },
+    start_boon_ct_meta_stagger    = { en = "Starting Boon: (Mod Boon) Reactive Bulwark" },
+    disable_boon_ct_meta_stagger_tooltip = { en = "(Mod Boon) Per active boon, gain +1%% stagger power and +1%% melee cleave. Works like Lileath's Favour, but boosts impact and cleave instead of damage and attack speed." },
+    start_boon_ct_meta_stagger_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% stagger power and +1%% melee cleave. Works like Lileath's Favour, but boosts impact and cleave instead of damage and attack speed." },
+    display_name_ct_meta_stagger = { en = "Reactive Bulwark" },
+    description_ct_meta_stagger  = { en = "+1%% stagger power and +1%% cleave per active boon." },
+    disable_boon_ct_meta_crit = { en = "Disable Boon: (Mod Boon) Crit Cascade" },
+    start_boon_ct_meta_crit   = { en = "Starting Boon: (Mod Boon) Crit Cascade" },
+    disable_boon_ct_meta_crit_tooltip = { en = "(Mod Boon) Per active boon, gain +1%% critical strike chance and +5%% critical strike effectiveness (crit damage)." },
+    start_boon_ct_meta_crit_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% critical strike chance and +5%% critical strike effectiveness (crit damage)." },
+    display_name_ct_meta_crit = { en = "Crit Cascade" },
+    description_ct_meta_crit  = { en = "+1%% crit chance and +5%% crit power per active boon." },
+    disable_boon_ct_meta_health = { en = "Disable Boon: (Mod Boon) Vitality Cascade" },
+    start_boon_ct_meta_health   = { en = "Starting Boon: (Mod Boon) Vitality Cascade" },
+    disable_boon_ct_meta_health_tooltip = { en = "(Mod Boon) Per active boon, gain +1%% max health and +1%% healing received." },
+    start_boon_ct_meta_health_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% max health and +1%% healing received." },
+    display_name_ct_meta_health = { en = "Vitality Cascade" },
+    description_ct_meta_health  = { en = "+1%% max health and +1%% healing received per active boon." },
+    disable_boon_ct_meta_cooldown = { en = "Disable Boon: (Mod Boon) Ability Cascade" },
+    start_boon_ct_meta_cooldown   = { en = "Starting Boon: (Mod Boon) Ability Cascade" },
+    disable_boon_ct_meta_cooldown_tooltip = { en = "(Mod Boon) Per active boon, gain +2%% cooldown regen rate." },
+    start_boon_ct_meta_cooldown_tooltip   = { en = "(Mod Boon) Per active boon, gain +2%% cooldown regen rate." },
+    display_name_ct_meta_cooldown = { en = "Ability Cascade" },
+    description_ct_meta_cooldown  = { en = "+2%% cooldown regen per active boon." },
+    disable_boon_ct_meta_movespeed = { en = "Disable Boon: (Mod Boon) Wind Cascade" },
+    start_boon_ct_meta_movespeed   = { en = "Starting Boon: (Mod Boon) Wind Cascade" },
+    disable_boon_ct_meta_movespeed_tooltip = { en = "(Mod Boon) Per active boon: +1%% movement speed (compounds). Exotic." },
+    start_boon_ct_meta_movespeed_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% movement speed. Exotic rarity." },
+    display_name_ct_meta_movespeed = { en = "Wind Cascade" },
+    description_ct_meta_movespeed  = { en = "+1%% movement speed per active boon." },
+    -- v0.7.43: Quiver Cascade (+5% ammo per boon, ranged-secondary required for any effect)
+    -- v0.7.72: also extends max overheat (Sienna staves, Bardin drakefire) and Moonfire Bow energy capacity.
+    disable_boon_ct_meta_ammo = { en = "Disable Boon: (Mod Boon) Quiver Cascade" },
+    start_boon_ct_meta_ammo   = { en = "Starting Boon: (Mod Boon) Quiver Cascade" },
+    disable_boon_ct_meta_ammo_tooltip = { en = "(Mod Boon) Per active boon: +5%% total ammo, -5%% overheat per cast (Sienna staves, Bardin drakefire), +5%% Moonfire Bow energy. Exotic. Inert without a ranged weapon." },
+    start_boon_ct_meta_ammo_tooltip   = { en = "(Mod Boon) Per active boon: +5%% total ammo, -5%% overheat per cast, +5%% Moonfire energy. Exotic." },
+    display_name_ct_meta_ammo = { en = "Quiver Cascade" },
+    description_ct_meta_ammo  = { en = "+5%% total ammo per active boon. Per-shot cost saturates at 75%% off; never free." },
+    -- v0.7.32: 1 green HP per kill mod boon
+    -- 2026-05-23 v0.7.98-dev DISABLED: ct_kill_heal mod boon removed per user request after
+    -- Chest-of-Trials crash. Restore alongside the ct_kill_heal block in
+    -- chaos_wastes_tweaker.lua (~L5698) and the BOON_TREE entry in chaos_wastes_tweaker_data.lua.
+    --[[
+    disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
+    start_boon_ct_kill_heal   = { en = "Starting Boon: (Mod Boon) Khaine's Communion" },
+    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Catalogued under Health by effect. Toggle this off to remove it from the boon pool." },
+    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Enable to roll as your starting boon — the boon must be injected into the pool (which happens automatically when this mod is active)." },
+    display_name_ct_kill_heal = { en = "Khaine's Communion" },
+    description_ct_kill_heal  = { en = "Killing an enemy heals you for 0.25 permanent (green) health." },
+    --]]
+    disable_boon_ct_boon_vauls_anvil = { en = "Disable Boon: (Mod Boon) Vaul's Anvil" },
+    start_boon_ct_boon_vauls_anvil   = { en = "Starting Boon: (Mod Boon) Vaul's Anvil" },
+    disable_boon_ct_boon_vauls_anvil_tooltip = { en = "(Mod Boon) Boon variant with the same effect as the trait. Requires the matching Rework toggle." },
+    start_boon_ct_boon_vauls_anvil_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
+    disable_boon_ct_boon_manann_tempest = { en = "Disable Boon: (Mod Boon) Manann's Tempest" },
+    start_boon_ct_boon_manann_tempest   = { en = "Starting Boon: (Mod Boon) Manann's Tempest" },
+    disable_boon_ct_boon_manann_tempest_tooltip = { en = "(Mod Boon) Boon variant that stacks with the trait. Requires the Rework toggle." },
+    start_boon_ct_boon_manann_tempest_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
+    disable_boon_ct_boon_taal_twinned_arrow = { en = "Disable Boon: (Mod Boon) Taal's Twinned Arrow" },
+    start_boon_ct_boon_taal_twinned_arrow   = { en = "Starting Boon: (Mod Boon) Taal's Twinned Arrow" },
+    disable_boon_ct_boon_taal_twinned_arrow_tooltip = { en = "(Mod Boon) Boon variant that stacks with the trait. Requires the Rework toggle." },
+    start_boon_ct_boon_taal_twinned_arrow_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
+    disable_boon_ct_boon_asuryan_wrath = { en = "Disable Boon: (Mod Boon) Asuryan's Wrath" },
+    start_boon_ct_boon_asuryan_wrath   = { en = "Starting Boon: (Mod Boon) Asuryan's Wrath" },
+    disable_boon_ct_boon_asuryan_wrath_tooltip = { en = "(Mod Boon) Boon variant that stacks with the trait. Melee-only. Requires the Rework toggle." },
+    start_boon_ct_boon_asuryan_wrath_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
+    mod_boons = { en = "Mod Boons" },
+
+    -- ============================================================
+    -- Boon Tree: Group Display Names
+    -- ============================================================
+    disable_boon_bombs_group = { en = "Disable Boons: Bomb Boons" },
+    start_boon_bombs_group = { en = "Starting Boons: Bomb Boons" },
     disabled_boons_group = { en = "Disabled Boons" },
     starting_boons_group = { en = "Starting Boons" },
     -- v0.7.27c parent group display names
@@ -226,183 +444,6 @@ local loc = {
     disable_boon_gamble_misc_group = { en = "Disable Boons: Gamble & Misc" },
     start_boon_gamble_misc_group = { en = "Starting Boons: Gamble & Misc" },
     start_boon_dormant_group = { en = "Starting Boons: Dormant Boons" },
-
-    -- Mod Boons (v0.7.30) — 4 ct-injected per-boon scaling boons (model: Lileath's Favour)
-    disable_boon_mod_boons_group = { en = "Disable Boons: (Mod Boon) New Scaling Boons" },
-    start_boon_mod_boons_group   = { en = "Starting Boons: (Mod Boon) New Scaling Boons" },
-    disable_boon_ct_meta_stagger  = { en = "Disable Boon: (Mod Boon) Reactive Bulwark" },
-    start_boon_ct_meta_stagger    = { en = "Starting Boon: (Mod Boon) Reactive Bulwark" },
-    disable_boon_ct_meta_stagger_tooltip = { en = "(Mod Boon) Per active boon, gain +1%% stagger power and +1%% melee cleave. Works like Lileath's Favour, but boosts impact and cleave instead of damage and attack speed." },
-    start_boon_ct_meta_stagger_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% stagger power and +1%% melee cleave. Works like Lileath's Favour, but boosts impact and cleave instead of damage and attack speed." },
-    display_name_ct_meta_stagger = { en = "Reactive Bulwark" },
-    description_ct_meta_stagger  = { en = "+1%% stagger power and +1%% cleave per active boon." },
-
-    disable_boon_ct_meta_crit = { en = "Disable Boon: (Mod Boon) Crit Cascade" },
-    start_boon_ct_meta_crit   = { en = "Starting Boon: (Mod Boon) Crit Cascade" },
-    disable_boon_ct_meta_crit_tooltip = { en = "(Mod Boon) Per active boon, gain +1%% critical strike chance and +5%% critical strike effectiveness (crit damage)." },
-    start_boon_ct_meta_crit_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% critical strike chance and +5%% critical strike effectiveness (crit damage)." },
-    display_name_ct_meta_crit = { en = "Crit Cascade" },
-    description_ct_meta_crit  = { en = "+1%% crit chance and +5%% crit power per active boon." },
-
-    disable_boon_ct_meta_health = { en = "Disable Boon: (Mod Boon) Vitality Cascade" },
-    start_boon_ct_meta_health   = { en = "Starting Boon: (Mod Boon) Vitality Cascade" },
-    disable_boon_ct_meta_health_tooltip = { en = "(Mod Boon) Per active boon, gain +1%% max health and +1%% healing received." },
-    start_boon_ct_meta_health_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% max health and +1%% healing received." },
-    display_name_ct_meta_health = { en = "Vitality Cascade" },
-    description_ct_meta_health  = { en = "+1%% max health and +1%% healing received per active boon." },
-
-    disable_boon_ct_meta_cooldown = { en = "Disable Boon: (Mod Boon) Ability Cascade" },
-    start_boon_ct_meta_cooldown   = { en = "Starting Boon: (Mod Boon) Ability Cascade" },
-    disable_boon_ct_meta_cooldown_tooltip = { en = "(Mod Boon) Per active boon, gain +2%% cooldown regen rate." },
-    start_boon_ct_meta_cooldown_tooltip   = { en = "(Mod Boon) Per active boon, gain +2%% cooldown regen rate." },
-    display_name_ct_meta_cooldown = { en = "Ability Cascade" },
-    description_ct_meta_cooldown  = { en = "+2%% cooldown regen per active boon." },
-
-    disable_boon_ct_meta_movespeed = { en = "Disable Boon: (Mod Boon) Wind Cascade" },
-    start_boon_ct_meta_movespeed   = { en = "Starting Boon: (Mod Boon) Wind Cascade" },
-    disable_boon_ct_meta_movespeed_tooltip = { en = "(Mod Boon) Per active boon: +1%% movement speed (compounds). Exotic." },
-    start_boon_ct_meta_movespeed_tooltip   = { en = "(Mod Boon) Per active boon, gain +1%% movement speed. Exotic rarity." },
-    display_name_ct_meta_movespeed = { en = "Wind Cascade" },
-    description_ct_meta_movespeed  = { en = "+1%% movement speed per active boon." },
-
-    -- v0.7.43: Quiver Cascade (+5% ammo per boon, ranged-secondary required for any effect)
-    -- v0.7.72: also extends max overheat (Sienna staves, Bardin drakefire) and Moonfire Bow energy capacity.
-    disable_boon_ct_meta_ammo = { en = "Disable Boon: (Mod Boon) Quiver Cascade" },
-    start_boon_ct_meta_ammo   = { en = "Starting Boon: (Mod Boon) Quiver Cascade" },
-    disable_boon_ct_meta_ammo_tooltip = { en = "(Mod Boon) Per active boon: +5%% total ammo, -5%% overheat per cast (Sienna staves, Bardin drakefire), +5%% Moonfire Bow energy. Exotic. Inert without a ranged weapon." },
-    start_boon_ct_meta_ammo_tooltip   = { en = "(Mod Boon) Per active boon: +5%% total ammo, -5%% overheat per cast, +5%% Moonfire energy. Exotic." },
-    display_name_ct_meta_ammo = { en = "Quiver Cascade" },
-    description_ct_meta_ammo  = { en = "+5%% total ammo per active boon. Per-shot cost saturates at 75%% off; never free." },
-
-    -- v0.7.32: 1 green HP per kill mod boon
-    -- 2026-05-23 v0.7.98-dev DISABLED: ct_kill_heal mod boon removed per user request after
-    -- Chest-of-Trials crash. Restore alongside the ct_kill_heal block in
-    -- chaos_wastes_tweaker.lua (~L5698) and the BOON_TREE entry in chaos_wastes_tweaker_data.lua.
-    --[[
-    disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
-    start_boon_ct_kill_heal   = { en = "Starting Boon: (Mod Boon) Khaine's Communion" },
-    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Catalogued under Health by effect. Toggle this off to remove it from the boon pool." },
-    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Enable to roll as your starting boon — the boon must be injected into the pool (which happens automatically when this mod is active)." },
-    display_name_ct_kill_heal = { en = "Khaine's Communion" },
-    description_ct_kill_heal  = { en = "Killing an enemy heals you for 0.25 permanent (green) health." },
-    --]]
-
-    -- v0.7.34: Trait-as-Boon. Each toggle enables the corresponding trait's effect as a Unique-rarity boon.
-    enable_boon_vauls_anvil = { en = "Rework: Vaul's Anvil as Boon (Unique)" },
-    enable_boon_vauls_anvil_tooltip = { en = "Adds Vaul's Anvil (passive block while melee wielded, 10s lockout on block break) as a Unique boon. Requires a new CW run." },
-    enable_boon_manann_tempest = { en = "Rework: Manann's Tempest as Boon (Unique)" },
-    enable_boon_manann_tempest_tooltip = { en = "Adds Manann's Tempest (crits trigger chain lightning) as a Unique boon. Stacks with the trait. Requires a new Chaos Wastes run." },
-    tweak_manann_tempest_cooldown = { en = "Rework: Manann's Tempest: 8s cooldown (boon + trait)" },
-    tweak_manann_tempest_cooldown_tooltip = { en = "Caps Manann's Tempest at one chain per 8s. Applies to both trait and boon. Off = vanilla (every crit). Host-only." },
-    enable_boon_taal_twinned_arrow = { en = "Rework: Taal's Twinned Arrow as Boon (Unique)" },
-    enable_boon_taal_twinned_arrow_tooltip = { en = "Adds Taal's Twinned Arrow (+1 ranged projectile per shot) as a Unique boon. Stacks with the trait. Requires a new CW run." },
-    enable_boon_asuryan_wrath = { en = "Rework: Asuryan's Wrath as Boon (Unique)" },
-    enable_boon_asuryan_wrath_tooltip = { en = "Adds Asuryan's Wrath (a melee kill has a 50%% chance to deal killing-blow damage to a nearby enemy) as a Unique boon. Stacks with the trait. Requires a new Chaos Wastes run." },
-    tweak_anath_raema_permanent = { en = "[untested] Rework: Anath Raema's Swiftness, permanent reload speed" },
-    tweak_anath_raema_permanent_tooltip = { en = "Makes Anath Raema's +50%% reload speed a permanent passive while the traited weapon is wielded. No ammo pickup needed." },
-    tweak_defeat_recovery = { en = "[untested] Rework: Defeat Recovery (soft wipe rescue)" },
-    tweak_defeat_recovery_tooltip = { en = "On a team wipe, everyone respawns, but you lose all your coins and 5 random boons. Works once per mission; wiping again ends the run normally. Each player only takes the penalty if they have this turned on." },
-
-    disable_boon_ct_boon_vauls_anvil = { en = "Disable Boon: (Mod Boon) Vaul's Anvil" },
-    start_boon_ct_boon_vauls_anvil   = { en = "Starting Boon: (Mod Boon) Vaul's Anvil" },
-    disable_boon_ct_boon_vauls_anvil_tooltip = { en = "(Mod Boon) Boon variant with the same effect as the trait. Requires the matching Rework toggle." },
-    start_boon_ct_boon_vauls_anvil_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
-
-    disable_boon_ct_boon_manann_tempest = { en = "Disable Boon: (Mod Boon) Manann's Tempest" },
-    start_boon_ct_boon_manann_tempest   = { en = "Starting Boon: (Mod Boon) Manann's Tempest" },
-    disable_boon_ct_boon_manann_tempest_tooltip = { en = "(Mod Boon) Boon variant that stacks with the trait. Requires the Rework toggle." },
-    start_boon_ct_boon_manann_tempest_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
-
-    disable_boon_ct_boon_taal_twinned_arrow = { en = "Disable Boon: (Mod Boon) Taal's Twinned Arrow" },
-    start_boon_ct_boon_taal_twinned_arrow   = { en = "Starting Boon: (Mod Boon) Taal's Twinned Arrow" },
-    disable_boon_ct_boon_taal_twinned_arrow_tooltip = { en = "(Mod Boon) Boon variant that stacks with the trait. Requires the Rework toggle." },
-    start_boon_ct_boon_taal_twinned_arrow_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
-
-    disable_boon_ct_boon_asuryan_wrath = { en = "Disable Boon: (Mod Boon) Asuryan's Wrath" },
-    start_boon_ct_boon_asuryan_wrath   = { en = "Starting Boon: (Mod Boon) Asuryan's Wrath" },
-    disable_boon_ct_boon_asuryan_wrath_tooltip = { en = "(Mod Boon) Boon variant that stacks with the trait. Melee-only. Requires the Rework toggle." },
-    start_boon_ct_boon_asuryan_wrath_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
-
-    -- 2026-05-23 v0.7.98-dev DISABLED: Skulls Event Boons + Activate Dormant Boons localization
-    -- removed per user request after Chest-of-Trials crash. Restore alongside the matching VMF
-    -- widgets in chaos_wastes_tweaker_data.lua and the lua apply-site calls.
-    --[[
-    skulls_event_boons_group = { en = "Khorne's Skulls Event Boons" },
-    enable_skulls_event_boons = { en = "[untested] Enable Skulls Event Boons (any time)" },
-    enable_skulls_event_boons_tooltip = { en = "Adds the 10 Khorne's Skulls event boons to the normal CW pool. Vanilla gates them to the Skulls mutator; this clears that gate. Set bonuses still work. Boons 06/07/08 are inert outside the event. Applies to the NEXT shrine/chest roll." },
-
-    activate_dormant_boons_group = { en = "Activate Dormant Boons" },
-    activate_dormant_deus_ammo_pickup_give_allies_ammo = { en = "Activate: Mathlann's Bounty" },
-    activate_dormant_deus_ammo_pickup_give_allies_ammo_tooltip = { en = "Injects Mathlann's Bounty (ammo pickup grants ammo to allies) into the active CW boon pool at Rare rarity. Dormant in vanilla. Requires a new CW run to take effect; toggling off requires a game restart to fully remove from the pool." },
-    activate_dormant_deus_coin_pickup_regen = { en = "Activate: Bögenauer's Prosperity" },
-    activate_dormant_deus_coin_pickup_regen_tooltip = { en = "Injects Bögenauer's Prosperity (coin pickup → moderate health regen) into the active CW boon pool at Rare rarity. Dormant in vanilla. Requires a new CW run to take effect." },
-    activate_dormant_deus_large_ammo_pickup_infinite_ammo = { en = "Activate: Nethu's Relentlessness" },
-    activate_dormant_deus_large_ammo_pickup_infinite_ammo_tooltip = { en = "Injects Nethu's Relentlessness (large ammo pickup grants temporary infinite ammo) into the active CW boon pool at Exotic rarity. Dormant in vanilla. Requires a new CW run to take effect." },
-    activate_dormant_deus_larger_clip = { en = "Activate: Grungni's Gift" },
-    activate_dormant_deus_larger_clip_tooltip = { en = "Injects Grungni's Gift (+clip size) into the active CW boon pool at Common rarity. Dormant in vanilla (likely moved to a charm trait equivalent). Requires a new CW run to take effect." },
-    activate_dormant_deus_throw_speed_increase = { en = "Activate: Hashut's Greeting" },
-    activate_dormant_deus_throw_speed_increase_tooltip = { en = "Injects Hashut's Greeting (double throw speed) into the active CW boon pool at Rare rarity. Dormant in vanilla. Requires a new CW run to take effect." },
-    activate_dormant_deus_timed_block_free_shot = { en = "Activate: Timed-Block Free Shot" },
-    activate_dormant_deus_timed_block_free_shot_tooltip = { en = "Injects the timed-block-free-shot effect into the active CW boon pool at Exotic rarity. Dormant in vanilla. Requires a new CW run to take effect." },
-    activate_dormant_deus_transmute_into_coins = { en = "Activate: Smednir's Transmutation" },
-    activate_dormant_deus_transmute_into_coins_tooltip = { en = "Injects Smednir's Transmutation (items → coins) into the active CW boon pool at Rare rarity. Dormant in vanilla (placeholder icon — likely cut content). Requires a new CW run to take effect." },
-    activate_dormant_explosive_pushes_on_damage_taken = { en = "Activate: Chotec's Touch" },
-    activate_dormant_explosive_pushes_on_damage_taken_tooltip = { en = "Injects Chotec's Touch (taking damage → push attacks become explosive) into the active CW boon pool at Exotic rarity. Dormant in vanilla (placeholder icon — likely cut content). Functional implementation verified in source. Requires a new CW run to take effect." },
-    activate_dormant_squats = { en = "Activate: Squats" },
-    activate_dormant_squats_tooltip = { en = "Injects 'Squats' into the active CW boon pool at Common rarity. Dormant in vanilla (no description text — placeholder/easter-egg boon). Requires a new CW run to take effect." },
-    --]]
-    reworks_group = { en = "Reworks" },
-    reworks_boons_group = { en = "Reworks: Boons" },
-    -- v0.7.159-dev Task 1: nested sub-groups inside Reworks: Boons.
-    reworks_boons_existing_group = { en = "[untested] Reworks: Existing Boons" },
-    reworks_boons_new_group = { en = "[untested] Reworks: New Boons (Added)" },
-    reworks_potions_group = { en = "Reworks: Potions" },
-    tweak_poison_proof_duration = { en = "Rework: Poison Proof potion lasts 4 minutes" },
-    tweak_poison_proof_duration_tooltip = { en = "Lasts 4 minutes instead of 2 (6 with Decanter)." },
-    tweak_moot_milk_alt = { en = "Rework: Moot Milk alternative effect" },
-    tweak_moot_milk_alt_tooltip = { en = "Replaces Moot Milk's dodge buffs with: +25%% movement speed, unlimited dodges, +40%% stamina regen, 60s (90s with Decanter)." },
-    tweak_invis_potion_2x = { en = "Rework: Killer in the Shadows lasts 2x as long" },
-    tweak_invis_potion_2x_tooltip = { en = "Doubles Killer in the Shadows duration (5s becomes 10s, 15s becomes 30s). Decanter still adds +50%% on top." },
-    tweak_home_brewer_potency = { en = "Rework: Home Brewer +50%% potency" },
-    tweak_home_brewer_potency_tooltip = { en = "With Home Brewer, the Moot Milk rework is 1.5x stronger: +25%% movement speed becomes +37.5%%, and +40%% stamina regen becomes +60%%. Duration is unchanged." },
-    tweak_reckless_swings = { en = "Rework: Khaine's Fury" },
-    tweak_reckless_swings_tooltip = { en = "Softens Khaine's Fury: self-damage drops from 3 to 1 per melee hit, and it stays active down to 25%% health instead of 50%%." },
-    tweak_miracle_of_ulric_persistent = { en = "[untested] Miracle of Ulric (Persistent Power)" },
-    tweak_miracle_of_ulric_persistent_tooltip = { en = "Replaces Blessing of Power: applies +50 Power as a persistent buff that survives weapon swaps. Renames to \"Miracle of Ulric\". Host-only." },
-    ulric_pack_unlimited_range = { en = "[untested] Ulric's Pack: Unlimited Aura Range" },
-    ulric_pack_unlimited_range_tooltip = { en = "Removes the 20m range limit on Ulric's Pack, so every ally who has the boon counts no matter how far away they are. No restart needed." },
-    tweak_wildfire_generations_cap = { en = "[untested] Myrmidia's Wildfire: Generations Cap" },
-    tweak_wildfire_generations_cap_tooltip = { en = "Max times Myrmidia's Wildfire can chain. 3 = prevents infinite cascades; 10 = near-uncapped vanilla; 1 = no chaining past the original spread. Host-only." },
-    -- v0.7.81: Miracle of Isha replaced its dropdown widget with a mutex
-    -- checkbox cluster (per LOCALIZATION_STANDARD.md § 10). The legacy dropdown
-    -- option-label keys (isha_alt_vanilla/aegis/wounds) and the _tooltip were
-    -- removed as dead code (v0.7.203) — no widget referenced them. The base
-    -- setting key below is kept because _get_isha_mode()'s migration path still
-    -- reads its stored value (mod:get) for users who last picked the old dropdown.
-    tweak_miracle_of_isha_alternative = { en = "Miracle of Isha behavior (legacy dropdown)" },
-
-    -- Mutex cluster `isha_choice` — pick one (or neither = vanilla). Per
-    -- LOCALIZATION_STANDARD.md § 10, cluster members use the
-    -- "    (A) / (B) / (C)" prefix convention with leading 4-space indent
-    -- so the multiple-choice relationship reads visually in the VMF UI.
-    tweak_miracle_of_isha_aegis = { en = "[untested]     (A) Aegis: -25%% damage taken for the next mission" },
-    tweak_miracle_of_isha_aegis_tooltip = {
-        en = "Miracle of Isha, choice (A) of (B). Alternative to '(B) Unlimited Wounds': turning either one on turns the other off, and both off keeps the vanilla revive-once effect. Every hero takes 25%% less damage for the next mission only. Host-only."
-    },
-    tweak_miracle_of_isha_wounds = { en = "[untested]     (B) Unlimited Wounds: recruit-style, every knockdown revivable (next mission only)" },
-    tweak_miracle_of_isha_wounds_tooltip = {
-        en = "Miracle of Isha, choice (B) of (B). Alternative to '(A) Aegis': turning either one on turns the other off, and both off keeps the vanilla revive-once effect. Every hero gets unlimited wounds for the next mission only, so like Recruit difficulty every knockdown is revivable. Host-only."
-    },
-    tweak_boon_movespeed = { en = "Rework: Movement Speed property" },
-    tweak_boon_movespeed_tooltip = { en = "Changes the 5%% movement speed bonus to 10%%." },
-    bomb_boon_cooldown = { en = "Bomb Boon Cooldown (s)" },
-    bomb_boon_cooldown_tooltip = { en = "Minimum seconds between drops for the 'drop a bomb or item on ability use' boon (0 = vanilla, which is 120 to 180). Lower it, for example to 60, to drop more often. Host-only." },
-    bomb_boon_exclusive = { en = "Bomb Boons Mutually Exclusive" },
-    bomb_boon_exclusive_tooltip = { en = "Once you own any bomb boon, others are removed from the pool. Prevents stacking." },
-    endless_bombs_consumes_morgrim = { en = "[untested] No Morgrim's Carry-Over (Endless Bombs)" },
-    endless_bombs_consumes_morgrim_tooltip = { en = "Endless Bombs still duplicates Morgrim's Bomb, but any un-thrown copy is removed when the potion ends, so you can't carry it over to the next potion. Host-only." },
-    rv_no_save_morgrim = { en = "[untested] Block Ranger Veteran from Saving Morgrim's" },
-    rv_no_save_morgrim_tooltip = { en = "Ranger Veteran's Survivalist passive cannot save Morgrim's Bomb. Other grenades unaffected." },
     disable_boon_properties_group = { en = "Disable Boons: Properties" },
     disable_boon_talents_group = { en = "Disable Boons: Talents" },
     disable_boon_skulls_and_sets_group = { en = "Disable Boons: Skulls & Sets" },
@@ -421,7 +462,41 @@ local loc = {
     start_boon_combat_group = { en = "Starting Boons: Combat" },
     start_boon_healing_and_sustain_group = { en = "Starting Boons: Healing, THP & Health Gain" },
     start_boon_utility_and_team_group = { en = "Starting Boons: Utility & Team" },
-    -- Boon entries (generated)
+    -- BOON_TREE category_id display names (v0.7.90). These are VMF group headers
+    -- shown in the Disabled Boons and Starting Boons menus. Organized by hierarchy.
+    -- Top-level categories:
+    properties = { en = "Weapon Properties" },
+    talents = { en = "Talents" },
+    sets = { en = "Sets" },
+    orbs = { en = "Orbs" },
+    bomb_bubbles = { en = "Bomb Bubbles" },
+    auras = { en = "Auras" },
+    -- Defensive Boons sub-categories:
+    defensive_boons = { en = "Defensive" },
+    health = { en = "Health" },
+    stamina_and_parry = { en = "Stamina & Parry" },
+    damage_reduction = { en = "Damage Reduction" },
+    save_revive = { en = "Save / Revive" },
+    -- Offensive Boons sub-categories:
+    offensive_boons = { en = "Offensive" },
+    crit = { en = "Crit" },
+    attack_speed = { en = "Attack Speed" },
+    ranged = { en = "Ranged" },
+    damage_and_power = { en = "Damage & Power" },
+    aoe = { en = "AOE" },
+    -- Utility Boons sub-categories:
+    utility_boons = { en = "Utility" },
+    potions = { en = "Potions" },
+    bombs = { en = "Bombs" },
+    career_skill = { en = "Career Skill" },
+    career_skill_aoe = { en = "Career Skill AOE" },
+    coins_and_ammo = { en = "Coins & Ammo" },
+    chest_triggers = { en = "Chest Triggers" },
+    gamble_misc = { en = "Gamble & Misc" },
+
+    -- ============================================================
+    -- Disabled & Starting Boons (BOON_TREE-generated; disable/start pairs kept adjacent)
+    -- ============================================================
     disable_boon_ability_cooldown_reduction = { en = "Disable Boon: Cooldown Reduction" },
     start_boon_ability_cooldown_reduction = { en = "Starting Boon: Cooldown Reduction" },
     disable_boon_ability_cooldown_reduction_tooltip = { en = "Reduces cooldown of career skill" },
@@ -1071,91 +1146,37 @@ local loc = {
     disable_boon_wolfpack_tooltip = { en = "Gain X%% bonus to Power. This is multiplied by the number of allies with the Boon." },
     start_boon_wolfpack_tooltip = { en = "Gain X%% bonus to Power. This is multiplied by the number of allies with the Boon." },
 
-    -- v0.7.76: Bot Boon Mirror (Phase 3.1)
-    bots_mirror_host_boons = { en = "Shared Blessings: Bots Mirror Host's Boons" },
-    bots_mirror_host_boons_tooltip = { en = "Every bot gets the same boon the host picks at any shrine, altar, or chest. Host-only." },
+    -- ============================================================
+    -- Misc / Shared (disabled/deferred features, not confidently bucketable)
+    -- ============================================================
+    -- 2026-05-23 v0.7.98-dev DISABLED: Skulls Event Boons + Activate Dormant Boons localization
+    -- removed per user request after Chest-of-Trials crash. Restore alongside the matching VMF
+    -- widgets in chaos_wastes_tweaker_data.lua and the lua apply-site calls.
+    --[[
+    skulls_event_boons_group = { en = "Khorne's Skulls Event Boons" },
+    enable_skulls_event_boons = { en = "[untested] Enable Skulls Event Boons (any time)" },
+    enable_skulls_event_boons_tooltip = { en = "Adds the 10 Khorne's Skulls event boons to the normal CW pool. Vanilla gates them to the Skulls mutator; this clears that gate. Set bonuses still work. Boons 06/07/08 are inert outside the event. Applies to the NEXT shrine/chest roll." },
 
-    -- v0.7.120-dev: Bot Boon Random Roll (mutex alternative to mirror)
-    bots_get_random_boons = { en = "Shared Blessings: Bots Roll Random Boons" },
-    bots_get_random_boons_tooltip = { en = "Whenever the host picks a boon, each bot gets its own random boon of the same rarity from the same pool, so bots usually differ from each other and the host. Turning this on turns off 'Bots Mirror Host's Boons'. Host-only." },
-
-    -- v0.7.120-dev: Bot Weapon Upgrade Mirror
-    bots_mirror_host_weapon_upgrades = { en = "Shared Reliquaries: Bots Get Host's Weapon Upgrades" },
-    bots_mirror_host_weapon_upgrades_tooltip = { en = "Whenever the host uses a Chaos Wastes weapon altar, each bot gets the matching result: a swap altar gives the bot a new random weapon of the same rarity, and an upgrade altar upgrades the bot's current weapon to the same rarity with rerolled traits. Host-only." },
-    announce_bot_boons = { en = "Announce Bot Boons in Chat" },
-    announce_bot_boons_tooltip = { en = "Prints a chat line naming each bot and the boon it got whenever bots are given boons. Only you see it, and only while 'Bots Mirror Host's Boons' or 'Bots Roll Random Boons' is on. Host-only." },
-
-    -- Blessed Bots: Survival Boons (any gamemode; _ct_blessed_bots.lua)
-    ct_blessed_bots = { en = "Blessed Bots: Survival Boons" },
-    ct_blessed_bots_tooltip = { en = "Gives every bot three Chaos Wastes survival boons in any game mode to keep them alive longer: they gain power and healing when all allies are down, gain speed and brief damage protection at low health, and make downed allies near them invulnerable. Host-only. Experimental." },
-
-    -- Shadow Homing Skulls curse stun duration (mechanic tweak; ct main lua)
-    tweak_shadow_skull_stun_sec = { en = "Shadow Homing Skulls stun (seconds)" },
-    tweak_shadow_skull_stun_sec_tooltip = { en = "How many seconds the Shadow Homing Skulls curse keeps you disabled when a skull hits you (2.5 = vanilla). Lower it to soften the curse, raise it to make it harsher. Host-only." },
-
-    -- v0.7.89: Grudge Mark Ban Menu (re-instated; previous v0.7.76 implementation
-    -- never took effect because terror events capture the spawn func as an upvalue
-    -- at boot — fixed by mutating _G.BossGrudgeMarks directly).
-    boss_grudge_marks_group = { en = "Boss Grudge Marks Banlist" },
-    ban_grudge_mark_commander       = { en = "[untested] Ban: Commander" },
-    ban_grudge_mark_commander_tooltip       = { en = "The boss summons extra reinforcements during the fight." },
-    ban_grudge_mark_crippling       = { en = "[untested] Ban: Crippling Blow" },
-    ban_grudge_mark_crippling_tooltip       = { en = "The boss's hits reduce your damage." },
-    ban_grudge_mark_crushing        = { en = "[untested] Ban: Crushing Blow" },
-    ban_grudge_mark_crushing_tooltip        = { en = "The boss's hits deal heavy stagger and shrink your block angle." },
-    ban_grudge_mark_frenzy          = { en = "[untested] Ban: Frenzy" },
-    ban_grudge_mark_frenzy_tooltip          = { en = "The boss attacks faster as its health drops." },
-    ban_grudge_mark_intangible      = { en = "[untested] Ban: Intangible" },
-    ban_grudge_mark_intangible_tooltip      = { en = "The boss periodically fades and briefly can't be hit." },
-    ban_grudge_mark_periodic_curse  = { en = "[untested] Ban: Periodic Curse Aura" },
-    ban_grudge_mark_periodic_curse_tooltip  = { en = "The boss gives off a cursed-blood pulse on a set timer." },
-    ban_grudge_mark_periodic_shield = { en = "[untested] Ban: Periodic Shield" },
-    ban_grudge_mark_periodic_shield_tooltip = { en = "The boss gains a damage-absorbing shield on a set timer." },
-    ban_grudge_mark_raging          = { en = "[untested] Ban: Raging" },
-    ban_grudge_mark_raging_tooltip          = { en = "The boss enrages at low health for more damage and resistance." },
-    ban_grudge_mark_ranged_immune   = { en = "[untested] Ban: Ranged Immune" },
-    ban_grudge_mark_ranged_immune_tooltip   = { en = "The boss ignores all ranged damage and must be killed in melee." },
-    ban_grudge_mark_regenerating    = { en = "[untested] Ban: Regenerating" },
-    ban_grudge_mark_regenerating_tooltip    = { en = "The boss heals damage taken unless you keep pressuring it." },
-    ban_grudge_mark_unstaggerable   = { en = "[untested] Ban: Unstaggerable" },
-    ban_grudge_mark_unstaggerable_tooltip   = { en = "The boss can't be staggered by attacks or pushes." },
-    ban_grudge_mark_vampiric        = { en = "[untested] Ban: Vampiric" },
-    ban_grudge_mark_vampiric_tooltip        = { en = "The boss heals from the damage it deals to you." },
-    ban_grudge_mark_warping         = { en = "[untested] Ban: Warping" },
-    ban_grudge_mark_warping_tooltip         = { en = "The boss teleports around the fight at intervals." },
-
-    -- BOON_TREE category_id display names (v0.7.90). These are VMF group headers
-    -- shown in the Disabled Boons and Starting Boons menus. Organized by hierarchy.
-    -- Top-level categories:
-    properties = { en = "Weapon Properties" },
-    talents = { en = "Talents" },
-    sets = { en = "Sets" },
-    orbs = { en = "Orbs" },
-    bomb_bubbles = { en = "Bomb Bubbles" },
-    auras = { en = "Auras" },
-    mod_boons = { en = "Mod Boons" },
-    -- Defensive Boons sub-categories:
-    defensive_boons = { en = "Defensive" },
-    health = { en = "Health" },
-    stamina_and_parry = { en = "Stamina & Parry" },
-    damage_reduction = { en = "Damage Reduction" },
-    save_revive = { en = "Save / Revive" },
-    -- Offensive Boons sub-categories:
-    offensive_boons = { en = "Offensive" },
-    crit = { en = "Crit" },
-    attack_speed = { en = "Attack Speed" },
-    ranged = { en = "Ranged" },
-    damage_and_power = { en = "Damage & Power" },
-    aoe = { en = "AOE" },
-    -- Utility Boons sub-categories:
-    utility_boons = { en = "Utility" },
-    potions = { en = "Potions" },
-    bombs = { en = "Bombs" },
-    career_skill = { en = "Career Skill" },
-    career_skill_aoe = { en = "Career Skill AOE" },
-    coins_and_ammo = { en = "Coins & Ammo" },
-    chest_triggers = { en = "Chest Triggers" },
-    gamble_misc = { en = "Gamble & Misc" },
+    activate_dormant_boons_group = { en = "Activate Dormant Boons" },
+    activate_dormant_deus_ammo_pickup_give_allies_ammo = { en = "Activate: Mathlann's Bounty" },
+    activate_dormant_deus_ammo_pickup_give_allies_ammo_tooltip = { en = "Injects Mathlann's Bounty (ammo pickup grants ammo to allies) into the active CW boon pool at Rare rarity. Dormant in vanilla. Requires a new CW run to take effect; toggling off requires a game restart to fully remove from the pool." },
+    activate_dormant_deus_coin_pickup_regen = { en = "Activate: Bögenauer's Prosperity" },
+    activate_dormant_deus_coin_pickup_regen_tooltip = { en = "Injects Bögenauer's Prosperity (coin pickup → moderate health regen) into the active CW boon pool at Rare rarity. Dormant in vanilla. Requires a new CW run to take effect." },
+    activate_dormant_deus_large_ammo_pickup_infinite_ammo = { en = "Activate: Nethu's Relentlessness" },
+    activate_dormant_deus_large_ammo_pickup_infinite_ammo_tooltip = { en = "Injects Nethu's Relentlessness (large ammo pickup grants temporary infinite ammo) into the active CW boon pool at Exotic rarity. Dormant in vanilla. Requires a new CW run to take effect." },
+    activate_dormant_deus_larger_clip = { en = "Activate: Grungni's Gift" },
+    activate_dormant_deus_larger_clip_tooltip = { en = "Injects Grungni's Gift (+clip size) into the active CW boon pool at Common rarity. Dormant in vanilla (likely moved to a charm trait equivalent). Requires a new CW run to take effect." },
+    activate_dormant_deus_throw_speed_increase = { en = "Activate: Hashut's Greeting" },
+    activate_dormant_deus_throw_speed_increase_tooltip = { en = "Injects Hashut's Greeting (double throw speed) into the active CW boon pool at Rare rarity. Dormant in vanilla. Requires a new CW run to take effect." },
+    activate_dormant_deus_timed_block_free_shot = { en = "Activate: Timed-Block Free Shot" },
+    activate_dormant_deus_timed_block_free_shot_tooltip = { en = "Injects the timed-block-free-shot effect into the active CW boon pool at Exotic rarity. Dormant in vanilla. Requires a new CW run to take effect." },
+    activate_dormant_deus_transmute_into_coins = { en = "Activate: Smednir's Transmutation" },
+    activate_dormant_deus_transmute_into_coins_tooltip = { en = "Injects Smednir's Transmutation (items → coins) into the active CW boon pool at Rare rarity. Dormant in vanilla (placeholder icon — likely cut content). Requires a new CW run to take effect." },
+    activate_dormant_explosive_pushes_on_damage_taken = { en = "Activate: Chotec's Touch" },
+    activate_dormant_explosive_pushes_on_damage_taken_tooltip = { en = "Injects Chotec's Touch (taking damage → push attacks become explosive) into the active CW boon pool at Exotic rarity. Dormant in vanilla (placeholder icon — likely cut content). Functional implementation verified in source. Requires a new CW run to take effect." },
+    activate_dormant_squats = { en = "Activate: Squats" },
+    activate_dormant_squats_tooltip = { en = "Injects 'Squats' into the active CW boon pool at Common rarity. Dormant in vanilla (no description text — placeholder/easter-egg boon). Requires a new CW run to take effect." },
+    --]]
 }
 
 -- Per-mission and per-CW-scenario toggle labels. Generated from the catalogs in

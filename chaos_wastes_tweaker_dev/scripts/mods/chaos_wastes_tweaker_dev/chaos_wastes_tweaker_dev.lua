@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.204-dev"
+local MOD_VERSION = "0.7.205-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -6634,6 +6634,31 @@ function mod._ct_boon_display_name(name)
     return tostring(name)
 end
 
+-- #144 diagnostic helper: read-only snapshot of a recipient's CURRENT stored boon list.
+-- DeusRunController:get_player_power_ups(peer, local_id) (deus_run_controller.lua:1080) returns
+-- the run_state SharedState power_ups table — the SAME list the boon UI renders and the SAME
+-- list add_power_ups appends to (deus_run_controller.lua:1126). Returns (count, comma-separated
+-- names). On `mod` (not a file-scope local) per the 200-locals cap note, mirroring the pattern of
+-- _ct_boon_display_name above. Fully pcall-guarded: any resolve/format failure returns
+-- (-1, "<snapshot_error>") so a caller's printf can never disturb boon application.
+function mod._ct_boon144_list_snapshot(run_controller, local_player_id)
+    local ok, count, names = pcall(function()
+        local rs = run_controller and run_controller._run_state
+        local peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
+        local list = run_controller and run_controller.get_player_power_ups
+            and run_controller:get_player_power_ups(peer, local_player_id)
+        if type(list) ~= "table" then return 0, "" end
+        local parts = {}
+        for i = 1, #list do
+            local pu = list[i]
+            parts[i] = (pu and pu.name) and tostring(pu.name) or "?"
+        end
+        return #list, table.concat(parts, ",")
+    end)
+    if ok then return count, names end
+    return -1, "<snapshot_error>"
+end
+
 -- v0.7.159-dev Task 2: converted hook_safe -> full mod:hook so disabled boons can be
 -- filtered OUT of `new_power_ups` BEFORE vanilla grants + activates them. ROOT CAUSE of
 -- the `[boon-trace] DISABLED BOON GRANTED: blazing_revenge` leak: the disable filter only
@@ -6671,7 +6696,54 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
         end
     end
 
+    -- #144 diagnostic: snapshot the recipient's boon list BEFORE the grant. The user reported a
+    -- STARTING boon (ct_boon_vauls_anvil) vanishing after acquiring another boon; their hypothesis
+    -- was a fixed-size boon array overflowing/overwriting. Vanilla has NO such cap (power_ups is a
+    -- dynamic SharedState table appended by add_power_ups — deus_run_controller.lua:1126 /
+    -- deus_run_state_spec.lua:298), so this watches for the list SHRINKING across a grant, which
+    -- would prove a real drop/overwrite. Gated on `not _ct_bot_mirror_active` so the re-entrant bot
+    -- grants (driven below) don't spam the trace; the human's own grants + vanilla set-reward
+    -- re-entries inside func() are still captured.
+    local _b144_pre_count, _b144_pre_list
+    if not _ct_bot_mirror_active then
+        _b144_pre_count, _b144_pre_list = mod._ct_boon144_list_snapshot(self, local_player_id)
+    end
+
     func(self, new_power_ups, local_player_id, present)
+
+    -- #144 diagnostic (cont.): snapshot AFTER the grant and emit before/after lists with counts.
+    -- `added` names the boons this call actually appended (post-disable-strip). With no vanilla
+    -- cap the stored list must only ever GROW by #new_power_ups; anything smaller means a boon was
+    -- dropped/overwritten — the smoking gun for the "starting boon disappears" report. Raw printf
+    -- (host runs VMF logging OFF, per diagnostics doctrine). Whole block pcall-wrapped so a
+    -- snapshot/format failure can never break boon application.
+    if not _ct_bot_mirror_active then
+        pcall(function()
+            if not new_power_ups or #new_power_ups == 0 then return end
+            local rs = self and self._run_state
+            local peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
+            local post_count, post_list = mod._ct_boon144_list_snapshot(self, local_player_id)
+            local added_parts = {}
+            for i = 1, #new_power_ups do
+                local pu = new_power_ups[i]
+                added_parts[i] = (pu and pu.name) and tostring(pu.name) or "?"
+            end
+            local added_csv = table.concat(added_parts, ",")
+            pcall(printf, "[ct:boon144] pre-grant peer=%s local_id=%s count=%s list=%s (issue #144)",
+                tostring(peer), tostring(local_player_id), tostring(_b144_pre_count), tostring(_b144_pre_list))
+            pcall(printf, "[ct:boon144] post-grant peer=%s local_id=%s count=%s added=%s list=%s (issue #144)",
+                tostring(peer), tostring(local_player_id), tostring(post_count), added_csv, tostring(post_list))
+            -- Loss detector: expected post = pre + #added. Fires only on a genuine shrink.
+            if type(_b144_pre_count) == "number" and type(post_count) == "number"
+                and _b144_pre_count >= 0 and post_count >= 0 then
+                local expected = _b144_pre_count + #new_power_ups
+                if post_count < expected then
+                    pcall(printf, "[ct:boon144] LOSS pre=%d added=%d expected=%d post=%d - a boon was dropped/overwritten across this grant (issue #144)",
+                        _b144_pre_count, #new_power_ups, expected, post_count)
+                end
+            end
+        end)
+    end
 
     -- v0.7.90: unconditional audit trail for every boon grant. Logs name, rarity, recipient,
     -- and toggle state — surfaces any boon that slipped through a toggle. Tag `[boon-trace]`
@@ -6857,6 +6929,17 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
         mode_random and "rolled" or "mirrored", #new_power_ups, #bots)
 end)
 
+-- #144 install-time finding (logged once): there is NO fixed max-boon cap in vanilla. A player's
+-- active power-ups live in a dynamic SharedState Lua table (deus_run_state_spec.lua:298 "power_ups",
+-- type="table", default {}); DeusRunController.add_power_ups (deus_run_controller.lua:1126) only ever
+-- table.clone + table.append + set_player_power_ups — never a bounded/fixed-size write — and the
+-- network transport CHUNKS long encoded strings (shared_state.lua:298-303, STRING_CHUNK_SIZE=500)
+-- and reassembles them (shared_state.lua:767-783) rather than truncating. So the overflow-overwrite
+-- hypothesis for #144 is not supported by the engine; the [ct:boon144] pre/post trace above will
+-- show whether the stored list actually SHRINKS on a grant vs. the starting boon simply never being
+-- present in the stored list to begin with (a persistence / re-sync path, not a cap).
+pcall(printf, "[ct:boon144] no fixed boon cap in vanilla (power_ups is a dynamic SharedState table; add_power_ups appends - deus_run_controller.lua:1126 / deus_run_state_spec.lua:298). Watching for list SHRINK on grant. (issue #144)")
+
 -- Regression guard for the announce_bot_boons feature. The singleton-hook invariant for
 -- (DeusRunController, add_power_ups) is enforced statically by tools/mod-lint; this runtime
 -- check verifies the announce wiring: the boon-name helper resolves (never empty / sentinel)
@@ -6871,6 +6954,21 @@ _rt_register("bot_boon_announce_wired", function()
     end
     if type(mod:get("announce_bot_boons")) ~= "boolean" then
         return "BOT-BOON REGRESSION: announce_bot_boons checkbox not registered (mod:get is non-boolean)"
+    end
+end)
+
+-- #144 diagnostic install guard: the boon-list snapshot helper must resolve and stay side-effect
+-- free. The pre/post [ct:boon144] trace is folded into the single (DeusRunController, add_power_ups)
+-- hook above — this only verifies the helper exists and returns (number, string) for a bogus
+-- controller (never crashing, never mutating anything).
+_rt_register("boon144_list_trace_installed", function()
+    if type(mod._ct_boon144_list_snapshot) ~= "function" then
+        return "#144 REGRESSION: mod._ct_boon144_list_snapshot missing (boon-list diagnostic)"
+    end
+    local count, names = mod._ct_boon144_list_snapshot(nil, 1)
+    if type(count) ~= "number" or type(names) ~= "string" then
+        return "#144 REGRESSION: _ct_boon144_list_snapshot(nil,1) must return (number, string), got ("
+            .. type(count) .. ", " .. type(names) .. ")"
     end
 end)
 
