@@ -1,5 +1,9 @@
 # Weapon Tweaker Changelog
 
+## 0.12.196-dev (2026-07-01) - Wire up the Bretonnian Sword & Shield buff tooltip
+
+The `wt_brett_sword_shield_buff` checkbox never showed its description: the widget had no `tooltip` field, so the settings menu auto-resolved `wt_brett_sword_shield_buff_description` (which does not exist) while the text lived under `..._tooltip`. The widget now passes `tooltip = "wt_brett_sword_shield_buff_tooltip"` explicitly (`weapon_tweaker_data.lua`). No key renames; no other changes.
+
 ## 0.12.195-dev (2026-07-01) - Localization fixes + player-facing option descriptions
 
 Menu-text cleanup pass. No gameplay, setting, or widget changes; every setting_id, default, and range is untouched.

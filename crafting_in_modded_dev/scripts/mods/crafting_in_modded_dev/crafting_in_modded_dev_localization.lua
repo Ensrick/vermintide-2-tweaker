@@ -18,7 +18,7 @@ return {
         en = "Open Standard Crafting Bench",
     },
     standard_crafting_hotkey_description = {
-        en = "Opens the standard Keep Smithy bench: salvage, craft, re-roll properties and traits, upgrade rarity, apply illusions, convert dust (not the Athanor). It always opens in the Keep and follows the 'Allow in mission' toggle below inside missions, but never opens in the Chaos Wastes; you can also run /cim_craft_standard.",
+        en = "Opens the standard Keep Smithy bench: salvage, craft, re-roll properties and traits, upgrade rarity, apply illusions, convert dust (not the Athanor). Works in the Keep and the Chaos Wastes, and follows the 'Allow in mission' toggle below inside missions; you can also run /cim_craft_standard.",
     },
     allow_in_mission = {
         en = "Allow standard crafting bench in mission",

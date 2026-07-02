@@ -1,5 +1,9 @@
 # Crafting in Modded Changelog
 
+## 0.8.42-dev (2026-07-01) - Correct standard-bench description: it works in the Chaos Wastes
+
+The standard crafting bench description wrongly claimed the bench "never opens in the Chaos Wastes" (a leftover from the pre-sweep text; user confirmed crafting works there). `standard_crafting_hotkey_description` now says it works in the Keep and the Chaos Wastes. Localization text only; no code changes.
+
 ## 0.8.41-dev (2026-07-01) - #174 loadout attribution probe (passive, log-only)
 
 Added a passive, default-on diagnostic probe for issue #174 (bot loadouts replaced on startup by base blacksmith items in modded realm). No gameplay change - it only writes `[174:loadout]` lines to the engine console log via `printf` so a single post-playtest log names whether cim wrote or restored any loadout slots.

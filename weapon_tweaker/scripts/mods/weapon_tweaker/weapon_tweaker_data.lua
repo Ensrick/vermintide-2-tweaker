@@ -1346,7 +1346,9 @@ local data = {
                     { setting_id = "authentic_brace_of_pistols", type = "checkbox", default_value = false },
                     { setting_id = "moonfire_aoe_revert", type = "checkbox", default_value = false },
                     { setting_id = "wt_priest_punch_buff", type = "checkbox", default_value = false },
-                    { setting_id = "wt_brett_sword_shield_buff", type = "checkbox", default_value = false },
+                    -- Explicit tooltip: the loc key ends in _tooltip, which VMF does NOT
+                    -- auto-resolve (auto path only tries <setting_id>_description).
+                    { setting_id = "wt_brett_sword_shield_buff", type = "checkbox", default_value = false, tooltip = "wt_brett_sword_shield_buff_tooltip" },
                 },
             },
 --[==[ BIG REBALANCE WIDGETS — ON ICE (bt retired 2026-06-08). The whole br_master
