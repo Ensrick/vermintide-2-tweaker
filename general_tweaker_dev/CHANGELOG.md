@@ -1,5 +1,24 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.170-dev (2026-07-01) -- Settings menu: sort A->Z, nest verified fine-tunes, mirror the loc file to the tree
+
+Menu reorganization only. No functional changes: no setting added, removed, renamed, or re-defaulted; every one of the 144 widget setting_ids is preserved. Data-file widget defaults, ranges, decimals, keybind function_names, and dropdown option values/show_widgets are all unchanged. Localization strings are preserved verbatim except one meta-language fix (below).
+
+- **Within-group A->Z sorting by display label** (status tags like "[untested]" ignored when sorting):
+  - **Bots**: loose options re-sorted (AFK Bot Takeover, Allow Bots in Keep, Announce guard breaks, Bot Behavior Improvements, Bot follow mode, Bot Takeover, Bots drink potions, Bots rescue awaiting, Disable Bots, Faster bot reactions, Follow snap-back distance, Improved Bot Combat). Bot Teleport Lab nested group stays first.
+  - **Cheats and Debug**: loose primitives A->Z (Clear Enemy Spawns, Disable Enemy Spawns, Godmode, Noclip, Noclip Toggle), then the five nested sub-groups A->Z (Buffs & Stats, Level Control, Spawners, Time & Pause, Ult). Buffs & Stats, Ult, and Level Control leaves re-sorted A->Z.
+  - **Info**: Assassin, Boss path progress, Packmaster.
+  - **Visuals and Audio**: Assassin/Packmaster VO, Disable fog, Disable mutator explosions, Disable sun shadows, Disable ult VO, Draw boss spheres, Max Ragdolls.
+  - **Host-Side Lobby Controls**: Modded Lobby Manifest members A->Z (Broadcast, Send MOTD, Show missing mods); Prioritize Specials sub-toggles A->Z (Deepwood, Soulstealer, Tagging).
+- **Nested three verified-gated fine-tune clusters under their existing master checkbox** (code already gates them, so hiding while off is purely visual, no behavior change):
+  - `noclip_speed` + `noclip_boost_multiplier` under `noclip_enabled` (read only inside the active movement hook). The `noclip_hotkey` binding stays a loose sibling: it is what turns noclip on, so it must remain visible while noclip is off.
+  - `gt_lobby_kick_idle_threshold_minutes` + `gt_lobby_ki_warn_seconds` under `gt_lobby_kick_idle_enabled` (idle tick reads them only past the enable gate).
+  - `gt_lobby_motd_send_chat` + `gt_lobby_motd_send_popup` + `gt_lobby_motd_once_per_peer_per_session` under `gt_lobby_motd_enabled` (join handler reads them only past the enable gate).
+- **Deliberate orders kept (not A->Z), each noted in a code comment:** Bot Teleport Lab D1..D10 / F1..F10 (numeric, maps to `_gt_bot_teleport_lab.lua`); Creature Spawner grudge sub_widgets (INDEX-LOCKED -- the dropdown's `show_widgets = {1}` / `{2..14}` reveal arrays reference sub_widget positions); Creature Spawner (spawn workflow + saved slots 1/2/3); Item Spawner (next/prev/spawn workflow); Time & Pause (scale then faster/slower then pause); Grail Knight quests 1/2/3 (numbered). Cheats and Debug intentionally lists loose headline cheats above its detail sub-groups so the most-used toggles stay surfaced.
+- **Localization file reordered to mirror the widget tree** with a `-- ====` banner per top-level group and blank lines between groups; code-referenced strings that have no widget (MOTD popup title/text buffer, failed-join reveal text, bot guard-break chat line) moved to a trailing section.
+- **One style fix:** `gt_bot_toggle_hotkey_tooltip` dropped its "Toggles whether..." meta-language preamble ("Allows or blocks bots on the current level..."); the mechanic and rare-crash caveat are preserved.
+- **Suspected orphans (reported, NOT removed):** `gt_lobby_motd_text` + `gt_lobby_motd_text_tooltip` are left over from the removed MOTD text-input widget; the MOTD text is now set via `/lobby_motd_set` and read with `mod:get`, so these two labels are unused.
+
 ## v0.2.169-dev (2026-07-01) -- Passive diagnostic probes: #198 training-dummy multi-hit + #139 bot-teleport decision
 
 Two default-on, printf-based diagnostic probes (visible with mod-logging off). No gameplay change, no setting gate, no new user-facing strings.
