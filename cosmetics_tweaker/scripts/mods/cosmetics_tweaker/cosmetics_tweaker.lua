@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.62-dev"
+local MOD_VERSION = "0.9.63-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1425,6 +1425,111 @@ local function _inject_all_frames(target)
     return added, skipped
 end
 
+-- v0.9.63-dev: vanilla-UNOBTAINABLE cosmetics — career skins + hats that have NO
+-- obtain path anywhere in the shipped data: not in Lohner's Emporium catalog
+-- (store_data.lua), no premium-store / bundle entry (store_dlc_settings.lua /
+-- store_bundle_layouts.lua), no steam_itemdefid, no achievement grant, no required_dlc.
+-- Vanilla therefore never places them in the player's inventory, so the per-career
+-- unlock toggles (which only edit can_wield in apply_cosmetic_unlocks) can never
+-- surface them — the item is simply never owned. We grant modded-realm ownership by
+-- injecting them into the cosmetic fake-inventory, the SAME mechanism the portrait
+-- frame unlock uses: playfab_mirror_base.lua:2315-2401 turns each injected key into a
+-- fake item and registers `_unlocked_cosmetics[key] = backend_id` +
+-- `_inventory_items[backend_id]`. List derived from a full ItemMasterList ×
+-- store/achievement/steam_itemdefid cross-reference sweep (54 skins + 82 hats). The
+-- "_white" skins are the datamined "(Purified)" prestige set; the rest are
+-- discontinued promo skins/hats (Nuln Bordermarcher, Ostermark Bowman, etc.).
+local _unobtainable_cosmetics = {
+    -- Kruber hats
+    "es_hat_0001", "es_hat_0002", "es_hat_0003", "es_helmet_0003",
+    "huntsman_hat_0004", "huntsman_hat_0009", "huntsman_hat_1010",
+    "knight_hat_0003", "knight_hat_0005", "knight_hat_0006", "knight_hat_0011",
+    "mercenary_hat_0006", "mercenary_hat_0007",
+    -- Kruber skins
+    "skin_es_huntsman_black_and_gold", "skin_es_huntsman_ostermark", "skin_es_huntsman_white",
+    "skin_es_knight_black_and_gold", "skin_es_knight_red", "skin_es_knight_white",
+    "skin_es_mercenary_black_and_gold", "skin_es_mercenary_helmgart", "skin_es_mercenary_ostermark", "skin_es_mercenary_white",
+    "skin_es_questingknight_white",
+    -- Bardin hats
+    "dr_helmet_0001", "dr_helmet_0002", "dr_helmet_0003", "dr_helmet_0005", "dr_helmet_0008", "dr_helmet_0011",
+    "dr_slayer_hair_0002",
+    "ironbreaker_hat_0007", "ironbreaker_hat_0012", "ironbreaker_hat_0013",
+    "ranger_hat_0003", "ranger_hat_0004", "ranger_hat_0010", "ranger_hat_0015", "ranger_hat_1010",
+    "slayer_hat_0006", "slayer_hat_0007", "slayer_hat_0010", "slayer_hat_0012", "slayer_hat_1010",
+    -- Bardin skins
+    "skin_dr_engineer_white",
+    "skin_dr_ironbreaker_black_and_gold", "skin_dr_ironbreaker_crimson", "skin_dr_ironbreaker_white",
+    "skin_dr_ranger_black_and_gold", "skin_dr_ranger_helmgart", "skin_dr_ranger_karak_norn", "skin_dr_ranger_white",
+    "skin_dr_slayer_dragon", "skin_dr_slayer_runes", "skin_dr_slayer_skull", "skin_dr_slayer_white",
+    -- Saltzpyre hats
+    "bountyhunter_hat_0002", "bountyhunter_hat_0003", "bountyhunter_hat_1010",
+    "priest_hat_0001", "priest_hat_0002", "priest_hat_0003", "priest_hat_0004",
+    "wh_hat_0001", "wh_hat_0003", "wh_hat_0007", "wh_hat_0008", "wh_hat_0009",
+    "witchhunter_hat_0002", "witchhunter_hat_0003",
+    "zealot_hat_0003", "zealot_hat_0009", "zealot_hat_0010", "zealot_hat_1003", "zealot_hat_1010",
+    -- Saltzpyre skins
+    "skin_wh_bountyhunter_black_and_gold", "skin_wh_bountyhunter_white", "skin_wh_bountyhunter_yellow_and_red",
+    "skin_wh_captain_black_and_gold", "skin_wh_captain_helmgart", "skin_wh_captain_ostland", "skin_wh_captain_white",
+    "skin_wh_zealot_black_and_gold", "skin_wh_zealot_crimson", "skin_wh_zealot_white",
+    -- Kerillian hats
+    "maidenguard_hat_0005", "maidenguard_hat_0008", "maidenguard_hat_0010", "maidenguard_hat_1010",
+    "shade_hat_0003", "shade_hat_0007", "shade_hat_0010", "shade_hat_1010",
+    "thornsister_hat_1010",
+    "waywatcher_hat_0002", "waywatcher_hat_0006", "waywatcher_hat_0011", "waywatcher_hat_1010",
+    "ww_hood_0001", "ww_hood_0002", "ww_hood_0004",
+    -- Kerillian skins
+    "skin_ww_maidenguard_black_and_gold", "skin_ww_maidenguard_red_and_yellow", "skin_ww_maidenguard_white",
+    "skin_ww_shade_black_and_gold", "skin_ww_shade_crimson", "skin_ww_shade_white",
+    "skin_ww_thornsister_white",
+    "skin_ww_waywatcher_anmyr", "skin_ww_waywatcher_black_and_gold", "skin_ww_waywatcher_helmgart", "skin_ww_waywatcher_white",
+    -- Sienna hats
+    "adept_hat_0002", "adept_hat_0003", "adept_hat_0010", "adept_hat_1010",
+    "bw_gate_0001", "bw_gate_0006", "bw_gate_0007", "bw_gate_0008",
+    "bw_necromancer_hat_1010",
+    "scholar_hat_0004", "scholar_hat_0005", "scholar_hat_0012",
+    "unchained_hat_0004", "unchained_hat_0008",
+    -- Sienna skins
+    "skin_bw_adept_black_and_gold", "skin_bw_adept_helmgart", "skin_bw_adept_ostermark", "skin_bw_adept_white",
+    "skin_bw_scholar_black_and_gold", "skin_bw_scholar_ostermark", "skin_bw_scholar_white",
+    "skin_bw_unchained_black_and_gold", "skin_bw_unchained_ostermark", "skin_bw_unchained_white",
+}
+
+-- Ownership is account-wide (once owned, any career in the item's native can_wield
+-- can equip it). Grant an unobtainable cosmetic when it has NO managed per-career
+-- toggle (e.g. the wh_priest bless hats, which the mod's cross-career system
+-- excludes), or when ANY of its character's career toggles is enabled — so the user
+-- can still hide one again by unchecking all its Cosmetic Availability toggles.
+local function _cosmetic_ownership_enabled(item_key)
+    local info = U.managed[item_key]
+    if not info then return true end
+    for _, career in ipairs(_CHARACTER_CAREERS[info.character] or {}) do
+        if mod:get("cos_unlock_" .. career .. "_" .. item_key) then return true end
+    end
+    return false
+end
+
+local _unob_inject_stats = { last_added = 0, last_skipped_dlc = 0 }
+local function _inject_unobtainable_cosmetics(target)
+    if not target then return 0, 0 end
+    local added, skipped = 0, 0
+    for i = 1, #_unobtainable_cosmetics do
+        local key = _unobtainable_cosmetics[i]
+        -- rawget: ItemMasterList __index crashifies on missing keys; a DLC pack the
+        -- user doesn't own leaves some of these keys unregistered on their install.
+        if target[key] == nil and rawget(ItemMasterList, key) then
+            if _skin_requires_unowned_dlc(key) then
+                skipped = skipped + 1
+            elseif _cosmetic_ownership_enabled(key) then
+                target[key] = true
+                added = added + 1
+            end
+        end
+    end
+    _unob_inject_stats.last_added = added
+    _unob_inject_stats.last_skipped_dlc = skipped
+    return added, skipped
+end
+
 -- IMPORTANT: hook the DERIVED class, not `PlayFabMirrorBase`.
 -- foundation\scripts\util\class.lua:51-57 copies parent methods into the
 -- child table at class-definition time (no __index chaining). The runtime
@@ -1435,25 +1540,35 @@ end
 -- 2026-05-06 02:41 for the diagnostic that surfaced this.
 
 mod:hook("PlayFabMirrorAdventure", "_create_fake_inventory_items", function(func, self, fake_inventory_items, items_type)
-    if items_type == "cosmetics"
-       and mod:get("unlock_all_frames")
-       and script_data["eac-untrusted"]
-       and fake_inventory_items
-    then
-        local added, skipped = _inject_all_frames(fake_inventory_items)
-        _frame_inject_stats.hook_fired = _frame_inject_stats.hook_fired + 1
-        _frame_inject_stats.last_added = added
-        _frame_inject_stats.last_skipped_dlc = skipped
-        mod:info("[unlock_all_frames] _create_fake_inventory_items pre-hook fired: added=%d skipped_dlc=%d", added, skipped)
+    if items_type == "cosmetics" and script_data["eac-untrusted"] and fake_inventory_items then
+        if mod:get("unlock_all_frames") then
+            local added, skipped = _inject_all_frames(fake_inventory_items)
+            _frame_inject_stats.hook_fired = _frame_inject_stats.hook_fired + 1
+            _frame_inject_stats.last_added = added
+            _frame_inject_stats.last_skipped_dlc = skipped
+            mod:info("[unlock_all_frames] _create_fake_inventory_items pre-hook fired: added=%d skipped_dlc=%d", added, skipped)
+        end
+        -- v0.9.63-dev: grant modded-realm ownership of vanilla-unobtainable skins/hats
+        -- so the per-career unlock toggles can actually surface them (they otherwise
+        -- never enter the player's inventory). Always runs in modded realm — this is
+        -- NOT gated on the frame toggle, which is a separate feature.
+        local ca, cs = _inject_unobtainable_cosmetics(fake_inventory_items)
+        if ca > 0 then
+            mod:info("[unlock_cosmetics] injected %d unobtainable cosmetics into fake inventory (skipped_dlc=%d)", ca, cs)
+        end
     end
     return func(self, fake_inventory_items, items_type)
 end)
 
 mod:hook_safe("PlayFabMirrorAdventure", "get_unlocked_cosmetics", function(self)
-    if not mod:get("unlock_all_frames") or not script_data["eac-untrusted"] then return end
+    if not script_data["eac-untrusted"] then return end
     local cosmetics = self._unlocked_cosmetics
     if not cosmetics then return end
-    _inject_all_frames(cosmetics)
+    -- Belt-and-suspenders resync for callers that re-query after login. Both injectors
+    -- no-op on keys already registered (they guard on `target[key] == nil`), so the
+    -- pre-hook's real backend_ids are never clobbered.
+    if mod:get("unlock_all_frames") then _inject_all_frames(cosmetics) end
+    _inject_unobtainable_cosmetics(cosmetics)
 end)
 
 mod:command("frames_status", "Diagnostic for the Unlock All Portrait Frames toggle.", function()
@@ -1494,6 +1609,33 @@ mod:command("frames_status", "Diagnostic for the Unlock All Portrait Frames togg
     if items_iface and items_iface.get_filtered_items then
         local list = items_iface:get_filtered_items("slot_type == frame", {})
         mod:echo("[frames_status] backend get_filtered_items('slot_type == frame') returned %d items", list and #list or -1)
+    end
+end)
+
+-- v0.9.63-dev: verify the unobtainable-cosmetic ownership grant in-game (user runs
+-- with mod-logging OFF, so the mod:info lines above are invisible; this echoes to chat).
+mod:command("cosmetics_status", "Diagnostic for the vanilla-unobtainable skin/hat unlock.", function()
+    mod:echo("[cosmetics_status] modded_realm=%s | last inject: added=%d skipped_dlc=%d (of %d tracked)",
+        tostring(script_data and script_data["eac-untrusted"]),
+        _unob_inject_stats.last_added, _unob_inject_stats.last_skipped_dlc, #_unobtainable_cosmetics)
+    local backend = Managers.backend
+    local mirror = backend and backend.get_interface and backend:get_interface("items")
+    local mirror_base = mirror and mirror._backend_mirror
+    if not mirror_base and backend then mirror_base = backend._mirror end
+    if mirror_base and mirror_base._unlocked_cosmetics then
+        local owned, missing = 0, {}
+        for i = 1, #_unobtainable_cosmetics do
+            local k = _unobtainable_cosmetics[i]
+            if mirror_base._unlocked_cosmetics[k] then owned = owned + 1
+            elseif rawget(ItemMasterList, k) then missing[#missing + 1] = k end
+        end
+        mod:echo("[cosmetics_status] %d/%d unobtainable cosmetics owned in _unlocked_cosmetics", owned, #_unobtainable_cosmetics)
+        if #missing > 0 then
+            mod:echo("[cosmetics_status] %d present-but-unowned (toggle off or not yet synced): %s%s",
+                #missing, table.concat(missing, ", ", 1, math.min(#missing, 8)), #missing > 8 and " ..." or "")
+        end
+    else
+        mod:echo("[cosmetics_status] could not locate PlayFabMirrorBase via Managers.backend")
     end
 end)
 

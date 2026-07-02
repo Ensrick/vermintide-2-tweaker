@@ -1,5 +1,31 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.63-dev — 2026-07-02 — FIX: vanilla-unobtainable skins/hats never appeared (the per-career toggles only edited can_wield, never granted ownership) — grant all 136 via fake-inventory injection
+
+> User wanted "Ostermark Bowman" and "Nuln Bordermarcher" (Huntsman skins) equippable and reported they were not showing, even though their `cos_unlock_es_huntsman_skin_es_huntsman_ostermark` / `_black_and_gold` toggles are saved `true` (verified in `user_settings.config`). Build-only; in-game verification is the user's.
+
+### Root cause (source-proven)
+The per-cosmetic unlock tree only ever edited `can_wield`. `apply_cosmetic_unlocks` (`cosmetics_tweaker.lua:816-849`) adds a career to `ItemMasterList[key].can_wield` when a toggle is on — that governs WHICH careers may equip an item the player already OWNS, nothing more. But a career skin/hat only appears in the customization grid if it is in the player's inventory: `BackendInterfaceItemPlayfab._refresh_items` builds `self._items` from `backend_mirror:get_all_inventory_items()` (`backend_interface_item_playfab.lua:56-76`), and the modded-realm fake inventory is built ONLY from the account's owned `unlocked_cosmetics` (`playfab_mirror_base.lua:1470-1479` → `_create_fake_inventory_items`, `:2315-2344`). Vanilla-unobtainable cosmetics are never in `unlocked_cosmetics`, so they are never owned, never in `_items`, and never shown — regardless of the toggle. These skins already carry their native career in `can_wield` (e.g. `skin_es_huntsman_ostermark` has `can_wield = {"es_huntsman"}`, `item_master_list_exported.lua:517-519`), so the toggle edit was a no-op for them. The mod injected only portrait FRAMES into the fake inventory (`_inject_all_frames`, gated on `unlock_all_frames`), never skins/hats. That is the gap.
+
+### What "unobtainable" means here (full cross-reference sweep)
+Enumerated every `item_type == "skin"`/`"hat"` entry across all `item_master_list*.lua` (517 cosmetics) and cross-referenced each against every obtain path: Lohner's Emporium catalog (`store_data.lua`, 455 keys), premium store + bundles (`store_dlc_settings.lua` / `store_bundle_layouts.lua`), the `steam_itemdefid` field (Steam grant), `required_dlc` (DLC grant), `store_optional_skin`/`store_optional_hat` bundling, `base_skin` defaults, and all `achievement*` files. 136 hero cosmetics (54 skins + 82 hats) have NO path at all — verified independently by grepping all 136 keys across `scripts/` outside the item-list/render files: 0 hits. These split into the datamined `_white` "(Purified)" prestige set (rarity `unique`, from eight_ball/cog/lake/woods/shovel) and discontinued promo skins/hats (Nuln Bordermarcher = `skin_es_huntsman_black_and_gold`, Ostermark Bowman = `skin_es_huntsman_ostermark`, etc.). The 15 Versus `vs_*` pactsworn skins are excluded (not hero cosmetics).
+
+### Fix
+- New `_unobtainable_cosmetics` list (the 136 keys) + `_inject_unobtainable_cosmetics(target)` helper (`cosmetics_tweaker.lua`, next to `_inject_all_frames`). It mirrors the frame-unlock mechanism exactly: injecting a key into the `_create_fake_inventory_items` input makes vanilla turn it into a fake item and register `_unlocked_cosmetics[key] = backend_id` + `_inventory_items[backend_id]` (`playfab_mirror_base.lua:2394-2401`) — i.e. genuine modded-realm ownership.
+- Wired into the two EXISTING `PlayFabMirrorAdventure` hooks (no new hooks — merged into their bodies per the VMF duplicate-drop rule): the `_create_fake_inventory_items` pre-hook now injects unobtainable cosmetics on every `items_type == "cosmetics"` build in modded realm (independent of the frame toggle), and the `get_unlocked_cosmetics` post-hook resyncs them. Both injectors guard `target[key] == nil`, so the pre-hook's real backend_ids are never clobbered.
+- **Ownership respects the toggles.** `_cosmetic_ownership_enabled(key)` grants a key only if ANY of its character's `cos_unlock_<career>_<key>` toggles is on (ownership is account-wide); unchecking all of a cosmetic's Cosmetic-Availability toggles hides it again. The 4 wh_priest bless hats (not in the managed tree — wh_priest is excluded from the cross-career system) are granted unconditionally. DLC gate (`_skin_requires_unowned_dlc`) is applied before every grant.
+- No changes to `_cosmetic_unlocks.lua`: all 132 managed unobtainable keys already have their native-career toggle `default_value = true`; 0 were default-off. Only the 4 priest hats are outside the managed tree (handled by the unconditional branch).
+
+### Verify in-game
+- New `/cosmetics_status` chat command (echoes to chat, since the user runs mod-logging OFF): reports modded-realm state, last inject count, and how many of the 136 are now owned in `_unlocked_cosmetics`.
+- The real test: Kruber → Huntsman → customization → Skins should now list "Ostermark Bowman", "Nuln Bordermarcher", and "Huntsman (Purified)". A full restart is required after any toggle change (`get_unlocked_cosmetics` runs once at PlayFab login).
+
+### Risk
+- Injecting ownership of a cosmetic the player already owns is an idempotent no-op (guarded on `target[key] == nil`), so any over-inclusion is harmless. Asset-existence of the `_white` material packages is still an in-game render check (they reuse the shared base mesh with only a material swap, so worst case is a fallback material, not a crash).
+
+### Files
+- `cosmetics_tweaker.lua` — `_unobtainable_cosmetics` list + `_inject_unobtainable_cosmetics` + `_cosmetic_ownership_enabled` helpers; the two `PlayFabMirrorAdventure` cosmetic hooks extended to inject skins/hats; new `/cosmetics_status` command; `MOD_VERSION` `0.9.62-dev` → `0.9.63-dev`.
+
 ## 0.9.62-dev — 2026-07-02 — FIX: native Access-Violation crash opening the weapon-customization screen in a mission (ShadingEnvironment.blend, #228)
 
 > Diagnosed from the reporter's crash log `console-2026-07-02-05.13.47-...8e770416`. Crash `<<Crash>>Access violation (0xc0000005)` at 05:19:20, ~1s after opening the loadout-panel gear icon mid-mission on warcamp (Against the Grain) for `es_deus_01` (spear + shield). Build-only; in-game verification is the user's.
