@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.198-dev (2026-07-02) - Deepwood Staff now available on Kruber
+
+Kerillian's **Deepwood Staff** (`we_life_staff`, Sister of the Thorn's life staff) was reachable on Kerillian and Saltzpyre careers but had been withheld from all four Kruber careers ("pending user decision"), so it never appeared in Kruber's Weapon Availability menu and could not be equipped or tested. Per user request 2026-07-02 it is now wired for Kruber the same way `we_javelin` already was.
+
+- **Added `we_life_staff` to all four Kruber careers' unlock lists** (`wt_unlock_data.lua`): `es_mercenary`, `es_huntsman`, `es_knight`, `es_questingknight`.
+- **Added the four companion Availability widgets** (`unlock_es_<career>_we_life_staff`, `weapon_tweaker_data.lua`) so the `widget_unlock_map_consistency` regression check stays green, plus the four **"Kerillian: Deepwood Staff"** loc labels (`weapon_tweaker_localization.lua`).
+- **Extended the `staff_life` wield patch** (`wt_wield_patches.lua`) with the four Kruber careers -> `to_2h_hammer`, matching every other Sienna/elf staff port onto Kruber's body (Greathammer two-handed wield/idle vocab). The staff renders on Kruber immediately.
+- Status: flagged **[Untested]** in the Availability menu (already present in `wt_port_status._UNTESTED.kruber`); not added to the dev 3P Anim Picker yet - the shared staff wield source renders it out of the box, per-attack 3P tuning is a follow-up if wanted.
+
 ## 0.12.197-dev (2026-07-01) - Settings menu: sort the Weapon Tweaks group A-Z
 
 Settings-menu organization pass. No gameplay, setting, or widget changes; every `setting_id`, default, `range`, and tooltip text is untouched.
