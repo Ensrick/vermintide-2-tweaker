@@ -212,62 +212,89 @@ return {
                 },
             },
             -- ================================================================
-            -- In-Mission Hero Select (#173 rewire, 2026-07-02)
+            -- In-Mission Menus (collapsible; reorg 2026-07-02 per user direction)
             -- ================================================================
-            -- Opens the REAL hero/career selection screen (CharacterSelectionView,
-            -- the keep "C"-key grid) mid-mission; the keep-only backdrop world is
-            -- swapped to the mission-loadable inventory-preview world for the mount.
-            -- Career swap respawns IN PLACE (B7-proven). Blocked in Chaos Wastes.
-            -- See _gut_mission_hero_select.lua.
+            -- Wraps the two mid-mission menu features. Setting_ids unchanged, so
+            -- existing user settings carry over.
+            -- Hero Select (#173): opens the REAL CharacterSelectionView mid-mission;
+            --   keep-only backdrop swapped to the inventory-preview world; career
+            --   swap respawns IN PLACE. Blocked in Chaos Wastes.
+            --   See _gut_mission_hero_select.lua.
+            -- Inventory (migrated from general_tweaker 2026-06-24): see
+            --   _gut_mission_inventory.lua.
             {
-                setting_id  = "gut_mission_hero_select_group",
+                setting_id  = "gut_inmission_menus_group",
                 type        = "group",
                 sub_widgets = {
                     {
-                        setting_id    = "gut_mission_hero_select_enabled",
-                        type          = "checkbox",
-                        default_value = true,   -- ON by default
-                        tooltip       = "gut_mission_hero_select_enabled_tooltip",
+                        setting_id  = "gut_mission_hero_select_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "gut_mission_hero_select_enabled",
+                                type          = "checkbox",
+                                default_value = true,   -- ON by default
+                                tooltip       = "gut_mission_hero_select_enabled_tooltip",
+                            },
+                            {
+                                setting_id      = "gut_open_hero_select_hotkey",
+                                type            = "keybind",
+                                keybind_trigger = "pressed",
+                                keybind_type    = "function_call",
+                                function_name   = "gut_open_mission_hero_select",
+                                default_value   = {},
+                                tooltip         = "gut_open_hero_select_hotkey_tooltip",
+                            },
+                        },
                     },
                     {
-                        setting_id      = "gut_open_hero_select_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gut_open_mission_hero_select",
-                        default_value   = {},
-                        tooltip         = "gut_open_hero_select_hotkey_tooltip",
+                        setting_id  = "gut_mission_inventory_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "gut_mission_inventory_enabled",
+                                type          = "checkbox",
+                                default_value = true,   -- #87: on by default
+                                tooltip       = "gut_mission_inventory_enabled_tooltip",
+                            },
+                            {
+                                setting_id    = "gut_mission_menu_tabs",
+                                type          = "checkbox",
+                                default_value = true,   -- #87: on by default
+                                tooltip       = "gut_mission_menu_tabs_tooltip",
+                            },
+                            {
+                                setting_id      = "gut_open_inv_hotkey",
+                                type            = "keybind",
+                                keybind_trigger = "pressed",
+                                keybind_type    = "function_call",
+                                function_name   = "gut_open_mission_inventory",
+                                default_value   = {},
+                                tooltip         = "gut_open_inv_hotkey_tooltip",
+                            },
+                        },
                     },
                 },
             },
             -- ================================================================
-            -- In-Mission Inventory (MIGRATED from general_tweaker 2026-06-24)
+            -- Loadout Manager -- issue #175
             -- ================================================================
-            -- See _gut_mission_inventory.lua.
+            -- The modded-scoped native loadout store itself is INTRINSIC/implicit
+            -- (always on in the modded realm, no toggle - user direction 2026-07-02;
+            -- the former gut_native_loadouts_group/_enabled widgets are gone). This
+            -- group holds loadout MANAGEMENT options; more coming later.
+            -- gut_use_non_modded_loadouts ON = modded reads your non-modded (official)
+            -- loadouts read-only: every loadout write is blocked, nothing modded can
+            -- change them. OFF (default) = modded loadouts stored separately.
             {
-                setting_id  = "gut_mission_inventory_group",
+                setting_id  = "gut_loadout_manager_group",
                 type        = "group",
                 sub_widgets = {
                     {
-                        setting_id    = "gut_mission_inventory_enabled",
+                        setting_id    = "gut_use_non_modded_loadouts",
                         type          = "checkbox",
-                        default_value = true,   -- #87: on by default
-                        tooltip       = "gut_mission_inventory_enabled_tooltip",
-                    },
-                    {
-                        setting_id    = "gut_mission_menu_tabs",
-                        type          = "checkbox",
-                        default_value = true,   -- #87: on by default
-                        tooltip       = "gut_mission_menu_tabs_tooltip",
-                    },
-                    {
-                        setting_id      = "gut_open_inv_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gut_open_mission_inventory",
-                        default_value   = {},
-                        tooltip         = "gut_open_inv_hotkey_tooltip",
+                        default_value = false,
+                        tooltip       = "gut_use_non_modded_loadouts_tooltip",
                     },
                 },
             },
@@ -310,26 +337,6 @@ return {
                         type          = "checkbox",
                         default_value = true,
                         tooltip       = "gut_mt_auto_collapse_tooltip",
-                    },
-                },
-            },
-            -- ================================================================
-            -- Native Loadouts (Modded Realm) -- issue #175
-            -- ================================================================
-            -- When in the modded (EAC-untrusted) realm, the native I-VI loadout bar
-            -- reads/writes a modded-only store so official loadouts stay untouched.
-            -- Inert in the official realm and in Versus. Default ON. See
-            -- _gut_native_loadouts.lua. Label ordered A->Z between "Mod Tweaker" and
-            -- "On-Screen Overlays".
-            {
-                setting_id  = "gut_native_loadouts_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "gut_native_loadouts_enabled",
-                        type          = "checkbox",
-                        default_value = true,
-                        tooltip       = "gut_native_loadouts_enabled_tooltip",
                     },
                 },
             },

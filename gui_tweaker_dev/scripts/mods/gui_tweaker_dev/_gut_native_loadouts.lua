@@ -122,31 +122,43 @@ local function _in_modded_realm()
     return (sd and sd["eac-untrusted"]) and true or false
 end
 
--- Pure gate logic, exposed for regression testing. Inert unless BOTH the modded realm
--- AND the master toggle are on. `toggle` nil is treated as ON (widget default_value=true).
-function M.gate(is_modded, toggle)
-    if not is_modded then return false end
-    return toggle ~= false
+-- Tri-mode gate (2026-07-02 reorg: the store itself is INTRINSIC - no enable toggle):
+--   MODE_OFF      official realm (or Versus/undeterminable): fully inert, vanilla behavior.
+--   MODE_STORE    modded, "Use non-modded loadouts" OFF (default): store overlay -
+--                 reads serve the modded store, writes captured into it, official untouched.
+--   MODE_READONLY modded, "Use non-modded loadouts" ON: reads pass through to the
+--                 official data, EVERY loadout write is blocked (no store, no official) -
+--                 the player cannot modify loadouts from modded at all.
+-- Pure logic exposed for regression testing. Setting default_value=false => nil reads as OFF.
+local MODE_OFF, MODE_STORE, MODE_READONLY = "off", "store", "readonly"
+M.MODE_OFF, M.MODE_STORE, M.MODE_READONLY = MODE_OFF, MODE_STORE, MODE_READONLY
+
+function M.mode(is_modded, use_non_modded)
+    if not is_modded then return MODE_OFF end
+    if use_non_modded then return MODE_READONLY end
+    return MODE_STORE
 end
 
-local function _feature_active()
-    if not _in_modded_realm() then return false end   -- official realm: cheap exit, no mod:get
-    return M.gate(true, mod:get("gut_native_loadouts_enabled"))
+local function _feature_mode()
+    if not _in_modded_realm() then return MODE_OFF end   -- official realm: cheap exit, no mod:get
+    return M.mode(true, mod:get("gut_use_non_modded_loadouts"))
 end
 
 -- Mirror hooks additionally require the Adventure data key so Versus stays vanilla.
-local function _mirror_active(mirror)
-    if not _feature_active() then return false end
-    return mirror._characters_data_key == ADVENTURE_DATA_KEY
+local function _mirror_mode(mirror)
+    local m = _feature_mode()
+    if m == MODE_OFF then return MODE_OFF end
+    return (mirror._characters_data_key == ADVENTURE_DATA_KEY) and m or MODE_OFF
 end
 
 -- Interface/UI hooks lack the mirror on `self`; resolve it to check the same discriminator.
-local function _adventure_active()
-    if not _feature_active() then return false end
+local function _adventure_mode()
+    local m = _feature_mode()
+    if m == MODE_OFF then return MODE_OFF end
     local ok, mirror = pcall(function()
         return Managers.backend:get_interface("items")._backend_mirror
     end)
-    return (ok and mirror and mirror._characters_data_key == ADVENTURE_DATA_KEY) or false
+    return (ok and mirror and mirror._characters_data_key == ADVENTURE_DATA_KEY) and m or MODE_OFF
 end
 
 -- Loadout cap read from the game, NEVER hardcoded 6 (issue #231 raises it to 30 later).
@@ -234,7 +246,9 @@ local function _install_bu_capture()
     _bu_capture_installed = true
     mod:hook(BU, "set_loadout_item", function(func, backend_id, career_name, slot_name)
         -- 3-arg entry point, always the SELECTED loadout (no index arg by design).
-        if _adventure_active() and career_name and backend_id and GEAR_SLOT_SET[slot_name] then
+        -- READONLY mode: no capture; the call passes through and the mirror-level write
+        -- blocks make the equip snap back to the official loadout on the next refresh.
+        if _adventure_mode() == MODE_STORE and career_name and backend_id and GEAR_SLOT_SET[slot_name] then
             local store = _store()
             local entry = store[career_name]
             if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
@@ -262,7 +276,8 @@ end
 
 -- get_character_data(self, career_name, key, optional_loadout_index) -- base:1909
 mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, career_name, key, optional_loadout_index)
-    if not _mirror_active(self) or not career_name then
+    -- READONLY mode reads pass through: the official data IS the loadout source then.
+    if _mirror_mode(self) ~= MODE_STORE or not career_name then
         return func(self, career_name, key, optional_loadout_index)
     end
     _prepare(self, career_name)
@@ -299,7 +314,7 @@ end)
 
 -- get_career_loadouts(self, career_name) -> (selected_index, loadouts_array) -- base:1944
 mod:hook("PlayFabMirrorAdventure", "get_career_loadouts", function(func, self, career_name)
-    if not _mirror_active(self) or not career_name then
+    if _mirror_mode(self) ~= MODE_STORE or not career_name then
         return func(self, career_name)
     end
     _prepare(self, career_name)
@@ -312,7 +327,7 @@ end)
 
 -- has_loadout(self, career_name, loadout_index) -- base:1921
 mod:hook("PlayFabMirrorAdventure", "has_loadout", function(func, self, career_name, loadout_index)
-    if not _mirror_active(self) or not career_name then
+    if _mirror_mode(self) ~= MODE_STORE or not career_name then
         return func(self, career_name, loadout_index)
     end
     _prepare(self, career_name)
@@ -332,8 +347,14 @@ end)
 -- interface (set_loadout_item at :657-665) / talents interface (set_talents at :331)
 -- already resolved. We store it verbatim -- the cosmetic/pose id rewrite is done upstream.
 mod:hook("PlayFabMirrorAdventure", "set_character_data", function(func, self, career_name, key, value, set_mirror, optional_loadout_index)
-    if not _mirror_active(self) or not career_name then
+    local m = _mirror_mode(self)
+    if m == MODE_OFF or not career_name then
         return func(self, career_name, key, value, set_mirror, optional_loadout_index)
+    end
+    if m == MODE_READONLY then
+        printf("[gut_dev:NATIVE_LOADOUTS] set_character_data career=%s key=%s BLOCKED (read-only non-modded loadouts)",
+            tostring(career_name), tostring(key))
+        return
     end
     _prepare(self, career_name)
     local store = _store()
@@ -353,8 +374,13 @@ end)
 
 -- set_loadout_index(self, career, loadout_index) -- base:1968
 mod:hook("PlayFabMirrorAdventure", "set_loadout_index", function(func, self, career_name, loadout_index)
-    if not _mirror_active(self) or not career_name or not loadout_index then
+    local m = _mirror_mode(self)
+    if m == MODE_OFF or not career_name or not loadout_index then
         return func(self, career_name, loadout_index)
+    end
+    if m == MODE_READONLY then
+        printf("[gut_dev:NATIVE_LOADOUTS] set_loadout_index career=%s BLOCKED (read-only non-modded loadouts)", tostring(career_name))
+        return
     end
     _prepare(self, career_name)
     local store = _store()
@@ -371,8 +397,13 @@ end)
 
 -- add_loadout(self, career) -- base:2036
 mod:hook("PlayFabMirrorAdventure", "add_loadout", function(func, self, career_name)
-    if not _mirror_active(self) or not career_name then
+    local m = _mirror_mode(self)
+    if m == MODE_OFF or not career_name then
         return func(self, career_name)
+    end
+    if m == MODE_READONLY then
+        printf("[gut_dev:NATIVE_LOADOUTS] add_loadout career=%s BLOCKED (read-only non-modded loadouts)", tostring(career_name))
+        return
     end
     _prepare(self, career_name)
     local store = _store()
@@ -394,8 +425,13 @@ end)
 
 -- delete_loadout(self, career, loadout_index) -- base:1994
 mod:hook("PlayFabMirrorAdventure", "delete_loadout", function(func, self, career_name, loadout_index)
-    if not _mirror_active(self) or not career_name or not loadout_index then
+    local m = _mirror_mode(self)
+    if m == MODE_OFF or not career_name or not loadout_index then
         return func(self, career_name, loadout_index)
+    end
+    if m == MODE_READONLY then
+        printf("[gut_dev:NATIVE_LOADOUTS] delete_loadout career=%s BLOCKED (read-only non-modded loadouts)", tostring(career_name))
+        return
     end
     _prepare(self, career_name)
     local entry = _store()[career_name]
@@ -425,8 +461,14 @@ end)
 -- slots + talents per base:1941) are captured into the store and BLOCKED so nothing
 -- modded ever mutates _characters_data. career-nil (character-level) writes pass through.
 mod:hook("PlayFabMirrorAdventure", "set_career_read_only_data", function(func, self, character, key, value, career, set_mirror, loadout_index)
-    if not _mirror_active(self) or not career then
+    local m = _mirror_mode(self)
+    if m == MODE_OFF or not career then
         return func(self, character, key, value, career, set_mirror, loadout_index)
+    end
+    if m == MODE_READONLY then
+        printf("[gut_dev:NATIVE_LOADOUTS] set_career_read_only_data career=%s key=%s BLOCKED (read-only non-modded loadouts)",
+            tostring(career), tostring(key))
+        return
     end
     _prepare(self, career)
     local store = _store()
@@ -448,7 +490,7 @@ end)
 -- Overlay bot designations onto _bot_loadouts AFTER vanilla built it from _loadouts.
 -- hook_safe (post) -- no other gut_dev hook targets refresh_bot_loadouts.
 mod:hook_safe("BackendInterfaceItemPlayfab", "refresh_bot_loadouts", function(self)
-    if not _adventure_active() then return end
+    if _adventure_mode() ~= MODE_STORE then return end
     local bot = self._bot_loadouts
     if type(bot) ~= "table" then return end
     for career_name, entry in pairs(_store()) do
@@ -469,8 +511,13 @@ end)
 -- store. Isolation: PlayerData.loadout_selection is realm-shared and not eac-gated, so we
 -- never write it while modded.
 mod:hook("HeroWindowLoadoutSelectionConsole", "_save_bot_equipment", function(func, self)
-    if not _adventure_active() then
+    local m = _adventure_mode()
+    if m == MODE_OFF then
         return func(self)
+    end
+    if m == MODE_READONLY then
+        printf("[gut_dev:NATIVE_LOADOUTS] bot_equipment BLOCKED (read-only non-modded loadouts)")
+        return
     end
     local profile = SPProfiles and SPProfiles[self._profile_index]
     local career_settings = profile and profile.careers and profile.careers[self._career_index]
@@ -550,12 +597,14 @@ M.rt_checks = {
         if not ok then return "_in_modded_realm raised" end
     end },
     { name = "native_loadouts_failsafe_inert", fn = function()
-        -- Failsafe/gate: inert unless BOTH modded realm AND toggle on.
-        if M.gate(false, true) ~= false then return "active in official realm (should be inert)" end
-        if M.gate(false, false) ~= false then return "active in official realm, toggle off" end
-        if M.gate(true, false) ~= false then return "active with toggle off" end
-        if M.gate(true, true) ~= true then return "inert in modded+on (should be active)" end
-        if M.gate(true, nil) ~= true then return "toggle default should be ON" end
+        -- Tri-mode gate: OFF in official always; STORE is the modded default (implicit
+        -- feature, no enable toggle); READONLY when "Use non-modded loadouts" is ON.
+        if M.mode(false, false) ~= M.MODE_OFF then return "not inert in official realm" end
+        if M.mode(false, true) ~= M.MODE_OFF then return "not inert in official realm (use_non_modded on)" end
+        if M.mode(false, nil) ~= M.MODE_OFF then return "not inert in official realm (nil setting)" end
+        if M.mode(true, false) ~= M.MODE_STORE then return "modded default should be STORE" end
+        if M.mode(true, nil) ~= M.MODE_STORE then return "nil setting should read as STORE (default OFF)" end
+        if M.mode(true, true) ~= M.MODE_READONLY then return "use_non_modded on should be READONLY" end
     end },
     { name = "native_loadouts_no_hardcoded_6", fn = function()
         local expected = InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS

@@ -5,6 +5,25 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.176-dev (2026-07-02) -- Interface reorg + Loadout Manager group (user direction 2026-07-02)
+
+### Changed
+- **"In-Mission Menus" collapsible group** now wraps the former top-level "In-Mission
+  Hero Select" and "In-Mission Inventory" groups. All setting_ids unchanged, so user
+  settings carry over.
+- **"Native Loadouts (Modded Realm)" group REMOVED** - the modded-scoped store is an
+  intrinsic, implicit feature (always on in the modded realm); an enable toggle was
+  pointless. `gut_native_loadouts_group` / `gut_native_loadouts_enabled` widgets and loc
+  deleted.
+- **New "Loadout Manager" group** (options for managing loadouts; more to come). First
+  option: **"Use non-modded loadouts"** (`gut_use_non_modded_loadouts`, default OFF).
+  ON = while modded, the I-VI bar reads your non-modded (official) loadouts READ-ONLY:
+  every loadout write (equips, talents, loadout switches, add/delete, bot designation)
+  is blocked at the mirror - nothing modded can change them, and nothing writes to the
+  modded store either. OFF (default) = separate modded loadouts as before.
+- Module gate reworked to tri-mode (`M.mode`: OFF official / STORE modded default /
+  READONLY use-non-modded); failsafe regression check rewritten accordingly.
+
 ## 0.2.175-dev (2026-07-02) -- FIX #175: equips in modded now persist with Loremaster's Armoury installed (LA clone-dispatch capture gap)
 
 ### Why (friend logs 2026-07-02 21:25 + 21:27)

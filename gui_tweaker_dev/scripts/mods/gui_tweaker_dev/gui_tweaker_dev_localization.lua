@@ -185,6 +185,13 @@ return {
     UNOBTRUSIVE_MISSION_TOOLTIP_tooltip = { en = "Make the floating mission marker (used for the revive warning) smaller and always transparent." },
 
     -- ============================================================
+    -- In-Mission Menus (collapsible wrapper, reorg 2026-07-02)
+    -- ============================================================
+    gut_inmission_menus_group = {
+        en = "In-Mission Menus",
+    },
+
+    -- ============================================================
     -- In-Mission Hero Select (sibling of the inventory feature, 2026-06-24)
     -- ============================================================
     gut_mission_hero_select_group = {
@@ -267,16 +274,16 @@ return {
     },
 
     -- ============================================================
-    -- Native Loadouts (Modded Realm) -- issue #175
+    -- Loadout Manager -- issue #175 (modded-scoped store itself is implicit/always-on)
     -- ============================================================
-    gut_native_loadouts_group = {
-        en = "Native Loadouts (Modded Realm)",
+    gut_loadout_manager_group = {
+        en = "Loadout Manager",
     },
-    gut_native_loadouts_enabled = {
-        en = "[untested] Store modded loadouts separately",
+    gut_use_non_modded_loadouts = {
+        en = "[untested] Use non-modded loadouts",
     },
-    gut_native_loadouts_enabled_tooltip = {
-        en = "While you are in the modded realm, the game's built-in I to VI loadout bar (gear, cosmetics, talents, and bot loadout) reads and writes a modded-only store, kept separate from your official-realm loadouts. Modded changes never touch your official loadouts, and official changes never leak into modded. On first use each career's official loadouts are copied in once as a starting point. Has no effect in the official realm or in Versus. On by default.",
+    gut_use_non_modded_loadouts_tooltip = {
+        en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows exactly your official loadouts, and nothing you do in modded can change them - equips, talent changes, loadout switches, and bot designation all snap back. Turn off (default) to keep separate modded loadouts that never touch your official ones.",
     },
 
     -- ============================================================
