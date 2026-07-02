@@ -1,5 +1,15 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.208-dev (2026-07-02) - #222 strict re-sweep: option tooltips no longer restate their title
+
+VMF draws each option's title as the orange first line of the hover popup, then the
+description below it (confirmed in VMF source options.lua: it builds the popup as
+`title .. "\n" .. body`). The first #222 pass used too lenient a bar and left bodies that
+opened by re-naming the option (e.g. "Opens the ..." under "Open ...", or a value-noun
+echo under a slider title), so the name still showed twice. This pass rewrites 27
+`_tooltip` bodies to open with the behavior, effect, or range instead. No magnitudes,
+mechanics, `%%` escaping, host-only/mutex caveats, or boon-effect bodies were changed.
+
 ## 0.7.207-dev (2026-07-02) - #164: starting_coins VMF menu back to fine granularity (25-step moves to gut Mod Tweaker)
 
 Per the binding 2026-07-02 direction: VMF's own options view stays at its natural fine granularity so the user can dial an exact pilgrim's-coin value (e.g. 324); the coarse 25-step now lives ONLY in gut's Mod Tweaker (#164). Removed BOTH ct-side snap paths that were forcing multiples of 25:
