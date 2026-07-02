@@ -112,7 +112,13 @@ local loc = {
     disable_dominant_god = { en = "[untested] Disable Dominant-God Rule" },
     disable_dominant_god_tooltip = { en = "Removes vanilla's rule that reserves the journey's dominant god for the finale. All 4 gods rotate uniformly across curses, including the finale." },
     finale_dominant_god = { en = "[untested] Finale God" },
-    finale_dominant_god_tooltip = { en = "Which god's curse is forced for the finale. 0 = weekly rotation, 1 = Nurgle, 2 = Tzeentch, 3 = Khorne, 4 = Slaanesh. Host-only." },
+    finale_dominant_god_tooltip = { en = "Forces a specific god's curse for the finale instead of the game's weekly rotation. Host-only." },
+    -- Finale God dropdown option labels (values 0-4; see finale_god_options in *_data.lua).
+    finale_god_rotation = { en = "Weekly Rotation" },
+    finale_god_nurgle   = { en = "Nurgle" },
+    finale_god_tzeentch = { en = "Tzeentch" },
+    finale_god_khorne   = { en = "Khorne" },
+    finale_god_slaanesh = { en = "Slaanesh" },
     -- Curse labels carry their HOST GOD as a prefix ("Disable: <God>: <Curse>") and are
     -- alphabetized (god, then curse) to match the menu widget order in *_data.lua. God
     -- grouping is authoritative from vanilla deus_map_populate_settings.lua `all_curses`

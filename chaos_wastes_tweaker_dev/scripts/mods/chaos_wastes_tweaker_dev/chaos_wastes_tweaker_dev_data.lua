@@ -392,6 +392,18 @@ local count_with_default_options = {
     { text = "10", value = 10 },
 }
 
+-- Finale God dropdown options. value = index into FINALE_GODS (chaos_wastes_tweaker_dev.lua:481
+-- { "nurgle", "tzeentch", "khorne", "slaanesh" }); value 0 = no override, the `> 0` guard at
+-- ~L3989 leaves the game's weekly rotation in place. Stored value is the same integer the old
+-- numeric widget wrote, so existing saved settings carry over unchanged.
+local finale_god_options = {
+    { text = "finale_god_rotation", value = 0 },
+    { text = "finale_god_nurgle",   value = 1 },
+    { text = "finale_god_tzeentch", value = 2 },
+    { text = "finale_god_khorne",   value = 3 },
+    { text = "finale_god_slaanesh", value = 4 },
+}
+
 local data = {
     name = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
@@ -549,7 +561,7 @@ local data = {
                     { setting_id = "flesh_guard_clouds_per_minute", type = "numeric", default_value = 6, range = { 0, 30 }, decimals_number = 0, tooltip = "flesh_guard_clouds_per_minute_tooltip" },
                     { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
                     { setting_id = "disable_dominant_god", type = "checkbox", default_value = true, tooltip = "disable_dominant_god_tooltip" },
-                    { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0, tooltip = "finale_dominant_god_tooltip" },
+                    { setting_id = "finale_dominant_god", type = "dropdown", default_value = 0, options = finale_god_options, tooltip = "finale_dominant_god_tooltip" },
                 },
             },
             -- ============================================================
