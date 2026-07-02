@@ -5,6 +5,19 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.177-dev (2026-07-02) -- Interface reorg round 2: single HUD category + Cutscenes under Main Menu & Startup
+
+### Changed (user direction 2026-07-02; all setting_ids unchanged, settings carry over)
+- **"On-Screen Overlays" category DELETED; single "HUD" category instead.** The overlays
+  (parry indicator, respawn-over-portrait timer, floating damage numbers) modify HUD
+  elements, so splitting them from the HUD group was pointless. `gut_hide_hud_ui_group`
+  relabeled "Hide HUD & UI" -> "HUD" and now holds: HUD-mode dropdown + cycle hotkey,
+  the Hide UI Elements & Buffs sub-tree, then the three overlay master toggles. The
+  `gut_hud_group` wrapper widget + loc entry are gone.
+- **"Cutscenes & Monologues" nested under "Main Menu & Startup"** (was top-level).
+- Top-level categories now: 3rd-Person Camera, HUD, In-Mission Menus, Loadout Manager,
+  Main Menu & Startup, Mod Tweaker (A-Z preserved).
+
 ## 0.2.176-dev (2026-07-02) -- Interface reorg + Loadout Manager group (user direction 2026-07-02)
 
 ### Changed

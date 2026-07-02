@@ -86,7 +86,9 @@ return {
     -- HideBuffs "UI Tweaks" area)
     -- ============================================================
     gut_hide_hud_ui_group = {
-        en = "Hide HUD & UI",
+        -- Reorg 2026-07-02: former "Hide HUD & UI"; now the single HUD category
+        -- (absorbed the deleted "On-Screen Overlays"). setting_id unchanged.
+        en = "HUD",
     },
 
     -- Hide UI (3 modes) — migrated from general_tweaker.
@@ -287,10 +289,10 @@ return {
     },
 
     -- ============================================================
-    -- On-Screen Overlays (parry indicator, respawn timer, damage numbers)
+    -- Overlays (parry indicator, respawn timer, damage numbers) - now inside the
+    -- HUD category (gut_hide_hud_ui_group); the "On-Screen Overlays" category and
+    -- its gut_hud_group widget were deleted in the 2026-07-02 reorg.
     -- ============================================================
-    -- Label de-jargoned from "HUD"; setting_id (gut_hud_group) unchanged.
-    gut_hud_group = { en = "On-Screen Overlays" },
 
     -- Parry Indicator (absorbed from the "Parry Indicator" mod).
     gut_parry_indicator = {

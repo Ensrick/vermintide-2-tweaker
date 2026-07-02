@@ -77,56 +77,14 @@ return {
                 },
             },
             -- ================================================================
-            -- Cutscenes & Monologues (MIGRATED from general_tweaker 2026-06-25,
-            -- issue #106; monologue toggle migrated 2026-06-29, #192)
+            -- HUD (reorg 2026-07-02 per user direction: the former "On-Screen
+            -- Overlays" category is deleted and its widgets live here - overlays
+            -- like the parry indicator and respawn-over-portrait timer modify HUD
+            -- elements, so one HUD category. setting_id kept: gut_hide_hud_ui_group.)
             -- ================================================================
-            -- Deliberate order: skip-cutscenes master + its hotkey, then the
-            -- related loading-screen monologue toggle. See _gut_cutscenes.lua.
-            {
-                setting_id  = "gut_cutscenes_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "gut_skip_cutscenes_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = "gut_skip_cutscenes_enabled_tooltip",
-                        sub_widgets   = {
-                            {
-                                setting_id    = "gut_skip_cutscenes_auto",
-                                type          = "checkbox",
-                                default_value = false,
-                                tooltip       = "gut_skip_cutscenes_auto_tooltip",
-                            },
-                        },
-                    },
-                    {
-                        setting_id      = "gut_skip_cutscenes_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gut_skip_cutscenes_toggle",
-                        default_value   = {},
-                        tooltip         = "gut_skip_cutscenes_hotkey_tooltip",
-                    },
-                    -- Disable Loading-Screen Monologues (MIGRATED from
-                    -- general_tweaker 2026-06-29, #192). See _gut_monologue.lua.
-                    {
-                        setting_id    = "gut_disable_intro_monologue",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = "gut_disable_intro_monologue_tooltip",
-                    },
-                },
-            },
-            -- ================================================================
-            -- Hide HUD & UI
-            -- ================================================================
-            -- ONE collapsible umbrella folding the two formerly-sibling hide-UI
-            -- surfaces (the HUD-visibility dropdown + the absorbed HideBuffs/"UI
-            -- Tweaks" area) so they stop reading as duplicates.
             -- Deliberate order (NOT A->Z): the HUD-mode dropdown + its cycle
-            -- hotkey sit at the top, then the "Hide UI Elements & Buffs" sub-tree.
+            -- hotkey sit at the top, then the "Hide UI Elements & Buffs" sub-tree
+            -- (absorbed HideBuffs/"UI Tweaks"), then the overlay master toggles.
             -- Setting ids kept verbatim (HideBuffs fork hooks read
             -- mod:get(SETTING_NAMES.<id>)); only labels changed.
             {
@@ -206,6 +164,72 @@ return {
                                     { setting_id = "UNOBTRUSIVE_FLOATING_OBJECTIVE", type = "checkbox", default_value = false, tooltip = "UNOBTRUSIVE_FLOATING_OBJECTIVE_tooltip" },
                                     { setting_id = "UNOBTRUSIVE_MISSION_TOOLTIP",    type = "checkbox", default_value = false, tooltip = "UNOBTRUSIVE_MISSION_TOOLTIP_tooltip" },
                                 },
+                            },
+                        },
+                    },
+                    -- Overlays (former "On-Screen Overlays" category, deleted in the
+                    -- 2026-07-02 reorg). Parry-block colour, respawn countdown over a
+                    -- portrait, floating damage numbers - each an independent master
+                    -- toggle with fine-tune sub-widgets.
+                    {
+                        setting_id  = "gut_parry_indicator",
+                        type        = "checkbox",
+                        default_value = false,
+                        tooltip     = "gut_parry_indicator_tooltip",
+                        sub_widgets = {
+                            {
+                                setting_id     = "gut_parry_r",
+                                type           = "numeric",
+                                range          = { 0, 255 },
+                                default_value  = 0,
+                                decimals_number = 0,
+                                tooltip        = "gut_parry_r",
+                            },
+                            {
+                                setting_id     = "gut_parry_g",
+                                type           = "numeric",
+                                range          = { 0, 255 },
+                                default_value  = 255,
+                                decimals_number = 0,
+                                tooltip        = "gut_parry_g",
+                            },
+                            {
+                                setting_id     = "gut_parry_b",
+                                type           = "numeric",
+                                range          = { 0, 255 },
+                                default_value  = 120,
+                                decimals_number = 0,
+                                tooltip        = "gut_parry_b",
+                            },
+                        },
+                    },
+                    -- Respawn countdown over a dead teammate's portrait (optional).
+                    {
+                        setting_id  = "gut_respawn_timer",
+                        type        = "checkbox",
+                        default_value = false,
+                        tooltip     = "gut_respawn_timer_tooltip",
+                        sub_widgets = {
+                            { setting_id = "gut_respawn_font_size", type = "numeric", range = { 12, 80 },  default_value = 32, decimals_number = 0, tooltip = "gut_respawn_font_size_tooltip" },
+                            { setting_id = "gut_respawn_r",         type = "numeric", range = { 0, 255 },  default_value = 255, decimals_number = 0, tooltip = "gut_respawn_r" },
+                            { setting_id = "gut_respawn_g",         type = "numeric", range = { 0, 255 },  default_value = 60,  decimals_number = 0, tooltip = "gut_respawn_g" },
+                            { setting_id = "gut_respawn_b",         type = "numeric", range = { 0, 255 },  default_value = 60,  decimals_number = 0, tooltip = "gut_respawn_b" },
+                        },
+                    },
+                    -- Floating Damage Numbers (MIGRATED from general_tweaker 2026-06-29).
+                    -- Client-side, networking-free; takes effect on the next map load.
+                    -- See _gut_damage_numbers.lua.
+                    {
+                        setting_id    = "gut_damage_numbers_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gut_damage_numbers_enabled_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gut_damage_numbers_include_dots",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gut_damage_numbers_include_dots_tooltip",
                             },
                         },
                     },
@@ -299,16 +323,55 @@ return {
                 },
             },
             -- ================================================================
-            -- Main Menu & Startup (MIGRATED from general_tweaker 2026-06-29, #190)
+            -- Main Menu & Startup (MIGRATED from general_tweaker 2026-06-29, #190;
+            -- Cutscenes & Monologues nested here in the 2026-07-02 reorg)
             -- ================================================================
-            -- Both default OFF; plain engine-data reassignments (no hooks).
-            -- See _gut_mainmenu.lua.
+            -- Startup toggles default OFF; plain engine-data reassignments (no
+            -- hooks). See _gut_mainmenu.lua. Cutscenes sub-group: skip-cutscenes
+            -- master + hotkey + loading-screen monologue toggle (issues #106/#192,
+            -- setting_ids unchanged). See _gut_cutscenes.lua / _gut_monologue.lua.
             {
                 setting_id  = "gut_mainmenu_group",
                 type        = "group",
                 sub_widgets = {
                     { setting_id = "gut_skip_start_screen",    type = "checkbox", default_value = false, tooltip = "gut_skip_start_screen_tooltip" },
                     { setting_id = "gut_return_to_menu_quits", type = "checkbox", default_value = false, tooltip = "gut_return_to_menu_quits_tooltip" },
+                    {
+                        setting_id  = "gut_cutscenes_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "gut_skip_cutscenes_enabled",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gut_skip_cutscenes_enabled_tooltip",
+                                sub_widgets   = {
+                                    {
+                                        setting_id    = "gut_skip_cutscenes_auto",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gut_skip_cutscenes_auto_tooltip",
+                                    },
+                                },
+                            },
+                            {
+                                setting_id      = "gut_skip_cutscenes_hotkey",
+                                type            = "keybind",
+                                keybind_trigger = "pressed",
+                                keybind_type    = "function_call",
+                                function_name   = "gut_skip_cutscenes_toggle",
+                                default_value   = {},
+                                tooltip         = "gut_skip_cutscenes_hotkey_tooltip",
+                            },
+                            -- Disable Loading-Screen Monologues (#192). See _gut_monologue.lua.
+                            {
+                                setting_id    = "gut_disable_intro_monologue",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gut_disable_intro_monologue_tooltip",
+                            },
+                        },
+                    },
                 },
             },
             -- ================================================================
@@ -337,83 +400,6 @@ return {
                         type          = "checkbox",
                         default_value = true,
                         tooltip       = "gut_mt_auto_collapse_tooltip",
-                    },
-                },
-            },
-            -- ================================================================
-            -- On-Screen Overlays
-            -- ================================================================
-            -- Optional overlays drawn on top of the game: parry-block colour,
-            -- respawn countdown over a portrait, floating damage numbers. Each is
-            -- an independent master toggle with its own fine-tune sub-widgets.
-            {
-                setting_id = "gut_hud_group",
-                type       = "group",
-                sub_widgets = {
-                    -- Parry Indicator (absorbed). Recolours the block shields
-                    -- during the timed-block window for every weapon. RGB
-                    -- sub-sliders pick the colour.
-                    {
-                        setting_id  = "gut_parry_indicator",
-                        type        = "checkbox",
-                        default_value = false,
-                        tooltip     = "gut_parry_indicator_tooltip",
-                        sub_widgets = {
-                            {
-                                setting_id     = "gut_parry_r",
-                                type           = "numeric",
-                                range          = { 0, 255 },
-                                default_value  = 0,
-                                decimals_number = 0,
-                                tooltip        = "gut_parry_r",
-                            },
-                            {
-                                setting_id     = "gut_parry_g",
-                                type           = "numeric",
-                                range          = { 0, 255 },
-                                default_value  = 255,
-                                decimals_number = 0,
-                                tooltip        = "gut_parry_g",
-                            },
-                            {
-                                setting_id     = "gut_parry_b",
-                                type           = "numeric",
-                                range          = { 0, 255 },
-                                default_value  = 120,
-                                decimals_number = 0,
-                                tooltip        = "gut_parry_b",
-                            },
-                        },
-                    },
-                    -- Respawn countdown over a dead teammate's portrait (optional).
-                    {
-                        setting_id  = "gut_respawn_timer",
-                        type        = "checkbox",
-                        default_value = false,
-                        tooltip     = "gut_respawn_timer_tooltip",
-                        sub_widgets = {
-                            { setting_id = "gut_respawn_font_size", type = "numeric", range = { 12, 80 },  default_value = 32, decimals_number = 0, tooltip = "gut_respawn_font_size_tooltip" },
-                            { setting_id = "gut_respawn_r",         type = "numeric", range = { 0, 255 },  default_value = 255, decimals_number = 0, tooltip = "gut_respawn_r" },
-                            { setting_id = "gut_respawn_g",         type = "numeric", range = { 0, 255 },  default_value = 60,  decimals_number = 0, tooltip = "gut_respawn_g" },
-                            { setting_id = "gut_respawn_b",         type = "numeric", range = { 0, 255 },  default_value = 60,  decimals_number = 0, tooltip = "gut_respawn_b" },
-                        },
-                    },
-                    -- Floating Damage Numbers (MIGRATED from general_tweaker 2026-06-29).
-                    -- Client-side, networking-free; takes effect on the next map load.
-                    -- See _gut_damage_numbers.lua.
-                    {
-                        setting_id    = "gut_damage_numbers_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = "gut_damage_numbers_enabled_tooltip",
-                        sub_widgets   = {
-                            {
-                                setting_id    = "gut_damage_numbers_include_dots",
-                                type          = "checkbox",
-                                default_value = true,
-                                tooltip       = "gut_damage_numbers_include_dots_tooltip",
-                            },
-                        },
                     },
                 },
             },

@@ -26,13 +26,35 @@ local mod = get_mod("gut_dev")
 --     log, added 2026-07-01; #140 fade-arm added 2026-07-02; dup-check re-run: whole-mod
 --     grep found no other hook on it — only comment references in _gut_camera.lua)
 --
--- #140 (Parting of the Waves / dlc_portals brief fade-IN, user-confirmed 2026-07-02,
--- reproduces in official/vanilla Adventure): gut armed the fade-swallow (_skip_next_fade)
--- only in flow_cb_activate_cutscene_logic, but this map's native fade-in fires around the
--- EARLIER flow_cb_activate_cutscene_camera node — at which point _skip_next_fade is still
--- false, so the fade-in played. Fix: arm _skip_next_fade at the camera node too (Aussiemon
--- SkipCutscenes.lua:8 pattern), gated on "will this cutscene actually skip" so a CW
--- author-LOCKED boss cinematic that plays through keeps its fade.
+-- #140 (Parting of the Waves brief fade-IN, user-confirmed 2026-07-02, reproduces in
+-- official/vanilla Adventure). LEVEL-KEY CORRECTION: "A Parting of the Waves" is
+-- `dlc_dwarf_whaling` (NOT dlc_portals - earlier docs had this wrong; the clean trace
+-- below logs level=dlc_dwarf_whaling on every line).
+--   ROUND 1 (camera-node fade-arm, 2026-07-02): gut armed the fade-swallow
+--   (_skip_next_fade) only in flow_cb_activate_cutscene_logic, but this map's native
+--   fade-in fires around the EARLIER flow_cb_activate_cutscene_camera node - at which
+--   point _skip_next_fade is still false, so the fade-in played. Fix: arm
+--   _skip_next_fade at the camera node too (Aussiemon SkipCutscenes.lua:8 pattern),
+--   gated on "will this cutscene actually skip" so a CW author-LOCKED boss cinematic
+--   that plays through keeps its fade.
+--   ROUND 2 (guard-based swallow, v0.2.178-dev; clean user trace 2026-07-02 22:04,
+--   v0.2.175-dev, no other cutscene mods): the auto-skip itself works (deferred skip
+--   fires, fade #1 swallowed via _skip_next_fade, teardown clean, post-skip guard
+--   _skipped_cutscene_system ARMED), but the map's flow keeps firing delayed node
+--   groups AFTER the skip, and in each group the fx_fade effect fires ~97 ms BEFORE
+--   its flow_cb_activate_cutscene_camera node (PROVEN ordering on dlc_dwarf_whaling):
+--     22:04:39.972 effect | name=fx_fade skip_next_fade=false -> PLAYED (the bug)
+--     22:04:40.069 camera node -> fade-arm + CAMERA-ACTIVATE suppressed (97 ms too late)
+--     22:04:45.417 fade #3 swallowed only by luck (leftover flag from the 40.069 arm)
+--   The single-shot _skip_next_fade armed at the camera node can never catch a fade
+--   that PRECEDES its own camera node. Fix: in flow_cb_cutscene_effect, while the #106
+--   post-skip guard is armed (_skipped_cutscene_system == self), swallow EVERY fx_fade
+--   on that system. The one-shot _skip_next_fade branch stays - it handles the fade
+--   that arrives during skip_pressed BEFORE the guard arms (trace 22:04:36.434).
+--   TRADE-OFF (accepted): while the guard is armed (from skip until the next cutscene
+--   activation or level change), any scripted standalone fx_fade routed through
+--   CutsceneSystem is also swallowed - a cosmetic pop instead of a masking fade.
+--   Accepted vs. the erroneous black screen.
 --   * CutsceneSystem.flow_cb_deactivate_cutscene_cameras (hook_safe, lifecycle log only;
 --     same dup-check, no other hook)
 --   * ShowCursorStack.pop                       (table-form, guarded)
