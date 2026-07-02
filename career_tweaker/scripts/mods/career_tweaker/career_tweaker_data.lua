@@ -3,32 +3,34 @@ local mod = get_mod("crt")
 -- Per-dropdown factory. VMF's options.lua localize_dropdown_data mutates each
 -- option's `text` field IN PLACE (`option.text = mod:localize(option.text)`).
 -- A single shared options table reused across N dropdowns gets localized N
--- times: first pass converts "talent_swap_option_none" → "None (default)";
+-- times: first pass converts "talent_swap_option_none" -> "None (default)";
 -- the second pass localizes "None (default)" (not a key) and falls back to
 -- "<None (default)>"; each subsequent reuse adds another bracket pair, so by
--- the 20th dropdown the option reads "<<<<<<<<<<<<<<<<<<<None (default)>>>>>>>>>>>>>>>>>>>".
--- Every dropdown MUST get its own freshly-built options table — return a new
+-- the 20th dropdown the option reads "<<<...None (default)...>>>".
+-- Every dropdown MUST get its own freshly-built options table - return a new
 -- table from this builder on every call site.
 -- (Same pattern documented in enemy_tweaker_data.lua, line 17.)
+-- Option order follows the vanilla hero roster (Kruber, Bardin, Kerillian,
+-- Saltzpyre, Sienna), matching the per-career dropdowns below.
 local function _talent_swap_options()
     return {
         { text = "talent_swap_option_none",              value = "none"              },
+        -- Markus (Kruber)
+        { text = "talent_swap_option_es_huntsman",       value = "es_huntsman"       },
+        { text = "talent_swap_option_es_knight",         value = "es_knight"         },
+        { text = "talent_swap_option_es_mercenary",      value = "es_mercenary"      },
+        { text = "talent_swap_option_es_questingknight", value = "es_questingknight" },
         -- Bardin
         { text = "talent_swap_option_dr_ironbreaker",    value = "dr_ironbreaker"    },
         { text = "talent_swap_option_dr_slayer",         value = "dr_slayer"         },
         { text = "talent_swap_option_dr_ranger",         value = "dr_ranger"         },
         { text = "talent_swap_option_dr_engineer",       value = "dr_engineer"       },
-        -- Markus
-        { text = "talent_swap_option_es_huntsman",       value = "es_huntsman"       },
-        { text = "talent_swap_option_es_knight",         value = "es_knight"         },
-        { text = "talent_swap_option_es_mercenary",      value = "es_mercenary"      },
-        { text = "talent_swap_option_es_questingknight", value = "es_questingknight" },
         -- Kerillian
         { text = "talent_swap_option_we_shade",          value = "we_shade"          },
         { text = "talent_swap_option_we_maidenguard",    value = "we_maidenguard"    },
         { text = "talent_swap_option_we_waywatcher",     value = "we_waywatcher"     },
         { text = "talent_swap_option_we_thornsister",    value = "we_thornsister"    },
-        -- Victor
+        -- Victor (Saltzpyre)
         { text = "talent_swap_option_wh_zealot",         value = "wh_zealot"         },
         { text = "talent_swap_option_wh_bountyhunter",   value = "wh_bountyhunter"   },
         { text = "talent_swap_option_wh_captain",        value = "wh_captain"        },
@@ -48,49 +50,44 @@ return {
     options = {
         widgets = {
             -- ============================================================
-            -- Character Experience Level Override
+            -- Armor & Overcharge (hook-based; v0.3.32-dev)
             -- ============================================================
-            -- All careers under one hero share the same XP — the override is
-            -- keyed by hero display_name. 0 = no override; 1-35 = report that
-            -- level everywhere (inventory badge, char-select, mission spawn).
             {
-                setting_id  = "experience_levels_group",
+                setting_id  = "armor_overcharge_group",
                 type        = "group",
                 sub_widgets = {
-                    { setting_id = "level_override_dwarf_ranger",   type = "numeric", default_value = 0, range = { 0, 35 } },
-                    { setting_id = "level_override_empire_soldier", type = "numeric", default_value = 0, range = { 0, 35 } },
-                    { setting_id = "level_override_wood_elf",       type = "numeric", default_value = 0, range = { 0, 35 } },
-                    { setting_id = "level_override_witch_hunter",   type = "numeric", default_value = 0, range = { 0, 35 } },
-                    { setting_id = "level_override_bright_wizard",  type = "numeric", default_value = 0, range = { 0, 35 } },
-                    -- v0.3.21-dev: bypass the LEVEL gate on owned careers. DLC
-                    -- ownership is preserved (unowned-DLC careers stay locked).
-                    -- Hooks ProgressionUnlocks.is_unlocked_for_profile only.
-                    { setting_id = "unlock_all_careers",            type = "checkbox", default_value = false, tooltip = "unlock_all_careers_tooltip" },
+                    { setting_id = "armor_gromril_ignore_chip",             type = "checkbox", default_value = false, tooltip = "armor_gromril_ignore_chip_tooltip" },
+                    { setting_id = "armor_specials_dont_break_gromril",     type = "checkbox", default_value = false, tooltip = "armor_specials_dont_break_gromril_tooltip" },
+                    { setting_id = "unchained_no_overcharge_from_ff",       type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_ff_tooltip" },
+                    { setting_id = "unchained_no_overcharge_from_disablers", type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_disablers_tooltip" },
+                    { setting_id = "oe_benefit_from_cooldown_reduction",    type = "checkbox", default_value = false, tooltip = "oe_benefit_from_cooldown_reduction_tooltip" },
                 },
             },
             -- ============================================================
             -- Career Ability & Talent Swapping
+            -- Roster-order exemption: per-career dropdowns follow the vanilla
+            -- hero roster (Kruber, Bardin, Kerillian, Saltzpyre, Sienna), not A-Z.
             -- ============================================================
             {
                 setting_id = "career_swapping_group",
                 type       = "group",
                 sub_widgets = {
+                    -- Markus (Kruber)
+                    { setting_id = "talent_swap_es_huntsman",       type = "dropdown", default_value = "none", options = _talent_swap_options() },
+                    { setting_id = "talent_swap_es_knight",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
+                    { setting_id = "talent_swap_es_mercenary",      type = "dropdown", default_value = "none", options = _talent_swap_options() },
+                    { setting_id = "talent_swap_es_questingknight", type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     -- Bardin
                     { setting_id = "talent_swap_dr_ironbreaker",    type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_dr_slayer",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_dr_ranger",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_dr_engineer",       type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    -- Markus
-                    { setting_id = "talent_swap_es_huntsman",       type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_es_knight",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_es_mercenary",      type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_es_questingknight", type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     -- Kerillian
                     { setting_id = "talent_swap_we_shade",          type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_we_maidenguard",    type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_we_waywatcher",     type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_we_thornsister",    type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    -- Victor
+                    -- Victor (Saltzpyre)
                     { setting_id = "talent_swap_wh_zealot",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_wh_bountyhunter",   type = "dropdown", default_value = "none", options = _talent_swap_options() },
                     { setting_id = "talent_swap_wh_captain",        type = "dropdown", default_value = "none", options = _talent_swap_options() },
@@ -103,14 +100,31 @@ return {
                 },
             },
             -- ============================================================
-            -- Talent Reworks
-            --
-            -- Hierarchy: Talent Reworks > General | Rework: <Character> > Rework: <Career> > Rework: <Talent>
-            -- Every submenu and toggle label is prefixed "Rework: " so the player
-            -- always sees which top-level menu they're navigating.
+            -- Character Experience Level Override
+            -- Roster-order exemption: per-character level fields follow the
+            -- vanilla hero roster (Kruber, Bardin, Kerillian, Saltzpyre,
+            -- Sienna), not A-Z. All careers under one hero share the same XP;
+            -- the override is keyed by hero display_name. 0 = no override;
+            -- 1-35 = report that level everywhere (inventory badge,
+            -- char-select, mission spawn).
             -- ============================================================
+            {
+                setting_id  = "experience_levels_group",
+                type        = "group",
+                sub_widgets = {
+                    { setting_id = "level_override_empire_soldier", type = "numeric", default_value = 0, range = { 0, 35 } },
+                    { setting_id = "level_override_dwarf_ranger",   type = "numeric", default_value = 0, range = { 0, 35 } },
+                    { setting_id = "level_override_wood_elf",       type = "numeric", default_value = 0, range = { 0, 35 } },
+                    { setting_id = "level_override_witch_hunter",   type = "numeric", default_value = 0, range = { 0, 35 } },
+                    { setting_id = "level_override_bright_wizard",  type = "numeric", default_value = 0, range = { 0, 35 } },
+                    -- v0.3.21-dev: bypass the LEVEL gate on owned careers. DLC
+                    -- ownership is preserved (unowned-DLC careers stay locked).
+                    -- Hooks ProgressionUnlocks.is_unlocked_for_profile only.
+                    { setting_id = "unlock_all_careers",            type = "checkbox", default_value = false, tooltip = "unlock_all_careers_tooltip" },
+                },
+            },
             -- ============================================================
-            -- Big Rebalance Integration (Core's Big Rebalance — ~160 opt-in
+            -- Big Rebalance Integration (Core's Big Rebalance - ~160 opt-in
             -- toggles, all default false). Master toggle enables pre-
             -- registration of all new buffs / talent buffs / damage profiles /
             -- explosion templates in canonical sorted order across peers
@@ -522,6 +536,14 @@ return {
                 end)(),
             },
 ]==]
+            -- ============================================================
+            -- Talent Reworks
+            --
+            -- Roster-order exemption: character subgroups follow the vanilla
+            -- hero roster (Kruber, Bardin, Kerillian, Saltzpyre, Sienna), not
+            -- A-Z; General (cross-career) stays first. Each toggle label names
+            -- its career so the player sees which talent it reworks.
+            -- ============================================================
             {
                 setting_id = "talent_reworks_group",
                 type       = "group",
@@ -535,42 +557,6 @@ return {
                             { setting_id = "rework_general_thp_kill_minimum",    type = "checkbox", default_value = false },
                             { setting_id = "rework_general_enhanced_power_10pct", type = "checkbox", default_value = false },
                             { setting_id = "rework_general_mainstay_stagger_15pct", type = "checkbox", default_value = false },
-                        },
-                    },
-                    -- Bardin
-                    {
-                        setting_id  = "rework_dr_group",
-                        type        = "group",
-                        sub_widgets = {
-                            {
-                                setting_id  = "rework_dr_ranger_group",
-                                type        = "group",
-                                sub_widgets = {
-                                    { setting_id = "rework_dr_ranger_attack_speed_5_to_10",  type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_ranger_base_hp_plus_25",       type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_ranger_exuberance_stacking_dr", type = "checkbox", default_value = false },
-                                },
-                            },
-                            {
-                                setting_id  = "rework_dr_slayer_group",
-                                type        = "group",
-                                sub_widgets = {
-                                    { setting_id = "rework_dr_slayer_trophy_hunter_30_stacks_bundle",   type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_slayer_dawi_drop_buffed",                 type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_slayer_no_escape_15s",                    type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_slayer_adrenaline_surge_150pct_nerf",     type = "checkbox", default_value = false },
-                                },
-                            },
-                            {
-                                setting_id  = "rework_dr_engineer_group",
-                                type        = "group",
-                                sub_widgets = {
-                                    { setting_id = "rework_dr_engineer_ingenious_ordnance_240s",       type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_engineer_full_head_of_steam_4pct",       type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_engineer_gromril_plated_shot_full_speed", type = "checkbox", default_value = false },
-                                    { setting_id = "rework_dr_engineer_leading_shots",                 type = "checkbox", default_value = false, tooltip = "rework_dr_engineer_leading_shots_description" },
-                                },
-                            },
                         },
                     },
                     -- Kruber (Markus)
@@ -616,6 +602,42 @@ return {
                             },
                         },
                     },
+                    -- Bardin
+                    {
+                        setting_id  = "rework_dr_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id  = "rework_dr_ranger_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    { setting_id = "rework_dr_ranger_attack_speed_5_to_10",  type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_ranger_base_hp_plus_25",       type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_ranger_exuberance_stacking_dr", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id  = "rework_dr_slayer_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    { setting_id = "rework_dr_slayer_trophy_hunter_30_stacks_bundle",   type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_slayer_dawi_drop_buffed",                 type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_slayer_no_escape_15s",                    type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_slayer_adrenaline_surge_150pct_nerf",     type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id  = "rework_dr_engineer_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    { setting_id = "rework_dr_engineer_ingenious_ordnance_240s",       type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_engineer_full_head_of_steam_4pct",       type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_engineer_gromril_plated_shot_full_speed", type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_engineer_leading_shots",                 type = "checkbox", default_value = false, tooltip = "rework_dr_engineer_leading_shots_description" },
+                                },
+                            },
+                        },
+                    },
                     -- Kerillian
                     {
                         setting_id  = "rework_we_group",
@@ -644,6 +666,57 @@ return {
                                     { setting_id = "rework_we_waywatcher_kurnous_reward_5pct",          type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_waywatcher_ricochet_no_ff_5_bounces",     type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_waywatcher_serrated_shots_all_arrows",    type = "checkbox", default_value = false },
+                                },
+                            },
+                        },
+                    },
+                    -- Saltzpyre (Victor)
+                    {
+                        setting_id  = "rework_wh_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id  = "rework_wh_zealot_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    { setting_id = "rework_wh_zealot_smite_random_crits",                     type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_zealot_power_5_to_10",                          type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_zealot_ability_green_to_thp",                   type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30",       type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_zealot_castigate_4pct_as_per_fiery_faith",      type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_zealot_holy_fortitude_30_max_hp",               type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id  = "rework_wh_bountyhunter_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    { setting_id = "rework_wh_bountyhunter_double_shotted_80",                            type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_bountyhunter_double_shotted_damage_double",                 type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_bountyhunter_blessed_combat_25_and_passive_melee_reset",    type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_bountyhunter_rile_the_mob_movement",                        type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload",     type = "checkbox", default_value = false },
+                                    -- MUTEX cluster member: bh_passive_choice (see career_tweaker.lua mutex.declare).
+                                    -- Its (B) sibling cbr_bh_passive_perks_rework lives in the ON-ICE Big
+                                    -- Rebalance block above, so only this (A) member is live right now.
+                                    { setting_id = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",    type = "checkbox", default_value = false, tooltip = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip" },
+                                    { setting_id = "rework_wh_bountyhunter_just_reward_5s_cooldown",                      type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill",         type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id  = "rework_wh_captain_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    { setting_id = "rework_wh_captain_parry_window", type = "checkbox", default_value = false },
+                                },
+                            },
+                            {
+                                setting_id  = "rework_wh_priest_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    { setting_id = "rework_wh_priest_shield_of_faith_10s_110s_cd_plus_unyielding_20s", type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_priest_prayer_of_vengeance_self_40_others_20",            type = "checkbox", default_value = false },
                                 },
                             },
                         },
@@ -691,60 +764,13 @@ return {
                             },
                         },
                     },
-                    -- Saltzpyre (Victor)
-                    {
-                        setting_id  = "rework_wh_group",
-                        type        = "group",
-                        sub_widgets = {
-                            {
-                                setting_id  = "rework_wh_zealot_group",
-                                type        = "group",
-                                sub_widgets = {
-                                    { setting_id = "rework_wh_zealot_smite_random_crits",                     type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_zealot_power_5_to_10",                          type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_zealot_ability_green_to_thp",                   type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30",       type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_zealot_castigate_4pct_as_per_fiery_faith",      type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_zealot_holy_fortitude_30_max_hp",               type = "checkbox", default_value = false },
-                                },
-                            },
-                            {
-                                setting_id  = "rework_wh_bountyhunter_group",
-                                type        = "group",
-                                sub_widgets = {
-                                    { setting_id = "rework_wh_bountyhunter_double_shotted_80",                            type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_bountyhunter_double_shotted_damage_double",                 type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_bountyhunter_blessed_combat_25_and_passive_melee_reset",    type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_bountyhunter_rile_the_mob_movement",                        type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload",     type = "checkbox", default_value = false },
-                                    -- MUTEX cluster member: bh_passive_choice (see career_tweaker.lua mutex.declare)
-                                    { setting_id = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",    type = "checkbox", default_value = false, tooltip = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip" },
-                                    { setting_id = "rework_wh_bountyhunter_just_reward_5s_cooldown",                      type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill",         type = "checkbox", default_value = false },
-                                },
-                            },
-                            {
-                                setting_id  = "rework_wh_captain_group",
-                                type        = "group",
-                                sub_widgets = {
-                                    { setting_id = "rework_wh_captain_parry_window", type = "checkbox", default_value = false },
-                                },
-                            },
-                            {
-                                setting_id  = "rework_wh_priest_group",
-                                type        = "group",
-                                sub_widgets = {
-                                    { setting_id = "rework_wh_priest_shield_of_faith_10s_110s_cd_plus_unyielding_20s", type = "checkbox", default_value = false },
-                                    { setting_id = "rework_wh_priest_prayer_of_vengeance_self_40_others_20",            type = "checkbox", default_value = false },
-                                },
-                            },
-                        },
-                    },
                 },
             },
             -- ============================================================
             -- Tourney Balance Testing port (PHASE 1 - default OFF). Applies
             -- via career_tweaker_tourney.lua. Per-career clean data mutations.
+            -- Roster-order exemption: character subgroups follow the vanilla
+            -- hero roster (Kruber, Bardin, Kerillian, Saltzpyre, Sienna), not A-Z.
             -- ============================================================
             {
                 setting_id = "trn_career_group",
@@ -777,20 +803,6 @@ return {
                         { setting_id = "trn_bw_scholar", type = "checkbox", default_value = false, tooltip = "trn_bw_scholar_tooltip" },
                         { setting_id = "trn_bw_necromancer", type = "checkbox", default_value = false, tooltip = "trn_bw_necromancer_tooltip" },
                     } },
-                },
-            },
-            -- ============================================================
-            -- Armor & Overcharge (hook-based; v0.3.32-dev)
-            -- ============================================================
-            {
-                setting_id  = "armor_overcharge_group",
-                type        = "group",
-                sub_widgets = {
-                    { setting_id = "armor_gromril_ignore_chip",             type = "checkbox", default_value = false, tooltip = "armor_gromril_ignore_chip_tooltip" },
-                    { setting_id = "armor_specials_dont_break_gromril",     type = "checkbox", default_value = false, tooltip = "armor_specials_dont_break_gromril_tooltip" },
-                    { setting_id = "unchained_no_overcharge_from_ff",       type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_ff_tooltip" },
-                    { setting_id = "unchained_no_overcharge_from_disablers", type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_disablers_tooltip" },
-                    { setting_id = "oe_benefit_from_cooldown_reduction",    type = "checkbox", default_value = false, tooltip = "oe_benefit_from_cooldown_reduction_tooltip" },
                 },
             },
         },

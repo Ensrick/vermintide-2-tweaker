@@ -1,5 +1,27 @@
 # Career Tweaker Changelog
 
+## 0.3.49-dev - 2026-07-01 - Settings menu reorganization (sort + roster order)
+
+Menu SORT / ORGANIZE / POLISH pass only. No settings added, removed, renamed, or re-defaulted; no behavior changes. Verified programmatically: all 179 widget setting_ids and 41 dropdown option values are the same set as 0.3.48-dev, and the commented-out Big Rebalance `cbr_*` block is preserved byte-for-byte in both `career_tweaker_data.lua` and `career_tweaker_localization.lua`.
+
+### Changed - top-level menu order is now A-Z
+Reordered the five top-level groups alphabetically by display label: Armor & Overcharge, Career Ability & Talent Swapping, Character Experience Level, Talent Reworks, Tourney Balance (previously accretion-ordered).
+
+### Changed - unified every character grouping on the vanilla hero roster
+The four character/career-grouped areas now all follow the vanilla hero roster (Kruber, Bardin, Kerillian, Saltzpyre, Sienna) instead of the two inconsistent orders they had before:
+- Talent Reworks character subgroups (was Bardin, Kruber, Kerillian, Sienna, Saltzpyre; General stays first).
+- Career Ability & Talent Swapping per-career dropdowns and their shared option lists (was Bardin-first).
+- Character Experience Level per-character level fields (was Bardin-first).
+- Tourney Balance was already in roster order; unchanged.
+
+A one-line comment above each roster-ordered block names the exemption. Within-character career order and per-toggle order inside a subgroup (both deliberate) were left as-is.
+
+### Changed - polished group labels (display strings only)
+Removed redundant / implementation-detail noise from group labels: "Armor & Overcharge (hook-based)" to "Armor & Overcharge"; "Tourney Balance (Careers)" to "Tourney Balance"; the five Tourney subgroups "Kruber (Tourney)" ... "Sienna (Tourney)" to bare character names (they already sit under the Tourney Balance parent). No setting_id or loc key changed.
+
+### Changed - localization file mirrors the widget tree
+Reordered `career_tweaker_localization.lua` to match the new widget order with `-- ====` section banners. All 610 keys are unchanged, and every English value is byte-identical to 0.3.48-dev except the 7 group-label edits above.
+
 ## 0.3.48-dev — 2026-07-01 — Fix menu localization + rewrite option descriptions
 
 ### Fixed — double-localized tooltips showed the sentence wrapped in angle brackets
