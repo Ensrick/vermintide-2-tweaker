@@ -1,5 +1,19 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.207-dev (2026-07-02) - #164: starting_coins VMF menu back to fine granularity (25-step moves to gut Mod Tweaker)
+
+Per the binding 2026-07-02 direction: VMF's own options view stays at its natural fine granularity so the user can dial an exact pilgrim's-coin value (e.g. 324); the coarse 25-step now lives ONLY in gut's Mod Tweaker (#164). Removed BOTH ct-side snap paths that were forcing multiples of 25:
+
+- **Removed the `on_setting_changed` snap** (`chaos_wastes_tweaker_dev.lua`) that rounded the persisted `starting_coins` value to the nearest 25 (`math.floor(v / 25 + 0.5) * 25` + write-back). The setting is now stored and applied verbatim as the run's starting coins at `setup_run`; any integer 0-3000 persists. Kept a guarded early return so control flow is unchanged (starting_coins drives none of the downstream syncs).
+- **Removed the `VMFOptionsView.callback_draw_numeric_menu` pre-hook** (`chaos_wastes_tweaker_dev.lua`) that quantized the VMF slider's `internal_value` to multiples of 25 in real time (Issue #39). VMF's own slider now moves by 1 again, so an exact value like 324 is settable there. The unrelated Issue #40 mutex-checkbox visual-refresh hook (`callback_setting_changed`) is untouched; its header comment was trimmed to describe only the remaining hook.
+- **Data comment** (`_data.lua`) for the `starting_coins` widget updated: documents that the fine-grained slider is intentional and that neither a `step` field nor a 3-element range may be added (a 3-element range is fatal to VMF's `validate_numeric_data`; a top-level `step` field is stripped by VMF's `initialize_numeric_data` at core/options.lua:439-448 and never reaches the Mod Tweaker). `range` stays `{ 0, 3000 }`.
+
+No new settings, loc, or version-sync behavior. The `starting_coins` setter override + its regression checks (`starting_coins_setter_not_adder`, `starting_coins_value_matches_setting`) are unaffected: both read the raw setting, which is now simply un-snapped.
+
+### Verify in-game
+- Mod Options -> Chaos Wastes Tweaker -> Pilgrim's Coin: the starting-coins slider moves by 1 and you can set an exact value like 324; reopening the menu shows 324 (not snapped).
+- The 25-step now lives in gut's Mod Tweaker (gut_dev 0.2.179-dev): ESC -> Mod Tweaker -> Chaos Wastes -> Pilgrim's Coin arrows move 25/click, Apply commits the snapped value.
+
 ## 0.7.206-dev (2026-07-02) - Finale God: numeric slider -> named dropdown
 
 - **"Finale God" is now a dropdown of named gods instead of a 0-4 slider.** The old numeric widget required memorizing the value-to-god mapping; it now offers Weekly Rotation / Nurgle / Tzeentch / Khorne / Slaanesh directly. Purely a widget-type swap: the dropdown stores the same integer `value` (0 = weekly rotation, 1-4 = index into `FINALE_GODS = { nurgle, tzeentch, khorne, slaanesh }`, verified at chaos_wastes_tweaker_dev.lua:481 against the consumer at ~L3989), so every existing saved setting carries over unchanged and the apply-site code is untouched. Tooltip simplified (the numeric legend is now redundant). New loc keys `finale_god_rotation/nurgle/tzeentch/khorne/slaanesh`; new `finale_god_options` table in `_data.lua` (same shape as the existing `count_with_default_options` dropdown). `qa/check_localization.ps1` clean for ct_dev.

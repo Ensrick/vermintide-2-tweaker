@@ -580,11 +580,16 @@ local data = {
                 type = "group",
                 sub_widgets = {
                     { setting_id = "coin_multiplier", type = "numeric", default_value = 1, range = { 0.1, 5 }, decimals_number = 2 },
-                    -- starting_coins snaps to the nearest multiple of 25 via on_setting_changed (chaos_wastes_tweaker.lua).
-                    -- range MUST be exactly 2 elements: VMF rejects a 3-element range outright
-                    -- ('range' field must contain an array-like table with 2 elements) and aborts the
-                    -- mod's ENTIRE options init -> no [ct:LOAD], mod dead. A 3rd "step" element (the #164
-                    -- attempt) is NOT ignored by VMF -- it is fatal. Step-snapping lives in on_setting_changed.
+                    -- (#164) starting_coins is INTENTIONALLY a plain fine-grained slider here: VMF's own
+                    -- options menu steps by 1 so the user can dial an exact value (e.g. 324). The coarse
+                    -- 25-step lives ONLY in gut's Mod Tweaker (its STEP_OVERRIDES registry). Do NOT add a
+                    -- `step` field or a 3rd range element to snap it:
+                    --   * range MUST be exactly 2 elements -- VMF's validate_numeric_data FATALS on a 3rd
+                    --     ('range' field must contain an array-like table with 2 elements) and aborts the
+                    --     mod's ENTIRE options init (ct .188 was DEAD; reverted .189).
+                    --   * a top-level `step` field is non-fatal but USELESS: VMF's initialize_numeric_data
+                    --     (core/options.lua:439-448) rebuilds the widget copying only range/default_value/
+                    --     decimals_number/unit_text, so `step` never reaches the Mod Tweaker anyway.
                     { setting_id = "starting_coins", type = "numeric", default_value = 0, range = { 0, 3000 }, decimals_number = 0 },
                 },
             },

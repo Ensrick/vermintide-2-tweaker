@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.206-dev"
+local MOD_VERSION = "0.7.207-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -11847,16 +11847,11 @@ mod.on_setting_changed = function(setting_id)
     end
 
     if setting_id == "starting_coins" then
-        -- VMF's numeric widget has no native step parameter; snap the saved value
-        -- to the nearest multiple of 25. Third arg `false` suppresses the callback
-        -- so the write-back doesn't loop (snap is idempotent regardless).
-        local v = mod:get("starting_coins")
-        if type(v) == "number" then
-            local snapped = math.floor(v / 25 + 0.5) * 25
-            if snapped ~= v then
-                mod:set("starting_coins", snapped, false)
-            end
-        end
+        -- (#164) NO snap here. VMF's own options menu is intentionally left at its natural
+        -- fine granularity so the user can dial an exact value (e.g. 324); the coarse 25-step
+        -- lives ONLY in gut's Mod Tweaker (its STEP_OVERRIDES registry). Whatever value is
+        -- stored is applied verbatim as the run's starting coins at setup_run. The early
+        -- return preserves the prior control flow (starting_coins drives none of the syncs below).
         return
     end
     if setting_id == "tweak_reckless_swings" then
@@ -11901,70 +11896,30 @@ mod.on_setting_changed = function(setting_id)
 end
 
 -- ============================================================
--- VMF UI fixes (v0.7.120-dev — Issues #39 + #40)
+-- VMF UI fix (v0.7.120-dev — Issue #40; #39/#164 numeric-step hook REMOVED)
 -- ============================================================
--- Two hooks on `VMFOptionsView` that drive widget DISPLAY state from inside
--- the open options menu. VMF's native widgets cache their display state
--- (`is_checkbox_checked` / `internal_value`) independently of the persisted
--- setting and only re-sync from `mod:get` on view re-open (see upstream
--- vmf_options_view.lua:4787 — `update_picked_option_for_settings_list_widgets`
--- runs only in `on_enter`). That caching breaks two patterns:
+-- One hook on `VMFOptionsView` that drives widget DISPLAY state from inside the open
+-- options menu. VMF's native widgets cache their display state (`is_checkbox_checked`)
+-- independently of the persisted setting and only re-sync from `mod:get` on view re-open
+-- (`update_picked_option_for_settings_list_widgets` runs only in `on_enter`).
 --
---   1. **starting_coins slider step-by-25** (Issue #39): VMF's numeric widget
---      has no step / snap / increment field — its slider held_function writes
---      a continuous 0..1 to `internal_value` (vmf_options_view.lua:2486-2492),
---      and `callback_draw_numeric_menu` (line 4181) converts that to
---      `full_range * internal_value + range[1]` rounded to decimals_number.
---      With decimals_number=0 + range=0..3000 the slider visibly moves by 1.
---      Fix: pre-hook `callback_draw_numeric_menu` and quantize internal_value
---      to multiples of (25/full_range) for the `starting_coins` widget BEFORE
---      the original runs — that makes both the displayed number AND the
---      slider fill visually snap to multiples of 25 in real time.
+-- (#164, v0.7.207-dev) The former `callback_draw_numeric_menu` pre-hook that snapped the
+-- `starting_coins` slider to multiples of 25 inside VMF's OWN menu (Issue #39) was REMOVED,
+-- together with the on_setting_changed snap that rounded the persisted value to 25. Per the
+-- binding 2026-07-02 direction, VMF's own options view stays at its natural fine granularity
+-- so the user can dial an exact value (e.g. 324); the coarse 25-step now lives ONLY in gut's
+-- Mod Tweaker (its STEP_OVERRIDES registry, #164).
 --
---   2. **Mutex checkbox visual sync** (Issue #40): when our `on_setting_changed`
---      mutex enforcer calls `mod:set(sibling, false)` to uncheck a mutex
---      cluster sibling, the underlying setting updates but the open widget's
---      `is_checkbox_checked` stays true — so both checkboxes appear checked
---      until the user closes & reopens the menu. Fix: post-hook
---      `callback_setting_changed` to call
---      `self:update_picked_option_for_settings_list_widgets()` after any ct
---      setting change. That function (vmf_options_view.lua:4332-4445) walks
---      all widgets and re-syncs `is_checkbox_checked` / `current_value` from
---      the persisted store — making the mutex-deselected siblings visually
---      flip in the same frame.
---
--- Both hooks are narrowly gated (`mod_name == "ct_dev"` — this is the dev
--- clone's registered id; stable chaos_wastes_tweaker uses "ct") so other mods
--- are unaffected. pcall-wrapped per the verify-by-design rule.
--- See memory entries `reference_vmf_numeric_widget_no_step.md`,
--- `reference_vmf_checkbox_cached_display_state.md` for the full mechanic.
+-- **Mutex checkbox visual sync** (Issue #40): when our `on_setting_changed` mutex enforcer
+-- calls `mod:set(sibling, false)` to uncheck a cluster sibling, the underlying setting updates
+-- but the open widget's `is_checkbox_checked` stays true — both checkboxes appear checked until
+-- the menu is reopened. Fix: post-hook `callback_setting_changed` to call
+-- `self:update_picked_option_for_settings_list_widgets()` after any ct setting change; it walks
+-- all widgets and re-syncs display state from the persisted store in the same frame. Narrowly
+-- gated (`mod_name == "ct_dev"` — the dev clone's registered id) + pcall-wrapped.
+-- See memory `reference_vmf_checkbox_cached_display_state.md` for the mechanic.
 
--- (1) Slider step-by-25 for starting_coins.
-mod:hook("VMFOptionsView", "callback_draw_numeric_menu", function(func, self, widget_content)
-    pcall(function()
-        if widget_content and widget_content.mod_name == "ct_dev"
-                and widget_content.setting_id == "starting_coins" then
-            local popup = widget_content.popup_menu_widget
-            local pmc = popup and popup.content
-            if pmc and pmc.changed and type(pmc.internal_value) == "number"
-                    and type(widget_content.range) == "table" then
-                local lo = widget_content.range[1] or 0
-                local hi = widget_content.range[2] or 0
-                local full_range = hi - lo
-                if full_range > 0 then
-                    local steps = full_range / 25
-                    if steps > 0 then
-                        local v = pmc.internal_value
-                        pmc.internal_value = math.floor(v * steps + 0.5) / steps
-                    end
-                end
-            end
-        end
-    end)
-    return func(self, widget_content)
-end)
-
--- (2) Mutex / dependent-checkbox visual refresh.
+-- Mutex / dependent-checkbox visual refresh.
 -- Post-hook: original runs first (persists value, fires mod.on_setting_changed,
 -- which runs the mutex enforcer that may have called mod:set on siblings).
 -- After all that, force a widget-display refresh so the open menu reflects the
