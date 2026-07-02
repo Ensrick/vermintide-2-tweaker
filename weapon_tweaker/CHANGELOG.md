@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.199-dev (2026-07-02) - Weapon Availability: consistent source-character row order (#179)
+
+The Weapon Availability rows within each career were only unevenly ordered - some groups were grouped by source character, others drifted, and the runtime status-tag prefix ([Working] / [Untested] / [Needs Animations]) appeared to be driving the sort. Rows now sort deterministically by source character, never by tag.
+
+- **Added one central normalization pass** at the end of `weapon_tweaker_data.lua` that reorders every `melee_<career>` / `ranged_<career>` leaf group's `unlock_<career>_<weapon>` checkboxes by **source character in the fixed roster order Kruber, Bardin, Saltzpyre, Kerillian, Sienna** (weapon_key prefix `es_`, `dr_`, `wh_`, `we_`, `bw_`), then alphabetically by weapon_key within each source character.
+- **Sorts on the weapon_key only, never the localized label**, so the status tag (applied later in the localization table) can no longer influence row order - the reported "tags messing up the sort" bug.
+- Single pass over the `weapon_availability` subtree only; every `setting_id` and `default_value` is unchanged, so `widget_unlock_map_consistency` stays green and no stored setting is affected. Future ports auto-sort without hand-ordering.
+
 ## 0.12.198-dev (2026-07-02) - Deepwood Staff now available on Kruber
 
 Kerillian's **Deepwood Staff** (`we_life_staff`, Sister of the Thorn's life staff) was reachable on Kerillian and Saltzpyre careers but had been withheld from all four Kruber careers ("pending user decision"), so it never appeared in Kruber's Weapon Availability menu and could not be equipped or tested. Per user request 2026-07-02 it is now wired for Kruber the same way `we_javelin` already was.
