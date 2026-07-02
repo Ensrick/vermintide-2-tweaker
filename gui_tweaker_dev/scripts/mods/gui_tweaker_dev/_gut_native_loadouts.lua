@@ -52,6 +52,17 @@ local LOADOUT_SLOT_NAMES = {
     "slot_necklace", "slot_ring", "slot_trinket_1", "slot_frame", "slot_pose",
 }
 
+-- Gear slots ONLY: the slots whose stored value is always an inventory backend GUID that
+-- `get_item_from_id` can validate. Cosmetic slots (skin/hat/frame/pose) may hold plain item
+-- KEYS (e.g. "es_2h_sword_weapon_pose_02", "mercenary_hat_0009") that get_item_from_id can
+-- NEVER resolve; validating them drops legitimate values. Burned 2026-07-02 (v0.2.170-dev
+-- friend logs): sanitize stripped slot_pose from every career every session, including
+-- default_weapon_pose_01 in a rewrite/drop loop. Vanilla degrades a missing cosmetic
+-- gracefully, so cosmetic slots are never sanitized.
+local GEAR_SLOT_NAMES = {
+    "slot_ranged", "slot_melee", "slot_necklace", "slot_ring", "slot_trinket_1",
+}
+
 -- The VMF settings key `characters_data` discriminates Adventure from Versus
 -- (`vs_characters_data`), set by the mirror subclass (playfab_mirror_adventure.lua).
 -- We scope the whole feature to the Adventure mirror; Versus stays vanilla.
@@ -160,8 +171,10 @@ local function _ensure_seeded(mirror, career_name)
 end
 
 -- Sanitize dangling backend_ids (issue #175 requirement 7): items can disappear between
--- modded sessions. Validate GEAR slots against the backend once per career per session;
--- drop dead ids (printf, no crash). Cosmetic/pose slots are skipped -- vanilla degrades a
+-- modded sessions. Validate GEAR slots only (GEAR_SLOT_NAMES) against the backend once per
+-- career per session; drop dead ids (printf, no crash). Cosmetic/pose/frame slots are NEVER
+-- validated -- their values can be item keys get_item_from_id cannot resolve (see
+-- GEAR_SLOT_NAMES comment for the 2026-07-02 pose-drop burn), and vanilla degrades a
 -- missing cosmetic gracefully to empty via get_unlocked_cosmetics.
 local _sanitized = {}
 local function _sanitize_career(career_name)
@@ -173,15 +186,10 @@ local function _sanitize_career(career_name)
     _sanitized[career_name] = true
     local removed = 0
     for idx, lo in pairs(entry.loadouts) do
-        for i = 1, #LOADOUT_SLOT_NAMES do
-            local slot = LOADOUT_SLOT_NAMES[i]
+        for i = 1, #GEAR_SLOT_NAMES do
+            local slot = GEAR_SLOT_NAMES[i]
             local id = lo[slot]
-            local is_cos = false
             if id then
-                local ok_c, res = pcall(function() return CosmeticUtils.is_cosmetic_slot(slot) end)
-                is_cos = ok_c and res
-            end
-            if id and not is_cos then
                 local ok2, item = pcall(iface.get_item_from_id, iface, id)
                 if ok2 and not item then     -- definitively gone (never drop on pcall error)
                     lo[slot] = nil
@@ -391,6 +399,43 @@ mod:hook("HeroWindowLoadoutSelectionConsole", "_save_bot_equipment", function(fu
 end)
 
 -- ==================================================================
+-- Re-seed command. The seed is one-time by design, so a snapshot taken while the mirror
+-- held bad data (e.g. blacksmith items committed to the cloud by the pre-isolation #174
+-- bleed, seen 2026-07-02 on merc Kruber slot_melee) is frozen until explicitly reset.
+-- /reset_modded_loadouts        -> wipe the whole modded store
+-- /reset_modded_loadouts <career> -> wipe one career (e.g. es_mercenary)
+-- Next loadout touch in modded re-seeds from the CURRENT official data. Official data is
+-- never written; this only discards the modded-side copies (including any modded-only edits).
+-- ==================================================================
+mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from official (optional: career name)", function(career_arg)
+    local store = _store()
+    if career_arg and career_arg ~= "" then
+        if not store[career_arg] then
+            mod:echo("No modded loadout store for '" .. tostring(career_arg) .. "' (nothing to reset)")
+            printf("[gut_dev:NATIVE_LOADOUTS] reset requested for unknown career=%s", tostring(career_arg))
+            return
+        end
+        store[career_arg] = nil
+        _sanitized[career_arg] = nil
+        _persist()
+        _dirtify()
+        mod:echo("Modded loadouts reset for " .. career_arg .. "; they re-seed from official on next use")
+        printf("[gut_dev:NATIVE_LOADOUTS] store reset career=%s (will re-seed from official)", career_arg)
+    else
+        local n = 0
+        for career_name in pairs(store) do
+            store[career_name] = nil
+            _sanitized[career_name] = nil
+            n = n + 1
+        end
+        _persist()
+        _dirtify()
+        mod:echo("Modded loadouts reset for " .. n .. " career(s); they re-seed from official on next use")
+        printf("[gut_dev:NATIVE_LOADOUTS] store reset ALL (%d careers, will re-seed from official)", n)
+    end
+end)
+
+-- ==================================================================
 -- Regression markers (issue #175 requirement 11). Registered by gui_tweaker_dev.lua.
 -- ==================================================================
 M.HOOK_TARGETS = {
@@ -426,6 +471,17 @@ M.rt_checks = {
         if M.max_loadouts() ~= expected then
             return string.format("cap %s != InventorySettings.MAX_NUM_CUSTOM_LOADOUTS %s (hardcoded?)",
                 tostring(M.max_loadouts()), tostring(expected))
+        end
+    end },
+    { name = "native_loadouts_sanitize_gear_only", fn = function()
+        -- Sanitizer must never validate cosmetic/pose slots (2026-07-02 pose-drop burn):
+        -- their values can be item keys that get_item_from_id cannot resolve.
+        local cosmetic = { slot_skin = true, slot_hat = true, slot_frame = true, slot_pose = true }
+        local in_loadout = {}
+        for _, s in ipairs(LOADOUT_SLOT_NAMES) do in_loadout[s] = true end
+        for _, s in ipairs(GEAR_SLOT_NAMES) do
+            if cosmetic[s] then return "cosmetic slot in GEAR_SLOT_NAMES: " .. s end
+            if not in_loadout[s] then return "unknown slot in GEAR_SLOT_NAMES: " .. s end
         end
     end },
     { name = "native_loadouts_hook_targets_unique", fn = function()

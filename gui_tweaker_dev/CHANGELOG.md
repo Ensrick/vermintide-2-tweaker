@@ -5,6 +5,37 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.172-dev (2026-07-02) -- FIX #175 follow-up: pose-sanitize defect + /reset_modded_loadouts re-seed command
+
+### Why (friend logs 2026-07-02 19:40-19:57 + user_settings capture)
+Two defects surfaced on the first friend deployment of the v0.2.170-dev native
+modded-scoped loadouts:
+1. **Sanitizer stripped victory poses every session.** `slot_pose` values are item KEYS
+   (e.g. `es_2h_sword_weapon_pose_02`), not backend GUIDs, so `get_item_from_id` could
+   never resolve them and the sanitizer dropped every pose on every career - including a
+   `default_weapon_pose_01` drop/rewrite loop each session. Log-proven
+   (`sanitize ... slot=slot_pose dropped dangling id=...` across 22 careers).
+2. **Seed froze pre-isolation corruption.** The one-time official-to-modded seed
+   faithfully snapshotted the cloud state at first touch - but that state already
+   contained blacksmith items committed by the pre-isolation #174 bleed (merc Kruber
+   `slot_melee` seeded to the blacksmith greatsword GUID; sanitize validated it as a
+   real owned item at 19:41:10, and zero gear writes were captured afterward, ruling
+   out post-seed corruption). The user then fixed official (correct there), but the
+   modded snapshot stayed frozen wrong by design.
+
+### Changed
+- **Sanitize gear slots only.** New `GEAR_SLOT_NAMES` whitelist (ranged/melee/necklace/
+  ring/trinket_1 - the slots that always hold backend GUIDs); cosmetic slots
+  (skin/hat/frame/pose) are never validated. New regression check
+  `native_loadouts_sanitize_gear_only`.
+- **New `/reset_modded_loadouts [career]` chat command.** Wipes the modded store (all
+  careers, or one, e.g. `/reset_modded_loadouts es_mercenary`) so loadouts re-seed from
+  the CURRENT official data on next use. This is the cure for a bad frozen seed: fix
+  your gear in official, then reset in modded. Official data is never written;
+  modded-only edits in the wiped entries are discarded.
+- Note: poses already lost from a v0.2.170 store (dropped before this fix) come back
+  via the same reset, or by re-equipping the pose in modded.
+
 ## 0.2.171-dev (2026-07-02) -- FIX #173: Hero Select now opens the REAL hero/career selection screen mid-mission
 
 ### Why
