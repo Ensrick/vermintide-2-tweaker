@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.197-dev (2026-07-01) - Settings menu: sort the Weapon Tweaks group A-Z
+
+Settings-menu organization pass. No gameplay, setting, or widget changes; every `setting_id`, default, `range`, and tooltip text is untouched.
+
+- **Sorted the four toggles in the "Weapon Tweaks" (`weapon_overrides`) group A-Z by display label** (`weapon_tweaker_data.lua`): Authentic Brace of Pistols, Bretonnian Sword and Shield buff, Moonfire Bow, Warrior Priest punch. Previously accretion-ordered. Only the row order changed; the `setting_id` multiset is identical.
+- **Colocated the `wt_brett_sword_shield_buff` localization entries with the rest of the `weapon_overrides` block** and re-sorted that block A-Z to match the widget order (`weapon_tweaker_localization.lua`). The brett label/tooltip had been sitting alone in the top-of-file "Top-level groups" header area. Pure file-hygiene move; VMF resolves by key, so rendering is unchanged, and the `mod._wt_loc_raw` publication + dev-module loc merge downstream are untouched.
+- **Top-level group order verified already A-Z** ("Weapon Availability" < "Weapon Tweaks"); the dev **3P Anim Picker** and hold-pose tools stay last (dev-tooling-last convention, mirrors `enable_debug_logging`). The per-weapon Availability tree keeps its deliberate v0.12.194 source-character grouping (#179).
+
 ## 0.12.196-dev (2026-07-01) - Wire up the Bretonnian Sword & Shield buff tooltip
 
 The `wt_brett_sword_shield_buff` checkbox never showed its description: the widget had no `tooltip` field, so the settings menu auto-resolved `wt_brett_sword_shield_buff_description` (which does not exist) while the text lived under `..._tooltip`. The widget now passes `tooltip = "wt_brett_sword_shield_buff_tooltip"` explicitly (`weapon_tweaker_data.lua`). No key renames; no other changes.

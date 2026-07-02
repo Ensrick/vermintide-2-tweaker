@@ -5,9 +5,6 @@ local loc = {
     mod_description = { en = "Lets each character wield weapons that normally belong to other characters, plus optional changes to how some weapons behave. Requires the Vermintide Mod Framework." },
     -- Top-level groups
     weapon_availability = { en = "Weapon Availability" },
-
-    wt_brett_sword_shield_buff = { en = "Bretonnian Sword and Shield buff" },
-    wt_brett_sword_shield_buff_tooltip = { en = "Makes the Bretonnian sword and shield hit harder and faster, with extra damage against headshots, monsters, and berserkers. Its third heavy, second light, and push follow-up attacks gain an added bonus." },
     -- Per-character containers (v0.12.103-dev restructure 2026-05-30:
     -- characters at top, melee/ranged nested inside each char)
     char_kruber = { en = "Kruber" },
@@ -1059,15 +1056,18 @@ local loc = {
     -- (enable_weapon_unlocks_core/runtime_guards/wield_slot_guard/create_equipment_guard/
     --  career_action_injection, force_bretonnian_shield_unlock) — flagged by
     -- qa/check_name_integrity.ps1, referenced nowhere in lua/data (only in a comment).
-    -- Weapon override toggles (template patches that change weapon behavior)
+    -- Weapon override toggles (template patches that change weapon behavior).
+    -- Leaf entries sorted A->Z by display label to match _data.lua.
     weapon_overrides = { en = "Weapon Tweaks" },
     weapon_overrides_description = { en = "Optional changes to how certain weapons behave." },
     authentic_brace_of_pistols = { en = "Authentic Brace of Pistols" },
     authentic_brace_of_pistols_description = { en = "Reworks the Brace of Pistols into a single-shot flintlock: shots pierce armor, break shields, and keep the same damage at any range, with no aim mode, rapid fire, or manual reload. Total ammo drops from 24 to 12 and the spread is much wider. Requires a restart." },
-    wt_priest_punch_buff = { en = "Warrior Priest punch: 3x stagger, 2x damage" },
-    wt_priest_punch_buff_description = { en = "Makes the Warrior Priest greathammer's special punch stagger about three times as hard and deal double damage. Works in multiplayer as long as everyone runs this mod. Off by default." },
+    wt_brett_sword_shield_buff = { en = "Bretonnian Sword and Shield buff" },
+    wt_brett_sword_shield_buff_tooltip = { en = "Makes the Bretonnian sword and shield hit harder and faster, with extra damage against headshots, monsters, and berserkers. Its third heavy, second light, and push follow-up attacks gain an added bonus." },
     moonfire_aoe_revert = { en = "Moonfire Bow: revert pre-nerf AOE" },
     moonfire_aoe_revert_description = { en = "Restores the old Moonfire Bow: every arrow bursts in a small area (about 1.5 metres) on impact, with no friendly fire. The bonus damage only applies when you are the host. The matching visual burst is a separate option in the Tweaker: Cosmetics mod." },
+    wt_priest_punch_buff = { en = "Warrior Priest punch: 3x stagger, 2x damage" },
+    wt_priest_punch_buff_description = { en = "Makes the Warrior Priest greathammer's special punch stagger about three times as hard and deal double damage. Works in multiplayer as long as everyone runs this mod. Off by default." },
 
     -- (enable_debug_logging removed v0.12.176-dev — #169; diagnostics route through VMF mod:debug)
     enable_dev_anim_picker         = { en = "Dev: 3P Anim Picker (tuning only)" },
