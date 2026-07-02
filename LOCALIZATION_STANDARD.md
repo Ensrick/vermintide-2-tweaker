@@ -124,16 +124,25 @@ Use `kebab_case` matching the widget's `setting_id`. Both VMF resolution and hum
 tp_camera_enabled = { en = "Enable Third-Person Camera" },
 ```
 
-### Tooltips — `_tooltip` suffix (canonical)
+### Tooltips — pass a RAW loc key in `tooltip`; `_tooltip` suffix (naming convention)
 
-VMF auto-resolves `<setting_id>_tooltip` as the tooltip key. Use `_tooltip`, NOT `_description`.
+**CORRECTED 2026-07-01 (verified against the live VMF bundle's `core/options.lua` bytecode + upstream source).** VMF localizes the widget's `tooltip` field **itself** at options-menu build time (`options.localize` defaults to `true`, and `localize_generic_widget_data` runs `mod:localize()` on `title`/`tooltip`/dropdown option `text`/numeric `unit_text`). Two consequences:
+
+1. **The `tooltip` field must be a RAW key string** (`tooltip = "tp_camera_enabled_tooltip"`). **NEVER write `tooltip = mod:localize("...")` in a `_data.lua` widget** — the pre-localized English comes back, VMF then re-localizes that whole sentence as a key, misses, and the menu renders the sentence wrapped in `<...>`. This double-localize was the repo-wide source of the `<>` markers around option descriptions (fixed in the 2026-07-01 sweep). Same rule for widget `title`, dropdown option `text`, and `unit_text`. The ONE legitimate eager localize in a data file is the top-level mod `description = mod:localize("mod_description")` — VMF does not re-localize that field.
+2. **The auto-resolved fallback suffix is `_description`, not `_tooltip`.** When a widget has NO `tooltip` field, VMF tries `quick_localize(setting_id .. "_description")` and silently shows nothing if missing (no marker). The earlier version of this doc had this backwards.
+
+Naming convention for explicitly-passed keys stays `_tooltip`:
 
 ```lua
+-- _data.lua
+{ setting_id = "tp_camera_enabled", type = "checkbox", tooltip = "tp_camera_enabled_tooltip", ... }
+
+-- _localization.lua
 tp_camera_enabled         = { en = "Enable Third-Person Camera" },
 tp_camera_enabled_tooltip = { en = "Toggle third-person camera view. Can also be toggled in-game with the 'gt tp' chat command." },
 ```
 
-`_description` is a legacy variant some older entries use. It is NOT auto-resolved by VMF — those keys only work if the data file passes them explicitly. Do not author new `_description` keys. (Some mods such as `weapon_tweaker` and `crafting_in_modded` have hundreds of `_description` keys for historical reasons; migrating them is a follow-up — do not touch in this pass.)
+Existing `_description` keys (weapon_tweaker, crafting_in_modded have hundreds) are fine where the widget omits `tooltip` — they ride the auto-resolve. Don't mass-rename in either direction.
 
 ### Group labels
 
@@ -235,10 +244,11 @@ For most mods the call-site terseness gain is marginal; the audit-clarity loss i
 
 ## 6. Missing-key behavior
 
-When `_data.lua` references a key that doesn't exist in `_localization.lua`:
+When `_data.lua` references a key that doesn't exist in `_localization.lua` (**corrected 2026-07-01** — verified against live VMF bytecode):
 
-- For setting widget IDs / tooltip IDs / group IDs: VMF renders the **raw setting_id string** in the UI. No crash. Just looks ugly (e.g. `mod_description` appears literally as `mod_description` in the panel header).
-- For explicit `mod:localize("key")` calls: VMF returns the string `<key>` (with angle brackets).
+- Widget titles (the `setting_id` / explicit `title` key) and explicit `tooltip` keys: VMF runs them through `mod:localize()` at menu build, so a missing key renders **`<key>` with angle brackets** frozen into the widget.
+- The auto-resolved `<setting_id>_description` fallback (widget with no `tooltip` field) uses `quick_localize`, which returns nil on a miss — the row simply has **no tooltip**, no marker.
+- Any explicit `mod:localize("key")` call elsewhere returns the string `<key>` (with angle brackets).
 
 **Implication:** missing keys are silent. Always spot-check the rendered VMF panel for any mod whose `_data.lua` has been edited. If you see a raw `setting_id` rendered, that's the symptom.
 
@@ -322,6 +332,7 @@ Run this every time you add or edit an entry in any `_localization.lua` file:
 [ ] Setting key matches the widget's setting_id in _data.lua, and tooltip key is exactly `<setting_id>_tooltip`?
 [ ] File is saved as UTF-8 without BOM?
 [ ] If this is a new mod, `mod_description` is defined?
+[ ] If a label is COMPUTED from another loc entry (dynamic menu), it reads the raw loc DATA, not `mod:localize`, and not a parallel hardcoded name map (see § 12)?
 ```
 
 If any line is unchecked, fix before committing. The cost of a missed `%` in a tooltip is a `<<crashify-exception>>` spam burst the next time the panel renders, plus a half-day audit hunting it down.
@@ -526,11 +537,82 @@ Run this every time you rewrite or audit an existing entry:
 
 ---
 
+## 12. Dynamically-resolved menu labels — read raw loc DATA, never `mod:localize` during registration
+
+Most labels are static `{ en = "..." }` entries. But some menus compute a label at
+build time from another loc entry — e.g. the `weapon_tweaker` dev anim picker derives
+each weapon group's label ("Sienna: Coruscation Staff rendered on Kruber body") from the
+**documented** `unlock_<career>_<weapon>` name, so the picker and the Weapon Availability
+menu can never disagree (the single-source-of-truth rule — see memory
+`feedback_use_documented_localized_names`). Two hard rules apply, both learned the hard way.
+
+### 12.1 — Resolve from the loc, NEVER from a parallel hardcoded map
+
+A menu that shows item/weapon/career names must derive them from the localization
+(the single source of truth), not a second hand-maintained `{ key = "Name" }` table.
+The parallel map silently goes stale: when seven Sienna staves were added but not
+added to the picker's hardcoded `_WEAPON_NAME`, the picker fell back to raw keys
+(`Sienna bw_deus_01`) and a tester couldn't tell what the weapon was (wt #159). Keep a
+hardcoded map ONLY as a last-resort fallback, and make the fallback a source-qualified
+key — **never surface a bare internal key**.
+
+### 12.2 — Do NOT call `mod:localize` from any path that runs DURING loc registration
+
+This is the load-order trap that burned wt **#197** (a 27× error flood + the names
+silently not resolving):
+
+- VMF registers a mod's localization only when its `_localization.lua` `return`s its
+  table. Any code that runs **before** that — i.e. *during* the loc file's own
+  execution — cannot use `mod:localize` for that mod's own keys.
+- The classic trigger: the loc file `mod:dofile`s a dev/feature module and calls its
+  `loc_keys()` from inside its own body (to merge dynamic keys). That `loc_keys()` (and
+  any catalog/label build it does) runs **pre-registration**. A `mod:localize` call
+  there logs **`[MOD][<id>][ERROR] (localize): localization file was not loaded for this
+  mod`** once per call AND returns nothing usable — so the computed labels silently fall
+  back to raw keys, and the labels VMF actually registers are the wrong ones.
+- **The fix: read the raw loc DATA table directly.** Publish it on the mod object before
+  dofiling the consumer, and have the consumer read the entry:
+
+  ```lua
+  -- in <mod>_localization.lua, BEFORE it dofiles the consumer + calls loc_keys():
+  mod._wt_loc_raw = loc
+
+  -- in the consumer's label resolver (NO mod:localize):
+  local entry = mod._wt_loc_raw and mod._wt_loc_raw["unlock_" .. career .. "_" .. weapon_key]
+  if type(entry) == "table" and entry.en then
+      return (entry.en:gsub("^%s*%b[]%s*", ""))   -- strip any computed "[...]" status tag
+  end
+  ```
+
+  The raw read has no load-order dependency. Note the published table is the SAME
+  reference the loc file may later mutate in place (e.g. a status-tag post-process loop),
+  so reads after that see tags — strip them.
+
+### 12.3 — Tests that guard this (wt `/wt_regression_test`)
+
+A test that *rebuilds* a label and checks it is NOT enough: it runs in-game (loc
+registered), so `mod:localize` works there and the registration-time bug stays hidden.
+Test the **registered value** VMF actually renders:
+
+- `dev_picker_group_labels_registered` — for each menu group, asserts `mod:localize(group_sid)`
+  resolves to a real label (not the raw weapon key, not an unregistered `<key>`/bare sid).
+  This is the one that would have caught #197.
+- `wt_loc_raw_published` — asserts the loc file still publishes `mod._wt_loc_raw` with the
+  expected entries (guards the load-bearing dependency).
+- `dev_picker_names_localized` — the freshly-rebuilt-label check (catches the resolver
+  itself regressing).
+
+Memory: `reference_vmf_localize_before_registration`, `feedback_use_documented_localized_names`.
+
+---
+
 ## Cross-references
 
 - [`AUDIT_section_c.md`](./AUDIT_section_c.md) — full localization sweep with the P0/P1/P2/P3 findings this standard is built around.
 - [`AUDIT_2026_05_21.md`](./AUDIT_2026_05_21.md) — master audit; "Documentation gaps surfaced" section lists the gaps this doc closes.
 - Memory: `feedback_ps5_getcontent_utf8.md` — UTF-8 / PowerShell 5.1 reading.
+- Memory: `reference_vmf_localize_before_registration.md` — the §12.2 load-order trap (mod:localize fails during loc registration).
+- Memory: `feedback_use_documented_localized_names.md` — the §12.1 single-source-of-truth rule (no parallel hardcoded name maps).
 - `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua` — canonical reference for trait-description `%%` escaping (post Fix 1).
 - `lobby_tweaker/scripts/mods/lobby_tweaker/lobby_tweaker_localization.lua` — canonical reference for Pattern A pre-format directives (`%%d` in localization, `string.format` at call site).
 - `general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua` — canonical reference for clean conventional formatting (`_tooltip` suffix, group/setting layout, mod_description).

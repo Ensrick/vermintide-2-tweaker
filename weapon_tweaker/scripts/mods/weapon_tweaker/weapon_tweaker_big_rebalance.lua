@@ -31,15 +31,19 @@ is documented in each toggle's description.
 
 local mod = get_mod("wt")
 
+-- BR ON ICE (bt retired 2026-06-08). Belt-and-suspenders: even if something
+-- still dofile's this module, return the no-op stub immediately so none of the
+-- ~2600 lines of BR data/hook installers below build into the 1 GiB lua_heap.
+-- The primary off-switch is the commented dofile in weapon_tweaker.lua; this is
+-- the backstop. To revive BR: restore bt, delete this guard, un-comment the loader.
+if true then return { apply_all = function() end, register_all = function() end } end
+
 -- v0.12.88-dev: local _dbg helper. The main `weapon_tweaker.lua` file-local
 -- `_dbg` isn't reachable from this sibling file (Lua 5.1 file-locals don't
--- cross dofile boundaries). Mirror the same gate so [wt:dbg] log lines all
--- live under one toggle. Sampling counters per-hook are inside the hook
--- bodies; this helper is the raw emit primitive only.
+-- cross dofile boundaries). Routed through VMF mod:debug channel
+-- (PROJECT_STANDARDS.md § 3.6).
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[wt:dbg] " .. fmt, ...)
-    end
+    mod:debug("[wt:dbg] " .. fmt, ...)
 end
 
 -- Forward-ref guard: defs is a pure-data module loaded via dofile so this

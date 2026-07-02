@@ -1,23 +1,19 @@
-local mod = get_mod("gut")
+﻿local mod = get_mod("gut")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.13-dev"
+local MOD_VERSION = "0.2.118"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- Both route through VMF logging (mod:debug / mod:warning); gated by VMF
+-- output_mode_debug / output_mode_warning — no per-mod toggle needed.
+-- `_dbg` is for confirmation / expected behavior — debug channel.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — warning channel.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[gut:dbg] " .. fmt, ...)
-    end
+    mod:debug("[gut:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[gut:dbg] " .. fmt, ...)
-        mod:echo("[gut] " .. fmt, ...)
-    end
+    mod:warning("[gut:dbg] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -115,15 +111,34 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
+
+_rt_register("arrow_hover_native_size", function()
+    -- (#92/#99) The arrow hover/glow overlay must be the BIGGER native sprite (30x35), NOT the
+    -- 19x27 base — drawing it at base size made the glow too small + misplaced. Build a stepper
+    -- row and assert the overlay styles match the vanilla size, so the fix can't silently revert
+    -- (ground truth: options_view_definitions.lua left_arrow_hover :2206-2216 size 30x35).
+    local ok, defs = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+    if not ok or type(defs) ~= "table" or type(defs.create_checkbox) ~= "function" then
+        return "definitions/create_checkbox unavailable"
+    end
+    local ok2, w = pcall(defs.create_checkbox, "RT", { 0, 0, 0 }, 0)
+    if not ok2 or type(w) ~= "table" or type(w.style) ~= "table" then
+        return "create_checkbox build failed: " .. tostring(w)
+    end
+    for _, k in ipairs({ "left_arrow_hover", "right_arrow_hover" }) do
+        local ts = w.style[k] and w.style[k].texture_size
+        if type(ts) ~= "table" or ts[1] ~= 30 or ts[2] ~= 35 then
+            return string.format("%s texture_size=%s (want {30,35})", k,
+                ts and ("{" .. tostring(ts[1]) .. "," .. tostring(ts[2]) .. "}") or tostring(ts))
+        end
+    end
+end)
 
 _rt_register("localization_format_safe", function()
     -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
@@ -589,20 +604,37 @@ do
     end)
 end
 
--- _dbg: hero_view auto-dump. Fires whenever HeroView opens AND debug_logging is on.
+-- _dbg: hero_view auto-dump. Fires whenever HeroView opens.
 mod:hook_safe("HeroView", "on_enter", function(self, ...)
-    if not mod:get("enable_debug_logging") then return end
     pcall(Customizer.dump_hero_view, self)
 end)
 
--- VMF emits this callback when the user flips any setting. We use it to log
--- the debug-mode transition unconditionally (only place that does so).
+-- VMF emits this callback when the user flips any setting.
 mod.on_setting_changed = function(setting_id)
-    if setting_id == "enable_debug_logging" then
-        if mod:get("enable_debug_logging") then
-            mod:info("[gui_tweaker] debug_logging: ENABLED")
-        end
+    if setting_id == "gut_mission_inventory_enabled"
+        or setting_id == "gut_mission_hero_select_enabled" then
+        -- In-mission inventory + hero-select share the same InventorySettings
+        -- loadout-access data patch (body in _gut_mission_inventory.lua); both
+        -- panels need it to render mid-mission. mod._gut_apply_keep_menus is a table
+        -- field resolved at call time (the module dofile's later in this file).
+        if mod._gut_apply_keep_menus then mod._gut_apply_keep_menus() end
+    elseif setting_id == "gut_skip_cutscenes_enabled" then
+        -- Skip Cutscenes (migrated from gt, issue #106): persistently mirror the
+        -- VMF checkbox into the engine's skip gate, exactly as gt's on_setting_changed
+        -- did. The _gut_cutscenes.lua hooks also flip this transiently per-skip, so the
+        -- feature works either way; this keeps the persistent flag in sync for any
+        -- engine path that reads it directly.
+        script_data = script_data or {}
+        script_data.skippable_cutscenes = mod:get("gut_skip_cutscenes_enabled") or nil
     end
+end
+
+-- Re-apply the in-mission inventory InventorySettings patch + ESC-menu entry on
+-- every game-state transition, since the engine can reload InventorySettings and
+-- the per-mission deus/adventure gate must be re-evaluated. mod._gut_apply_keep_menus
+-- is a table field resolved at call time (body in _gut_mission_inventory.lua).
+mod.on_game_state_changed = function(status, state_name)
+    if mod._gut_apply_keep_menus then mod._gut_apply_keep_menus() end
 end
 
 -- Per-frame entry point: pulls activation state, runs the drag machine if
@@ -713,8 +745,7 @@ end
 
 -- Dogfood category so the view renders real content (and proves the end-to-end:
 -- open -> change -> persist -> on_change). gut's own demo settings live in the
--- Mod Tweaker keyspace (mt::gut::*); the debug toggle bridges into VMF so it
--- actually drives gut's logging. Replace/extend once per-mod registration (or
+-- Mod Tweaker keyspace (mt::gut::*). Replace/extend once per-mod registration (or
 -- VMF auto-mirror) lands.
 if mod.mod_tweaker and not mod.mod_tweaker:is_registered("gut") then
     mod.mod_tweaker:register_category({
@@ -726,7 +757,6 @@ if mod.mod_tweaker and not mod.mod_tweaker:is_registered("gut") then
                 type       = "checkbox",
                 label      = "Debug logging",
                 default    = false,
-                on_change  = function(v) mod:set("enable_debug_logging", v and true or false) end,
             },
             {
                 setting_id = "mt_demo_slider",
@@ -765,12 +795,108 @@ mod:hook_safe("IngameViewLayoutLogic", "setup_button_layout", function(self, lay
         end
     end
     table.insert(entries, insert_at, {
-        display_name      = "mod_tweaker_button_name",
-        display_name_func = function() return "Mod Tweaker" end,
-        fade              = true,
-        transition        = "mod_tweaker_view",
+        -- display_name is a LOC KEY (resolved to "Mod Tweaker" via our
+        -- append_backend_localizations). Do NOT add a display_name_func returning the
+        -- resolved string: the MODERN menu (hero_window_ingame_view.lua:473) does
+        -- `text_field = display_name_func() or display_name` and then LOCALIZES
+        -- text_field — so a func returning "Mod Tweaker" gets re-localized into
+        -- "<Mod Tweaker>". The key path localizes correctly in BOTH menus.
+        display_name = "mod_tweaker_button_name",
+        fade         = true,
+        transition   = "mod_tweaker_view",
     })
+    -- Diagnostic for the "ESC menu looks deprecated after leaving the Mod Tweaker"
+    -- report: log the full button list each time the layout is built, so we can see
+    -- if the count grows (accumulation) or the set changes after the Mod Tweaker.
+    do
+        local ts = {}
+        for i = 1, #entries do ts[#ts + 1] = tostring(entries[i].transition) end
+        mod:debug("[mt:esc] setup_button_layout -> %d buttons: [%s]", #entries, table.concat(ts, ", "))
+    end
 end)
+
+-- Build + attach the Mod Tweaker view into an IngameUI instance's `views` table.
+-- Idempotent. Used by BOTH the setup_views hook (early attempt) and the
+-- transition closure (lazy, on demand). At transition time the IngameUI is fully
+-- initialised (self.views populated, self.ingame_ui_context set at
+-- ingame_ui.lua:138), so the lazy path is the reliable one — the setup_views
+-- post-call hook's timing vs self.views shifted after the game's Versus update,
+-- so it now sees self.views as not-yet-a-table and silently bails.
+local function _attach_view(self, ctx_arg)
+    if not self or type(self.views) ~= "table" then return false end
+    if self.views.mod_tweaker_view then return true end
+    local ctx = ctx_arg or self.ingame_ui_context
+    if not ctx then
+        ctx = {
+            ui_renderer     = self.ui_renderer,
+            ui_top_renderer = self.ui_top_renderer,
+            ingame_ui       = self,
+            input_manager   = self.input_manager,
+            world_manager   = self.world_manager,
+        }
+    end
+    if not (ctx.ui_renderer or ctx.ui_top_renderer) then
+        _dbg_alert("[mt] attach: no usable ui_renderer in context; cannot build view")
+        return false
+    end
+    local ok_view, ModTweakerView = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
+    if not ok_view or type(ModTweakerView) ~= "table" then
+        _dbg_alert("[mt] attach: view dofile failed: %s", tostring(ModTweakerView))
+        return false
+    end
+    local ok_new, view_or_err = pcall(ModTweakerView.new, ModTweakerView, ctx)
+    if not ok_new then
+        _dbg_alert("[mt] attach: ModTweakerView:new raised: %s", tostring(view_or_err))
+        return false
+    end
+    self.views.mod_tweaker_view = view_or_err
+    _dbg("[mt] attach: ModTweakerView attached")
+    return true
+end
+
+-- Forward-declared so the transition closure below (and the on_enter re-pin in
+-- _mod_tweaker_view.lua) can defensively re-pin LA's atlas + log on every Mod
+-- Tweaker open (v0.2.56). The keepalive module is dofile'd much later in this file;
+-- this local is ASSIGNED at that dofile site (`_gut_la_keepalive = mod:dofile(...)`),
+-- but DECLARED here so the closure captures it as an upvalue. `_mt_open_count` is a
+-- module-level open counter for the instrumentation (shows 1st/2nd/3rd/4th open).
+local _gut_la_keepalive
+local _mt_open_count = 0
+
+-- Re-pin LA's atlas package (pcall-guarded) + log the residency/renderer state on
+-- every Mod Tweaker open. The Mod Tweaker BORROWS the long-lived IngameUI renderer
+-- (does NOT recreate it), and the keepalive's premise that "LA unloads its own
+-- package" means the atlas can go missing between opens — so a one-time pin on
+-- StateInGameRunning.on_enter isn't enough; we re-pin on each open. The keepalive's
+-- own `has_loaded` force-load guard stays intact (it NEVER force-loads a non-resident
+-- LA package — that re-introduces the 0.2.54 crash). `self` is the IngameUI (site i)
+-- or the ModTweakerView (site ii) — both expose ui_renderer/ui_top_renderer for the
+-- renderer-identity probe. Exposed as mod._gut_mt_repin_la so the view module can
+-- call the SAME path.
+local function _gut_mt_repin_la(self, site)
+    _mt_open_count = _mt_open_count + 1
+    local pm = Managers and Managers.package
+    local resident = "?"
+    if pm and pm.has_loaded then
+        local ok_r, r = pcall(pm.has_loaded, pm, "resource_packages/Loremasters-Armoury/Loremasters-Armoury")
+        resident = ok_r and tostring(r) or ("err:" .. tostring(r))
+    end
+    local pinned = "?"
+    if _gut_la_keepalive and _gut_la_keepalive.is_pinned then
+        local ok_p, p = pcall(_gut_la_keepalive.is_pinned)
+        pinned = ok_p and tostring(p) or ("err:" .. tostring(p))
+    end
+    mod:debug("[gut:la] mod-tweaker open #%d (site=%s): LA_resident=%s gut_pinned=%s ui_renderer=%s ui_top_renderer=%s",
+        _mt_open_count, tostring(site), resident, pinned,
+        tostring(self and self.ui_renderer), tostring(self and self.ui_top_renderer))
+    if _gut_la_keepalive and _gut_la_keepalive.pin then
+        local ok_pin, err_pin = pcall(_gut_la_keepalive.pin)
+        if not ok_pin then
+            mod:warning("[gut:la] re-pin pcall raised on open #%d: %s", _mt_open_count, tostring(err_pin))
+        end
+    end
+end
+mod._gut_mt_repin_la = _gut_mt_repin_la
 
 -- Transition + view registration. Two halves:
 --   (a) transitions table -- mutated directly via package.loaded so the
@@ -790,12 +916,82 @@ local ok_settings_inject, settings_inject_err = pcall(function()
         return
     end
     settings.transitions.mod_tweaker_view = function(self)
-        -- Guard: only switch if the view actually attached. If construction ever
-        -- failed, switching current_view to a missing view makes IngameUI index
-        -- a nil views[current_view] (ingame_ui.lua) and hard-crash. Fall back to
-        -- the ingame menu instead so the ESC entry is a no-op, never a crash.
+        -- BUILD 2 ROUTING (v0.2.57-dev). The ESC "Mod Tweaker" button has TWO targets:
+        --
+        --   * IN THE KEEP/INN -> open the HeroView SUB-STATE (gut_mod_tweaker,
+        --     _mod_tweaker_state.lua). A sub-state stays INSIDE the already-open
+        --     hero_view and never recreates its renderer, so it eliminates BOTH the
+        --     deprecated bare-IngameView look on exit AND the LA armoury_atlas
+        --     renderer-recreation crash (42c81d84) that the leave/re-enter
+        --     standalone-view path triggered. This is the proper fix the old TODO
+        --     described.
+        --
+        --   * IN A MISSION -> there is NO hero_view, so we KEEP the existing standalone
+        --     ModTweakerView path (the pre-build-2 behaviour). In a mission the
+        --     standalone view's exit routes to "ingame_menu" (never crashed there; no
+        --     hero_view to recreate), preserving in-mission access exactly as before.
+        --
+        -- Keep/inn detection matches _ba_heroview_inject: ingame_ui_context.is_in_inn.
+        local ctx = self.ingame_ui_context
+        local in_keep = not (ctx and ctx.is_in_inn == false)
+        -- v0.2.62-dev REVERT: the keep HeroView sub-state (build 2) reliably OPENED (rows
+        -- built) but the HeroView state machine immediately BOUNCED it back to
+        -- HeroViewStateOverview (log: overview -> gut_mod_tweaker on_enter rows=13 ->
+        -- overview), so it never stayed visible from the ESC button — the "doesn't open
+        -- from the main menu" regression. The STANDALONE ModTweakerView opens reliably (it
+        -- always did in-mission), and build-3's origin-capture exit (below) returns to the
+        -- modern hero_view menu rather than the deprecated bare one, so the sub-state is no
+        -- longer needed to avoid the deprecated look. Route the KEEP through the standalone
+        -- view too. (HeroViewStateModTweaker + _ba_heroview_inject stay registered for the
+        -- /gut_mod_tweaker command.) Flip _USE_KEEP_SUBSTATE back only after the sub-state
+        -- bounce is root-caused.
+        local _USE_KEEP_SUBSTATE = false
+        if _USE_KEEP_SUBSTATE and in_keep and self.transition_with_fade and rawget(_G, "HeroViewStateModTweaker") then
+            _dbg("[mt] ESC entry in keep -> hero_view sub-state gut_mod_tweaker")
+            -- force_open = true is LOAD-BEARING. The ESC "Mod Tweaker" button fires from
+            -- INSIDE the already-open keep ESC menu, which IS hero_view (the ingame_menu
+            -- window inside HeroViewStateOverview), so self.current_view == "hero_view"
+            -- ALREADY. Without force_open, IngameUI.handle_transition's guard
+            -- `if old_view ~= new_view or force_open` (ingame_ui.lua:953) is false→false,
+            -- so it SKIPS HeroView:on_enter / post_update_on_enter — and post_update_on_enter
+            -- is the ONLY path that reads menu_state_name (hero_view.lua:504-508). Result
+            -- (the reported bug): the fade plays but the gut_mod_tweaker sub-state never
+            -- opens. force_open forces the re-enter so menu_state_name is honored. This is
+            -- the EXACT vanilla keep-button flow: every keep ESC menu button (Inventory,
+            -- Loot, ...) uses transition="hero_view" + transition_state=<screen> +
+            -- force_open=true (ingame_view_menu_layout_console.lua:742-745).
+            self:transition_with_fade("hero_view", {
+                menu_state_name = "gut_mod_tweaker",
+                force_open = true,
+            })
+            return
+        end
+
+        -- In-mission path (or sub-state unavailable): standalone ModTweakerView.
+        -- DEFENSIVE re-pin LA's atlas + instrument BEFORE attaching/showing the view
+        -- (site i). The borrowed renderer is long-lived, so the atlas can be unloaded
+        -- between opens; re-pin every open (pcall-guarded, has_loaded-gated inside).
+        pcall(_gut_mt_repin_la, self, "transition")
+        -- Lazy-attach on demand: at click time the IngameUI is fully initialised, so
+        -- this is the reliable build point. Idempotent. Only switch if the view
+        -- actually attached, so a build failure stays a harmless no-op.
+        _attach_view(self)
         if self.views and self.views.mod_tweaker_view then
+            -- Capture the ORIGIN menu so exit returns to it. In a mission ESC opens
+            -- EITHER the modern HeroView menu (current_view == "hero_view", the default
+            -- when use_pc_menu_layout=false) OR the legacy IngameView (current_view ==
+            -- "ingame_menu"). self.current_view is still the origin here — the engine
+            -- snapshots old_view BEFORE invoking this closure (ingame_ui.lua:946) — so
+            -- reading it now gives the menu the player actually opened. Hard-coding
+            -- "ingame_menu" dumped modern-menu players into the deprecated bare
+            -- IngameView on exit. ModTweakerView:exit already safely handles the
+            -- "hero_view" target (supplies { menu_state_name = "overview" }).
+            local origin = self.current_view
+            self.views.mod_tweaker_view._exit_transition =
+                (origin == "hero_view") and "hero_view" or "ingame_menu"
             self.current_view = "mod_tweaker_view"
+        else
+            _dbg_alert("[mt] transition: view not attached; ESC entry is a no-op")
         end
     end
     _dbg("[mt] transition registered: mod_tweaker_view")
@@ -804,33 +1000,205 @@ if not ok_settings_inject then
     _dbg_alert("[mt] transitions injection failed: %s", tostring(settings_inject_err))
 end
 
+-- ============================================================
+-- Open the Mod Tweaker from gameplay (#125) — hotkey + chat command
+-- ============================================================
+-- The Mod Tweaker settings menu is reachable from the ESC menu's "Mod Tweaker"
+-- button (the IngameViewLayoutLogic.setup_button_layout injection above). This
+-- exposes a DIRECT opener so a function-call keybind + a chat command can open it
+-- without going through the ESC menu first.
+--
+-- It drives the SAME `mod_tweaker_view` transition the ESC button uses (registered
+-- just above), via Managers.ui:handle_transition — so there is NO new hook and NO
+-- duplicated open logic. The transition closure handles attach + origin-capture +
+-- current_view, and works from raw gameplay (current_view is nil there, so the
+-- closure sets _exit_transition = "ingame_menu" as the FALLBACK only). With the
+-- #124 change the view's exit always routes to "exit_menu" (game), so a hotkey-
+-- opened menu — which has no originating menu — correctly returns to gameplay on
+-- exit. Mirrors the sibling in-mission inventory/hero-select openers
+-- (Managers.ui:handle_transition(..., { use_fade = true })).
+--
+-- SCOPE: keep AND mid-mission. The Mod Tweaker is a borrowed-renderer settings
+-- LIST (not a preview world), so it is NOT subject to the keep-only preview-world
+-- crash class that gates the hero-select/inventory features — the standalone
+-- ModTweakerView already opens reliably in-mission via the ESC button, and this
+-- reuses that exact path. No Chaos Wastes/deus gate is needed (no loadout surface).
+-- (In-mission behavior still wants the user's in-game confirmation.)
+mod.gut_open_mod_tweaker = function()
+    if not (Managers.ui and Managers.ui.handle_transition) then
+        mod:echo("UI manager not available (not in-game?).")
+        return
+    end
+    local ok, err = pcall(function()
+        Managers.ui:handle_transition("mod_tweaker_view", { use_fade = true })
+    end)
+    if not ok then
+        mod:echo("Could not open the Mod Tweaker: " .. tostring(err))
+    end
+end
+
+mod:command("gut_mod_tweaker", "Open the Mod Tweaker settings menu (works in the keep and mid-mission). Same as the gut_open_mod_tweaker_hotkey keybind and the ESC-menu 'Mod Tweaker' button.", function()
+    mod.gut_open_mod_tweaker()
+end)
+
 -- NOTE the second param: IngameUI.init passes the context to setup_views as an
 -- ARGUMENT (ingame_ui.lua:107) and does NOT store self.ingame_ui_context until
 -- later, so reading self.ingame_ui_context here is nil — that nil context made
 -- ModTweakerView:new throw, the view never attached, and transitioning to the
 -- (missing) view crashed IngameUI at ingame_ui.lua:625. Capture the arg instead.
+-- Early attach attempt. May no-op if self.views isn't populated yet at this
+-- hook's timing (the transition lazy-attach is the guaranteed path).
 mod:hook_safe("IngameUI", "setup_views", function(self, ingame_ui_context)
-    if type(self.views) ~= "table" then return end
-    if self.views.mod_tweaker_view then return end -- idempotent
-    local ctx = ingame_ui_context or self.ingame_ui_context
-    if not ctx then
-        -- No context this call; don't attach a broken view. A later setup_views
-        -- (or the canonical construction) will have one.
-        _dbg_alert("[mt] setup_views: no ingame_ui_context; deferring view build")
-        return
+    _attach_view(self, ingame_ui_context)
+end)
+
+-- The ESC-menu "Mod Tweaker" button is the raw key "mod_tweaker_button_name"
+-- (ingame_view.lua:252 content.title_text = data.display_name, :138
+-- title_text.localize = true), localized at draw by the engine localizer. VMF mod
+-- loc is NOT in the engine tables, so it rendered as "<mod_tweaker_button_name>".
+--
+-- TWO prior HOOK fixes FAILED: (a) hooking _G.Localize — the global is set via
+-- rawset in LocalizationManager.init, so a re-init blows the VMF wrapper away; and
+-- (b) hooking LocalizationManager.lookup — the button's text pass ALSO localizes
+-- via LocalizationManager.simple_lookup (ui_passes.lua:1599), a SIBLING method that
+-- `lookup` never routes through. Both are interception; both miss a path.
+--
+-- ROOT-CAUSE FIX (workflow wf_8504e8ba): SUPPLY the string instead of intercepting.
+-- LocalizationManager._base_lookup checks self._backend_localizations FIRST
+-- (localization_manager.lua:50-51) and is the shared bottom of BOTH lookup and
+-- simple_lookup, so registering the string there resolves on every path natively —
+-- no wrapped closure to bypass. (LA already hooks _base_lookup in the field,
+-- confirming that table is the universal chokepoint.)
+local function _register_button_loc()
+    local loc = Managers and Managers.localizer
+    if loc and loc.append_backend_localizations then
+        pcall(loc.append_backend_localizations, loc, { mod_tweaker_button_name = "Mod Tweaker" })
+        -- PROBE: after registering, what does the engine localizer actually return
+        -- for the key? If this prints "Mod Tweaker", the append works and any <> the
+        -- user still sees is a DIFFERENT element (not this ESC button). If it prints
+        -- "<mod_tweaker_button_name>", the backend-loc path is NOT what this button
+        -- localizes through and we need a different fix.
+        local resolved = "?"
+        if rawget(_G, "Localize") then pcall(function() resolved = Localize("mod_tweaker_button_name") end) end
+        mod:info("[mt] registered backend loc; Localize('mod_tweaker_button_name') -> '%s'", tostring(resolved))
+        return true
     end
-    local ok_view, ModTweakerView = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
-    if not ok_view or type(ModTweakerView) ~= "table" then
-        _dbg_alert("[mt] setup_views: ModTweakerView dofile failed: %s", tostring(ModTweakerView))
-        return
+    mod:info("[mt] backend-loc register SKIPPED (Managers.localizer not ready at this point)")
+    return false
+end
+-- Register at boot if the localizer is already up; otherwise on_all_mods_loaded (below)
+-- and the IngameView.on_enter retry guarantee it's set before the ESC menu draws.
+_register_button_loc()
+-- _backend_localizations is reset to {} in LocalizationManager.init (a mid-session
+-- language switch re-inits), so re-register after any re-init. This is DATA, not a
+-- wrapped closure — immune to the rawset/VMF-chain fragility that killed both hooks.
+mod:hook_safe("LocalizationManager", "init", function()
+    _register_button_loc()
+end)
+-- Belt-and-suspenders: register when the ESC menu opens (Managers.localizer is
+-- definitely up by then), so even if boot/on_all_mods_loaded missed, the key is set
+-- before the button's title_text is drawn. (gut hooks HeroView.on_enter, not
+-- IngameView.on_enter — distinct pair, no duplicate.)
+mod:hook_safe("IngameView", "on_enter", function()
+    _register_button_loc()
+end)
+
+-- ESC/keep-menu button-overflow compaction (v0.2.56; REWRITTEN v0.2.64-dev — was
+-- hooking the WRONG class for 8 versions).
+--
+-- DIAGNOSIS of why the prior fix never worked:
+--   * The keep pause/ESC menu the user sees is NOT the legacy IngameView. The
+--     reported button list (character_selection / spoils_of_war /
+--     return_to_pc_menu_hero_view / quit_game_hero_view, 10 entries) is the MODERN
+--     HeroView sub-window `HeroWindowIngameView` (hero_window_ingame_view.lua) — the
+--     "Main Menu" screen inside hero_view. That class has NO set_background_height
+--     method; the gut hook on `IngameView.set_background_height` therefore NEVER
+--     FIRED for the keep menu. (Legacy IngameView is only the bare in-MISSION menu.)
+--   * Even on the legacy IngameView path the logo branch was dead: IngameView.
+--     create_ui_elements (ingame_view.lua:122-152) NEVER assigns self.logo — the logo
+--     widget isn't even instantiated there (it has no `logo` widget def), so
+--     `if self.logo ...` was always nil. The visible logo comes from the modern menu.
+--
+-- The modern menu lays out its button column + sizes its panel in
+-- HeroWindowIngameView._update_presentation (hero_window_ingame_view.lua:490-515):
+-- each title button gets `offset[2] = -(60 * index - 1)` (spacing = 60, line 504),
+-- and the background panel grows to `total_height + 90` (line 513). With 10 buttons
+-- the column runs `0 .. -540` and overflows off the bottom. The logo widget is
+-- `_widgets_by_name.logo` (definitions :287, scenegraph node "logo").
+--
+-- FIX: hook_safe `HeroWindowIngameView._update_presentation` (runs AFTER vanilla
+-- positions the column, so our shift/hide stick) and, once over the overflow
+-- threshold: (a) lift the whole button column up by re-walking the same index→offset
+-- math with a reduced spacing AND a positive top bias, and (b) hide the logo by
+-- zeroing its style.color alpha. hook_safe is correct (the vanilla method returns
+-- nothing; it mutates widget offsets + the scenegraph in place). This (Class,method)
+-- pair is hooked NOWHERE ELSE in gut — grep-verified before adding (the only other
+-- HeroView-family hook is HeroView.on_enter, a different class+method).
+--
+-- (#93) ALWAYS-ON implicit feature (2026-06-24): the `gut_compact_esc_menu` toggle +
+-- setting were removed — this was never meant to be optional (gut itself adds the Mod
+-- Tweaker ESC button that causes the overflow this fixes, so the fix should always run,
+-- like wt's auto-vent). The hook is only a no-op below the overflow threshold anyway, so
+-- there's nothing to gate. No setting read remains.
+--
+-- NOTE the COLUMN_SHIFT / SPACING numbers below are TUNE-IN-GAME values — they move
+-- the column the right DIRECTION (up) but the exact lift needs an in-game eyeball.
+local _MT_ESC_OVERFLOW_THRESHOLD = 8   -- vanilla keep menu is ~8 buttons; gut + VMF push it to 10
+mod:hook_safe("HeroWindowIngameView", "_update_presentation", function(self)
+    local buttons = self._title_button_widgets
+    local layout_logic = self.layout_logic
+    if not (buttons and layout_logic) then return end
+    local ok_ld, layout_data = pcall(layout_logic.layout_data, layout_logic)
+    if not ok_ld or type(layout_data) ~= "table" then return end
+    local num = #layout_data
+    if num < _MT_ESC_OVERFLOW_THRESHOLD then return end
+
+    -- Re-pack the column tighter so all `num` buttons fit, and bias the whole stack
+    -- UP. Vanilla uses spacing = 60 starting near offset 0 (descending). We compress
+    -- spacing and add a positive top bias = half the saved height, re-centring the
+    -- shorter column. (Vanilla math: hero_window_ingame_view.lua:497-505.)
+    local VANILLA_SPACING = 60
+    local SPACING = 48                                  -- tighter rows (TUNE IN-GAME)
+    local saved = (VANILLA_SPACING - SPACING) * num     -- total height reclaimed
+    local TOP_BIAS = math.floor(saved / 2)              -- lift so the column re-centres
+    for index = 1, num do
+        local w = buttons[index]
+        if w and w.offset then
+            -- mirrors vanilla `-(spacing * index - 1)` with our spacing + the up-bias.
+            w.offset[2] = -(SPACING * index - 1) + TOP_BIAS
+        end
     end
-    local ok_new, view_or_err = pcall(ModTweakerView.new, ModTweakerView, ctx)
-    if not ok_new then
-        _dbg_alert("[mt] setup_views: ModTweakerView:new raised: %s", tostring(view_or_err))
-        return
+
+    -- Hide the keep logo so the (now lifted) column has clear headroom. The logo
+    -- widget is _widgets_by_name.logo (definitions :287, built via
+    -- UIWidgets.create_simple_texture). create_simple_texture nests color under
+    -- style.texture_id.color, NOT style.color (ui_widgets.lua:5302-5318) — the prior
+    -- IngameView code read the wrong path, which was part of why "logo still shows".
+    -- VT2 color tables are {A,R,G,B}, so alpha is index [1]. Idempotent — re-zeroing
+    -- each presentation rebuild is harmless.
+    local wbn = self._widgets_by_name
+    local logo = wbn and wbn.logo
+    local lstyle = logo and logo.style and logo.style.texture_id
+    if lstyle and lstyle.color then
+        lstyle.color[1] = 0
     end
-    self.views.mod_tweaker_view = view_or_err
-    _dbg("[mt] setup_views: ModTweakerView attached")
+
+    -- Lift the keep separator/divider by the same amount as the button column so it
+    -- sits ABOVE the menu text instead of bleeding through it. _widgets_by_name.divider
+    -- is the upper rule (hero_window_ingame_view_definitions.lua:279,
+    -- UIWidgets.create_simple_texture("divider_01_top", "divider"); sg node "divider").
+    -- NOT divider_bottom (:280, the lower rule). It's registered into _widgets_by_name
+    -- in create_ui_elements (:161-169), so it's drawable/mutable here. The button
+    -- column was lifted +TOP_BIAS via each button widget's render offset[2] (:1096);
+    -- mutating the divider's render offset[2] the SAME {0,0,0} field keeps the shift
+    -- isolated to the divider texture (does NOT cascade to the logo/panel/buttons that
+    -- are scenegraph-parented to the "divider" node — a render-offset change doesn't
+    -- touch the scenegraph). Idempotent: TOP_BIAS is recomputed each presentation
+    -- rebuild and vanilla never resets this offset, so SET (not +=) to avoid drift.
+    local divider = wbn and wbn.divider
+    if divider and divider.offset then
+        divider.offset[2] = TOP_BIAS
+    end
 end)
 
 _rt_register("mod_tweaker_esc_entry_hook", function()
@@ -868,12 +1236,94 @@ _rt_register("mod_tweaker_transition_registered", function()
     if type(settings.transitions.mod_tweaker_view) ~= "function" then
         return "transitions.mod_tweaker_view is not a function"
     end
-    -- Smoke: ensure the transition just sets current_view.
-    local fake = {}
+    -- Smoke (IN-MISSION fallback, build 2): force is_in_inn=false and supply NO
+    -- transition_with_fade so the closure takes the standalone-ModTweakerView branch.
+    -- Pre-seed views.mod_tweaker_view so _attach_view short-circuits (idempotent
+    -- early-return) without needing a real renderer; the closure must then set
+    -- current_view. (The keep branch routes via transition_with_fade -> hero_view
+    -- sub-state and is covered by mod_tweaker_substate_registered below.)
+    local fake = {
+        ingame_ui_context = { is_in_inn = false },
+        views = { mod_tweaker_view = { _exit_transition = nil } },
+    }
     settings.transitions.mod_tweaker_view(fake)
     if fake.current_view ~= "mod_tweaker_view" then
-        return "transition did not set current_view = mod_tweaker_view"
+        return "in-mission transition did not set current_view = mod_tweaker_view"
     end
+
+    -- ORIGIN-CAPTURE (v0.2.58-dev): the in-mission exit must return to whichever
+    -- menu the player opened. The closure reads self.current_view (the engine's
+    -- pre-closure origin snapshot) and routes "hero_view" origin -> "hero_view",
+    -- everything else -> "ingame_menu". Assert both branches so a regression that
+    -- re-hardcodes "ingame_menu" (the deprecated-bare-menu bug) is caught.
+    local function _exit_for(origin)
+        local f = {
+            current_view = origin,
+            ingame_ui_context = { is_in_inn = false },
+            views = { mod_tweaker_view = { _exit_transition = nil } },
+        }
+        settings.transitions.mod_tweaker_view(f)
+        return f.views.mod_tweaker_view._exit_transition
+    end
+    local et_hero = _exit_for("hero_view")
+    if et_hero ~= "hero_view" then
+        return string.format("hero_view origin did not set _exit_transition = hero_view (got %s)", tostring(et_hero))
+    end
+    local et_legacy = _exit_for("ingame_menu")
+    if et_legacy ~= "ingame_menu" then
+        return string.format("ingame_menu origin did not set _exit_transition = ingame_menu (got %s)", tostring(et_legacy))
+    end
+
+    -- KEEP branch (v0.2.60-dev): in the keep (is_in_inn ~= false) the closure must route
+    -- to the hero_view sub-state via transition_with_fade WITH force_open = true and
+    -- menu_state_name = "gut_mod_tweaker". Dropping force_open is the regression that made
+    -- the ESC button darken-then-open-nothing (the keep ESC menu IS hero_view, so without
+    -- force_open IngameUI.handle_transition skips the re-enter and menu_state_name is
+    -- ignored). Capture the call to assert both params survive.
+    if rawget(_G, "HeroViewStateModTweaker") then
+        local captured
+        local fake_keep = {
+            ingame_ui_context = { is_in_inn = true },
+            transition_with_fade = function(_self, transition, params)
+                captured = { transition = transition, params = params or {} }
+            end,
+        }
+        settings.transitions.mod_tweaker_view(fake_keep)
+        if not captured then
+            return "keep branch did not call transition_with_fade"
+        end
+        if captured.transition ~= "hero_view" then
+            return string.format("keep branch transition not 'hero_view' (got %s)", tostring(captured.transition))
+        end
+        if captured.params.menu_state_name ~= "gut_mod_tweaker" then
+            return string.format("keep branch menu_state_name not 'gut_mod_tweaker' (got %s)", tostring(captured.params.menu_state_name))
+        end
+        if captured.params.force_open ~= true then
+            return "keep branch missing force_open = true (the darken-then-nothing regression)"
+        end
+    end
+end)
+
+-- Build 2: the Mod Tweaker KEEP sub-state must register exactly like the compendium —
+-- the class global exists and the gut_mod_tweaker screen descriptor is appended in the
+-- SINGLE HeroView.init hook (no duplicate hook). This marker mirrors the compendium's
+-- registration invariant.
+_rt_register("mod_tweaker_substate_registered", function()
+    if not rawget(_G, "HeroViewStateModTweaker") then
+        return "HeroViewStateModTweaker class global not defined (state dofile failed)"
+    end
+    local C = rawget(_G, "HeroViewStateModTweaker")
+    for _, name in ipairs({ "on_enter", "update", "post_update", "on_exit",
+                            "input_service", "close_menu" }) do
+        if type(C[name]) ~= "function" then
+            return string.format("HeroViewStateModTweaker:%s is not a function (got %s)",
+                name, type(C[name]))
+        end
+    end
+    if type(mod._gut_open_mod_tweaker) ~= "function" then
+        return "mod._gut_open_mod_tweaker opener not defined (inject module didn't load)"
+    end
+    return nil
 end)
 
 _rt_register("mod_tweaker_api_present", function()
@@ -907,6 +1357,339 @@ _rt_register("mod_tweaker_api_present", function()
     if MT:get(probe_id, "probe_flag") ~= true then return "get() did not reflect set()" end
 end)
 
-mod:info(string.format("gui_tweaker v%s ready (loadout save/restore + HUD edit mode + mod_tweaker api)", MOD_VERSION))
+-- v0.2.59-dev — the gear "Advanced Settings" drill-down + the slider thumb-move fix.
+-- (1) The defs module must export the gear + back-row factories, and a built gear must
+--     carry a hotspot pass WITH an explicit style.hotspot (rows share the mt_list_start
+--     node, so a missing style collapses the hit target to 1x1).
+-- (2) The slider must drive its thumb/fill via a `local_offset` pass — the ONLY pass
+--     type the engine invokes `offset_function` for (ui_passes.lua:4587). A regression
+--     that re-attaches offset_function to a texture/rect pass (where it's ignored, the
+--     build-3 "thumb doesn't move" bug) would have NO local_offset pass and is caught here.
+_rt_register("mod_tweaker_gear_and_slider", function()
+    local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+    if type(defs.create_gear_button) ~= "function" then return "create_gear_button factory missing" end
+    if type(defs.create_back_row) ~= "function" then return "create_back_row factory missing" end
+
+    local gear = defs.create_gear_button(-46)
+    if type(gear) ~= "table" then return "create_gear_button did not return a widget" end
+    local g_has_hotspot, g_styled = false, false
+    for _, p in ipairs(gear.element.passes) do
+        if p.pass_type == "hotspot" then g_has_hotspot = true; if p.style_id then g_styled = true end end
+    end
+    if not g_has_hotspot then return "gear widget has no hotspot pass" end
+    if not g_styled then return "gear hotspot lacks style_id (hit target would collapse to 1x1)" end
+    if not (gear.style and gear.style.hotspot and gear.style.hotspot.size) then
+        return "gear hotspot has no explicit style.hotspot.size"
+    end
+
+    -- A slider must contain a local_offset pass carrying an offset_function.
+    local base = { 0, -10, 0 }
+    local slider = defs.create_slider("rt probe", "", base)
+    local has_local_offset = false
+    for _, p in ipairs(slider.element.passes) do
+        if p.pass_type == "local_offset" and type(p.offset_function) == "function" then
+            has_local_offset = true
+        end
+    end
+    if not has_local_offset then
+        return "slider has no local_offset pass with offset_function (thumb/fill would not move)"
+    end
+end)
+
+-- (#95) Keybind / table read-only values must route through _format_keybind_value
+-- in _mod_tweaker_view.lua, NOT tostring(), or a VMF keybind (a Lua TABLE like
+-- {"left alt"}) renders its raw address ("CYCLE HUD MODE: table: 0x..."). Source
+-- guard: read the VIEW file (anchored via debug.getinfo on a ModTweakerView method)
+-- and assert BOTH (a) the formatter helper is present and (b) the read-only branch
+-- routes keybind/table values through it. Needles are split across two literals so
+-- this test's own source can't self-match. Degrades to a no-op when source
+-- introspection is unavailable (deploy/bundle paths ship no readable .lua).
+_rt_register("mod_tweaker_keybind_render", function()
+    local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
+    if not ok_view or type(View) ~= "table" or type(View._handle_input) ~= "function" then
+        return  -- can't reach the view module; skip
+    end
+    local ok, info = pcall(debug.getinfo, View._handle_input, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- (a) the formatter helper must exist.
+    local helper_needle = "_format_keybind" .. "_value"
+    if not txt:find(helper_needle, 1, true) then
+        return "#95 regression: _format_keybind_value is absent from _mod_tweaker_view.lua (keybinds would render a raw table address)"
+    end
+    -- (b) the read-only branch must route wtype=="keybind" OR a table value through it.
+    local branch_needle = 'wtype == "keybind" or type(val)' .. ' == "table"'
+    if not txt:find(branch_needle, 1, true) then
+        return "#95 regression: read-only row no longer routes keybind/table values through _format_keybind_value (raw 'table: 0x...' would reach the label)"
+    end
+    local routed_needle = ': " .. _format_keybind' .. "_value(val)"
+    if not txt:find(routed_needle, 1, true) then
+        return "#95 regression: the keybind/table branch does not call _format_keybind_value(val)"
+    end
+end)
+
+-- (#91) Scrollbar thumb drag must use a GRAB-OFFSET anchor (the cursor-Y at grab +
+-- the scroll_value at grab), then track the cursor DELTA over the thumb's travel —
+-- NOT the old absolute-position snap that jumped the thumb top to the cursor.
+-- Source guard on _mod_tweaker_view.lua's _handle_input: assert both grab-anchor
+-- fields survive. Split needles to avoid self-match; no-op when source unreadable.
+_rt_register("mod_tweaker_scrollbar_grab_offset", function()
+    local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
+    if not ok_view or type(View) ~= "table" or type(View._handle_input) ~= "function" then
+        return
+    end
+    local ok, info = pcall(debug.getinfo, View._handle_input, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local cursor_anchor = "_sb_grab_cursor" .. "_y"
+    local scroll_anchor = "_sb_grab_scroll" .. "_value"
+    if not txt:find(cursor_anchor, 1, true) or not txt:find(scroll_anchor, 1, true) then
+        return "#91 regression: scrollbar thumb drag no longer records a grab-offset anchor (reverted to absolute-position snapping — grabbing the thumb jumps it)"
+    end
+end)
+
+-- (#92 corrected) The stepper/slider arrow glow must match the VANILLA GAME SETTINGS
+-- menu (create_stepper_widget, options_view_definitions.lua:3054), NOT VMF. Native draws
+-- TWO sprites per arrow: a base `settings_arrow_normal` at FULL alpha (font_default,255 —
+-- :3415/:3457) that is NEVER dimmed at idle, plus a separate `settings_arrow_clicked`
+-- OVERLAY seeded color {0,255,255,255} = alpha 0 (:3428-3433/:3470-3475) that fades up to
+-- 255 on hover (OptionsView.on_stepper_arrow_hover, options_view.lua:4335-4369). The glow
+-- is the _clicked overlay APPEARING, not an alpha ramp on the base. Table-introspection of
+-- a built slider (which calls _append_arrows) asserts: (a) the base arrows draw
+-- settings_arrow_normal at FULL alpha 255 (NOT dim); (b) the _clicked hover OVERLAYS exist
+-- drawing settings_arrow_clicked seeded at alpha 0; (c) a local_offset pass with an
+-- offset_function drives the overlay alpha 0->255.
+_rt_register("mod_tweaker_arrow_hover_glow", function()
+    local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+    if type(defs.create_slider) ~= "function" then return "create_slider factory missing" end
+    local base = { 0, -10, 0 }
+    local slider = defs.create_slider("rt probe", "", base)
+    if type(slider) ~= "table" or not (slider.element and slider.element.passes) then
+        return "create_slider did not return a renderable widget"
+    end
+    -- (a) base arrows draw settings_arrow_normal at FULL alpha (idle must NOT be dimmed —
+    -- native :3415/:3457 are font_default,255).
+    local la = slider.content and slider.content.left_arrow
+    if not (la and la.texture_id == "settings_arrow_normal") then
+        return "#92 regression: base left arrow no longer draws settings_arrow_normal"
+    end
+    local las = slider.style and slider.style.left_arrow
+    if not (las and las.color and las.color[1] == 255) then
+        return "#92 regression: base arrow not at FULL idle alpha 255 (vanilla draws the idle sprite full; a dimmed idle is the wrong-menu VMF ramp)"
+    end
+    -- (b) the _clicked hover OVERLAYS must exist, drawing settings_arrow_clicked seeded at
+    -- alpha 0 (native left_arrow_hover/right_arrow_hover color {0,...}).
+    local lah = slider.content and slider.content.left_arrow_hover
+    if not (lah and lah.texture_id == "settings_arrow_clicked") then
+        return "#92 regression: missing _clicked hover overlay (vanilla glow = settings_arrow_clicked overlay fading in over the base)"
+    end
+    local lahs = slider.style and slider.style.left_arrow_hover
+    if not (lahs and lahs.color and lahs.color[1] == 0) then
+        return "#92 regression: _clicked hover overlay not seeded at alpha 0 (native seed {0,255,255,255}; it ramps to 255 on hover)"
+    end
+    -- (c) a local_offset pass with an offset_function must drive the overlay alpha ramp
+    -- (only a local_offset pass's offset_function runs each frame).
+    local has_local_offset = false
+    for _, p in ipairs(slider.element.passes) do
+        if p.pass_type == "local_offset" and type(p.offset_function) == "function" then
+            has_local_offset = true
+        end
+    end
+    if not has_local_offset then
+        return "#92 regression: no local_offset pass with an offset_function — the _clicked overlay alpha ramp cannot run"
+    end
+end)
+
+-- (#92 corrected) The COLLAPSED dropdown arrow must match the VANILLA GAME SETTINGS
+-- dropdown (create_drop_down_widget, options_view_definitions.lua:2299): a visible arrow
+-- in BOTH states (down sprite when closed, up-flip when open — it never disappears), with
+-- the brighter drop_down_menu_arrow_clicked glow sprite layering on hover/open. Asserts:
+-- (a) base arrow_down + arrow_up passes both exist and are gated on content.active so one
+-- is ALWAYS drawn; (b) an arrow_glow pass draws drop_down_menu_arrow_clicked; (c) the base
+-- arrows are at FULL alpha (never gated to a blank/dimmed open state).
+_rt_register("mod_tweaker_dropdown_arrow_glow", function()
+    local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+    if type(defs.create_dropdown) ~= "function" then return "create_dropdown factory missing" end
+    local dd = defs.create_dropdown("rt probe dd", { 0, -10, 0 }, 0)
+    if type(dd) ~= "table" or not (dd.element and dd.element.passes) then
+        return "create_dropdown did not return a renderable widget"
+    end
+    -- (a) both base arrows present; one drawn when closed, one when open -> never blank.
+    local has_down, has_up, has_glow = false, false, false
+    local down_check, up_check = nil, nil
+    for _, p in ipairs(dd.element.passes) do
+        if p.style_id == "arrow_down" then has_down = true; down_check = p.content_check_function end
+        if p.style_id == "arrow_up"   then has_up   = true; up_check   = p.content_check_function end
+        if p.style_id == "arrow_glow" then has_glow = true end
+    end
+    if not (has_down and has_up) then
+        return "#92 regression: dropdown missing a base down/up arrow pass (the arrow must stay visible when open — never gate the only arrow off active)"
+    end
+    -- The closed pass shows when NOT active, the open pass shows when active -> exactly one
+    -- base arrow is always drawn, so opening can never blank the arrow.
+    if not (down_check and up_check and down_check({ active = false }) and up_check({ active = true })
+            and not down_check({ active = true }) and not up_check({ active = false })) then
+        return "#92 regression: dropdown arrow gating wrong (closed must draw the down arrow, open the up arrow — the open state must not be blank)"
+    end
+    -- (b) the _clicked glow sprite overlay exists (drop_down_menu_arrow_clicked).
+    local glowc = dd.content and dd.content.arrow_glow
+    if not (has_glow and glowc and glowc.texture_id == "drop_down_menu_arrow_clicked") then
+        return "#92 regression: dropdown missing the drop_down_menu_arrow_clicked glow overlay (native hover/open glow sprite)"
+    end
+    -- (c) base arrows at FULL alpha in both states (native style.arrow color = font_default,255).
+    local ad, au = dd.style and dd.style.arrow_down, dd.style and dd.style.arrow_up
+    if not (ad and ad.color and ad.color[1] == 255 and au and au.color and au.color[1] == 255) then
+        return "#92 regression: dropdown base arrows not at FULL alpha (native arrow is font_default,255 closed AND open; a dim/0 open arrow is the disappearing-arrow defect)"
+    end
+end)
+
+-- (#93) Compact-ESC menu compaction is now an UNCONDITIONAL implicit feature — the
+-- gut_compact_esc_menu TOGGLE + setting were removed (2026-06-24) and the
+-- HeroWindowIngameView._update_presentation hook always runs (no-op below the
+-- overflow threshold). This guard FAILS if a real setting-READ for that toggle is
+-- reintroduced (gating the feature again). It checks the setting-read shape, not the
+-- bare string, so the explanatory comment naming the removed toggle does not trip it.
+-- Anchored on mod.on_setting_changed (a `mod.` field in the MAIN file). Split needle;
+-- no-op when source unreadable.
+_rt_register("mod_tweaker_compact_esc_implicit", function()
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- A reintroduced gate would read the setting via mod:get(...) on that toggle id.
+    -- (The read-shape needle is assembled below from two literals so this very line
+    -- and the comment naming the removed toggle can't make the test self-match.)
+    local read_needle = 'mod:get("gut_compact_esc' .. '_menu")'
+    if txt:find(read_needle, 1, true) then
+        return "#93 regression: the gut_compact_esc_menu setting/toggle was reintroduced (the ESC-menu compaction must run unconditionally now)"
+    end
+end)
+
+-- UI Tweaks "Temporal Fix" (absorbed): re-aligns stock UI Tweaks (HideBuffs)
+-- player HP-bar placement broken by the Versus update. Applied at
+-- on_all_mods_loaded (HideBuffs must be loaded first); also tried now in case
+-- HideBuffs loaded before us. No-op if UI Tweaks isn't installed. See
+-- _gut_uitweaks_temporal_fix.lua for the verified diff + mechanism.
+local _gut_temporal_fix = mod:dofile("scripts/mods/gui_tweaker/_gut_uitweaks_temporal_fix")
+-- UI Tweaks buff-bar end-time crash fix (absorbed): nil-guards
+-- PriorityBuffUI._add_buff so stacking buffs (e.g. Bardin OE pump stacks) stop
+-- spamming "attempt to compare nil with number" every frame. No-op if UI Tweaks
+-- isn't installed. See _gut_buffbar_endtime_fix.lua for the diagnosed mechanic.
+local _gut_buffbar_fix = mod:dofile("scripts/mods/gui_tweaker/_gut_buffbar_endtime_fix")
+-- External config file (.toml): on load, override the author's mods' VMF settings
+-- with the values in gut_mod_settings.toml. Read-only (the sandbox blocks writes);
+-- /gut_export_settings dumps TOML to the log + tools/gut-settings.ps1 writes it.
+local _gut_config = mod:dofile("scripts/mods/gui_tweaker/_gut_config_file")
+-- Hide UI (3 modes: off/partial/complete/camera) — migrated from general_tweaker.
+-- Owns mod.update (chains any prior) for per-frame complete/camera enforcement;
+-- registers the gut_hud_cycle keybind function + /gut_hud command.
+local _gut_hide_ui = mod:dofile("scripts/mods/gui_tweaker/_hide_ui")
+-- Loremaster's Armoury atlas keep-alive: pins LA's package so its custom atlas can't
+-- be unloaded out from under the hero-view HDR renderer (VMF injects it there and the
+-- engine C-fatals on a missing material). No-op if LA isn't installed. See
+-- _la_atlas_keepalive.lua (crash efadf778).
+-- Assigns the forward-declared `_gut_la_keepalive` upvalue (declared above the Mod
+-- Tweaker transition closure so that closure + the view module can call its pin()).
+_gut_la_keepalive = mod:dofile("scripts/mods/gui_tweaker/_la_atlas_keepalive")
+-- NumericUI ability-cooldown realtime fix: VT2 cooldown reduction speeds up the
+-- countdown (decreases the value faster), so NumericUI's raw cooldown number visibly
+-- speeds up. We divide the cooldown read (only while NumericUI is computing its
+-- display) by the cooldown_regen multiplier so it shows accurate, real-time-paced
+-- reduced seconds. No-op if NumericUI isn't installed. See _numericui_cooldown_realtime.lua.
+local _gut_numericui_cd = mod:dofile("scripts/mods/gui_tweaker/_numericui_cooldown_realtime")
+local _gut_prev_on_all_mods_loaded = mod.on_all_mods_loaded
+mod.on_all_mods_loaded = function(...)
+    if _gut_prev_on_all_mods_loaded then _gut_prev_on_all_mods_loaded(...) end
+    if _gut_temporal_fix and _gut_temporal_fix.apply then pcall(_gut_temporal_fix.apply) end
+    if _gut_buffbar_fix and _gut_buffbar_fix.apply then pcall(_gut_buffbar_fix.apply) end
+    -- Apply the config override LAST so it wins over whatever the mods restored.
+    if _gut_config and _gut_config.apply then pcall(_gut_config.apply) end
+end
+if _gut_temporal_fix and _gut_temporal_fix.apply then pcall(_gut_temporal_fix.apply) end
+if _gut_buffbar_fix and _gut_buffbar_fix.apply then pcall(_gut_buffbar_fix.apply) end
+
+-- Parry Indicator (absorbed): recolours the HUD block shields during the
+-- timed-block window for EVERY weapon (the original gated on the Parry trait).
+-- Optional via `gut_parry_indicator`. Hooks register at dofile time. See
+-- _gut_parry_indicator.lua for the verified mechanic + the dropped gate.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_parry_indicator")
+
+-- Optional: large respawn countdown over a dead teammate's portrait (client-safe
+-- estimate anchored to the dead-skull state). See _gut_respawn_timer.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_respawn_timer")
+
+-- Skip Cutscenes (MIGRATED from general_tweaker 2026-06-25, issue #106): hooks
+-- CutsceneSystem.flow_cb_cutscene_effect / flow_cb_activate_cutscene_logic /
+-- skip_pressed + ShowCursorStack.pop, exposes mod.gut_skip_cutscenes_toggle, and
+-- chains mod.update for the deferred auto-skip processor. Behavior is unchanged from
+-- gt (CW/deus gating + deferred-skip teardown preserved verbatim); ADDS a printf-based
+-- [gut:cutscene] diagnostic (survives mod-logging-off) for the stuck dlc_castle CW
+-- cutscene (#106). PRE-FLIGHT: gut has no other CutsceneSystem / ShowCursorStack.pop
+-- hook (it only CALLS ShowCursorStack.show/.hide). Dofile'd AFTER _hide_ui.lua so its
+-- mod.update chain captures the hide-ui update as prev. See _gut_cutscenes.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_cutscenes")
+
+-- In-mission inventory access (migrated from general_tweaker 2026-06-24): Open
+-- Inventory In Mission (mod.gut_open_mission_inventory + /gut_inv) + Customize
+-- gear-icon cim crash-gate (HeroWindowLoadoutConsole._customize_item) + Show menu
+-- tabs in-mission (HeroWindowPanelConsole.on_enter) + the InventorySettings/ESC
+-- "Open Inventory" data patch (mod._gut_apply_keep_menus, driven by the
+-- on_setting_changed branch + on_game_state_changed dispatcher above). All hooks
+-- are singletons (preflight-verified: gut has no other HeroWindowLoadoutConsole /
+-- HeroWindowPanelConsole hook). See _gut_mission_inventory.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_inventory")
+
+-- In-mission HERO SELECT (sibling of the inventory feature, 2026-06-24): Open the
+-- HeroView TALENTS layout mid-mission (mod.gut_open_mission_hero_select +
+-- /gut_hero_select + the gut_open_hero_select_hotkey keybind). Reuses the inventory
+-- feature's exact keep-gate bypass (the shared mod._gut_apply_keep_menus
+-- InventorySettings patch), the vanilla `hero_view_force` transition (exit_to_game =
+-- true -> free exit-to-mission, no custom exit closure), and the deus/CW hard-block.
+-- Registers NO hooks (direct transition + pure-data game-mode flip), so there are no
+-- new (Class, method) pairs to collide with. SAFETY: scoped to VIEW + live-safe
+-- talents/cosmetics only -- a mid-mission career CHANGE is unsafe (force_respawn
+-- teleports to level start) and CharacterSelectionView mounts a keep-only preview
+-- world, so true career-PICK is left to the keep. See _gut_mission_hero_select.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_hero_select")
+
+-- Dev probe: capture the live vanilla OptionsView so /gut_dump_options can dump
+-- its real scroll/mask/scrollbar layout — ground-truth for the Mod Tweaker
+-- scrollbar. See _gut_options_probe.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_options_probe")
+
+-- Bestiary & Armory (absorbed): merged weapon (Armory) + enemy (Bestiary)
+-- compendium with a PURE-DYNAMIC data layer — weapons enumerated live from
+-- ItemMasterList, enemies from Breeds, so new content appears with no hardcoded
+-- list. Currently ships the data providers + dump/open commands; the HeroView
+-- compendium UI is built in subsequent phases. See _ba_compendium.lua.
+-- Phase 0 of the HeroView compendium UI: the state class must dofile FIRST (so the
+-- global HeroViewStateCompendium exists before HeroView resolves it), then the
+-- injection (HeroView.init screen registration + /gut_armory open), then the data
+-- layer + commands.
+-- The Mod Tweaker KEEP sub-state class (build 2) must ALSO dofile before the inject
+-- module, for the same reason: _ba_heroview_inject registers BOTH the gut_compendium
+-- and gut_mod_tweaker screens in its single HeroView.init hook, and HeroView resolves
+-- state_name -> global class at transition time. The standalone in-mission
+-- ModTweakerView (_mod_tweaker_view) is unchanged and stays the mission path.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_ba_compendium_state")
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_state")
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_ba_heroview_inject")
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_ba_compendium")
+
+mod:info(string.format("gui_tweaker v%s ready (loadout save/restore + HUD edit mode + mod_tweaker api + bestiary/armory)", MOD_VERSION))
 
 mod:info("[mem-probe] gut boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GUT) / 1024)

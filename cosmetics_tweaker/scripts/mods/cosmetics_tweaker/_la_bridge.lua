@@ -21,6 +21,17 @@ Pipeline:
 
 local mod = get_mod("cosmetics_tweaker")
 
+-- Engine-level log. The user runs with VMF mod-logging OFF, so mod:info is
+-- invisible to them; engine `printf` writes to the game console log
+-- regardless. Used for the #149 in-mission / husk kind="unit" paint outcomes
+-- (ok/skip) so the user can confirm what happened without enabling Debug
+-- Logging. Falls back to mod:info if `printf` isn't present on some build.
+local function _plog(fmt, ...)
+    local ok, msg = pcall(string.format, "[cosmetics_tweaker/LA] " .. fmt, ...)
+    if not ok then msg = "[cosmetics_tweaker/LA] (log format error)" end
+    if printf then printf("%s", msg) else mod:info("%s", msg) end
+end
+
 local M = {}
 
 M.registered            = false
@@ -1198,76 +1209,147 @@ local function _probe_la_unit_materials(unit, armoury_key)
     mod:info("[LA probe %s] === end ===", tag)
 end
 
+-- v0.9.41-dev (#149): AV-safety precheck for painting a kind="unit" LA shield
+-- in the "ingame" / "network_husk" contexts. `Unit.set_texture_for_materials`
+-- is a C-level call that access-violates at offset 0x8 (BYPASSING pcall) when a
+-- target material is the engine null sentinel (#ID[00000000]) — the failure
+-- mode that kept the in-game paint gated off through v0.8.46/47/48. That null
+-- case is specific to the customization PREVIEWER's narrow per-world resource
+-- scope; the in-mission and remote-husk bodies spawn the LA mesh through the
+-- real game pipeline, so its `mat_to_use` parent material
+-- (wpn_empire_handgun_02_t2) is bound at engine level and the null case should
+-- not occur. We still verify (non-fatally, every call pcall-wrapped) that the
+-- unit carries at least one real (non-null) material and REFUSE to paint
+-- otherwise, so a bad-material case degrades to "no heraldry" rather than
+-- crashing mission start. Never calls Material.num_parameters / parameter_name
+-- / parameter_type (those raise a resource_manager.cpp fault that bypasses
+-- pcall — see cosmetics_tweaker.lua:435-438).
+local function _kind_unit_paint_is_safe(unit, armoury_key, context)
+    if not (Unit and Unit.num_meshes and Unit.mesh and Mesh and Mesh.num_materials and Mesh.material) then
+        _plog("#149 paint SKIP %s ctx=%s: mesh/material API unavailable", tostring(armoury_key), tostring(context))
+        return false
+    end
+    local ok_n, n = pcall(Unit.num_meshes, unit)
+    if not ok_n or type(n) ~= "number" or n < 1 then
+        _plog("#149 paint SKIP %s ctx=%s: no meshes (ok=%s n=%s)",
+            tostring(armoury_key), tostring(context), tostring(ok_n), tostring(n))
+        return false
+    end
+    local saw_material, saw_real = false, false
+    for i = 0, n - 1 do
+        local ok_m, mesh = pcall(Unit.mesh, unit, i)
+        if ok_m and mesh then
+            local ok_nm, nm = pcall(Mesh.num_materials, mesh)
+            if ok_nm and type(nm) == "number" then
+                for j = 0, nm - 1 do
+                    local ok_mat, mat = pcall(Mesh.material, mesh, j)
+                    if ok_mat and mat then
+                        saw_material = true
+                        -- The null sentinel renders as a hash of all zeros; a
+                        -- real material carries a non-zero resource id.
+                        local ok_s, s = pcall(tostring, mat)
+                        if not ok_s or not s or not s:find("00000000") then
+                            saw_real = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if not saw_material then
+        _plog("#149 paint SKIP %s ctx=%s: unit has meshes but no materials",
+            tostring(armoury_key), tostring(context))
+        return false
+    end
+    if not saw_real then
+        _plog("#149 paint SKIP %s ctx=%s: only null (#ID[00000000]) material(s) — would AV",
+            tostring(armoury_key), tostring(context))
+        return false
+    end
+    return true
+end
+
 local function _paint_offhand_textures_locally(unit, variant, armoury_key, context)
     if not unit or type(unit) ~= "userdata" then return false end
     if not Unit.alive(unit) then return false end
 
-    -- v0.8.44: REVERTED v0.8.43 re-enable. The hypothesis was that v0.8.39's
-    -- parent-package preload (wpn_empire_handgun_02_t2 for Reiland) would
-    -- make `Unit.set_texture_for_materials` safe on bundled meshes. v0.8.43
-    -- test result: same AV at 0x8 (GUID 45a2a017). The 0x8 dereference is
-    -- not the shader-graph being absent — it's something else (likely the
-    -- LA mesh's compiled material not being instantiated in the customization
-    -- preview's specific world, even though the package is globally loaded).
-    -- Stingray materials are per-world; globally-loaded ≠ scoped to the
-    -- LootItemUnitPreviewer's render world. Staying disabled until we have
-    -- a different binding primitive or replicate LA's swap_units_new
-    -- NetworkLookup aliasing for the customization preview path.
+    -- History (v0.8.43/44): the 0x8 AV in `Unit.set_texture_for_materials` on
+    -- kind="unit" meshes is the customization PREVIEWER's null material
+    -- (#ID[00000000]) — the LA mesh's compiled material isn't instantiated in
+    -- the LootItemUnitPreviewer's per-world resource scope even though the
+    -- package is globally loaded. That's why the previewer path first does
+    -- Unit.set_all_materials(parent) to bind a real material. v0.9.41-dev (#149)
+    -- re-enabled painting for the "ingame" / "network_husk" contexts (the real
+    -- mission / husk bodies, where the parent material IS bound) behind the
+    -- _kind_unit_paint_is_safe precheck — those were the host's bare-mesh and
+    -- the client's no-skin symptoms. See the per-context routing below.
     if variant.kind == "unit" then
-        -- v0.8.48: ONLY apply the material swap in the LootItemUnitPreviewer
-        -- (customization preview) context. v0.8.47 broke in-game rendering
-        -- (LA mesh became massive) because the swap ran on already-correctly-
-        -- bound units in the in-game and hero-previewer worlds. Those paths
-        -- already render the LA mesh correctly without our intervention;
-        -- the customization preview is the only world where material[0] is
-        -- #ID[00000000] (per v0.8.45 probe). Skip the swap AND the paint
-        -- for non-previewer contexts to keep the v0.8.46 safe-no-paint
-        -- behavior for in-game/inventory (where painting still AVs because
-        -- the *paint texture binding* is what 0x8-faulted, not the swap).
-        -- v0.8.64-dev: four valid contexts now — "ingame", "hero_previewer",
-        -- "loot_previewer", "network_husk". Only loot_previewer takes the
-        -- swap+paint path; the other three fall through to the kind="unit"
-        -- bail-without-paint behavior. "network_husk" is the peer-side
-        -- replay path: we paint a wearer-selected LA shield texture onto
-        -- our local husk's left-hand weapon unit. Mesh-swap on a husk
-        -- would require despawning/respawning a network-coupled unit, so
-        -- kind="unit" husk variants are deferred (vanilla mesh stays).
-        if context ~= "loot_previewer" then
+        -- Context routing for kind="unit" custom-mesh shields:
+        --
+        --   * "loot_previewer" (customization preview): the previewer's narrow
+        --     per-world resource scope resolves the LA mesh's material to
+        --     #ID[00000000] (null) at spawn, so we MUST Unit.set_all_materials
+        --     the parent vanilla material before painting (else the paint AVs),
+        --     and scale the unit up to a visible size. (v0.8.45-49 history.)
+        --
+        --   * "ingame" / "network_husk": the in-mission / remote-husk body
+        --     spawns the LA mesh through the real game pipeline, so its
+        --     `mat_to_use` parent material is already bound at engine level. We
+        --     must NOT Unit.set_all_materials (doing so in v0.8.47 made the
+        --     in-game mesh massive) and must NOT scale. We DO paint the heraldry
+        --     textures (with an AV-safety precheck) so the shield isn't a bare
+        --     imperial mesh — #149: the host saw an imperial shield WITHOUT the
+        --     Kotbs LA skin in-mission, and the client saw the vanilla mesh.
+        --     The previewer-only AV (null material) cannot occur here, but the
+        --     precheck degrades a hypothetical bad-material case to "no paint"
+        --     instead of crashing mission start.
+        --
+        --   * "hero_previewer" (inventory mannequin) / unknown: LA's own
+        --     HeroPreviewer hook re-paints that path; we stay out (no paint).
+        if context == "loot_previewer" then
+            -- Customization-preview context: swap the null material, then paint.
+            local parent_path = M.la_kind_unit_parent_packages and M.la_kind_unit_parent_packages[armoury_key]
+            if parent_path and Unit.set_all_materials then
+                local ok, err = pcall(Unit.set_all_materials, unit, parent_path)
+                mod:info("[LA fix kind=unit %s] Unit.set_all_materials(%s) ok=%s err=%s",
+                    tostring(armoury_key), parent_path, tostring(ok), tostring(err))
+            else
+                mod:info("[LA fix kind=unit %s] no parent_path or Unit.set_all_materials missing — paint will likely AV",
+                    tostring(armoury_key))
+            end
+
+            -- v0.8.49: scale up the unit in the customization preview only.
+            -- kind="unit" meshes render visibly smaller than vanilla shield
+            -- illusions in the previewer's intrinsic zoom; this normalizes them
+            -- without affecting in-game or inventory-mannequin rendering.
+            local scale = (M.la_kind_unit_preview_scale and M.la_kind_unit_preview_scale[armoury_key])
+                or M.la_kind_unit_preview_scale_default or 1.0
+            if scale ~= 1.0 and Unit.set_local_scale and Vector3 then
+                local ok = pcall(Unit.set_local_scale, unit, 0, Vector3(scale, scale, scale))
+                if M.trace then
+                    mod:info("[LA fix kind=unit %s] Unit.set_local_scale(0, %sx) ok=%s",
+                        tostring(armoury_key), tostring(scale), tostring(ok))
+                end
+            end
+            -- Fall through to the texture-painting code below.
+        elseif context == "ingame" or context == "network_husk" then
+            -- v0.9.41-dev (#149): paint the heraldry onto the real in-mission /
+            -- husk LA mesh. NO set_all_materials, NO scale (previewer-only).
+            -- AV-safety precheck so a null-material case degrades to "no paint"
+            -- instead of a C-level access violation that bypasses pcall.
+            if not _kind_unit_paint_is_safe(unit, armoury_key, context) then
+                return false
+            end
+            _plog("#149 paint OK %s ctx=%s — applying heraldry", tostring(armoury_key), tostring(context))
+            -- Fall through to the texture-painting code below.
+        else
+            -- "hero_previewer" or unknown: vanilla / LA's own hooks render it.
             if M.trace then
-                mod:info("[LA bridge] kind=unit %s context=%s — skipping swap+paint (vanilla path renders correctly)",
+                mod:info("[LA bridge] kind=unit %s context=%s — skipping (rendered by vanilla/LA path)",
                     tostring(armoury_key), tostring(context))
             end
             return false
         end
-
-        -- Customization-preview context: swap the null material, then paint.
-        local parent_path = M.la_kind_unit_parent_packages and M.la_kind_unit_parent_packages[armoury_key]
-        if parent_path and Unit.set_all_materials then
-            local ok, err = pcall(Unit.set_all_materials, unit, parent_path)
-            mod:info("[LA fix kind=unit %s] Unit.set_all_materials(%s) ok=%s err=%s",
-                tostring(armoury_key), parent_path, tostring(ok), tostring(err))
-        else
-            mod:info("[LA fix kind=unit %s] no parent_path or Unit.set_all_materials missing — paint will likely AV",
-                tostring(armoury_key))
-        end
-
-        -- v0.8.49: scale up the unit in the customization preview only.
-        -- kind="unit" meshes render visibly smaller than vanilla shield
-        -- illusions in the previewer's intrinsic zoom; this normalizes them
-        -- without affecting in-game or inventory-mannequin rendering (those
-        -- contexts already early-returned above).
-        local scale = (M.la_kind_unit_preview_scale and M.la_kind_unit_preview_scale[armoury_key])
-            or M.la_kind_unit_preview_scale_default or 1.0
-        if scale ~= 1.0 and Unit.set_local_scale and Vector3 then
-            local ok = pcall(Unit.set_local_scale, unit, 0, Vector3(scale, scale, scale))
-            if M.trace then
-                mod:info("[LA fix kind=unit %s] Unit.set_local_scale(0, %sx) ok=%s",
-                    tostring(armoury_key), tostring(scale), tostring(ok))
-            end
-        end
-
-        -- Fall through to the texture-painting code below. The swap should
-        -- have given us a real material slot to paint into.
     end
 
     -- Resolution order for textures:

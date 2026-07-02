@@ -1,28 +1,47 @@
 local mod = get_mod("event_tweaker")
 _MEM_PROBE_T0_EVT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.4.13-dev"
+local MOD_VERSION = "0.4.19-dev"
+
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([event_tweaker] enabled v<X> settings_fp=<hash>) is the canonical version
 -- surface (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Tweaker: Events v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- Both route through VMF's built-in logging system (gated by VMF output_mode_debug / output_mode_warning).
+-- `_dbg` is for confirmation / expected behavior — mod:debug channel.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[event_tweaker:dbg] " .. fmt, ...)
-    end
+    mod:debug("[event_tweaker:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[event_tweaker:dbg] " .. fmt, ...)
-        mod:echo("[event_tweaker] " .. fmt, ...)
-    end
+    mod:warning("[event_tweaker:dbg] " .. fmt, ...)
 end
+
+-- ============================================================
+-- Cursed Adventure — Chaos Wastes / Be'lakor curse catalog
+-- (verified by adversarial source audit 2026-06-19 — see DEVELOPMENT.md
+-- "Cursed Adventure" + CHANGELOG 0.4.14-dev)
+-- ============================================================
+-- The catalog lives in the shared require'd module event_tweaker_curses (also
+-- required by _data.lua + _localization.lua) — it MUST NOT be a mod._field set
+-- here, because VMF loads files localization -> data -> script (script LAST),
+-- so a script-set field is nil at data/loc eval. These curses normally run only
+-- inside the Chaos Wastes / Deus realm because their unit/decal resource
+-- PACKAGE is loaded only by DeusRunState.set_event_mutators
+-- (deus_run_state.lua:438-453); the mechanics themselves use only standard
+-- mission managers and every DLC entity system is registered into EVERY mission
+-- at boot (entity_system.lua:176 + :424-435). So once we preload the package on
+-- every peer (the MutatorHandler.init + _activate_mutator hooks below), they run
+-- on a plain adventure map. NB: clients ALSO need the package
+-- (spawn_network_unit replicates a husk), so unlike the host-only "Other
+-- Mutators" group, the Cursed Adventure group requires event_tweaker on EVERY peer.
+local Curses                  = require("scripts/mods/event_tweaker/event_tweaker_curses")
+local MANAGED_CURSES          = Curses.MANAGED_CURSES
+local _CURSE_BROKEN_IN_ADVENTURE = Curses.BROKEN_IN_ADVENTURE
+local _CURSE_TO_GOD           = Curses.CURSE_TO_GOD
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
 -- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
@@ -101,13 +120,10 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
 
@@ -322,22 +338,119 @@ local function active_preset()
     return EVENT_PRESETS[pick]
 end
 
--- Walks MUTATOR_CATALOG and returns a flat list of mutator names
--- whose individual checkboxes are on. DLC-gated mutators owned by the
--- host pass; un-owned ones are dropped so they never reach the lobby.
-local function selected_individual_mutators()
+-- ============================================================
+-- Dynamic mutator discovery (ported from "Deed Mutators Selector",
+-- Workshop 3579882542)
+-- ============================================================
+-- That mod's whole feature is iterating the live MutatorTemplates global and
+-- surfacing every mutator the engine flags as player-facing (carries BOTH a
+-- display_name and a description). MUTATOR_CATALOG above is a curated,
+-- hand-tooltipped subset; this picks up everything else SAFE for adventure.
+--
+-- TWO engine-flag exclusions keep the "Other Mutators" group adventure-safe:
+--   1. tmpl.packages — a non-empty packages list means the mutator spawns
+--      units/decals from a resource package loaded ONLY by
+--      DeusRunState.set_event_mutators (deus_run_state.lua:438-453) in the
+--      Chaos Wastes / Deus realm. AdventureMechanism never loads it, so
+--      activating one on a standard Adventure mission spawns from an unloaded
+--      package -> hard "Resource not found" fatal. Those package-bearing
+--      curses are surfaced SEPARATELY in the "Cursed Adventure" group, which
+--      preloads the package first (see the curse-adventure section below).
+--   2. tmpl.hide_from_player_ui — Fatshark's explicit "not player-facing"
+--      flag (the hidden Deus pacing knobs). A stricter signal than the
+--      display_name+description heuristic Deed Mutators Selector relied on.
+--
+-- Network safety: NetworkLookup.mutator_templates = create_lookup({}, MutatorTemplates)
+-- (network_lookup.lua:266) is built at boot from the full template table, so
+-- every boot-registered name is a valid rpc_activate_mutator_client arg and
+-- broadcasts to vanilla clients (the safe group stays host-only).
+local function _is_adventure_safe_mutator(name, tmpl)
+    return type(tmpl) == "table"
+        and tmpl.display_name and tmpl.description
+        and not tmpl.hide_from_player_ui
+        and not (tmpl.packages and next(tmpl.packages))
+        and not _CURSE_BROKEN_IN_ADVENTURE[name]   -- weave/deus-only crashers
+end
+
+local _displayable_cache
+local function displayable_registered_mutators()
+    if _displayable_cache then
+        return _displayable_cache
+    end
     local out = {}
-    for ci = 1, #MUTATOR_CATALOG do
-        local cat = MUTATOR_CATALOG[ci]
-        for mi = 1, #cat.mutators do
-            local id = cat.mutators[mi]
-            if mod:get("mut_" .. id) and mutator_allowed(id) then
-                out[#out + 1] = id
+    local MT = rawget(_G, "MutatorTemplates")
+    -- Require a NON-EMPTY table: don't memoize an empty set if this is ever
+    -- called before the settings tables finish populating.
+    if MT and next(MT) then
+        for name, tmpl in pairs(MT) do
+            if _is_adventure_safe_mutator(name, tmpl) then
+                out[name] = true
             end
+        end
+        _displayable_cache = out
+    end
+    return out
+end
+
+-- Package-bearing curse mutators whose checkbox is on. DLC-owned (free CW /
+-- Be'lakor content, so always true) + actually registered in MutatorTemplates.
+-- These ride the SAME live-event injection as everything else, but additionally
+-- trigger per-peer package preload + cursed-sky lighting (hooks near EOF).
+local function selected_curse_mutators()
+    local out = {}
+    local MT = rawget(_G, "MutatorTemplates")
+    for i = 1, #MANAGED_CURSES do
+        local c = MANAGED_CURSES[i]
+        if mod:get("mut_" .. c.id) and owns_dlc(c.dlc)
+           and (not MT or rawget(MT, c.id)) then
+            out[#out + 1] = c.id
         end
     end
     return out
 end
+
+-- Returns a flat list of mutator names whose individual checkboxes are on —
+-- the curated catalog PLUS every dynamically-discovered adventure-safe mutator,
+-- deduped. DLC-gated mutators owned by the host pass; un-owned ones are
+-- dropped so they never reach the lobby. (Package-bearing curses are handled
+-- separately by selected_curse_mutators() — they aren't in this set.)
+local function selected_individual_mutators()
+    local out, seen = {}, {}
+    local function consider(id)
+        if not seen[id] and mod:get("mut_" .. id) and mutator_allowed(id) then
+            seen[id] = true
+            out[#out + 1] = id
+        end
+    end
+    for ci = 1, #MUTATOR_CATALOG do
+        local cat = MUTATOR_CATALOG[ci]
+        for mi = 1, #cat.mutators do
+            consider(cat.mutators[mi])
+        end
+    end
+    for id in pairs(displayable_registered_mutators()) do
+        consider(id)
+    end
+    return out
+end
+
+_rt_register("dynamic_mutator_discovery", function()
+    -- Confirms the Deed-Mutators-Selector port is live: discovery must surface
+    -- adventure-safe mutators BEYOND the curated catalog, else "Other Mutators"
+    -- ships empty. Skips cleanly when the template table isn't loaded.
+    local MT = rawget(_G, "MutatorTemplates")
+    if not MT then return end
+    local curated = {}
+    for ci = 1, #MUTATOR_CATALOG do
+        for mi = 1, #MUTATOR_CATALOG[ci].mutators do
+            curated[MUTATOR_CATALOG[ci].mutators[mi]] = true
+        end
+    end
+    for id in pairs(displayable_registered_mutators()) do
+        if not curated[id] then return end
+    end
+    return "no uncurated adventure-safe mutators discovered — Other Mutators group would be empty"
+end)
 
 -- Combine preset mutators + individual checkbox mutators, deduped.
 local function gather_mutators()
@@ -367,6 +480,13 @@ local function gather_mutators()
     local individual = selected_individual_mutators()
     for i = 1, #individual do
         add(individual[i])
+    end
+
+    -- Package-bearing Chaos Wastes / Be'lakor curses. Same injection path; the
+    -- MutatorHandler._activate_mutator hook preloads their package on each peer.
+    local curses = selected_curse_mutators()
+    for i = 1, #curses do
+        add(curses[i])
     end
 
     return out
@@ -436,7 +556,19 @@ mod:hook("BackendInterfaceLiveEventsPlayfab", "get_special_events", function (fu
     local mutators = gather_mutators()
     if #mutators == 0 then
         -- Original is either Fatshark's list (suppress off) or nil
-        -- (suppress on with no injection of our own).
+        -- (suppress on with no injection of our own). Log the pass-through so
+        -- the log unambiguously shows event_tweaker injected NOTHING and what
+        -- (if anything) Fatshark is serving — distinguishes "ET caused it" from
+        -- "a real live event" when debugging.
+        local orig = {}
+        if type(original) == "table" then
+            for i = 1, #original do
+                local e = original[i]
+                orig[i] = (type(e) == "table" and tostring(e.name)) or tostring(e)
+            end
+        end
+        mod:debug("[event-inject] injecting NOTHING (no preset/mutator/curse selected); suppress=%s; Fatshark special_events pass-through=[%s]",
+            tostring(suppress), table.concat(orig, ","))
         return original or {}
     end
     -- Use the preset name if one is selected (matches the active_events
@@ -573,16 +705,25 @@ mod:command("event_active", "List currently-active mutators in the loaded game m
 end)
 
 mod:command("event_clear", "Uncheck every individual mutator (preset untouched)", function()
-    local n = 0
+    local n, seen = 0, {}
+    local function clear(id)
+        if not seen[id] and mod:get("mut_" .. id) then
+            seen[id] = true
+            mod:set("mut_" .. id, false, false)
+            n = n + 1
+        end
+    end
     for ci = 1, #MUTATOR_CATALOG do
         local cat = MUTATOR_CATALOG[ci]
         for mi = 1, #cat.mutators do
-            local id = cat.mutators[mi]
-            if mod:get("mut_" .. id) then
-                mod:set("mut_" .. id, false, false)
-                n = n + 1
-            end
+            clear(cat.mutators[mi])
         end
+    end
+    for id in pairs(displayable_registered_mutators()) do
+        clear(id)
+    end
+    for i = 1, #MANAGED_CURSES do
+        clear(MANAGED_CURSES[i].id)
     end
     mod:echo("[event] cleared %d mutators", n)
 end)
@@ -683,6 +824,212 @@ mod.on_setting_changed = function(setting_id)
         apply_now("event_preset changed")
     elseif setting_id == "suppress_live_event" then
         apply_now("suppress_live_event changed")
+    end
+end
+
+-- ============================================================
+-- Cursed Adventure — package preload + cursed-sky lighting
+-- ============================================================
+-- Makes the package-bearing Chaos Wastes / Be'lakor curses (MANAGED_CURSES)
+-- actually run on a standard adventure mission. Two hooks:
+--   1. MutatorHandler._activate_mutator — a method called on the HOST (via
+--      activate_mutators) AND on every CLIENT (via rpc_activate_mutator_client
+--      -> activate_mutator), so each peer SYNC-loads the curse's resource
+--      package locally, exactly as DeusRunState.set_event_mutators does per
+--      peer. Clients need it too: spawn_network_unit replicates a husk whose
+--      unit lives in that package. Sync load (Managers.package:load 4th arg
+--      false) = ready before the first in-mission spawn; no async race.
+--   2. CameraManager.shading_callback — per-frame ShadingEnvironment-var tint
+--      for the active curse's Chaos god (profiles copied from
+--      chaos_wastes_tweaker.lua:3247). Blends multiplicatively on the level's
+--      baked atmosphere; the engine re-seeds every frame so it reverts for
+--      free when no curse is active. Client-side cosmetic, no RPC.
+-- Both are gated to the ADVENTURE mechanism so a real Chaos Wastes run (where
+-- DeusRunState already loads the package and ct already tints) is untouched.
+do
+    local ET_CURSE_PKG_REF = "event_tweaker_curse_package"
+    local _loaded_curse_packages = {}   -- pkg_name -> true (our refs to balance)
+    local _active_curse_god = nil        -- cached for the per-frame shading hook
+
+    local function _is_adventure_mechanism()
+        local mm = rawget(_G, "Managers") and Managers.mechanism
+        if not mm or not mm.current_mechanism_name then return true end
+        local ok, name = pcall(mm.current_mechanism_name, mm)
+        if not ok then return true end
+        return name == "adventure"
+    end
+
+    -- Recompute which Chaos god (if any) the currently-active curses theme, for
+    -- the sky tint. Cheap; called on activate/deactivate only. When several
+    -- curses of different gods are active, the lowest curse-name alphabetically
+    -- wins — DETERMINISTIC so every peer agrees on one tint (pairs() order is
+    -- unspecified and would diverge host vs client).
+    local function _refresh_active_curse_god()
+        local gm = Managers.state and Managers.state.game_mode
+        local handler = gm and gm._mutator_handler
+        local active = handler and handler._active_mutators
+        local candidates = {}
+        if active then
+            for name, _ in pairs(active) do
+                if _CURSE_TO_GOD[name] then candidates[#candidates + 1] = name end
+            end
+        end
+        table.sort(candidates)
+        _active_curse_god = candidates[1] and _CURSE_TO_GOD[candidates[1]] or nil
+    end
+
+    local function _maybe_preload_curse_package(name)
+        if not _is_adventure_mechanism() then return end
+        local MT = rawget(_G, "MutatorTemplates")
+        local tmpl = MT and rawget(MT, name)
+        if not (tmpl and tmpl.packages and next(tmpl.packages) and _CURSE_TO_GOD[name]) then
+            return
+        end
+        local pm = rawget(_G, "Managers") and Managers.package
+        if not pm then return end
+        for _, pkg in ipairs(tmpl.packages) do
+            if not _loaded_curse_packages[pkg] and not pm:has_loaded(pkg, ET_CURSE_PKG_REF) then
+                local ok = pcall(pm.load, pm, pkg, ET_CURSE_PKG_REF, nil, false)  -- false = SYNC
+                if ok then
+                    _loaded_curse_packages[pkg] = true
+                    _dbg("[curse] preloaded %s for %s", pkg, name)
+                else
+                    _dbg_alert("[curse] FAILED to preload %s for %s", pkg, name)
+                end
+            end
+        end
+    end
+
+    -- Hook BOTH the per-mutator activate (host loop + client RPC) and deactivate
+    -- so the package is ready before activation and the god cache stays current.
+    mod:hook("MutatorHandler", "_activate_mutator", function(func, self, name, ...)
+        _maybe_preload_curse_package(name)
+        local a, b = func(self, name, ...)
+        if _CURSE_TO_GOD[name] then _refresh_active_curse_god() end
+        -- Log EVERY mutator the handler activates (ours OR vanilla/Fatshark), so
+        -- the log shows the full active set. Cross-reference with the
+        -- [event-inject] line: a name here that also appears there is
+        -- event_tweaker's; one here WITHOUT a matching inject is the base game's.
+        _dbg("[mutator-active] '%s' (server=%s)", tostring(name), tostring(self._is_server))
+        return a, b
+    end)
+    mod:hook("MutatorHandler", "_deactivate_mutator", function(func, self, name, ...)
+        local a, b = func(self, name, ...)
+        if _CURSE_TO_GOD[name] then _refresh_active_curse_god() end
+        return a, b
+    end)
+
+    -- Hot-join safety. A client joining MID-mission instantiates already-spawned
+    -- curse husks during game-object sync, which the engine performs BEFORE it
+    -- sends the mutator-activate RPC (peer_states.lua) — so the _activate_mutator
+    -- load above would arrive too late and World.spawn_unit on the unloaded
+    -- package would hard-crash the joiner. MutatorHandler.init already knows the
+    -- mutator list at construction (host: the `mutators` arg; client: the
+    -- network-synced _initialized_mutator_map, populated BEFORE game objects), so
+    -- preload here too — on every peer, ahead of any husk. Belt-and-suspenders
+    -- with the _activate_mutator load (normal-join + host).
+    mod:hook_safe("MutatorHandler", "init", function(self, mutators)
+        local names = {}
+        if type(mutators) == "table" then
+            for i = 1, #mutators do names[mutators[i]] = true end
+        end
+        local map = self._initialized_mutator_map
+        if type(map) == "table" then
+            -- Shape is engine-internal; harvest any string key OR value as a
+            -- candidate mutator name (name-keyed or id->name, both covered).
+            for k, v in pairs(map) do
+                if type(k) == "string" then names[k] = true end
+                if type(v) == "string" then names[v] = true end
+            end
+        end
+        for name in pairs(names) do
+            _maybe_preload_curse_package(name)
+        end
+    end)
+
+    -- Balance the package ref-count + clear the cache on mission exit (per peer).
+    -- Only drop an entry whose unload actually succeeded (a pcall failure on a
+    -- divergent ref must keep the entry so it isn't orphaned / silently leaked).
+    mod:hook_safe("StateIngame", "on_exit", function(self)
+        local pm = rawget(_G, "Managers") and Managers.package
+        if pm then
+            for pkg in pairs(_loaded_curse_packages) do
+                if pcall(pm.unload, pm, pkg, ET_CURSE_PKG_REF) then
+                    _loaded_curse_packages[pkg] = nil
+                end
+            end
+        end
+        _active_curse_god = nil
+    end)
+
+    -- Per-god multiplicative sky/atmosphere tints (copied verbatim from
+    -- chaos_wastes_tweaker.lua:3247 _CURSE_SKY_PROFILES, user-tuned values).
+    local _CURSE_SKY_PROFILES = {
+        khorne = {
+            skydome_tint_color = {1.32, 0.51, 0.44}, sun_color = {1.21, 0.76, 0.62},
+            secondary_sun_color = {1.14, 0.65, 0.58}, ambient_tint = {1.04, 0.69, 0.62},
+            ambient_tint_top = {1.14, 0.58, 0.51}, fog_color = {1.39, 0.48, 0.44},
+            exposure_mul = 0.95,
+        },
+        nurgle = {
+            skydome_tint_color = {0.78, 1.05, 0.55}, sun_color = {1.05, 1.02, 0.65},
+            secondary_sun_color = {0.92, 0.98, 0.66}, ambient_tint = {0.88, 0.95, 0.68},
+            ambient_tint_top = {0.82, 1.00, 0.60}, fog_color = {0.80, 1.05, 0.55},
+            exposure_mul = 1.00,
+        },
+        tzeentch = {
+            skydome_tint_color = {0.62, 0.76, 1.35}, sun_color = {1.39, 0.72, 0.44},
+            secondary_sun_color = {1.28, 0.79, 0.55}, ambient_tint = {1.25, 0.86, 0.58},
+            ambient_tint_top = {1.32, 0.76, 0.48}, fog_color = {0.76, 0.83, 1.21},
+            exposure_mul = 1.04,
+        },
+        slaanesh = {
+            skydome_tint_color = {1.35, 0.50, 1.15}, sun_color = {1.30, 0.85, 0.95},
+            secondary_sun_color = {1.20, 0.65, 1.05}, ambient_tint = {1.15, 0.65, 1.05},
+            ambient_tint_top = {1.30, 0.55, 1.20}, fog_color = {1.25, 0.40, 1.10},
+            exposure_mul = 0.97,
+        },
+        belakor = {
+            skydome_tint_color = {0.40, 0.25, 0.65}, sun_color = {0.50, 0.50, 0.85},
+            secondary_sun_color = {0.55, 0.50, 0.90}, ambient_tint = {0.75, 0.65, 1.00},
+            ambient_tint_top = {0.60, 0.55, 1.00}, fog_color = {0.40, 0.30, 0.75},
+            exposure_mul = 0.92,
+        },
+    }
+
+    local function _cursed_lighting_on()
+        return mod:get("cursed_lighting") ~= false  -- default ON
+    end
+
+    if rawget(_G, "CameraManager") and rawget(_G, "ShadingEnvironment") then
+        mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading_env, viewport)
+            -- Vanilla wraps its whole body in `if self._world == world` — only
+            -- touch the shading_env of the world this camera owns (UI / preview /
+            -- end-screen worlds also drive shading_callback). Mirror it.
+            if self._world ~= world then return end
+            if not _active_curse_god or not _cursed_lighting_on() then return end
+            if not _is_adventure_mechanism() then return end  -- leave real CW runs to ct
+            local profile = _CURSE_SKY_PROFILES[_active_curse_god]
+            if not profile then return end
+            local function mul_set(var)
+                local t = profile[var]
+                if not t then return end
+                local v = ShadingEnvironment.vector3(shading_env, var)
+                if v then
+                    ShadingEnvironment.set_vector3(shading_env, var,
+                        Vector3(v.x * t[1], v.y * t[2], v.z * t[3]))
+                end
+            end
+            mul_set("skydome_tint_color"); mul_set("sun_color")
+            mul_set("secondary_sun_color"); mul_set("ambient_tint")
+            mul_set("ambient_tint_top"); mul_set("fog_color")
+            if profile.exposure_mul and profile.exposure_mul ~= 1.0 then
+                local cur = ShadingEnvironment.scalar(shading_env, "exposure")
+                if cur then
+                    ShadingEnvironment.set_scalar(shading_env, "exposure", cur * profile.exposure_mul)
+                end
+            end
+        end)
     end
 end
 

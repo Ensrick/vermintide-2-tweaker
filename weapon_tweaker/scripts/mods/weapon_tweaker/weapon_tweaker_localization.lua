@@ -2,9 +2,12 @@ local mod = get_mod("wt")
 
 local loc = {
     mod_name = { en = "Tweaker: Weapons" },
-    mod_description = { en = "Weapon unlock and runtime experimentation for Vermintide 2. Requires VMF." },
+    mod_description = { en = "Lets each character wield weapons that normally belong to other characters, plus optional changes to how some weapons behave. Requires the Vermintide Mod Framework." },
     -- Top-level groups
     weapon_availability = { en = "Weapon Availability" },
+
+    wt_brett_sword_shield_buff = { en = "Bretonnian Sword and Shield buff" },
+    wt_brett_sword_shield_buff_tooltip = { en = "Makes the Bretonnian sword and shield hit harder and faster, with extra damage against headshots, monsters, and berserkers. Its third heavy, second light, and push follow-up attacks gain an added bonus." },
     -- Per-character containers (v0.12.103-dev restructure 2026-05-30:
     -- characters at top, melee/ranged nested inside each char)
     char_kruber = { en = "Kruber" },
@@ -122,9 +125,9 @@ local loc = {
     unlock_es_mercenary_we_shortbow = { en = "Kerillian: Swift Bow" },
     unlock_es_mercenary_we_shortbow_hagbane = { en = "Kerillian: Hagbane Short Bow" },
     unlock_es_mercenary_we_javelin = { en = "Kerillian: Javelin" },
-    unlock_es_mercenary_we_life_staff = { en = "Kerillian: Deepwood Staff" },
     unlock_es_mercenary_wh_brace_of_pistols = { en = "Saltzpyre: Brace of Pistols" },
     unlock_es_mercenary_wh_crossbow_repeater = { en = "Saltzpyre: Volley Crossbow" },
+    unlock_es_mercenary_wh_crossbow = { en = "Saltzpyre: Crossbow" },
     unlock_es_mercenary_wh_deus_01 = { en = "Saltzpyre: Griffon-foot" },
     unlock_es_mercenary_wh_repeating_pistols = { en = "Saltzpyre: Repeating Pistol" },
     unlock_es_mercenary_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
@@ -191,9 +194,9 @@ local loc = {
     unlock_es_huntsman_we_shortbow = { en = "Kerillian: Swift Bow" },
     unlock_es_huntsman_we_shortbow_hagbane = { en = "Kerillian: Hagbane Short Bow" },
     unlock_es_huntsman_we_javelin = { en = "Kerillian: Javelin" },
-    unlock_es_huntsman_we_life_staff = { en = "Kerillian: Deepwood Staff" },
     unlock_es_huntsman_wh_brace_of_pistols = { en = "Saltzpyre: Brace of Pistols" },
     unlock_es_huntsman_wh_crossbow_repeater = { en = "Saltzpyre: Volley Crossbow" },
+    unlock_es_huntsman_wh_crossbow = { en = "Saltzpyre: Crossbow" },
     unlock_es_huntsman_wh_deus_01 = { en = "Saltzpyre: Griffon-foot" },
     unlock_es_huntsman_wh_repeating_pistols = { en = "Saltzpyre: Repeating Pistol" },
     unlock_es_huntsman_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
@@ -261,9 +264,9 @@ local loc = {
     unlock_es_knight_we_shortbow = { en = "Kerillian: Swift Bow" },
     unlock_es_knight_we_shortbow_hagbane = { en = "Kerillian: Hagbane Short Bow" },
     unlock_es_knight_we_javelin = { en = "Kerillian: Javelin" },
-    unlock_es_knight_we_life_staff = { en = "Kerillian: Deepwood Staff" },
     unlock_es_knight_wh_brace_of_pistols = { en = "Saltzpyre: Brace of Pistols" },
     unlock_es_knight_wh_crossbow_repeater = { en = "Saltzpyre: Volley Crossbow" },
+    unlock_es_knight_wh_crossbow = { en = "Saltzpyre: Crossbow" },
     unlock_es_knight_wh_deus_01 = { en = "Saltzpyre: Griffon-foot" },
     unlock_es_knight_wh_repeating_pistols = { en = "Saltzpyre: Repeating Pistol" },
     unlock_es_knight_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
@@ -331,9 +334,9 @@ local loc = {
     unlock_es_questingknight_we_shortbow = { en = "Kerillian: Swift Bow" },
     unlock_es_questingknight_we_shortbow_hagbane = { en = "Kerillian: Hagbane Short Bow" },
     unlock_es_questingknight_we_javelin = { en = "Kerillian: Javelin" },
-    unlock_es_questingknight_we_life_staff = { en = "Kerillian: Deepwood Staff" },
     unlock_es_questingknight_wh_brace_of_pistols = { en = "Saltzpyre: Brace of Pistols" },
     unlock_es_questingknight_wh_crossbow_repeater = { en = "Saltzpyre: Volley Crossbow" },
+    unlock_es_questingknight_wh_crossbow = { en = "Saltzpyre: Crossbow" },
     unlock_es_questingknight_wh_deus_01 = { en = "Saltzpyre: Griffon-foot" },
     unlock_es_questingknight_wh_repeating_pistols = { en = "Saltzpyre: Repeating Pistol" },
     unlock_es_questingknight_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
@@ -782,15 +785,12 @@ local loc = {
     unlock_wh_captain_es_handgun = { en = "Kruber: Handgun" },
     unlock_wh_captain_es_repeating_handgun = { en = "Kruber: Repeater Handgun" },
     -- Bardin batch BS-A (2026-05-31)
-    unlock_wh_captain_dr_1h_axe = { en = "Bardin: 1H Axe" },
-    unlock_wh_captain_dr_1h_hammer = { en = "Bardin: 1H Hammer" },
     unlock_wh_captain_dr_2h_axe = { en = "Bardin: Greataxe" },
     unlock_wh_captain_dr_2h_cog_hammer = { en = "Bardin: Cog Hammer" },
     unlock_wh_captain_dr_2h_hammer = { en = "Bardin: 2H Hammer" },
     unlock_wh_captain_dr_2h_pick = { en = "Bardin: Pickaxe" },
     -- Bardin batch BS-B (2026-05-31)
     unlock_wh_captain_dr_dual_wield_axes = { en = "Bardin: Dual Axes" },
-    unlock_wh_captain_dr_dual_wield_hammers = { en = "Bardin: Dual Hammers" },
     unlock_wh_captain_dr_1h_throwing_axes = { en = "Bardin: Throwing Axes" },
     unlock_wh_captain_dr_rakegun = { en = "Bardin: Grudge-Raker" },
     unlock_wh_captain_dr_drake_pistol = { en = "Bardin: Drakefire Pistols" },
@@ -821,7 +821,6 @@ local loc = {
     unlock_wh_captain_bw_necromancy_staff = { en = "Sienna: Soulstealer Staff" },
     unlock_wh_captain_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
     unlock_wh_captain_we_javelin = { en = "Kerillian: Javelin" },
-    unlock_wh_captain_we_life_staff = { en = "Kerillian: Deepwood Staff" },
     -- Shield-combos override (2026-06-04): all 7 → wh_dual_wield_axe_falchion
     unlock_wh_captain_es_mace_shield = { en = "Kruber: Mace and Shield" },
     unlock_wh_captain_es_sword_shield = { en = "Kruber: Sword and Shield" },
@@ -865,15 +864,12 @@ local loc = {
     unlock_wh_bountyhunter_es_handgun = { en = "Kruber: Handgun" },
     unlock_wh_bountyhunter_es_repeating_handgun = { en = "Kruber: Repeater Handgun" },
     -- Bardin batch BS-A (2026-05-31)
-    unlock_wh_bountyhunter_dr_1h_axe = { en = "Bardin: 1H Axe" },
-    unlock_wh_bountyhunter_dr_1h_hammer = { en = "Bardin: 1H Hammer" },
     unlock_wh_bountyhunter_dr_2h_axe = { en = "Bardin: Greataxe" },
     unlock_wh_bountyhunter_dr_2h_cog_hammer = { en = "Bardin: Cog Hammer" },
     unlock_wh_bountyhunter_dr_2h_hammer = { en = "Bardin: 2H Hammer" },
     unlock_wh_bountyhunter_dr_2h_pick = { en = "Bardin: Pickaxe" },
     -- Bardin batch BS-B (2026-05-31)
     unlock_wh_bountyhunter_dr_dual_wield_axes = { en = "Bardin: Dual Axes" },
-    unlock_wh_bountyhunter_dr_dual_wield_hammers = { en = "Bardin: Dual Hammers" },
     unlock_wh_bountyhunter_dr_1h_throwing_axes = { en = "Bardin: Throwing Axes" },
     unlock_wh_bountyhunter_dr_rakegun = { en = "Bardin: Grudge-Raker" },
     unlock_wh_bountyhunter_dr_drake_pistol = { en = "Bardin: Drakefire Pistols" },
@@ -904,7 +900,6 @@ local loc = {
     unlock_wh_bountyhunter_bw_necromancy_staff = { en = "Sienna: Soulstealer Staff" },
     unlock_wh_bountyhunter_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
     unlock_wh_bountyhunter_we_javelin = { en = "Kerillian: Javelin" },
-    unlock_wh_bountyhunter_we_life_staff = { en = "Kerillian: Deepwood Staff" },
     -- Shield-combos override (2026-06-04): all 7 → wh_dual_wield_axe_falchion
     unlock_wh_bountyhunter_es_mace_shield = { en = "Kruber: Mace and Shield" },
     unlock_wh_bountyhunter_es_sword_shield = { en = "Kruber: Sword and Shield" },
@@ -948,15 +943,12 @@ local loc = {
     unlock_wh_zealot_es_handgun = { en = "Kruber: Handgun" },
     unlock_wh_zealot_es_repeating_handgun = { en = "Kruber: Repeater Handgun" },
     -- Bardin batch BS-A (2026-05-31)
-    unlock_wh_zealot_dr_1h_axe = { en = "Bardin: 1H Axe" },
-    unlock_wh_zealot_dr_1h_hammer = { en = "Bardin: 1H Hammer" },
     unlock_wh_zealot_dr_2h_axe = { en = "Bardin: Greataxe" },
     unlock_wh_zealot_dr_2h_cog_hammer = { en = "Bardin: Cog Hammer" },
     unlock_wh_zealot_dr_2h_hammer = { en = "Bardin: 2H Hammer" },
     unlock_wh_zealot_dr_2h_pick = { en = "Bardin: Pickaxe" },
     -- Bardin batch BS-B (2026-05-31)
     unlock_wh_zealot_dr_dual_wield_axes = { en = "Bardin: Dual Axes" },
-    unlock_wh_zealot_dr_dual_wield_hammers = { en = "Bardin: Dual Hammers" },
     unlock_wh_zealot_dr_1h_throwing_axes = { en = "Bardin: Throwing Axes" },
     unlock_wh_zealot_dr_rakegun = { en = "Bardin: Grudge-Raker" },
     unlock_wh_zealot_dr_drake_pistol = { en = "Bardin: Drakefire Pistols" },
@@ -987,7 +979,6 @@ local loc = {
     unlock_wh_zealot_bw_necromancy_staff = { en = "Sienna: Soulstealer Staff" },
     unlock_wh_zealot_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
     unlock_wh_zealot_we_javelin = { en = "Kerillian: Javelin" },
-    unlock_wh_zealot_we_life_staff = { en = "Kerillian: Deepwood Staff" },
     -- Shield-combos override (2026-06-04): all 7 → wh_dual_wield_axe_falchion
     unlock_wh_zealot_es_mace_shield = { en = "Kruber: Mace and Shield" },
     unlock_wh_zealot_es_sword_shield = { en = "Kruber: Sword and Shield" },
@@ -1069,118 +1060,31 @@ local loc = {
     --  career_action_injection, force_bretonnian_shield_unlock) — flagged by
     -- qa/check_name_integrity.ps1, referenced nowhere in lua/data (only in a comment).
     -- Weapon override toggles (template patches that change weapon behavior)
-    weapon_overrides = { en = "Weapon Overrides" },
-    weapon_overrides_description = { en = "Toggleable behavior changes that patch existing weapon templates." },
+    weapon_overrides = { en = "Weapon Tweaks" },
+    weapon_overrides_description = { en = "Optional changes to how certain weapons behave." },
     authentic_brace_of_pistols = { en = "Authentic Brace of Pistols" },
-    authentic_brace_of_pistols_description = { en = "Flintlock-style Brace of Pistols rework:\n• Handgun damage (armor-piercing, shield-breaking); flat distance dropoff.\n• Single-shot only; no aim/rapid-fire, no manual reload (auto-chambers like bows).\n• Ammo 24 → 12. Spread widened x4 on every stance.\n\nRequires restart." },
-    moonfire_cosmetic_puff = { en = "Moonfire Bow: cosmetic AOE puff" },
-    moonfire_cosmetic_puff_description = { en = "Spawns the small blue moonfire puff on every Moonfire Bow hit. Cosmetic only. Overridden by the AOE revert toggle when both are on." },
+    authentic_brace_of_pistols_description = { en = "Reworks the Brace of Pistols into a single-shot flintlock: shots pierce armor, break shields, and keep the same damage at any range, with no aim mode, rapid fire, or manual reload. Total ammo drops from 24 to 12 and the spread is much wider. Requires a restart." },
+    wt_priest_punch_buff = { en = "Warrior Priest punch: 3x stagger, 2x damage" },
+    wt_priest_punch_buff_description = { en = "Makes the Warrior Priest greathammer's special punch stagger about three times as hard and deal double damage. Works in multiplayer as long as everyone runs this mod. Off by default." },
     moonfire_aoe_revert = { en = "Moonfire Bow: revert pre-nerf AOE" },
-    moonfire_aoe_revert_description = { en = "Restores pre-nerf Moonfire Bow: every arrow detonates in a 1.5m AOE on impact (0.75m max-damage core). No friendly fire. Damage host-side; VFX everywhere. Overrides the cosmetic puff toggle." },
+    moonfire_aoe_revert_description = { en = "Restores the old Moonfire Bow: every arrow bursts in a small area (about 1.5 metres) on impact, with no friendly fire. The bonus damage only applies when you are the host. The matching visual burst is a separate option in the Tweaker: Cosmetics mod." },
 
-    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-    -- v0.12.81-dev: renamed from `wt_debug_mode` (was nested in
-    -- `diagnostics_group`) to the universal `enable_debug_logging` key.
-    enable_debug_logging         = { en = "Debug Logging" },
-    enable_debug_logging_tooltip = { en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable." },
+    -- (enable_debug_logging removed v0.12.176-dev — #169; diagnostics route through VMF mod:debug)
+    enable_dev_anim_picker         = { en = "Dev: 3P Anim Picker (tuning only)" },
+    enable_dev_anim_picker_tooltip = { en = "Turns on the in-game third-person animation picker, which lists cross-character weapons that still need animation work and lets you choose each attack's third-person animation live, without a restart. Only the third-person view is affected; turn it off to hide the list." },
 
-    -- Weapon traits (adventure pool filter)
-    weapon_traits                  = { en = "Weapon Traits (Adventure)" },
-    weapon_traits_description      = { en = "Trait roll pool for adventure/modded crafting. Adventure traits on by default; CW traits require Crafting in Modded." },
-    adventure_melee_traits         = { en = "Adventure Melee Traits" },
-    adventure_ranged_traits        = { en = "Adventure Ranged Traits" },
-    cw_melee_traits                = { en = "Chaos Wastes Melee Traits" },
-    cw_melee_traits_description    = { en = "Adds CW melee traits to the adventure crafting pool. CW-restricted traits (Home Run, Shield of Splinters, Always Blocking, etc.) only roll on weapons that originally supported them." },
-    cw_ranged_traits               = { en = "Chaos Wastes Ranged Traits" },
-    cw_ranged_traits_description   = { en = "Adds CW ranged traits to the adventure crafting pool. CW-restricted traits only roll on weapons that originally supported them." },
-
-    -- Adventure melee traits
-    trait_melee_attack_speed_on_crit               = { en = "Swift Slaying" },
-    trait_melee_attack_speed_on_crit_description   = { en = "Critical hits grant +20%% attack speed for 5 seconds." },
-    trait_melee_timed_block_cost                   = { en = "Parry" },
-    trait_melee_timed_block_cost_description       = { en = "Timed blocks cost no stamina." },
-    trait_melee_counter_push_power                 = { en = "Off Balance" },
-    trait_melee_counter_push_power_description     = { en = "Pushes against attacks gain 50%% bonus push power." },
-    trait_melee_increase_damage_on_block           = { en = "Heroic Intervention" },
-    trait_melee_increase_damage_on_block_description = { en = "Blocking an attack increases damage taken on the attacker by 20%% for 5 seconds." },
-    trait_melee_reduce_cooldown_on_crit            = { en = "Resourceful Combatant" },
-    trait_melee_reduce_cooldown_on_crit_description = { en = "Critical hits reduce career skill cooldown by 5%%." },
-    trait_melee_shield_on_assist                   = { en = "Opportunist" },
-    trait_melee_shield_on_assist_description       = { en = "Assisting an ally grants 15 temporary HP to both of you." },
-
-    -- Adventure ranged traits
-    trait_ranged_restore_stamina_headshot                       = { en = "Inspirational Shot" },
-    trait_ranged_restore_stamina_headshot_description           = { en = "Headshots replenish nearby allies' stamina." },
-    trait_ranged_replenish_ammo_headshot                        = { en = "Scrounger" },
-    trait_ranged_replenish_ammo_headshot_description            = { en = "Headshots restore 1 ammo." },
-    trait_ranged_replenish_ammo_on_crit                         = { en = "Conservative Shooter" },
-    trait_ranged_replenish_ammo_on_crit_description             = { en = "Critical hits restore 5%% of max ammo." },
-    trait_ranged_reduce_cooldown_on_crit                        = { en = "Resourceful Sharpshooter" },
-    trait_ranged_reduce_cooldown_on_crit_description            = { en = "Ranged critical hits reduce career skill cooldown by 5%%." },
-    trait_ranged_increase_power_level_vs_armour_crit            = { en = "Hunter" },
-    trait_ranged_increase_power_level_vs_armour_crit_description = { en = "Ranged crits grant 25%% power vs the hit target's armor type for 10 seconds." },
-    trait_ranged_consecutive_hits_increase_power                = { en = "Barrage" },
-    trait_ranged_consecutive_hits_increase_power_description    = { en = "Consecutive ranged hits stack bonus power (up to 5 stacks, +5%% each)." },
-    trait_ranged_reduced_overcharge                             = { en = "Thermal Equalizer" },
-    trait_ranged_reduced_overcharge_description                 = { en = "Reduces overcharge generation by 20%%." },
-    trait_ranged_remove_overcharge_on_crit                      = { en = "Heat Sink" },
-    trait_ranged_remove_overcharge_on_crit_description          = { en = "Critical hits with overcharge weapons cost no overcharge." },
-
-    -- Chaos Wastes melee traits
-    cw_trait_stagger_aoe_on_crit                                  = { en = "[CW] Shockwave" },
-    cw_trait_stagger_aoe_on_crit_description                      = { en = "Critical hits create an AoE stagger around the target." },
-    cw_trait_armor_breaker                                        = { en = "[CW] Armor Breaker" },
-    cw_trait_armor_breaker_description                            = { en = "Killing armored enemies makes nearby enemies take more damage." },
-    cw_trait_shield_of_isha                                       = { en = "[CW] Shield of Isha (shields only)" },
-    cw_trait_shield_of_isha_description                           = { en = "Increases max damage taken before downing by 20." },
-    cw_trait_bloodthirst                                          = { en = "[CW] Bloodthirst" },
-    cw_trait_bloodthirst_description                              = { en = "Every 5 kills grants a stack of +2%% attack speed (5 max). Resets after 30s without a kill." },
-    cw_trait_headhunter                                           = { en = "[CW] Headhunter (melee + ranged)" },
-    cw_trait_headhunter_description                               = { en = "Headshots grant stacking damage. Stacks are consumed on use." },
-    cw_trait_home_run                                             = { en = "[CW] Home Run (2H hammers only)" },
-    cw_trait_home_run_description                                 = { en = "Charged heavy attacks launch enemies a long distance. Only applies to compatible 2H hammers." },
-    cw_trait_shield_splinters                                     = { en = "[CW] Shield of Splinters (melee + ranged)" },
-    cw_trait_shield_splinters_description                         = { en = "Generates temporary HP on hit. Only applies to weapons CW originally allowed it on." },
-    cw_trait_serrated_blade                                       = { en = "[CW] Serrated Blade (blades only)" },
-    cw_trait_serrated_blade_description                           = { en = "Slashing hits apply a damage-over-time bleed. Only applies to compatible bladed weapons." },
-    cw_trait_crescendo_strike                                     = { en = "[CW] Crescendo Strike" },
-    cw_trait_crescendo_strike_description                         = { en = "Consecutive light attacks increase damage." },
-    cw_trait_follow_up                                            = { en = "[CW] Follow Up" },
-    cw_trait_follow_up_description                                = { en = "Hitting an enemy you just hit deals bonus damage." },
-    cw_trait_always_blocking                                      = { en = "[CW] Always Blocking (shields only)" },
-    cw_trait_always_blocking_description                          = { en = "Briefly retain block after the input is released. Only applies to compatible shields." },
-    cw_trait_deus_big_swing_stagger                               = { en = "[CW] Big Swing Stagger (heavy 2H only)" },
-    cw_trait_deus_big_swing_stagger_description                   = { en = "Heavy attacks that hit multiple enemies grant a brief stagger-power buff." },
-    cw_trait_deus_crit_chain_lightning                            = { en = "[CW] Crit Chain Lightning (melee + ranged)" },
-    cw_trait_deus_crit_chain_lightning_description                = { en = "Critical hits chain lightning to nearby enemies. Only applies to weapons CW allowed it on." },
-    cw_trait_deus_collateral_damage_on_melee_killing_blow         = { en = "[CW] Collateral Damage" },
-    cw_trait_deus_collateral_damage_on_melee_killing_blow_description = { en = "Killing blows have a chance to deal collateral damage in an arc." },
-    cw_trait_melee_heal_on_crit                                   = { en = "[CW] Heal on Crit (Melee)" },
-    cw_trait_melee_heal_on_crit_description                       = { en = "Critical hits heal 5 HP." },
-
-    -- Chaos Wastes ranged traits
-    cw_trait_refilling_shot                                       = { en = "[CW] Refilling Shot" },
-    cw_trait_refilling_shot_description                           = { en = "Killing blows refill the chamber. Only applies to compatible ranged weapons." },
-    cw_trait_piercing_projectiles                                 = { en = "[CW] Piercing Projectile" },
-    cw_trait_piercing_projectiles_description                     = { en = "Projectiles pierce additional targets. Only applies to compatible projectile weapons." },
-    cw_trait_deus_extra_shot                                      = { en = "[CW] Extra Shot" },
-    cw_trait_deus_extra_shot_description                          = { en = "Increases max ammo. Only applies to compatible ranged weapons." },
-    cw_trait_deus_ranged_crit_explosion                           = { en = "[CW] Ranged Crit Explosion" },
-    cw_trait_deus_ranged_crit_explosion_description               = { en = "Ranged critical hits cause an explosion. Only applies to compatible ranged weapons." },
-    cw_trait_deus_ammo_pickup_reload_speed                        = { en = "[CW] Ammo Pickup Reload Speed" },
-    cw_trait_deus_ammo_pickup_reload_speed_description            = { en = "Picking up ammo grants a reload-speed buff. Only applies to compatible ranged weapons." },
 
     -- ============================================================
     -- Core's Big Rebalance integration
     -- ============================================================
     br_master                                       = { en = "[Big Rebalance]" },
-    br_master_description                           = { en = "Opt-in subset of Big Rebalance weapon changes. All toggles default OFF. REQUIRES 'Tweaker: Buffs' (bt) installed and its master toggle ON, then restart. Without bt master, every toggle here is inert." },
+    br_master_description                           = { en = "An optional set of Big Rebalance weapon changes, all switched off by default. They only take effect if the Tweaker: Buffs mod is installed with its main toggle on and the game is then restarted." },
 
     br_melee                                        = { en = "Melee" },
     br_melee_1h_hammer                              = { en = "1H Hammers" },
     br_1h_hammer_dodge_count                        = { en = "1H hammers: 4 dodges across families" },
     br_1h_hammer_light_down_speed                   = { en = "1H hammers: faster light-down animation" },
-    br_1h_hammer_heavy_gs_profile                   = { en = "1H hammers: heavy -> gs_1h_heavy profile" },
+    br_1h_hammer_heavy_gs_profile                   = { en = "1H hammers: heavy to gs_1h_heavy profile" },
     br_1h_hammer_heavy_range                        = { en = "1H hammers: heavy range_mod 1.2" },
     br_1h_hammer_tome_rework                        = { en = "Tome-hammer (WP) rework (mega-toggle)" },
     br_1h_hammer_wizard_rework                      = { en = "BW 1H hammer rework (mega-toggle)" },
@@ -1210,7 +1114,7 @@ local loc = {
 
     br_melee_dual                                   = { en = "Daggers / Dual Weapons" },
     br_dw_mace_sword                                = { en = "Dual mace+sword rework (mega-toggle)" },
-    br_1h_dagger_pushstab                           = { en = "1H dagger: pushstab -> default_right_heavy" },
+    br_1h_dagger_pushstab                           = { en = "1H dagger: pushstab to default_right_heavy" },
     br_dw_sword_dagger                              = { en = "Dual sword+dagger no-crit + speed" },
     br_dw_swords_speed                              = { en = "Dual swords heavy speed" },
     br_dw_daggers                                   = { en = "Dual daggers tuning (mega-toggle)" },
@@ -1228,10 +1132,10 @@ local loc = {
     br_melee_shield                                 = { en = "Shields / S+W / S+H" },
     br_flail_shield                                 = { en = "Flail+shield (mega-toggle)" },
     br_axe_shield_crit                              = { en = "Axe+shield light-bopp crit" },
-    br_1h_hammer_shield_heavy                       = { en = "1H hammer+shield: heavy-left -> heavy_slashing_tank" },
+    br_1h_hammer_shield_heavy                       = { en = "1H hammer+shield: heavy-left to heavy_slashing_tank" },
     br_sword_shield_emp                             = { en = "Empire sword+shield rework (mega-toggle)" },
     br_shield_slam_replace                          = { en = "Replace shield-slam damage profiles" },
-    br_shield_slam_replace_description              = { en = "Replaces shield_slam profiles with BR values (stagger_duration_modifier=1.75, shield_break). Full slam-rewrite hook depends on et's stagger rewrite — enable both for full intent." },
+    br_shield_slam_replace_description              = { en = "Gives shield slam attacks Big Rebalance's stronger stagger and shield-breaking. For the full effect, also enable the matching stagger option in the Tweaker: Enemies mod." },
 
     br_ranged                                       = { en = "Ranged" },
     br_ranged_bow                                   = { en = "Bows / Crossbows / Longbows" },
@@ -1272,7 +1176,7 @@ local loc = {
     br_bardin_survival_ale                          = { en = "Slayer survival ale drink anim 2x" },
     br_we_ww_trueflight                             = { en = "Way Watcher Trueflight + Piercing Shot (mega-toggle)" },
     br_sienna_scholar_skullshot                     = { en = "Scholar skullshot overcharge AOE" },
-    br_sienna_scholar_skullshot_description         = { en = "Adds AOE explosion to Scholar's ult shot. Note: tunes the generic overcharge_explosion profile which Unchained venting also uses." },
+    br_sienna_scholar_skullshot_description         = { en = "Adds an area explosion to the Pyromancer's ultimate shot. Because the effect is shared, it also changes Unchained's venting explosion." },
     br_vc_bh_shotgun_profile                        = { en = "Bounty Hunter shotgun (career) profile" },
     br_vc_wp_nuke                                   = { en = "Warrior Priest nuke explosion profile" },
     br_slayer_leap_landing                          = { en = "Slayer leap landing impact" },
@@ -1331,7 +1235,7 @@ local loc = {
     br_hook_trueflight_start                       = { en = "ActionTrueFlightBow start-action rework" },
     br_hook_trueflight_fire                         = { en = "ActionTrueFlightBow fire rework" },
     br_hook_shield_slam                             = { en = "ActionShieldSlam _hit rework (gate only)" },
-    br_hook_shield_slam_description                 = { en = "Gate-only toggle. Full slam rewrite needs BR helpers in et; the table-edit half is in br_shield_slam_replace under Melee > Shields." },
+    br_hook_shield_slam_description                 = { en = "Enables part of the shield slam rework. The full change also needs the Replace shield-slam damage profiles option here and the matching option in the Tweaker: Enemies mod." },
 
     br_wield                                        = { en = "Wield Permission Expansions" },
     br_wield_es_2h_heavy_spear                      = { en = "ES 2H heavy spear: add Merc + GK" },
@@ -1342,13 +1246,27 @@ local loc = {
 
     br_misc                                         = { en = "Misc & Cross-Cutting" },
     br_misc_chaos_raider_special_staggers           = { en = "Chaos Raider special-attack stagger ignore array" },
-    br_misc_chaos_raider_special_staggers_description = { en = "BR ships this in the weapon-changes file but it's a BreedActions edit. Belongs in et; here for parity." },
+    br_misc_chaos_raider_special_staggers_description = { en = "Changes how Chaos Raiders ignore stagger during their special attacks. Included mainly for completeness; it fits better with the enemy tweaks." },
     br_misc_tank_hit_mass_plague_monk               = { en = "Plague monk tank hit-mass = 0.5" },
     br_misc_status_dodge_count                      = { en = "Generic dodge_count = 2 baseline" },
-    br_misc_status_dodge_count_description          = { en = "Defaults dodge_count = 2 when unset. Full BR rewrite ships in et's stagger rewrite; enable both for full intent." },
+    br_misc_status_dodge_count_description          = { en = "Gives weapons without a set dodge count a baseline of two effective dodges. For the full change, also enable the matching option in the Tweaker: Enemies mod." },
     br_misc_weapons_meta_init                       = { en = "Weapons-table post-process init (recommended)" },
-    br_misc_weapons_meta_init_description           = { en = "Runs the BR meta-init loop (crosshair defaults, lookup_data, effective_against_combined, tap/hold ranges). Recommended whenever any other BR toggle is on." },
+    br_misc_weapons_meta_init_description           = { en = "Applies the shared setup the other Big Rebalance options rely on, such as crosshair defaults and attack ranges. Recommended whenever any other Big Rebalance option is on." },
+
+    -- v0.12.151-dev: wt_passive_charge_restore + _tooltip keys REMOVED — the
+    -- toggle was deleted and the passive overcharge-vent / Moonfire-Bow-regen
+    -- behavior is now implicit/always-on (mirrors native-career function).
 }
+
+-- Publish the raw loc table so the dev anim picker can resolve documented weapon
+-- names by direct lookup (mod._wt_loc_raw["unlock_<career>_<weapon>"].en) instead
+-- of mod:localize — which errors "(localize): localization file was not loaded" at
+-- this pre-registration phase and returns nothing usable (#197). MUST be set before
+-- the picker is dofiled + its loc_keys() runs below (that's when it reads names).
+-- The unlock entries here still carry their BASE names; the status-tag loop further
+-- down mutates this same table in place, so later reads see tags — the picker strips
+-- them. (Set on `mod` so the SCRIPT/DATA picker instances can read it too.)
+mod._wt_loc_raw = loc
 
 -- Dev tooling loc keys: each dev module owns its own loc_keys() table; we
 -- merge them in here so we don't have to maintain dual loc lists. Each module
@@ -1359,5 +1277,53 @@ local _wt_dev_anim_picker_loc = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_a
 local _wt_dev_hold_pose_loc   = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_hold_pose")
 for k, v in pairs(_wt_dev_anim_picker_loc.loc_keys()) do loc[k] = v end
 for k, v in pairs(_wt_dev_hold_pose_loc.loc_keys()) do loc[k] = v end
+
+-- ---------------------------------------------------------------------------
+-- v0.12.141-dev: COMPUTED Weapon-Availability STATUS TAGS (3P-only).
+-- ---------------------------------------------------------------------------
+-- The `unlock_*` labels above historically carried HAND-TYPED tag prefixes
+-- ("[untested]" / "[confirmed working]" / bare). 299 of 947 entries were left
+-- bare and several confirmed ports (Saltzpyre's Flail = es_1h_flail, Bardin's
+-- Greataxe = dr_2h_axe) read "[untested]" or nothing. This pass REPLACES every
+-- hand-typed prefix with a tag derived from the real per-(career, weapon) 3P
+-- status (wt_port_status.lua — the same source the picker uses), so NO weapon
+-- is untagged and the Availability menu stays in lockstep with the picker.
+-- Vocabulary: [Working] / [Needs Animations] / [Needs Offsets] / [Untested].
+-- 3P-only: status never reflects any 1P state (1P is universal — never touched).
+local _port_status = mod:dofile("scripts/mods/weapon_tweaker/wt_port_status")
+local _unlock_data = mod:dofile("scripts/mods/weapon_tweaker/wt_unlock_data")
+
+-- Known careers (set form) so parse_unlock_id can find the career/weapon split.
+local _careers_set = {}
+if _unlock_data and _unlock_data.weapon_unlock_map then
+    for career in pairs(_unlock_data.weapon_unlock_map) do _careers_set[career] = true end
+end
+
+-- Strip a leading "[...]" tag (any case) + following spaces from a label, so the
+-- computed tag replaces the old hand-typed one instead of stacking on it.
+local function _strip_leading_tag(s)
+    return (s:gsub("^%s*%b[]%s*", ""))
+end
+
+for key, entry in pairs(loc) do
+    if type(key) == "string" and key:find("^unlock_") and type(entry) == "table" and entry.en then
+        local career, weapon_key = _port_status.parse_unlock_id(key, _careers_set)
+        if career and weapon_key then
+            local tag  = _port_status.tag(career, weapon_key)
+            local base = _strip_leading_tag(entry.en)
+            -- v0.12.142-dev: for a [Needs Animations] port, fold the redirect
+            -- target INTO the tag ("[Needs Animations → Greathammer]") so the row
+            -- shows BOTH what it needs AND which weapon's 3P anims it borrows.
+            -- [Working] (fully functional) / [Needs Offsets] / [Untested] carry no
+            -- redirect (redirect_target returns nil for them), so they read plainly.
+            local redirect = _port_status.redirect_target(career, weapon_key)
+            if redirect and tag == "[Needs Animations]" then
+                -- redirect is "[<Target>]" — splice into the tag's own brackets.
+                tag = "[Needs Animations → " .. redirect:sub(2, -2) .. "]"
+            end
+            entry.en = tag .. " " .. base
+        end
+    end
+end
 
 return loc

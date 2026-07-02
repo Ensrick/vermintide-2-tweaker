@@ -1,5 +1,36 @@
 # Modded Progression — Changelog
 
+## 0.2.12-dev (2026-07-01) — #174 loadout attribution probe (passive, log-only)
+
+### Why
+Issue #174: bot loadouts get replaced on startup by base blacksmith items in modded realm, and it is unclear which mod persists/restores them. mp is one of three loadout-adjacent suspects, so it gets a passive attribution probe. No gameplay change.
+
+### Changed
+- New `_diag_probe.lua` — rate-limited `printf` emitter for the `[174:loadout]` channel (logs on first-sight + on-change, startup window, hard flood cap). Writes via engine `printf` so it lands in the log with VMF mod logging OFF.
+- `_with_eac_off` now maintains `mod._mp_eac_depth`, exposed as `mod.is_eac_window()`. mp itself has no loadout write/restore path (it is a scaffolding stub); its only #174 relevance is that `_with_eac_off` un-gates vanilla progression, so the eac-window flag lets the cosmetics_tweaker chokepoint attribute any loadout write that lands while mp has the realm un-gated. The depth counter mirrors the existing eac-flag set/restore bracket exactly (byte-identical behaviour).
+- One load-time `[174:loadout]` line names mp as a non-writer with the eac-window instrumented.
+
+### Notes
+- No behaviour change, no new hooks on any loadout path. Not built, deployed, uploaded, or committed.
+
+### Files
+- `_diag_probe.lua` (new), `modded_progression.lua` (loader + eac-depth counter + load line; `MOD_VERSION` `0.2.11-dev` -> `0.2.12-dev`).
+
+## 0.2.11-dev (2026-07-01) — Fix double-localized widget fields; rewrite option descriptions for players
+
+### Why
+VMF's options module localizes each widget's `title` / `tooltip` / dropdown-option `text` field itself at menu build time (via `mod:localize`). The data tree was calling `mod:localize(...)` a second time on those fields, so the already-resolved string got fed back through `mod:localize`, which returned the value wrapped in angle brackets when treated as a key. Result: the starting-state tooltip and its three dropdown option labels rendered wrapped in `<...>`. The old tooltip/description text also used em dashes, non-ASCII bullet characters, and internal jargon (PlayFab, "local store", "seed").
+
+### Changed
+- `modded_progression_data.lua` — converted the 4 widget-level eager localizations to raw loc keys so VMF localizes them once: `tooltip = "starting_state_tooltip"` and the three dropdown option `text` fields (`start_fresh` / `start_level_35` / `start_level_35_unlocked`). The top-level mod `description = mod:localize("mod_description")` is the one correct eager-localize and is unchanged.
+- `modded_progression_localization.lua` — rewrote `mod_description`, `starting_state_tooltip`, and `starting_state_description` into short, plain-English player-facing text. Removed em dashes and non-ASCII bullets, dropped backend jargon in favour of "your progress is saved locally on your PC," and pointed users at the `/mp_reset` chat command to re-choose a starting state.
+
+### Notes
+- No loc keys were missing; all widget-referenced keys already existed. No keys, setting_ids, widget structure, or defaults were changed.
+- Not built, deployed, uploaded, or committed.
+
+## 0.2.10-dev (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
 ## 0.2.9-dev (2026-06-07) — Remove dead reset_progression loc keys (orphan-loc audit)
 
 ### Why

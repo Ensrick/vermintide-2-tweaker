@@ -1,4 +1,8 @@
 local mod = get_mod("event_tweaker")
+-- Shared curse catalog. require'd (NOT read off a mod._field) because VMF loads
+-- this data file BEFORE the .lua script — a script-set mod._field would be nil
+-- here. See event_tweaker_curses.lua's header.
+local Curses = require("scripts/mods/event_tweaker/event_tweaker_curses")
 
 -- ============================================================
 -- Mutator catalog (kept in sync with event_tweaker.lua's copy)
@@ -174,16 +178,83 @@ for i = 1, #CATEGORIES do
     }
 end
 
--- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
--- Appended LAST so it stays at the BOTTOM of the widget tree, top-level
--- (NOT inside any group), key `enable_debug_logging` verbatim across every
--- mod in the repo.
-widgets[#widgets + 1] = {
-    setting_id    = "enable_debug_logging",
-    type          = "checkbox",
-    default_value = false,
-    tooltip       = "enable_debug_logging_tooltip",
-}
+-- ============================================================
+-- "Other Mutators" group — dynamic discovery
+-- (ported from "Deed Mutators Selector", Workshop 3579882542)
+-- ============================================================
+-- Walk the live MutatorTemplates global and surface every registered mutator
+-- the engine flags player-facing (display_name + description) that ISN'T in a
+-- curated category, ISN'T package-bearing (those go in Cursed Adventure), ISN'T
+-- a Fatshark-hidden internal (hide_from_player_ui), and ISN'T a known
+-- adventure-crasher (mod._ET_CURSE_BROKEN — keep in lockstep with
+-- _is_adventure_safe_mutator in event_tweaker.lua). Labels come from the game's
+-- own localized strings, registered dynamically in event_tweaker_localization.
+do
+    local curated = {}
+    for i = 1, #CATEGORIES do
+        for j = 1, #CATEGORIES[i].mutators do
+            curated[CATEGORIES[i].mutators[j]] = true
+        end
+    end
+    local broken = Curses.BROKEN_IN_ADVENTURE
+    local MT = rawget(_G, "MutatorTemplates")
+    if MT then
+        local extra = {}
+        for name, tmpl in pairs(MT) do
+            if not curated[name] and not broken[name] and type(tmpl) == "table"
+               and tmpl.display_name and tmpl.description
+               and not tmpl.hide_from_player_ui
+               and not (tmpl.packages and next(tmpl.packages)) then
+                extra[#extra + 1] = name
+            end
+        end
+        table.sort(extra)
+        local sub = {}
+        for i = 1, #extra do
+            sub[#sub + 1] = {
+                setting_id    = "mut_" .. extra[i],
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "mut_" .. extra[i] .. "_tooltip",
+            }
+        end
+        if #sub > 0 then
+            widgets[#widgets + 1] = { setting_id = "cat_other", type = "group", sub_widgets = sub }
+        end
+    end
+end
+
+-- ============================================================
+-- "Cursed Adventure" group — Chaos Wastes / Be'lakor curses
+-- ============================================================
+-- Hand-curated, package-bearing curses surfaced via mod._ET_MANAGED_CURSES
+-- (set in event_tweaker.lua). Activating one preloads its resource package on
+-- every peer + applies the cursed-sky tint. ⚠ Unlike the rest of the mod,
+-- these require EVERY player in the lobby to run event_tweaker (clients need
+-- the package for replicated curse units). The `cursed_lighting` toggle leads
+-- the group.
+do
+    local managed = Curses.MANAGED_CURSES
+    if type(managed) == "table" and #managed > 0 then
+        local sub = {
+            { setting_id = "cursed_lighting", type = "checkbox", default_value = true,
+              tooltip = "cursed_lighting_tooltip" },
+        }
+        for i = 1, #managed do
+            local c = managed[i]
+            local dlc = rawget(DLC_BY_MUTATOR_UI, c.id)  -- usually nil (CW/Be'lakor are free)
+            if ui_owns_dlc(dlc) then
+                sub[#sub + 1] = {
+                    setting_id    = "mut_" .. c.id,
+                    type          = "checkbox",
+                    default_value = false,
+                    tooltip       = "mut_" .. c.id .. "_tooltip",
+                }
+            end
+        end
+        widgets[#widgets + 1] = { setting_id = "cat_cursed", type = "group", sub_widgets = sub }
+    end
+end
 
 return {
     name = "Tweaker: Events",

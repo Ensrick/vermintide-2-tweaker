@@ -13,6 +13,15 @@ if not mod then return end
 local unit_alive = Unit.alive
 local material_set_texture = Material.set_texture
 
+-- v0.9.50-dev (#199): never hand Material.set_texture a non-resident texture —
+-- it's an engine-level fatal. Mirror the units/packages preflight used in the
+-- main MH embed so a missing animated-frame texture is skipped, not crashed.
+local function _has_texture(path)
+    if not path or type(path) ~= "string" then return false end
+    if not rawget(_G, "Application") or not Application.can_get then return true end
+    return Application.can_get("texture", path) and true or false
+end
+
 -- Class definition. If another instance of MH (standalone, or a sibling
 -- tweaker mod's embed) already declared this, `class(AnimTextureExtension)`
 -- preserves the existing table and just lets us re-assign methods on top.
@@ -163,7 +172,9 @@ AnimTextureExtension.update = function (self, dt, unit)
                     local texture = self.aniamted_channels[mat_slot][slot_type][frame_number]
                     local texure_slot_name = self.texture_slot_names[slot_type]
 
-                    material_set_texture(material, texure_slot_name, texture)
+                    if _has_texture(texture) then
+                        material_set_texture(material, texure_slot_name, texture)
+                    end
 
                     self.frame_numbers[mat_slot][slot_type].current_number = frame_number + 1
 

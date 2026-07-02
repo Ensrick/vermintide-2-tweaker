@@ -1,4 +1,75 @@
-﻿# Verminious Dreams Lighting — Changelog
+# Verminious Dreams Lighting — Changelog
+
+## v1.0.14-dev — 2026-07-01 — Menu wording pass: rewrote the mod description and all four option tooltips in plain, player-facing English (no internal level ids or engine jargon), removed em dashes and stray markup.
+
+### Why
+The mod description and per-mission tooltips leaned on internal terms (raw level ids like `dlc_termite_1`, `vdl` shorthand, "profile", per-light "override") that mean nothing to a player reading the settings menu.
+
+### Changed
+- `verminious_dreams_lighting_dev_localization.lua` — reworded `mod_description` and the four `*_tooltip` strings (`enable_dlc_termite_1/2/3_tooltip`, `enable_cw_curse_adjust_tooltip`) to describe what each toggle does in plain English. No internal ids, no engine terms, no em dashes. Meaning preserved from the prior text; no mechanics invented. Titles/labels unchanged.
+
+### Notes
+- No eager-localize conversions were needed: the widgets already use raw-key tooltips (`tooltip = "..."`), and the only `mod:localize` call is the correct top-level `description = mod:localize("mod_description")`.
+- Key cross-check clean: all four setting_ids and all four tooltip keys already exist in the loc file; nothing added or renamed.
+
+### Build
+Not built, not deployed, not uploaded.
+
+## v1.0.13-dev — 2026-06-28 — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## v1.0.12-dev — 2026-06-24 — The Well of Dreams: brighten amb_top further (+40% more)
+
+User: the +30% wasn't enough. Bumped `amb_top` another +40% → `{91, 91, 109}` (cumulative from the original `{50,50,60}`: ×1.82). Still tune-able live via `/vdl_*`.
+
+## v1.0.11-dev — 2026-06-24 — The Well of Dreams: brighten the dark indoor/shadow ambient (+30%)
+
+User feedback: The Well of Dreams (`dlc_termite_3`) was a bit too dark. Its darkest lighting channel is the upper-hemisphere ambient `amb_top` (`ambient_tint_top`) at `{50,50,60}` — the fill that lifts shadowed/indoor areas. Brightened it ~30% → `{65,65,78}` (×1.3). Other channels unchanged (`amb` {200,200,280}, `sun` {100,100,100}, `fog` {70,85,85}). Tune further live with the `/vdl_*` commands if needed.
+
+## v1.0.10-dev — 2026-06-20 — Brighten Belakor curse a touch (Devious Delvings was too dark)
+
+User feedback: the v1.0.9 CW curse lighting works well, but the **Belakor** curse on **Devious Delvings** (`dlc_termite_2`) was "a little too dark." That mission has the darkest vdl base profile (`fog = {24,24,24}`), and Belakor's vanilla seed `light_probe_tint` is `{0.76, 0.76, 1.0}` (it darkens R+G to 76%), so the multiply over-darkens it.
+
+### Changed
+- Seeded `_CURSE_ADJUST.belakor` with a small brightening: all six channels (sky/sun/sun2/amb/amb_top/fog) now use the multiplier `{0.85, 0.85, 1.0}` instead of falling back to the `{0.76, 0.76, 1.0}` vanilla seed. That lifts the R/G darkening from 0.76 → 0.85 (a ~12% relative lift, ~9 points of the multiplier range), leaving blue at 1.0 so Belakor keeps its cold hue. Done entirely in the existing multiply/brightness space — no hardcoded absolute color.
+- **Conservative on purpose** — the user said "a little." Only Belakor is touched; the other four deities still fall back to their vanilla `light_probe_tint` seeds. The 0.09 lift is small.
+
+### Fine-tuning (still fully in-game tunable)
+- Re-tune live with `/vdl_curse belakor <channel> <r> <g> <b>` (float multipliers on top of vdl's base; channels sky/sun/sun2/amb/amb_top/fog), `/vdl_curse_exp belakor [mul]`, and `/vdl_curse_dump` to print a copy-paste block. `/vdl_curse_clear belakor [channel|all]` reverts to the `{0.76, 0.76, 1.0}` vanilla seed.
+- **Caveat:** `_CURSE_ADJUST` keys per-THEME, not per-mission, so this also lightly brightens Belakor on `dlc_termite_1`/`_3`. Those have lighter bases and were reported fine, and the lift only *reduces* darkening (can't over-darken), so it's benign. If you want it scoped to `dlc_termite_2` alone, retune per-mission with the commands above after eyeballing the other two.
+
+### Build
+VMBLauncher.exe build verminious_dreams_lighting_dev — verification only. NOT deployed, NOT uploaded.
+
+## v1.0.9-dev — 2026-06-21 — Chaos Wastes application + curse-adjustment framework
+
+vdl now applies its mission lighting when its three missions are injected into a **Chaos Wastes** expedition, and layers a per-curse adjustment on top.
+
+### Why
+vdl's profiles previously keyed on an EXACT `level_id` match (`dlc_termite_1/2/3`), so they only fired in Adventure. In Chaos Wastes the same missions carry a permutation `level_id` of the form `<base>_<theme>_path<N>` (e.g. `dlc_termite_1_khorne_path1`, plus the duplicate-alias form `dlc_termite_1_dup1_khorne_path1`), so the exact match missed them and CW players got vanilla lighting. The user also wants the active curse to tint vdl's custom look while in CW.
+
+### Changed — CW application (prefix match)
+- Added `_resolve_profile_key(raw_key)`: exact match first (Adventure unchanged, byte-for-byte), then a `^<base>_` prefix scan against the three baked profile keys for the CW permutations. The base mission key is always a literal prefix of the permutation — the same convention `chaos_wastes_tweaker`'s `adventure_base_from_level_key` relies on. **No dependency on chaos_wastes_tweaker** — vdl only reuses the level_id naming pattern; it calls no ct API.
+- `local_player_game_starts`, `shading_callback`, `on_setting_changed`, `_profile_for_current_level[_raw]`, and `vdl_level` now resolve the raw engine key down to the base profile key, so the base profile + per-mission VMF toggle apply on the CW permutations too. `_CURRENT_LEVEL_KEY` now caches the **base** key.
+
+### Changed — curse-adjustment layer (framework; values user-tunable)
+- New per-frame **Layer 2** in the `shading_callback` hook (consolidated into the existing hook — no new hook registered). When in a Deus expedition with a curse (theme ≠ `wastes`), it multiplies the post-base ShadingEnvironment value (vdl's color, or the baked vanilla where vdl left it alone) by a per-deity tint, composing the curse look on TOP of vdl's lighting instead of replacing it.
+- Curse + theme read straight from **vanilla Deus state** (`Managers.mechanism:game_mechanism():get_deus_run_controller():get_current_node().theme` / `.curse`), nil-safe; outside a Deus expedition every reader bails and the layer no-ops (Adventure behaves exactly as before).
+- **Seed (no invented colors):** each deity's adjustment defaults to the vanilla engine tint the base game already ships for that theme — `DeusThemeSettings[theme].light_probe_tint` — read live from the engine table, never copied into source. The user tunes the final curse look in-game; nothing fabricated ships as a "curse color".
+- New settings + commands: master toggle `enable_cw_curse_adjust` (default ON, no-op outside CW) and `/vdl_curse <theme> <channel> [r g b]`, `/vdl_curse_exp <theme> [mul]`, `/vdl_curse_clear`, `/vdl_curse_dump`, `/vdl_curse_save` (overrides persist under `saved_curse_adjust_v1`, separate from base `saved_profiles_v4`).
+- Regression checks added (`/vdl_regression_test`): `cw_permutation_prefix_match`, `curse_seed_is_engine_value_not_invented`, `curse_layer_noop_outside_deus`.
+
+### To tune in-game (curse look is NOT final)
+Run a vdl mission inside a cursed CW expedition, then per deity (khorne/nurgle/tzeentch/slaanesh/belakor) adjust `/vdl_curse <theme> <channel> <r> <g> <b>` (float multipliers on top of vdl's base) and `/vdl_curse_exp`. `/vdl_curse_dump` prints a copy-paste block to bake into `_CURSE_ADJUST`. Defaults are the vanilla deity `light_probe_tint` until tuned.
+
+### Open design question (flagged for the user)
+The curse tint currently **multiplies** vdl's base color (same idiom ct uses for CW skies). An alternative blend (lerp toward the vanilla curse atmosphere, or additive overlay) is also reasonable; multiply was chosen to keep vdl's tuned hue recognizable under the curse. Easy to switch in Layer 2 if you prefer a different composition.
+
+### Build
+VMBLauncher.exe build verminious_dreams_lighting_dev — verification only. NOT deployed, NOT uploaded.
+
+## v1.0.8-dev — 2026-06-19 — Test-status labels on menu entries
+
+Prefixed the three per-mission lighting toggles with `[untested]` so we know what's safe to promote to stable `verminious_dreams_lighting`. Flip to `[confirmed working]` as verified in-game. See `TESTING_STATUS.md`.
 
 ## v1.0.7-dev — 2026-05-26
 

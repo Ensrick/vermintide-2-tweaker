@@ -1,0 +1,948 @@
+local mod = get_mod("gt_dev")
+
+-- ============================================================================
+-- Bot Teleport Lab (Diagnostics)  --  observe/probe the "bots teleport away
+-- from the player" bug.  DIAGNOSTICS ONLY -- this module never changes bot
+-- behavior; it only reads state and logs / draws.  No fixes here (those come
+-- later and will reuse the shared infra below).
+-- ============================================================================
+-- MERGE-DISPATCH ARCHITECTURE (why this file has almost no `mod:hook`)
+-- ----------------------------------------------------------------------------
+-- VMF silently DROPS a second `mod:hook`/`mod:hook_safe` on the same
+-- (Class, method) pair from the same mod. gt (via _gt_bot_fixes.lua) ALREADY
+-- hooks every injection point this lab needs:
+--     BTConditions.should_teleport            (FIX 7)
+--     BTBotTeleportToAllyAction.run           (FIX 7 confirmation, WAS hook_safe)
+--     PlayerBotBase.update                    (consolidated per-frame chokepoint)
+--     AIBotGroupSystem._assign_destination_points  (FIX 9 follow-mode override)
+-- so this module MUST NOT re-hook any of them. Instead it defines
+-- `mod._gt_btlab_*` observer functions, and _gt_bot_fixes.lua calls them from
+-- INSIDE its existing hook bodies (guarded `if mod._gt_btlab_X then ... end`).
+-- Because the dispatch is resolved at call time on the `mod` table, load order
+-- doesn't matter: this file loads during mod init, long before any in-game
+-- teleport, so the functions are present by the time a hook first fires.
+--
+-- NOTE re D2: the task brief said "take a FRESH hook_safe on
+-- AIBotGroupSystem._assign_destination_points". That pair is ALREADY hooked by
+-- FIX 9 in _gt_bot_fixes.lua, so a fresh hook would be silently dropped by VMF
+-- (and flagged by tools/mod-lint). D2 is therefore MERGED into the FIX 9 body
+-- like every other injection point. The D2 dispatch sits at the TOP of the FIX 9
+-- hook_safe body, so it reads the follow_unit vanilla just assigned; when the
+-- user runs a non-default Bot-follow-mode (Follow Host / Split), FIX 9 rewrites
+-- follow_unit LATER in the same tick, so with those modes D2 logs the
+-- pre-override target -- the D1/D3/D4 observers (which read at should_teleport /
+-- update time) show the final post-override value.
+--
+-- OUTPUT: everything logs via engine `printf` (tag `[gt:btlab:dNN]`) so it's
+-- visible even with VMF mod-logging OFF (the user runs logging off -- see
+-- memory reference_vt2_diagnostics_use_printf_not_modinfo). Per-tick logs are
+-- throttled (~1s per bot) to avoid flooding.  Every observer body is
+-- pcall-guarded so a bad read degrades to vanilla behavior, never crashes.
+--
+-- HOST-SIDE: bot AI is server-side, so all of this only ever runs on the host.
+-- Nothing here registers a network event or sends an RPC.
+--
+-- GATING: each diagnostic reads `mod:get("gt_btlab_enabled") and
+-- mod:get("gt_btlab_dNN_...")` (master gate + per-diagnostic sub-toggle). ALL
+-- default OFF.
+--
+-- CHAT COMMANDS: /bot_tp_dump (D8 tally)  ,  /bot_tp_snap (D10 ring buffer)
+-- ============================================================================
+
+local POSITION_LOOKUP = POSITION_LOOKUP
+local ALIVE           = ALIVE
+local HEALTH_ALIVE    = HEALTH_ALIVE
+local ScriptUnit      = ScriptUnit
+local Vector3         = Vector3
+local Vector3Box      = Vector3Box
+local Quaternion      = Quaternion
+local Unit            = Unit
+local Broadphase      = Broadphase
+local Managers        = Managers
+
+local _MASTER = "gt_btlab_enabled"
+
+-- ----------------------------------------------------------------------------
+-- Small helpers
+-- ----------------------------------------------------------------------------
+
+-- printf wrapper: format safely, then hand a pre-formatted string to printf so a
+-- stray `%` in a name can't break the engine's own format pass.
+local function _pf(fmt, ...)
+    local p = rawget(_G, "printf")
+    if not p then return end
+    local ok, s = pcall(string.format, fmt, ...)
+    if ok then p("%s", s) end
+end
+
+-- master gate + per-diagnostic sub-toggle in one read.
+local function _on(sub)
+    return mod:get(_MASTER) and mod:get(sub)
+end
+
+-- game clock (seconds); pcall-guarded because Managers.time may not have the
+-- "game" timer outside a mission.
+local function _now()
+    local ok, v = pcall(function() return Managers.time and Managers.time:time("game") end)
+    return (ok and v) or 0
+end
+
+-- per-bot throttle stamped on the blackboard. Returns true at most once per
+-- `interval` seconds for the given key.
+local function _throttle(bb, key, now, interval)
+    local nxt = bb[key] or 0
+    if now < nxt then return false end
+    bb[key] = now + interval
+    return true
+end
+
+local function _local_player_unit()
+    local pm = Managers.player
+    local p = pm and pm:local_player()
+    return p and p.player_unit
+end
+
+local function _follow_unit(bb)
+    local ge = bb and bb.ai_bot_group_extension
+    return ge and ge.data and ge.data.follow_unit
+end
+
+local function _career_of_unit(unit)
+    if not unit then return "?" end
+    local ce = ScriptUnit.has_extension(unit, "career_system")
+    if ce and ce.career_name then
+        local ok, n = pcall(ce.career_name, ce)
+        if ok and n then return n end
+    end
+    return "?"
+end
+
+-- "name(career)" for readable logs. Falls back to the raw unit handle.
+local function _unit_label(unit)
+    if not unit then return "none" end
+    local ok, label = pcall(function()
+        local pm = Managers.player
+        local owner = pm and pm.owner and pm:owner(unit)
+        local name = owner and owner.name and owner:name() or tostring(unit)
+        return string.format("%s(%s)", name, _career_of_unit(unit))
+    end)
+    return (ok and label) or tostring(unit)
+end
+
+local function _dist_units(a, b)
+    local pa = a and POSITION_LOOKUP[a]
+    local pb = b and POSITION_LOOKUP[b]
+    if pa and pb then return Vector3.distance(pa, pb) end
+    return nil
+end
+
+local function _segment_of(unit)
+    local cd = Managers.state and Managers.state.conflict
+    if not (cd and unit) then return nil end
+    local ok, seg = pcall(cd.get_player_unit_segment, cd, unit)
+    return ok and seg or nil
+end
+
+local function _is_downed(unit)
+    local st = unit and ScriptUnit.has_extension(unit, "status_system")
+    if not st then return false end
+    local ok, downed = pcall(function()
+        return st:is_knocked_down() or st:is_dead() or st:is_ready_for_assisted_respawn()
+    end)
+    return (ok and downed) and true or false
+end
+
+-- ----------------------------------------------------------------------------
+-- Per-mission state (reset on StateIngame enter)
+-- ----------------------------------------------------------------------------
+local _bots        = {}    -- [bot_unit] = { blackboard = bb, seen = t }   (D3/D6/D7)
+local _follow_last = {}    -- [bot_unit] = last follow_unit                (D2)
+local _tp_counts   = {}    -- [bot_unit] = { label, total, toward, away }  (D8)
+local _snaps       = {}    -- ring buffer of teleport snapshots            (D10)
+local _last_tp     = {}    -- [bot_unit] = game-time of last teleport      (F9 cooldown)
+local _SNAP_MAX    = 10
+
+local function _reset_mission_state()
+    _bots        = {}
+    _follow_last = {}
+    _tp_counts   = {}
+    _snaps       = {}
+    _last_tp     = {}
+    -- Also drop any cached draw resources so a stale world handle isn't reused.
+    mod._gt_btlab_line_object = nil
+    mod._gt_btlab_line_world  = nil
+    mod._gt_btlab_gui         = nil
+    mod._gt_btlab_gui_world   = nil
+end
+
+-- ============================================================================
+-- D2  follow_tracker  --  merged into FIX 9's _assign_destination_points hook
+-- ----------------------------------------------------------------------------
+-- Log each bot's follow_unit and, when it CHANGES, old -> new with both units'
+-- player identity. Stores last-seen per bot so it only logs on change.
+-- ============================================================================
+mod._gt_btlab_track_follow = function(bot_ai_data)
+    if not _on("gt_btlab_d2_follow_tracker") then return end
+    if type(bot_ai_data) ~= "table" then return end
+    pcall(function()
+        for bot_unit, data in pairs(bot_ai_data) do
+            if data then
+                local new_follow = data.follow_unit
+                local last = _follow_last[bot_unit]
+                if new_follow ~= last then
+                    _follow_last[bot_unit] = new_follow
+                    _pf("[gt:btlab:d2] bot=%s follow CHANGED %s -> %s",
+                        _unit_label(bot_unit), _unit_label(last), _unit_label(new_follow))
+                end
+            end
+        end
+    end)
+end
+
+-- ============================================================================
+-- D1 (decision side) + D4 + D5  --  merged into BTConditions.should_teleport
+-- ----------------------------------------------------------------------------
+-- Runs every tick per bot (throttled where noisy).
+--   D1: record the measured bot->follow distance + current leash threshold onto
+--       the blackboard, so the execution-side (.run) hook can classify the
+--       trigger (vanilla 40m vs gt tighter leash) when a teleport actually fires.
+--   D4: self vs follow_unit conflict-segment values + whether the segment gate
+--       (target_segment >= self_segment) passed or blocked.
+--   D5: target_ally_need_type + whether target_unit == priority_target_enemy,
+--       i.e. why the aid exception did/didn't fire.
+-- ============================================================================
+mod._gt_btlab_observe_should_teleport = function(blackboard)
+    if not mod:get(_MASTER) then return end
+    pcall(function()
+        local unit   = blackboard.unit
+        local follow = _follow_unit(blackboard)
+        local now    = _now()
+
+        -- D1 decision recorder (cheap, unthrottled -- keeps the last-measured
+        -- distance fresh for the .run trigger classification).
+        if _on("gt_btlab_d1_teleport_events") and follow then
+            local d = _dist_units(unit, follow)
+            if d then
+                local leash = mod:get("gt_bot_follow_distance_m") or 40.0
+                blackboard._gt_btlab_dec = { dist = d, leash = leash }
+            end
+        end
+
+        -- D4 segment probe (throttled ~1s).
+        if _on("gt_btlab_d4_segment_probe") and _throttle(blackboard, "_gt_btlab_d4_t", now, 1.0) then
+            local self_seg   = _segment_of(unit) or 1
+            local follow_seg = follow and _segment_of(follow)
+            local gate = (follow_seg and follow_seg >= self_seg) and "PASS" or "BLOCK"
+            _pf("[gt:btlab:d4] bot=%s self_seg=%s follow_seg=%s gate=%s (BLOCK => never teleports this tick)",
+                _unit_label(unit), tostring(self_seg), tostring(follow_seg), gate)
+        end
+
+        -- D5 aid probe (throttled ~1s).
+        if _on("gt_btlab_d5_aid_probe") and _throttle(blackboard, "_gt_btlab_d5_t", now, 1.0) then
+            local need = blackboard.target_ally_need_type
+            local has_prio = blackboard.target_unit and blackboard.target_unit == blackboard.priority_target_enemy
+            local exception = (need ~= nil or has_prio) and true or false
+            _pf("[gt:btlab:d5] bot=%s target_ally_need_type=%s has_priority_target=%s aid_exception=%s (exception=true => teleport suppressed)",
+                _unit_label(unit), tostring(need), tostring(has_prio and true or false), tostring(exception))
+        end
+    end)
+end
+
+-- ============================================================================
+-- D1 (execution side) + D8 + D9 + D10  --  merged into the CONVERTED
+-- BTBotTeleportToAllyAction.run hook (see _gt_bot_fixes.lua).
+-- ----------------------------------------------------------------------------
+-- _gt_btlab_pre_teleport captures the bot position BEFORE the teleport executes
+-- (returned boxed because it must survive the wrapped func() call).
+-- _gt_btlab_observe_teleport runs AFTER the teleport, with the boxed pre-pos.
+-- ============================================================================
+mod._gt_btlab_pre_teleport = function(unit, blackboard) -- luacheck: ignore blackboard
+    if not mod:get(_MASTER) then return nil end
+    local ok, box = pcall(function()
+        local p = POSITION_LOOKUP[unit]
+        return p and Vector3Box(p) or nil
+    end)
+    return ok and box or nil
+end
+
+-- capture a snapshot of the whole team at teleport time (D10).
+local function _push_snapshot(trigger_unit, trigger_info)
+    local you = _local_player_unit()
+    local snap = {
+        t        = _now(),
+        bot      = _unit_label(trigger_unit),
+        trigger  = trigger_info or "?",
+        you      = _unit_label(you),
+        you_downed   = _is_downed(you),
+        you_disabled = false,
+        players  = {},
+    }
+    -- local player "combat state" -> disabled flag (grabbed / hooked / pounced).
+    local you_st = you and ScriptUnit.has_extension(you, "status_system")
+    if you_st then
+        local ok, dis = pcall(function() return you_st:is_disabled() end)
+        snap.you_disabled = (ok and dis) and true or false
+    end
+
+    local pm = Managers.player
+    local players = pm and pm.human_and_bot_players and pm:human_and_bot_players()
+    if players then
+        for _, player in pairs(players) do
+            local u = player.player_unit
+            local entry = {
+                name   = (player.name and player:name()) or "?",
+                is_bot = player.bot_player and true or false,
+                career = u and _career_of_unit(u) or "?",
+                downed = _is_downed(u),
+                seg    = u and _segment_of(u),
+                follow = nil,
+                pos    = nil,
+            }
+            local p = u and POSITION_LOOKUP[u]
+            if p then entry.pos = string.format("(%.0f,%.0f,%.0f)", p.x, p.y, p.z) end
+            if entry.is_bot and u then
+                local rec = _bots[u]
+                local bb  = rec and rec.blackboard
+                local f   = bb and _follow_unit(bb)
+                entry.follow = f and _unit_label(f) or "none"
+            end
+            snap.players[#snap.players + 1] = entry
+        end
+    end
+
+    _snaps[#_snaps + 1] = snap
+    while #_snaps > _SNAP_MAX do table.remove(_snaps, 1) end
+end
+
+mod._gt_btlab_observe_teleport = function(self, unit, blackboard, pre_box) -- luacheck: ignore self
+    if not mod:get(_MASTER) then return end
+    -- F9 cooldown source: stamp the last-teleport time for this bot on EVERY
+    -- teleport the lab sees (vanilla-40m or gt tighter-leash; the F3 redirect
+    -- stamps its own inside _gt_btlab_redirect_teleport). Cheap, unconditional
+    -- while the master gate is on so F9 has a timestamp even with all D-toggles off.
+    if unit then _last_tp[unit] = _now() end
+    pcall(function()
+        local follow  = _follow_unit(blackboard)
+        local you     = _local_player_unit()
+        local pre      = pre_box and pre_box:unbox()
+        local post     = POSITION_LOOKUP[unit]
+        local you_pos  = you and POSITION_LOOKUP[you]
+
+        -- Trigger classification from the D1 decision recorder.
+        local dec      = blackboard._gt_btlab_dec
+        local measured = dec and dec.dist
+        local leash    = (dec and dec.leash) or (mod:get("gt_bot_follow_distance_m") or 40.0)
+        local trigger
+        if measured then
+            if measured >= 40.0 then
+                trigger = string.format("vanilla-40m (measured %.1fm)", measured)
+            elseif leash < 40.0 and measured >= leash then
+                trigger = string.format("gt-tighter-leash %.0fm (measured %.1fm)", leash, measured)
+            else
+                trigger = string.format("unknown (measured %.1fm, leash %.0fm)", measured, leash)
+            end
+        else
+            trigger = string.format("unknown (no fresh should_teleport measure, leash %.0fm)", leash)
+        end
+
+        -- TOWARD / AWAY-from-local-player delta.
+        local before  = (pre and you_pos) and Vector3.distance(pre, you_pos) or nil
+        local after   = (post and you_pos) and Vector3.distance(post, you_pos) or nil
+        local dir = "?"
+        if before and after then dir = (after > before) and "AWAY" or "TOWARD" end
+
+        -- D1 full teleport line.
+        if _on("gt_btlab_d1_teleport_events") then
+            local prex, prey, prez = (pre and pre.x) or 0, (pre and pre.y) or 0, (pre and pre.z) or 0
+            local pox, poy, poz    = (post and post.x) or 0, (post and post.y) or 0, (post and post.z) or 0
+            _pf("[gt:btlab:d1] TELEPORT bot=%s from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) follow=%s dist_bot_follow=%s trigger=%s | to_local_player before=%s after=%s => %s",
+                _unit_label(unit),
+                prex, prey, prez, pox, poy, poz,
+                _unit_label(follow),
+                (measured and string.format("%.1fm", measured)) or "n/a",
+                trigger,
+                (before and string.format("%.1fm", before)) or "n/a",
+                (after and string.format("%.1fm", after)) or "n/a",
+                dir)
+        end
+
+        -- D8 per-bot per-mission counter (toward vs away).
+        if _on("gt_btlab_d8_tp_counter") then
+            local c = _tp_counts[unit]
+            if not c then
+                c = { label = _unit_label(unit), total = 0, toward = 0, away = 0 }
+                _tp_counts[unit] = c
+            end
+            c.total = c.total + 1
+            if dir == "AWAY" then c.away = c.away + 1
+            elseif dir == "TOWARD" then c.toward = c.toward + 1 end
+        end
+
+        -- D9 has_teleported flag SET (vanilla flips it true inside run()).
+        if _on("gt_btlab_d9_hasteleported_probe") then
+            _pf("[gt:btlab:d9] has_teleported SET -> %s for bot=%s (must clear in BTBotFollowAction.enter before another teleport)",
+                tostring(blackboard.has_teleported), _unit_label(unit))
+            -- prime the clear-detector so the update observer only reports the
+            -- subsequent true->false edge.
+            blackboard._gt_btlab_ht_last = blackboard.has_teleported and true or false
+        end
+
+        -- D10 snapshot into the ring buffer.
+        if _on("gt_btlab_d10_tp_snapshot") then
+            _push_snapshot(unit, trigger)
+        end
+    end)
+end
+
+-- ============================================================================
+-- FIXES (F1..F10)  --  the toggles that actually STOP "bots teleport away".
+-- ----------------------------------------------------------------------------
+-- Each fix is an independent sub-toggle (default OFF, host-side, pcall-guarded),
+-- gated `mod:get("gt_btlab_enabled") and mod:get("gt_btlab_fNN_...")` via `_on`.
+-- The fixes route through THREE dispatch fns the _gt_bot_fixes.lua hooks call
+-- (VMF drops a 2nd hook on an already-hooked pair, so nothing here re-hooks):
+--   mod._gt_btlab_veto_teleport(...)        -> in BTConditions.should_teleport
+--       backs the VETO fixes F2/F4/F6/F7/F8/F9/F10 (return true => BLOCK).
+--   mod._gt_btlab_override_follow_unit(...)  -> in AIBotGroupSystem._assign_...
+--       backs F1/F5 (return a unit to re-point data.follow_unit at, or nil).
+--   mod._gt_btlab_redirect_teleport(...)     -> at the TOP of BTBotTeleport...run
+--       backs F3 (teleport bot to YOUR navmesh pos, return true = handled).
+-- Vetoes OR together; the FIRST that fires is logged and blocks. F1 beats F5.
+-- F3 acts in .run independent of the veto layer. Tag: [gt:btlab:fNN].
+-- ============================================================================
+
+-- Navmesh-valid position of a unit (same source vanilla's teleport reads:
+-- whereabouts last_position_on_navmesh, bt_bot_teleport_to_ally_action.lua:44).
+-- Falls back to the raw position lookup.
+local function _navmesh_pos(target_unit)
+    if not target_unit then return nil end
+    local wb = ScriptUnit.has_extension(target_unit, "whereabouts_system")
+    local ok, p = pcall(function() return wb and wb:last_position_on_navmesh() end)
+    return (ok and p) or POSITION_LOOKUP[target_unit]
+end
+
+-- F10 heading source for the LOCAL player. Primary = first-person aim (camera
+-- look), flattened to horizontal + normalized. Fallback = the 3P body facing
+-- (Unit.local_rotation node 0). Returns nil if neither resolves. NOTE: the aim
+-- source is source-verified (first_person_system ext + current_rotation(),
+-- player_unit_first_person.lua:824); the body-facing fallback is a best-effort
+-- proxy. Both are pcall-guarded so a bad read just yields nil (fix no-ops).
+local function _local_heading(you)
+    if not you then return nil end
+    local dir
+    local fp = ScriptUnit.has_extension(you, "first_person_system")
+    if fp and fp.current_rotation then
+        local ok, rot = pcall(fp.current_rotation, fp)
+        if ok and rot then
+            local f = Quaternion.forward(rot)
+            dir = Vector3(f.x, f.y, 0)
+        end
+    end
+    if not dir or Vector3.length(dir) < 0.01 then
+        local ok, rot = pcall(Unit.local_rotation, you, 0)
+        if ok and rot then
+            local f = Quaternion.forward(rot)
+            dir = Vector3(f.x, f.y, 0)
+        end
+    end
+    if dir and Vector3.length(dir) >= 0.01 then
+        return Vector3.normalize(dir)
+    end
+    return nil
+end
+
+-- F5 helper: nearest ALIVE HUMAN player unit to `bot_unit` (excludes the bot
+-- itself + any bot player). Uses Managers.player:human_players(); nil if none.
+local function _nearest_alive_human(bot_unit)
+    local pm = Managers.player
+    local humans = pm and pm.human_players and pm:human_players()
+    if not humans then return nil end
+    local bot_pos = bot_unit and POSITION_LOOKUP[bot_unit]
+    if not bot_pos then return nil end
+    local best, best_d
+    for _, player in pairs(humans) do
+        local u = player and player.player_unit
+        if u and u ~= bot_unit and HEALTH_ALIVE[u] then
+            local p = POSITION_LOOKUP[u]
+            if p then
+                local d = Vector3.distance_squared(bot_pos, p)
+                if not best_d or d < best_d then best_d, best = d, u end
+            end
+        end
+    end
+    return best
+end
+
+-- F8 helper: count ALIVE enemy AI within `radius` of `you_pos` via the AI
+-- broadphase (mirrors the query pattern in _gt_prioritize_specials.lua:135-139).
+-- side:is_enemy filters out friendly/neutral broadphase hits. pcall-guarded.
+local function _enemies_near(you, you_pos, radius)
+    local count = 0
+    pcall(function()
+        local ai = Managers.state.entity and Managers.state.entity:system("ai_system")
+        local bp = ai and ai.broadphase or (ai and ai:broadphase())
+        if not bp then return end
+        local results = {}
+        local n = Broadphase.query(bp, you_pos, radius, results)
+        local side = Managers.state and Managers.state.side
+        for i = 1, n do
+            local e = results[i]
+            if e and HEALTH_ALIVE[e] then
+                local is_enemy = true
+                if side and side.is_enemy and you then
+                    local ok, en = pcall(side.is_enemy, side, you, e)
+                    if ok then is_enemy = en and true or false end
+                end
+                if is_enemy then count = count + 1 end
+            end
+        end
+    end)
+    return count
+end
+
+-- F6 helper: is the bot GENUINELY stuck (justifies a teleport) vs merely far?
+-- Two signals: (1) successive_failed_paths() > 0 -- the same navigation counter
+-- vanilla's should_teleport_to_position reads (bt_bot_conditions.lua:1201,
+-- source-verified); (2) OFF-NAVMESH -- the bot's actual position sits more than
+-- ~3 m from its last-known navmesh position (heuristic proxy, NOT source-exact:
+-- last_position_on_navmesh lags behind while a unit is off the mesh). Either =>
+-- stuck. When neither holds, the teleport is "pure distance" and F6 vetoes it.
+local _F6_OFFNAV_SQ = 9.0   -- (3 m)^2
+local function _bot_is_stuck(blackboard, self_unit)
+    local nav = blackboard and blackboard.navigation_extension
+    if nav and nav.successive_failed_paths then
+        local ok, fails = pcall(nav.successive_failed_paths, nav)
+        if ok and fails and fails > 0 then return true end
+    end
+    local wb = self_unit and ScriptUnit.has_extension(self_unit, "whereabouts_system")
+    local navpos = wb and wb:last_position_on_navmesh()
+    local actual = self_unit and POSITION_LOOKUP[self_unit]
+    if navpos and actual and Vector3.distance_squared(actual, navpos) > _F6_OFFNAV_SQ then
+        return true
+    end
+    return false
+end
+
+-- ----------------------------------------------------------------------------
+-- DISPATCH 1: veto layer (F2/F4/F6/F7/F8/F9/F10). Returns true to BLOCK.
+-- Called from the should_teleport hook AFTER gt computes a "wants teleport"
+-- decision; a true here overrides even a vanilla-40m teleport. Vetoes are
+-- OR-combined in F-number order; the FIRST that fires is logged + blocks.
+-- ----------------------------------------------------------------------------
+mod._gt_btlab_veto_teleport = function(blackboard, self_unit, follow_unit, dist_sq) -- luacheck: ignore dist_sq
+    if not mod:get(_MASTER) then return false end
+    local veto_id, veto_detail
+    pcall(function()
+        local you       = _local_player_unit()
+        local you_pos   = you and POSITION_LOOKUP[you]
+        local bot_pos   = self_unit and POSITION_LOOKUP[self_unit]
+        local follow_pos = follow_unit and POSITION_LOOKUP[follow_unit]
+
+        -- F2 block_away: destination (approx = follow pos) is FARTHER from you
+        -- than the bot is now => the teleport pulls the bot away from you.
+        if not veto_id and _on("gt_btlab_f2_block_away") and you_pos and bot_pos and follow_pos then
+            local bot_to_you  = Vector3.distance(bot_pos, you_pos)
+            local dest_to_you = Vector3.distance(follow_pos, you_pos)
+            if dest_to_you > bot_to_you then
+                veto_id = "f02"
+                veto_detail = string.format("dest %.1fm from you > bot %.1fm from you (would move AWAY)", dest_to_you, bot_to_you)
+            end
+        end
+
+        -- F4 proximity_veto: bot already within f4_radius m of you.
+        if not veto_id and _on("gt_btlab_f4_proximity_veto") and you_pos and bot_pos then
+            local r = mod:get("gt_btlab_f4_radius") or 25.0
+            local d = Vector3.distance(bot_pos, you_pos)
+            if d <= r then
+                veto_id = "f04"
+                veto_detail = string.format("bot %.1fm <= %.0fm proximity radius of you", d, r)
+            end
+        end
+
+        -- F6 stuck_only: veto a pure-distance teleport; only allow when the bot
+        -- is genuinely off-navmesh / has failed paths.
+        if not veto_id and _on("gt_btlab_f6_stuck_only") then
+            if not _bot_is_stuck(blackboard, self_unit) then
+                veto_id = "f06"
+                veto_detail = "not off-navmesh + no failed paths (pure-distance teleport blocked)"
+            end
+        end
+
+        -- F7 threshold_raise: veto until the bot is at least f7_distance m from
+        -- follow_unit (much farther leash before any teleport).
+        if not veto_id and _on("gt_btlab_f7_threshold_raise") and bot_pos and follow_pos then
+            local thr = mod:get("gt_btlab_f7_distance") or 80.0
+            local d = Vector3.distance(bot_pos, follow_pos)
+            if d < thr then
+                veto_id = "f07"
+                veto_detail = string.format("bot->follow %.1fm < %.0fm threshold", d, thr)
+            end
+        end
+
+        -- F8 combat_hold: veto while you have enemies within f8_radius (you are
+        -- in active combat, so a bot shouldn't leash off to a far follow target).
+        if not veto_id and _on("gt_btlab_f8_combat_hold") and you_pos then
+            local r = mod:get("gt_btlab_f8_radius") or 15.0
+            local n = _enemies_near(you, you_pos, r)
+            if n > 0 then
+                veto_id = "f08"
+                veto_detail = string.format("%d enemy(s) within %.0fm of you (combat hold)", n, r)
+            end
+        end
+
+        -- F9 cooldown: veto further teleports for f9_seconds after this bot's
+        -- last teleport (per-bot timestamp stamped in observe_teleport / redirect).
+        if not veto_id and _on("gt_btlab_f9_cooldown") and self_unit then
+            local last = _last_tp[self_unit]
+            if last then
+                local secs = mod:get("gt_btlab_f9_seconds") or 3.0
+                local since = _now() - last
+                if since < secs then
+                    veto_id = "f09"
+                    veto_detail = string.format("%.1fs < %.1fs since last teleport (cooldown)", since, secs)
+                end
+            end
+        end
+
+        -- F10 direction_aware: veto if follow_unit is BEHIND your heading
+        -- (dot(look/move dir, normalize(follow - you)) < 0) -- don't yank the
+        -- bot backward relative to where you're going.
+        if not veto_id and _on("gt_btlab_f10_direction_aware") and you_pos and follow_pos then
+            local heading = _local_heading(you)
+            if heading then
+                local to_follow = follow_pos - you_pos
+                to_follow = Vector3(to_follow.x, to_follow.y, 0)
+                if Vector3.length(to_follow) > 0.01 then
+                    local dp = Vector3.dot(heading, Vector3.normalize(to_follow))
+                    if dp < 0 then
+                        veto_id = "f10"
+                        veto_detail = string.format("follow is BEHIND your heading (dot=%.2f)", dp)
+                    end
+                end
+            end
+        end
+    end)
+
+    if veto_id then
+        _pf("[gt:btlab:%s] SUPPRESSED teleport bot=%s -- %s",
+            veto_id, _unit_label(self_unit), veto_detail or "?")
+        return true
+    end
+    return false
+end
+
+-- ----------------------------------------------------------------------------
+-- DISPATCH 2: follow-unit override (F1/F5). Returns a unit to re-point
+-- data.follow_unit at, or nil to keep the engine's assignment. F1 (you) beats
+-- F5 (nearest human) when both are on.
+-- ----------------------------------------------------------------------------
+mod._gt_btlab_override_follow_unit = function(bot_unit, assigned_follow_unit) -- luacheck: ignore assigned_follow_unit
+    if not mod:get(_MASTER) then return nil end
+    local result
+    pcall(function()
+        -- F1 follow_you: leash the bot to the LOCAL player. Precedence over F5.
+        if _on("gt_btlab_f1_follow_you") then
+            local you = _local_player_unit()
+            if you and you ~= bot_unit and HEALTH_ALIVE[you] then
+                result = you
+                return
+            end
+        end
+        -- F5 nearest_human: leash the bot to its nearest alive human.
+        if _on("gt_btlab_f5_nearest_human") then
+            local nh = _nearest_alive_human(bot_unit)
+            if nh then result = nh end
+        end
+    end)
+    return result
+end
+
+-- ----------------------------------------------------------------------------
+-- DISPATCH 3: teleport redirect (F3). Called at the TOP of the .run hook. When
+-- on, teleport the bot to YOUR navmesh position instead of follow_unit and
+-- return true so the hook SKIPS vanilla func(). Mirrors the vanilla teleport
+-- primitives (bt_bot_teleport_to_ally_action.lua:84-98) + gt's FIX 5 pattern.
+-- ----------------------------------------------------------------------------
+mod._gt_btlab_redirect_teleport = function(unit, blackboard)
+    if not (mod:get(_MASTER) and mod:get("gt_btlab_f3_teleport_to_you")) then return false end
+    local handled = false
+    pcall(function()
+        local you = _local_player_unit()
+        if not you or you == unit then return end
+        local pos = _navmesh_pos(you)
+        local locomotion = blackboard.locomotion_extension
+        local nav = blackboard.navigation_extension
+        if not (pos and locomotion and nav) then return end
+
+        locomotion:teleport_to(pos)
+        local status_extension = blackboard.status_extension
+        if status_extension then
+            status_extension:set_falling_height(true, pos.z)
+            status_extension:set_ignore_next_fall_damage(true)
+        end
+        nav:teleport(pos)
+        if blackboard.ai_extension and blackboard.ai_extension.clear_failed_paths then
+            blackboard.ai_extension:clear_failed_paths()
+        end
+        blackboard.has_teleported = true
+        if blackboard.follow then
+            blackboard.follow.needs_target_position_refresh = true
+        end
+        _last_tp[unit] = _now()   -- feed F9 cooldown from the redirect too
+
+        _pf("[gt:btlab:f03] REDIRECTED to local player bot=%s to=(%.1f,%.1f,%.1f)",
+            _unit_label(unit), pos.x, pos.y, pos.z)
+        handled = true
+    end)
+    return handled
+end
+
+-- ============================================================================
+-- D3 + D9(clear) + bot registry  --  merged into PlayerBotBase.update
+-- ----------------------------------------------------------------------------
+-- Registers the bot (so the D6/D7 draw tick has a blackboard + can enumerate
+-- bots), watches for the has_teleported true->false clear (D9), and prints the
+-- throttled distance readout (D3).
+-- ============================================================================
+mod._gt_btlab_observe_update = function(self, unit, blackboard, t) -- luacheck: ignore self
+    if not mod:get(_MASTER) then return end
+    pcall(function()
+        -- registry for D6/D7 draw + D10 snapshot (blackboard access by unit).
+        _bots[unit] = { blackboard = blackboard, seen = t }
+
+        -- D9 clear detection (cheap true->false edge watch).
+        if _on("gt_btlab_d9_hasteleported_probe") then
+            local now_ht = blackboard.has_teleported and true or false
+            local was_ht = blackboard._gt_btlab_ht_last
+            if was_ht == nil then
+                blackboard._gt_btlab_ht_last = now_ht
+            elseif was_ht and not now_ht then
+                blackboard._gt_btlab_ht_last = now_ht
+                _pf("[gt:btlab:d9] has_teleported CLEARED for bot=%s (follow action re-armed; bot may teleport again)",
+                    _unit_label(unit))
+            elseif now_ht ~= was_ht then
+                blackboard._gt_btlab_ht_last = now_ht
+            end
+        end
+
+        -- D3 distance readout (throttled ~1s).
+        if _on("gt_btlab_d3_distance_readout") and _throttle(blackboard, "_gt_btlab_d3_t", t, 1.0) then
+            local follow  = _follow_unit(blackboard)
+            local you     = _local_player_unit()
+            local d_follow = _dist_units(unit, follow)
+            local d_you    = _dist_units(unit, you)
+            local leash    = mod:get("gt_bot_follow_distance_m") or 40.0
+            _pf("[gt:btlab:d3] bot=%s dist_follow=%s dist_you=%s leash=%.0fm (vanilla teleports at 40m)",
+                _unit_label(unit),
+                d_follow and string.format("%.1fm", d_follow) or "n/a",
+                d_you    and string.format("%.1fm", d_you)    or "n/a",
+                leash)
+        end
+    end)
+end
+
+-- ============================================================================
+-- D6 bot_hud (on-screen text) + D7 leash_lines (3D debug lines)
+-- ----------------------------------------------------------------------------
+-- Runs from a registered mod.update consumer (NOT a class hook).
+--
+-- PRIMITIVES (best-effort; verified against vanilla usage but the exact
+-- screen-text path is not runtime-confirmed by the author -- see report):
+--   D7 lines: World.create_line_object / LineObject.add_line / .reset /
+--             .dispatch -- the SAME pattern _gt_solo_qol.lua already ships for
+--             its boss-sphere debug draw (known-good in this repo).
+--   D6 text : World.create_screen_gui(world, "material", "materials/fonts/arial",
+--             "immediate") + Camera.world_to_screen + Gui.text, mirroring
+--             vanilla player_hud.lua:43-83 (draw_player_names) and
+--             graph_drawer.lua (font "arial", "materials/fonts/arial", size 26).
+--             world_to_screen returns (.x = screen x, .z = screen y).
+-- Everything is pcall-guarded; if a primitive is unavailable the draw simply
+-- no-ops (never crashes / never affects gameplay).
+-- ============================================================================
+local FONT      = "arial"
+local FONT_MTRL = "materials/fonts/arial"
+
+-- release cached draw resources + clear any lingering lines.
+local function _clear_and_null()
+    local lo = mod._gt_btlab_line_object
+    local w  = mod._gt_btlab_line_world
+    if lo and w then
+        pcall(function()
+            LineObject.reset(lo)
+            LineObject.dispatch(w, lo)
+        end)
+    end
+    mod._gt_btlab_line_object = nil
+    mod._gt_btlab_line_world  = nil
+    mod._gt_btlab_gui         = nil
+    mod._gt_btlab_gui_world   = nil
+end
+
+local function _do_draw(want_hud, want_lines)
+    local world = Managers.world and Managers.world:world("level_world")
+    if not world then
+        _clear_and_null()
+        return
+    end
+
+    -- D7: line object (recreate on world change).
+    local lo
+    if want_lines then
+        if mod._gt_btlab_line_world ~= world then
+            mod._gt_btlab_line_object = nil
+            mod._gt_btlab_line_world  = world
+        end
+        if not mod._gt_btlab_line_object then
+            mod._gt_btlab_line_object = World.create_line_object(world, false)
+        end
+        lo = mod._gt_btlab_line_object
+        if lo then LineObject.reset(lo) end
+    end
+
+    -- D6: screen gui + camera (recreate gui on world change).
+    local gui, camera
+    if want_hud then
+        if mod._gt_btlab_gui_world ~= world then
+            mod._gt_btlab_gui       = nil
+            mod._gt_btlab_gui_world = world
+        end
+        if not mod._gt_btlab_gui then
+            mod._gt_btlab_gui = World.create_screen_gui(world, "material", FONT_MTRL, "immediate")
+        end
+        gui = mod._gt_btlab_gui
+        local viewport = ScriptWorld.viewport(world, "player_1")
+        camera = viewport and ScriptViewport.camera(viewport)
+    end
+
+    local you     = _local_player_unit()
+    local you_pos = you and POSITION_LOOKUP[you]
+    local up      = Vector3(0, 0, 1.0)   -- lift lines off the floor
+    local head    = Vector3(0, 0, 2.2)   -- text anchor above the bot's head
+
+    local color_follow = Color(255, 255, 210, 40)    -- yellow: bot -> follow_unit
+    local color_you    = Color(255, 60, 200, 220)    -- cyan:   bot -> local player
+    local white        = Color(255, 255, 255, 255)
+    local yellow       = Color(255, 255, 210, 40)
+
+    for unit, rec in pairs(_bots) do
+        if ALIVE[unit] and POSITION_LOOKUP[unit] then
+            local bb         = rec.blackboard
+            local bot_pos    = POSITION_LOOKUP[unit]
+            local follow     = bb and _follow_unit(bb)
+            local follow_pos = follow and POSITION_LOOKUP[follow]
+
+            -- D7 lines
+            if lo then
+                if follow_pos then
+                    LineObject.add_line(lo, color_follow, bot_pos + up, follow_pos + up)
+                end
+                if you_pos and you ~= unit then
+                    LineObject.add_line(lo, color_you, bot_pos + up, you_pos + up)
+                end
+            end
+
+            -- D6 text
+            if gui and camera then
+                local wp = bot_pos + head
+                if Camera.inside_frustum(camera, wp) > 0 then
+                    local d_follow = follow_pos and Vector3.distance(bot_pos, follow_pos)
+                    local d_you    = you_pos and Vector3.distance(bot_pos, you_pos)
+                    local line1 = _unit_label(unit)
+                    local line2 = string.format("follows %s  d=%s  you=%s",
+                        follow and _unit_label(follow) or "none",
+                        d_follow and string.format("%.0f", d_follow) or "?",
+                        d_you    and string.format("%.0f", d_you)    or "?")
+                    local sp = Camera.world_to_screen(camera, wp)
+                    -- Gui.text is single-line; draw the two lines stacked.
+                    Gui.text(gui, line1, FONT_MTRL, 22, FONT, Vector3(sp.x, sp.z + 22, 500), white)
+                    Gui.text(gui, line2, FONT_MTRL, 20, FONT, Vector3(sp.x, sp.z, 500), yellow)
+                end
+            end
+        else
+            _bots[unit] = nil   -- prune dead/despawned bots
+        end
+    end
+
+    if lo then LineObject.dispatch(world, lo) end
+end
+
+local function _btlab_draw(dt) -- luacheck: ignore dt
+    if not mod:get(_MASTER) then
+        _clear_and_null()
+        return
+    end
+    local want_hud   = _on("gt_btlab_d6_bot_hud")   and true or false
+    local want_lines = _on("gt_btlab_d7_leash_lines") and true or false
+    if not (want_hud or want_lines) then
+        _clear_and_null()
+        return
+    end
+    pcall(_do_draw, want_hud, want_lines)
+end
+
+if mod._gt_register_update then
+    mod._gt_register_update("btlab_draw", _btlab_draw)
+end
+
+-- ============================================================================
+-- Reset per-mission state on StateIngame enter (chain-wrap; never redefine the
+-- central handler). D8 counters + D10 snapshots + D2 follow tracking + the bot
+-- registry all reset at the mission boundary.
+-- ============================================================================
+do
+    local prev = mod.on_game_state_changed
+    mod.on_game_state_changed = function(status, state_name)
+        if prev then prev(status, state_name) end
+        if status == "enter" and state_name == "StateIngame" then
+            _reset_mission_state()
+        end
+    end
+end
+
+-- ============================================================================
+-- D8  chat command: /bot_tp_dump  --  per-bot teleport tally (toward vs away)
+-- ============================================================================
+mod:command("bot_tp_dump", "Bot Teleport Lab: dump per-bot teleport tally (toward vs away from you)", function()
+    local any = false
+    local gt_total, gt_toward, gt_away = 0, 0, 0
+    mod:echo("[btlab] teleport tally this mission:")
+    for unit, c in pairs(_tp_counts) do
+        any = true
+        mod:echo("  %s -- total=%d toward_you=%d away_from_you=%d",
+            c.label or _unit_label(unit), c.total, c.toward, c.away)
+        gt_total  = gt_total  + c.total
+        gt_toward = gt_toward + c.toward
+        gt_away   = gt_away   + c.away
+    end
+    if not any then
+        mod:echo("  (no teleports recorded yet -- enable D1/D8 and play a bit)")
+    else
+        mod:echo("  ALL BOTS -- total=%d toward_you=%d away_from_you=%d", gt_total, gt_toward, gt_away)
+    end
+end)
+
+-- ============================================================================
+-- D10  chat command: /bot_tp_snap  --  dump the teleport snapshot ring buffer
+-- ============================================================================
+mod:command("bot_tp_snap", "Bot Teleport Lab: dump the last teleport snapshots (positions/downed/follow)", function()
+    if #_snaps == 0 then
+        mod:echo("[btlab] no teleport snapshots captured yet (enable D10 and play a bit).")
+        return
+    end
+    mod:echo("[btlab] %d teleport snapshot(s), oldest first -- full detail in console log:", #_snaps)
+    for i, s in ipairs(_snaps) do
+        mod:echo("  #%d t=%.1f bot=%s trigger=%s (you: downed=%s disabled=%s)",
+            i, s.t or 0, s.bot or "?", s.trigger or "?", tostring(s.you_downed), tostring(s.you_disabled))
+        _pf("[gt:btlab:d10] snapshot #%d t=%.1f bot=%s trigger=%s you=%s you_downed=%s you_disabled=%s",
+            i, s.t or 0, s.bot or "?", s.trigger or "?", s.you or "?",
+            tostring(s.you_downed), tostring(s.you_disabled))
+        for _, e in ipairs(s.players) do
+            _pf("[gt:btlab:d10]   %s%s career=%s pos=%s downed=%s seg=%s follow=%s",
+                e.is_bot and "[BOT] " or "[HUMAN] ", e.name, e.career,
+                e.pos or "?", tostring(e.downed), tostring(e.seg), e.follow or "-")
+        end
+    end
+    mod:echo("[btlab] (%d snapshots dumped to console log)", #_snaps)
+end)
+
+mod:info("[gt:btlab] Bot Teleport Lab loaded (diagnostics; all default OFF)")

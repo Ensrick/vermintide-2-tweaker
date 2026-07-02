@@ -1122,8 +1122,4 @@ for setting_id, entry in pairs(AdventurePool.build_loc_entries()) do
     loc[setting_id] = entry
 end
 
--- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-loc.enable_debug_logging         = { en = "Debug Logging" }
-loc.enable_debug_logging_tooltip = { en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable." }
-
 return loc

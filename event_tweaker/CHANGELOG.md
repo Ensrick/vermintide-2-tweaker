@@ -1,5 +1,92 @@
 # Tweaker: Events — Changelog
 
+## 0.4.19-dev (2026-07-01) -- Rewrote every option description for players; stripped internal mutator ids and non-ASCII/em-dash characters from menu text
+
+### Why
+Every mutator tooltip led with its raw internal id in brackets (e.g. `[no_ammo] ...`), several carried developer shorthand ("DLC batch 02", "conflict director"), and a handful of strings used non-ASCII arrows / em dashes. None of that is useful to a player reading the VMF settings menu.
+
+### Changed -- `event_tweaker_localization.lua`
+- Rewrote `mod_description`, `event_preset_tooltip`, `suppress_live_event_tooltip`, `cursed_lighting_tooltip`, and all 47 curated `mut_*_tooltip` values into plain player-facing English (max 2-3 sentences each). Dropped the leading `[internal_id]` prefix and internal jargon from every one; meaning preserved from the prior text, nothing invented.
+- Removed em dashes and non-ASCII characters from menu-facing strings: `cat_cursed` label (em dash -> colon), `preset_skulls_2023` label (non-ASCII arrow removed; `hordes_galore` -> "Hordes Galore"), `preset_skulls_2026` label (em dash -> semicolon), and the generated Cursed Adventure curse tooltip (em dash -> period).
+- Simplified the three Geheimnisnacht preset labels to drop internal level keys (`dlc_portals`, `dlc_castle`, etc.) that a player can't read; they now say "ritual sites on that year's maps".
+- Retitled the `suppress_live_event` label to "Suppress the game's live event" (was "Fatshark's live event").
+
+### Not changed
+- No `mod:localize(...)` widget-level calls needed converting (there were none; the only eager localize is the top-level `mod_description` in `_data.lua`, which is correct).
+- No missing loc keys: every static widget-referenced key already resolved; the dynamic "Other Mutators" / "Cursed Adventure" groups still register their labels/tooltips from the game's own localized strings at runtime.
+- Setting ids, keys, widget structure, and defaults untouched. `MOD_VERSION` `0.4.18-dev` -> `0.4.19-dev`.
+
+## 0.4.18-dev (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.4.17-dev (2026-06-26) -- revert #135 weekly-god diagnostic (added to the wrong mod)
+
+Revert the #135 weekly-god diagnostic. The weekly god / cursed-sky theme is a **chaos_wastes_tweaker** feature, not event_tweaker — the probe was added to the wrong mod. Removed both `[et-probe:weekly]` emit points (`get_special_events` after `gather_mutators()`, and `_refresh_active_curse_god`) plus the now-unused `local _printf` helper and its comment block (0 remaining uses). Surrounding vanilla logic restored exactly as it was before the probe. No behavior change. `MOD_VERSION` `0.4.16-dev` → `0.4.17-dev`.
+
+## 0.4.16-dev (2026-06-26) -- #135 DIAGNOSTIC: weekly god/curse override mismatch (instrument, NOT a fix)
+
+### Why
+User report: selected **Tzeentch** but the run themed/resolved to **Slaanesh** — a god/curse mapping mismatch in the Cursed Adventure feature. This build adds a printf diagnostic so the next session can read `selected` vs `applied` straight from the log. **No behavior change — diagnostic only.**
+
+### Added — `[et-probe:weekly]` (raw `printf`, bypasses the mod-logging toggle)
+- `event_tweaker.lua` — new guarded `local _printf = rawget(_G, "printf") or function() end`. Two emit points, both tagged `[et-probe:weekly]`:
+  1. **In `get_special_events`** (right after `gather_mutators()`, the apply point that runs on mission/keep load): logs `preset=…`, `selected_curses=[curse:god,…]` (from the `mut_<id>` settings, each tagged with the god it is *meant* to theme), `injected_mutators=[…]` (what actually reaches the lobby), `applied_theme_god=…`, and `alpha_first_curse=…`.
+  2. **In `_refresh_active_curse_god`** (the runtime resolution point): logs the live active curse set + the resolved `applied_god` + `alpha_first`.
+- This surfaces the likely culprit: the cursed-sky/theme god resolves as the **alphabetically-first** active curse's god (a deterministic tie-break in `_refresh_active_curse_god`), so when curses of different gods are enabled at once, the alpha-first curse — not necessarily the one the user "meant" — wins the theme. `selected=tzeentch applied=slaanesh` will be readable from one line. **No mapping change made yet** (that's the follow-up once the log confirms the divergence).
+
+### Files
+- `event_tweaker.lua` — `MOD_VERSION` `0.4.15-dev` → `0.4.16-dev`; `_printf` helper; 2 `[et-probe:weekly]` emit points. No hooks added (lint-confirmed: 8 hooks, 0 duplicate).
+
+## 0.4.15-dev (2026-06-20) -- Active-mutator logging + clarify night_mode's confusing in-game name
+
+### Why
+User report: with Event Tweaker on (no preset/event/curse selected), TAB's active-mutator list showed "Geheimnisnacht Night Mode" and the mission darkened — looked like the mod was forcing the Geheimnisnacht event. Root cause from the log (`[event-inject] ... injecting 1 mutator(s): [night_mode]`) + the saved setting (`mut_night_mode = true`): the user had the **Night Mode** checkbox (Atmosphere group) on, and the vanilla `night_mode` mutator's in-game display name *is* "Geheimnisnacht Night Mode" (it's that event's signature darkening mutator). Not a bug — `night_mode` is a standalone mutator, not the event — but the naming is confusing, and the log didn't make the full active set obvious.
+
+### Changed
+- `event_tweaker.lua` — `get_special_events` now logs the **"injecting NOTHING"** case (with Fatshark's pass-through list) under `enable_debug_logging`, so the log unambiguously shows when ET injects nothing vs. when a real live event is active. The `MutatorHandler._activate_mutator` hook now `_dbg`-logs **every** mutator the handler activates (`[mutator-active] '<name>'`) — ours OR vanilla — so the log shows the full active set; cross-reference with `[event-inject]` to tell them apart.
+- `event_tweaker_localization.lua` — `mut_night_mode` tooltip now warns it shows as "Geheimnisnacht Night Mode" in-game and does NOT activate the event.
+- MOD_VERSION `0.4.14-dev` → `0.4.15-dev`.
+
+### Fix for the user
+Uncheck **Night Mode** in the Atmosphere group (or run `/event_clear` to clear all individual mutators). The preset dropdown is separate and was already Off.
+
+## 0.4.14-dev (2026-06-19) -- Incorporate "Deed Mutators Selector" + "Cursed Adventure" (CW/Be'lakor curses on standard maps, with themed lighting)
+
+### Why
+Two related additions, both consolidated into event_tweaker (the mutator picker's natural home — it already activates mutators via the `get_special_events` live-event hook).
+
+1. **Deed Mutators Selector port** — that mod (Workshop `3579882542`) dynamically surfaces every engine-flagged player-facing mutator (`display_name`+`description`) instead of a curated list. event_tweaker already had every *deed* mutator; the delta was the Chaos Wastes / Be'lakor / Deus set.
+2. **Cursed Adventure** — make the package-bearing CW/Be'lakor *curses* actually run on a standard adventure mission (they normally crash there — `[VT2 mutator packages are Deus-realm only]`). A 4-agent adversarial source audit (2026-06-19) proved the curse *mechanics* use only standard mission managers and that every DLC entity system they need is registered into every mission at boot (`entity_system.lua:176` + `:424-435`); the *only* blocker is the resource package, which `DeusRunState.set_event_mutators` loads only in the Deus realm. So we preload it ourselves.
+
+### Added — dynamic discovery ("Other Mutators" group)
+- `event_tweaker.lua` — `_is_adventure_safe_mutator(name, tmpl)` (display_name+description, not `hide_from_player_ui`, no `packages`, not in `_CURSE_BROKEN_IN_ADVENTURE`) + cached `displayable_registered_mutators()`. `selected_individual_mutators()` / `/event_clear` union curated + discovered. New `dynamic_mutator_discovery` regression check.
+- `event_tweaker_data.lua` — dynamic `cat_other` group. `event_tweaker_localization.lua` — labels pulled from the game's own `Localize` (no fabrication), `%`-escaped.
+
+### Added — Cursed Adventure ("Cursed Adventure" group)
+- `event_tweaker.lua` — `MANAGED_CURSES` (11 package-bearing curses → Chaos god + DLC), `_CURSE_TO_GOD`, `selected_curse_mutators()` (injected via `gather_mutators`), and a do-block of hooks:
+  - **`MutatorHandler._activate_mutator`** (the chokepoint hit on the HOST via `activate_mutators` AND every CLIENT via `rpc_activate_mutator_client` → `_activate_mutator`, `mutator_handler.lua:782`) — SYNC-preloads the curse's `packages` on that peer (`Managers.package:load(pkg, ref, nil, false)`) *before* the mutator's `start_function`, exactly like `DeusRunState.set_event_mutators` does per-peer. Clients need it too (`spawn_network_unit` replicates a husk).
+  - **`StateIngame.on_exit`** — ref-balanced `unload` + cache clear.
+  - **`CameraManager.shading_callback`** — per-god multiplicative ShadingEnvironment-var tint (profiles copied from `chaos_wastes_tweaker.lua:3247`); blends on the level's baked atmosphere and reverts for free every frame. `cursed_lighting` toggle (default on).
+  - All gated to `Managers.mechanism:current_mechanism_name() == "adventure"` so a real Chaos Wastes run (where Deus already loads the package and ct already tints) is untouched.
+- `event_tweaker_data.lua` — `cat_cursed` group from `mod._ET_MANAGED_CURSES` + the `cursed_lighting` toggle. `event_tweaker_localization.lua` — curse labels from the game's own strings + a per-curse tooltip noting the god, the all-players-need-the-mod requirement, and the experimental flag.
+
+### Excluded (verified hard-crashers — never surfaced anywhere)
+- `curse_bolt_of_change` — spawn path calls `Managers.mechanism:game_mechanism():get_deus_run_controller()`, a `DeusMechanism`-only method (`deus_mechanism.lua:523`) → nil-method crash on every bolt.
+- `curse_belakors_shadows` — actually a *weave* mutator; `server_update` does `radius*radius` with `radius=nil` outside a weave → nil-arithmetic crash. (Package-free, so it's in `_CURSE_BROKEN_IN_ADVENTURE` — the package filter alone wouldn't catch it.)
+- `curse_empathy` — package-free, no Deus deps, but a latent server-side nil-index (`data.hero_side` unset on the server). Excluded until verified in-game.
+
+### Multiplayer constraint (new for the curse group only)
+The package-bearing curses require **every player in the lobby to run event_tweaker** — clients load the curse package locally to instantiate the replicated curse units. The rest of the mod (presets, vanilla mutators, the "Other Mutators" group) stays host-only.
+
+### Hardening (post-verification — a 4-lens adversarial pass caught two blockers + edges)
+- **Load-order blocker (fixed):** VMF loads a mod's files `localization → data → script`, so the script runs LAST — the first cut set `mod._ET_MANAGED_CURSES` in the script and read it in `_data.lua`/`_localization.lua`, where it was nil, so the whole Cursed Adventure UI group never built and the package-free broken curses leaked into "Other Mutators". Fixed by moving the catalog into a new shared module **`event_tweaker_curses.lua`** that all three files `require` (the `enemy_tweaker_breeds` pattern; bundled automatically via the `scripts/.../*` wildcard). The loc file also had no `local mod`, so its `mod._ET_*` reads would have nil-indexed at runtime — the `require` removes that too.
+- **Hot-join crash (fixed):** a client joining MID-mission instantiates already-spawned curse husks during game-object sync, which the engine does BEFORE the mutator-activate RPC — so the `_activate_mutator` load arrived too late and `World.spawn_unit` on the unloaded package crashed the joiner. Added a `MutatorHandler.init` `hook_safe` that preloads from the network-synced `_initialized_mutator_map` (populated at handler construction, before game objects) on every peer. Normal-join + host were already safe via `_activate_mutator`; this closes the hot-join window.
+- **`self._world == world` guard** added to the shading hook (vanilla's mandatory precondition — don't tint UI/preview/end-screen worlds).
+- **Deterministic multi-god tint:** when curses of different gods are active, the alphabetically-lowest curse name wins (was `pairs()`-order, which diverges host vs client).
+- **Package ref-leak:** `on_exit` now only drops a package entry whose `unload` pcall actually succeeded.
+
+### Status
+`build event_tweaker` compiles clean (4 files, 4 bundles). mod-lint: PASS (8 hooks, 0 duplicate/forward-ref/late-local). Hook points + all 11 curse names + the load order source-verified; adversarial 4-lens verification run and its two blockers + edges fixed. NOT yet uploaded — event_tweaker is a **public** mod; needs in-game testing + explicit per-build ship approval before a public Workshop push.
+
 ## 0.4.13-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
 
 ### Why

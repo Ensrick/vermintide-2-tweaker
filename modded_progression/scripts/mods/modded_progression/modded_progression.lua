@@ -23,28 +23,32 @@ Major sections (search by name to jump):
 local mod = get_mod("mp")
 _MEM_PROBE_T0_MP = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.9-dev"
+local MOD_VERSION = "0.2.12-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Modded Progression v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- Routed through VMF logging channels; visible via VMF output_mode_debug / output_mode_warning.
+-- `_dbg` is for confirmation / expected behavior — mod:debug channel.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[mp:dbg] " .. fmt, ...)
-    end
+    mod:debug("[mp:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[mp:dbg] " .. fmt, ...)
-        mod:echo("[mp] " .. fmt, ...)
-    end
+    mod:warning("[mp:dbg] " .. fmt, ...)
 end
+
+-- #174 attribution probe (passive, default-on, printf). mp owns NO loadout
+-- write/restore path (it is a scaffolding stub re-enabling vanilla progression),
+-- so its only #174 relevance is that its `_with_eac_off` wrappers un-gate the
+-- realm around vanilla progression calls. The probe emits one load-time line
+-- naming that fact, and mp exposes `mod.is_eac_window()` so the cosmetics
+-- vanilla-chokepoint hook can attribute any loadout write that lands while mp
+-- has un-gated the realm. See _diag_probe.lua.
+local PROBE = mod:dofile("scripts/mods/modded_progression/_diag_probe")
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
 -- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
@@ -91,6 +95,17 @@ end
 
 mod:info("[mp:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
 
+-- #174 attribution: one printf line naming mp's role. mp is a scaffolding stub
+-- with NO loadout capture/restore/persist path (grep confirms: no set_loadout_item
+-- hook, no bot-slot write), so it cannot be the writer that replaces bot loadouts
+-- on startup. What it DOES do is un-gate vanilla progression via `_with_eac_off`;
+-- `is_eac_window` is now armed for the cosmetics chokepoint to attribute writes
+-- that occur while mp has the realm un-gated.
+if PROBE then
+    PROBE.emit("174:loadout", nil,
+        "mp no-loadout-writer (scaffold stub) eac_window_instrumented=1")
+end
+
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable
 -- (>=1.0.0) versions stay silent. Detect via MOD_VERSION string match.
@@ -123,13 +138,10 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised on call" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised on call" end
 end)
 
 
@@ -367,10 +379,20 @@ end
 -- bounds so nil holes survive.
 local function _capture(...) return select("#", ...), { ... } end
 
+-- #174: track whether we are currently inside a `_with_eac_off` window (the
+-- realm is un-gated for a vanilla progression call). Depth counter mirrors the
+-- eac-flag set/restore bracket exactly so behaviour is byte-identical; a throw
+-- inside func leaks depth the same way the existing code leaks the flag (these
+-- vanilla fns don't throw in practice). Read by cosmetics' #174 chokepoint hook.
+mod._mp_eac_depth = 0
+mod.is_eac_window = function() return (mod._mp_eac_depth or 0) > 0 end
+
 local function _with_eac_off(func, self, ...)
     local orig = script_data["eac-untrusted"]
     script_data["eac-untrusted"] = nil
+    mod._mp_eac_depth = mod._mp_eac_depth + 1
     local n, results = _capture(func(self, ...))
+    mod._mp_eac_depth = mod._mp_eac_depth - 1
     script_data["eac-untrusted"] = orig
     return unpack(results, 1, n)
 end

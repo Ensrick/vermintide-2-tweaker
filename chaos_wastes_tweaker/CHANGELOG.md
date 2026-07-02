@@ -1,5 +1,8 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.129-beta — 2026-06-28
+- Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
 ## 0.7.128-beta (2026-06-16) — Curse-banner crash fix reworked to a data backfill (kills the "trying to hook object that doesn't exist: DeusCurseUI" error)
 
 Cherry-picked from `ct_dev` v0.7.139-dev.

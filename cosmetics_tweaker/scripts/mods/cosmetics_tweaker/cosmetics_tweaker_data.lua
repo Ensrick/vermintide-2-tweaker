@@ -1,290 +1,150 @@
 local mod = get_mod("cosmetics_tweaker")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 
+-- ---------------------------------------------------------------------------
+-- Cosmetic Availability sub-widgets: the auto-generated per-character
+-- cosmetic-unlock tree (Character -> Career -> Hats/Skins -> individual
+-- checkboxes; see _cosmetic_unlocks.lua) followed by the two "unlock all"
+-- toggles as LOOSE options at the bottom of the same category. They only take
+-- effect in modded realm, but with this mod installed the player already knows
+-- that, so no "(Modded Only)" suffix and no extra nesting.
+-- ---------------------------------------------------------------------------
+local cosmetic_availability_widgets = {}
+for _, w in ipairs(U.widgets) do
+    cosmetic_availability_widgets[#cosmetic_availability_widgets + 1] = w
+end
+-- The two loose "unlock all" toggles sit at the bottom of the tree, ordered
+-- A->Z by display label: "Unlock All Portrait Frames" (P) before "Unlock All
+-- Weapon Illusions" (W). (Per the standing alphabetize-by-label rule; the big
+-- auto-generated Character->Career tree above keeps its deliberate hierarchy.)
+cosmetic_availability_widgets[#cosmetic_availability_widgets + 1] = {
+    setting_id    = "unlock_all_frames",
+    type          = "checkbox",
+    default_value = false,
+    tooltip       = "unlock_all_frames_tooltip",
+}
+cosmetic_availability_widgets[#cosmetic_availability_widgets + 1] = {
+    setting_id    = "unlock_all_illusions",
+    type          = "checkbox",
+    default_value = false,
+    tooltip       = "unlock_all_illusions_tooltip",
+}
+
+-- Top-level groups sorted A->Z by display label, with the large Cosmetic
+-- Availability tree deliberately kept LAST so it doesn't push the small option
+-- groups down the list:
+--   Loremaster's Armory · Third-Person Equipment · Weapon Visual Tweaks ·
+--   (then) Cosmetic Availability.
 local widgets = {
+    -- Loremaster's Armory: every Loremaster's Armoury integration toggle lives
+    -- here now, instead of each carrying an "LA:" label prefix. Children A->Z.
     {
-        setting_id    = "unlock_all_illusions",
-        type          = "checkbox",
-        default_value = false,
-        tooltip       = mod:localize("unlock_all_illusions_tooltip"),
+        setting_id  = "loremasters_armoury_group",
+        type        = "group",
+        sub_widgets = {
+            -- v0.9.49-dev (issue #186): remove LA's Okri's Challenges entirely --
+            -- its "main_quest" line + 12 sub-quests hidden from Okri's book, no
+            -- tracking, no completion pop-ups, unread-letter banner silenced.
+            -- Default ON (challenges DISABLED). Restart after toggling OFF to
+            -- restore. See _la_okri.lua + _la_prefix_embedded.lua.
+            {
+                setting_id    = "la_disable_okri_challenges",
+                type          = "checkbox",
+                default_value = true,
+                tooltip       = "la_disable_okri_challenges_tooltip",
+            },
+            -- v0.9.3.1: LA Prefix Patch embedded -- quiet-mode toggles for LA's
+            -- quest markers and unread-letter notifications. Default off so LA
+            -- behaves as shipped until the user opts in.
+            {
+                setting_id    = "suppress_la_quest_markers",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "suppress_la_quest_markers_tooltip",
+            },
+            {
+                setting_id    = "suppress_la_notifications",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "suppress_la_notifications_tooltip",
+            },
+            -- v0.9.40-dev (issue #137): crash guard for LA's
+            -- StatisticsUtil.register_kill hook, which nil-derefs the attacker
+            -- player when the killer has LEFT the game. Default ON (fail-safe) --
+            -- only an explicit uncheck disables it.
+            {
+                setting_id    = "la_killquest_crash_guard",
+                type          = "checkbox",
+                default_value = true,
+                tooltip       = "la_killquest_crash_guard_tooltip",
+            },
+        },
     },
+
+    -- Experimental Third-Person Equipment: spawns extra 3P weapon meshes
+    -- attached to the player's body for whichever loadout slot isn't currently
+    -- wielded. Inspired by the standalone TPE mod (Workshop 1387440934).
+    -- Positions are coarse -- per-item_type, not per-career.
     {
-        setting_id    = "unlock_all_frames",
-        type          = "checkbox",
-        default_value = false,
-        tooltip       = mod:localize("unlock_all_frames_tooltip"),
+        setting_id  = "tpe_group",
+        type        = "group",
+        sub_widgets = {
+            {
+                setting_id    = "tpe_enable",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "tpe_enable_tooltip",
+            },
+            {
+                setting_id    = "tpe_show_self_in_3p",
+                type          = "checkbox",
+                default_value = true,
+                tooltip       = "tpe_show_self_in_3p_tooltip",
+            },
+            {
+                setting_id      = "tpe_downscale_big_weapons",
+                type            = "numeric",
+                default_value   = 100,
+                range           = { 25, 100 },
+                decimals_number = 0,
+                tooltip         = "tpe_downscale_big_weapons_tooltip",
+            },
+        },
     },
-    -- v0.9.3.9: la_bridge_enable toggle REMOVED. The LA bridge is now a
-    -- built-in feature, always on. Players who don't want LA cosmetics
-    -- just don't subscribe to Loremaster's Armoury. Removed widget from
-    -- Settings tree; init code below treats it as unconditionally true.
-    -- v0.9.3.1: LA Prefix Patch embedded — quiet-mode toggles for LA's quest
-    -- markers and unread-letter notifications. Default off so LA behaves as
-    -- shipped until user opts in.
-    {
-        setting_id    = "suppress_la_quest_markers",
-        type          = "checkbox",
-        default_value = false,
-        tooltip       = mod:localize("suppress_la_quest_markers_tooltip"),
-    },
-    {
-        setting_id    = "suppress_la_notifications",
-        type          = "checkbox",
-        default_value = false,
-        tooltip       = mod:localize("suppress_la_notifications_tooltip"),
-    },
-    {
-        setting_id    = "glow_picker_auto_popup_enabled",
-        type          = "checkbox",
-        default_value = true,
-        tooltip       = mod:localize("glow_picker_auto_popup_enabled_tooltip"),
-    },
-    -- v0.9.29-dev (issue #48): hide weavebound / shyish glow families from
-    -- the illusion grid by default. Per-family toggles let the user opt
-    -- back in. Currently-equipped skin is preserved regardless.
-    {
-        setting_id    = "hide_weavebound_skins",
-        type          = "checkbox",
-        default_value = true,
-        tooltip       = mod:localize("hide_weavebound_skins_tooltip"),
-    },
-    {
-        setting_id    = "hide_shyish_skins",
-        type          = "checkbox",
-        default_value = true,
-        tooltip       = mod:localize("hide_shyish_skins_tooltip"),
-    },
+
+    -- Weapon Visual Tweaks (was "Weapon & Item Appearance").
     {
         setting_id  = "appearance_group",
         type        = "group",
         sub_widgets = {
+            -- v0.9.47-dev: collapsed the redundant "Weapon Model Tweaks" wrapper;
+            -- the lone toggles sit directly under this group now.
             {
-                setting_id  = "weapon_model_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "es_bastard_sword_thiccc",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("es_bastard_sword_thiccc_tooltip"),
-                    },
-                },
+                setting_id    = "es_bastard_sword_thiccc",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "es_bastard_sword_thiccc_tooltip",
             },
             {
-                setting_id  = "glow_override_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "glow_override_enable",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("glow_override_enable_tooltip"),
-                    },
-                    {
-                        setting_id    = "glow_override_preset",
-                        type          = "dropdown",
-                        default_value = "default",
-                        options       = {
-                            { text = "glow_preset_default", value = "default"      },
-                            { text = "glow_preset_white",   value = "white_glow"   },
-                            { text = "glow_preset_purple",  value = "purple_glow"  },
-                            { text = "glow_preset_gold",    value = "golden_glow"  },
-                            { text = "glow_preset_red",     value = "deep_crimson" },
-                            { text = "glow_preset_green",   value = "life_green"   },
-                            { text = "glow_preset_blue",    value = "lileath"      },
-                        },
-                        tooltip = mod:localize("glow_override_preset_tooltip"),
-                    },
-                    -- Advanced: per-channel COLORS (magic family) + per-channel
-                    -- brightness multipliers.
-                    --
-                    -- The main `glow_override_preset` above is one color applied
-                    -- across the whole weapon. Standard rune-family glowy
-                    -- weapons (themed Veteran, Stylish loot-chest) only have
-                    -- one channel and that's all they need. Multi-channel
-                    -- magic-family weapons (Weavebound, Shyish-Infused) have
-                    -- 3 distinct visual elements (per probe v0.8.22):
-                    --   * Lower gradient (color_glow_high + color_glow_low)
-                    --   * Upper gradient (color_smoke_high + color_smoke_low)
-                    --   * Dots particles (color_dots)
-                    -- Enable "Per-Channel Colors" to drive each independently.
-                    -- When the toggle is OFF, magic weapons use the main color.
-                    {
-                        setting_id  = "glow_advanced_group",
-                        type        = "group",
-                        sub_widgets = {
-                            {
-                                setting_id    = "glow_mult_master",
-                                type          = "numeric",
-                                default_value = 1.0,
-                                range         = { 0.0, 5.0 },
-                                decimals_number = 2,
-                                tooltip       = mod:localize("glow_mult_master_tooltip"),
-                            },
-                            -- Per-channel COLORS (magic-family). Defaults match
-                            -- the main color so toggling enable on/off doesn't
-                            -- visually flip until the user sets specific colors.
-                            {
-                                setting_id    = "glow_per_channel_color_enable",
-                                type          = "checkbox",
-                                default_value = false,
-                                tooltip       = mod:localize("glow_per_channel_color_enable_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_color_lower_gradient",
-                                type          = "dropdown",
-                                default_value = "default",
-                                options       = {
-                                    { text = "glow_preset_default", value = "default"      },
-                                    { text = "glow_preset_white",   value = "white_glow"   },
-                                    { text = "glow_preset_purple",  value = "purple_glow"  },
-                                    { text = "glow_preset_gold",    value = "golden_glow"  },
-                                    { text = "glow_preset_red",     value = "deep_crimson" },
-                                    { text = "glow_preset_green",   value = "life_green"   },
-                                    { text = "glow_preset_blue",    value = "lileath"      },
-                                },
-                                tooltip = mod:localize("glow_color_lower_gradient_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_color_upper_gradient",
-                                type          = "dropdown",
-                                default_value = "default",
-                                options       = {
-                                    { text = "glow_preset_default", value = "default"      },
-                                    { text = "glow_preset_white",   value = "white_glow"   },
-                                    { text = "glow_preset_purple",  value = "purple_glow"  },
-                                    { text = "glow_preset_gold",    value = "golden_glow"  },
-                                    { text = "glow_preset_red",     value = "deep_crimson" },
-                                    { text = "glow_preset_green",   value = "life_green"   },
-                                    { text = "glow_preset_blue",    value = "lileath"      },
-                                },
-                                tooltip = mod:localize("glow_color_upper_gradient_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_color_dots",
-                                type          = "dropdown",
-                                default_value = "default",
-                                options       = {
-                                    { text = "glow_preset_default", value = "default"      },
-                                    { text = "glow_preset_white",   value = "white_glow"   },
-                                    { text = "glow_preset_purple",  value = "purple_glow"  },
-                                    { text = "glow_preset_gold",    value = "golden_glow"  },
-                                    { text = "glow_preset_red",     value = "deep_crimson" },
-                                    { text = "glow_preset_green",   value = "life_green"   },
-                                    { text = "glow_preset_blue",    value = "lileath"      },
-                                },
-                                tooltip = mod:localize("glow_color_dots_tooltip"),
-                            },
-                            -- Per-channel BRIGHTNESS multipliers. Mult of 0
-                            -- SKIPS that channel (preserves whatever vanilla
-                            -- wrote, or no write on non-templated meshes).
-                            {
-                                setting_id    = "glow_mult_rune",
-                                type          = "numeric",
-                                default_value = 1.0,
-                                range         = { 0.0, 5.0 },
-                                decimals_number = 2,
-                                tooltip       = mod:localize("glow_mult_rune_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_mult_glow_high",
-                                type          = "numeric",
-                                default_value = 1.0,
-                                range         = { 0.0, 5.0 },
-                                decimals_number = 2,
-                                tooltip       = mod:localize("glow_mult_glow_high_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_mult_glow_low",
-                                type          = "numeric",
-                                default_value = 1.0,
-                                range         = { 0.0, 5.0 },
-                                decimals_number = 2,
-                                tooltip       = mod:localize("glow_mult_glow_low_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_mult_smoke_high",
-                                type          = "numeric",
-                                default_value = 1.0,
-                                range         = { 0.0, 5.0 },
-                                decimals_number = 2,
-                                tooltip       = mod:localize("glow_mult_smoke_high_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_mult_smoke_low",
-                                type          = "numeric",
-                                default_value = 1.0,
-                                range         = { 0.0, 5.0 },
-                                decimals_number = 2,
-                                tooltip       = mod:localize("glow_mult_smoke_low_tooltip"),
-                            },
-                            {
-                                setting_id    = "glow_mult_dots",
-                                type          = "numeric",
-                                default_value = 0.0,
-                                range         = { 0.0, 5.0 },
-                                decimals_number = 2,
-                                tooltip       = mod:localize("glow_mult_dots_tooltip"),
-                            },
-                        },
-                    },
-                },
+                setting_id    = "cos_moonfire_cosmetic_puff",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "cos_moonfire_cosmetic_puff_tooltip",
             },
+            -- v0.9.37-dev: the VMF "Weapon Glow Override" menu was REMOVED here;
+            -- glow is now driven by the in-context Glow Picker popup
+            -- (_glow_picker.lua). The old global-override apply paths go inert
+            -- with the setting gone (guarded, not ripped out).
         },
     },
-}
 
--- Experimental Third-Person Equipment: spawns extra 3P weapon meshes
--- attached to the player's body for whichever loadout slot isn't currently
--- wielded. Inspired by the standalone TPE mod (Workshop 1387440934).
--- Positions are coarse — per-item_type, not per-career.
-widgets[#widgets + 1] = {
-    setting_id  = "tpe_group",
-    type        = "group",
-    sub_widgets = {
-        {
-            setting_id    = "tpe_enable",
-            type          = "checkbox",
-            default_value = false,
-            tooltip       = mod:localize("tpe_enable_tooltip"),
-        },
-        {
-            setting_id    = "tpe_show_self_in_3p",
-            type          = "checkbox",
-            default_value = true,
-            tooltip       = mod:localize("tpe_show_self_in_3p_tooltip"),
-        },
-        {
-            setting_id      = "tpe_downscale_big_weapons",
-            type            = "numeric",
-            default_value   = 100,
-            range           = { 25, 100 },
-            decimals_number = 0,
-            tooltip         = mod:localize("tpe_downscale_big_weapons_tooltip"),
-        },
+    -- Cosmetic Availability (kept LAST): the generated per-character unlock tree
+    -- plus the two loose "unlock all" toggles, assembled above.
+    {
+        setting_id  = "cosmetic_availability_group",
+        type        = "group",
+        sub_widgets = cosmetic_availability_widgets,
     },
-}
-
--- Nest the auto-generated per-character cosmetic-unlock widget tree under a
--- single top-level "Cosmetic Availability" group so it doesn't clutter the
--- main settings list. The generated tree is Character → Career → Hats/Skins →
--- individual checkboxes; see _cosmetic_unlocks.lua and the python generator.
-widgets[#widgets + 1] = {
-    setting_id  = "cosmetic_availability_group",
-    type        = "group",
-    sub_widgets = U.widgets,
-}
-
--- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
--- Appended LAST so it stays at the BOTTOM of the widget tree, top-level
--- (NOT inside any group), key `enable_debug_logging` verbatim across every
--- mod in the repo. v0.9.14-dev: renamed from the per-mod `debug_dumps` key
--- (previously above the appearance group).
-widgets[#widgets + 1] = {
-    setting_id    = "enable_debug_logging",
-    type          = "checkbox",
-    default_value = false,
-    tooltip       = mod:localize("enable_debug_logging_tooltip"),
 }
 
 return {

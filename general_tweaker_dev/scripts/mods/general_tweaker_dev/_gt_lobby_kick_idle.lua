@@ -216,11 +216,11 @@ end
 -- Chat commands (renamed lt_* -> gt_lobby_* per merge)
 -- ---------------------------------------------------------------------------
 
-mod:command("gt_lobby_idle_whitelist", "Whitelist a Steam ID from idle-kicks. Usage: /gt_lobby_idle_whitelist <steam_id>",
+mod:command("lobby_idle_whitelist", "Whitelist a Steam ID from idle-kicks. Usage: /lobby_idle_whitelist <steam_id>",
     function(steam_id_arg)
         local sid = _normalize_id(steam_id_arg)
         if not sid then
-            mod:echo(TAG .. " /gt_lobby_idle_whitelist: missing or invalid steam_id.")
+            mod:echo(TAG .. " /lobby_idle_whitelist: missing or invalid steam_id.")
             return
         end
         local wl = _load_whitelist()
@@ -229,16 +229,16 @@ mod:command("gt_lobby_idle_whitelist", "Whitelist a Steam ID from idle-kicks. Us
         mod:echo(TAG .. " idle-whitelisted " .. sid .. ".")
     end)
 
-mod:command("gt_lobby_idle_unwhitelist", "Remove a Steam ID from idle-kick whitelist. Usage: /gt_lobby_idle_unwhitelist <steam_id>",
+mod:command("lobby_idle_unwhitelist", "Remove a Steam ID from idle-kick whitelist. Usage: /lobby_idle_unwhitelist <steam_id>",
     function(steam_id_arg)
         local sid = _normalize_id(steam_id_arg)
         if not sid then
-            mod:echo(TAG .. " /gt_lobby_idle_unwhitelist: missing or invalid steam_id.")
+            mod:echo(TAG .. " /lobby_idle_unwhitelist: missing or invalid steam_id.")
             return
         end
         local wl = _load_whitelist()
         if wl[sid] == nil then
-            mod:echo(TAG .. " /gt_lobby_idle_unwhitelist: " .. sid .. " not on whitelist.")
+            mod:echo(TAG .. " /lobby_idle_unwhitelist: " .. sid .. " not on whitelist.")
             return
         end
         wl[sid] = nil
@@ -246,9 +246,9 @@ mod:command("gt_lobby_idle_unwhitelist", "Remove a Steam ID from idle-kick white
         mod:echo(TAG .. " removed " .. sid .. " from idle whitelist.")
     end)
 
-mod:command("gt_lobby_idle_status", "Show idle-kick tracker (deltas + timers).", function()
+mod:command("lobby_idle_status", "Show idle-kick tracker (deltas + timers).", function()
     if not _is_host() then
-        mod:echo(TAG .. " /gt_lobby_idle_status: host only.")
+        mod:echo(TAG .. " /lobby_idle_status: host only.")
         return
     end
     local threshold = _threshold_seconds()

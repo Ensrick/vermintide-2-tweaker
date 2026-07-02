@@ -1,5 +1,645 @@
 # Weapon Tweaker Changelog
 
+## 0.12.195-dev (2026-07-01) - Localization fixes + player-facing option descriptions
+
+Menu-text cleanup pass. No gameplay, setting, or widget changes; every setting_id, default, and range is untouched.
+
+- **Fixed two option tooltips that were being localized twice** (once eagerly in code via `mod:localize(...)` in the widget's `tooltip` field, then again by the settings menu at build time), which made them render wrapped in `<>`. The dev **3P Anim Picker** master toggle (`enable_dev_anim_picker`, `weapon_tweaker_data.lua`) and the picker's per-attack dropdowns (`wt_dev_anim_attack_tooltip`, `wt_dev_anim_picker.lua`) now pass their loc keys as raw strings so the menu localizes them exactly once. The one correct eager-localize (`description = mod:localize("mod_description")`) was left as-is.
+- **Rewrote every option description and tooltip in plain, player-facing English** (`mod_description`, the `weapon_overrides` / `authentic_brace_of_pistols` / `wt_priest_punch_buff` / `moonfire_aoe_revert` / brett-buff tooltips, all Big Rebalance `_description` keys, and the dev-picker tooltips), dropping internal terms (hooks, templates, anim events, profile names, mod-ids) in favor of what the option does in-game. Max two sentences each.
+- **Removed leftover non-ASCII / angle-bracket characters from a few menu labels**: three Big Rebalance titles used a literal `->` arrow (now "to"), one dev-picker dropdown option used an em dash (now a hyphen), and the moonfire tooltip's `>` submenu path was reworded.
+- **Key cross-check**: verified all 1145 widget `setting_id`s in `weapon_tweaker_data.lua` (and the dev-picker's programmatically generated group/dropdown titles) resolve to a loc key. No keys were missing; none added. Flagged one likely-orphaned key (`wt_brett_sword_shield_buff_tooltip`) whose widget auto-resolves the `_description` suffix, not `_tooltip` — left as-is per the no-rename rule.
+
+## 0.12.194-dev (2026-07-01) — Availability menu source-character ordering (#179) + Executioner Sword on Saltzpyre picker (#160)
+
+Two fixes plus a batch of stale-issue verifications.
+
+- **#179 — Weapon Availability menu now groups every career's rows by SOURCE character in the fixed order Kruber, Bardin, Saltzpyre, Kerillian, Sienna** (weapon-key prefix es_, dr_, wh_, we_, bw_). Previously the ordering was inconsistent: each receiver listed its OWN character's weapons first, and the Saltzpyre careers (wh_captain / wh_bountyhunter / wh_zealot) were badly interleaved (e.g. `wh es we bw es dr we bw es dr we`). Reordered the `unlock_*` checkbox toggles inside every `melee_*` / `ranged_*` group in `weapon_tweaker_data.lua` to the fixed source-character order (stable within each source block, so existing within-block order is preserved). No toggle was added, removed, or re-defaulted — the setting_id multiset is byte-identical, only the row order changed. Also removed 12 stale historical batch-annotation comments (`-- Sienna batch D`, `-- Shield-combos override …`, `-- Batch E remaining …`) that were splitting the Saltzpyre lists; the shield-routing fact they noted is authoritative in `wt_wield_patches.lua`.
+- **#160 — added Kruber's Executioner Sword (`es_2h_sword_executioner`) to the Saltzpyre side of the dev 3P Anim Picker** for per-attack tuning. It already renders as Saltzpyre's 2H Sword via the existing `to_2h_sword` wield redirect (`two_handed_swords_executioner_template_1` → wh_* in `wt_wield_patches.lua`); this adds the picker surface. New SET G ("2H Sword") in `_SALTZ_SET_LABEL` / `_SALTZ_SET_VOCAB` with `two_handed_swords_template_1`'s 3P vocab (that template carries zero `anim_event_3p` overrides, so 3P == `anim_event` names, #196-safe), plus the port in `_SALTZ_WEAPON_SET/_TEMPLATE/_ATTACKS` (`wt_dev_anim_picker.lua`) and a `_NEEDS_ANIMS.saltzpyre` entry (`wt_port_status.lua`). Dev-tool only, 3P-only; 1P untouched. Tune → bake in a later pass.
+
+**Verified already-fixed (no code change this version; confirmed present in source with their regression tests, awaiting in-game re-confirmation):** #201 Deepwood Staff crash removal (v0.12.189, test `no_redundant_bardin_1h_on_saltzpyre` sibling area / `we_life_staff` gone from the 7 non-Kerillian lists), #195 Necromancer Staff soul_rip FX force-load (v0.12.179, test `necromancer_fx_package_resident_if_dlc`), #187 redundant Bardin 1H Axe/Hammer removed from Saltzpyre (v0.12.173, test `no_redundant_bardin_1h_on_saltzpyre`), #197 localize-flood fix reads the raw loc table (v0.12.183, test `wt_loc_raw_published`). #159 picker localized-name display shipped v0.12.178 (test `dev_picker_names_localized`); new code in this version follows the localized-name-comment convention.
+
+## 0.12.193-dev (2026-07-01) — Dev 3P Anim Picker: add Kerillian as a third receiver (33 cross-character ports, 8 SETs)
+
+Adds **Kerillian** (all four elf careers — Waywatcher / Handmaiden / Shade / Sister of the Thorn) to the dev **3P Anim Picker**, alongside the existing Kruber + Saltzpyre receivers, so the "next group" of cross-character melee weapons rendered on Kerillian's body can be tuned per-attack in-game. **Setup only** — no bakes, no `_3p_template_remaps` changes; the user tunes, then a later pass bakes. **3P-only** throughout; 1P never touched. Membership = every cross-character MELEE port (non-`we_` key) that appears in a `we_*` unlock list, is not already `_CONFIRMED.kerillian`, and has a `we_*` wield-redirect target in `wt_wield_patches`. Mirrors the Saltzpyre picker construction exactly (`_KERI_*` tables + `_RECV.kerillian` + `"kerillian"` in `_RECEIVERS`; move-label maps empty). New `_NEEDS_ANIMS.kerillian` bucket in `wt_port_status.lua` so the Weapon Availability menu tags them `[Needs Animations → <SET>]`.
+
+Each SET's dropdown vocab is the Kerillian-native target template's `anim_event_3p` column (fallback `anim_event` where no `_3p`) — the 3P events the elf body actually authors (#196). Only `1h_axes_wood_elf` diverges (`attack_swing_up` → `attack_swing_up_left`), folded into SET D.
+
+- **SET A — Elf 2H Axe/Glaive** (`to_2h_axe_we`, 12): es_2h_hammer, wh_2h_hammer, dr_2h_cog_hammer, dr_2h_pick, bw_ghost_scythe, bw_skullstaff_beam, bw_skullstaff_fireball, bw_skullstaff_flamethrower, bw_skullstaff_geiser, bw_skullstaff_spear, bw_necromancy_staff, bw_deus_01 (staves render as the 2H glaive)
+- **SET B — Elf 2H Sword** (`to_2h_sword_we`, 2): es_2h_sword_executioner, es_bastard_sword
+- **SET C — Elf 1H Sword** (`to_1h_sword`, 4): wh_fencing_sword, bw_1h_flail_flaming, bw_dagger, bw_flame_sword
+- **SET D — Elf 1H Axe** (`to_1h_axe`, 2): wh_1h_hammer, dr_1h_hammer (vocab carries the #196 `attack_swing_up`→`attack_swing_up_left` 3P divergence)
+- **SET E — Elf Spear & Shield** (`to_1h_spear_shield`, 7): es_mace_shield, es_sword_shield, es_sword_shield_breton, wh_flail_shield, wh_hammer_book, wh_hammer_shield, dr_shield_axe
+- **SET F — Dual Swords** (`to_dual_swords`, 3): wh_dual_hammer, dr_dual_wield_axes, dr_dual_wield_hammers
+- **SET G — Sword & Dagger** (`to_dual_sword_dagger`, 2): es_dual_wield_hammer_sword, wh_dual_wield_axe_falchion
+- **SET H — Elf Javelin** (`to_javelin`, 1): dr_1h_throwing_axes
+
+**Firearms excluded** (would route to `to_repeating_crossbow_elf`): wh_brace_of_pistols, wh_crossbow, wh_deus_01, wh_repeating_pistols, es_blunderbuss, es_handgun, es_repeating_handgun, dr_deus_01, dr_drake_pistol, dr_drakegun, dr_rakegun, dr_steam_pistol, dr_crossbow — the elf repeating crossbow authors only `attack_shoot`/`to_zoom` in 3P, so there's no meaningful per-attack tuning surface (same rationale the Kruber/Saltzpyre pickers used to exclude firearms).
+
+**Skipped** (no `we_*` wield-redirect target): es_1h_mace (`one_handed_hammer_template_1`), es_longbow (`longbow_empire_template`), wh_crossbow_repeater (`repeating_crossbow_template_1`, `es_`-only) — no elf redirect.
+
+## 0.12.192-dev (2026-07-01) — Fix longbow zoom/aim on Kruber's non-Huntsman careers (#210 follow-up)
+
+The v0.12.191 fix restored the native Huntsman longbow charge, but it also stopped the aim/zoom working when the Empire longbow is used on Kruber's OTHER careers (Mercenary/Foot Knight/Grail Knight), where it's a cross-career unlock. The zoom is the `action_two` aim (`anim_event = "draw_bow"`); on those cross-career bodies the native `draw_bow` doesn't drive the aim, so it must render via the universal `to_zoom` (as it did before .191). Fixed by keying the runtime remap on FULL career name: `es_huntsman` keeps native `draw_bow`; `es_mercenary`/`es_knight`/`es_questingknight` (and `wh_` Saltzpyre) map the aim to `to_zoom`. Native Huntsman unchanged.
+
+## 0.12.191-dev (2026-06-30) — Fix native longbow charge/draw animation broken by the longbow→crossbow patch (#210)
+
+Charging Kruber's own Empire longbow (and Kerillian's elf longbow) stopped animating. Cause: the Saltzpyre longbow→crossbow support (`_patch_longbow_empire_template_for_saltzpyre` / `_patch_longbow_template_1_for_saltzpyre`) overwrote `anim_event_3p` on the **shared** longbow templates **globally** — remapping `draw_bow` → `to_zoom` (crossbow aim) for every career, so the native wielder's draw fired a crossbow event that its body couldn't play. Fixed by moving the per-action crossbow remap off the shared template and into the **runtime career-scoped** `_3p_template_remaps.<template>.wh_` (Saltzpyre-only), with `es_`/`we_` marked native (`= false`). The career-scoped *wield* override is unchanged. Kruber/Kerillian native longbows keep their own `draw_bow`/`attack_shoot_fast`; Saltzpyre's crossbow swap still remaps. 1P untouched.
+
+## 0.12.190-dev (2026-06-30) — Rename "Weapon Overrides" menu section to "Weapon Tweaks"
+
+Display-label only — the `weapon_overrides` group now reads **"Weapon Tweaks"**. setting_id unchanged (no settings reset).
+
+## 0.12.189-dev (2026-06-30) — Fix Deepwood Staff (we_life_staff) hard-crash on non-Kerillian careers (#201)
+
+The Sister of the Thorn's Deepwood Staff (`we_life_staff`, `staff_life`) hard-crashed on wield when equipped on Kruber (and Saltzpyre): `staff_life.lua` `init_state_data` reads Kerillian-body finger nodes (`ep_r_index` etc.) via `Unit.node`, a C-level fatal (c_api_unit.cpp:74) that bypasses pcall — those nodes don't exist on non-Kerillian bodies. The staff's whole magic rig is finger-node-bound, so it can't render off-Kerillian. Removed `we_life_staff` from the 7 non-Kerillian career unlock lists (Kruber ×4 + Saltzpyre ×3) plus their `_data.lua` widgets and loc keys. Kept native on Sister of the Thorn (we_thornsister).
+
+## 0.12.188-dev (2026-06-30) — Bake the dev-picker 3P picks: 10 Kruber + 17 Saltzpyre cross-character ports flip to [Working]
+
+The user's confirmed dev 3P Anim Picker picks (from `user_settings(2).config`) are now **baked** career-scoped into `_3p_template_remaps` (`weapon_tweaker.lua`) so the animations ship to everyone — no dev toggle needed. Each baked weapon moved from `_NEEDS_ANIMS` → `_CONFIRMED` in `wt_port_status.lua` (Availability tag flips to **[Working]**) and was deleted from the picker tables (`_WEAPON_SET`/`_WEAPON_TEMPLATE`/`_WEAPON_ATTACKS` for Kruber, the emptied `_SALTZ_*` tables for Saltzpyre). **3P-only**, career-scoped (Kruber = `es_`, non-WP Saltzpyre = `wh_`); native owners (`bw_`/`we_`/`es_`/`wh_` = `false`) play untouched. 27 career-sub-keys added/replaced total.
+
+**Kruber (`es_`, 10 ports):**
+- `dr_2h_cog_hammer` → `two_handed_cog_hammers_template_1` (16 picks; **re-tuned**, #182 — replaces the v0.12.151 3-pick identity bake).
+- `wh_2h_hammer` → `two_handed_hammer_priest_template` (14 picks; **re-tuned**, #180 — replaces the v0.12.151 bake).
+- `wh_fencing_sword` (Rapier) → `fencing_sword_template_1` (7 picks; new, #178).
+- `bw_deus_01` → `bw_deus_01_template_1` (4 picks); `bw_necromancy_staff` → `staff_death` (6 picks); `bw_skullstaff_beam` → `staff_blast_beam_template_1` (5 picks); `bw_skullstaff_fireball` → `staff_fireball_fireball_template_1` (4 picks); `bw_skullstaff_flamethrower` → `staff_flamethrower_template` (4 picks); `bw_skullstaff_geiser` → `staff_fireball_geiser_template_1` (4 picks); `bw_skullstaff_spear` → `staff_spark_spear_template_1` (4 picks).
+
+**Saltzpyre (`wh_`, 17 ports — `_NEEDS_ANIMS.saltzpyre` now empty):**
+- `bw_dagger` → `one_handed_daggers_template_1` (10 picks); `bw_flame_sword` → `flaming_sword_template_1` (10 picks).
+- `we_2h_axe` → `two_handed_axes_template_2` (9 picks); `es_dual_wield_hammer_sword` → `dual_wield_hammer_sword_template` (11 picks); `dr_dual_wield_axes` → `dual_wield_axes_template_1` (13 picks); `we_dual_wield_daggers` → `dual_wield_daggers_template_1` (12 picks); `we_dual_wield_swords` → `dual_wield_swords_template_1` (12 picks); `we_dual_wield_sword_dagger` → `dual_wield_sword_dagger_template_1` (12 picks).
+- `we_spear` → `two_handed_spears_elf_template_1` (11 picks, #161 polearm re-tune); `es_halberd` → `two_handed_halberds_template_1` (9 picks, #161).
+- `bw_deus_01`, `bw_necromancy_staff`, `bw_skullstaff_beam/_fireball/_flamethrower/_geiser/_spear` → the shared staff/Deus templates (4–6 picks each; `wh_` sub-key added alongside the Kruber `es_` bake).
+
+**Notes:** The Kruber staves' `inspect_start` picks in the config were **NOT** baked — the current picker deliberately omits inspect (2026-06-29 user decision) and never applied them at runtime. `wh_hammer_book` stays in `_NEEDS_ANIMS.kruber` (no anim picks — its 3P is a mesh-swap, #181). The pre-existing stale picker `_SOURCE_MOVE_LABEL`/`_WEAPON_*` entries for already-confirmed weapons were left as-is (inert; gated out by `_PORT_STATUS.needs_anims`).
+
+## 0.12.187-dev (2026-06-30) — Skullsplitter & Tome on Kruber: offset-free book-hide instead of a spawned mesh swap (#181)
+
+The v0.12.186-dev spawned-unit mesh swap rendered with **crazy offsets** in-game (the freshly-spawned hammer linked to the right node with a bad transform). Replaced it with the simpler approach the user asked for: **keep the vanilla Skullsplitter hammer in its native engine position and just hide the book**, letting the `to_1h_hammer` wield redirect animate the hammer as Kruber's native 1H mace. No unit is spawned, linked, or relinked, so there are no swap-induced offsets.
+
+- **Removed**: the force-load helper + its constant + init call, the spawn/link/`mark_for_deletion` logic, and the preview spawn-swap (no mesh is spawned anymore).
+- **In-mission** (`weapon_tweaker.lua`, `_wt_hammer_book_3p_swap_apply` rewritten): on `es_` careers, when `GearUtils.spawn_inventory_unit` fires for `hand == "right"` (the book) the book 3P unit is hidden (`set_visibility`/`set_unit_visibility`, 3P-only); `hand == "left"` (the hammer) returns the vanilla units unchanged. Vanilla `show_third_person_inventory` re-shows the right-hand wielded unit on every wield (`simple_inventory_extension.lua:1017-1024`), so the book is **durably re-hidden** via the existing `show_third_person_inventory` post-hook — generalized from `_hide_brace_left_pistol` to `_rehide_hidden_3p_units` (brace → hide left pistol; `wh_hammer_book` → hide right/book; hammer kept). Still one `hook_safe` per (Class, method).
+- **Inventory preview** (`_wt_hammer_book_preview_swap_apply` rewritten): drops the book's `right_hand` `spawn_data` entry so it never spawns; the hammer (`left_hand`) entry is left untouched in its native position.
+- **Kept from v0.12.186-dev**: the wield patch (`one_handed_hammer_book_priest_template` es_* = `to_1h_hammer` — this IS the redirect to Kruber's 1H mace), the dev anim picker SET F entry, and the `wt_port_status` `_NEEDS_ANIMS.kruber` entry.
+- **3P-only, es_-only** throughout; 1P never touched; native Warrior Priest and all non-`es_` careers unaffected.
+
+## 0.12.186-dev (2026-06-30) — Skullsplitter & Tome on Kruber renders as a regular 1H Skullsplitter (#181)
+
+`wh_hammer_book` ("Skullsplitter & Tome", Warrior Priest's hammer+book) on Kruber (the four `es_` careers) now renders in 3rd person as a **regular 1H Skullsplitter** — hammer in the RIGHT hand, **no book** — playing **1H mace/hammer** 3P animations. Native Warrior Priest (`wh_priest`) and all non-`es_` careers are completely unaffected. **3P-only** — 1P (universal across all six characters) is never touched.
+
+- **Wield** (`wt_wield_patches.lua`): the four `es_*` entries for `one_handed_hammer_book_priest_template` change from `to_1h_hammer_shield` → `to_1h_hammer` (Kruber's native `es_1h_mace` / `one_handed_hammer_template_1` stance). `we_*` (Kerillian) entries unchanged.
+- **3P mesh swap** (`weapon_tweaker.lua`, `_wt_hammer_book_3p_swap_apply`, dispatched from the existing `GearUtils.spawn_inventory_unit` hook): on `es_` careers, the right-hand (book) spawn is replaced with a fresh `wpn_wh_1h_hammer_01` unit linked to `Weapons.one_handed_hammer_template_1`'s right one-handed-melee node (`j_rightweaponattach`); the vanilla book is `mark_for_deletion`'d. The left-hand (original) hammer is hidden at spawn and re-hidden durably via the existing `_hide_brace_left_pistol` `show_third_person_inventory` post-hook (extended to also match `wh_hammer_book`). Husk-visibility rule mirrors the brace/longbow swaps; whole body is `pcall`-isolated with vanilla fallback. The substitute unit is force-loaded at mod init (`_force_load_hammer_book_skullsplitter_3p_unit`).
+- **Inventory preview** (`_wt_hammer_book_preview_swap_apply`): same swap in the keep/hero 3P preview — right-hand `unit_name` + `unit_attachment_node_linking` rewritten to the hammer (target template's `third_person` table, so unwielded `a_unwielded_1h_right` is body-authored), left-hand entry dropped.
+- **Dev anim picker** (`wt_dev_anim_picker.lua`): new Kruber SET **F = "1H Mace/Skullsplitter"** (`one_handed_hammer_template_1` vocab, which has no 1P/3P divergence), with `wh_hammer_book` added to `_WEAPON_SET`/`_WEAPON_TEMPLATE`/`_WEAPON_ATTACKS`. Surfaced for tuning via `wt_port_status` `_NEEDS_ANIMS.kruber` (`"1H Mace/Skullsplitter"`).
+
+## 0.12.185-dev (2026-06-29) — Menu cleanup: fold Weapon Buffs in, remove Weapon Traits, move Moonfire cosmetic to Cosmetics
+
+Three menu changes per user:
+- **Weapon Buffs group removed** — its single option (Bretonnian Sword & Shield buff) moved into **Weapon Overrides** where it belongs. Orphan `wt_weapon_buffs` loc dropped.
+- **Weapon Traits (Adventure) collapsible removed** — the whole group (adventure + CW melee/ranged trait toggles) and its ~84 loc entries are gone. The backing `apply_trait_filters` pool filter is neutered to a no-op (vanilla trait roll pools left untouched); cim's `wt.traits`/`wt.categories` weave-forge mapping is unaffected (separate system).
+- **Moonfire Bow cosmetic AOE puff moved to cosmetics_tweaker** (Weapon & Item Appearance) — wt keeps only the gameplay `moonfire_aoe_revert`. `_wt_moonfire_on_hit` now handles revert only; the cosmetic-puff branch + `_wt_spawn_moonfire_puff` helper + `moonfire_cosmetic_puff` toggle/loc removed. See cosmetics_tweaker v0.9.48-dev.
+
+## 0.12.184-dev (2026-06-29) — Harden localized menu labels (tests + docs) (#159/#197)
+
+Hardening pass so the picker-localization class of bug can't silently recur. **Test:** added `dev_picker_group_labels_registered` — an END-TO-END check that asserts each picker group's **registered** loc value (`mod:localize(group_sid)`, what VMF actually renders) resolves to a real label, not a raw key or an unregistered `<key>`. This is the test that *would have caught #197* (the existing `dev_picker_names_localized` rebuilds a fresh label, so it resolved fine in-game while the registered menu labels were raw). Exposed `M.catalog_group_keys()` for it. **Docs:** new `LOCALIZATION_STANDARD.md` § 12 (dynamically-resolved menu labels: read raw loc data, never `mod:localize` during registration; no parallel hardcoded name maps) + checklist item; new `VMF_RECIPES.md` § 14 (the mod:localize-before-registration trap). No gameplay change.
+
+## 0.12.183-dev (2026-06-29) — Fix localization-error flood + actually resolve picker names (#197)
+
+The log flooded with `[wt][ERROR] (localize): localization file was not loaded for this mod` (27×) — introduced by v0.12.178. `_weapon_display_name` resolved documented names via `mod:localize`, but the picker catalog/labels are built at mod-init / `loc_keys()` time, **before wt's localization is registered** (the loc file dofiles the picker and calls `loc_keys()` from inside its own execution). So `mod:localize` errored per weapon AND returned nothing usable — meaning the v0.12.178 documented-names fix was also silently falling back to raw keys for the menu labels. Fixed by resolving names from wt's **raw loc table directly**: the localization file now publishes `mod._wt_loc_raw = loc` before dofiling the picker, and `_weapon_display_name` reads `mod._wt_loc_raw["unlock_<career>_<weapon>"].en` (stripping the status tag) — no `mod:localize`, no load-order dependency. So the staff names now actually resolve ("Sienna: Coruscation Staff", etc.) AND the error flood is gone. Added regression test `wt_loc_raw_published`. **Lesson:** never call `mod:localize` from a path that runs during loc registration — read the raw loc data instead.
+
+## 0.12.182-dev (2026-06-29) — Fix Billhook (SET F) charge-attack picks not playing (#196)
+
+Picking the Billhook's charge attacks in the dev anim picker did nothing in 3P. Cause: SET F's vocab was built from the billhook's **1P `anim_event`** names, but the picker writes the picked value as **`anim_event_3p`** — and the billhook's charge/heavy attacks have divergent 1P/3P names (1P `attack_swing_charge_stab` → 3P `attack_swing_stab_charge`, etc., confirmed in vanilla `2h_billhooks.lua`). So charge/heavy picks set a 3P event the Saltzpyre body doesn't author → fell through to idle. Rebuilt `_SALTZ_SET_VOCAB.F` from the billhook's `anim_event_3p` column (deduped). Added regression test `saltz_billhook_set_uses_3p_events`. **Class risk** (tracked in #196): the other SET vocabs were grepped the same way and may have the same latent bug wherever a target template's charge/heavy `anim_event_3p` diverges from its `anim_event` — needs a cross-set audit.
+
+## 0.12.181-dev (2026-06-29) — Remove the inspect animation from the dev anim picker
+
+Per user: the inspect animation should never be a tunable picker dropdown — each weapon just keeps whatever inspect animation it already uses, so there's nothing to map. Removed every `inspect_start` entry from the picker's `_WEAPON_ATTACKS` and `_SALTZ_WEAPON_ATTACKS` (the seven Sienna staves on Kruber + Saltzpyre were the only weapons that listed it). The picker no longer generates an inspect dropdown and never writes an `anim_event_3p` override for inspect. Added regression test `dev_picker_no_inspect_dropdown` so inspect can't creep back into the attack tables.
+
+## 0.12.180-dev (2026-06-29) — +0.6 Z grip offset for the remaining Sienna staves on Kruber
+
+Extends the Flamestorm Staff's +0.6 Z grip drop to the other six Sienna staves ported to Kruber that lacked one — **Beam, Fireball, Conflagration (geiser), Bolt (spear), Soulstealer (necromancy), and Coruscation (deus_01)** staves. They all render as Greathammer in 3P (picker SET A), so Kruber's hands need the same haft seating. Added to `_weapon_grip_offsets` (`{ es_ = {0,0,0.6} }`) and `_DURABLE_GRIP_OFFSETS` (large offset, stomped each anim tick otherwise). **`es_`-only** (Kruber) — Sienna's native `bw_*` grip is untouched; **3P + inventory-preview only**, 1P never touched.
+
+## 0.12.179-dev (2026-06-29) — Fix Necromancer Staff soul_rip crash on cross-char wielders (FX force-load timing) (#195)
+
+A tester crashed (`create_particles` C-fatal, `fx/wpnfx_necromancer_skullstaff_anticipation` not loaded) when firing the **Necromancy Staff's soul_rip** special on a cross-character wielder. wt *does* force-load `bw_necromancer` (which holds that FX) gated on the Necromancer DLC (`shovel`), but the gate ran only at **mod-init**, where `Managers.unlock:is_dlc_unlocked` can still be **unresolved even for an owner** — so the gate returned early (no log) and the package never loaded (confirmed in the nicho log: only `bw_unchained` force-loaded; `dlcs/shovel` was resident from boot, proving ownership). Fix: (1) ownership now also accepts the boot DLC package `dlcs/shovel` being resident (a timing-safe owner signal resolved before mod-init); (2) the force-load is idempotent and **re-attempted from `on_game_state_changed`** (keep/mission entry, ownership always resolved by then), so the package is guaranteed resident before the staff can be wielded in a mission. True non-owners still never load it (they can't wield it). Existing regression test `necromancer_fx_package_resident_if_dlc` covers residence-when-owned.
+
+## 0.12.178-dev (2026-06-29) — Dev anim picker shows documented weapon names, not raw keys (#159)
+
+The dev 3P Anim Picker showed **raw internal keys** for weapons missing from its hardcoded `_WEAPON_NAME` map — the tester saw "Sienna bw_deus_01" instead of "Sienna: Coruscation Staff" (all seven Sienna staves added in v0.12.157 were never added to that table, so `_weapon_display_name` fell back to the key). Fixed at the source: `_weapon_display_name` now resolves each weapon's name from the **same documented localization the Weapon Availability menu uses** (`unlock_<career>_<weapon_key>`, via a `weapon_unlock_map` lookup to a guaranteed-present career), strips the computed `[Needs Animations → …]` status tag, and only falls back to the curated map (then a source-qualified key) if no loc entry exists. The two menus can no longer diverge. Added regression test `dev_picker_names_localized` (asserts no catalog weapon's label contains its raw key) so this can't regress.
+
+## 0.12.177-dev (2026-06-29) — Rapier on Kruber back to Empire Sword & Shield (#178)
+
+Reverts the wrong `to_1h_sword` detour from v0.12.171: Saltzpyre's **Rapier** (`fencing_sword_template_1`) on Kruber now wields as **Empire Sword & Shield** (`to_1h_sword_shield`) again, per user — this is what was asked for originally and the bare-1H-sword redirect should never have shipped. All four `es_` careers reverted in `wt_wield_patches.lua`; `_NEEDS_ANIMS.kruber` label updated to "Empire Sword & Shield". Dev picker keeps SET C (Empire 1H Sword) for swing tuning since sword-and-shield shares the 1H-sword swing vocab (shield only adds block/bash). Kerillian (`we_`) untouched; 1P never touched.
+
+## 0.12.176-dev (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.12.175-dev (2026-06-28) — Hold-Pose tuner: rotation sliders actually rotate (#168 follow-up)
+
+The rotation sliders appeared to do nothing (reported on a left-hand shield). Cause: `Quaternion.from_euler_angles_xyz` takes **degrees** (vanilla `crawl_space_extension.lua:14` passes `90` for 90°), but `_build_pose` wrapped the slider values in `math.rad()` — so a 30° input became 0.52°, ~57× too small and imperceptible. Offset (position) had no such conversion, which is why it worked. Removed the `math.rad()` wrap; degrees pass straight through. Updated the `/wt_dump_hold_pose` "Apply via" snippet to degrees so any baked rotation is correct.
+
+## 0.12.174-dev (2026-06-28) — Bretonnian Longsword grip offset on Saltzpyre
+
+Bake a **+0.08 Z** 3P grip offset for the **Bretonnian Longsword** (`es_bastard_sword`) when wielded by **Saltzpyre** (`wh_`-scoped). User-tuned via the hold-pose tuner. Added to `_weapon_grip_offsets` (`{ wh_ = {0,0,0.08} }`) and `_DURABLE_GRIP_OFFSETS` — durable because node 0 is reset every anim tick, so a one-shot would be stomped in-game (preview-OK/in-game-wrong). `wh_`-only (Kruber `es_` + native wielders untouched); 3P-only (1P never touched).
+
+## 0.12.173-dev (2026-06-28) — Remove redundant Bardin 1H Axe + 1H Hammer from Saltzpyre (#187)
+
+`dr_1h_axe` (≡ Saltzpyre's `wh_1h_axe`) and `dr_1h_hammer` (≡ Saltzpyre's `wh_1h_hammer` Skullsplitter) are redundant on Saltzpyre and are removed from the non-WP careers. Removed from the `wh_captain`/`wh_bountyhunter`/`wh_zealot` unlock_map lists + menu toggles + loc (kept for Bardin & Kerillian). Added regression test `no_redundant_bardin_1h_on_saltzpyre` so they can't creep back in (raised several times). Verified surgical via a `wh_`-specific 3-token anchor.
+
+## 0.12.172-dev (2026-06-28) — Restore Saltzpyre Crossbow on Kruber (#138) + Cog Hammer re-tune (#182)
+
+- **#138 Saltzpyre's Crossbow** (`wh_crossbow`) restored on Kruber. It had been dropped from the Kruber `es_` unlock_map + menu toggles even though its baked 3P anims/grip-offsets and the `a_unwielded_crossbow` crash-fix (`_patch_xchar_unwielded_attachment_safe` → `j_hips`) are intact. Re-added to all 4 `es_` unlock lists + menu toggles (default on) + loc (`"Saltzpyre: Crossbow"`). Added regression test `kruber_has_saltzpyre_crossbow` so it can't silently vanish again.
+- **#182 Cog Hammer** (`dr_2h_cog_hammer`) on Kruber → moved `_CONFIRMED.kruber` → `_NEEDS_ANIMS.kruber` and re-added to the dev picker (SET A) to re-tune bad anims (same handling as #180; old `_3p_template_remaps.two_handed_cog_hammers_template_1.es_` bake left until re-tuned).
+
+Tracking-only (open): **#183** (Kruber ranged tags/localized-names/ordering), **#184** (Kruber ranged weapons missing from dev picker), **#179** (Availability source-char ordering), **#181** (Skullsplitter & Tome model-sub).
+
+## 0.12.171-dev (2026-06-28) — Kruber weapon status batch (#176/#177/#178/#180)
+
+- **#176 Falchion** (`wh_1h_falchion`) + **#177 Crowbill** (`bw_1h_crowbill`) on Kruber → tagged `_CONFIRMED.kruber` (`[Working]`), user-confirmed in-game.
+- **#178 Rapier** (`wh_fencing_sword`) on Kruber → wield changed `to_1h_sword_shield` → **`to_1h_sword`** (1H Sword, not sword+shield) in `wt_wield_patches.lua`; added to the dev picker (Kruber `_WEAPON_SET = "C"` Empire 1H Sword + `_WEAPON_TEMPLATE`/`_WEAPON_ATTACKS` + `_NEEDS_ANIMS.kruber`) to tune the swings, then bake.
+- **#180 Saltzpyre Greathammer** (`wh_2h_hammer`) on Kruber → moved `_CONFIRMED.kruber` → `_NEEDS_ANIMS.kruber` and re-added to the picker (SET A) to re-tune the bad anims. The old career-scoped bake (`_3p_template_remaps.two_handed_hammer_priest_template.es_`) is **left in place** until re-tuned (picker picks override per-attack); clear + re-bake after the new tune.
+
+Still open from this batch: **#179** (Weapon Availability source-character ordering), **#181** (Skullsplitter & Tome model-substitute). Dev-tool/picker + wield-patch + status only; 1P untouched.
+
+## 0.12.170-dev (2026-06-28) — Dev Hold-Pose tuner: independent per-hand offset/rotation; remove hand dropdown (#168)
+
+Fixes a soft-bake bug: the tuner had ONE offset/rotation slider set shared via a `wt_dev_hp_target_hand` dropdown, so setting the right hand then switching the dropdown to left reused the same values and corrupted the pose.
+
+- **Removed** the `wt_dev_hp_target_hand` dropdown and the 6 shared sliders.
+- **Added** two independent groups: **Right hand** (`wt_dev_hp_rh_offset_x/y/z`, `_rh_rot_pitch/yaw/roll`) and **Left hand** (`wt_dev_hp_lh_*`), each its own persisted offset (m) + rotation (deg).
+- `_apply_pose_all()` now resolves the right and left 3P units separately and applies **each hand from its own sliders** (no shared/"both" path). Defer-to-baked guard preserved per hand (all-zero = no write). `/wt_dev_hp_reset` zeros all 12; the dump emits both hands. 3P-only; `_resolve_wielded` + 1P untouched.
+
+## 0.12.169-dev (2026-06-28) — Saltzpyre dev picker batch 3: polearm regression (Kerillian Spear + Kruber Halberd) (#161)
+
+Adds **Kerillian's Spear** (`we_spear`, `two_handed_spears_elf_template_1`) and **Kruber's Halberd** (`es_halberd`, `two_handed_halberds_template_1`) to the Saltzpyre dev anim picker so the regressed swings can be re-tuned. New picker **SET F = Saltzpyre Billhook** (`two_handed_billhooks` vocab, grepped). Both moved from `_CONFIRMED.saltzpyre` → `_NEEDS_ANIMS.saltzpyre`.
+
+- Diagnosis: the **wield is already correct** (`two_handed_spears_elf_template_1` + `two_handed_halberds_template_1` both `wh_* = "to_2h_billhook"`, the Saltzpyre Billhook stance — `2h_billhooks.lua:1468`). The regression is the classic polearm class (CHANGELOG **v0.12.64-dev**): the stance renders but per-attack **swing events no-op** on the billhook SM unless remapped. Re-tune the swings in the picker (SET F), then bake; root-cause of the swing-remap drop tracked in **#161**.
+- Localized-name dev comments added next to the internal keys (Kerillian "Spear" / Kruber "Halberd" / Saltzpyre "Bill Hook") per the new localization convention (#159).
+
+## 0.12.168-dev (2026-06-28) — FIX (render lever): Saltzpyre dual axes → axe&falchion, dagger → falchion via WIELD PATCH
+
+Corrects a mistake from .164/.165: re-pointing the dev picker SET only changes the dev tool's dropdown options — it does **not** change the rendered animation. The actual lever is `wt_wield_patches.lua` (`wield_anim_career_3p`). Both weapons were still rendering the old anims:
+- **Bardin Dual Axes** (`dual_wield_axes_template_1`) on Saltzpyre was `wh_* = "to_dual_hammers_priest"` (WP Dual Hammers) → now **`to_dual_axe_sword_wh`** (Dual Axe & Falchion), as requested.
+- **Sienna Dagger** (`one_handed_daggers_template_1`) on Saltzpyre was `wh_* = "to_fencing_sword"` (Rapier) → now **`to_1h_sword`** (1H Falchion's wield; `1h_falchions.lua:1183`).
+
+(`es_dual_wield_hammer_sword` was already `to_dual_axe_sword_wh`, so it was correct.) Added regression tests `saltzpyre_dual_axes_wield_axe_falchion` + `saltzpyre_dagger_wield_falchion` asserting the wield values. Picker SETs/`_NEEDS_ANIMS` already aligned in .164/.165 for per-attack tuning on top.
+
+## 0.12.167-dev (2026-06-28) — Regression markers for this session's crash fixes + dual-hammers removal
+
+Added three `/wt_regression_test` checks so the session's fixes can't silently regress:
+- **`fire_fx_package_resident`** (#128) — asserts `careers/bw_unchained` is force-loaded (drakefire/fireball/flamethrower AOE particles resident for cross-character wielders).
+- **`necromancer_fx_package_resident_if_dlc`** (v0.12.163) — asserts `careers/bw_necromancer` is resident when the Necromancer (`shovel`) DLC is owned (Soulstealer/Necromancy staff soul_rip particle); SKIPs when the DLC isn't owned (the load is intentionally DLC-gated).
+- **`no_dwarf_dual_hammers_on_saltzpyre`** (v0.12.164) — asserts `dr_dual_wield_hammers` stays out of the `wh_captain`/`wh_bountyhunter`/`wh_zealot` unlock lists (redundant with Dual Skullsplitters).
+
+The two package checks are **runtime residence assertions** (`Managers.package:has_loaded`), run in-keep via `/wt_regression_test`. No behavior change.
+
+## 0.12.166-dev (2026-06-28) — Saltzpyre: Empire Hammer & Sword → Dual Axe & Falchion anims
+
+`es_dual_wield_hammer_sword` (Empire Mace & Sword) on Saltzpyre now redirects to **Dual Axe & Falchion** (picker SET C) instead of WP Dual Hammers (SET B). Updated `_SALTZ_WEAPON_SET` + `_NEEDS_ANIMS.saltzpyre`. With this, all Saltzpyre dual-wields (Kerillian daggers/swords/sword-dagger, Bardin dual axes, Empire hammer&sword) share SET C; **SET B (WP Dual Hammers) now has no assigned weapon** (left defined). Picker-only; tune then bake. Kruber unchanged.
+
+## 0.12.165-dev (2026-06-28) — Saltzpyre: Sienna Dagger → 1H Falchion anims (was Fencing Sword)
+
+`bw_dagger` (Sienna Dagger) on Saltzpyre now redirects to **1H Falchion** (picker SET E) instead of Fencing Sword/Rapier (SET D). Updated `_SALTZ_WEAPON_SET` + `_NEEDS_ANIMS.saltzpyre` display. SET D (Fencing Sword) now has no assigned weapon — left defined for possible future reuse. Picker-only; tune per-attack then bake. Kruber's dagger (separately baked → Empire 1H Sword) is untouched.
+
+## 0.12.164-dev (2026-06-28) — Saltzpyre: dual axes → Dual Axe & Falchion; drop redundant Dwarf Dual Hammers
+
+Two Saltzpyre cross-character tweaks (user-directed):
+1. **Bardin Dual Axes (`dr_dual_wield_axes`) now redirects to Dual Axe & Falchion** (picker SET C) instead of Warrior Priest Dual Hammers (SET B) — an axe-containing dual-wield → axe-containing dual-wield is the better visual fit. Picker `_SALTZ_WEAPON_SET` + `_NEEDS_ANIMS.saltzpyre` display updated; tune per-attack in the dev picker, then bake.
+2. **Removed Dwarf Dual Hammers (`dr_dual_wield_hammers`) from Saltzpyre entirely** — redundant with the **Dual Skullsplitters** (`wh_dual_hammer`) the non-WP Saltzpyre careers already have. Removed from the unlock map (`wh_captain`/`wh_bountyhunter`/`wh_zealot` only — Bardin & Kerillian keep it), the dev picker tables (`_SALTZ_WEAPON_SET`/`_TEMPLATE`/`_ATTACKS`), `_NEEDS_ANIMS.saltzpyre`, and the menu toggles + loc keys for those 3 careers.
+
+Data-only / picker-only; no apply-path or core-logic change. Kruber unchanged.
+
+## 0.12.163-dev (2026-06-28) — FIX: Necromancy/Soulstealer Staff CTD on cross-character wielders (DLC-gated package)
+
+Fixes a second cross-character particle crash (same class as #128, different package). Firing the **Necromancy / Soulstealer Staff** (`bw_necromancy_staff`, `staff_death`) `soul_rip` attack on a non-Necromancer wielder CTD'd the host (nicho, 2026-06-28):
+
+```
+create_particles failed, Particle effect '#ID[418bb6de77c32555]' not loaded
+effect_name = "fx/wpnfx_necromancer_skullstaff_anticipation"  | sub_action = "soul_rip"
+```
+
+**Root cause.** The #128 fix force-loads `careers/bw_unchained`, which covers every Sienna staff a base Sienna career can wield (beam/fireball/geiser/spark-spear/flamethrower/coruscation). But the Necromancy Staff is **Necromancer-exclusive**, so its particles live only in the `bw_necromancer` career package (verified: bundle `82250c065e5b8ade` contains `418bb6de77c32555`) — not in bw_unchained.
+
+**Fix.** Also force-load `resource_packages/careers/bw_necromancer` at mod init. Because it's a **DLC career (`shovel`)**, the load is **gated on DLC ownership** (`Managers.unlock:is_dlc_unlocked("shovel")`, with `dlc_exists` pre-check) — force-loading a DLC package a non-owner doesn't have installed would itself async-crash. Only owners can wield the Necromancy Staff, so non-owners need nothing. With this, `bw_unchained` (non-DLC, all base-Sienna staves) + `bw_necromancer` (DLC, the Necromancy Staff) cover every cross-character Sienna staff.
+
+- 3P/particle-residence only; no apply-path change. Not yet in-game verified — needs the soul_rip retest on a cross-character Necromancy Staff.
+
+## 0.12.162-dev (2026-06-27) — Bake Flamestorm Staff grip offset (+0.6 Z) on Kruber
+
+User-tuned grip offset baked for the Sienna **Flamestorm Staff** (`bw_skullstaff_flamethrower`) when wielded by Kruber: `_weapon_grip_offsets.bw_skullstaff_flamethrower.es_ = {0, 0, 0.6}`, added to `_DURABLE_GRIP_OFFSETS` (per-frame re-apply, same path as the scythe/glaive) so the engine's per-tick canonical-pose reset can't stomp it. Seats Kruber's hands on the staff haft (the staff renders as Greathammer in 3P via the staff anim redirect).
+
+- **es_ ONLY (Kruber)** — Sienna's native `bw_*` careers find no prefix match → offset stays nil → native Sienna grip untouched. **3P-ONLY** by construction (`_offset_weapon_units` + durable re-apply write only `*_unit_3p`, never 1P — `feedback_cross_char_transforms_3p_only`). Single source of truth = `_weapon_grip_offsets`; `_DURABLE_GRIP_OFFSETS` is just the membership set.
+- No new hook, no apply-path change. Mirrors the scythe (`+0.6 Z`) and glaive (`+0.285 Z`) durable offsets.
+
+## 0.12.161-dev (2026-06-27) — Saltzpyre dev picker batch 2: 7 Sienna staves
+
+Adds the 7 Sienna staves (Beam / Fireball / Flamethrower / Geiser / Spark-Spear / Necromancy / Coruscation) to the Saltzpyre side of the dev 3P Anim Picker, mapped to **SET A (Warrior Priest Greathammer, 2-handed grip)** — mirroring how the same staves were handled for Kruber (staves → Greathammer). The staff cast/charge source events get one dropdown each, options = the WP Greathammer 2H swing vocab; tune per-cast in-game, then bake career-scoped (`wh_`).
+
+- Source attack data for all 7 staves is reused verbatim from the verified Kruber `.157` staff `_WEAPON_ATTACKS` (source events are receiver-independent). Templates re-confirmed. All 7 verified present in the `wh_captain`/`wh_bountyhunter`/`wh_zealot` unlock lists (equippable on Saltzpyre).
+- `_NEEDS_ANIMS.saltzpyre` gains the 7 staves (redirect-target display "Warrior Priest Greathammer"); `_SALTZ_WEAPON_SET/_TEMPLATE/_ATTACKS` gain the 7 entries. Saltzpyre picker now lists 16 ports (9 melee batch-1 + 7 staves).
+- Dev-tool only, 3P-only — no apply-path/bake/ship change. Kruber unchanged. CAVEAT: SET A target is a Warrior Priest weapon (`bless` DLC); staff anims fall through to idle without the DLC (no crash). Remaining Saltzpyre batches: shields (7), ranged (pistols/crossbow/drakegun), throwing axes/javelin.
+
+## 0.12.160-dev (2026-06-27) — Dev 3P Anim Picker now multi-receiver; added Saltzpyre batch 1
+
+The dev-only 3P Anim Picker (`wt_dev_anim_picker.lua`) is refactored from KRUBER-only to **multi-receiver** via a `_RECV` dispatch table, and seeded with the first Saltzpyre batch. Dev-tool only, 3P-only — no change to the apply path or to any baked/shipped animation.
+
+### What changed
+- **New `_RECV` dispatch** keyed by receiver (`kruber` / `saltzpyre`). The existing Kruber data tables (`_SET_LABEL` / `_SET_VOCAB` / `_SET_MOVE_LABEL` / `_WEAPON_SET` / `_WEAPON_TEMPLATE` / `_WEAPON_ATTACKS` / `_SOURCE_MOVE_LABEL`) are **left byte-identical**; Kruber simply points at them through `_RECV.kruber`. The catalog builder, vocab/label readers, `loc_keys`, dump and coverage headers were repointed at `_RECV`.
+- **Kruber output unchanged** — same `p_kruber_*` port_ids, same setting_ids, same labels. Saltzpyre adds 9 new `p_saltzpyre_*` entries.
+- **Saltzpyre batch 1 = 9 melee cross-character ports across 5 SETs:** WP Greathammer (A), WP Dual Hammers (B), Dual Axe & Falchion (C), Fencing Sword / Rapier (D), 1H Falchion (E). Surfaced via the new `_NEEDS_ANIMS.saltzpyre` allow-list in `wt_port_status.lua` (rendered on the non-WP Saltzpyre body: wh_captain / wh_bountyhunter / wh_zealot).
+- Weapons: Kerillian Glaive (`we_2h_axe` → A); Kruber Mace & Sword (`es_dual_wield_hammer_sword`), Bardin Dual Axes (`dr_dual_wield_axes`), Bardin Dual Hammers (`dr_dual_wield_hammers`) → B; Kerillian Dual Daggers / Dual Swords / Sword & Dagger (`we_dual_wield_*`) → C; Sienna Dagger (`bw_dagger` → D); Sienna Flaming Sword (`bw_flame_sword` → E).
+
+### Caveats
+- **WP-DLC dependency on SET A/B:** the SET A (WP Greathammer) and SET B (WP Dual Hammers) redirect targets are Warrior-Priest weapons (`bless` DLC). Their anims live on the shared Saltzpyre body but may be absent without the DLC — the picker falls through to the idle stance (no T-pose, no crash).
+- **Move labels are raw-event for batch 1** — Saltzpyre's `set_move_label` / `source_move_label` maps are intentionally empty, so rows/options show the raw `anim_event` (the resolvers already fall back to the raw event). Polished move labels are a follow-up.
+
+## 0.12.159-dev (2026-06-27) -- FIX: cross-character fire/explosion weapons CTD non-native careers
+
+Fixes a hard crash-to-desktop reported by nicho (host, 2026-06-25): equipping a Bardin/Sienna **fire weapon** on a career that doesn't natively own it (e.g. **Drakefire Pistols on Foot Knight**) and firing it crashed the game on the AOE detonation —
+
+```
+<<Lua Error>> WorldApi create_particles failed, Particle effect '#ID[35874310a062bfd8]' not loaded
+Assertion failed `...resource_manager().can_get(particle_type, particle_name)` at c_api_world.cpp:384
+  DamageUtils.create_explosion -> World.create_particles
+```
+
+**Root cause.** The drakefire/fireball AOE explosion particle `fx/wpnfx_drake_pistols_projectile_impact` (murmur64A `35874310a062bfd8`) is referenced by *string* in `ExplosionTemplates`, so it is not a build-time dependency of the weapon's unit bundle. It is bundled into the **career packages** of the careers that natively wield these weapons (Bardin `dr_*`, Sienna `bw_*`). A cross-character wielder loads the weapon unit but never that career package → the resource manager can't get the particle at detonation → C-level assert (bypasses `pcall`, same class as the existing brace/crossbow unit force-loads).
+
+**Fix.** Force-load one vanilla, non-DLC Sienna career package (`resource_packages/careers/bw_unchained`) at mod init, mirroring the existing `_force_load_brace_repeater_3p_unit` pattern. Verified via `vt2_bundle_unpacker` that this single ~10 MB package contains **all** the common cross-character fire particles at once — `wpnfx_drake_pistols_projectile_impact` (Drake Pistols AOE + Fireball basic), `wpnfx_fireball_charged_impact_remap` + `wpnfx_fireball_charged_impact` (Fireball charged), and `wpnfx_flamethrower_01` (Drakegun + Flamethrower staff) — so the one load covers Drake Pistols, Drakegun, and the fireball/flamethrower staves for every wt user. Vanilla package = Steam-verified complete bundle, so the force-load is safe (no missing-member C-fatal); this is resource-pool memory, not the Lua heap.
+
+- **Not yet in-game verified** — needs a non-Bardin career (Foot Knight) to equip Drakefire Pistols via wt, fire a charged shot, and confirm no crash on detonation. The `[wt fire-fx]` printf logs the force-load result at boot.
+- **Follow-up:** the Sienna flaming-flail particle (`0df4b41f`) lives in the `anvil` DLC package (DLC-gated, lower-traffic cross-char port) and is deferred to a later batch.
+
+## 0.12.158-dev (2026-06-27) -- Bretonnian Sword and Shield damage buff toggle (live, no restart)
+
+New opt-in toggle `wt_brett_sword_shield_buff` (Weapon Buffs group, default OFF). Buffs ONLY the Bretonnian Sword and Shield (template `one_handed_sword_shield_template_2`, used only by that weapon and its skins, so nothing leaks to other weapons).
+
+- All attacks: +10% damage (`power_distribution.attack`), +10% attack speed (`anim_time_scale`), headshot coefficient set to 2, vs-monster (`armor_modifier.attack[3]`) set to 4, vs-berserker (`armor_modifier.attack[5]`) set to 1.25. On top: `heavy_attack_stab` (heavy 3) +20% damage, `light_attack_right` (light 2) +10% faster, `light_attack_stab_postpush` (push follow-up) +20% damage. The push action itself is untouched.
+- Scoped via private `wt_brettsns_` damage-profile and PowerLevelTemplates clones (mirrors character_weapon_variants `_clone_damage_profile` and its anim_time_scale loop). Applies and reverts LIVE via `mod.wt_apply_brett_buff` (`on_setting_changed` plus once at load), no restart: captures vanilla values once, then swaps the template's per-attack fields between vanilla and buffed.
+- `[wt:brettsns]` printf logs each attack's current headshot/monster/berserker for verification (expected 1.5 / 0.75 / 2.5). Armor indices verified from breeds (rat_ogre and chaos_troll armor_category 3 = monster; chaos_berzerker and skaven_plague_monk 5 = berserker). NOT in-game tested; multiplayer note: all peers should run the same wt build for consistent networked damage.
+
+## 0.12.156-dev (2026-06-25) — BAKE the final 7 Kruber [Needs Animations] 3P ports (picker now empty)
+
+The last seven cross-character ports flagged `[Needs Animations]` on Kruber are now baked as permanent **career-scoped defaults** in `_3p_template_remaps` (`weapon_tweaker.lua`), so they render correctly for every subscriber **with no dev picker, no setting, and no per-user configuration**. The picks were pulled verbatim from the user's persisted dev anim picker (`user_settings.config`, 2026-06-25). With these baked, **`_NEEDS_ANIMS.kruber` is now empty** — every Kruber picker port is baked.
+
+### What changed
+- **Baked into `_3p_template_remaps`** (`weapon_tweaker.lua`), each entry career-scoped (native owner's prefix `= false` so its 3P plays UNTOUCHED; `es_` carries the Kruber-only redirect):
+  - `we_one_hand_axe_template` — Kerillian 1H Axe (`we_1h_axe`) → Kruber native 1H Axe (`to_1h_axe`, mostly identity).
+  - `two_handed_axes_template_2` — Kerillian Glaive (`we_2h_axe`) → Empire Greathammer (durable +0.285 Z grip offset already set v0.12.152).
+  - `dual_wield_daggers_template_1` — Kerillian Dual Daggers (`we_dual_wield_daggers`) → Empire Mace & Sword.
+  - `dual_wield_sword_dagger_template_1` — Kerillian Sword & Dagger (`we_dual_wield_sword_dagger`) → Empire Mace & Sword.
+  - `dual_wield_swords_template_1` — Kerillian Dual Swords (`we_dual_wield_swords`) → Empire Mace & Sword.
+  - `dual_wield_hammers_priest_template` — WP/Saltzpyre Dual Skullsplitters (`wh_dual_hammer`) → Empire Mace & Sword (`wh_ = false` covers both Saltzpyre and Warrior Priest).
+  - `one_handed_flail_shield_template` — WP/Saltzpyre Flail & Shield (`wh_flail_shield`) → Empire Mace & Shield.
+  Each `es_` table maps the template's fired source `anim_event` → the user's picked target, verbatim from the config. Consumed at the `Unit.animation_event` hook via `state.remap` — **3P body only**. Identity entries are harmless re-fires; `__unset__` picks were omitted (fall through to native). No new apply call, no new hook.
+- **Picker removal** (`wt_port_status.lua`): all 7 keys deleted from `_NEEDS_ANIMS.kruber` (now `{}`) and added to `_CONFIRMED.kruber` so the dev picker drops them and the Weapon Availability tag reads `[Working]`. The stale `we_2h_axe` grip-offset note updated to reflect the anim is now baked too.
+
+### Scope / safety
+**3P-ONLY** — no `anim_event`/`wield_anim`/`state_machine`/1P-unit read or write; anim redirects on the 3P-body hook path only. Native owners (Kerillian / Saltzpyre / Warrior Priest) play untouched via the owner-prefix `false` fall-through. No new file-scope locals at chunk scope; 200-locals respected. Docs updated: `ANIMATION_COVERAGE.md` (5 rows / 7 keys → ✅ BAKED `[Working]`; stale chooser-exclusion-sync note removed).
+
+## 0.12.155-dev (2026-06-25) — Ship baked Kruber 3P picks + correct scythe grip (+6 → +0.6), dev override defers to bake
+
+Release roll-up of the baked Kruber 3P animation-picker work (v0.12.149/.150/.151-dev) to the **public** `weapon_tweaker` Workshop item (id 3712896117). The finished Kruber 3P picks for the cross-character ports — **Bardin's Pickaxe, Bardin's Dual Axes, Sienna's Fire Sword, Sienna's Dagger, Sienna's Mace, the Necromancer Ghost Scythe, the Warrior Priest / Saltzpyre Greathammer, and the Outcast Engineer Coghammer** — are baked into `_3p_template_remaps` as permanent **career-scoped defaults**, so they render correctly for every subscriber **with no dev picker, no setting, and no per-user configuration required**. The picks were captured verbatim from the user's `[wt:play]` log.
+
+### What ships in this build
+- **Baked picks live in `_3p_template_remaps`** (`weapon_tweaker.lua`), each entry career-scoped: the native owner's career prefix is `false` (so `_resolve_template_remap` returns nil → the native owner's 3P plays UNTOUCHED), and the `es_` (Kruber) branch carries the redirect. Consumed at the `Unit.animation_event` hook via `state.remap` — **3P body only** (the 1P hands unit is excluded upstream; 1P is never touched per the universal-1P rule). No new apply call, no new hook (VMF duplicate-hook rule respected).
+- **Scythe 3P grip offset corrected `+6` → `+0.6` Z** in `_weapon_grip_offsets` (`bw_ghost_scythe.es_ = {0, 0, 0.6}`). The prior `+6` value was a 10× metres overshoot (the offset is in metres, so `6` flung the haft 6 m off-body); the corrected `0.6` seats Kruber's hands on the scythe haft. Career-scoped to Kruber's `es_*` and applied via the durable per-frame re-apply path (`_DURABLE_GRIP_OFFSETS`) so the engine's per-tick canonical-pose reset can't stomp it. 3P-only by construction (`_offset_weapon_units` `unit_fields` is hardcoded to `*_3p`); Sienna's native scythe grip is provably not moved (no `bw_*` prefix match).
+- **Dev grip-offset override now defers to the baked value at its `0` default.** The Hold-Pose Tuner's `wt_dev_hp_live_apply` checkbox defaults to `false` (live per-frame apply OFF) and the dev offset sliders default to `0`, so a stock install never touches the wielded weapon unit — the baked `_weapon_grip_offsets` / durable re-apply value survives untouched for every subscriber. Belt-and-suspenders: `_apply_pose_to` also no-ops when all sliders are `0`, so even with live-apply on, an untouched tool can't clobber the bake. The user enables the override deliberately only when tuning a new weapon.
+- **No new logic in this version** beyond the grip-offset correction + version bump — this entry also ships the already-baked .149/.150/.151 remap data to the public item as a clean release. The dev picker / `[wt:apply]`/`[wt:play]` instrumentation is retained for the remaining flagged weapons.
+
+### Scope / safety
+**3P-ONLY** — no `anim_event`/`wield_anim`/`state_machine`/1P read or write; native owners (Bardin / Sienna / Saltzpyre-WP) play untouched via the owner-prefix `false` fall-through. The grip-offset correction is a single data-value edit (`6` → `0.6`) on an already-es_-scoped entry — no new prefix match, no native-wielder exposure. No new file-scope locals at chunk scope; 200-locals cap respected.
+
+## 0.12.154-dev (2026-06-24) — Strip dev-only `[confirmed working]` tags from the public labels
+
+Follow-up to v0.12.153-dev (which stripped `[untested]`). Stripped the leading `[confirmed working] ` display prefix from **19** user-facing `en = "..."` label values in `weapon_tweaker_localization.lua` (cross-character weapon-unlock rows: Kerillian Spear, Saltzpyre Axe/Billhook across Mercenary/Huntsman/Knight/Questing Knight + the Waywatcher/Maidenguard/Shade/Thornsister axe rows + the Captain/Bounty Hunter/Zealot spear rows). Display-string-only edit — no logic, hooks, or behavior changed. Verified 0 `[confirmed working]` occurrences remain in any `en =` value. The legitimate feature/category tags `[CW]` (Chaos Wastes) and `[Big Rebalance]` were left intact (21 occurrences unchanged).
+
+## 0.12.153-dev (2026-06-24) — Strip dev-only `[untested]` tags from the public labels
+
+This is the **public** `weapon_tweaker` Workshop item (id 3712896117, visibility=public). The dev-only `[untested]` prefix tags were leaking onto the live in-game labels.
+
+### What changed
+- **`weapon_tweaker_localization.lua`** — stripped the leading `[untested] ` display prefix from **629** user-facing `en = "..."` label values (cross-character weapon-unlock rows: `unlock_es_mercenary_*`, etc.). The labels now read clean (e.g. `"Bardin: Great Axe"` instead of `"[untested] Bardin: Great Axe"`). Verified: **0** `[untested]` occurrences remain in any `en =` value. The 4 remaining `[untested]` mentions in this file are code comments / status-vocabulary docs (non-display) and were left untouched.
+- **`wt_port_status.lua`** — untouched; its `[Untested]` occurrences are status-tracking literals and comments, not user-facing loc strings.
+
+### Scope / safety
+Display-string-only edit — no logic, hooks, or behavior changed. The `*_dev` weapon_tweaker item keeps its tags (dev surface).
+
+## 0.12.150-dev (2026-06-24) — BAKE Sienna's Mace + Necromancer Scythe as PERMANENT Kruber-only 3P defaults (+ Scythe 3P grip offset)
+
+Two more weapons the user finished tuning on Kruber — **Sienna's Mace (`bw_1h_mace`)** and the **Necromancer Ghost Scythe (`bw_ghost_scythe`)** — are now baked as permanent career-scoped defaults so they ship without the dev picker. The picks were captured verbatim from the user's `[wt:play]` log. Both render as **Empire Greathammer** in 3P on Kruber; the Scythe additionally gets a **+0.569 Z 3P grip offset** (Kruber-only) so Kruber's hands sit on the haft. Mirrors the v0.12.149-dev 4-weapon bake exactly, plus the one extra offset step.
+
+### What changed
+- **Baked into `_3p_template_remaps`** (`weapon_tweaker.lua`), career-scoped:
+  - `one_handed_hammer_wizard_template_1` — `bw_ = false` (Sienna native untouched), `es_ = {…}` (Kruber → Empire Greathammer). 13 source→target picks.
+  - `staff_scythe` — `bw_ = false` (Sienna native untouched), `es_ = {…}` (Kruber → Empire Greathammer). 15 source→target picks; the two scythe specials (`special_action` / `special_action_02`) have no SET A twin and are mapped to the nearest Greathammer events per the user's picks (`attack_swing_charge` / `attack_swing_down_left`).
+  Each `es_` table maps the template's fired source `anim_event` → the user's picked target, verbatim from the dump. Resolved via the existing `_resolve_template_remap` (prefix-matched, `weapon_tweaker.lua:1078`) and consumed at the `Unit.animation_event` hook via `state.remap` (`weapon_tweaker.lua:1510`) — **3P body only** (the 1P hands unit is excluded upstream). The native owner's `bw_ = false` makes `_resolve_template_remap` return nil for any Sienna (`bw_*`) career → native plays untouched (same precedent as `flaming_sword_template_1.bw_ = false`). No new apply call, no new hook (VMF duplicate-hook rule respected — none added).
+- **Scythe 3P grip offset BAKED** into `_weapon_grip_offsets` (`weapon_tweaker.lua`): `bw_ghost_scythe = { es_ = {0, 0, 0.569} }`. **Career-scoped to `es_` only** — `_offset_weapon_units` matches by career prefix (`career_name:sub(1, #prefix) == prefix`, `weapon_tweaker.lua:1972`), so only Kruber's `es_*` careers match; Sienna's `bw_*` careers find no matching prefix → `offset` stays nil → early return → **Sienna's native scythe grip is NOT moved**. **3P-ONLY by construction** — `_offset_weapon_units`' `unit_fields` list is hardcoded to `{ "left_unit_3p", "right_unit_3p" }` (the `*_1p` fields were removed as a latent bug in v0.12.136); it CANNOT touch 1P. Applied at both rendering paths via the shared helper (in-game `GearUtils.create_equipment` + menu `MenuWorldPreviewer._spawn_item_unit`). Per the table's own NOTE, this one-shot `create_equipment` write CAN be stomped by the engine's per-frame attachment re-apply on some weapons — if the Scythe snaps back in testing, escalate to a **career-gated `unit_attachment_node_linking.third_person` mutation** (NOT a raw `staff_scythe` linking write — that surface is shared with Sienna).
+- **Picker removal** (`wt_port_status.lua`): `bw_1h_mace` and `bw_ghost_scythe` deleted from `_NEEDS_ANIMS.kruber` (the catalog/setting-index gate) so the dev picker no longer surfaces them; both added to `_CONFIRMED.kruber` so the Weapon Availability tag reads `[Working]`. `bw_ghost_scythe` ALSO removed from `_NEEDS_OFFSETS.kruber` (now `{}`) since its offset is applied, not pending — so `M.tag` stops returning `[Needs Offsets]`. Mirrored out of the picker's `_WEAPON_SET` for lockstep.
+- **Picker retained for the REMAINING flagged weapons** (Coghammer, WP Greathammer, WH 1H Axe, the Kerillian dual/2H ports, etc.); the `[wt:apply]`/`[wt:play]` instrumentation is kept to capture future picks.
+
+### Scope / safety
+**3P-ONLY** — no `anim_event`/`wield_anim`/`state_machine`/1P-unit read or write; anim redirects on the 3P-body hook path only, grip offset via `_offset_weapon_units` whose `unit_fields` is hardcoded to `*_3p`. Native Sienna 3P + grip is provably untouched (owner prefix `bw_ = false` for anims; `es_`-prefix-only match for the offset; the two new templates had no prior `_3p_template_remaps` entry, so the native-owner fall-through chain is byte-identical to pre-bake). No new file-scope locals at chunk scope; 200-locals respected. Docs updated: `ANIMATION_COVERAGE.md` (2 rows → ✅ BAKED `[Working]`), `KRUBER_3P_ANIM_DECISIONS.md` (BAKED table + provenance picks + status rows; Scythe offset noted).
+
+## 0.12.149-dev (2026-06-24) — BAKE 4 finished Kruber 3P picks as PERMANENT, CAREER-SCOPED defaults (3P-ONLY)
+
+The four weapons the user finished tuning on Kruber — **Bardin's Pickaxe, Bardin's Dual Axes, Sienna's Fire Sword, Sienna's Dagger** — are now baked as permanent defaults so they ship to every friend and subscriber WITHOUT the dev picker. The picks were captured verbatim from the user's `[wt:play]` log.
+
+### Why a career-scoped remap, NOT a shared `anim_event_3p` write
+All four templates carry **no authored `anim_event_3p` natively** (verified against the decompiled `2h_picks.lua`, `dual_wield_axes.lua`, `1h_swords_flaming_spell.lua`, `1h_dagger_wizard.lua` — `anim_event` only). So `weapon_unit_extension.lua:512` (`anim_event_3p or event`) fires the source `anim_event` string on **every wielder's own 3P body** at `:652`. Writing the shared template's `anim_event_3p` (what the dev picker's raw apply does) would make the **NATIVE owners** — Bardin (pickaxe, dual axes) and Sienna (fire sword, dagger) — fire the Kruber-tuned string on THEIR skeletons too, silently breaking the native 3P view for any non-Kruber wielder. The bake avoids this entirely.
+
+### What changed
+- **Baked into `_3p_template_remaps`** (`weapon_tweaker.lua`), career-scoped:
+  - `two_handed_picks_template_1` — `dr_ = false` (Bardin native untouched), `es_ = {…}` (Kruber → Empire Greathammer).
+  - `flaming_sword_template_1` — `bw_ = false` (Sienna native untouched), `es_ = {…}` (Kruber → Empire 1H Sword).
+  - `one_handed_daggers_template_1` — `bw_ = false`, `es_ = {…}` (Kruber → Empire 1H Sword).
+  - `dual_wield_axes_template_1` — ADDED `es_ = {…}` to the existing entry (Kruber → Empire Mace & Sword); the `dr_ironbreaker`/`dr_ranger`/`dr_engineer` Bardin-cross block and the implicit `dr_slayer`-native fall-through are unchanged.
+  Each `es_` table maps the template's fired source `anim_event` → the user's picked target, verbatim from the dump. Resolved via the existing `_resolve_template_remap` (prefix-matched) and consumed at the `Unit.animation_event` hook — **3P body only** (the 1P hands unit is excluded upstream). The native owner's `dr_`/`bw_` = `false` makes `_resolve_template_remap` return nil → native plays untouched (same precedent as `two_handed_billhooks_template`'s `wh_ = false`). No new apply call, no new hook (VMF duplicate-hook rule respected — none added).
+- **Picker removal** (`wt_port_status.lua`): the 4 weapon_keys (`dr_2h_pick`, `dr_dual_wield_axes`, `bw_dagger`, `bw_flame_sword`) deleted from `_NEEDS_ANIMS.kruber` (the catalog/setting-index gate) so the dev picker no longer surfaces them. Their now-inert stored VMF settings can't fight the bake — the apply path iterates only `_setting_index`, which is gated on the catalog, which is gated on `_NEEDS_ANIMS`. Same keys added to `_CONFIRMED.kruber` so the Weapon Availability tag reads `[Working]`. Mirrored out of the picker's `_WEAPON_SET` for lockstep.
+- **Picker retained for the REMAINING flagged weapons** (Coghammer, WP Greathammer, WH 1H Axe, the Kerillian dual/2H ports, scythe, etc.); the `[wt:apply]`/`[wt:play]` instrumentation is kept to capture future picks.
+
+### Scope / safety
+**3P-ONLY** — no `anim_event`/`wield_anim`/`state_machine`/1P-unit read or write; only `anim_event_3p`-equivalent redirects on the 3P-body hook path. Native Bardin/Sienna 3P is provably untouched (owner prefix `false`; the three new templates had no prior `_3p_template_remaps` entry, so the native-owner fall-through chain is byte-identical to pre-bake). No new file-scope locals at chunk scope (the dual-axes `es_t` lives inside the existing IIFE closure); 200-locals respected. Docs updated: `ANIMATION_COVERAGE.md` (4 rows → ✅ BAKED), `KRUBER_3P_ANIM_DECISIONS.md` (Completed Picks → BAKED section + status rows).
+
+## 0.12.148-dev (2026-06-24) — 3P Anim Picker: gameplay MOVE LABELS on rows + dropdown options (3P-ONLY, display-only)
+
+The dev 3P Anim Picker now shows gameplay move labels (Light 1 / Heavy 2 / Charge N (windup) / Push / Push Attack / Block) move-first on every attack ROW and every dropdown OPTION, with the raw `anim_event` kept as a secondary clarifier so each entry stays unambiguous. Previously every row and option rendered the bare engine event name (`attack_swing_down_left`), which told the user nothing about which actual swing it drives.
+
+### What changed
+Two new static label maps mirroring the existing vocab/attack structure, with no behavioral change to the apply path:
+- `_SET_MOVE_LABEL[set][anim_event]` — the TARGET-set move label per dropdown OPTION (e.g. SET A `attack_swing_heavy` → "Heavy 2"). Mirrors `_SET_VOCAB` 1:1; all 55 vocab options (5 sets × 11) labeled.
+- `_SOURCE_MOVE_LABEL[weapon_key][anim_event]` — the SOURCE-weapon move label per attack ROW (e.g. `dr_2h_pick` `attack_swing_down_left` → "Heavy 1"). Mirrors `_WEAPON_ATTACKS` 1:1.
+
+Both resolved offline by chain-tracing the decompiled weapon templates (the authoritative sub-action NAME is the light/heavy classifier — `light_attack_*` = Light, `heavy_attack_*` = Heavy; the `kind="melee_start"` charge poses = "Charge N (windup)"). All five sets are charge-style templates: `action_one` opens on a held charge windup that branches to a light or heavy swing on release; `attack_push` = Push; `parry_pose` = Block.
+
+### Label format
+- Attack ROW label: `↳ Light 1  ·  attack_swing_down_left` (move-first, U+00B7 middle-dot separator, raw event as clarifier).
+- Dropdown OPTION label: `Heavy 2  ·  attack_swing_heavy`. The stored setting `value` is STILL the raw `anim_event` verbatim — only the displayed `text` is the move-first label, so the apply path (`mod:get(sid)` → `_apply_anim_event_change`) is untouched. Two new helpers `_move_label_for_set` / `_move_label_for_source` build the strings; `_build_options` and `loc_keys` register each label string as its own VMF loc key (raw forms also registered for fall-through).
+
+### Raw-event fallbacks (no clean move label — 4 of 186 source attacks)
+Where a source attack has no clean target-set twin, the label falls back to the raw event name (never blank): `bw_ghost_scythe` `special_action` / `special_action_02` (Necromancer scythe special), `bw_flame_sword` `attack_swing_right_spell` (spell attack), `wh_flail_shield` `attack_slam` (shield slam, `light_attack_03`). `wh_2h_hammer`'s slams got descriptive labels ("Slam (special)" / "Slam (charged special)") rather than a raw fallback. All 55 dropdown OPTIONS are fully labeled (0 raw-fallbacks).
+
+### Scope / safety
+**3P-ONLY** — display-only change; no `anim_event_3p` write path, hook, or persist logic touched (`anim_event` / `wield_anim` / 1p units / `state_machine` never read or written). No new hooks (the picker still has none; VMF duplicate-hook rule respected). The hardcoded vocab, only-flagged membership filtering, character names, and the working apply path (`anim_event_3p` writes, `_ensure_setting_index_built`) are all preserved. 5 new file-scope symbols (`_SET_MOVE_LABEL`, `_SOURCE_MOVE_LABEL`, `_LABEL_SEP`, `_move_label_for_set`, `_move_label_for_source`); 47 file-scope locals total, 200-locals respected. mod-lint clean (0 forward-ref / late-local / duplicate-hook).
+
+## 0.12.147-dev (2026-06-23) — 3P Anim Picker: picks now load from settings (empty `_setting_index` on the apply instance) — 3P-ONLY
+
+The actual root cause behind every prior 3P-anim-picker miss (the .144 cache-bust and the .145 instrumentation were chasing the wrong layer): the apply path was iterating an **empty `_setting_index`**, so it never wrote anything to any template. The user's 0.12.146-dev instrumented log proved it — **zero `[wt:apply]` lines** for the entire session (neither boot `reapply_stored_picks` nor live `on_setting_changed` wrote anything), and every `[wt:play]` showed `picks_set={}`, `is_picked_3p_value=false`, `FINAL (unchanged)`, `has_anim=true`. The funnel was innocent (FINAL unchanged) and the clips existed (`has_anim=true`); the picks simply never reached the template because the runtime pick set was empty.
+
+### Root cause — `mod:dofile` is NOT a singleton; the apply instance's index was never populated
+`mod:dofile("…/wt_dev_anim_picker")` **re-executes the chunk and returns a fresh module table on every call** (it does not cache like `require`). The file is dofiled from **three** places, each getting its own private copy of the file-scope `_setting_index` upvalue:
+- `weapon_tweaker.lua:139` — the **SCRIPT** instance (runs `install()` → `reapply_stored_picks()` at boot, and `mod.on_setting_changed` → `M.on_setting_changed()` on every live dropdown change),
+- `weapon_tweaker_data.lua:1757` — the **DATA** instance (runs `build_widget_tree()`),
+- `weapon_tweaker_localization.lua:1366` — the **LOC** instance (runs `loc_keys()`).
+
+`_setting_index` is populated **only** inside `build_widget_tree()` (via `_build_attack_dropdown` → the per-attack rec write). That ran on the **DATA** instance only. The **SCRIPT** instance — the one that actually applies picks at boot and on change — never called `build_widget_tree()`, so its `_setting_index` stayed `{}`. `reapply_stored_picks()` iterated an empty table (zero applies); `on_setting_changed()` looked up `_setting_index[setting_id]`, got nil, and returned early (silent no-op). The dropdowns still showed the user's stored picks because VMF renders them straight off the settings store on the DATA instance — masking the empty SCRIPT-side index. This is the [[reference_vmf_mod_file_load_order]] / cross-instance-state class: shared state must live on the `mod` table or be rebuilt per-instance, never in a single dofile instance's upvalue. Setting-id symmetry was never the problem — the write-id and read-id are identical; the table they live in was the wrong (empty) one.
+
+### Fix — make the index self-building on whichever instance needs it
+New file-scope `_ensure_setting_index_built()` populates `_setting_index` from the same static catalog/attack tables **without** building any widgets (cheap, idempotent, guarded by `_setting_index_built`). The rec-write is factored into a shared `_register_attack_setting(entry, source_event)` used by **both** `_build_attack_dropdown` (DATA instance, building widgets) and `_ensure_setting_index_built` (SCRIPT instance, apply-only) so the rec shape can never drift between them. `reapply_stored_picks()` and `on_setting_changed()` now call `_ensure_setting_index_built()` first — so the SCRIPT instance's index is populated before it reads it, regardless of which dofile instance the entry point fired on. `build_widget_tree()` still fully populates the index as before and now marks `_setting_index_built = true` so a redundant rebuild on that same instance is a no-op.
+
+### Expected log after this fix
+Boot now emits `[wt:apply] … n>0` lines for every stored pick (was zero); a live dropdown change emits an `[wt:apply]` line immediately. `[wt:play]` should now show a non-empty `picks_set={…}` and `is_picked_3p_value=true` for picked attacks on the equipped picker weapon.
+
+### Scope / safety
+**3P-ONLY** — only `anim_event_3p` is read/written; `anim_event` / `wield_anim` / 1p units / `state_machine` are never touched. No new hooks (the picker module still has none; VMF duplicate-hook rule respected). The .144 MechanismOverrides cache-bust and the .145 `[wt:apply]`/`[wt:play]` instrumentation are **kept intact** — they're now meaningful because the apply path actually runs. New file-scope symbols: `_setting_index_built`, `_register_attack_setting`, `_ensure_setting_index_built`; `_build_attack_dropdown` slimmed to delegate. 200-locals respected. mod-lint clean (0 forward-ref / late-local / duplicate-hook).
+
+## 0.12.146-dev (2026-06-23) — Inventory-preview wield pose for cross-character ports (3P-ONLY)
+
+Fixes the missing wield stance in the keep inventory character preview for cross-character weapons whose `wt_wield_patches.lua` entry omits the previewed career's prefix — reported case **Elf Greatsword (`we_2h_sword`) on Kruber**, plus every other prefix-gap port (the fix is career-agnostic, not a one-off `es_*` add).
+
+### Root cause
+The previewer (`MenuWorldPreviewer`, derived from `HeroPreviewer`) fires the wield anim on the 3P body directly at spawn: `wield_anim_career_3p[career] -> wield_anim_career[career] -> item_template.wield_anim` (`world_hero_previewer.lua:1059-1066`). That path does **NOT** go through wt's `Unit.animation_event` redirect hook — the preview `character_unit` has no `career_system`/`inventory_system` extension, so `_unit_career_name(unit)` is nil in the hook and the `_career_anim_redirect` branch is a no-op there (gated on a resolved career). For `we_2h_sword` the template is `two_handed_swords_wood_elf_template`, whose wield patch lists only `wh_*`; on a Kruber `es_*` career `wield_anim_career_3p[es_*]` is nil, so the previewer fell back to the elf base `wield_anim = "to_2h_sword_we"` and fired it on Kruber's `empire_soldier` body, which does not author that elf event → no wield transition → the body holds its previous/idle stance (the "missing pose" symptom; no T-pose). In-mission is correct because `_career_anim_redirect.to_2h_sword_we` redirects it (alt `to_bastard_sword` on non-`we_` careers).
+
+### Fix — receiver-native pose on the preview 3P body
+Merged into the **existing** `MenuWorldPreviewer._spawn_item_unit` hook (no new hook — VMF duplicate-hook rule respected). After the engine spawns the unit, for the currently-wielded slot only (`self._wielded_slot_type == slot_type`, matching the engine's own gate so the off-hand isn't re-posed), it:
+1. recomputes the event the engine fired (`wield_anim_career_3p[career]` → base `wield_anim`),
+2. resolves the receiver-native target via the new `_resolve_preview_wield_event` helper, which re-uses the **same `_career_anim_redirect` data** (overrides → prefix/invert → alt) plus the suffix-redirect fallback the in-mission hook uses — **no parallel pose table**,
+3. fires it on `self.character_unit` **only when** the resolved event differs from what was fired, the body does **not** author the fired event (i.e. it really was the missing-pose fallback), and the body **does** author the resolved event (`_safe_has_anim` guards both).
+
+### Scope / safety
+General fix for the whole prefix-gap class, not greatsword-only. **3P-ONLY**: the preview world has no 1P unit; only `self.character_unit` is touched; `anim_event`/`wield_anim`/1p units/`state_machine` are never read or written. Nil-guarded for preview spawn timing (`_is_unit`, `_safe_has_anim`, `pcall`-wrapped `Unit.animation_event`). No new locals near the 200 cap. New helper `_resolve_preview_wield_event` (file-scope, placed after `_try_suffix_redirect`). Diagnostic line `[wt:preview_wield]` logs each correction.
+
+## 0.12.145-dev (2026-06-23) — 3P Anim Picker: LOGGING-ONLY play-path + apply-path instrumentation (no behavior change)
+
+Diagnose-before-mitigate. The v0.12.144-dev cache-bust did not make picks visibly change the 3P animation in-game, and the structural "write reaches engine" analysis has been wrong twice. This build adds **logging only** to the apply path and the runtime play path so the next attack logs exactly where a picked animation is lost. No behavior fix; no 1P paths touched.
+
+### Override-hypothesis verdict (investigated, then instrumented to confirm/refute in-game)
+For the prime suspect — `dr_2h_pick` (`two_handed_picks_template_1`) wielded by a Kruber career — the runtime redirect funnel does **NOT** rename a picked event. Traced in source: the pickaxe's Kruber wield event is `to_2h_hammer` (`wt_wield_patches.lua:194`), which is **not** a key in `_3p_remap_triggers`; `two_handed_picks_template_1` has **no** entry in `_3p_template_remaps`; key `dr_2h_pick` has none in `_3p_key_remaps`; and the fallback `_resolve_3p_remap("to_2h_hammer", career)` returns nil — so `state.remap` stays nil and the attack-remap / flail / career-redir / suffix branches all fall through. The picked `anim_event_3p` value reaches `Unit.animation_event(owner_unit, <picked>)` unchanged. Separately, `MechanismOverrides` returns the **original live** `two_handed_picks_template_1` table (the template carries no `mechanism_overrides` field, and neither do its actions — only `packmaster_claw` does in `weapon_templates/`), so for the pickaxe the cache-bust is a no-op and the engine reads the picker's live writes directly. **Conclusion:** the loss is NOT the funnel and NOT the MechanismOverrides cache for this weapon — it is upstream (apply-side) or a content limitation (Kruber body doesn't author/visibly play the picked clip). The instrumentation distinguishes these.
+
+### `[wt:apply]` — apply-path trace (always logged, both live `on_setting_changed` and boot `reapply_stored_picks`)
+`_apply_anim_event_change` now `mod:info`s `[wt:apply] tpl=… source_event=… -> anim_event_3p=… n=… sites={action.sub,…}` on every write — proving (a) the write reached the template the wielded weapon uses and (b) the COUNT of sub-actions matched + the exact `action.sub_action` sites written (n>0). When `n==0` it additionally dumps the live template's full `anim_event`/`anim_event_3p` vocab (`_live_anim_event_vocab`) so a stale-`_WEAPON_ATTACKS` source-string mismatch is diagnosable from the log alone.
+
+### `[wt:play]` — runtime play-path trace (LOCAL 3P body, picker weapons only, gated on the picker toggle)
+New block in the `Unit.animation_event` hook (`weapon_tweaker.lua`). Scoped to: `is_local` 3P body, a combat event (`attack_`/`push_`/`parry_`), `enable_dev_anim_picker` ON, and `state.template` being one of the picker's flagged templates (`_wt_dev_anim_picker.is_picker_template`). It logs:
+- `[wt:play] READ event=… tmpl=… key=… career=… is_picked_3p_value=… has_anim=… picks_set={src->val,…}` — the event the ENGINE read for this swing. On the 3P body the engine fires the picked `anim_event_3p` VALUE directly (`weapon_unit_extension.lua:512`), so `is_picked_3p_value=true` means the pick reached the engine; `false` means it was lost upstream (apply n==0 / wrong template / never written). `has_anim` reports whether the Kruber skeleton even authors that clip.
+- `[wt:play] FINAL event=… (read was …) <<RENAMED BY FUNNEL>> | (unchanged) has_anim=…` — emitted via a per-call wrapper on the hook's `func`, so EVERY downstream fire in the hook reports the FINAL event handed to the engine. If wt's funnel renamed the picked event, the FINAL line differs and names it (override hypothesis, confirmed/refuted per swing). (The one FORCE path calling `_original_animation_event` directly is gated on `state.remap == spear_to_billhook`, which never applies to a picker weapon, so wrapping `func` is complete coverage here.)
+
+### Reading the log
+(a) Did the pick get written to the wielded template? → `[wt:apply] … n>0` with the right `tpl=`. (b) Did the engine read the picked value? → `[wt:play] READ … is_picked_3p_value=true`. (c) Did the funnel rename it before it played? → `[wt:play] FINAL … <<RENAMED BY FUNNEL>>` (or `(unchanged)`). If READ shows `is_picked_3p_value=true`, FINAL is `(unchanged)`, and `has_anim=true`, the pick fully reaches the engine and the remaining gap is purely a 3P-clip / state-machine playability issue on the Kruber body (not a code bug).
+
+### Preserved / scope
+LOGGING ONLY — no apply/redirect behavior changed. 3P-ONLY: reads/writes only `anim_event_3p`; never `anim_event` / `wield_anim` / 1p units / `state_machine`. No hooks added (the picker module still has none; the play-path log lives inside the existing single `Unit.animation_event` hook — VMF duplicate-hook rule respected). New picker exports: `is_picker_template`, `current_3p_for`, `live_3p_map`, `is_picked_3p_value`, plus `_live_anim_event_vocab`. 200-locals respected.
+
+## 0.12.144-dev (2026-06-23) — 3P Anim Picker: picks now actually apply in 3P (MechanismOverrides cache-bust)
+
+All 3P-only. Fixes the dev `wt_dev_anim_picker.lua` so a per-attack pick takes effect on the equipped weapon. The write target was already correct (`anim_event_3p` on the live `Weapons[name]` sub-actions); the disconnect was a caching layer between that write and the engine read.
+
+### Root cause — the engine reads a CACHED COPY, not the live template
+At attack time the engine resolves the action's 3P anim from `MechanismOverrides.get(rawget(Weapons, name))`, not the live `Weapons[name]` table the picker mutates (`Vermintide-2-Source-Code/scripts/helpers/weapon_utils.lua:211` → `backend_interface_item_playfab.lua:871` → `backend_utils.lua:136` → `WeaponUnitExtension.start_action` reads `current_action_settings.anim_event_3p` per swing). `MechanismOverrides.get` (`.../game_mode/mechanisms/mechanism_overrides.lua:13`) shallow-COPIES any template that carries a `mechanism_overrides` field (or has a nested child that does) and caches the copy in `CACHE[t]`, persisting it for the whole mechanism. Once cached, every `get_item_template` returns the stale COPY — so a menu-time write to the live original was never seen by an attack. The existing `_try_force_rewield` re-runs `inv:wield(slot)` but does NOT invalidate that cache, so the rewield re-read the same stale copy.
+
+### Fix — bust the MechanismOverrides cache after every write, then rewield
+New file-scope helper `_bust_mechanism_override_cache(template_name)` (`wt_dev_anim_picker.lua`) calls `MechanismOverrides.recursive_cleanup(Weapons[name], current_mechanism_name)` (`mechanism_overrides.lua:119`) to drop `CACHE[t]`, forcing the next `get_item_template` to rebuild the copy from the now-mutated live template. It's a guarded no-op (`if original then` at `mechanism_overrides.lua:122`) when the template was never cached (e.g. a template with no overrides anywhere in its tree), so it's safe to call unconditionally. `_apply_anim_event_change` now calls it after the mutation loop — for BOTH the live `on_setting_changed` path (cache-bust THEN `_try_force_rewield`, order matters) and the boot `reapply_stored_picks` path. No re-equip required: the cache-bust makes the live write take on the next attack; the rewield just forces an immediate refresh.
+
+### Fix — loud no-op-write warning
+`_apply_anim_event_change` now `mod:warning`s when a write matches zero sub-actions (`n == 0`) instead of returning silently. A zero-match means the hardcoded `_WEAPON_ATTACKS` source string doesn't match any live `anim_event` on that template's sub-actions, so the dropdown writes nothing — previously this was invisible. The message points at `/wt_coverage` + `/wt_dump_anim_picks` to reconcile a stale source list.
+
+### Preserved
+Hardcoded-vocab simplification (`_WEAPON_SET` / `_SET_VOCAB` / `_WEAPON_ATTACKS`), only-flagged membership filter (`wt_port_status.needs_anims` allow-list), character-named source qualifiers + `Kruber` receiver, the live-submenu pattern, `/wt_dump_anim_picks` + `/wt_coverage`. No hooks added (VMF duplicate-hook rule — the module still has none). 3P-ONLY: the fix touches only `anim_event_3p` — never `anim_event` / `wield_anim` / 1p units / `state_machine`. 200-locals respected (one new file-scope local).
+
+## 0.12.143-dev (2026-06-23) — 3P Anim Picker rebuilt as a STATIC hardcoded menu (no set-chooser, no dynamic resolution)
+
+All 3P-only. The dev `wt_dev_anim_picker.lua` is rewritten from a dynamic catalog/vocab walk + a per-weapon 3P anim-SET chooser into a fully STATIC hardcoded menu, per the v0.12.143-dev spec. No 1P field is read or written.
+
+### Removed — the per-weapon 3P anim-SET chooser dropdown + all dynamic-resolution code
+The established SET per weapon is fixed (resolved offline from `wt_wield_patches.lua` → the `to_*` wield event → its target template), so the set is no longer negotiated in-menu. Deleted: `_build_set_dropdown`'s set-dropdown, `_build_kruber_set_options`, `_KRUBER_SET_LABEL` / `_set_friendly`, the `_WIELD_EVENT_TO_TARGET` / `_WIELD_TARGET_BY_RECEIVER` maps + `_resolve_target_for_port` / `_live_target_template_for`, the `_build_dynamic_catalog` unlock-map walk + `_build_chooser_catalog`, the Kruber-only vocab build (`_build_kruber_native_templates` / `_build_kruber_wield_vocab` / `_live_wield_vocab`), the `_pre_apply_wield_patches` / `wt_wield_patches` dofile (the picker no longer needs to pre-seed `wield_anim_career_3p` to resolve targets), the `_GREATHAMMER_BASELINE_*` seed tables, the `kind="wield"` apply path (`_apply_wield_change`) + the wield `setting_id` factories (`_sid_set` / `_sid_set_group` / `_sid_wield`). The `wt_unlock_data` dofile is also gone (membership is now the explicit allow-list, not a unlock-map walk).
+
+### Added — three static hardcoded tables drive the whole picker
+`_WEAPON_SET` (weapon_key → established SET letter A..E), `_SET_VOCAB` (SET → the target template's authored `anim_event` vocab = the dropdown OPTIONS, 11 per set, identical for every weapon in that set), and `_WEAPON_ATTACKS` (weapon_key → the weapon's own source attack `anim_event`s, one dropdown each). Plus `_WEAPON_TEMPLATE` (source template per weapon) and a curated `_WEAPON_NAME`. The five sets: A Greathammer (`to_2h_hammer` / `two_handed_hammers_template_1`), B Mace & Sword (`to_dual_hammer_sword_es` / `dual_wield_hammer_sword_template`), C Empire 1H Sword (`to_1h_sword` / `one_handed_swords_template_1`), D Mace & Shield (`to_1h_hammer_shield` / `one_handed_hammer_shield_template_1`), E Witch Hunter 1H Axe (`to_1h_axe` / `one_hand_axe_template_1`). Set vocabs + per-weapon source attacks were extracted from + verified against the decompiled `Vermintide-2-Source-Code/.../weapon_templates/` files.
+
+### Menu shape
+Per flagged weapon → one collapsible `type="group"` (label `"<Source> <Weapon> rendered on Kruber body  [<set>]"`), with one per-attack `anim_event_3p` dropdown inside whose OPTIONS are the HARDCODED established-set vocab. Selecting one applies via `_apply_anim_event_change` (writes `anim_event_3p` ONLY — 3P), auto-rewields, persists, and boot-replays — unchanged. A handful of source attacks with no clean target-set twin (`attack_swing_right_spell` on `bw_flame_sword`; `attack_slam`/`attack_slam_charge` on `wh_2h_hammer` + `wh_flail_shield`; `special_action`/`special_action_02` on `bw_ghost_scythe`) still get a dropdown — the user maps to the nearest set event or leaves UNSET (falls through to the prior idle stance; no T-pose, no crash).
+
+### Preserved
+- Live-submenu pattern intact (`build_widget_tree()` returns the ARRAY of per-weapon group widgets, nested as the `enable_dev_anim_picker` checkbox's `sub_widgets`; VMF reveals/hides LIVE on toggle — no restart). Lightweight build (now trivially cheap — static-table copy, no IML/catalog/vocab walk). Character-named source qualifiers + `Kruber` receiver. The group → dropdown nesting keeps the gut Mod Tweaker depth-drill working. `/wt_dump_anim_picks` + `/wt_coverage` retained (Kruber-scoped). No status tags on rows (the `[set]` bracket is the chosen-animation-set name, not a status tag). No hooks (VMF duplicate-hook rule — the module has none). 3P-ONLY throughout. 200-locals respected (35 file-scope locals).
+
+### Membership
+Gated on `wt_port_status.M.needs_anims(career, weapon_key)` — the explicit `_NEEDS_ANIMS.kruber` allow-list (15 weapons). Verified: the picker's 15 hardcoded weapons EXACTLY match `_NEEDS_ANIMS.kruber`; every weapon has a non-empty source-attack list; every set has 11 options — so every flagged weapon's dropdowns are non-empty.
+
+## 0.12.142-dev (2026-06-23) — Picker/Availability refinements: tags moved to Availability (+redirect target), character-named sources, picker lists only flagged weapons
+
+All 3P-only. Four refinements from `KRUBER_3P_ANIM_DECISIONS.md` § OPEN ISSUES. No 1P field is read or written.
+
+### Changed (1) — REMOVED status-tag prefix from the PICKER
+Every picker row needs animations by definition, so the `[Needs Animations] ` / `[Needs Offsets] ` prefix was noise there. The `_chooser_prefix(entry)` helper and its single call site (the `_sid_set_group` label in `M.loc_keys`) are gone (`wt_dev_anim_picker.lua`). Picker rows now read just `<character> <weapon type> rendered on … [chosen set]`. The `[chosen set]` bracket stays — it's the chosen-animation-set name (e.g. `[Empire Greathammer]`), the thing the user picks, NOT a status tag.
+
+### Changed (2) — Status + REDIRECT TARGET now on the WEAPON AVAILABILITY menu
+`wt_port_status.lua` gains `M.redirect_target(career, weapon_key)` → the bracketed target weapon a `[Needs Animations]` port borrows its 3P anims from (e.g. `[Greathammer]`), sourced from a new `_NEEDS_ANIMS` table (the `SET=` column of `ANIMATION_COVERAGE.md` "## Receiver: KRUBER"). The localization post-process loop (`weapon_tweaker_localization.lua`) now folds that target into the tag for a `[Needs Animations]` port: a row reads `[Needs Animations → Greathammer] Kruber: …`. `[Working]` (fully functional — no redirect), `[Needs Offsets]`, and `[Untested]` carry no redirect and read plainly. So each Availability row shows BOTH what it needs AND which weapon's 3P animation it borrows.
+
+### Changed (3) — PICKER source qualifier uses CHARACTER names, not race names
+`_SOURCE_QUALIFIER` (`wt_dev_anim_picker.lua`) remapped `Empire/Dwarf/Elf/Witch Hunter/Bright Wizard` → `Kruber/Bardin/Kerillian/Saltzpyre/Sienna`, matching the Availability menu ("Kruber: Mace", "Bardin: Great Axe"). "Dwarf Pickaxe" now reads "Bardin Pickaxe". `_QUALIFIER_OVERRIDES` emptied: `es_sword_shield_breton` falls through to "Kruber" (Bretonnian is a weapon descriptor, not a source character); the three `wh_*` Warrior-Priest weapons resolve to "Saltzpyre" via the `wh_` owner prefix (no override needed). The receiver short name (`_CHARACTER_SHORT`) was already character-named — unchanged.
+
+### Changed (4) — PICKER lists ONLY explicitly-flagged `[Needs Animations]` weapons
+The chooser used a NEGATIVE filter ("every Kruber port not confirmed and not `[Working]`"), which surfaced UNTESTED ports too — Beam Staff (`bw_skullstaff_beam`), Javelin, Deepwood Staff were never flagged yet appeared. Replaced with a POSITIVE allow-list: `wt_port_status.M.needs_anims(career, weapon_key)` is true only for the explicit `_NEEDS_ANIMS` Kruber set (the `SET=`-annotated `📋`/`🔧` rows from `ANIMATION_COVERAGE.md` + `KRUBER_3P_ANIM_DECISIONS.md`). Untested + confirmed + needs-offsets-only ports all fall out; `bw_ghost_scythe` (needs anims AND offsets) correctly stays. The redundant `_COVERAGE_CONFIRMED_KRUBER` exclusion mirror was deleted — a confirmed port is simply absent from `_NEEDS_ANIMS`, collapsing two divergent confirmed-lists into one source of truth in `wt_port_status.lua`.
+
+**Decision (item 4 open question):** did NOT flip `M.tag`'s default-return from `[Needs Animations]` to `[Untested]`. That would have re-tagged ~100 un-cataloged Availability ports (a visible behavior change). Instead the picker gates on an EXPLICIT closed allow-list, satisfying "list ONLY flagged weapons" with zero change to the Availability menu's existing tags.
+
+### Preserved
+- Live-submenu pattern intact (picker rows are still the `enable_dev_anim_picker` checkbox's `sub_widgets`; VMF reveals/hides LIVE on toggle). Kruber-only lightweight vocab build unchanged (no ~11 MB six-character leak). v0.12.141 weapon-TYPE naming fix (curated `_WEAPON_NAME`) intact. Dropdown population unchanged. No new hooks (VMF duplicate-hook rule); the tag/redirect work is pure data + a localization post-process. 200-locals respected.
+
+## 0.12.141-dev (2026-06-23) — Picker names by weapon TYPE (no cosmetic-illusion leak/overflow) + every Weapon-Availability entry computed-tagged
+
+All 3P-only. Fixes the two user-reported issues from `KRUBER_3P_ANIM_DECISIONS.md` § OPEN ISSUES (picker wrong-names/empty-dropdowns/overflow; Availability tags incomplete). No 1P field is read or written anywhere in this change.
+
+### Fixed — picker showed COSMETIC-ILLUSION names ("Dwarf Beardling's Azdrek"), not weapon TYPES (+ row overflow)
+`_weapon_display_name` (`wt_dev_anim_picker.lua:689`) resolved the name via `_weapon_loc_name` FIRST, which reads `ItemMasterList[key].localized_name`. On a base weapon-TYPE key that field is the **default cosmetic SKIN's** name, not the weapon-type name — `ItemMasterList.dr_2h_pick.display_name = "dw_2h_pick_skin_01_name"` → "…Azdrek"; `ItemMasterList.es_handgun.display_name = "es_handgun_skin_03_name"` `[src: Vermintide-2-Source-Code item_master_list_exported.lua:7501, :6797; item_master_list.lua:114 (localized_name = Localize(display_name))]`. So the curated weapon-TYPE map `_WEAPON_NAME` was never consulted (the `or` short-circuited), leaking long cosmetic names that also overflowed the row.
+
+**Fix — reverse the precedence:** `_WEAPON_NAME[weapon_key]` (the deduped, one-entry-per-weapon-TYPE source of truth) wins; `_weapon_loc_name` is now a LAST-resort fallback only for keys `_WEAPON_NAME` doesn't cover (flagged via `_OPEN_QUESTIONS`). Same fix applied to the TARGET side (`_target_loc_display:676`): curated name / hand-written `display` fallback wins over the reverse-mapped base key's cosmetic `localized_name`. Same type-vs-illusion trap as `reference_vt2_versus_items_hidden_in_adventure` (vs_* keys carry cosmetic-grade strings).
+
+This is the type-vs-illusion distinction the task asked to DOCUMENT: a clarifying block at the enumeration site (`_build_dynamic_catalog`) now states ItemMasterList holds weapon TYPES **and** cosmetic skins/illusions, that the picker enumerates one-row-per-TYPE off `weapon_unlock_map` (NOT a raw IML walk), and that the cosmetic name only ever leaked at the DISPLAY step. The doctrine is also recorded in `docs/MECHANICS.md`.
+
+### Fixed — empty per-attack dropdowns: runtime diagnostic to name the exact coverage gaps
+A Kruber chooser row shows NO per-attack dropdowns exactly when its live wield set fails to resolve a target template (`_build_set_dropdown` gate) — i.e. its SOURCE template has no `es_*` career in `wt_wield_patches.lua`, or the resolved wield event has no `_WIELD_*_TO_TARGET` entry. Offline scans can't reliably resolve weapon_key→template (the IML is split across many files and base keys carry no `template` field), so `_ensure_catalog_built` now walks the LIVE data (where both resolutions exist) and logs each unresolved Kruber chooser row by `weapon_key(src=template,wield=event)`. The user's next boot log names precisely which source template needs an `es_*` patch add — mirroring the v0.12.140-dev `we_one_hand_axe_template` fix — instead of a guess. (Every currently-catalogued `[Needs Animations]` Kruber row already resolves via the existing patches; the diagnostic guards against regressions + future ports.)
+
+### Fixed — Weapon-Availability tags were INCOMPLETE (299 of 947 entries bare; confirmed ports mislabeled)
+The `unlock_*` labels in `weapon_tweaker_localization.lua` carried HAND-TYPED tag prefixes (`[untested]` / `[confirmed working]` / bare). 299 entries had no tag, and confirmed ports read wrong: **Saltzpyre's Flail** (`es_1h_flail`) was bare on Kruber and `[untested]` on Saltzpyre's careers; **Bardin's Greataxe** (`dr_2h_axe`) was `[untested]` on its cross-character rows. There was no status-computation layer — the tag was free text typed per string.
+
+**Fix — computed tags from real status (new `wt_port_status.lua`).** A shared `(career, weapon_key) -> tag` resolver, generated 2026-06-23 from `ANIMATION_COVERAGE.md` (✅/🔁 → `[Working]`; ❓ → `[Untested]`; grip rows → `[Needs Offsets]`) merged with `KRUBER_3P_ANIM_DECISIONS.md` CONFIRMED rows and the picker's `_COVERAGE_CONFIRMED_KRUBER` / `_PORT_STATUS_LABEL`. The localization file now post-processes every `unlock_*` entry: strip any leading hand-typed `[…]` tag and prepend the computed one (vocabulary `[Working]` / `[Needs Animations]` / `[Needs Offsets]` / `[Untested]`). Native ports (owner prefix == receiver, incl. WP wielding the wh_* family) → `[Working]`; the default for a surviving cross-character port (set decided, per-attack pending) → `[Needs Animations]`. Saltzpyre's Flail now reads `[Working]` everywhere (native on Kruber/Saltzpyre, confirmed elsewhere); Bardin's Greataxe `[Working]` on every receiver. No weapon is untagged. This replaces three divergent hand-typed vocabularies with ONE source the Availability menu + picker now share.
+
+### Preserved
+- Live-submenu pattern intact: the picker rows are still the `sub_widgets` of the `enable_dev_anim_picker` checkbox (VMF reveals/hides LIVE on toggle, no restart). The Kruber-only lightweight vocab build is unchanged — no ~11 MB six-character leak re-introduced. No new hooks (VMF duplicate-hook rule); the tag pass is a pure data post-process at localization-load time. 200-locals respected (the tag loop's locals are in the localization chunk; no per-frame Query/View work).
+
+## 0.12.140-dev (2026-06-23) — 3P Anim-Set Chooser becomes a LIVE master toggle (no restart) + Kerillian 1H Axe coverage gap closed
+
+All 3P-only. Reworks the dev 3P Anim-Set Chooser (Kruber) into a fully-functional per-attack picking menu that reveals LIVE when toggled — the "needs a game restart" dead-toggle bug is gone.
+
+### Fixed — `enable_dev_anim_picker` was a dead toggle (required a restart to take effect)
+The picker's widget tree was built ONCE at boot, gated on the toggle's value AT BOOT, and VMF never re-runs `_data.lua` — so flipping the toggle at runtime did nothing (the tooltip even admitted "then restart the game"). Root cause chain: `enable_dev_anim_picker` was a standalone top-level checkbox with no children; the picker entries were a SEPARATE top-level group appended only when `build_widget_tree()` returned non-nil; `build_widget_tree()` returned nil when the toggle was OFF at boot because `_ensure_catalog_built()` short-circuited to an empty catalog; `_catalog_built` latched so it never re-evaluated.
+
+**Fix — VMF native master-toggle → `sub_widgets` (reference_vmf_native_master_toggle_submenu).** The picker rows are now nested as the `sub_widgets` of the `enable_dev_anim_picker` CHECKBOX, built UNCONDITIONALLY at boot, and VMF's per-frame visibility loop (`vmf_options_view.lua:4461-4463`) reveals/hides the whole picker menu LIVE when the box is toggled — no restart. VMF reads `mod:get` itself each frame to drive visibility, so the `mod:get`-based toggle still controls the picker; it's just no longer a Lua gate that latched at boot. The OFF short-circuits in `_ensure_catalog_built()`, `_build_dynamic_catalog()`, and `M.loc_keys()` are removed; the dead `_dev_picker_enabled()` helper is removed.
+
+### Changed — `build_widget_tree()` returns an ARRAY, not a wrapping group
+`M.build_widget_tree()` (`wt_dev_anim_picker.lua`) now returns the array of per-Kruber-port set-dropdown group widgets directly (never a top-level group, never nil). `weapon_tweaker_data.lua` nests that array as the checkbox's `sub_widgets` (guarded: attaches only when non-empty, else a bare checkbox — empty `sub_widgets` is tolerated on a checkbox; only `type="group"` rejects zero children). All per-port group labels / dropdown labels / per-attack option texts are registered at boot regardless of the toggle (`M.loc_keys()` no longer early-returns when OFF) so the revealed widgets never render `<<key>>`.
+
+### Changed — LIGHTWEIGHT Kruber-only vocab build (no ~11 MB leak despite building unconditionally)
+Building the picker at boot regardless of toggle would re-introduce the ~11 MB six-character vocab leak the old boot-gate existed to suppress. So the heavy builders (`_build_native_templates_by_char` walked all of `ItemMasterList`; `_build_live_wield_vocab` / `_build_live_anim_event_vocab` walked every `es_/dr_/we_/wh_/bw_` native template tree for all six characters) are REMOVED and replaced with a Kruber-only build:
+- `_build_kruber_native_templates()` — one `ItemMasterList` pass keeping only `es_`-prefixed templates.
+- `_build_kruber_wield_vocab()` — the ~14 Kruber `to_*` wield-set strings (the only vocab the set dropdown consumes via `_build_kruber_set_options`).
+- `_live_anim_event_vocab` left EMPTY — the per-attack dropdowns pull each TARGET template's vocab lazily (`_collect_target_anim_event_vocab`), not the per-character anim_event vocab. The six-char anim_event vocab was dead weight for the chooser.
+
+Net resident cost: one `es_`-only IML pass + ~14 Kruber wield strings + N Kruber port rows, each lazily pulling one target template's ~20-event vocab — instead of six full character vocabularies + a full IML native map.
+
+### Fixed — Kerillian 1H Axe (`we_1h_axe` → Kruber) coverage gap (`wt_wield_patches.lua:199`)
+`we_one_hand_axe_template` had ONLY `wh_*` careers, so for Kruber `wield_anim_career_3p[es_huntsman]` was nil → `_resolve_target_for_port` returned nil → the row read `[Needs Offsets]` and built NO per-attack dropdowns. Added the four `es_*` careers (`= "to_1h_axe"`); on Kruber `to_1h_axe` resolves via `_WIELD_TARGET_BY_RECEIVER.es` → `one_hand_axe_template_1` (Witch Hunter 1H Axe vocab), moving it into the `[Needs Animations]` set. This was the single gap; every other catalogued `[Needs Animations]` Kruber weapon already resolved.
+
+### Preserved
+- Per-attack `anim_event_3p` dropdowns (one per source attack action, options = the resolved target-set 3P vocab), the `[Needs Animations]` / `[Needs Offsets]` prefix + `[Set]` suffix labels, and the Greathammer baseline pre-fill for War Pick / Coghammer / Reckoner — all unchanged from 0.12.139-dev.
+- Picks still apply LIVE via `_apply_anim_event_change` / `_apply_wield_change` (3P-only — `anim_event_3p` / `wield_anim_career_3p`, never 1P) + `_try_force_rewield` + boot `reapply_stored_picks`. No new apply code; the `^wt_dev_anim_` dispatch in `weapon_tweaker.lua` already forwards the child ids.
+
+### Weapons rendered (13 `[Needs Animations]` Kruber rows, per-attack dropdowns)
+War Pick (`dr_2h_pick`), Coghammer (`dr_2h_cog_hammer`), Reckoner Greathammer (`wh_2h_hammer`), Sword & Dagger (`we_dual_wield_sword_dagger`), Sienna's Dagger (`bw_dagger`), Dual Skullsplitters (`wh_dual_hammer`), Kerillian Dual Swords (`we_dual_wield_swords`), Dual Axes (`dr_dual_wield_axes`), Sienna's Mace (`bw_1h_mace`), Sienna's Scythe (`bw_ghost_scythe`), Kerillian Glaive (`we_2h_axe`), Sienna's Fire Sword (`bw_flame_sword`), WP Flail & Shield (`wh_flail_shield`) — plus Kerillian 1H Axe (`we_1h_axe`) now that the gap above is closed (14 total).
+
+## 0.12.139-dev (2026-06-23) — KRUBER decisions merge: chooser per-attack dropdowns + `[Needs Animations]` prefix + Volley/Repeater-Crossbow crash fix
+
+All 3P-only. Three changes from the verified `KRUBER_3P_ANIM_DECISIONS` capture.
+
+### Fixed (game-breaking, network game) — Kerillian Repeater Crossbow (`we_crossbow_repeater`) on Kruber empty-wield crash
+Wielding the ported elf Repeater Crossbow EMPTY/unloaded on a Kruber career fired the not-loaded/no-ammo wield events — `to_repeating_crossbow_elf` / `to_repeating_crossbow_elf_noammo` (`repeating_crossbows_elf.lua:258-259`) — which are **absent from `NetworkLookup.anims`** (the lookup has `to_repeating_crossbow`/`_noammo` and `to_repeating_handgun`/`_noammo`, but **no `_elf` entries**). The empty-wield path routes the not-loaded event through `ammo_extension:start_reload(...)` → `generic_ammo_user_extension.lua:311-330`, where `event_id = NetworkLookup.anims[reload_event]` is `nil` and `network_transmit:send_rpc_clients("rpc_anim_event", nil, go_id)` packs nil into a network-typed lookup-index field → **C-level RPC-packer fatal (bypasses pcall, network game only)**. wt's `_WIELD_ANIM_CAREER_3P_PATCHES_BULK` only patched the LOADED `wield_anim_career_3p` (consumed via the safe non-networked `Unit.animation_event` path), not the not-loaded/no-ammo wields.
+
+**Fix:** new `_NOT_LOADED_NO_AMMO_CAREER_PATCHES` + applier (`weapon_tweaker.lua`, after the wield-patch apply) writes `wield_anim_not_loaded_career` / `wield_anim_no_ammo_career` for the four Kruber careers on `repeating_crossbow_elf_template` → `to_repeating_handgun` / `to_repeating_handgun_noammo` (both **registered** in `NetworkLookup.anims` AND authored on Kruber's `empire_soldier` 3P body). 3P wield-fallback fields only — never `anim_event`/`wield_anim` (1P). Native Kerillian wielders are untouched (only `es_*` careers patched). NOT fixed by registering the `_elf` names into `_anim_redirect` (those redirect onto the same unregistered events and carry the identical latent crash for non-elf wielders). Saltzpyre's Volley Crossbow (`wh_crossbow_repeater`) never crashed — its template uses the registered `to_repeating_crossbow`/`_noammo` not-loaded wields.
+
+### Added — per-ATTACK 3P-anim dropdowns under each chooser row (`wt_dev_anim_picker.lua`)
+The Kruber 3P Anim-Set Chooser now adds one per-attack `anim_event_3p` dropdown (a bare dropdown emitted directly into the set group's `sub_widgets`, alongside the set dropdown) for each **set-decided** port (the wield set resolves to a target template). Options = the chosen target template's authored `anim_event` vocab (target-filtered; broad receiver vocab fallback if the target authors none). Reuses the dead-but-present `kind="anim_event"` machinery verbatim — `_apply_anim_event_change` writes `anim_event_3p` ONLY (3P), plus `_try_force_rewield` / `reapply_stored_picks` for live-apply + persist + boot-replay. No new apply code, no main-file edit (`^wt_dev_anim_` dispatch at `weapon_tweaker.lua:4565` already forwards the new ids). Per-attack vocab is resolved from the **live** wield set (`_live_target_template_for`), so it tracks chooser set-picks on the next menu re-open (catalog is built once; VMF can't rebuild widgets mid-frame — stated in the tooltip).
+
+**Load-order fix (the enabler).** The picker's `build_widget_tree()` / `loc_keys()` run from `_data.lua` / `_localization.lua`, which VMF loads BEFORE the main script's top-level patcher calls (`reference_vmf_mod_file_load_order`). So at catalog-build time the live `Weapons.*.wield_anim_career_3p` was still empty (vanilla cross-character templates carry none), `_resolve_target_for_port` returned nil for every patcher-decided port, and NO port would have shown a target/per-attack surface. Fix: the two cross-character wield-patch tables (`_WIELD_ANIM_CAREER_3P_PATCHES` + the 72-entry `_BULK`) were extracted **verbatim** (byte-identical; key+pair-diff-verified) into a new shared module `wt_wield_patches.lua` that BOTH the main script and the picker `mod:dofile`. The picker pre-applies them to `Weapons.*` at catalog-build time (`_pre_apply_wield_patches`, only when the picker is ON, seed-if-absent so it never clobbers), idempotent with the main script's later apply. This also fixes the latent v0.12.138 bug where the chooser's "using X animations" label silently never resolved for patcher-decided ports.
+
+- **`[Needs Animations]` / `[Needs Offsets]` row prefix.** A set-decided row reads `[Needs Animations] <Weapon> [<Set>]` (per-attack picks still pending); an undecided row keeps `[Needs Offsets]`. Refreshes on menu re-open (VMF caches the open label).
+- **Greathammer BASELINE pre-fill.** The three Greathammer-family ports — War Pick (`dr_2h_pick`), Coghammer (`dr_2h_cog_hammer`), Reckoner (`wh_2h_hammer`) → all SET=`to_2h_hammer`/Empire Greathammer — seed their per-attack dropdown DEFAULTS from a hand-mapped Empire Greathammer (`two_handed_hammers_template_1`) vocab (light diagonals→`attack_swing_left_diagonal`, heavy overheads→`attack_swing_down_left`/`_right`, heavy sweeps→`attack_swing_heavy`/`_heavy_right`, charge wind-ups→`attack_swing_charge`L/R, push→`attack_push`, block→`parry_pose`, wield→`to_2h_hammer`). Only seeds when the live template hasn't set an `anim_event_3p` for that source attack — never overwrites a live/persisted pick. User tweaks live.
+
+### Changed — `ANIMATION_COVERAGE.md` chooser-exclusion mirror (`_COVERAGE_CONFIRMED_KRUBER`)
+Capture-confirmed two more Kruber rows to ✅ → added to `_COVERAGE_CONFIRMED_KRUBER` (drops them out of the chooser next boot): `dr_shield_axe` (Axe & Shield, native fall-through) and `bw_1h_flail_flaming` (Flaming Flail, wield redirect). `bw_1h_crowbill` is **HELD** out of the exclusion pending user reconcile — the capture says CONFIRMED but `ANIMATION_COVERAGE.md:59` still flags a Kruber heavy-attack regression (🧊). Coverage doc B-rows updated to `[Needs Animations] … (SET as tabled)`; the elf-vs-volley crossbow FALSE-event note corrected (the crasher is the elf `we_crossbow_repeater`, not the registered-event Volley `wh_crossbow_repeater`).
+
+### NOT in this pass (deferred)
+- **MODEL-SUB ports** (`wh_hammer_book` Skullsplitter & Tome, `wh_fencing_sword` Rapier & Pistol) — separate later pass (mesh hide + native-anim route); NOT surfaced as plain chooser rows.
+- **`bw_1h_crowbill`** exclusion — awaiting user retest of the heavy-attack regression.
+
+## 0.12.138-dev (2026-06-23) — 3P Anim-Set Chooser (Kruber) replaces the per-attack picker + dead-toggle/leak fix
+
+### Fixed (two root causes behind the dev-picker memory regression)
+- **RC2 — dead toggle.** `_dev_picker_enabled()` (`wt_dev_anim_picker.lua`) read the engine `Application.user_setting("mods_settings", "wt", ...)` store, where VMF does NOT persist checkbox settings — so it always returned nil and the `enable_dev_anim_picker` toggle was inert (the gate never engaged). Now reads `mod:get("enable_dev_anim_picker")` (the VMF store; `mod` is valid at `_data.lua`/`_localization.lua` boot time). The widget + loc keys were already correct.
+- **RC1 — gate hoisted above the leak sources.** The old gate only short-circuited `_build_dynamic_catalog`, AFTER `_build_native_templates_by_char` (walks all of `ItemMasterList`) + `_build_live_wield_vocab` / `_build_live_anim_event_vocab` (walk every `es_/dr_/we_/wh_/bw_` native template tree) had already run. The gate now short-circuits at the TOP of `_ensure_catalog_built()` (empty catalog + empty vocabs when OFF) and `M.loc_keys()` early-returns the single top-level loc string when OFF. OFF now = `+0.0 MB` on the `[mem-probe]` lines.
+
+### Changed (the live tuning surface — replaces the per-attack picker)
+The per-attack dropdown fan-out (one dropdown per source `anim_event` × six characters) is replaced by a **Kruber-only 3P Anim-Set Chooser**:
+- **One dropdown per non-confirmed Kruber cross-character port** (flat list, no per-character sub-buckets). Options = the live Kruber-native `to_*` wield sets (data-driven from `_live_wield_vocab.kruber`), each shown with a friendly label (`_KRUBER_SET_LABEL`, e.g. `to_2h_billhook` → "Empire Billhook"), plus an "(unset — fall through)" sentinel. Rows sorted A→Z by label.
+- **Exclusion = confirmed-working, sourced from `ANIMATION_COVERAGE.md`.** A port is shown iff it's a Kruber cross-character port in the dynamic catalog AND not `[Working]` in-code AND not in `_COVERAGE_CONFIRMED_KRUBER` (the generated mirror of the ✅ rows in the COVERAGE Kruber section). When a COVERAGE row flips ✅, add its `weapon_key` to that table and it drops out next boot. The two `[Inventory Model Error]` ✅ rows (`we_2h_sword`, `we_1h_spears_shield`) ARE excluded (3P confirmed; the tag is a keep-preview caveat). `bw_1h_flail_flaming` is INCLUDED (🔧 in COVERAGE wins over the in-code `[Working]` label).
+- **Suffix labels.** Each row title carries the current chosen set in brackets — e.g. "Elf Glaive rendered on Kruber body [Empire Greathammer]". The `[bracket]` refreshes on **menu re-open** (VMF caches the open label — `reference_vmf_checkbox_cached_display_state`), stated in the dropdown tooltip; the set itself applies live.
+- **Live-apply + persist + boot-replay reuse the existing machinery verbatim.** Each dropdown registers a `kind="wield"` record into `_setting_index` (new `setting_id = wt_dev_anim_<port>_set`, still under the `^wt_dev_anim_` dispatch in `weapon_tweaker.lua:4565` — no main-file edit). `_apply_wield_change` writes `wield_anim_career_3p[career]` for EVERY Kruber career on the port, `_try_force_rewield` re-fires the stance immediately, `reapply_stored_picks` replays tuned picks at boot.
+- **3P-only guarantee:** the chooser only ever writes `wield_anim_career_3p` (a 3P field). It never touches `anim_event` / `wield_anim` / `state_machine` (1P/universal). 1P is the shared `first_person_base` skeleton and is never modified (`feedback_cross_char_transforms_3p_only`).
+- The per-attack picker code (`_build_port_group`, `kind="anim_event"` apply) is left **dead-but-present** so `/wt_dump_anim_picks` and `/wt_coverage` (which read live `Weapons.*`, not the widget tree) keep working unchanged.
+
+## 0.12.137-dev (2026-06-21) — Passive charge restore for cross-character staves & Moonfire Bow
+
+### Added (`wt_passive_charge_restore` toggle, default OFF) — `[untested]`
+New per-frame feature that restores the passive overcharge-vent / energy-regen mechanic for two cross-character weapon families when wielded on a career that lacks it natively:
+
+- **Sienna staves** (and any overcharge weapon): slowly **vent** overcharge. The native passive decay rate is read from `OverchargeData[career_name]` (`bulldozer_player.lua:206`), so a non-Sienna career stores `overcharge_value_decrease_rate = 0` and the staff never vents on its own. We drive `overcharge_ext:remove_charge(1.0 * dt)` each frame (rate `1.0` matches every Sienna staff career's native rate, `overcharge_data.lua:41/52/63`), gated only when there's overcharge to vent.
+- **Moonfire Bow** (`we_deus_01`, any energy bow): slowly **regenerate** charge. The native regen rate is read from `EnergyData[career_name]` (`bulldozer_player.lua:207`), defined only for the four Kerillian careers (`energy_data.lua:4-27`, `recharge_rate = 1.5/s`); any other career falls back to `recharge_rate = 0` so the bow drains and never refills (bricks after ~8 shots). We drive `energy_ext:add_energy(1.5 * dt)` each frame, gated below max.
+
+**Hard constraints honored:**
+- **Consumption side only.** Uses `remove_charge` / `add_energy` (both clamp internally). Never mutates `_max_overcharge` / `max_value` / `_max_energy` (engine `NetworkConstants` cap → `fassert` crash; see `feedback_vt2_max_resource_consumption_side`).
+- **Owner-authoritative networking.** Both extensions are simulated by the owning peer and broadcast via the game object (husks are read-only). The tick drives **only** `Managers.player:local_player().player_unit`, so the local human's value is corrected on the peer that owns it and replicated automatically — no double-apply, no remote/bot writes.
+- **Cross-character only.** Gated on the LIVE native rate being `0`/absent (`overcharge_value_decrease_rate == 0` / `_recharge_rate == 0`-or-nil). Any career that natively vents/regens (every Sienna career, the four Kerillian careers, drakefire dwarves, etc.) is left entirely untouched.
+- **nil/type-safe.** `ScriptUnit.has_extension` for every extension, wielded-weapon-may-be-absent guards, and the per-unit body + each engine call wrapped in `pcall` (Stingray `*.node`-class fatals bypass inner pcalls, so an outer net is present).
+
+**Implementation:** new module `scripts/mods/weapon_tweaker/_wt_passive_charge.lua` exposing `M.tick(dt)`, called from the single existing `mod.update` in `weapon_tweaker_backend.lua` (no new `mod:hook`, so no duplicate-hook concern; `mod.update` now captures the VMF-supplied `dt`). Detection keys off the wielded item template: `overcharge_data` table present = overcharge weapon; an action of `kind == "bow_energy"`/`"aim_energy"` = energy bow.
+
+## 0.12.132-dev (2026-06-19) — CRITICAL multiplayer fix: anim-event RPC feedback loop (every player's 3P stuck on endless repeat)
+
+### Fixed (game-breaking, multiplayer)
+A/B-confirmed: with wt enabled, in a 2+ human lobby **every** player's 3P animation was stuck on an endless repeat/loop, on **every** weapon. Disabling wt cleared it instantly.
+
+**Root cause:** the `AnimationSystem.anim_event_with_variable_float` crash-guard hook (added v0.12.128, `weapon_tweaker.lua:2510`) **dropped vanilla's 6th parameter `skip_sync`**. The networked-anim RPC receiver (`rpc_anim_event_variable_float`, `animation_system.lua:312`) replays a received event with `skip_sync=true` precisely so it does **not** re-broadcast. With `skip_sync` omitted from the hook signature, `func(...)` was called with only 5 args → `skip_sync=nil` → vanilla's `if not skip_sync and Managers.state.network:game()` (`animation_system.lua:140`) re-sent the RPC. So **every husk that received a variable'd anim event re-broadcast it → infinite host↔client RPC feedback loop**, re-firing the animation every network tick. Only manifests in a network game with ≥2 humans (needs a peer to bounce the RPC with) — hence "only in a lobby with another player," all humans, every weapon, solo immune.
+
+**Fix:** thread `skip_sync` through the hook signature and pass it to `func` unchanged, so husk replays stay local (`skip_sync=true`) as vanilla intends. The find-variable crash guard (the hook's original purpose — prevents the `es_bastard_sword`-charged-on-non-native `animation_set_variable(nil)` crash) is untouched.
+
+> v0.12.128–v0.12.131 (the crash guard + its drop-vs-fire-bare tuning, from the memory-leak thread) shipped without CHANGELOG entries; this entry documents the regression they introduced and its fix.
+
+## 0.12.127-dev (2026-06-19) — Anim confirmed: Saltzpyre Billhook on all Kruber careers
+
+Flipped `unlock_es_{mercenary,huntsman,knight,questingknight}_wh_2h_billhook` to `[confirmed working]` (user-verified in-game). Per-receiver this time (Kruber only) — Kerillian receivers stay `[untested]`. See `TESTING_STATUS.md`.
+
+## 0.12.126-dev (2026-06-19) — Forced-GC leak test on mission exit (lua_heap diagnosis)
+
+INSTRUMENT ONLY. The host log already revealed the real mechanism via the existing per-state heap sampler: the Lua heap **ratchets up per mission** (≈150 MB keep baseline → 513 MB mission 1 → 311 MB after exit → 699 MB mission 2 — i.e. each mission loads ≈365 MB and ≈160 MB of it is NOT freed on exit). wt's own per-transition apply is only +6 KB, so it's not wt's direct allocation — it's that something during the mission isn't released. The one thing the live sampler couldn't answer (it deliberately never forces GC) is whether that un-freed heap is a true retained-reference **leak** or just collectable garbage. This adds a forced `collectgarbage("collect")` on `StateIngame/exit` that logs `reclaimed garbage` vs `survives GC` — if "survives GC" climbs each mission, it's a real leak to hunt; if it returns to baseline, it's GC pressure. Debug-gated (`enable_debug_logging`). Combine with 0.12.125's boot breakdown.
+
+## 0.12.125-dev (2026-06-19) — Per-subsystem boot mem-probes (lua_heap-cap diagnosis)
+
+INSTRUMENT ONLY (no behavior change) — to find what actually drives wt's Lua-heap footprint instead of guessing. Added ungated boot `[mem-probe]` lines that print the lua delta of each heavy subsystem on one boot:
+- `wt weapon_backend: +X MB` — the backend dofile, which the existing `boot_lua` total never counted (baseline is set *after* it).
+- `wt_dev_anim catalog+vocab: +X MB (N entries)` — the dev anim picker's dynamic catalog + skeleton vocab, built at boot (`_ensure_catalog_built`).
+- `wt_dev_anim widget_tree: +X MB (N char groups)` — the per-pair dropdown tree VMF holds.
+- `wt_dev_anim loc_keys: +X MB (N strings)` — the option-text loc strings (two per vocab value per entry).
+
+All `[picker-only]` subsystems are resident at boot for every player even if they never open the picker — the suspected baseline-raiser that leaves less headroom for the per-mission force-load spike. Boot once with the log open; the breakdown tells us exactly where the heap goes, then we cut it.
+
+## 0.12.124-dev (2026-06-19) — Animation test-status labels in the weapon availability menu
+
+Prefixed the cross-character weapon entries in the availability menu with `[untested]` (the 3P-animation testing surface) and `[confirmed working]` for verified weapons, so we can track what's animation-ready for release. Same-character entries (native skeleton — animations work by default) are left unlabeled, as are group headers. 633 cross-character entries labeled `[untested]`; **Kerillian: Spear** (`we_spear`) and **Saltzpyre: Axe** (`wh_1h_axe`) marked `[confirmed working]` across all receivers (15 entries). See `TESTING_STATUS.md`.
+
+## 0.12.123-dev (2026-06-19) — Warrior Priest punch buff (Reckoner Greathammer special): 3x stagger, 2x damage
+
+### Added
+- **`wt_priest_punch_buff`** (Weapon Overrides group, default OFF) — triples the stagger and doubles the damage of the Warrior Priest 2h hammer's **special attack**, the punch (`attack_slam`, reached via the weapon's push-stagger special). The punch action on `Weapons.two_handed_hammer_priest_template` vanilla-points at the shared `light_blunt_smiter_stab` damage profile; since that profile is shared with other weapons, we register a **private cloned profile** `wt_priest_punch_buffed` with the punch's damage (`power_distribution.attack ×2`) and stagger (`power_distribution.impact ×3`) scaled on its `default_target` + `targets`, then repoint only the punch action's `damage_profile` at it while the toggle is on (restoring the original key when off).
+  - Profile is registered into `NetworkLookup.damage_profiles` **unconditionally at load** (same determinism rule as `wt_authentic_pistol`, PROJECT_STANDARDS §9.3) so a host with the toggle on and a client with it off don't diverge on the network index. Only the action repoint is gated.
+  - Regression: `wt_priest_punch_buff_wired` (profile registered + in NetworkLookup + default_target scaled 2×/3×).
+
 ## 0.12.120-dev (2026-06-17) — Crash fix: universal attachment-node guard (Skullsplitter + tome on Kruber); remove Kruber Longbow zoom toggles
 
 ### Crash fix — `j_rightweaponcomponent11` engine-fatal on equip

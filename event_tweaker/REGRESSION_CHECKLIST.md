@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-06-19.
 
 ---
 ## Multiplayer / Network Sync
@@ -73,6 +73,24 @@ Last updated: 2026-05-22.
 | Repro | 1. Inject a live event with `{ weekly_event = "append", mutators = {...} }` (no name). 2. Start the game. |
 | Expected post-fix | Every injected entry has non-nil string `name`. |
 | Detection | Lint: grep `event_tweaker` injection sites for `name = ...`. |
+
+
+---
+
+### et-cursed-adventure-package-preload — CW/Be'lakor curses must preload their package on EVERY peer before spawn
+
+**[MULTIPLAYER] [INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | (a) Host or client hard-crashes "Resource not found" mid-mission when a Cursed Adventure curse spawns its unit/decal; or (b) a broken curse (`curse_bolt_of_change` / `curse_belakors_shadows` / `curse_empathy`) leaks into a UI group and crashes adventure; or (c) the cursed-sky tint double-applies / never reverts. |
+| Root cause | Package-bearing curses' resource package is loaded only by `DeusRunState.set_event_mutators` in the Deus realm. event_tweaker preloads it via the `MutatorHandler._activate_mutator` hook — which MUST fire on the host (via `activate_mutators`) AND every client (via `rpc_activate_mutator_client` → `_activate_mutator`). If the hook target/name regresses, or the sync flag flips to async, or `current_mechanism_name()` gating wrongly skips a peer, the husk spawn hits an unloaded resource. The 3 broken curses must stay in `_CURSE_BROKEN_IN_ADVENTURE` (and out of `MANAGED_CURSES`). |
+| Mod(s) | event_tweaker |
+| Fix version(s) | event_tweaker v0.4.14-dev |
+| Category | INTEGRATION |
+| Repro | 1. Host an adventure mission with a Cursed Adventure curse (e.g. `mut_curse_blood_storm`) checked; have a friend (also running the mod) join as client. 2. Play until the curse spawns. Both must NOT crash. 3. Toggle `mut_curse_belakor_totems`, `/event_apply`. 4. Confirm the sky tints to the curse's god color and reverts on mission exit. 5. Confirm `curse_bolt_of_change` / `curse_belakors_shadows` / `curse_empathy` appear in NO group. |
+| Expected post-fix | No "Resource not found" on host or client; broken curses absent from every group; tint applies in adventure only (not double-applied in a real CW run) and reverts. |
+| Detection | Source: `mod:hook("MutatorHandler", "_activate_mutator", ...)` present + sync load (4th arg `false`); `_CURSE_BROKEN_IN_ADVENTURE` contains the 3 names and they're absent from `MANAGED_CURSES`; all hooks gated on `current_mechanism_name() == "adventure"`. Boot log: no `Attempting to rehook active hook`. |
 
 
 ---

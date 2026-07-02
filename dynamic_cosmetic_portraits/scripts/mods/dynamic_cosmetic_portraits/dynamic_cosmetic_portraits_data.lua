@@ -118,31 +118,17 @@ local function _build_injections()
     return injections
 end
 
+-- This mod deliberately exposes NO VMF settings page and no enable/disable
+-- toggle: it "simply does what it does" (user directive 2026-06-22). The
+-- `options.widgets` tree was removed entirely and `is_togglable` set to false.
+-- Portrait swapping is always on; debug logging is always on (see the main
+-- lua's _dbg / _dbg_alert helpers). The `custom_gui_textures` block below is
+-- NOT options — it is the load-bearing texture/material registration that VMF
+-- injects into the UI renderers, and must stay.
 local data = {
     name = "Dynamic Cosmetic Portraits",
     description = mod:localize("mod_description"),
-    is_togglable = true,
-
-    options = {
-        widgets = {
-            {
-                setting_id    = "dynamic_portraits",
-                type          = "checkbox",
-                default_value = true,
-                tooltip       = mod:localize("dynamic_portraits_tooltip"),
-            },
-            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-            -- Must be at the BOTTOM of the widget tree, top-level (NOT
-            -- inside any group), key `enable_debug_logging` verbatim across
-            -- every mod in the repo.
-            {
-                setting_id    = "enable_debug_logging",
-                type          = "checkbox",
-                default_value = false,
-                tooltip       = mod:localize("enable_debug_logging_tooltip"),
-            },
-        },
-    },
+    is_togglable = false,
 
     custom_gui_textures = {
         textures = _texture_names,

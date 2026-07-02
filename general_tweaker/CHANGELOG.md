@@ -1,5 +1,27 @@
 # General Tweaker Changelog
 
+## v0.2.73-alpha (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## v0.2.72-alpha (2026-06-24) -- Remove in-mission inventory / Keep Menus (migrated to GUI Tweaker); resolves #62
+
+### Why
+The in-mission inventory / "Keep Menus in Missions" feature force-flipped `IngameUI.handle_menu_hotkeys`' `hotkeys_enabled` arg to true mid-mission, which let the keep view hotkeys (Hero Select / Map / etc.) spawn unloaded `ui_*` preview worlds and crash (Issue #62). The whole feature has been migrated to the **GUI Tweaker** (`gut`) mod, so it is removed here entirely rather than patched. This resolves #62 for public subscribers.
+
+### Removed
+- **In-mission inventory opener** — `mod.gt_open_mission_inventory` field and the `/gt_inv` chat command.
+- **Keep-menus access patch** — the `InventorySettings.inventory_loadout_access_supported_game_modes` adventure/survival/deus patch, the ESC-menu "Open Inventory" entry injector (`_patch_in_game_menu` / `_INVENTORY_BUTTON_ENTRY` / layout helpers), and the `_patch_inventory_access` re-apply from `on_game_state_changed`.
+- **The `IngameUI.handle_menu_hotkeys` hotkey-flip hook** — the direct cause of Issue #62.
+- **The `HeroWindowLoadoutConsole._customize_item` cim crash-gate** — only reachable from the in-mission loadout panel, so it goes with the feature.
+- **The `mission_inventory_enabled` branch** from `on_setting_changed`.
+- **The "Keep Menus in Missions" settings group** (`mission_inventory_enabled` / `gt_open_inv_hotkey`) from `_data.lua` and its loc keys (incl. tooltips) from `_localization.lua`.
+- itemV2.cfg description: dropped the "Keep Menus in Missions" feature block + the summary-line mention; added a note that the feature moved to the GUI Tweaker mod.
+
+### Added
+- New `/gt_regression_test` check `gt_no_mission_hotkey_flip` — source-pattern guard (anchored on the `mod.on_setting_changed` main-file field) that FAILS if the `IngameUI.handle_menu_hotkeys` hook is ever reintroduced. The needle is assembled from two string literals so the test's own source does not self-match; degrades to a no-op when source introspection is unavailable.
+
+### Notes
+No other gt feature touched — camera/noclip/freecam/godmode, lobby controls, debug dumps, friendly-fire, etc. are intact. Mirrors the removal already done in `general_tweaker_dev`.
+
 ## v0.2.71-alpha (2026-06-17) -- Settings logging + bot-rescue diagnostics
 
 ### Why

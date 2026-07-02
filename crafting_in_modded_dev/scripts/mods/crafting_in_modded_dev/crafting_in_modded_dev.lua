@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.39-dev"
+local MOD_VERSION = "0.8.41-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -259,6 +259,11 @@ end
 -- them at well-known UI transitions / state changes.
 local _ok_dbg, _err_dbg = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/cim_debug")
 if not _ok_dbg then mod:error("Failed to load cim_debug: %s", tostring(_err_dbg)) end
+
+-- #174 attribution probe (passive, default-on, printf). Instruments cim's own
+-- loadout capture + restore paths so the user's post-playtest log names whether
+-- cim wrote/restored bot or player loadout slots on startup. See _diag_probe.lua.
+local PROBE = mod:dofile("scripts/mods/crafting_in_modded_dev/_diag_probe")
 
 -- Backward-compat: pre-v0.7.0 cim used `rarity = "promo"` for crafts. Keep
 -- "promo" registered in NetworkLookup.rarities too so legacy saved items can
@@ -1229,6 +1234,15 @@ local function _reequip_live_avatar()
 end
 
 _restore_modded_loadout = function()
+    -- #174 probe: name whether cim's startup restore even runs. persist defaults
+    -- OFF (moved to Tweaker: GUI) -> the whole restore is a no-op and cim writes
+    -- no bot/player slots, exonerating it. key=nil: this fires a handful of times
+    -- per boot (initial + deferred retries), well under the flood cap.
+    if PROBE then
+        PROBE.emit("174:loadout", nil,
+            string.format("cim_dev _restore_modded_loadout:ENTER persist=%s (OFF=no-op, cim writes no slots)",
+                tostring(_persist_loadouts_enabled())))
+    end
     -- v0.8.15-dev MASTER gate: when loadout persistence is OFF (default), cim
     -- does NOT touch loadouts at all — no flat->indexed migration, no stale
     -- purge, no set_loadout_item writes, no live-avatar re-equip. The whole
@@ -1396,6 +1410,16 @@ end
 -- here falls back to the resolved selected index (matching vanilla's
 -- get/set_character_data default) so the capture never lands index-less.
 local function _capture_loadout_equip(career_name, slot_name, item_id, from_live_equip, loadout_index)
+    -- #174 probe: log BEFORE the gate so we see every capture attempt AND whether
+    -- persistence is enabled (default OFF -> cim writes nothing, exonerating it).
+    -- restoring=true marks a replay write (not a fresh equip). Dedup per
+    -- career/slot/index so the startup burst logs once each.
+    if PROBE then
+        PROBE.emit("174:loadout", "cim_cap/" .. tostring(career_name) .. "/" .. tostring(slot_name) .. "/" .. tostring(loadout_index),
+            string.format("cim_dev _capture_loadout_equip profile=%s slot=%s item=%s idx=%s from_live=%s persist=%s restoring=%s",
+                tostring(career_name), tostring(slot_name), tostring(item_id), tostring(loadout_index),
+                tostring(from_live_equip), tostring(_persist_loadouts_enabled()), tostring(_restoring)))
+    end
     -- v0.8.15-dev master gate: when loadout persistence is OFF (default), cim
     -- captures NOTHING — `_modded_loadout` is never read or written, so neither
     -- the BackendInterfaceItemPlayfab hook_safe nor the BackendUtils full hook

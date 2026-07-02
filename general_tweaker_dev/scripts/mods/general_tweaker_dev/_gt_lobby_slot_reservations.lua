@@ -13,7 +13,7 @@ local M = {}
 --
 -- Persistence key:  "gt_lobby_sr_reservations" = { [steam_id_string] = slot_index, ... }
 -- Master toggle:    "gt_lobby_slot_reservations_enabled"
--- Chat commands:    /gt_lobby_reserve, /gt_lobby_unreserve, /gt_lobby_reservations
+-- Chat commands:    /lobby_reserve, /lobby_unreserve, /lobby_reservations
 
 local STORAGE_KEY = "gt_lobby_sr_reservations"
 local TOGGLE_KEY  = "gt_lobby_slot_reservations_enabled"
@@ -133,20 +133,20 @@ end
 -- Chat commands (host-only). Renamed lt_* -> gt_lobby_* per merge.
 -- ---------------------------------------------------------------------------
 
-mod:command("gt_lobby_reserve", "Reserve a lobby slot for a Steam ID. Usage: /gt_lobby_reserve <steam_id> <slot 1-4>",
+mod:command("lobby_reserve", "Reserve a lobby slot for a Steam ID. Usage: /lobby_reserve <steam_id> <slot 1-4>",
     function(steam_id_arg, slot_arg)
         if not _is_host() then
-            mod:echo(TAG .. " /gt_lobby_reserve: host only.")
+            mod:echo(TAG .. " /lobby_reserve: host only.")
             return
         end
         local steam_id = _normalize_id(steam_id_arg)
         local slot     = _parse_slot(slot_arg)
         if not steam_id then
-            mod:echo(TAG .. " /gt_lobby_reserve: missing or invalid steam_id.")
+            mod:echo(TAG .. " /lobby_reserve: missing or invalid steam_id.")
             return
         end
         if not slot then
-            mod:echo(TAG .. " /gt_lobby_reserve: slot must be 1, 2, 3, or 4.")
+            mod:echo(TAG .. " /lobby_reserve: slot must be 1, 2, 3, or 4.")
             return
         end
         local reservations = _load()
@@ -155,20 +155,20 @@ mod:command("gt_lobby_reserve", "Reserve a lobby slot for a Steam ID. Usage: /gt
         mod:echo(TAG .. " Reserved slot " .. slot .. " for " .. steam_id .. ".")
     end)
 
-mod:command("gt_lobby_unreserve", "Remove a slot reservation. Usage: /gt_lobby_unreserve <steam_id>",
+mod:command("lobby_unreserve", "Remove a slot reservation. Usage: /lobby_unreserve <steam_id>",
     function(steam_id_arg)
         if not _is_host() then
-            mod:echo(TAG .. " /gt_lobby_unreserve: host only.")
+            mod:echo(TAG .. " /lobby_unreserve: host only.")
             return
         end
         local steam_id = _normalize_id(steam_id_arg)
         if not steam_id then
-            mod:echo(TAG .. " /gt_lobby_unreserve: missing or invalid steam_id.")
+            mod:echo(TAG .. " /lobby_unreserve: missing or invalid steam_id.")
             return
         end
         local reservations = _load()
         if reservations[steam_id] == nil then
-            mod:echo(TAG .. " /gt_lobby_unreserve: no reservation for " .. steam_id .. ".")
+            mod:echo(TAG .. " /lobby_unreserve: no reservation for " .. steam_id .. ".")
             return
         end
         reservations[steam_id] = nil
@@ -176,7 +176,7 @@ mod:command("gt_lobby_unreserve", "Remove a slot reservation. Usage: /gt_lobby_u
         mod:echo(TAG .. " Removed reservation for " .. steam_id .. ".")
     end)
 
-mod:command("gt_lobby_reservations", "List current slot reservations.", function()
+mod:command("lobby_reservations", "List current slot reservations.", function()
     local reservations = _load()
     if not next(reservations) then
         mod:echo(TAG .. " No reservations.")

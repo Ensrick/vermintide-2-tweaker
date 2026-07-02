@@ -36,7 +36,8 @@
         @{ Dir = 'chaos_wastes_tweaker_dev';   ModId = 'ct_dev';                     WorkshopId = '3733366926'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'Chaos Wastes Tweaker (Dev)' }
         @{ Dir = 'general_tweaker';            ModId = 'gt';                         WorkshopId = '3713619122'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'General Tweaker' }
         @{ Dir = 'general_tweaker_dev';        ModId = 'gt_dev';                     WorkshopId = '3733367409'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'General Tweaker (Dev)' }
-        @{ Dir = 'gui_tweaker';                ModId = 'gut';                        WorkshopId = '3732144878'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'GUI Tweaker' }
+        @{ Dir = 'gui_tweaker';                ModId = 'gut';                        WorkshopId = '3732144878'; Visibility = 'friends_only'; Stream = 'stable'; Public = $false; Name = 'GUI Tweaker' }
+        @{ Dir = 'gui_tweaker_dev';            ModId = 'gut_dev';                    WorkshopId = '3751024698'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'GUI Tweaker (Dev)' }
         @{ Dir = 'cosmetics_tweaker';          ModId = 'cosmetics_tweaker';          WorkshopId = '3715714222'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Cosmetics Tweaker' }
         @{ Dir = 'dynamic_cosmetic_portraits'; ModId = 'dynamic_cosmetic_portraits'; WorkshopId = '3721036701'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Dynamic Cosmetic Portraits' }
         @{ Dir = 'career_tweaker';             ModId = 'crt';                        WorkshopId = '3716286199'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Career Tweaker' }

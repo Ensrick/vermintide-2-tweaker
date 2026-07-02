@@ -1,5 +1,74 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.358-dev — 2026-07-01 — Fix menu tooltip double-localize + rewrite option descriptions
+
+Localization/menu-text pass. VMF's options module localizes each widget's `tooltip` field itself at menu-build time, so passing an already-localized string (`tooltip = mod:localize("K")`) double-localized the value and rendered it wrapped in angle brackets.
+
+- **Converted the two widget `tooltip = mod:localize("K")` calls to raw keys** (`tooltip = "K"`) in `character_weapon_variants_data.lua` (`enable_cwv_es_crossbow`, `enable_cwv_tuskgor_javelin_bomb`), letting VMF localize them once. The top-level `mod.description = mod:localize("mod_description")` is the one correct eager-localize and was left as-is.
+- **Cross-checked every widget-referenced loc key** against the loc table (3 checkboxes: title keys + tooltip/description keys) — all present, no missing entries.
+- **Rewrote all six option description/tooltip strings** (`mod_description`, `mace_sword_tweak_description`, `enable_cwv_tuskgor_javelin_bomb_tooltip`, `cwv_grenade_tuskgor_javelin_description`, `enable_cwv_es_crossbow_tooltip`, `cwv_es_crossbow_description`) into short, player-facing English: removed em dashes and internal jargon (3P/FX/register/TODO.md references), capped at 2-3 sentences. Item display names left untouched. No key/setting_id/structure/default changes.
+
+## 0.1.357-dev — 2026-07-01 — Refactor: move 28 musket bare-globals off the Lua global namespace (#1)
+
+Mechanical, no-behaviour-change refactor closing GitHub issue #1. The old-musket + shared musket-pool runtime state was declared as ~28 bare **global** variables (`_CWV_OLD_MUSKET_POS/ROT/SCALE_{1P,3P}_{RANGED,MELEE}`, `_CWV_OLD_MUSKET_UNITS_*`, `_CWV_OLD_MUSKET_FX_PROXY`, `_CWV_MUSKET_AMMO_EXTS`, `_CWV_RESERVE_PER_MUSKET`, and the 9 `_cwv_musket_*` / `_track/apply/spawn/destroy/reapply_old_musket_*` functions). These polluted `_G` and risked silent collision with other mods — luacheck flagged **141** W111/W113 warnings on them.
+
+- **Consolidated all 28 into a single file-scope `local _om = {}` holder table**; every reference is now `_om.<original_name>` (pure prefix, field names unchanged). Verified byte-equivalent to the prior source once the holder block and every `_om.` prefix are stripped, so behaviour is identical.
+- **Why a holder table and not 28 individual `local` forward-decls** (the issue's first-guess approach): the main chunk already sits at **199 of Lua 5.1's hard 200-local ceiling** (see the existing "scope mesh-path locals" `do`-block that fights the same limit). 28 more file-scope locals overflow the limit and produce a no-line compile error — exactly what broke the earlier v0.1.330/331 attempt (error 4201742337). The holder adds **one** local (199 → 200) and one shared upvalue per capturing closure, achieving the same "0 bare globals" goal within the limit.
+- Result: luacheck musket-global warnings 141 → **0**; remaining W111/W113 are pre-existing engine globals (`PackageManager`, `AiAnimUtils`, `CanWieldAllItemTemplates`, `ProjectileUnits`) and the intentional `_MEM_PROBE_T0_CWV` probe, all out of scope. No new warnings; repo lint (hook-dup / forward-ref / late-local) clean. **Pending in-game verification.**
+
+## 0.1.356-dev — 2026-06-30 — Make variant-registration summary VISIBLE (diagnose "only axe+shield shows")
+
+User reports that after running v0.1.355, only the axe+shield variant appears — the imperial longsword, longsword+shield, dual axes, musket, etc. are missing. The log shows the mod loading cleanly with **no** errors/warnings and the user on the correct bundle (`[cwv:LOAD] v0.1.355-dev`), but the `_auto_register_all` registration counts are all `_dbg`-gated (debug off), so there's no way to tell from the log whether the variants are failing to *build*, failing to *register*, or registering fine but not *displaying*.
+
+- Converted the `_auto_register_all` exit summary from `_dbg` to `mod:info` (INFO is on in the user's session) — now logs `built_ok / build_failed / skipped_skin_only / skipped_already / entries_added / defs` plus the full list of registered backend_ids. This makes the next log definitively show whether ~28 variants register (→ display/backend-merge issue) or only ~1 (→ build-loop bail). Diagnostic only; no behaviour change.
+
+## 0.1.355-dev — 2026-06-30 — Silence the recurring `on_game_state_changed` log error
+
+The user's log kept showing `(event) on_game_state_changed: player_manager.lua:559: Network backend has not been set` on every boot. Root cause: the diagnostics-only `mod.on_game_state_changed` loadout-snapshot handler calls `Managers.player:local_player()` on every state-enter, but that internally calls `peer_id()` which **throws** at early states (StateSplashScreen / StateTitleScreen) before the network backend exists. VMF catches it but logs it as an error each time. Pre-existing (not from the bomb-slot work); surfaced now because the user was scrutinising CWV log output.
+
+- Guarded the `local_player()` lookup in `mod.on_game_state_changed` with a `pcall` + `Managers.player` nil-check, bailing silently when the backend isn't up yet. No behaviour change (the handler is diagnostics-only and gated behind debug logging). Unrelated to the missing-variants regression — that remains fixed by v0.1.354's disabled bomb block.
+
+## 0.1.354-dev — 2026-06-29 — REGRESSION FIX: disable bomb-slot block (all variants vanished)
+
+User reported that after the bomb-slot Tuskgor Javelin block was added (v0.1.352/.353), **none** of the CWV variant weapons appeared anymore (musket, dual axes, axe+shield, etc.). The latest log (console-2026-06-29-23.56) showed the mod loading fully with **no** registration error, the `StateInGameRunning.on_enter` registration hook installed, the keep loading, and the backend enabling — i.e. the failure is a silent global side-effect of running the new bomb block at file load (suspects: the `NetworkLookup.item_names` injection, the `Pickups.grenades` renormalise, or the `javelin_template` clone), not a logged crash.
+
+- **Guarded the entire bomb-slot registration block OFF** (`_TJB_FEATURE_ON = false`) to restore all variant content immediately. The code is retained for surgical re-introduction once the conflict is root-caused. The `/cwv_give_javelin` command remains registered but no-ops (echoes "not registered") while the block is off.
+
+## 0.1.353-dev — 2026-06-29 — Tuskgor Javelin (BOMB SLOT): full javelin moveset, one-shot + `/give` command
+
+### What changed vs 0.1.352-dev
+Per user direction, reworked the bomb-slot javelin from a grenade-template clone (throw-only) into the **full javelin weapon** living in the bomb slot:
+- **Template now clones `javelin_template`** (not the grenade template), so it keeps the **melee stab moveset** AND the aimed throw. **Full size** (no scale override). **One-shot:** `ammo_data.max_ammo = 1` + `destroy_when_out_of_ammo = true` + auto-catch reload disabled + ammo pickups blocked → throw it once and it's gone.
+- **Melee stabs buffed** 2.5× (`_clone_damage_profile`); **throw** uses the buffed `cwv_tuskgor_javelin_bomb` damage profile (armour pierce, cleave 2.5 → multi-pierce, shield_break, headshot 3.0×, 2.5× power) + the boar-spear projectile.
+- The projectile resolves THIS template directly via the ItemMasterList entry's `temporary_template` (`backend_interface_item.lua:770` reads `temporary_template` first) — no runtime template-swap hook needed (unlike the ranged javelin, whose `item_name` resolves to the base `we_javelin`).
+- **New chat command `/cwv_give_javelin`** — grants the one-shot Tuskgor Javelin straight into your bomb slot (bypasses the random pickup pool) for instant testing. Force-loads the boar-spear held + `_3p` (projectile) units first, since the `/give` path skips `PickupPackageLoader`.
+
+### Still NOT verified in-game (DoD gate)
+**The big open question:** whether the grenade SLOT cleanly wields a full ranged-template moveset (hold + melee + aim-throw) or whether the slot's quick-throw input interferes. `/cwv_give_javelin` is the tool to find out. Also unverified: melee stab damage/feel, throw damage tuning, boar-spear mesh render at full size, and MP sync. Tuning knobs unchanged (`_TJB_DAMAGE_MULT` 2.5, `_TJB_CLEAVE` 2.5, `_TJB_HEADSHOT_BOOST` 3.0, `_TJB_THROW_SPEED` 5000, `_TJB_SPAWN_SHARE` 0.15).
+
+## 0.1.352-dev — 2026-06-29 — Tuskgor Javelin (BOMB SLOT): single-use thrown spear in the grenade slot
+
+### What
+A brand-new archetype for CWV — the first item that lives in `slot_grenade` (the bomb slot) instead of a backend weapon slot. It is **not** a bomb: it's the literal javelin throw, packaged as a single-use grenade-slot consumable.
+
+- **Behaviour:** one straight-flying thrown spear (Tuskgor / boar-spear model) that pierces armour, penetrates several enemies in a line, goes through shields, and deals high damage to monsters and on headshots. Single use (consumed on throw).
+- **Acquisition:** a NEW grenade pickup (`cwv_tuskgor_javelin_bomb`) injected into the `Pickups.grenades` pool — it does **not** replace frag/fire bombs, it just joins the bomb-pickup pool that can roll in every game mode (~15% of grenade-pool rolls by default).
+- **Toggle:** `enable_cwv_tuskgor_javelin_bomb` (default ON). Takes effect on the next keep/level load.
+
+### How (the load-bearing bits)
+- Registered directly as an `ItemMasterList` grenade entry + `Weapons[...]` template + `Pickups.grenades` entry (slot_grenade items are `stored_in_backend = false` and never equipped from the keep, so the normal `_variant_definitions` / MoreItemsLibrary path does not apply).
+- Throw uses `kind = "thrown_projectile"` (ActionThrownProjectile, registered for everyone via the DLC `action_classes_lookup` merge at `weapon_unit_extension.lua:101-106`) with **direct** `impact_data.damage_profile` and **no** `aoe`/`timed_data` — i.e. no explosion. `kind = "charged_projectile"` (vanilla grenades) always explodes, so it could not be reused.
+- Damage profile `cwv_tuskgor_javelin_bomb` = deep clone of vanilla `thrown_javelin` (which already has `shield_break = true`) with armour modifiers bumped to ≥1.5 (armour pierce + monster damage), `cleave_distribution` raised to 2.5 (drives the projectile's `_max_mass` so it penetrates several enemies before linking/sticking), `boost_curve_coefficient_headshot` = 3.0, and 2.5× power. Vanilla `thrown_javelin` is untouched (deep clone).
+- Projectile `cwv_tuskgor_javelin_bomb` = clone of `Projectiles.javelin` pointed at the boar-spear `ProjectileUnits` entry (`cwv_tuskgor_javelin`, already husk-registered) with `use_weapon_skin = false`, so it flies as the boar spear instead of the not-loaded woods-DLC elf javelin unit.
+- Network: new keys mirrored into `NetworkLookup.item_names` (MP equip sync via `rpc_add_equipment`), `NetworkLookup.pickup_names`, `NetworkLookup.damage_profiles`, and `AllPickups`. The grenade group is renormalised to sum to 1.0 (guards the pickup-sampler `total<1.0` crash class). Resolve-by-name lookups register unconditionally so a peer with the toggle off can still resolve a host-spawned pickup; only local pool membership is toggle-gated.
+- Mesh loads automatically: `PickupPackageLoader._load_pickup` preloads the `temporary_template`'s `right_hand_unit` (+`_3p`) for the pickup, and that `_3p` is the projectile unit.
+
+### DoD (Definition of Done) — NOT yet walked
+**Not verified in-game.** This is a new archetype; compile-clean ≠ working. Open items to verify on the test client: pickup actually spawns + is interactable (interim world model is the frag-bomb pup), throw fires the spear projectile, direct damage + armour/shield/multi-pierce + headshot/monster scaling behave, boar-spear held + in-flight mesh renders, MP sync (remote husk view, client picking up host-spawned javelin), and damage tuning (2.5× / cleave 2.5 may need balancing). Polish backlog: spear-shaped world pickup model + correct grenade-hand attachment orientation + a proper javelin throw windup (currently the grenade "to_grenade" wield + overhand throw anim).
+
+## 0.1.351-dev — 2026-06-28
+- Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
 ## 0.1.350-dev (2026-06-13) — Harden two remaining cold `ItemMasterList` reads with `rawget` (crashify-spam fix)
 
 ### Why

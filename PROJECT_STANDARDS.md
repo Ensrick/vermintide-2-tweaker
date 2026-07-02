@@ -122,13 +122,52 @@ that dumps current state in a copy-pasteable form. Examples:
 - `/ct_diag` — current pool overrides, active mutators, altar config.
 - `/cosmetics_diag` — la_equips_by_peer, offhand_selection, glow runtime.
 
-### 3.6 Debug Logging toggle (universal — every mod, no exceptions)
+### 3.6 Debug logging — VMF-native, no per-mod toggle (current policy 2026-06-29)
+
+> **CURRENT POLICY (established 2026-06-29, supersedes the 2026-05-25 per-mod
+> toggle below).** We do **NOT** ship our own `enable_debug_logging` checkbox
+> anymore — it is redundant with VMF's own logging controls. Diagnostics route
+> through VMF's logging methods and are gated by VMF's logging output level,
+> which the user sets ONCE in VMF's options. There is **no per-mod toggle to
+> enable/disable on our mods** — that is superfluous.
+>
+> - **Routine diagnostics** use the two file-local helpers, which now call VMF's
+>   severity-scoped log methods directly (no `mod:get` gate of our own):
+>   - `_dbg(fmt, ...)` → `mod:debug(...)` — emits only when VMF's **debug** log
+>     level is on. File only.
+>   - `_dbg_alert(fmt, ...)` → `mod:warning(...)` — emits only when VMF's
+>     **warning** log level is on. File AND in-game chat.
+>   So "as long as VMF logging is on, it happens" — specifically, `_dbg` rides
+>   VMF's debug channel and `_dbg_alert` rides VMF's warning channel. The user
+>   never touches a toggle on OUR side.
+> - **Critical always-on telemetry** (instrumentation that MUST be captured even
+>   when the user runs with VMF logging off — e.g. ct's `[ct-spawn-tally]` /
+>   `[populate_pickups]` Horn-of-Magnus census) uses **raw `printf`**, which
+>   bypasses ALL toggles (VMF's included) and always lands in `console_logs\`.
+>   Reserve this for load-bearing diagnostics, not routine noise.
+> - **Reference implementation:** `chaos_wastes_tweaker_dev` (#169, v0.7.186-dev).
+>   `_dbg`/`_dbg_alert` route through `mod:debug`/`mod:warning`; zero live reads
+>   of any `enable_debug_logging` key; no menu widget.
+>
+> **Migration status (2026-06-29).** Only `ct_dev` is fully VMF-native. Still on
+> the legacy per-mod gate: `chaos_wastes_tweaker` (stable), `character_weapon_variants`,
+> `general_tweaker_dev` (gate the helper on the legacy key in code, no menu
+> widget); `weapon_tweaker`, `weapon_tweaker_dev`, `weapons_of_chaos` (still
+> expose the menu checkbox). Rolling the VMF-native pattern out to these is a
+> per-mod task — do it when touching each mod, or as a deliberate sweep.
+
+---
+
+#### Legacy: per-mod Debug Logging toggle (2026-05-25 — being phased out)
+
+> Retained for the not-yet-migrated mods above. Do NOT add this to new mods or
+> to `ct_dev`. New work follows the VMF-native policy above.
 
 Established 2026-05-25. User feedback: "VMF menu options for debug are
 inconsistent. Just a toggle for Debug Logging at the BOTTOM and have one
 available for every single mod I have."
 
-Every mod in this repo MUST expose a single VMF widget with **exactly** these
+Each legacy (unmigrated) mod exposes a single VMF widget with **exactly** these
 properties:
 
 | Field | Value |

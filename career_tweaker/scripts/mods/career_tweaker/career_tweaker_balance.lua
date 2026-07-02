@@ -45,20 +45,29 @@ local _CRT_BUFF_NAMES = {
     "crt_bh_jwd_special_kill_dr_proc",
     "crt_bh_jwd_special_kill_dr_stack",
     "crt_bh_jwd_stack_remover",
+    "crt_engineer_leading_shots_accumulator",
+    "crt_engineer_leading_shots_counter",
+    "crt_engineer_leading_shots_crit",
     "crt_knight_counter_punch_proc",
     "crt_knight_counter_punch_stack",
     "crt_mainstay_universal_stagger",
     "crt_merc_blade_barrier_proc",
     "crt_merc_blade_barrier_remover",
     "crt_merc_blade_barrier_stack",
+    "crt_merc_enhanced_training_as",
     "crt_priest_prayer_self_extra",
     "crt_questingknight_impetuous_as",
     "crt_questingknight_impetuous_as_proc",
     "crt_questingknight_impetuous_power",
     "crt_questingknight_impetuous_power_proc",
+    "crt_sienna_flame_unending_driver",
+    "crt_sienna_flame_unending_stack",
+    "crt_sienna_natural_talent_ranged_driver",
+    "crt_sienna_natural_talent_ranged_stack",
     "crt_sienna_numb_to_pain_proc",
     "crt_sienna_numb_to_pain_remover",
     "crt_sienna_numb_to_pain_stack",
+    "crt_unchained_ult_max_us",
     "crt_waywatcher_drakiras_alacrity_passive",
     "crt_waywatcher_fervent_huntress_passive",
     "crt_zealot_holy_fortitude_max_hp",
@@ -1017,14 +1026,13 @@ local BALANCE_MODS = {
     },
 
     -- ============================================================
-    -- Pyromancer: Famished Flames (lvl 25) — burn 100→150%, non-burn 15→30%
+    -- Battle Wizard: Famished Flames (lvl 25) — burn 100→150%, non-burn 15→30%
     -- ============================================================
     -- Talent `sienna_adept_increased_burn_damage_reduced_non_burn_damage`
     -- attaches two separate buff templates: `sienna_adept_increased_burn_damage`
     -- (multiplier 1.0 = +100% burn damage) and `sienna_adept_reduced_non_burn_damage`
     -- (multiplier -0.15 = -15% non-burn). User's "level 10" terminology is a
-    -- mis-recall — the talent lives at row 5 (level 25) on Pyromancer (bw_adept),
-    -- not on Battle Wizard.
+    -- mis-recall — the talent lives at row 5 (level 25) on Battle Wizard (bw_adept).
     rework_bw_adept_famished_flames_buffed = {
         character = "sienna",
         career    = "bw_adept",
@@ -1056,11 +1064,11 @@ local BALANCE_MODS = {
     },
 
     -- ============================================================
-    -- Pyromancer: Volcanic Force (lvl 20) — full-charge +50% → +100%
+    -- Battle Wizard: Volcanic Force (lvl 20) — full-charge +50% → +100%
     -- ============================================================
     -- Talent `sienna_adept_power_level_on_full_charge`. Buff template's
     -- multiplier holds the +50% (0.5) bonus on fully-charged spells.
-    -- User said "level 10" — actual is row 4 (level 20) on Pyromancer (bw_adept).
+    -- User said "level 10" — actual is row 4 (level 20) on Battle Wizard (bw_adept).
     rework_bw_adept_volcanic_force_doubled = {
         character = "sienna",
         career    = "bw_adept",
@@ -1091,7 +1099,7 @@ local BALANCE_MODS = {
     },
 
     -- ============================================================
-    -- Pyromancer: Fires from Ash — 3% → 1% CDR + 0.5 THP per burning kill
+    -- Battle Wizard: Fires from Ash — 3% → 1% CDR + 0.5 THP per burning kill
     -- ============================================================
     -- Talent `sienna_adept_cooldown_reduction_on_burning_enemy_killed`.
     -- Field patch on the cooldown_reduction multiplier (0.03→0.01); the
@@ -1416,6 +1424,133 @@ local BALANCE_MODS = {
         patches   = {
             { buff = "bardin_engineer_2_1_cooldown", field = "duration", value = 240 },
         },
+    },
+
+    -- ============================================================
+    -- Engineer: Leading Shots (legacy talent restore) — replaces Ingenious Ordnance
+    -- ============================================================
+    -- Restores the pre-Patch-5.2.0 "Leading Shots": every 4th ranged shot is a
+    -- GUARANTEED CRIT. Replaces the Ingenious Ordnance talent
+    -- (bardin_engineer_improved_explosives, level-10 slot [2,1]).
+    --
+    -- Crank Gun: the Steam-Assisted Crank Gun career skill uses NO ammo, so we
+    -- count on `on_hit` filtered to ranged projectile attack types (NOT
+    -- on_ammo_used, which the ammo-less Crank Gun never fires). The Crank Gun's
+    -- bullets are ranged projectiles → they DO trigger on_hit → they count.
+    --
+    -- Chain (all STOCK buff funcs — no custom code):
+    --   counter (add_buff_on_first_target_hit, on_hit, ranged-only) -> adds a
+    --   stack of accumulator each ranged shot -> accumulator (max_stacks 4,
+    --   reset_on_max) -> on the 4th grants the crit buff -> crit buff
+    --   (guaranteed_crit perk, consumed on the next on_critical_action).
+    -- Modeled on Mercenary Paced Strikes + the engineer's own Scavenged-Shot
+    -- accumulator (talent_settings_cog_dwarf_ranger.lua:331-360).
+    --
+    -- Additive: the OTHER 3 shots keep their normal random crit chance (the
+    -- faithful "removes random crit" needs a crit-resolver hook; not done).
+    -- Mutually-soft with rework_dr_engineer_ingenious_ordnance_240s: when this is
+    -- ON the talent no longer references bardin_engineer_2_1_cooldown, so the 240s
+    -- toggle has no visible effect (no crash — they touch different things).
+    rework_dr_engineer_leading_shots = {
+        character = "bardin",
+        career    = "dr_engineer",
+        patches   = {},
+        custom_apply = function(saved)
+            local buff_perks = require("scripts/unit_extensions/default_player_unit/buffs/settings/buff_perk_names")
+            local AT = rawget(_G, "AttackTypes")
+            if not (BuffTemplates and buff_perks and AT) then return end
+
+            -- Ranged projectile shots only (covers the Crank Gun; excludes melee + grenades).
+            local ranged_only = {
+                [AT.projectile] = true,
+                [AT.instant_projectile] = true,
+                [AT.heavy_instant_projectile] = true,
+            }
+
+            local function _ensure(name, def)
+                if BuffTemplates[name] == nil or BuffTemplates[name]._crt_pending then
+                    BuffTemplates[name] = def
+                    saved["ls_created_" .. name] = true
+                end
+            end
+
+            _ensure("crt_engineer_leading_shots_counter", {
+                buffs = { {
+                    name               = "crt_engineer_leading_shots_counter",
+                    buff_func          = "add_buff_on_first_target_hit",
+                    buff_to_add        = "crt_engineer_leading_shots_accumulator",
+                    event              = "on_hit",
+                    valid_attack_types = ranged_only,
+                    client_side        = true,
+                } },
+            })
+            _ensure("crt_engineer_leading_shots_accumulator", {
+                buffs = { {
+                    name                = "crt_engineer_leading_shots_accumulator",
+                    icon                = "bardin_engineer_ranged_crit_count",
+                    max_stacks          = 4,
+                    on_max_stacks_func  = "add_remove_buffs",
+                    reset_on_max_stacks = true,
+                    max_stack_data      = { buffs_to_add = { "crt_engineer_leading_shots_crit" } },
+                } },
+            })
+            _ensure("crt_engineer_leading_shots_crit", {
+                buffs = { {
+                    name           = "crt_engineer_leading_shots_crit",
+                    buff_func      = "dummy_function",
+                    event          = "on_critical_action",
+                    icon           = "bardin_engineer_ranged_crit_count",
+                    max_stacks     = 1,
+                    priority_buff  = true,
+                    remove_on_proc = true,
+                    perks          = { buff_perks.guaranteed_crit },
+                } },
+            })
+
+            -- Repoint the Ingenious Ordnance talent at the Leading Shots counter.
+            if not (Talents and TalentIDLookup) then return end
+            local lookup = TalentIDLookup["bardin_engineer_improved_explosives"]
+            if not lookup then return end  -- non-COG owner: talent absent → no-op
+            local talent = Talents[lookup.hero_name] and Talents[lookup.hero_name][lookup.talent_id]
+            if not talent then return end
+
+            saved.ls_buffs = talent.buffs
+            saved.ls_icon  = talent.icon
+            saved.ls_desc  = talent.description
+            saved.ls_dv    = talent.description_values
+            saved.ls_dname = talent.display_name  -- usually nil (vanilla talent has only `name`)
+            talent.buffs              = { "crt_engineer_leading_shots_counter" }
+            talent.icon               = "bardin_engineer_ranged_crit_count"
+            -- Title resolves as Localize(display_name or name) (hero_window_talents.lua:328);
+            -- the vanilla `name` still localizes to "Ingenious Ordnance", so set
+            -- display_name (it takes precedence) to show "Leading Shots".
+            talent.display_name       = "crt_engineer_leading_shots_name"
+            talent.description        = "crt_engineer_leading_shots_desc"
+            talent.description_values = { { value = 4 } }
+        end,
+        custom_restore = function(saved)
+            if Talents and TalentIDLookup then
+                local lookup = TalentIDLookup["bardin_engineer_improved_explosives"]
+                local talent = lookup and Talents[lookup.hero_name] and Talents[lookup.hero_name][lookup.talent_id]
+                if talent and saved.ls_buffs then
+                    talent.buffs              = saved.ls_buffs
+                    talent.icon               = saved.ls_icon
+                    talent.display_name       = saved.ls_dname
+                    talent.description        = saved.ls_desc
+                    talent.description_values = saved.ls_dv
+                end
+            end
+            if BuffTemplates then
+                for _, n in ipairs({
+                    "crt_engineer_leading_shots_counter",
+                    "crt_engineer_leading_shots_accumulator",
+                    "crt_engineer_leading_shots_crit",
+                }) do
+                    if saved["ls_created_" .. n] then BuffTemplates[n] = _crt_make_stub() end
+                end
+            end
+            saved.ls_buffs, saved.ls_icon, saved.ls_desc, saved.ls_dv, saved.ls_dname = nil, nil, nil, nil, nil
+        end,
     },
 
     -- ============================================================
@@ -2243,57 +2378,392 @@ local BALANCE_MODS = {
     -- The "kill must be a burning enemy + elite or special" filter lives in
     -- the proc's buff_func (`add_buff_on_burning_special_or_elite_kill`,
     -- runtime override below).
+    -- ============================================================
+    -- Unchained: Unstable Strength rescale  (10% melee power / 5 overcharge,
+    -- up to 6x  -- vs vanilla 12% / 6 overcharge, up to 5x)
+    -- ============================================================
+    -- Unstable Strength is the career PASSIVE, not a tree talent: the driver
+    -- `sienna_unchained_passive_increased_melee_power_on_overcharge` (buffs[1]
+    -- .chunk_size = 6, .max_sub_buff_stacks default 5) runs
+    -- activate_server_buff_stacks_based_on_overcharge_chunks to add up to N stacks
+    -- of `sienna_unchained_passive_melee_power_on_overcharge` (buffs[1].max_stacks
+    -- = 5, .multiplier = 0.12, stat power_level_melee). Rescale = chunk 6->5,
+    -- max 5->6 (on BOTH the driver's max_sub_buff_stacks AND the stack buff's
+    -- max_stacks, or the driver caps at the lower), multiplier 0.12->0.10.
+    -- This is the "master" toggle the other Unchained reworks read to pick their
+    -- per-stack math (5%/6x when on, 6%/5x when off). Pure runtime field patch on
+    -- shared BuffTemplates; restored on toggle-off.
+    rework_bw_unchained_unstable_strength_rescale = {
+        character = "sienna",
+        career    = "bw_unchained",
+        patches   = {},
+        custom_apply = function(saved)
+            if not BuffTemplates then return end
+            local drv = BuffTemplates.sienna_unchained_passive_increased_melee_power_on_overcharge
+            local drv_b = drv and drv.buffs and drv.buffs[1]
+            if drv_b then
+                saved.us_chunk = drv_b.chunk_size
+                saved.us_maxsub = drv_b.max_sub_buff_stacks
+                drv_b.chunk_size = 5
+                drv_b.max_sub_buff_stacks = 6
+            end
+            local stk = BuffTemplates.sienna_unchained_passive_melee_power_on_overcharge
+            local stk_b = stk and stk.buffs and stk.buffs[1]
+            if stk_b then
+                saved.us_maxstacks = stk_b.max_stacks
+                saved.us_mult = stk_b.multiplier
+                stk_b.max_stacks = 6
+                stk_b.multiplier = 0.10
+            end
+        end,
+        custom_restore = function(saved)
+            if not BuffTemplates then return end
+            local drv = BuffTemplates.sienna_unchained_passive_increased_melee_power_on_overcharge
+            local drv_b = drv and drv.buffs and drv.buffs[1]
+            if drv_b and saved.us_chunk ~= nil then
+                drv_b.chunk_size = saved.us_chunk
+                drv_b.max_sub_buff_stacks = saved.us_maxsub
+            end
+            local stk = BuffTemplates.sienna_unchained_passive_melee_power_on_overcharge
+            local stk_b = stk and stk.buffs and stk.buffs[1]
+            if stk_b and saved.us_maxstacks ~= nil then
+                stk_b.max_stacks = saved.us_maxstacks
+                stk_b.multiplier = saved.us_mult
+            end
+            saved.us_chunk, saved.us_maxsub, saved.us_maxstacks, saved.us_mult = nil, nil, nil, nil
+        end,
+    },
+
+    -- ============================================================
+    -- Unchained: Unstable Strength stacks ALSO grant burn-DoT damage
+    -- ============================================================
+    -- Adds a 2nd stat_buff entry (increased_burn_dot_damage, the burn-DoT scaler)
+    -- to the US stack buff, so every US stack grants +12% DoT damage (10% up to 6x
+    -- when the US-rescale toggle #1 is on, matching its per-stack cadence). The
+    -- driver adds N US-buff instances per overcharge chunk; each now applies the
+    -- DoT bonus too. Idempotent: strips any prior crt_us_dot entry before adding.
+    rework_bw_unchained_unstable_strength_dot = {
+        character = "sienna",
+        career    = "bw_unchained",
+        patches   = {},
+        custom_apply = function(saved)
+            if not BuffTemplates then return end
+            local stk = BuffTemplates.sienna_unchained_passive_melee_power_on_overcharge
+            if not (stk and stk.buffs) then return end
+            local us_on = mod:get("rework_bw_unchained_unstable_strength_rescale")
+            local dot   = us_on and 0.10 or 0.12
+            local maxn  = us_on and 6 or 5
+            for i = #stk.buffs, 1, -1 do
+                if stk.buffs[i].name == "crt_us_dot" then table.remove(stk.buffs, i) end
+            end
+            stk.buffs[#stk.buffs + 1] = { stat_buff = "increased_burn_dot_damage", multiplier = dot, max_stacks = maxn, name = "crt_us_dot" }
+            saved.dot_added = true
+        end,
+        custom_restore = function(saved)
+            if not BuffTemplates then return end
+            local stk = BuffTemplates.sienna_unchained_passive_melee_power_on_overcharge
+            if stk and stk.buffs then
+                for i = #stk.buffs, 1, -1 do
+                    if stk.buffs[i].name == "crt_us_dot" then table.remove(stk.buffs, i) end
+                end
+            end
+            saved.dot_added = nil
+        end,
+    },
+
+    -- ============================================================
+    -- Unchained: Chain Reaction explosions IGNITE nearby enemies
+    -- ============================================================
+    -- Chain Reaction's on-burning-kill explosion uses the no_damage push profile
+    -- `slayer_leap_landing` (pure stagger, zero damage -- see MECHANICS). Giving
+    -- the explosion a `dot_template_name` makes it apply a burn DoT to everything
+    -- caught, so it actually lights nearby enemies on fire. Pure data patch on the
+    -- shared ExplosionTemplates entry; restored on toggle-off.
+    rework_bw_unchained_chain_reaction_ignite = {
+        character = "sienna",
+        career    = "bw_unchained",
+        patches   = {},
+        custom_apply = function(saved)
+            local ET = rawget(_G, "ExplosionTemplates")
+            local e = ET and ET.sienna_unchained_burning_enemies_explosion
+            local exp = e and e.explosion
+            if exp and exp.dot_template_name == nil then
+                exp.dot_template_name = "burning_dot_3tick"
+                saved.cr_dot_added = true
+            end
+            -- Bigger spread: the vanilla burst (radius 0.5..1.5) is HALF the vanilla
+            -- fire explosion (lamp_oil radius 3), so almost nothing catches the burn DoT.
+            -- Widen to lamp_oil scale so the ignite actually spreads to a cluster.
+            if exp and saved.cr_radius_orig == nil then
+                saved.cr_radius_orig = { exp.radius_min, exp.radius_max, exp.max_damage_radius_min, exp.max_damage_radius_max }
+                exp.radius_min, exp.radius_max = 1.5, 3
+                exp.max_damage_radius_min, exp.max_damage_radius_max = 1, 3
+            end
+            -- More often: the burning-kill explosion fires on only 40% of burning enemy
+            -- deaths by default (talent sienna_unchained_exploding_burning_enemies,
+            -- proc_chance 0.4). Bump to 100% so the chain actually chains.
+            local BT = rawget(_G, "BuffTemplates")
+            local b = BT and BT.sienna_unchained_exploding_burning_enemies
+            local sub = b and b.buffs and b.buffs[1]
+            if sub and saved.cr_proc_orig == nil then
+                saved.cr_proc_orig = sub.proc_chance
+                sub.proc_chance = 1.0
+            end
+        end,
+        custom_restore = function(saved)
+            local ET = rawget(_G, "ExplosionTemplates")
+            local e = ET and ET.sienna_unchained_burning_enemies_explosion
+            local exp = e and e.explosion
+            if exp and saved.cr_dot_added then
+                exp.dot_template_name = nil
+                saved.cr_dot_added = nil
+            end
+            if exp and saved.cr_radius_orig then
+                local o = saved.cr_radius_orig
+                exp.radius_min, exp.radius_max = o[1], o[2]
+                exp.max_damage_radius_min, exp.max_damage_radius_max = o[3], o[4]
+                saved.cr_radius_orig = nil
+            end
+            local BT = rawget(_G, "BuffTemplates")
+            local b = BT and BT.sienna_unchained_exploding_burning_enemies
+            local sub = b and b.buffs and b.buffs[1]
+            if sub and saved.cr_proc_orig ~= nil then
+                sub.proc_chance = saved.cr_proc_orig
+                saved.cr_proc_orig = nil
+            end
+        end,
+    },
+
+    -- ============================================================
+    -- Unchained: Natural Talent -> +ranged power per Unstable Strength stack
+    -- ============================================================
+    -- Replaces vanilla Natural Talent (sienna_unchained_reduced_overcharge, -10%
+    -- vent overcharge) with +6% ranged power per US stack (5% up to 6x when #1 is
+    -- on). Same overcharge-chunk driver pattern as Numb to Pain (#5): a crt driver
+    -- (update_func activate_server_buff_stacks_based_on_overcharge_chunks) keeps N
+    -- stacks of a power_level_ranged buff in sync with overcharge.
+    rework_bw_unchained_natural_talent_ranged = {
+        character = "sienna",
+        career    = "bw_unchained",
+        patches   = {},
+        custom_apply = function(saved)
+            if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            local us_on = mod:get("rework_bw_unchained_unstable_strength_rescale")
+            local chunk = us_on and 5 or 6
+            local maxn  = us_on and 6 or 5
+            local rng   = us_on and 0.05 or 0.06
+            BuffTemplates.crt_sienna_natural_talent_ranged_stack = {
+                buffs = { { stat_buff = "power_level_ranged", multiplier = rng, max_stacks = maxn, name = "crt_sienna_natural_talent_ranged_stack" } },
+            }
+            BuffTemplates.crt_sienna_natural_talent_ranged_driver = {
+                buffs = { { update_func = "activate_server_buff_stacks_based_on_overcharge_chunks", chunk_size = chunk, buff_to_add = "crt_sienna_natural_talent_ranged_stack", max_sub_buff_stacks = maxn, name = "crt_sienna_natural_talent_ranged_driver" } },
+            }
+            saved.nt_created = true
+            local lookup = TalentIDLookup["sienna_unchained_reduced_overcharge"]
+            if lookup then
+                local talent = Talents[lookup.hero_name] and Talents[lookup.hero_name][lookup.talent_id]
+                if talent and talent.buffs then
+                    saved.nt_orig_buffs = {}
+                    for i, b in ipairs(talent.buffs) do saved.nt_orig_buffs[i] = b end
+                    talent.buffs = { "crt_sienna_natural_talent_ranged_driver" }
+                end
+            end
+        end,
+        custom_restore = function(saved)
+            if Talents and TalentIDLookup and saved.nt_orig_buffs then
+                local lookup = TalentIDLookup["sienna_unchained_reduced_overcharge"]
+                if lookup then
+                    local talent = Talents[lookup.hero_name] and Talents[lookup.hero_name][lookup.talent_id]
+                    if talent then talent.buffs = saved.nt_orig_buffs end
+                end
+            end
+            if BuffTemplates and saved.nt_created then
+                BuffTemplates.crt_sienna_natural_talent_ranged_stack = _crt_make_stub()
+                BuffTemplates.crt_sienna_natural_talent_ranged_driver = _crt_make_stub()
+            end
+            saved.nt_orig_buffs = nil
+            saved.nt_created = nil
+        end,
+    },
+
+    -- ============================================================
+    -- Unchained: Abandon -> innate, slot becomes "Flame Unending" (CDR per US stack)
+    -- ============================================================
+    -- (a) Abandon's effect (sienna_unchained_health_to_ult, overcharge->cooldown)
+    --     becomes base kit: append that buff to PassiveAbilitySettings.bw_3.buffs
+    --     (the always-on career passive list, career_ability_settings.lua:599).
+    -- (b) The lvl-25 talent slot (talent name == buff name "sienna_unchained_
+    --     health_to_ult") becomes "Flame Unending": the career skill RECHARGES
+    --     +6% faster per US stack (5% up to 6x = +30% at full stacks when #1 on),
+    --     via the same overcharge-chunk driver. Uses `cooldown_regen` -- the
+    --     CONTINUOUS decay-rate stat (cooldown_speed = apply_buffs_to_value(1,
+    --     "cooldown_regen"), POSITIVE = faster) -- so recharge accelerates as US
+    --     stacks build during the cooldown. NOT `activated_cooldown`, which only
+    --     trims the cooldown ONCE at activation (cost-gated, one-shot) and never
+    --     sped the passive recharge. Same activated_cooldown-vs-cooldown_regen
+    --     distinction as the OE fix (career_tweaker_oe_cooldown.lua). Both reverted on toggle-off.
+    rework_bw_unchained_abandon_innate_flame_unending = {
+        character = "sienna",
+        career    = "bw_unchained",
+        patches   = {},
+        custom_apply = function(saved)
+            if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            local PAS = rawget(_G, "PassiveAbilitySettings")
+            local pa = PAS and PAS.bw_3
+            if pa and pa.buffs then
+                local present = false
+                for _, b in ipairs(pa.buffs) do if b == "sienna_unchained_health_to_ult" then present = true break end end
+                if not present then
+                    pa.buffs[#pa.buffs + 1] = "sienna_unchained_health_to_ult"
+                    saved.abandon_innate_added = true
+                end
+            end
+            -- Show Abandon in the passive section's perk list (loc keys overridden via
+            -- the shared _G.Localize hook). Idempotent against re-apply.
+            if pa and pa.perks then
+                local perk_present = false
+                for _, p in ipairs(pa.perks) do if p.display_name == "crt_abandon_perk_name" then perk_present = true break end end
+                if not perk_present then
+                    pa.perks[#pa.perks + 1] = { description = "crt_abandon_perk_desc", display_name = "crt_abandon_perk_name" }
+                    saved.abandon_perk_added = true
+                end
+            end
+            local us_on = mod:get("rework_bw_unchained_unstable_strength_rescale")
+            local chunk = us_on and 5 or 6
+            local maxn  = us_on and 6 or 5
+            -- cooldown_regen MULTIPLIER, POSITIVE = faster recharge (stacking_multiplier;
+            -- N stacks accumulate N*cdr into the decay-speed root). 6x0.05 (rescale) or
+            -- 5x0.06 = +30% recharge speed at full Unstable Strength stacks.
+            local cdr   = us_on and 0.05 or 0.06
+            BuffTemplates.crt_sienna_flame_unending_stack = {
+                buffs = { { stat_buff = "cooldown_regen", multiplier = cdr, max_stacks = maxn, name = "crt_sienna_flame_unending_stack" } },
+            }
+            BuffTemplates.crt_sienna_flame_unending_driver = {
+                buffs = { { update_func = "activate_server_buff_stacks_based_on_overcharge_chunks", chunk_size = chunk, buff_to_add = "crt_sienna_flame_unending_stack", max_sub_buff_stacks = maxn, name = "crt_sienna_flame_unending_driver" } },
+            }
+            saved.fu_created = true
+            local lookup = TalentIDLookup["sienna_unchained_health_to_ult"]
+            if lookup then
+                local talent = Talents[lookup.hero_name] and Talents[lookup.hero_name][lookup.talent_id]
+                if talent and talent.buffs then
+                    saved.fu_orig_buffs = {}
+                    for i, b in ipairs(talent.buffs) do saved.fu_orig_buffs[i] = b end
+                    talent.buffs = { "crt_sienna_flame_unending_driver" }
+                end
+            end
+        end,
+        custom_restore = function(saved)
+            local PAS = rawget(_G, "PassiveAbilitySettings")
+            local pa = PAS and PAS.bw_3
+            if pa and pa.buffs and saved.abandon_innate_added then
+                for i = #pa.buffs, 1, -1 do
+                    if pa.buffs[i] == "sienna_unchained_health_to_ult" then table.remove(pa.buffs, i) break end
+                end
+            end
+            if pa and pa.perks and saved.abandon_perk_added then
+                for i = #pa.perks, 1, -1 do
+                    if pa.perks[i].display_name == "crt_abandon_perk_name" then table.remove(pa.perks, i) break end
+                end
+            end
+            if Talents and TalentIDLookup and saved.fu_orig_buffs then
+                local lookup = TalentIDLookup["sienna_unchained_health_to_ult"]
+                if lookup then
+                    local talent = Talents[lookup.hero_name] and Talents[lookup.hero_name][lookup.talent_id]
+                    if talent then talent.buffs = saved.fu_orig_buffs end
+                end
+            end
+            if BuffTemplates and saved.fu_created then
+                BuffTemplates.crt_sienna_flame_unending_stack = _crt_make_stub()
+                BuffTemplates.crt_sienna_flame_unending_driver = _crt_make_stub()
+            end
+            saved.abandon_innate_added = nil
+            saved.abandon_perk_added = nil
+            saved.fu_orig_buffs = nil
+            saved.fu_created = nil
+        end,
+    },
+
+    -- ============================================================
+    -- Mercenary: Enhanced Training -> tiered Paced Strikes (2/3/4 targets)
+    -- ============================================================
+    -- Vanilla Enhanced Training (markus_mercenary_passive_improved) requires 4
+    -- targets for a flat buff and gives nothing at 3. Rework: with Enhanced
+    -- Training taken, a light/heavy hitting >=2 targets grants `target_number`
+    -- stacks (cap 4) of a 5% attack-speed buff (6s) -> 2 tgt=10%, 3=15%, 4=20%;
+    -- <2 = none. Base Paced Strikes (no Enhanced Training) and the other proc
+    -- branches keep vanilla behaviour (>=3 target gate). Done by pointing
+    -- markus_mercenary_passive.buff_func at a crt ProcFunction (registered below)
+    -- that replicates vanilla except the Enhanced-Training branch; the AS buff is
+    -- crt_merc_enhanced_training_as (attack_speed 0.05, max 4, 6s).
+    rework_es_mercenary_enhanced_training_tiered = {
+        character = "markus",
+        career    = "es_mercenary",
+        patches   = { { buff = "markus_mercenary_passive", field = "buff_func", value = "crt_enhanced_training_proc" } },
+        custom_apply = function(saved)
+            if not BuffTemplates then return end
+            BuffTemplates.crt_merc_enhanced_training_as = {
+                buffs = { { stat_buff = "attack_speed", multiplier = 0.05, max_stacks = 4, duration = 6, name = "crt_merc_enhanced_training_as" } },
+            }
+            saved.et_created = true
+        end,
+        custom_restore = function(saved)
+            if BuffTemplates and saved.et_created then BuffTemplates.crt_merc_enhanced_training_as = _crt_make_stub() end
+            saved.et_created = nil
+        end,
+    },
+
+    -- ============================================================
+    -- Unchained: Numb to Pain -> -DR + less Blood-Magic overcharge per Unstable
+    -- Strength stack  (REPLACES the prior burn-elite-kill DR-stack design)
+    -- ============================================================
+    -- Per Unstable Strength stack (= per overcharge chunk, mirroring US's own
+    -- driver): -6% damage taken AND -12% overcharge generated by Blood Magic (the
+    -- Unchained damage->overcharge passive; stat `reduced_overcharge_from_passive`,
+    -- distinct from `reduced_overcharge` which is the venting/casting one). When
+    -- the US-rescale toggle (#1) is on, US runs 5oc/6x so this mirrors it at
+    -- -5%/-10% up to 6x. Reuses the pre-registered crt buffs:
+    --   crt_sienna_numb_to_pain_stack = per-stack buff, two stat_buffs (damage_taken
+    --       + reduced_overcharge_from_passive).
+    --   crt_sienna_numb_to_pain_proc  = REPURPOSED as the overcharge-chunk DRIVER
+    --       (update_func activate_server_buff_stacks_based_on_overcharge_chunks --
+    --       the same engine func Unstable Strength uses), keeps N stacks in sync
+    --       with current overcharge.
+    --   crt_sienna_numb_to_pain_remover = now unused; left as a stub (the driver
+    --       auto-tracks stacks up AND down, so no on-hit remover is needed).
+    -- setting_id kept (legacy name) to avoid data/loc churn; label/desc updated.
     rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit = {
         character = "sienna",
         career    = "bw_unchained",
         patches   = {},
         custom_apply = function(saved)
             if not BuffTemplates or not Talents or not TalentIDLookup then return end
-            if BuffTemplates.crt_sienna_numb_to_pain_stack == nil or BuffTemplates.crt_sienna_numb_to_pain_stack._crt_pending then
-                BuffTemplates.crt_sienna_numb_to_pain_stack = {
-                    buffs = {
-                        {
-                            stat_buff = "damage_taken",
-                            multiplier = -0.05,
-                            max_stacks = 4,
-                            name = "crt_sienna_numb_to_pain_stack",
-                        },
+            local us_on   = mod:get("rework_bw_unchained_unstable_strength_rescale")
+            local chunk   = us_on and 5 or 6
+            local maxn    = us_on and 6 or 5
+            local dmg_mul = us_on and -0.05 or -0.06
+            local oc_mul  = us_on and -0.10 or -0.12
+            BuffTemplates.crt_sienna_numb_to_pain_stack = {
+                buffs = {
+                    { stat_buff = "damage_taken",                    multiplier = dmg_mul, max_stacks = maxn, name = "crt_sienna_numb_to_pain_stack" },
+                    { stat_buff = "reduced_overcharge_from_passive", multiplier = oc_mul,  max_stacks = maxn, name = "crt_sienna_numb_to_pain_stack_oc" },
+                },
+            }
+            saved.ntp_created_stack = true
+            BuffTemplates.crt_sienna_numb_to_pain_proc = {
+                buffs = {
+                    {
+                        update_func         = "activate_server_buff_stacks_based_on_overcharge_chunks",
+                        chunk_size          = chunk,
+                        buff_to_add         = "crt_sienna_numb_to_pain_stack",
+                        max_sub_buff_stacks = maxn,
+                        name                = "crt_sienna_numb_to_pain_proc",
                     },
-                }
-                saved.ntp_created_stack = true
-            end
-            if BuffTemplates.crt_sienna_numb_to_pain_proc == nil or BuffTemplates.crt_sienna_numb_to_pain_proc._crt_pending then
-                BuffTemplates.crt_sienna_numb_to_pain_proc = {
-                    buffs = {
-                        {
-                            buff_func = "crt_add_buff_on_burning_special_or_elite_kill",
-                            buff_to_add = "crt_sienna_numb_to_pain_stack",
-                            event = "on_kill",
-                            name = "crt_sienna_numb_to_pain_proc",
-                        },
-                    },
-                }
-                saved.ntp_created_proc = true
-            end
+                },
+            }
+            saved.ntp_created_proc = true
+            -- Keep the remover registered as an (unused) stub for NetworkLookup determinism.
             if BuffTemplates.crt_sienna_numb_to_pain_remover == nil or BuffTemplates.crt_sienna_numb_to_pain_remover._crt_pending then
-                BuffTemplates.crt_sienna_numb_to_pain_remover = {
-                    buffs = {
-                        {
-                            buff_func = "remove_buff_stack",
-                            event     = "on_damage_taken",
-                            name      = "crt_sienna_numb_to_pain_remover",
-                            remove_buff_func = "remove_buff_stack",
-                            remove_buff_stack_data = {
-                                {
-                                    buff_to_remove    = "crt_sienna_numb_to_pain_stack",
-                                    num_stacks        = 1,
-                                    server_controlled = false,
-                                },
-                            },
-                        },
-                    },
-                }
-                saved.ntp_created_remover = true
+                BuffTemplates.crt_sienna_numb_to_pain_remover = _crt_make_stub()
             end
             local lookup = TalentIDLookup["sienna_unchained_reduced_damage_taken_after_venting_2"]
             if lookup then
@@ -2301,7 +2771,7 @@ local BALANCE_MODS = {
                 if talent and talent.buffs then
                     saved.ntp_orig_buffs = {}
                     for i, b in ipairs(talent.buffs) do saved.ntp_orig_buffs[i] = b end
-                    talent.buffs = { "crt_sienna_numb_to_pain_proc", "crt_sienna_numb_to_pain_remover" }
+                    talent.buffs = { "crt_sienna_numb_to_pain_proc" }
                 end
             end
         end,
@@ -2314,12 +2784,11 @@ local BALANCE_MODS = {
                 end
             end
             if BuffTemplates then
-                if saved.ntp_created_stack   then BuffTemplates.crt_sienna_numb_to_pain_stack = _crt_make_stub() end
-                if saved.ntp_created_proc    then BuffTemplates.crt_sienna_numb_to_pain_proc = _crt_make_stub() end
-                if saved.ntp_created_remover then BuffTemplates.crt_sienna_numb_to_pain_remover = _crt_make_stub() end
+                if saved.ntp_created_stack then BuffTemplates.crt_sienna_numb_to_pain_stack = _crt_make_stub() end
+                if saved.ntp_created_proc  then BuffTemplates.crt_sienna_numb_to_pain_proc = _crt_make_stub() end
             end
             saved.ntp_orig_buffs = nil
-            saved.ntp_created_stack, saved.ntp_created_proc, saved.ntp_created_remover = nil, nil, nil
+            saved.ntp_created_stack, saved.ntp_created_proc = nil, nil
         end,
     },
 
@@ -2573,6 +3042,21 @@ local CRT_DESC_OVERRIDES = {
         setting = "rework_dr_engineer_full_head_of_steam_4pct",
         text = "Full Head of Steam: +4%% attack speed per pump stack while at maximum pump.",
     },
+    -- Leading Shots (replaces Ingenious Ordnance). The talent UI resolves the
+    -- title + description via the GLOBAL Localize, which does NOT see crt's
+    -- _localization.lua keys (VMF mod-loc scope) — so the talent's
+    -- display_name/description keys must be supplied HERE, through the shared
+    -- _G.Localize hook, like every other rework. The "4" is hardcoded (no %s) to
+    -- match the other entries and skip the string.format path entirely.
+    -- See TALENT_TEXT_RENDERING.md for the full mechanism.
+    ["crt_engineer_leading_shots_name"] = {
+        setting = "rework_dr_engineer_leading_shots",
+        text = "Leading Shots",
+    },
+    ["crt_engineer_leading_shots_desc"] = {
+        setting = "rework_dr_engineer_leading_shots",
+        text = "Every 4 ranged attacks (including the Crank Gun), your next ranged attack is a guaranteed critical hit.",
+    },
     -- ------ Kruber: Huntsman ------
     ["markus_huntsman_passive_crit_aura_desc"] = {
         setting = "rework_es_huntsman_crit_aura_unlimited_range",
@@ -2595,6 +3079,10 @@ local CRT_DESC_OVERRIDES = {
     ["markus_mercenary_passive_defence_on_proc_desc"] = {
         setting = "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit",
         text = "Blade Barrier: -0.5%% damage taken per kill, stacking up to 60x (-30%% at cap). Taking damage removes 10 stacks.",
+    },
+    ["markus_mercenary_passive_improved_desc"] = {
+        setting = "rework_es_mercenary_enhanced_training_tiered",
+        text = "Enhanced Training: hitting 2 / 3 / 4 enemies with a melee attack grants 2 / 3 / 4 stacks of +5%% attack speed for 6 seconds (up to +20%%). Hitting fewer than 2 grants no bonus.",
     },
     -- ------ Kruber: Grail Knight ------
     ["markus_questing_knight_kills_buff_power_stacking_desc"] = {
@@ -2682,7 +3170,7 @@ local CRT_DESC_OVERRIDES = {
         setting = "rework_wh_priest_prayer_of_vengeance_self_40_others_20",
         text = "Prayer of Vengeance: the Warrior Priest gains +40%% damage versus Monsters; nearby allies gain +20%%.",
     },
-    -- ------ Sienna: Pyromancer ------
+    -- ------ Sienna: Battle Wizard ------
     ["sienna_adept_increased_burn_damage_reduced_non_burn_damage_desc"] = {
         setting = "rework_bw_adept_famished_flames_buffed",
         text = "Famished Flames: burning enemies take +150%% damage; non-burning enemies take -30%% damage.",
@@ -2721,9 +3209,47 @@ local CRT_DESC_OVERRIDES = {
         setting = "rework_bw_unchained_wildfire_burst_and_radius",
         text = "Wildfire: Career Skill explosion radius increased by +25%% and initial burst damage increased by +50%%.",
     },
-    ["sienna_unchained_reduced_damage_taken_after_venting_2_desc"] = {
+    -- Numb to Pain. NOTE: key is the talent's `description` FIELD
+    -- (sienna_unchained_reduced_damage_taken_after_venting_desc_2), which
+    -- UIUtils.get_talent_description Localizes -- NOT <talent_name>_desc. The old
+    -- entry keyed "..._venting_2_desc" was DEAD (wrong key); fixed here + retext to
+    -- the v0.3.36 rework.
+    ["sienna_unchained_reduced_damage_taken_after_venting_desc_2"] = {
         setting = "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",
-        text = "Numb to Pain: each kill of a burning Elite or Special grants -5%% damage taken, stacking up to 4x. Taking damage removes one stack.",
+        text = "Numb to Pain: per Unstable Strength stack, -6%% damage taken AND -12%% overcharge generated by Blood Magic (-5%%/-10%% with the Unstable Strength rescale active).",
+    },
+    ["sienna_unchained_reduced_overcharge_desc"] = {
+        setting = "rework_bw_unchained_natural_talent_ranged",
+        text = "Natural Talent: +6%% ranged power per Unstable Strength stack (5%% with the Unstable Strength rescale active).",
+    },
+    ["sienna_unchained_exploding_burning_enemies_desc"] = {
+        setting = "rework_bw_unchained_chain_reaction_ignite",
+        text = "Chain Reaction: killing a burning enemy triggers an explosion that staggers and sets nearby enemies on fire.",
+    },
+    ["sienna_unchained_activated_ability_power_on_enemies_hit_desc"] = {
+        setting = "rework_bw_unchained_fuel_for_the_fire_vent",
+        text = "Fuel for the Fire: enemies hit by your Career Skill take increased damage, and your Career Skill now clears only 25%% of your overcharge instead of all of it.",
+    },
+    -- Flame Unending REPLACES Abandon in the lvl-25 slot. The talent has no
+    -- display_name field, so the title resolves via Localize(name) -- override the
+    -- name key too. Abandon itself becomes innate (shown as a passive perk).
+    ["sienna_unchained_health_to_ult"] = {
+        setting = "rework_bw_unchained_abandon_innate_flame_unending",
+        text = "Flame Unending",
+    },
+    ["sienna_unchained_health_to_ult_desc"] = {
+        setting = "rework_bw_unchained_abandon_innate_flame_unending",
+        text = "Flame Unending: -6%% Career Skill cooldown per Unstable Strength stack (-5%% with the Unstable Strength rescale active). Abandon is now part of your base kit.",
+    },
+    -- Abandon, shown as a passive perk (appended to PassiveAbilitySettings.bw_3.perks
+    -- by the rework's custom_apply) while #3 is active.
+    ["crt_abandon_perk_name"] = {
+        setting = "rework_bw_unchained_abandon_innate_flame_unending",
+        text = "Abandon",
+    },
+    ["crt_abandon_perk_desc"] = {
+        setting = "rework_bw_unchained_abandon_innate_flame_unending",
+        text = "Abandon: your Career Skill cooldown is reduced based on your current overcharge.",
     },
 }
 
@@ -3108,6 +3634,99 @@ if ProcFunctions and ProcFunctions.crt_add_buff_on_burning_special_or_elite_kill
         if buff_to_add then owner_buff_ext:add_buff(buff_to_add) end
     end
 end
+
+-- Mercenary Enhanced Training proc (rework_es_mercenary_enhanced_training_tiered).
+-- Replicates vanilla gain_markus_mercenary_passive_proc (buff_templates.lua:3522)
+-- EXACTLY except the Enhanced-Training branch: with markus_mercenary_passive_improved
+-- taken, a light/heavy hitting >=2 targets grants min(target_number,4) stacks of
+-- crt_merc_enhanced_training_as (5% AS, 6s). The outer gate is lowered to >=2 so
+-- the ET branch can see 2 targets; every other branch still requires
+-- >= buff.template.targets (3), so base Paced Strikes is unchanged. target_number
+-- is params[4], attack_type params[2].
+if ProcFunctions and ProcFunctions.crt_enhanced_training_proc == nil then
+    ProcFunctions.crt_enhanced_training_proc = function(owner_unit, buff, params)
+        if not Managers.state.network.is_server then return end
+        if not ALIVE[owner_unit] then return end
+        local buff_template = buff.template
+        local target_number = params[4]
+        local attack_type   = params[2]
+        if not (target_number and (attack_type == "light_attack" or attack_type == "heavy_attack")) then return end
+        local buff_system = Managers.state.entity:system("buff_system")
+        local talent_extension = ScriptUnit.extension(owner_unit, "talent_system")
+        local buff_to_add = buff_template.buff_to_add
+        local buff_applied = true
+        if talent_extension:has_talent("markus_mercenary_passive_improved", "empire_soldier", true) then
+            if target_number >= 2 then
+                local stacks = math.min(target_number, 4)
+                for _ = 1, stacks do
+                    buff_system:add_buff(owner_unit, "crt_merc_enhanced_training_as", owner_unit, false)
+                end
+            else
+                buff_applied = false
+            end
+        elseif target_number >= buff_template.targets then
+            if talent_extension:has_talent("markus_mercenary_passive_group_proc", "empire_soldier", true) then
+                local side = Managers.state.side.side_by_unit[owner_unit]
+                local units = side and side.PLAYER_AND_BOT_UNITS
+                if units then
+                    for i = 1, #units do
+                        if HEALTH_ALIVE[units[i]] then buff_system:add_buff(units[i], buff_to_add, owner_unit, false) end
+                    end
+                end
+            elseif talent_extension:has_talent("markus_mercenary_passive_power_level_on_proc", "empire_soldier", true) then
+                buff_system:add_buff(owner_unit, "markus_mercenary_passive_power_level", owner_unit, false)
+                buff_system:add_buff(owner_unit, buff_to_add, owner_unit, false)
+            else
+                buff_system:add_buff(owner_unit, buff_to_add, owner_unit, false)
+            end
+        else
+            buff_applied = false
+        end
+        if buff_applied and target_number >= buff_template.targets
+            and talent_extension:has_talent("markus_mercenary_passive_defence_on_proc", "empire_soldier", true) then
+            buff_system:add_buff(owner_unit, "markus_mercenary_passive_defence", owner_unit, false)
+        end
+    end
+end
+
+-- crt_unchained_ult_max_us (#8): static buff added on Unchained career-skill use
+-- when rework_bw_unchained_career_skill_max_us is on. +60% melee power for 10s ==
+-- the max Unstable Strength melee bonus (6x10% == 5x12% == 0.60) regardless of
+-- current overcharge. Filled here (real template) over the pre-registered stub.
+if BuffTemplates and (BuffTemplates.crt_unchained_ult_max_us == nil or (rawget(BuffTemplates, "crt_unchained_ult_max_us") or {})._crt_pending) then
+    BuffTemplates.crt_unchained_ult_max_us = {
+        buffs = { { stat_buff = "power_level_melee", multiplier = 0.60, duration = 10, name = "crt_unchained_ult_max_us", icon = "sienna_unchained_activated_ability_power_on_enemies_hit" } },
+    }
+end
+
+-- Unchained career-ability hook (#7 Fuel for the Fire vent 25% + #8 max US stacks).
+-- ONE hook on CareerAbilityBWUnchained._run_ability serving both, each gated on its
+-- own toggle read per-call (no apply/restore -- VMF deactivates the hook when crt
+-- is disabled). #7: only when the Fuel for the Fire talent is equipped, capture
+-- overcharge before the original (which calls overcharge_extension:reset()), then
+-- restore 75% afterward so the ult clears only 25%. #8: add the max-US burst buff.
+-- (Distinct class from the existing CareerAbilityWHZealot._run_ability hook above,
+-- so no VMF duplicate-hook collision.)
+mod:hook("CareerAbilityBWUnchained", "_run_ability", function(func, self, ...)
+    local owner_unit = self._owner_unit
+    local oce, oc_before
+    if owner_unit and ALIVE[owner_unit] and mod:get("rework_bw_unchained_fuel_for_the_fire_vent") then
+        local talent_ext = ScriptUnit.has_extension(owner_unit, "talent_system")
+        if talent_ext and talent_ext:has_talent("sienna_unchained_activated_ability_power_on_enemies_hit", "bright_wizard", true) then
+            oce = ScriptUnit.has_extension(owner_unit, "overcharge_system")
+            if oce then oc_before = oce:get_overcharge_value() end
+        end
+    end
+    func(self, ...)
+    if oce and oc_before and oc_before > 0 then
+        oce.overcharge_value = oc_before * 0.75
+        pcall(function() oce:set_animation_variable() end)
+    end
+    if owner_unit and ALIVE[owner_unit] and mod:get("rework_bw_unchained_career_skill_max_us") then
+        local be = self._buff_extension or ScriptUnit.has_extension(owner_unit, "buff_system")
+        if be then pcall(function() be:add_buff("crt_unchained_ult_max_us") end) end
+    end
+end)
 
 -- ============================================================
 -- Field-patch apply/restore engine

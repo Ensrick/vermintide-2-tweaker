@@ -1,5 +1,46 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.16-dev (2026-07-01) -- Localization audit (no bugs found; mod has no settings page)
+
+### Why
+Repo-wide sweep for the VMF double-localize bug class: VMF's options module localizes each widget's `title`/`tooltip`/dropdown-option `text`/`unit_text` itself at menu build time, so a widget value written as `tooltip = mod:localize("key")` gets localized twice and renders wrapped in angle brackets. This mod was audited for that pattern and for stale/missing loc keys.
+
+Nothing needed fixing. This mod removed its VMF settings page in v0.1.15-dev, so there are no widgets, no tooltips, no dropdowns, and no `setting_id` fields to double-localize. The only remaining loc key is `mod_description`, referenced once as `description = mod:localize("mod_description")` in `_data.lua` — this is the top-level mod-list description, the one place VMF does NOT auto-localize, so the explicit `mod:localize` is correct and stays. The description value already reads as plain human English (2 sentences, ASCII only, no em dashes, no percent signs, no angle brackets), so it was reviewed and left unchanged.
+
+### Changed
+- `dynamic_cosmetic_portraits.lua:4` — `MOD_VERSION` `0.1.15-dev` -> `0.1.16-dev`.
+- No source/localization behavior changes: the audit found no widget-level double-localize, no missing loc keys, and no description rewrites were warranted.
+
+### Tests
+Not built/deployed per task scope. `/dcp_regression_test` scaffold unaffected (`localization_format_safe` still guards literal `%` in loc strings; the sole loc value has none).
+
+### To verify
+- In-game: this mod still shows no VMF settings page (unchanged from v0.1.15-dev); its mod-list entry description reads correctly with no stray angle brackets.
+
+## 0.1.15-dev (2026-06-22) -- Remove the VMF settings page entirely (no options, no toggles)
+
+### Why
+User directive: "this mod doesn't really need any options or toggles. It simply does what it does." The mod's two settings — `dynamic_portraits` (portrait-swap on/off) and `enable_debug_logging` — were the only user-facing surface, and neither earns its keep: portrait swapping is the entire point of the mod, and the debug toggle gated a tiny amount of diagnostic output. Both are now hard-on, and VMF shows no settings page for this mod.
+
+Portrait-swapping functionality is COMPLETELY UNCHANGED — only the options/menu surface was removed. The load-bearing `custom_gui_textures` registration in `_data.lua` (texture/material injection into the UI renderers) is untouched; it is not an "option," it's how the portraits reach the screen.
+
+### Changed
+- `dynamic_cosmetic_portraits.lua:4` — `MOD_VERSION` `0.1.14-dev` -> `0.1.15-dev`.
+- `dynamic_cosmetic_portraits_data.lua` — removed the entire `options.widgets` tree (the `dynamic_portraits` checkbox + the `enable_debug_logging` checkbox) and set `is_togglable = false`, so VMF renders no settings page and no enable/disable toggle. Kept `name`, `description`, and the load-bearing `custom_gui_textures` block.
+- `dynamic_cosmetic_portraits.lua` — `_dbg` / `_dbg_alert` no longer gate on `mod:get("enable_debug_logging")`; debug logging is always on (the mod has few debug features, so the volume is negligible).
+- `dynamic_cosmetic_portraits.lua` — `_sync_portrait_settings()` no longer gates on `mod:get("dynamic_portraits")`; portrait swapping is always on.
+- `dynamic_cosmetic_portraits.lua` — removed the now-dead `mod.on_setting_changed` handler (it only reacted to `dynamic_portraits`).
+- `dynamic_cosmetic_portraits.lua` — `/portrait_diag` now reports `dynamic_portraits=always-on`; the `dbg_helpers_two_channel` regression check no longer flips the removed setting, it just verifies the helpers don't raise.
+- `dynamic_cosmetic_portraits_localization.lua` — removed the orphaned `dynamic_portraits` / `dynamic_portraits_tooltip` / `enable_debug_logging` / `enable_debug_logging_tooltip` strings; kept `mod_description` (still referenced by `_data.lua`).
+
+### Tests
+Not built/deployed per task scope. `/dcp_regression_test` scaffold preserved (`dbg_helpers_two_channel` updated, `localization_format_safe` unaffected).
+
+### To verify
+- In-game: this mod no longer appears with a settings page in the VMF mod options menu (and has no enable/disable toggle there).
+- Portraits still swap to match equipped Kruber Mercenary hats/outfits exactly as before.
+- `/portrait_diag` reports `dynamic_portraits=always-on` and the same material-readiness/career state as before.
+
 ## 0.1.14-dev (2026-06-07) -- Back-fill: Workshop preview swap (item_preview.png -> preview.jpg) + version bump
 
 ### Why

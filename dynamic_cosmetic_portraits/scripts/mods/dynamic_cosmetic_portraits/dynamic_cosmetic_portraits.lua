@@ -1,27 +1,25 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
 _MEM_PROBE_T0_DCP = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.14-dev"
+local MOD_VERSION = "0.1.16-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
 mod:info("Dynamic Cosmetic Portraits v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- The `enable_debug_logging` VMF toggle was removed 2026-06-22 (this mod has
+-- no settings page). Debug logging is now always on — this mod has few debug
+-- features, so the extra log volume is negligible.
 -- `_dbg` is for confirmation / expected behavior — file only.
 -- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[dcp:dbg] " .. fmt, ...)
-    end
+    mod:info("[dcp:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[dcp:dbg] " .. fmt, ...)
-        mod:echo("[dcp] " .. fmt, ...)
-    end
+    mod:info("[dcp:dbg] " .. fmt, ...)
+    mod:echo("[dcp] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -101,13 +99,13 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    -- The `enable_debug_logging` toggle was removed 2026-06-22 (no settings
+    -- page); both helpers are now unconditionally on. Just verify they don't
+    -- raise when called.
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
 
@@ -449,10 +447,9 @@ local function _sync_portrait_settings()
         _original_picking_image = career.picking_image
     end
 
-    if not mod:get("dynamic_portraits") then
-        _restore_portrait_settings()
-        return
-    end
+    -- Portrait swapping is always on: the `dynamic_portraits` VMF toggle was
+    -- removed 2026-06-22 (this mod has no settings page). It simply does what
+    -- it does.
 
     if not _check_portrait_materials_ready() then return end
 
@@ -485,9 +482,8 @@ mod:command("portrait_diag", "Diagnose portrait texture registration + hat state
     end
 
     local ready = _check_portrait_materials_ready()
-    emit("settings_active=%s dynamic_portraits=%s materials_ready=%s",
-        tostring(_portrait_settings_active), tostring(mod:get("dynamic_portraits")),
-        tostring(ready))
+    emit("settings_active=%s dynamic_portraits=always-on materials_ready=%s",
+        tostring(_portrait_settings_active), tostring(ready))
     local career = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
     if career then
         emit("career_settings.portrait_image='%s' picking_image='%s'",
@@ -743,11 +739,9 @@ mod.on_game_state_changed = function()
     _sync_portrait_settings()
 end
 
-mod.on_setting_changed = function(setting_id)
-    if setting_id == "dynamic_portraits" then
-        _sync_portrait_settings()
-    end
-end
+-- No mod.on_setting_changed: this mod has no VMF settings page (removed
+-- 2026-06-22). Portrait swapping is driven by the UnitFrameUI.draw hook and
+-- on_game_state_changed above.
 
 -- CLARIFY: Ctrl+Shift+R (hot-reload) is UNSAFE for this mod — engine holds
 -- C++ resource locks on loaded materials/textures that Lua can't release.

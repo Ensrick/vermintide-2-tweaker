@@ -1,5 +1,191 @@
 # Career Tweaker Changelog
 
+## 0.3.48-dev — 2026-07-01 — Fix menu localization + rewrite option descriptions
+
+### Fixed — double-localized tooltips showed the sentence wrapped in angle brackets
+Widget tooltips were written as `tooltip = mod:localize("key")`, which returned the English sentence at data-load time; VMF then re-localized that whole sentence as a key, missed, and displayed it wrapped in `<...>`. Converted all 24 active widget-level `tooltip = mod:localize("key")` calls in `career_tweaker_data.lua` to raw keys (`tooltip = "key"`) so VMF localizes each once at render time. The top-level mod `name` / `description` eager `mod:localize` calls are correct and were left as-is. (The one such call inside the commented-out Big Rebalance block was also normalized.)
+
+### Changed — rewrote every option description and tooltip for players
+Rewrote all option `_description` and `_tooltip` values plus `mod_description` in `career_tweaker_localization.lua` into plain, player-readable English (max two to three sentences each), removing internal jargon (field names, stat ids, dev notes) while keeping game terms, talent names, and balance numbers. Percent signs stay doubled (`%%`) for VMF's format pass. No setting ids, keys, widget structure, or defaults were changed.
+
+### Fixed — non-ASCII / angle-bracket characters in menu strings
+Replaced em dashes in three toggle labels (Enhanced Training, Fuel for the Fire, Numb to Pain) with commas, and converted the `->` arrow (which contains a literal `>`) to "to" in 27 rework labels, so no menu string contains `<`, `>`, em dashes, or unicode arrows. Cross-checked every widget-referenced loc key (titles, group headers, tooltip keys, dropdown options) against the loc table: all resolve, none missing.
+
+## 0.3.47-dev — 2026-06-28
+- Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.3.46-dev (2026-06-25) — Fix: Sienna career labels were swapped (Battle Wizard ⇄ Pyromancer)
+
+### Fixed — Talent Reworks menu mislabeled Battle Wizard reworks as "Pyromancer"
+The Reworks group `rework_bw_adept_group` and its three checkboxes (Famished Flames, Volcanic Force, Fires from Ash) were labeled **"Pyromancer"**, but `bw_adept` is **Battle Wizard** (`sound_character = "bright_wizard_battle_wizard"`, source `career_settings.lua:1161`); `bw_scholar` is Pyromancer. These reworks patch `sienna_adept_*` talents (Battle Wizard's tree), so the underlying mechanics were always correct — only the display labels were wrong. Relabeled to "Battle Wizard". Display-string-only.
+
+### Fixed — Talent Swap dropdown had the same swap
+`talent_swap_bw_scholar` / `talent_swap_option_bw_scholar` said "Battle Wizard" and `talent_swap_bw_adept` / `talent_swap_option_bw_adept` said "Pyromancer" — both inverted. Corrected so the swap-target dropdown shows the right Sienna career names. Display-string-only; setting_id keys unchanged.
+
+Also corrected three misleading `bw_adept = Pyromancer` comments in `career_tweaker_balance.lua` (the original source of the confusion). The `cbr_*` and `trn_*` Sienna groups were already correct and untouched.
+
+## 0.3.45-dev (2026-06-24) — Strip dev-only status tags from public labels
+
+Stripped the dev-only `[untested]` prefix tags from 5 user-facing `en = "..."` label values in `career_tweaker_localization.lua` (the Armor & Overcharge group: Gromril chip/DoT exemption, specials-don't-break-Gromril, Unchained no-overcharge-from-FF/disablers, OE cooldown-reduction benefit). Display-string-only edit — no logic or behavior change. Verified 0 `[untested]` occurrences remain in any `en =` value.
+
+## 0.3.44-dev (2026-06-22) — Unchained: Flame Unending recharge fix + Chain Reaction more/bigger
+
+### Fixed — Flame Unending fed the WRONG cooldown stat
+`rework_bw_unchained_abandon_innate_flame_unending` granted **`activated_cooldown`** per Unstable Strength stack — which only trims the cooldown ONCE at activation (cost-gated, one-shot), so it never sped the ability's passive recharge as US stacks built. Switched the per-stack buff to **`cooldown_regen`** (the continuous decay-rate stat; positive = faster) and flipped the sign. Now the career skill recharges progressively faster the more Unstable Strength you hold: **+5% recharge speed per stack up to 6× = +30% at full stacks** with the Unstable Strength rescale on (6% × 5 = +30% on vanilla stacks). Same `activated_cooldown`-vs-`cooldown_regen` distinction as the OE cooldown fix.
+
+### Changed — Chain Reaction ignite now actually spreads + chains
+`rework_bw_unchained_chain_reaction_ignite` previously only added the burn DoT. The DoT was real but the explosion radius (0.5–1.5) is HALF the vanilla fire blast (lamp_oil radius 3), so almost nothing caught fire, and the explosion only fired on **40%** of burning kills (vanilla `sienna_unchained_exploding_burning_enemies` proc_chance 0.4). The toggle now ALSO widens the burst to lamp_oil scale (radius_min/max → 1.5/3, max_damage_radius → 1/3) and bumps proc_chance to **1.0** (every burning kill), so the ignite spreads to a cluster and the chain actually chains. Both reverted on toggle-off.
+
+## 0.3.43-dev (2026-06-21) — Unchained #8: give the 10s career-skill Unstable Strength buff a HUD icon
+
+The `crt_unchained_ult_max_us` buff (rework #8: career skill grants max Unstable Strength, +60% melee power for 10s) had no `icon`, so it didn't appear in the buff bar — players couldn't see the 10s window. Added `icon = "sienna_unchained_activated_ability_power_on_enemies_hit"` (the Unchained "Enhanced Power" buff icon) to the buff sub-template (`career_tweaker_balance.lua:3660`), so it now shows in the HUD with its 10s countdown. Data-only; no behavior change.
+
+## 0.3.42-dev (2026-06-21) — Fix: OE cooldown-reduction mirror was a no-op (bonus → multiplier)
+
+The v0.3.41 OE Cooldown-Reduction mirror did nothing in-game. It fed the reduction into `cooldown_regen` as a `variable_bonus_max` (a `bonus`), but `cooldown_regen` is a `stacking_multiplier` stat (`buff_templates.lua:40`) — for which `_add_stat_buff` only accumulates the `.multiplier` field of non-first registrants and silently drops the `.bonus` (`buff_extension.lua:683-686`). Since the OE passive `bardin_engineer_passive_no_ability_regen` (multiplier -1) already creates `cooldown_regen`'s root `stat_buff[0]` at career init, the mirror's bonus was unconditionally dropped → zero effect. Caught by adversarial review (both verifiers, independently).
+
+### Changed
+- `career_tweaker_oe_cooldown.lua` — the managed buff template now uses `variable_multiplier_max = 1.0` (contributes a `multiplier`), so `variable_value = reduction` lands as `multiplier = reduction`, accumulating into the `cooldown_regen` root alongside the passive (-1) and pump (+0.4 × up to 5) — the channel `career_extension.lua:244-246` actually reads. Corrected the math comments + loc tooltip wording (bonus → multiplier).
+- MOD_VERSION → 0.3.42-dev.
+
+## 0.3.41-dev (2026-06-21) — Outcast Engineer: benefit from Cooldown Reduction gear (opt-in)
+
+### Added (default OFF) — new toggle `oe_benefit_from_cooldown_reduction` (Armor & Overcharge group)
+- **Outcast Engineer now benefits from Cooldown Reduction trinkets/charms.** Vanilla bug-by-design: the "Cooldown Reduction" property (`ability_cooldown_reduction`, weapon_properties.lua:186) grants the `activated_cooldown` stat (range −0.05..−0.10), but `activated_cooldown` is consumed ONLY inside `CareerExtension.start_activated_ability_cooldown` (career_extension.lua:424) behind an ability `cost` (career_extension.lua:418-420). The OE's Crank Gun ult `dr_4` (career_ability_settings_cog.lua:5-29: `cooldown = 60`, no `cost`) never hits that path — he recharges SOLELY through the `cooldown_regen` decay loop (career_extension.lua:241-246), driven by `bardin_engineer_pump_buff` (cooldown_regen +0.4 ×5, talent_settings_cog_dwarf_ranger.lua:20-22) vs `bardin_engineer_passive_no_ability_regen` (cooldown_regen −1, :7-9). So `activated_cooldown` and `cooldown_regen` are different stats → Cooldown Reduction gear did exactly nothing for him.
+- **Fix:** when ON, mirror the OE's live `activated_cooldown` reduction onto an equal `cooldown_regen` bonus: `reduction = 1 - buff_extension:apply_buffs_to_value(1, "activated_cooldown")` (e.g. 0.90 → 0.10), maintained as a single managed `cooldown_regen` stat-buff worth that amount. A 10% Cooldown Reduction trinket → ~+0.10 cooldown_regen → his pump recharge ~10% faster, plus a small passive trickle offsetting the −1 passive.
+- **Gating / safety:** OE-only (gated on local career == `dr_engineer`), owner-local (applies to `Managers.player:local_player().player_unit` only). Dynamic — re-evaluated on a throttled ~4×/sec tick from `mod.update` (NOT a new hook); keeps exactly ONE managed buff id, replacing (remove-then-add, `skip_net_sync`) on change so there's no drift / double-apply / accumulation. Toggle off, career switch, despawn, or no-CDR-gear (reduction below epsilon) all remove the managed bonus → exact vanilla. Buff is `client_side` (local recharge math, no RPC). The OE pump mechanic and base behavior are untouched (separate additive `cooldown_regen` bonus). Cleared eagerly in `on_disabled`.
+- New module `career_tweaker_oe_cooldown.lua` (dofile'd like `career_tweaker_armor_overcharge.lua`); registers the `crt_oe_cdr_mirror` buff template (`variable_bonus_max = 1.0` so `variable_value` carries the live reduction). Loc keys + tooltip added; toggle nested in the existing "Armor & Overcharge (hook-based)" group, `[untested]`-prefixed per dev convention.
+
+## 0.3.40-dev (2026-06-21) — Fix v0.3.39 cooldown-hook regression + tooltips/names/perk for the reworks
+
+### Fixed (important)
+- **`current_ability_cooldown` hook (v0.3.39) dropped its 2nd return value** — it returns `(cooldown, max_cooldown)` and the HUD cooldown bar consumes `max_cooldown`; my guard captured only the first (multi-return collapse), which would have nil'd the bar's denominator. Now pcall-wrapped capturing BOTH returns, fallback `(0, 1)`. Also covers the `career_extension.lua:698` nil (`max_cooldown` on a desynced swapped ability — same ability-swap crash class, user crash GUID 1efed1ef on v0.3.38).
+
+### Added — talent tooltips/names + Abandon perk (the reworks now read correctly in-game)
+- Talent **description overrides** (shared `_G.Localize` hook, gated per toggle) for: Natural Talent (#4), Numb to Pain (#5), Chain Reaction (#6), Fuel for the Fire (#7), Flame Unending (#3), and Mercenary Enhanced Training. Texts state the new mechanics.
+- **Fixed a dead override key**: the prior Numb to Pain override was keyed `..._venting_2_desc`, but `UIUtils.get_talent_description` Localizes the talent's `description` FIELD (`..._venting_desc_2`) — so it never applied. Corrected.
+- **Flame Unending name**: the lvl-25 slot now reads "Flame Unending" (overrides the talent's name key; it has no display_name field).
+- **Abandon shown as a passive perk**: #3 appends an Abandon entry to `PassiveAbilitySettings.bw_3.perks` (name/desc via the Localize hook), so the now-innate Abandon is visible in the passive ability section. Reverted on toggle-off.
+
+### Note
+Passive Unstable Strength numbers (#1/#2) text left as-is — that's the shared career-passive description (also covers Blood Magic); rewriting it risks misstating the unchanged passive. The talent tooltips above are the player-facing surface for the reworks.
+
+## 0.3.39-dev (2026-06-21) — Fix: ability-swap ult crash + career-unlock UI refresh
+
+### Fixed (pre-existing features, surfaced by user testing — not the new reworks)
+- **Ability-swap ult crash** (`Career Ability & Talent Swapping`). Live-swapping a career's `activated_ability` while the hero is spawned desyncs the spawned career extension's `_abilities`/cooldown state from `CareerSettings`, so the next ult had `CareerExtension:current_ability_cooldown(id)` return nil → engine crash at `career_extension.lua:424` (`apply_buffs_to_value(nil, "activated_cooldown")`). Repro: "swapped merc ult Slayer→none then ulted." Fix: guard the cooldown read so it never returns nil (treat the desynced ability as ready); the swap still applies cleanly on next spawn. Confirmed from crash log `console-2026-06-21-22.08.51`.
+- **Career-select lock not refreshing** (`Character Experience Level` + `Unlock All Careers`). `HeroWindowCharacterSummary._setup_hero_selection_widgets` bakes each career's `content.locked` once at populate from the hero level (which both settings feed); changing those mid-menu left the tiles stale (careers wrongly locked/unlocked until toggling unlock-all forced a rebuild). Fix: track the live hero window and re-run its tile setup when a `level_override_*` / `unlock_all_careers` setting changes.
+
+### Note
+The 9 reworks from v0.3.35–.38 were NOT implicated in either crash (the crash log had zero rework-buff references and no auto-dump → the user wasn't on Unchained/Mercenary). They remain untested in-game — an Unchained + Mercenary run with a log still needed to confirm them.
+
+## 0.3.38-dev (2026-06-21) — Remaining reworks: #4, #3, #7, #8 (Unchained) + Mercenary Enhanced Training
+
+### Added (default OFF) — completes the Unchained set + the Mercenary rework
+- **`rework_bw_unchained_natural_talent_ranged`** (#4) — Natural Talent → +6% ranged power per Unstable Strength stack (5% up to 6× with #1). New crt driver+stack buffs (`crt_sienna_natural_talent_ranged_*`), overcharge-chunk driven; replaces the vanilla −10% vent buff on `sienna_unchained_reduced_overcharge`.
+- **`rework_bw_unchained_abandon_innate_flame_unending`** (#3) — Abandon (overcharge→cooldown, `sienna_unchained_health_to_ult`) appended to `PassiveAbilitySettings.bw_3.buffs` so it's **innate**; its lvl-25 slot becomes **Flame Unending** = −6% career-skill cooldown (`activated_cooldown`) per US stack (5% up to 6× with #1), via a new crt driver+stack.
+- **`rework_bw_unchained_fuel_for_the_fire_vent`** (#7) — while the Fuel for the Fire talent is equipped, the career skill **clears only 25% overcharge** instead of all. Hook on `CareerAbilityBWUnchained._run_ability`: captures overcharge before the vanilla `reset()`, restores 75% after.
+- **`rework_bw_unchained_career_skill_max_us`** (#8) — career skill grants the **max Unstable Strength melee bonus (+60%) for 10s** regardless of overcharge (new static buff `crt_unchained_ult_max_us`); same `_run_ability` hook.
+- **`rework_es_mercenary_enhanced_training_tiered`** (Mercenary) — Enhanced Training: a melee hitting **2/3/4 targets grants 2/3/4 stacks of 5% attack speed for 6s** (10/15/20%); <2 = nothing. Custom `ProcFunctions.crt_enhanced_training_proc` (replicates vanilla except the ET branch; gate lowered to ≥2 only for that branch) + new `crt_merc_enhanced_training_as`; `markus_mercenary_passive.buff_func` patched to it.
+
+### All 9 reworks now live (test all together)
+#1 US rescale, #2 US→DoT, #3 Abandon-innate+Flame Unending, #4 Natural Talent→ranged, #5 Numb to Pain, #6 Chain Reaction ignite, #7 Fuel for the Fire vent, #8 career-skill max US, + Mercenary Enhanced Training. The per-US-stack reworks (#3/#4/#5) and the ability hooks (#7/#8) want in-game confirmation via the auto-dump/log.
+
+## 0.3.37-dev (2026-06-21) — Unchained reworks #2 (US→DoT) + #6 (Chain Reaction ignite)
+
+### Added (Unchained reworks group, default OFF)
+- **`rework_bw_unchained_unstable_strength_dot`** (#2) — each Unstable Strength stack also grants **+12% burn DoT damage** (`increased_burn_dot_damage`; 10% up to 6× when #1 is on). Adds a 2nd stat_buff entry to the US stack buff so every overcharge-chunk stack carries it. Idempotent re-apply; restored on toggle-off.
+- **`rework_bw_unchained_chain_reaction_ignite`** (#6) — Chain Reaction's on-burning-kill explosion (a zero-damage `slayer_leap_landing` push) now carries `dot_template_name = "burning_dot_3tick"`, so it **ignites nearby enemies**. Pure data patch on `ExplosionTemplates.sienna_unchained_burning_enemies_explosion`.
+
+### Remaining (back-to-back next builds)
+#3 Abandon→innate + Flame Unending, #4 Natural Talent→ranged power/US stack, #7 Fuel for the Fire vents 25% (ult hook), #8 career-skill max-US-stacks (ult hook), and Mercenary Enhanced Training/Paced Strikes (custom proc) — these need new crt buffs / hooks / a custom buff_func, built carefully so they don't crash.
+
+## 0.3.36-dev (2026-06-21) — Unchained rework #5: Numb to Pain reworked (per Unstable Strength stack)
+
+### Changed (replaces the prior Numb to Pain rework)
+- **`rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit`** (same toggle, new behavior) — Numb to Pain now grants, **per Unstable Strength stack: −6% damage taken AND −12% overcharge generated by Blood Magic** (`reduced_overcharge_from_passive`). When the Unstable Strength rescale (#1) is on, it mirrors US's 5oc/6× cadence at −5%/−10% up to 6×. Driven by the same `activate_server_buff_stacks_based_on_overcharge_chunks` engine function Unstable Strength uses, so stacks track current overcharge up and down (no on-hit removal). Reuses the pre-registered `crt_sienna_numb_to_pain_stack` (now two stat_buffs) + `crt_sienna_numb_to_pain_proc` (repurposed as the overcharge-chunk driver); `crt_sienna_numb_to_pain_remover` retired to an unused stub. The old "DR stack on burning elite/special kill, lose on hit" design is gone, per request.
+
+### Notes
+- Needs in-game confirmation that the driver's `update_func` runs while attached as a talent buff (Unstable Strength's identical driver runs as a career passive). The auto-dump will show the new `crt_sienna_numb_to_pain_*` wiring on next Unchained load.
+- Next: Mercenary Enhanced Training / Paced Strikes; then Unchained #2/#3/#4/#6/#7/#8.
+
+## 0.3.35-dev (2026-06-21) — Unchained rework #1: Unstable Strength rescale (master toggle)
+
+### Added (Unchained reworks group, default OFF)
+- **`rework_bw_unchained_unstable_strength_rescale`** — Unstable Strength now gives **+10% melee power per 5 overcharge, up to 6×** (vanilla 12% per 6, up to 5×). Patches the passive driver `sienna_unchained_passive_increased_melee_power_on_overcharge` (chunk_size 6→5, max_sub_buff_stacks →6) and the stack buff `sienna_unchained_passive_melee_power_on_overcharge` (max_stacks 5→6, multiplier 0.12→0.10), saving/restoring originals. This is the **master toggle** the remaining Unchained reworks read for their per-stack math (5%/6× when on, vanilla 6%/5× when off).
+
+### In progress (built from the in-game auto-dump of bw_unchained + es_mercenary)
+First of the requested Unchained set; the rest queued: US→DoT, Abandon→innate + new Flame Unending (CDR/stack), Natural Talent→ranged power/stack, Numb to Pain→DR + Blood-Magic overcharge/stack (replaces the existing NtP rework), Chain Reaction ignite, Fuel for the Fire vents 25% (gated on that talent), career-skill max-US-stacks; plus Mercenary Enhanced Training/Paced Strikes.
+
+## 0.3.34-dev (2026-06-21) — Fix the auto-dump (it errored + never dumped in v0.3.33)
+
+### Fixed
+- v0.3.33's auto-dump spammed `player_manager.lua:559: Network backend has not been set` and never produced any `[crt:talent]` output. Two bugs: (1) `_crt_local_career` called `Managers.player:local_player()` **without** a pcall, and it was invoked from `on_game_state_changed` on **every** state including `StateSplashScreen`/`StateLoading`, where `local_player()` raises that engine error (only the inner lookups were guarded); (2) it relied on `player:career_name()`, which returns nil until the profile's `display_name` loads, so resolution came back nil even where it didn't throw.
+- **Now:** `_crt_local_career` wraps the whole resolution in pcall (can't throw) and prefers the **career_system extension** on the spawned unit, with `career_name()` as a weaker fallback. The state trigger is gated to **`StateIngame` only**. Since the unit/career aren't ready at state-enter, a short **per-frame retry window** (`mod.update`, ~1×/sec for 20 s) fires the throw-proof, de-duped check until it dumps — so it lands once you're actually playing a reworked career, with or without opening the talent screen. De-dupe is set only on a **successful** dump. (Verified the failure in your `console-2026-06-21-20.10.30` log: crt v0.3.33-dev loaded, you were on bw_unchained + es_mercenary, talent screen opened 6×, but 8 errors and 0 dump lines.)
+
+## 0.3.33-dev (2026-06-21) — Auto-dump talents for careers under active rework (bw_unchained, es_mercenary)
+
+### Added (data harness — no gameplay effect)
+- **Automatic talent/buff dump** for the careers currently being reworked (`bw_unchained`, `es_mercenary`). When the local player is on one of those careers, crt writes its full talent tree → buff map to the console log (`[crt:talent]` lines) automatically — once per career per session — so the exact internal names + proc values are captured from normal play without anyone running `/crt_dump_talents`. Fires from the talent-screen `on_enter` (guaranteed career-resolved) and each `on_game_state_changed` enter; de-duped per career/session. Pure read.
+- Refactored the `/crt_dump_talents` body into reusable `mod.crt_dump_career_talents(career, reason)` (the command still works), and **widened the per-buff dump** to include `proc_chance / chunk_size / max_stacks / duration / event / buff_func / buff_to_add` so a tweak can be wired straight from the log.
+
+### Why
+Prepping the requested Unchained reworks (Unstable Strength rescale, US→DoT, Abandon→innate + new "Flame Unending", Natural Talent / Numb to Pain rescales, Chain Reaction ignite, Fuel-for-the-Fire vent %, career-skill max-stacks) and the Mercenary **Enhanced Training / Paced Strikes** rework (2 targets → 2×5% AS for 6 s, 3 → 15%, 4 → 20%, <2 → none). Those need the exact live talent→buff mapping; this dump produces it from a normal session.
+
+## 0.3.32-dev (2026-06-20) — Armor & Overcharge toggles (4 hook-based, default OFF)
+
+### Added
+- **Four opt-in (default-OFF) Armor & Overcharge toggles** in a new `armor_overcharge_group`, served by a new feature file `career_tweaker_armor_overcharge.lua` (dofile'd from `career_tweaker.lua` the same way Tourney is). Pure runtime hooks gated live on `mod:get` — no `{apply,restore,active_count}` lifecycle and no `on_setting_changed` dispatch (VMF re-reads `mod:get` and deactivates the hooks when the mod is disabled). All four carry the `[untested]` prefix per dev label discipline.
+  - `armor_gromril_ignore_chip` — Ironbreaker Gromril Armour AND Necromancer Cursed Armor (`sienna_necromancer_5_2_counter`) stacks are NOT consumed by chip / DoT / AOE sources (`dot_debuff` + the `DAMAGE_TYPES_AOE` set: globadier gas, warpfire, blightstorm, bile, ratling area). The armor still absorbs the next real hit.
+  - `armor_specials_dont_break_gromril` — special enemies (Hookrat / Assassin / Leech, generic `Breeds[source].special` test) no longer consume Gromril Armour UNLESS the Ironbreaker has the Gromril Curse talent (`bardin_ironbreaker_max_gromril_delay`).
+  - `unchained_no_overcharge_from_ff` — Sienna Unchained gains no overcharge from ally / friendly-fire damage (`side_by_unit` ally test).
+  - `unchained_no_overcharge_from_disablers` — Unchained gains no overcharge from special-disabler grab/impact damage (mirrors the Tourney Balance mod).
+
+### Architecture / correctness
+- **Two hook targets, not one** (different functions, different authority — see the module header):
+  - `DamageUtils.apply_buffs_to_damage` (ONE `mod:hook`) carries toggles #1-gromril / #2 / #3 / #4. **Host-authoritative** — gating the host's gromril consume means `rpc_remove_gromril_armour` is never sent, so clients never strip either (the client mirror strips unconditionally on RPC receipt). Overcharge likewise either applies locally or RPCs the owning client.
+  - `PlayerUnitHealthExtension.add_damage` (ONE `mod:hook`) carries toggle #1-necromancer. **Per-victim own-peer** — the `sienna_necromancer_5_2_counter_remover` proc fires from `add_damage:702-703` on the victim's own peer.
+- **Interception via per-instance method shim** restored in a pcall-protected finally: gromril hides the marker from `be:has_buff_type`; overcharge makes `be:apply_buffs_to_value` a no-op for stat `damage_taken_to_overcharge`; necromancer swallows the `on_damage_taken` event in `be:trigger_procs` for the one exempt tick.
+- VMF no-duplicate-hook rule satisfied — both targets confirmed un-hooked elsewhere in crt. Added `/crt_regression_test` check `armor_overcharge_hook_targets_present`.
+- **Caveat:** the Gromril and Overcharge toggles only take effect when the player running crt is the HOST (host decides whether to send the removal/conversion RPC). The Necromancer exemption is per-peer and works for the local Necromancer regardless of host.
+
+## 0.3.31-dev (2026-06-20) — Big Rebalance fully on ice (localization keys commented out)
+
+Completed freezing the Big Rebalance (Core's BR) integration. The BR **widgets** were already on ice (`career_tweaker_data.lua` 120-524 wrapped in `--[==[ … ]==]`) and the BR **module** is already stubbed/not-loaded (`career_tweaker.lua:127` dofile commented, no-op stub at 132) since bt was retired 2026-06-08. This release also comments out the now-orphaned BR **localization keys** (`cbr_*` group labels + ~160 toggle labels/tooltips + the BR passive-perks-rework descriptions, `career_tweaker_localization.lua` 238-641) in a matching `--[==[ … ]==]` block. Those keys were referenced only by the (commented) BR widgets and the (unloaded) BR module — no active feature uses them, verified by grep. The separate **Tourney Balance** (`trn_*`) feature is untouched and remains active. Net: the entire BR surface is now commented out / inert; nothing BR-related loads or appears in the menu. To restore, remove the three `--[==[`/`]==]` opener-closer pairs (data widgets, loc keys, and the module dofile).
+
+## 0.3.30-dev (2026-06-18) — Actually fix Leading Shots text (mod loc keys don't reach global Localize) + docs
+
+### Fixed
+- **Leading Shots name + description still rendered wrong after v0.3.29 — real root cause found.** It was NOT the `{1}`→`%s` placeholder (that was a necessary but insufficient earlier fix). The talent UI resolves the title (`Localize(display_name or name)`, `hero_window_talents.lua:328`) and body (`get_talent_description` → `string.format`, `ui_utils.lua:69`) via the **global** `Localize`. **VMF does not register a mod's `_localization.lua` keys into the global `Localize`** (mod-loc scope), so `crt_engineer_leading_shots_name`/`_desc` never resolved — exactly the trap every *other* crt rework avoids by serving its text through the shared `_G.Localize` hook + `CRT_DESC_OVERRIDES` table. Added both keys to `CRT_DESC_OVERRIDES` (gated on `rework_dr_engineer_leading_shots`), hardcoding the count to skip `string.format` like the other entries. Title now reads **"Leading Shots"**, body **"Every 4 ranged attacks…"**.
+
+### Added
+- **`TALENT_TEXT_RENDERING.md`** — documents how VT2 renders a talent's name + description (title field precedence, printf-not-`{1}` placeholders, `%%` escaping, `description_values` shapes, and the mod-Localize scope trap with the `CRT_DESC_OVERRIDES` fix pattern), with engine file:line citations and a minimal recipe.
+
+## 0.3.29-dev (2026-06-18) — Fix Leading Shots talent name + description text
+
+### Fixed
+- **Leading Shots talent showed the wrong name and description in-game.** Two bugs in the v0.3.27 rework:
+  - **Name** — the talent title resolves as `Localize(talent.display_name or talent.name)` (`hero_window_talents.lua:328`). The rework set `description`/`icon` but never `display_name`, so the title kept localizing the vanilla `name` → "Ingenious Ordnance". Now sets `talent.display_name = "crt_engineer_leading_shots_name"` ("Leading Shots"), snapshotted + restored on disable.
+  - **Description** — the body goes through `string.format(Localize(desc), values)` (`ui_utils.lua:format_localized_description`), which uses `%s`/`%d`, not `{1}`. The loc used `{1}`, so the count never substituted and a literal `{1}` rendered. Changed the placeholder to `%s` → now reads "Every 4 ranged attacks…".
+
+## 0.3.28-dev (2026-06-18) — Zealot talent-dump command (diagnose Holy Fortitude) + regression-list sync
+
+### Added
+- **`/crt_dump_talents [career]`** (default `wh_zealot`) — logs a career's LIVE talent tree (post-rework) with each talent's internal name, display name, buffs, and each buff's `stat_buff`/`bonus`/`multiplier`. Needed because the local decompile is older than the current game: the Zealot "Holy Fortitude" talent doesn't exist in the decompile by that name, so `rework_wh_zealot_holy_fortitude_30_max_hp` targets a **best-guess** talent (`victor_zealot_passive_healing_received`) that the current game likely renamed/removed → `TalentIDLookup` returns nil → the rework silently no-ops (user reported it stuck at vanilla 180 HP). Run this, paste the `[crt:talent]` lines, and the rework gets re-pointed at the real talent.
+
+### Fixed
+- Synced `_CRT_BUFF_NAMES_EXPECTED` (the `/crt_regression_test` copy in `career_tweaker.lua`) with the canonical `_CRT_BUFF_NAMES` — the v0.3.27 Leading Shots add updated the canonical list but not the regression copy, which `/crt_regression_test` would have flagged. No functional impact (registration uses the canonical list).
+
+## 0.3.27-dev (2026-06-18) — Restore the legacy "Leading Shots" Engineer talent (replaces Ingenious Ordnance)
+
+### Added
+- **Outcast Engineer: Leading Shots (replaces Ingenious Ordnance)** toggle in the Engineer rework group. Restores the pre-Patch-5.2.0 talent: **every 4th ranged shot is a guaranteed critical hit**, and crucially **it works with the Steam-Assisted Crank Gun** (which uses no ammo). Researched against Fatshark patch notes (added Patch 3.4 / Nov 2020, removed Patch 5.2.0 / Dec 2023 → replaced by Ingenious Ordnance) + the decompile.
+  - **Crank Gun coverage:** the counter procs on `on_hit` filtered to ranged projectile attack types (`projectile` / `instant_projectile` / `heavy_instant_projectile`), **not** `on_ammo_used` — the ammo-less Crank Gun never fires `on_ammo_used`, but its bullets are ranged projectiles that trigger `on_hit`, so they count.
+  - **Implementation:** a 3-buff chain using only **stock** buff funcs — counter (`add_buff_on_first_target_hit`, ranged-only) → accumulator (`max_stacks 4`, `reset_on_max_stacks`, `add_remove_buffs`) → guaranteed-crit buff (`buff_perks.guaranteed_crit`, consumed on the next `on_critical_action`). Modeled on Mercenary Paced Strikes + the engineer's own Scavenged-Shot accumulator. Swaps `Talents.bardin_engineer_improved_explosives` (slot [2,1]) `buffs`/`icon`/`description` with snapshot/restore, per the existing `rework_*` framework. Three names added to `_CRT_BUFF_NAMES` (alphabetical; NetworkLookup-deterministic — version-lockstep).
+  - **Icon:** reuses `bardin_engineer_ranged_crit_count` — the orphaned talent icon already in the shipped `gui_icons` atlas (referenced by no current talent = the original Leading Shots art). No asset shipped.
+  - **Scope (additive):** guaranteed crit every 4th ranged shot; the other 3 keep their normal random crit chance (the original's full random-crit suppression needs a crit-resolver hook — not done). While ON, the Ingenious Ordnance reworks have no effect (the talent is swapped out) — they don't conflict/crash.
+  - **To verify in-game:** toggle on, fire 4 ranged shots, confirm the 4th crits + the icon renders; confirm the Crank Gun also crits on its cadence. (WIP — the in-game talent tooltip text may show a raw loc key if crt's loc isn't registered into the game's `Localize`; the *mechanic* is independent of that.)
+
 ## 0.3.25-dev (2026-06-17) — Tourney Balance Testing port: Phase 1 (career talent toggles)
 
 ### Why

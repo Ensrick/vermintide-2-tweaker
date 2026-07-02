@@ -57,9 +57,8 @@ local CHUNK_SIZE = 400
 local function _dbg_alert(fmt, ...)
     if type(mod._gt_dbg_alert) == "function" then
         mod._gt_dbg_alert(fmt, ...)
-    elseif mod:get("enable_debug_logging") then
-        mod:info("[gt:dbg] " .. fmt, ...)
-        mod:echo("[gt] " .. fmt, ...)
+    else
+        mod:warning("[gt:dbg] " .. fmt, ...)
     end
 end
 

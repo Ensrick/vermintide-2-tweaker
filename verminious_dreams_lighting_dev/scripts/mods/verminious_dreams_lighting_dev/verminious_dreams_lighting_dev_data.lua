@@ -24,14 +24,15 @@ return {
                 default_value = true,
                 tooltip       = "enable_dlc_termite_3_tooltip",
             },
-            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-            -- Must be at the BOTTOM of the widget tree, top-level (NOT inside
-            -- any group), key `enable_debug_logging` verbatim across every mod.
+            -- Chaos Wastes curse-adjustment layer (v1.0.9-dev). When one of the
+            -- three missions is injected into a cursed CW expedition, layer the
+            -- per-deity curse tint on TOP of vdl's base lighting. Default ON;
+            -- harmless outside Chaos Wastes (no-op in Adventure).
             {
-                setting_id    = "enable_debug_logging",
+                setting_id    = "enable_cw_curse_adjust",
                 type          = "checkbox",
-                default_value = false,
-                tooltip       = "enable_debug_logging_tooltip",
+                default_value = true,
+                tooltip       = "enable_cw_curse_adjust_tooltip",
             },
         },
     },

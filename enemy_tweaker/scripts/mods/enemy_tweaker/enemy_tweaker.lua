@@ -1,6 +1,14 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.5-dev"
+local MOD_VERSION = "0.7.22-dev"
+-- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
+-- the FIRST positional arg of every mod:network_send this mod emits, and
+-- validated as the first arg of every mod:network_register callback; a peer on a
+-- different schema is dropped with a log line (no crash, no state mutation).
+-- Bump ONLY when an RPC payload shape changes (field add/remove/reorder, or a
+-- positional field's type changes). One constant per mod, shared across every
+-- channel the mod owns. Never define below 1.
+local ET_RPC_SCHEMA = 1
 _MEM_PROBE_T0_ET = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([et] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -8,13 +16,11 @@ _MEM_PROBE_T0_ET = collectgarbage("count")  -- [mem-probe] temp Lua-footprint ba
 mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- Both route through VMF logging, gated by VMF output_mode (no per-mod toggle).
+-- `_dbg` is for confirmation / expected behavior — mod:debug channel (file only).
+-- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel (file only).
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[et:dbg] " .. fmt, ...)
-    end
+    mod:debug("[et:dbg] " .. fmt, ...)
 end
 
 -- v0.7.0-dev: dbg_alert is now LOG-ONLY. Used to mod:echo to chat on every
@@ -22,9 +28,7 @@ end
 -- (per-IP plateau, per-spawn breed-swap, etc. all fired through here). Chat
 -- is reserved for `_chat_alert` below — genuinely surprising conditions only.
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[et:dbg] " .. fmt, ...)
-    end
+    mod:warning("[et:dbg] " .. fmt, ...)
 end
 
 -- _chat_alert(fmt, ...) — log + chat. ONLY call from genuinely surprising
@@ -32,10 +36,8 @@ end
 -- replication, ambients_ignore_threat clobbering vanilla state, hook install
 -- failure. Always logs; only chat-echoes when debug logging is on.
 local function _chat_alert(fmt, ...)
-    mod:warning("[et:chat_alert] " .. fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:echo("[et] " .. fmt, ...)
-    end
+    mod:warning("[et] " .. fmt, ...)
+    mod:echo("[et] " .. fmt, ...)
 end
 
 -- ============================================================
@@ -107,14 +109,12 @@ local function _hook_wrap_table(class_table, method, label, body)
     end)
 end
 
--- _spawn_dbg(channel, fmt, ...) — aggressive per-spawn debug trace, gated
--- on enable_debug_logging. Channels: paced / event / roaming / patrol /
+-- _spawn_dbg(channel, fmt, ...) — aggressive per-spawn debug trace, routed
+-- through mod:debug (gated by VMF output_mode_debug). Channels: paced / event / roaming / patrol /
 -- unit / refresh. Stable prefix lets post-mission logs be grepped per
 -- channel: `grep '\[et:spawn:event\]' console_log-*.log`.
 local function _spawn_dbg(channel, fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[et:spawn:" .. tostring(channel) .. "] " .. fmt, ...)
-    end
+    mod:debug("[et:spawn:" .. tostring(channel) .. "] " .. fmt, ...)
 end
 
 -- _spawn_dbg_alert(channel, fmt, ...) — _spawn_dbg variant that also
@@ -127,8 +127,34 @@ end
 -- dozens of chat lines per zone load at high multipliers. Same rationale as
 -- _dbg_alert above. Use `_chat_alert` for chat-worthy surprises.
 local function _spawn_dbg_alert(channel, fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[et:spawn:" .. tostring(channel) .. "] " .. fmt, ...)
+    mod:warning("[et:spawn:" .. tostring(channel) .. "] " .. fmt, ...)
+end
+
+-- _et_probe(key, fmt, ...) — direct engine console print for diagnostics that
+-- MUST survive a mod-logging-OFF session. The user plays with VMF logging OFF,
+-- so mod:info / mod:warning / mod:debug NEVER reach the handed-over console log
+-- (memory reference_vt2_diagnostics_use_printf_not_modinfo). The engine global
+-- `printf` (used by vanilla itself, e.g. scripts/managers/conflict_director/
+-- breed_freezer.lua:119) always writes to console-*.log regardless of VMF state.
+-- Rate-limited per `key` to a few lines/min so a hot path cannot flood the log;
+-- pcall-guarded so a format slip can never fault the caller. Reserve for probes
+-- that must be visible with logging off — routine confirmation still uses _dbg.
+local _PROBE_MIN_INTERVAL = 12  -- seconds between prints of the same key (~5/min)
+local _probe_last_t = {}
+local function _et_probe(key, fmt, ...)
+    local t
+    if Managers and Managers.time then
+        local ok, tt = pcall(Managers.time.time, Managers.time, "game")
+        if ok and type(tt) == "number" then t = tt end
+    end
+    if t then
+        local last = _probe_last_t[key]
+        if last and (t - last) < _PROBE_MIN_INTERVAL then return end
+        _probe_last_t[key] = t
+    end
+    -- t == nil (no game clock yet): fail OPEN and print, never drop the datum.
+    if not pcall(printf, "[et] " .. fmt, ...) then
+        pcall(printf, "[et] (probe format error, key=%s)", tostring(key))
     end
 end
 
@@ -273,7 +299,8 @@ mod._br_fingerprint_broadcast_once = function()
     local fp = mod._br_settings_fingerprint()
     if mod.network_send then
         local ok, err = pcall(function()
-            mod:network_send("et_br_fingerprint", "others", MOD_VERSION, fp)
+            -- ET_RPC_SCHEMA is the FIRST positional arg (VMF_RECIPES § 10 / Issue #42).
+            mod:network_send("et_br_fingerprint", "others", ET_RPC_SCHEMA, MOD_VERSION, fp)
         end)
         if not ok then
             mod:info("[BR:fp] broadcast failed: %s", tostring(err))
@@ -283,25 +310,35 @@ mod._br_fingerprint_broadcast_once = function()
     end
 end
 
-mod:network_register("et_br_fingerprint", function(sender_peer_id, peer_version, peer_fp)
+mod:network_register("et_br_fingerprint", function(sender_peer_id, schema_version, peer_version, peer_fp)
+    -- Schema gate (VMF_RECIPES § 10 / Issue #42): drop peers on a different RPC
+    -- schema so a mixed-version lobby degrades cleanly instead of parsing the
+    -- payload by the wrong positions. Drop + log; never error() (a noisy per-tick
+    -- chat error from a stale peer is worse than the corruption it replaces).
+    if schema_version ~= ET_RPC_SCHEMA then
+        -- printf (not _dbg_alert): the user runs mod-logging OFF, so the prior
+        -- mod:warning-routed line never reached their console log. Keyed per peer
+        -- so two mismatched peers both surface; rate-limited against per-tick spam.
+        _et_probe("rpc:schema:" .. tostring(sender_peer_id),
+            "[rpc:schema] %s mismatch from peer=%s: peer sent v%s, we expect v%d. Dropping.",
+            "et_br_fingerprint", tostring(sender_peer_id),
+            tostring(schema_version), ET_RPC_SCHEMA)
+        return
+    end
+    -- Defensive type check AFTER the schema gate (catches the rare case where a
+    -- legacy sender's first payload field happens to equal ET_RPC_SCHEMA).
     if type(peer_fp) ~= "string" then return end
     _br_fingerprint_peers[tostring(sender_peer_id)] = peer_fp
     local own_fp = mod._br_settings_fingerprint()
     if peer_fp ~= own_fp then
         -- _dbg_alert because mismatch is the actionable case (host/client
         -- BR settings drift -> damage math divergence). PROJECT_STANDARDS § 3.6.
-        if mod:get("enable_debug_logging") then
-            mod:info("[et:dbg] [BR:fp] MISMATCH peer=%s peer_v=%s peer_fp=%s own_fp=%s -- BR sub-toggles diverge",
-                tostring(sender_peer_id), tostring(peer_version), peer_fp, own_fp)
-            mod:echo("[et] [BR:fp] MISMATCH peer=%s peer_fp=%s own_fp=%s",
-                tostring(sender_peer_id), peer_fp, own_fp)
-        else
-            -- Surface even with debug OFF — mismatch is a real bug condition,
-            -- not a routine confirmation. Use a single mod:info line (no chat
-            -- spam) so non-debug players still get a triage breadcrumb.
-            mod:info("[BR:fp] MISMATCH peer=%s peer_v=%s peer_fp=%s own_fp=%s -- BR sub-toggles diverge",
-                tostring(sender_peer_id), tostring(peer_version), peer_fp, own_fp)
-        end
+        mod:debug("[et:dbg] [BR:fp] MISMATCH peer=%s peer_v=%s peer_fp=%s own_fp=%s -- BR sub-toggles diverge",
+            tostring(sender_peer_id), tostring(peer_version), peer_fp, own_fp)
+        -- Surface unconditionally — mismatch is a real bug condition, not a
+        -- routine confirmation. mod:warning so it always lands in the log.
+        mod:warning("[BR:fp] MISMATCH peer=%s peer_v=%s peer_fp=%s own_fp=%s -- BR sub-toggles diverge",
+            tostring(sender_peer_id), tostring(peer_version), peer_fp, own_fp)
     else
         mod:info("[BR:fp] match peer=%s fp=%s v=%s",
             tostring(sender_peer_id), peer_fp, tostring(peer_version))
@@ -357,7 +394,14 @@ end
 -- enemy_tweaker_big_rebalance.lua for ownership and per-toggle docs, and
 -- enemy_tweaker_big_rebalance_registrations.lua for the cross-mod-shared
 -- canonical alphabetical registration list.
-local BR = require("scripts/mods/enemy_tweaker/enemy_tweaker_big_rebalance")
+-- BR ON ICE (bt retired 2026-06-08; heap relief 2026-06-18). The module is no
+-- longer require()'d, so its data tables + hook installers never load into the
+-- 1 GiB lua_heap. Stub preserves the public API and seeds the external
+-- NewBreedTweaks sink (mod._bloodlust_health). To revive: restore bt, delete the
+-- stub, un-comment the require below.
+-- local BR = require("scripts/mods/enemy_tweaker/enemy_tweaker_big_rebalance")
+local BR = { on_enabled = function() end, on_setting_changed = function() end, on_disabled = function() end }
+mod._bloodlust_health = mod._bloodlust_health or {}
 
 -- ============================================================
 -- Helpers
@@ -625,7 +669,7 @@ end
 -- can't break the preset rotation.
 local function _apply_horde_preset()
     local preset = _get_preset()
-    local multiplier = _mult("horde_size_multiplier")
+    local multiplier = math.min(_mult("horde_size_multiplier"), 5)  -- v0.7.11-dev: cap 5x (log parity with the apply)
     local mutated_keys = 0
 
     _safe("apply_horde_preset_swap", function()
@@ -648,19 +692,16 @@ local function _apply_horde_preset()
         end
     end)
 
-    -- Size multiplier applies independently of preset selection so users
-    -- can scale vanilla hordes too. At multiplier == 1 this loop is a no-op
-    -- (early-out inside _apply_size_multiplier).
-    if multiplier ~= 1 then
-        _safe("apply_horde_size_multiplier", function()
-            for _, comp in pairs(HordeCompositionsPacing) do
-                if type(comp) == "table" and #comp > 0 then
-                    _apply_size_multiplier(comp, multiplier)
-                    mutated_keys = mutated_keys + 1
-                end
-            end
-        end)
-    end
+    -- v0.7.9-dev: paced-horde SIZE scaling moved off this global. The engine
+    -- sizes paced hordes from CurrentHordeSettings.compositions_pacing
+    -- (horde_spawner.lua:136/348/742), which is a DEEP clone of the global taken
+    -- at conflict_director.lua:881 (table.clone recurses — table.lua:40-45), so a
+    -- global-side mutation never reaches the spawner (and scaling the global here
+    -- would ALSO double-apply once the clone is made from it, then scaled again).
+    -- Size is now applied to the live clone in
+    -- _apply_horde_size_to_current_horde_settings(), called from the init +
+    -- refresh hooks (mirrors faction-swap / roaming). The preset SWAP above still
+    -- mutates the global; the fresh clone inherits it.
 
     mod:info("[et:paced] applied: preset=%s multiplier=%.1f keys_mutated=%d",
         tostring(mod:get("horde_preset") or "off"), multiplier, mutated_keys)
@@ -782,6 +823,47 @@ local function _apply_faction_swap_to_current_horde_settings()
         end
     end
 end
+
+-- v0.7.9-dev: scale paced hordes by applying horde_size_multiplier to the LIVE
+-- post-clone CurrentHordeSettings.compositions_pacing — the table the engine
+-- actually reads to size a paced horde (horde_spawner.lua:136/348/742). That
+-- table is a fresh DEEP clone of the global HordeCompositionsPacing taken at each
+-- refresh (conflict_director.lua:881; table.clone recurses — table.lua:40-45), so
+-- mutating the global never reaches the spawner. Mirror faction-swap/roaming:
+-- re-apply in the init AND refresh hooks. Idempotent-by-fresh-clone — each
+-- refresh re-clones the UNMUTATED global (et restores it before this runs), so
+-- each clone is scaled exactly once (no multiplier^2 compounding).
+local function _apply_horde_size_to_current_horde_settings()
+    local multiplier = math.min(_mult("horde_size_multiplier"), 5)  -- v0.7.11-dev: hard-cap 5x (also clamps a stale saved >5)
+    if multiplier == 1 then return end
+    local CHS = rawget(_G, "CurrentHordeSettings")
+    if not CHS or type(CHS.compositions_pacing) ~= "table" then return end
+    _safe("apply_horde_size_to_CHS", function()
+        local n = 0
+        for _, comp in pairs(CHS.compositions_pacing) do
+            -- Only array-shaped composition entries have #comp > 0; this skips the
+            -- sound_settings / loaded_probs non-array fields. _apply_size_multiplier
+            -- scales only the {min,max} tuples, never loaded_probs, so the
+            -- LoadedDice / pickup-sampler invariant is untouched.
+            if type(comp) == "table" and #comp > 0 then
+                _apply_size_multiplier(comp, multiplier)
+                n = n + 1
+            end
+        end
+        _spawn_dbg("paced", "horde size -> CurrentHordeSettings.compositions_pacing: mult=%.1f keys=%d", multiplier, n)
+    end)
+end
+
+-- v0.7.10-dev: the beastman planted-banner force-load (v0.7.9) is REVERTED — it
+-- crashed. `Managers.package:load` was called on the raw UNIT PATH
+-- (units/weapons/enemy/wpn_bm_standard_01/wpn_bm_standard_01_placed), which is
+-- NOT a loadable .package; the engine threw "Resource '#ID[...]' not found"
+-- ASYNCHRONOUSLY (so the surrounding pcall never caught it) and hard-crashed the
+-- game (GUID ea9eaebb-fa1c-45a8-a5c4-405d791ab71f) on the first CD init/refresh
+-- with beastmen swapped in. Removed entirely until the correct PACKAGE that
+-- carries that unit is identified (TODO). Consequence: the planted beastman
+-- banner does not render on a cross-faction swap — same as <=v0.7.8 — but no
+-- crash. The v0.7.9 horde-size fix is independent and stays.
 
 -- ============================================================
 -- Difficulty mimic (per-system difficulty override)
@@ -969,6 +1051,97 @@ local function _apply_roaming_size_multiplier()
 end
 
 -- ============================================================
+-- Roaming Elite Pool: Stormvermin Champion (v0.7.18-dev)
+-- ============================================================
+-- Toggle-gated, default-OFF, HOST-side: a per-spawn roll can replace a ROAMING
+-- skaven elite (skaven_storm_vermin / _with_shield / _commander) with the
+-- Stormvermin Champion (skaven_storm_vermin_champion). "Roaming" is gated on
+-- spawn_type == "roam" (set by EnemyRecycler at enemy_recycler.lua:585), which
+-- excludes horde / paced / event / boss spawns — so the Champion only subs in
+-- for the loose wandering elites the user asked for, not horde stormvermin. The
+-- swap itself lives INSIDE the shared spawn_queued_unit hook below (VMF drops a
+-- 2nd hook on the same Class.method — see the consolidation banner there).
+--
+-- The Champion is a registered, dynamically-loadable boss breed (same class as
+-- the Warlord), so the swap reuses the vanilla networked spawn/loader path
+-- exactly like the Warlord monster-pool feature — we never call
+-- Managers.package:load ourselves.
+--
+-- Per-user stat retune (applied to the Champion breed while the feature is ON):
+--   * max_health: 260 at Cataclysm (difficulty rank 5 = internal `hardest`),
+--     ~1/5 (52) at Recruit (rank 1), linear ramp between; ranks 6-8
+--     (Cataclysm 2/3/3+) scaled on above. Vanilla Champion is an 800-HP boss.
+--   * AI tuning copied from Skarrik Spinemanglr (skaven_storm_vermin_warlord):
+--     ai_strength = 10, ai_toughness = 10 (Champion vanilla is 6 / 3).
+--   * Super armor via primary_armor_category = 6 — the chaos-warrior / warlord /
+--     exalted-champion tier (breed_chaos_warrior.lua:79).
+--
+-- SIDE EFFECT (flagged in tooltip + CHANGELOG): mutating the shared Champion
+-- breed retunes EVERY Champion on this peer while the toggle is on — including
+-- the rare vanilla appearances (weave missions, a few terror-event hordes, the
+-- Khorne Champions mutator). Gated behind the toggle + restored on disable, and
+-- every peer running et applies the same retune so host/client agree. Peers
+-- without et (or toggle off) keep the vanilla 800-HP Champion — pin the setting
+-- across the lobby for a consistent session (same caveat as et's other
+-- host-side spawn features).
+local _CHAMPION_BREED = "skaven_storm_vermin_champion"
+local _CHAMPION_ELIGIBLE_ELITES = {
+    skaven_storm_vermin             = true,
+    skaven_storm_vermin_with_shield = true,
+    skaven_storm_vermin_commander   = true,
+}
+-- index = difficulty_rank: 1 Recruit, 2 Veteran, 3 Champion, 4 Legend,
+-- 5 Cataclysm, 6 Cataclysm 2, 7 Cataclysm 3, 8 Cataclysm 3+. 260 @ rank 5 per
+-- user spec; 52 (=260/5) @ rank 1; linear between; scaled on above Cataclysm.
+local _CHAMPION_ELITE_MAX_HEALTH    = { 52, 104, 156, 208, 260, 340, 420, 500 }
+local _CHAMPION_ELITE_AI_STRENGTH   = 10  -- Skarrik (warlord) value; Champion vanilla = 6
+local _CHAMPION_ELITE_AI_TOUGHNESS  = 10  -- Skarrik (warlord) value; Champion vanilla = 3
+local _CHAMPION_ELITE_PRIMARY_ARMOR = 6   -- super armor (chaos-warrior / warlord tier)
+
+local _champion_vanilla_backup   = nil
+local _champion_overrides_active = nil    -- nil = untouched, true = applied, false = restored
+
+-- Idempotent: writes only when the toggle state changed since last call. Reads
+-- mod:get("champion_in_elite_pool") (falsy when the toggle is off OR the mod is
+-- disabled, so on_disabled restores vanilla correctly).
+local function _apply_champion_breed_overrides()
+    local b = rawget(_G, "Breeds") and Breeds[_CHAMPION_BREED]
+    if type(b) ~= "table" then
+        _dbg_alert("champion: Breeds[%s] not loaded — deferring override", _CHAMPION_BREED)
+        return
+    end
+    local want = mod:get("champion_in_elite_pool") and true or false
+    if want == _champion_overrides_active then return end
+    if want then
+        if not _champion_vanilla_backup then
+            _champion_vanilla_backup = {
+                max_health             = b.max_health,
+                ai_strength            = b.ai_strength,
+                ai_toughness           = b.ai_toughness,
+                primary_armor_category = b.primary_armor_category,  -- nil in vanilla
+            }
+        end
+        b.max_health             = _CHAMPION_ELITE_MAX_HEALTH
+        b.ai_strength            = _CHAMPION_ELITE_AI_STRENGTH
+        b.ai_toughness           = _CHAMPION_ELITE_AI_TOUGHNESS
+        b.primary_armor_category = _CHAMPION_ELITE_PRIMARY_ARMOR
+        mod:info("[champion] elite-pool overrides applied (260@Cata / AI 10,10 / super-armor)")
+    elseif _champion_vanilla_backup then
+        b.max_health             = _champion_vanilla_backup.max_health
+        b.ai_strength            = _champion_vanilla_backup.ai_strength
+        b.ai_toughness           = _champion_vanilla_backup.ai_toughness
+        b.primary_armor_category = _champion_vanilla_backup.primary_armor_category
+        mod:info("[champion] elite-pool overrides restored to vanilla")
+    end
+    _champion_overrides_active = want
+end
+
+-- Load-time apply so every peer running et reflects its saved toggle at boot
+-- (cross-peer health interpretation must match). Idempotent; re-asserted at
+-- ConflictDirector.init + the VMF lifecycle callbacks below.
+_safe("champion_load_apply", _apply_champion_breed_overrides)
+
+-- ============================================================
 -- Hooks
 -- ============================================================
 
@@ -981,8 +1154,10 @@ _hook_wrap("ConflictDirector", "init", "ConflictDirector.init", function(func, s
     _apply_roaming_size_multiplier()
     _build_swap_map()
     _build_faction_swap_map()
+    _apply_champion_breed_overrides()                                            -- v0.7.18-dev: Champion elite-pool stat retune (idempotent)
     _apply_difficulty_mimic(self)
     _apply_faction_swap_to_current_horde_settings()
+    _apply_horde_size_to_current_horde_settings()                                -- v0.7.9-dev: scale the live clone
 
     local horde_mult,   _   = _mult("horde_size_multiplier")
     local event_mult,   _e  = _mult("event_size_multiplier")
@@ -1013,6 +1188,7 @@ _hook_wrap("ConflictDirector", "refresh_conflict_director_patches",
     func(self, ...)
     _apply_difficulty_mimic(self)
     _apply_faction_swap_to_current_horde_settings()
+    _apply_horde_size_to_current_horde_settings()                                -- v0.7.9-dev: re-scale freshly-cloned CHS
     -- v0.6.0-dev: re-apply roaming size on every CD refresh too. Without
     -- this the mid-mission zone-boundary CD switch (Athel Yenlui etc.)
     -- would revert SizeOfInterestPoint to vanilla until the next mission.
@@ -1023,6 +1199,202 @@ _hook_wrap("ConflictDirector", "refresh_conflict_director_patches",
         tostring(self and self.current_conflict_settings))
     _spawn_dbg("refresh", "refresh_conflict_director_patches trigger=%s", trigger)
 end)
+
+-- ============================================================
+-- Monster Pool: Skarrik Spinemangler (v0.7.12-dev)
+-- ============================================================
+-- Toggle-gated, default-OFF, HOST-side: when a boss terror event would spawn a
+-- standard monster, a per-spawn roll can replace it with the Skaven Warlord
+-- (skaven_storm_vermin_warlord, "Skarrik Spinemangler"). Monsters spawn via
+-- ConflictDirector boss terror events -> ConflictDirector:spawn_one ->
+-- spawn_queued_unit (conflict_director.lua:1732) — a DIFFERENT path than the
+-- horde breed-swap below (HordeSpawner), so this needs its own hook.
+--
+-- CRASH-SAFE PACKAGE LOAD: we substitute the breed TABLE only and let VANILLA
+-- spawn_queued_unit run its own load — it calls enemy_package_loader:request_breed
+-- (conflict_director.lua:1738) on the real .package (resource_packages/breeds/
+-- skaven_storm_vermin_warlord), and the spawn queue blocks on
+-- is_breed_loaded_on_all_peers before instantiating. We NEVER call
+-- Managers.package:load ourselves (the raw-unit-path call is what async-crashed
+-- et at the v0.7.10 banner force-load, L820-829). The warlord is a registered
+-- dynamically-loadable breed (EnemyPackageLoaderSettings 'level_specific'), and a
+-- shipped mod (SpawnTweaks reverse-twins) already spawns it cross-level this way.
+-- RESIDUAL RISK: on a level whose bundle lacks the warlord package, vanilla's
+-- async load could still fail — default off + host-must-test (see tooltip).
+--
+-- chaos_troll_chief is DELIBERATELY excluded — it's the Festering Ground scripted
+-- finale boss; swapping it would break that mission's scripted event.
+local _WARLORD_BREED = "skaven_storm_vermin_warlord"
+local _WARLORD_ELIGIBLE_MONSTERS = {
+    skaven_rat_ogre   = true,
+    skaven_stormfiend = true,
+    chaos_spawn       = true,
+    chaos_troll       = true,
+    beastmen_minotaur = true,
+}
+
+-- ============================================================
+-- CONSOLIDATED spawn_queued_unit hook (SINGLE hook per Class.method — VMF drops
+-- duplicates). Two independent breed substitutions share this body:
+--   1. Warlord monster-pool swap (v0.7.12-dev) — eligible MONSTER -> Skarrik.
+--   2. Champion roaming-elite swap (v0.7.18-dev) — roaming ELITE -> Champion.
+-- They gate on disjoint (breed, spawn_type) conditions, so at most one fires per
+-- spawn. Singleton-invariant marker: _et_spawn_queued_unit_consolidated.
+-- ============================================================
+_hook_wrap("ConflictDirector", "spawn_queued_unit", "spawn_queued_unit_swaps",
+        function(func, self, breed, boxed_spawn_pos, boxed_spawn_rot, spawn_category,
+                 spawn_animation, spawn_type, optional_data, group_data, unit_data)
+    -- 1. Warlord monster-pool swap. Fast early-out: one mod:get when off.
+    if mod:get("warlord_in_monster_pool")
+            and type(breed) == "table"
+            and _WARLORD_ELIGIBLE_MONSTERS[breed.name]
+            and rawget(_G, "Breeds") and Breeds[_WARLORD_BREED] then
+        -- Host-only: spawn_queued_unit/request_breed are server-authoritative.
+        -- Substituting on the host means the warlord replicates to clients
+        -- normally (engine network-synced loader + is_breed_loaded_on_all_peers
+        -- gate). Managers.player.is_server is a boolean field (player_manager.lua:41).
+        local pm = Managers and Managers.player
+        if pm and pm.is_server then
+            local chance = mod:get("warlord_monster_chance") or 0
+            if chance > 0 and math.random() * 100 <= chance then
+                local original = breed.name
+                breed = Breeds[_WARLORD_BREED]
+                _spawn_dbg("warlord", "monster %s -> Skarrik Spinemangler (chance=%d)", tostring(original), chance)
+            end
+        end
+    end
+
+    -- 2. Champion roaming-elite swap. Roaming spawns only (spawn_type == "roam",
+    -- set by EnemyRecycler at enemy_recycler.lua:585) so horde / event / boss
+    -- stormvermin are never touched. Host-only (server-authoritative spawn); the
+    -- Champion is a registered loadable breed so vanilla replicates it normally.
+    -- breed is re-checked here (the warlord block above may have reassigned it,
+    -- but a monster breed is never in the elite set, so the two never collide).
+    if mod:get("champion_in_elite_pool")
+            and spawn_type == "roam"
+            and type(breed) == "table"
+            and _CHAMPION_ELIGIBLE_ELITES[breed.name]
+            and rawget(_G, "Breeds") and Breeds[_CHAMPION_BREED] then
+        local pm = Managers and Managers.player
+        if pm and pm.is_server then
+            local chance = mod:get("champion_elite_chance") or 0
+            if chance > 0 and math.random() * 100 <= chance then
+                local original = breed.name
+                breed = Breeds[_CHAMPION_BREED]
+                _spawn_dbg("champion", "roaming elite %s -> Stormvermin Champion (chance=%d)", tostring(original), chance)
+            end
+        end
+    end
+
+    return func(self, breed, boxed_spawn_pos, boxed_spawn_rot, spawn_category,
+                spawn_animation, spawn_type, optional_data, group_data, unit_data)
+end)
+
+-- v0.7.14-dev: husk / open-pool warlord `intro_timer` crash guard.
+-- `breed.stagger_modifier_function` (breed_skaven_storm_vermin_warlord.lua:170)
+-- does an UNGUARDED `t < blackboard.intro_timer`. `intro_timer` is set only by the
+-- HOST's run_on_spawn (ai_breed_snippets.lua:626, on_storm_vermin_champion_spawn);
+-- the CLIENT/husk path (run_on_husk_spawn) sets no timer fields, so a peer
+-- resolving stagger on a husk warlord hits `t < nil` and crashes
+-- (do_stagger_calculation, damage_utils.lua:775). Every OTHER vanilla reader of
+-- intro_timer guards it (e.g. bt_conditions.lua:87 `blackboard.intro_timer and …`),
+-- so nil is a state vanilla already tolerates — this one callback is the oversight.
+-- Wrap the breed's data-field callback (a PLAIN function, NOT a VMF class hook, so
+-- no hook-collision) to default `intro_timer = 0` ("intro already over" — correct
+-- for an open-pool spawn that has no intro sequence) before vanilla runs. Idempotent
+-- via the `_et_intro_timer_guarded` flag; install is unconditional because it only
+-- acts when intro_timer is nil, which never happens on the scripted-arena host
+-- spawn. Reported 2026-06-20 (Skarrik Spinemangler crash, GUID f2818b56).
+do
+    local wb = rawget(_G, "Breeds") and Breeds[_WARLORD_BREED]
+    if wb and type(wb.stagger_modifier_function) == "function" and not wb._et_intro_timer_guarded then
+        local _vanilla_stagger_mod = wb.stagger_modifier_function
+        wb.stagger_modifier_function = function(stagger_type, duration, length, hit_zone_name, blackboard, ...)
+            if blackboard and blackboard.unit and blackboard.intro_timer == nil then
+                blackboard.intro_timer = 0  -- intro already elapsed -> normal stagger behavior
+            end
+            return _vanilla_stagger_mod(stagger_type, duration, length, hit_zone_name, blackboard, ...)
+        end
+        wb._et_intro_timer_guarded = true
+        mod:info("[warlord] intro_timer stagger guard installed on %s", _WARLORD_BREED)
+    end
+end
+
+-- v0.7.16-dev: open-pool warlord BTSpawnAllies "lacking spawners" crash guard.
+-- The Warlord BT runs a `BTSpawnAllies` node (`spawn_allies`,
+-- skaven_storm_vermin_warlord_behavior.lua:57-59) that calls
+-- ALLIES into the `warlord_spawners` spawner group to summon reinforcements.
+-- That group only exists in the Warlord's home arena (Stormdorf). On any other
+-- level — here a CW-injected dlc_termite_2 mission — the group is absent, so the
+-- node's spawn-point lookup raises a HARD fassert:
+--   bt_spawn_allies_action.lua:184
+--   `fassert(spawners_raw, "Level %s is lacking spawners of spawner group %s,
+--    this is necessary to use BTSpawnAllies behaviour in breed %s", …)`
+-- reached from BTSpawnAllies.enter:39 -> BTSpawnAllies.find_spawn_point:178
+-- (`spawner_system._id_lookup[spawn_group]` is nil). Reported 2026-06-20
+-- (Skarrik Spinemangler crash, GUID e87eacaa). This is the SECOND out-of-arena
+-- Warlord crash (1st = the intro_timer stagger guard above, v0.7.14).
+--
+-- `find_spawn_point` is a PLAIN function on the BTSpawnAllies table (a static
+-- method called as `BTSpawnAllies.find_spawn_point(unit, …)`, not `self:` —
+-- bt_spawn_allies_action.lua:175), so we wrap the table entry directly: NOT a
+-- VMF class hook, so no duplicate-hook concern (grep-verified: enemy_tweaker has
+-- no `mod:hook` on BTSpawnAllies / find_spawn_point). LOWEST BLAST RADIUS: the
+-- wrap only diverts from vanilla when BOTH (a) the BT's breed is the Warlord
+-- (`blackboard.breed.name == _WARLORD_BREED`) AND (b) `warlord_spawners` is
+-- genuinely missing from the LIVE spawner system (`_id_lookup[spawn_group] == nil`,
+-- the exact table+key vanilla asserts on). Every other breed's BTSpawnAllies, and
+-- the Warlord IN ITS HOME ARENA (where `warlord_spawners` IS registered, so the
+-- lookup is non-nil), fall straight through to vanilla untouched.
+--
+-- Neutralization: instead of asserting, end the spawn-allies node cleanly. We
+-- populate the minimal `data` fields the surrounding `BTSpawnAllies.enter` still
+-- touches after our return (`data.call_position` — a Vector3Box that enter:45
+-- `:store()`s into when `override_spawn_allies_call_position` is set, which the
+-- Warlord's `warlord_defensive_on_enter` hook always sets; and `data.spawn_forward`),
+-- then NIL `blackboard.spawning_allies` so `BTSpawnAllies.run` returns "done" on
+-- its first tick (run:381 `if not data then return "done"`) BEFORE `_spawn` runs.
+-- That skips `_spawn`'s `data.spawners` deref entirely (we have no real spawners
+-- to give it — a fake/empty spawners list would `#spawners`-modulo-crash _spawn at
+-- :340), so the Warlord simply does its call-allies wind-up and gets no
+-- reinforcements off-arena. We return the Warlord's own position as the
+-- call_position. Wrapped in pcall via _hook_wrap; any inner error falls through to
+-- vanilla (which, off-arena, would re-assert — but we only reach vanilla if our
+-- gate didn't match, i.e. the group exists). Idempotent install; install is
+-- unconditional because the gate is per-call.
+local _BTSpawnAllies = rawget(_G, "BTSpawnAllies")
+if _BTSpawnAllies and type(_BTSpawnAllies.find_spawn_point) == "function" then
+_hook_wrap_table(_BTSpawnAllies, "find_spawn_point",
+        "warlord_spawn_allies_no_group",
+        function(func, unit, blackboard, action, data, override_spawn_group)
+    if blackboard and blackboard.breed and blackboard.breed.name == _WARLORD_BREED then
+        local spawn_group = override_spawn_group or (action and action.optional_go_to_spawn)
+            or (action and action.spawn_group)
+        local ent = Managers and Managers.state and Managers.state.entity
+        local spawner_system = ent and ent:system("spawner_system")
+        local group_present = spawner_system and spawn_group
+            and spawner_system._id_lookup and spawner_system._id_lookup[spawn_group]
+        -- Only divert when the group is genuinely absent (off home arena) AND
+        -- vanilla has no fallback-spawner escape hatch for this action.
+        if not group_present and not (action and action.use_fallback_spawners) then
+            local self_pos = (rawget(_G, "POSITION_LOOKUP") and POSITION_LOOKUP[unit])
+                or (unit and Unit.alive(unit) and Unit.world_position(unit, 0))
+            if self_pos and data then
+                local fwd = Quaternion.forward(Unit.local_rotation(unit, 0))
+                data.spawn_forward = Vector3Box(fwd)
+                data.call_position = Vector3Box(self_pos)
+                -- Ending the node before _spawn: no spawners are dereferenced.
+                blackboard.spawning_allies = nil
+                _spawn_dbg("warlord", "off-arena Skarrik: spawner group '%s' absent -> neutralizing BTSpawnAllies (no reinforcements)",
+                    tostring(spawn_group))
+                return self_pos
+            end
+        end
+    end
+    return func(unit, blackboard, action, data, override_spawn_group)
+end)
+    mod:info("[warlord] BTSpawnAllies off-arena spawner-group guard installed")
+end
 
 -- compose_blob_horde_spawn_list returns (spawn_list, num_to_spawn) — a real
 -- list of breed names. Three things happen here in order:
@@ -1136,12 +1508,10 @@ _hook_wrap("HordeSpawner", "spawn_unit", "spawn_unit",
             breed_name = replacement
         end
     end
-    if mod:get("enable_debug_logging") then
-        _spawn_dbg("unit", "spawn_unit breed=%s%s hidden=%s",
-            tostring(breed_name),
-            (original ~= breed_name) and (" (was=" .. tostring(original) .. ")") or "",
-            tostring(hidden_spawn))
-    end
+    _spawn_dbg("unit", "spawn_unit breed=%s%s hidden=%s",
+        tostring(breed_name),
+        (original ~= breed_name) and (" (was=" .. tostring(original) .. ")") or "",
+        tostring(hidden_spawn))
     return func(self, hidden_spawn, breed_name, goal_pos, horde)
 end)
 
@@ -1162,6 +1532,7 @@ if rawget(_G, "SpawnerSystem") then
     _hook_wrap("SpawnerSystem", "spawn_horde_from_terror_event_ids",
             "spawn_horde_from_terror_event_ids", function(func, self, ...)
         local mult, is_zero = _mult("event_size_multiplier")
+        if mult and mult > 5 then mult = 5 end   -- v0.7.11-dev: cap event hordes at 5x (clamps a stale saved >5)
         if mult == 1 then
             _spawn_dbg("event", "spawn_horde_from_terror_event_ids passthrough mult=1.0")
             return func(self, ...)
@@ -1203,11 +1574,9 @@ if rawget(_G, "HordeSpawner") and type(rawget(_G, "HordeSpawner").spawn_horde) =
     _hook_wrap("HordeSpawner", "spawn_horde", "spawn_horde",
             function(func, self, side_id, composition_type, strictness, fill_type,
                      spread, horde_type, optional_data, ...)
-        if mod:get("enable_debug_logging") then
-            _spawn_dbg("event", "spawn_horde side=%s comp_type=%s horde_type=%s active_event_scale=%s",
-                tostring(side_id), tostring(composition_type), tostring(horde_type),
-                tostring(mod._et_event_breed_scale))
-        end
+        _spawn_dbg("event", "spawn_horde side=%s comp_type=%s horde_type=%s active_event_scale=%s",
+            tostring(side_id), tostring(composition_type), tostring(horde_type),
+            tostring(mod._et_event_breed_scale))
         return func(self, side_id, composition_type, strictness, fill_type,
             spread, horde_type, optional_data, ...)
     end)
@@ -1256,6 +1625,69 @@ if rawget(_G, "EnemyRecycler") then
             "inject_roaming_patrol pack_type=%s ip=%s amount=%s",
             tostring(pack_type), tostring(pack_size_ip_unit_name), tostring(amount))
         return func(self, area_position, area_rot, pack_type, pack_size_ip_unit_name, zone_data)
+    end)
+end
+
+-- ============================================================
+-- #213 double-freeze guard (BreedFreezer.try_mark_unit_for_freeze)
+-- ============================================================
+-- Symptom (Issue #213): engine "ERROR: Tried to freeze unit twice in the same
+-- frame." from vanilla scripts/managers/conflict_director/breed_freezer.lua:253,
+-- HOST-only, under EnemyRecycler.deactivate_area with our raised
+-- RecycleSettings.max_grunts override (see the ConflictDirector.update hook).
+-- Non-fatal but noisy, and it leaves the unit in a conflicting state.
+--
+-- Chain: EnemyRecycler.deactivate_area -> ConflictDirector.destroy_unit
+-- (conflict_director.lua:2403) -> register_unit_destroyed (conflict_director.lua:2371)
+-- -> BreedFreezer:try_mark_unit_for_freeze (called at conflict_director.lua:2386).
+-- The actual freeze is DEFERRED to BreedFreezer.commit_freezes, so ALIVE[unit]
+-- stays true between two same-frame destroy_unit calls on one unit; the second
+-- call re-marks the same unit, vanilla finds it already in units_to_freeze and
+-- prints the ERROR (line 253) AND -- because try_mark then returns false -- the
+-- caller falls through to mark_for_deletion(unit) (conflict_director.lua:2387),
+-- conflicting with the freeze already queued on the first call. Raising the grunt
+-- cap packs more roaming trash into recycler areas, so the window opens far more
+-- often than in vanilla.
+--
+-- Guard: replicate vanilla's OWN duplicate check (breed_freezer.lua:247-257)
+-- BEFORE calling vanilla, reading vanilla's own self.units_to_freeze[breed] list.
+-- That is the exact state vanilla checks, cleared on the exact same lifecycle
+-- (commit_freezes), so there is no frame-boundary or unit-pooling guesswork. If
+-- the unit is already queued this batch, return TRUE ("already marked / handled")
+-- so register_unit_destroyed does NOT also mark_for_deletion it -- the unit stays
+-- frozen exactly once and the double-freeze ERROR is suppressed. Fail-open: any
+-- missing state (settings / breed / list not resolvable) falls through to vanilla,
+-- so behavior is unchanged beyond suppressing the redundant second mark. No prior
+-- et hook exists on BreedFreezer (grep-verified) -- new (Class, method) pair.
+if rawget(_G, "BreedFreezer") then
+    _hook_wrap("BreedFreezer", "try_mark_unit_for_freeze", "double_freeze_guard",
+            function(func, self, breed, unit)
+        local settings = self._breed_freezer_settings
+        local breed_name = breed and breed.name
+        if settings and breed_name and settings.breeds and settings.breeds[breed_name] ~= nil then
+            local units_to_freeze = self.units_to_freeze and self.units_to_freeze[breed_name]
+            if units_to_freeze then
+                for i = 1, #units_to_freeze do
+                    if units_to_freeze[i] == unit then
+                        -- Already queued for freeze this batch: suppress the
+                        -- double-mark. Return true so the caller skips
+                        -- mark_for_deletion (conflict_director.lua:2386-2387).
+                        local n = (mod._et_freeze_suppress_this_frame or 0) + 1
+                        mod._et_freeze_suppress_this_frame = n
+                        -- printf probe (visible with mod logging off). `queued` =
+                        -- current freeze-batch depth for this breed (the meaningful
+                        -- load signal at the freeze chokepoint; the recycler area
+                        -- index is an unstable loop-local in _update_roaming_spawning,
+                        -- reshuffled by fast_array_remove, so it is not reported).
+                        _et_probe("213:freeze",
+                            "[213:freeze] suppressed unit=%s queued=%d count_this_frame=%d",
+                            tostring(breed_name), #units_to_freeze, n)
+                        return true
+                    end
+                end
+            end
+        end
+        return func(self, breed, unit)
     end)
 end
 
@@ -1412,6 +1844,11 @@ end
 if rawget(_G, "ConflictDirector") then
     _hook_wrap("ConflictDirector", "update", "spawn_pacing.update",
             function(func, self, ...)
+        -- #213: reset the per-frame double-freeze suppression counter at the top
+        -- of the CD tick. deactivate_area -> destroy_unit -> try_mark_unit_for_freeze
+        -- (the BreedFreezer guard below) all run inside this vanilla update, so a
+        -- reset here brackets one frame's worth of suppressions for the probe.
+        mod._et_freeze_suppress_this_frame = 0
         local RS = rawget(_G, "RecycleSettings")
         local original_max_grunts
         if RS then
@@ -1613,6 +2050,48 @@ end
 -- on setting change. on_disabled also restores.
 _safe("banner_apply_initial", _apply_banner_bearer_stagger_toggle)
 
+-- (3) No camera jerk on placement: vanilla
+--     ExplosionTemplates.standard_bearer_explosion.explosion catapults/pushes
+--     PLAYERS when the standard slams down (catapult_players=true,
+--     player_push_speed=10, catapult_force=7 — belladonna_equipment_settings.lua),
+--     which launches the player and jerks their camera ("forces the camera when
+--     set down"). This toggle nulls the player-knockback vectors on the explosion
+--     template so placement no longer moves the player's camera. The explosion's
+--     effect on nearby beastmen (the stagger) is unaffected. Snapshot vanilla at
+--     first apply; restore on off/disable. force_off=true forces the vanilla
+--     restore (used from on_disabled).
+local _banner_explosion_original
+local function _apply_banner_camera_jerk_toggle(force_off)
+    local ET = rawget(_G, "ExplosionTemplates")
+    local tmpl = type(ET) == "table" and ET.standard_bearer_explosion
+    local expl = type(tmpl) == "table" and tmpl.explosion
+    if type(expl) ~= "table" then return end
+
+    if _banner_explosion_original == nil then
+        _banner_explosion_original = {
+            catapult_players  = expl.catapult_players,
+            player_push_speed = expl.player_push_speed,
+            catapult_force    = expl.catapult_force,
+            catapult_force_z  = expl.catapult_force_z,
+        }
+    end
+
+    if (not force_off) and mod:get("banner_no_camera_jerk_on_placement") then
+        expl.catapult_players  = false
+        expl.player_push_speed = 0
+        expl.catapult_force    = 0
+        if expl.catapult_force_z ~= nil then expl.catapult_force_z = 0 end
+        _spawn_dbg("banner", "standard placement player-catapult disabled (no camera jerk)")
+    else
+        expl.catapult_players  = _banner_explosion_original.catapult_players
+        expl.player_push_speed = _banner_explosion_original.player_push_speed
+        expl.catapult_force    = _banner_explosion_original.catapult_force
+        expl.catapult_force_z  = _banner_explosion_original.catapult_force_z
+        _spawn_dbg("banner", "standard placement player-catapult restored to vanilla")
+    end
+end
+_safe("banner_camera_apply_initial", _apply_banner_camera_jerk_toggle)
+
 -- BeastmenStandardHealthExtension.add_damage hook — extends can_damage_banner.
 -- Vanilla body (paraphrased):
 --   can_damage_banner = attack_type == "heavy_attack" or "light_attack"
@@ -1719,6 +2198,26 @@ if rawget(_G, "AIGroupSystem") then
             local base_n = #formation
             if base_n == 0 then return end
             local target_n = _scale_count(base_n, mult)
+            -- v0.7.13-dev: HARD ROW CAP (crash fix). Each replicated row extends the
+            -- patrol along its spline by SPLINE_SPEED (2.22m -- patrol_formation_settings
+            -- .lua:20); formation_length = (rows-1) * 2.22m (ai_group_system.lua:822).
+            -- Once the formation runs past the spline/navmesh end, vanilla
+            -- create_formation_data can't place that row -- spawn_pos comes back nil
+            -- (ai_group_system.lua:897) and it builds a malformed, breed_name-less
+            -- member with an off-mesh boxed start_position. That bad member later
+            -- crashes the patrol's update_units on POSITION_LOOKUP[unit]
+            -- (Vector3_distance_squared "Vector3 expected, got userdata",
+            -- ai_group_templates_patrol.lua). Capping total rows keeps the whole
+            -- formation on-mesh. 14 rows (~29m) is ~2x a typical 6-row patrol and
+            -- stays within normal spline length; bigger patrols are an engine limit,
+            -- not something we can safely force. Reported by a co-op tester whose
+            -- patrol_size_multiplier was cranked high (2026-06-20).
+            local MAX_PATROL_ROWS = 14
+            if target_n > MAX_PATROL_ROWS then
+                _spawn_dbg_alert("patrol", "row count clamped %d -> %d (mult=%.1f) to keep the formation on-mesh; larger patrols overrun the spline and crash vanilla update_units",
+                    target_n, MAX_PATROL_ROWS, mult)
+                target_n = MAX_PATROL_ROWS
+            end
             if target_n <= base_n then return end
             replicated = {}
             -- Preserve any non-array fields on the formation table.
@@ -1952,6 +2451,7 @@ mod.on_setting_changed = function(setting_id)
         _safe("on_setting_changed:apply_preset",  _apply_horde_preset)
         _safe("on_setting_changed:apply_roaming", _apply_roaming_size_multiplier)
         _safe("on_setting_changed:apply_banner",  _apply_banner_bearer_stagger_toggle)
+        _safe("on_setting_changed:apply_banner_camera", _apply_banner_camera_jerk_toggle)
         _safe("on_setting_changed:build_swap",    _build_swap_map)
         _safe("on_setting_changed:build_faction", _build_faction_swap_map)
         _safe("on_setting_changed:reapply_active_cd", _reapply_via_active_cd)
@@ -1970,6 +2470,16 @@ mod.on_setting_changed = function(setting_id)
         end)
         mod:info("[et] settings updated (setting=%s)", tostring(setting_id))
     end
+    -- Re-apply the boss fly-disable multiplier on any setting change (spawn
+    -- paths read the data fields live). Guarded: the boss-tweaks module is
+    -- dofile'd at end-of-file, so mod._et_apply_fly_disable may be nil for the
+    -- very first on_setting_changed if it somehow fires pre-load.
+    if mod._et_apply_fly_disable then
+        _safe("on_setting_changed:fly_disable", mod._et_apply_fly_disable)
+    end
+    -- Champion elite-pool retune — outside the compositions guard (independent of
+    -- composition backup state; idempotent, only writes on a toggle-state change).
+    _safe("on_setting_changed:champion", _apply_champion_breed_overrides)
     _safe("on_setting_changed:BR", BR.on_setting_changed, setting_id)
 end
 
@@ -1980,6 +2490,7 @@ mod.on_disabled = function()
     -- had patched it. Setting read returns falsy when the toggle is off OR
     -- when the mod is disabled, so calling _apply_ does the right thing.
     _safe("on_disabled:restore_banner_bearer_stagger", _apply_banner_bearer_stagger_toggle)
+    _safe("on_disabled:restore_banner_camera", function() _apply_banner_camera_jerk_toggle(true) end)
     _breed_swap_map = {}
     _faction_swap_map = {}
     -- Note: we can't undo the in-place CurrentHordeSettings rewrite from here
@@ -1987,6 +2498,9 @@ mod.on_disabled = function()
     -- (zone change, level transition) will rebuild it from scratch — and our
     -- hook will be inactive, so no swap is re-applied. Within the same active
     -- CD, the swap remains until the next refresh.
+    -- Restore the vanilla Champion breed (mod:get returns falsy when disabled,
+    -- so _apply_ takes the restore branch).
+    _safe("on_disabled:champion", _apply_champion_breed_overrides)
     _safe("on_disabled:BR", BR.on_disabled)
     mod:echo("Enemy Tweaker disabled — compositions restored")
 end
@@ -1998,6 +2512,7 @@ mod.on_enabled = function()
         _safe("on_enabled:apply_preset",       _apply_horde_preset)
         _safe("on_enabled:apply_roaming",      _apply_roaming_size_multiplier)
         _safe("on_enabled:apply_banner",       _apply_banner_bearer_stagger_toggle)
+        _safe("on_enabled:apply_banner_camera", _apply_banner_camera_jerk_toggle)
         _safe("on_enabled:build_swap",         _build_swap_map)
         _safe("on_enabled:build_faction",      _build_faction_swap_map)
         _safe("on_enabled:reapply_active_cd",  _reapply_via_active_cd)
@@ -2016,6 +2531,8 @@ mod.on_enabled = function()
         end)
         mod:echo("Enemy Tweaker enabled")
     end
+    -- Outside the guard: re-assert the Champion retune per its saved toggle.
+    _safe("on_enabled:champion", _apply_champion_breed_overrides)
     _safe("on_enabled:BR", BR.on_enabled)
 end
 
@@ -2155,6 +2672,39 @@ mod:command("et_status", "Show current Enemy Tweaker state", function()
             end
         end
     end
+end)
+
+-- /et_reset — one-click revert of every spawn-affecting setting to its INERT
+-- (vanilla) default. Enemy Tweaker is already inert out of the box (mimics
+-- default "off" + skipped; the 4 size multipliers default 1.0; pacing values are
+-- guarded to their vanilla baselines), so this exists to clear any value a host
+-- set while exploring the menu and guarantee a clean slate. Live applied state
+-- reverts on the next level load / conflict-director switch; the values are
+-- inert immediately. Notify=true so each on_setting_changed re-apply runs.
+mod:command("et_reset", "Reset all Enemy Tweaker SPAWN settings to inert (vanilla) defaults", function()
+    local inert = {
+        -- difficulty mimic (the "horde override" dropdowns) -> off
+        mimic_horde = "off", mimic_specials = "off", mimic_pacing = "off",
+        mimic_pack_spawning = "off", mimic_intensity = "off", mimic_boss = "off",
+        -- spawn-scaling multipliers -> 1.0x
+        horde_size_multiplier = 1, event_size_multiplier = 1,
+        roaming_size_multiplier = 1, patrol_size_multiplier = 1,
+        -- spawn pacing -> vanilla baselines
+        max_grunts_override = 90, spawn_pace_multiplier = 1,
+        horde_grunt_push_threshold = 60, horde_frequency_min = 50, horde_frequency_max = 100,
+        ambients_ignore_threat = false,
+        -- breed / faction swaps + preset -> off
+        breed_swap_from = "off", breed_swap_to = "off",
+        faction_swap_skaven = "off", faction_swap_chaos = "off", faction_swap_beastmen = "off",
+        horde_preset = "off",
+    }
+    local n = 0
+    for id, val in pairs(inert) do
+        mod:set(id, val, true)
+        n = n + 1
+    end
+    mod:echo("[et] reset %d spawn settings to inert defaults — Enemy Tweaker now changes nothing until you opt in.", n)
+    mod:echo("[et] (live spawns revert on the next level load; run /et_status to confirm the settings.)")
 end)
 
 -- ============================================================
@@ -2445,6 +2995,46 @@ _rt_register("breed_swap_map_table", function()
     end
 end)
 
+_rt_register("warlord_monster_swap_hook", function()
+    -- Verifies the monster->warlord substitution hook target + breed exist.
+    if type(rawget(_G, "ConflictDirector")) ~= "table"
+            or type(ConflictDirector.spawn_queued_unit) ~= "function" then
+        return "ConflictDirector.spawn_queued_unit missing — warlord monster-swap hook target absent"
+    end
+    if not (rawget(_G, "Breeds") and Breeds.skaven_storm_vermin_warlord) then
+        return "Breeds.skaven_storm_vermin_warlord missing — Skarrik Spinemangler breed not registered"
+    end
+end)
+
+_rt_register("warlord_spawn_allies_guard", function()
+    -- v0.7.16-dev: verifies the off-arena BTSpawnAllies guard's hook target +
+    -- the spawner_system lookup field it inspects still exist.
+    if type(rawget(_G, "BTSpawnAllies")) ~= "table"
+            or type(BTSpawnAllies.find_spawn_point) ~= "function" then
+        return "BTSpawnAllies.find_spawn_point missing — warlord spawn-allies guard target absent"
+    end
+end)
+
+_rt_register("champion_elite_swap_consolidated", function()
+    -- v0.7.18-dev: the Champion roaming-elite swap SHARES the spawn_queued_unit
+    -- hook with the Warlord swap (single-hook-per-Class.method invariant). Verify
+    -- the shared hook target, the Champion breed, the eligibility table, and the
+    -- breed-override apply function are all present.
+    if type(rawget(_G, "ConflictDirector")) ~= "table"
+            or type(ConflictDirector.spawn_queued_unit) ~= "function" then
+        return "ConflictDirector.spawn_queued_unit missing — consolidated swap hook target absent"
+    end
+    if not (rawget(_G, "Breeds") and Breeds[_CHAMPION_BREED]) then
+        return "Breeds.skaven_storm_vermin_champion missing — Champion breed not registered"
+    end
+    if type(_CHAMPION_ELIGIBLE_ELITES) ~= "table" or not _CHAMPION_ELIGIBLE_ELITES.skaven_storm_vermin then
+        return "_CHAMPION_ELIGIBLE_ELITES table missing or empty"
+    end
+    if type(_apply_champion_breed_overrides) ~= "function" then
+        return "_apply_champion_breed_overrides missing"
+    end
+end)
+
 _rt_register("et_big_rebalance_uses_rawget", function()
     -- v0.5.6/.7: six call sites in `enemy_tweaker_big_rebalance.lua` (L1087,
     -- 1097, 1139, 1165, 1185, 1207) resolve hit-zone / damage-source / item
@@ -2480,13 +3070,30 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
     local ok = pcall(_dbg, "smoke test off")
     if not ok then return "_dbg raised with toggle off" end
     ok = pcall(_dbg_alert, "smoke test off")
     if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+end)
+
+_rt_register("et_rpc_schema_present", function()
+    -- VMF_RECIPES § 10 / Issue #42: the et_br_fingerprint RPC is schema-gated.
+    -- Guards against a future revert that drops the ET_RPC_SCHEMA constant or
+    -- sets it below the floor (which would silently un-gate the receiver).
+    if type(ET_RPC_SCHEMA) ~= "number" then
+        return "ET_RPC_SCHEMA not defined as number"
+    end
+    if ET_RPC_SCHEMA < 1 then return "ET_RPC_SCHEMA < 1" end
+end)
+
+_rt_register("et_freeze_probe_present", function()
+    -- Issue #213: the double-freeze guard's probe must reach engine printf so it
+    -- is visible with mod logging OFF. Guards against a revert that drops the
+    -- _et_probe helper (which would send the probe back through invisible VMF
+    -- logging) or removes the per-frame suppression counter.
+    if type(_et_probe) ~= "function" then return "_et_probe helper missing" end
+    local ok = pcall(_et_probe, "rt_smoke", "regression smoke")
+    if not ok then return "_et_probe raised on smoke call" end
 end)
 
 
@@ -2831,4 +3438,11 @@ _rt_register("localization_format_safe", function()
         end
     end
 end)
+-- Boss Mechanic Tweaks (Halescourge/Nurgloth fly-disable duration). Received
+-- from general_tweaker_dev 2026-06-20 (et_fly_disable_mult). Load-time data
+-- mutation of BreedActions / TrueFlightTemplates; no network registration, no
+-- mod:hook (so no duplicate-hook concern). Exposes mod._et_apply_fly_disable,
+-- re-applied from on_setting_changed above.
+mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")
+
 mod:info("[mem-probe] et boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_ET) / 1024)

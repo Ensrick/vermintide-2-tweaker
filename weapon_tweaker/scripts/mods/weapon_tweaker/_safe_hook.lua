@@ -83,11 +83,11 @@ Layer 3: traced_hook (v0.12.84-dev)
 `mod:traced_hook_safe(class, method, handler)` are Layer-3 wrappers that
 delegate to `safe_hook` / `safe_hook_safe` (Layer 2) AND emit structured
 `[wt:trace] event=enter|exit class=<C> method=<m> n_args=N` log lines
-gated on `mod:get("enable_debug_logging")`. When the toggle is OFF the
-trace lines never emit and the wrapper is semantically identical to
-`safe_hook` — same multi-return preservation (delegated to safe_hook's
-`select("#", ...)` + explicit-`j` unpack pattern, not re-implemented here),
-same pcall isolation, same error log prefix.
+routed through `mod:debug` (VMF output_mode_debug controls visibility).
+The wrapper is semantically identical to `safe_hook` — same multi-return
+preservation (delegated to safe_hook's `select("#", ...)` + explicit-`j`
+unpack pattern, not re-implemented here), same pcall isolation, same error
+log prefix.
 
 Adopt `traced_hook` when you want fire-confirmation + return-shape
 visibility at a specific Class.method (i.e. "did the hook fire? did it
@@ -209,19 +209,15 @@ function mod.traced_hook(self, class, method, handler)
     -- unpack-with-explicit-j contract; we just observe.
     return self:safe_hook(class, method, function(func, ...)
         local n_args = select("#", ...)
-        if mod:get("enable_debug_logging") then
-            mod:info("[wt:trace] event=enter class=%s method=%s n_args=%d",
-                tostring(class), tostring(method), n_args)
-        end
+        mod:debug("[wt:trace] event=enter class=%s method=%s n_args=%d",
+            tostring(class), tostring(method), n_args)
         -- Run the user handler. Capture every return into a packed array +
         -- explicit count so we can both log n_returned AND return the tuple
         -- intact. Same idiom safe_hook uses internally for xpcall returns.
         local function _capture(...) return select("#", ...), { ... } end
         local n_returned, results = _capture(handler(func, ...))
-        if mod:get("enable_debug_logging") then
-            mod:info("[wt:trace] event=exit  class=%s method=%s n_returned=%d",
-                tostring(class), tostring(method), n_returned)
-        end
+        mod:debug("[wt:trace] event=exit  class=%s method=%s n_returned=%d",
+            tostring(class), tostring(method), n_returned)
         -- Explicit j (n_returned) preserves nil holes — same Lua 5.1 #table
         -- quirk that motivated safe_hook's unpack(results, 2, n) pattern.
         return unpack(results, 1, n_returned)
@@ -229,7 +225,7 @@ function mod.traced_hook(self, class, method, handler)
 end
 
 -- Layer 3 analog for hook_safe (post-callback, no return-value handling).
--- Delegates to safe_hook_safe. Same trace lines, gated on the same toggle.
+-- Delegates to safe_hook_safe. Same trace lines, routed through mod:debug.
 function mod.traced_hook_safe(self, class, method, handler)
     if type(handler) ~= "function" then
         self:error("[wt:traced_hook_safe] handler for %s.%s is not a function (got %s)",
@@ -238,15 +234,11 @@ function mod.traced_hook_safe(self, class, method, handler)
     end
     return self:safe_hook_safe(class, method, function(...)
         local n_args = select("#", ...)
-        if mod:get("enable_debug_logging") then
-            mod:info("[wt:trace] event=enter class=%s method=%s n_args=%d",
-                tostring(class), tostring(method), n_args)
-        end
+        mod:debug("[wt:trace] event=enter class=%s method=%s n_args=%d",
+            tostring(class), tostring(method), n_args)
         handler(...)
-        if mod:get("enable_debug_logging") then
-            mod:info("[wt:trace] event=exit  class=%s method=%s n_returned=0",
-                tostring(class), tostring(method))
-        end
+        mod:debug("[wt:trace] event=exit  class=%s method=%s n_returned=0",
+            tostring(class), tostring(method))
     end)
 end
 

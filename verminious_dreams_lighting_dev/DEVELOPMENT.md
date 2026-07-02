@@ -65,6 +65,54 @@ Hook on `GameModeManager` (the dispatcher), not a specific game mode
 subclass, so the mod fires for vanilla adventure runs AND CW-injected
 runs.
 
+### Chaos Wastes application + curse-adjustment layer (v1.0.9-dev)
+
+vdl's three missions exist twice under different `level_id` forms:
+
+| Realm | `level_id` form | Example |
+|---|---|---|
+| Adventure | the raw base key | `dlc_termite_1` |
+| Chaos Wastes | per-theme permutation `<base>_<theme>_path<N>` | `dlc_termite_1_khorne_path1` |
+| Chaos Wastes (dup alias) | `<base>_dup<N>_<theme>_path<N>` | `dlc_termite_1_dup1_khorne_path1` |
+
+The base mission key is always a literal prefix of the CW permutation, so
+`_resolve_profile_key(raw_key)` does an exact match first (Adventure
+unchanged) then a `^<base>_` prefix scan. This is the same convention
+`chaos_wastes_tweaker`'s `adventure_base_from_level_key`
+(`chaos_wastes_tweaker_dev.lua:3317`) relies on — but **vdl has no
+dependency on ct**; it only reuses the naming pattern. Every level-key
+lookup (`local_player_game_starts`, `shading_callback`,
+`on_setting_changed`, `_profile_for_current_level[_raw]`, `vdl_level`)
+resolves to the base key, and `_CURRENT_LEVEL_KEY` caches the base.
+
+**Curse layer (Layer 2)** — folded into the existing `shading_callback`
+hook (no second hook on `CameraManager.shading_callback` — that would be a
+silent VMF no-chain drop). After Layer 1 sets vdl's base colors, if we're
+in a Deus expedition with a curse (theme ≠ `wastes`), Layer 2 reads the
+post-base ShadingEnvironment value back out and multiplies it by a
+per-deity tint, composing the curse look ON TOP of vdl's lighting.
+
+- **Curse/theme read from vanilla Deus state only:**
+  `Managers.mechanism:game_mechanism():get_deus_run_controller():get_current_node().theme`
+  / `.curse` (nil-safe via `_deus_run_controller` / `_current_deus_node`).
+  `node.theme` = the deity (`DEUS_THEME_TYPES`: khorne/nurgle/tzeentch/
+  slaanesh/belakor/wastes); `node.curse` = the granular curse mutator name
+  (e.g. `curse_belakor_totems`). vdl branches its lighting on the **theme**
+  (5 deities, each with a verifiable vanilla tint); `node.curse` is surfaced
+  to the user but not used to branch the color.
+- **Seed = vanilla `DeusThemeSettings[theme].light_probe_tint`**, read live
+  from the engine table (`deus_theme_settings.lua:9-14/23-27/46-50/66-70/
+  86-90/106-110`). No fabricated curse colors are baked into vdl source —
+  `_CURSE_ADJUST` starts empty and the user tunes per-deity via
+  `/vdl_curse*`. Tuned values bake into `_CURSE_ADJUST` (separate save key
+  `saved_curse_adjust_v1`).
+- Master toggle `enable_cw_curse_adjust` (default ON, no-op outside CW).
+
+**Open design choice:** Layer 2 multiplies vdl's base color (same idiom
+ct uses for CW skies at `chaos_wastes_tweaker_dev.lua:4100`). A lerp toward
+the vanilla curse atmosphere, or an additive overlay, are alternatives —
+swap in Layer 2 if a different composition reads better in-game.
+
 ### Light grouping (v0.4.0+)
 
 Global `vdl_light` paints every Light in the level the same colour,

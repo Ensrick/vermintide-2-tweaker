@@ -1,11 +1,11 @@
-local mod = get_mod("gt_dev")
+local mod = get_mod("enemy_tweaker")
 
 -- ============================================================================
--- Boss Mechanic Tweaks
+-- Boss Mechanic Tweaks (received from general_tweaker_dev 2026-06-20)
 -- ============================================================================
 -- Load-time data mutations that change how a boss attack behaves (not a
 -- difficulty level). Source citations into the decompiled vanilla source at
--- C:\Users\danjo\source\repos\Vermintide-2-Source-Code (verified 2026-06-17).
+-- C:\Users\danjo\source\repos\Vermintide-2-Source-Code.
 
 -- ----------------------------------------------------------------------------
 -- Halescourge / Nurgloth fly disable ("cloud of flies") duration
@@ -33,15 +33,14 @@ local mod = get_mod("gt_dev")
 -- Both blobs carry health 5, so the disable can still be ended early by killing
 -- the fly cloud -- this only scales the maximum length. We mutate the data
 -- fields at load (and on setting change); the spawn paths read them live, so no
--- per-cast hook is needed. Halescourge's missile is gated by the
--- `defensive_seeking_bomb` consideration (breed_chaos_exalted_sorcerer.lua:496),
--- i.e. situational/rare, matching its in-game feel.
+-- per-cast hook is needed (and no mod:hook is registered here -- pure data
+-- mutation, so no duplicate-hook concern with enemy_tweaker's existing hooks).
 
 local SWARM_VANILLA_DURATION = 8   -- Nurgloth melee swarm (BT action)
 local MISSILE_VANILLA_LIFE   = 10  -- seeking insect-swarm bomb (both bosses)
 
-local function _gt_apply_fly_disable()
-    local mult = mod:get("gt_fly_disable_mult")
+local function _et_apply_fly_disable()
+    local mult = mod:get("et_fly_disable_mult")
     if type(mult) ~= "number" then
         mult = 1.0
     end
@@ -51,38 +50,29 @@ local function _gt_apply_fly_disable()
     local actions = breed_actions and breed_actions.chaos_exalted_sorcerer_drachenfels
     local swarm = actions and actions.swarm_players
     if swarm then
-        swarm._gt_vanilla_duration = swarm._gt_vanilla_duration or swarm.duration or SWARM_VANILLA_DURATION
-        swarm.duration = swarm._gt_vanilla_duration * mult
+        swarm._et_vanilla_duration = swarm._et_vanilla_duration or swarm.duration or SWARM_VANILLA_DURATION
+        swarm.duration = swarm._et_vanilla_duration * mult
     end
 
     -- 2. Seeking insect-swarm bomb missile life_time (Halescourge + Nurgloth).
     local tft = rawget(_G, "TrueFlightTemplates")
     local missile = tft and tft.sorcerer_slow_bomb_missile
     if missile then
-        missile._gt_vanilla_life = missile._gt_vanilla_life or missile.attached_life_time or MISSILE_VANILLA_LIFE
-        missile.attached_life_time = missile._gt_vanilla_life * mult
+        missile._et_vanilla_life = missile._et_vanilla_life or missile.attached_life_time or MISSILE_VANILLA_LIFE
+        missile.attached_life_time = missile._et_vanilla_life * mult
     end
 
-    if mod:get("enable_debug_logging") then
-        mod:info("[gt:boss] fly-disable mult=%.2f -> Nurgloth swarm=%.1fs, seeking-bomb missile=%.1fs",
-            mult,
-            (swarm and swarm.duration) or -1,
-            (missile and missile.attached_life_time) or -1)
-    end
+    mod:debug("[et:boss] fly-disable mult=%.2f -> Nurgloth swarm=%.1fs, seeking-bomb missile=%.1fs",
+        mult,
+        (swarm and swarm.duration) or -1,
+        (missile and missile.attached_life_time) or -1)
 
     return (swarm ~= nil) or (missile ~= nil)
 end
 
--- Apply now -- BreedActions / TrueFlightTemplates are boot-time globals.
-_gt_apply_fly_disable()
+-- Expose so enemy_tweaker.lua's on_setting_changed chain can re-apply on a
+-- mid-session slider edit (the data fields are read live by the spawn paths).
+mod._et_apply_fly_disable = _et_apply_fly_disable
 
--- Re-apply when the slider changes (chain any prior on_setting_changed).
-local _gt_boss_prev_on_setting_changed = mod.on_setting_changed
-mod.on_setting_changed = function(setting_id)
-    if _gt_boss_prev_on_setting_changed then
-        _gt_boss_prev_on_setting_changed(setting_id)
-    end
-    if setting_id == "gt_fly_disable_mult" then
-        _gt_apply_fly_disable()
-    end
-end
+-- Apply now -- BreedActions / TrueFlightTemplates are boot-time globals.
+_et_apply_fly_disable()

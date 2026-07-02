@@ -1,4 +1,30 @@
-﻿# Crafting in Modded Changelog
+# Crafting in Modded Changelog
+
+## 0.8.41-dev (2026-07-01) - #174 loadout attribution probe (passive, log-only)
+
+Added a passive, default-on diagnostic probe for issue #174 (bot loadouts replaced on startup by base blacksmith items in modded realm). No gameplay change - it only writes `[174:loadout]` lines to the engine console log via `printf` so a single post-playtest log names whether cim wrote or restored any loadout slots.
+
+- New `_diag_probe.lua` - rate-limited `printf` emitter (logs on first-sight + on-change, with a startup window and a hard flood cap). Shared helper for the `[174:loadout]` channel.
+- `_capture_loadout_equip` now logs every capture attempt (career/slot/item/index/from_live) AND the `persist` gate + `restoring` state, BEFORE the master gate returns - so a gated-off no-op is still visible.
+- `_restore_modded_loadout` logs at entry whether startup restore even runs (`persist=false` = no-op = cim writes no slots, exonerating it for #174).
+
+### Files
+- `_diag_probe.lua` (new) - probe emitter.
+- `crafting_in_modded_dev.lua` - loader + 2 probe calls; `MOD_VERSION` `0.8.40-dev` -> `0.8.41-dev`.
+
+## 0.8.40-dev (2026-07-01) - Option menu localization fix + plain-English descriptions
+
+Fixed a mod-options menu display bug and rewrote every option description to read as plain, player-facing text.
+
+- **Menu display fix** - the "Ignore items from inactive mods" option had its tooltip wired so that VMF localized it twice, which made the whole English sentence show up wrapped in angle brackets in the options menu. It now displays the intended description.
+- **Rewrote all option descriptions** - every option tooltip (and the mod's own description line) is now one or two plain sentences describing what the option does in game, with no leftover developer notes, version numbers, or internal wording. Titles and defaults are unchanged.
+
+No gameplay behavior changes; menu text only.
+
+### Files
+- `crafting_in_modded_dev_data.lua` - the "Ignore items from inactive mods" tooltip now passes the localization key instead of the already-localized string (fixes the double-localize).
+- `crafting_in_modded_dev_localization.lua` - rewrote all 10 option/mod descriptions in plain English (2 sentences max, no internal jargon, ASCII only).
+- `crafting_in_modded_dev.lua` - `MOD_VERSION` `0.8.39-dev` -> `0.8.40-dev`.
 
 ## 0.8.39-dev (2026-07-01) — FIX: accessory buttons now play a sound + press feedback
 

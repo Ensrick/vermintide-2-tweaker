@@ -69,15 +69,39 @@ Cross-refs: [[project_wt_direction_2026_05_23]],
             [[feedback_1p_animations_universal]]
 ]==]
 
+local _mp_pre_backend = collectgarbage("count")  -- [mem-probe]
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
+mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total below — baseline is set after this)", (collectgarbage("count") - _mp_pre_backend) / 1024)  -- [mem-probe]
 
--- Core's Big Rebalance integration (~113 toggles + master).  The cross-mod
--- registrations list is `weapon_tweaker_big_rebalance_registrations.lua` —
--- identical content is also shipped in ct/et (diff-checked).  See
--- `_big_rebalance_extract/impl_wt_summary.md` for the full toggle inventory.
-local big_rebalance = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance")
+-- ============================================================
+-- BIG REBALANCE — ON ICE (v0.12.122-dev, 2026-06-18)
+-- ============================================================
+-- The entire Big Rebalance integration is mothballed. bt (buff_tweaker) was
+-- retired 2026-06-08, so BR's _master() gate has been permanently false — BR
+-- did NOTHING — yet weapon_tweaker_big_rebalance.lua + _big_rebalance_defs.lua
+-- still loaded their full payload (DamageProfile / Explosion / Buff defs + the
+-- ~2600-line hook installers) into the hard 1 GiB lua_heap at boot, contributing
+-- to the lua_heap OOM crashes. We stop loading them entirely. To UN-ICE: restore
+-- bt, then un-comment the dofile line below and delete the `if true then return`
+-- guard banners at the top of the two BR module files. (Reversal is purely
+-- un-commenting; both BR files are still shipped in the bundle, just dormant.)
+-- local big_rebalance = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance")  -- BR ON ICE
+local big_rebalance = { apply_all = function() end }
+-- The two true-flight formula helpers were file-scope in the BR module (NOT
+-- behind the master gate) purely so wt's /wt_regression_test markers can assert
+-- them with BR off. Preserve them on the stub so those tests stay green —
+-- gameplay is unchanged: their only callers live in the master-gated trueflight
+-- hook, which is never installed once bt is retired.
+function mod._wt_tf_projectile_speed(speed, i)
+    if i > 1 then return speed * (1 - i * 0.05) end
+    return speed
+end
+function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
+    local extra_shots_idx = num_projectiles - (num_extra_shots or 0) + 1
+    return extra_shots_idx <= i
+end
 
-local MOD_VERSION = "0.12.120-dev"
+local MOD_VERSION = "0.12.195-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -114,6 +138,9 @@ mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
 -- See feedback_no_premature_dev_gates.md.
 local _wt_dev_anim_picker = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_anim_picker")
 local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_hold_pose")
+-- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
+-- mutates the weapon template, so a restart is needed to apply/revert).
+mod:dofile("scripts/mods/weapon_tweaker/_wt_brett_sword_shield_buff")
 
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([wt] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -121,40 +148,19 @@ local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_hold_
 mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 
 -- ============================================================
--- Debug helper (v0.12.74-dev; gate renamed v0.12.81-dev) — gated
--- verbose diagnostics
+-- Debug helper — routed through VMF logging channels
 -- ============================================================
--- `enable_debug_logging` is the single user-facing toggle
--- (PROJECT_STANDARDS.md § 3.6, replaces the previous
--- `wt_debug_mode`). When OFF (default), the noisy per-spawn /
--- per-wield / per-state diagnostic lines that used to fire
--- unconditionally are suppressed. When ON, every `_dbg(...)` call
--- below routes to `mod:info` with a `[wt:dbg]` tag prefix.
---
--- Load-time status (e.g. "Weapon Tweaker: Baseline Active") and
--- warnings/errors stay on `mod:info` / `mod:warning` / `mod:error`
--- so they always print regardless of the toggle. The intent is
--- "noisy fine-grained diagnostics OFF by default; importable info
--- ON by default" — not a log-level system.
---
--- Performance note: `mod:get` is a hash-table lookup with no
--- network / disk roundtrip, so a per-call check is cheap. Inside
--- a hot loop, cache once at the top: `local D = mod:get("enable_debug_logging")`.
---
+-- Diagnostics now route through VMF; visibility controlled by VMF
+-- output_mode_debug / output_mode_warning (PROJECT_STANDARDS.md § 3.6).
 -- v0.12.83-dev: two-helper policy per PROJECT_STANDARDS.md § 3.6.
--- `_dbg` = confirmation / expected behavior — file only.
--- `_dbg_alert` = unexpected / wrong / mismatch — file AND in-game chat.
+-- `_dbg` = confirmation / expected behavior — mod:debug channel.
+-- `_dbg_alert` = unexpected / wrong / mismatch — mod:warning channel.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[wt:dbg] " .. fmt, ...)
-    end
+    mod:debug("[wt:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[wt:dbg] " .. fmt, ...)
-        mod:echo("[wt] " .. fmt, ...)
-    end
+    mod:warning("[wt:dbg] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -219,23 +225,17 @@ end
 -- so the old keys won't be re-written by the VMF settings panel.
 local function _migrate_legacy_debug_setting()
     if mod:get("wt_debug_migration_v1") then return end
-    local legacy_debug    = mod:get("debug")
-    local legacy_logging  = mod:get("enable_weapon_debug_logging")
-    local legacy_wtdebug  = mod:get("wt_debug_mode")
-    if legacy_debug or legacy_logging or legacy_wtdebug then
-        mod:set("enable_debug_logging", true)
-        mod:info("[wt] migrated legacy debug settings -> enable_debug_logging=true (debug=%s, enable_weapon_debug_logging=%s, wt_debug_mode=%s)",
-            tostring(legacy_debug), tostring(legacy_logging), tostring(legacy_wtdebug))
-    end
-    -- Clear the old keys to a definite `false`. The widgets are gone in
+    -- Clear the old debug keys to a definite `false`. The widgets are gone in
     -- _data.lua so VMF won't surface these in the panel; the residual
     -- entries are harmless but we still want a clean baseline so a
     -- future re-introduction of `debug` etc. doesn't pick up a stale
     -- truthy value from years ago. `mod:set(key, false)` is the
     -- safest cross-version write (some VMF builds treat `nil` as
-    -- "no change").
+    -- "no change"). `enable_debug_logging` itself also removed v0.12.176-dev
+    -- (diagnostics now route through VMF channels — see CHANGELOG).
     mod:set("debug", false)
     mod:set("enable_weapon_debug_logging", false)
+    mod:set("enable_debug_logging", false)
     mod:set("wt_debug_migration_v1", true)
 end
 _migrate_legacy_debug_setting()
@@ -593,6 +593,61 @@ local function _try_suffix_redirect(unit, event_name, career)
 end
 
 -- ============================================================================
+-- INVENTORY-PREVIEW WIELD POSE (3P-ONLY) — receiver-native stance correction
+-- ============================================================================
+-- v0.12.146-dev. The keep inventory previewer (MenuWorldPreviewer, derived
+-- from HeroPreviewer) fires the wield anim on the 3P body directly at spawn:
+--   wield = wield_anim_career_3p[career] or wield_anim_career[career]
+--                                        or item_template.wield_anim
+-- (world_hero_previewer.lua:1059-1066). It does NOT route that event through
+-- our `Unit.animation_event` hook's `_career_anim_redirect` path, because the
+-- preview `character_unit` has NO career_system / inventory_system extension —
+-- so `_unit_career_name(unit)` returns nil in the hook and the redirect is a
+-- no-op there (gated on a resolved career at line ~1544).
+--
+-- For cross-character ports whose `wt_wield_patches.lua` entry omits the
+-- receiver's career prefix (e.g. `two_handed_swords_wood_elf_template` lists
+-- only `wh_*`, so on a Kruber `es_*` career `wield_anim_career_3p[es_*]` is
+-- nil), the previewer falls back to the elf template's base
+-- `wield_anim = "to_2h_sword_we"` and fires it on Kruber's empire_soldier body,
+-- which does not author that elf event -> no wield transition -> the body holds
+-- its previous/idle stance (the "missing pose" symptom; no T-pose, see
+-- feedback_vt2_no_tpose_default_stance). In-mission the same event is redirected
+-- by `_career_anim_redirect.to_2h_sword_we` (alt = "to_bastard_sword" for the
+-- non-we_ branch), which is why the mission render is correct.
+--
+-- This resolver re-uses the SAME `_career_anim_redirect` data the in-mission
+-- hook uses (no parallel pose table) to compute the receiver-native wield event
+-- for one (event, career) pair, WITHOUT firing. The spawn hook below then plays
+-- it on the 3P preview body only if (a) it differs from what the engine already
+-- fired and (b) the body actually authors it. Strictly 3P: the preview world has
+-- no 1P unit, and we touch only `self.character_unit`.
+--
+-- Resolution mirrors the `_career_anim_redirect` branch in the animation_event
+-- hook (overrides -> prefix/invert -> alt), then a suffix-redirect fallback:
+local function _resolve_preview_wield_event(body, event_name, career)
+    if not event_name or not career then return nil end
+    local redir = _career_anim_redirect[event_name]
+    if redir then
+        if redir.overrides and redir.overrides[career]
+                and _safe_has_anim(body, redir.overrides[career]) then
+            return redir.overrides[career]
+        end
+        local matches_prefix = career:sub(1, #redir.prefix) == redir.prefix
+        local should_redirect = redir.invert and matches_prefix
+                                or (not redir.invert and not matches_prefix)
+        if should_redirect and _safe_has_anim(body, redir.alt) then
+            return redir.alt
+        end
+        return nil
+    end
+    -- Suffix-based fallback (e.g. *_2h_billhook -> *_polearm) for events not
+    -- listed in _career_anim_redirect. _try_suffix_redirect already verifies the
+    -- target is authored on the body before returning it.
+    return _try_suffix_redirect(body, event_name, career)
+end
+
+-- ============================================================================
 -- ANIMATION REMAPPING — READ FIRST
 -- ============================================================================
 -- 1P (first-person) animations are UNIVERSAL across all six characters and
@@ -873,6 +928,111 @@ local _3p_template_remaps = {
         wh_ = false,
         es_ = _3p_remap_billhook_to_polearm,
     },
+    -- ============================================================
+    -- v0.12.149-dev: BAKED Kruber 3P picks for 4 natively-owned weapons.
+    -- ============================================================
+    -- These four ports were tuned via the dev anim picker and CONFIRMED working
+    -- on Kruber. The picks are baked here (career-scoped) instead of the picker's
+    -- raw shared-template write — see KRUBER_3P_ANIM_DECISIONS.md "BAKED" section.
+    --
+    -- WHY CAREER-SCOPED, NOT A SHARED `anim_event_3p` WRITE: each template carries
+    -- NO authored `anim_event_3p` natively (verified: 2h_picks.lua / dual_wield_axes
+    -- .lua / 1h_swords_flaming_spell.lua / 1h_dagger_wizard.lua all have anim_event
+    -- only). So weapon_unit_extension.lua:512 (`anim_event_3p or event`) fires the
+    -- source `anim_event` string on EVERY wielder's own 3P body at :652. Writing the
+    -- shared template's `anim_event_3p` would make Bardin (pickaxe, dual axes) and
+    -- Sienna (fire sword, dagger) — the NATIVE owners — fire the Kruber-tuned string
+    -- on THEIR skeletons too, breaking the native view. The `es_` remap below
+    -- redirects ONLY for Kruber's careers; the owner prefix (`dr_`/`bw_`) is `false`
+    -- → _resolve_template_remap returns nil → native owner plays UNTOUCHED. Same
+    -- native-owned precedent as two_handed_billhooks_template above (wh_ = false).
+    --
+    -- 3P-ONLY by construction: consumed at the Unit.animation_event hook (:1513),
+    -- whose `unit` is the 3P body (1P hands unit excluded upstream). Remap keys are
+    -- the fired event = the template's source `anim_event` (no authored anim_event_3p),
+    -- which equals the picker's source-event dump verbatim. Identity entries
+    -- (attack_push->attack_push, parry_pose->parry_pose, etc.) are harmless re-fires;
+    -- a target absent on Kruber's redirected SM safely falls through (native fires).
+    --
+    -- Bardin pickaxe (dr_2h_pick) -> Empire Greathammer (wield to_2h_hammer on es_).
+    two_handed_picks_template_1 = {
+        dr_ = false, -- native (Bardin): untouched
+        es_ = {
+            attack_push                         = "attack_push",
+            attack_swing_charge_left_down       = "attack_swing_charge_left",
+            attack_swing_charge_left_down_pose  = "attack_swing_charge",
+            attack_swing_charge_right_down      = "attack_swing_charge_right",
+            attack_swing_down_left              = "attack_swing_down_left",
+            attack_swing_down_left_axe          = "attack_swing_down_left",
+            attack_swing_down_right             = "attack_swing_down_right",
+            attack_swing_down_right_axe         = "attack_swing_down_right",
+            attack_swing_left                   = "attack_swing_left",
+            attack_swing_left_diagonal          = "attack_swing_left_diagonal",
+            attack_swing_right_diagonal         = "attack_swing_heavy_right",
+            parry_pose                          = "parry_pose",
+        },
+    },
+    -- Sienna fire sword (bw_flame_sword) -> Empire 1H Sword (wield to_1h_sword on es_).
+    flaming_sword_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_push                  = "attack_push",
+            attack_swing_charge          = "attack_swing_charge_left",
+            attack_swing_charge_right    = "attack_swing_charge_right_pose",
+            attack_swing_heavy           = "attack_swing_heavy",
+            attack_swing_left            = "attack_swing_left_diagonal",
+            attack_swing_left_diagonal   = "attack_swing_left_diagonal",
+            attack_swing_right_diagonal  = "attack_swing_right_diagonal",
+            attack_swing_right_spell     = "attack_swing_right",
+            attack_swing_stab            = "attack_swing_down",
+            parry_pose                   = "parry_pose",
+        },
+        -- v0.12.188-dev: Sienna Flaming Sword on SALTZPYRE body -> 1H Falchion
+        -- (wh_-scoped redirect). attack_swing_right_spell has no Falchion twin —
+        -- mapped to the nearest event per the user's pick.
+        wh_ = {
+            attack_push                 = "attack_push",
+            attack_swing_charge         = "attack_swing_charge_left_diagonal_pose",
+            attack_swing_charge_right   = "attack_swing_charge_right_diagonal_pose",
+            attack_swing_heavy          = "attack_swing_heavy_left_diagonal",
+            attack_swing_left           = "attack_swing_left_diagonal",
+            attack_swing_left_diagonal  = "attack_swing_left_diagonal",
+            attack_swing_right_diagonal = "attack_swing_right_diagonal",
+            attack_swing_right_spell    = "attack_swing_up",
+            attack_swing_stab           = "attack_swing_down",
+            parry_pose                  = "parry_pose",
+        },
+    },
+    -- Sienna dagger (bw_dagger) -> Empire 1H Sword (wield to_1h_sword on es_).
+    one_handed_daggers_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_push                  = "attack_push",
+            attack_swing_charge          = "attack_swing_charge_left",
+            attack_swing_charge_left     = "attack_swing_charge_right_pose",
+            attack_swing_heavy           = "attack_swing_heavy",
+            attack_swing_heavy_right     = "attack_swing_heavy_right",
+            attack_swing_left            = "attack_swing_left_diagonal",
+            attack_swing_left_diagonal   = "attack_swing_left_diagonal",
+            attack_swing_right_diagonal  = "attack_swing_right_diagonal",
+            attack_swing_stab            = "attack_swing_down",
+            parry_pose                   = "parry_pose",
+        },
+        -- v0.12.188-dev: Sienna Dagger on SALTZPYRE body -> 1H Falchion
+        -- (wh_-scoped redirect).
+        wh_ = {
+            attack_push                 = "attack_push",
+            attack_swing_charge         = "attack_swing_charge_left_diagonal_pose",
+            attack_swing_charge_left    = "attack_swing_charge_right_diagonal_pose",
+            attack_swing_heavy          = "attack_swing_heavy_left_diagonal",
+            attack_swing_heavy_right    = "attack_swing_heavy_right_diagonal",
+            attack_swing_left           = "attack_swing_left_diagonal",
+            attack_swing_left_diagonal  = "attack_swing_left_diagonal",
+            attack_swing_right_diagonal = "attack_swing_right_diagonal",
+            attack_swing_stab           = "attack_swing_heavy_left_diagonal",
+            parry_pose                  = "parry_pose",
+        },
+    },
     -- Bardin's dual axes on non-Slayer careers. The wield event redirect
     -- (to_dual_axes → to_dual_hammers) loads the dual-hammers SM, but the
     -- dual_wield_axes template fires several attack events the dual-hammers
@@ -897,8 +1057,558 @@ local _3p_template_remaps = {
             attack_swing_down            = "attack_swing_stab",          -- L5 release → dual_hammers L5
             -- L1 native (attack_swing_left_diagonal) plays dual_hammers L3 swing
         }
-        return { dr_ironbreaker = t, dr_ranger = t, dr_engineer = t }
+        -- v0.12.149-dev: BAKED Kruber picks. Bardin's dual axes on Kruber render
+        -- as Empire Mace & Sword (wield to_dual_hammer_sword_es). Confirmed via the
+        -- dev anim picker; baked here career-scoped. dr_slayer keeps no entry →
+        -- native; dr_ironbreaker/ranger/engineer keep `t` above. es_ is Kruber.
+        local es_t = {
+            attack_push                       = "attack_push",
+            attack_swing_charge_diagonal      = "attack_swing_charge_left",
+            attack_swing_charge_left          = "attack_swing_charge_left",
+            attack_swing_charge_right         = "attack_swing_charge_right",
+            attack_swing_down                 = "attack_swing_down",
+            attack_swing_heavy                = "attack_swing_heavy_left_diagonal",
+            attack_swing_heavy_left_diagonal  = "attack_swing_heavy_left_diagonal",
+            attack_swing_heavy_right          = "attack_swing_heavy_right_diagonal",
+            attack_swing_left                 = "attack_swing_left_diagonal",
+            attack_swing_left_diagonal        = "attack_swing_left",
+            attack_swing_right                = "attack_swing_right_diagonal",
+            attack_swing_right_diagonal       = "attack_swing_right",
+            parry_pose                        = "parry_pose",
+        }
+        -- v0.12.188-dev: BAKED Saltzpyre picks. Bardin's dual axes on the non-WP
+        -- Saltzpyre body render as Dual Axe & Falchion (wield to_dual_axe_falchion);
+        -- wh_-scoped redirect, separate from the Kruber es_ bake above.
+        local wh_t = {
+            attack_push                      = "attack_push",
+            attack_swing_charge_diagonal     = "attack_swing_charge_down",
+            attack_swing_charge_left         = "attack_swing_charge_left",
+            attack_swing_charge_right        = "attack_swing_charge_down",
+            attack_swing_down                = "attack_swing_heavy_down",
+            attack_swing_heavy               = "attack_swing_heavy_left",
+            attack_swing_heavy_left_diagonal = "attack_swing_heavy_down",
+            attack_swing_heavy_right         = "attack_swing_heavy_down",
+            attack_swing_left                = "attack_swing_down",
+            attack_swing_left_diagonal       = "attack_swing_heavy_left",
+            attack_swing_right               = "attack_swing_right",
+            attack_swing_right_diagonal      = "attack_swing_right",
+            parry_pose                       = "parry_pose",
+        }
+        return { dr_ironbreaker = t, dr_ranger = t, dr_engineer = t, es_ = es_t, wh_ = wh_t }
     end)(),
+    -- Sienna's Mace (bw_1h_mace) -> Empire Greathammer on Kruber (wield to_2h_hammer
+    -- on es_). v0.12.150-dev: BAKED Kruber picks (confirmed via the dev anim picker).
+    -- bw_ = false → Sienna native plays UNTOUCHED; es_ is the Kruber-only redirect.
+    one_handed_hammer_wizard_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_push                         = "attack_push",
+            attack_swing_charge_left_diagonal   = "attack_swing_charge",
+            attack_swing_charge_left_pose        = "attack_swing_charge_left",
+            attack_swing_charge_right_pose       = "attack_swing_charge_right",
+            attack_swing_down                    = "attack_swing_down_left",
+            attack_swing_heavy_down              = "attack_swing_down_left",
+            attack_swing_heavy_left_up           = "attack_swing_heavy",
+            attack_swing_heavy_right_up          = "attack_swing_heavy_right",
+            attack_swing_left                    = "attack_swing_left",
+            attack_swing_left_diagonal           = "attack_swing_left_diagonal",
+            attack_swing_left_diagonal_last      = "attack_swing_left_diagonal",
+            attack_swing_right_diagonal          = "attack_swing_down_right",
+            parry_pose                           = "parry_pose",
+        },
+    },
+    -- Necromancer Ghost Scythe (bw_ghost_scythe) -> Empire Greathammer on Kruber
+    -- (wield to_2h_hammer on es_). v0.12.150-dev: BAKED Kruber picks. bw_ = false →
+    -- Sienna native plays UNTOUCHED; es_ is the Kruber-only redirect. The two scythe
+    -- specials (special_action / special_action_02) have no SET A twin — mapped to
+    -- the nearest Greathammer events per the user's picks. ALSO carries a +6 Z 3P
+    -- grip offset (es_ only) via _weapon_grip_offsets below, applied through the
+    -- DURABLE per-frame path (_DURABLE_GRIP_OFFSETS) — bumped from +0.569 in
+    -- v0.12.151-dev because the one-shot offset was stomped in-game (see OFFSETS.md).
+    staff_scythe = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_push                          = "attack_push",
+            attack_swing_charge_left             = "attack_swing_charge_left",
+            attack_swing_charge_left_diagonal    = "attack_swing_charge_left",
+            attack_swing_charge_right            = "attack_swing_charge_right",
+            attack_swing_heavy                   = "attack_swing_heavy",
+            attack_swing_heavy_left_diagonal     = "attack_swing_heavy",
+            attack_swing_heavy_right             = "attack_swing_heavy_right",
+            attack_swing_left                    = "attack_swing_left",
+            attack_swing_left_diagonal           = "attack_swing_down_left",
+            attack_swing_left_diagonal_last      = "attack_swing_down_left",
+            attack_swing_right                   = "attack_swing_heavy_right",
+            attack_swing_up_right                = "attack_swing_down_right",
+            parry_pose                           = "parry_pose",
+            special_action                       = "attack_swing_charge",
+            special_action_02                    = "attack_swing_down_left",
+        },
+    },
+    -- Warrior Priest / Saltzpyre Greathammer (wh_2h_hammer, template
+    -- two_handed_hammer_priest_template) -> Empire Greathammer on Kruber (wield
+    -- to_2h_hammer on es_). v0.12.188-dev: RE-BAKED Kruber picks (#180 — the
+    -- v0.12.151 bake animated badly on Kruber, so the weapon was moved back to
+    -- _NEEDS_ANIMS in v0.12.157 and re-tuned via the dev anim picker; these picks
+    -- are pulled verbatim from the user's persisted picks). wh_ = false →
+    -- Saltzpyre/Warrior-Priest natives play UNTOUCHED; es_ is the Kruber-only
+    -- redirect. attack_slam / attack_slam_charge have no Greathammer twin — mapped
+    -- to the nearest events per the user's picks.
+    two_handed_hammer_priest_template = {
+        wh_ = false, -- native (Saltzpyre / Warrior Priest): untouched
+        es_ = {
+            attack_push                       = "attack_push",
+            attack_slam                       = "attack_swing_left",
+            attack_slam_charge                = "attack_swing_left",
+            attack_swing_charge               = "attack_swing_charge",
+            attack_swing_charge_right         = "attack_swing_charge",
+            attack_swing_charge_right_down    = "attack_swing_charge_left",
+            attack_swing_down_right           = "attack_swing_down_left",
+            attack_swing_heavy_right          = "attack_swing_heavy",
+            attack_swing_heavy_right_diagonal = "attack_swing_down_left",
+            attack_swing_left                 = "attack_swing_left_diagonal",
+            attack_swing_up                   = "attack_swing_heavy",
+            attack_swing_up_left              = "attack_swing_down_left",
+            parry_pose                        = "parry_pose",
+            parry_pose_02                     = "parry_pose",
+        },
+    },
+    -- Bardin Outcast Engineer Coghammer (dr_2h_cog_hammer, template
+    -- two_handed_cog_hammers_template_1) -> Empire Greathammer on Kruber (wield
+    -- to_2h_hammer on es_). v0.12.188-dev: RE-BAKED Kruber picks (#182 — the
+    -- v0.12.151 3-pick identity bake animated badly on Kruber, so the weapon was
+    -- moved back to _NEEDS_ANIMS in v0.12.157 and re-tuned via the dev anim picker;
+    -- these 16 picks are pulled verbatim from the user's persisted picks). dr_ =
+    -- false → Bardin native plays UNTOUCHED; es_ is the Kruber-only redirect.
+    two_handed_cog_hammers_template_1 = {
+        dr_ = false, -- native (Bardin Outcast Engineer): untouched
+        es_ = {
+            attack_push                    = "attack_push",
+            attack_swing_charge            = "attack_swing_charge",
+            attack_swing_charge_pose       = "attack_swing_charge_left",
+            attack_swing_charge_right      = "attack_swing_charge_right",
+            attack_swing_charge_right_down = "attack_swing_charge_right",
+            attack_swing_down_left         = "attack_swing_down_left",
+            attack_swing_down_right        = "attack_swing_down_left",
+            attack_swing_heavy             = "attack_swing_down_left",
+            attack_swing_heavy_right       = "attack_swing_down_left",
+            attack_swing_left              = "attack_swing_left",
+            attack_swing_left_diagonal     = "attack_swing_left_diagonal",
+            attack_swing_right_diagonal    = "attack_swing_down_right",
+            attack_swing_up                = "attack_swing_left",
+            attack_swing_up_pose           = "attack_swing_left",
+            attack_swing_up_right          = "attack_swing_down_right",
+            parry_pose                     = "parry_pose",
+        },
+    },
+    -- ============================================================
+    -- v0.12.156-dev: BAKED Kruber 3P picks for 7 more cross-character ports.
+    -- ============================================================
+    -- Pulled verbatim from the user's persisted dev anim picker (user_settings.config,
+    -- 2026-06-25) — the last [Needs Animations] Kruber ports. Same career-scoped
+    -- pattern as the v0.12.149-.151 bakes above: native owner prefix = false (owner
+    -- plays UNTOUCHED), es_ is the Kruber-only redirect. 3P-only (consumed at the
+    -- Unit.animation_event hook). Identity entries are harmless re-fires; __unset__
+    -- picks were omitted (fall through to native).
+
+    -- Kerillian 1H Axe (we_1h_axe) -> Kruber native to_1h_axe (mostly identity).
+    we_one_hand_axe_template = {
+        we_ = false, -- native (Kerillian): untouched
+        es_ = {
+            attack_push                              = "attack_push",
+            attack_swing_charge_left_diagonal        = "attack_swing_charge_left_diagonal",
+            attack_swing_charge_left_diagonal_pose   = "attack_swing_charge_left_diagonal_pose",
+            attack_swing_charge_right_diagonal_pose  = "attack_swing_charge_right_diagonal_pose",
+            attack_swing_down                        = "attack_swing_down_right",
+            attack_swing_down_right                  = "attack_swing_down_right",
+            attack_swing_heavy_down                  = "attack_swing_heavy_down",
+            attack_swing_heavy_down_right            = "attack_swing_heavy_down_right",
+            attack_swing_left                        = "attack_swing_left_diagonal",
+            attack_swing_right                       = "attack_swing_right_diagonal",
+            attack_swing_up                          = "attack_swing_right_diagonal",
+            parry_pose                               = "parry_pose",
+        },
+    },
+    -- Kerillian Glaive (we_2h_axe) -> Empire Greathammer (wield to_2h_hammer on es_).
+    two_handed_axes_template_2 = {
+        we_ = false, -- native (Kerillian): untouched
+        es_ = {
+            attack_push                = "attack_push",
+            attack_swing_charge_down   = "attack_swing_charge_right",
+            attack_swing_charge_left   = "attack_swing_charge_right",
+            attack_swing_heavy_down    = "attack_swing_down_left",
+            attack_swing_heavy_left    = "attack_swing_heavy_right",
+            attack_swing_left          = "attack_swing_heavy",
+            attack_swing_left_diagonal = "attack_swing_heavy",
+            attack_swing_right         = "attack_swing_heavy_right",
+            parry_pose                 = "parry_pose",
+        },
+        -- v0.12.188-dev: Kerillian Glaive on SALTZPYRE body -> WP Greathammer
+        -- (two_handed_axes_template_2 source events; wh_-scoped redirect).
+        wh_ = {
+            attack_push                = "attack_push",
+            attack_swing_charge_down   = "attack_swing_charge",
+            attack_swing_charge_left   = "attack_swing_charge_right",
+            attack_swing_heavy_down    = "attack_swing_left",
+            attack_swing_heavy_left    = "attack_swing_heavy_right",
+            attack_swing_left          = "attack_swing_left",
+            attack_swing_left_diagonal = "attack_swing_down_right",
+            attack_swing_right         = "attack_swing_up",
+            parry_pose                 = "parry_pose",
+        },
+    },
+    -- Kerillian Dual Daggers (we_dual_wield_daggers) -> Empire Mace & Sword.
+    dual_wield_daggers_template_1 = {
+        we_ = false, -- native (Kerillian): untouched
+        es_ = {
+            attack_push                = "attack_push",
+            attack_swing_charge        = "attack_swing_charge_left",
+            attack_swing_charge_left   = "attack_swing_charge_right",
+            attack_swing_charge_right  = "attack_swing_charge_right",
+            attack_swing_down_left     = "attack_swing_left",
+            attack_swing_down_right    = "attack_swing_right",
+            attack_swing_heavy         = "attack_swing_heavy_left_diagonal",
+            attack_swing_heavy_down    = "attack_swing_heavy_right_diagonal",
+            attack_swing_left          = "attack_swing_left_diagonal",
+            attack_swing_right         = "attack_swing_right_diagonal",
+            parry_pose                 = "parry_pose",
+            push_stab                  = "attack_swing_down",
+        },
+        -- v0.12.188-dev: Kerillian Dual Daggers on SALTZPYRE body -> Dual Axe &
+        -- Falchion (wh_-scoped redirect).
+        wh_ = {
+            attack_push               = "attack_push",
+            attack_swing_charge       = "attack_swing_charge_down",
+            attack_swing_charge_left  = "attack_swing_charge_left",
+            attack_swing_charge_right = "attack_swing_charge_down",
+            attack_swing_down_left    = "attack_swing_heavy_down",
+            attack_swing_down_right   = "attack_swing_heavy_left",
+            attack_swing_heavy        = "attack_swing_heavy_down",
+            attack_swing_heavy_down   = "attack_swing_heavy_down",
+            attack_swing_left         = "attack_swing_heavy_down",
+            attack_swing_right        = "attack_swing_heavy_left",
+            parry_pose                = "parry_pose",
+            push_stab                 = "attack_swing_heavy_down",
+        },
+    },
+    -- Kerillian Sword & Dagger (we_dual_wield_sword_dagger) -> Empire Mace & Sword.
+    dual_wield_sword_dagger_template_1 = {
+        we_ = false, -- native (Kerillian): untouched
+        es_ = {
+            attack_push                       = "attack_push",
+            attack_swing_charge               = "attack_swing_charge_right",
+            attack_swing_charge_diagonal      = "attack_swing_charge_left",
+            attack_swing_charge_left          = "attack_swing_charge_right",
+            attack_swing_heavy                = "attack_swing_heavy_right_diagonal",
+            attack_swing_heavy_left_diagonal  = "attack_swing_heavy_left_diagonal",
+            attack_swing_left                 = "attack_swing_left_diagonal",
+            attack_swing_right                = "attack_swing_right_diagonal",
+            attack_swing_right_diagonal       = "attack_swing_right",
+            attack_swing_stab                 = "attack_swing_down",
+            parry_pose                        = "parry_pose",
+            push_stab                         = "attack_swing_down",
+        },
+        -- v0.12.188-dev: Kerillian Sword & Dagger on SALTZPYRE body -> Dual Axe &
+        -- Falchion (wh_-scoped redirect).
+        wh_ = {
+            attack_push                      = "attack_push",
+            attack_swing_charge              = "attack_swing_charge_down",
+            attack_swing_charge_diagonal     = "attack_swing_charge_left",
+            attack_swing_charge_left         = "attack_swing_charge_down",
+            attack_swing_heavy               = "attack_swing_heavy_down",
+            attack_swing_heavy_left_diagonal = "attack_swing_heavy_left",
+            attack_swing_left                = "attack_swing_heavy_down",
+            attack_swing_right               = "attack_swing_heavy_down",
+            attack_swing_right_diagonal      = "attack_swing_heavy_left",
+            attack_swing_stab                = "attack_swing_heavy_left",
+            parry_pose                       = "parry_pose",
+            push_stab                        = "attack_swing_heavy_down",
+        },
+    },
+    -- Kerillian Dual Swords (we_dual_wield_swords) -> Empire Mace & Sword.
+    dual_wield_swords_template_1 = {
+        we_ = false, -- native (Kerillian): untouched
+        es_ = {
+            attack_push                       = "attack_push",
+            attack_swing_charge_diagonal      = "attack_swing_charge_left",
+            attack_swing_charge_left          = "attack_swing_charge_right",
+            attack_swing_charge_right         = "attack_swing_charge_left",
+            attack_swing_heavy_left_diagonal  = "attack_swing_heavy_left_diagonal",
+            attack_swing_heavy_right          = "attack_swing_heavy_right_diagonal",
+            attack_swing_left                 = "attack_swing_left",
+            attack_swing_left_diagonal        = "attack_swing_left_diagonal",
+            attack_swing_right                = "attack_swing_right_diagonal",
+            attack_swing_right_diagonal       = "attack_swing_right",
+            parry_pose                        = "parry_pose",
+            push_stab                         = "attack_swing_down",
+        },
+        -- v0.12.188-dev: Kerillian Dual Swords on SALTZPYRE body -> Dual Axe &
+        -- Falchion (wh_-scoped redirect).
+        wh_ = {
+            attack_push                      = "attack_push",
+            attack_swing_charge_diagonal     = "attack_swing_charge_down",
+            attack_swing_charge_left         = "attack_swing_charge_left",
+            attack_swing_charge_right        = "attack_swing_charge_down",
+            attack_swing_heavy_left_diagonal = "attack_swing_heavy_down",
+            attack_swing_heavy_right         = "attack_swing_heavy_left",
+            attack_swing_left                = "attack_swing_heavy_down",
+            attack_swing_left_diagonal       = "attack_swing_heavy_down",
+            attack_swing_right               = "attack_swing_heavy_left",
+            attack_swing_right_diagonal      = "attack_swing_heavy_left",
+            parry_pose                       = "parry_pose",
+            push_stab                        = "attack_swing_heavy_down",
+        },
+    },
+    -- Warrior Priest Dual Skullsplitters (wh_dual_hammer) -> Empire Mace & Sword.
+    dual_wield_hammers_priest_template = {
+        wh_ = false, -- native (Saltzpyre / Warrior Priest): untouched
+        es_ = {
+            attack_push                        = "attack_push",
+            attack_swing_charge_down           = "attack_swing_charge_left",
+            attack_swing_charge_left           = "attack_swing_charge_left",
+            attack_swing_charge_right          = "attack_swing_charge_right",
+            attack_swing_down                  = "attack_swing_down",
+            attack_swing_heavy_down            = "attack_swing_heavy_left_diagonal",
+            attack_swing_heavy_left_diagonal   = "attack_swing_heavy_left_diagonal",
+            attack_swing_heavy_right_diagonal  = "attack_swing_heavy_right_diagonal",
+            attack_swing_left                  = "attack_swing_left",
+            attack_swing_left_diagonal         = "attack_swing_left_diagonal",
+            attack_swing_stab                  = "attack_swing_down",
+            attack_swing_up                    = "attack_swing_right",
+            parry_pose                         = "parry_pose",
+        },
+    },
+    -- Warrior Priest Flail & Shield (wh_flail_shield) -> Empire Mace & Shield.
+    one_handed_flail_shield_template = {
+        wh_ = false, -- native (Saltzpyre / Warrior Priest): untouched
+        es_ = {
+            attack_push                     = "attack_push",
+            attack_slam                     = "attack_swing_heavy",
+            attack_swing_charge             = "attack_swing_charge_left_pose",
+            attack_swing_charge_down_pose   = "attack_swing_charge_left_pose",
+            attack_swing_charge_pose        = "attack_swing_charge_left_pose",
+            attack_swing_down               = "attack_swing_down",
+            attack_swing_down_right         = "attack_swing_down",
+            attack_swing_heavy_down         = "attack_swing_down",
+            attack_swing_heavy_left         = "attack_swing_heavy_left",
+            attack_swing_left               = "attack_swing_heavy_left",
+            attack_swing_left_diagonal      = "attack_swing_left",
+            attack_swing_right_diagonal     = "attack_swing_right_diagonal",
+            parry_pose                      = "parry_pose",
+        },
+    },
+    -- ============================================================
+    -- v0.12.188-dev: BAKED Kruber + Saltzpyre 3P picks for the latest
+    -- [Needs Animations] cross-character ports.
+    -- ============================================================
+    -- Pulled verbatim from the user's persisted dev anim picker
+    -- (user_settings(2).config) — the Kruber Sienna-staves/Rapier batch and the
+    -- Saltzpyre melee + Sienna-staves batches. Same career-scoped pattern as the
+    -- v0.12.149-.156 bakes: native owner prefix = false (owner plays UNTOUCHED);
+    -- es_ is the Kruber-only redirect, wh_ the (non-WP) Saltzpyre redirect. The
+    -- staff/Deus templates carry BOTH es_ and wh_ because the same Sienna source
+    -- weapons are surfaced on both receiver bodies. 3P-only (consumed at the
+    -- Unit.animation_event hook). Identity entries are harmless re-fires; the
+    -- staves' `inspect_start` picks were deliberately NOT baked (the picker never
+    -- remaps inspect — 2026-06-29 user decision — and never applied them).
+
+    -- Saltzpyre's Rapier (wh_fencing_sword) -> Empire 1H Sword on Kruber (wield
+    -- to_1h_sword on es_). wh_ = false → Saltzpyre/WP native plays UNTOUCHED.
+    fencing_sword_template_1 = {
+        wh_ = false, -- native (Saltzpyre / Warrior Priest): untouched
+        es_ = {
+            attack_push                 = "attack_push",
+            attack_swing_left           = "attack_swing_left_diagonal",
+            attack_swing_right          = "attack_swing_right",
+            attack_swing_right_diagonal = "attack_swing_right_diagonal",
+            attack_swing_stab           = "attack_swing_heavy_right",
+            attack_swing_stab_charge    = "attack_swing_charge_right_pose",
+            parry_pose                  = "parry_pose",
+        },
+    },
+
+    -- Sienna's "Deus" staff (bw_deus_01) -> Empire Greathammer on Kruber (es_) /
+    -- WP Greathammer on Saltzpyre (wh_). bw_ = false → Sienna native untouched.
+    bw_deus_01_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_geiser_placed  = "attack_swing_down_right",
+            attack_geiser_start   = "attack_swing_charge_right",
+            attack_shoot_fireball = "attack_swing_down_right",
+            cooldown_start        = "parry_pose",
+        },
+        wh_ = {
+            attack_geiser_placed  = "attack_swing_heavy_right",
+            attack_geiser_start   = "attack_swing_charge_right",
+            attack_shoot_fireball = "attack_swing_up",
+            cooldown_start        = "parry_pose",
+        },
+    },
+
+    -- Sienna's Necromancy / Soulstealer staff (bw_necromancy_staff, staff_death)
+    -- -> Greathammer (es_ Kruber / wh_ Saltzpyre). bw_ = false → Sienna untouched.
+    staff_death = {
+        bw_ = false, -- native (Sienna / Necromancer): untouched
+        es_ = {
+            chain_attack    = "attack_swing_left",
+            chain_attack_02 = "attack_swing_down_right",
+            cooldown_start  = "parry_pose",
+            soul_rip_attack = "attack_swing_heavy",
+            soul_rip_pop    = "attack_swing_left",
+            soul_rip_start  = "attack_swing_heavy_right",
+        },
+        wh_ = {
+            chain_attack    = "attack_swing_heavy_right_diagonal",
+            chain_attack_02 = "attack_swing_down_right",
+            cooldown_start  = "attack_swing_heavy_right_diagonal",
+            soul_rip_attack = "attack_swing_charge_right",
+            soul_rip_pop    = "attack_swing_heavy_right",
+            soul_rip_start  = "attack_swing_charge",
+        },
+    },
+
+    -- Sienna's Beam staff (bw_skullstaff_beam) -> Greathammer (es_ / wh_).
+    staff_blast_beam_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_shoot_beam_spark   = "attack_push",
+            attack_shoot_beam_start   = "parry_pose",
+            attack_shoot_sparks       = "attack_swing_heavy",
+            cooldown_start            = "parry_pose",
+            flamethrower_charge_start = "parry_pose",
+        },
+        wh_ = {
+            attack_shoot_beam_spark   = "attack_swing_down_right",
+            attack_shoot_beam_start   = "parry_pose",
+            attack_shoot_sparks       = "attack_swing_heavy_right_diagonal",
+            cooldown_start            = "parry_pose",
+            flamethrower_charge_start = "attack_swing_charge_right",
+        },
+    },
+
+    -- Sienna's Fireball staff (bw_skullstaff_fireball) -> Greathammer (es_ / wh_).
+    staff_fireball_fireball_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_charge_fireball        = "attack_swing_charge_right",
+            attack_shoot_fireball         = "attack_swing_down_right",
+            attack_shoot_fireball_charged = "attack_swing_down_right",
+            cooldown_start                = "parry_pose",
+        },
+        wh_ = {
+            attack_charge_fireball        = "attack_swing_charge_right",
+            attack_shoot_fireball         = "attack_swing_up",
+            attack_shoot_fireball_charged = "attack_swing_heavy_right",
+            cooldown_start                = "parry_pose",
+        },
+    },
+
+    -- Sienna's Flamethrower staff (bw_skullstaff_flamethrower) -> Greathammer.
+    staff_flamethrower_template = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_shoot_flamethrower         = "attack_swing_down_left",
+            attack_shoot_flamethrower_charged = "attack_swing_down_left",
+            cooldown_start                    = "parry_pose",
+            flamethrower_charge_start         = "attack_swing_charge_left",
+        },
+        wh_ = {
+            attack_shoot_flamethrower         = "attack_swing_up",
+            attack_shoot_flamethrower_charged = "attack_swing_heavy_right",
+            cooldown_start                    = "parry_pose",
+            flamethrower_charge_start         = "attack_swing_charge_right",
+        },
+    },
+
+    -- Sienna's Geiser staff (bw_skullstaff_geiser) -> Greathammer (es_ / wh_).
+    staff_fireball_geiser_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_geiser_placed  = "attack_swing_down_right",
+            attack_geiser_start   = "attack_swing_charge_right",
+            attack_shoot_fireball = "attack_swing_down_right",
+            cooldown_start        = "parry_pose",
+        },
+        wh_ = {
+            attack_geiser_placed  = "attack_swing_heavy_right",
+            attack_geiser_start   = "attack_swing_charge_right",
+            attack_shoot_fireball = "attack_swing_up",
+            cooldown_start        = "parry_pose",
+        },
+    },
+
+    -- Sienna's Spear/Spark staff (bw_skullstaff_spear) -> Greathammer (es_ / wh_).
+    staff_spark_spear_template_1 = {
+        bw_ = false, -- native (Sienna): untouched
+        es_ = {
+            attack_charge_spear        = "attack_swing_charge_right",
+            attack_shoot_rapid_left    = "attack_swing_heavy",
+            attack_shoot_rapid_right   = "attack_swing_heavy_right",
+            attack_shoot_spear_charged = "attack_swing_down_right",
+        },
+        wh_ = {
+            attack_charge_spear        = "attack_swing_charge_right",
+            attack_shoot_rapid_left    = "attack_swing_down_right",
+            attack_shoot_rapid_right   = "attack_swing_heavy_right_diagonal",
+            attack_shoot_spear_charged = "attack_swing_heavy_right",
+            cooldown_start             = "parry_pose",
+        },
+    },
+
+    -- Kruber's Empire Mace & Sword (es_dual_wield_hammer_sword) on the SALTZPYRE
+    -- body -> Dual Axe & Falchion (wh_). es_ = false → Kruber native untouched.
+    dual_wield_hammer_sword_template = {
+        es_ = false, -- native (Kruber): untouched
+        wh_ = {
+            attack_push                       = "attack_push",
+            attack_swing_charge_left          = "attack_swing_charge_left",
+            attack_swing_charge_right         = "attack_swing_charge_down",
+            attack_swing_down                 = "attack_swing_right",
+            attack_swing_heavy_left_diagonal  = "attack_swing_heavy_left",
+            attack_swing_heavy_right_diagonal = "attack_swing_heavy_down",
+            attack_swing_left                 = "attack_swing_right_diagonal",
+            attack_swing_left_diagonal        = "attack_swing_down_left",
+            attack_swing_right                = "attack_swing_right",
+            attack_swing_right_diagonal       = "attack_swing_left_diagonal",
+            parry_pose                        = "parry_pose",
+        },
+    },
+
+    -- Kruber's Halberd (es_halberd) on the SALTZPYRE body -> Billhook (wh_).
+    -- es_ = false → Kruber native untouched.
+    two_handed_halberds_template_1 = {
+        es_ = false, -- native (Kruber): untouched
+        wh_ = {
+            attack_push               = "attack_push",
+            attack_swing_charge_left  = "attack_swing_charge_stab",
+            attack_swing_charge_right = "attack_swing_charge_stab",
+            attack_swing_down_left    = "attack_swing_left_diagonal",
+            attack_swing_down_right   = "attack_swing_down",
+            attack_swing_heavy        = "attack_swing_heavy_stab",
+            attack_swing_heavy_right  = "attack_swing_heavy_down",
+            attack_swing_right        = "attack_swing_stab",
+            parry_pose                = "parry_pose",
+        },
+    },
+
+    -- Kerillian's Spear (we_spear) on the SALTZPYRE body -> Billhook (wh_).
+    -- we_ = false → Kerillian native untouched.
+    two_handed_spears_elf_template_1 = {
+        we_ = false, -- native (Kerillian): untouched
+        wh_ = {
+            attack_push                = "attack_push",
+            attack_swing_charge_left   = "attack_swing_charge_stab",
+            attack_swing_charge_right  = "attack_swing_charge_down",
+            attack_swing_down_left     = "attack_swing_left_diagonal",
+            attack_swing_down_left_axe = "attack_swing_stab",
+            attack_swing_down_right    = "attack_swing_stab",
+            attack_swing_heavy         = "attack_swing_heavy_down",
+            attack_swing_heavy_right   = "attack_swing_heavy_stab",
+            attack_swing_right         = "attack_swing_stab",
+            parry_pose                 = "parry_pose",
+            push_stab                  = "attack_swing_left_diagonal",
+        },
+    },
 }
 
 local function _resolve_template_remap(template_name, career)
@@ -1244,6 +1954,58 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
     local career = _unit_career_name(unit) or (is_local and _local_career_name()) or nil
     local state = _state_for(unit)
 
+    -- ============================================================
+    -- [wt:play] dev-picker play-path trace (v0.12.145-dev) — LOGGING ONLY.
+    -- ============================================================
+    -- Diagnose-before-mitigate: prove WHERE a picked anim_event_3p is lost
+    -- between the menu write and the engine. Scoped tightly so it stays
+    -- readable: only fires for the LOCAL 3P body, only while wielding one of the
+    -- picker's flagged-weapon templates, only for combat events (attack_/push_/
+    -- parry_), and only when the dev picker toggle is ON.
+    --
+    -- HOW IT WORKS: when the gate is active we (a) log the event the ENGINE READ
+    -- (event_name as start_action passed it — this is the live
+    -- current_action_settings.anim_event_3p the picker mutated, OR the template
+    -- default if the pick didn't take), and (b) wrap `func` so EVERY downstream
+    -- call in this hook logs the FINAL event actually handed to the engine. If
+    -- the funnel renames the picked event, the FINAL line differs from the READ
+    -- line and names the rename — that's the override hypothesis, confirmed or
+    -- refuted per event. (The one FORCE path that calls `_original_animation_event`
+    -- directly is gated on state.remap == spear_to_billhook, which never applies
+    -- to any picker weapon, so wrapping only `func` is complete coverage here.)
+    if is_local and event_name and state and state.template
+        and (event_name:sub(1, 7) == "attack_" or event_name:sub(1, 5) == "push_" or event_name:sub(1, 6) == "parry_")
+        and mod:get("enable_dev_anim_picker")
+        and _wt_dev_anim_picker and _wt_dev_anim_picker.is_picker_template
+        and _wt_dev_anim_picker.is_picker_template(state.template) then
+        -- On the 3P body the engine fires the picked anim_event_3p VALUE directly
+        -- (weapon_unit_extension.lua:512). So `event_name` here SHOULD be one of
+        -- the picker's set 3P values if the pick took. is_picked_3p tells us
+        -- whether the read event is a picked value (pick reached the engine) or a
+        -- template default (pick lost UPSTREAM — apply n==0, wrong template, or
+        -- never written). The live_3p_map dump shows what the picks currently are.
+        local is_picked_3p = _wt_dev_anim_picker.is_picked_3p_value(state.template, event_name)
+        local map = _wt_dev_anim_picker.live_3p_map(state.template)
+        local map_parts = {}
+        for src, val in pairs(map) do map_parts[#map_parts + 1] = tostring(src) .. "->" .. tostring(val) end
+        table.sort(map_parts)
+        mod:info("[wt:play] READ event=%s tmpl=%s key=%s career=%s is_picked_3p_value=%s has_anim=%s picks_set={%s}",
+            tostring(event_name), tostring(state.template), tostring(state.key),
+            tostring(career), tostring(is_picked_3p), tostring(_safe_has_anim(unit, event_name)),
+            table.concat(map_parts, ","))
+        local _wt_play_orig_func = func
+        func = function(u, ev, ...)
+            -- Logs the FINAL event the engine receives AFTER wt's funnel. If it
+            -- differs from the read event, wt renamed it — the override
+            -- hypothesis, confirmed/refuted per swing.
+            mod:info("[wt:play] FINAL event=%s (read was %s)%s has_anim=%s",
+                tostring(ev), tostring(event_name),
+                (tostring(ev) ~= tostring(event_name)) and " <<RENAMED BY FUNNEL>>" or " (unchanged)",
+                tostring(_safe_has_anim(u, ev)))
+            return _wt_play_orig_func(u, ev, ...)
+        end
+    end
+
     if _log_anims then
         local _al_tag = is_local and "3P-body" or "3P-husk"
         local is_combat = event_name:sub(1, 7) == "attack_" or event_name:sub(1, 5) == "push_" or event_name:sub(1, 3) == "to_" or event_name:sub(1, 6) == "parry_"
@@ -1579,23 +2341,20 @@ mod:traced_hook("SimpleInventoryExtension", "wield", function(func, self, slot_n
             -- (the per-template default 3P clip names). The actual 3P
             -- skeleton path is derived from career_name via the profile
             -- (e.g. `wh_` -> witch_hunter base, `es_` -> empire_soldier).
-            local D = mod:get("enable_debug_logging")
-            if D then
-                local s = _state_for(self._unit)
-                local equipment = self._equipment or self.equipment
-                local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
-                local item_data = slot_data and slot_data.item_data
-                local item_key = (item_data and (item_data.key or item_data.name)) or "?"
-                local template = (s and s.template) or (item_data and item_data.template) or "?"
-                local tmpl_tbl = Weapons and Weapons[template]
-                local anim_event_3p = (tmpl_tbl and tmpl_tbl.anim_event_3p) or "?"
-                local wield_anim_3p = (tmpl_tbl and tmpl_tbl.wield_anim_3p) or "?"
-                local career_name = self._career_name or "?"
-                _dbg("[wield] slot=%s career=%s key=%s template=%s anim_event_3p=%s wield_anim_3p=%s",
-                    tostring(slot_name), tostring(career_name),
-                    tostring(item_key), tostring(template),
-                    tostring(anim_event_3p), tostring(wield_anim_3p))
-            end
+            local s = _state_for(self._unit)
+            local equipment = self._equipment or self.equipment
+            local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
+            local item_data = slot_data and slot_data.item_data
+            local item_key = (item_data and (item_data.key or item_data.name)) or "?"
+            local template = (s and s.template) or (item_data and item_data.template) or "?"
+            local tmpl_tbl = Weapons and Weapons[template]
+            local anim_event_3p = (tmpl_tbl and tmpl_tbl.anim_event_3p) or "?"
+            local wield_anim_3p = (tmpl_tbl and tmpl_tbl.wield_anim_3p) or "?"
+            local career_name = self._career_name or "?"
+            _dbg("[wield] slot=%s career=%s key=%s template=%s anim_event_3p=%s wield_anim_3p=%s",
+                tostring(slot_name), tostring(career_name),
+                tostring(item_key), tostring(template),
+                tostring(anim_event_3p), tostring(wield_anim_3p))
         end
     end
     return func(self, slot_name, ...)
@@ -1727,6 +2486,121 @@ local _weapon_grip_offsets = {
     wh_hammer_shield = { es_ = {0, 0, 0.15, hand = "right"} },
     es_2h_sword    = { we_ = {0, 0, -0.085} },
     wh_2h_sword    = { we_ = {0, 0, -0.085} },
+    -- Necromancer Ghost Scythe ported to Kruber (es_) renders as Greathammer in 3P
+    -- (staff_scythe remap above) and needs the grip dropped +0.6 Z so Kruber's
+    -- hands sit on the haft. Moved to the DURABLE per-frame re-apply path (see
+    -- _DURABLE_GRIP_OFFSETS / OFFSETS.md) because a one-shot create_equipment
+    -- write was STOMPED every animation tick in-game (preview-OK / in-game-wrong);
+    -- the scythe now re-applies its offset every frame from mod.update, exactly
+    -- like the dev hold-pose tool does. Career-scoped to es_ ONLY (Sienna's bw_*
+    -- careers find no matching prefix -> offset stays nil -> early return, so
+    -- Sienna's native scythe grip is NOT moved). 3P-ONLY by construction (both
+    -- _offset_weapon_units and the durable re-apply write only *_unit_3p, never
+    -- 1P). See _DURABLE_GRIP_OFFSETS just below for the why.
+    bw_ghost_scythe = { es_ = {0, 0, 0.6} },
+    -- Elven 2H Axe/Glaive -> Greathammer on Kruber; durable, es_-only, Z grip.
+    -- Same durable per-frame re-apply as the scythe (see _DURABLE_GRIP_OFFSETS):
+    -- a one-shot set_local_position is stomped every anim tick in-game (survives
+    -- preview, reverts in gameplay). es_ ONLY (Kruber); other careers / native
+    -- wielders of two_handed_axes_template_2 find no prefix -> offset nil -> early
+    -- return, so they're untouched. 3P-ONLY by construction. (+0.285 Z.)
+    we_2h_axe = { es_ = {0, 0, 0.285} },
+    -- Sienna Flamestorm Staff (bw_skullstaff_flamethrower) ported to Kruber (es_)
+    -- renders as Greathammer in 3P (staff anims redirect, picker SET A) and needs
+    -- the grip dropped +0.6 Z so Kruber's hands seat on the staff haft — same value
+    -- and durable per-frame re-apply as the scythe (a one-shot write is stomped
+    -- every anim tick in-game). es_ ONLY (Kruber); Sienna's bw_* careers find no
+    -- prefix -> offset nil -> early return, so the native Sienna grip is untouched.
+    -- 3P-ONLY by construction. (User-tuned +0.6 Z, 2026-06-27.)
+    bw_skullstaff_flamethrower = { es_ = {0, 0, 0.6} },
+    -- The remaining Sienna staves ported to Kruber (es_) ALSO render as Greathammer
+    -- in 3P (picker SET A) and need the SAME +0.6 Z grip drop so Kruber's hands seat
+    -- on the staff haft (identical to the Flamestorm Staff above; user-directed
+    -- 2026-06-29 "all sienna staves on kruber that haven't been given that"). es_ ONLY
+    -- (Kruber); Sienna's bw_* careers find no prefix -> offset nil -> native grip
+    -- untouched. DURABLE (large offset is stomped each anim tick in-game — all listed
+    -- in _DURABLE_GRIP_OFFSETS). 3P + inventory-preview ONLY by construction (both
+    -- paths read this table and write only *_unit_3p; 1P is never touched).
+    bw_skullstaff_beam     = { es_ = {0, 0, 0.6} },
+    bw_skullstaff_fireball = { es_ = {0, 0, 0.6} },
+    bw_skullstaff_geiser   = { es_ = {0, 0, 0.6} },
+    bw_skullstaff_spear    = { es_ = {0, 0, 0.6} },
+    bw_necromancy_staff    = { es_ = {0, 0, 0.6} },
+    bw_deus_01             = { es_ = {0, 0, 0.6} },
+    -- Bretonnian Longsword (es_bastard_sword) on Saltzpyre (wh_) needs the grip
+    -- dropped +0.08 Z so it seats in Saltzpyre's hands. wh_-ONLY (Saltzpyre); Kruber
+    -- (es_) and other wielders of bastard_sword_template find no prefix -> offset nil
+    -- -> untouched. DURABLE: node 0 is reset every anim tick, so a one-shot is stomped
+    -- in-game (the value was user-tuned via the per-frame hold-pose tuner). 3P-only.
+    -- (User-tuned +0.08 Z, 2026-06-28.)
+    es_bastard_sword = { wh_ = {0, 0, 0.08} },
+    -- NOTE: this table is the SINGLE SOURCE OF TRUTH for every 3P grip nudge
+    -- (preview AND in-game read it). Two application paths consume it:
+    --   * SMALL static nudges (the 0.05-0.15 entries above): a one-shot additive
+    --     write at create_equipment / preview spawn via _offset_weapon_units. Fine
+    --     for small deltas the engine's per-frame attachment re-apply doesn't
+    --     visibly disturb.
+    --   * STOMP-PRONE large offsets (the scythe): ALSO listed in
+    --     _DURABLE_GRIP_OFFSETS below, which re-applies the SAME value every frame
+    --     in-game so the engine's per-tick canonical-pose reset can't erase it.
+    -- NEVER bake a tuned hold-pose value as a raw
+    -- unit_attachment_node_linking.third_person write on a SHARED template
+    -- (staff_scythe is shared with Sienna) — that breaks the native wielder. The
+    -- durable re-apply is career-gated to es_ instead. (es_handgun-on-Saltzpyre
+    -- offset was mis-baked into a linking table in v0.12.135 and reverted in .136.)
+    -- Full rationale + the preview-OK/in-game-wrong post-mortem: OFFSETS.md.
+}
+
+-- ===========================================================================
+-- DURABLE (per-frame re-applied) 3P grip offsets.    [OFFSETS.md]
+-- ===========================================================================
+-- WHY THIS EXISTS (the preview-OK / in-game-wrong failure):
+--   A one-shot Unit.set_local_position written at create_equipment time SURVIVES
+--   in the inventory MODEL PREVIEW (MenuWorldPreviewer poses the weapon once and
+--   does NOT re-drive node 0 every frame) but is STOMPED in-game: the running
+--   animation system re-applies each weapon unit's canonical attachment-node pose
+--   on the very next tick, resetting node 0 and erasing our offset. This is
+--   source-confirmed by wt_dev_hold_pose.lua:16-21 ("a one-shot set_local_pose is
+--   overwritten on the very next animation tick ... re-writing the local pose
+--   every frame keeps the value visible"). So a large grip drop (the +6 scythe)
+--   looked right in preview and reverted to raw position in-game.
+--
+-- HOW THE DURABLE PATH WORKS:
+--   For weapon_keys listed here, _reapply_durable_grip_offsets() runs every frame
+--   (driven from weapon_tweaker_backend.lua's mod.update) on the LOCAL player's
+--   wielded 3P weapon unit(s). It is ADDITIVE-from-canonical: it reads the
+--   freshly-reset canonical local_position the engine just wrote this tick and
+--   adds the offset, so the result is stable frame-to-frame and NEVER compounds
+--   (the read-and-add is safe ONLY because the engine resets node 0 each tick;
+--   that reset is the very thing that makes a one-shot fail). This matches the
+--   ADDITIVE semantics of the one-shot preview path (current + pos), so the SAME
+--   value in _weapon_grip_offsets means the same thing in both views.
+--
+-- INVARIANTS (do not break):
+--   * 3P-ONLY: writes only right_unit_3p / left_unit_3p. NEVER 1P (universal
+--     first person, the user's hard rule — feedback_cross_char_transforms_3p_only).
+--   * CAREER-ONLY: gated on the same prefix match as _offset_weapon_units, so
+--     only the receiving career (es_ = Kruber) is moved; the native wielder
+--     (Sienna's bw_*) finds no prefix and is untouched.
+--   * LOCAL player only (owner-authoritative; husks re-pose from their own host
+--     anyway). Keeps the per-frame cost to one unit.
+--   * SINGLE SOURCE OF TRUTH: the offset VALUE lives in _weapon_grip_offsets, not
+--     here. This table is just the membership set of keys that need re-applying.
+--
+-- To add a weapon to the durable path: add its key = true here AND its offset to
+-- _weapon_grip_offsets above. To remove: delete from here (the one-shot path in
+-- _offset_weapon_units still applies the value at spawn for preview).
+local _DURABLE_GRIP_OFFSETS = {
+    bw_ghost_scythe = true,
+    we_2h_axe       = true,  -- Elven 2H Axe/Glaive on Kruber (+0.285 Z, es_-only)
+    bw_skullstaff_flamethrower = true,  -- Sienna Flamestorm Staff on Kruber (+0.6 Z, es_-only)
+    bw_skullstaff_beam         = true,  -- Sienna Beam Staff on Kruber (+0.6 Z, es_-only)
+    bw_skullstaff_fireball     = true,  -- Sienna Fireball Staff on Kruber (+0.6 Z, es_-only)
+    bw_skullstaff_geiser       = true,  -- Sienna Conflagration Staff on Kruber (+0.6 Z, es_-only)
+    bw_skullstaff_spear        = true,  -- Sienna Bolt Staff on Kruber (+0.6 Z, es_-only)
+    bw_necromancy_staff        = true,  -- Sienna Soulstealer Staff on Kruber (+0.6 Z, es_-only)
+    bw_deus_01                 = true,  -- Sienna Coruscation Staff on Kruber (+0.6 Z, es_-only)
+    es_bastard_sword           = true,  -- Bretonnian Longsword on Saltzpyre (+0.08 Z, wh_-only)
 }
 
 local function _offset_weapon_units(slot_data, weapon_key, career_name)
@@ -1746,13 +2620,20 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
 
     local pos = Vector3(offset[1], offset[2], offset[3])
     local hand = offset.hand
+    -- v0.12.136-dev: 3P-ONLY. Grip offsets must NEVER move the 1P units
+    -- (right_unit_1p / left_unit_1p). First person is universal across all six
+    -- characters and renders correctly by default — offsetting it visibly breaks
+    -- the first-person view (the user's hard rule: never touch 1P unless asked).
+    -- The *_1p fields that used to be in these lists were a latent bug: EVERY
+    -- grip offset was silently shifting the 1P weapon too. Cross-character grip
+    -- correction is a 3P-skeleton concern only.
     local unit_fields
     if hand == "right" then
-        unit_fields = { "right_unit_1p", "right_unit_3p" }
+        unit_fields = { "right_unit_3p" }
     elseif hand == "left" then
-        unit_fields = { "left_unit_1p", "left_unit_3p" }
+        unit_fields = { "left_unit_3p" }
     else
-        unit_fields = { "left_unit_1p", "right_unit_1p", "left_unit_3p", "right_unit_3p" }
+        unit_fields = { "left_unit_3p", "right_unit_3p" }
     end
     for _, field in ipairs(unit_fields) do
         local unit = slot_data[field]
@@ -1772,6 +2653,89 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
         end
     end
     _dbg("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(hand or "both"))
+end
+
+-- Resolve the career-prefix-matched offset entry for (weapon_key, career_name)
+-- from _weapon_grip_offsets. Returns the {x, y, z[, hand]} array or nil. Shared
+-- by the one-shot path above and the durable per-frame re-apply below so both
+-- read the SAME single source of truth with identical prefix-match semantics.
+local function _resolve_grip_offset(weapon_key, career_name)
+    if not weapon_key or not career_name then return nil end
+    local overrides = _weapon_grip_offsets[weapon_key]
+    if not overrides then return nil end
+    for prefix, off in pairs(overrides) do
+        if career_name:sub(1, #prefix) == prefix then
+            return off
+        end
+    end
+    return nil
+end
+
+-- DURABLE per-frame grip-offset re-apply (see _DURABLE_GRIP_OFFSETS header).
+-- Called every frame from weapon_tweaker_backend.lua's mod.update. Re-applies
+-- the scythe's (and any future _DURABLE_GRIP_OFFSETS member's) grip offset to
+-- the LOCAL player's wielded 3P weapon unit(s) so the engine's per-tick
+-- canonical-pose reset can't stomp it. 3P-ONLY, career-gated, additive-from-
+-- canonical (read the freshly-reset local_position + add offset = stable, never
+-- compounds — see header). Exposed on the mod table because the backend module
+-- is a separate dofile scope (mod:dofile is NOT a singleton —
+-- reference_vmf_dofile_not_singleton); the function closes over the file-scope
+-- _weapon_grip_offsets / _DURABLE_GRIP_OFFSETS here, the single source of truth.
+function mod._reapply_durable_grip_offsets()
+    if not next(_DURABLE_GRIP_OFFSETS) then return end
+
+    local career_name = _local_career_name()
+    if not career_name then return end
+
+    local pm = Managers and Managers.player
+    local lp = pm and pm.local_player and pm:local_player()
+    local punit = lp and lp.player_unit
+    if not punit then return end
+
+    local inv = ScriptUnit and ScriptUnit.has_extension
+        and ScriptUnit.has_extension(punit, "inventory_system")
+    if not inv then return end
+
+    -- Identify the wielded weapon key. Only re-apply if it's a durable member;
+    -- otherwise this is a cheap early-out on the common (non-scythe) frame.
+    local slot_name = inv.get_wielded_slot_name and inv:get_wielded_slot_name()
+    if not slot_name then return end
+    local equipment = inv._equipment
+    if not equipment then return end
+    local slot_data = equipment.slots and equipment.slots[slot_name]
+    local weapon_key = slot_data and (slot_data.id
+        or (slot_data.item_data and slot_data.item_data.key))
+    if not weapon_key or not _DURABLE_GRIP_OFFSETS[weapon_key] then return end
+
+    local offset = _resolve_grip_offset(weapon_key, career_name)
+    if not offset then return end  -- career not in this weapon's offset map (e.g. Sienna native)
+
+    local pos = Vector3(offset[1], offset[2], offset[3])
+    local hand = offset.hand
+    -- 3P-ONLY (never *_unit_1p). The currently-wielded 3P units are the live
+    -- ones the engine is re-posing each frame, so these are exactly what gets
+    -- stomped without this re-apply.
+    local right_3p = equipment.right_hand_wielded_unit_3p
+    local left_3p  = equipment.left_hand_wielded_unit_3p
+    local function apply(unit)
+        if unit and Unit.alive and Unit.alive(unit) then
+            -- ADDITIVE-from-canonical: read the engine's just-reset local pos and
+            -- add the offset. Stable frame-to-frame; never compounds because the
+            -- engine reset zeroes our prior write before we read.
+            local ok_cur, current = pcall(Unit.local_position, unit, 0)
+            if ok_cur and current then
+                pcall(Unit.set_local_position, unit, 0, current + pos)
+            end
+        end
+    end
+    if hand == "right" then
+        apply(right_3p)
+    elseif hand == "left" then
+        apply(left_3p)
+    else
+        apply(right_3p)
+        apply(left_3p)
+    end
 end
 
 -- CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
@@ -1949,6 +2913,127 @@ local function _force_load_sp_crossbow_3p_units()
 end
 
 _force_load_sp_crossbow_3p_units()
+
+-- ============================================================
+-- Cross-character FIRE / EXPLOSION particle fix (v0.12.159-dev)
+-- ============================================================
+-- CRASH (nicho, 2026-06-25, host): a non-native career (Foot Knight `es_knight`)
+-- equipping a Bardin/Sienna fire weapon via wt's unlock map and firing it CTDs
+-- the host —
+--   <<Lua Error>> WorldApi create_particles failed,
+--   Particle effect '#ID[35874310a062bfd8]' not loaded
+--   (Assertion c_api_world.cpp:384; DamageUtils.create_explosion ->
+--    World.create_particles, off the charged drakefire shot's timed AOE).
+--
+-- ROOT CAUSE: the drakefire/fireball AOE explosion particle
+-- `fx/wpnfx_drake_pistols_projectile_impact` (murmur64A = 35874310a062bfd8) is
+-- referenced by STRING in ExplosionTemplates, so it is NOT a build-time
+-- dependency of the weapon's own unit bundle (the unit loads on equip, the
+-- particle does not). It is instead bundled into the CAREER packages of the
+-- careers that natively wield these weapons. A cross-character wielder loads the
+-- weapon unit but never that career package, so the resource manager can't get
+-- the particle at detonation -> C-level assert (bypasses pcall, same family as
+-- the brace/crossbow unit force-loads above and the LA force-load crash class,
+-- reference_vt2_la_package_force_load_crash).
+--
+-- FIX: force-load ONE vanilla, non-DLC Sienna career package at mod init. Verified
+-- via vt2_bundle_unpacker that `resource_packages/careers/bw_unchained`
+-- (= bundle 2f35c9d9dcee1fab) contains EVERY common cross-character fire
+-- particle at once:
+--   35874310a062bfd8  fx/wpnfx_drake_pistols_projectile_impact  Drake Pistols AOE + Fireball staff basic
+--   db4255f05669df28  fx/wpnfx_fireball_charged_impact_remap    Fireball staff charged
+--   9ce03ee5712aa07d  fx/wpnfx_fireball_charged_impact          charged-fire variants
+--   fe6eaa73e7448531  fx/wpnfx_flamethrower_01                  Drakegun + Flamethrower staff
+-- so one ~10 MB load makes them all resident for every wt user. Vanilla package
+-- = Steam-verified complete bundle, so force-loading a non-resident vanilla
+-- package is safe (no missing-member C-fatal). This is resource-pool memory,
+-- NOT the Lua heap (reference_vt2_lua_heap_1gib_crash is heap-side). Async load
+-- fires at mod init, long before any equip/fire path (mirrors the unit loads
+-- above). (Follow-up: the Sienna flaming-flail particle 0df4b41f lives in the
+-- `anvil` DLC package — DLC-gated, lower-traffic port — left for a later batch.)
+local _FIRE_FX_CAREER_PACKAGE = "resource_packages/careers/bw_unchained"
+
+local function _force_load_fire_explosion_packages()
+    if not (Managers and Managers.package) then return end
+    local ok, err = pcall(function()
+        Managers.package:load(_FIRE_FX_CAREER_PACKAGE, "wt_fire_fx_particles", nil, true, true)
+    end)
+    if ok then
+        mod:info("[wt fire-fx] force-loaded fire/explosion particle package: %s", _FIRE_FX_CAREER_PACKAGE)
+    else
+        mod:warning("[wt fire-fx] failed to force-load %s: %s", _FIRE_FX_CAREER_PACKAGE, tostring(err))
+    end
+end
+
+_force_load_fire_explosion_packages()
+
+-- The Necromancy / Soulstealer Staff (bw_necromancy_staff, template staff_death) is
+-- a NECROMANCER-exclusive weapon; its particles — e.g. the soul_rip
+-- `fx/wpnfx_necromancer_skullstaff_anticipation` (murmur64A 418bb6de77c32555) — live
+-- in the `bw_necromancer` career package, NOT in bw_unchained. So the bw_unchained
+-- load above does NOT cover it: a cross-character wielder firing soul_rip hit the same
+-- create_particles C-fatal as the drakefire crash (GH #128) on this particle (nicho,
+-- 2026-06-28, console-...-03.02.04 log; verified the particle is in bw_necromancer
+-- bundle 82250c065e5b8ade).
+--
+-- bw_necromancer is a DLC career (`shovel`). Force-loading a non-resident DLC package
+-- whose bundle a non-owner doesn't even have installed would itself async-crash
+-- (reference_vt2_la_package_force_load_crash), so this is GATED on DLC ownership. Only
+-- owners can wield the Necromancy Staff anyway, so non-owners need nothing here.
+--
+-- TIMING (v0.12.178-dev, 2026-06-29 nicho crash): the old code assumed
+-- `Managers.unlock:is_dlc_unlocked` was resolved at mod-init "because the package
+-- load above proves Managers.package is ready". That was WRONG — the unlock-manager
+-- ownership truth can still be UNRESOLVED at mod-init even for an owner, so the gate
+-- returned early (no log) and bw_necromancer never loaded → soul_rip create_particles
+-- C-fatal in-mission (`fx/wpnfx_necromancer_skullstaff_anticipation` not loaded). Fix:
+--   1. Ownership proxy — the engine force-loads `dlcs/shovel` ONLY for owners and it's
+--      resident BEFORE wt mod-init (nicho's log: dlcs/shovel force_loaded at boot,
+--      wt init ~9s later), so package residence is a timing-safe owner signal that
+--      backstops the not-yet-resolved is_dlc_unlocked.
+--   2. Idempotent + re-attempted from on_game_state_changed (keep/mission entry, by
+--      which point ownership is always resolved) so a slow-resolving owner still gets
+--      the package loaded before they can wield the staff.
+local _FIRE_FX_NECRO_PACKAGE = "resource_packages/careers/bw_necromancer"
+local _FIRE_FX_NECRO_DLC = "shovel"
+local _FIRE_FX_NECRO_DLC_BOOT_PACKAGE = "resource_packages/dlcs/shovel"
+local _necro_fx_loaded = false
+
+-- Owner iff the unlock-manager says so OR the boot DLC package is resident (the
+-- latter resolves earlier and backstops an unresolved is_dlc_unlocked at mod-init).
+local function _necro_dlc_owned()
+    local um = Managers and Managers.unlock
+    if um and um.dlc_exists and um.is_dlc_unlocked
+       and um:dlc_exists(_FIRE_FX_NECRO_DLC) and um:is_dlc_unlocked(_FIRE_FX_NECRO_DLC) then
+        return true
+    end
+    if Managers and Managers.package and Managers.package.has_loaded
+       and Managers.package:has_loaded(_FIRE_FX_NECRO_DLC_BOOT_PACKAGE) then
+        return true
+    end
+    return false
+end
+
+-- Idempotent; safe to call repeatedly (mod-init + every on_game_state_changed). A
+-- true non-owner never passes _necro_dlc_owned() so it never loads (correct — they
+-- can't wield it); an owner whose ownership wasn't resolved at mod-init loads on the
+-- first state transition where it is.
+function mod._force_load_necromancer_fx_package()
+    if _necro_fx_loaded then return end
+    if not (Managers and Managers.package) then return end
+    if not _necro_dlc_owned() then return end
+    local ok, err = pcall(function()
+        Managers.package:load(_FIRE_FX_NECRO_PACKAGE, "wt_fire_fx_necromancer", nil, true, true)
+    end)
+    if ok then
+        _necro_fx_loaded = true
+        mod:info("[wt fire-fx] force-loaded Necromancer fx package (shovel DLC owned): %s", _FIRE_FX_NECRO_PACKAGE)
+    else
+        mod:warning("[wt fire-fx] failed to force-load %s: %s", _FIRE_FX_NECRO_PACKAGE, tostring(err))
+    end
+end
+
+mod._force_load_necromancer_fx_package()
 
 -- ============================================================
 -- Brace → Repeater illusion resolver
@@ -2166,7 +3251,6 @@ local function _patch_longbow_empire_template_for_saltzpyre()
     end
     local tpl = Weapons.longbow_empire_template
     local n_career_overrides = 0
-    local n_action_remaps = 0
 
     tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
     for k, v in pairs(_SP_LONGBOW_CROSSBOW_WIELD_3P) do
@@ -2174,23 +3258,28 @@ local function _patch_longbow_empire_template_for_saltzpyre()
         n_career_overrides = n_career_overrides + 1
     end
 
-    -- Per-action anim_event_3p remap. Pattern mirrors the brace patcher.
-    if tpl.actions then
-        for _, action_group in pairs(tpl.actions) do
-            if type(action_group) == "table" then
-                for _, sub_action in pairs(action_group) do
-                    if type(sub_action) == "table"
-                            and sub_action.anim_event
-                            and _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event] then
-                        sub_action.anim_event_3p = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event]
-                        n_action_remaps = n_action_remaps + 1
-                    end
-                end
-            end
-        end
-    end
-    _dbg("[wt:tpl_patch] event=applied template=longbow_empire_template career_overrides=%d action_remaps=%d",
-        n_career_overrides, n_action_remaps)
+    -- Per-action anim remap: register a RUNTIME career-scoped remap
+    -- (_3p_template_remaps.longbow_empire_template.wh_) instead of MUTATING the
+    -- SHARED template globally. The old global mutation set draw_bow → to_zoom on
+    -- the template for EVERY career, which broke Kruber's NATIVE longbow charge
+    -- (draw_bow fired to_zoom on es_ too) — #210. The runtime path is wh_-gated, so
+    -- es_ (Kruber native) keeps its own draw_bow / attack_shoot_fast. Keyed by the
+    -- actions' fired 3P event (= their anim_event; these actions carry no native
+    -- anim_event_3p, so anim_event IS what fires).
+    -- The Empire longbow is native to es_HUNTSMAN only (can_wield). On the OTHER
+    -- Kruber careers it is a CROSS-CAREER unlock whose 3P longbow aim state does not
+    -- drive the native `draw_bow`, so the charged aim/zoom (action_two, kind="aim",
+    -- anim_event="draw_bow") must render via the universal `to_zoom` — exactly as it
+    -- did before v0.12.191, when the (now-removed) global mutation applied to_zoom to
+    -- everyone. Native Huntsman keeps `draw_bow` (that was #210). Keyed by FULL career
+    -- name so es_huntsman is excluded from the crossbow remap. (#210 follow-up.)
+    _3p_template_remaps.longbow_empire_template = _3p_template_remaps.longbow_empire_template or {}
+    _3p_template_remaps.longbow_empire_template.es_mercenary      = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
+    _3p_template_remaps.longbow_empire_template.es_knight         = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
+    _3p_template_remaps.longbow_empire_template.es_questingknight = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
+    _3p_template_remaps.longbow_empire_template.wh_               = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
+    _dbg("[wt:tpl_patch] event=applied template=longbow_empire_template career_overrides=%d (wield) + runtime remap for cross-career es_ (Merc/FK/GK) + wh_; native es_huntsman untouched",
+        n_career_overrides)
 end
 
 _patch_longbow_empire_template_for_saltzpyre()
@@ -2225,7 +3314,6 @@ local function _patch_longbow_template_1_for_saltzpyre()
     end
     local tpl = Weapons.longbow_template_1
     local n_career_overrides = 0
-    local n_action_remaps = 0
 
     tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
     for k, v in pairs(_WE_LONGBOW_CROSSBOW_WIELD_3P) do
@@ -2233,22 +3321,14 @@ local function _patch_longbow_template_1_for_saltzpyre()
         n_career_overrides = n_career_overrides + 1
     end
 
-    if tpl.actions then
-        for _, action_group in pairs(tpl.actions) do
-            if type(action_group) == "table" then
-                for _, sub_action in pairs(action_group) do
-                    if type(sub_action) == "table"
-                            and sub_action.anim_event
-                            and _WE_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event] then
-                        sub_action.anim_event_3p = _WE_LONGBOW_CROSSBOW_ANIM_REMAP_3P[sub_action.anim_event]
-                        n_action_remaps = n_action_remaps + 1
-                    end
-                end
-            end
-        end
-    end
-    _dbg("[wt:tpl_patch] event=applied template=longbow_template_1 career_overrides=%d action_remaps=%d",
-        n_career_overrides, n_action_remaps)
+    -- Same #210 fix as the empire longbow above: runtime wh_-gated remap instead of
+    -- a global template mutation, so Kerillian's NATIVE elf longbow (we_) keeps its
+    -- own draw_bow / attack_shoot_fast charge+fire anims. wh_-only remaps to crossbow.
+    _3p_template_remaps.longbow_template_1 = _3p_template_remaps.longbow_template_1 or {}
+    _3p_template_remaps.longbow_template_1.we_ = false  -- native Kerillian: never remap
+    _3p_template_remaps.longbow_template_1.wh_ = _WE_LONGBOW_CROSSBOW_ANIM_REMAP_3P
+    _dbg("[wt:tpl_patch] event=applied template=longbow_template_1 career_overrides=%d (wield) + runtime wh_ remap (#210: native we_ untouched)",
+        n_career_overrides)
 end
 
 _patch_longbow_template_1_for_saltzpyre()
@@ -2334,66 +3414,21 @@ _patch_repeating_pistol_template_1_for_kruber()
 -- table walk. This table only handles the wield-event patch, which is the
 -- whole story for polearm-class templates because the in-mission
 -- `_3p_remap_triggers` (line ~421) already covers their per-action remaps.
-local _WIELD_ANIM_CAREER_3P_PATCHES = {
-    -- Kerillian's elf spear (we_spear) on cross-character wielders.
-    -- Mirrors `_career_anim_redirect.to_spear` overrides (line ~237).
-    two_handed_spears_elf_template_1 = {
-        wh_captain        = "to_2h_billhook",
-        wh_bountyhunter   = "to_2h_billhook",
-        wh_zealot         = "to_2h_billhook",
-        es_mercenary      = "to_polearm",
-        es_huntsman       = "to_polearm",
-        es_knight         = "to_polearm",
-        es_questingknight = "to_polearm",
-    },
-    -- Kruber's halberd (es_halberd). vanilla `wield_anim = "to_polearm"`.
-    -- Saltzpyre cross-character: route to billhook stance.
-    -- es_* entries are belt-and-suspenders: in theory the engine's fallback
-    -- (per `world_hero_previewer.lua:1003`) walks wield_anim_career_3p[career]
-    -- → wield_anim_career[career] → wield_anim, so omitting Kruber would
-    -- still fire "to_polearm" on his native body. But user repro of
-    -- v0.12.55-dev showed Mercenary's preview holding the previous-weapon
-    -- stance for halberd / Tuskgor — meaning the fallback chain is NOT
-    -- producing "to_polearm" on the preview unit for some interaction we
-    -- haven't traced. Explicit es_* entries force the wield event the same
-    -- way the billhook template's es_* entry does (which user confirmed
-    -- works pre-patch). If the diagnostic block below proves the engine
-    -- fallback is fine, the es_* entries can be removed later — for now
-    -- they cost nothing and match the pattern that visibly works.
-    two_handed_halberds_template_1 = {
-        es_mercenary      = "to_polearm",
-        es_huntsman       = "to_polearm",
-        es_knight         = "to_polearm",
-        es_questingknight = "to_polearm",
-        wh_captain        = "to_2h_billhook",
-        wh_bountyhunter   = "to_2h_billhook",
-        wh_zealot         = "to_2h_billhook",
-    },
-    -- Kruber's Tuskgor heavy spear (es_2h_heavy_spear). Same vanilla
-    -- `wield_anim = "to_polearm"` as halberd, same fix applied.
-    two_handed_heavy_spears_template = {
-        es_mercenary      = "to_polearm",
-        es_huntsman       = "to_polearm",
-        es_knight         = "to_polearm",
-        es_questingknight = "to_polearm",
-        wh_captain        = "to_2h_billhook",
-        wh_bountyhunter   = "to_2h_billhook",
-        wh_zealot         = "to_2h_billhook",
-    },
-    -- Saltzpyre's billhook (wh_2h_billhook) on Kruber cross-character.
-    -- Mirrors `_career_anim_redirect.to_2h_billhook` overrides (line ~247).
-    -- Kerillian is omitted: she has no billhook unlock in any career row.
-    two_handed_billhooks_template = {
-        es_mercenary      = "to_polearm",
-        es_huntsman       = "to_polearm",
-        es_knight         = "to_polearm",
-        es_questingknight = "to_polearm",
-    },
-}
+-- v0.12.139-dev: the wield-patch DATA moved to a shared module so the dev anim
+-- picker (which runs from _data.lua / _localization.lua, BEFORE this script's
+-- top-level patcher calls — see reference_vmf_mod_file_load_order) can resolve
+-- each Kruber port's TARGET template from its chosen wield set at catalog-build
+-- time. The picker pre-applies the same tables to Weapons.* (idempotent with the
+-- apply below). All values are `to_*` events written to wield_anim_career_3p — a
+-- 3P field; 1P (anim_event/wield_anim) is never touched. The verbatim tables
+-- (with their per-block provenance comments) now live in wt_wield_patches.lua.
+local _WIELD_PATCHES_MODULE = mod:dofile("scripts/mods/weapon_tweaker/wt_wield_patches")
+local _WIELD_ANIM_CAREER_3P_PATCHES      = _WIELD_PATCHES_MODULE.patches
+local _WIELD_ANIM_CAREER_3P_PATCHES_BULK = _WIELD_PATCHES_MODULE.bulk
 
-local function _apply_wield_anim_career_3p_patches()
+local function _apply_wield_anim_career_3p_patches(patches)
     if not Weapons then return end
-    for template_name, career_overrides in pairs(_WIELD_ANIM_CAREER_3P_PATCHES) do
+    for template_name, career_overrides in pairs(patches) do
         local tpl = Weapons[template_name]
         if tpl then
             tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
@@ -2414,7 +3449,124 @@ local function _apply_wield_anim_career_3p_patches()
     end
 end
 
-_apply_wield_anim_career_3p_patches()
+_apply_wield_anim_career_3p_patches(_WIELD_ANIM_CAREER_3P_PATCHES)
+_apply_wield_anim_career_3p_patches(_WIELD_ANIM_CAREER_3P_PATCHES_BULK)
+
+-- ============================================================
+-- v0.12.139-dev: not-loaded / no-ammo WIELD fallbacks for cross-character
+-- repeating crossbows (3P-ONLY crash fix — Kerillian Repeater Crossbow on Kruber)
+-- ============================================================
+-- Crash class (network game only, bypasses pcall — engine RPC packer fatal):
+--   `repeating_crossbow_elf_template` (we_crossbow_repeater) sets
+--     wield_anim_not_loaded = "to_repeating_crossbow_elf"          (repeating_crossbows_elf.lua:259)
+--     wield_anim_no_ammo    = "to_repeating_crossbow_elf_noammo"   (repeating_crossbows_elf.lua:258)
+--   Neither `_elf` event is registered in NetworkLookup.anims
+--   (anims_lookup_table.lua has to_repeating_crossbow / _noammo and
+--    to_repeating_handgun / _noammo, but NO `_elf` entries). When the crossbow
+--   is wielded EMPTY/unloaded, simple_inventory_extension.lua:2050-2063 routes
+--   the not-loaded event into ammo_extension:start_reload(...), which reaches
+--   generic_ammo_user_extension.lua:311-330:
+--       event_id = NetworkLookup.anims[reload_event]  -- => nil
+--       network_transmit:send_rpc_clients("rpc_anim_event", event_id, go_id)
+--   Packing nil into the rpc_anim_event lookup-index field is a C-level fatal.
+--   wt's _WIELD_ANIM_CAREER_3P_PATCHES_BULK only patches `wield_anim_career_3p`
+--   (the LOADED stance, consumed via the safe non-networked Unit.animation_event
+--   at simple_inventory_extension.lua:2013), NOT the not-loaded/no-ammo wields,
+--   so the raw `_elf` names survive on the empty-wield reload-send path.
+--
+-- Fix (3P-ONLY): per-career not-loaded/no-ammo wield overrides pointing at the
+-- network-REGISTERED Kruber repeating-handgun events, which Kruber's
+-- empire_soldier 3P body authors AND which exist in NetworkLookup.anims:
+--   to_repeating_handgun         (anims_lookup_table.lua:670 — handgun has no
+--                                 distinct not-loaded wield; its loaded wield is
+--                                 the correct fallback)
+--   to_repeating_handgun_noammo  (anims_lookup_table.lua:671 — handgun's own
+--                                 wield_anim_no_ammo, repeating_handguns.lua:312)
+-- These are 3P wield-FALLBACK fields only — never anim_event/wield_anim (1P).
+-- Saltzpyre's Volley Crossbow (wh_crossbow_repeater, repeating_crossbows.lua)
+-- already uses to_repeating_crossbow / _noammo (both REGISTERED) so it never
+-- crashed — no patch needed there. Do NOT instead register the `_elf` names into
+-- _anim_redirect (lines ~484-485): those redirect ONTO the same unregistered
+-- `_elf` events and carry this identical latent crash for any non-elf wielder;
+-- they're only safe today because they ride the direct (non-networked)
+-- Unit.animation_event path behind _safe_has_anim.
+local _KRUBER_REPEATER_CAREERS = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+}
+local _NOT_LOADED_NO_AMMO_CAREER_PATCHES = {
+    -- we_crossbow_repeater (Kerillian Repeater Crossbow) ported onto Kruber.
+    repeating_crossbow_elf_template = {
+        not_loaded = "to_repeating_handgun",
+        no_ammo    = "to_repeating_handgun_noammo",
+        careers    = _KRUBER_REPEATER_CAREERS,
+    },
+}
+
+local function _apply_not_loaded_no_ammo_career_patches(patches)
+    if not Weapons then return end
+    for template_name, spec in pairs(patches) do
+        local tpl = Weapons[template_name]
+        if tpl then
+            tpl.wield_anim_not_loaded_career = tpl.wield_anim_not_loaded_career or {}
+            tpl.wield_anim_no_ammo_career   = tpl.wield_anim_no_ammo_career   or {}
+            local n = 0
+            for _, career in ipairs(spec.careers) do
+                if spec.not_loaded then tpl.wield_anim_not_loaded_career[career] = spec.not_loaded end
+                if spec.no_ammo    then tpl.wield_anim_no_ammo_career[career]    = spec.no_ammo end
+                n = n + 1
+            end
+            _dbg("[wt:tpl_patch] event=applied template=%s not_loaded/no_ammo careers=%d", template_name, n)
+        else
+            mod:warning("[wt not-loaded/no-ammo patch] Weapons.%s missing; skipping", template_name)
+        end
+    end
+end
+
+_apply_not_loaded_no_ammo_career_patches(_NOT_LOADED_NO_AMMO_CAREER_PATCHES)
+
+-- ============================================================
+-- Cross-character anim-variable crash guard (v0.12.128-dev)
+-- ============================================================
+-- A ported weapon can fire a charge/pose animation event that carries an
+-- animation VARIABLE (anim_event_with_variable_float) whose variable name the
+-- RECEIVER's state machine does not author. Vanilla
+-- AnimationSystem.anim_event_with_variable_float does
+-- `idx = Unit.animation_find_variable(unit, variable_name)` then
+-- `Unit.animation_set_variable(unit, idx, value)` with NO nil-guard — when the
+-- variable is missing, idx is nil and animation_set_variable hard-crashes
+-- ("bad argument #2 ... number expected, got nil", animation_system.lua:163).
+-- Reproduced on the Bretonnian Longsword (es_bastard_sword) charged on a
+-- non-native career (wh_captain), event attack_swing_charge_right_diagonal_pose.
+-- Guard: when the variable isn't found on the unit, SKIP the variable'd event
+-- entirely. v0.12.131-dev: we previously fired the BARE event here, but that
+-- caught dodges/actions in an animation LOOP — the missing blend variable is
+-- exactly what transitions the clip out, so firing the event without it just
+-- re-loops the clip. Skipping is safe: the action's gameplay logic proceeds
+-- independently; only the cosmetic anim is dropped on the cross-character port
+-- whose body lacks that variable. Native weapons always find their variable, so
+-- they take the original path unchanged.
+--
+-- v0.12.132-dev CRITICAL MULTIPLAYER FIX (GUID: A/B-confirmed 2026-06-19): vanilla's
+-- 6th param `skip_sync` (animation_system.lua:139) suppresses the rpc_anim_event_variable_float
+-- re-broadcast. The RPC RECEIVER replays the networked event with skip_sync=TRUE
+-- (animation_system.lua:312) precisely so it does NOT bounce back onto the wire. The
+-- previous hook signature OMITTED skip_sync, so when it called func(...) with only 5
+-- args, skip_sync collapsed to nil -> vanilla's `if not skip_sync and ...:game()`
+-- (animation_system.lua:140) re-sent the RPC -> every husk that RECEIVED a variable'd
+-- anim event RE-BROADCAST it -> infinite host<->client RPC feedback loop -> EVERY human
+-- player's 3P animation stuck on endless repeat in a 2+ human lobby, on EVERY weapon
+-- (native included), only in a network game. Fix: thread skip_sync through the signature
+-- and pass it to func unchanged so husk replays stay local (skip_sync=true) as vanilla
+-- intends. The find-variable crash guard above is unchanged.
+mod:hook("AnimationSystem", "anim_event_with_variable_float", function(func, self, unit, event_name, variable_name, variable_value, skip_sync)
+    if unit and Unit.alive(unit) then
+        local idx = Unit.animation_find_variable(unit, variable_name)
+        if type(idx) ~= "number" then
+            return
+        end
+    end
+    return func(self, unit, event_name, variable_name, variable_value, skip_sync)
+end)
 
 -- ============================================================
 -- Body-specific attachment source-node safety (v0.12.114-dev — per-spawn)
@@ -2903,11 +4055,111 @@ if mod:get("authentic_brace_of_pistols") then
 end
 
 -- ============================================================
+-- Warrior Priest punch buff (Reckoner Greathammer special)
+-- ============================================================
+-- Toggle that TRIPLES stagger and DOUBLES damage of the Warrior Priest 2h
+-- hammer's special attack -- the "punch" (anim attack_slam) reached via the
+-- weapon's push-stagger special. The punch action lives on the priest hammer
+-- template (Weapons.two_handed_hammer_priest_template) and vanilla points at the
+-- shared `light_blunt_smiter_stab` damage profile -- which other weapons also
+-- use, so we must NOT mutate it in place. Instead we register a private cloned
+-- profile (`wt_priest_punch_buffed`) with the punch's damage (power_distribution
+-- .attack x2) and stagger (.impact x3) scaled on its default_target + targets,
+-- then repoint ONLY the punch action's damage_profile at it while the toggle is
+-- on (restoring the original key when off).
+--
+-- Like wt_authentic_pistol, the profile is registered into NetworkLookup
+-- UNCONDITIONALLY at load (gated registration would desync the network index
+-- between a host with the toggle on and a client with it off -- PROJECT_STANDARDS
+-- §9.3). Only the action repoint is toggle-gated.
+do
+    local PRIEST_PUNCH_PROFILE = "wt_priest_punch_buffed"
+    local PRIEST_PUNCH_SRC = "light_blunt_smiter_stab"
+    local PRIEST_HAMMER_TMPL = "two_handed_hammer_priest_template"
+    local DAMAGE_MULT = 2  -- doubles damage
+    local STAGGER_MULT = 3  -- triples stagger
+
+    -- Scale a power-level node's damage (attack) / stagger (impact). Resolves a
+    -- string ref to PowerLevelTemplates and returns an OWN copy so the shared
+    -- vanilla table is never mutated.
+    local function _scaled_node(node)
+        if type(node) == "string" then
+            node = rawget(_G, "PowerLevelTemplates") and PowerLevelTemplates[node]
+        end
+        if type(node) ~= "table" then return node end
+        local c = table.clone(node, true)
+        local pd = c.power_distribution
+        if type(pd) == "table" then
+            if type(pd.attack) == "number" then pd.attack = pd.attack * DAMAGE_MULT end
+            if type(pd.impact) == "number" then pd.impact = pd.impact * STAGGER_MULT end
+        end
+        return c
+    end
+
+    -- Register the cloned+scaled profile. Idempotent; mirrors
+    -- _wt_clone_shot_sniper_no_dropoff's NetworkLookup registration.
+    local function _register_priest_punch_profile()
+        local DPT = rawget(_G, "DamageProfileTemplates")
+        if not DPT then return false end
+        if DPT[PRIEST_PUNCH_PROFILE] then return true end
+        local src = DPT[PRIEST_PUNCH_SRC]
+        if not src then return false end
+        local clone = table.clone(src, true)
+        clone.default_target = _scaled_node(clone.default_target)
+        if type(clone.targets) == "string" then
+            clone.targets = rawget(_G, "PowerLevelTemplates") and PowerLevelTemplates[clone.targets]
+        end
+        if type(clone.targets) == "table" then
+            local nt = {}
+            for i, t in ipairs(clone.targets) do nt[i] = _scaled_node(t) end
+            clone.targets = nt
+        end
+        DPT[PRIEST_PUNCH_PROFILE] = clone
+        if NetworkLookup and NetworkLookup.damage_profiles
+            and not rawget(NetworkLookup.damage_profiles, PRIEST_PUNCH_PROFILE) then
+            local tbl = NetworkLookup.damage_profiles
+            local idx = #tbl + 1
+            rawset(tbl, idx, PRIEST_PUNCH_PROFILE)
+            rawset(tbl, PRIEST_PUNCH_PROFILE, idx)
+        end
+        return true
+    end
+
+    -- Captured once so toggling off restores the exact vanilla key.
+    local _punch_orig_profile
+
+    -- Repoint the punch action's damage_profile based on the toggle. Iterates the
+    -- template's action groups and finds the `punch` sub-action (no dependence on
+    -- which group it lives in).
+    mod.wt_apply_priest_punch_buff = function()
+        local tpl = rawget(_G, "Weapons") and Weapons[PRIEST_HAMMER_TMPL]
+        if not (tpl and tpl.actions) then return end
+        local enabled = mod:get("wt_priest_punch_buff")
+        local use_profile = enabled and DamageProfileTemplates and DamageProfileTemplates[PRIEST_PUNCH_PROFILE] and PRIEST_PUNCH_PROFILE or nil
+        for _, group in pairs(tpl.actions) do
+            if type(group) == "table" and type(group.punch) == "table" then
+                if _punch_orig_profile == nil then
+                    _punch_orig_profile = group.punch.damage_profile or PRIEST_PUNCH_SRC
+                end
+                group.punch.damage_profile = use_profile or _punch_orig_profile
+            end
+        end
+    end
+
+    -- ALWAYS register at load (network-index determinism); repoint per toggle.
+    if not _register_priest_punch_profile() then
+        mod:warning("[wt:priest-punch] damage-profile registration failed at load (DamageProfileTemplates/NetworkLookup not ready)")
+    end
+    mod.wt_apply_priest_punch_buff()
+end
+
+-- ============================================================
 -- Moonfire Bow pre-nerf AOE restoration
 -- ============================================================
--- Two toggles in weapon_overrides:
---   moonfire_cosmetic_puff  — small blue puff on every arrow impact, no damage
---   moonfire_aoe_revert     — pre-nerf AOE + larger puff (overrides cosmetic)
+-- One toggle in weapon_overrides:
+--   moonfire_aoe_revert  — pre-nerf AOE detonation + puffs (damage host-side)
+-- The cosmetic-only puff (moonfire_cosmetic_puff) moved to cosmetics_tweaker
+-- (Weapon & Item Appearance, cos_moonfire_cosmetic_puff) on 2026-06-29.
 --
 -- Implementation hooks the four impact paths on PlayerProjectileUnitExtension
 -- (hit_enemy / hit_level_unit / hit_static_unit / hit_breakable_object) and
@@ -2956,54 +4208,39 @@ local function _is_moonfire_arrow(item_name)
     return string.sub(item_name, 1, 10) == "we_deus_01"
 end
 
-local function _wt_spawn_moonfire_puff(world, position, big)
-    if not position then return end
-    local rot = Quaternion.identity()
-    World.create_particles(world, _MOONFIRE_PUFF_FX, position, rot)
-    if big then
-        for i = 1, #_moonfire_jitter_offsets do
-            local p = position + _moonfire_jitter_offsets[i]:unbox()
-            World.create_particles(world, _MOONFIRE_PUFF_FX, p, rot)
-        end
-    end
-end
-
 local function _wt_moonfire_on_hit(self, hit_position)
     if not _is_moonfire_arrow(self.item_name) then return end
-    local revert = mod:get("moonfire_aoe_revert")
-    local cosmetic = mod:get("moonfire_cosmetic_puff")
-    if not revert and not cosmetic then return end
+    -- moonfire_cosmetic_puff moved to cosmetics_tweaker (Weapon & Item Appearance,
+    -- setting cos_moonfire_cosmetic_puff) on 2026-06-29 — wt keeps only the gameplay
+    -- AOE revert. Cosmetics' puff hook skips when this revert is on (it already puffs).
+    if not mod:get("moonfire_aoe_revert") then return end
     local world = self._world
     if not world or not hit_position then return end
 
-    if revert then
-        local rotation = Unit.alive(self._projectile_unit)
-            and Unit.local_rotation(self._projectile_unit, 0)
-            or Quaternion.identity()
-        local owner_unit = self._owner_unit
-        if not Unit.alive(owner_unit) then return end
-        local is_husk = self._owner_player and not self._owner_player.local_player or false
-        DamageUtils.create_explosion(
-            world,
-            owner_unit,
-            hit_position,
-            rotation,
-            _MOONFIRE_AOE_TEMPLATE,
-            self.scale or 1,
-            self.item_name,
-            self._is_server,
-            is_husk,
-            self._projectile_unit,
-            self.power_level or 0,
-            self._is_critical_strike or false,
-            owner_unit
-        )
-        for i = 1, #_moonfire_jitter_offsets do
-            local p = hit_position + _moonfire_jitter_offsets[i]:unbox()
-            World.create_particles(world, _MOONFIRE_PUFF_FX, p, Quaternion.identity())
-        end
-    else
-        _wt_spawn_moonfire_puff(world, hit_position, false)
+    local rotation = Unit.alive(self._projectile_unit)
+        and Unit.local_rotation(self._projectile_unit, 0)
+        or Quaternion.identity()
+    local owner_unit = self._owner_unit
+    if not Unit.alive(owner_unit) then return end
+    local is_husk = self._owner_player and not self._owner_player.local_player or false
+    DamageUtils.create_explosion(
+        world,
+        owner_unit,
+        hit_position,
+        rotation,
+        _MOONFIRE_AOE_TEMPLATE,
+        self.scale or 1,
+        self.item_name,
+        self._is_server,
+        is_husk,
+        self._projectile_unit,
+        self.power_level or 0,
+        self._is_critical_strike or false,
+        owner_unit
+    )
+    for i = 1, #_moonfire_jitter_offsets do
+        local p = hit_position + _moonfire_jitter_offsets[i]:unbox()
+        World.create_particles(world, _MOONFIRE_PUFF_FX, p, Quaternion.identity())
     end
 end
 
@@ -3034,6 +4271,7 @@ end
 -- (feedback_lua_forward_reference).
 local _wt_longbow_3p_swap_apply
 local _wt_repeating_pistol_3p_swap_apply
+local _wt_hammer_book_3p_swap_apply
 
 -- Hook GearUtils.spawn_inventory_unit. Always call vanilla first, capture
 -- all 4 returns (v_w3p, v_a3p, v_w1p, v_a1p), then attempt the swap inside
@@ -3066,6 +4304,12 @@ mod:traced_hook("GearUtils", "spawn_inventory_unit", function(func, world, hand,
     end
     if item_data.name == "wh_repeating_pistols" then
         return _wt_repeating_pistol_3p_swap_apply(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
+    end
+    -- #181: Skullsplitter & Tome on Kruber → 1H Skullsplitter (hammer in the right
+    -- hand, no book). The helper handles BOTH hands (right=book → swapped to hammer;
+    -- left=original hammer → hidden), career-gated to es_ inside.
+    if item_data.name == "wh_hammer_book" then
+        return _wt_hammer_book_3p_swap_apply(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
     end
     -- Gate: only apply swap when wielding a brace, on the right hand
     -- (where the brace's "main pistol" mounts), and the wielder is a
@@ -3545,51 +4789,111 @@ _wt_repeating_pistol_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world,
     return v_w3p, v_a3p, v_w1p, v_a1p
 end
 
--- Hide the left-hand brace pistol on Kruber. The brace template renders TWO
--- pistols (one per hand) — the right-hand spawn_inventory_unit hook above
--- swaps the right-hand mesh to the Empire repeater, but the left-hand pistol
--- stays vanilla and clips through the repeater's body. We can't just hide it
--- in the spawn hook because `show_third_person_inventory`
--- (simple_inventory_extension.lua:1014-1075 / simple_husk_inventory_extension.lua:471)
--- sets visibility back to `show` on every wield/unwield. So post-hook that
--- function and re-hide the left-hand 3P unit specifically when (a) the
--- wielded item is the brace AND (b) the wielder is a Kruber career.
+-- ============================================================
+-- Kruber Skullsplitter & Tome (wh_hammer_book) → 1H Skullsplitter in-game 3P (#181)
+-- ============================================================
+-- v0.12.187-dev: REPLACED the spawned-unit mesh swap (v0.12.186-dev) with the simpler
+-- offset-free approach the user asked for. The spawned-unit swap mounted a freshly-
+-- spawned hammer at the right node and produced bad transforms / crazy offsets in-game.
+-- Instead we KEEP the vanilla Skullsplitter hammer in its native engine position and
+-- just HIDE THE BOOK, letting the to_1h_hammer wield redirect (wt_wield_patches.lua)
+-- animate the hammer as Kruber's native 1H mace. NOTHING is spawned, linked, or
+-- relinked — so there are no swap-induced offsets.
 --
--- v0.12.39 — registered on BOTH SimpleInventoryExtension AND
--- SimpleHuskInventoryExtension. The husk class has the same method but no
--- inheritance from the self-owned class (see feedback_vt2_husk_extension_class_pair).
--- Previously hooking only the self-owned class left the brace's left pistol
--- visible on the host's view of a remote-player Kruber husk after the
--- right-hand was successfully swapped to the repeater in v0.12.38.
-local function _hide_brace_left_pistol(self, show)
+-- Vanilla `one_handed_hammer_book_priest_template`: left_hand_unit = the Skullsplitter
+-- HAMMER (keep it), right_hand_unit = the BOOK (hide it). spawn_inventory_unit fires
+-- once per hand:
+--   * hand == "right" (the book): hide that 3P unit. `show_third_person_inventory`
+--     re-shows the right-hand wielded unit on every wield
+--     (simple_inventory_extension.lua:1017-1024), so `_rehide_hidden_3p_units` (below)
+--     re-hides it durably; this spawn-time hide additionally covers the husk path
+--     (husks don't call show_third_person_inventory from _wield_slot).
+--   * hand == "left" (the hammer): return the vanilla units UNCHANGED — the hammer
+--     keeps its correct native attachment.
+-- 3P-ONLY: v_w1p/v_a1p (1P) are never touched — 1P is universal across all six chars.
+_wt_hammer_book_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
+    do
+        local is_husk = owner_unit_1p == nil
+        local career_for_log = _unit_career_name(owner_unit_3p)
+        _dbg("[wt hammer-book-3p-swap] enter hand=%s husk=%s owner_unit_3p=%s career=%s v_w3p=%s",
+            tostring(hand), tostring(is_husk), tostring(owner_unit_3p ~= nil),
+            tostring(career_for_log), tostring(v_w3p ~= nil))
+    end
+
+    local career_name = _unit_career_name(owner_unit_3p)
+    if not career_name or career_name:sub(1, 3) ~= "es_" then
+        _dbg("[wt hammer-book-3p-swap] SKIP (career not Kruber: %s)", tostring(career_name))
+        return v_w3p, v_a3p, v_w1p, v_a1p
+    end
+
+    -- RIGHT hand = the book → hide it (3P only). LEFT hand (the hammer) and any other
+    -- hand → return vanilla unchanged (hammer stays in its native position).
+    if hand == "right" and v_w3p and Unit.alive(v_w3p) then
+        if Unit.has_visibility_group(v_w3p, "normal") then
+            Unit.set_visibility(v_w3p, "normal", false)
+        else
+            Unit.set_unit_visibility(v_w3p, false)
+        end
+        _dbg("[wt hammer-book-3p-swap] hid book 3P unit at spawn (husk=%s career=%s)",
+            tostring(owner_unit_1p == nil), career_name)
+    end
+
+    -- Never spawn/relink/delete — always return the vanilla units (book just hidden).
+    return v_w3p, v_a3p, v_w1p, v_a1p
+end
+
+-- Durable re-hide of 3P units that a wt swap/hide leaves hidden but that vanilla
+-- `show_third_person_inventory` re-shows on every wield/unwield
+-- (simple_inventory_extension.lua:1017-1075 / simple_husk_inventory_extension.lua:471
+-- set visibility back to `show`). Post-hook that function and re-hide the relevant
+-- 3P unit, gated to Kruber (es_) careers:
+--   * wh_brace_of_pistols: hide the LEFT pistol. The brace renders two pistols; the
+--     right-hand mesh is swapped to the Empire repeater and the left pistol clips it.
+--   * wh_hammer_book (#181): hide the RIGHT-hand unit (the BOOK). The Skullsplitter
+--     hammer (left_hand_wielded_unit_3p) is KEPT visible in its correct native
+--     position — it just animates via the to_1h_hammer wield redirect.
+--
+-- v0.12.39 — registered on BOTH SimpleInventoryExtension AND SimpleHuskInventoryExtension.
+-- The husk class has the same method but no inheritance from the self-owned class
+-- (see feedback_vt2_husk_extension_class_pair). ONE hook_safe per (Class, method) per
+-- mod — both weapons share this single callback (VMF_RECIPES § 1, no-duplicate-hooks).
+local function _rehide_hidden_3p_units(self, show)
     if not show then return end
     local equipment = self._equipment
     if not equipment then return end
-    local left_unit = equipment.left_hand_wielded_unit_3p
-    if not left_unit or not Unit.alive(left_unit) then return end
 
     local wielded_slot = equipment.wielded_slot
     if not wielded_slot then return end
     local slot_data = equipment.slots and equipment.slots[wielded_slot]
     local item_data = slot_data and slot_data.item_data
-    if not item_data or item_data.name ~= "wh_brace_of_pistols" then return end
+    if not item_data then return end
+
+    -- Which 3P unit to re-hide depends on the wielded weapon.
+    local unit_to_hide
+    if item_data.name == "wh_brace_of_pistols" then
+        unit_to_hide = equipment.left_hand_wielded_unit_3p   -- brace's clipping left pistol
+    elseif item_data.name == "wh_hammer_book" then
+        unit_to_hide = equipment.right_hand_wielded_unit_3p  -- #181: the book (hammer stays)
+    else
+        return
+    end
+    if not unit_to_hide or not Unit.alive(unit_to_hide) then return end
 
     local owner_unit = self._unit
     local career_name = owner_unit and _unit_career_name(owner_unit)
     if not career_name or career_name:sub(1, 3) ~= "es_" then return end
 
-    -- Force the left brace pistol invisible. Mirror the visibility-group
-    -- branching that vanilla `show_third_person_inventory` uses so we hit
-    -- whichever path the unit was rendered through.
-    if Unit.has_visibility_group(left_unit, "normal") then
-        Unit.set_visibility(left_unit, "normal", false)
+    -- Force the unit invisible. Mirror the visibility-group branching that vanilla
+    -- `show_third_person_inventory` uses so we hit whichever path it was rendered through.
+    if Unit.has_visibility_group(unit_to_hide, "normal") then
+        Unit.set_visibility(unit_to_hide, "normal", false)
     else
-        Unit.set_unit_visibility(left_unit, false)
+        Unit.set_unit_visibility(unit_to_hide, false)
     end
 end
 
-mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory", _hide_brace_left_pistol)
-mod:hook_safe("SimpleHuskInventoryExtension", "show_third_person_inventory", _hide_brace_left_pistol)
+mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory", _rehide_hidden_3p_units)
+mod:hook_safe("SimpleHuskInventoryExtension", "show_third_person_inventory", _rehide_hidden_3p_units)
 
 -- Forward declarations for the helper functions defined below, called from
 -- the consolidated `MenuWorldPreviewer.equip_item` hook_safe below. Without
@@ -3597,6 +4901,7 @@ mod:hook_safe("SimpleHuskInventoryExtension", "show_third_person_inventory", _hi
 -- (feedback_lua_forward_reference).
 local _wt_longbow_preview_swap_apply
 local _wt_repeating_pistol_preview_swap_apply
+local _wt_hammer_book_preview_swap_apply
 local _wt_capture_preview_item_key
 
 
@@ -3642,6 +4947,9 @@ mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot
 
     -- Helper 3: repeating pistol → repeating handgun preview swap (Kruber careers).
     _wt_repeating_pistol_preview_swap_apply(self, item_name, slot)
+
+    -- Helper 4: Skullsplitter & Tome → 1H Skullsplitter preview swap (Kruber, #181).
+    _wt_hammer_book_preview_swap_apply(self, item_name, slot)
 
     -- Inline body: brace → repeater preview swap (Kruber careers).
     if item_name ~= "wh_brace_of_pistols" then return end
@@ -3780,6 +5088,41 @@ _wt_repeating_pistol_preview_swap_apply = function(self, item_name, slot)
     end
 end
 
+-- Inventory preview book-hide for Kruber's wh_hammer_book (#181).
+-- v0.12.187-dev: matches the offset-free in-mission approach — the keep/hero preview
+-- spawns 3P units from precomputed `spawn_data` (World.spawn_unit; it does NOT route
+-- through GearUtils.spawn_inventory_unit), so to hide the book here we DROP its
+-- spawn_data entry (the book is the right_hand entry). The Skullsplitter hammer
+-- (left_hand entry) is left UNTOUCHED so it renders in its correct native position.
+-- No mesh swap, no node-linking substitution → no preview offsets.
+_wt_hammer_book_preview_swap_apply = function(self, item_name, slot)
+    if item_name ~= "wh_hammer_book" then return end
+    local career = self._current_career_name
+    if not career or career:sub(1, 3) ~= "es_" then return end
+
+    local slot_type = (type(slot) == "table" and slot.type) or nil
+    if not slot_type then return end
+    local info = self._item_info_by_slot and self._item_info_by_slot[slot_type]
+    if not info or not info.spawn_data then return end
+
+    local new_spawn_data = {}
+    local hid_book = false
+    for _, entry in ipairs(info.spawn_data) do
+        if entry.right_hand then
+            -- drop the book (right_hand) entry so it never spawns in the preview
+            hid_book = true
+        else
+            -- keep the hammer (left_hand) + any other entry, untouched (native position)
+            new_spawn_data[#new_spawn_data + 1] = entry
+        end
+    end
+    info.spawn_data = new_spawn_data
+
+    if hid_book then
+        _dbg("[wt hammer-book-3p-swap preview] dropped book (right_hand) entry, kept native hammer on career=%s", career)
+    end
+end
+
 -- Apply scale/offset to the inventory character preview.
 -- The keep inventory uses MenuWorldPreviewer (see notes above the
 -- brace-3P swap hook — class() copies parent methods, so hooks on
@@ -3838,6 +5181,43 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
     local fake_slot = { right_unit_3p = unit }
     _scale_weapon_units(fake_slot, weapon_key, career_name)
     _offset_weapon_units(fake_slot, weapon_key, career_name)
+
+    -- v0.12.146-dev: INVENTORY-PREVIEW WIELD POSE (3P-ONLY). Correct the wield
+    -- stance for cross-character ports whose wield_anim_career_3p entry omits the
+    -- previewed career's prefix (so the engine fell back to the source template's
+    -- base wield_anim and fired an event the receiver body doesn't author -> the
+    -- "missing pose" symptom; e.g. Elf Greatsword `to_2h_sword_we` on Kruber).
+    -- The previewer fires the wield event ONLY for the currently-wielded slot
+    -- (world_hero_previewer.lua:1056 `self._wielded_slot_type == item_slot_type`),
+    -- so gate on that to avoid re-posing the off-hand slot. Re-uses the SAME
+    -- `_career_anim_redirect` data the in-mission hook uses (no parallel table)
+    -- via `_resolve_preview_wield_event`. Strictly 3P: only `self.character_unit`.
+    if not skip_wield_anim
+            and self._wielded_slot_type == slot_type
+            and type(item_template) == "table" then
+        local preview_body = self.character_unit
+        local preview_career = self._current_career_name or career_name
+        if preview_body and _is_unit(preview_body) and preview_career then
+            -- The event the engine actually fired (mirror world_hero_previewer
+            -- get_wield_anim: wield_anim_career_3p[career] -> base wield_anim).
+            local wac3p = item_template.wield_anim_career_3p
+            local fired = (wac3p and wac3p[preview_career]) or item_template.wield_anim
+            if fired then
+                local resolved = _resolve_preview_wield_event(preview_body, fired, preview_career)
+                -- Only correct when the redirect resolves to a DIFFERENT,
+                -- body-authored event AND the engine's fired event is NOT
+                -- itself authored (i.e. it was the missing-pose fallback). If
+                -- the body authors `fired`, the engine already posed correctly.
+                if resolved and resolved ~= fired
+                        and not _safe_has_anim(preview_body, fired)
+                        and _safe_has_anim(preview_body, resolved) then
+                    _dbg("[wt:preview_wield] career=%s template_wield=%s -> %s (missing-pose fix)",
+                        tostring(preview_career), tostring(fired), tostring(resolved))
+                    pcall(Unit.animation_event, preview_body, resolved)
+                end
+            end
+        end
+    end
 
     -- DIAGNOSTIC v0.12.94-dev: cross-character attachment node-presence probe.
     -- v0.12.93-dev shipped this reading the GLOBAL weapon template, which was
@@ -4037,6 +5417,12 @@ local function _trait_enabled(trait_key, is_cw)
 end
 
 local function apply_trait_filters()
+    -- RETIRED 2026-06-29 (user request): the "Weapon Traits (Adventure)" menu was
+    -- removed, so there are no toggles to honor — leave the vanilla trait roll pools
+    -- untouched. Kept as a no-op stub (+ the mod._apply_trait_filters / _revert exports
+    -- and call sites) so nothing dangles; the dead _trait_pool_sources / snapshot
+    -- helpers below can be deleted in a later cleanup pass.
+    if true then return end
     if not WeaponTraits or not WeaponTraits.combinations then return end
     _snapshot_trait_pools()
     if not _initial_trait_pools then return end
@@ -4104,7 +5490,6 @@ mod._revert_trait_pools = revert_trait_pools
 -- through equipment.slots, only runs on state entry, only runs when debug
 -- is on.
 local function _dbg_dump_local_player_loadout()
-    if not mod:get("enable_debug_logging") then return end
     local pm = Managers and Managers.player
     if not pm then return end
     local ok_pl, player = pcall(pm.local_player, pm)
@@ -4129,22 +5514,56 @@ local function _dbg_dump_local_player_loadout()
 end
 
 mod.on_game_state_changed = function(status, state_name)
+    -- [heap-probe] v0.12.121-dev: per-state-transition lua_heap sampler for the
+    -- 1 GiB lua_heap OOM diagnosis (see memory reference_vt2_lua_heap_1gib_crash).
+    -- Fires on EVERY transition. Routed through mod:debug channel (VMF
+    -- output_mode_debug controls visibility). Instrument only — no fix shipped.
+    local _heap_pre = collectgarbage("count")
+    local since_last = mod._heap_probe_last_kb and (_heap_pre - mod._heap_probe_last_kb) or 0
+    mod:debug("[heap-probe] %s/%s pre-apply: %.1f MB (%.0f KB), since last transition: %+.0f KB",
+        tostring(state_name), tostring(status), _heap_pre / 1024, _heap_pre, since_last)
+    mod._heap_probe_last_kb = _heap_pre
+
     mod:info("Weapon Tweaker: Baseline Active")
     apply_weapon_unlocks()
     patch_career_actions_on_weapons()
     apply_trait_filters()
+    -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
+    -- unresolved at mod-init even for owners; by any state transition it's resolved,
+    -- so this guarantees bw_necromancer's soul_rip particles are resident before the
+    -- staff can be wielded in a mission (2026-06-29 nicho create_particles crash).
+    mod._force_load_necromancer_fx_package()
     -- Re-apply Big Rebalance writes on every state transition.  Most BR
     -- changes mutate Weapons/DamageProfileTemplates which the engine
     -- caches at boot, so this is largely defensive — but cheap and
     -- consistent with the existing pattern in this hook.
     big_rebalance.apply_all()
 
-    -- Debug-only loadout dump on StateIngame entry. `mod:get` is cheap
-    -- so the gate also lives inside `_dbg_dump_local_player_loadout`
-    -- (belt-and-suspenders — if a future caller re-uses the dump
-    -- helper outside this hook, the gate still holds).
+    -- Loadout dump on StateIngame entry (routed through mod:debug channel).
     if status == "enter" and state_name == "StateIngame" then
         _dbg_dump_local_player_loadout()
+    end
+
+    local heap_post = collectgarbage("count")
+    mod:debug("[heap-probe] %s/%s post-apply: %.1f MB, this transition's apply cost: %+.0f KB",
+        tostring(state_name), tostring(status), heap_post / 1024, heap_post - _heap_pre)
+
+    -- v0.12.126-dev LEAK TEST: on mission EXIT only, force a full GC and
+    -- re-measure. The live sampler above deliberately never collects (so
+    -- retained growth stays visible), but the one thing it can't answer is
+    -- whether the heap that DIDN'T free on exit is a true retained-reference
+    -- leak or just collectable garbage the engine hadn't reaped yet. This
+    -- forces the question: `reclaimed` = garbage; whatever remains above the
+    -- keep baseline (~150 MB) is the real, non-collectable footprint that
+    -- ACCUMULATES toward the 1 GiB cap. Resync _heap_probe_last_kb to the
+    -- post-GC value so the next transition's delta stays honest.
+    if status == "exit" and state_name == "StateIngame" then
+        local before_gc = collectgarbage("count")
+        collectgarbage("collect")
+        local after_gc = collectgarbage("count")
+        mod._heap_probe_last_kb = after_gc
+        mod:debug("[heap-probe] StateIngame/exit FORCED-GC LEAK TEST: %.1f MB -> %.1f MB (reclaimed %.0f KB garbage; %.1f MB SURVIVES GC = true non-garbage footprint — if this climbs each mission it's a real leak)",
+            before_gc / 1024, after_gc / 1024, before_gc - after_gc, after_gc / 1024)
     end
 end
 
@@ -4207,6 +5626,10 @@ mod.on_setting_changed = function(setting_id)
     elseif setting_id and setting_id:find("^wt_dev_anim_") then
         -- Dev: 3P anim picker — mutate live Weapons.<tpl> tables.
         _wt_dev_anim_picker.on_setting_changed(setting_id)
+    elseif setting_id == "wt_priest_punch_buff" then
+        if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
+    elseif setting_id == "wt_brett_sword_shield_buff" then
+        if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
     end
     -- wt_dev_hp_* settings are read by the hold-pose tuner's per-frame hook
     -- via mod:get directly, no dispatcher branch needed.
@@ -4656,6 +6079,33 @@ end)
 -- log file for `[wt:trace] event=enter|exit ...` pairs around any of the
 -- three migrated hook sites: SimpleInventoryExtension.wield,
 -- GearUtils.create_equipment, GearUtils.spawn_inventory_unit).
+_rt_register("wt_priest_punch_buff_wired", function()
+    -- The buffed punch profile must register at load (network-index determinism)
+    -- and the apply fn must exist. Mirrors the authentic-pistol guard.
+    if type(mod.wt_apply_priest_punch_buff) ~= "function" then
+        return "mod.wt_apply_priest_punch_buff missing"
+    end
+    local DPT = rawget(_G, "DamageProfileTemplates")
+    if not DPT then return "skip: DamageProfileTemplates not loaded" end
+    if not DPT.wt_priest_punch_buffed then
+        return "wt_priest_punch_buffed damage profile not registered at load"
+    end
+    if NetworkLookup and NetworkLookup.damage_profiles
+        and not rawget(NetworkLookup.damage_profiles, "wt_priest_punch_buffed") then
+        return "wt_priest_punch_buffed missing from NetworkLookup.damage_profiles (would desync/crash networked)"
+    end
+    -- The clone must actually be scaled vs the source on default_target (2x dmg /
+    -- 3x stagger), proving the power_distribution scale ran.
+    local src = DPT.light_blunt_smiter_stab
+    local buf = DPT.wt_priest_punch_buffed
+    local function pd(p) return type(p)=="table" and type(p.default_target)=="table" and p.default_target.power_distribution or nil end
+    local sp, bp = pd(src), pd(buf)
+    if type(sp)=="table" and type(bp)=="table" and type(sp.attack)=="number" and type(sp.impact)=="number" then
+        if math.abs(bp.attack - sp.attack * 2) > 0.0001 then return "punch damage not 2x on default_target" end
+        if math.abs(bp.impact - sp.impact * 3) > 0.0001 then return "punch stagger not 3x on default_target" end
+    end
+end)
+
 _rt_register("wt_traced_hook_present", function()
     -- 1. Source-pattern marker constant set by `_safe_hook.lua` (Layer 3
     --    section). If the require ever drops out of the load order or the
@@ -4672,29 +6122,22 @@ _rt_register("wt_traced_hook_present", function()
         return "mod.traced_hook_safe is not a function (got " .. type(mod.traced_hook_safe) .. ")"
     end
     -- 3. Smoke: install traced_hook on a fresh dummy class (fresh identity
-    --    so VMF's duplicate-hook guard never trips), call with toggle OFF,
-    --    assert no crash. We DON'T assert "no trace lines emitted" — that
-    --    would require log-file inspection — but a crash inside the
-    --    tracing closure (nil deref, bad unpack args, etc.) would surface
-    --    here as a runtime error captured by the outer pcall in
-    --    /wt_regression_test.
+    --    so VMF's duplicate-hook guard never trips). We DON'T assert "no
+    --    trace lines emitted" — that would require log-file inspection — but
+    --    a crash inside the tracing closure would surface here.
     local _dummy_class = {
         method = function(self, a, b) return a, nil, b end,  -- 3 returns w/ nil hole
     }
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
     mod:traced_hook(_dummy_class, "method", function(func, ...)
         return func(...)
     end)
     local r1, r2, r3 = _dummy_class:method(7, 9)
     if r1 ~= 7 or r2 ~= nil or r3 ~= 9 then
-        if saved == true then mod:set("enable_debug_logging", true) end
-        return string.format("traced_hook return-shape broken (toggle off): r1=%s r2=%s r3=%s",
+        return string.format("traced_hook return-shape broken: r1=%s r2=%s r3=%s",
             tostring(r1), tostring(r2), tostring(r3))
     end
-    -- 4. Same smoke with toggle ON — proves the trace-emit path doesn't
-    --    crash. Restore prior toggle state regardless.
-    mod:set("enable_debug_logging", true)
+    -- 4. Second smoke with a different dummy class to verify the trace-emit
+    --    path doesn't crash when mod:debug fires.
     local _dummy_class_b = {
         method = function(self, a, b) return a, nil, b end,
     }
@@ -4702,11 +6145,8 @@ _rt_register("wt_traced_hook_present", function()
         return func(...)
     end)
     local s1, s2, s3 = _dummy_class_b:method(11, 13)
-    -- Restore prior toggle BEFORE we early-return on a check failure, so
-    -- a failing test doesn't leave the user with a flipped setting.
-    if saved == false or saved == nil then mod:set("enable_debug_logging", false) end
     if s1 ~= 11 or s2 ~= nil or s3 ~= 13 then
-        return string.format("traced_hook return-shape broken (toggle on): s1=%s s2=%s s3=%s",
+        return string.format("traced_hook return-shape broken (second smoke): s1=%s s2=%s s3=%s",
             tostring(s1), tostring(s2), tostring(s3))
     end
 end)
@@ -4840,13 +6280,10 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised on call" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised on call" end
 end)
 
 
@@ -4887,38 +6324,38 @@ end)
 -- held weapon (forces a dump regardless of the toggle).
 local function _wt_dump_weapon_data(item_key, source)
     if type(item_key) ~= "string" or item_key == "" then
-        mod:info("[wt:wield_dump] no item_key (source=%s)", tostring(source))
+        mod:debug("[wt:wield_dump] no item_key (source=%s)", tostring(source))
         return
     end
     local iml = rawget(_G, "ItemMasterList")
     local entry = iml and rawget(iml, item_key)
     if type(entry) ~= "table" then
-        mod:info("[wt:wield_dump] %s (source=%s) -- no ItemMasterList entry",
+        mod:debug("[wt:wield_dump] %s (source=%s) -- no ItemMasterList entry",
             item_key, tostring(source))
         return
     end
-    mod:info("[wt:wield_dump] === %s (source=%s) ===", item_key, tostring(source))
-    mod:info("[wt:wield_dump]   slot_type=%s item_type=%s template=%s",
+    mod:debug("[wt:wield_dump] === %s (source=%s) ===", item_key, tostring(source))
+    mod:debug("[wt:wield_dump]   slot_type=%s item_type=%s template=%s",
         tostring(entry.slot_type), tostring(entry.item_type), tostring(entry.template))
-    mod:info("[wt:wield_dump]   display_name=%s inventory_icon=%s required_dlc=%s",
+    mod:debug("[wt:wield_dump]   display_name=%s inventory_icon=%s required_dlc=%s",
         tostring(entry.display_name), tostring(entry.inventory_icon),
         tostring(entry.required_dlc))
-    mod:info("[wt:wield_dump]   anim_event=%s wield_anim=%s",
+    mod:debug("[wt:wield_dump]   anim_event=%s wield_anim=%s",
         tostring(entry.anim_event), tostring(entry.wield_anim))
-    mod:info("[wt:wield_dump]   anim_event_3p=%s wield_anim_3p=%s",
+    mod:debug("[wt:wield_dump]   anim_event_3p=%s wield_anim_3p=%s",
         tostring(entry.anim_event_3p), tostring(entry.wield_anim_3p))
-    mod:info("[wt:wield_dump]   state_machine=%s state_machine_3p=%s",
+    mod:debug("[wt:wield_dump]   state_machine=%s state_machine_3p=%s",
         tostring(entry.state_machine), tostring(entry.state_machine_3p))
     if type(entry.can_wield) == "table" then
-        mod:info("[wt:wield_dump]   can_wield=[%s]",
+        mod:debug("[wt:wield_dump]   can_wield=[%s]",
             table.concat(entry.can_wield, ","))
     end
     if entry.left_hand_unit or entry.right_hand_unit then
-        mod:info("[wt:wield_dump]   1p left=%s right=%s",
+        mod:debug("[wt:wield_dump]   1p left=%s right=%s",
             tostring(entry.left_hand_unit), tostring(entry.right_hand_unit))
     end
     if entry.left_hand_unit_3p or entry.right_hand_unit_3p then
-        mod:info("[wt:wield_dump]   3p left=%s right=%s",
+        mod:debug("[wt:wield_dump]   3p left=%s right=%s",
             tostring(entry.left_hand_unit_3p), tostring(entry.right_hand_unit_3p))
     end
 end
@@ -4929,7 +6366,6 @@ end
 -- own equips, not teammates'.
 mod:hook_safe("SimpleInventoryExtension", "_wield_slot",
     function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
-        if not mod:get("enable_debug_logging") then return end
         local item_key = slot_data
             and (slot_data.id
                 or (slot_data.item_data and slot_data.item_data.key))
@@ -5169,6 +6605,209 @@ _rt_register("vmf_no_empty_group_widgets", function()
         return string.format("%d empty VMF group(s) found (would trip 'must have at least 1 sub_widget' at boot): %s",
             #offenders, table.concat(offenders, "; "))
     end
+end)
+
+_rt_register("fire_fx_package_resident", function()
+    -- GH #128 (v0.12.159-dev): cross-character fire weapons (Drakefire Pistols,
+    -- Drakegun, Fireball/Flamethrower staves) CTD'd non-native careers because
+    -- their AOE explosion particles ride the Sienna career package bw_unchained,
+    -- which a cross-char wielder never loads. wt force-loads it at mod init
+    -- (_force_load_fire_explosion_packages). If that load is removed/renamed the
+    -- crash returns; this asserts the package is resident.
+    if not (Managers and Managers.package) then return "skip: Managers.package not ready (run in-keep)" end
+    local pkg = "resource_packages/careers/bw_unchained"
+    if not Managers.package:has_loaded(pkg) then
+        return "fire-fx package NOT resident (#128 regression) -- " .. pkg
+    end
+end)
+
+_rt_register("necromancer_fx_package_resident_if_dlc", function()
+    -- v0.12.163-dev: the Necromancy/Soulstealer Staff (bw_necromancy_staff) on a
+    -- cross-char wielder needs bw_necromancer's particles
+    -- (fx/wpnfx_necromancer_skullstaff_*), which are NOT in bw_unchained. wt
+    -- force-loads bw_necromancer at mod init, GATED on the Necromancer DLC
+    -- (`shovel`) being owned (force-loading a non-owned DLC package would itself
+    -- crash). So this only asserts residence when the DLC is owned.
+    if not (Managers and Managers.package and Managers.unlock) then return "skip: managers not ready (run in-keep)" end
+    local um = Managers.unlock
+    if not (um.dlc_exists and um.is_dlc_unlocked and um:dlc_exists("shovel") and um:is_dlc_unlocked("shovel")) then
+        return "skip: Necromancer (shovel) DLC not owned -- package intentionally not force-loaded"
+    end
+    local pkg = "resource_packages/careers/bw_necromancer"
+    if not Managers.package:has_loaded(pkg) then
+        return "necromancer fx package NOT resident (soulstealer-crash regression) -- " .. pkg
+    end
+end)
+
+_rt_register("no_dwarf_dual_hammers_on_saltzpyre", function()
+    -- v0.12.164-dev: dr_dual_wield_hammers removed from the non-WP Saltzpyre
+    -- careers (redundant with wh_dual_hammer "Dual Skullsplitters" they already
+    -- have). Guard that a future unlock-map edit doesn't silently re-add it.
+    if type(weapon_unlock_map) ~= "table" then return "skip: weapon_unlock_map not loaded" end
+    local bad = {}
+    for _, c in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        local list = weapon_unlock_map[c]
+        if type(list) == "table" then
+            for _, k in ipairs(list) do
+                if k == "dr_dual_wield_hammers" then bad[#bad + 1] = c end
+            end
+        end
+    end
+    if #bad > 0 then return "dr_dual_wield_hammers back on Saltzpyre: " .. table.concat(bad, ", ") end
+end)
+
+_rt_register("saltzpyre_dual_axes_wield_axe_falchion", function()
+    -- v0.12.168: Bardin's "Dual Axes" (dual_wield_axes_template_1) on Saltzpyre must
+    -- wield as the Dual Axe & Falchion (to_dual_axe_sword_wh), NOT WP Dual Hammers
+    -- (to_dual_hammers_priest). Guards the wt_wield_patches.bulk entry from reverting.
+    local wp = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.bulk
+    local e = wp and wp.dual_wield_axes_template_1
+    if not e then return "skip: wield-patch module not loaded" end
+    for _, c in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        if e[c] ~= "to_dual_axe_sword_wh" then
+            return "dual axes " .. c .. " wield = " .. tostring(e[c]) .. " (expected to_dual_axe_sword_wh)"
+        end
+    end
+end)
+
+_rt_register("saltzpyre_dagger_wield_falchion", function()
+    -- v0.12.168: Sienna's "Dagger" (one_handed_daggers_template_1) on Saltzpyre must
+    -- wield as 1H Falchion (to_1h_sword), NOT Fencing Sword/Rapier (to_fencing_sword).
+    local wp = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.bulk
+    local e = wp and wp.one_handed_daggers_template_1
+    if not e then return "skip: wield-patch module not loaded" end
+    for _, c in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        if e[c] ~= "to_1h_sword" then
+            return "dagger " .. c .. " wield = " .. tostring(e[c]) .. " (expected to_1h_sword)"
+        end
+    end
+end)
+
+_rt_register("kruber_has_saltzpyre_crossbow", function()
+    -- #138: wh_crossbow (Saltzpyre's "Crossbow") kept getting dropped from Kruber's
+    -- unlock_map despite working (baked anims/offsets + the a_unwielded_crossbow
+    -- j_hips crash-fix via _patch_xchar_unwielded_attachment_safe). Guard it stays
+    -- in all 4 Kruber careers so it can't silently vanish from the menu again.
+    if type(weapon_unlock_map) ~= "table" then return "skip: weapon_unlock_map not loaded" end
+    local missing = {}
+    for _, c in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+        local list = weapon_unlock_map[c]
+        local found = false
+        if type(list) == "table" then
+            for _, k in ipairs(list) do if k == "wh_crossbow" then found = true; break end end
+        end
+        if not found then missing[#missing + 1] = c end
+    end
+    if #missing > 0 then return "wh_crossbow missing from Kruber unlock_map: " .. table.concat(missing, ", ") end
+end)
+
+_rt_register("no_redundant_bardin_1h_on_saltzpyre", function()
+    -- #187: Bardin's dr_1h_axe (≡ Saltzpyre wh_1h_axe) and dr_1h_hammer
+    -- (≡ Saltzpyre wh_1h_hammer Skullsplitter) are redundant on Saltzpyre and were
+    -- removed (kept their entries to re-add to Saltzpyre = a bug). Guard them out of
+    -- the non-WP Saltzpyre unlock lists.
+    if type(weapon_unlock_map) ~= "table" then return "skip: weapon_unlock_map not loaded" end
+    local bad = {}
+    for _, c in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        local list = weapon_unlock_map[c]
+        if type(list) == "table" then
+            for _, k in ipairs(list) do
+                if k == "dr_1h_axe" or k == "dr_1h_hammer" then bad[#bad + 1] = c .. ":" .. k end
+            end
+        end
+    end
+    if #bad > 0 then return "redundant Bardin 1h back on Saltzpyre: " .. table.concat(bad, ", ") end
+end)
+
+_rt_register("dev_picker_names_localized", function()
+    -- #159: the dev 3P Anim Picker must show DOCUMENTED localized weapon names,
+    -- never raw internal keys (the tester saw "Sienna bw_deus_01" instead of
+    -- "Sienna: Coruscation Staff" because the seven staves were missing from the
+    -- old hardcoded _WEAPON_NAME and fell back to the key). _weapon_display_name
+    -- now resolves from the Availability loc; this guards every catalog weapon.
+    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.unresolved_display_names) then
+        return "skip: picker has no unresolved_display_names()"
+    end
+    local bad = _wt_dev_anim_picker.unresolved_display_names()
+    if type(bad) == "table" and #bad > 0 then
+        return "picker weapons showing raw internal keys (no documented name): " .. table.concat(bad, ", ")
+    end
+end)
+
+_rt_register("dev_picker_group_labels_registered", function()
+    -- #159/#197 END-TO-END: the REGISTERED localized label for every picker weapon
+    -- group (the actual string VMF renders) must resolve to a real name — not a raw
+    -- internal key (#159), and not an unregistered <key>/bare setting_id (#197 — a
+    -- label registered before names could resolve). This checks the registered value
+    -- (mod:localize on the group sid), NOT a freshly-recomputed label, so it would
+    -- have CAUGHT #197 (the in-game `dev_picker_names_localized` test rebuilds fresh
+    -- and so resolved correctly even while the registered menu labels were raw).
+    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.catalog_group_keys) then
+        return "skip: picker has no catalog_group_keys()"
+    end
+    local entries = _wt_dev_anim_picker.catalog_group_keys()
+    if type(entries) ~= "table" or #entries == 0 then return "skip: empty picker catalog" end
+    local bad = {}
+    for _, e in ipairs(entries) do
+        local s = mod:localize(e.sid)
+        if type(s) ~= "string" or s == "" then
+            bad[#bad + 1] = e.weapon_key .. "=<empty>"
+        elseif s == e.sid or s:sub(1, 1) == "<" then
+            bad[#bad + 1] = e.weapon_key .. "=<unregistered>"
+        elseif s:find(e.weapon_key, 1, true) then
+            bad[#bad + 1] = e.weapon_key .. "=<raw-key>"
+        end
+    end
+    if #bad > 0 then
+        return "picker group labels not localized (registered values): " .. table.concat(bad, ", ")
+    end
+end)
+
+_rt_register("wt_loc_raw_published", function()
+    -- #197: the dev picker resolves documented weapon names by reading
+    -- mod._wt_loc_raw directly (NOT mod:localize, which errors "localization file was
+    -- not loaded" when the catalog is built before loc registration). Guard that the
+    -- localization file still publishes the raw table with the unlock entries.
+    if type(mod._wt_loc_raw) ~= "table" then
+        return "mod._wt_loc_raw not published by localization file — picker names fall back to raw keys (#197)"
+    end
+    if type(mod._wt_loc_raw["unlock_es_mercenary_bw_deus_01"]) ~= "table" then
+        return "mod._wt_loc_raw present but missing expected unlock entries"
+    end
+end)
+
+_rt_register("dev_picker_no_inspect_dropdown", function()
+    -- User 2026-06-29: the inspect animation must NOT be a tunable picker dropdown —
+    -- the weapon just uses whatever inspect anim it already has. Guard inspect events
+    -- from creeping back into _WEAPON_ATTACKS / _SALTZ_WEAPON_ATTACKS.
+    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.inspect_attacks) then
+        return "skip: picker has no inspect_attacks()"
+    end
+    local bad = _wt_dev_anim_picker.inspect_attacks()
+    if type(bad) == "table" and #bad > 0 then
+        return "inspect events present in picker (should be removed): " .. table.concat(bad, ", ")
+    end
+end)
+
+_rt_register("saltz_billhook_set_uses_3p_events", function()
+    -- #196: the Billhook SET (F) vocab must list the billhook's anim_event_3p VALUES
+    -- (e.g. attack_swing_stab_charge), NOT its 1P anim_event names (attack_swing_charge_stab),
+    -- because the picker writes anim_event_3p. The 1P names set a 3P event the Saltzpyre
+    -- body doesn't author -> charge/heavy picks fall through to idle.
+    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.set_vocab_for) then
+        return "skip: picker has no set_vocab_for()"
+    end
+    local vocab = _wt_dev_anim_picker.set_vocab_for("saltzpyre", "F")
+    if type(vocab) ~= "table" then return "skip: Billhook SET F vocab not found" end
+    local has = {}
+    for _, e in ipairs(vocab) do has[e] = true end
+    local bad = {}
+    if not has["attack_swing_stab_charge"] then bad[#bad + 1] = "missing 3P charge event attack_swing_stab_charge" end
+    for _, one_p in ipairs({ "attack_swing_charge_stab", "attack_swing_charge_down",
+                             "attack_swing_heavy_down", "attack_swing_heavy_left", "attack_swing_stab_02" }) do
+        if has[one_p] then bad[#bad + 1] = "1P-only event leaked into vocab: " .. one_p end
+    end
+    if #bad > 0 then return "Billhook SET F vocab wrong: " .. table.concat(bad, "; ") end
 end)
 
 -- ============================================================

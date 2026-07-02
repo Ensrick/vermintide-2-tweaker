@@ -49,7 +49,10 @@ local function key_for(self, obj, method)
     return tostring(self) .. "|" .. tostring(obj) .. "::" .. tostring(method)
 end
 
-local function wrap(orig_method)
+-- `is_normal_hook` is true only for the plain VMFMod.hook install site (where
+-- the registered handler receives `func` as its first arg and is responsible
+-- for calling the original). hook_safe / hook_origin pass false.
+local function wrap(orig_method, is_normal_hook)
     if type(orig_method) ~= "function" then return orig_method end
     return function(self, obj, method, handler)
         if self.get_name and self:get_name() == LA_NAME then
@@ -58,15 +61,39 @@ local function wrap(orig_method)
                 return
             end
             seen[k] = true
+            -- #137: LA's StatisticsUtil.register_kill hook (utils/hooks.lua)
+            -- nil-derefs `attacker_player.player_unit` when the killer has LEFT
+            -- the game — player_from_unique_id() returns nil for a departed
+            -- peer whose lingering DoT (e.g. a globadier's poison) scores a
+            -- kill — and crashes the HOST. cosmetics_tweaker is mandated to
+            -- load BEFORE LA, so a normal mod:hook from us would be the INNER
+            -- wrapper and never run before LA's crash. Instead we intercept
+            -- LA's registration here (this wrap runs at LA's mod:hook call,
+            -- prototype-level, before any handler fires) and pcall-guard its
+            -- handler. On error we still call `func(...)` so vanilla
+            -- register_kill stat tracking runs. Default-ON; only an explicit
+            -- `false` on the setting disables (fail-safe).
+            if is_normal_hook and method == "register_kill" and type(handler) == "function" then
+                local la_handler = handler
+                handler = function(func, ...)
+                    if mod:get("la_killquest_crash_guard") == false then
+                        return la_handler(func, ...)
+                    end
+                    local ok = pcall(la_handler, func, ...)
+                    if not ok then
+                        return func(...)
+                    end
+                end
+            end
         end
         return orig_method(self, obj, method, handler)
     end
 end
 
 if rawget(_G, "VMFMod") and not _G.VMFMod._cos_la_prefix_wrapped then
-    VMFMod.hook        = wrap(VMFMod.hook)
-    VMFMod.hook_safe   = wrap(VMFMod.hook_safe)
-    VMFMod.hook_origin = wrap(VMFMod.hook_origin)
+    VMFMod.hook        = wrap(VMFMod.hook, true)
+    VMFMod.hook_safe   = wrap(VMFMod.hook_safe, false)
+    VMFMod.hook_origin = wrap(VMFMod.hook_origin, false)
     _G.VMFMod._cos_la_prefix_wrapped = true
     mod:info("[la_prefix_embed] VMFMod hook methods wrapped; LA duplicate registrations will be silently ignored.")
 else
@@ -171,7 +198,12 @@ mod:hook("NewsFeedUI", "init", function(func, self, parent, ingame_ui_context)
         if tmpl and not tmpl._la_prefix_patch_notif_wrapped then
             local orig_cond = tmpl.condition_func
             tmpl.condition_func = function(params)
-                if mod:get("suppress_la_notifications") then return false end
+                -- v0.9.49-dev (#186): the LA Okri's-Challenges disable toggle
+                -- also silences LA's unread-quest-letter banner — it's the
+                -- "notification" that goes with the quest line. Reuses this
+                -- existing wrapper (NO second NewsFeedUI.init hook — VMF drops
+                -- duplicate Class.method registrations).
+                if mod:get("suppress_la_notifications") or mod:get("la_disable_okri_challenges") then return false end
                 if orig_cond then return orig_cond(params) end
                 return false
             end

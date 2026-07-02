@@ -1,5 +1,5 @@
-# check_vmf_widget_types.ps1 — static scan for invalid VMF widget `type` values
-# in active-mod `*_data.lua` files.
+# check_vmf_widget_types.ps1 — static scan for invalid VMF widget `type`
+# values AND malformed numeric `range` fields in active-mod `*_data.lua` files.
 #
 # Bug class: VMF's options init (`new_mod`'s `mod_data`) does a strict
 # whitelist match on `widget.type`. The canonical type set as of VMF current
@@ -13,6 +13,17 @@
 # and the mod's ENTIRE options page disappears (not just the offending
 # widget). Runtime `mod:get(setting_id)` reads still work, so the user has
 # no UI to change settings but the mod itself loads — silent UI death.
+#
+# SECOND bug class (added 2026-06-29): a `numeric` widget's `range` field must
+# be an array of EXACTLY 2 elements `{ min, max }`. A 3-element range — e.g.
+# the `{ 0, 3000, 25 }` "step hint" attempt — is NOT silently ignored by VMF;
+# it fails the SAME options-init validation with
+#     [widget "<id>" (numeric)]: 'range' field must contain an array-like
+#     table with 2 elements
+# and kills the entire mod's options registration (no `[<mod>:LOAD]`, every
+# tweak gone). Burned ct_dev v0.7.188-dev (`starting_coins` range `{0,3000,25}`,
+# #164) — the mod was completely dead until v0.7.189-dev reverted it. A numeric
+# "step" CANNOT be carried in range[3]; snap in `on_setting_changed` instead.
 #
 # Burned 2026-05-25: gt v0.2.60-dev shipped with widget #103
 # `type = "text_input"` (a non-VMF type the author assumed worked because
@@ -84,6 +95,15 @@ function Read-FileUtf8([string]$path) {
 # only define widget trees, so every `type =` field is a widget type.
 $rxWidgetType = [regex]'\btype\s*=\s*"([A-Za-z0-9_]+)"'
 
+# Single-line `range = { ... }` capture. `range` is a numeric-widget-only
+# field and MUST hold exactly 2 elements. We count top-level comma-separated
+# items inside the braces; the data files always write ranges on one line as
+# simple `{ num, num }` literals, so a naive comma split is exact here.
+# Multi-line range tables aren't used in these files (and would be unusual);
+# we only validate single-line ranges, consistent with this script's
+# line-oriented philosophy.
+$rxRange = [regex]'\brange\s*=\s*\{([^}]*)\}'
+
 # ---- file collection ----
 function Get-ScanFiles {
     param([string]$Root)
@@ -141,17 +161,35 @@ function Scan-File {
         $commentIdx = $line.IndexOf('--')
         if ($commentIdx -ge 0) { $codePart = $line.Substring(0, $commentIdx) }
 
+        # --- 1) invalid widget type ---
         $matches = $rxWidgetType.Matches($codePart)
-        if ($matches.Count -eq 0) { continue }
-
         foreach ($m in $matches) {
             $typeName = $m.Groups[1].Value
             if (-not $ValidSet.ContainsKey($typeName)) {
                 $errors += [pscustomobject]@{
+                    Kind = "type"
                     File = $Path
                     Line = $i + 1
                     Type = $typeName
                     Text = $line.Trim()
+                }
+            }
+        }
+
+        # --- 2) malformed numeric `range` (must be exactly 2 elements) ---
+        $rangeMatches = $rxRange.Matches($codePart)
+        foreach ($rm in $rangeMatches) {
+            $inner = $rm.Groups[1].Value.Trim()
+            if ($inner -eq "") { continue }   # `range = {}` — not our class; leave to runtime
+            # Count top-level comma-separated elements (range literals are flat).
+            $elems = @($inner -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+            if ($elems.Count -ne 2) {
+                $errors += [pscustomobject]@{
+                    Kind  = "range"
+                    File  = $Path
+                    Line  = $i + 1
+                    Type  = "range[$($elems.Count)]"
+                    Text  = $line.Trim()
                 }
             }
         }
@@ -173,7 +211,8 @@ function Invoke-SelfTest {
 
     $cases = @(
         @{ Path = "widget_type_bad.lua";  ExpectedError = $true;  Desc = "type=`"text_input`" (invalid VMF type)" },
-        @{ Path = "widget_type_good.lua"; ExpectedError = $false; Desc = "type=`"checkbox`" (valid VMF type)" }
+        @{ Path = "widget_type_good.lua"; ExpectedError = $false; Desc = "valid types + valid 2-element range" },
+        @{ Path = "widget_range_bad.lua"; ExpectedError = $true;  Desc = "numeric range { 0, 3000, 25 } (3 elements — fatal)" }
     )
 
     $allPass = $true
@@ -241,7 +280,7 @@ if ($hardError) {
 }
 
 if ($allErrors.Count -eq 0) {
-    Write-Host "[check_vmf_widget_types] OK -- all widget types are valid VMF." -ForegroundColor Green
+    Write-Host "[check_vmf_widget_types] OK -- all widget types are valid VMF; all numeric ranges have 2 elements." -ForegroundColor Green
     exit 0
 }
 
@@ -249,7 +288,11 @@ Write-Host "[check_vmf_widget_types] ERRORS: $($allErrors.Count)" -ForegroundCol
 foreach ($e in $allErrors) {
     $rel = $e.File
     if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
-    Write-Host ("  X {0}:{1} -- invalid type '{2}' (valid: {3})" -f $rel, $e.Line, $e.Type, $ValidTypesDisplay) -ForegroundColor Red
+    if ($e.Kind -eq "range") {
+        Write-Host ("  X {0}:{1} -- numeric 'range' has {2} elements; VMF requires EXACTLY 2 {{ min, max }} (a step in range[3] is fatal, not ignored)" -f $rel, $e.Line, $e.Type) -ForegroundColor Red
+    } else {
+        Write-Host ("  X {0}:{1} -- invalid type '{2}' (valid: {3})" -f $rel, $e.Line, $e.Type, $ValidTypesDisplay) -ForegroundColor Red
+    }
     Write-Host ("      $($e.Text)") -ForegroundColor DarkRed
 }
 exit 2

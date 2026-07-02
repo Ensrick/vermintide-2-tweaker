@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.350-dev"
+local MOD_VERSION = "0.1.358-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -30,6 +30,14 @@ local CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cros
 -- line-1336 cross-access tracking and silently breaking 3P anim remap.
 -- v0.1.337 consolidated both bodies; v0.1.339 adds this regression guard.
 local _cwv_wield_hook_registration_count = 0
+
+-- Issue #1: old-musket + shared musket-pool runtime state, consolidated into a
+-- single file-scope local holder instead of ~28 bare globals. Kept as ONE table
+-- (not individual `local`s) because the main chunk already sits at 199/200 Lua
+-- 5.1 locals; 28 more file-scope locals overflow the 200-local ceiling (that is
+-- what broke the v0.1.330/331 attempt). Fields keep their original names so the
+-- refactor is a pure `_om.` prefix with no behavior change.
+local _om = {}
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- v0.1.344: removed the in-game chat banner echo per PROJECT_STANDARDS.md
@@ -72,12 +80,10 @@ mod:info("[regression-test-command] registered as /cwv_regression_test")
 -- ============================================================================
 -- Debug-mode logging helper (v0.1.336; gate renamed v0.1.340)
 -- ============================================================================
--- Gates verbose [cwv:dbg] diagnostic lines behind the universal
--- `enable_debug_logging` VMF checkbox (PROJECT_STANDARDS.md § 3.6;
--- previously `cwv_debug_mode`). When OFF, every _dbg call short-circuits
--- before formatting -- safe to leave call sites in hot paths. When ON,
--- lines route to `mod:info` with the `[cwv:dbg] ` prefix so they sort
--- alongside the rest of the cwv log stream in console.log.
+-- Both route through VMF logging (mod:debug / mod:warning), gated by VMF
+-- output_mode. _dbg uses mod:debug (output_mode_debug gate); _dbg_alert uses
+-- mod:warning (output_mode_warning gate). Safe to leave call sites in hot
+-- paths -- VMF skips formatting when the output mode is off.
 --
 -- KEEP UNCONDITIONAL (do NOT route through _dbg):
 --   * mod:info("Character Weapon Variants v%s ...") boot lines.
@@ -86,20 +92,15 @@ mod:info("[regression-test-command] registered as /cwv_regression_test")
 --   * Template-creation summary lines ("Created <foo>_template ...") --
 --     these fire once at boot and document the registered table contents.
 --
--- v0.1.341-dev: two-helper policy per PROJECT_STANDARDS.md § 3.6.
--- `_dbg` = confirmation / expected behavior — file only.
--- `_dbg_alert` = unexpected / wrong / mismatch — file AND in-game chat.
+-- v0.1.351-dev: per-mod toggle removed; both route through VMF output_mode.
+-- `_dbg` = confirmation / expected behavior — mod:debug (file only).
+-- `_dbg_alert` = unexpected / wrong / mismatch — mod:warning.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[cwv:dbg] " .. fmt, ...)
-    end
+    mod:debug("[cwv:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[cwv:dbg] " .. fmt, ...)
-        mod:echo("[cwv] " .. fmt, ...)
-    end
+    mod:warning("[cwv:dbg] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -1468,22 +1469,20 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 		end
 	end
 
-	-- (2) Debug-mode wield dump (any slot, cwv_* items only). Cached `mod:get`
-	-- lookup gates the rest -- no work when debug is off.
-	if mod:get("enable_debug_logging") then
-		local equipment = self._equipment
-		local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
-		local item_data = slot_data and slot_data.item_data
-		if item_data then
-			local bid = item_data.backend_id
-				or (item_data.mod_data and item_data.mod_data.backend_id)
-			if type(bid) == "string" and bid:match("^cwv_") then
-				_dbg("[cwv:wield] slot=%s backend_id=%s template=%s skin=%s career=%s",
-					tostring(slot_name), tostring(bid),
-					tostring(item_data.template),
-					tostring(slot_data.skin),
-					tostring(self._career_name))
-			end
+	-- (2) Debug-mode wield dump (any slot, cwv_* items only). Routes through
+	-- VMF output_mode_debug gate.
+	local equipment = self._equipment
+	local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
+	local item_data = slot_data and slot_data.item_data
+	if item_data then
+		local bid = item_data.backend_id
+			or (item_data.mod_data and item_data.mod_data.backend_id)
+		if type(bid) == "string" and bid:match("^cwv_") then
+			_dbg("[cwv:wield] slot=%s backend_id=%s template=%s skin=%s career=%s",
+				tostring(slot_name), tostring(bid),
+				tostring(item_data.template),
+				tostring(slot_data.skin),
+				tostring(self._career_name))
 		end
 	end
 end)
@@ -3150,7 +3149,7 @@ local function _toggle_musket_stance_and_rewield(player_unit)
 		end
 		-- v0.1.307: re-sync shared pool to the restored reserve so the
 		-- other pool member (if any) sees the same reserve.
-		if _cwv_musket_sync_pool then _cwv_musket_sync_pool(new_ext) end
+		if _om._cwv_musket_sync_pool then _om._cwv_musket_sync_pool(new_ext) end
 	end
 end
 
@@ -3733,30 +3732,30 @@ end  -- end of do-block opened above _OLD_MUSKET_BAYONET_DAMAGE_MULT
 -- pickup), the sync helper copies the new value to every other live
 -- member. Cap dynamically scales with the count of alive pool members.
 do
-	_CWV_MUSKET_AMMO_EXTS    = setmetatable({}, { __mode = "k" })
-	_CWV_RESERVE_PER_MUSKET  = 10  -- max_ammo (11) - ammo_per_clip (1)
+	_om._CWV_MUSKET_AMMO_EXTS    = setmetatable({}, { __mode = "k" })
+	_om._CWV_RESERVE_PER_MUSKET  = 10  -- max_ammo (11) - ammo_per_clip (1)
 
 	local function _count_alive_pool_members()
 		local n = 0
-		for ext in pairs(_CWV_MUSKET_AMMO_EXTS) do
+		for ext in pairs(_om._CWV_MUSKET_AMMO_EXTS) do
 			if ext.unit and Unit.alive(ext.unit) then n = n + 1 end
 		end
 		return n
 	end
 
-	_cwv_musket_pool_cap = function()
-		return _count_alive_pool_members() * _CWV_RESERVE_PER_MUSKET
+	_om._cwv_musket_pool_cap = function()
+		return _count_alive_pool_members() * _om._CWV_RESERVE_PER_MUSKET
 	end
 
 	-- Sync one member's _available_ammo across all alive pool members,
 	-- capped by the dynamic pool max. Called whenever any single
 	-- member's available_ammo changes.
-	_cwv_musket_sync_pool = function(source_ext)
+	_om._cwv_musket_sync_pool = function(source_ext)
 		if not source_ext or not source_ext._cwv_musket_pool_member then return end
-		local cap = _cwv_musket_pool_cap()
+		local cap = _om._cwv_musket_pool_cap()
 		local pool = math.min(source_ext._available_ammo or 0, cap)
 		source_ext._available_ammo = pool
-		for ext in pairs(_CWV_MUSKET_AMMO_EXTS) do
+		for ext in pairs(_om._CWV_MUSKET_AMMO_EXTS) do
 			if ext ~= source_ext and ext.unit and Unit.alive(ext.unit) then
 				ext._available_ammo = pool
 			end
@@ -3768,22 +3767,22 @@ do
 	-- extension. Aligns its initial `_available_ammo` with any existing
 	-- pool member's value (so a second-spawned musket inherits the
 	-- pool's current reserve, doesn't reset it to default 10).
-	_cwv_musket_register_ammo_ext = function(ext)
+	_om._cwv_musket_register_ammo_ext = function(ext)
 		if not ext or not ext.unit or not Unit.alive(ext.unit) then return end
 		if ext._cwv_musket_pool_member then return end
 		ext._cwv_musket_pool_member = true
-		_CWV_MUSKET_AMMO_EXTS[ext] = true
+		_om._CWV_MUSKET_AMMO_EXTS[ext] = true
 		-- Inherit existing pool value if any live members exist
-		for other in pairs(_CWV_MUSKET_AMMO_EXTS) do
+		for other in pairs(_om._CWV_MUSKET_AMMO_EXTS) do
 			if other ~= ext and other.unit and Unit.alive(other.unit) then
 				ext._available_ammo = other._available_ammo
 				break
 			end
 		end
 		-- Re-sync with new cap (which grew when we added this member)
-		_cwv_musket_sync_pool(ext)
+		_om._cwv_musket_sync_pool(ext)
 		_dbg("[cwv musket pool] registered ext on unit=%s, members=%d, pool_cap=%d, available=%s",
-			tostring(ext.unit), _count_alive_pool_members(), _cwv_musket_pool_cap(), tostring(ext._available_ammo))
+			tostring(ext.unit), _count_alive_pool_members(), _om._cwv_musket_pool_cap(), tostring(ext._available_ammo))
 	end
 
 	-- Hook ammo extension update — vanilla's reload completion mutates
@@ -3795,7 +3794,7 @@ do
 		local before = was_member and self._available_ammo or nil
 		local r = orig(self, ...)
 		if was_member and self._available_ammo ~= before then
-			_cwv_musket_sync_pool(self)
+			_om._cwv_musket_sync_pool(self)
 		end
 		return r
 	end)
@@ -3807,7 +3806,7 @@ do
 			local before = self._available_ammo
 			local r = orig(self, amount)
 			if self._available_ammo ~= before then
-				_cwv_musket_sync_pool(self)
+				_om._cwv_musket_sync_pool(self)
 			end
 			return r
 		end
@@ -4390,22 +4389,22 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		-- The user wants different pos/rot/scale per stance.
 		local _mode = (item_template == Weapons.musket_template_melee
 		               or item_template == Weapons.old_musket_template_melee) and "melee" or "ranged"
-		_apply_old_musket_textures(v_w1p)
-		_apply_old_musket_textures(v_w3p)
-		_track_old_musket_unit(v_w1p, "1p", _mode)
-		_track_old_musket_unit(v_w3p, "3p", _mode)
-		_apply_old_musket_transform(v_w1p, "1p", _mode)
-		_apply_old_musket_transform(v_w3p, "3p", _mode)
-		_spawn_old_musket_fx_proxy(world, v_w1p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1",     owner_unit_1p, "j_rightweaponattach")
-		_spawn_old_musket_fx_proxy(world, v_w3p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p", owner_unit_3p, "j_rightweaponattach")
+		_om._apply_old_musket_textures(v_w1p)
+		_om._apply_old_musket_textures(v_w3p)
+		_om._track_old_musket_unit(v_w1p, "1p", _mode)
+		_om._track_old_musket_unit(v_w3p, "3p", _mode)
+		_om._apply_old_musket_transform(v_w1p, "1p", _mode)
+		_om._apply_old_musket_transform(v_w3p, "3p", _mode)
+		_om._spawn_old_musket_fx_proxy(world, v_w1p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1",     owner_unit_1p, "j_rightweaponattach")
+		_om._spawn_old_musket_fx_proxy(world, v_w3p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p", owner_unit_3p, "j_rightweaponattach")
 
 		-- v0.1.306: register the spawned ammo extension into the shared
 		-- reserve pool so cross-slot equipped cwv muskets share reserve
 		-- ammo (chambered ammo stays per-item). 1P unit only — 3P doesn't
 		-- have ammo_system in vanilla rifle template.
-		if _cwv_musket_register_ammo_ext and v_w1p and Unit.alive(v_w1p)
+		if _om._cwv_musket_register_ammo_ext and v_w1p and Unit.alive(v_w1p)
 				and ScriptUnit.has_extension(v_w1p, "ammo_system") then
-			_cwv_musket_register_ammo_ext(ScriptUnit.extension(v_w1p, "ammo_system"))
+			_om._cwv_musket_register_ammo_ext(ScriptUnit.extension(v_w1p, "ammo_system"))
 		end
 	end
 
@@ -4727,8 +4726,8 @@ mod:hook("GearUtils", "destroy_wielded", function(func, world, wielded_unit)
 		_detach_musket_bayonet(world, wielded_unit)
 		-- v0.1.293: destroy Old Musket FX-proxy (hidden vanilla rifle) when
 		-- our custom mesh is destroyed.
-		if _destroy_old_musket_fx_proxy then
-			_destroy_old_musket_fx_proxy(wielded_unit)
+		if _om._destroy_old_musket_fx_proxy then
+			_om._destroy_old_musket_fx_proxy(wielded_unit)
 		end
 	end
 	return func(world, wielded_unit)
@@ -4835,15 +4834,15 @@ end
 -- box for long-term storage, `:unbox()` to get a fresh raw Quaternion when
 -- you need to pass it to an API that wants a raw value.
 -- Defaults for 1P-RANGED match v0.1.295 user-tuned values.
-_CWV_OLD_MUSKET_POS_1P_RANGED   = { 0, 0.62, 0 }
-_CWV_OLD_MUSKET_ROT_1P_RANGED   = QuaternionBox(Quaternion.axis_angle(Vector3(1, 1, -1), -math.pi / 2))
-_CWV_OLD_MUSKET_SCALE_1P_RANGED = { 1, 1.2, 1.4 }
+_om._CWV_OLD_MUSKET_POS_1P_RANGED   = { 0, 0.62, 0 }
+_om._CWV_OLD_MUSKET_ROT_1P_RANGED   = QuaternionBox(Quaternion.axis_angle(Vector3(1, 1, -1), -math.pi / 2))
+_om._CWV_OLD_MUSKET_SCALE_1P_RANGED = { 1, 1.2, 1.4 }
 
 -- v0.1.299 1P MELEE defaults from user live-tune: pos (0, 0.06, 0),
 -- rot axis (0, 1, 0) @ -90° (pure Y-axis rotation), scale identity.
-_CWV_OLD_MUSKET_POS_1P_MELEE   = { 0, 0.06, 0 }
-_CWV_OLD_MUSKET_ROT_1P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
-_CWV_OLD_MUSKET_SCALE_1P_MELEE = { 1, 1, 1 }
+_om._CWV_OLD_MUSKET_POS_1P_MELEE   = { 0, 0.06, 0 }
+_om._CWV_OLD_MUSKET_ROT_1P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
+_om._CWV_OLD_MUSKET_SCALE_1P_MELEE = { 1, 1, 1 }
 
 -- v0.1.318: 3P split into _RANGED / _MELEE.
 -- v0.1.320: final tuned values from user live-tune:
@@ -4851,38 +4850,38 @@ _CWV_OLD_MUSKET_SCALE_1P_MELEE = { 1, 1, 1 }
 --   3P-MELEE  — pos (0, 0.045, 0.1) (unchanged from v0.1.318), rot (0, 1, 0) @ -90°
 --               (unchanged), scale (1, 1.1, 1.1) (matched to 3P-RANGED per user
 --               "do the same scaling for melee as well")
-_CWV_OLD_MUSKET_POS_3P_RANGED   = { 0, 0.64, -0.01 }
-_CWV_OLD_MUSKET_ROT_3P_RANGED   = QuaternionBox(Quaternion.from_euler_angles_xyz(-90, -90, 0))
-_CWV_OLD_MUSKET_SCALE_3P_RANGED = { 1, 1.1, 1.1 }
+_om._CWV_OLD_MUSKET_POS_3P_RANGED   = { 0, 0.64, -0.01 }
+_om._CWV_OLD_MUSKET_ROT_3P_RANGED   = QuaternionBox(Quaternion.from_euler_angles_xyz(-90, -90, 0))
+_om._CWV_OLD_MUSKET_SCALE_3P_RANGED = { 1, 1.1, 1.1 }
 
-_CWV_OLD_MUSKET_POS_3P_MELEE   = { 0, 0.045, 0.1 }
-_CWV_OLD_MUSKET_ROT_3P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
-_CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1.1, 1.1 }
+_om._CWV_OLD_MUSKET_POS_3P_MELEE   = { 0, 0.045, 0.1 }
+_om._CWV_OLD_MUSKET_ROT_3P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
+_om._CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1.1, 1.1 }
 
 -- Weak-keyed tracking sets — one per (perspective × mode) bucket.
-_CWV_OLD_MUSKET_UNITS_1P_RANGED = setmetatable({}, { __mode = "k" })
-_CWV_OLD_MUSKET_UNITS_1P_MELEE  = setmetatable({}, { __mode = "k" })
-_CWV_OLD_MUSKET_UNITS_3P_RANGED = setmetatable({}, { __mode = "k" })
-_CWV_OLD_MUSKET_UNITS_3P_MELEE  = setmetatable({}, { __mode = "k" })
+_om._CWV_OLD_MUSKET_UNITS_1P_RANGED = setmetatable({}, { __mode = "k" })
+_om._CWV_OLD_MUSKET_UNITS_1P_MELEE  = setmetatable({}, { __mode = "k" })
+_om._CWV_OLD_MUSKET_UNITS_3P_RANGED = setmetatable({}, { __mode = "k" })
+_om._CWV_OLD_MUSKET_UNITS_3P_MELEE  = setmetatable({}, { __mode = "k" })
 
-_track_old_musket_unit = function(unit, perspective, mode)
+_om._track_old_musket_unit = function(unit, perspective, mode)
 	if not unit or not Unit.alive(unit) then return end
 	if perspective == "1p" then
 		if mode == "melee" then
-			_CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = true
+			_om._CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = true
 		else
-			_CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = true
+			_om._CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = true
 		end
 	else
 		if mode == "melee" then
-			_CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = true
+			_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = true
 		else
-			_CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = true
+			_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = true
 		end
 	end
 end
 
-_apply_old_musket_textures = function(unit)
+_om._apply_old_musket_textures = function(unit)
 	if not unit or not Unit.alive(unit) then return end
 	local ok, num_meshes = pcall(Unit.num_meshes, unit)
 	if not ok or not num_meshes then return end
@@ -4904,20 +4903,20 @@ _apply_old_musket_textures = function(unit)
 	end
 end
 
-_apply_old_musket_transform = function(unit, perspective, mode)
+_om._apply_old_musket_transform = function(unit, perspective, mode)
 	if not unit or not Unit.alive(unit) then return end
 	local pos, rot, scale
 	if perspective == "1p" then
 		if mode == "melee" then
-			pos, rot, scale = _CWV_OLD_MUSKET_POS_1P_MELEE, _CWV_OLD_MUSKET_ROT_1P_MELEE, _CWV_OLD_MUSKET_SCALE_1P_MELEE
+			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_1P_MELEE, _om._CWV_OLD_MUSKET_ROT_1P_MELEE, _om._CWV_OLD_MUSKET_SCALE_1P_MELEE
 		else
-			pos, rot, scale = _CWV_OLD_MUSKET_POS_1P_RANGED, _CWV_OLD_MUSKET_ROT_1P_RANGED, _CWV_OLD_MUSKET_SCALE_1P_RANGED
+			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_1P_RANGED, _om._CWV_OLD_MUSKET_ROT_1P_RANGED, _om._CWV_OLD_MUSKET_SCALE_1P_RANGED
 		end
 	else
 		if mode == "melee" then
-			pos, rot, scale = _CWV_OLD_MUSKET_POS_3P_MELEE, _CWV_OLD_MUSKET_ROT_3P_MELEE, _CWV_OLD_MUSKET_SCALE_3P_MELEE
+			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_3P_MELEE, _om._CWV_OLD_MUSKET_ROT_3P_MELEE, _om._CWV_OLD_MUSKET_SCALE_3P_MELEE
 		else
-			pos, rot, scale = _CWV_OLD_MUSKET_POS_3P_RANGED, _CWV_OLD_MUSKET_ROT_3P_RANGED, _CWV_OLD_MUSKET_SCALE_3P_RANGED
+			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_3P_RANGED, _om._CWV_OLD_MUSKET_ROT_3P_RANGED, _om._CWV_OLD_MUSKET_SCALE_3P_RANGED
 		end
 	end
 	pcall(Unit.set_local_position, unit, 0, Vector3(pos[1], pos[2], pos[3]))
@@ -4937,9 +4936,9 @@ end
 -- Result: muzzle flash, smoke, sound, casing-eject all emit from the right
 -- world position (our mesh's hand-attached position, since the proxy is
 -- linked) while only our custom mesh renders.
-_CWV_OLD_MUSKET_FX_PROXY = setmetatable({}, { __mode = "k" })  -- our_unit -> proxy_unit
+_om._CWV_OLD_MUSKET_FX_PROXY = setmetatable({}, { __mode = "k" })  -- our_unit -> proxy_unit
 
-_spawn_old_musket_fx_proxy = function(world, our_unit, vanilla_path, owner_unit, owner_hand_node_name)
+_om._spawn_old_musket_fx_proxy = function(world, our_unit, vanilla_path, owner_unit, owner_hand_node_name)
 	if not our_unit or not Unit.alive(our_unit) then
 		-- v0.1.341-dev: promoted to `_dbg_alert` — "invalid unit" is an
 		-- alert condition (the FX proxy can't be installed; FX won't fire).
@@ -4989,19 +4988,19 @@ _spawn_old_musket_fx_proxy = function(world, our_unit, vanilla_path, owner_unit,
 	pcall(Unit.set_local_rotation, proxy, 0, Quaternion.identity())
 	pcall(Unit.set_local_scale, proxy, 0, Vector3(1, 1, 1))
 	local vok = pcall(Unit.set_unit_visibility, proxy, false)
-	_CWV_OLD_MUSKET_FX_PROXY[our_unit] = proxy
+	_om._CWV_OLD_MUSKET_FX_PROXY[our_unit] = proxy
 	_dbg("[cwv old-musket fx] proxy spawned: path=%s linked_to=%s link_ok=%s vis_ok=%s",
 		vanilla_path, linked_to, tostring(lok), tostring(vok))
 end
 
-_destroy_old_musket_fx_proxy = function(our_unit)
-	local proxy = _CWV_OLD_MUSKET_FX_PROXY[our_unit]
+_om._destroy_old_musket_fx_proxy = function(our_unit)
+	local proxy = _om._CWV_OLD_MUSKET_FX_PROXY[our_unit]
 	if proxy and Unit.alive(proxy) then
 		if Managers and Managers.state and Managers.state.unit_spawner then
 			pcall(function() Managers.state.unit_spawner:mark_for_deletion(proxy) end)
 		end
 	end
-	_CWV_OLD_MUSKET_FX_PROXY[our_unit] = nil
+	_om._CWV_OLD_MUSKET_FX_PROXY[our_unit] = nil
 end
 
 -- Proxy Unit.node lookups: when called on our custom mesh and the requested
@@ -5013,14 +5012,14 @@ end
 -- Unit.node hook can probe our mesh without invoking its own hook chain.
 local _orig_unit_has_node = Unit.has_node
 mod:hook(Unit, "node", function(orig, unit, name)
-	local proxy = _CWV_OLD_MUSKET_FX_PROXY[unit]
+	local proxy = _om._CWV_OLD_MUSKET_FX_PROXY[unit]
 	if proxy and Unit.alive(proxy) and not _orig_unit_has_node(unit, name) then
 		return orig(proxy, name)
 	end
 	return orig(unit, name)
 end)
 mod:hook(Unit, "has_node", function(orig, unit, name)
-	local proxy = _CWV_OLD_MUSKET_FX_PROXY[unit]
+	local proxy = _om._CWV_OLD_MUSKET_FX_PROXY[unit]
 	if proxy and Unit.alive(proxy) then
 		return orig(unit, name) or orig(proxy, name)
 	end
@@ -5035,7 +5034,7 @@ end)
 -- no-ops. Redirect to the proxy (which has the full vanilla flow graph).
 -- Same proxy-table-lookup pattern as Unit.node hook above.
 mod:hook(Unit, "flow_event", function(orig, unit, event_name)
-	local proxy = _CWV_OLD_MUSKET_FX_PROXY[unit]
+	local proxy = _om._CWV_OLD_MUSKET_FX_PROXY[unit]
 	if proxy and Unit.alive(proxy) then
 		return orig(proxy, event_name)
 	end
@@ -5044,42 +5043,42 @@ end)
 -- Flow VARIABLES seed values that flow graph nodes read (e.g. "hit_position"
 -- on line 192 of action_handgun.lua). Redirect to proxy for the same reason.
 mod:hook(Unit, "set_flow_variable", function(orig, unit, name, value)
-	local proxy = _CWV_OLD_MUSKET_FX_PROXY[unit]
+	local proxy = _om._CWV_OLD_MUSKET_FX_PROXY[unit]
 	if proxy and Unit.alive(proxy) then
 		return orig(proxy, name, value)
 	end
 	return orig(unit, name, value)
 end)
 
-_reapply_old_musket_transforms_all = function()
+_om._reapply_old_musket_transforms_all = function()
 	local n_1p_r, n_1p_m = 0, 0
-	for unit in pairs(_CWV_OLD_MUSKET_UNITS_1P_RANGED) do
+	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_1P_RANGED) do
 		if Unit.alive(unit) then
-			_apply_old_musket_transform(unit, "1p", "ranged"); n_1p_r = n_1p_r + 1
+			_om._apply_old_musket_transform(unit, "1p", "ranged"); n_1p_r = n_1p_r + 1
 		else
-			_CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = nil
+			_om._CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = nil
 		end
 	end
-	for unit in pairs(_CWV_OLD_MUSKET_UNITS_1P_MELEE) do
+	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_1P_MELEE) do
 		if Unit.alive(unit) then
-			_apply_old_musket_transform(unit, "1p", "melee"); n_1p_m = n_1p_m + 1
+			_om._apply_old_musket_transform(unit, "1p", "melee"); n_1p_m = n_1p_m + 1
 		else
-			_CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = nil
+			_om._CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = nil
 		end
 	end
 	local n_3p_r, n_3p_m = 0, 0
-	for unit in pairs(_CWV_OLD_MUSKET_UNITS_3P_RANGED) do
+	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_3P_RANGED) do
 		if Unit.alive(unit) then
-			_apply_old_musket_transform(unit, "3p", "ranged"); n_3p_r = n_3p_r + 1
+			_om._apply_old_musket_transform(unit, "3p", "ranged"); n_3p_r = n_3p_r + 1
 		else
-			_CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = nil
+			_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = nil
 		end
 	end
-	for unit in pairs(_CWV_OLD_MUSKET_UNITS_3P_MELEE) do
+	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_3P_MELEE) do
 		if Unit.alive(unit) then
-			_apply_old_musket_transform(unit, "3p", "melee"); n_3p_m = n_3p_m + 1
+			_om._apply_old_musket_transform(unit, "3p", "melee"); n_3p_m = n_3p_m + 1
 		else
-			_CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = nil
+			_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = nil
 		end
 	end
 	mod:echo("[cwv old-musket] reapplied to %d 1P-r + %d 1P-m + %d 3P-r + %d 3P-m unit(s)", n_1p_r, n_1p_m, n_3p_r, n_3p_m)
@@ -6060,6 +6059,344 @@ end
 
 _register_tuskgor_javelin_assets()
 _create_tuskgor_javelin_template()
+
+-- ============================================================================
+-- Tuskgor Javelin (BOMB SLOT) — single-use thrown spear "grenade"  (v0.1.352-dev)
+-- ============================================================================
+-- A NEW archetype for CWV: an item that lives in slot_grenade (the bomb slot)
+-- rather than a backend weapon slot. It is acquired via a NEW grenade pickup
+-- injected into Pickups.grenades — it does NOT replace frag/fire bombs, it just
+-- joins the bomb-pickup pool that can spawn in every game mode.
+--
+-- BEHAVIOUR (per user 2026-06-29): NOT a bomb. It is the literal javelin throw
+-- in the grenade slot — a single straight-flying spear that:
+--   * pierces ARMOUR  (damage profile armor_modifier raised across the board)
+--   * penetrates SEVERAL enemies in a line: cleave_distribution drives the
+--     projectile's _max_mass (player_projectile_unit_extension.lua get_max_targets),
+--     so the spear keeps travelling until cumulative enemy mass is spent, THEN
+--     links/sticks (link/wall_nail).
+--   * goes through SHIELDS  (thrown_javelin damage profile shield_break = true)
+--   * high damage to MONSTERS + on HEADSHOT (power scale + headshot boost curve)
+--   * single use (ammo_data.max_ammo = 1, destroy_when_out_of_ammo = true)
+--
+-- WHY it can't use the normal _variant_definitions path: slot_grenade items are
+-- stored_in_backend = false, never equipped from the keep, and resolved via
+-- ItemMasterList[key].temporary_template -> Weapons[name]. So it is registered
+-- directly as ItemMasterList entry + Weapons template + Pickups.grenades entry,
+-- NOT a MoreItemsLibrary backend item.
+--
+-- MECHANICS CONFIRMED (decompiled source, 2026-06-29):
+--   * kind = "thrown_projectile" => ActionThrownProjectile is registered for
+--     everyone (weapon_unit_extension.lua:101-106 merges every DLC's
+--     action_classes_lookup; throwing axes ship with the game). It applies
+--     DIRECT impact damage from impact_data.damage_profile with NO aoe / NO
+--     explosion — unlike kind="charged_projectile" (vanilla grenades) which
+--     always explodes.
+--   * Pickup pool: pickup_system reads Pickups.grenades directly via weighted
+--     random; AllPickups + NetworkLookup.pickup_names are built at boot, so a
+--     post-boot mod entry must be mirrored in manually (same as the ranged
+--     javelin's ammo pickups above). The grenade group is renormalised to sum
+--     to 1.0 (guards the pickup-sampler total<1.0 crash class).
+--   * MP: the equipped grenade syncs by item_name index (rpc_add_equipment ->
+--     NetworkLookup.item_names); the husk (remote) view reads right_hand_unit
+--     from the ItemMasterList entry; the HUD slot icon reads ItemMasterList.hud_icon.
+--   * Mesh load: PickupPackageLoader._load_pickup preloads the temporary_template's
+--     right/left_hand_unit (+_3p), so the boar spear loads automatically for the
+--     pickup; its _3p IS the projectile unit, already husk-registered by
+--     _register_tuskgor_javelin_assets above (ProjectileUnits "cwv_tuskgor_javelin").
+--
+-- Wrapped in do...end so its locals release back to the top-level chunk
+-- (Lua 5.1 200-local limit — this file is large).
+do
+	local _TJB_TEMPLATE_NAME    = "cwv_tuskgor_javelin_bomb_template"
+	local _TJB_ITEM_KEY         = "cwv_grenade_tuskgor_javelin"
+	local _TJB_PICKUP_KEY       = "cwv_tuskgor_javelin_bomb"
+	local _TJB_DAMAGE_PROFILE   = "cwv_tuskgor_javelin_bomb"
+	local _TJB_PROJECTILE_INFO  = "cwv_tuskgor_javelin_bomb"
+	-- Reuse the ranged javelin's boar-spear ProjectileUnits entry (registered +
+	-- husk-injected by _register_tuskgor_javelin_assets above).
+	local _TJB_PROJECTILE_UNITS = _TJ_PROJECTILE_KEY   -- "cwv_tuskgor_javelin"
+	local _TJB_HELD_UNIT        = "units/weapons/player/wpn_emp_boar_spear_01/wpn_emp_boar_spear_01"
+	-- Interim world-pickup model: the frag-bomb pickup unit (has interaction
+	-- actors + is always loaded). A spear-shaped carrier pickup can replace this
+	-- later (see the ranged javelin's throwing-axe-pup carrier pattern).
+	local _TJB_PICKUP_UNIT      = "units/weapons/player/pup_grenades/pup_grenade_01_t1"
+	local _TJB_SPAWN_SHARE      = 0.15   -- fraction of grenade-pool rolls that are the javelin
+	local _TJB_DAMAGE_MULT      = 2.5
+	local _TJB_DEPTH            = 1.5
+	local _TJB_CLEAVE           = 2.5
+	local _TJB_HEADSHOT_BOOST   = 3.0
+	local _TJB_THROW_SPEED      = 5000
+
+	-- 1. Damage profile — buffed thrown_javelin (armour pierce, multi-pierce,
+	--    monster + headshot damage; keeps shield_break). Deep-cloned so the
+	--    vanilla thrown_javelin (used by the ranged javelin + Kerillian) is
+	--    untouched.
+	local function _register_profile()
+		if not DamageProfileTemplates then return end
+		if DamageProfileTemplates[_TJB_DAMAGE_PROFILE] then return end
+		local source = DamageProfileTemplates.thrown_javelin
+		if not source then
+			mod:warning("thrown_javelin damage profile missing — bomb javelin unavailable")
+			return
+		end
+		local p = table.clone(source, true)
+		p.shield_break = true
+		local function bump_armor(m)
+			if m and m.attack then
+				for i = 1, #m.attack do m.attack[i] = math.max(m.attack[i], 1.5) end
+			end
+		end
+		bump_armor(p.armor_modifier_near)
+		bump_armor(p.armor_modifier_far)
+		p.cleave_distribution = p.cleave_distribution or {}
+		p.cleave_distribution.attack = _TJB_CLEAVE
+		p.cleave_distribution.impact = _TJB_CLEAVE
+		if p.default_target then
+			p.default_target.boost_curve_coefficient_headshot = _TJB_HEADSHOT_BOOST
+			local function scale(t) if t and t.attack then t.attack = t.attack * _TJB_DAMAGE_MULT end end
+			scale(p.default_target.power_distribution_near)
+			scale(p.default_target.power_distribution_far)
+			scale(p.default_target.power_distribution)
+		end
+		DamageProfileTemplates[_TJB_DAMAGE_PROFILE] = p
+		if NetworkLookup and NetworkLookup.damage_profiles
+			and not rawget(NetworkLookup.damage_profiles, _TJB_DAMAGE_PROFILE) then
+			local tbl = NetworkLookup.damage_profiles
+			local idx = #tbl + 1
+			rawset(tbl, idx, _TJB_DAMAGE_PROFILE)
+			rawset(tbl, _TJB_DAMAGE_PROFILE, idx)
+		end
+	end
+
+	-- 2. Projectile — boar spear in flight (NOT the woods-DLC elf javelin unit,
+	--    which isn't loaded for our item). Reuses the husk-registered boar-spear
+	--    ProjectileUnits entry.
+	local function _register_projectile()
+		if not Projectiles or not Projectiles.javelin then
+			mod:warning("Projectiles.javelin missing — bomb javelin projectile unavailable")
+			return
+		end
+		if Projectiles[_TJB_PROJECTILE_INFO] then return end
+		local p = table.clone(Projectiles.javelin, true)
+		p.projectile_units_template = _TJB_PROJECTILE_UNITS
+		p.use_weapon_skin = false
+		Projectiles[_TJB_PROJECTILE_INFO] = p
+	end
+
+	-- 3. Weapon template — the JAVELIN moveset (melee stabs + aimed throw) made
+	--    into a ONE-SHOT consumable that lives in the grenade slot: full size,
+	--    keeps the melee attacks, throwing it consumes it (destroy on out-of-ammo).
+	--    Cloned from javelin_template (NOT the grenade template) so it carries the
+	--    full action set + boot-populated lookup_data; the projectile resolves THIS
+	--    template via our ItemMasterList entry's temporary_template
+	--    (backend_interface_item.lua:770 reads temporary_template first), so no
+	--    runtime template-swap hook is needed.
+	local function _register_template()
+		if not Weapons then return end
+		if Weapons[_TJB_TEMPLATE_NAME] then return end
+		local source = Weapons.javelin_template
+		if not source then
+			mod:warning("javelin_template missing — bomb javelin unavailable")
+			return
+		end
+		local t = table.clone(source, true)
+
+		-- Held mesh: boar spear, FULL SIZE (no scale override anywhere — the
+		-- ranged variant's 0.80 shrink lives on the item def, which this item
+		-- does not set).
+		t.right_hand_unit = _TJB_HELD_UNIT
+		t.left_hand_unit  = _TJB_HELD_UNIT
+
+		-- One-shot: a single javelin, destroyed when thrown. No refill, no
+		-- vanilla auto-catch recall.
+		if t.ammo_data then
+			t.ammo_data.max_ammo = 1
+			t.ammo_data.ammo_per_clip = 1
+			t.ammo_data.ammo_per_reload = 1
+			t.ammo_data.block_ammo_pickup = true
+			t.ammo_data.unique_ammo_type = false
+			t.ammo_data.reload_on_ammo_pickup = false
+			t.ammo_data.destroy_when_out_of_ammo = true
+		end
+		if t.actions and t.actions.weapon_reload and t.actions.weapon_reload.default then
+			local function _false() return false end
+			t.actions.weapon_reload.default.condition_func = _false
+			t.actions.weapon_reload.default.chain_condition_func = _false
+		end
+
+		-- Walk sub-actions: buff the melee stabs, and rewrite the throw to the
+		-- buffed boar-spear projectile (direct impact, multi-pierce, no recovery —
+		-- it sticks where it lands and is gone).
+		for _, action_group in pairs(t.actions) do
+			if type(action_group) == "table" then
+				for _, sub in pairs(action_group) do
+					if type(sub) == "table" then
+						-- Melee stab damage (string-key profiles) — buff to match.
+						if sub.kind == "sweep" and sub.damage_profile then
+							sub.damage_profile = _clone_damage_profile(sub.damage_profile, "cwv_tjb_", { damage = _TJB_DAMAGE_MULT })
+						end
+						-- The throw (kind = "thrown_projectile").
+						if sub.kind == "thrown_projectile" then
+							sub.speed = _TJB_THROW_SPEED
+							sub.projectile_info = Projectiles[_TJB_PROJECTILE_INFO] or sub.projectile_info
+							sub.impact_data = {
+								damage_profile = (DamageProfileTemplates[_TJB_DAMAGE_PROFILE] and _TJB_DAMAGE_PROFILE) or "thrown_javelin",
+								depth = _TJB_DEPTH,
+								depth_damage_modifier_min = 1,
+								depth_damage_modifier_max = 1.2,
+								depth_offset = -0.2,
+								link = true,
+								wall_nail = true,
+								no_stop_on_friendly_fire = true,
+								flow_event_on_init = "link_projectile_show",
+								flow_event_on_walls = "teleport_out",
+							}
+						end
+					end
+				end
+			end
+		end
+
+		Weapons[_TJB_TEMPLATE_NAME] = t
+		mod:info("Created %s (javelin moveset, one-shot, full size, slot_grenade)", _TJB_TEMPLATE_NAME)
+	end
+
+	-- 4. ItemMasterList entry + NetworkLookup.item_names (MP equip sync). Husk
+	--    view reads right_hand_unit here; HUD slot icon reads hud_icon here.
+	local function _register_item()
+		if not ItemMasterList then return end
+		if rawget(ItemMasterList, _TJB_ITEM_KEY) then return end
+		rawset(ItemMasterList, _TJB_ITEM_KEY, {
+			name = _TJB_ITEM_KEY,
+			key = _TJB_ITEM_KEY,
+			description = "cwv_grenade_tuskgor_javelin_description",
+			display_name = "cwv_grenade_tuskgor_javelin_name",
+			gamepad_hud_icon = "hud_icon_bomb_01",
+			hud_icon = "hud_inventory_icon_bomb",
+			inventory_icon = "icons_placeholder",
+			is_local = true,
+			item_type = "grenade",
+			right_hand_unit = _TJB_HELD_UNIT,   -- husk (remote) view reads this
+			rarity = "exotic",
+			slot_type = "grenade",
+			temporary_template = _TJB_TEMPLATE_NAME,
+			can_wield = CanWieldAllItemTemplates,
+		})
+		if NetworkLookup and NetworkLookup.item_names
+			and not rawget(NetworkLookup.item_names, _TJB_ITEM_KEY) then
+			local tbl = NetworkLookup.item_names
+			local idx = #tbl + 1
+			rawset(tbl, idx, _TJB_ITEM_KEY)
+			rawset(tbl, _TJB_ITEM_KEY, idx)
+		end
+	end
+
+	-- 5. Pickup settings + resolve-by-name lookups. Registered UNCONDITIONALLY so
+	--    every peer can resolve a host-spawned pickup even if their own toggle is
+	--    off. AllPickups + Pickups.grenades share the same settings object (as
+	--    vanilla does).
+	local _pickup_settings = {
+		bots_mule_pickup = true,
+		consumable_item = true,
+		debug_pickup_category = "grenades",
+		dupable = true,
+		hud_description = "cwv_tuskgor_javelin_bomb",
+		individual_pickup = false,
+		item_description = "cwv_tuskgor_javelin_bomb",
+		item_name = _TJB_ITEM_KEY,
+		local_pickup_sound = true,
+		only_once = true,
+		pickup_sound_event = "pickup_grenade",
+		slot_name = "slot_grenade",
+		type = "inventory_item",
+		unit_name = _TJB_PICKUP_UNIT,
+		pickup_name = _TJB_PICKUP_KEY,
+		spawn_weighting = 0,   -- set during pool injection (step 6)
+	}
+	local function _register_pickup_lookups()
+		if AllPickups and not AllPickups[_TJB_PICKUP_KEY] then
+			AllPickups[_TJB_PICKUP_KEY] = _pickup_settings
+		end
+		if NetworkLookup and NetworkLookup.pickup_names
+			and not rawget(NetworkLookup.pickup_names, _TJB_PICKUP_KEY) then
+			local tbl = NetworkLookup.pickup_names
+			local idx = #tbl + 1
+			rawset(tbl, idx, _TJB_PICKUP_KEY)
+			rawset(tbl, _TJB_PICKUP_KEY, idx)
+		end
+	end
+
+	-- 6. Pool membership — add to Pickups.grenades + renormalise the group to sum
+	--    to 1.0. Gated on the local toggle (the host's pool decides what spawns in
+	--    their game; clients still resolve via step 5). Runs once (existence guard).
+	local function _inject_pool()
+		if not Pickups or not Pickups.grenades then return end
+		if Pickups.grenades[_TJB_PICKUP_KEY] then return end
+		local enabled = true
+		local ok, v = pcall(function() return mod:get("enable_cwv_tuskgor_javelin_bomb") end)
+		if ok and v == false then enabled = false end
+		if not enabled then
+			mod:info("Tuskgor Javelin bomb disabled by setting — not added to the grenade pool")
+			return
+		end
+		-- Pre-renorm raw weight so the final normalised share ~= _TJB_SPAWN_SHARE
+		-- (the other entries were already normalised to sum ~1.0 at boot).
+		_pickup_settings.spawn_weighting = _TJB_SPAWN_SHARE / (1 - _TJB_SPAWN_SHARE)
+		Pickups.grenades[_TJB_PICKUP_KEY] = _pickup_settings
+		local total = 0
+		for _, s in pairs(Pickups.grenades) do total = total + (s.spawn_weighting or 0) end
+		if total > 0 then
+			for _, s in pairs(Pickups.grenades) do
+				s.spawn_weighting = (s.spawn_weighting or 0) / total
+			end
+		end
+		mod:info("Injected '%s' into the grenade pickup pool (share ~%.0f%%)", _TJB_PICKUP_KEY, _TJB_SPAWN_SHARE * 100)
+	end
+
+	-- ⚠ TEMPORARILY DISABLED (v0.1.354-dev) — REGRESSION TRIAGE.
+	-- After this bomb-slot block was added (v0.1.352/.353), the user reported
+	-- that ALL CWV variant weapons stopped appearing (musket, dual axes,
+	-- axe+shield, etc.). The 23.56 log shows the mod loading fully with NO
+	-- registration error, so the cause is a global side-effect of running this
+	-- block at file load (suspects: NetworkLookup.item_names injection, the
+	-- Pickups.grenades renormalise, or the javelin_template clone). Guarded OFF
+	-- to restore content immediately; if content returns with this off, the
+	-- cause is confirmed here and the feature is re-introduced surgically.
+	local _TJB_FEATURE_ON = false
+	if _TJB_FEATURE_ON then
+		_register_profile()
+		_register_projectile()
+		_register_template()
+		_register_item()
+		_register_pickup_lookups()
+		_inject_pool()
+	end
+
+	-- Test/grant command: drop the one-shot Tuskgor Javelin straight into the
+	-- local player's bomb slot (bypasses the random pickup pool). Wield it with
+	-- the grenade key, then melee-stab or aim+throw; throwing it consumes it.
+	mod:command("cwv_give_javelin", "Give the single-use Tuskgor Javelin into your bomb slot", function()
+		local player = Managers.player and Managers.player:local_player()
+		local unit = player and player.player_unit
+		if not (unit and Unit.alive(unit)) then mod:echo("[cwv] no local player unit (be in a level)"); return end
+		local inv = ScriptUnit.has_extension(unit, "inventory_system")
+		if not inv then mod:echo("[cwv] no inventory extension on player unit"); return end
+		local item_data = rawget(ItemMasterList, _TJB_ITEM_KEY)
+		if not item_data then mod:echo("[cwv] javelin-bomb item not registered"); return end
+		-- The /give path bypasses PickupPackageLoader, which normally preloads the
+		-- temporary_template's held + _3p (projectile) units — force-load them so
+		-- the held mesh + thrown projectile don't spawn an unloaded unit.
+		if Managers.package then
+			pcall(function() Managers.package:load(_TJB_HELD_UNIT, "cwv_javelin_bomb", nil, true, true) end)
+			pcall(function() Managers.package:load(_TJB_HELD_UNIT .. "_3p", "cwv_javelin_bomb", nil, true, true) end)
+		end
+		local ok_add, err_add = pcall(function() inv:add_equipment("slot_grenade", item_data) end)
+		if not ok_add then mod:echo("[cwv] add_equipment failed: " .. tostring(err_add)); return end
+		pcall(function() inv:wield("slot_grenade") end)
+		mod:echo("[cwv] Tuskgor Javelin granted to bomb slot — wield (grenade key), melee or aim+throw. One use.")
+	end)
+end
 
 -- ============================================================
 -- Rapier template (modified fencing_sword_template_1)
@@ -8543,8 +8880,18 @@ local function _auto_register_all()
 	end
 
 	_auto_registered = true
-	_dbg("[cwv:auto_register] event=exit built_ok=%d build_failed=%d skipped_skin_only=%d skipped_already_registered=%d total_entries_added=%d",
-		n_built_ok, n_build_failed, n_skipped_skin_only, n_skipped_already_registered, #entries)
+	-- v0.1.356-dev: VISIBLE (mod:info, not _dbg) registration summary so the
+	-- "only axe+shield shows" regression can be diagnosed from the user's log
+	-- (INFO is on, DEBUG is off). If built_ok is ~28 but the inventory shows 1,
+	-- it's a display/backend-merge issue; if built_ok is ~1, the build loop is
+	-- bailing. Also lists the keys that made it into the registration batch.
+	mod:info("[cwv:auto_register] SUMMARY built_ok=%d build_failed=%d skipped_skin_only=%d skipped_already=%d entries_added=%d (defs=%d)",
+		n_built_ok, n_build_failed, n_skipped_skin_only, n_skipped_already_registered, #entries, #_variant_definitions)
+	do
+		local keys = {}
+		for _, p in ipairs(pending_defs) do keys[#keys + 1] = p.backend_id end
+		mod:info("[cwv:auto_register] registered keys: %s", table.concat(keys, ", "))
+	end
 end
 
 -- CLARIFY: StateInGameRunning.on_enter fires on entering the keep AND on every
@@ -9103,11 +9450,11 @@ local function _cwv_spawn_item_post(self, item_name)
 			_dbg_alert("[cwv preview] Unit.num_meshes failed: ok=%s num_meshes=%s", tostring(ok_nm), tostring(num_meshes))
 		end
 		_dbg("[cwv preview] textures applied: meshes=%d mats=%d ok_triples=%d", meshes_seen, mats_seen, tex_set_oks)
-		if _track_old_musket_unit then
-			_track_old_musket_unit(slot.right, "3p", _stance)
+		if _om._track_old_musket_unit then
+			_om._track_old_musket_unit(slot.right, "3p", _stance)
 		end
-		if _apply_old_musket_transform then
-			_apply_old_musket_transform(slot.right, "3p", _stance)
+		if _om._apply_old_musket_transform then
+			_om._apply_old_musket_transform(slot.right, "3p", _stance)
 		end
 	elseif def.item_key == "cwv_es_musket_old" then
 		-- v0.1.341-dev: promoted to `_dbg_alert` — "gate failed" is an
@@ -9294,19 +9641,19 @@ end
 -- stance (polearm), _3p = third-person (shared across modes).
 mod:command("cwv_om_pos_1p_r", "Old Musket 1P RANGED pos: /cwv_om_pos_1p_r <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_1p_r <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_POS_1P_RANGED = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_POS_1P_RANGED = v; _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_pos_1p_m", "Old Musket 1P MELEE pos: /cwv_om_pos_1p_m <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_1p_m <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_POS_1P_MELEE = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_POS_1P_MELEE = v; _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_pos_3p_r", "Old Musket 3P RANGED pos: /cwv_om_pos_3p_r <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_3p_r <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_POS_3P_RANGED = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_POS_3P_RANGED = v; _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_pos_3p_m", "Old Musket 3P MELEE pos: /cwv_om_pos_3p_m <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: /cwv_om_pos_3p_m <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_POS_3P_MELEE = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_POS_3P_MELEE = v; _om._reapply_old_musket_transforms_all()
 end)
 -- Rotation commands. Three operations per bucket:
 --   cwv_om_rot_<bucket>      <ax> <ay> <az> <deg>  — SET (replace current with single axis-angle)
@@ -9326,84 +9673,84 @@ local function _unbox_or_identity(boxed) return boxed and boxed:unbox() or Quate
 mod:command("cwv_om_rot_1p_r", "SET 1P RANGED rot (axis-angle deg): <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rot_1p_r <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_1P_RANGED = QuaternionBox(_q_aa(ax, ay, az, deg)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_1P_RANGED = QuaternionBox(_q_aa(ax, ay, az, deg)); _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_rot_1p_m", "SET 1P MELEE rot (axis-angle deg): <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rot_1p_m <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_1P_MELEE = QuaternionBox(_q_aa(ax, ay, az, deg)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_1P_MELEE = QuaternionBox(_q_aa(ax, ay, az, deg)); _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_rot_3p_r", "SET 3P RANGED rot (axis-angle deg): <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rot_3p_r <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_3P_RANGED = QuaternionBox(_q_aa(ax, ay, az, deg)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_3P_RANGED = QuaternionBox(_q_aa(ax, ay, az, deg)); _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_rot_3p_m", "SET 3P MELEE rot (axis-angle deg): <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rot_3p_m <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_3P_MELEE = QuaternionBox(_q_aa(ax, ay, az, deg)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_3P_MELEE = QuaternionBox(_q_aa(ax, ay, az, deg)); _om._reapply_old_musket_transforms_all()
 end)
 
 mod:command("cwv_om_rotmul_1p_r", "MUL 1P RANGED rot by axis-angle: <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rotmul_1p_r <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_1P_RANGED = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_CWV_OLD_MUSKET_ROT_1P_RANGED), _q_aa(ax, ay, az, deg)))
-	_reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_1P_RANGED = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_om._CWV_OLD_MUSKET_ROT_1P_RANGED), _q_aa(ax, ay, az, deg)))
+	_om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_rotmul_1p_m", "MUL 1P MELEE rot by axis-angle: <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rotmul_1p_m <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_1P_MELEE = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_CWV_OLD_MUSKET_ROT_1P_MELEE), _q_aa(ax, ay, az, deg)))
-	_reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_1P_MELEE = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_om._CWV_OLD_MUSKET_ROT_1P_MELEE), _q_aa(ax, ay, az, deg)))
+	_om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_rotmul_3p_r", "MUL 3P RANGED rot by axis-angle: <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rotmul_3p_r <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_3P_RANGED = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_CWV_OLD_MUSKET_ROT_3P_RANGED), _q_aa(ax, ay, az, deg)))
-	_reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_3P_RANGED = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_om._CWV_OLD_MUSKET_ROT_3P_RANGED), _q_aa(ax, ay, az, deg)))
+	_om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_rotmul_3p_m", "MUL 3P MELEE rot by axis-angle: <ax> <ay> <az> <deg>", function(ax, ay, az, deg)
 	ax, ay, az, deg = tonumber(ax), tonumber(ay), tonumber(az), tonumber(deg)
 	if not (ax and ay and az and deg) then mod:echo("usage: cwv_om_rotmul_3p_m <ax> <ay> <az> <degrees>"); return end
-	_CWV_OLD_MUSKET_ROT_3P_MELEE = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_CWV_OLD_MUSKET_ROT_3P_MELEE), _q_aa(ax, ay, az, deg)))
-	_reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_3P_MELEE = QuaternionBox(Quaternion.multiply(_unbox_or_identity(_om._CWV_OLD_MUSKET_ROT_3P_MELEE), _q_aa(ax, ay, az, deg)))
+	_om._reapply_old_musket_transforms_all()
 end)
 
 mod:command("cwv_om_eul_1p_r", "SET 1P RANGED rot from Euler XYZ (deg): <x> <y> <z>", function(x, y, z)
 	x, y, z = tonumber(x), tonumber(y), tonumber(z)
 	if not (x and y and z) then mod:echo("usage: cwv_om_eul_1p_r <x_deg> <y_deg> <z_deg>"); return end
-	_CWV_OLD_MUSKET_ROT_1P_RANGED = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_1P_RANGED = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_eul_1p_m", "SET 1P MELEE rot from Euler XYZ (deg): <x> <y> <z>", function(x, y, z)
 	x, y, z = tonumber(x), tonumber(y), tonumber(z)
 	if not (x and y and z) then mod:echo("usage: cwv_om_eul_1p_m <x_deg> <y_deg> <z_deg>"); return end
-	_CWV_OLD_MUSKET_ROT_1P_MELEE = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_1P_MELEE = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_eul_3p_r", "SET 3P RANGED rot from Euler XYZ (deg): <x> <y> <z>", function(x, y, z)
 	x, y, z = tonumber(x), tonumber(y), tonumber(z)
 	if not (x and y and z) then mod:echo("usage: cwv_om_eul_3p_r <x_deg> <y_deg> <z_deg>"); return end
-	_CWV_OLD_MUSKET_ROT_3P_RANGED = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_3P_RANGED = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_eul_3p_m", "SET 3P MELEE rot from Euler XYZ (deg): <x> <y> <z>", function(x, y, z)
 	x, y, z = tonumber(x), tonumber(y), tonumber(z)
 	if not (x and y and z) then mod:echo("usage: cwv_om_eul_3p_m <x_deg> <y_deg> <z_deg>"); return end
-	_CWV_OLD_MUSKET_ROT_3P_MELEE = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_ROT_3P_MELEE = QuaternionBox(Quaternion.from_euler_angles_xyz(x, y, z)); _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_scale_1p_r", "Old Musket 1P RANGED scale: /cwv_om_scale_1p_r <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_1p_r <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_SCALE_1P_RANGED = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_SCALE_1P_RANGED = v; _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_scale_1p_m", "Old Musket 1P MELEE scale: /cwv_om_scale_1p_m <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_1p_m <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_SCALE_1P_MELEE = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_SCALE_1P_MELEE = v; _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_scale_3p_r", "Old Musket 3P RANGED scale: /cwv_om_scale_3p_r <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_3p_r <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_SCALE_3P_RANGED = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_SCALE_3P_RANGED = v; _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_scale_3p_m", "Old Musket 3P MELEE scale: /cwv_om_scale_3p_m <x> <y> <z>", function(x, y, z)
 	local v = _parse3(x, y, z); if not v then mod:echo("usage: cwv_om_scale_3p_m <x> <y> <z>"); return end
-	_CWV_OLD_MUSKET_SCALE_3P_MELEE = v; _reapply_old_musket_transforms_all()
+	_om._CWV_OLD_MUSKET_SCALE_3P_MELEE = v; _om._reapply_old_musket_transforms_all()
 end)
 mod:command("cwv_om_show", "Echo current Old Musket transform values (rot as Euler XYZ deg)", function()
 	local function _f3(v) return string.format("(%.3f, %.3f, %.3f)", v[1], v[2], v[3]) end
@@ -9412,10 +9759,10 @@ mod:command("cwv_om_show", "Echo current Old Musket transform values (rot as Eul
 		local x, y, z = Quaternion.to_euler_angles_xyz(boxed:unbox())
 		return string.format("euler_xyz=(%.2f, %.2f, %.2f)°", x, y, z)
 	end
-	mod:echo("[cwv old-musket] 1P-RANGED pos=%s  rot=%s  scale=%s", _f3(_CWV_OLD_MUSKET_POS_1P_RANGED), _fr(_CWV_OLD_MUSKET_ROT_1P_RANGED), _f3(_CWV_OLD_MUSKET_SCALE_1P_RANGED))
-	mod:echo("[cwv old-musket] 1P-MELEE  pos=%s  rot=%s  scale=%s", _f3(_CWV_OLD_MUSKET_POS_1P_MELEE),  _fr(_CWV_OLD_MUSKET_ROT_1P_MELEE),  _f3(_CWV_OLD_MUSKET_SCALE_1P_MELEE))
-	mod:echo("[cwv old-musket] 3P-RANGED pos=%s  rot=%s  scale=%s", _f3(_CWV_OLD_MUSKET_POS_3P_RANGED), _fr(_CWV_OLD_MUSKET_ROT_3P_RANGED), _f3(_CWV_OLD_MUSKET_SCALE_3P_RANGED))
-	mod:echo("[cwv old-musket] 3P-MELEE  pos=%s  rot=%s  scale=%s", _f3(_CWV_OLD_MUSKET_POS_3P_MELEE),  _fr(_CWV_OLD_MUSKET_ROT_3P_MELEE),  _f3(_CWV_OLD_MUSKET_SCALE_3P_MELEE))
+	mod:echo("[cwv old-musket] 1P-RANGED pos=%s  rot=%s  scale=%s", _f3(_om._CWV_OLD_MUSKET_POS_1P_RANGED), _fr(_om._CWV_OLD_MUSKET_ROT_1P_RANGED), _f3(_om._CWV_OLD_MUSKET_SCALE_1P_RANGED))
+	mod:echo("[cwv old-musket] 1P-MELEE  pos=%s  rot=%s  scale=%s", _f3(_om._CWV_OLD_MUSKET_POS_1P_MELEE),  _fr(_om._CWV_OLD_MUSKET_ROT_1P_MELEE),  _f3(_om._CWV_OLD_MUSKET_SCALE_1P_MELEE))
+	mod:echo("[cwv old-musket] 3P-RANGED pos=%s  rot=%s  scale=%s", _f3(_om._CWV_OLD_MUSKET_POS_3P_RANGED), _fr(_om._CWV_OLD_MUSKET_ROT_3P_RANGED), _f3(_om._CWV_OLD_MUSKET_SCALE_3P_RANGED))
+	mod:echo("[cwv old-musket] 3P-MELEE  pos=%s  rot=%s  scale=%s", _f3(_om._CWV_OLD_MUSKET_POS_3P_MELEE),  _fr(_om._CWV_OLD_MUSKET_ROT_3P_MELEE),  _f3(_om._CWV_OLD_MUSKET_SCALE_3P_MELEE))
 end)
 
 -- v0.1.303 probe: dump every musket item in the backend mirror, plus the
@@ -9426,9 +9773,9 @@ end)
 -- in the pool, plus the pool cap. Useful for verifying the shared-pool
 -- behavior (chambered ammo per-item, reserve shared across items).
 mod:command("cwv_musket_ammo_diag", "Dump shared-pool ammo state for all cwv muskets", function()
-	if not _CWV_MUSKET_AMMO_EXTS then mod:echo("pool not initialized"); return end
+	if not _om._CWV_MUSKET_AMMO_EXTS then mod:echo("pool not initialized"); return end
 	local count = 0
-	for ext in pairs(_CWV_MUSKET_AMMO_EXTS) do
+	for ext in pairs(_om._CWV_MUSKET_AMMO_EXTS) do
 		local alive = ext.unit and Unit.alive(ext.unit)
 		if alive then
 			count = count + 1
@@ -9441,9 +9788,9 @@ mod:command("cwv_musket_ammo_diag", "Dump shared-pool ammo state for all cwv mus
 			mod:echo("[#?] dead member (cleanup pending)")
 		end
 	end
-	if _cwv_musket_pool_cap then
+	if _om._cwv_musket_pool_cap then
 		mod:echo("pool: members=%d  cap=%d  reserve_per_musket=%d",
-			count, _cwv_musket_pool_cap(), _CWV_RESERVE_PER_MUSKET)
+			count, _om._cwv_musket_pool_cap(), _om._CWV_RESERVE_PER_MUSKET)
 	end
 end)
 
@@ -9747,7 +10094,6 @@ end
 -- (1) Game state transitions. VMF surfaces engine state changes through the
 -- top-level `mod.on_game_state_changed = function(status, state_name)` slot.
 mod.on_game_state_changed = function(status, state_name)
-    if not mod:get("enable_debug_logging") then return end
     local n = _dbg_count_registered_cwv_items()
     _dbg("on_game_state_changed: status=%s state=%s registered_cwv_items=%d",
         tostring(status), tostring(state_name), n)
@@ -9756,8 +10102,15 @@ mod.on_game_state_changed = function(status, state_name)
     -- active) — `exit` fires before extensions are wired in the next state.
     if status ~= "enter" then return end
 
-    local pl = Managers.player and Managers.player:local_player()
-    local player_unit = pl and pl.player_unit
+    -- `Managers.player:local_player()` internally calls `peer_id()`, which
+    -- THROWS "Network backend has not been set" on early state-enters
+    -- (StateSplashScreen / menu) before the network backend exists. This is a
+    -- diagnostics-only handler, so pcall the lookup and bail silently when the
+    -- backend isn't up yet — otherwise VMF logs a (caught) error on every boot.
+    if not Managers.player then return end
+    local ok_pl, pl = pcall(Managers.player.local_player, Managers.player)
+    if not ok_pl or not pl then return end
+    local player_unit = pl.player_unit
     if not player_unit or not Unit.alive(player_unit) then
         _dbg("  loadout: no local player_unit yet (state=%s)", tostring(state_name))
         return
@@ -10109,13 +10462,10 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
 

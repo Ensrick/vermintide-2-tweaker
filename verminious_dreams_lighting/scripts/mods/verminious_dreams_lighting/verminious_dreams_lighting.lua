@@ -1,7 +1,7 @@
 local mod = get_mod("verminious_dreams_lighting")
 _MEM_PROBE_T0_VDLS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "1.0.6"
+local MOD_VERSION = "1.0.7"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([vdl] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy" — never echo at module load,
@@ -10,20 +10,15 @@ local MOD_VERSION = "1.0.6"
 mod:info("Verminious Dreams Lighting v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- Routed through VMF logging channels; visible via VMF output_mode_debug / output_mode_warning.
+-- `_dbg` is for confirmation / expected behavior — mod:debug channel.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[vdl:dbg] " .. fmt, ...)
-    end
+    mod:debug("[vdl:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[vdl:dbg] " .. fmt, ...)
-        mod:echo("[vdl] " .. fmt, ...)
-    end
+    mod:warning("[vdl:dbg] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -96,13 +91,10 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised on call" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised on call" end
 end)
 
 

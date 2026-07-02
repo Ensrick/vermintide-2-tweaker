@@ -277,27 +277,6 @@ return {
                 },
             },
             {
-                setting_id  = "mission_inventory_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "mission_inventory_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("mission_inventory_enabled_tooltip"),
-                    },
-                    {
-                        setting_id      = "gt_open_inv_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gt_open_mission_inventory",
-                        default_value   = {},
-                        tooltip         = mod:localize("gt_open_inv_hotkey_tooltip"),
-                    },
-                },
-            },
-            {
                 setting_id  = "player_state_group",
                 type        = "group",
                 sub_widgets = {
@@ -760,16 +739,6 @@ return {
                         tooltip       = mod:localize("gt_lobby_manifest_failnotify_enabled_tooltip"),
                     },
                 },
-            },
-            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-            -- v0.2.54-dev: renamed from `gt_debug_mode` (was nested in
-            -- `gt_debug_group`) to the universal `enable_debug_logging` key,
-            -- un-nested to top-level at the BOTTOM of the widget tree.
-            {
-                setting_id    = "enable_debug_logging",
-                type          = "checkbox",
-                default_value = false,
-                tooltip       = mod:localize("enable_debug_logging_tooltip"),
             },
             -- Bot Options -- AI teammate behavior fixes (see _gt_bot_fixes.lua).
             -- All default OFF; host-side only (bots exist on the host), no

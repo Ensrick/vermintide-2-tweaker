@@ -1,24 +1,35 @@
 return {
 	mod_description = {
-		en = "Adds new weapon variants combining models from different characters into lore-friendly packages.",
+		en = "Adds new weapon variants that combine models from different characters into lore-friendly weapons.",
 	},
 	mace_sword_tweak = {
 		en = "Mace and Sword Name and Cosmetic Tweak",
 	},
 	mace_sword_tweak_description = {
-		en = "When ON, renames Kruber's vanilla Mace and Sword to 'Cudgel and Short Sword' and shrinks its sword (off-hand) model to match the Shortsword variant. Affects only the vanilla weapon — the CWV Sword and Mace variant is a different weapon and is unaffected.",
+		en = "When on, renames Kruber's vanilla Mace and Sword to 'Cudgel and Short Sword' and shrinks the off-hand sword to match the Shortsword. This only changes the vanilla weapon; the separate Sword and Mace variant added by this mod is left untouched.",
 	},
 	cwv_interaction_ammunition_javelin = {
 		en = "Tuskgor Javelin",  -- pickup popup text when looking at a stuck javelin
 	},
 
 	-- ============================================================
+	-- Tuskgor Javelin (BOMB SLOT) — single-use thrown spear grenade
+	-- ============================================================
+	enable_cwv_tuskgor_javelin_bomb = { en = "Bomb Slot: Tuskgor Javelin (one-shot, full javelin moveset)" },
+	enable_cwv_tuskgor_javelin_bomb_tooltip = { en = "When on, a Tuskgor Javelin can appear in the bomb pickup pool in every game mode without replacing the normal frag and fire bombs. It is a boar spear you can stab with in melee or throw once to pierce armour, shields, and a line of enemies, hitting hard on monsters and headshots, but the throw uses it up. It joins the pool on the next keep or level load." },
+	-- Item name + description (grenade slot). display_name rarely shown for grenade items, kept for completeness.
+	cwv_grenade_tuskgor_javelin_name = { en = "Tuskgor Javelin" },
+	cwv_grenade_tuskgor_javelin_description = { en = "A full-size boar spear: stab with it in melee, or throw it once to punch through shields, plate, and the men behind them. One throw and it is gone." },
+	-- Pickup interaction prompt + HUD description (Pickups.grenades entry hud_description / item_description).
+	cwv_tuskgor_javelin_bomb = { en = "Tuskgor Javelin" },
+
+	-- ============================================================
 	-- cwv_es_crossbow variant (v0.1.347-dev)
 	-- ============================================================
 	enable_cwv_es_crossbow         = { en = "Kruber: Crossbow (Saltzpyre's, rifle anims)" },
-	enable_cwv_es_crossbow_tooltip = { en = "When ON, registers a Kruber variant of Saltzpyre's crossbow that uses Kruber's rifle 3P animations. Default ON. Known polish items: 3P grip offsets, smoke FX on shot, missing bolt in 3P — see TODO.md." },
+	enable_cwv_es_crossbow_tooltip = { en = "When on, adds a version of Saltzpyre's crossbow that Kruber can wield, animated like his handgun in the third-person view. It is on by default." },
 	cwv_es_crossbow_name           = { en = "Crossbow" },
-	cwv_es_crossbow_description    = { en = "An imperial-issue crossbow taken up by Reikland state troopers — same Witch-Hunter-pattern weapon, shouldered like the standard handgun." },
+	cwv_es_crossbow_description    = { en = "An imperial-issue crossbow taken up by Reikland state troopers, the same Witch Hunter pattern weapon shouldered like a standard handgun." },
 
 	-- On-ice `cwv_es_musket` variant item_type display name. The variant def is
 	-- commented out (kept as a backup idea — the live musket is
@@ -29,11 +40,4 @@ return {
 	-- (`:match("^cwv_es_musket")`) keeps this key referenced. v0.1.348-dev.
 	cwv_es_musket                  = { en = "Musket" },
 
-	-- ============================================================
-	-- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-	-- v0.1.340: renamed from `cwv_debug_mode` (was nested in
-	-- `cwv_diagnostics_group`) to the universal `enable_debug_logging` key.
-	-- ============================================================
-	enable_debug_logging         = { en = "Debug Logging" },
-	enable_debug_logging_tooltip = { en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable." },
 }

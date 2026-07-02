@@ -108,8 +108,18 @@
 
 [CmdletBinding()]
 param(
+    [Parameter(Position = 0)]
     [string]$ModPath,
+
+    # NAMED-ONLY (no Position) on purpose. Issue #214: this used to be the second
+    # positional parameter, so `lint-mod.ps1 a.lua b.lua` bound b.lua to $JsonPath
+    # and the JSON report OVERWROTE b.lua (destroyed a gt_dev source file on
+    # 2026-07-01). It must now be passed as `-JsonPath <file.json>`; a stray second
+    # positional arg errors loudly ("positional parameter cannot be found")
+    # instead of clobbering a file.
+    [Parameter()]
     [string]$JsonPath,
+
     [switch]$Json,
     [switch]$Quiet,
     [switch]$Strict,
@@ -1527,6 +1537,15 @@ $exitCode = Emit-Report -Reports $reports -Quiet:$Quiet -Strict:$Strict
 
 if ($Json -or $JsonPath) {
     $jsonOut = if ($JsonPath) { $JsonPath } else { Join-Path $repoRoot '.release-stage\mod-lint.json' }
+    # Issue #214 safety net (belt-and-suspenders on top of the named-only param):
+    # never overwrite an EXISTING file that is not a .json report. A typo'd
+    # -JsonPath target (e.g. a .lua source path) must fail loudly rather than
+    # destroy the file. A path that does not exist yet, or already ends in .json,
+    # is allowed (overwriting a prior .json report is intended).
+    if ((Test-Path -LiteralPath $jsonOut -PathType Leaf) -and
+        ([System.IO.Path]::GetExtension($jsonOut).ToLowerInvariant() -ne '.json')) {
+        throw "Refusing to write the lint JSON report over existing non-.json file '$jsonOut'. Pass -JsonPath a path ending in .json, or omit it to use the default .release-stage/mod-lint.json."
+    }
     $parent = Split-Path -Parent $jsonOut
     if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
     $payload = [ordered]@{

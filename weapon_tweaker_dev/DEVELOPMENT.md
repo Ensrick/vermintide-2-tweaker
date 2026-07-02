@@ -1,0 +1,784 @@
+# Weapon Tweaker — Development Notes
+
+Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
+`CHANGELOG.md` (history), `CODE_REVIEW.md` (current health), `REGRESSION_CHECKLIST.md`
+(pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure
+for adding a new cross-character weapon port).
+
+---
+
+## Design direction (2026-05-23)
+
+weapon_tweaker's role is **full-freedom cross-character weapons**: a wielder
+can equip any career's weapon they want. To keep the bystander 3P view
+plausible, wt maps 3P anim events onto a functionally-similar native weapon's
+vocab on the receiver's skeleton.
+
+### User's verbatim framing
+
+> "Those aren't cross-skeleton ports. The first person animations just work.
+> Everyone's first person hand models work with all animations from all
+> weapons so far. What we've done for weapon tweaker is allow the weapons,
+> but map 3rd person animations onto them; this is where Isaak's mod should
+> help quite a bit. Things like Kerillian's sword has a moveset that
+> Kruber's 1H sword 3rd person animations can look mostly natural with if
+> we put the animation events in the right order. For weapons like the
+> Longbow on Saltzpyre or Brace of Pistols on Kruber, there are no
+> animations that look right, but there are weapons that are functionally
+> similar enough to where we can make the 3rd person model look like it's
+> using a weapon that functions similarly enough that it looks natural to
+> players in 3rd person. To other players it looks like Kruber is using a
+> repeater rifle when he uses Saltzpyre's brace of pistols, but the player
+> with the pistols gets to enjoy trying that weapon on a character they
+> may have never been able to experiment with it on. Weapon Tweaker is
+> meant to allow cross career/character weapons with complete freedom
+> while still looking normal in 3rd person to other players."
+
+### Key terminology correction
+
+These are **NOT cross-skeleton ports**. 1P animations just work
+everywhere. Only 3P needs a remap onto the receiver's existing vocab.
+
+### Canonical wt examples to keep
+
+- **Brace of Pistols on Kruber** — bystanders see Kruber using "a repeater
+  rifle"; the wielder enjoys playing brace on Kruber.
+- **Longbow on Saltzpyre** — bystanders see something like Saltzpyre's
+  crossbow; wielder gets longbow.
+- **Billhook on non-Kruber** — and similar genuine cross-character ports.
+
+### The reversal (2026-05-23)
+
+Cases where the source weapon is **functionally identical** to a receiver's
+native (e.g. Bardin's axe ported onto Saltzpyre when Saltzpyre already has
+a falchion-family weapon) add no gameplay value. These are being **removed
+from wt** and moved to a planned `cosmetics_tweaker` cross-character
+cosmetic swap.
+
+Genuine functional cross-character ports (brace, longbow, billhook, etc.)
+**stay in wt**.
+
+### Sister projects (do not conflate)
+
+- **`character_weapon_variants`** — semi-lore-friendly variant items that
+  clone from cross-character base templates. Donor's 1P moveset is free;
+  3P side uses `anim_event_3p` remap onto a good-enough native vocab. CWV
+  variants are **designed to play differently enough** to feel like new
+  weapons, distinct from wt's full-freedom cross-character access.
+- **`cosmetics_tweaker` cross-char cosmetic swap (planned)** — destination
+  for identical-functional ports being removed from wt.
+
+---
+
+## Animation remap
+
+### 1P animations are universal — never touch
+
+**Recurring correction across sessions.** 1P animations work on every
+character with every weapon by default, with zero work from us. The 1P
+first-person view is "just hands" — `first_person_base` is shared across
+all six characters and any weapon's 1P state machine plays correctly on
+any character's first-person unit. **Never override `anim_event` (1P),
+`wield_anim` (1P), or `state_machine` per character.** Only
+`anim_event_3p`, `wield_anim_3p`, and `wield_anim_career_3p` matter.
+
+Every section below is about 3P only. There is no parallel 1P version of
+the closed-vocab rule because 1P needs none.
+
+### Unit architecture: player_unit, first_person_unit, and husks
+
+VT2 has three types of units that receive `animation_event` calls:
+
+- **player_unit** (`player.player_unit`, `is_local=true`) — the local
+  player's **3P body**. Needs all redirects and remaps for cross-career
+  weapons to work in 3P.
+- **first_person_unit** (`self._first_person_unit`, `is_local=false`) —
+  the local player's **1P hands**. Must NEVER receive redirects. 1P
+  animations work correctly by default; redirecting wield events on this
+  unit puts the 1P state machine in the wrong weapon state, breaking all
+  attack animations.
+- **husks** (other players' units, `is_local=false`) — need redirects
+  and remaps for multiplayer 3P.
+
+**Critical:** `is_local` does NOT distinguish 1P from 3P. `is_local=true`
+means player_unit (3P body). The 1P first_person_unit has
+`is_local=false` — same as husks. You cannot use `is_local` to protect
+1P.
+
+**Why:** v0.9.69 — early-returning `is_local` to protect 1P crashed the
+game because it also skipped redirects on the 3P body (player_unit),
+sending events that don't exist on the skeleton. The 1P first_person_unit
+must be identified separately via `_local_fp_unit` (captured in the wield
+hook from `self._first_person_unit`).
+
+**How to apply:** The wield hook captures
+`_local_fp_unit = self._first_person_unit` (local-only — for 1P
+identification). It ALSO populates a weak-keyed `_unit_state[self._unit]`
+entry **for every player including husks and bots** so the
+animation_event hook can read each unit's own weapon. In the
+animation_event hook, the first_person_unit gets an early return
+(`if _local_fp_unit and unit == _local_fp_unit then return func(...)`).
+All redirect/remap logic runs on everything else (player_unit + husks)
+using per-unit state and the unit's OWN career via
+`_unit_career_name(unit)`. Never gate redirects with `is_local` and never
+read remap state from a single global.
+
+### Per-unit state, weak-keyed
+
+The animation remap system in `weapon_tweaker.lua` tracks each 3P body's
+current weapon + active remap table in a **weak-keyed per-unit state
+table**, NOT in module-level globals. Always read remap state via
+`_state_for(unit)` and read the unit's career via `_unit_career_name(unit)`.
+
+**Why:** v0.12.34 had a single set of globals (`_current_weapon_template`,
+`_current_weapon_key`, `_3p_weapon_remap`, `_last_remap_template`) that
+only the local viewer's wield populated. The `Unit.animation_event` hook
+then applied the local viewer's remap to every 3P body it saw —
+including remote-player husks. Result: remote cross-career weapons
+rendered with wrong/missing 3P anims unless the local viewer happened to
+hold the same weapon on the same career. v0.12.35 migrated to per-unit
+state.
+
+**How to apply:**
+
+- `SimpleInventoryExtension.wield` hook populates
+  `_unit_state[self._unit]` for **every** wield (local, husks, bots). Do
+  NOT gate state capture on `self._unit == player.player_unit`. Only
+  `_local_fp_unit` capture stays local-gated — and it's used solely for
+  the redirect-skip early return.
+- `Unit.animation_event` hook reads `state = _state_for(unit)` and
+  `career = _unit_career_name(unit)`. Both per-unit. Never reach for
+  `_local_career_name()` for the remap path — fallback to local career
+  is OK only when the per-unit lookup returns nil for the local player's
+  own unit.
+- The `to_*` remap reset is per-unit (`state.last_remap_id` tracks
+  weapon change per unit, not globally).
+- The flail direct-redirect block (Saltzpyre + Sienna flaming flail
+  cross-career fixes) reads `state.key` per-unit, not the global. Was
+  previously `is_local`-only — that's no longer needed since per-unit
+  weapon scoping prevents the direct-redirect from hijacking other
+  players' weapons.
+- The 1P early return MUST be **above** the state lookup so 1P events
+  don't allocate empty state entries on the 1P hands unit.
+- Weak-keyed table (`__mode = "k"`) means dead units release
+  automatically; no cleanup needed.
+
+### Husk extension class pair
+
+VT2 has separate `Simple*Extension` / `SimpleHusk*Extension` classes for
+self-owned vs remote units. Hooking one silently no-ops on the other.
+Audit `unit_extension_templates.lua` and register both. wt v0.12.37 was
+the fix that completed v0.12.35's per-unit migration.
+
+### Closed-vocabulary rule for remap targets
+
+When picking a substitute event for a 3P cross-character animation remap
+(System B template clone, cross-access runtime remap, or weapon_tweaker
+System A), the substitute MUST appear in the `anim_event` column of the
+**target body's wield-SM-matching template** — the template whose
+`wield_anim` matches the value of `wield_anim_career_3p` set for the
+foreign wielder.
+
+**Why:** This keeps recurring as a failure mode — picking remap targets
+from the skeleton-events probe table or from
+`Unit.has_animation_event` TRUE results, then watching them produce no
+visible animation in-game. The master state machine knows event names
+that have no visible clip in the current sub-graph; only events authored
+on the wield SM's template are guaranteed to have a real clip behind
+them. Bug class confirmed in CWV v0.1.158:
+`_kruber_axe_falchion_remap` had `attack_push → attack_swing_left_diagonal`
+even though `attack_push` was already in `dual_wield_hammer_sword_template`'s
+authored set — the remap was substituting a working native clip for a
+different one. Multiple earlier sessions wasted hours guessing targets
+from the skeleton probe.
+
+**How to apply:**
+
+- Before adding any remap entry, pull the target template's full
+  `anim_event` list from `dumps/weapon_actions.txt` (or live via
+  `wt dump_actions <template>`). Write it down. That is the closed
+  universe of valid remap targets.
+- For each source event, ask THREE questions:
+  1. **In target's closed list?** If no → remap to a substitute from the
+     closed list.
+  2. **Target's CLIP for that event matches the visual intent?** If no →
+     remap to a different in-vocab event whose clip does. (Example:
+     v0.1.158 left source push-attack `attack_swing_down` alone because
+     it was in vocab; target's clip is a right-hand mace chop, but
+     design wanted a left-hand falchion swing, so v0.1.161 remapped to
+     `attack_swing_left`.)
+  3. **Body's chain state has a clip for the target event in that
+     state?** Closed-vocab is NOT sufficient on its own. An in-vocab
+     event can produce no animation if the body's current chain state
+     (idle / after-light / after-heavy) has no clip mapped for it. Pick
+     a target that the target template fires from an EQUIVALENT chain
+     position. (Example: v0.1.158-v0.1.192 mapped axe+falchion's H1
+     from idle to `heavy_right_diagonal`; Kruber's body has no clip for
+     that event from idle — `heavy_right_diagonal` is reachable only
+     via the H2 chain. Body stood still on H1. Fixed in v0.1.193 by
+     mapping H1 to `heavy_left_diagonal`, which IS Kruber's idle-H1
+     native event.)
+- The source for chain-position-to-event mapping: read the target
+  template Lua at
+  `Vermintide-2-Source-Code/scripts/settings/equipment/weapon_templates/<target>.lua`.
+  Action sub-tables (`action_one.default`, `action_one.heavy_attack`,
+  `action_one.default_right_heavy`, etc.) show which event fires from
+  which chain position.
+- For substitutes: pick from the closed list, prefer direction-matched
+  AND chain-position-matched. If a heavy release is remapped, walk the
+  source chain graph and remap the paired charge to a wind-up of the
+  same direction.
+- `wt force3p` is visual verification but limited — it fires from idle,
+  so it can prove "this event has an idle-state clip" but not "this
+  event has a clip from chain state X."
+- `wt animlog` does NOT confirm playback. It logs every event fired with
+  a `[MISSING]` flag from `Unit.has_animation_event` — but
+  `[MISSING]=false` only means the SM knows the event name, not that a
+  clip plays. Visual observation is the only confirmation.
+- The full procedure with a worked Kruber-axe-falchion example lives at
+  `character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md`.
+
+**Don't:**
+
+- Don't pick targets from the 3P skeleton events table (below) alone —
+  that's a per-character skeleton probe, not a per-template authoring
+  list.
+- Don't compile candidates from "all events the target character uses" —
+  too broad. Different wield SMs on the same body have different
+  authored vocabularies, and an event in template A is often a stub in
+  template B.
+- Don't add a remap for a source event that's already in the target's
+  closed list. That overrides a working native clip with a different
+  one.
+
+### `Unit.has_animation_event` lies — verify visually
+
+A TRUE result from `Unit.has_animation_event(unit, event)` only means
+the SM has a transition declared for the event. It does NOT mean firing
+the event produces a visible animation on the currently-loaded weapon
+SM. Some events return TRUE on the skeleton table but play nothing when
+fired (e.g. `attack_swing_heavy_left` on flail+Kruber).
+
+**Why:** v0.9.81-v0.9.87 wasted hours guessing remap targets that
+"existed" on the skeleton per the probe table but produced no visible
+animation in 3P. The skeleton events reference (below) was probed
+without a weapon SM loaded; results don't reflect what actually animates
+when a specific weapon is wielded.
+
+**How to apply:** Before picking a remap target, equip the weapon on
+the target career, stand idle, and run `wt force3p <event>` for each
+candidate. Visually confirm a complete strike plays. Only then add the
+remap. The skeleton events table is useful for ruling OUT events
+(FALSE = definitely missing) but TRUE entries are not a guarantee of
+visible playback.
+
+### No bows on Warrior Priest
+
+When adding any cross-character port that targets a bow, crossbow, or
+longbow 3P mesh (e.g. `we_longbow`-on-Saltzpyre → empire crossbow 3P;
+`es_longbow`-on-Saltzpyre → empire crossbow 3P), do NOT add `wh_priest`
+to the unlock map, the `_data.lua` widgets, the `_localization.lua`
+labels, or the `_<PORT>_WIELD_3P` table.
+
+**Why:** Warrior Priest's 3P body skeleton authors only the six
+universal wields plus `to_2h_hammer` (see "3P skeleton events" below).
+It does NOT author `to_crossbow`, `to_longbow`, `to_repeating_crossbow`,
+or any other ranged-stance event. Cross-character bow/crossbow ports
+that include him are dead UI at best — the missing wield event silently
+no-ops and the body holds the previous weapon's idle stance (NOT a
+T-pose despite older descriptions) — and engine-fatal at worst (some
+downstream paths assert the wield event resolved). His vanilla weapon
+list is also restricted enough that the unlock checkbox is dead UI even
+when it doesn't crash.
+
+**How to apply:**
+
+- Cross-character RANGED ports targeting bows / crossbows / longbows /
+  volley-crossbows: omit `wh_priest` from every table and widget.
+- Cross-character MELEE ports: still permissible to include `wh_priest`,
+  gated on his skeleton's actual melee vocabulary (he has
+  `to_1h_hammer`, `to_2h_hammer`, `to_1h_hammer_shield`).
+- Auditing precedent: `_SP_LONGBOW_CROSSBOW_WIELD_3P` (Empire Longbow on
+  Saltzpyre port) historically included `wh_priest = "to_crossbow"` —
+  was dead code (his `can_wield` excluded the longbow), now removed for
+  consistency in v0.12.46-dev.
+
+Established 2026-05-19 during the `we_longbow`-on-Saltzpyre Port A
+shipment; user stated the rule directly after seeing the Port A patcher
+table.
+
+### Three-layer remap system
+
+The animation remap system uses three layers, in resolution order:
+
+1. **`_anim_redirect`** — global event renames (every unit, every
+   weapon).
+2. **`_career_anim_redirect`** — career-prefix-aware redirects (`we_`,
+   `es_`, `wh_`, with `_default` fallback).
+3. **`_suffix_career_map`** — suffix-based event swaps.
+
+Then per-weapon remap tables (`_3p_remap_spear_to_billhook`, etc.) are
+selected via `_3p_remap_triggers` based on the active weapon's career
++ template/key. Template-based remaps (`_3p_template_remaps`) use the
+weapon template name (e.g. `we_one_hand_sword_template_1`). Key-based
+remaps (`_3p_key_remaps`) use the weapon key (e.g. `we_1h_sword`).
+Resolution order: template first, key as fallback. Both support
+career-prefix matching with `_default` fallback, and `false` to
+explicitly skip a career (e.g. `we_ = false` means Kerillian uses
+native animations).
+
+### Remap-table gotchas
+
+- **Remap tables need both 1P and 3P event name variants.** Charge
+  events have swapped word order between 1P and 3P (e.g.
+  `attack_swing_stab_charge` vs `attack_swing_charge_stab`). Both
+  variants must be in the remap table.
+- **Clear only on actual weapon switch.** The game re-fires wield
+  animation events (`to_polearm`) during push/block/ability. The
+  re-fired event is the REDIRECTED name, not the original. It doesn't
+  go through career redirect, so the remap never gets re-set. Guard the
+  clear with `remap_id ~= _last_remap_template`, where
+  `remap_id = _current_weapon_template or _current_weapon_key`.
+- **`_current_weapon_template` can be nil.** During career ability or
+  non-weapon slot activation, the template becomes nil. The `remap_id`
+  fallback to `_current_weapon_key` handles this — if both are nil,
+  `remap_id` is nil and the clear is skipped.
+- **Polearm charge events on Kruber:**
+  `attack_swing_charge_right` = thrust windup,
+  `attack_swing_charge` = overhead windup. Match charge remap targets
+  to the heavy release type.
+- **Force-fire via `_original_animation_event` for SM-breaking events.**
+  Some events (e.g. `attack_swing_stab_02`) corrupt the entire SM
+  chain when added to the remap table — even mapping to valid targets
+  like `stab` or `left_diagonal` breaks ALL animations, not just the
+  target. For these events, bypass the remap table and call
+  `_original_animation_event(unit, target)` directly. This is the same
+  code path as `wt force3p` and works where the remap table fails.
+  **Why:** `stab_02 → stab` in the remap table broke L1-L3 as well
+  (v0.9.43). Force-fire of the same target event works (v0.9.47). Root
+  cause unknown — possibly the billhook SM uses `stab_02` internally.
+- **Force-fire blocks must be scoped to their remap table.** Force-fires
+  run inside the `if _3p_weapon_remap` block, so they apply to ANY
+  active remap. Guard with
+  `_3p_weapon_remap == _3p_remap_spear_to_billhook` (or whichever table
+  the force-fires target). Without this, billhook-specific force-fires
+  (e.g. `heavy_left→heavy_stab`) incorrectly intercept the same events
+  on other weapons like elf spear+shield. **Why:** v0.9.56 — elf using
+  Kruber's spear+shield had H1/H2 silently hijacked by billhook
+  force-fires.
+- **Bidirectional remap tables for shared wield events.** When two
+  weapon types share a wield event redirect (e.g.
+  `to_1h_spear_shield` ↔ `to_es_deus_01`), the remap direction depends
+  on which character is using the weapon. Use career-prefix entries in
+  `_3p_remap_triggers` to select the correct direction: `_default` for
+  the common case, `we_` / `es_` / `wh_` for career-specific overrides.
+- **Billhook has a 3-light chain.** The billhook SM cycles:
+  `stab → left_diagonal → stab → loop`. `light_attack_bopp` is push
+  follow-up, not L4. Weapons with 4+ chained lights need force-fire for
+  attacks beyond position 3.
+- **Billhook event name inversion.** On the billhook SM, event names
+  are visually inverted: `stab_charge` LOOKS like a swing windup,
+  `charge_left_diagonal` LOOKS like a stab windup. Same for releases:
+  `heavy_stab` looks like diagonal, `heavy_left_diagonal` looks like
+  stab. When mapping charge→release pairs, the "matching" visual pair
+  uses opposite-named events.
+
+### Heavy-attack chains are 3-position, not 2-position
+
+Many cross-career weapons have a 3-position heavy chain that confused
+the v0.9.108-v0.9.114 work:
+
+- **H1 (from idle):** event-pair A
+- **H2:** event-pair B (different events from A)
+- **H3+ (loops with H2):** event-pair C — but the *release* event in C
+  is often the SAME as A's release. The SM differentiates by chain
+  state, not event.
+
+This means redirecting A's release also redirects H3+'s release. If you
+want H1 ≠ H3+ visually, you can't — they share the release event. What
+you CAN make distinct is the charge windup; remap C's unique charge
+event (e.g. `attack_swing_charge_left_pose` on
+`one_handed_swords_template_1`) to match H1's release direction so the
+chain stays visually coherent.
+
+**Why:** v0.9.113 — bw_sword chain on Bardin: H1 was
+`charge_left/heavy`, H2 was `charge_right_pose/heavy_right`, H3+ was
+`charge_left_pose/heavy`. H3 inherited H1's right-swing release (because
+both fire `heavy`) but had no remap on `charge_left_pose`, so H3 fired
+without a visible windup. User reported "first heavy loses charge
+animation" — the chained-loop variant. Adding a windup remap for the
+H3-specific charge event fixed it without changing H1.
+
+**How to apply:** When fixing cross-career heavies, capture animlog of
+4+ chained heavies (not just 2). Look for a third event pair beyond H1
+and H2. If H3+'s release event matches H1's, only remap H3+'s charge to
+match the visual; leave the release alone (already correct via H1's
+remap).
+
+### Three-heavy chains exist on some weapons
+
+The elf 1h sword (`we_one_hand_sword_template_1`) has three distinct
+heavy events: H1 `charge_down → heavy_down`, H2
+`charge_left → heavy_left_up`, H3
+`charge_right_diagonal_pose → heavy_down_right`. H3 is its own event
+pair, not a loop variant. Charge event
+`attack_swing_charge_right_diagonal_pose` is also fired during light L2
+charge — remapping it affects both, but light charges are too brief to
+notice the change.
+
+### Known weapon-specific remaps
+
+- **Greatsword cross-career remap (template-based).**
+  `two_handed_swords_template_1` (es/wh greatsword) on Kerillian
+  (`we_`): stance redirect `to_2h_sword` → `to_2h_sword_we`, plus 8
+  template remaps for diagonal events that don't exist on the elf
+  skeleton. Push-attack (`attack_swing_down_right`) maps to
+  `attack_swing_heavy` (the elf greatsword's default heavy release). H1
+  heavy release (`attack_swing_heavy_left_diagonal`) maps to
+  `attack_swing_left` to match L1's visual direction. Grip offset
+  `-0.085` Z on both `es_2h_sword` and `wh_2h_sword` for `we_*`. Tuned
+  through several iterations: `-0.07` imperceptible, `-0.25`
+  overcorrection, `-0.15` slightly too much, `-0.085` final.
+- **`we_1h_sword` on non-Kerillian:** `attack_swing_stab` →
+  `attack_swing_down` (light 3), `attack_swing_heavy_left_up` →
+  `attack_swing_heavy` (heavy 2). Kerillian skipped via
+  `we_ = false`.
+- **`es_1h_flail` on non-Saltzpyre:** H1 release `attack_swing_left` →
+  `attack_swing_heavy`, H2 release `attack_swing_heavy_left` →
+  `attack_swing_heavy` (v0.9.88). Both are direct
+  `func(unit, target, ...)` calls in the hook BEFORE the remap-table
+  block — the remap table corrupts the SM for `attack_swing_left` (same
+  pattern as billhook `stab_02`).
+- **`bw_1h_flail_flaming` on non-Sienna:** only H2 release
+  `attack_swing_heavy_left` → `attack_swing_heavy` needs the redirect
+  (v0.9.92). H1 charge `attack_swing_charge_down` and release
+  `attack_swing_heavy_down` fire natively as the correct overhead — DO
+  NOT remap them. Earlier versions (≤v0.9.91) added template-table
+  entries for these and broke H1's animation on Kruber.
+- **Heavy remap target must play a full strike animation.**
+  `attack_swing_heavy_left` only plays charge / nothing on Kruber's
+  skeleton even though `Unit.has_animation_event` reports it TRUE.
+  `attack_swing_heavy` plays a complete heavy strike.
+
+### Vanilla bug fixed via narrow native-wielder redirect (v0.9.96)
+
+`es_1h_flail` push-attack on Saltzpyre native: vanilla
+`attack_swing_right` release fires on the 3P body but produces no
+visible animation. User confirmed via `wt force3p` testing that
+`attack_swing_right_diagonal` plays a visible L2-style swing on
+Saltzpyre's flail SM. Added a narrow redirect (`attack_swing_right` →
+`attack_swing_right_diagonal`) gated on
+`_current_weapon_key == "es_1h_flail"` AND career prefix `wh_`. This is
+the only place we modify a native-wielder animation; the user
+explicitly authorized it after testing confirmed the vanilla event was
+broken.
+
+**Why the rule "don't modify native-wielder animations" was relaxed
+here:** The native event was demonstrably broken (no visible animation
+even from idle), and the user verified via `force3p` that an
+alternative event produced the correct visual. Without those two
+confirmations, do not redirect a native-wielder event.
+
+### Inventory preview uses a separate code path (MenuWorldPreviewer)
+
+The new (post-WoM) inventory character preview uses
+`MenuWorldPreviewer`, not `HeroPreviewer` or `GearUtils.create_equipment`.
+Hooks on `GearUtils.create_equipment` apply only to the in-game keep
+player_unit, not the menu preview's own spawned units. To affect the
+menu preview:
+
+- Hook `MenuWorldPreviewer:equip_item(item_key, slot, backend_id)` to
+  capture the weapon key per slot. This is the only place the actual
+  weapon key is exposed.
+- Hook `MenuWorldPreviewer:_spawn_item_unit(unit, slot_type, item_data, ...)`
+  to apply scale/offset to the spawned `unit`. Note: `item_data` here
+  is the weapon TEMPLATE (e.g. `we_one_hand_axe_template`), NOT an
+  inventory item — so `item_data.key`/`name` returns the template name,
+  not the weapon key. Look up the captured key from the equip_item map
+  by `slot_type` (which is "melee"/"ranged"/"hat", not "slot_melee").
+- Use a weak-keyed table (`setmetatable({}, {__mode = "k"})`) for the
+  previewer→key mapping so dismissed previewers don't leak.
+
+**Why:** v0.9.129 added grip/scale support for the menu inventory after
+the user noticed in-game changes weren't reflected in the preview. The
+two code paths are entirely separate; this is not documented anywhere
+obvious in VT2 modkit.
+
+---
+
+## 3P animation fix process
+
+### When to use
+
+A cross-career weapon plays wrong or missing 3P animations (visible in
+keep lobby or to other players). Common symptoms: attack plays
+charge/windup but no strike, body holds the previous weapon's idle
+stance with no fire/swing animation (the silent missing-event no-op —
+NOT a T-pose; see `PROJECT_STANDARDS.md` § 9.8 for the terminology
+rule), or a completely wrong swing direction.
+
+### Step 1: Enable animlog
+
+Run `wt animlog` in-game chat. This toggles animation event logging.
+Output goes to both `mod:echo` (in-game chat) and `mod:info` (console
+log file). Only attack/wield/parry events are logged; idle/locomotion
+filtered out.
+
+### Step 2: Perform the attack combo
+
+Do the full light chain and heavy chain. Each attack fires two events:
+a charge event first, then a strike event. Light attacks have ~50-120ms
+charge-to-strike gap; heavies ~500-660ms. The log shows `1P` and `3P`
+tags, and `[MISSING]` if the event doesn't exist on the skeleton.
+
+### Step 3: Read the console log
+
+Log file: `%APPDATA%\Fatshark\Vermintide 2\console_logs\` (most
+recent). Search for `[MOD][wt]`. Events show as:
+
+```
+1P attack_swing_stab
+3P attack_swing_stab [MISSING]
+```
+
+A `[MISSING]` tag on the 3P line means the skeleton doesn't have that
+animation event.
+
+### Step 4: Identify the broken event
+
+Compare 1P and 3P lines. If 3P shows `[MISSING]`, that event needs a
+remap. Cross-reference with the 3P skeleton events table (below) to
+find which attack events exist on the target character's skeleton.
+
+### Step 5: Choose a remap target — CLOSED VOCABULARY + VISUAL VERIFY
+
+**Closed-vocabulary rule (load-bearing):** every remap target MUST be a
+string already authored in the `anim_event` column of the **target
+body's wield-SM-matching template** (the template whose `wield_anim`
+matches the value of `wield_anim_career_3p` set for the foreign
+wielder). Anything outside that set is invention regardless of what the
+skeleton-events probe or `Unit.has_animation_event` reports.
+
+Workflow:
+
+1. Identify the target template. For a cross-character cross-access
+   weapon, this is the template whose `wield_anim` matches the value
+   the foreign career was routed to (e.g. axe+falchion on Kruber
+   routes to `to_dual_hammer_sword_es`, so the target template is
+   `dual_wield_hammer_sword_template`).
+2. Read every `anim_event` value from that template — `dumps/weapon_actions.txt`
+   (organized) or live via `wt dump_actions <template>`. That is the
+   closed list of allowed remap targets.
+3. For each broken source event: pick a substitute from the closed
+   list whose visual direction matches the source's intent. Source
+   events that are ALREADY in the closed list need no remap — they
+   play natively.
+4. Verify visually: equip on the target career, idle in keep, run
+   `wt force3p <candidate>`, watch the 3P body. Only "the body visibly
+   moved through a complete strike" counts. `force3p exists=true` is
+   necessary but not sufficient.
+
+Do NOT pick a target from the 3P skeleton events table alone. The
+skeleton table is useful for ruling things OUT (FALSE = definitely
+missing) but TRUE entries are not a guarantee of visible playback in
+the current sub-graph.
+
+The closed-vocabulary rule supersedes the older "common heavy-strike
+candidates" list and the "all events from the target character's native
+weapon template" guidance — both were too broad. The right scope is
+**the wield-SM-matching template only**, not "everything that character
+ever uses." See `character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md`
+for the full step-by-step procedure with a worked example.
+
+### Step 6: Add the remap
+
+**Default path:** add to `_3p_key_remaps` (by weapon key) or
+`_3p_template_remaps` (by template name). Use career prefix matching:
+`we_ = false` skips the weapon's native character, `_default` covers
+all others.
+
+**Fallback path (SM-corrupting events):** some events break ALL
+animations when added to the remap table even with a valid target —
+`attack_swing_left` (flail), `attack_swing_stab_02` (billhook). For
+these, add a hardcoded direct-redirect block in the `animation_event`
+hook BEFORE the `_3p_weapon_remap` block, calling
+`func(unit, target, ...)` with full varargs:
+
+```lua
+if _current_weapon_key == "es_1h_flail" and career and career:sub(1, 3) ~= "wh_" then
+    if event_name == "attack_swing_left" or event_name == "attack_swing_heavy_left" then
+        return func(unit, "attack_swing_heavy", ...)
+    end
+end
+```
+
+Symptom that you need this path: the table-based remap "fires" per the
+log but no animation plays, or it breaks unrelated attacks in the same
+chain.
+
+### Step 7: Build, deploy, test
+
+Bump MOD_VERSION, build, deploy, hot-reload in-game. Re-equip the
+weapon (wield hook must fire to pick up new template/key). Run
+`wt animlog` again to verify the remap fires and the 3P event changes.
+Check visually that the animation plays correctly.
+
+### Step 8: Verify menu inventory preview matches
+
+For scale and grip-offset changes specifically, check the inventory
+character preview after the in-game change works — the new (post-WoM)
+inventory uses `MenuWorldPreviewer`, which spawns its OWN units
+separate from the in-game body. The mod handles both paths via shared
+helpers (see the comment block above `_weapon_scale_overrides` in
+weapon_tweaker.lua), so adding entries works automatically — but if
+you change the scale/offset hook plumbing itself, validate both paths.
+Animation remaps don't go through MenuWorldPreviewer (the preview pose
+is static, not driven by the in-game animation_event hook), so this
+step only matters for scale/offset edits.
+
+### Key gotchas
+
+- Must re-equip weapon after hot reload (wield hook sets template/key).
+- **Never redirect the first_person_unit** (1P hands). It has
+  `is_local=false` — same as husks. Identify it via `_local_fp_unit`
+  (captured from `self._first_person_unit` in the wield hook) and
+  early-return it before any redirect logic.
+- **player_unit IS the 3P body** (`is_local=true`). It NEEDS redirects
+  and remaps. Never skip it.
+- `is_local` does NOT distinguish 1P from 3P — do not use it to protect
+  1P animations.
+- Some events that exist on a skeleton don't play a visible strike
+  (only charge) — always test visually.
+- Console log requires game to flush; open inventory or exit game to
+  force flush.
+
+---
+
+## 3P skeleton events reference
+
+Probed 2026-04-26 via `wt sm_probe` on each character in the keep
+lobby. Useful for ruling OUT events (FALSE = definitely missing) but
+TRUE entries DO NOT guarantee visible playback when a specific weapon
+SM is loaded (see "Unit.has_animation_event lies" above).
+
+### Wield Events (FALSE = needs redirect)
+
+| Event                  | Kruber | Saltz | WPriest | Kerill | Bardin | Sienna |
+|------------------------|--------|-------|---------|--------|--------|--------|
+| to_2h_sword            | T      | T     | F       | F      | F      | T      |
+| to_2h_sword_we         | F      | T     | F       | T      | F      | F      |
+| to_bastard_sword       | T      | T     | F       | F      | F      | F      |
+| to_spear               | T      | T     | T       | T      | T      | T      |
+| to_polearm             | T      | T     | T       | T      | T      | T      |
+| to_1h_sword            | T      | T     | T       | T      | T      | T      |
+| to_1h_hammer           | T      | T     | T       | T      | T      | T      |
+| to_2h_billhook         | F      | T     | F       | F      | F      | T      |
+| to_longbow             | T      | T     | F       | T      | F      | F      |
+| to_es_longbow          | T      | T     | F       | F      | F      | F      |
+| to_1h_sword_shield     | T      | T     | F       | T      | T      | F      |
+| to_1h_hammer_shield    | T      | T     | F       | T      | T      | T      |
+| to_dual_wield          | F      | F     | F       | F      | F      | F      |
+| to_2h_hammer           | T      | T     | T       | F      | T      | T      |
+| to_2h_axe              | F      | F     | F       | F      | F      | F      |
+| to_1h_axe              | T      | T     | T       | T      | T      | T      |
+| to_1h_falchion         | F      | F     | F       | F      | F      | F      |
+| to_1h_flail            | T      | T     | T       | T      | T      | T      |
+| to_crossbow            | T      | T     | F       | F      | T      | T      |
+| to_repeating_crossbow  | F      | T     | F       | F      | F      | T      |
+| to_handgun             | T      | T     | F       | F      | T      | F      |
+| to_blunderbuss         | T      | T     | F       | F      | F      | F      |
+
+### Attack Events (only listing those FALSE on any skeleton)
+
+| Event                           | Kruber | Saltz | WPriest | Kerill | Bardin | Sienna |
+|---------------------------------|--------|-------|---------|--------|--------|--------|
+| attack_swing_charge_down_pose   | T      | F     | F       | F      | F      | T      |
+| attack_swing_stab_lh            | T      | F     | F       | T      | F      | F      |
+| attack_swing_down_left_axe      | F      | F     | F       | T      | T      | T      |
+| push_stab                       | T      | F     | F       | T      | T      | F      |
+
+All other attack events (attack_swing_right, attack_swing_left,
+attack_swing_down, attack_swing_up_left, attack_swing_down_left,
+attack_swing_down_right, attack_swing_heavy, attack_swing_heavy_right,
+attack_swing_heavy_left, attack_swing_heavy_down,
+attack_swing_heavy_left_diagonal, attack_swing_heavy_right_diagonal,
+attack_swing_charge, attack_swing_charge_left, attack_swing_charge_right,
+attack_swing_charge_left_diagonal,
+attack_swing_charge_right_diagonal_pose,
+attack_swing_charge_left_diagonal_pose, attack_swing_charge_stab,
+attack_swing_charge_down, attack_swing_stab, attack_swing_stab_02,
+attack_swing_left_diagonal, attack_push, parry_pose) are TRUE on all 6
+skeletons.
+
+### Key observations
+
+1. **Universal wield events** (TRUE everywhere): to_spear, to_polearm,
+   to_1h_sword, to_1h_hammer, to_1h_axe, to_1h_flail. **CAVEAT:**
+   `to_1h_hammer` is phantom on Kerillian — TRUE in probe but no
+   visible animation. Redirect to `to_1h_sword` fixes it (confirmed
+   2026-04-29). Other "universal" events may have similar phantom
+   behavior on specific skeletons.
+2. **Universally missing**: to_dual_wield, to_2h_axe, to_1h_falchion —
+   no skeleton has these.
+3. **Warrior Priest** is the most stripped — only the 6 universal
+   wields + to_2h_hammer. No ranged, no shields, no swords/bastard.
+4. **Saltzpyre (non-Priest)** is the most complete — has almost
+   everything including to_2h_billhook natively.
+5. **to_2h_billhook** only exists on Saltzpyre and Sienna.
+6. **to_bastard_sword** only exists on Kruber and Saltzpyre.
+7. **to_2h_sword** only exists on Kruber, Saltzpyre, and Sienna.
+8. **to_2h_sword_we** only exists on Saltzpyre and Kerillian.
+9. **Kerillian** has the most complete attack set (only missing
+   attack_swing_charge_down_pose).
+10. **Kruber** only missing attack_swing_down_left_axe from attacks —
+    most complete after Kerillian.
+
+---
+
+## QA tooling
+
+### Widget-tree reorder verifier — `_qa_wt_reorder.py`
+
+When QA-ing a VMF widget reorder pass (shuffling `setting_id = "unlock_*"` rows in `weapon_tweaker_data.lua` and the matching keys in `weapon_tweaker_localization.lua`), use the verifier script at the repo root: `C:\Users\danjo\source\repos\vermintide-2-tweaker\_qa_wt_reorder.py`.
+
+**Gates it checks:**
+- `setting_id` parity between `_data.lua` and `_localization.lua`.
+- No add/drop vs pre-edit `.bak` files.
+- No `default_value` flips.
+- Widget tree integrity (brace balance + structural soundness per subtree).
+- `MOD_VERSION` bump.
+- Intentional per-career divergence preservation.
+
+**Important: brace-aware tree walker, NOT naive regex.** A naive regex that scans N chars forward from each `setting_id` will dive into nested `sub_widgets` and false-positive group-level `default_value` flips. The verifier uses a brace-aware tree walker that scopes `default_value` lookup to the immediate widget table only. This also gives a stronger structural guarantee than counting `{` vs `}` (a walker catches imbalances in specific subtrees, not just file-total counts).
+
+VMF widget nesting in this repo uses `sub_widgets = { ... }`, NOT `parent_group_name = "..."` — the walker is structured around `sub_widgets` keys.
+
+Authored 2026-05-23 during the weapon_tweaker v0.12.71-dev reorder pass. Lives at the repo root because nothing prevents reuse on other mods' data/loc files — adapt the input paths per mod.
+
+Related: § Conventions "Maintain alphabetical order" below — moving a `setting_id` between groups requires moving the loc string at the same time; the verifier catches mismatches.
+
+---
+
+## Conventions
+
+### Maintain alphabetical order in weapon menus
+
+When renaming a weapon's character prefix (e.g., "Kruber: Flail" →
+"Saltzpyre: Flail"), the entry must be moved to its new alphabetical
+position in BOTH files:
+
+1. `weapon_tweaker_localization.lua` — move the line from the old
+   character group to the new one.
+2. `weapon_tweaker_data.lua` — move the setting entry to match.
+
+Entries are grouped by character (Bardin, Kerillian, Kruber, Saltzpyre,
+Sienna) and sorted alphabetically by display name within each group.
+Every career section must be updated.
+
+**Why:** The VMF mod menu renders weapons in the order they appear in
+data.lua. Changing a display name without moving the entry breaks
+alphabetical sorting in the dropdown.
+
+**How to apply:** Any time a weapon's character label changes, treat it
+as a move operation, not just a string replacement. Update all career
+sections in both files.

@@ -137,6 +137,22 @@ local function _has_package(path)
     return Application.can_get("package", path) and true or false
 end
 
+-- v0.9.50-dev (#199): this MH fork inherited the standalone's hardcoded fallback
+-- texture paths (textures/T_Texture_NR normal / T_Texture_MOS MAB at lines ~181)
+-- which were NEVER shipped — the standalone's own CHANGELOG flags them as
+-- missing, and the correct defaults live in the dead/unused _DEFAULT_TEX_DICT
+-- above. Setting a non-existent texture is an engine-level fatal: equipping the
+-- CWV custom musket (mat_to_use convention, no per-slot normals.slotN) falls
+-- back to T_Texture_NR and crashes. Preflight the texture like units/packages so
+-- a missing one is SKIPPED, not fatal. Skipping is also the right visual — the
+-- unit keeps whatever real texture its mat_to_use material already carries
+-- instead of a flat default.
+local function _has_texture(path)
+    if not path or type(path) ~= "string" then return false end
+    if not rawget(_G, "Application") or not Application.can_get then return true end
+    return Application.can_get("texture", path) and true or false
+end
+
 local function _safe_load_package(path)
     if not _has_package(path) then
         mod:warning("[mh_embed] Skipping package load — not in resources: %s", tostring(path))
@@ -227,7 +243,11 @@ local function replace_textures(unit)
                         local mater = mesh_material(mesh, mat_slot)
                         for text_slot, map in pairs(texture) do
                             local tex_name = unit_get_data(unit, text_slot) or "texture_map"
-                            material_set_texture(mater, tex_name, map)
+                            if _has_texture(map) then
+                                material_set_texture(mater, tex_name, map)
+                            else
+                                mod:warning("[mh_embed] #199: skipped missing texture '%s' (slot '%s') — kept material's existing map", tostring(map), tostring(tex_name))
+                            end
                         end
                     end
                 end

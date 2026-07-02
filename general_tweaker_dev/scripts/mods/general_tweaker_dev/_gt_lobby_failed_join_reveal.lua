@@ -32,8 +32,8 @@ local FALLBACK_WORKSHOP_URL = "https://steamcommunity.com/app/552500/workshop/"
 local MAX_CHUNKS = 64
 
 -- Debug alert helper -- defers to gt's shared `_gt_dbg_alert` (general_tweaker_dev.lua:47).
--- Gated on `enable_debug_logging`; logs to file AND in-game chat for unexpected
--- states. Used by the create_popup soft guard (audit 2026-06-07, F17).
+-- Routes through mod:warning (VMF output_mode_warning gate). Used by the
+-- create_popup soft guard (audit 2026-06-07, F17).
 local function _dbg_alert(fmt, ...)
     if type(mod._gt_dbg_alert) == "function" then
         mod._gt_dbg_alert(fmt, ...)
@@ -403,11 +403,11 @@ mod:hook("StateLoading", "create_popup", function(func, self, error_key, header,
     -- Suppress vanilla popup; we've taken over.
 end)
 
--- Diagnostic chat command. Usage: /gt_lobby_manifest_probe <lobby_id>
-mod:command("gt_lobby_manifest_probe", "Fetch+dump a remote lobby's modded manifest (no join)",
+-- Diagnostic chat command. Usage: /lobby_manifest_probe <lobby_id>
+mod:command("lobby_manifest_probe", "Fetch+dump a remote lobby's modded manifest (no join)",
 function(lobby_id_arg)
     if not lobby_id_arg or lobby_id_arg == "" then
-        mod:echo("[gt_lobby_manifest_probe] usage: /gt_lobby_manifest_probe <lobby_id>")
+        mod:echo("[gt_lobby_manifest_probe] usage: /lobby_manifest_probe <lobby_id>")
         return
     end
     local text, err = _fetch_manifest_for_lobby(lobby_id_arg)

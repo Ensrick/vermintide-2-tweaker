@@ -19,74 +19,10 @@ local function _effective(name)
     return mod:get(name)
 end
 
--- ----------------------------------------------------------------------------
--- #6 Adventure RNG "save a consumable" trait odds
--- ----------------------------------------------------------------------------
--- Home Brewer / Healers Touch / Grenadier are Adventure weapon traits with a
--- chance to NOT consume the potion / healing item / grenade on use. Vanilla odds
--- are 25% each:
---   WeaponTraits.buff_templates.trait_ring_not_consume_potion.buffs[1].proc_chance      = 0.25 (weapon_traits.lua:69)
---   WeaponTraits.buff_templates.trait_necklace_not_consume_healing.buffs[1].proc_chance = 0.25 (weapon_traits.lua:84)
---   WeaponTraits.buff_templates.trait_trinket_not_consume_grenade.buffs[1].proc_chance  = 0.25 (weapon_traits.lua:104)
--- The proc gate reads buffs[1].proc_chance at add_buff time (buff_extension.lua:642).
--- Adventure and CW are SEPARATE templates (CW boons live in DeusPowerUpBuffTemplates),
--- so this never touches CW. Mutates both WeaponTraits.buff_templates and
--- (defensively) the global BuffTemplates. Save/restore; default 25% = vanilla.
-local ADV_SAVE_TRAITS = {
-    "trait_ring_not_consume_potion",      -- Home Brewer
-    "trait_necklace_not_consume_healing", -- Healers Touch
-    "trait_trinket_not_consume_grenade",  -- Grenadier
-}
-local adv_save_originals = nil
-
-local function _adv_save_buff_entries()
-    local out = {}
-    local wt = rawget(_G, "WeaponTraits")
-    local bt = rawget(_G, "BuffTemplates")
-    for _, key in ipairs(ADV_SAVE_TRAITS) do
-        local wt_t = wt and wt.buff_templates and wt.buff_templates[key]
-        local wt_buff = wt_t and wt_t.buffs and wt_t.buffs[1]
-        if wt_buff then out[#out + 1] = wt_buff end
-        local bt_t = bt and bt[key]
-        local bt_buff = bt_t and bt_t.buffs and bt_t.buffs[1]
-        if bt_buff then out[#out + 1] = bt_buff end
-    end
-    return out
-end
-
-local function revert_adv_save_traits()
-    if not adv_save_originals then return end
-    -- All three vanilla traits share proc_chance 0.25, so restoring the captured
-    -- value to every entry is correct.
-    for _, b in ipairs(_adv_save_buff_entries()) do
-        b.proc_chance = adv_save_originals.proc_chance
-    end
-    adv_save_originals = nil
-end
-
-local function apply_adv_save_traits()
-    local pct = _effective("tweak_adventure_save_trait_chance") or 25
-    local target = math.max(0, math.min(100, pct)) / 100
-    if math.abs(target - 0.25) < 0.001 then
-        revert_adv_save_traits()
-        return
-    end
-    local entries = _adv_save_buff_entries()
-    if #entries == 0 then
-        mod:info("[adv-save-traits] WeaponTraits.buff_templates not loaded yet; will retry on settings sync")
-        return
-    end
-    if not adv_save_originals then
-        adv_save_originals = { proc_chance = entries[1].proc_chance or 0.25 }
-    end
-    for _, b in ipairs(entries) do
-        b.proc_chance = target
-    end
-end
-
-mod._ct_sync_adv_save_traits = function()
-    apply_adv_save_traits()
-end
+-- #6 Adventure "save a consumable" trait odds — MOVED to general_tweaker (gt)
+-- on 2026-06-18. Home Brewer / Healers Touch / Grenadier are ADVENTURE-mode
+-- traits, not a Chaos Wastes feature, so the slider now lives in gt as
+-- `gt_adventure_save_trait_chance`. Removed from ct.
 
 -- ----------------------------------------------------------------------------
 -- #5 Shadow Homing Skulls curse — stun (overpowered disable) duration
@@ -136,6 +72,5 @@ mod._ct_sync_shadow_skull_stun = function()
     apply_shadow_skull_stun()
 end
 
--- Apply both on load.
-mod._ct_sync_adv_save_traits()
+-- Apply on load.
 mod._ct_sync_shadow_skull_stun()

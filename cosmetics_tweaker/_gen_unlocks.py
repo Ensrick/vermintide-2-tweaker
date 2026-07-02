@@ -109,6 +109,10 @@ _TRANSLIT = {
     "Ù": "U", "Ú": "U", "Û": "U",
     "Ñ": "N", "Ç": "C", "—": "-", "–": "-", "’": "'", "‘": "'",
     "“": '"', "”": '"', "…": "...",
+    # Strip literal angle brackets: some probe names are the game's own
+    # missing-loc placeholder ("<test_item_1001>"), and "<" / ">" must never
+    # appear in a menu label (they read as VMF missing-key markers in-game).
+    "<": "", ">": "",
 }
 
 

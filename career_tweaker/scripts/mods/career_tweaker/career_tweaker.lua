@@ -1,6 +1,6 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.25-dev"
+local MOD_VERSION = "0.3.48-dev"
 _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -8,20 +8,15 @@ _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint b
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
 -- `_dbg` is for confirmation / expected behavior — file only.
 -- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[crt:dbg] " .. fmt, ...)
-    end
+    mod:debug("[crt:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[crt:dbg] " .. fmt, ...)
-        mod:echo("[crt] " .. fmt, ...)
-    end
+    mod:warning("[crt:dbg] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -120,11 +115,16 @@ end
 -- bt:is_br_active() (see career_tweaker_big_rebalance.lua:46-48) before
 -- applying. (bt took ownership of the shared registry, eliminating the
 -- previously byte-identical registration files that wt/ct/et each shipped.)
-local ok_br, big_rebalance = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_big_rebalance")
-if not ok_br then
-    mod:error("Failed to load Big Rebalance module: %s", tostring(big_rebalance))
-    big_rebalance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
-end
+-- BR ON ICE (bt retired 2026-06-08; heap relief 2026-06-18). Module no longer
+-- dofile'd, so its ~2768 lines of data/hooks never load into the 1 GiB lua_heap.
+-- Stub preserves the {apply, restore, active_count} contract read at lines
+-- 433/465/485/531. To revive: restore bt, delete the stub, un-comment below.
+-- local ok_br, big_rebalance = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_big_rebalance")
+-- if not ok_br then
+--     mod:error("Failed to load Big Rebalance module: %s", tostring(big_rebalance))
+--     big_rebalance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
+-- end
+local big_rebalance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 
 -- Tourney Balance Testing port (PHASE 1: clean per-career data mutations,
 -- ~17 default-OFF trn_* toggles). Same {apply,restore,active_count} contract
@@ -134,6 +134,26 @@ if not ok_trn then
     mod:error("Failed to load Tourney module: %s", tostring(tourney))
     tourney = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 end
+
+-- Armor & Overcharge toggles (4 default-OFF gameplay hooks). Unlike balance /
+-- tourney these are pure runtime hooks gated live on mod:get — NO
+-- {apply,restore,active_count} contract and NO on_setting_changed dispatch; VMF
+-- re-reads mod:get and deactivates the hooks when the mod is disabled. The
+-- module installs exactly one mod:hook on DamageUtils.apply_buffs_to_damage and
+-- one on PlayerUnitHealthExtension.add_damage (both confirmed un-hooked elsewhere
+-- in crt). See career_tweaker_armor_overcharge.lua header for the authority model.
+local ok_ao, _ao = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_armor_overcharge")
+if not ok_ao then mod:error("Failed to load armor/overcharge module: %s", tostring(_ao)) end
+
+-- Outcast Engineer cooldown-reduction benefit (single opt-in toggle
+-- `oe_benefit_from_cooldown_reduction`, default OFF). Pure runtime, OE-only,
+-- owner-local: mirrors the OE's live `activated_cooldown` reduction onto an equal
+-- `cooldown_regen` bonus so his Cooldown Reduction gear finally speeds his ult
+-- recharge. Driven from mod.update (NOT a hook) via mod._crt_oe_cdr_tick. See
+-- career_tweaker_oe_cooldown.lua header for the full vanilla-mismatch analysis +
+-- the no-drift single-managed-bonus sync mechanism.
+local ok_oecdr, _oecdr = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_oe_cooldown")
+if not ok_oecdr then mod:error("Failed to load OE cooldown module: %s", tostring(_oecdr)) end
 
 -- Mutex cluster framework. Lets us declare "pick one of N alternatives"
 -- groups (e.g. rework_X vs cbr_X for the same talent) as plain checkboxes
@@ -195,6 +215,10 @@ local _talent_window_instance = nil
 
 mod:hook_safe("HeroWindowTalents", "on_enter", function(self)
     _talent_window_instance = self
+    -- Opening the talent screen is a guaranteed career-resolved moment -- a
+    -- reliable point to fire the rework-career auto-dump (no-op off those careers
+    -- or after the first dump this session). mod-field ref: defined further down.
+    if mod._crt_auto_dump_check then mod._crt_auto_dump_check() end
 end)
 
 mod:hook_safe("HeroWindowTalents", "on_exit", function(self)
@@ -419,11 +443,68 @@ mod:hook("ProgressionUnlocks", "is_unlocked_for_profile", function(func, unlock_
 end)
 
 -- ============================================================
+-- Bug fixes (2026-06-21): ability-swap ult crash + career-unlock UI refresh
+-- ============================================================
+-- (1) Live-swapping a career's activated_ability (the Career Ability & Talent
+-- Swapping feature) while the hero is already spawned desyncs the spawned career
+-- extension's `_abilities`/cooldown state from the mutated CareerSettings, so the
+-- next ult has `CareerExtension:current_ability_cooldown(id)` return nil and the
+-- engine crashes at career_extension.lua:424 (apply_buffs_to_value(nil,
+-- "activated_cooldown")). Guard: the cooldown read never returns nil (treat the
+-- desynced ability as ready). The swap still applies cleanly on the next spawn /
+-- mission load. Repro: "swapped merc ult Slayer->none then ulted -> crash"
+-- (crash log console-2026-06-21-22.08.51). pcall covers both nil-return and the
+-- rarer `_abilities[id]` index error.
+-- current_ability_cooldown returns TWO values: (cooldown, max_cooldown). Both the
+-- ult-activate path (career_extension.lua:424) and the function's own tail
+-- (line 698: `ability.max_cooldown > 0 and ...`) can hit a nil from the desynced
+-- ability, and the HUD cooldown bar consumes the SECOND return — so the guard
+-- must pcall (catch the 698 error too) AND preserve both returns (dropping the
+-- 2nd is the multi-return-collapse gotcha, VMF_RECIPES §2). Fallback (0, 1):
+-- cooldown 0 = ready, max_cooldown 1 = avoids divide-by-zero in the bar.
+mod:hook("CareerExtension", "current_ability_cooldown", function(func, self, ability_id)
+    local ok, cooldown, max_cooldown = pcall(func, self, ability_id)
+    if not ok then return 0, 1 end
+    return cooldown or 0, max_cooldown or 1
+end)
+
+-- (2) The career-select tiles (HeroWindowCharacterSummary._setup_hero_selection_
+-- widgets) bake each career's `content.locked` ONCE at populate, from the hero's
+-- level -- which the Character Experience Level override and Unlock All Careers
+-- both feed. Flipping either setting while the hero view is open left the tiles
+-- stale (which is why the user saw careers wrongly locked/unlocked until they
+-- toggled unlock-all, forcing a rebuild). Track the live window and re-run its
+-- tile setup when a level_override_* / unlock_all_careers setting changes.
+local _char_summary_instance = nil
+mod:hook_safe("HeroWindowCharacterSummary", "on_enter", function(self)
+    _char_summary_instance = self
+end)
+mod:hook_safe("HeroWindowCharacterSummary", "on_exit", function(self)
+    _char_summary_instance = nil
+end)
+local function refresh_career_unlock_ui()
+    local inst = _char_summary_instance
+    if inst and inst._setup_hero_selection_widgets then
+        -- pcall: window may be mid-teardown between the on_exit hook firing late
+        -- and this call; never let a refresh break the menu.
+        pcall(function() inst:_setup_hero_selection_widgets() end)
+    end
+end
+
+-- ============================================================
 -- Lifecycle hooks
 -- ============================================================
 
 mod.on_game_state_changed = function(status, state_name)
     apply_talent_swaps()
+    -- Auto-dump the rework careers' talent/buff map. Only on StateIngame enter
+    -- (keep/mission) -- NEVER at StateSplashScreen/StateLoading, where
+    -- Managers.player:local_player() raises "Network backend has not been set".
+    -- The unit/career aren't ready at enter, so start a short per-frame retry
+    -- window (mod.update) that fires the throw-proof, de-duped check until it dumps.
+    if status == "enter" and state_name == "StateIngame" and mod._crt_start_dump_retry then
+        mod._crt_start_dump_retry()
+    end
     -- Defensive nil-check: if a dofile failure slipped past pcall (VMF's
     -- `mod:dofile` doesn't always raise — sometimes returns nil + logs the
     -- error separately, leaving the safe-stub fallback at line 13 dormant),
@@ -468,6 +549,13 @@ mod.on_setting_changed = function(setting_id)
     if setting_id:find("^trn_") then
         if tourney and tourney.apply then tourney.apply() end
     end
+
+    -- Career-select lock state is baked at populate; refresh the open hero view so
+    -- a level-override / unlock-all change takes effect without re-opening (bug fix
+    -- (2) above).
+    if setting_id == "unlock_all_careers" or setting_id:find("^level_override_") then
+        refresh_career_unlock_ui()
+    end
 end
 
 mod.on_disabled = function()
@@ -485,6 +573,10 @@ mod.on_disabled = function()
     if big_rebalance and big_rebalance.restore then big_rebalance.restore() end
     if tourney and tourney.restore then tourney.restore() end
     restore_talent_swaps()
+    -- Drop the OE cooldown-reduction managed bonus cleanly (the tick also self-
+    -- clears once mod:get returns nil, but do it eagerly so the live OE reverts to
+    -- exact vanilla recharge the instant the mod is disabled).
+    if mod._crt_oe_cdr_clear then mod._crt_oe_cdr_clear() end
     -- Refresh the inventory talent picker if it's open so a live disable visibly
     -- reverts swapped trees instead of waiting for a menu re-open.
     refresh_talent_ui()
@@ -497,7 +589,9 @@ mod.on_disabled = function()
     --     no-op stubs in place. Restart clears them.
     --   * VMF-installed hooks (ExperienceSettings.get_experience, the mirror
     --     get_read_only_data overrides, ProgressionUnlocks.is_unlocked_for_profile,
-    --     HeroWindowTalents on_enter/on_exit). VMF deactivates a disabled mod's
+    --     HeroWindowTalents on_enter/on_exit, plus the two armor/overcharge hooks
+    --     DamageUtils.apply_buffs_to_damage + PlayerUnitHealthExtension.add_damage).
+    --     VMF deactivates a disabled mod's
     --     hooks for us, and each body also gates on a mod:get(...) read, so they
     --     no-op while disabled — but the wrappers stay installed until restart.
     mod:echo("[crt] Talent swaps + balance reworks reverted. Buff registrations and hooks need a game restart for a fully clean vanilla state.")
@@ -532,6 +626,145 @@ mod:command("ct_status", "Show Career Tweaker version and active swaps/balance m
     mod:echo("  Big Rebalance toggles active: " .. tostring(br_count))
 end)
 
+-- Dump a career's CURRENT (live, post-rework) talent tree so we can re-point
+-- reworks whose target talent name was guessed from a stale decompile. The
+-- running game has the real data the local decompile may lack (e.g. the Zealot
+-- "Holy Fortitude" talent isn't in the decompile by that name). Usage:
+--   /crt_dump_talents            (defaults to wh_zealot)
+--   /crt_dump_talents wh_zealot
+-- Logs [crt:talent] lines (enable Debug Logging) + each talent's first buff's
+-- stat_buff/bonus/multiplier so the HP/max_health talent is identifiable.
+-- Reusable dump body. `reason` tags the log ("manual"/"auto"). Writes [crt:talent]
+-- lines via mod:info (always goes to the console_logs file, regardless of the
+-- chat-echo gate), so an auto-dump lands in the log even with Debug Logging off.
+-- Also prints each buff template's full proc fields (proc_chance/chunk_size/
+-- max_stacks/duration/event/buff_func/buff_to_add) so a tweak can be wired from
+-- the dump alone without re-grepping the source.
+mod.crt_dump_career_talents = function(career, reason)
+    career = (career and career ~= "" and career) or "wh_zealot"
+    local CS = rawget(_G, "CareerSettings")
+    local TT = rawget(_G, "TalentTrees")
+    local TL = rawget(_G, "TalentIDLookup")
+    local TA = rawget(_G, "Talents")
+    local BT = rawget(_G, "BuffTemplates")
+    local cs = CS and CS[career]
+    if not cs then mod:info("[crt:talent] unknown career: %s", tostring(career)); return false end
+    local hero = cs.profile_name
+    local tree = TT and TT[hero] and TT[hero][cs.talent_tree_index]
+    if not tree then mod:info("[crt:talent] no talent tree for %s", tostring(career)); return false end
+    mod:info("[crt:talent] === %s (hero=%s tree=%s) [%s] ===", tostring(career), tostring(hero), tostring(cs.talent_tree_index), tostring(reason or "manual"))
+    for row_i, row in ipairs(tree) do
+        for col_i, tname in ipairs(row) do
+            local lookup = TL and TL[tname]
+            local talent = lookup and TA and TA[lookup.hero_name] and TA[lookup.hero_name][lookup.talent_id]
+            local buffs = talent and talent.buffs
+            local buffstr = (type(buffs) == "table") and table.concat(buffs, ",") or "?"
+            local disp = tname
+            local lok, loc = pcall(Localize, tname)
+            if lok and loc and loc ~= tname and not tostring(loc):find("^<") then disp = loc end
+            mod:info("[crt:talent] [%d,%d] %s | name=%s | buffs=[%s] | icon=%s",
+                row_i, col_i, disp, tname, buffstr, tostring(talent and talent.icon))
+            if type(buffs) == "table" then
+                for _, bn in ipairs(buffs) do
+                    local bt = BT and BT[bn]
+                    local b1 = bt and bt.buffs and bt.buffs[1]
+                    if b1 then
+                        mod:info("[crt:talent]      buff %s | stat_buff=%s bonus=%s multiplier=%s proc_chance=%s chunk_size=%s max_stacks=%s duration=%s event=%s buff_func=%s buff_to_add=%s",
+                            tostring(bn), tostring(b1.stat_buff), tostring(b1.bonus), tostring(b1.multiplier),
+                            tostring(b1.proc_chance), tostring(b1.chunk_size), tostring(b1.max_stacks),
+                            tostring(b1.duration), tostring(b1.event), tostring(b1.buff_func), tostring(b1.buff_to_add))
+                    end
+                end
+            end
+        end
+    end
+    return true
+end
+
+mod:command("crt_dump_talents", "Dump a career's live talents + buffs (default wh_zealot)", function(career)
+    local ok = mod.crt_dump_career_talents(career, "manual")
+    if ok then mod:echo("[crt] dumped " .. tostring((career ~= "" and career) or "wh_zealot") .. " talents to log — paste the [crt:talent] lines") end
+end)
+
+-- ============================================================
+-- Auto-dump talents for careers under active rework (bw_unchained, es_mercenary)
+-- ============================================================
+-- Data-harness (PROJECT_STANDARDS debug doctrine): when the local player is on a
+-- career we're actively reworking, dump its talent/buff map to the log
+-- automatically (once per career per session) so the exact internal names +
+-- proc values are captured from normal play -- no /command needed. Pure read; no
+-- gameplay effect. Add a career here while it's being worked on.
+local _CRT_AUTO_DUMP_CAREERS = { bw_unchained = true, es_mercenary = true }
+local _crt_auto_dumped = {}
+
+-- Resolve the LOCAL player's career, NEVER throwing. The whole body is pcall'd
+-- because `Managers.player:local_player()` itself raises "Network backend has
+-- not been set" (player_manager.lua:559) at early states (StateSplashScreen /
+-- StateLoading) -- that was the v0.3.33 error spam (only the inner lookups were
+-- guarded, not local_player). Prefer the career_system extension on the spawned
+-- unit (reliable once spawned); fall back to player:career_name() (which itself
+-- returns nil until the profile's display_name loads, so it's the weaker source).
+local function _crt_local_career()
+    local ok, career = pcall(function()
+        local pm = Managers.player
+        local p = pm and pm:local_player()
+        if not p then return nil end
+        local unit = p.player_unit
+        if unit and Unit.alive(unit) then
+            local ce = ScriptUnit.has_extension(unit, "career_system")
+            if ce then
+                local n = ce:career_name()
+                if type(n) == "string" then return n end
+            end
+        end
+        if p.career_name then
+            local n = p:career_name()
+            if type(n) == "string" then return n end
+        end
+        return nil
+    end)
+    return (ok and type(career) == "string") and career or nil
+end
+
+-- Exposed so the lifecycle hooks (on_game_state_changed), the per-frame retry,
+-- and the talent-window on_enter hook can all drive it; resolves at call time.
+-- De-dupe is set ONLY on a SUCCESSFUL dump, so an early call that resolves the
+-- career but hits a not-yet-ready talent table can still succeed on a retry.
+mod._crt_auto_dump_check = function()
+    local career = _crt_local_career()
+    if not (career and _CRT_AUTO_DUMP_CAREERS[career]) then return end
+    if _crt_auto_dumped[career] then return end
+    mod:info("[crt:talent] auto-dump for %s (career under rework) -------------------", career)
+    if mod.crt_dump_career_talents(career, "auto") then
+        _crt_auto_dumped[career] = true
+    end
+end
+
+-- Per-frame retry window: career/unit aren't ready at StateIngame *enter*, so
+-- after each enter we retry the (throw-proof, de-duped) check ~1x/sec for a short
+-- window until it dumps. Guarantees the dump fires when you're actually playing a
+-- reworked career, without depending on opening the talent screen.
+local _crt_dump_retry_left = 0
+local _crt_dump_retry_acc = 0
+mod.update = function(dt)
+    -- Outcast Engineer cooldown-reduction benefit (its own throttle + gating;
+    -- self-guards on the toggle, the OE career, and the local player — no-op for
+    -- every other career or when the toggle is off). Driven from here, not a hook.
+    if mod._crt_oe_cdr_tick then mod._crt_oe_cdr_tick(dt) end
+
+    if _crt_dump_retry_left <= 0 then return end
+    _crt_dump_retry_left = _crt_dump_retry_left - (dt or 0)
+    _crt_dump_retry_acc = _crt_dump_retry_acc + (dt or 0)
+    if _crt_dump_retry_acc >= 1.0 then
+        _crt_dump_retry_acc = 0
+        if mod._crt_auto_dump_check then mod._crt_auto_dump_check() end
+    end
+end
+mod._crt_start_dump_retry = function()
+    _crt_dump_retry_left = 20.0
+    _crt_dump_retry_acc = 1.0  -- fire on the next frame, then ~1x/sec
+end
+
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
 -- ============================================================
@@ -546,20 +779,29 @@ local _CRT_BUFF_NAMES_EXPECTED = {
     "crt_bh_jwd_special_kill_dr_proc",
     "crt_bh_jwd_special_kill_dr_stack",
     "crt_bh_jwd_stack_remover",
+    "crt_engineer_leading_shots_accumulator",
+    "crt_engineer_leading_shots_counter",
+    "crt_engineer_leading_shots_crit",
     "crt_knight_counter_punch_proc",
     "crt_knight_counter_punch_stack",
     "crt_mainstay_universal_stagger",
     "crt_merc_blade_barrier_proc",
     "crt_merc_blade_barrier_remover",
     "crt_merc_blade_barrier_stack",
+    "crt_merc_enhanced_training_as",
     "crt_priest_prayer_self_extra",
     "crt_questingknight_impetuous_as",
     "crt_questingknight_impetuous_as_proc",
     "crt_questingknight_impetuous_power",
     "crt_questingknight_impetuous_power_proc",
+    "crt_sienna_flame_unending_driver",
+    "crt_sienna_flame_unending_stack",
+    "crt_sienna_natural_talent_ranged_driver",
+    "crt_sienna_natural_talent_ranged_stack",
     "crt_sienna_numb_to_pain_proc",
     "crt_sienna_numb_to_pain_remover",
     "crt_sienna_numb_to_pain_stack",
+    "crt_unchained_ult_max_us",
     "crt_waywatcher_drakiras_alacrity_passive",
     "crt_waywatcher_fervent_huntress_passive",
     "crt_zealot_holy_fortitude_max_hp",
@@ -634,13 +876,11 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    -- Helpers route through VMF (mod:debug / mod:warning); just verify they don't raise.
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
 
@@ -663,6 +903,24 @@ _rt_register("localization_format_safe", function()
                     k, tostring(fmt_err))
             end
         end
+    end
+end)
+
+_rt_register("armor_overcharge_hook_targets_present", function()
+    -- v0.3.32-dev: the armor/overcharge module installs exactly ONE mod:hook on
+    -- each of its two targets (VMF drops the 2nd hook on the same (Class, method)
+    -- silently). The STATIC duplicate-hook guarantee is enforced at build time by
+    -- tools/mod-lint/lint-mod.ps1; this runtime check confirms both hook TARGETS
+    -- are resolvable (i.e. the module had something real to hook). Both functions
+    -- live in core scripts loaded well before any keep state, so this passes even
+    -- from the keep.
+    local DU = rawget(_G, "DamageUtils")
+    if type(DU) ~= "table" or type(DU.apply_buffs_to_damage) ~= "function" then
+        return "DamageUtils.apply_buffs_to_damage missing"
+    end
+    local PUHE = rawget(_G, "PlayerUnitHealthExtension")
+    if type(PUHE) ~= "table" or type(PUHE.add_damage) ~= "function" then
+        return "PlayerUnitHealthExtension.add_damage missing"
     end
 end)
 

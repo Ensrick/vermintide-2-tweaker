@@ -325,9 +325,38 @@ local function make_cw_pickup_settings(vanilla)
             grenades      = adv and adv.grenades or 5,
             healing       = adv and adv.healing or { first_aid_kit = 2, healing_draught = 2 },
             level_events  = adv and adv.level_events or { explosive_barrel = 2, lamp_oil = 2 },
-            -- Aggressive CW pickup counts (user spec: at least 30 each if they fit).
-            -- The _can_spawn hook below grants eligibility on any non-tome/grim primary
-            -- spawner, so these compete with ammo/healing/grenades for unclaimed slots.
+            -- CW pickup counts. The _can_spawn hook below grants eligibility on any
+            -- non-tome/grim primary spawner, so deus_potions, deus_soft_currency and
+            -- deus_weapon_chest all compete for the SAME finite, shared primary spawner
+            -- pool (pickup_system.lua:467-633 iterates pickup_types over one `spawners`
+            -- array and permanently table.remove()s each consumed spawner at :621-626).
+            -- This is unlike a vanilla CW level, where potion spawners and
+            -- painting_scrap→coin spawners are type-partitioned and never contend.
+            --
+            -- Coin-starvation fix (Abundance-of-Life curse): the curse mutator
+            -- (mutator_curse_abundance_of_life.lua:7-11) carries
+            -- pickup_system_multipliers = { deus_potions = 3, ... } applied by
+            -- MutatorHandler.pickup_settings_updated_settings (mutator_handler.lua:544-560)
+            -- BEFORE spawning. It triples deus_potions but leaves deus_soft_currency
+            -- untouched (not a key in the curse table), so in the SHARED primary pool
+            -- a potions-first allocation pass (pairs() order is non-deterministic in
+            -- Lua 5.1) could drain the spawner list and drop coins into silent
+            -- spawn_debt (pickup_system.lua:629).
+            --
+            -- v0.7.165-dev ROBUST fix lives in the `_can_spawn` hook in
+            -- chaos_wastes_tweaker_dev.lua (search `_spawner_reserved_for_coins`): a
+            -- deterministic ~40% slice of primary spawners is reserved COIN-ONLY by
+            -- DENYING deus_potions/deus_weapon_chest eligibility there, so potions can
+            -- never claim them regardless of iteration order or the ×3 curse. That
+            -- GUARANTEES coins (the prior count-only ratio only reduced the odds).
+            --
+            -- These counts are now just "how many of each to request"; the guarantee
+            -- is the reservation, not the ratio. Request coins generously enough to
+            -- fill the reserved slice, and keep potions at a level that feels normal
+            -- on NON-cursed injected levels too (×3 curse → 90 requested potions, but
+            -- they're confined to the unreserved ~60% of spawners). Only counts change
+            -- here — the deus_potions spawn_weighting table is untouched, so the
+            -- [0,1) sampler-sum crash class does not apply.
             deus_potions       = 30,
             deus_soft_currency = 30,
             deus_weapon_chest  = 5,  -- altars (1 temper + 1 melee swap + 1 ranged swap + 2 boon)
@@ -341,6 +370,11 @@ local function make_cw_pickup_settings(vanilla)
         }
     end
     local function secondary()
+        -- Secondary draws from a SEPARATE spawner pool (self.secondary_pickup_spawners,
+        -- pickup_system.lua:443-449) but the SAME curse multiplier is reapplied to it
+        -- (:446). The `_can_spawn` coin reservation (v0.7.165-dev) fires for secondary
+        -- spawners too (same hook, same percentage_through_level hash), so coins are
+        -- guaranteed here as well -- no need for a coins-heavy ratio as a defense.
         return {
             ammo               = 3,
             grenades           = 4,

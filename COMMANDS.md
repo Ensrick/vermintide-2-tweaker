@@ -25,21 +25,41 @@ wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose  -- hold-pose tuner
 ```
 *(wt section refreshed 2026-06-11 — added the 7 commands landed since the 2026-05-25 snapshot.)*
 
-### `gt` (general_tweaker)
+### `gt` (general_tweaker_dev)
+*(2026-07-01: the `gt_` prefix was stripped from ALL gt commands to simplify. The ONLY exception is `gt_regression_test`, kept prefixed because bare `regression_test` collides with gui_tweaker's. `lobby_*` names keep their `lobby_` prefix — only `gt_` was removed.)*
 ```
-tp, freecam, noclip, dump_glossary, dump_cosmetics, unstuck, god,
-no_enemies, win, fail, restart, kill_bots, die, fix_sound,
-dump_items_by_slot, ai, ult_reset, time_faster, time_slower, pause,
-infinite_ammo, infinite_stamina, giga_power,
-gt_regression_test,
--- Host-side lobby controls (absorbed from lobby_tweaker 2026-05-25):
-gt_lobby_reserve, gt_lobby_unreserve, gt_lobby_reservations,
-gt_lobby_ignore, gt_lobby_ignore_persist, gt_lobby_unignore,
-gt_lobby_ignored, gt_lobby_ignore_last,
-gt_lobby_idle_whitelist, gt_lobby_idle_unwhitelist, gt_lobby_idle_status,
-gt_lobby_motd_test,
-gt_lobby_manifest_dump, gt_lobby_manifest_probe
+-- Cheats / player-state:
+god, no_enemies, clear_enemies, unstuck, cloak, unkillable, inndmg, noclip, ai,
+infinite_ammo, stamina, gigapower, ultreset, pause, time_faster, time_slower,
+-- Level control / match flow:
+win, fail, restart, killbots, die, respawn, fix_sound, bottoggle, readyup, inn,
+-- Bots:
+no_bots, bots_in_keep,
+-- Spawners:
+spawncreature, nextcreature, prevcreature, destroycreatures, savecreature, selectedcreatures,
+spawnitem, nextitem, previtem,
+-- Dumps / debug:
+dump_settings, dump_level, dump_glossary, dump_cosmetics, dump_items_by_slot,
+dump_hero_view, dump_ai, dump_menu, ai_slotdump, bot_loadout_dump, fire_probe,
+gt_regression_test,   -- ONLY command still carrying the gt_ prefix
+-- Host-side lobby controls (absorbed from lobby_tweaker; still lobby_-prefixed):
+lobby_reserve, lobby_unreserve, lobby_reservations,
+lobby_ignore, lobby_ignore_persist, lobby_unignore, lobby_ignored, lobby_ignore_last,
+lobby_idle_whitelist, lobby_idle_unwhitelist, lobby_idle_status,
+lobby_motd_test, lobby_motd_set, lobby_motd_clear,
+lobby_manifest_dump, lobby_manifest_probe
 ```
+
+### `gut` (gui_tweaker)
+```
+gut_save_loadout, gut_load_loadout, gut_list_loadouts,
+gut_edit_hud, gut_reset_hud, gut_list_hud,
+gut_hud, gut_hud_cycle,
+gut_inv,                       -- open inventory mid-mission (migrated from gt /gt_inv 2026-06-24)
+gut_hero_select,               -- open HeroView talents layout mid-mission (live-safe; career PICK stays keep-only by design)
+gut_regression_test, gut_lua_mem
+```
+*(partial gut audit added 2026-06-24 alongside the in-mission inventory migration; gut was previously un-audited in this file — other gut commands may exist.)*
 
 ### `ct` (chaos_wastes_tweaker)
 ```
@@ -72,7 +92,7 @@ cwv_om_eul_{1p_r,1p_m,3p_r,3p_m},
 cwv_om_scale_{1p_r,1p_m,3p_r,3p_m},
 cwv_om_show, cwv_musket_ammo_diag, cwv_musket_dump,
 cwv_probe_skins, cwv_probe_unit, cwv_probe_attach,
-cwv_despawn_probes, cwv_give
+cwv_despawn_probes, cwv_give, cwv_give_javelin
 ```
 
 ### `cim` (crafting_in_modded)

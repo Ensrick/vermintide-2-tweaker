@@ -1,4 +1,4 @@
-local mod = get_mod("gut")
+﻿local mod = get_mod("gut")
 
 -- Mod Tweaker: controller + public API surface.
 -- v0.1 scaffold. Wires the registry/persistence module (_mod_tweaker_settings),

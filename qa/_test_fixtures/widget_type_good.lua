@@ -16,6 +16,8 @@ return {
                 type          = "checkbox",
                 default_value = false,
             },
+            -- numeric with a valid 2-element range — must PASS the range check too.
+            { setting_id = "baz", type = "numeric", default_value = 1, range = { 0, 10 }, decimals_number = 0 },
         },
     },
 }

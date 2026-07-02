@@ -107,22 +107,6 @@ return {
         en = "Hand your character over to bot AI for stepping away or for testing. Works as host OR client (host self-toggle is now supported — the swap is deferred one tick so the current frame finishes reading input before the local Player object is torn down). Refused in versus (no hero bot AI) and in the keep (no spawning). Toggling off recreates your character with a fresh loadout (consumables/ammo do NOT persist across the swap). Auto-resets on state change. The host must also have General Tweaker installed. Chat: '/ai'.",
     },
 
-    mission_inventory_group = {
-        en = "Keep Menus in Missions",
-    },
-    mission_inventory_enabled = {
-        en = "Enable Keep Menu Hotkeys in Missions",
-    },
-    mission_inventory_enabled_tooltip = {
-        en = "Patches InventorySettings so the inventory view can render in adventure/survival/deus game modes and adds an 'Open Inventory' entry to the in-game ESC menu. The keep's bound hotkeys (Inventory/Hero/Map etc.) USUALLY do not fire mid-mission even with this on (vanilla gates them deep inside the view's can_interact checks). Use the keybind/command below for a reliable open.",
-    },
-    gt_open_inv_hotkey = {
-        en = "Open Inventory (Mid-Mission)",
-    },
-    gt_open_inv_hotkey_tooltip = {
-        en = "Hotkey: open the inventory while you're in a mission. Same as '/gt_inv'. Calls `Managers.ui:handle_transition('hero_view_force', ...)` directly — the same path vanilla fires from the ESC-menu 'Open Inventory' entry — so it bypasses the hotkey gating that blocks the standard I/H/M/etc. keys mid-mission.",
-    },
-
     player_state_group = {
         en = "Player State Toggles",
     },
@@ -549,12 +533,6 @@ return {
     gt_lobby_failnotify_cosmetic_footer    = { en = "Host also has %%d cosmetic mods you don't (gameplay unaffected)." },
     gt_lobby_failnotify_button_workshop    = { en = "Open Workshop" },
     gt_lobby_failnotify_button_cancel      = { en = "Close" },
-
-    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-    -- v0.2.54-dev: renamed from `gt_debug_mode` (was nested in `gt_debug_group`)
-    -- to the universal `enable_debug_logging` key.
-    enable_debug_logging = { en = "Debug Logging" },
-    enable_debug_logging_tooltip = { en = "Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable." },
 
     -- Bot Options (AI teammate behavior fixes; _gt_bot_fixes.lua). Host-side only.
     gt_bot_options_group = { en = "Bot Options (AI Teammates)" },

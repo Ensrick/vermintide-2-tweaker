@@ -201,7 +201,7 @@ local options_data = {
                         setting_id = "ignore_unloadable_items",
                         type = "checkbox",
                         default_value = false,
-                        tooltip = mod:localize("ignore_unloadable_items_description"),
+                        tooltip = "ignore_unloadable_items_description",
                     },
                 },
             },

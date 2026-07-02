@@ -12,7 +12,4 @@ return {
     enable_dlc_termite_3         = en("The Well of Dreams"),
     enable_dlc_termite_3_tooltip = en("ON (default): apply tuned lighting to The Well of Dreams (dlc_termite_3). OFF: leave vanilla lighting on this mission untouched. Atmosphere reverts immediately on toggle; per-light overrides only fully clear on next level load."),
 
-    -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-    enable_debug_logging         = en("Debug Logging"),
-    enable_debug_logging_tooltip = en("Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable."),
 }

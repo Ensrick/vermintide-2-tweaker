@@ -17,9 +17,19 @@
    as many sessions as needed.
 3. **Export**: `/wt_dump_anim_picks <character>` → paste-ready
    `_<PORT>_WIELD_3P` / `_<PORT>_ANIM_REMAP_3P` blocks in the console log.
-4. **Bake**: hand the dump to Claude → it lands in the patcher tables
-   (`_WIELD_ANIM_CAREER_3P_PATCHES` or a per-port patcher) + this file flips to
-   WORKING. Model substitutes (column b) are a separate wiring pass — see
+4. **Bake**: hand the dump to Claude → it lands in the patcher tables + this file
+   flips to WORKING. Two destinations by pick kind:
+   - **Wield stance** (`to_*` events) → `_WIELD_ANIM_CAREER_3P_PATCHES`
+     (`wt_wield_patches.lua`), career-scoped (`es_*` only for a Kruber port).
+   - **Per-attack picks** (`attack_*`/`parry_*`/`attack_push`) → a CAREER-SCOPED
+     `es_`-keyed entry in `_3p_template_remaps` (`weapon_tweaker.lua`), with the
+     native owner's prefix set to `false` so the owner's 3P is never touched.
+     NEVER raw-write the shared template's `anim_event_3p` — that corrupts the
+     native owner (see the BAKED section in `KRUBER_3P_ANIM_DECISIONS.md`,
+     v0.12.149-dev). Then REMOVE the weapon_key from `_NEEDS_ANIMS.kruber` and add
+     it to `_CONFIRMED.kruber` (`wt_port_status.lua`) so the picker drops it and
+     the Availability tag reads `[Working]`.
+   Model substitutes (column b) are a separate wiring pass — see
    "Model-substitute queue" at the bottom.
 
 **Legend** — ✅ WORKING (wired + verified) · 🔧 WIRED? (plumbing exists,
@@ -48,31 +58,34 @@ entries; longbow has zoom toggles).
 | wh_1h_axe | Saltzpyre: 1H Axe | ✅ | Native `to_1h_axe` vocab — confirmed (DECISIONS:148) |
 | es_1h_flail | Empire Flail | 🔁 | native |
 | bw_1h_crowbill | Sienna: Crowbill | 🧊 | Remap wired + scale, but **Kruber heavy-attack regression** — user to retest (DECISIONS:35) |
-| bw_1h_flail_flaming | Sienna: Flaming Flail | 🔧 | Wield redirect `to_1h_flail_flaming→to_1h_flail` wired in v0.12.119 (DECISIONS:36 fix) — needs in-game verify |
-| dr_dual_wield_axes | Bardin: Dual Axes | 📋 | decided `to_dual_hammer_sword`; current per-action table covers dr_ careers only |
-| dr_2h_cog_hammer / dr_2h_pick | Cog Hammer / Pickaxe | 📋 | decided `to_2h_hammer` (native on Kruber; per-action unverified) |
-| dr_shield_axe | Axe & Shield | 📋 | decided native fall-through; CWV precedent if broken |
+| bw_1h_flail_flaming | Sienna: Flaming Flail | ✅ | Wield redirect `to_1h_flail_flaming→to_1h_flail` (DECISIONS:36 fix); capture-confirmed v0.12.139-dev → excluded from chooser |
+| dr_dual_wield_axes | Bardin: Dual Axes | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.dual_wield_axes_template_1.es_` (Empire Mace & Sword); removed from picker |
+| dr_2h_pick | Bardin: Pickaxe | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.two_handed_picks_template_1.es_` (Empire Greathammer); removed from picker |
+| dr_2h_cog_hammer | Cog Hammer | ✅ | **[Working] — BAKED v0.12.151-dev** career-scoped `_3p_template_remaps.two_handed_cog_hammers_template_1.es_` (Empire Greathammer); all-identity picks (already animates correctly on Kruber); `dr_ = false` keeps Bardin native; removed from picker |
+| dr_shield_axe | Axe & Shield | ✅ | native fall-through; capture-confirmed v0.12.139-dev → excluded from chooser |
 | dr_1h_throwing_axes | Throwing Axes | 📋 | decided `to_1h_mace` |
 | dr_drake_pistol | Drakefire Pistols | 📋 | decided `to_repeating_handgun` + **offhand hide** (model-sub queue) |
 | dr_drakegun | Drakegun | 📋 | decided `to_blunderbuss` |
 | dr_steam_pistol | Masterwork Pistol | 📋 | decided `to_repeating_handgun` |
 | dr_deus_01 | Trollhammer Torpedo | 📋 | decided `to_blunderbuss` |
-| we_1h_axe | Kerillian: 1H Axe | 🔧 | native `to_1h_axe` TRUE on Kruber; route per wh_1h_axe pattern |
-| we_2h_axe | Kerillian: Glaive | 📋 | decided `to_2h_hammer` (`to_2h_axe` authored on NO skeleton) |
-| we_dual_wield_daggers / _swords / _sword_dagger | Elf duals ×3 | 📋 | decided `to_dual_hammer_sword` |
+| we_1h_axe | Kerillian: 1H Axe | ✅ | **[Working] — BAKED v0.12.156-dev** career-scoped `_3p_template_remaps.we_one_hand_axe_template.es_` (Kruber native 1H Axe, mostly identity); `we_ = false` keeps Kerillian native; removed from picker |
+| we_2h_axe | Kerillian: Glaive | ✅ | **[Working] — BAKED v0.12.156-dev** career-scoped `_3p_template_remaps.two_handed_axes_template_2.es_` (Empire Greathammer; grip offset already set v0.12.152); `we_ = false` keeps Kerillian native; removed from picker |
+| we_dual_wield_daggers / _swords / _sword_dagger | Elf duals ×3 | ✅ | **[Working] — BAKED v0.12.156-dev** career-scoped `_3p_template_remaps.dual_wield_daggers_template_1.es_` / `.dual_wield_swords_template_1.es_` / `.dual_wield_sword_dagger_template_1.es_` (Empire Mace & Sword); `we_ = false` keeps Kerillian native; removed from picker |
 | we_shortbow / we_shortbow_hagbane | Shortbow / Hagbane | 📋 | crash-safety net only (j_hips); **TODO #31**: proper model sub → Empire Longbow |
 | we_javelin | Javelin | ❓ | EXPERIMENTAL, target TBD |
 | we_life_staff | Deepwood Staff | ❓ | PENDING user decision (DECISIONS:226) |
-| we_crossbow_repeater | Repeater Crossbow | 📋 | decided `to_repeating_handgun` (current redirect lands on a FALSE event — no-op) |
-| wh_dual_hammer | Dual Hammers | 📋 | decided `to_dual_hammer_sword` |
-| wh_2h_hammer | 2H Hammer | 🔁 | native `to_2h_hammer` — confirmed target |
-| wh_fencing_sword | Rapier | 📋 | decided experimental `to_1h_sword_shield` (offhand pistol has no Kruber vocab) |
-| wh_flail_shield / wh_hammer_book | WP combos | 📋 | decided `to_1h_mace_shield` |
-| wh_crossbow_repeater | Volley Crossbow | 📋 | decided `to_repeating_handgun` |
+| we_crossbow_repeater | Repeater Crossbow | 🧊 | **CRASH FIXED v0.12.139-dev** — empty-wield reload fired the unregistered `_elf`/`_elf_noammo` not-loaded/no-ammo wields → nil NetworkLookup.anims id → RPC-packer fatal (network game). Now patches `wield_anim_not_loaded_career`/`wield_anim_no_ammo_career` → `to_repeating_handgun`/`_noammo` (registered + Kruber-authored). Loaded stance SET=`to_repeating_handgun` (per-attack still pending) |
+| wh_dual_hammer | WP Dual Skullsplitters | ✅ | **[Working] — BAKED v0.12.156-dev** career-scoped `_3p_template_remaps.dual_wield_hammers_priest_template.es_` (Empire Mace & Sword); `wh_ = false` keeps Saltzpyre/WP native; removed from picker |
+| wh_2h_hammer | WP Greathammer (Reckoner) | ✅ | **[Working] — BAKED v0.12.151-dev** career-scoped `_3p_template_remaps.two_handed_hammer_priest_template.es_` (Empire Greathammer); `wh_ = false` keeps Saltzpyre/WP native; removed from picker |
+| wh_fencing_sword | Rapier | 📋 | MODEL-SUB queue (hide off-hand pistol, route `to_1h_sword_shield`); NOT a plain chooser row — separate later pass |
+| wh_flail_shield | WP Flail & Shield | ✅ | **[Working] — BAKED v0.12.156-dev** career-scoped `_3p_template_remaps.one_handed_flail_shield_template.es_` (Empire Mace & Shield); `wh_ = false` keeps Saltzpyre/WP native; removed from picker |
+| wh_hammer_book | WP Skullsplitter & Tome | 📋 | MODEL-SUB queue (hide tome, plain Skullsplitter mesh, native 1H-mace anims); NOT a plain chooser row — separate later pass |
+| wh_crossbow_repeater | Volley Crossbow | 📋 | decided `to_repeating_handgun`; uses REGISTERED `to_repeating_crossbow`/`_noammo` not-loaded wields (no crash, unlike the elf `we_crossbow_repeater`) — decided-not-wired |
 | wh_deus_01 | Griffon-foot | 📋 | decided `to_repeating_handgun` + **repeater-handgun MODEL sub + offhand hide, mirror Brace** (model-sub queue) |
-| bw_1h_mace | Sienna: Mace | 📋 | decided `to_2h_hammer` (held 2H) |
-| bw_dagger / bw_flame_sword | Dagger / Flame Sword | 📋 | decided `to_1h_sword` |
-| bw_ghost_scythe | Ensorcelled Reaper | 📋 | decided `to_2h_hammer` |
+| bw_1h_mace | Sienna: Mace | ✅ | **[Working] — BAKED v0.12.150-dev** career-scoped `_3p_template_remaps.one_handed_hammer_wizard_template_1.es_` (Empire Greathammer); `bw_ = false` keeps Sienna native; removed from picker |
+| bw_dagger | Sienna: Dagger | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.one_handed_daggers_template_1.es_` (Empire 1H Sword); removed from picker |
+| bw_flame_sword | Sienna: Flame Sword | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.flaming_sword_template_1.es_` (Empire 1H Sword); removed from picker |
+| bw_ghost_scythe | Ensorcelled Reaper | ✅ | **[Working] — BAKED v0.12.150-dev** career-scoped `_3p_template_remaps.staff_scythe.es_` (Empire Greathammer); `bw_ = false` keeps Sienna native. **Grip offset BAKED**: `_weapon_grip_offsets.bw_ghost_scythe.es_ = {0,0,6}` (es_-scoped, 3P-only) via the **DURABLE per-frame re-apply path** `_DURABLE_GRIP_OFFSETS` (v0.12.151-dev bumped 0.569→6 — the one-shot was stomped in-game; see OFFSETS.md); removed from picker + `_NEEDS_OFFSETS` |
 | bw_skullstaff_* ×5, bw_necromancy_staff, bw_deus_01 | Sienna staves ×7 | 📋 | all decided `to_2h_hammer`; user will UNSET some actions via picker |
 | wh_1h_falchion | Falchion | — | CWV-managed on Kruber — wt skips |
 

@@ -26,6 +26,13 @@ end
 function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     mod.loadout_cache = mod.loadout_cache or {}
 
+    -- Passive overcharge-vent / energy-regen restore for cross-character
+    -- overcharge weapons (Sienna staves) + the Moonfire Bow on careers that
+    -- lack the native rate. Exposes M.tick(dt); driven from mod.update below
+    -- (the single per-frame surface VMF schedules). Loaded once here. See the
+    -- module header for the full networking / consumption-side rationale.
+    local passive_charge = mod:dofile("scripts/mods/weapon_tweaker/_wt_passive_charge")
+
     local function is_mod_unlocked_weapon(career_name, weapon_key)
         if not career_name or not weapon_key then
             return false
@@ -92,7 +99,28 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     --      can collide with weave-mode interface usage and other mods. Runs
     --      once when Managers.backend has interfaces created (in the lobby).
     -- VMF schedules `mod.update` every frame so the conditions are polled.
-    mod.update = function()
+    -- VMF passes the frame `dt` as the first arg (repo-wide convention:
+    -- `mod.update = function(dt) ... end`); the deferred-init guards below
+    -- ignore it, but the passive-charge tick needs it.
+    mod.update = function(dt)
+        -- Per-frame passive-charge restore (cross-character staves / Moonfire
+        -- Bow). Self-gated on its VMF toggle (default OFF) and the local owned
+        -- player only; pcall-isolated internally so it can never break init.
+        passive_charge.tick(dt)
+
+        -- Per-frame DURABLE 3P grip-offset re-apply (the Necromancer Ghost
+        -- Scythe on Kruber, etc.). A one-shot create_equipment offset is stomped
+        -- by the engine's per-tick canonical-pose reset in-game (preview-OK /
+        -- in-game-wrong), so members of _DURABLE_GRIP_OFFSETS re-apply every
+        -- frame on the local player's wielded 3P unit. 3P-ONLY, career-gated,
+        -- additive-from-canonical (never compounds). See the _DURABLE_GRIP_OFFSETS
+        -- header in weapon_tweaker.lua / OFFSETS.md. Defined on the mod table
+        -- because that's where the offset data lives (separate dofile scope).
+        -- Guarded: nil before weapon_tweaker.lua finishes loading (load order).
+        if mod._reapply_durable_grip_offsets then
+            pcall(mod._reapply_durable_grip_offsets)
+        end
+
         if not mod._applied_unlocks and ItemMasterList then
             mod._applied_unlocks = true
             apply_weapon_unlocks()

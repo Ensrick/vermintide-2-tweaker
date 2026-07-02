@@ -42,7 +42,7 @@ _MEM_PROBE_T0_CTS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint b
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.128-beta"
+local MOD_VERSION = "0.7.129-beta"
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
 -- approach which crashed to 0 cost at ~20 boons. See `.ammo_system_design_2026-05-24.md`.
@@ -78,20 +78,15 @@ local CT_RPC_SCHEMA = 1
 mod:info("[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
+-- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
 -- `_dbg` is for confirmation / expected behavior — file only.
 -- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[ct:dbg] " .. fmt, ...)
-    end
+    mod:debug("[ct:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[ct:dbg] " .. fmt, ...)
-        mod:echo("[ct] " .. fmt, ...)
-    end
+    mod:warning("[ct:dbg] " .. fmt, ...)
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -4641,15 +4636,13 @@ local _ct_diag_event_manager_ref = nil
 local _ct_diag_subscriber = setmetatable({}, { __mode = "v" })
 
 _ct_diag_subscriber.player_pickup_deus_weapon_chest = function(self, player)
-    if not mod:get("enable_debug_logging") then return end
     local name = player and player.name and player:name() or "?"
     local is_bot = player and player.bot_player and "BOT" or "human"
-    mod:info("[diag] event:player_pickup_deus_weapon_chest player=%s (%s)", tostring(name), is_bot)
+    mod:debug("[diag] event:player_pickup_deus_weapon_chest player=%s (%s)", tostring(name), is_bot)
 end
 
 _ct_diag_subscriber.chest_unlock_failed = function(self, chest_type)
-    if not mod:get("enable_debug_logging") then return end
-    mod:info("[diag] event:chest_unlock_failed chest_type=%s", tostring(chest_type))
+    mod:debug("[diag] event:chest_unlock_failed chest_type=%s", tostring(chest_type))
 end
 
 local function _diag_subscribe_if_needed()
@@ -4663,8 +4656,8 @@ local function _diag_subscribe_if_needed()
     end)
     if not ok then
         mod:info("[diag] subscriber register failed: %s", tostring(err))
-    elseif mod:get("enable_debug_logging") then
-        mod:info("[diag] diagnostic event subscribers registered (new event_manager)")
+    else
+        mod:debug("[diag] diagnostic event subscribers registered (new event_manager)")
     end
 end
 
@@ -9635,13 +9628,10 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
 _rt_register("ct_rpc_schema_present", function()

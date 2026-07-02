@@ -54,14 +54,11 @@ local BOON_TREE = {
             "sharing_is_caring", "static_charge",
         },
     },
-    {
-        category_id = "bomb_bubbles",
-        items = {
-            "boon_supportbomb_concentration_01", "boon_supportbomb_crit_01",
-            "boon_supportbomb_healing_01", "boon_supportbomb_speed_01",
-            "boon_supportbomb_strenght_01",
-        },
-    },
+    -- v0.7.159-dev Task 1: `bomb_bubbles` (the support-bomb boon set) MOVED to be a
+    -- sub-category of `utility_boons` (see below), nested alongside `bombs`. It is no
+    -- longer a top-level category. category_id + item setting-id tails are unchanged,
+    -- so disable_boon_* / start_boon_* user values persist; only the menu position
+    -- moves (group setting_id `*_bomb_bubbles_group` is identical either way).
     {
         category_id = "auras",
         items = {
@@ -157,6 +154,16 @@ local BOON_TREE = {
                     "boon_bomb_heavy_01", "cluster_barrel", "deus_barrel_power",
                     "deus_grenade_multi_throw", "explosive_ordinance", "grenadier",
                     "pyrotechnical_echo", "shrapnel",
+                },
+            },
+            -- v0.7.159-dev Task 1: support-bomb boon set, nested under utility >
+            -- bomb bubbles (was a top-level category). Same category_id + items.
+            {
+                category_id = "bomb_bubbles",
+                items = {
+                    "boon_supportbomb_concentration_01", "boon_supportbomb_crit_01",
+                    "boon_supportbomb_healing_01", "boon_supportbomb_speed_01",
+                    "boon_supportbomb_strenght_01",
                 },
             },
             {
@@ -323,6 +330,26 @@ local function sort_key(widget)
     return label:lower()
 end
 
+-- Menu-layout rule (user, standing): collapsible sub-menus (`type == "group"`)
+-- always render ABOVE loose options within the same parent. Enforced by a STABLE
+-- partition — groups keep their relative order, loose options keep theirs; only the
+-- group-vs-option split is normalized. Runs on every widget list (independent of
+-- SORT_GROUPS alphabetization, which orders items WITHIN a sorted group).
+local function _groups_first(widgets)
+    local groups, rest = {}, {}
+    for _, w in ipairs(widgets) do
+        if w.type == "group" then
+            groups[#groups + 1] = w
+        else
+            rest[#rest + 1] = w
+        end
+    end
+    if #groups == 0 or #rest == 0 then return end  -- nothing to reorder
+    local i = 0
+    for _, w in ipairs(groups) do i = i + 1; widgets[i] = w end
+    for _, w in ipairs(rest)   do i = i + 1; widgets[i] = w end
+end
+
 local function recursive_sort(widgets)
     if type(widgets) ~= "table" then return end
     for _, w in ipairs(widgets) do
@@ -335,6 +362,9 @@ local function recursive_sort(widgets)
             recursive_sort(w.sub_widgets)
         end
     end
+    -- After children are settled, lift any collapsible sub-groups above loose
+    -- options at THIS level (the "collapsible above options" rule).
+    _groups_first(widgets)
 end
 
 -- `text` values are localization keys (resolved by VMF via mod:localize). VMF wraps any missing
@@ -401,45 +431,88 @@ local data = {
                 sub_widgets = {
                     { setting_id = "coin_multiplier", type = "numeric", default_value = 1, range = { 0.1, 5 }, decimals_number = 2 },
                     -- starting_coins snaps to the nearest multiple of 25 via on_setting_changed (chaos_wastes_tweaker.lua).
+                    -- range MUST be exactly 2 elements: VMF rejects a 3-element range outright
+                    -- ('range' field must contain an array-like table with 2 elements) and aborts the
+                    -- mod's ENTIRE options init → no [ct:LOAD], mod dead. A 3rd "step" element (the #164
+                    -- attempt) is NOT ignored by VMF — it is fatal. Step-snapping lives in on_setting_changed.
                     { setting_id = "starting_coins", type = "numeric", default_value = 0, range = { 0, 3000 }, decimals_number = 0 },
                 },
             },
             {
                 setting_id = "shrines_altars_chests_group",
                 type = "group",
+                -- Fully grouped (v0.7.197-dev): every setting lives in a labeled collapsible
+                -- (no loose options). Declared in render order — groups-first keeps this order.
                 sub_widgets = {
-                    { setting_id = "shrine_boon_count", type = "numeric", default_value = 4, range = { 1, 5 }, decimals_number = 0 },
-                    { setting_id = "chest_boon_count", type = "numeric", default_value = 3, range = { 1, 5 }, decimals_number = 0 },
-                    { setting_id = "chest_upgrade_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "chest_swap_melee_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "chest_swap_ranged_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "chest_power_up_count", type = "dropdown", default_value = -1, options = altar_count_options, tooltip = "altar_count_tooltip" },
-                    { setting_id = "cursed_chest_count", type = "dropdown", default_value = -1, options = count_with_default_options, tooltip = "cursed_chest_count_tooltip" },
-                    { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },
-                    -- v0.7.130-dev (Issue #64): per-Chest-of-Trials enemy spawn-count
-                    -- multiplier. 1.0 = vanilla. Applies to `spawn_around_origin_unit`
-                    -- elements whose `spawn_counter_category == "cursed_chest_enemies"`
-                    -- — i.e. ONLY the trial waves, not unrelated terror events.
-                    { setting_id = "cot_enemy_multiplier", type = "numeric", default_value = 1.0, range = { 0.5, 5.0 }, decimals_number = 1, tooltip = "cot_enemy_multiplier_tooltip" },
-                },
-            },
-            {
-                -- v0.7.127-dev: altar reuse. count = max times the altar can be USED
-                -- per visit (1 = vanilla). cost_mult = geometric multiplier applied per
-                -- subsequent use: cost_N = base_cost * (mult ^ (N - 1)). mult=1 keeps
-                -- vanilla cost across all uses. mult=2 doubles each use (1x, 2x, 4x, 8x).
-                -- mult=0.5 halves each use (1x, 0.5x, 0.25x). All values host-broadcast.
-                setting_id = "altar_reuse_group",
-                type = "group",
-                sub_widgets = {
-                    { setting_id = "altar_reuse_count_power_up",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
-                    { setting_id = "altar_reuse_cost_mult_power_up", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
-                    { setting_id = "altar_reuse_count_swap_melee",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
-                    { setting_id = "altar_reuse_cost_mult_swap_melee", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
-                    { setting_id = "altar_reuse_count_swap_ranged",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
-                    { setting_id = "altar_reuse_cost_mult_swap_ranged", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
-                    { setting_id = "altar_reuse_count_upgrade",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
-                    { setting_id = "altar_reuse_cost_mult_upgrade", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                    {
+                        -- v0.7.196-dev: all FIVE per-mission spawn-count sliders under ONE
+                        -- nested collapsible (user request). Groups-first ordering lifts this
+                        -- collapsible (and altar_reuse_group) above the loose options.
+                        -- v0.7.194-dev: these were dropdowns; the 4 altar counts keep -1..9
+                        -- (-1 = Default) — identical value semantics to the old
+                        -- altar_count_options dropdown, so NO consuming-code change (main lua
+                        -- reads the same ints; -1 = "skip override", 0 = none, 1-9 = force N).
+                        setting_id = "altar_chest_counts_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "chest_upgrade_count",     type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                            { setting_id = "chest_swap_melee_count",  type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                            { setting_id = "chest_swap_ranged_count", type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                            { setting_id = "chest_power_up_count",     type = "numeric", default_value = -1, range = { -1, 9 }, decimals_number = 0, tooltip = "altar_count_tooltip" },
+                            -- Chests of Trials: explicit 0..5 slider, default 1 (no -1/Default).
+                            -- The consuming cap already maps -1 -> 1 (chaos_wastes_tweaker.lua:5447),
+                            -- so default 1 == vanilla's typical 1 per mission. A legacy saved -1
+                            -- still reads safely in code; the slider just can't SET it anymore.
+                            { setting_id = "cursed_chest_count",      type = "numeric", default_value = 1,  range = { 0, 5 },  decimals_number = 0, tooltip = "cursed_chest_count_tooltip" },
+                        },
+                    },
+                    {
+                        -- v0.7.158-dev Task 2: Altar Reuse nested under Shrines, Altars
+                        -- and Chests (was a top-level sibling group through v0.7.157).
+                        -- VMF supports nested groups (cf. available_missions_group inside
+                        -- adventure_maps_group below).
+                        --
+                        -- v0.7.127-dev: altar reuse. count = max times the altar can be USED
+                        -- per visit (1 = vanilla). cost_mult = geometric multiplier applied per
+                        -- subsequent use: cost_N = base_cost * (mult ^ (N - 1)). mult=1 keeps
+                        -- vanilla cost across all uses. mult=2 doubles each use (1x, 2x, 4x, 8x).
+                        -- mult=0.5 halves each use (1x, 0.5x, 0.25x). All values host-broadcast.
+                        setting_id = "altar_reuse_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "altar_reuse_count_power_up",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_power_up", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                            { setting_id = "altar_reuse_count_swap_melee",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_swap_melee", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                            { setting_id = "altar_reuse_count_swap_ranged",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_swap_ranged", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                            { setting_id = "altar_reuse_count_upgrade",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_upgrade_tooltip" },
+                            { setting_id = "altar_reuse_cost_mult_upgrade", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                        },
+                    },
+                    {
+                        -- Number of boon CHOICES each shrine / chest offers (not spawn counts).
+                        setting_id = "boons_offered_group",
+                        type = "group",
+                        sub_widgets = {
+                            -- v0.7.199-dev: caps raised 5 -> 50. Offerings beyond the visible
+                            -- rows (shrine 4 / chest 3) scroll via the boon-offer scrollbar
+                            -- (_ct_boon_scroll block in the main lua).
+                            { setting_id = "shrine_boon_count", type = "numeric", default_value = 4, range = { 1, 50 }, decimals_number = 0 },
+                            { setting_id = "chest_boon_count",  type = "numeric", default_value = 3, range = { 1, 50 }, decimals_number = 0 },
+                        },
+                    },
+                    {
+                        setting_id = "chest_of_trials_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },
+                            -- Per-Chest-of-Trials enemy spawn-count multiplier (Issue #64). 1.0 =
+                            -- vanilla. Applies only to spawn_counter_category "cursed_chest_enemies"
+                            -- (the trial waves), not unrelated terror events.
+                            { setting_id = "cot_enemy_multiplier", type = "numeric", default_value = 1.0, range = { 0.5, 5.0 }, decimals_number = 1, tooltip = "cot_enemy_multiplier_tooltip" },
+                        },
+                    },
                 },
             },
             {
@@ -476,27 +549,35 @@ local data = {
                 type = "group",
                 sub_widgets = {
                     { setting_id = "force_belakor", type = "checkbox", default_value = false },
+                    -- v0.7.200-dev (#104): host-side rolling-window cap on the Corrupted Flesh
+                    -- curse's globadier-class gas clouds. 0 = vanilla/uncapped. Alphabetical:
+                    -- "Corrupted Flesh Curse..." sits between "Always Include..." and "Cursed
+                    -- Mission Count" by display label.
+                    { setting_id = "flesh_guard_clouds_per_minute", type = "numeric", default_value = 6, range = { 0, 30 }, decimals_number = 0, tooltip = "flesh_guard_clouds_per_minute_tooltip" },
                     { setting_id = "disable_dominant_god", type = "checkbox", default_value = true, tooltip = "disable_dominant_god_tooltip" },
                     { setting_id = "finale_dominant_god", type = "numeric", default_value = 0, range = { 0, 4 }, decimals_number = 0 },
                     { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
                     {
                         setting_id = "disabled_curses_group",
                         type = "group",
+                        -- Alphabetized by display label "Disable: <God>: <Curse>" (god, then curse)
+                        -- to match the menu localization. God grouping is authoritative from vanilla
+                        -- deus_map_populate_settings.lua `all_curses`. Loc strings carry the god prefix.
                         sub_widgets = {
-                            { setting_id = "disable_curse_abundance_of_life", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_belakor_totems", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_blood_storm", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_bolt_of_change", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_change_of_tzeentch", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_corrupted_flesh", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_egg_of_tzeentch", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_empathy", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_greed_pinata", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_khorne_champions", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_rotten_miasma", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_shadow_homing_skulls", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_skulking_sorcerer", type = "checkbox", default_value = false },
-                            { setting_id = "disable_curse_skulls_of_fury", type = "checkbox", default_value = false },
+                            { setting_id = "disable_curse_belakor_totems", type = "checkbox", default_value = false },        -- Belakor
+                            { setting_id = "disable_curse_shadow_homing_skulls", type = "checkbox", default_value = false },  -- Belakor
+                            { setting_id = "disable_curse_blood_storm", type = "checkbox", default_value = false },           -- Khorne
+                            { setting_id = "disable_curse_khorne_champions", type = "checkbox", default_value = false },       -- Khorne
+                            { setting_id = "disable_curse_skulls_of_fury", type = "checkbox", default_value = false },         -- Khorne
+                            { setting_id = "disable_curse_corrupted_flesh", type = "checkbox", default_value = false },        -- Nurgle
+                            { setting_id = "disable_curse_rotten_miasma", type = "checkbox", default_value = false },          -- Nurgle
+                            { setting_id = "disable_curse_skulking_sorcerer", type = "checkbox", default_value = false },      -- Nurgle (NOT Tzeentch)
+                            { setting_id = "disable_curse_empathy", type = "checkbox", default_value = false },               -- Slaanesh
+                            { setting_id = "disable_curse_greed_pinata", type = "checkbox", default_value = false },          -- Slaanesh
+                            { setting_id = "disable_curse_abundance_of_life", type = "checkbox", default_value = false },      -- Slaanesh (Unquenchable Thirst)
+                            { setting_id = "disable_curse_bolt_of_change", type = "checkbox", default_value = false },         -- Tzeentch
+                            { setting_id = "disable_curse_change_of_tzeentch", type = "checkbox", default_value = false },     -- Tzeentch
+                            { setting_id = "disable_curse_egg_of_tzeentch", type = "checkbox", default_value = false },        -- Tzeentch
                         },
                     },
                     {
@@ -532,45 +613,68 @@ local data = {
                     {
                         setting_id = "reworks_boons_group",
                         type = "group",
+                        -- v0.7.159-dev Task 1: split into two NESTED sub-groups —
+                        --   (a) reworks_boons_existing_group: modify how an EXISTING
+                        --       boon / property / bot-distribution behaves.
+                        --   (b) reworks_boons_new_group: ADD a brand-new selectable boon
+                        --       (the four `enable_boon_*` trait-as-boon toggles, "...as
+                        --       Boon (Unique)").
+                        -- All setting_ids preserved verbatim (user values persist).
+                        -- `tweak_manann_tempest_cooldown` stays in (a): it changes a
+                        -- cooldown VALUE (and also affects the vanilla trait per its
+                        -- tooltip "boon + trait"), i.e. modifies behavior rather than
+                        -- adding a boon — per the existing-vs-new classification rule.
                         sub_widgets = {
-                            { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
-                            { setting_id = "tweak_boon_movespeed", type = "checkbox", default_value = false, tooltip = "tweak_boon_movespeed_tooltip" },
-                            { setting_id = "bomb_boon_cooldown", type = "numeric", default_value = 0, range = { 0, 600 }, decimals_number = 0, tooltip = "bomb_boon_cooldown_tooltip" },
-                            { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
-                            { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
-                            { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
-                            { setting_id = "enable_boon_vauls_anvil",         type = "checkbox", default_value = false, tooltip = "enable_boon_vauls_anvil_tooltip" },
-                            { setting_id = "enable_boon_manann_tempest",      type = "checkbox", default_value = false, tooltip = "enable_boon_manann_tempest_tooltip" },
-                            { setting_id = "tweak_manann_tempest_cooldown",   type = "checkbox", default_value = false, tooltip = "tweak_manann_tempest_cooldown_tooltip" },
-                            { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
-                            { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
-                            { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
-                            { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
-                            { setting_id = "tweak_miracle_of_ulric_persistent", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_ulric_persistent_tooltip" },
-                            { setting_id = "ulric_pack_unlimited_range", type = "checkbox", default_value = false, tooltip = "ulric_pack_unlimited_range_tooltip" },
-                            { setting_id = "tweak_wildfire_generations_cap", type = "numeric", default_value = 3, range = { 1, 10 }, decimals_number = 0, tooltip = "tweak_wildfire_generations_cap_tooltip" },
-                            -- Miracle of Isha — mutex cluster `isha_choice`.
-                            -- v0.7.81: replaced the legacy `tweak_miracle_of_isha_alternative`
-                            -- dropdown with these two checkboxes per LOCALIZATION_STANDARD.md § 10.
-                            -- Both unchecked = vanilla revive-once behavior. Toggling one auto-
-                            -- unchecks the other (enforced in on_setting_changed via
-                            -- chaos_wastes_tweaker_mutex). Labels use the "    (A) / (B)" prefix
-                            -- convention with 4-space leading indent so the multiple-choice
-                            -- relationship reads visually in the VMF UI.
-                            { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
-                            { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
-                            { setting_id = "ct_blessed_bots", type = "checkbox", default_value = false, tooltip = "ct_blessed_bots_tooltip" },
-                            { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
-                            -- v0.7.120-dev: mutex alternative to mirror. Bots roll INDEPENDENT random boons each
-                            -- time the host claims one. Mutex group "bots_boon_mode" — declared in chaos_wastes_tweaker.lua.
-                            { setting_id = "bots_get_random_boons",            type = "checkbox", default_value = false, tooltip = "bots_get_random_boons_tooltip" },
-                            -- v0.7.120-dev: mirror host weapon-chest interactions onto every bot. Swap chests
-                            -- generate a random weapon for the bot's career; upgrade chests upgrade the bot's
-                            -- currently-equipped CW weapon to the same target rarity.
-                            { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
-                            -- Host-only chat readout: prints which boon each bot receives while
-                            -- mirror/random bot boons are on, so the host can see what bots got.
-                            { setting_id = "announce_bot_boons",               type = "checkbox", default_value = false, tooltip = "announce_bot_boons_tooltip" },
+                            {
+                                setting_id = "reworks_boons_existing_group",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
+                                    { setting_id = "tweak_boon_movespeed", type = "checkbox", default_value = false, tooltip = "tweak_boon_movespeed_tooltip" },
+                                    { setting_id = "bomb_boon_cooldown", type = "numeric", default_value = 0, range = { 0, 600 }, decimals_number = 0, tooltip = "bomb_boon_cooldown_tooltip" },
+                                    { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
+                                    { setting_id = "endless_bombs_consumes_morgrim", type = "checkbox", default_value = false, tooltip = "endless_bombs_consumes_morgrim_tooltip" },
+                                    { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
+                                    { setting_id = "tweak_manann_tempest_cooldown",   type = "checkbox", default_value = false, tooltip = "tweak_manann_tempest_cooldown_tooltip" },
+                                    { setting_id = "tweak_anath_raema_permanent",     type = "checkbox", default_value = false, tooltip = "tweak_anath_raema_permanent_tooltip" },
+                                    { setting_id = "tweak_defeat_recovery",           type = "checkbox", default_value = false, tooltip = "tweak_defeat_recovery_tooltip" },
+                                    { setting_id = "tweak_miracle_of_ulric_persistent", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_ulric_persistent_tooltip" },
+                                    { setting_id = "ulric_pack_unlimited_range", type = "checkbox", default_value = false, tooltip = "ulric_pack_unlimited_range_tooltip" },
+                                    { setting_id = "tweak_wildfire_generations_cap", type = "numeric", default_value = 3, range = { 1, 10 }, decimals_number = 0, tooltip = "tweak_wildfire_generations_cap_tooltip" },
+                                    -- Miracle of Isha — mutex cluster `isha_choice`.
+                                    -- v0.7.81: replaced the legacy `tweak_miracle_of_isha_alternative`
+                                    -- dropdown with these two checkboxes per LOCALIZATION_STANDARD.md § 10.
+                                    -- Both unchecked = vanilla revive-once behavior. Toggling one auto-
+                                    -- unchecks the other (enforced in on_setting_changed via
+                                    -- chaos_wastes_tweaker_mutex). Labels use the "    (A) / (B)" prefix
+                                    -- convention with 4-space leading indent so the multiple-choice
+                                    -- relationship reads visually in the VMF UI.
+                                    { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
+                                    { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
+                                    { setting_id = "ct_blessed_bots", type = "checkbox", default_value = false, tooltip = "ct_blessed_bots_tooltip" },
+                                    { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
+                                    -- v0.7.120-dev: mutex alternative to mirror. Bots roll INDEPENDENT random boons each
+                                    -- time the host claims one. Mutex group "bots_boon_mode" — declared in chaos_wastes_tweaker.lua.
+                                    { setting_id = "bots_get_random_boons",            type = "checkbox", default_value = false, tooltip = "bots_get_random_boons_tooltip" },
+                                    -- v0.7.120-dev: mirror host weapon-chest interactions onto every bot. Swap chests
+                                    -- generate a random weapon for the bot's career; upgrade chests upgrade the bot's
+                                    -- currently-equipped CW weapon to the same target rarity.
+                                    { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
+                                    -- Host-only chat readout: prints which boon each bot receives while
+                                    -- mirror/random bot boons are on, so the host can see what bots got.
+                                    { setting_id = "announce_bot_boons",               type = "checkbox", default_value = false, tooltip = "announce_bot_boons_tooltip" },
+                                },
+                            },
+                            {
+                                setting_id = "reworks_boons_new_group",
+                                type = "group",
+                                sub_widgets = {
+                                    { setting_id = "enable_boon_vauls_anvil",         type = "checkbox", default_value = false, tooltip = "enable_boon_vauls_anvil_tooltip" },
+                                    { setting_id = "enable_boon_manann_tempest",      type = "checkbox", default_value = false, tooltip = "enable_boon_manann_tempest_tooltip" },
+                                    { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
+                                    { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
+                                },
+                            },
                         },
                     },
                     {
@@ -580,7 +684,6 @@ local data = {
                             { setting_id = "tweak_poison_proof_duration", type = "checkbox", default_value = false, tooltip = "tweak_poison_proof_duration_tooltip" },
                             { setting_id = "tweak_moot_milk_alt", type = "checkbox", default_value = false, tooltip = "tweak_moot_milk_alt_tooltip" },
                             { setting_id = "tweak_home_brewer_potency", type = "checkbox", default_value = false, tooltip = "tweak_home_brewer_potency_tooltip" },
-                            { setting_id = "tweak_adventure_save_trait_chance", type = "numeric", default_value = 25, range = { 0, 100 }, decimals_number = 0, tooltip = "tweak_adventure_save_trait_chance_tooltip" },
                             { setting_id = "tweak_invis_potion_2x", type = "checkbox", default_value = false, tooltip = "tweak_invis_potion_2x_tooltip" },
                             { setting_id = "enable_campaign_potions", type = "checkbox", default_value = false },
                         },
@@ -697,16 +800,5 @@ local data = {
 }
 
 recursive_sort(data.options.widgets)
-
--- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
--- Appended AFTER `recursive_sort` so it stays at the BOTTOM of the widget tree,
--- top-level (NOT inside any group), key `enable_debug_logging` verbatim across
--- every mod in the repo.
-data.options.widgets[#data.options.widgets + 1] = {
-    setting_id    = "enable_debug_logging",
-    type          = "checkbox",
-    default_value = false,
-    tooltip       = mod:localize("enable_debug_logging_tooltip"),
-}
 
 return data

@@ -95,20 +95,29 @@ function Parse-DataFile([string]$path) {
     return $refs
 }
 
-# Bug #2: detect unescaped % in localization values. The dangerous pattern is
-# a single % NOT followed by another %. E.g. "5%" should be "5%%".
+# Bug #2: detect unescaped % in localization values. VMF's mod:localize runs EVERY
+# string through string.format (safe_string_format, vmf/modules/core/localization.lua),
+# so a literal % must be doubled to %%. A lone % that does NOT start a valid Lua format
+# directive (e.g. "% C", "5%", "100% done") raises "invalid option to 'format'", which
+# breaks the VMF options view / shows a red error tooltip. Runtime twin: the
+# `localization_format_safe` regression test (/gt_regression_test).
+#
+# Rule: flag any % that is neither `%%` nor the start of a valid directive
+# (optional flags/width/precision + a conversion char). The previous version wrongly
+# treated "% " (percent-space) as safe and let gt ship
+# gt_adventure_save_trait_chance = "...Grenadier % Chance" -> crash (2026-06-30).
 function Find-UnescapedPercent([hashtable]$loc, [string]$file) {
     $bad = @()
+    # A valid single directive after '%': optional flags/width/precision + conversion char.
+    $directive = '[-+ #0]*[0-9]*(?:\.[0-9]+)?[diouxXeEfgGqscaA]'
     foreach ($k in $loc.Keys) {
         $v = $loc[$k]
-        # Look for % not followed by % or end-of-string-with-no-format-chars-after.
-        # Lua format chars after %: %, d, s, i, f, etc. Anything else literal needs %%.
-        # Lenient check: any % not followed by % d s i f x g e o c q is suspect.
-        if ($v -match '%(?![%dsifxgeocq.])' -and $v -notmatch '%%') {
-            # Only flag if it's clearly literal (e.g. "5%", "10% chance") and not a format.
-            if ($v -match '\d%(?!%)' -or $v -match '%(?![\s\dsf])') {
-                $bad += "$($file): key '$k' has unescaped %% in value: '$v'"
-            }
+        # Strip escaped literals (%%) FIRST, then any remaining % must start a valid
+        # directive -- otherwise it's a lone/misplaced % that string.format rejects.
+        # (Evaluating each % independently would wrongly flag the 2nd % of a valid %%.)
+        $stripped = $v -replace '%%', ''
+        if ($stripped -match ('%(?!' + $directive + ')')) {
+            $bad += "$($file): key '$k' has an unescaped % (double it to %%): '$v'"
         }
     }
     return $bad

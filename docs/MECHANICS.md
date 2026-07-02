@@ -102,6 +102,16 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 - The full cim recipe→synth→craft→mirror→persistence flow (including
   `_forged_weapons` + `_modded_loadout` and the cross-mod API) is mapped in its
   memory note; read it before touching the craft path. [memory: reference_cim_weapon_crafting_flow]
+- A base `ItemMasterList` weapon-TYPE key's own `display_name` / `localized_name`
+  is the DEFAULT COSMETIC SKIN's name, NOT the weapon-type name: e.g.
+  `ItemMasterList.dr_2h_pick.display_name = "dw_2h_pick_skin_01_name"` ("…Azdrek")
+  and `ItemMasterList.es_handgun.display_name = "es_handgun_skin_03_name"`, with
+  `item.localized_name = Localize(item.display_name)` precomputed at boot. So
+  ItemMasterList holds BOTH weapon types AND cosmetic skins/illusions, and
+  `localized_name` on a base key is cosmetic-grade — UNSAFE as a weapon-TYPE
+  label. Key any "what weapon TYPE is this" UI on a curated key→type map (wt's
+  `_WEAPON_NAME`), not on `localized_name`. Same trap as the vs_* cosmetic-grade
+  display strings below. [src: scripts/settings/equipment/item_master_list_exported.lua:7500 (dr_2h_pick), :6797 (es_handgun); scripts/settings/equipment/item_master_list.lua:115 (localized_name = Localize(display_name))]
 
 ## Domain: Networking / RPC
 

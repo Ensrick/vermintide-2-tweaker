@@ -15,6 +15,29 @@ Plus one orthogonal switch:
 
 3. **`suppress_live_event`** (v0.4.10-dev+, default off). When on, the three hooks below drop Fatshark's `original` response *before* merging our own. Lets the host neutralize whatever event Fatshark is currently serving (Skulls 2026 keep + Geheimnisnacht 2026 ritual sites + event lighting + tab-menu modifier list, etc.) without waiting for the live event to roll over. The preset and per-mutator checkboxes still stack on top.
 
+## "Other Mutators" — dynamic discovery (ported from Deed Mutators Selector)
+
+`v0.4.14-dev` absorbed the one worthwhile feature of **Deed Mutators Selector** (Workshop `3579882542`): iterate the live `MutatorTemplates` global and surface every mutator the engine flags player-facing (`display_name`+`description`), instead of a hand-curated list. The "Other Mutators" group auto-includes the package-free Chaos Wastes / Deus mutators not in a curated category. Three exclusions keep it adventure-safe (`_is_adventure_safe_mutator(name, tmpl)`): `hide_from_player_ui` (Fatshark-hidden Deus pacing knobs), a non-empty `packages` field (those go to Cursed Adventure), and `_CURSE_BROKEN_IN_ADVENTURE` (weave/deus-only crashers). Labels are pulled from the game's own `Localize` (no fabrication), registered dynamically in the loc file. Wired across all three files; `mod._ET_CURSE_BROKEN` is the shared blacklist.
+
+## Cursed Adventure — CW/Be'lakor curses on standard maps (`v0.4.14-dev`)
+
+Lets the host run package-bearing Chaos Wastes / Be'lakor **curses** (`MANAGED_CURSES`) on a plain adventure mission, with themed lighting. Normally those crash in adventure (`[memory: reference_vt2_mutator_packages_deus_only]`) because their unit/decal resource package is loaded only by `DeusRunState.set_event_mutators` (`deus_run_state.lua:438-453`). A 4-agent adversarial source audit (2026-06-19) established that the curse *mechanics* use only standard mission managers, and `entity_system.lua:176`+`:424-435` register every DLC entity system into every mission at boot — so the package is the only blocker.
+
+| Piece | How |
+| :--- | :--- |
+| **Injection** | `selected_curse_mutators()` feeds `gather_mutators()` → the existing `get_special_events` hook → the lobby mutator handler → `rpc_activate_mutator_client` to clients. Same path as every other mutator. |
+| **Package preload (normal join + host)** | Hook `MutatorHandler._activate_mutator` — the chokepoint hit on the HOST (via `activate_mutators`) AND every CLIENT (via `rpc_activate_mutator_client` → `_activate_mutator`, `mutator_handler.lua:782`). SYNC-load (`Managers.package:load(pkg, "event_tweaker_curse_package", nil, false)`) each `packages` entry *before* `func` runs `start_function`. Idempotent (`has_loaded` + `_loaded_curse_packages` set). |
+| **Package preload (hot-join)** | Hook `MutatorHandler.init` (`hook_safe`) — a mid-mission joiner instantiates already-spawned curse husks during game-object sync, which happens BEFORE the activate RPC (`peer_states.lua`), so `_activate_mutator` would be too late. `init` knows the mutator list at construction (host: the `mutators` arg; client: the network-synced `_initialized_mutator_map`, populated before game objects), so preload there too. Belt-and-suspenders with the `_activate_mutator` load. |
+| **Unload** | `StateIngame.on_exit` (`state_ingame.lua:1847`) — ref-balanced `unload` per peer. |
+| **Lighting** | Hook `CameraManager.shading_callback`; multiply per-god ShadingEnvironment vars (`_CURSE_SKY_PROFILES`, copied from `chaos_wastes_tweaker.lua:3247`). `_active_curse_god` cached on activate/deactivate. Reverts for free (engine re-seeds the shading_env every frame). `cursed_lighting` toggle (default on). |
+| **Mechanism gate** | All four hooks no-op unless `Managers.mechanism:current_mechanism_name() == "adventure"`, so a real CW run (Deus loads the package, ct tints) is untouched. |
+
+**Multiplayer:** unlike the host-only rest of the mod, the curse group needs **every player** to run event_tweaker — clients load the package locally to instantiate replicated curse units (`spawn_network_unit` husks).
+
+**Excluded crashers** (`_CURSE_BROKEN_IN_ADVENTURE`, never surfaced): `curse_bolt_of_change` (Deus-mechanism-only `get_deus_run_controller`), `curse_belakors_shadows` (weave mutator, nil-arithmetic crash — package-free so the package filter can't catch it), `curse_empathy` (server-side `data.hero_side` nil-index). **Experimental** (surfaced, won't crash, may be inert): `curse_egg_of_tzeentch`, `curse_greed_pinata`.
+
+**Catalog lives in `event_tweaker_curses.lua`, a shared `require`'d module** (`MANAGED_CURSES` / `BROKEN_IN_ADVENTURE` / `CURSE_TO_GOD`), NOT a `mod._field` set in the script. VMF loads files `localization → data → script` (script LAST), so a script-set field is nil when `_data.lua` / `_localization.lua` evaluate. A `require`'d module is evaluated once (by the first requiring file) and cached — all three files see it. This mirrors `enemy_tweaker_breeds.lua`. **Burned once** (v0.4.14-dev first cut): the entire Cursed Adventure UI group silently never built. Rule: anything `_data.lua` / `_localization.lua` need from the script must go through a shared `require`'d module, never a script-assigned `mod._field`.
+
 ## Architecture
 
 Three hooks, all on backend classes. Single chokepoint per concern — every consumer of the hooked function sees the override consistently.

@@ -1,4 +1,4 @@
-local mod = get_mod("gut")
+﻿local mod = get_mod("gut")
 
 -- Mod Tweaker: registered-category store + standalone persistence layer.
 -- v0.1 scaffold. Hosts the runtime registry of mod-author-registered settings

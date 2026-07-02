@@ -60,9 +60,7 @@ local function _ensure_deus_buffs_registered()
         end
     end
     _deus_buffs_mirrored = true
-    if mod:get("enable_debug_logging") then
-        mod:info("[ct:blessed-bots] mirrored DeusPowerUpBuffTemplates into BuffTemplates (any-gamemode resolution)")
-    end
+    mod:debug("[ct:blessed-bots] mirrored DeusPowerUpBuffTemplates into BuffTemplates (any-gamemode resolution)")
     return true
 end
 
@@ -86,11 +84,9 @@ local function _grant_boons_to_bot(unit)
         if not already then
             if BuffUtils.get_buff_template(buff_name) then
                 buff_system:add_buff(unit, buff_name, unit)
-                if mod:get("enable_debug_logging") then
-                    mod:info("[ct:blessed-bots] granted %s to a bot", buff_name)
-                end
-            elseif mod:get("enable_debug_logging") then
-                mod:info("[ct:blessed-bots] template %s not registered; skipped", buff_name)
+                mod:debug("[ct:blessed-bots] granted %s to a bot", buff_name)
+            else
+                mod:debug("[ct:blessed-bots] template %s not registered; skipped", buff_name)
             end
         end
     end

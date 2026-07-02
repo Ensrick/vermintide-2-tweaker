@@ -1,0 +1,11 @@
+mod = [
+	"weapon_tweaker_dev"
+]
+
+package = [
+	"resource_packages/weapon_tweaker_dev/weapon_tweaker_dev"
+]
+
+lua = [
+	"scripts/mods/weapon_tweaker_dev/*"
+]

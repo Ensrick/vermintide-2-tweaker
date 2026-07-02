@@ -12,6 +12,12 @@ gating happens in weapon_tweaker_big_rebalance.lua.
 
 local mod = get_mod("wt")
 
+-- BR ON ICE (bt retired 2026-06-08). This defs file is only dofile'd by
+-- weapon_tweaker_big_rebalance.lua (now on ice), so it should never load — but
+-- return an empty table early as a backstop so no BR DamageProfile/Explosion/Buff
+-- definitions build into the lua_heap if some stray loader reaches it.
+if true then return {} end
+
 local DEFS = {}
 
 -- ============================================================

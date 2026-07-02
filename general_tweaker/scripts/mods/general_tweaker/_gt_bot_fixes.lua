@@ -114,10 +114,7 @@ mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, contex
         -- exactly what the human's "tap potion key" does. Max additional slot
         -- count for Necro slot_potion is 1, so First == the potion.
         inventory_extension:swap_equipment_from_storage("slot_potion", SwapFromStorageType.First, primary.item_data)
-
-        if mod:get("enable_debug_logging") then
-            mod:info("[gt:bot] promoted Necromancer bot potion to primary so it can hand off / drink it")
-        end
+        mod:debug("[gt:bot] promoted Necromancer bot potion to primary so it can hand off / drink it")
     end
 end)
 
@@ -170,9 +167,7 @@ mod:hook("BTConditions", "can_activate_ability", function (func, blackboard, arg
     if blackboard.target_ally_needs_aid then
         local need_type = blackboard.target_ally_need_type
         if need_type == "knocked_down" or need_type == "ledge" or need_type == "hook" then
-            if mod:get("enable_debug_logging") then
-                mod:info("[gt:bot-ib] yielding Ironbreaker ult-hold to aid ally (need=%s)", tostring(need_type))
-            end
+            mod:debug("[gt:bot-ib] yielding Ironbreaker ult-hold to aid ally (need=%s)", tostring(need_type))
             return false
         end
     end
@@ -226,7 +221,6 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         return ally, real_dist, need_type, look_at
     end
 
-    local debug_on = mod:get("enable_debug_logging")
     local player_and_bot_units = side.PLAYER_AND_BOT_UNITS
     local self_pos = POSITION_LOOKUP[unit]
     local best_unit, best_dist
@@ -250,10 +244,8 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                 local alive = HEALTH_ALIVE[player_unit] and true or false
                 local _, allowed_aid_path = self:_ally_path_allowed(unit, player_unit, t)
 
-                if debug_on then
-                    mod:info("[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s",
-                        k, tostring(alive), tostring(allowed_aid_path and true or false))
-                end
+                mod:debug("[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s",
+                    k, tostring(alive), tostring(allowed_aid_path and true or false))
 
                 if not alive then
                     not_alive = not_alive + 1
@@ -270,13 +262,13 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         end
     end
 
-    -- Throttled per-bot summary (debug-gated) so we see WHY a rescue did/didn't
-    -- fire without spamming when no one is awaiting rescue.
-    if debug_on and considered > 0 then
+    -- Throttled per-bot summary so we see WHY a rescue did/didn't fire
+    -- without spamming when no one is awaiting rescue.
+    if considered > 0 then
         local next_t = blackboard._gt_rescue_log_t or 0
         if t >= next_t then
             blackboard._gt_rescue_log_t = t + 2.0
-            mod:info("[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d prior_need=%s",
+            mod:debug("[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d prior_need=%s",
                 considered, best_unit and "yes" or "no", not_alive, blocked_path, tostring(need_type))
         end
     end

@@ -2,23 +2,30 @@ local mod = get_mod("gt_dev")
 
 -- Grail Knight quest dropdown options. Values mirror the
 -- `markus_questing_knight_passive_*` reward strings that
--- PassiveAbilityQuestingKnight's challenge pool reads. Text is plain
--- English here (the localized labels live in general_tweaker_localization).
-local GT_GK_QUEST_OPTIONS = {
-    { text = "Random (vanilla)",    value = "random" },
-    { text = "Power vs. Elites",    value = "markus_questing_knight_passive_power_level" },
-    { text = "Attack Speed",        value = "markus_questing_knight_passive_attack_speed" },
-    { text = "Cooldown Reduction",  value = "markus_questing_knight_passive_cooldown_reduction" },
-    { text = "Health Regen",        value = "markus_questing_knight_passive_health_regen" },
-    { text = "Damage Reduction",    value = "markus_questing_knight_passive_damage_taken" },
-}
-
-local GT_HUD_MODE_OPTIONS = {
-    { text = "Off",      value = "off" },
-    { text = "Partial",  value = "partial" },
-    { text = "Complete", value = "complete" },
-    { text = "Camera",   value = "camera" },
-}
+-- PassiveAbilityQuestingKnight's challenge pool reads.
+--
+-- PER-DROPDOWN FACTORY (do NOT hoist back to a shared table). VMF's
+-- localize_dropdown_data mutates each option's `text` IN PLACE
+-- (`option.text = mod:localize(option.text)`). The three quest dropdowns below
+-- (gt_gk_quest1/2/3) each localize their options table once; if they shared a
+-- single table, the 2nd dropdown would localize the already-localized strings
+-- and the 3rd would localize those again, producing the `<<...>>` / `<<<...>>>`
+-- bracket cascade users reported on "Choose Grail Knight Quests". Returning a
+-- fresh table per call gives each dropdown its own table to mutate. `text` is a
+-- real loc key (resolved in general_tweaker_dev_localization) so it renders as a
+-- clean display name instead of the missing-key fallback. Same pattern as
+-- crt's _talent_swap_options() / enemy_tweaker's dropdown factory.
+-- See REGRESSION_CHECKLIST "vmf-dropdown-options-mutated".
+local function _gt_gk_quest_options()
+    return {
+        { text = "gt_gk_opt_random",              value = "random" },
+        { text = "gt_gk_opt_power_level",         value = "markus_questing_knight_passive_power_level" },
+        { text = "gt_gk_opt_attack_speed",        value = "markus_questing_knight_passive_attack_speed" },
+        { text = "gt_gk_opt_cooldown_reduction",  value = "markus_questing_knight_passive_cooldown_reduction" },
+        { text = "gt_gk_opt_health_regen",        value = "markus_questing_knight_passive_health_regen" },
+        { text = "gt_gk_opt_damage_taken",        value = "markus_questing_knight_passive_damage_taken" },
+    }
+end
 
 -- Creature Spawner unit-list dropdown options. Values match the runtime
 -- table keys in _gt_cs_unit_lists (regular_units / dummy_units / etc.) so
@@ -48,81 +55,337 @@ return {
 
     options = {
         widgets = {
+            -- Bot Options -- AI teammate behavior fixes (see _gt_bot_fixes.lua).
+            -- All default OFF; host-side only (bots exist on the host), no
+            -- network registration so they can't affect non-modded peers.
             {
-                setting_id  = "tp_camera_group",
+                setting_id  = "gt_bot_options_group",
                 type        = "group",
                 sub_widgets = {
+                    -- Nested sub-group first (menu convention: nested sub-groups
+                    -- before loose options). Bot Teleport Lab = diagnostics-only
+                    -- tools to observe/probe the "bots teleport away" bug. A master
+                    -- checkbox (gt_btlab_enabled) gates 10 independent D-toggles.
+                    -- The 10 are listed in D1..D10 NUMERIC order (NOT alphabetical)
+                    -- -- the numbering is deliberate and maps to _gt_bot_teleport_lab.lua.
+                    -- All default OFF; host-side (bot AI is server-side).
                     {
-                        setting_id    = "tp_camera_enabled",
+                        setting_id  = "gt_btlab_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "gt_btlab_enabled",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_btlab_enabled_tooltip",
+                                -- Master gate: every D-toggle also requires this ON
+                                -- (code reads `mod:get("gt_btlab_enabled") and
+                                -- mod:get("gt_btlab_dNN_...")`). VMF auto-hides these
+                                -- sub_widgets while the master is unchecked.
+                                sub_widgets   = {
+                                    {
+                                        setting_id    = "gt_btlab_d1_teleport_events",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d1_teleport_events_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d2_follow_tracker",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d2_follow_tracker_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d3_distance_readout",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d3_distance_readout_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d4_segment_probe",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d4_segment_probe_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d5_aid_probe",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d5_aid_probe_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d6_bot_hud",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d6_bot_hud_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d7_leash_lines",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d7_leash_lines_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d8_tp_counter",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d8_tp_counter_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d9_hasteleported_probe",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d9_hasteleported_probe_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_d10_tp_snapshot",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_d10_tp_snapshot_tooltip",
+                                    },
+                                    -- FIXES (F1..F10): the toggles that actually
+                                    -- STOP "bots teleport away". Listed in F1..F10
+                                    -- NUMERIC order (NOT alphabetical) -- the
+                                    -- numbering is deliberate and maps to the fix
+                                    -- dispatch fns in _gt_bot_teleport_lab.lua.
+                                    -- Each ALSO requires the master gate above.
+                                    -- F4/F7/F8/F9 carry a nested numeric param.
+                                    -- All default OFF; host-side.
+                                    {
+                                        setting_id    = "gt_btlab_f1_follow_you",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f1_follow_you_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f2_block_away",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f2_block_away_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f3_teleport_to_you",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f3_teleport_to_you_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f4_proximity_veto",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f4_proximity_veto_tooltip",
+                                        sub_widgets   = {
+                                            {
+                                                setting_id      = "gt_btlab_f4_radius",
+                                                type            = "numeric",
+                                                default_value   = 25.0,
+                                                range           = { 5.0, 60.0 },
+                                                decimals_number = 0,
+                                                tooltip         = "gt_btlab_f4_radius_tooltip",
+                                            },
+                                        },
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f5_nearest_human",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f5_nearest_human_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f6_stuck_only",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f6_stuck_only_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f7_threshold_raise",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f7_threshold_raise_tooltip",
+                                        sub_widgets   = {
+                                            {
+                                                setting_id      = "gt_btlab_f7_distance",
+                                                type            = "numeric",
+                                                default_value   = 80.0,
+                                                range           = { 40.0, 200.0 },
+                                                decimals_number = 0,
+                                                tooltip         = "gt_btlab_f7_distance_tooltip",
+                                            },
+                                        },
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f8_combat_hold",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f8_combat_hold_tooltip",
+                                        sub_widgets   = {
+                                            {
+                                                setting_id      = "gt_btlab_f8_radius",
+                                                type            = "numeric",
+                                                default_value   = 15.0,
+                                                range           = { 5.0, 40.0 },
+                                                decimals_number = 0,
+                                                tooltip         = "gt_btlab_f8_radius_tooltip",
+                                            },
+                                        },
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f9_cooldown",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f9_cooldown_tooltip",
+                                        sub_widgets   = {
+                                            {
+                                                setting_id      = "gt_btlab_f9_seconds",
+                                                type            = "numeric",
+                                                default_value   = 3.0,
+                                                range           = { 0.5, 15.0 },
+                                                decimals_number = 1,
+                                                tooltip         = "gt_btlab_f9_seconds_tooltip",
+                                            },
+                                        },
+                                    },
+                                    {
+                                        setting_id    = "gt_btlab_f10_direction_aware",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gt_btlab_f10_direction_aware_tooltip",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    -- Bot-roster presence (whether bots exist / where) comes first,
+                    -- before the behavior tweaks. Moved here from Gameplay
+                    -- (v0.2.145-dev) — both are bot controls and belong under Bot
+                    -- Options. gt_bots_in_keep is still runtime kill-switched (#65).
+                    {
+                        setting_id    = "gt_no_bots",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("tp_camera_enabled_tooltip"),
+                        tooltip       = "gt_no_bots_tooltip",
                     },
                     {
-                        setting_id    = "tp_distance",
-                        type          = "numeric",
-                        default_value = 3.0,
-                        range         = { 1.0, 10.0 },
-                        decimals_number = 1,
-                        tooltip       = mod:localize("tp_distance_tooltip"),
-                    },
-                    {
-                        setting_id    = "tp_height",
-                        type          = "numeric",
-                        default_value = 1.0,
-                        range         = { -1.0, 5.0 },
-                        decimals_number = 1,
-                        tooltip       = mod:localize("tp_height_tooltip"),
-                    },
-                    {
-                        setting_id    = "tp_side_offset",
-                        type          = "numeric",
-                        default_value = 0.8,
-                        range         = { -3.0, 3.0 },
-                        decimals_number = 1,
-                        tooltip       = mod:localize("tp_side_offset_tooltip"),
-                    },
-                    {
-                        setting_id    = "tp_disable_zoom_in",
+                        setting_id    = "gt_bots_in_keep",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("tp_disable_zoom_in_tooltip"),
+                        tooltip       = "gt_bots_in_keep_tooltip",
                     },
                     {
-                        setting_id    = "freecam_enabled",
+                        setting_id    = "gt_improved_bot_combat",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("freecam_enabled_tooltip"),
+                        tooltip       = "gt_improved_bot_combat_tooltip",
+                    },
+                    -- Bundled bot-behavior fixes (v0.2.128-dev). Replaces the eight
+                    -- former individual toggles: necro potion handoff, don't-fail-
+                    -- while-a-bot-is-alive, auto ledge pull-up (3s), ladder unstick
+                    -- (4s), instant grab targeted items, prioritize revive, allow
+                    -- revive during ult, rescue ledge/hooked/disabled allies. The
+                    -- per-feature delays are now hard-coded (3s / 4s) in
+                    -- _gt_bot_fixes.lua.
+                    {
+                        setting_id    = "gt_bot_behavior_improvements",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_bot_behavior_improvements_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_bot_rescue_awaiting",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_bot_rescue_awaiting_tooltip",
+                    },
+                    -- Bot follow mode (v0.2.152-dev) -- single dropdown
+                    -- consolidating the previous gt_bot_split_among_players +
+                    -- gt_bot_follow_host checkboxes. Migration: the FIX 9 hook
+                    -- in _gt_bot_fixes.lua falls back to the old settings on
+                    -- the first tick before the new dropdown is read, so
+                    -- existing user state carries over without a forced reset.
+                    {
+                        setting_id    = "gt_bot_follow_mode",
+                        type          = "dropdown",
+                        default_value = "default",
+                        options       = {
+                            { text = "gt_bot_follow_mode_default",     value = "default" },
+                            { text = "gt_bot_follow_mode_follow_host", value = "follow_host" },
+                            { text = "gt_bot_follow_mode_split",       value = "split" },
+                        },
+                        tooltip       = "gt_bot_follow_mode_tooltip",
+                    },
+                    -- Bot follow snap-back distance. The separate "Tighter bot follow
+                    -- distance" enable toggle was removed 2026-06-30 -- this slider is now
+                    -- the sole control: 40 = vanilla (no-op / off), lower = tighter leash.
+                    {
+                        setting_id      = "gt_bot_follow_distance_m",
+                        type            = "numeric",
+                        default_value   = 40.0,             -- 40 = vanilla gate; default = off. Lower to tighten.
+                        range           = { 10.0, 40.0 },   -- >= 40 does nothing (FIX 7 short-circuits); 40 = off, 10 = tightest
+                        decimals_number = 1,
+                        tooltip         = "gt_bot_follow_distance_m_tooltip",
+                    },
+                    -- Replicant Bots ports (v0.2.131-dev). Host-side, default OFF.
+                    {
+                        setting_id    = "gt_bot_fast_reactions",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_bot_fast_reactions_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_bot_drink_potions_in_danger",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_bot_drink_potions_in_danger_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_bot_guard_break_msg",
+                        type          = "dropdown",
+                        default_value = "none",
+                        options       = {
+                            { text = "gt_bot_guard_break_msg_none",   value = "none" },
+                            { text = "gt_bot_guard_break_msg_host",   value = "host" },
+                            { text = "gt_bot_guard_break_msg_global", value = "global" },
+                        },
+                        tooltip       = "gt_bot_guard_break_msg_tooltip",
+                    },
+                    -- Bot Takeover (moved from Gameplay 2026-06-30) -- handing YOUR
+                    -- hero to bot AI is a bot-control feature, so it lives in Bot
+                    -- Options. setting_ids preserved; /ai command unchanged.
+                    {
+                        setting_id    = "ai_takeover_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "ai_takeover_enabled_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_ai_afk_takeover",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_ai_afk_takeover_tooltip",
                     },
                 },
             },
+            -- ============================================================
+            -- Cheats and Debug (v0.2.128-dev). Houses godmode + noclip
+            -- (moved out of Gameplay) plus the formerly top-level Buffs &
+            -- Stats / Ult / Time & Pause / Level Control / Spawners groups,
+            -- now nested as sub-groups.
+            -- ============================================================
             {
-                setting_id  = "gameplay_group",
+                setting_id  = "cheats_debug_group",
                 type        = "group",
                 sub_widgets = {
                     {
                         setting_id    = "godmode_enabled",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("godmode_enabled_tooltip"),
-                    },
-                    {
-                        setting_id    = "allow_duplicate_careers",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("allow_duplicate_careers_tooltip"),
-                    },
-                    {
-                        setting_id    = "disable_friendly_fire",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("disable_friendly_fire_tooltip"),
+                        tooltip       = "godmode_enabled_tooltip",
                     },
                     {
                         setting_id    = "noclip_enabled",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("noclip_enabled_tooltip"),
+                        tooltip       = "noclip_enabled_tooltip",
                     },
                     {
                         setting_id    = "noclip_speed",
@@ -130,7 +393,7 @@ return {
                         default_value = 15.0,
                         range         = { 1.0, 60.0 },
                         decimals_number = 1,
-                        tooltip       = mod:localize("noclip_speed_tooltip"),
+                        tooltip       = "noclip_speed_tooltip",
                     },
                     {
                         setting_id    = "noclip_boost_multiplier",
@@ -138,7 +401,7 @@ return {
                         default_value = 3.0,
                         range         = { 1.0, 10.0 },
                         decimals_number = 1,
-                        tooltip       = mod:localize("noclip_boost_multiplier_tooltip"),
+                        tooltip       = "noclip_boost_multiplier_tooltip",
                     },
                     {
                         setting_id      = "noclip_hotkey",
@@ -147,13 +410,15 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_noclip_toggle",
                         default_value   = {},
-                        tooltip         = mod:localize("noclip_hotkey_tooltip"),
+                        tooltip         = "noclip_hotkey_tooltip",
                     },
+                    -- Enemy spawn controls (moved from Gameplay 2026-06-30) -- both are
+                    -- cheat-style combat toggles, so they sit with godmode / noclip.
                     {
                         setting_id    = "disable_enemy_spawns",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("disable_enemy_spawns_tooltip"),
+                        tooltip       = "disable_enemy_spawns_tooltip",
                     },
                     {
                         setting_id      = "clear_enemies_hotkey",
@@ -162,168 +427,8 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_clear_enemies",
                         default_value   = {},
-                        tooltip         = mod:localize("clear_enemies_hotkey_tooltip"),
+                        tooltip         = "clear_enemies_hotkey_tooltip",
                     },
-                    {
-                        setting_id    = "ai_takeover_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("ai_takeover_enabled_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bots_in_keep",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bots_in_keep_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_no_bots",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_no_bots_tooltip"),
-                    },
-                },
-            },
-            {
-                setting_id  = "gt_cutscenes_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "gt_skip_cutscenes_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_skip_cutscenes_enabled_tooltip"),
-                        sub_widgets   = {
-                            {
-                                setting_id    = "gt_skip_cutscenes_auto",
-                                type          = "checkbox",
-                                default_value = false,
-                                tooltip       = mod:localize("gt_skip_cutscenes_auto_tooltip"),
-                            },
-                        },
-                    },
-                    {
-                        setting_id    = "gt_disable_intro_monologue",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_disable_intro_monologue_tooltip"),
-                    },
-                },
-            },
-            {
-                setting_id  = "gt_corpses_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "gt_more_corpses_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_more_corpses_enabled_tooltip"),
-                        sub_widgets   = {
-                            {
-                                setting_id      = "gt_more_corpses_count",
-                                type            = "numeric",
-                                default_value   = 24,
-                                range           = { 1, 500 },
-                                decimals_number = 0,
-                                tooltip         = mod:localize("gt_more_corpses_count_tooltip"),
-                            },
-                        },
-                    },
-                },
-            },
-            {
-                setting_id  = "gt_gk_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "gt_gk_quests_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_gk_quests_enabled_tooltip"),
-                        sub_widgets   = {
-                            {
-                                setting_id    = "gt_gk_quest1",
-                                type          = "dropdown",
-                                default_value = "random",
-                                options       = GT_GK_QUEST_OPTIONS,
-                                tooltip       = mod:localize("gt_gk_quest1_tooltip"),
-                            },
-                            {
-                                setting_id    = "gt_gk_quest2",
-                                type          = "dropdown",
-                                default_value = "random",
-                                options       = GT_GK_QUEST_OPTIONS,
-                                tooltip       = mod:localize("gt_gk_quest2_tooltip"),
-                            },
-                            {
-                                setting_id    = "gt_gk_quest3",
-                                type          = "dropdown",
-                                default_value = "random",
-                                options       = GT_GK_QUEST_OPTIONS,
-                                tooltip       = mod:localize("gt_gk_quest3_tooltip"),
-                            },
-                        },
-                    },
-                },
-            },
-            {
-                setting_id  = "gt_readyup_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id      = "gt_ready_up_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gt_ready_up_now",
-                        default_value   = {},
-                        tooltip         = mod:localize("gt_ready_up_hotkey_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_auto_ready_on_vote_pass",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_auto_ready_on_vote_pass_tooltip"),
-                    },
-                },
-            },
-            {
-                setting_id  = "mission_inventory_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "mission_inventory_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("mission_inventory_enabled_tooltip"),
-                    },
-                    {
-                        setting_id      = "gt_open_inv_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gt_open_mission_inventory",
-                        default_value   = {},
-                        tooltip         = mod:localize("gt_open_inv_hotkey_tooltip"),
-                    },
-                },
-            },
-            {
-                setting_id  = "player_state_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id      = "cloak_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gt_cloak_toggle",
-                        default_value   = {},
-                        tooltip         = mod:localize("cloak_hotkey_tooltip"),
-                    },
-                },
-            },
             {
                 setting_id  = "buffs_group",
                 type        = "group",
@@ -334,7 +439,7 @@ return {
                         default_value   = 5,
                         range           = { 0, 100 },
                         decimals_number = 1,
-                        tooltip         = mod:localize("base_crit_chance_tooltip"),
+                        tooltip         = "base_crit_chance_tooltip",
                     },
                     {
                         setting_id      = "movement_speed",
@@ -342,7 +447,23 @@ return {
                         default_value   = 4,
                         range           = { 0, 30 },
                         decimals_number = 1,
-                        tooltip         = mod:localize("movement_speed_tooltip"),
+                        tooltip         = "movement_speed_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_fall_damage_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_fall_damage_enabled_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id      = "gt_fall_damage_mult",
+                                type            = "numeric",
+                                default_value   = 1,
+                                range           = { 0, 5 },
+                                decimals_number = 2,
+                                tooltip         = "gt_fall_damage_mult_tooltip",
+                            },
+                        },
                     },
                 },
             },
@@ -357,13 +478,13 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_ult_reset",
                         default_value   = {},
-                        tooltip         = mod:localize("ult_reset_hotkey_tooltip"),
+                        tooltip         = "ult_reset_hotkey_tooltip",
                     },
                     {
                         setting_id    = "ult_player_cap_enabled",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("ult_player_cap_enabled_tooltip"),
+                        tooltip       = "ult_player_cap_enabled_tooltip",
                         sub_widgets   = {
                             {
                                 setting_id      = "ult_player_cap_value",
@@ -371,7 +492,7 @@ return {
                                 default_value   = 0,
                                 range           = { 0, 120 },
                                 decimals_number = 1,
-                                tooltip         = mod:localize("ult_player_cap_value_tooltip"),
+                                tooltip         = "ult_player_cap_value_tooltip",
                             },
                         },
                     },
@@ -379,15 +500,15 @@ return {
                         setting_id    = "ult_bot_cap_enabled",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("ult_bot_cap_enabled_tooltip"),
+                        tooltip       = "ult_bot_cap_enabled_tooltip",
                         sub_widgets   = {
                             {
                                 setting_id      = "ult_bot_cap_value",
                                 type            = "numeric",
-                                default_value   = 0,
+                                default_value   = 20,   -- was 0, which made enabling the toggle clamp bots to 0s cooldown = ult CONSTANTLY (footgun). 20s = "more aggressive" per the loc intent, not unlimited; user can still set 0 for constant.
                                 range           = { 0, 120 },
                                 decimals_number = 1,
-                                tooltip         = mod:localize("ult_bot_cap_value_tooltip"),
+                                tooltip         = "ult_bot_cap_value_tooltip",
                             },
                         },
                     },
@@ -402,7 +523,7 @@ return {
                         type          = "numeric",
                         default_value = 13,
                         range         = { 1, 24 },
-                        tooltip       = mod:localize("time_scale_value_tooltip"),
+                        tooltip       = "time_scale_value_tooltip",
                     },
                     {
                         setting_id      = "time_faster_hotkey",
@@ -411,7 +532,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_time_faster",
                         default_value   = {},
-                        tooltip         = mod:localize("time_faster_hotkey_tooltip"),
+                        tooltip         = "time_faster_hotkey_tooltip",
                     },
                     {
                         setting_id      = "time_slower_hotkey",
@@ -420,14 +541,14 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_time_slower",
                         default_value   = {},
-                        tooltip         = mod:localize("time_slower_hotkey_tooltip"),
+                        tooltip         = "time_slower_hotkey_tooltip",
                     },
                     {
                         setting_id    = "pause_value",
                         type          = "numeric",
                         default_value = 1,
                         range         = { 1, 24 },
-                        tooltip       = mod:localize("pause_value_tooltip"),
+                        tooltip       = "pause_value_tooltip",
                     },
                     {
                         setting_id      = "pause_hotkey",
@@ -436,7 +557,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_pause_toggle",
                         default_value   = {},
-                        tooltip         = mod:localize("pause_hotkey_tooltip"),
+                        tooltip         = "pause_hotkey_tooltip",
                     },
                 },
             },
@@ -451,7 +572,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_win_level",
                         default_value   = {},
-                        tooltip         = mod:localize("win_level_hotkey_tooltip"),
+                        tooltip         = "win_level_hotkey_tooltip",
                     },
                     {
                         setting_id      = "fail_level_hotkey",
@@ -460,7 +581,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_fail_level",
                         default_value   = {},
-                        tooltip         = mod:localize("fail_level_hotkey_tooltip"),
+                        tooltip         = "fail_level_hotkey_tooltip",
                     },
                     {
                         setting_id      = "restart_level_hotkey",
@@ -469,7 +590,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_restart_level",
                         default_value   = {},
-                        tooltip         = mod:localize("restart_level_hotkey_tooltip"),
+                        tooltip         = "restart_level_hotkey_tooltip",
                     },
                     {
                         setting_id      = "kill_bots_hotkey",
@@ -478,7 +599,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_kill_bots",
                         default_value   = {},
-                        tooltip         = mod:localize("kill_bots_hotkey_tooltip"),
+                        tooltip         = "kill_bots_hotkey_tooltip",
                     },
                     {
                         setting_id      = "die_hotkey",
@@ -487,7 +608,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_die",
                         default_value   = {},
-                        tooltip         = mod:localize("die_hotkey_tooltip"),
+                        tooltip         = "die_hotkey_tooltip",
                     },
                     {
                         setting_id      = "fix_sound_hotkey",
@@ -496,7 +617,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_fix_sound",
                         default_value   = {},
-                        tooltip         = mod:localize("fix_sound_hotkey_tooltip"),
+                        tooltip         = "fix_sound_hotkey_tooltip",
                     },
                     {
                         setting_id      = "gt_bot_toggle_hotkey",
@@ -505,52 +626,16 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_bot_toggle",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_bot_toggle_hotkey_tooltip"),
+                        tooltip         = "gt_bot_toggle_hotkey_tooltip",
                     },
                 },
             },
+            -- Spawners: collapsible parent grouping Creature Spawner + Item Spawner.
+            -- Nested under Cheats and Debug (v0.2.128-dev).
             {
-                setting_id  = "gt_hud_visibility_group",
+                setting_id  = "gt_spawners_group",
                 type        = "group",
                 sub_widgets = {
-                    {
-                        setting_id    = "gt_hud_mode",
-                        type          = "dropdown",
-                        default_value = "off",
-                        options       = GT_HUD_MODE_OPTIONS,
-                        tooltip       = mod:localize("gt_hud_mode_tooltip"),
-                    },
-                    {
-                        setting_id      = "gt_hud_cycle_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gt_hud_cycle",
-                        default_value   = {},
-                        tooltip         = mod:localize("gt_hud_cycle_hotkey_tooltip"),
-                    },
-                },
-            },
-            {
-                setting_id  = "gt_damage_numbers_group",
-                type        = "group",
-                sub_widgets = {
-                    {
-                        setting_id    = "gt_damage_numbers_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_damage_numbers_enabled_tooltip"),
-                        sub_widgets   = {
-                            {
-                                setting_id    = "gt_damage_numbers_include_dots",
-                                type          = "checkbox",
-                                default_value = true,
-                                tooltip       = mod:localize("gt_damage_numbers_include_dots_tooltip"),
-                            },
-                        },
-                    },
-                },
-            },
             {
                 setting_id  = "gt_cs_group",
                 type        = "group",
@@ -560,7 +645,7 @@ return {
                         type          = "dropdown",
                         default_value = "regular_units",
                         options       = GT_CS_UNIT_LIST_OPTIONS,
-                        tooltip       = mod:localize("gt_cs_unit_list_tooltip"),
+                        tooltip       = "gt_cs_unit_list_tooltip",
                     },
                     {
                         setting_id      = "gt_cs_spawn",
@@ -569,7 +654,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_cs_spawn",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_cs_spawn_tooltip"),
+                        tooltip         = "gt_cs_spawn_tooltip",
                     },
                     {
                         setting_id      = "gt_cs_next",
@@ -578,7 +663,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_cs_next",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_cs_next_tooltip"),
+                        tooltip         = "gt_cs_next_tooltip",
                     },
                     {
                         setting_id      = "gt_cs_prev",
@@ -587,7 +672,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_cs_prev",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_cs_prev_tooltip"),
+                        tooltip         = "gt_cs_prev_tooltip",
                     },
                     {
                         setting_id      = "gt_cs_destroy",
@@ -596,7 +681,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_cs_destroy",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_cs_destroy_tooltip"),
+                        tooltip         = "gt_cs_destroy_tooltip",
                     },
                     {
                         setting_id      = "gt_cs_spawn_slot_1",
@@ -605,7 +690,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_cs_spawn_slot_1",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_cs_spawn_slot_1_tooltip"),
+                        tooltip         = "gt_cs_spawn_slot_1_tooltip",
                     },
                     {
                         setting_id      = "gt_cs_spawn_slot_2",
@@ -614,7 +699,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_cs_spawn_slot_2",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_cs_spawn_slot_2_tooltip"),
+                        tooltip         = "gt_cs_spawn_slot_2_tooltip",
                     },
                     {
                         setting_id      = "gt_cs_spawn_slot_3",
@@ -623,26 +708,26 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_cs_spawn_slot_3",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_cs_spawn_slot_3_tooltip"),
+                        tooltip         = "gt_cs_spawn_slot_3_tooltip",
                     },
                     {
                         setting_id    = "gt_cs_mission_ai",
                         type          = "checkbox",
                         default_value = true,
-                        tooltip       = mod:localize("gt_cs_mission_ai_tooltip"),
+                        tooltip       = "gt_cs_mission_ai_tooltip",
                     },
                     {
                         setting_id    = "gt_cs_keep_ai",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("gt_cs_keep_ai_tooltip"),
+                        tooltip       = "gt_cs_keep_ai_tooltip",
                     },
                     {
                         setting_id    = "gt_cs_grudge",
                         type          = "dropdown",
                         default_value = false,
                         options       = GT_CS_GRUDGE_OPTIONS,
-                        tooltip       = mod:localize("gt_cs_grudge_tooltip"),
+                        tooltip       = "gt_cs_grudge_tooltip",
                         sub_widgets   = {
                             {
                                 setting_id      = "gt_cs_grudge_random_modifier_count",
@@ -650,21 +735,21 @@ return {
                                 default_value   = 1,
                                 range           = { 0, 13 },
                                 decimals_number = 0,
-                                tooltip         = mod:localize("gt_cs_grudge_random_modifier_count_tooltip"),
+                                tooltip         = "gt_cs_grudge_random_modifier_count_tooltip",
                             },
-                            { setting_id = "gt_cs_grudge_warping",         type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_warping_tooltip") },
-                            { setting_id = "gt_cs_grudge_intangible",      type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_intangible_tooltip") },
-                            { setting_id = "gt_cs_grudge_unstaggerable",   type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_unstaggerable_tooltip") },
-                            { setting_id = "gt_cs_grudge_raging",          type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_raging_tooltip") },
-                            { setting_id = "gt_cs_grudge_vampiric",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_vampiric_tooltip") },
-                            { setting_id = "gt_cs_grudge_ranged_immune",   type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_ranged_immune_tooltip") },
-                            { setting_id = "gt_cs_grudge_periodic_shield", type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_periodic_shield_tooltip") },
-                            { setting_id = "gt_cs_grudge_crippling",       type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_crippling_tooltip") },
-                            { setting_id = "gt_cs_grudge_crushing",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_crushing_tooltip") },
-                            { setting_id = "gt_cs_grudge_regenerating",    type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_regenerating_tooltip") },
-                            { setting_id = "gt_cs_grudge_periodic_curse",  type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_periodic_curse_tooltip") },
-                            { setting_id = "gt_cs_grudge_commander",       type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_commander_tooltip") },
-                            { setting_id = "gt_cs_grudge_frenzy",          type = "checkbox", default_value = false, tooltip = mod:localize("gt_cs_grudge_frenzy_tooltip") },
+                            { setting_id = "gt_cs_grudge_warping",         type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_warping_tooltip" },
+                            { setting_id = "gt_cs_grudge_intangible",      type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_intangible_tooltip" },
+                            { setting_id = "gt_cs_grudge_unstaggerable",   type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_unstaggerable_tooltip" },
+                            { setting_id = "gt_cs_grudge_raging",          type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_raging_tooltip" },
+                            { setting_id = "gt_cs_grudge_vampiric",        type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_vampiric_tooltip" },
+                            { setting_id = "gt_cs_grudge_ranged_immune",   type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_ranged_immune_tooltip" },
+                            { setting_id = "gt_cs_grudge_periodic_shield", type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_periodic_shield_tooltip" },
+                            { setting_id = "gt_cs_grudge_crippling",       type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_crippling_tooltip" },
+                            { setting_id = "gt_cs_grudge_crushing",        type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_crushing_tooltip" },
+                            { setting_id = "gt_cs_grudge_regenerating",    type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_regenerating_tooltip" },
+                            { setting_id = "gt_cs_grudge_periodic_curse",  type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_periodic_curse_tooltip" },
+                            { setting_id = "gt_cs_grudge_commander",       type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_commander_tooltip" },
+                            { setting_id = "gt_cs_grudge_frenzy",          type = "checkbox", default_value = false, tooltip = "gt_cs_grudge_frenzy_tooltip" },
                         },
                     },
                 },
@@ -680,7 +765,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_is_next",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_is_next_hotkey_tooltip"),
+                        tooltip         = "gt_is_next_hotkey_tooltip",
                     },
                     {
                         setting_id      = "gt_is_prev_hotkey",
@@ -689,7 +774,7 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_is_prev",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_is_prev_hotkey_tooltip"),
+                        tooltip         = "gt_is_prev_hotkey_tooltip",
                     },
                     {
                         setting_id      = "gt_is_spawn_hotkey",
@@ -698,269 +783,291 @@ return {
                         keybind_type    = "function_call",
                         function_name   = "gt_is_spawn",
                         default_value   = {},
-                        tooltip         = mod:localize("gt_is_spawn_hotkey_tooltip"),
+                        tooltip         = "gt_is_spawn_hotkey_tooltip",
+                    },
+                },
+            },
+                },  -- end gt_spawners_group sub_widgets
+            },      -- end gt_spawners_group
+                },  -- end cheats_debug_group sub_widgets
+            },      -- end cheats_debug_group
+            -- Skip Cutscenes / Auto-skip MIGRATED to gui_tweaker (gut) 2026-06-25,
+            -- issue #106; the loading-screen monologue toggle (the group's last
+            -- remaining member) MIGRATED to gut 2026-06-29, #192 — group removed.
+            -- Floating Damage Numbers MIGRATED to gui_tweaker (gut) 2026-06-29.
+            {
+                setting_id  = "gameplay_group",
+                type        = "group",
+                -- SORTING (2026-06-30 rule): Prioritize Specials + Choose Grail Knight
+                -- Quests are now master toggles (not groups), so this level has NO nested
+                -- groups -- every member is a loose option, ordered alphabetically by
+                -- label. (Allow Duplicate Careers + Unlock Weaves -> Lobby; Enemy Spawns
+                -- -> Cheats and Debug; Bot / AFK Takeover -> Bots.)
+                sub_widgets = {
+                    -- "Choose Grail Knight Quests" -- master toggle + 3 quest dropdowns.
+                    -- Unwrapped 2026-06-30 from a redundant single-item group (gt_gk_group).
+                    {
+                        setting_id    = "gt_gk_quests_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_gk_quests_enabled_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_gk_quest1",
+                                type          = "dropdown",
+                                default_value = "random",
+                                options       = _gt_gk_quest_options(),
+                                tooltip       = "gt_gk_quest1_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_gk_quest2",
+                                type          = "dropdown",
+                                default_value = "random",
+                                options       = _gt_gk_quest_options(),
+                                tooltip       = "gt_gk_quest2_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_gk_quest3",
+                                type          = "dropdown",
+                                default_value = "random",
+                                options       = _gt_gk_quest_options(),
+                                tooltip       = "gt_gk_quest3_tooltip",
+                            },
+                        },
+                    },
+                    -- "Disable Friendly Fire"
+                    {
+                        setting_id    = "disable_friendly_fire",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "disable_friendly_fire_tooltip",
+                    },
+                    -- "Healer's Touch, Home Brewer, Grenadier % Chance"
+                    {
+                        setting_id      = "gt_adventure_save_trait_chance",
+                        type            = "numeric",
+                        default_value   = 25,
+                        range           = { 1, 75 },
+                        decimals_number = 0,
+                        tooltip         = "gt_adventure_save_trait_chance_tooltip",
+                    },
+                    -- "Prioritize Specials (Tagging, Deepwood and Soulstealer)" -- master
+                    -- toggle (was a plain group 2026-06-30). The 3 context sub-toggles
+                    -- default ON; the master gates all of them (_gt_prioritize_specials.lua).
+                    {
+                        setting_id    = "gt_prio_specials_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_prio_specials_enabled_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_prio_special_tag",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_prio_special_tag_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_prio_special_deepwood",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_prio_special_deepwood_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_prio_special_soulstealer",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_prio_special_soulstealer_tooltip",
+                            },
+                        },
                     },
                 },
             },
             -- ============================================================
             -- Host-Side Lobby Controls (absorbed from lobby_tweaker
             -- 2026-05-25; lt v0.1.7-dev). All settings namespaced
-            -- `gt_lobby_*`; chat commands likewise renamed `/gt_lobby_*`.
+            -- `gt_lobby_*`; chat commands likewise renamed `/lobby_*`.
             -- ============================================================
             {
                 setting_id  = "gt_lobby_controls_group",
                 type        = "group",
+                -- SORTING (2026-06-30 rule): nested sub-groups first (top), then loose
+                -- options alphabetical by display label (status tags ignored). Dependent
+                -- sub-options (idle threshold / warn) stay directly under their parent.
                 sub_widgets = {
-                    -- Slot Reservations
+                    -- Modded Lobby Manifest -- nested group, so it sits at the TOP.
+                    -- Also holds Message of the Day (both are host->joiner broadcasts).
                     {
-                        setting_id    = "gt_lobby_slot_reservations_enabled",
+                        setting_id  = "gt_lobby_manifest_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "gt_lobby_manifest_broadcast_enabled",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_lobby_manifest_broadcast_enabled_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_lobby_manifest_failnotify_enabled",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_lobby_manifest_failnotify_enabled_tooltip",
+                            },
+                            -- Message of the Day (moved from the parent 2026-06-30).
+                            -- MOTD text is set via chat: /lobby_motd_set <text>
+                            -- (VMF has no string-input widget type).
+                            {
+                                setting_id    = "gt_lobby_motd_enabled",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_lobby_motd_enabled_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_lobby_motd_send_chat",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_lobby_motd_send_chat_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_lobby_motd_send_popup",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_lobby_motd_send_popup_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_lobby_motd_once_per_peer_per_session",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_lobby_motd_once_per_peer_per_session_tooltip",
+                            },
+                        },
+                    },
+                    -- Loose options, alphabetical by display label:
+                    -- "Allow Duplicate Careers" (moved from Gameplay 2026-06-30; confirmed working)
+                    {
+                        setting_id    = "allow_duplicate_careers",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("gt_lobby_slot_reservations_enabled_tooltip"),
+                        tooltip       = "allow_duplicate_careers_tooltip",
                     },
-                    -- Session Ignore List
-                    {
-                        setting_id    = "gt_lobby_session_ignore_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_lobby_session_ignore_enabled_tooltip"),
-                    },
-                    -- Kick on Idle
+                    -- "Auto-kick idle players in keep" (+ dependent threshold / warn sliders)
                     {
                         setting_id    = "gt_lobby_kick_idle_enabled",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("gt_lobby_kick_idle_enabled_tooltip"),
+                        tooltip       = "gt_lobby_kick_idle_enabled_tooltip",
                     },
                     {
                         setting_id    = "gt_lobby_kick_idle_threshold_minutes",
                         type          = "numeric",
                         default_value = 10,
                         range         = { 1, 60 },
-                        tooltip       = mod:localize("gt_lobby_kick_idle_threshold_minutes_tooltip"),
+                        tooltip       = "gt_lobby_kick_idle_threshold_minutes_tooltip",
                     },
                     {
                         setting_id    = "gt_lobby_ki_warn_seconds",
                         type          = "numeric",
                         default_value = 60,
                         range         = { 10, 180 },
-                        tooltip       = mod:localize("gt_lobby_ki_warn_seconds_tooltip"),
+                        tooltip       = "gt_lobby_ki_warn_seconds_tooltip",
                     },
-                    -- Message of the Day
+                    -- "Auto-restart mission on team wipe" (moved from Visuals 2026-06-30).
+                    -- setting_id preserved so _gt_solo_qol.lua reads + user state carry over.
                     {
-                        setting_id    = "gt_lobby_motd_enabled",
+                        setting_id    = "gt_solo_auto_restart_on_wipe",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("gt_lobby_motd_enabled_tooltip"),
+                        tooltip       = "gt_solo_auto_restart_on_wipe_tooltip",
                     },
-                    -- MOTD text setting is NOT a widget — VMF has no native
-                    -- string-input widget type. Set via chat command:
-                    --   /gt_lobby_motd_set <text>
-                    -- which writes to `mod:set("gt_lobby_motd_text", text)`.
-                    -- A widget here with type="text_input" caused widget#103
-                    -- to fail VMF validation (no such VMF type) and broke gt
-                    -- options init entirely on 2026-05-25.
+                    -- "Auto-start On Vote Pass"
                     {
-                        setting_id    = "gt_lobby_motd_send_chat",
-                        type          = "checkbox",
-                        default_value = true,
-                        tooltip       = mod:localize("gt_lobby_motd_send_chat_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_lobby_motd_send_popup",
+                        setting_id    = "gt_auto_ready_on_vote_pass",
                         type          = "checkbox",
                         default_value = false,
-                        tooltip       = mod:localize("gt_lobby_motd_send_popup_tooltip"),
+                        tooltip       = "gt_auto_ready_on_vote_pass_tooltip",
                     },
+                    -- "Enable ignore list"
                     {
-                        setting_id    = "gt_lobby_motd_once_per_peer_per_session",
+                        setting_id    = "gt_lobby_session_ignore_enabled",
                         type          = "checkbox",
-                        default_value = true,
-                        tooltip       = mod:localize("gt_lobby_motd_once_per_peer_per_session_tooltip"),
+                        default_value = false,
+                        tooltip       = "gt_lobby_session_ignore_enabled_tooltip",
                     },
-                    -- Modded Lobby Manifest
+                    -- "Enable slot reservations"
                     {
-                        setting_id    = "gt_lobby_manifest_broadcast_enabled",
+                        setting_id    = "gt_lobby_slot_reservations_enabled",
                         type          = "checkbox",
-                        default_value = true,
-                        tooltip       = mod:localize("gt_lobby_manifest_broadcast_enabled_tooltip"),
+                        default_value = false,
+                        tooltip       = "gt_lobby_slot_reservations_enabled_tooltip",
                     },
+                    -- "Ready Up (Skip Countdown)"
                     {
-                        setting_id    = "gt_lobby_manifest_failnotify_enabled",
+                        setting_id      = "gt_ready_up_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gt_ready_up_now",
+                        default_value   = {},
+                        tooltip         = "gt_ready_up_hotkey_tooltip",
+                    },
+                    -- "Unlock All Ranked Weaves" (moved from Gameplay 2026-06-30)
+                    {
+                        setting_id    = "gt_unlock_all_weaves",
                         type          = "checkbox",
-                        default_value = true,
-                        tooltip       = mod:localize("gt_lobby_manifest_failnotify_enabled_tooltip"),
+                        default_value = false,
+                        tooltip       = "gt_unlock_all_weaves_tooltip",
                     },
                 },
             },
-            -- Self-refreshing vanilla-name dump (feeds tools/gen-name-map).
-            -- Default ON: emits loc_key->English to the console log once per
-            -- game build on keep entry. See _gt_name_dump.lua. Manual re-dump:
-            -- /gt_dump_names.
+            -- (In-mission inventory group MIGRATED to gui_tweaker 2026-06-24.)
+            -- (Main Menu & Startup group MIGRATED to gui_tweaker 2026-06-29, #190.)
+            -- (Ready Up group MIGRATED into Host-Side Lobby Controls above 2026-06-29.)
+            -- Info (2026-06-29) -- on-screen text readouts / warnings split out
+            -- from Solo & QoL into their own group so they're easier to find.
+            -- Widget IDs preserved (gt_solo_*) so existing user settings carry
+            -- over and the _gt_solo_qol.lua reads against `mod:get(...)` keep
+            -- working unchanged.
             {
-                setting_id    = "gt_auto_name_dump",
-                type          = "checkbox",
-                default_value = true,
-                tooltip       = mod:localize("gt_auto_name_dump_tooltip"),
-            },
-            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-            -- v0.2.54-dev: renamed from `gt_debug_mode` (was nested in
-            -- `gt_debug_group`) to the universal `enable_debug_logging` key,
-            -- un-nested to top-level at the BOTTOM of the widget tree.
-            {
-                setting_id    = "enable_debug_logging",
-                type          = "checkbox",
-                default_value = false,
-                tooltip       = mod:localize("enable_debug_logging_tooltip"),
-            },
-            -- Lua memory watchdog interval. The watchdog itself rides the
-            -- universal `enable_debug_logging` toggle above (v0.2.79-dev) — it's
-            -- a debug diagnostic like every other, so it runs whenever debug
-            -- logging is on. Logs collectgarbage("count") every N seconds — the
-            -- ground-truth Lua heap size — so a session that OOMs the lua_heap
-            -- shows the exact growth curve + which level/timeframe it accelerates.
-            {
-                setting_id    = "memwatch_interval",
-                type          = "numeric",
-                default_value = 10,
-                range         = { 2, 60 },
-                decimals_number = 0,
-                tooltip       = mod:localize("memwatch_interval_tooltip"),
-            },
-            -- v0.2.78-dev: GC mitigation to survive long sessions despite the
-            -- in-investigation Lua heap leak. Tightens the incremental GC so the
-            -- heap stays closer to the live set, with an optional periodic full
-            -- collect. Toggle on for long CW runs until the leak is fixed.
-            {
-                setting_id    = "gc_mitigation_enabled",
-                type          = "checkbox",
-                default_value = false,
-                tooltip       = mod:localize("gc_mitigation_enabled_tooltip"),
-            },
-            {
-                setting_id    = "gc_full_collect_sec",
-                type          = "numeric",
-                default_value = 0,
-                range         = { 0, 120 },
-                decimals_number = 0,
-                tooltip       = mod:localize("gc_full_collect_sec_tooltip"),
-            },
-            -- Bot Options -- AI teammate behavior fixes (see _gt_bot_fixes.lua).
-            -- All default OFF; host-side only (bots exist on the host), no
-            -- network registration so they can't affect non-modded peers.
-            {
-                setting_id  = "gt_bot_options_group",
+                setting_id  = "gt_info_group",
                 type        = "group",
                 sub_widgets = {
-                    {
-                        setting_id    = "gt_bot_necro_potion_handoff",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_necro_potion_handoff_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bot_ironbreaker_revive_in_ult",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_ironbreaker_revive_in_ult_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bot_rescue_awaiting",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_rescue_awaiting_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bot_mission_fail_prevention",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_mission_fail_prevention_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bot_ledge_pullup",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_ledge_pullup_tooltip"),
-                    },
-                    {
-                        setting_id      = "gt_bot_ledge_pullup_delay",
-                        type            = "numeric",
-                        default_value   = 3.0,
-                        range           = { 1.0, 10.0 },
-                        decimals_number = 1,
-                        tooltip         = mod:localize("gt_bot_ledge_pullup_delay_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bot_ladder_unstick",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_ladder_unstick_tooltip"),
-                    },
-                    {
-                        setting_id      = "gt_bot_ladder_unstick_delay",
-                        type            = "numeric",
-                        default_value   = 5.0,
-                        range           = { 2.0, 20.0 },
-                        decimals_number = 1,
-                        tooltip         = mod:localize("gt_bot_ladder_unstick_delay_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bot_follow_distance_enabled",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_follow_distance_enabled_tooltip"),
-                    },
-                    {
-                        setting_id      = "gt_bot_follow_distance_m",
-                        type            = "numeric",
-                        default_value   = 40.0,
-                        range           = { 10.0, 50.0 },
-                        decimals_number = 1,
-                        tooltip         = mod:localize("gt_bot_follow_distance_m_tooltip"),
-                    },
-                    {
-                        setting_id    = "gt_bot_instant_pickup",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = mod:localize("gt_bot_instant_pickup_tooltip"),
-                    },
+                    { setting_id = "gt_solo_assassin_text_warning",   type = "checkbox", default_value = false, tooltip = "gt_solo_assassin_text_warning_tooltip" },
+                    { setting_id = "gt_solo_packmaster_text_warning", type = "checkbox", default_value = false, tooltip = "gt_solo_packmaster_text_warning_tooltip" },
+                    { setting_id = "gt_solo_boss_path_progress",      type = "checkbox", default_value = false, tooltip = "gt_solo_boss_path_progress_tooltip" },
                 },
             },
-            -- Boss Mechanic Tweaks (see _gt_boss_tweaks.lua). Load-time data
-            -- mutation; host-side, no network registration.
+            -- (More Corpses group MERGED into Visuals (gt_solo_group, renamed
+            -- from "Solo & QoL") 2026-06-29.)
+            -- Visuals (was "Solo & QoL"; ported from True Solo QoL Tweaks; see
+            -- _gt_solo_qol.lua). All default OFF. AUTO_KILL_BOTS not ported --
+            -- use "Disable Bots".
             {
-                setting_id  = "gt_boss_tweaks_group",
+                setting_id  = "gt_solo_group",  -- display label "Visuals" (loc); setting_id preserved
                 type        = "group",
                 sub_widgets = {
+                    -- (Auto-restart on team wipe MOVED to Host-Side Lobby Controls
+                    -- 2026-06-30 -- it's a host-side match-flow control, not a visual.)
+                    { setting_id = "gt_solo_assassin_hero_vo",           type = "checkbox", default_value = false, tooltip = "gt_solo_assassin_hero_vo_tooltip" },
+                    { setting_id = "gt_solo_disable_ult_vo",             type = "checkbox", default_value = false, tooltip = "gt_solo_disable_ult_vo_tooltip" },
+                    { setting_id = "gt_solo_disable_mutator_explosions", type = "checkbox", default_value = false, tooltip = "gt_solo_disable_mutator_explosions_tooltip" },
+                    -- (Disable level intro audio REMOVED 2026-06-30 -- duplicated GUI Tweaker's "Disable Level Intro Audio".)
+                    { setting_id = "gt_solo_disable_fog",                type = "checkbox", default_value = false, tooltip = "gt_solo_disable_fog_tooltip" },
+                    { setting_id = "gt_solo_disable_sun_shadows",        type = "checkbox", default_value = false, tooltip = "gt_solo_disable_sun_shadows_tooltip" },
+                    { setting_id = "gt_solo_draw_boss_spheres",          type = "checkbox", default_value = false, tooltip = "gt_solo_draw_boss_spheres_tooltip" },
+                    -- Max Ragdolls -- single always-on slider (the enable toggle +
+                    -- nested sub-widget were dropped 2026-06-30). 24 = vanilla default;
+                    -- up to 300 for a cinematic pile.
                     {
-                        setting_id      = "gt_fly_disable_mult",
+                        setting_id      = "gt_more_corpses_count",
                         type            = "numeric",
-                        default_value   = 1.0,
-                        range           = { 0.0, 3.0 },
-                        decimals_number = 2,
-                        tooltip         = mod:localize("gt_fly_disable_mult_tooltip"),
+                        default_value   = 24,
+                        range           = { 1, 300 },
+                        decimals_number = 0,
+                        tooltip         = "gt_more_corpses_count_tooltip",
                     },
                 },
             },
-            -- Solo & QoL (ported from True Solo QoL Tweaks; see _gt_solo_qol.lua).
-            -- All default OFF. AUTO_KILL_BOTS not ported -- use "Disable Bots (Solo)".
-            {
-                setting_id  = "gt_solo_group",
-                type        = "group",
-                sub_widgets = {
-                    { setting_id = "gt_solo_auto_restart_on_wipe",       type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_auto_restart_on_wipe_tooltip") },
-                    { setting_id = "gt_solo_assassin_text_warning",      type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_assassin_text_warning_tooltip") },
-                    { setting_id = "gt_solo_packmaster_text_warning",    type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_packmaster_text_warning_tooltip") },
-                    { setting_id = "gt_solo_assassin_hero_vo",           type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_assassin_hero_vo_tooltip") },
-                    { setting_id = "gt_solo_disable_ult_vo",             type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_ult_vo_tooltip") },
-                    { setting_id = "gt_solo_disable_mutator_explosions", type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_mutator_explosions_tooltip") },
-                    { setting_id = "gt_solo_disable_intro_audio",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_intro_audio_tooltip") },
-                    { setting_id = "gt_solo_disable_fog",                type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_fog_tooltip") },
-                    { setting_id = "gt_solo_disable_sun_shadows",        type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_disable_sun_shadows_tooltip") },
-                    { setting_id = "gt_solo_draw_boss_spheres",          type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_draw_boss_spheres_tooltip") },
-                    { setting_id = "gt_solo_boss_path_progress",         type = "checkbox", default_value = false, tooltip = mod:localize("gt_solo_boss_path_progress_tooltip") },
-                },
-            },
+            -- 3rd-Person Camera (tp_camera_group) MIGRATED to gui_tweaker (gut)
+            -- 2026-06-29, #191.
         },
     },
 }

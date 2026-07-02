@@ -25,6 +25,12 @@
 
 local mod = get_mod("crt")
 
+-- BR ON ICE (bt retired 2026-06-08). Belt-and-suspenders: if any stray loader
+-- still dofile's this module, return the inert stub immediately so its ~2768
+-- lines of data/hooks never run or consume lua_heap. Matches the {apply, restore,
+-- active_count} shape read in career_tweaker.lua. To revive BR, delete this line.
+if true then return { apply = function() end, restore = function() end, active_count = function() return 0 end } end
+
 -- Canonical registration list moved to the new `bt` (buff_tweaker) mod.
 -- ct no longer ships its own copy nor performs the master pre-register
 -- pass. It reads bt's `is_br_active()` public API to gate per-feature

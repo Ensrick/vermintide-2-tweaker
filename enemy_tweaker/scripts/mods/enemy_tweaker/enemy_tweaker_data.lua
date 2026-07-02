@@ -149,7 +149,9 @@ end
 
 return {
     name         = "Tweaker: Enemies",
-    description  = "mod_description",
+    -- Root-level description is the ONE field VMF uses verbatim (get_description, no
+    -- re-localize), so it must be localized eagerly here - unlike every widget field below.
+    description  = mod:localize("mod_description"),
     is_togglable = true,
     options = {
         widgets = {
@@ -183,7 +185,7 @@ return {
                         setting_id    = "horde_size_multiplier",
                         type          = "numeric",
                         default_value = 1,
-                        range         = { 0, 15 },
+                        range         = { 0, 5 },   -- v0.7.11-dev: capped at 5x (paced hordes get overwhelming/unstable past ~5x; patrols + roaming still go to 15x)
                         decimals_number = 1,
                         tooltip       = "horde_size_multiplier_tooltip",
                     },
@@ -191,7 +193,7 @@ return {
                         setting_id    = "event_size_multiplier",
                         type          = "numeric",
                         default_value = 1,
-                        range         = { 0, 15 },
+                        range         = { 0, 5 },   -- v0.7.11-dev: capped at 5x (event hordes are wave spawns like paced hordes; patrols + roaming still go to 15x)
                         decimals_number = 1,
                         tooltip       = "event_size_multiplier_tooltip",
                     },
@@ -338,6 +340,12 @@ return {
                         default_value = false,
                         tooltip       = "banner_breakable_by_ranged_tooltip",
                     },
+                    {
+                        setting_id    = "banner_no_camera_jerk_on_placement",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "banner_no_camera_jerk_on_placement_tooltip",
+                    },
                 },
             },
 
@@ -425,6 +433,57 @@ return {
                 },
             },
 
+            -- ============================================================
+            -- MONSTER POOL: SKARRIK SPINEMANGLER (v0.7.12-dev)
+            -- ============================================================
+            {
+                setting_id  = "monster_swap_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "warlord_in_monster_pool",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "warlord_in_monster_pool_tooltip",
+                    },
+                    {
+                        setting_id      = "warlord_monster_chance",
+                        type            = "numeric",
+                        default_value   = 25,
+                        range           = { 0, 100 },
+                        decimals_number = 0,
+                        tooltip         = "warlord_monster_chance_tooltip",
+                    },
+                },
+            },
+
+            -- ============================================================
+            -- ROAMING ELITE POOL: STORMVERMIN CHAMPION (v0.7.18-dev)
+            -- ============================================================
+            {
+                setting_id  = "elite_swap_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "champion_in_elite_pool",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "champion_in_elite_pool_tooltip",
+                    },
+                    {
+                        setting_id      = "champion_elite_chance",
+                        type            = "numeric",
+                        default_value   = 5,
+                        range           = { 0, 100 },
+                        decimals_number = 0,
+                        tooltip         = "champion_elite_chance_tooltip",
+                    },
+                },
+            },
+
+--[==[ BIG REBALANCE WIDGETS — ON ICE (bt retired 2026-06-08). The br_group menu
+-- group is commented out so the inert BR toggles don't appear in the VMF menu.
+-- To restore, delete this opener line and the closing long-comment marker below.
             -- BIG REBALANCE (Core's BR / "Weapon Balance" decompile)
             -- All defaults false; master gates registrations across mods
             -- (same setting_id pattern in wt + ct, OR-merged at runtime).
@@ -535,14 +594,24 @@ return {
                     },
                 },
             },
-            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-            -- Must be at the BOTTOM of the widget tree, top-level (NOT inside
-            -- any group), key `enable_debug_logging` verbatim across every mod.
+]==]
+            -- ============================================================
+            -- BOSS MECHANIC TWEAKS (received from general_tweaker_dev
+            -- 2026-06-20 — was gt_fly_disable_mult; renamed et_fly_disable_mult)
+            -- ============================================================
             {
-                setting_id    = "enable_debug_logging",
-                type          = "checkbox",
-                default_value = false,
-                tooltip       = "enable_debug_logging_tooltip",
+                setting_id  = "boss_tweaks_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id      = "et_fly_disable_mult",
+                        type            = "numeric",
+                        default_value   = 1.0,
+                        range           = { 0.0, 3.0 },
+                        decimals_number = 2,
+                        tooltip         = "et_fly_disable_mult_tooltip",
+                    },
+                },
             },
         },
     },

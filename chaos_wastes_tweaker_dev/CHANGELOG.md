@@ -1,5 +1,622 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.201-dev (2026-07-01) - Localization sweep: fix over-escaped percents, add missing dropdown keys, rewrite option descriptions
+
+- **Fixed percent-sign rendering across the settings menu.** About 200 boon and rework tooltips were over-escaped as `%%%%`, which renders as a literal double percent in-game (e.g. "+X%% Damage" instead of "+X% Damage"). Normalized every one to the correct single `%%` per LOCALIZATION_STANDARD.md section 1 (VMF runs each localized string through one `string.format` pass, so one doubling is correct).
+- **Added two missing dropdown labels.** The "Rework: Arena Ammo Boxes" dropdown referenced numeric options `0` and `10` that had no localization entry, so those two choices showed as `<0>` / `<10>`. Added `["0"]` and `["10"]`.
+- **Rewrote option descriptions for players, not code.** Swept the mechanic / rework / bot / grudge-mark / potion tooltips to plain, 1-2 sentence English: removed engine and network jargon ("Host-broadcast", "reliquary", "talent set", "server-side"), a source-file reference (TRAITS_REFERENCE.md), and every em dash and arrow from menu-facing strings. Vanilla-style boon effect descriptions kept their wording. No setting_ids, defaults, ranges, or widgets changed.
+
+## 0.7.200-dev (2026-07-01) - #156 object-set candidate fix, #211 disabled-boon bypass, #104 gas-cloud guard
+
+### #156 - Horn of Magnus zero pickups: 'adventure' object-set candidate fix + spawner-count diagnostic
+
+- **HYPOTHESIS-DRIVEN candidate fix, pending in-game verification.** The 2026-07-01 forensics (magnus_tzeentch_path1, v0.7.198) showed 100% spawn debt on all 13 pickup-type requests with ALL spawner lists empty at populate and `pickup_gizmo_spawned` never registering a unit - the gizmos never SPAWNED. Suspected mechanism: `GameModeSettings.deus.object_sets = { gm_sp = true }` vs adventure's `{ adventure = true, gm_sp = true }` - level units grouped in the `adventure` object set (membership lives in the level binary, unreadable offline) silently never spawn under the deus game mode.
+- **Fix:** new table-form hook on `GameModeHelper.get_object_sets` (game_mode_helper.lua:58-111; returns `(object_sets_map, spawned_object_sets_array)`): when `game_mode_key == "deus"` AND the loading level key resolves through ct's STATIC adventure catalog (`AdventurePool.MISSION_BY_KEY`, deliberately not the toggle-gated `IS_INJECTED_ADVENTURE_LEVEL`, so host and clients decide identically) AND `LevelSettings[level_key].level_name` matches the level being spawned AND the level actually has an `adventure` set, append `"adventure"` to the spawned-sets array. Vanilla deus and vanilla Adventure are untouched (no catalog match / different game_mode_key). Engagement proof: `[ct:objset] injected adventure level <key>: enabling 'adventure' object set (issue #156)` (raw printf).
+- **Diagnostic (lands regardless of the fix):** the `[populate_pickups]` printf now also carries `spawners: primary=N secondary=N guaranteed=N` at populate entry (field names verified against vanilla pickup_system.lua:64/75/76). All-zero on an injected level = level-load problem; nonzero = the veto is downstream.
+- **Verification steps:** host a CW run, get Horn of Magnus (or any injected adventure map). Expect (1) the `[ct:objset]` line at level load, (2) nonzero `spawners:` counts on `[populate_pickups]`, (3) `[ct-spawn-tally] total>0` and actual chests/altars/pickups in-game. CAVEAT: enabling the `adventure` set may also spawn other adventure-only units on injected maps - eyeball for oddities (out-of-place props, event units).
+
+### #211 - disabled boons still granted: bot random-boon bypass fixed + grant-source tracing
+
+- **ROOT CAUSE (code-proven):** the bot-boon mirror's random mode (`bots_get_random_boons`) picked from the RAW `DeusPowerUpsArrayByRarity` bucket - which is only stripped of disabled boons inside the `generate_random_power_ups` remove-then-restore window - and then granted via `add_power_ups` with the pre-grant gate deliberately skipped (`_ct_bot_mirror_active`). That is the only in-code path that can produce the observed `[boon-trace] DISABLED BOON GRANTED` lines (the trace only fires in the add_power_ups hook, and the gate strips everything else). Fits all 4 host-side hits (grenadier / deus_second_wind / deus_push_charge in one minute on skaven_stronghold = one host grant mirrored to bots; skill_by_block on nurgle_belakor).
+- **Fix:** `_pick_random_for_rarity` now filters the bucket through the new shared `mod._ct_boon_disabled(name)` helper (also now used by the roll-pool strip's `_should_strip` and the pre-grant gate - one check, three call sites, behavior-identical for checkbox booleans). Empty filtered bucket falls back to mirroring the host's (already-gated) boon. Defense-in-depth: the bot clone loop also skips any disabled name outright and printfs `[bot-boon] SKIPPED disabled boon` if that ever fires. Bomb-boon exclusivity / altar no-repeat are NOT applied to bot picks - both are per-recipient state this rarity-matched pick never consulted (unchanged behavior).
+- **Grant-source tracing (raw printf - the host runs VMF logging OFF):** every grant through `add_power_ups` now logs `[boon-trace] grant source=<tag> boon=<name> rarity=<r> disabled=<bool> ... (issue #211)`. Tags: `bot_mirror`/`bot_random` (ct's bot loop), `set_reward` (new `DeusRunController._check_set_completed` wrapper), `cot_view_pick` (new `DeusCursedChestView._on_button_pressed` wrapper), `untagged` = the boon-ALTAR grant inside `DeusChestExtension.open_chest` (not pre-taggable: ct's only open_chest hook is the consolidated post-call hook_safe, and VMF drops a second hook on the same method - that path is double-covered by the pool strip + pre-grant gate anyway). Gate blocks also printf now.
+- **Full vanilla grant-path map** (documented in-code above the tagging hooks): covered by pool strip - altar stored roll, shrine shop offerings, Chest of Trials picks, end-of-level random grants (these write run_state directly and never enter add_power_ups; the pool strip is their only filter). Covered by pre-grant gate - everything calling add_power_ups. Deliberately NOT covered - `_add_initial_power_ups` (the player's own talents-as-boons + live-event boons; stripping would desync shared run state), `grant_party_power_up`/Belakor quest challenge reward + node `terror_event_power_up` party grants (specific named power-ups written to party state / activated directly). These are instrumented-by-map only; if a future log shows a disabled boon from one of them, that map says exactly where to gate.
+- New regression marker `boon_disable_shared_gate` (helper present + sane on unknown/nil keys).
+
+### #104 - Corrupted Flesh gas-cloud FPS guard + AoE attribution
+
+- **Rate guard:** new table-form hook on `ProcFunctions.mark_of_nurgle_explosion` (morris_buff_settings.lua:2254-2299 - the exact function that spawns the globadier-class cloud + nav-tag volume + rpc_area_damage; resolved by string at proc time per buff_extension.lua:1350, same mechanism as the #129 Mathlann guard). Host-side rolling 60s window; when the window is full the proc returns WITHOUT calling vanilla - no cloud unit, no nav volume, no RPC (the mark's other on_death buffs run normally; guard-vs-bail audited). Suppression log (rate-limited to 1 per 5s): `[ct:flesh_guard] suppressed gas cloud (n this window, cap=N/min, issue #104)`.
+- **New setting:** "Corrupted Flesh Curse: Max Gas Clouds per Minute" (`flesh_guard_clouds_per_minute`, numeric 0-30, **default 6**, 0 = vanilla/uncapped) in the Curses menu. Default 6/min roughly halves the observed bastion peak (11/min) while leaving the 2.7/min steady rate untouched. Joins the host-synced registry automatically (every non-per-peer widget does via `_collect_setting_ids`); only the host evaluates the gate - the buff sits on host-side AI units and `spawn_network_unit` is server-only, so clients pass through untouched and no extra sync wiring is needed.
+- **AoE attribution (logging gap):** each allowed cloud logs `[ct:aoe] template=corrupted_flesh_explosion buff=mark_of_nurgle_death_explosion source=<breed> window_n=N cap=N` (or `cap=off` when uncapped) - scoped to this deus curse mechanism only, so ordinary combat explosions never spam it (observed max 11/line-min).
+- **Verification steps:** run a corrupted-flesh CW mission (nurgle theme). Expect `[ct:flesh_guard] ... guard installed` at load, `[ct:aoe]` lines per cloud, and `[ct:flesh_guard] suppressed ...` lines once the per-minute cap engages during dense fights; FPS during marked-enemy deaths should hold.
+
+## 0.7.199-dev (2026-07-01) - Boon-offer scrollbar + boon-count caps raised to 50
+
+- **Scrollbar for the shrine and cursed-chest boon offerings.** The shrine (DeusShopView) and cursed chest (DeusCursedChestView) lay their offered boons on a fixed vertical arc that never scrolls, so offers beyond the visible rows were stranded off-screen. Now, when a shrine offers more than 4 boons or a chest more than 3, the arc flattens into a row-snapped vertical list with a track+thumb scrollbar to the right of the boon column. Scrolling: mouse wheel (1 row per notch), clicking the track above/below the thumb (page a full window), or dragging the thumb (jump to any row). Off-window rows park far off-screen, so they cannot be hovered or bought until scrolled to; blessings and the shop's owned-boons side panel are untouched. At or below the vanilla row counts the views stay byte-identical vanilla (the single-boon NaN fix still runs).
+- **Boon-count caps raised 5 -> 50** for both `shrine_boon_count` and `chest_boon_count` (defaults unchanged: 4 / 3). The existing count-override hook already passes any value through; the scrollbar is what makes counts past ~4 actually usable.
+- Implementation: one consolidated `_ct_boon_scroll` block in the main lua. Setup merges into the two existing `*_create_ui_elements` hook_safe bodies (VMF one-hook-per-method rule); two new wrapping `update` hooks run scroll input + reflow before vanilla draws each frame, pcall-guarded so any vanilla shape change degrades to "no scroll" instead of crashing the view.
+- Verification: not yet checked in-game. On view open with an over-cap offer, the log line `[ct:boon_scroll] engaged: N boons offered, ...` proves the path ran; a keep-side `/verify_*` command is impractical here because the state only exists while a shrine/chest view is open.
+
+## 0.7.198-dev — 2026-07-01 — Logging discipline: demote the deus-chest fallback warning
+
+The `[deus-chest] … injected a balanced fallback` message was firing at **warning** level on every native CW path mission (dlc_castle_*, cemetery_*, etc.) that ships no `deus_weapon_chest_distribution` — but injecting that fallback is the correct, intended behavior (it's what prevents vanilla's assert). A warning should mean "maybe a problem"; this is working as designed, so it's now a file-only `_dbg` line, not a warning. Audited the rest of ct's ~25 warning/alert sites — all others are genuine (regression FAILs, RPC schema mismatches, vanilla-call-raised recoveries, "investigate" traces), so they stay.
+
+## 0.7.197-dev — 2026-06-30 — Shrines/Altars/Chests fully grouped (no loose options)
+
+The Shrines, Altars and Chests menu is now four clean collapsibles with nothing dangling: **Altars & Chests per Mission**, **Altar Reroll Options**, **Boons Offered** (Shrines/Chests Number of Available Boons), and **Chest of Trials** (Revive on Chest Completion + Enemy Count Multiplier). Two new groups (`boons_offered_group`, `chest_of_trials_group`) absorb the former loose options. Pure menu structure — no setting_ids or behavior changed.
+
+## 0.7.196-dev — 2026-06-30 — Group the per-mission count sliders under one collapsible
+
+Follow-up to .195: the five per-mission spawn-count sliders (Upgrade Altars, Melee Swap Altars, Ranged Swap Altars, Boon Altars, Chests of Trials per Mission) are now under a single nested collapsible group, **"Altars & Chests per Mission"** (`altar_chest_counts_group`), instead of loose in the Shrines, Altars and Chests menu. With the groups-first layout rule, this collapsible and "Altar Reroll Options" both sit above the loose options (Number of Available Boons, etc.). No setting_ids changed — pure menu structure.
+
+## 0.7.195-dev — 2026-06-30 — Shrines/Altars/Chests menu: layout rule, renames, count sliders
+
+- **Menu-layout rule enforced globally:** collapsible sub-menus (`type = "group"`) now always render ABOVE loose options in the same parent (stable partition in `recursive_sort`). "Altar Reroll Options" now sits at the TOP of the Shrines, Altars and Chests menu instead of the bottom.
+- **Renames:** "Shrine Boon Options" → **"Shrines: Number of Available Boons"**; "Chest Boon Options" → **"Chests: Number of Available Boons"**.
+- **Count settings are now sliders (were dropdowns), no "Default" list entry:**
+  - **Upgrade Altars / Melee Swap Altars / Ranged Swap Altars / Boon Altars** → numeric sliders, range **-1 to 9** (-1 = Default). Identical value semantics to the old dropdown, so no behavior change.
+  - **Chests of Trials per Mission** → numeric slider, range **0 to 5, default 1**. The old -1/Default is gone; since the cap code already maps -1→1, default 1 matches vanilla's usual 1 per mission. (A legacy saved -1 still reads safely in code.)
+
+## 0.7.194-dev — 2026-06-30 — Duplicate-career chips: implicit (no toggle) + #122 floating fix
+
+- **Removed the "Map Screen" menu group + the "Show Both Chips for Duplicate Careers" toggle.** Showing both vote chips when two players share a career is a purely-corrective display fix, so it's now an **implicit, always-on** feature — no toggle, no menu group. (`show_duplicate_career_chips` / `map_screen_group` removed from data + loc; `_setting_on()` now always true.)
+- **#122 — duplicate chips no longer hover above the map / land in odd places.** Root cause: `_place_dup_token` placed the chip at the correct vanilla node+slot pose but then added a token-LOCAL nudge (`+0.45 x`, `+0.35 z`) + `0.72` down-scale to "distinguish" it. Because the CW map is viewed at an angle, a token-local `+z` becomes an up/away translation in world space — that's the float. The distinction was also unnecessary: each duplicate voter already owns a **distinct vanilla slot** (its peer ordinal), and vanilla's four authored slot poses already fan the chips around a node. Fix: place using **vanilla's exact `DeusMapScene._place_token` math and nothing else** (`node_local_pose × referenced_token_poses[slot]`) — flat, correctly positioned, same size as every other chip. Needs an in-game check with two players on the same career.
+
+## 0.7.193-dev — 2026-06-30 — Altar Reroll menu rename + #103 altar-collapse-animation fix
+
+- **Menu rename:** "Altar Reuse (reroll bad picks)" → **"Altar Reroll Options"**.
+- **#103 — altar model no longer stays collapsed after a single use (while uses remain).** A re-armed altar kept its glow (open_chest re-fires `lua_update_<chest_type>`) but its physical model stayed in the collapsed/looted pose. Root cause: vanilla `purchase()` fires `lua_update_collected` — the structure-collapse flow event — which is ONE-WAY (vanilla altars are single-use), so re-firing the arm event restores the hologram but not the structure. Fix mirrors the **Peregrinaje** mod's approach (prevention, not reversal): a new `DeusChestExtension.purchase` hook suppresses ONLY the `lua_update_collected` event when the altar will re-arm (uses remaining), so the structure never collapses. The final use still collapses normally. Everything else about `purchase()` (cost, purchased/looted state, loot RPC) is byte-identical, and the filter installs/restores under `pcall` so it **fails safe** — if it can't install, the altar collapses exactly as before (no regression to glow/cost). Needs an in-game check (altar visuals can't be validated offline).
+
+## 0.7.192-dev — 2026-06-30 — #205 follow-up: DEBOUNCE the settings re-sync (Apply-button burst)
+
+Completes the #205 fix for the **Apply button** case. The gut Mod Tweaker stages edits and commits the whole batch on Apply, firing `on_setting_changed` hundreds of times in one frame. The .191 supersede guard already prevented the *crash* (queue capped at one sync), but each of those calls still re-encoded all 489 settings to JSON inline → hundreds of redundant encodes in a single frame = a CPU **hitch**.
+
+- `on_setting_changed` now marks the synced registry dirty + arms a 0.5 s countdown instead of broadcasting inline; `mod.update` fires **one** encode + **one** 46-chunk sync after the burst settles. Applying a few hundred settings = one sync, no hitch.
+- `setup_run` still broadcasts immediately (single call at run start). The .191 supersede guard stays as belt-and-suspenders. Mid-run edits reach clients ~0.5 s later — harmless (clients apply on the next boon/altar roll).
+
+## 0.7.191-dev — 2026-06-30 — CRASH FIX: host settings-sync flood → reliable-queue overflow (#205)
+
+**Dual-log-confirmed host crash.** Editing ct settings rapidly (e.g. dragging sliders / toggling in the gut Mod Tweaker) in the Chaos Wastes keep with a client connected could crash the host. `mod._ct_broadcast_host_settings` is re-called by `on_setting_changed` on every synced-setting change, and each call enqueues the **full 489-key / 46-chunk** snapshot. The #97 fix paces the chunk *send rate* but doesn't stop rapid edits from **stacking** multiple full trains — ~4–5 stacked (204 chunks / 94 KB) overran Stingray's reliable send queue (~97 KB cap) → host wedged. Evidence: host log ended on `Reliable send queue overflow ... rpc_mod_user_data, count: 204`; the client received `46 chunks, 489 keys` at the same instant, then timed out 11 s later (`Rx age server 11.1s`).
+
+- **Fix:** `_ct_broadcast_host_settings` now **supersedes** pending host-settings chunks — it purges any un-drained `ct_sync_host_settings_chunk` entries from the paced FIFO before enqueuing a fresh snapshot. A new full snapshot makes the old one redundant, and the receiver discards never-completed sessions, so this is safe and caps the host-settings queue at one sync (~46 chunks) no matter how fast you edit. Graph-snapshot / peer-manifest chunks untouched.
+- Same crash CLASS as #97 / #129; distinct trigger (settings sync via Mod Tweaker edits, not hot-join graph sync).
+
+## 0.7.190-dev — 2026-06-30 — Disabled Curses menu: god-prefixed + renamed + alphabetized
+
+The "Disabled Curses" checkboxes now read `Disable: <God>: <Curse>` and are alphabetized by that label (god, then curse). God grouping is taken verbatim from vanilla `deus_map_populate_settings.lua` `all_curses` — including the non-obvious `skulking_sorcerer` = **Nurgle** (not Tzeentch).
+
+- Renamed **"Abundance of Life" → "Unquenchable Thirst"** (`disable_curse_abundance_of_life`, Slaanesh) — the engine codename is ironic (the curse drains life); "Unquenchable Thirst" is the in-game name.
+- All 14 curse labels gained their host-god prefix (Belakor treated as a god for prefixing); the two `[confirmed working]` QA tags moved to a trailing position so they don't break the alphabetical sort.
+- Reordered the menu widgets in `*_data.lua` to match (menu order is widget order, not loc order). No `setting_id` changed → saved values + all `disable_curse_*` reads are unaffected.
+
+## 0.7.189-dev — 2026-06-29 — HOTFIX: revert fatal 3-element starting_coins range (mod was dead, #164)
+
+**0.7.188-dev broke the entire mod.** Its `starting_coins` range `{ 0, 3000, 25 }` was rejected by VMF at options-init time — `'range' field must contain an array-like table with 2 elements` — which aborts ct's ENTIRE options registration, so the mod never finished loading (no `[ct:LOAD]`, every CW tweak gone) on every host. The .188 claim that "VMF ignores the extra range element" is false: a 3rd element is **fatal**, not ignored.
+
+- Reverted the range to `{ 0, 3000 }` (2 elements). The 25-coin snapping was never dependent on range[3] — it lives in `on_setting_changed` (chaos_wastes_tweaker.lua) and continues to work for ct's own menu.
+- `#164` (making the **gut Mod Tweaker** cross-mod slider snap to 25) is NOT solvable via a VMF range[3] — VMF refuses to store it, so gut could never read it back. That needs a different, gut-side mechanism; reopening #164 to track.
+
+## 0.7.188-dev — 2026-06-29 — starting_coins step 25 (gut Mod Tweaker reads range[3], #164) [REVERTED in .189 — broke the mod]
+
+`starting_coins` widget range is now `{ 0, 3000, 25 }`. The 3rd element is the step the gut Mod Tweaker reads (#164) so its slider snaps to 25 instead of 1. VMF ignores the extra range element. **← This was wrong; the 3-element range is fatal to VMF options init. See .189.**
+
+## 0.7.187-dev — 2026-06-29 — #58/#156: UNCONDITIONAL spawn census (Horn of Magnus "nothing spawns")
+
+The recurring intermittent bug where a Chaos Wastes Horn of Magnus / injected-adventure mission spawns with NO chests, NO altars, NO pickups was never diagnosable from a log: the only evidence was `has_pickup_settings` + the *configured* `cursed_chest_count`, never what ACTUALLY spawned. Closed that hole.
+
+- **`[ct-spawn-tally]` per-mission census (raw `printf`, always captured).** Counts every pickup that passes through `PickupSystem._spawn_pickup` — the single chokepoint for BOTH the spread pass (ammo/healing/potions/coins) and the guaranteed pass (Chests of Trials, Belakor altar, caskets) — keyed by final pickup_name. Emits ONE summary line ~8s after the host's `populate_pickups` (guaranteed-spawn pass is done by then): `level= injected= adv_base= diff= total= ZERO= | chests(cursed= weapon=) altar= coins= potions= | <full breakdown>`. `total=0` on an injected level is the unambiguous "this map is broken" signal. Wired into the EXISTING `_spawn_pickup` hook + the EXISTING `mod.update` drainer (no new hook, no second update owner) — marker `CT_SPAWN_TALLY_v1_unconditional_census`.
+- **`[populate_pickups]` line now also logs `injected=` + `adv_base=` + `diff_has_entry=`.** `injected=false` on a `magnus_*`/`military_*` CW level is the prime root-cause suspect: it means `on_injected_adventure_level()` returned false, so the whole adventure→deus bridge in `_can_spawn` is skipped and EVERYTHING is vetoed. `diff_has_entry=false` reproduces the vanilla "NO PICKUP DATA FOR CURRENT DIFFICULTY → USING SETTINGS FOR EASY" fallback. Together these say WHY in the same breath as the census says WHAT.
+- Both use raw `printf`, so they land on a VMF-logging-OFF host with no dump command and no debug toggle (unaffected by the .186 `_dbg`→`mod:debug` routing).
+
+## 0.7.186-dev — 2026-06-28
+- Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.7.185-dev (2026-06-28) — regression coverage for the two closed issues that lacked it (#100, #101)
+
+User audit caught that #100 (bot upgrade rarity) and #101 (Endless Bombs / Morgrim's) were closed without `_rt_register` checks (#117 already had one — `cursed_chest_unique_trials`, behavioral). Added marker-sentinel checks per the repo convention:
+- `CT_BOT_WEAP_OPENED_RARITY_MARKER` + check `bot_weap_opened_rarity_pre_bump` — guards the pre-bump `_opened_rarity` capture so bots can't regress to mirroring the bumped next-use rarity (one tier above host).
+- `CT_ENDLESS_BOMBS_MARKER` + check `endless_bombs_strip_on_expiry` — guards the strip-leftover-on-EXPIRY approach against reverting to the wrong consume-on-drink (.178) / continuous-eat (.179) forms that broke the intended potion+Morgrim's combo.
+- Verified `dbg_helpers_two_channel` still passes after the .183 `_dbg`→`printf` change (it asserts helper existence + safe no-op, not `mod:info`).
+
+## 0.7.184-dev (2026-06-28) — diagnostics sweep follow-up: /dump_* and /verify_* commands always print
+
+- The .183 sweep routed the manually-invoked `/dump_*` and `/verify_*` command handlers through `_dbg` (gated by `enable_debug_logging`) — wrong UX, since the user types those to diagnose and expects output immediately. Promoted 29 command-output lines (`/verify_grudge|belakor|coins|engineer_bombs|meta_ammo|altars`, `DUMP:grudge_marks|potions|boon_loc|boon_deep|buff_deep|mutators|traits|adv_names`, `/dump_journey`, `/dump_isha`) from `_dbg` → unconditional `pcall(printf, …)`, so they print on invocation regardless of the debug toggle.
+- Runtime `[belakor:diag]` traces (fire on game events, can repeat) stay gated `_dbg` — correct. Cumulative final state: 51 `pcall(printf)`, 126 `_dbg`, 0 `mod:info` calls.
+
+## 0.7.183-dev (2026-06-28) — diagnostics visibility sweep: kill the mod:info blind spot
+
+The user runs VMF's global mod-logging OFF, so EVERY `mod:info` line was invisible — including the mod's own `enable_debug_logging` path, so turning on debug logging did nothing visible.
+
+- **Keystone:** `_dbg` / `_dbg_alert` helpers now emit via `printf` instead of `mod:info` (still gated by `enable_debug_logging`). Turning on debug logging now actually produces captured output (39+ call sites unblocked at once).
+- **Sweep (all ~179 direct `mod:info` calls):** failure/error paths + one-shot load/version/RPC-schema/sync-handshake lines → unconditional `pcall(printf, …)` (~30, low-volume, always captured); all other diagnostics → routed through `_dbg` (gated, now-visible, silent when debug off, so no spam in friends' logs). 0 real `mod:info` calls remain (1 match is a comment). `mod:echo` (in-game chat) untouched.
+
+## 0.7.182-dev (2026-06-28) — #156 diagnostic: make the "no pickups" probe VISIBLE (printf, was mod:info)
+
+- #156 (Horn of Magnus / `magnus_belakor_path1` sometimes spawns zero pickups when injected into CW): the existing `[populate_pickups] … has_pickup_settings=…` defensive diagnostic used `mod:info`, which is suppressed because the user runs VMF mod-logging OFF — so it logged 0 times and the recurring bug (first seen 2026-05-22) was never diagnosable. Converted to **unconditional `printf`** (once per mission load, host-side), added `difficulty=`. No dump commands / debug toggle needed; the next host-side repro will auto-log `has_pickup_settings=false` (the smoking gun: vanilla `populate_pickups` early-bails on nil `pickup_settings`). Cause-confirm before fixing — see #156.
+
+## 0.7.181-dev (2026-06-28) — #101 follow-up: un-stick the bomb pose after stripping
+
+- When the leftover Morgrim's was stripped while the player was *wielding* it, destroying the grenade slot left them stuck in the bomb/throw pose on an empty slot (couldn't switch weapons). Now: capture the wielded slot before the strip, and if it was `slot_grenade`, interrupt the weapon action (`CharacterStateHelper.stop_weapon_actions`) and `wield("slot_melee")` (slot 1). No swap if they were already on melee/ranged at expiry.
+
+## 0.7.180-dev (2026-06-28) — #101 REDONE correctly: strip leftover Morgrim's on potion EXPIRY (not consume on drink)
+
+The whole approach was wrong (mine and the original). The intent: Endless Bombs is MEANT to work with Morgrim's — players save a Morgrim's to throw during the potion. The only exploit is the leftover: don't throw your last Morgrim's before the potion ends and it persists (duplicated) for reuse.
+
+- **Reverted** the v0.7.178 drink-time consume AND the v0.7.179 continuous mid-potion consume — both wrongly deleted Morgrim's and broke the intended combo.
+- New behavior: at DRINK, the apply-hook only RECORDS a flag (`buff.ct_endless_had_morgrim`) if you held a Morgrim's; Morgrim's stays fully usable for the whole potion. At EXPIRY (`remove_deus_potion_buff`, the shared deus-potion remove func, flag-gated so other potions are untouched) any leftover `holy_hand_grenade` in `slot_grenade` is removed. Markers: `[endless-bombs] drink: … had_morgrim=…` / `[endless-bombs] potion ended -> stripped leftover Morgrim's`.
+- Setting renamed to "No Morgrim's Carry-Over (Endless Bombs)" + tooltip rewritten to match.
+
+## 0.7.179-dev (2026-06-28) — #101 continuous-consume (drink-time consume wasn't enough)
+
+### #101 — Morgrim's now stays consumed for the whole Endless Bombs duration
+- v0.7.178 fixed the drink-time consume (log-proven: slot -> grenade_frag_01), but the player REACQUIRES Morgrim's ~1.5s later while the potion is still active (log `console-2026-06-28-00.50.57`: L11576 consume -> L11605 grenade slot = holy_hand_grenade again; 1 human + 3 bots, bots/pickups re-supplying), so it returns as the endless bomb = the "repeated use" still happening.
+- Added a second hook on the buff's per-tick `update_pockets_full_of_bombs_buff`: while Endless Bombs is active and the toggle is on, any `holy_hand_grenade` that re-enters `slot_grenade` is destroyed (vanilla's own refill then restores `frag_grenade_t1`). Net: you cannot hold/throw Morgrim's at all for the potion's duration — it's always a frag. Only acts when Morgrim's is present (no per-frame churn otherwise). Marker `[endless-bombs] re-acquired Morgrim's during Endless Bombs -> destroyed slot_grenade`.
+- NOTE (separate, not yet addressed): bots passing/dropping Morgrim's to the player mid-potion is itself odd behavior — flagged for its own investigation (bot-aid give vs `drop_item_on_ability_use` boon).
+
+## 0.7.178-dev (2026-06-28) — #101 Endless-Bombs-consumes-Morgrim slot fix; #118 trait gate corrected to white-only; #117 closed
+
+### #101 — Endless Bombs now actually consumes Morgrim's Bomb
+- The consume hook on `apply_pockets_full_of_bombs_buff` checked `slot_level_event`, but Morgrim's Bomb (`holy_hand_grenade`) lives in **`slot_grenade`** (`deus_blessing_settings.lua:85`). `slot_level_event` is empty at drink time, so the branch never fired. **Log-validated** (`console-2026-06-28-00.11.23…log`): line 14995 `[SharedState] grenade:…= holy_hand_grenade` (Morgrim's in the grenade slot), line 15113 `[endless-bombs] … level_event_item=nil -> consume_morgrim=false` (old check missed it), lines 15115+ `wt … slot=slot_grenade key=holy_hand_grenade` (kept after drinking = the "repeated use" bug).
+- Fix: scan `slot_grenade` first, `slot_level_event` as fallback, and `destroy_slot` whichever holds `holy_hand_grenade`. Vanilla `update_pockets_full_of_bombs_buff` then refills `slot_grenade` with `frag_grenade_t1` — Morgrim's eaten, normal endless (frag) bombs remain. Diagnostic relabeled `morgrim_in=<slot>`.
+
+### #118 — trait gate corrected: only WHITE (`plentiful`) starters stay trait-less
+- v0.7.177 over-excluded: it gated `plentiful` OR `common`, blocking traits on green (`common`/"uncommon") weapons. Per user, green is uncommon and SHOULD get traits. Gate now bails only on `plentiful` (white starting tier); `common`/`rare`/`exotic`/`unique` are all trait-eligible (`override_traits_in_result`).
+
+### #117 — closed (user-confirmed working in v0.7.177-dev)
+
+## 0.7.177-dev (2026-06-27) — bug batch: traits (#118/#119), Chest-of-Trials uniqueness (#117), chest revive (#116), bomb-boon cooldown (#120), grudge-mark ban (#107); #102/#103 + #122 deferred with plans
+
+Six fixes + two researched deferrals. Build: clean (3 bundles).
+
+### #118 — "Any Trait on Any Weapon" no longer gives traits to common/starting weapons
+- `chaos_wastes_tweaker_dev.lua` `override_traits_in_result` (the single trait-injection chokepoint): added a rarity gate so the tier-by-rarity injector bails when the rolled rarity is `plentiful` or `common`. White/starting weapons stay trait-less regardless of which trait toggle is active (vanilla only grants traits at exotic/unique; this keeps the low tiers vanilla-clean).
+
+### #119 — "Trait Tier by Rarity" no longer restricts by weapon TYPE (melee/ranged only)
+- Rewrote `get_tier_filtered_combos`: instead of drawing from the weapon's OWN `baked_trait_combinations` (already narrowed by `compatible_weapon_list` — a weapon-type restriction), it now draws from the full **melee** or **ranged** trait UNION (classified at runtime from `WeaponTraits.combinations` deus pools), gated only by the rolled rarity tier (`TRAIT_RARITY_POOL`) and the ban list. A weapon is no longer confined to its own type's trait subset; fire/heat staves draw from the whole ranged pool too. New helper `mod._ct_get_trait_class_pools` (stored on `mod` to respect the 200-locals chunk cap). Regression test `fire_weapon_tier_fallback_nonempty` replaced by `tier_by_rarity_class_union_ranged`.
+
+### #117 — Chest of Trials: unique trial each time, now ALWAYS-ON + guaranteed
+- Removed the `cursed_chest_unique_trials` toggle (widget + loc deleted; behavior forced on).
+- Added a second, deterministic uniqueness layer: a `TerrorEventMixer.start_event` wrapper force-rotates each `cursed_chest_prototype` `inject_event` block's `event_name_list` to a single pick that DIFFERS from that block's previous pick this mission (`mod._ct_cot_rotate_pick` + per-block `_ct_cot_block_last`, reset per mission/run). The existing seed-perturbation layer (now unconditional) still varies sub-challenges. Host-authoritative, template save/restore around the vanilla call. Marker bumped to `cot_unique_trials:force_rotate_event_name_list_v0.7.177`.
+
+### #116 — "Revive Team on Chest Completion" now actually revives
+- Rewrote the `DeusCursedChestExtension._set_state` (OPEN) body to port general_tweaker's proven per-player respawn primitive (`_gt_host_respawn`) across every party slot: awaiting-rescue (hanging) → `StatusUtils.set_respawned_network`; knocked-down → `StatusUtils.set_revived_network`; dead/queued → zero `respawn_timer`. The prior body never handled awaiting-rescue players (the gap that made it look dead) and leaned solely on `force_respawn_dead_players` (kept as a belt-and-suspenders catch-all). Verbose `mod:info` spam replaced with raw `printf` (lands on a logging-OFF host).
+
+### #120 — "Bomb Boon Cooldown" now takes effect
+- The old implementation mutated the SOURCE `DeusPowerUpTemplates` cooldown table, but the runtime buff resolves `buff.template` from a registered copy (same copy-vs-source trap that forced the reckless_swings dual-patch) — so it did nothing. Added a hook on the live `drop_item_on_ability_use` proc that, after vanilla runs, overrides the `drop_item_on_ability_use_cooldown` buff's duration to the user's configured interval (works for intervals shorter OR longer than vanilla 180/180/120; 0 = vanilla). Host-synced interval.
+
+### #107 — Be'lakor Shadow Lieutenant now honors the grudge-mark ban list
+- Extended the existing `TerrorEventUtils.apply_breed_enhancements` diagnostic hook to FILTER: on the host it strips any enhancement whose `.name` maps to a banned `ban_grudge_mark_<name>` setting before vanilla applies. Because this is the universal apply chokepoint, one filter covers the SL's hardcoded `POSSIBLE_SHADOW_LIEUTENANT_GRUDGE_MARK_NAMES` pool (which bypasses `_G.BossGrudgeMarks`), the random boss roll, and `grudge_mark_commander`. `BreedEnhancements[key].name == key == ban setting suffix` (direct map); `base` is never banned. Diagnostic printf retained (`applied=[...] banned_stripped=[...]`).
+
+### #102/#103 — Altar exotic-escalation + "used up" mesh (DEFERRED with concrete plan)
+- Left a source-grounded `TODO #102/#103:` block at the `_setup_rarity` hook. The escalation is the rarity-bump that keeps the altar lit; the clean decouple (remove bump; relax `can_be_unlocked` + `update_upgrade_chest_color` from `<=` to `<` for re-armed altars so same-rarity re-roll is allowed and lit) is well-understood but this altar re-arm path has regressed across 6 versions and is unverifiable offline. Not shipped blind.
+
+### #122 — Duplicate-career chips mis-position (DEFERRED with concrete plan)
+- Left a `TODO #122:` block in `_ct_dup_vote_chips.lua` detailing the borrow-an-unused-character-token + vanilla-`_place_token` + re-skin approach. Networked 3D map-scene UI with existing regression coverage; needs a live 2-same-career lobby to verify.
+
+## 0.7.176-dev (2026-06-26) — #134 DIAGNOSTIC: collectible → Pilgrim's Coin spawn probe (instrument, NOT a fix)
+
+DIAGNOSTIC ONLY — Ravaged Art (`painting_scrap`) + Loot Dice (`loot_die`) + lore pages (`lorebook_page`) appear in-mission on CW adventure maps instead of converting to Pilgrim's Coin (#134). All three conversion paths gate on `on_injected_adventure_level()` (deus run AND `adventure_base_from_level_key(level)` recognised), so the prime suspect is that gate being false on the affected maps.
+
+- One printf `[ct-probe:collectible]` line per collectible reaching the final spawn (`PickupSystem._spawn_pickup` — added a log call inside the EXISTING hook, no new hook). Fields: `name spawn_type on_adv in_coin_set deus level adv_base`. The gate breakdown (`on_adv`/`deus`/`adv_base`) shows WHY it isn't converting; `spawn_type` shows HOW it was spawned.
+- Bounded 80 lines/session, pcall-guarded, raw printf (survives mod-logging-off). Changes no conversion logic. (Issue #134)
+
+## 0.7.175-dev (2026-06-26) — revert #132/#134/#136 diagnostics (KEPT the #133 cooldown wording)
+
+Reverted the #132/#134/#136 printf diagnostics per user request — the chest probes already exist (the Issue #60 `[ct-probe]` budget/spawner probes are untouched), and the weekly-god / mission-divergence instrumentation is a separate concern. Removed:
+- the `[ct-probe:chestcount]` hook (`DeusCursedChestExtension.extensions_ready`, #132/#60),
+- the `[ct-probe:collectible]` probe folded into `PickupSystem._spawn_pickup` plus its comment header (#134),
+- the `[ct-probe:mission]` hook (`GameModeManager.gm_event_round_started`, #136),
+- the per-mission counter resets these added in `DeusRunController.setup_run`, `DeusMechanism._transition_next_node`, and `PickupSystem.populate_pickups` (`_ct_chestcount_n` / `_ct_collectible_probe_n`), and the `_ct_chestcount_cap` / `_ct_chestcount_level` stash in the populate probe. All four were implicit globals with no `local` declaration, so no orphan locals remain.
+
+**KEPT the #133 Manann's Tempest "8 second cooldown." description line** (conditional on `tweak_manann_tempest_cooldown`) — untouched. Surrounding lifecycle function bodies restored intact. No behavior change beyond removing the log lines. `MOD_VERSION` `0.7.174-dev` → `0.7.175-dev`.
+
+## 0.7.174-dev (2026-06-26) — #133 Manann's Tempest cooldown wording (conditional) + #132/#134/#136 diagnostics (instruments, NOT fixes)
+
+One small text fix plus three printf diagnostics. The diagnostics are **instruments only** — they do not fix #132/#134/#136; they exist so the next session can read the actual numbers/tags from the user's log.
+
+### #133 — Manann's Tempest description reflects the 8-second-cooldown tweak (text fix)
+- `chaos_wastes_tweaker_dev.lua` (`_G.Localize` hook, ~3990) — when `tweak_manann_tempest_cooldown` is **active**, the boon description `description_ct_boon_manann_tempest` now appends a second line **`8 second cooldown.`**; when the tweak is **off** the description stays **EXACTLY** vanilla. Conditional via `effective_setting` (host-synced) and resolved live on each tooltip render — same pattern as this file's Khaine's Fury / Miracle descriptions. No `%` in the appended text. The cooldown itself is unchanged (`ProcFunctions.chain_lightning` hook, `MANANN_TEMPEST_COOLDOWN_S = 8.0`). NOTE: the tweak's data-file `default_value` is `false` (off) in this build, so the line shows only after the user enables the tweak. Awaiting the user's in-game eyeball.
+
+### #132 — DIAGNOSTIC: actual cursed-chest count per mission (also #60)
+- New hook `DeusCursedChestExtension.extensions_ready` (distinct method from the existing `_set_state` hook — VMF-clean, lint-confirmed) increments a per-mission tally and emits **`[ct-probe:chestcount] spawned=N cap=M level=L is_server=B`** for every cursed chest, whichever path spawned it (capped conversion OR baked spawner). The highest `spawned=N` for a level is the ground-truth chest count — compare to `cap` to confirm the Khazukan over-spawn (expect `spawned=5 cap=3`). Tally resets in `populate_pickups` (host) + the two `_ct_cursed_chest_seq` reset sites. **Cap logic unchanged.**
+
+### #134 — DIAGNOSTIC: adventure-collectible → Pilgrim's Coin conversion
+- The user sees **Loot Dice + Ravaged Art** in-mission on CW-injected adventure maps instead of Pilgrim's Coin. Added a bounded, pcall-guarded probe **inside the existing `PickupSystem._spawn_pickup` hook** (no new hook) that, inside a CW run, logs each adventure collectible as it spawns: **`[ct-probe:collectible] tag=… level=… deus=yes adv_base=… on_adv=… in_coin_set=… converted=yes/no spawn_type=…`**. `tag` ∈ {`loot_die`,`lorebook_page`,`painting_scrap`}. This reveals WHY `loot_die` isn't converting (e.g. `on_adv=false` because `adventure_base_from_level_key` didn't match the level permutation, or it spawned via a path that bypasses this hook) and confirms `painting_scrap` (Ravaged Art) is NOT name-converted — it relies on the `_can_spawn` spawner-eligibility mapping (`painting_scrap` spots → `deus_soft_currency`). Per-mission cap of 40 lines; counter resets alongside the chest tally. **Conversion/eligibility logic unchanged.**
+
+### #136 — DIAGNOSTIC: host/client CW mission divergence
+- New hook `GameModeManager.gm_event_round_started` (fires once per peer when the round begins, level fully loaded — VMF-clean) emits **`[ct-probe:mission] level=… is_server=… deus=yes/no node=… base_level=… node_level=… curse=… theme=… god=… injected=…`** on BOTH host and client, so a host+client log pair can be diffed to see where the resolved level/node diverge. Reuses `get_current_node_key`/`get_current_node` + `adventure_base_from_level_key` / `AdventurePool.IS_INJECTED_ADVENTURE_LEVEL`. **Diagnostic only.**
+
+### Files
+- `chaos_wastes_tweaker_dev.lua` — `MOD_VERSION` `0.7.172-dev` → `0.7.174-dev`; #133 conditional description append; #134 `[ct-probe:collectible]` probe folded into the existing `_spawn_pickup` hook; 2 new diagnostic hooks (`DeusCursedChestExtension.extensions_ready`, `GameModeManager.gm_event_round_started`); per-mission `_ct_chestcount_n` / `_ct_collectible_probe_n` resets beside the existing `_ct_cursed_chest_seq` resets; cap/level stash in the `populate` probe.
+
+---
+
+_The 0.7.173-dev notes below are superseded by 0.7.174-dev above (same build cycle — 0.7.173-dev was uploaded before the #134 diagnostic was added); retained for history._
+
+## 0.7.173-dev (2026-06-26) — #133 Manann's Tempest cooldown wording (conditional) + #132/#136 diagnostics (instruments, NOT fixes)
+
+One small text fix plus two printf diagnostics. The diagnostics are **instruments only** — they do not fix #132 or #136; they exist so the next session can read the actual numbers from the user's log.
+
+### #133 — Manann's Tempest description reflects the 8-second-cooldown tweak (text fix)
+- `chaos_wastes_tweaker_dev.lua` (`_G.Localize` hook, ~3990) — when `tweak_manann_tempest_cooldown` is **active**, the boon description `description_ct_boon_manann_tempest` now appends a second line **`8 second cooldown.`**; when the tweak is **off** the description stays **EXACTLY** vanilla. Conditional via `effective_setting` (host-synced, so clients show the host's toggle state) and resolved live on each tooltip render — the same pattern this file already uses for the Khaine's Fury / Miracle descriptions. No `%` in the appended text, so no `%%` escaping needed. The cooldown itself is unchanged (enforced by the `ProcFunctions.chain_lightning` hook, `MANANN_TEMPEST_COOLDOWN_S = 8.0`). NOTE: the tweak's data-file `default_value` is `false` (off) in this build — the appended line therefore shows only after the user enables the tweak. Awaiting the user's in-game eyeball.
+
+### #132 — DIAGNOSTIC: actual cursed-chest count per mission (also #60)
+- New hook `DeusCursedChestExtension.extensions_ready` (distinct method from the existing `_set_state` hook — VMF-clean, lint-confirmed) increments a per-mission tally and emits **`[ct-probe:chestcount] spawned=N cap=M level=L is_server=B`** for every cursed chest, whichever path spawned it (capped conversion OR baked spawner). The highest `spawned=N` for a level is the ground-truth chest count — compare to `cap` to confirm the Khazukan over-spawn (expect `spawned=5 cap=3`). Tally resets in `populate_pickups` (host) + the two `_ct_cursed_chest_seq` reset sites (`setup_run`, `_transition_next_node`); cap+level stashed from the existing `populate` probe. Raw `printf` (pcall-guarded) so it lands on a logging-OFF host. **Cap logic unchanged — diagnostic only.**
+
+### #136 — DIAGNOSTIC: host/client CW mission divergence
+- New hook `GameModeManager.gm_event_round_started` (fires once per peer when the round begins, level fully loaded — VMF-clean) emits **`[ct-probe:mission] level=… is_server=… deus=yes/no node=… base_level=… node_level=… curse=… theme=… god=… injected=…`** on BOTH host and client, so a host+client log pair can be diffed to see exactly where the resolved level/node diverge. Reuses the existing node accessors (`get_current_node_key`/`get_current_node`) + `adventure_base_from_level_key` / `AdventurePool.IS_INJECTED_ADVENTURE_LEVEL`. Raw `printf` (pcall). **Diagnostic only.**
+
+### Files
+- `chaos_wastes_tweaker_dev.lua` — `MOD_VERSION` `0.7.172-dev` → `0.7.173-dev`; #133 conditional description append in the `Localize` hook; 2 new diagnostic hooks (`DeusCursedChestExtension.extensions_ready`, `GameModeManager.gm_event_round_started`); per-mission `_ct_chestcount_n` reset added beside the existing `_ct_cursed_chest_seq` resets; cap/level stash in the `populate` probe.
+
+## 0.7.172-dev (2026-06-25) — IMPLICIT crash guard: Mathlann's Storm-Strike AoE cap @ 40 targets (Issue #129)
+
+**Host-crash fix.** A CLIENT using **Mathlann's Storm-Strike** (`boon_careerskill_01`, vanilla CW — "Your Career Skill also calls down lightning on nearby enemies") crashed the HOST. The boon's `lightning_adjecent_enemies` proc (`morris_buff_settings.lua:3744`) broadphase-queries EVERY enemy in radius and per-enemy does `add_damage_network` + a `static_blade` `create_explosion` + a beam fx. Against an enemy_tweaker `huge_shields` blob (n=121) the cascading per-enemy RPCs flooded the host **reliable send queue** (`rpc_add_damage`×2239 + `rpc_add_buff`×1007 → overflow 98152) → client `broken connection: authentication_denied` → host crash. (NOT Manann's Tempest, which is chain_lightning capped at 5 — different boon/proc/god.)
+
+- **IMPLICIT (no toggle)** — a host crash must not be leave-on-able. Caps the proc's main broadphase sweep to **40 targets/cast** by temporarily wrapping `AiUtils.broadphase_query` for the duration of the proc (clamps only the first/main query; the per-enemy explosions' own queries are untouched), then restoring it — no permanent hook on the hot broadphase fn, network-heavy damage loop left vanilla. (Tuned up from an initial 15: the `n=121` in the log was enemy_tweaker's horde-*composition* size, not the count actually in the lightning radius, so 40 preserves a big AoE while still bounding the per-enemy `static_blade`-explosion cascade that is the real RPC amplifier.)
+- **Manann's Tempest does NOT cascade off Storm-Strike** (investigated 2026-06-25): Manann's chain_lightning is crit-gated (*"Critical strikes trigger a chain lightning"*) and Storm-Strike's lightning + its `static_blade` explosion are non-crit (`is_critical_strike = false`, morris_buff_settings.lua:3764), so it can't trigger Manann's — and Manann's is doubly bounded (5 targets + 8s cooldown) regardless. The crashing client owned both boons but they don't interact; the amplifier is Storm-Strike's own explosion AoE, which the 40-cap bounds (40 lightning hits → ≤40 explosions).
+- **Defensive logging** (`printf`, survives mod-logging-off): `[ct:mathlann_guard]` on install, on each cap-engage (`capped N -> 15`), and on any proc error (with guaranteed broadphase restore).
+- **Every peer needs this build:** the proc is `is_local` (runs on the boon OWNER), so the client holding the boon is the one that must be capped — an un-updated client still floods the host.
+- New hook `ProcFunctions.lightning_adjecent_enemies` (no collision — distinct from the `chain_lightning` Manann's Tempest hook). Cap constant `MATHLANN_STORMSTRIKE_CAP = 40`, tunable; the defensive log surfaces real-world counts for tuning.
+
+## 0.7.168-dev (2026-06-25) — Ship: friends-only dev release (verified)
+
+Friends-only dev ship of the v0.7.167-dev build. Verification passed (correctness, regression, duplicate-hook lint); promoting to the friends-only `ct_dev` Workshop item. No behavioral change vs v0.7.167-dev — this is a version-bump ship build (`MOD_VERSION` `0.7.167-dev` → `0.7.168-dev`) so the in-game load echo confirms the deployed bundle.
+
+### Files
+- `chaos_wastes_tweaker_dev.lua` — `MOD_VERSION` `0.7.167-dev` → `0.7.168-dev`. No other code change.
+
+## 0.7.167-dev (2026-06-24) — Ship: #60 Beacons baked-spawner cursed-chest cap + COMPLETE unconditional `[ct-probe]` chest-count/trial instrumentation (now covers the conversion path)
+
+Ships the Issue #60 fix (native baked `deus_cursed_chest` spawners — the Beacons path — now counted against the same per-mission `cursed_chest_count` budget the tome/grim conversion path uses) together with the final piece of the logging-OFF-host instrumentation. Develops on v0.7.166-dev with no behavioral change beyond completing the probe coverage.
+
+### Why this build (the instrumentation gap that was held)
+- The unconditional `[ct-probe]` printf coverage already landed on the **baked-cursed-chest spawner path** (`baked_cursed_chest=ALLOW/SUPPRESS`, the Beacons path in `_spawn_guaranteed_pickup`) plus the `populate` budget probe and the Chest-of-Trials `cot_activation` / `cot_seed_applied` trial probes. But the **tome/grimoire → cursed-chest CONVERSION path** (how termite/bastion/vanilla CW maps actually spawn their cursed chests — they ship NO baked `deus_cursed_chest` spawners) only logged via the GATED `_dbg` helper. On a host with VMF mod-logging OFF (the tester's setup), you got the configured count from `populate` but could count the ACTUAL spawned chests only on Beacons — half-blinding verification on every conversion-path map.
+
+### Fix
+- **New unconditional probe (`chaos_wastes_tweaker_dev.lua:~5149`).** In the existing tome/grim → cursed-chest conversion branch of `_spawn_guaranteed_pickup` (the `_chest_conversions_this_level < cap` path that increments the counter and spawns a `deus_cursed_chest` from a book pedestal), added one raw `printf("[ct-probe] conversion_cursed_chest=ALLOW kind=%s level=%s cap=%d count_now=%d spawned=%s", ...)` line, pcall-guarded, mirroring the baked-spawner `ALLOW` probe directly above. Now `[ct-probe]` `ALLOW` (baked) + `conversion_cursed_chest=ALLOW` lines together give the ACTUAL total cursed-chest count on EVERY map type from a logging-OFF host. Bounded per-spawn (fires at most `cap` times per mission load, never per-frame).
+- **#60 baked-spawner cap fix intact.** `Unit.get_data(spawner_unit, "deus_cursed_chest")` branch in `_spawn_guaranteed_pickup` still routes native baked cursed-chest spawners through the same `_chest_conversions_this_level < cap` budget (ALLOW under cap → vanilla spawn + increment; SUPPRESS over cap → skip). Unchanged.
+- **All prior probes untouched** — `populate` budget probe (per-mission), `baked_cursed_chest=ALLOW/SUPPRESS` (per-spawner), `cot_activation` + `cot_seed_applied` (per-chest trial). All raw `printf`, all bypass the VMF mod-logging toggle.
+- **No new hooks** (folded into the existing `_spawn_guaranteed_pickup` hook). **No `spawn_weighting` touched.** Duplicate-hook lint clean.
+
+### Files
+- `chaos_wastes_tweaker_dev.lua` — `MOD_VERSION` `0.7.166-dev` → `0.7.167-dev`; +1 unconditional `[ct-probe] conversion_cursed_chest=ALLOW` line in the conversion branch of `_spawn_guaranteed_pickup`.
+
+## 0.7.166-dev (2026-06-24) — Ship: altar "used-up visual fires on use 1" fix (verified) — re-armed reusable altars now stay lit/available, the looted mesh shows ONLY after the final use
+
+This is the shipping build of the altar used-up-visual fix developed across v0.7.157-dev (probes) → v0.7.158-dev (upgrade-altar rarity bump) → v0.7.159-dev (the root-cause re-fire). All three verifications (correctness, regression, duplicate-hook lint) passed; promoting to a friends-only dev release. No code changes vs v0.7.159-dev beyond the MOD_VERSION bump — this entry consolidates the root cause + fix for the shipped feature.
+
+### Root cause
+- For a REUSABLE altar (Issue #61, configurable max uses), vanilla `DeusChestExtension.purchase()` (`deus_chest_extension.lua:308`) fires the `lua_update_collected` flow event — the used-up/looted MODEL transition — on EVERY open, BEFORE ct's `open_chest` post-hook runs. The post-hook's re-arm path clears `_is_purchased` / `_animation_state` and retracts the peer from the networked `collected_by_peers` (v0.7.151-dev), which stops vanilla `update()` (`:175-182`) RE-asserting the looted state — but it does NOT un-fire the already-emitted flow event. So the flow graph stayed parked on the collected/looted mesh, and a re-armed altar (uses < max) read as "used up" after use 1 even though it was still usable.
+- Separately, for UPGRADE altars the dark/disabled look is driven by `update_upgrade_chest_color` (`:211-243`) firing `lua_interact_disabled` once the wielded weapon's rarity matches the altar's rolled `_rarity` — and the vanilla re-roll keeps the SAME rarity (constant per-`go_id` seed), so the altar stayed genuinely unusable, not just cosmetically dark.
+
+### Fix (source-verified)
+- **Re-fire on re-arm (`chaos_wastes_tweaker_dev.lua:6173-6198`).** In the existing `open_chest` post-hook re-arm branch (uses < max), deterministically re-fire `lua_update_<chest_type>` — the SAME event vanilla emits at `:142` when it re-rolls — so the re-armed altar leaves the used-up look IMMEDIATELY. The depleted (else) branch deliberately re-fires NOTHING, leaving vanilla's `lua_update_collected` in place, so the used-up visual now shows ONLY after the final use. Per-peer: each peer runs its own post-hook + its own `update()` derivation off the host-authoritative `collected_by_peers`, so host and clients both flip available→used-up only when the host's configured max uses are spent. `Unit.flow_event` is pcall-guarded behind a `Unit.alive` + `type(_chest_type) == "string"` guard per the repo engine-fatal rule.
+- **Upgrade-altar rarity bump (`:6216-6234`, v0.7.158-dev).** On a re-armed UPGRADE altar, bump `_rarity` strictly above the just-upgraded wielded weapon (capped at `unique`), re-fire `lua_update_<bumped>` so the hologram/glow reflects the new tier, and clear `_prev_update_upgrade_chest_color_event` so `update_upgrade_chest_color` re-evaluates to a usable, lit state instead of staying on the stale `lua_interact_disabled`.
+- **No new hooks** (folded into the existing `open_chest` post-hook and the read-only `DeusChestExtension.update` probe). **No `spawn_weighting` touched.** Duplicate-hook lint clean.
+
+### Verifications (all PASS)
+- **Correctness** — re-armed reusable altar leaves the used-up mesh on the same tick it re-arms; depleted altar keeps the looted mesh; upgrade altar relights at a higher tier.
+- **Regression** — `/ct_regression_test` source-pattern checks `altar_visual_probe_present` (`CT_ALTAR_VISUAL_PROBE_MARKER`), `upgrade_altar_rarity_bump` (`CT_UPGRADE_ALTAR_RARITY_BUMP_MARKER`), and `altar_reuse_hook_on_open_chest` all pass.
+- **Duplicate-hook lint** — PASS (0 duplicate-hook); the re-fire lives inside the single consolidated `open_chest` post-hook.
+
+### Files
+- `chaos_wastes_tweaker_dev.lua` — `MOD_VERSION` `0.7.165-dev` → `0.7.166-dev`. No other code change vs v0.7.159-dev — this is the shipping consolidation of the already-developed fix.
+
+## 0.7.165-dev (2026-06-24) — Robust coin-starvation fix (Abundance-of-Life curse): coins now GUARANTEED via a partitioned coin-only spawner reservation, not just a count ratio
+
+The prior fix (0.7.164-dev lowered injected-adventure `deus_potions` counts in `_adventure_pool.lua`) only *reduced* the odds of coin starvation under the Abundance-of-Life curse — it did not *guarantee* coins. This build replaces the count-only approach with a partitioned spawner reservation that mirrors vanilla's native type-partition, so coins are guaranteed regardless of pickup-type iteration order or the ×3 potion curse.
+
+### Root mechanism (source-verified)
+- On injected adventure levels, ct's `PickupSystem._can_spawn` hook DELIBERATELY un-partitions vanilla's spawner types: it grants `deus_potions`, `deus_soft_currency`, AND `deus_weapon_chest` eligibility on the SAME generic primary spawners (vanilla partitions potion-spawners vs `painting_scrap`→coin-spawners, so vanilla never starves coins).
+- `PickupSystem._spawn_spread_pickups` (`pickup_system.lua:467-633`) draws ALL pickup types from ONE shared `spawners` array, in `for pickup_type in pairs(pickup_settings)` order — which is **non-deterministic in Lua 5.1** — and permanently `table.remove`s each consumed spawner (`:621-626`) before the next type runs.
+- The Abundance-of-Life curse multiplies ONLY `deus_potions` ×3 (`mutator_curse_abundance_of_life.lua:7-11`, applied by `MutatorHandler.pickup_settings_updated_settings:544-560`); coins stay flat. So when potions iterate first, the ×3 demand can drain the shared pool before `deus_soft_currency` is reached → coins fall into silent `spawn_debt` (`pickup_system.lua:629`) → no coins.
+
+### Why a count ratio can't guarantee
+Allocation is per-section greedy in non-deterministic type order, not proportional to requested counts. Lowering potion counts only lowers the *probability* that a potions-first pass exhausts a finite spawner pool ahead of coins.
+
+### Robust fix — coin-only spawner reservation (option a: re-partition, closest to vanilla)
+- `chaos_wastes_tweaker_dev.lua`, in the existing `_can_spawn` hook: a deterministic ~40% slice of the primary (and secondary) spawners is reserved COIN-ONLY by DENYING `deus_potions` / `deus_weapon_chest` eligibility on them. `deus_soft_currency` is never denied by the reservation. A spawner is only `table.remove`d when a pickup that `_can_spawn` ALLOWED consumes it, so a reserved spawner survives every potion iteration regardless of `pairs()` order or the curse ×3 — it is still present and coin-eligible when `deus_soft_currency` iterates. **This is what makes coins guaranteed, not merely more likely.**
+- The reserved set is **rank-based**, rebuilt once per `populate_pickups` pass on the host (the spawner lists are fully populated by then — `pickup_gizmo_spawned` fires per-spawner at level spawn, before populate). Ranking by a stable per-spawner hash of `percentage_through_level` guarantees a floor of `max(1, ceil(0.4·N))` reserved spawners for ANY non-empty pool (closing the ~4% small-pool hole a pure independent per-spawner hash would leave), never reserves the whole pool, and spreads the reserved spawners uniformly across the level (the hash decorrelates from position, so coins find a reserved spawner in whatever section they iterate). A pure-hash fallback covers any path that reaches `_can_spawn` before the set is built.
+- The reservation's *effect* stays injected-adventure-only: the entire `_can_spawn` deny block (including the reservation branches) is already behind `if not on_injected_adventure_level() then return ok end`, so real CW / real Adventure / clients are untouched (their native spawner partition already protects coins). The rank-based set is rebuilt on the host every `populate_pickups` (not re-gated at the rebuild site — that file-local function is defined later in the file and a lexical forward reference would resolve to a nil global), which is inert on non-injected levels because the set is simply never consulted there.
+- **No `spawn_weighting` touched** (the `[0,1)` sampler-sum crash class does not apply — only `_can_spawn` eligibility and request counts change). **No new hooks** (folded into the existing `populate_pickups` and `_can_spawn` hooks — duplicate-hook lint clean).
+
+### Counts reconciled
+With the reservation now providing the guarantee, the injected-adventure counts in `_adventure_pool.lua` are rebalanced from the defensive 18/6 potion ratio back to a normal-feeling 30 primary / 10 secondary potions (coins stay 30 / 10). The ×3 curse still triples potions, but they are now confined to the unreserved ~60% of spawners, so they can't starve coins. Non-cursed injected levels feel normal again.
+
+### New `/ct_regression_test` check
+- **`coin_reservation_partition`** — asserts the reservation is wired (`mod._ct_coin_reservation_test` + the rank-based `mod._ct_rebuild_coin_reserved_set` / `mod._ct_clear_coin_reserved_set` handles), the reserved fraction is in `(0,1)`, the per-spawner hash is deterministic, and over a representative spread of `percentage_through_level` values the reservation is a PROPER subset (neither empty — which would void the guarantee — nor total — which would starve potions/altars).
+
+### Files
+- `chaos_wastes_tweaker_dev.lua` — `MOD_VERSION` `0.7.164-dev` → `0.7.165-dev`; `_coin_reservation_hash_reserved` / `_rebuild_coin_reserved_set` / `_spawner_reserved_for_coins` + `_coin_reserved_units` set added above the `_can_spawn` hook; `_can_spawn` potion/weapon-chest branches deny on reserved spawners; `populate_pickups` rebuilds (or clears) the reserved set before vanilla populate; `coin_reservation_partition` regression check added after `cw_collectible_and_big_casket`.
+- `_adventure_pool.lua` — `make_cw_pickup_settings` primary `deus_potions` 18→30, secondary `deus_potions` 6→10; comments rewritten to point at the reservation as the guarantee.
+
+## 0.7.164-dev (2026-06-24) — Regression guards for the dup-chip wrong-node fix (0.7.162) + the #97 paced-send flood fix (0.7.163)
+
+Two new `/ct_regression_test` source-pattern checks. No behavioral change — both fixes already shipped; these guard them against silent reversion on future edits, mirroring the existing marker-constant introspection checks (`open_chest_hook_singleton`, `variadic_hooks_arity_preserved`, etc.). The bundle is unreadable from Lua at runtime, so each check reads a marker/invariant exported onto `mod` or a file-scope global at the fix site (not a runtime grep).
+
+### New checks
+- **`dup_chip_no_current_node_fallback`** (guards ct_dev 0.7.162-dev) — asserts the dup-career extra-chip node_key resolution in `_ct_dup_vote_chips.lua` is `final_node_selected > vote > nil` with NO trailing current-node fallback (the fallback would plant a visible chip on the party's CURRENT node for an unvoted duplicate peer — the "valid-but-wrong mission node" bug). Reads `mod._ct_dup_chip_node_key_resolution`, exported at module-LOAD time near the top of the file (the resolution loop only runs during a CW map vote, so the export can't live at the resolution site). FAILs if the marker is missing, mismatched, or names the forbidden current-node token. The forbidden needle is split across two literals in the check so the check's own source can't self-match.
+- **`chunk_sends_paced_not_bursted`** (guards ct_dev 0.7.163-dev / Issue #97) — asserts the three chunked broadcasts stay paced through the enqueue/drain send queue, never inline-bursting inside their `for seq` loops. Verifies the `_CT_CHUNK_PACED_SEND_MARKER` constant (added near `_ct_chunk_send_queue`), `_ct_enqueue_chunk` exists, exactly one live `mod.update` drainer owner is present, `_CT_CHUNK_DRAIN_BUDGET` is a valid number ≥ 1, and the `_ct_chunk_send_queue` FIFO table exists. FAILs loudly if any piece of the paced-send wiring is dismantled.
+
+### Files
+- `chaos_wastes_tweaker_dev.lua` — `MOD_VERSION` `0.7.163-dev` → `0.7.164-dev`; `_CT_CHUNK_PACED_SEND_MARKER` constant added near the chunk send queue; two `_rt_register` checks added after `trait_filter_restores_on_error`.
+- `_ct_dup_vote_chips.lua` — load-time export `mod._ct_dup_chip_node_key_resolution = "final_node_selected>vote>nil"` near the top; resolution-site comment updated to point at it.
+
+## 0.7.163-dev (2026-06-24) — Ship: Issue #97 host crash on hot-join (chunked-sync flooded the reliable send queue) — fixed via a paced send-queue (verified)
+
+Shipping build of the Issue #97 chunked-sync pacing fix. All three verifications (correctness, regression, duplicate-hook lint) passed; friends-only dev release.
+
+### Root cause (#97)
+- ct_dev syncs three large payloads to clients as chunked-string RPC trains (`ct_sync_host_settings_chunk`, `ct_graph_snapshot_chunk`, and the peer-manifest chunk channel) — each payload is JSON-encoded, split into `SYNC_CHUNK_SIZE` (400-char) pieces, and sent as `(session, seq, total, chunk_str)`.
+- Each broadcaster used to emit its **entire** chunk train **inline in one frame** (`for seq = 1, total do mod:network_send(...) end`). On a **large-graph hot-join** all three fire in the same frame window and dump ~200 reliable RPCs (~94 KB) onto Stingray's reliable send queue at once. That queue has a hard byte budget (~97822 B); overflowing it tears down the host connection — the reported **host crash**.
+
+### Fix — paced send-queue (anti-flood)
+- Chunks are no longer sent inline. Each chunk is **enqueued** as a self-contained `network_send` arg set into one FIFO queue (`_ct_chunk_send_queue` / `_ct_enqueue_chunk`), and a per-frame drainer on `mod.update` pops up to `_CT_CHUNK_DRAIN_BUDGET` (8) entries per tick and sends them. At 8 chunks/frame the per-frame reliable byte load (~3.6 KB) stays FAR under the ~97822 B queue cap, and the reliable channel acks faster than we enqueue, so the queue drains steadily without ever stacking near the limit.
+- **Wire protocol unchanged.** Same event names, same `CT_RPC_SCHEMA` gate, same `session`/`seq`/`total` semantics, same `SYNC_CHUNK_SIZE`, same receiver reassembly. Only the **send timing** is paced. Receivers were already purely accumulative (buffer by `seq` per `(sender, session)`, act only once all `total` distinct chunks arrive — no single-frame/burst assumption), so they tolerate paced arrival with zero change.
+- **Ordering / re-entrancy.** FIFO order preserved (append at tail, pop from head). A new broadcast just appends more entries; the drainer never clears the queue mid-drain and each entry carries its own `session` id, so concurrent/overlapping broadcasts never corrupt each other. Each send is `pcall`-wrapped so one bad send can't abort the rest of the drain or stall the queue; `record_send` fires at SEND time so bt's net_replay ring still records the actual emission.
+
+### Hooks / tests
+- No new hooks. The drainer is hosted on `mod.update` (ct_dev's only mod-wide per-frame entry point — the existing `DeusChestExtension.update` hook is mission/per-chest-only and read-only). Duplicate-hook lint: **PASS (0 duplicate-hook)**.
+
+## 0.7.162-dev (2026-06-24) — Ship: duplicate-career map-vote chips (verified) — both voters' chips now render on the CW map screen
+
+This is the shipping build of the duplicate-career map-vote chip fix developed across v0.7.160 → v0.7.161-dev. All three verifications (correctness, regression, duplicate-hook lint) passed; promoting to a friends-only dev release. No code changes vs v0.7.161-dev beyond the MOD_VERSION bump — this entry consolidates the root cause + fix for the shipped feature.
+
+### Root cause
+- General Tweaker's **Allow Duplicate Careers** lets two peers share a `profile_index` (same hero). The CW map-vote scene (`DeusMapScene`) owns exactly five player "token" chip units keyed by `profile_index` (`_profile_index_to_token`). `DeusMapDecisionView._update_player_state` places chips via `self._scene:place_token(profile_index, index, node_key)` — chip IDENTITY is `profile_index`, and `place_token` is **last-writer-wins** at the shared hero slot. So when two peers share a career, the second peer's `place_token` **overwrites** the first: only ONE chip shows for both voters (the peer that iterated LAST in `controller:get_peers()`), and the other voter's choice is invisible on the map.
+
+### Fix
+- New `_ct_dup_vote_chips.lua` subsystem, **client-side render only — no new network sync** (vote DATA is already synced via shared_state). Post-hooks `DeusMapDecisionView._update_player_state` (vanilla runs first, so the **non-duplicate case is byte-for-byte vanilla**), then detects any `profile_index` voted by >1 peer and spawns/reuses a SECOND chip per EXTRA peer — exactly the first `n−1` peers in the per-`profile_index` list (`for i = 1, #list - 1`), leaving the last to vanilla. Each extra is placed at its OWN voted node (`final_node_selected` > own `vote`, no `current_node_key` fallback to avoid the "valid-but-wrong node" bug) and distinguished by position OFFSET + slight SCALE-down (`Unit.set_local_pose`/`_position`/`_scale`, all confirmed in-file and deterministic — NOT material recolor, which can silently no-op). Lateral nudge fans by extra-ordinal so 3+ way stacks spread; per-ordinal z-lift prevents z-fighting.
+- **No leak.** Extras spawned lazily, cached per-peer in `scene._ct_dup_tokens`, reused across frames, destroyed by a `DeusMapScene._clear` hook (runs from both `on_enter` and `destroy`, mirroring vanilla's `_profile_index_to_token` teardown). Toggle-off mid-view hides extras immediately.
+- **Safety.** Toggle-gated (`show_duplicate_career_chips`, default ON). All engine `Unit`/`World` calls pcall-wrapped; controller/scene fields nil/type-checked; any failure bails to vanilla (one chip), never crashing the map screen.
+
+### Hooks / tests
+- Two hooks, both the SOLE hook on their `(Class, method)` pair: `(DeusMapDecisionView, _update_player_state)` and `(DeusMapScene, _clear)`. Duplicate-hook lint: **PASS (0 duplicate-hook)**. ct_dev's other `DeusMapDecisionView` hooks (`_enable_hover`, `_start`) and `DeusMapScene` hook (`on_enter`) are on different methods.
+
+## 0.7.161-dev (2026-06-21) — Duplicate-career map-vote chips: adversarial-review fixes (correct extra-peer selection, fan-out for 3+ way, immediate hide on toggle-off)
+
+### Fixed — BLOCKING: two peers sharing a career voting DIFFERENT nodes drew the WRONG chips
+- **Bug (correctness verifier, ok=FALSE).** The v0.7.160 extra-spawn loop was `for i = 2, #list` — it spawned an extra for every peer AFTER the first in the per-`profile_index` list. But vanilla's `place_token` loop (`deus_map_decision_view.lua:665-682`) writes `_profile_index_to_token[profile_index]` once per peer (`deus_map_scene.lua:833-841`), so for a shared `profile_index` it's **LAST-WRITER-WINS**: vanilla's single visible chip shows the peer that iterated **LAST** in `ipairs(controller:get_peers())`. The old `i = 2..#list` set therefore (a) **doubled** the LAST peer — an extra chip placed on top of vanilla's chip — and (b) **never drew** the FIRST peer. With two peers voting different nodes, one node showed two stacked chips and the other showed none.
+- **Order confirmation.** Both vanilla and the mod read peers from `controller:get_peers()` → `NetworkState.get_peers` → `shared_state:get_server(key)` — ONE ordered shared-state array, iterated with `ipairs` in BOTH places (verified against decompiled source 2026-06-21). The mod appends `by_profile[profile_index]` in that same order, so `list[#list]` IS the peer vanilla draws and `list[1 .. #list-1]` are exactly the peers vanilla does NOT show.
+- **Fix.** Loop changed to `for i = 1, #list - 1` — spawn extras for the first n−1 peers, leave the last to vanilla. Now every voter's chip is drawn exactly once: vanilla draws `list[#list]`, the mod draws the rest. (`_ct_dup_vote_chips.lua` ~L262-L290.)
+
+### Fixed — 3+ peers sharing ONE career: extras no longer crowd/overlap (regression verifier)
+- **Bug.** All extras used the same constant `DUP_OFFSET {0.45, 0, 0.35}`, so with 2+ extras on the same node+slot they stacked on top of each other.
+- **Fix.** Lateral (x) nudge now scales by the extra's running ordinal (1st extra = 1×, 2nd = 2×, …) and a small per-ordinal z-lift (`DUP_OFFSET_Z_PER_EXTRA = 0.06`) keeps co-located extras from z-fighting each other. With the common 2-peer case (one extra, ordinal == 1) the offset is identical to the old constant — **2-way visuals unchanged**. (`_place_dup_token`, `_ct_dup_vote_chips.lua` ~L131-L175 + the new ordinal arg threaded from the spawn loop.)
+
+### Fixed — toggle OFF mid-view now hides extras immediately (regression verifier)
+- **Bug.** The early-return path when `show_duplicate_career_chips` is OFF returned without hiding — extras lingered visible until the next `_clear` (view re-open/destroy), contradicting the docstring's "hidden when ... toggled off mid-view" claim.
+- **Fix.** The toggle-off branch now resolves the scene (when available) and calls `_hide_all_dup_tokens(scene)` BEFORE returning, so extras disappear on the very next `_update_player_state` frame. Cache is preserved for reuse; `_clear` still owns destruction. (`_ct_dup_vote_chips.lua` ~L197-L210.)
+
+### Preserved
+- All existing safety intact: pcall around every engine `Unit`/`World` call, nil/type guards on controller/scene fields, `_clear` teardown/no-leak path, the non-duplicate case still byte-for-byte vanilla via the post-hook. No new hooks (still the two sole hooks on `(DeusMapDecisionView, _update_player_state)` and `(DeusMapScene, _clear)`). Two independent duplicate pairs still each resolve correctly (per-`profile_index` lists are independent).
+
+## 0.7.160-dev (2026-06-21) — Duplicate-career map-vote chips: show BOTH voters' chips on the CW map screen (offset + scale to distinguish)
+
+### Added — both vote chips now show when two players run the same career
+- **Problem.** General Tweaker's **Allow Duplicate Careers** lets two players run the SAME career. On the Chaos Wastes map-vote screen the vanilla scene (`DeusMapScene`) owns exactly **five** player "token" chip units — one per hero, stored in a 1-based array keyed by `profile_index` (`_profile_index_to_token`, `deus_map_scene.lua:238-251`). `DeusMapDecisionView._update_player_state` (`deus_map_decision_view.lua:665-682`) places chips with `self._scene:place_token(profile_index, index, node_key)` — the chip IDENTITY is `profile_index`. When two peers share a `profile_index`, the second peer's `place_token` **overwrites** the first at the shared hero slot, so only **one** chip shows for both voters (sitting on whichever peer iterated last). The other player's vote is invisible on the map.
+- **Fix (client-side render only — no new network sync).** New `_ct_dup_vote_chips.lua` subsystem. Post-hooks `DeusMapDecisionView._update_player_state` (vanilla runs first and places its one-chip-per-hero set EXACTLY as before — so the **non-duplicate case is byte-for-byte vanilla**), then detects any `profile_index` voted by >1 peer and, for each EXTRA peer beyond the first, spawns/reuses a SECOND chip unit (the same per-hero token asset), places it at that peer's own voted node (resolved exactly like vanilla: `final_node_selected` > own `vote` > current node), and distinguishes it.
+- **Distinguishing method: position OFFSET (vertical lift + lateral nudge) + slight SCALE-down, NOT material recolor.** Rationale: the token `.unit` assets are binary (not in decompiled source); whether any exposes a tint material variable is unverified per-asset, and `Material.set_*` silently NO-OPs when the variable isn't compiled into the shader variant (`TODO.md:146-149`) — a guess-and-check dead end with a silent-failure mode. The vanilla scene already distinguishes co-located chips purely by offset pose (`referenced_token_poses[slot]`, `deus_map_scene.lua:836-837`), so an offset+scale secondary chip is visually native and uses only `Unit.set_local_pose` / `Unit.set_local_position` / `Unit.set_local_scale` — all confirmed in-file (`deus_map_scene.lua:226,230,840`) and deterministic (no silent no-op path). Offset `{x=0.45, y=0, z=0.35}`, scale `0.72`.
+- **No leak.** Extra chips are spawned lazily on the first frame a duplicate is detected, cached per-peer in `scene._ct_dup_tokens` (keyed by `peer_id`), reused across frames (moved via `set_local_pose`, hidden when a peer stops being a duplicate). They're destroyed by a `DeusMapScene._clear` hook against `scene._world`, then the cache is nilled. `_clear` runs from BOTH `on_enter` (top, re-entrancy guard, `deus_map_scene.lua:454`) and `destroy` (`:512`), exactly where vanilla tears down `_profile_index_to_token` (`:532-536`), so extras are destroyed on every view re-open AND on destroy — no accumulation across map-vote re-opens.
+- **Safety.** Toggle-gated (`show_duplicate_career_chips`, default ON, `[untested]`). Client-side render preference: reads the local peer's own toggle (the vote DATA is already synced; this only governs how THIS client draws it). All engine `Unit`/`World` calls are pcall-wrapped (a stale/destroyed unit handle can fatal, bypassing Lua error handling); every controller/scene field is nil/type-checked before deref; any failure bails to vanilla (one chip), never crashing the map screen.
+
+### Hooks / tests
+- Two NEW hooks, both sole hooks on their `(Class, method)` pair (pre-flight grep 2026-06-21 confirmed neither was previously hooked in ct_dev): `mod:hook_safe("DeusMapDecisionView", "_update_player_state", ...)` and `mod:hook_safe("DeusMapScene", "_clear", ...)`. ct_dev's existing `DeusMapDecisionView` hooks (`_enable_hover`, `_start`) and `DeusMapScene` hook (`on_enter`) are on DIFFERENT methods — no consolidation needed.
+
+## 0.7.159-dev (2026-06-20) — Task 1: split "Reworks: Boons" into Existing/New sub-groups + nest Bomb Bubbles under Utility; Task 2: fix disabled-boon leak at grant; Task 3: silence misattributed trait-filter warning
+
+### Changed — Task 1: menu restructure (no setting_ids renamed — user values persist)
+- **"Reworks: Boons" split into two NESTED sub-groups:**
+  - **"Reworks: Existing Boons"** (`reworks_boons_existing_group`) — toggles that change how an EXISTING boon / property / bot-boon-distribution behaves: `tweak_reckless_swings` (Khaine's Fury), `tweak_boon_movespeed`, `bomb_boon_cooldown`, `bomb_boon_exclusive`, `endless_bombs_consumes_morgrim`, `rv_no_save_morgrim`, `tweak_manann_tempest_cooldown`, `tweak_anath_raema_permanent`, `tweak_defeat_recovery`, `tweak_miracle_of_ulric_persistent`, `ulric_pack_unlimited_range`, `tweak_wildfire_generations_cap`, `tweak_miracle_of_isha_aegis`/`_wounds`, `ct_blessed_bots`, `bots_mirror_host_boons`, `bots_get_random_boons`, `bots_mirror_host_weapon_upgrades`, `announce_bot_boons`.
+  - **"Reworks: New Boons (Added)"** (`reworks_boons_new_group`) — the four trait-as-boon toggles that ADD a brand-new selectable boon: `enable_boon_vauls_anvil`, `enable_boon_manann_tempest`, `enable_boon_taal_twinned_arrow`, `enable_boon_asuryan_wrath`.
+  - Classification rule: "adds a brand-new boon" → New; "changes how an existing boon behaves" → Existing. `tweak_manann_tempest_cooldown` is placed in **Existing** (it changes a cooldown value and per its own tooltip affects the vanilla "boon + trait", i.e. modifies behavior rather than adding a boon).
+  - `[untested]` on both new group headers (`reworks_boons_existing_group`, `reworks_boons_new_group`).
+- **"Bomb Bubbles" boon set nested under Utility:** the `bomb_bubbles` category (support-bomb boons `boon_supportbomb_*`) moved from a top-level boon category to a sub-category of `utility_boons` (alongside `bombs`), in both the **Disable Boons** and **Starting Boons** trees. category_id + item setting-id tails are unchanged, so `disable_boon_bomb_bubbles_group` / `start_boon_bomb_bubbles_group` and every `disable_boon_*` / `start_boon_*` value persist; only the menu position moves.
+
+### Fixed — Task 2: a DISABLED boon could still be granted (`[boon-trace] DISABLED BOON GRANTED: blazing_revenge`)
+- **Root cause:** the disable filter only stripped the ROLL pool (`DeusPowerUpsArray` / `DeusPowerUpsArrayByRarity`) inside the `DeusPowerUpUtils.generate_random_power_ups` hook. That covers every pool-rolled choice (shrine / cursed-chest / boon-altar choices are presented stripped). **But** a boon **ALTAR** (`DeusChestExtension`, `_chest_type == power_up`) rolls and **caches** its single offered boon into `self._stored_purchase` at chest **spawn** time (`_generate_stored_power_up` → `generate_random_power_ups`[1]), then grants it via `add_power_ups` on **purchase**. If the user toggles `disable_boon_<name>` ON **mid-run after** an altar already cached that boon, the strip already missed it and the **stale cached boon** sails through to `add_power_ups`. (The same gap applied to any specific-grant path that bypasses the pool: set rewards via `_check_set_completed`, starting boons.) `add_power_ups` (`deus_run_controller.lua:1126`) is the SINGLE universal apply chokepoint for every grant source — but ct only `hook_safe`'d it (post-call, too late to block).
+- **Fix:** converted ct's `(DeusRunController, add_power_ups)` hook from `hook_safe` to a full `mod:hook`, and added a **pre-grant disable gate** that removes any `effective_setting("disable_boon_<name>") == true` entry from `new_power_ups` **before** vanilla grants/activates it. `effective_setting` is host-authoritative (host's value on clients), so host + clients agree and a client never drops a boon the host legitimately granted. Filtering to empty is safe (vanilla early-returns on `#==0`). The bot-mirror reentry guard (`_ct_bot_mirror_active`) skips the gate for bot grants (those come from a pool we already control). Remains the ONLY hook on `(DeusRunController, add_power_ups)` — VMF singleton-hook invariant preserved (now a `mod:hook`). The post-grant `[boon-trace]` audit still runs after `func`; a `DISABLED BOON GRANTED` warning now only fires for a genuine bypass the gate didn't cover.
+
+### Changed — Task 3: misattributed/noisy `[trait-filter] generate_weapon_for_slot vanilla call raised` warning downgraded to debug-gated
+- **Root cause (not a trait-filter fault):** `DeusWeaponGeneration.generate_weapon_for_slot` has **no caller in the decompiled vanilla source** — the only invoker is ct's own bot-weapon-mirror helper `_gen_bot_weapon_for_slot` (`~L5726`), which **already** wraps the call in `pcall` and treats a raise as "the bot just skips that weapon slot this roll" (no crash, no user-visible effect). The raise itself is the **vanilla** `fassert(#weapon_keys > 0, "...weapon_pool state...")` at `deus_weapon_generation.lua:110`, fired when the bot's career `weapon_pool[rarity]` has no weapon group matching the requested slot at the target rarity. The trait filter only rewrites `baked_trait_combinations` (read later, exotic/unique only) and is unrelated.
+- **Fix:** in `_filtered_weapon_gen`, the `generate_weapon_for_slot` label now logs via debug-gated `_dbg` (with an explanatory message) instead of the ungated `mod:warning` (which fired ~8×/run as noise). The re-raise still happens (the caller's `pcall` handles it). The other three labels (`generate_weapon` / `generate_item_from_item_key` / `upgrade_item`) are on real vanilla gameplay paths with no upstream `pcall`, so they KEEP the ungated `mod:warning` (v0.7.134 rationale).
+
+### Hooks / tests
+- No new hooks added. `(DeusRunController, add_power_ups)` changed hook **type** (`hook_safe` → `hook`) but stays single — no duplicate. Pre-flight grep confirmed: `disable_boon`, `generate_weapon_for_slot`, `add_power_ups`, `reworks_boons` each touched in exactly the intended sites.
+
+## 0.7.158-dev (2026-06-20) — Task 1: REAL fix for weapon-upgrade altar "goes dark after first use" + Task 2: upgrade-altar property/trait reroll + Altar Reuse menu nested under Shrines/Altars/Chests
+
+### Fixed — Task 1: weapon-upgrade altars set to >1 use no longer go dark/disabled after the first use (root cause corrected; solo host, no peers)
+- **Symptom (corrected report):** the user is **solo host with no peers**, so the earlier "client RPC-latency" theory was wrong. The v0.7.151 `collected_by_peers` uncollect clears the own peer directly on the host with no RPC, yet a weapon-**upgrade** altar still darkened after one use.
+- **Root cause (from vanilla `deus_chest_extension.lua`):** an upgrade altar's looted/dark look is derived **two independent ways**, and `collected_by_peers` is only one of them:
+  1. `collected_by_peers` membership (`:175`) — the v0.7.151 uncollect handles this, and solo-host it's a direct local write that DOES hold. Not the culprit.
+  2. **`update_upgrade_chest_color` (`:211-243`)** — runs every tick, fully independent of `collected_by_peers`. It compares the altar's rolled `_rarity` against the player's **currently wielded weapon** rarity: `event = chest_rarity_order <= weapon_rarity_order and "lua_interact_disabled" or LUA_UPDATE_RARITY_EVENTS[rarity]`. After the first upgrade the wielded weapon's rarity **equals** the altar's rolled rarity, so the comparison is true and the altar fires `lua_interact_disabled` — the grey/"dark", can't-use visual. `can_be_unlocked` (`:505-517`) likewise returns false, so the re-armed altar is **genuinely unusable**, not just cosmetically dark.
+  - Vanilla re-rolls `_rarity` on every re-arm (`update()` `:140` → `_setup_rarity`), but the seed is **constant per go_id**, so it always re-rolls the SAME rarity and `update_upgrade_chest_color` always re-disables it.
+- **Fix (lowest-blast-radius, upgrade-altar only):** hook `DeusChestExtension._setup_rarity` (the single writer of `self._rarity`; previously **unhooked**, so VMF-clean). For an upgrade altar that has been used ≥ 1 time this run, bump the rolled rarity **strictly above** the player's wielded (just-upgraded) weapon, capped at `unique` (the usable ceiling; `event`/order 6 is excluded). This stops `update_upgrade_chest_color` from disabling the altar and keeps `can_be_unlocked` true until the player's weapon hits `unique`, at which point the altar correctly depletes/darkens. Hooking `_setup_rarity` (rather than writing `_rarity` once in the re-arm branch) is load-bearing: vanilla re-runs `_setup_rarity` every time the setup block re-runs and would otherwise **clobber** a one-shot write one tick later. The open_chest re-arm branch also applies the bump immediately + clears the cached `_prev_update_upgrade_chest_color_event` memo for a no-flicker refresh.
+- **Single-use altars and the depleted state are unchanged:** the bump is gated on `chest_type == upgrade` AND `uses ≥ 1`; first/only use takes the untouched vanilla roll, and once max uses is reached the altar darkens as before.
+
+### Added — Task 2: weapon-upgrade altar reuse now rerolls the upgraded weapon's properties/trait
+- Upgrade altars don't swap your weapon, so "reroll" means a fresh **properties/trait** roll on the upgraded weapon each reuse. Vanilla upgrade uses `DeusChestExtension._generate_upgraded_weapon` (`:426`) — a DISTINCT function from `_generate_stored_weapon` (the swap-altar path the existing seed-mix hook targets), so it was **not** previously rerolled and every reuse produced the same roll. New `mod:hook("DeusChestExtension", "_generate_upgraded_weapon", ...)` mixes the per-go_id use count into the `go_id` argument (same `+ uses * 1000003` idiom as the existing `_generate_stored_weapon` seed-mix), which flows through the function's internal `fnv32_hash` weapon_seed → a different properties/trait roll each reuse. Combined with the Task 1 rarity bump, each reuse is meaningful (higher rarity + fresh stats).
+
+### Changed — Task 2: "Altar Reuse" menu group nested under "Shrines, Altars and Chests"
+- The `altar_reuse_group` (was a top-level sibling) is now a nested sub-group inside `shrines_altars_chests_group` (VMF supports nested groups; cf. `available_missions_group` inside `adventure_maps_group`). No setting ids changed, so existing user values are preserved. Added a dedicated `altar_reuse_count_upgrade_tooltip` describing the reroll + rarity-bump behavior.
+
+### Diagnostics
+- The v0.7.157 `[altar_visual_probe]` read-only traces (the `update` watcher hook + the open_chest OPEN/REARM/DEPLETED lines) are **kept** — they remain read-only and let the user confirm the fix in-session. They can be stripped in a later release once the fix is confirmed.
+
+### Tests
+- New `upgrade_altar_rarity_bump` marker check (asserts the `_setup_rarity` fix isn't silently stripped). Existing `open_chest_hook_singleton`, `altar_visual_probe_present`, and `cursed_chest_unique_trials` checks unchanged. No duplicate hooks: `_setup_rarity`, `_generate_upgraded_weapon` were each previously unhooked; `open_chest`/`update`/`get_purchase_cost`/`_generate_stored_weapon`/`_generate_stored_power_up` remain single-hooked.
+
+## 0.7.157-dev (2026-06-20) — Task A: altar "goes dark after first use" diagnostic probes (diagnose-only) + Task B: Chest of Trials uniqueness
+
+### Added — Task A: read-only probes for the weapon-upgrade altar "goes dark after first use" report (DIAGNOSE-ONLY, no behavior change)
+- The user reports weapon-**upgrade** altars set to allow >1 use still go "dark"/looted-looking after the FIRST use despite the v0.7.151 re-arm + `collected_by_peers` uncollect. This drop instruments the path so the next session has runtime data; **no speculative fix** was applied (user diagnoses first).
+- **What the weapon-upgrade altar is:** the engine class `DeusChestExtension` with `_chest_type == DEUS_CHEST_TYPES.upgrade` (NOT a Chest of Trials — that's `DeusCursedChestExtension`). Upgrade altars are notably special in vanilla: `update()` derives `new_is_purchased` as `not self._stored_purchase and chest_type ~= upgrade or table.contains(collected_by_peers, peer_id)` (`deus_chest_extension.lua:175`). The `chest_type ~= upgrade` clause means an upgrade altar's purchased-state is driven **purely** by membership in `collected_by_peers` (the swap/power_up altars also flip purchased when `_stored_purchase` is nil). So an upgrade altar that stays "looted" after re-arm almost certainly still has the own peer in `collected_by_peers` on the next update tick.
+- **Probe points (all forced output — unconditional `mod:info`, tagged `[altar_visual_probe]`; user just plays, no command):**
+  1. In the consolidated `open_chest` re-arm path: an `OPEN` line (chest_type, go_id, uses/max_uses, whether the re-arm branch will run, is_server, `_is_purchased`/`_animation_state`/`_profile_index`, and `collected_by_peers` BEFORE the uncollect); a `REARM` line (own_peer + `collected_by_peers` AFTER `_ct_altar_uncollect` + the post-re-arm visual state we wrote); a `DEPLETED` line when max uses is reached (expected dark); and a `no go_id` line if the re-arm path is skipped entirely.
+  2. A new **read-only** `mod:hook("DeusChestExtension", "update", ...)` (ct_dev had no prior hook on this method — VMF-clean) that, for a re-armed chest, logs each of the next 8 ticks: the pre/post `_is_purchased`/`_animation_state`/`_profile_index`, whether `_stored_purchase` is set, whether it's an upgrade chest, whether the own peer is still in `collected_by_peers`, and the full array — so the log shows exactly which tick (and which derivation) re-darkens it.
+- **Obvious bug NOTED (not fixed, per diagnose-first):** the v0.7.151 `_ct_altar_uncollect` removes only the OWN peer from `collected_by_peers`. If the bug reproduces solo/host, the probes will confirm whether the own-peer removal is actually landing; if it reproduces only on a CLIENT-opened upgrade altar, suspect the `ct_altar_uncollect` RPC round-trip (host clears the field, but the host's authoritative write must propagate back before the client's `update` re-derives) — the UPDATE probe's `own_in_collected` field on the client will show it. Left for the user to confirm with the captured log.
+
+### Added — Task B: Chest of Trials uniqueness (toggle, default OFF, [untested]) — every chest after the first spawns a different trial
+- **Report:** multiple Chests of Trials in one mission spawn the same enemies. **Root cause (verified from decompiled source):** `DeusCursedChestExtension` activation calls `Managers.state.conflict:start_terror_event("cursed_chest_prototype", Managers.mechanism:get_level_seed(), unit)` (`deus_cursed_chest_extension.lua:105-109`) — every chest in the level passes the **same** level seed. `cursed_chest_prototype` (`deus_generic_terror_events.lua:50`) is a master event whose `inject_event` blocks each pick one faction challenge via `Math.next_random(data.seed, 1, #event_name_list)` (`terror_event_mixer.lua:1667`), where `data.seed` is the seed we passed (stored verbatim by `add_to_start_event_list`, `:1572-1580`). Same starting seed → same random walk → same challenge → same enemies.
+- **Fix:** new host-authoritative `mod:hook("ConflictDirector", "start_terror_event", ...)`. When the event is `cursed_chest_prototype` and the toggle is on, mix a per-mission activation counter (`_ct_cursed_chest_seq`) into the seed (`HashUtils.fnv32_hash(base .. "_ct_trial_" .. seq)`, FNV-prime fallback if `HashUtils` is absent), so each subsequent chest's `inject_event` walk lands on different indices → a different trial. **Chest #1 (seq 0) keeps the vanilla seed** (no offset); only chests 2..N are perturbed. Cursed-chest activation + terror events are server-side, so clients never call this for cursed chests — purely host-driven; the value reaches clients through the normal terror-event RPC.
+- **Per-mission counter reset** at both the existing `DeusMechanism._transition_next_node` hook (every node transition) and the `DeusRunController.setup_run` hook (run start) — belt-and-suspenders, no new hooks.
+- **Composes with `cot_enemy_multiplier`:** this only changes the SEED used to PICK the challenge; the enemy spawn-count scaling is a separate `spawn_around_origin_unit` hook. Neither touches the other.
+- New setting `cursed_chest_unique_trials` (checkbox, default `false`, `[untested]`) + tooltip; host-synced via `effective_setting` like every other ct setting.
+
+### Tests
+- `altar_visual_probe_present` (Task A marker), `cursed_chest_unique_trials` (Task B marker + asserts the per-mission counter global is a number).
+
+## 0.7.156-dev (2026-06-20) — Fix: client crash on the CW curse banner (curse-description icon was a table, not a texture name)
+
+Client crash in a CW expedition on an injected-adventure level (`dlc_termite_*`) with a curse active: `scripts/ui/ui_passes.lua:134: bad argument #2 to 'UIRenderer_draw_texture' (string expected, got table)`, from `deus_curse_ui.lua:214 (draw)`. **Root cause (vanilla, exposed by ct):** the curse-banner's `theme_icon` texture pass at scenegraph `description_pivot` reads its texture NAME from `content.theme_icon` (`deus_curse_ui_definitions.lua:317-324`), and that pass's `content_check_function` only tests `~= nil` — not string-ness. `DeusCurseUI.show_curse_info`/`show_special_message` set `local icon = theme_settings.icon or { 255, 255, 255, 255 }` (`deus_curse_ui.lua:144-149` / `:106-111`) and assign it straight to `content.theme_icon` (`:170`). `DeusThemeSettings.wastes` is the **only** theme with no `icon` field (all 5 god themes + belakor have one), so when ct forces `node.theme = "wastes"` to suppress curse aesthetics on a node whose curse is still shown (the `start_next_round` / `_transition_next_node` save-restore), the `or {color}` fallback fires and the renderer gets a **table** where it wants a **string** → crash. Vanilla never hits this because `deus_generate_graph` always forces a god theme for any curse node.
+
+**Fix:** same DATA-backfill approach as the v0.7.139-dev nil-color fix, and folded into the **same** `CURSE_THEME_COLOR_BACKFILL_MARKER` load block (no new hook — there is no `mod:hook` on `DeusCurseUI` anywhere in ct; zero duplicate-hook risk). At mod-load we now also give every `DeusThemeSettings` theme that lacks a string `icon` a valid one (`"deus_icon_meta_01"`, a neutral deus-realm meta icon from `gui_icons_atlas` that is loaded in every CW expedition). Lowest blast radius: only the curse-description theme icon for the wastes-on-cursed-node case is touched; normal god-themed curse banners already have their own `icon` and are untouched (the `type(theme.icon) ~= "string"` guard skips them). Idempotent, timing-free (boot-global available at load), and identical on host and every client so the data stays consistent peer-to-peer. Extended the `curse_theme_color_backfilled` regression test to also assert every theme carries a string `icon`.
+
+## 0.7.155-dev (2026-06-20) — Fix: CW round-end RPC overflow no longer freezes the next expedition
+
+Reported freeze on starting a new Chaos Wastes after a round, with `[finale_dominant_god] vanilla game_round_ended errored ... Failed to pack parameter 3, too many characters in string with max length 500`. Root cause: a `mod:network_send` firing inside vanilla `DeusMechanism.game_round_ended` → `_setup_run`'s graph/settings broadcast JSON-encodes its payload into one string and overflows Stingray's 500-char RPC cap (`network_utils.lua:93`), throwing **before** vanilla assigns `self._next_state` (`deus_mechanism.lua:621`/`:666`). The v0.7.81 fix swallowed the throw to avoid a host crash, but that left the mechanism with no next state → the next CW round never loads → **freeze**. **Fix:** in the existing `game_round_ended` hook's error branch, when the transition was skipped (`_next_state == nil`), drive `self:_transition_next_node("start")` ourselves to finish what vanilla skipped (pcall-wrapped — worst case it warns, never worse than the freeze). The run + graph are already built by `_setup_run` before the failing broadcast, so the recovery is safe. This fixes the freeze regardless of WHICH mod's un-chunked `network_send` overflowed — notably a **co-loaded stable `ct` alongside `ct_dev`** (running both is misconfiguration; ct_dev can't chunk a third party's send). ct_dev's own broadcasts are all chunked (`SYNC_CHUNK_SIZE = 400`) and cannot overflow. Recent v0.7.151/.153/.154 did not contribute (none serialize into the round-end payload).
+
+## 0.7.154-dev (2026-06-20) — Fix: CW pickup transforms leaked into real Adventure (no tomes in Adventure)
+
+`on_injected_adventure_level()` gated only on whether the current level is one CW *can* inject into its pool — but those same maps (Horn of Magnus, etc.) exist in **stock Adventure under the same `level_id`**, so the gate returned true in real Adventure too. That leaked every CW-only pickup transform into Adventure: the **tome/grimoire → Chest-of-Trials substitution** (so tomes/grimoires vanished), the pedestal/collectible → Pilgrim's Coin conversion, the `no_roamers` pacing filter, and `force_belakor`. **Fix:** the gate now ALSO requires an actual Chaos Wastes (deus) expedition — `Managers.mechanism:game_mechanism():get_deus_run_controller()` must be live (the same "are we in CW" idiom `_current_node_theme`/`_current_node_curse` use); Adventure's mechanism has no such method, so the gate bails and Adventure plays vanilla. CW expeditions are unaffected (the run controller is live there). Reported 2026-06-20: tomes missing in Adventure mode.
+
+## 0.7.153-dev (2026-06-20) — Miracle of Isha (Aegis / Unlimited Wounds) now lasts the NEXT MISSION ONLY
+
+### Changed — Aegis and Unlimited Wounds are scoped to one mission instead of the whole run
+- The two Miracle of Isha reworks — **(A) Aegis** (`-25% damage taken`) and **(B) Unlimited Wounds** (recruit-style, every knockdown revivable) — previously lasted the entire CW run. They now last **only the next mission** after purchase, then expire.
+- **Mechanism (Option B):** dropped `is_persistent = true` from the Aegis and Wounds buff templates. Vanilla `DeusSpawning`'s per-frame save loop (`deus_spawning.lua:249`) only saves buffs whose template has `is_persistent`, so once the flag is gone these two are **never auto-saved and never auto-reapplied** by the vanilla machine — there is no whole-run carry.
+- To make them cover the **next** mission (rather than dying in the shop where the buy happens — the shop is a unit-less `map` node), the buy hook now stashes the chosen buff name on a host-side run-controller field (`rc._ct_isha_pending`) that survives the shop→mission transition. A new host-only `mod:hook_safe("DeusSpawning", "_apply_initial_buffs", ...)` promotes that flag to active on the next mission's first spawn, applies the buff to every hero/bot for that mission, and **consumes it when the next node change is observed** (keyed on `rc:get_current_node_key()`, which is stable within a mission and distinct between consecutive missions — race-free, no game-start vs spawn ordering dependence).
+- **Respawns within the granted mission keep the buff** — a respawn re-enters `_apply_initial_buffs` at the same node key, so the buff is re-applied (guarded by `has_buff_type` so a hero who never died is not double-stacked).
+- Host-authoritative as before: `buff_system:add_buff` broadcasts to clients via `rpc_add_buff_synced` (templates are pre-registered in `NetworkLookup.buff_templates`); clients never touch the persistence list.
+
+### Unchanged — Miracle of Ulric (+50 Power) still lasts the whole run
+- Ulric **keeps** `is_persistent = true` and the vanilla whole-run save/reapply path. It is applied immediately on purchase and persists for the rest of the run, exactly as before. Only the two Isha buffs were rescoped.
+
+### Text + tests
+- Reworded the Aegis/Wounds VMF option labels + tooltips and the in-shop blessing descriptions to say "for the next mission" / "next mission only". Ulric's "+50 Power for the rest of the run" text is unchanged.
+- Extended `/verify_isha` to print the one-mission pending/active flag state (`<no active CW run>` in the keep).
+- Added regression marker `miracle_of_isha_one_mission_not_persistent`: asserts the apply/consume hook marker constant is present AND the live invariant that exactly Ulric (not Aegis/Wounds) carries `is_persistent` on its registered `BuffTemplates` entry.
+
+## 0.7.152-dev (2026-06-20) — Altar cost: remove mislabeled "Chest of Trials" override from boon altars + document altar-vs-chest terminology
+
+### Fixed — boon altars are priced by the altar-reuse multiplier again (the "Chest of Trials cost" feature was mis-targeted)
+- The "Chest of Trials (pay-with-coin)" feature was hooked on `DeusChestExtension.get_purchase_cost` for `_chest_type == power_up`. **`power_up` is the boon ALTAR (Shrine of Solace), not a Chest of Trials** — so the trials schedule was wrongly **re-pricing every boon altar** and, because its branch returned first, **shadowing the intended altar-reuse multiplier** (`150 * mult^uses`). The user's own logs showed `[altar_reuse] type=power_up used 1/2` and `[trials] boon chest #1` firing on the **same object** — proof they were one altar, not two chest kinds.
+- **An actual Chest of Trials is a separate engine class, `DeusCursedChestExtension`** (`scripts/unit_extensions/deus/deus_cursed_chest_extension.lua`): it has **no `_chest_type` and no `get_purchase_cost`** — you pay by fighting the trial wave, never with coin. There was no purchase step for the trials cost to legitimately hook; the feature could never have priced a real Chest of Trials.
+- **Per user decision, the settings are deleted.** Removed the `trials_cost_enabled` / `trials_cost_base` / `trials_cost_mult` widgets (`_data.lua`) + their 6 localization strings, the now-dead `_ct_trials_cost_for` helper and `_ct_trials_bought_this_map` per-map counter (+ its two reset sites), and the `chest_of_trials_cost_schedule` regression test (it asserted the deleted helper/widgets and would have hard-failed). With the trials branch gone, a `power_up` open falls straight through to the altar-reuse path, so **boon altars are now correctly priced by `150 * mult^uses`** (`altar_reuse_cost_mult_power_up`).
+- **Kept** the legitimate boon-altar no-repeat bookkeeping (record taken boons so later altars don't re-offer them), renamed honestly from `_ct_trials_taken_boons` → `_ct_boon_altar_taken_boons` and re-tagged its log `[trials]` → `[boon_altar]`. Added a `boon_altar_no_repeat` regression marker in place of the deleted cost-schedule test.
+- **`cot_enemy_multiplier` is untouched** — it correctly targets the real Chest of Trials via the terror-event tag `spawn_counter_category == "cursed_chest_enemies"`.
+
+### Docs — added an altar-vs-chest terminology banner
+- Added a banner comment above the altar cost-helper region: in-game the only "chest" is a **Chest of Trials** (`DeusCursedChestExtension`, no `_chest_type`, no coin cost); the boon / weapon-swap / weapon-upgrade shrines are **ALTARS** that the engine confusingly calls `DeusChestExtension` with `_chest_type = power_up`/`swap_melee`/`swap_ranged`/`upgrade`. Any `_chest_type == power_up` branch acts on a BOON ALTAR, never a Chest of Trials. No new `mod:hook` (the `get_purchase_cost` hook stays a singleton — only its body shrank).
+- **Supersedes the 0.7.151-dev "Cost behavior" note below**, which described the now-removed trials schedule as owning the boon price — that was the mislabeled behavior being removed here.
+
+## 0.7.151-dev (2026-06-20) — Altar reuse: fix the re-armed shrine still looking looted
+
+### Fixed — re-armed boon shrine (and weapon swap/upgrade altars) no longer stay visually consumed
+- A reused altar (`altar_reuse_count_* > 1`) functionally re-armed but still **looked looted** between uses — the re-rolled offering's hologram never reappeared.
+- **Root cause:** the re-arm zeroed only the chest's LOCAL state (`_is_purchased`, `_animation_state`, `_profile_index`, `_career_index`) but never cleared the **networked GameSession field `collected_by_peers`**. That field is the authoritative "this peer looted this chest" record. The first open inserts the opener's peer into it (vanilla server handler `rpc_deus_chest_looted`, `deus_chest_extension.lua:737-752`) and **nothing in vanilla ever removes it** — the vanilla chest network sync is one-directional toward "looted" only. So one tick after re-arm, vanilla `DeusChestExtension.update` (`deus_chest_extension.lua:175`) re-derived `new_is_purchased = ... or table.contains(collected_by_peers, peer_id)` → re-asserted `_animation_state = "looted"` (lines 177-182) → line 194 skipped `_update_chest_animation_and_sound_state`, so the offering presentation never re-fired.
+- **Fix:** on re-arm, the chest now also **retracts the own peer** from `collected_by_peers`, kept adjacent to the `_profile_index`/`_career_index` zeroing so the next `update` tick sees consistent state and takes the non-looted branch (re-displaying the re-rolled hologram). The field is server-authoritative, so:
+  - **Host opener** writes it directly.
+  - **Client opener** sends a new `ct_altar_uncollect` VMF RPC to the host (resolving the real host peer_id — VMF's `network_send` silently drops the `"server"` recipient, VMF_RECIPES § 3), and the **server** clears the authoritative field; the cleared state replicates back to every peer. This mirrors vanilla loot, which is server-authoritative (`purchase()` → `send_rpc_server` at `deus_chest_extension.lua:315`).
+- The clear removes **only the own peer**, never the whole array — co-op peers may have looted other chests, and the field is per-GameSession-object. It is a pure data write to one field: it does **not** re-enter `purchase()` and does **not** spawn anything, so there's no risk of a double-spawned preview or a re-charged purchase.
+- Implemented as two `mod._ct_*` helpers + one `mod:network_register("ct_altar_uncollect", ...)` server handler (no new `mod:hook` — the re-arm already lives in the consolidated `open_chest` hook). The handler resolves the sender from VMF's `sender_peer_id` (not a raw `CHANNEL_TO_PEER_ID`) and is gated on `CT_RPC_SCHEMA`.
+
+### Cost behavior — unchanged and correct (NOT a bug)
+- A boon (power_up) chest is **not free** in vanilla: it costs a flat 150 coins (`deus_cost_settings.lua: power_up = 150`), and the purchase path genuinely debits it. ct's reuse pricing is unchanged: with **Chest of Trials ON** the trials schedule fully owns the boon price (first boon each map free, then escalating round-down-to-50); with it **OFF**, the reuse multiplier charges `ceil(150 × mult^uses)`. No cost hook (`get_purchase_cost`, `_altar_cost_mult`, `_ct_trials_cost_for`) was touched.
+
+## 0.7.150-dev (2026-06-19) — Test-status: skull curse disables confirmed
+
+`[confirmed working]`: Disable Shadow Homing Skulls + Disable Skulls of Fury curses (user-verified in-game).
+
+## 0.7.149-dev (2026-06-19) — Test-status labels on all menu entries
+
+Prefixed every VMF menu widget with `[untested]` (and `[confirmed working]` for verified features) so we know what's safe to promote to stable `ct`. Tooltips, group headers, dropdown options, and `enable_debug_logging` are not labeled. The dynamic CW-scenario / adventure-mission map toggles are labeled in the `build_loc_entries()` consuming loop: **The Skittergate** → `[confirmed working]`; everything else `[untested]`. Known issue tracked: **Tower of Treachery** — gargoyle skull missing from chest (left `[untested]`). See `TESTING_STATUS.md`.
+
+## 0.7.148-dev (2026-06-19) — Adventure-collectible coin coverage + bigger coin casket in leftover book spots
+
+### Added — bigger coin casket where a tome/grimoire would have been
+- On injected Adventure maps, book pedestals are already converted: the first N become Chests of Trials (per `cursed_chest_count`) and the next can become the Belakor locus. **Leftover book spots used to spawn nothing — they now spawn a bigger coin casket** (a reward where the tome/grimoire would have been). It's the normal `deus_soft_currency` casket (`deus_loot_pyramide_01`) scaled to **1.75×** and tagged `ct_big_casket`; a new `GameModeDeus._get_coins_amount_and_type` hook grants tagged caskets **3× the coin** of a normal casket. `_spawn_guaranteed_pickup` runs per-peer on injected levels, so the scale + tag land on every peer's copy. Always on (no toggle), like the rest of the pedestal conversion.
+
+### Fixed/Improved — adventure collectibles → Pilgrim's Coin
+- The collectible→coin swap now also catches **`lorebook_page`** (the lore-page collectible), alongside the existing `loot_die` conversion. Confirmed coverage of the requested DLC collectibles: the Bögenhafen ale, **Blightreaper Rugbrödder ale**, and **Enchanter's Lair poison-feast chalice** are all `loot_die`-tagged spawners of the same bonus-dice "hidden mission" system, so they were already converted; `painting_scrap` (collectible art, all maps) remains handled by the spawner-eligibility mapping. So every Adventure-map collectible with no CW use now becomes coin.
+
+### Tests
+- `_rt_register("cw_collectible_and_big_casket")` — `loot_die` + `lorebook_page` are in the collectible→coin set, and `GameModeDeus._get_coins_amount_and_type` exists (so the 3× big-casket hook can bind).
+
+## 0.7.147-dev (2026-06-19) — Chest of Trials: pay-with-coin schedule + no-repeat boon offerings
+
+### Added — Chest of Trials pay-with-coin (new "Chest of Trials" settings group)
+- **`trials_cost_enabled`** (default OFF) + **`trials_cost_base`** (50–500, default 50) + **`trials_cost_mult`** (1.0–3.0, default 1.5). When on, boon (power_up) chests — the Chest of Trials — cost Pilgrim's Coin on an escalating schedule instead of the vanilla flat 150:
+  - **First boon chest each map is FREE.** The Nth after that costs `round_down_50(base × mult^(N-2))`. With base 50 / mult 2: `0, 50, 100, 200, 400`. With mult 1.5: `0, 50, 50 (75→50), 100 (112→50…), …` — all floored to the nearest 50.
+  - **Per-player, resets each map** (the first chest of every new map is free again). Tracked locally per peer: `get_purchase_cost` and `purchase()`/`open_chest` both run on the buying peer, so each player pays their own escalating price. Count increments in the consolidated `open_chest` hook and resets via `_transition_next_node` (per map) + `setup_run` (run start).
+  - **Host-authoritative:** base/mult read through `effective_setting` and auto-sync to clients (the keys are in the data tree, so `SYNCED_SETTING_NAMES` includes them).
+  - Implemented by extending ct's existing `DeusChestExtension.get_purchase_cost` hook (no new hook — VMF dup-hook rule). When enabled, the Trials schedule fully owns the boon-chest price; weapon swap/upgrade shrines and the altar-reuse multiplier are untouched.
+
+### Added — Chest of Trials no-repeat offerings (DEFAULT, no toggle)
+- Each Chest of Trials now offers a trial **none of your earlier chests this run did**. Extends the existing `DeusPowerUpUtils.generate_random_power_ups` remove-then-restore strip: for `weapon_chest` rolls only, boons already taken this run (`mod._ct_trials_taken_boons`, recorded in `open_chest`, cleared at `setup_run`) are stripped from the pool before the roll. Per-peer; other roll sources (shrine, cursed_chest, quest) are untouched.
+
+### Tests
+- `_rt_register("chest_of_trials_cost_schedule")` — helper exists, the three keys are in the synced set, and the schedule math holds (first free; base 50 / mult 2 → 0/50/100/200; round-down-to-50 with mult 1.5). Saves/restores live settings around the probe.
+
+## 0.7.146-dev (2026-06-18) — Fix boon-roll announce `<Invalid string format>` log error
+
+### Fixed
+- The bot boon-roll announce did `mod:echo(string.format("[ct] Bot %s got boon: %s (%s)", …))`. The boon display name can contain unfilled `%.1f` placeholders (raw loc + description_values), and `mod:echo` string-formats its first argument — so the pre-built string had its `%.1f` re-interpreted with no value and printed `<Invalid string format>` (`bad argument #2 to '?' (no value)`), 4× this session. Now passes the parts as args to `mod:echo` so it formats once; the boon name's `%` is inert as a `%s` value. Log-only (never crashed), but no more spurious error lines.
+
+## 0.7.145-dev (2026-06-18) — REVERT the holy_hand spawn-weight cut (it crashed the game on load)
+
+### Critical
+v0.7.143-dev lowered `Pickups.grenades.holy_hand_grenade.spawn_weighting` 0.8 → 0.1 to make Morgrim's bomb rarer on injected CW campaign maps. **This crashed the game on mission load** for anyone running the build:
+
+```
+foundation/scripts/util/error.lua:26: Problem selecting a pickup to spawn,
+spawn_weighting_total = 0.84999999999999998, spawn_value = 0.94332081079483032
+```
+
+Root cause: the spread-pickup sampler rolls `random` in `[0,1)` and walks the pool's cumulative `spawn_weighting`; if the pool total is **below the roll**, it falls off the end and hard-errors. holy_hand's 0.8 weight was load-bearing for the grenade pool total (the other grenades summed to only ~0.75). Cutting it to 0.1 made the total **0.85**, so any roll in `[0.85, 1.0)` crashed. This is the exact sampler invariant ct's own deus_potions renormalization already guards (a pool total must stay ≥ 1.0) — lowering a raw `spawn_weighting` violates it.
+
+### Changed
+- Removed the v0.7.143 load-time `holy_hand.spawn_weighting = 0.1` mutation entirely; holy_hand is back to vanilla 0.8 (no mutation, guaranteed crash-free). Morgrim's bomb is common again — the rate reduction has to be redone the safe way (renormalize the grenade pool so holy_hand's *share* shrinks while the total stays ≥ 1.0, or redistribute the removed weight onto the other grenades). A code comment at the old site documents the invariant so it isn't reintroduced as a bare weight cut.
+
+## 0.7.144-dev (2026-06-18) — Fix client rendering injected adventure maps as shrines + losing curse lighting (Issue #68)
+
+### Why
+Confirmed from a paired host+client log (2026-06-18): on the CLIENT, every injected campaign/adventure node rendered as a SHRINE with no curse halo, and the in-mission curse sky/lighting tint never applied. The client logged `[DeusMapScene.on_enter] seen=15 rewritten=0 skipped=13` on every map open while the host had injected those maps. Root cause: the client builds `AdventurePool.IS_INJECTED_ADVENTURE_LEVEL` from its OWN per-map toggle selection, which can be empty or differ from the host's — so `adventure_base_from_level_key()` returns nil for every host-injected node. That makes the map UI fall to `SHRINE_NODE_UNIT` (no curse halo) **and** makes `on_injected_adventure_level()` false on the client, so ct's adventure-map curse sky/lighting tint is skipped. One defect, both symptoms.
+
+### Fixed
+- `apply_graph_snapshot` (client) now registers each host node's adventure base into the client's `IS_INJECTED_ADVENTURE_LEVEL`, validated against the full static catalog `MISSION_BY_KEY` (built at load on both peers, so a hit is a genuine adventure base — never a vanilla CW node like `arena_belakor`). Uses the host's synced `base_level`, falling back to deriving the base from the permutation level key. Idempotent; persists for the run once the snapshot is seen. Result: the client recognizes exactly the maps the host injected → nodes render as travel with the correct icon + curse halo, and ct's curse lighting applies in-mission. `[#68]` log line per newly-recognized base.
+
+## 0.7.143-dev (2026-06-18) — Holy Hand Grenade much rarer on CW campaign maps
+
+### Why
+On the injected adventure/campaign maps, the Holy Hand Grenade ground pickup ("Morgrim's bomb") showed up far too often. Root cause: `Pickups.grenades.holy_hand_grenade.spawn_weighting = 0.8` — as likely as a regular grenade — and ct opens the campaign grenade pool on those maps, so this power-bomb claimed the (once-per-level) grenade slot constantly.
+
+### Changed
+- Load-time data mutation drops `Pickups.grenades.holy_hand_grenade.spawn_weighting` from **0.8 → 0.1** (~8× rarer). Naturally scoped to CW campaign maps — it's the only place the pickup spawns (its unit only loads in Morris/CW bundles, and vanilla CW arenas use deus spawners, not this campaign grenade pool). No toggle, per request. `[holy-hand]` log line confirms the value at load.
+
+## 0.7.142-dev (2026-06-18) — Diagnostics for the client-only "curse lighting not showing" bug (instrument-only; no behavior change)
+
+### Why
+A client-only, intermittent bug ("worked yesterday", multiple players): the CW curse sky/lighting doesn't show for the client. Investigation (verified against decompiled source) points at this defect class: the in-mission curse tint and the curse aesthetics are recomputed LOCALLY on every peer from `current_node.theme`, not authoritatively networked. The prime suspect is ct's own `DeusMechanism.start_next_round` theme-force: it sets `theme="wastes"` (neutral) while a curse is **disabled**, and `is_curse_disabled()` reads the host value via `effective_setting` (host-settings sync). If a client's synced value diverged or hasn't arrived, the client suppresses a curse the HOST is showing → loses the curse lighting. This is sync-race + per-curse → intermittent and client-only. No fix yet — this build adds the probes to confirm it from a paired host+client log.
+
+### Added (diagnostics only — ungated `mod:info`, no behavior change)
+- `[ct:theme-force]` (ungated) — at the `start_next_round` force site: logs `is_server`, the node's `curse`/`theme`, and `is_curse_disabled` per transition. A host log showing `is_curse_disabled=false` while the client shows `true` for the same curse confirms the divergence. This is the root-cause signal and fires even without debug logging.
+- The resulting per-node `theme`/`curse`/`god`/`node_type` (host vs client) is already dumped by the existing `[mission:start]` hook on `GameModeDeus.local_player_game_starts` (gated on `enable_debug_logging`) — no new hook added (VMF only allows one hook per method; a second would be dropped). Enable debug logging for that fuller dump.
+- (The existing ungated `[DeusMapScene.on_enter] SKIP/rewrite` logs already capture the related "missions render as shrines" symptom — compare client SKIP vs host rewrite for the same node key; that's the open Issue #68 / DLC-or-toggle pool divergence.)
+
+### To capture
+- Reproduce in co-op with the missing lighting, get **both** the host's and the client's console logs, and diff `[ct:theme-force]` / `[ct:lighting]` per node. Then the fix (host-authoritative curse-disable on the client, or defer the theme-force until the host sync has arrived) can be targeted.
+
+## 0.7.141-dev (2026-06-18) — Remove the Adventure save-item trait slider (moved to General Tweaker)
+
+### Why
+The "Adventure save-item trait chance (percent)" slider added in v0.7.140 controls the **Adventure-mode** charm traits Home Brewer / Healers Touch / Grenadier — it is not a Chaos Wastes feature and didn't belong in this mod. It now lives in **General Tweaker** as `gt_adventure_save_trait_chance` (1–75% slider). No other CW behavior changes.
+
+### Removed
+- `tweak_adventure_save_trait_chance` slider (data + localization), its `on_setting_changed` branch, its `sync_host_dependent_state` re-apply, and the whole `#6 Adventure save-a-consumable` block in `_ct_mechanic_tweaks.lua` (`ADV_SAVE_TRAITS`, `_adv_save_buff_entries`, `revert/apply_adv_save_traits`, `mod._ct_sync_adv_save_traits`). The `_effective` helper and the `#5 Shadow Homing Skulls stun` feature are untouched.
+
 ## 0.7.140-dev (2026-06-17) — Three user-suggested features: skull-stun slider, Adventure RNG-trait odds, Blessed Bots survival boons
 
 All source citations verified against the decompiled vanilla source 2026-06-17.

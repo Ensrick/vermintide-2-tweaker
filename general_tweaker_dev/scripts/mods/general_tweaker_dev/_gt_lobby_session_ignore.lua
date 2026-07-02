@@ -130,7 +130,7 @@ local function _require_host()
     return false
 end
 
-mod:command("gt_lobby_ignore", "Add a player to the session ignore list (Steam ID or name).", function(arg)
+mod:command("lobby_ignore", "Add a player to the session ignore list (Steam ID or name).", function(arg)
     if not _require_host() then return end
     local sid = _resolve_arg_to_sid(arg)
     if not sid then _say("Could not resolve '" .. tostring(arg) .. "' to a peer.") return end
@@ -140,7 +140,7 @@ mod:command("gt_lobby_ignore", "Add a player to the session ignore list (Steam I
     if _is_ignored(sid) then _kick(sid, "added to ignore list") end
 end)
 
-mod:command("gt_lobby_ignore_persist", "Add a Steam ID to the persistent ignore list.", function(arg)
+mod:command("lobby_ignore_persist", "Add a Steam ID to the persistent ignore list.", function(arg)
     if not _require_host() then return end
     local sid = _resolve_arg_to_sid(arg)
     if not sid then _say("Could not resolve '" .. tostring(arg) .. "' to a peer.") return end
@@ -151,9 +151,9 @@ mod:command("gt_lobby_ignore_persist", "Add a Steam ID to the persistent ignore 
     if _is_ignored(sid) then _kick(sid, "added to persistent ignore list") end
 end)
 
-mod:command("gt_lobby_unignore", "Remove a Steam ID from both ignore tiers.", function(arg)
+mod:command("lobby_unignore", "Remove a Steam ID from both ignore tiers.", function(arg)
     if not _require_host() then return end
-    if not arg or arg == "" then _say("Usage: /gt_lobby_unignore <steam_id>") return end
+    if not arg or arg == "" then _say("Usage: /lobby_unignore <steam_id>") return end
     local sid = tostring(arg)
     mod._gt_lobby_session_ignore[sid] = nil
     local p = _persistent()
@@ -161,7 +161,7 @@ mod:command("gt_lobby_unignore", "Remove a Steam ID from both ignore tiers.", fu
     _say("Removed " .. sid .. " from ignore list.")
 end)
 
-mod:command("gt_lobby_ignored", "Print the session + persistent ignore lists.", function()
+mod:command("lobby_ignored", "Print the session + persistent ignore lists.", function()
     if not _require_host() then return end
     local s_keys, p_keys = {}, {}
     for k, _ in pairs(mod._gt_lobby_session_ignore) do s_keys[#s_keys + 1] = k end
@@ -171,7 +171,7 @@ mod:command("gt_lobby_ignored", "Print the session + persistent ignore lists.", 
     _say("Persistent ignore (" .. #p_keys .. "): " .. (p_keys[1] and table.concat(p_keys, ", ") or "(none)"))
 end)
 
-mod:command("gt_lobby_ignore_last", "Re-add the most recently kicked-by-host peer to the session ignore list.", function()
+mod:command("lobby_ignore_last", "Re-add the most recently kicked-by-host peer to the session ignore list.", function()
     if not _require_host() then return end
     local sid = mod._gt_lobby_si_last_kicked
     if not sid then _say("No recent host-kicked peer recorded this session.") return end

@@ -363,7 +363,7 @@ if type(mod._gt_register_update) == "function" then
 end
 
 -- Diagnostics (renamed lt_manifest_dump -> gt_lobby_manifest_dump per merge)
-mod:command("gt_lobby_manifest_dump", "Print the locally-built modded manifest.", function()
+mod:command("lobby_manifest_dump", "Print the locally-built modded manifest.", function()
     local function chat(msg)
         if Managers.chat and Managers.chat.add_local_system_message then
             Managers.chat:add_local_system_message(1, msg, true)

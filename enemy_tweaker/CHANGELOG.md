@@ -1,6 +1,142 @@
 # Enemy Tweaker Changelog
 
-## 0.7.5-dev (2026-06-07) — Fix patrol-size hook reading the wrong positional arg (F8) + dead compose-blob debug label (F16)
+## 0.7.22-dev (2026-07-01) — Double-freeze guard + probe on the recycler freeze path (#213)
+
+### Fixed
+- **Suppressed the "Tried to freeze unit twice in the same frame" engine ERROR** under `EnemyRecycler.deactivate_area` with our raised grunt cap (#213). New guard hook on `BreedFreezer.try_mark_unit_for_freeze` (vanilla `scripts/managers/conflict_director/breed_freezer.lua`). The freeze is deferred to `commit_freezes`, so `ALIVE[unit]` stays true between two same-frame `ConflictDirector.destroy_unit` calls on one unit; the second call re-marked the unit, vanilla printed the ERROR (`breed_freezer.lua:253`) and then fell through to `mark_for_deletion` (`conflict_director.lua:2386-2387`), conflicting with the freeze queued on the first call. Raising `RecycleSettings.max_grunts` packs more roaming trash into recycler areas, so the window opened far more often than in vanilla.
+  - **Guard:** replicates vanilla's own duplicate check (`breed_freezer.lua:247-257`) BEFORE calling vanilla, reading vanilla's own `self.units_to_freeze[breed]` list (same state, cleared on the same `commit_freezes` lifecycle -- no frame-boundary or unit-pooling guesswork). If the unit is already queued this batch, returns `true` ("already marked / handled") so the caller skips the redundant `mark_for_deletion`; the unit stays frozen exactly once. **Fail-open:** any unresolvable state (settings / breed / list) falls through to vanilla, so behavior is unchanged beyond suppressing the redundant second mark. No prior et hook on `BreedFreezer` (grep-verified) -- new `(Class, method)` pair.
+
+### Added
+- **`[213:freeze]` printf probe.** When the guard suppresses a double-freeze it prints `[et] [213:freeze] suppressed unit=<breed> queued=<n> count_this_frame=<n>` via the engine `printf` (visible with mod logging OFF, unlike `mod:*` logging), rate-limited to ~5 lines/min. `queued` is the current freeze-batch depth for that breed; the recycler area index is an unstable loop-local (`_update_roaming_spawning`, reshuffled by `fast_array_remove`), so it is not a meaningful identifier and is not reported. Absence of the tag after a horde-heavy session is itself data that the double-freeze window did not open.
+- **New `_et_probe(key, fmt, ...)` helper** — direct engine-`printf` diagnostic channel, rate-limited per key, pcall-guarded. Added because the user plays with VMF mod-logging OFF, so `mod:info` / `mod:warning` / `mod:debug` never reach the handed-over console log (memory `reference_vt2_diagnostics_use_printf_not_modinfo`).
+
+### Changed
+- **`[rpc:schema]` mismatch log now uses `printf`, not `_dbg_alert`.** The `et_br_fingerprint` schema-mismatch line (added in 0.7.20-dev) routed through `mod:warning`, which is invisible with mod logging off -- so a mixed-version lobby drop was never actually landing in the user's log. Switched to `_et_probe` (keyed per peer, rate-limited).
+
+### Tests
+- New `_rt_register("et_freeze_probe_present")` smoke check (run via `/et_regression_test`) asserts `_et_probe` exists and does not raise, guarding against a revert that sends the probe back through invisible VMF logging.
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.21-dev → 0.7.22-dev.
+- `enemy_tweaker.lua` — new `_et_probe` helper; `BreedFreezer.try_mark_unit_for_freeze` guard hook; per-frame suppression-counter reset in the `ConflictDirector.update` hook; `[rpc:schema]` log switched to `_et_probe`; new regression check.
+
+### Grep (user log)
+- `[213:freeze]` — guard fired (double-freeze suppressed). Absence after a horde-heavy host session = the window never opened.
+- `Tried to freeze unit twice` — should no longer appear for freezable breeds once this build is the one actually running (verify via the `[id:LOAD]`/version banner).
+
+## 0.7.21-dev (2026-07-01) — Player-facing option descriptions + menu localization pass
+
+### Changed
+- **Rewrote every menu tooltip into plain player-facing English.** All 30 static rendered option tooltips (spawn scaling, spawn pacing, horde preset, Beastman banner, difficulty mimic, faction/breed substitution, monster + roaming-elite pools, boss fly-disable) plus the 4 dynamically generated per-difficulty tooltip templates (special max-total, max-same, per-special weight, per-special disable) were rewritten to at most 2-3 sentences describing what the setting does in the game, with the internal engine jargon removed (global/table/field names like `CurrentHordeSettings.compositions_pacing`, `RecycleSettings.max_grunts`, `SizeOfInterestPoint`, `AIGroupSystem.create_formation_data`, internal breed ids, etc.). Meaning was preserved from the prior text; nothing new was invented. Titles/labels and all setting_ids, defaults, and widget structure are unchanged.
+- **Removed em dashes from menu text.** The dynamically built breed-substitution dropdown option labels used an em dash separator (`"%s — %s"`); switched to a hyphen (`"%s - %s"`) per the no-em-dash-in-menus rule. The em dashes that remained were otherwise only inside the long tooltip values, which were replaced wholesale.
+
+### Notes
+- No `mod:localize()` calls exist in any widget field, so there were no double-localize (`<sentence>`) conversions to make. Every widget-referenced loc key (including the dynamically generated per-difficulty specials weight/disabled keys and the breed-swap option keys) resolves against the loc table; no missing entries were found or added.
+- The commented-out Big Rebalance widget block (ON ICE) and its loc entries were left unchanged: those tooltips never render, and they document internal rebalance infrastructure where the technical terms are the content.
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.20-dev → 0.7.21-dev.
+- `enemy_tweaker_localization.lua` — 30 static tooltip values + 4 dynamic per-difficulty tooltip templates rewritten; breed-swap option label separator em dash → hyphen.
+
+## 0.7.20-dev (2026-07-01) — RPC schema versioning on the et_br_fingerprint channel (#42)
+
+### Changed
+- **`et_br_fingerprint` RPC is now schema-versioned** (VMF_RECIPES § 10 pattern, propagated from the ct v0.7.114-dev pilot / Issue #27). New `local ET_RPC_SCHEMA = 1` constant defined next to `MOD_VERSION`.
+  - **Sender** (`mod._br_fingerprint_broadcast_once`): `ET_RPC_SCHEMA` is prepended as the FIRST positional arg, ahead of the existing `MOD_VERSION`, `fp` payload — `network_send("et_br_fingerprint", "others", ET_RPC_SCHEMA, MOD_VERSION, fp)`.
+  - **Receiver** (`mod:network_register("et_br_fingerprint", ...)`): the callback now takes `(sender_peer_id, schema_version, peer_version, peer_fp)` and drops any message whose `schema_version ~= ET_RPC_SCHEMA` before touching state, logging `[rpc:schema] et_br_fingerprint mismatch ...` via `_dbg_alert` (log-only, never `error()`). The existing `type(peer_fp) ~= "string"` guard is retained as a defensive post-gate type check.
+  - **Effect:** a mixed-version lobby (host on a new dev bundle, friend on a stale Workshop bundle, or vice versa) degrades cleanly — the mismatched fingerprint packet is dropped with a log line instead of being parsed by the wrong positions and producing a spurious BR-drift warning. No state mutation, no crash. Bump `ET_RPC_SCHEMA` only when the `et_br_fingerprint` payload shape changes (field add/remove/reorder, or a positional field's type changes).
+
+### Tests
+- New `_rt_register("et_rpc_schema_present")` smoke check (run via `/et_regression_test`) asserts `ET_RPC_SCHEMA` is a number and ≥ 1, guarding against a future revert silently un-gating the receiver.
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.19-dev → 0.7.20-dev; added `ET_RPC_SCHEMA = 1` constant.
+- `enemy_tweaker.lua` — sender prepend, receiver schema gate, new regression check.
+
+## 0.7.19-dev (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.7.18-dev (2026-06-27) — Stormvermin Champion in the roaming-elite pool
+
+### Added
+- **`champion_in_elite_pool`** + **`champion_elite_chance`** (Roaming Elite Pool group, default OFF, host-side, default chance **5%**) — a per-spawn roll can replace a **roaming** skaven elite (`skaven_storm_vermin` / `_with_shield` / `_commander`) with the **Stormvermin Champion** (`skaven_storm_vermin_champion`). "Roaming" is gated on `spawn_type == "roam"` (set by `EnemyRecycler` at `enemy_recycler.lua:585`), so only the loose wandering elites are eligible — horde, paced, terror-event, and boss-event stormvermin are never touched. Host-only (server-authoritative spawn); the Champion is a registered dynamically-loadable boss breed, so vanilla's networked loader replicates it to clients exactly like the Warlord feature — we never call `Managers.package:load` ourselves.
+  - **Single-hook consolidation:** merged into the existing `ConflictDirector.spawn_queued_unit` hook (VMF drops a 2nd hook on the same `Class.method`; marker `_et_spawn_queued_unit_consolidated`) alongside the Warlord monster-pool swap. The two gate on disjoint `(breed, spawn_type)` conditions, so at most one fires per spawn. Hook renamed `spawn_queued_unit_warlord` → `spawn_queued_unit_swaps`.
+- **Champion retuned for the elite role** (applied to the shared `Breeds.skaven_storm_vermin_champion` while the toggle is ON, restored on OFF/disable):
+  - **Health:** `max_health = { 52, 104, 156, 208, 260, 340, 420, 500 }` by difficulty rank — **260 on Cataclysm** (rank 5 = internal `hardest`) per request, **~1/5 (52) on Recruit** (rank 1), linear ramp between, scaled on above Cataclysm. Vanilla Champion is an 800-HP boss.
+  - **AI:** `ai_strength`/`ai_toughness` = **10/10**, copied from **Skarrik Spinemanglr** (`skaven_storm_vermin_warlord`); Champion vanilla is 6/3.
+  - **Super armor:** `primary_armor_category = 6` — the chaos-warrior / warlord / exalted-champion tier (`breed_chaos_warrior.lua:79`). Verified against decompiled source, not assumed.
+  - Keeps its own Champion behaviour tree (spin / shatter / lunge moveset) and boss flags — so it still shows a health bar and triggers champion combat music; treat it as a rare mini-boss.
+
+### Notes / caveats
+- **Side effect:** mutating the shared Champion breed retunes **every** Champion on this peer while the toggle is on, including its rare vanilla appearances (some weave missions / terror-event hordes, the Khorne Champions mutator). Gated behind the toggle and restored on disable.
+- **Multiplayer:** every peer running et applies the same retune (load-time + `ConflictDirector.init` + VMF lifecycle callbacks) so host/client agree on the Champion's stats. Peers without et (or with the toggle off) keep the vanilla 800-HP Champion — pin the setting across the lobby for a consistent session (same caveat as et's other host-side spawn features).
+- Default chance kept low (5%) so the Champion stays an occasional encounter, not a wall of mini-bosses.
+
+## 0.7.17-dev (2026-06-24) — Strip dev-only status tags from public labels
+
+Stripped the dev-only `[confirmed working]` prefix tag from the `et_fly_disable_mult` user-facing `en = "..."` label (Boss Mechanic Tweaks group: boss fly-disable duration multiplier). Display-string-only edit — no logic or behavior change. Verified 0 `[confirmed working]` occurrences remain in any `en =` value.
+
+## 0.7.16-dev (2026-06-20) — Fix Skarrik Spinemangler (Warlord) "lacking spawners" crash off-arena
+
+The "Monster Pool: Skarrik Spinemangler" feature crashed with `foundation/scripts/util/error.lua:26: Level <lvl> is lacking spawners of spawner group warlord_spawners, this is necessary to use BTSpawnAllies behaviour in breed skaven_storm_vermin_warlord` when a pool-spawned Warlord entered its ally-summon behaviour OUTSIDE its home arena (reported 2026-06-20, GUID e87eacaa, on a CW-injected `dlc_termite_2` mission). Root cause: the Warlord BT runs a `BTSpawnAllies` node (`spawn_allies`, `skaven_storm_vermin_warlord_behavior.lua:57-59`) that summons reinforcements from the `warlord_spawners` spawner group. That group is registered only in the Warlord's scripted home arena (Stormdorf), so on any other level the node's spawn-point lookup hits a **hard `fassert`**: `bt_spawn_allies_action.lua:184` (`fassert(spawners_raw, "Level %s is lacking spawners of spawner group %s, …")`), reached from `BTSpawnAllies.enter:39` → `BTSpawnAllies.find_spawn_point:178` where `spawner_system._id_lookup["warlord_spawners"]` is nil.
+
+**Fix:** wrap the plain table function `BTSpawnAllies.find_spawn_point` (a static method, not a `self:` method → NOT a VMF class hook, so no duplicate-hook concern — grep-verified no existing et hook on `BTSpawnAllies`/`find_spawn_point`). The wrap diverts from vanilla **only** when BOTH (a) the BT's breed is the Warlord (`blackboard.breed.name == skaven_storm_vermin_warlord`) AND (b) `warlord_spawners` is genuinely absent from the **live** spawner system (`spawner_system._id_lookup[spawn_group] == nil` — the exact table+key vanilla asserts on) and the action has no `use_fallback_spawners` escape hatch. In that case it ends the spawn-allies node cleanly: it populates the minimal `data` fields the surrounding `BTSpawnAllies.enter` still touches (`data.call_position`/`data.spawn_forward`), nils `blackboard.spawning_allies` so `BTSpawnAllies.run` returns `"done"` on its first tick (`run:381`) **before** `_spawn` would dereference the (nonexistent) spawners, and returns the Warlord's own position. Net effect off-arena: the Warlord plays its call-allies wind-up and simply gets no reinforcements — no crash. Wrapped in `pcall` via `_hook_wrap_table`. `_rt_register("warlord_spawn_allies_guard")` asserts the hook target stays present.
+
+**Lowest blast radius / arena-safe:** in the Warlord's real arena `warlord_spawners` IS registered, so `_id_lookup[spawn_group]` is non-nil → the gate fails → vanilla runs untouched and the Warlord summons allies normally. Every other breed that uses `BTSpawnAllies` (Exalted Sorcerers, Bödvarr, Rasknitt, etc.) is never the Warlord breed → also untouched.
+
+**This is the SECOND out-of-arena Warlord crash fix** (the 1st was the unguarded `intro_timer` in `stagger_modifier_function`, fixed v0.7.14). The feature stays **default-OFF + host-test-gated**. If more out-of-arena Warlord behaviours surface crashes (this breed assumes its scripted-arena scaffolding in several systems), the "Monster Pool: Skarrik Spinemangler" feature is a candidate to move **on-ice** rather than chase each one.
+
+## 0.7.15-dev (2026-06-20) — Boss fly-disable multiplier (received from general_tweaker_dev)
+
+### Added
+- **Boss Mechanic Tweaks group → `et_fly_disable_mult`** (default 1.0, range 0.0–3.0, 2 decimals) — moved here from general_tweaker_dev (was `gt_fly_disable_mult`). MULTIPLIER on how long the Halescourge / Nurgloth "cloud of flies" disable lasts. Scales BOTH fly attacks from their own vanilla baseline: Nurgloth's melee fly-swarm (`BreedActions.chaos_exalted_sorcerer_drachenfels.swarm_players.duration`, vanilla 8s) and the seeking insect-swarm bomb missile both bosses throw (`TrueFlightTemplates.sorcerer_slow_bomb_missile.attached_life_time`, vanilla 10s). Pure load-time data mutation in new `_et_boss_tweaks.lua` (exposes `mod._et_apply_fly_disable`), re-applied on any setting change via the existing `on_setting_changed` chain. **No `mod:hook`** — so no duplicate-hook concern with enemy_tweaker's existing BreedActions banner patch (which touches a different breed). Host-only (the boss runs on the host). The fly cloud stays killable (5 HP); this only changes its max length.
+
+## 0.7.14-dev (2026-06-20) — Fix Skarrik Spinemangler (Warlord) stagger crash
+
+The "Monster Pool: Skarrik Spinemangler" feature could crash with `breed_skaven_storm_vermin_warlord.lua:189 (decompiled :170): attempt to compare number with nil` when the Warlord took a hit (reported 2026-06-20, GUID f2818b56). Root cause: the breed's `stagger_modifier_function` does an **unguarded** `t < blackboard.intro_timer`, but `intro_timer` is set only by the Warlord's HOST-side `run_on_spawn` (`ai_breed_snippets.lua:626`). The **client/husk** spawn path (`run_on_husk_spawn`) sets no timer fields, so a peer resolving stagger on a husk Warlord compares `t < nil` and crashes (caller `damage_utils.do_stagger_calculation`, `:775`). Every other vanilla reader of `intro_timer` already guards it (e.g. `bt_conditions.lua:87`) — this one callback is the oversight. **Fix:** wrap the breed's `stagger_modifier_function` data-field (a plain function, not a VMF class hook → no hook collision) to default `intro_timer = 0` ("intro already over", correct for an open-pool spawn with no intro) when nil, before vanilla runs. Idempotent; installed unconditionally (only acts when `intro_timer` is nil, which never happens on the scripted-arena host spawn — so vanilla arena Warlords are unaffected). The feature stays default-OFF + host-test-gated; if other husk-side Warlord systems surface crashes, the feature should move on-ice, but the reported stagger crash is a clean contained fix.
+
+## 0.7.13-dev (2026-06-20) — Fix crash from oversized patrols (patrol size multiplier)
+
+### Fixed
+- **Patrol size multiplier no longer crashes when cranked high.** A co-op tester set the patrol size multiplier high and the game crashed with `ai_group_templates_patrol.lua … bad argument #1 to 'Vector3_distance_squared' (Vector3 expected, got userdata)` in the vanilla patrol `update_units`. Root cause: our `AIGroupSystem.create_formation_data` hook replicates formation **rows**, and each row extends the patrol along its spline by `SPLINE_SPEED` (2.22m — `patrol_formation_settings.lua:20`); `formation_length = (rows-1) × 2.22m` (`ai_group_system.lua:822`). Once the formation overruns the spline/navmesh, vanilla can't place the overflow row — `spawn_pos` returns nil (`ai_group_system.lua:897`) and it builds a malformed, `breed_name`-less member with an off-mesh boxed `start_position`. That bad member then crashes the patrol's `update_units` on `POSITION_LOOKUP[unit]`. **Fix:** hard-cap the replicated row count at **14 rows** (~29m, ~2× a typical 6-row patrol) so the whole formation stays on-mesh; the hook logs a `[patrol]` alert when it clamps. Bigger patrols are an engine (navmesh/spline) limit, not something we can safely force. The mod previously only *warned* at >64 rows without capping. (Same `POSITION_LOOKUP` crash class the repo tracks.)
+
+## 0.7.12-dev (2026-06-19) — "Monster Pool: Skarrik Spinemangler" toggle
+
+### Added
+- **`warlord_in_monster_pool`** + **`warlord_monster_chance`** (Monster Pool group, default OFF, host-side) — adds the Skaven Warlord **Skarrik Spinemangler** (`skaven_storm_vermin_warlord`) to the monster pool: when a boss terror event would spawn a standard monster (Rat Ogre / Stormfiend / Chaos Spawn / Troll / Minotaur), a per-spawn roll (`warlord_monster_chance` %, default 25) can replace it with the Warlord. New host-only `mod:hook` on **`ConflictDirector.spawn_queued_unit`** (`conflict_director.lua:1732`) — the universal spawn chokepoint that the boss terror-event path (`TerrorEventMixer` → `ConflictDirector:spawn_one` → `spawn_queued_unit`) funnels through; this is a **separate** path from the existing horde breed-swap (`HordeSpawner.*`), so it needed its own hook (single-hook pre-flight: zero prior et hooks on `spawn_queued_unit`/`spawn_one`).
+  - **Crash-safe package load:** the hook substitutes the breed *table* only and lets **vanilla** `spawn_queued_unit` run its own `enemy_package_loader:request_breed` on the real `.package` (`resource_packages/breeds/skaven_storm_vermin_warlord`); the spawn queue blocks on `is_breed_loaded_on_all_peers` before instantiating. We never call `Managers.package:load` ourselves (the raw-unit-path call that async-crashed et at the v0.7.10 banner force-load). The Warlord is a registered dynamically-loadable breed (`EnemyPackageLoaderSettings 'level_specific'`), and a shipped mod (SpawnTweaks reverse-twins) already spawns it cross-level via this exact path — verdict: crash-safe load path, one residual unverified risk (whether the Warlord package is physically mounted in *every* level's bundle), mitigated by default-OFF + host-must-test.
+  - **Caveats (in tooltip):** host-only; `chaos_troll_chief` (Festering Ground scripted finale boss) is excluded; off its home arena the Warlord may spawn without intro/music and behave passively; default chance kept low (25) to avoid multiple Warlords at once. `_rt_register("warlord_monster_swap_hook")` asserts the hook target + breed exist.
+
+## 0.7.11-dev (2026-06-18) — Cap horde + event size at 5x (patrol/roaming stay 15x)
+
+### Changed
+- **Horde Size and Event Size sliders now cap at 5x** (were 0–15x). Paced/event hordes are dense waves that get overwhelming and unstable past ~5x — now that horde scaling actually reaches the spawner (v0.7.9), 15x was too much. **Patrol Size and Roaming Size keep their 0–15x range** (a single enlarged patrol / ambient density scale more gracefully). Capped both at the slider (`range = {0,5}`) **and** with a hard `math.min(…, 5)` clamp in the apply paths (`_apply_horde_size_to_current_horde_settings`, the preset log, and the terror-event hook) so a stale saved value above 5 also clamps down. Tooltips updated.
+
+## 0.7.10-dev (2026-06-18) — HOTFIX: revert beastman banner force-load (crashed); keep horde-size fix
+
+### Fixed (crash)
+- **Reverted the v0.7.9 beastman planted-banner force-load — it hard-crashed the game.** `Managers.package:load` was called on the raw unit *path* (`units/weapons/enemy/wpn_bm_standard_01/wpn_bm_standard_01_placed`), which is **not a loadable `.package`**. The engine threw `Resource '#ID[46aeb0a96d242ebd]' was not found!` **asynchronously**, so the surrounding `pcall` never caught it, and the game crashed (GUID `ea9eaebb-fa1c-45a8-a5c4-405d791ab71f`) the moment a ConflictDirector init/refresh ran with beastmen swapped in. Removed the force-load entirely. Consequence: the planted beastman banner does **not** render on a cross-faction swap (same as ≤v0.7.8) — but **no crash**. Filed to re-do correctly once the real package carrying that unit is identified.
+
+### Unaffected
+- The **v0.7.9 horde-size scaling fix** is independent (it only mutates `{min,max}` counts on `CurrentHordeSettings.compositions_pacing`, no resource loading) and **remains in place**.
+
+## 0.7.9-dev (2026-06-18) — Fix horde-size scaling (no-op) + beastman planted-banner not rendering
+
+### Fixed
+- **`horde_size_multiplier` did nothing to paced hordes** (while patrol/roaming worked). The engine sizes paced hordes from `CurrentHordeSettings.compositions_pacing` (`horde_spawner.lua:136/348/742`), which is a **deep clone** of the global `HordeCompositionsPacing` taken at `conflict_director.lua:881` (`table.clone` recurses). et only mutated the *global* — never reaching the spawner — and the init hook's mutation happened *after* vanilla `init` already cloned the unmutated global; worse, every `Switching ConflictSettings` re-clone wiped it. Roaming/patrol work because they mutate live tables. **Fix:** new `_apply_horde_size_to_current_horde_settings()` scales the live `CurrentHordeSettings.compositions_pacing`, called from both the `ConflictDirector.init` and `refresh_conflict_director_patches` hooks (the load-bearing re-apply, mirroring faction-swap/roaming). Stopped scaling the global for sizing to avoid double-apply; each refresh re-clones the unmutated global so the clone is scaled exactly once. Only `{min,max}` tuples are touched — `loaded_probs` untouched (no pickup-sampler invariant risk).
+- **Beastman Standard Bearer planted no visible banner** on a cross-faction swap (the "bring that banner down" VO fired, but no prop). The bearer's breed package force-loads only the bearer model; the planted banner is a *separate* network unit hard-coded in `BTPlaceStandardAction` (`bt_place_standard_action.lua:118-119`: `units/weapons/enemy/wpn_bm_standard_01/wpn_bm_standard_01_placed`) that rides the beastmen *level* package — not resident on a non-beastmen map. **Fix:** et now force-loads that unit (`Managers.package:load`, async+prioritized, `has_loaded`+`pcall` guarded) whenever beastmen are swapped in, from the same init + refresh hooks, on every peer (it's a network unit clients must render). Gated so non-beastmen sessions hold no beastmen asset.
+
+## 0.7.8-dev (2026-06-18) — `/et_reset` (one-click inert) + confirmed inert-by-default
+
+### Added
+- **`/et_reset`** — reverts every spawn-affecting setting to its inert (vanilla) default in one command: the 6 difficulty-mimic dropdowns → `off`, the 4 size multipliers → `1.0x`, the pacing values (`max_grunts_override`/`horde_grunt_push_threshold`/`horde_frequency_min`/`max`) → their vanilla baselines, `spawn_pace_multiplier` → 1, `ambients_ignore_threat` → off, breed/faction swaps + `horde_preset` → off. Values go inert immediately; live spawns revert on the next level load. Run `/et_status` to confirm.
+
+### Verified (no code change needed)
+- **Enemy Tweaker is inert out of the box.** Audited every spawn-affecting default after a host's first-time use reportedly showed a "horde override for cataclysm" active: the difficulty-mimic dropdowns default to `off` and `_apply_difficulty_mimic` skips any field whose setting is `off`; the 4 size multipliers default to `1.0`; and the pacing settings are guarded (`if override ~= 90`, `if push ~= 60`, `if fmin ~= 50 or fmax ~= 100`, `if mult == 1 then return`) so they only apply when changed. A fresh install therefore overrides nothing. The observed `mimic_horde=cataclysm` was a value set in the settings menu, not a default — `/et_reset` clears exactly that.
+
+## 0.7.6-dev (2026-06-18) — Beastman Banner: "No Camera Jerk On Placement" toggle
+
+### Added
+- New checkbox in the **Beastman Banner** group: **No Camera Jerk On Placement** (default off). When ON, planting the beastmen standard no longer launches/pushes the player. Vanilla's `ExplosionTemplates.standard_bearer_explosion.explosion` (belladonna DLC) carries `catapult_players = true` + `player_push_speed = 10` + `catapult_force = 7`, so the placement shockwave flings the player and jerks their camera ("forces the player's camera when set down"). The toggle nulls those player-knockback fields on the explosion template (snapshot at first apply; restored on off/disable, with `on_disabled` forcing the vanilla restore). The explosion's effect on nearby beastmen (stagger) is unaffected. Same data-mutation pattern + apply points as the existing bearer-stagger toggle (initial / mission-load / setting-change / on_enabled / on_disabled); no new hooks.
 
 ### Why
 Audit 2026-06-07 flagged two arg-binding bugs against the decompiled vanilla source:

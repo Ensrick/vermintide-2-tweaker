@@ -1,7 +1,7 @@
 local mod = get_mod("gt")
 _MEM_PROBE_T0_GTS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.71-alpha"
+local MOD_VERSION = "0.2.73-alpha"
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
 -- needing access to this file-local. Mirrors the same pattern lt used
@@ -21,29 +21,23 @@ mod.MOD_VERSION = MOD_VERSION
 mod.GT_LOBBY_RPC_SCHEMA = 1
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- `_dbg` is for confirmation / expected behavior — routes through mod:debug.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — routes through mod:warning.
 -- v0.2.55: NOTE — the file ALSO redeclares `_dbg` (without prefix) inside the
 -- per-frame observation hooks block further down, which shadows this top-of-
--- file definition for everything below that point. Both definitions read the
--- same `enable_debug_logging` gate, so behavior is consistent.
+-- file definition for everything below that point.
+-- v0.2.73: removed per-mod enable_debug_logging toggle; diagnostics now route
+-- through VMF's built-in logging system (mod:debug / mod:warning).
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[gt:dbg] " .. fmt, ...)
-    end
+    mod:debug("[gt:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[gt:dbg] " .. fmt, ...)
-        mod:echo("[gt] " .. fmt, ...)
-    end
+    mod:warning("[gt:dbg] " .. fmt, ...)
 end
 
 -- Exposed for sibling `_gt_lobby_*` modules (and any future external file
--- that needs gt's debug-helpers). Both keys read the same
--- `enable_debug_logging` gate as the file-local closures.
+-- that needs gt's debug-helpers).
 mod._gt_dbg = _dbg
 mod._gt_dbg_alert = _dbg_alert
 
@@ -98,7 +92,6 @@ mod:info("[gt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
 -- confirm a HOST actually had a bot toggle ON). Paired with the per-change log
 -- in on_setting_changed below. Fires at load and on demand via /gt_dump_settings.
 local function _log_settings_snapshot(reason)
-    if not mod:get("enable_debug_logging") then return end
     local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
     if not ok or type(data) ~= "table" then return end
     local keys = {}
@@ -115,7 +108,7 @@ local function _log_settings_snapshot(reason)
     for _, k in ipairs(keys) do
         parts[#parts + 1] = k .. "=" .. tostring(mod:get(k))
     end
-    mod:info("[gt:settings@%s] %s", reason or "load", table.concat(parts, "; "))
+    mod:debug("[gt:settings@%s] %s", reason or "load", table.concat(parts, "; "))
 end
 mod._gt_log_settings_snapshot = _log_settings_snapshot
 _log_settings_snapshot("load")
@@ -717,108 +710,26 @@ end
 mod:command("noclip", "Toggle noclip (fly through walls)", function() mod.gt_noclip_toggle() end)
 
 -- ============================================================
--- Keep Menus in Missions (inventory, talents, achievements, etc.)
+-- Keep Menus in Missions / in-mission inventory — REMOVED (migrated to GUI Tweaker)
 -- ============================================================
--- The keep's menu hotkeys (I=inventory, H=hero, M=map, O=achievements,
--- C=loot, K=weave forge, J=weave play — all rebindable) feed into
--- `IngameUI.handle_menu_hotkeys`, which is only called with
--- `hotkeys_enabled = true` when `is_in_inn` is true. We hook the
--- function and force-flip the flag during missions so whatever key
--- the player has bound to each hotkey opens its menu in-mission too.
+-- The in-mission inventory / "Keep Menus in Missions" feature (the
+-- InventorySettings loadout-access patch, the ESC-menu "Open Inventory"
+-- entry, the `IngameUI.handle_menu_hotkeys` hotkey-flip hook, the
+-- `gt_open_mission_inventory` / `/gt_inv` opener, and the
+-- `HeroWindowLoadoutConsole._customize_item` cim crash-gate) was removed
+-- from the public General Tweaker in v0.2.72-alpha and lives in the
+-- GUI Tweaker (gut) mod instead.
 --
--- Three patches are needed:
---   (1) InventorySettings.inventory_loadout_access_supported_game_modes —
---       hero_view.lua:323 early-returns on adventure/deus and the loadout
---       panel never inits without this.
---   (2) IngameUI.handle_menu_hotkeys — flip `hotkeys_enabled` to true so
---       the I/H/M/O/C hotkeys actually fire transitions during a mission.
---   (3) menu_layouts.in_game.{alone,host,client} — adds an "Open Inventory"
---       entry to the ESC menu as a fallback for players who don't recall
---       the hotkey.
--- The legacy memory entry blamed `game_mode:menu_access_allowed_in_state()` in ingame_ui.lua,
--- but that method only exists on GameModeVersus and doesn't gate adventure/deus.
-local _INVENTORY_BUTTON_ENTRY = {
-    display_name = "interact_open_inventory_chest",
-    fade = true,
-    requires_player_unit = true,
-    transition = "hero_view_force",
-    transition_state = "overview",
-}
-
-local function _get_in_game_layouts()
-    -- ingame_view_menu_layout is local_require'd, so its return table lives in
-    -- package.loaded. Mutating that shared table affects the layouts seen by
-    -- subsequently-created IngameView instances.
-    local pkg = package and package.loaded
-    local defs = pkg and pkg["scripts/ui/views/ingame_view_menu_layout"]
-    return defs and defs.menu_layouts and defs.menu_layouts.in_game
-end
-
-local function _has_inventory_entry(layout)
-    if type(layout) ~= "table" then return false end
-    for _, entry in ipairs(layout) do
-        if entry and entry.display_name == _INVENTORY_BUTTON_ENTRY.display_name then
-            return true
-        end
-    end
-    return false
-end
-
-local function _patch_in_game_menu(enabled)
-    local in_game = _get_in_game_layouts()
-    if not in_game then return end
-    for _, key in ipairs({ "alone", "host", "client" }) do
-        local layout = in_game[key]
-        if type(layout) == "table" then
-            local has = _has_inventory_entry(layout)
-            if enabled and not has then
-                -- Insert just before "options_menu_button_name" (slot 2 in vanilla in_game
-                -- layouts) so the order matches the lobby layout: Return, Inventory, Options...
-                table.insert(layout, 2, table.clone(_INVENTORY_BUTTON_ENTRY))
-            elseif (not enabled) and has then
-                for i = #layout, 1, -1 do
-                    if layout[i] and layout[i].display_name == _INVENTORY_BUTTON_ENTRY.display_name then
-                        table.remove(layout, i)
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function _patch_inventory_access()
-    local enabled = mod:get("mission_inventory_enabled") and true or false
-    if InventorySettings then
-        local modes = InventorySettings.inventory_loadout_access_supported_game_modes
-        if modes then
-            modes.adventure = enabled or nil
-            modes.survival  = enabled or nil
-            modes.deus      = enabled or nil
-        end
-    end
-    _patch_in_game_menu(enabled)
-end
-
-_patch_inventory_access()
-
--- ingame_ui.lua:660 calls handle_menu_hotkeys with
--- `enable_hotkeys = is_in_inn and not disable_ingame_ui and not in_score_screen`.
--- Force the `hotkeys_enabled` arg true so the keep hotkeys (whatever the
--- player has them bound to) fire during missions too. The function still
--- bails on a missing player_unit, score-screen, or pending transition,
--- so end-of-level and respawn states remain protected.
-mod:hook("IngameUI", "handle_menu_hotkeys", function(func, self, dt, input_service, hotkeys_enabled, menu_active)
-    if mod:get("mission_inventory_enabled") then
-        hotkeys_enabled = true
-    end
-    return func(self, dt, input_service, hotkeys_enabled, menu_active)
-end)
+-- The `IngameUI.handle_menu_hotkeys` hotkey-flip in particular was the
+-- cause of Issue #62 (force-flipping `hotkeys_enabled` true mid-mission let
+-- the keep hotkeys spawn unloaded ui_* preview worlds and crash). The
+-- `gt_no_mission_hotkey_flip` regression test below guards against that hook
+-- being reintroduced.
 
 -- CLARIFY: tp is forcibly cleared on every state change (level transition,
 -- etc.) because the engine reinitializes the FP system. The
 -- PlayerUnitFirstPerson.extensions_ready hook above will re-arm tp on the
--- next player spawn if tp_camera_enabled is on. _patch_inventory_access is
--- re-applied here in case InventorySettings was reloaded.
+-- next player spawn if tp_camera_enabled is on.
 mod.on_game_state_changed = function(status, state_name)
     _tp_enabled = false
     if Development._hardcoded_dev_params then
@@ -829,7 +740,6 @@ mod.on_game_state_changed = function(status, state_name)
     -- the active flag so a stale noclip setting from the previous mission
     -- doesn't re-arm before the player has a body to fly.
     _noclip_active = false
-    _patch_inventory_access()
     -- AI takeover is a per-run intent — the saved state on the host doesn't
     -- survive a level/state change cleanly, and persisting the checkbox would
     -- show "on" across runs where no swap actually happened. Suppress the
@@ -864,9 +774,7 @@ mod.on_setting_changed = function(setting_id)
     -- v0.2.71: log every toggle/value change (debug-gated) so the log shows
     -- exactly when a setting flips and to what — pairs with the load snapshot.
     _dbg("[gt:setting-changed] %s = %s", tostring(setting_id), tostring(mod:get(setting_id)))
-    if setting_id == "mission_inventory_enabled" then
-        _patch_inventory_access()
-    elseif setting_id == "tp_camera_enabled" then
+    if setting_id == "tp_camera_enabled" then
         _apply_tp(mod:get("tp_camera_enabled"))
     elseif setting_id == "godmode_enabled" then
         _apply_godmode(mod:get("godmode_enabled") or false)
@@ -953,26 +861,19 @@ end
 -- preserves all returns intact (VMF_RECIPES § 2) and chains cleanly
 -- with other mods' wrappers on the same method.
 
--- v0.2.54-dev: renamed from `gt_debug_mode` to the universal
--- `enable_debug_logging` key per PROJECT_STANDARDS.md § 3.6.
--- v0.2.55-dev: shadows the top-of-file `_dbg`/`_dbg_alert` pair; both read
--- the same gate key.
-local function _dbg_on() return mod:get("enable_debug_logging") end
-
+-- v0.2.55-dev: shadows the top-of-file `_dbg`/`_dbg_alert` pair for
+-- everything below this point (no prefix, passes fmt directly).
+-- v0.2.73: removed per-mod enable_debug_logging gate; routes through VMF.
 local function _dbg(fmt, ...)
-    if _dbg_on() then mod:info(fmt, ...) end
+    mod:debug(fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if _dbg_on() then
-        mod:info(fmt, ...)
-        mod:echo("[gt] " .. tostring(fmt), ...)
-    end
+    mod:warning(fmt, ...)
 end
 
 -- Exposed on `mod` so the existing _customize_item hook (further
 -- down in the file, predates this section) can call into it.
-mod._dbg_on  = _dbg_on
 mod._dbg_log = _dbg
 
 local function _ctx_str()
@@ -1037,9 +938,8 @@ do
     end
 end
 
--- HeroView open/close: every entry to the keep / mission inventory
--- menu. Useful for confirming gt_open_mission_inventory actually
--- dispatched and which substate the view landed in.
+-- HeroView open/close: every entry to the keep menu. Useful for
+-- confirming which substate the view landed in.
 mod:hook("HeroView", "on_enter", function(func, self, params, ...)
     _dbg("[hero_view] on_enter | %s | cim=%s", _ctx_str(), _cim_str())
     return func(self, params, ...)
@@ -1375,13 +1275,13 @@ end)
 -- traversal that the gear icon and tab buttons drive.
 mod:hook("HeroViewStateOverview", "set_layout_by_name", function(func, self, name, ...)
     _dbg("[menu_event] set_layout_by_name name=%s", tostring(name))
-    if _dbg_on() then _gt_dump_menu_now("layout_" .. tostring(name)) end
+    _gt_dump_menu_now("layout_" .. tostring(name))
     return func(self, name, ...)
 end)
 
 mod:hook("HeroViewStateOverview", "on_enter", function(func, self, params, ...)
     _dbg("[menu_event] HeroViewStateOverview.on_enter")
-    if _dbg_on() then _gt_dump_menu_now("state_overview_enter") end
+    _gt_dump_menu_now("state_overview_enter")
     return func(self, params, ...)
 end)
 
@@ -1411,7 +1311,7 @@ do
     local _pending_after_ingame = false
     mod.on_game_state_changed = function(status, state_name)
         if prev then prev(status, state_name) end
-        if status == "enter" and state_name == "StateIngame" and _dbg_on() then
+        if status == "enter" and state_name == "StateIngame" then
             _pending_after_ingame = true
         end
     end
@@ -1818,126 +1718,13 @@ mod:command("clear_enemies", "Despawn every currently-alive enemy (host-only, sk
 end)
 
 -- ============================================================
--- Open Inventory In Mission (direct transition)
+-- Open Inventory In Mission / Mission Customize gear-icon — REMOVED
 -- ============================================================
--- The legacy `mission_inventory_enabled` toggle force-flipped
--- IngameUI.handle_menu_hotkeys' `hotkeys_enabled` arg, hoping the keep's
--- bound hotkeys would fire mid-mission. Empirically they don't — vanilla's
--- can_interact/transition_not_allowed gates inside handle_menu_hotkeys
--- still slam the door (matchmaking state, voting-in-progress, view-not-
--- ready checks, etc.) even with the outer guard bypassed.
---
--- Janoti's `Open Inventory In Game` mod skips that whole subsystem and
--- calls `Managers.ui:handle_transition("hero_view_force", {...})` directly,
--- which is the same call vanilla makes from the ESC menu's Open Inventory
--- entry. This bypasses every hotkey gate because we're not pretending to
--- be a hotkey press — we're driving the transition ourselves.
---
--- `mission_inventory_enabled` still toggles the
--- InventorySettings.inventory_loadout_access_supported_game_modes patch
--- and the ESC-menu entry (both load-bearing for the inventory view to
--- actually function once opened), so leave that group widget intact; the
--- new keybind/command below is the actual "open the inventory now" trigger.
-
-mod.gt_open_mission_inventory = function()
-    if not (Managers.ui and Managers.ui.handle_transition) then
-        mod:echo("UI manager not available (not in-game?).")
-        return
-    end
-    -- Chaos Wastes hub guard. CW levels don't include
-    -- `levels/ui_store_preview/world` in their package set; opening the
-    -- Customization tab tries to load it and fatals at
-    -- `hero_window_item_customization.lua:357`. Crash GUID
-    -- fa1ec6f8-7385-4221-869b-ed4f2893c97c (2026-05-22).
-    --
-    -- cim v0.7.36+ strips the level reference from the viewport
-    -- definition mid-mission (HeroWindowItemCustomization hook),
-    -- BUT that hook is gated on `not _is_in_keep()` — and
-    -- `DamageUtils.is_in_inn` returns true for the CW hub
-    -- `morris_hub` (per the memory store note on hub-level coverage).
-    -- So in the hub the cim hook bails early and vanilla still
-    -- fatals. Mid-mission `dlc_morris_*` levels report
-    -- is_in_inn=false → cim's fix applies → safe.
-    --
-    -- 2026-05-25 (gt v0.2.69-dev): tightened the gate from
-    -- "any deus mechanism" to "deus mechanism AND in_keep". The
-    -- original 2026-05-22 directive was crash-driven; with the crash
-    -- class fixed mid-mission, lift the mid-mission block so the
-    -- gear-icon customize flow is actually reachable in CW missions.
-    -- Hub block remains until either (a) cim extends its hook to also
-    -- cover the keep path, or (b) the package gets pre-loaded for
-    -- morris_hub. Either reverses this block; until then the hub
-    -- echo stands.
-    local mech = Managers.mechanism and Managers.mechanism:current_mechanism_name()
-    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    if mech == "deus" and in_keep then
-        mod:echo("Inventory disabled in the Chaos Wastes hub (vanilla preview level isn't loaded — would crash). Customize works in CW missions via Crafting in Modded.")
-        return
-    end
-    -- Inventory view depends on the loadout_access_supported_game_modes patch.
-    -- If the user hasn't enabled `mission_inventory_enabled`, force-flip the
-    -- relevant game-mode flags for the current call so the loadout panel
-    -- inits correctly. The patch is idempotent.
-    if InventorySettings then
-        local modes = InventorySettings.inventory_loadout_access_supported_game_modes
-        if modes then
-            modes.adventure = true
-            modes.survival  = true
-            modes.deus      = true
-        end
-    end
-    Managers.ui:handle_transition("hero_view_force", {
-        menu_state_name     = "overview",
-        menu_sub_state_name = "equipment",
-        use_fade            = true,
-    })
-end
-
-mod:command("gt_inv", "Open the inventory mid-mission (uses the same transition vanilla fires from the ESC-menu 'Open Inventory' entry)", function()
-    mod.gt_open_mission_inventory()
-end)
-
--- ============================================================
--- Mission Customize gear-icon: cim presence gate
--- ============================================================
--- The gear icon on the loadout panel routes to
--- HeroWindowItemCustomization (illusion swap + reroll properties /
--- traits). Vanilla's preview viewport hard-loads
--- `levels/ui_store_preview/world`, which is only in the keep's
--- package set; mid-mission it fatals on `LevelResource.object_set_names`.
--- Crash GUID ef637399-8862-46dc-b7fb-8c6f9c475cf4 (2026-05-24,
--- dlc_dwarf_interior).
---
--- cim v0.7.36+ ships the fix: it strips the level reference from the
--- viewport definition mid-mission so the screen mounts cleanly (item
--- still renders via the always-loaded ui_loot_preview package). With
--- cim active, the gear icon is fully functional in mission — illusion
--- swap, property reroll, trait reroll all run through cim's existing
--- HeroWindowItemCustomization hooks.
---
--- Without cim, that fix doesn't load, so the vanilla crash returns.
--- Block the action and tell the user. This intentionally only fires
--- mid-mission: in the keep, vanilla works without cim and nothing
--- needs gating. The CW block in gt_open_mission_inventory above
--- continues to fire first for CW (separate user directive — crafting
--- shouldn't be available in CW at all, hub or mission).
-
-mod:hook("HeroWindowLoadoutConsole", "_customize_item", function(func, self, item)
-    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    if mod._dbg_on and mod._dbg_on() and mod._dbg_log then
-        local d = item and item.data
-        mod._dbg_log("[customize_click] item.key=%s slot=%s backend_id=%s in_keep=%s cim=%s",
-            tostring(item and (item.key or (d and d.key)) or "?"),
-            tostring(d and d.slot_type or "?"),
-            tostring(item and item.backend_id or "?"),
-            tostring(in_keep),
-            get_mod("cim") and "present" or "absent")
-    end
-    if in_keep or get_mod("cim") then
-        return func(self, item)
-    end
-    mod:echo("Customize disabled mid-mission (Crafting in Modded mod isn't loaded — would crash the game).")
-end)
+-- `mod.gt_open_mission_inventory`, the `/gt_inv` command, and the
+-- `HeroWindowLoadoutConsole._customize_item` cim crash-gate were removed
+-- from the public General Tweaker in v0.2.72-alpha along with the rest of
+-- the in-mission inventory / Keep-Menus feature (migrated to the GUI
+-- Tweaker mod). See the migration note further up the file.
 
 -- ============================================================
 -- Friendly Fire Toggle
@@ -2604,18 +2391,15 @@ end
 -- was nil at chunk load when the rest of the debug section ran
 -- (assignment lives just above). Captures before/after AI state on
 -- every toggle so the user/agent can diff what mutated vs. what was
--- meant to mutate. The helpers _dbg_on / _gt_dump_ai_now are file-
--- scope locals declared in the debug section further up — both
--- visible by chunk position here.
+-- meant to mutate. _gt_dump_ai_now is a file-scope local declared in
+-- the debug section further up — visible by chunk position here.
 do
     local prev = _ai_handle_toggle_change
     _ai_handle_toggle_change = function(want_bot)
-        if mod._dbg_on and mod._dbg_on() then _gt_dump_ai_now("toggle_pre_want_bot=" .. tostring(want_bot)) end
+        _gt_dump_ai_now("toggle_pre_want_bot=" .. tostring(want_bot))
         local ok, err = prev(want_bot)
-        if mod._dbg_on and mod._dbg_on() then
-            (mod._dbg_log or function() end)("[ai_event] toggle returned ok=%s err=%s", tostring(ok), tostring(err))
-            _gt_dump_ai_now("toggle_post")
-        end
+        _dbg("[ai_event] toggle returned ok=%s err=%s", tostring(ok), tostring(err))
+        _gt_dump_ai_now("toggle_post")
         return ok, err
     end
 end
@@ -5245,6 +5029,33 @@ end)
 -- Both skipped here. Remaining checks below cover the deferred-cutscene fix
 -- (v0.2.42) which IS present.
 
+_rt_register("gt_no_mission_hotkey_flip", function()
+    -- Issue #62 (2026-05-28): a legacy hook force-set the hotkeys-enabled arg of
+    -- IngameUI.handle_menu_hotkeys to true mid-mission, enabling crash-prone keep
+    -- view hotkeys (Hero Select / Map / etc. spawn unloaded ui_* preview worlds).
+    -- Removed from the public General Tweaker in v0.2.72-alpha (the whole
+    -- in-mission inventory / Keep-Menus feature migrated to GUI Tweaker). This
+    -- source-pattern guard fails if that hook is reintroduced. The needle is
+    -- assembled from two literals so this test's own source does not self-match.
+    -- Degrades to a no-op when source introspection is unavailable (deploy/bundle
+    -- paths).
+    -- Anchored on mod.on_setting_changed (a `mod.` field defined in the MAIN
+    -- file) so this guard always reads general_tweaker.lua — where the removed
+    -- IngameUI hook lived.
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local needle = 'mod:hook("' .. 'IngameUI", "handle_menu_hotkeys"'
+    if txt:find(needle, 1, true) then
+        return "Issue #62 regression: the IngameUI handle_menu_hotkeys hook was reintroduced (crash-prone mid-mission hotkey flip)"
+    end
+end)
+
 _rt_register("cutscene_auto_skip_deferred", function()
     -- v0.2.42 deferred-skip pattern: _pending_auto_skip_system must exist as
     -- a file-local (initialized to nil, assigned by the activate_cutscene_logic
@@ -5356,13 +5167,10 @@ end)
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
     if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
 end)
 
 

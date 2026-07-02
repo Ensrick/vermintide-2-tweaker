@@ -671,15 +671,4 @@ local data = {
 
 recursive_sort(data.options.widgets)
 
--- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
--- Appended AFTER `recursive_sort` so it stays at the BOTTOM of the widget tree,
--- top-level (NOT inside any group), key `enable_debug_logging` verbatim across
--- every mod in the repo.
-data.options.widgets[#data.options.widgets + 1] = {
-    setting_id    = "enable_debug_logging",
-    type          = "checkbox",
-    default_value = false,
-    tooltip       = mod:localize("enable_debug_logging_tooltip"),
-}
-
 return data

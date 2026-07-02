@@ -888,6 +888,40 @@ Full canonical whitelist + per-type usage examples: `VMF_RECIPES.md § 6a` ("VMF
 
 ---
 
+## 19. Hooked vanilla networked fn drops a trailing sync param → RPC re-broadcast loop
+
+**First seen:** 2026-06-19 (weapon_tweaker v0.12.128 → v0.12.132)
+**Canonical citation:** wt CHANGELOG v0.12.132-dev; memory `reference_vmf_hook_drops_skip_sync_rpc_loop`
+**Lives in:** any `mod:hook(C, m, ...)` where vanilla `C.m` has a trailing networking/control param (`skip_sync`, `is_server`, `do_sync`, `from_local`, …) AND broadcasts an RPC
+
+### Symptoms
+- In a 2+ human network game ONLY (solo immune): every human player's husk (3P body) stuck on an endless-repeat / frozen animation; "everyone", every weapon, in the keep/lobby.
+- A/B: disabling the hooking mod clears it instantly.
+- No error, no crash, no log line — pure runtime network feedback.
+
+### Diagnosis pattern
+1. A/B-confirm the mod (disable → gone). Don't trust per-mod static review alone — two workflows here wrongly chased husk-attachment mods that were DISABLED before the A/B pinned it.
+2. Grep the mod for `mod:hook("<NetworkedClass>"` and read the hook's parameter list.
+3. Grep the decompiled vanilla `function <Class>.<method>` signature; count params. If the hook names FEWER than vanilla declares, the missing trailing param(s) collapse to `nil` when the hook calls `func(...)`.
+4. If vanilla does `if not skip_sync and Managers.state.network:game() then …send_rpc…` and the RPC receiver replays with that param = `true`, dropping it makes the receiver re-broadcast → loop.
+
+### Fix template
+```lua
+-- WRONG -- drops vanilla's 6th param skip_sync; husk replays re-broadcast → loop
+mod:hook("AnimationSystem", "anim_event_with_variable_float", function(func, self, unit, event_name, variable_name, variable_value)
+    return func(self, unit, event_name, variable_name, variable_value)
+end)
+
+-- RIGHT -- thread EVERY vanilla param through (here: skip_sync), or capture ... and splat
+mod:hook("AnimationSystem", "anim_event_with_variable_float", function(func, self, unit, event_name, variable_name, variable_value, skip_sync)
+    return func(self, unit, event_name, variable_name, variable_value, skip_sync)
+end)
+```
+
+Distinct from the multi-RETURN collapse gotcha (`VMF_RECIPES.md § 2`, return values) and from #15 (`"server"` recipient drop) — this is a dropped ARGUMENT silently flipping network re-send. Vanilla refs: `scripts/entity_system/systems/animation/animation_system.lua:139` (signature), `:140` (re-send gate), `:312` (receiver passes `skip_sync=true`).
+
+---
+
 ## Format anti-patterns (for future entries)
 
 When adding a new bug class entry, hold the line on:

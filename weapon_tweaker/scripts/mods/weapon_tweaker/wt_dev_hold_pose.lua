@@ -210,20 +210,38 @@ end
 -- Pose application
 -- ---------------------------------------------------------------------------
 
+-- True when every Hold-Pose slider is at its default (0). An all-zero pose is
+-- the IDENTITY matrix at local origin, and writing it with set_local_pose is
+-- ABSOLUTE — so applying it would CLOBBER any baked grip offset on node 0
+-- (the scythe / Elven-axe durable re-apply in weapon_tweaker.lua, and the
+-- one-shot _offset_weapon_units write). "0" must mean "no override, leave the
+-- baked grip alone", NOT "force the weapon to origin". This guard makes the
+-- untouched/zeroed tool a true no-op even if live-apply is on. Only an
+-- explicitly non-zero slider value wins and overrides the bake.
+local function _pose_is_default(p)
+    return (mod:get("wt_dev_hp_"..p.."_offset_x") or 0) == 0
+       and (mod:get("wt_dev_hp_"..p.."_offset_y") or 0) == 0
+       and (mod:get("wt_dev_hp_"..p.."_offset_z") or 0) == 0
+       and (mod:get("wt_dev_hp_"..p.."_rot_pitch") or 0) == 0
+       and (mod:get("wt_dev_hp_"..p.."_rot_yaw")   or 0) == 0
+       and (mod:get("wt_dev_hp_"..p.."_rot_roll")  or 0) == 0
+end
+
 -- Build a FRESH local pose matrix from scalar slider values. Returns the raw
 -- Matrix4x4 (stack temporary — must be consumed before the next frame).
-local function _build_pose()
-    local ox = mod:get("wt_dev_hp_offset_x") or 0
-    local oy = mod:get("wt_dev_hp_offset_y") or 0
-    local oz = mod:get("wt_dev_hp_offset_z") or 0
-    local pitch_deg = mod:get("wt_dev_hp_rot_pitch") or 0
-    local yaw_deg   = mod:get("wt_dev_hp_rot_yaw")   or 0
-    local roll_deg  = mod:get("wt_dev_hp_rot_roll")  or 0
+local function _build_pose(p)
+    local ox = mod:get("wt_dev_hp_"..p.."_offset_x") or 0
+    local oy = mod:get("wt_dev_hp_"..p.."_offset_y") or 0
+    local oz = mod:get("wt_dev_hp_"..p.."_offset_z") or 0
+    local pitch_deg = mod:get("wt_dev_hp_"..p.."_rot_pitch") or 0
+    local yaw_deg   = mod:get("wt_dev_hp_"..p.."_rot_yaw")   or 0
+    local roll_deg  = mod:get("wt_dev_hp_"..p.."_rot_roll")  or 0
     local pos = Vector3(ox, oy, oz)
-    local rot = Quaternion.from_euler_angles_xyz(
-        math.rad(pitch_deg),
-        math.rad(yaw_deg),
-        math.rad(roll_deg))
+    -- Stingray Quaternion.from_euler_angles_xyz takes DEGREES, not radians
+    -- (vanilla crawl_space_extension.lua:14 passes 90 for a 90° turn). The old
+    -- math.rad() wrap made every rotation ~57x too small -> imperceptible, so the
+    -- rotation sliders looked like they did nothing. Pass degrees straight through.
+    local rot = Quaternion.from_euler_angles_xyz(pitch_deg, yaw_deg, roll_deg)
     return Matrix4x4.from_quaternion_position(rot, pos)
 end
 
@@ -232,33 +250,32 @@ end
 -- .lua:65 and camera_state_helper.lua:21). Wrapped in pcall as belt-and-
 -- suspenders even though set_local_pose is documented as safe — engine
 -- write-side fatals occasionally bypass pcall.
-local function _apply_pose_to(weapon_unit)
+--
+-- DEFER-TO-BAKED: when all sliders are at default (0) we DO NOT write — an
+-- absolute identity-pose write would stomp the baked grip offset on node 0
+-- (precedence: 0 = "no override, keep the bake"; non-zero = "override wins").
+-- This keeps the durable per-frame grip re-apply (weapon_tweaker.lua
+-- _reapply_durable_grip_offsets) intact at stock defaults.
+local function _apply_pose_to(weapon_unit, p)
     if not weapon_unit then return false end
     if not Unit.alive(weapon_unit) then return false end
-    local pose = _build_pose()
+    if _pose_is_default(p) then return false end   -- defer-to-baked guard, per hand
+    local pose = _build_pose(p)
     local ok = pcall(Unit.set_local_pose, weapon_unit, 0, pose)
     return ok
 end
 
--- Resolve every (hand) the user has selected and apply the pose to each.
+-- Apply each hand's pose from ITS OWN sliders, independently. No hand
+-- dropdown, no "both" mode — RH sliders drive the right-hand unit, LH sliders
+-- drive the left-hand unit, each gated by its own defer-to-baked guard.
 local function _apply_pose_all()
     local target_slot = mod:get("wt_dev_hp_target_slot") or "auto"
-    local target_hand = mod:get("wt_dev_hp_target_hand") or "right"
-
-    if target_hand == "both" then
-        local applied = false
-        local u_r = select(1, _resolve_wielded(target_slot, "right"))
-        if u_r then applied = _apply_pose_to(u_r) or applied end
-        local u_l = select(1, _resolve_wielded(target_slot, "left"))
-        if u_l then applied = _apply_pose_to(u_l) or applied end
-        return applied
-    else
-        local weapon_unit = _resolve_wielded(target_slot, target_hand)
-        if weapon_unit then
-            return _apply_pose_to(weapon_unit)
-        end
-    end
-    return false
+    local applied = false
+    local u_r = select(1, _resolve_wielded(target_slot, "right"))
+    if u_r then applied = _apply_pose_to(u_r, "rh") or applied end
+    local u_l = select(1, _resolve_wielded(target_slot, "left"))
+    if u_l then applied = _apply_pose_to(u_l, "lh") or applied end
+    return applied
 end
 
 -- ---------------------------------------------------------------------------
@@ -268,41 +285,56 @@ end
 local function _dump_snippet()
     local target_slot = mod:get("wt_dev_hp_target_slot") or "auto"
     local target_kind = mod:get("wt_dev_hp_target_kind") or "wielded"
-    local target_hand = mod:get("wt_dev_hp_target_hand") or "right"
+    -- source_node stays a single dropdown: use it as the RIGHT-hand source and
+    -- the canonical j_lefthand bone as the LEFT-hand source.
     local source_node = mod:get("wt_dev_hp_source_node") or "j_righthand"
-
-    local ox = mod:get("wt_dev_hp_offset_x") or 0
-    local oy = mod:get("wt_dev_hp_offset_y") or 0
-    local oz = mod:get("wt_dev_hp_offset_z") or 0
-    local pitch_deg = mod:get("wt_dev_hp_rot_pitch") or 0
-    local yaw_deg   = mod:get("wt_dev_hp_rot_yaw")   or 0
-    local roll_deg  = mod:get("wt_dev_hp_rot_roll")  or 0
-
-    local _, hand, slot_name, item_key = _resolve_wielded(target_slot, target_hand)
-    hand      = hand      or target_hand
-    slot_name = slot_name or target_slot
-    item_key  = item_key  or "<unknown>"
     local career = _local_career()
 
+    -- One entry per hand: p = slider prefix, hand = resolve label, src = source bone.
+    local HANDS = {
+        { p = "rh", hand = "right", src = source_node },
+        { p = "lh", hand = "left",  src = "j_lefthand" },
+    }
+
     mod:info("-- ==== wt Hold Pose dump ====")
-    mod:info("-- character=%s  weapon=%s  slot=%s  kind=%s  hand=%s  source_node=%s",
-        career, tostring(item_key), tostring(slot_name),
-        tostring(target_kind), tostring(hand), tostring(source_node))
-    mod:info("-- Sliders: offset_xyz=(%.3f, %.3f, %.3f) m  rot_pyr=(%.1f, %.1f, %.1f) deg",
-        ox, oy, oz, pitch_deg, yaw_deg, roll_deg)
+    mod:info("-- character=%s  slot=%s  kind=%s", career, tostring(target_slot), tostring(target_kind))
     mod:info("local _custom_third_person = {")
-    mod:info("    {")
-    mod:info("        source = %q,", source_node)
-    mod:info("        target = 0,")
-    mod:info("        offset = { %.3f, %.3f, %.3f },", ox, oy, oz)
-    mod:info("        rotation = { pitch = %.1f, yaw = %.1f, roll = %.1f },  -- degrees, Euler XYZ",
-        pitch_deg, yaw_deg, roll_deg)
-    mod:info("    },")
+
+    for _, h in ipairs(HANDS) do
+        local p = h.p
+        local ox = mod:get("wt_dev_hp_"..p.."_offset_x") or 0
+        local oy = mod:get("wt_dev_hp_"..p.."_offset_y") or 0
+        local oz = mod:get("wt_dev_hp_"..p.."_offset_z") or 0
+        local pitch_deg = mod:get("wt_dev_hp_"..p.."_rot_pitch") or 0
+        local yaw_deg   = mod:get("wt_dev_hp_"..p.."_rot_yaw")   or 0
+        local roll_deg  = mod:get("wt_dev_hp_"..p.."_rot_roll")  or 0
+
+        local resolved_unit, hand, slot_name, item_key = _resolve_wielded(target_slot, h.hand)
+        local non_default = not _pose_is_default(p)
+
+        -- Emit a block when this hand has a resolved unit OR non-default sliders.
+        if resolved_unit or non_default then
+            hand      = hand      or h.hand
+            slot_name = slot_name or target_slot
+            item_key  = item_key  or "<unknown>"
+            mod:info("    -- hand=%s  weapon=%s  slot=%s  source_node=%s",
+                tostring(hand), tostring(item_key), tostring(slot_name), tostring(h.src))
+            mod:info("    -- Sliders: offset_xyz=(%.3f, %.3f, %.3f) m  rot_pyr=(%.1f, %.1f, %.1f) deg",
+                ox, oy, oz, pitch_deg, yaw_deg, roll_deg)
+            mod:info("    {")
+            mod:info("        source = %q,", h.src)
+            mod:info("        target = 0,")
+            mod:info("        offset = { %.3f, %.3f, %.3f },", ox, oy, oz)
+            mod:info("        rotation = { pitch = %.1f, yaw = %.1f, roll = %.1f },  -- degrees, Euler XYZ",
+                pitch_deg, yaw_deg, roll_deg)
+            mod:info("    },")
+        end
+    end
+
     mod:info("}")
-    mod:info("-- Apply via:")
-    mod:info("--   local pos = Vector3(%.3f, %.3f, %.3f)", ox, oy, oz)
-    mod:info("--   local rot = Quaternion.from_euler_angles_xyz(")
-    mod:info("--       math.rad(%.1f), math.rad(%.1f), math.rad(%.1f))", pitch_deg, yaw_deg, roll_deg)
+    mod:info("-- Apply via (per hand):")
+    mod:info("--   local pos = Vector3(offset_x, offset_y, offset_z)")
+    mod:info("--   local rot = Quaternion.from_euler_angles_xyz(pitch, yaw, roll)  -- DEGREES, not radians")
     mod:info("--   Unit.set_local_pose(weapon_unit, 0, Matrix4x4.from_quaternion_position(rot, pos))")
     mod:info("-- ==== end dump ====")
 end
@@ -340,77 +372,137 @@ function M.build_widget_tree()
                 },
             },
             {
-                setting_id = "wt_dev_hp_target_hand",
-                type = "dropdown",
-                default_value = "right",
-                options = {
-                    { text = "Right", value = "right" },
-                    { text = "Left",  value = "left" },
-                    { text = "Both",  value = "both" },
-                },
-            },
-            {
                 setting_id = "wt_dev_hp_source_node",
                 type = "dropdown",
                 default_value = "j_righthand",
                 options = source_node_options,
             },
+            -- RIGHT-hand pose sliders (drive the right_unit_3p independently).
             {
-                setting_id = "wt_dev_hp_offset_x",
-                type = "numeric",
-                default_value = 0,
-                range = { -1.0, 1.0 },
-                decimals_number = 3,  -- 1mm step (floor; numeric widget has no step field)
-                unit_text = " m",
+                setting_id = "wt_dev_hp_rh_group",
+                type = "group",
+                sub_widgets = {
+                    {
+                        setting_id = "wt_dev_hp_rh_offset_x",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -1.0, 1.0 },
+                        decimals_number = 3,  -- 1mm step (floor; numeric widget has no step field)
+                        unit_text = " m",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_rh_offset_y",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -1.0, 1.0 },
+                        decimals_number = 3,
+                        unit_text = " m",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_rh_offset_z",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -1.0, 1.0 },
+                        decimals_number = 3,
+                        unit_text = " m",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_rh_rot_pitch",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -180.0, 180.0 },
+                        decimals_number = 1,  -- 0.1 deg step (floor)
+                        unit_text = " deg",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_rh_rot_yaw",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -180.0, 180.0 },
+                        decimals_number = 1,
+                        unit_text = " deg",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_rh_rot_roll",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -180.0, 180.0 },
+                        decimals_number = 1,
+                        unit_text = " deg",
+                    },
+                },
             },
+            -- LEFT-hand pose sliders (drive the left_unit_3p independently).
             {
-                setting_id = "wt_dev_hp_offset_y",
-                type = "numeric",
-                default_value = 0,
-                range = { -1.0, 1.0 },
-                decimals_number = 3,
-                unit_text = " m",
-            },
-            {
-                setting_id = "wt_dev_hp_offset_z",
-                type = "numeric",
-                default_value = 0,
-                range = { -1.0, 1.0 },
-                decimals_number = 3,
-                unit_text = " m",
-            },
-            {
-                setting_id = "wt_dev_hp_rot_pitch",
-                type = "numeric",
-                default_value = 0,
-                range = { -180.0, 180.0 },
-                decimals_number = 1,  -- 0.1 deg step (floor)
-                unit_text = " deg",
-            },
-            {
-                setting_id = "wt_dev_hp_rot_yaw",
-                type = "numeric",
-                default_value = 0,
-                range = { -180.0, 180.0 },
-                decimals_number = 1,
-                unit_text = " deg",
-            },
-            {
-                setting_id = "wt_dev_hp_rot_roll",
-                type = "numeric",
-                default_value = 0,
-                range = { -180.0, 180.0 },
-                decimals_number = 1,
-                unit_text = " deg",
+                setting_id = "wt_dev_hp_lh_group",
+                type = "group",
+                sub_widgets = {
+                    {
+                        setting_id = "wt_dev_hp_lh_offset_x",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -1.0, 1.0 },
+                        decimals_number = 3,  -- 1mm step (floor; numeric widget has no step field)
+                        unit_text = " m",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_lh_offset_y",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -1.0, 1.0 },
+                        decimals_number = 3,
+                        unit_text = " m",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_lh_offset_z",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -1.0, 1.0 },
+                        decimals_number = 3,
+                        unit_text = " m",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_lh_rot_pitch",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -180.0, 180.0 },
+                        decimals_number = 1,  -- 0.1 deg step (floor)
+                        unit_text = " deg",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_lh_rot_yaw",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -180.0, 180.0 },
+                        decimals_number = 1,
+                        unit_text = " deg",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_lh_rot_roll",
+                        type = "numeric",
+                        default_value = 0,
+                        range = { -180.0, 180.0 },
+                        decimals_number = 1,
+                        unit_text = " deg",
+                    },
+                },
             },
             {
                 -- Live re-apply gate. When false, the per-frame hook is a no-op
                 -- and the user must `/wt_dev_hp_apply` for a one-shot write
                 -- (or `/wt_dump_hold_pose` to print the snippet without
                 -- mutating the live unit).
+                -- DEFAULTS TO FALSE (primary defer-to-baked guard): with
+                -- live-apply off at stock, the per-frame hook early-returns and
+                -- NEVER touches the weapon unit, so baked grip offsets
+                -- (weapon_tweaker.lua _weapon_grip_offsets / the durable
+                -- per-frame re-apply) survive untouched. The user enables this
+                -- deliberately when tuning. (Belt-and-suspenders: _apply_pose_to
+                -- also no-ops when all sliders are 0, so even with this on an
+                -- untouched tool won't clobber the bake.)
                 setting_id = "wt_dev_hp_live_apply",
                 type = "checkbox",
-                default_value = true,
+                default_value = false,
             },
         },
     }
@@ -425,14 +517,21 @@ function M.loc_keys()
         wt_dev_hold_pose      = { en = "Dev: Weapon Hold Pose Tuner" },
         wt_dev_hp_target_slot = { en = "Target slot" },
         wt_dev_hp_target_kind = { en = "Linking-table kind (for dump)" },
-        wt_dev_hp_target_hand = { en = "Target hand" },
         wt_dev_hp_source_node = { en = "Source node (3P body bone)" },
-        wt_dev_hp_offset_x    = { en = "Offset X (metres)" },
-        wt_dev_hp_offset_y    = { en = "Offset Y (metres)" },
-        wt_dev_hp_offset_z    = { en = "Offset Z (metres)" },
-        wt_dev_hp_rot_pitch   = { en = "Rotation pitch (deg, Euler X)" },
-        wt_dev_hp_rot_yaw     = { en = "Rotation yaw (deg, Euler Y)" },
-        wt_dev_hp_rot_roll    = { en = "Rotation roll (deg, Euler Z)" },
+        wt_dev_hp_rh_group       = { en = "Right hand" },
+        wt_dev_hp_rh_offset_x    = { en = "RH Offset X (metres)" },
+        wt_dev_hp_rh_offset_y    = { en = "RH Offset Y (metres)" },
+        wt_dev_hp_rh_offset_z    = { en = "RH Offset Z (metres)" },
+        wt_dev_hp_rh_rot_pitch   = { en = "RH Rotation pitch (deg, Euler X)" },
+        wt_dev_hp_rh_rot_yaw     = { en = "RH Rotation yaw (deg, Euler Y)" },
+        wt_dev_hp_rh_rot_roll    = { en = "RH Rotation roll (deg, Euler Z)" },
+        wt_dev_hp_lh_group       = { en = "Left hand" },
+        wt_dev_hp_lh_offset_x    = { en = "LH Offset X (metres)" },
+        wt_dev_hp_lh_offset_y    = { en = "LH Offset Y (metres)" },
+        wt_dev_hp_lh_offset_z    = { en = "LH Offset Z (metres)" },
+        wt_dev_hp_lh_rot_pitch   = { en = "LH Rotation pitch (deg, Euler X)" },
+        wt_dev_hp_lh_rot_yaw     = { en = "LH Rotation yaw (deg, Euler Y)" },
+        wt_dev_hp_lh_rot_roll    = { en = "LH Rotation roll (deg, Euler Z)" },
         wt_dev_hp_live_apply  = { en = "Live re-apply every frame" },
     }
 end
@@ -475,16 +574,22 @@ function M.install()
             mod:echo("[wt_dev_hp] dumped hold-pose snippet -- see console log")
         end)
 
-    -- Quick reset to zeros (faster than dragging six sliders back to 0).
+    -- Quick reset to zeros (faster than dragging twelve sliders back to 0).
     mod:command("wt_dev_hp_reset",
-        "Reset Hold-Pose sliders to zero offsets / zero rotation.",
+        "Reset Hold-Pose sliders (both hands) to zero offsets / zero rotation.",
         function()
-            mod:set("wt_dev_hp_offset_x", 0)
-            mod:set("wt_dev_hp_offset_y", 0)
-            mod:set("wt_dev_hp_offset_z", 0)
-            mod:set("wt_dev_hp_rot_pitch", 0)
-            mod:set("wt_dev_hp_rot_yaw",   0)
-            mod:set("wt_dev_hp_rot_roll",  0)
+            mod:set("wt_dev_hp_rh_offset_x", 0)
+            mod:set("wt_dev_hp_rh_offset_y", 0)
+            mod:set("wt_dev_hp_rh_offset_z", 0)
+            mod:set("wt_dev_hp_rh_rot_pitch", 0)
+            mod:set("wt_dev_hp_rh_rot_yaw",   0)
+            mod:set("wt_dev_hp_rh_rot_roll",  0)
+            mod:set("wt_dev_hp_lh_offset_x", 0)
+            mod:set("wt_dev_hp_lh_offset_y", 0)
+            mod:set("wt_dev_hp_lh_offset_z", 0)
+            mod:set("wt_dev_hp_lh_rot_pitch", 0)
+            mod:set("wt_dev_hp_lh_rot_yaw",   0)
+            mod:set("wt_dev_hp_lh_rot_roll",  0)
             -- mod:set from non-on_setting_changed paths updates the store
             -- but the open widget doesn't refresh until view re-open (see
             -- VMF_RECIPES § checkbox cached display state). The pose itself

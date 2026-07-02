@@ -30,8 +30,18 @@ local ScriptUnit = ScriptUnit
 -- Auto-restart on team wipe (instead of returning to the keep)
 -- ----------------------------------------------------------------------------
 -- On a "lost" end-condition, return "reload" so the mission restarts in place.
--- `/gt_inn` lets you deliberately bail to the keep while this is on.
-mod:hook("GameModeAdventure", "evaluate_end_conditions", function (func, self, round_started, dt, t, ...)
+-- `/inn` lets you deliberately bail to the keep while this is on.
+--
+-- Hooked on ALL THREE mission game modes (2026-07-01): Adventure, Chaos Wastes
+-- (Deus), and Weaves. Before this it only hooked GameModeAdventure, so a wipe in
+-- Chaos Wastes / Weaves ignored the toggle entirely (a user hit exactly this in a
+-- Deus run). "reload" is a valid end reason for every mode -- adventure_mechanism.lua:427
+-- and deus_mechanism.lua:539/545 both route it to level_transition_handler:reload_level().
+-- Each Class.method pair is distinct, so there's no VMF duplicate-hook collision
+-- (same pattern _gt_bots_keep uses for its _handle_bots hooks). We also capture the
+-- vanilla THIRD return (reason_data) and pass it through so a non-restart end isn't
+-- silently stripped (game_mode_manager.lua:800 reads all three).
+local function _gt_auto_restart_end_conditions(func, self, round_started, dt, t, ...)
     if not mod:get("gt_solo_auto_restart_on_wipe") then
         mod._gt_solo_do_insta_fail = false
         mod._gt_solo_skip_restart = false
@@ -43,19 +53,22 @@ mod:hook("GameModeAdventure", "evaluate_end_conditions", function (func, self, r
         self.lost_condition_timer = t - 1
     end
 
-    local ended, reason = func(self, round_started, dt, t, ...)
+    local ended, reason, reason_data = func(self, round_started, dt, t, ...)
 
     if ended and mod._gt_solo_skip_restart then
         mod._gt_solo_skip_restart = false
-        return ended, reason
+        return ended, reason, reason_data
     end
 
     if ended and reason == "lost" then
-        return ended, "reload"
+        return ended, "reload"   -- vanilla "reload" cases carry no reason_data
     end
 
-    return ended, reason
-end)
+    return ended, reason, reason_data
+end
+mod:hook("GameModeAdventure", "evaluate_end_conditions", _gt_auto_restart_end_conditions)
+mod:hook("GameModeDeus",      "evaluate_end_conditions", _gt_auto_restart_end_conditions)
+mod:hook("GameModeWeave",     "evaluate_end_conditions", _gt_auto_restart_end_conditions)
 
 local function _fail_to_inn()
     mod:pcall(function()
@@ -68,7 +81,7 @@ local function _fail_to_inn()
         Managers.state.game_mode:fail_level()
     end)
 end
-mod:command("gt_inn", "Fail the mission and return to the keep (use when 'Auto-restart on wipe' is on).", _fail_to_inn)
+mod:command("inn", "Fail the mission and return to the keep (use when 'Auto-restart on wipe' is on).", _fail_to_inn)
 
 -- ----------------------------------------------------------------------------
 -- Assassin / Packmaster spawn TEXT warning (area-indicator overlay)
@@ -215,14 +228,10 @@ mod:hook("DialogueSystem", "_update_currently_playing_dialogues", function (func
 end)
 
 -- ----------------------------------------------------------------------------
--- Disable level intro audio (loading-screen narration)
+-- Disable level intro audio -- REMOVED 2026-06-30: duplicated GUI Tweaker's
+-- "Disable Level Intro Audio" (gut's hb/level_loading_screen.lua hooks the same
+-- StateLoading._trigger_sound_events). Use the gut toggle instead.
 -- ----------------------------------------------------------------------------
-mod:hook("StateLoading", "_trigger_sound_events", function (func, self, level_key)
-    if mod:get("gt_solo_disable_intro_audio") then
-        return
-    end
-    return func(self, level_key)
-end)
 
 -- ----------------------------------------------------------------------------
 -- Disable the local player's ultimate voice line  (THE crash fix)

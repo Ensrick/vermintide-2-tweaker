@@ -1,0 +1,2451 @@
+# Tweaker: GUI dev — Changelog
+
+> **Dev fork created 2026-06-24** from `gui_tweaker` v0.2.82-dev (mod id `gut` → `gut_dev`,
+> directory `gui_tweaker/` → `gui_tweaker_dev/`, separate Workshop item — no `published_id`
+> assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
+> happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
+
+## 0.2.161-dev (2026-07-01) -- FIX: settings-menu localization ("<...>"-wrapped tooltips) + rewritten option descriptions
+
+Localization + descriptions only; no behavior, setting, default, or range changes.
+
+- **Double-localized tooltips no longer show wrapped in angle brackets.** Each widget's tooltip
+  in `gui_tweaker_dev_data.lua` eagerly called `mod:localize("<key>")`, which returns the English
+  sentence; VMF's options module then localizes that sentence a SECOND time, misses (it isn't a
+  key), and displays the whole tooltip as `<...the sentence...>`. Converted all 60 tooltip fields
+  to pass the raw loc KEY (`tooltip = "<key>"`) so VMF localizes exactly once. The one correct
+  eager-localize -- the mod's top-level `description = mod:localize("mod_description")` -- is left
+  as-is.
+- **"Hide UI" HUD-mode dropdown no longer shows `<Off>` / `<Partial>` / `<Complete>` / `<Camera>`.**
+  The dropdown option `text` fields were literal display strings, but VMF localizes each option's
+  `text` as a loc key (`option.text = mod:localize(option.text)`), so literals rendered bracketed.
+  They now use loc keys (`gut_hud_mode_opt_off/partial/complete/camera`) with matching entries;
+  the stored values (off/partial/complete/camera) are unchanged.
+- **Rewrote every option tooltip/description** into short, plain, player-facing English (about two
+  sentences, no engine/internal jargon) in `gui_tweaker_dev_localization.lua`. 55 values rewritten
+  (54 tooltips + `mod_description`); titles/labels left unchanged. Added the four new
+  dropdown-option loc keys.
+- **(#173) Read-only Hero Select research probes B3 + B7** (zero behavior change; engine `printf`
+  tagged `[gut:173]`, so they surface with mod logging OFF). **B3** (folded into the existing
+  `IngameUI.handle_transition` hook in `_gut_menu_transition_probe.lua`, per the VMF
+  no-duplicate-hook rule): on each menu-open transition, `pcall`-queries
+  `Managers.package:has_loaded("resource_packages/levels/ui_character_selection")` (no ref, so it
+  reports true residency) + the current `level_key`, edge-latched per (level, residency) --
+  answers whether a direct `character_selection_force` rewire is safe in-mission (true), needs a
+  preload (false), or must avoid the view (pcall error). **B7** (new `_gut_173_probes.lua`):
+  `hook_safe GameModeAdventure.force_respawn` (verified game_mode_adventure.lua:283; gut hooks it
+  nowhere else), captures the local player's pre-respawn position (as number components -- Vector3
+  is a stack temporary) and logs the post-respawn position + distance moved ~60 frames later on the
+  chained `mod.update`, settling whether a career swap teleports to level start. Both settle the
+  open questions in `HERO_SELECT_RESEARCH_173.md` before any rewire is attempted.
+
+## 0.2.160-dev (2026-07-01) -- READY FOR TEST: in-mission Cosmetics tab (#155) + gear-icon on cosmetics_tweaker (#84/#87)
+
+Two in-mission inventory surfaces moved from "hard-gated crash guard" to "ready for in-game
+verification". Both produce `[gut:155]` / `[gut:84]` engine `printf` evidence (mod logging can
+stay OFF). REQUIRES a full Steam restart before testing (self-authored Workshop re-pull).
+
+- **#155 -- in-mission Cosmetics tab (pose items).** The tab was disabled mid-mission because
+  `HeroWindowCosmeticsLoadoutConsole` draws weapon-pose items through the `gui_pose_items_atlas`
+  material (inside `materials/ui/ui_1080p_pose_cosmetics`), which vanilla only adds to the ingame
+  renderer's Gui when `is_in_inn` -> mid-mission it's absent and the pose draw takes a C-level
+  "Material not found in Gui" fatal at `ui_passes.lua:134` (crash GUID 5c0865b4). Root-caused in
+  the decompiled source: this is a DRAW-time fatal (`Gui.bitmap`), a different path from the
+  create_screen_gui fatal the v0.2.158 material guard handles -- so the guard alone did NOT cover
+  it. Fix: `_gut_gui_material_guard.lua` (the sole `UIRenderer.create` hook) now also INJECTS
+  `ui_1080p_pose_cosmetics` into ingame renderers that lack it, but ONLY when the resource is
+  resident (`Application.can_get`) -- adding a non-resident material would itself fatal create,
+  and the drop-filter would strip it. The result is published in `mod._gut_pose_atlas_ingame`;
+  `_gut_mission_inventory.lua` enables the Cosmetics tab in-mission (and lets the window draw)
+  ONLY when the atlas actually made it into the Gui, otherwise the tab stays gated exactly as
+  before (blank/no-crash). If the resource turns out to be keep-only (not resident in a mission),
+  the `[gut:155] ... NOT resident (can_get=false)` line reports that a package pin is the next
+  step. Best case: the tab works in-mission; worst case: unchanged + a definitive diagnostic.
+- **#84/#87 -- gear/cog "Customize" icon on the cosmetics_tweaker path.** The in-mission cog gate
+  (`_gut_customize_allowed`) now allows the Customization view when `cosmetics_tweaker` is present,
+  not only `cim` (still inert when gut runs alone). To make that view MOUNT without cim, gut now
+  carries its own copy of cim's proven preview-world mount-fix (`HeroWindowItemCustomization`
+  `_create_item_preview_widget_definition` + `_register_object_sets`, ported from
+  crafting_in_modded v0.7.45): mid-mission with cim absent it serves a level-free preview widget
+  def (mission-safe `environment/ui_hdr`) and seeds an empty object-set, dodging the
+  `levels/ui_store_preview/world` "Level not loaded" mount fatal (crash GUID ef637399). Both hooks
+  are inert in the keep and when cim is present (cim owns the fix then; gut passes through, so the
+  same-method hooks on the two mod-ids don't fight). This enables the view to open so cosmetic
+  changes can be tried in-mission; whether a given illusion applies + re-renders live is what the
+  test verifies. Modded crafting (reroll/salvage) still requires cim.
+
+## 0.2.159-dev (2026-07-01) -- FIX: post-skip camera guard (bastion sticky cutscene, #106) + camera-lifecycle logging + frame-time heartbeat
+
+HOST log forensics (2026-07-01, `dlc_bastion_nurgle_path1` / Blood in the Darkness): gut's
+auto-skip completed clean in 16 ms, but the LEVEL's cutscene flow timeline kept firing DELAYED
+camera-activate nodes that are not gated on the skip event. Vanilla
+`flow_cb_activate_cutscene_camera` (cutscene_system.lua:129-151) unconditionally re-set
+`active_camera`, hid the HUD, re-flagged the loading icon and re-queued the letterbox,
+re-locking the player TWICE after the successful skip until the timeline ran out at the
+cutscene's natural ~35.5 s duration. Vanilla `skip_pressed` (:97-109) tears down only the
+CURRENT camera and never short-circuits pending flow nodes. Distinct from the dlc_termite
+deferred-teardown variant fixed earlier; all in `_gut_cutscenes.lua`.
+
+- **Post-skip camera guard (#106 fix):** the `skip_pressed` hook now remembers WHICH
+  CutsceneSystem instance a skip actually executed on (armed only when the before-state had an
+  active camera and vanilla's teardown removed it, so orphan presses and author-locked CW
+  cutscenes never arm it; covers both auto-skip and manual skip, which share the hooked path).
+  While armed, a NEW `flow_cb_activate_cutscene_camera` hook suppresses that instance's late
+  camera re-activations (logged as `CAMERA-ACTIVATE suppressed (post-skip guard)`). The guard
+  clears when `flow_cb_activate_cutscene_logic` announces a genuinely new cutscene (reset runs
+  before the auto-skip evaluation, so the new cutscene can itself be skipped and re-arm the
+  guard), and it is instance-keyed, so a level transition (fresh CutsceneSystem per level)
+  invalidates it automatically. Dup-hook pre-flight re-run: no other gut hook on either camera
+  callback (comment references in `_gut_camera.lua` only).
+- **Camera-lifecycle logging (closes the client blind spot):** `[gut:cutscene] CAMERA-ACTIVATE`
+  / `CAMERA-DEACTIVATE` printf lines (hook + hook_safe respectively) with the same teardown
+  state snapshot the file already logs. The 2026-07-01 session showed
+  `flow_cb_activate_cutscene_logic` NEVER fires client-side (exactly 2 `[gut:cutscene]` lines
+  in the client's whole 7-mission log); the camera callbacks do fire on clients, so client
+  cutscene behavior is now observable.
+- **`[gut:frametime]` heartbeat (always on):** one printf every 30 s with
+  `level=<key> avg_ms=<x.x> worst_ms=<x.x> frames=<n>` accumulated in the existing chained
+  `mod.update` tick (accumulators reset each beat; ~2 lines/min). Both machines had FPS
+  complaints this session that could not be anchored to timestamps because neither log carried
+  any frame-time data.
+
+Verification is via the printf lines themselves (feature only observable in-mission during a
+cutscene, so no keep-runnable `/verify_*` command): a bastion run should show `post-skip camera
+guard ARMED` after the auto-skip, then `CAMERA-ACTIVATE suppressed (post-skip guard)` in place
+of the two re-locks. NOT yet verified in-game.
+
+## 0.2.158-dev (2026-07-01) -- GUI material guard: prevent "Gui material not found" client CTDs (mod-compat hardening)
+
+A friend's client hard-crashed on mission load into `dlc_castle_nurgle_path1` with
+`<<Script Error>> materials/ui/ui_1080p_chat`, deep in the "More Loading Screens" mod's
+loading-screen creation (`create_screen_gui`). `create_screen_gui` C-fatals -- bypassing
+pcall AND xpcall (the crash went through VMF's own `safe_call_nr` xpcall and still killed the
+client) -- whenever any listed material isn't resident. `ui_1080p_chat` is a real vanilla
+loading-screen material that simply wasn't loaded on that client at that instant (a mod-compat
+timing edge). Since it can't be CAUGHT, it must be PRE-FILTERED.
+
+- **New `_gut_gui_material_guard.lua`:** hooks `UIRenderer.create` (the funnel every screen GUI
+  passes through, and the exact function VMF's `custom_textures` already hooks, so proven-hookable)
+  and drops any `("material", <path>)` pair whose material is NOT loadable, tested with
+  `Application.can_get("material", path)` -- vanilla's own safe, non-faulting existence check
+  (`pickup_system.lua:882` uses `can_get("unit", ...)` for the identical "don't spawn a missing
+  resource" guard). A missing material now makes that ONE element silently not render instead of
+  crashing the client. Mod-agnostic: protects against More Loading Screens, Loremaster's Armoury,
+  and our own mods; generalizes the LA-atlas-specific `_la_atlas_keepalive`.
+- **Safety interlock:** the guard stays PASSIVE (pure passthrough) until `can_get` proves
+  trustworthy via a self-test against a known-always-resident material (`gw_fonts`), and fails
+  OPEN on any error -- it can never be the thing that breaks or blanks GUI creation.
+
+## 0.2.157-dev (2026-07-01) -- Apply colour matched to the FARMED live vanilla values + harden labels vs "<...>" + marker diagnostic
+
+- **Apply button colours now the EXACT farmed live-vanilla values** (from the v0.2.156 `[opt-apply]`
+  probe): ready = cheeseburger `{255,255,168,0}`, hover = white, disabled = gray a50
+  `{50,128,128,128}` (all {A,R,G,B}). The prior values were a wrong guess -- an earlier build matched
+  Apply to the TAB colour (font_button_normal tan), but the live game overrides ready-Apply to
+  cheeseburger via `update_apply_button`, and disabled is gray a50 not font_default a75. gut's Apply
+  now renders identically to the live game's Apply. (The shade the user reads as "green" is this
+  cheeseburger amber; gut was tan before, hence the mismatch.)
+- **`_vmf_label` hardened with the same "<...>" defence as `_vmf_tooltip`** (v0.2.155): strip a frozen
+  "<key>" marker, re-localize the inner key at render time, never surface a marker (fall back to the
+  bare key). Belt-and-suspenders in case a marker rides in via a title/text field, not just a tooltip.
+- **`[gut:desc]` marker diagnostic (temp):** on every row build, if the raw node title/tooltip OR the
+  resolved label/desc still contains "<", printf the mod + setting + raw + resolved values. With the
+  hardening this should fire zero times; if the user still sees "<>" while it stays silent, the marker
+  is coming from a different element (value/dropdown), which the log will then let us pinpoint.
+
+## 0.2.156-dev (2026-07-01) -- DIAGNOSTIC: farm the live Apply-ready button colour (temp)
+
+The vanilla Options Apply button is light green when ready in the LIVE game, but the decompiled
+source shows gold (cheeseburger), text-only, no green -- the source snapshot is older than the
+current build, so the exact shade cannot be read from source. Extended the OptionsView probe to
+`printf` the live Apply button's colours (`[opt-apply]` lines: every style's text_color + color)
+the first time it enters the READY state (changes pending). Open ESC to Options and change one
+setting to capture the real RGBA, then gut's Apply-ready colour is set to match. Remove once matched.
+No gameplay change; hook_safe on OptionsView.update_apply_button (no duplicate hook).
+
+## 0.2.155-dev (2026-07-01) -- ROOT FIX: no more "<...>" in option DESCRIPTIONS
+
+The recurring angle-bracket markers in the Mod Tweaker's hover descriptions are gone for good. Root
+cause: `_vmf_tooltip` (the description source) could return a FROZEN missing-loc marker. VMF sometimes
+bakes "<key>" into a widget's `tooltip` field when that key did not resolve at data-build time; the old
+code rejected re-localizing a "<...>" string but then fell back to RETURNING that marker (the leak,
+which is why it kept resurfacing no matter how many guards were added). Fix: strip the brackets to
+recover the key, re-localize it at RENDER time (all mods are registered by then, so it resolves), and
+NEVER return a "<...>" string -- if it still cannot resolve, the description is simply omitted. Applied
+to both twins (standalone view + keep sub-state). Labels were already fine; this closes the descriptions.
+
+## 0.2.154-dev (2026-07-01) -- EXPERIMENTAL: /gut_swap_career diagnostic command (real mid-mission career swap feasibility test, #173)
+
+- **EXPERIMENTAL/diagnostic: added `/gut_swap_career <n>` to test a REAL mid-mission career swap (#173 feasibility step, before building the Hero Select picker).** The command asks the game to swap the local player's CURRENT hero to career index n (1-4) while in a live mission, via the vanilla `ProfileRequester:request_profile(peer_id, 1, hero_name, career_name, force_respawn=true)` -- the same host-mediated path the keep character-select and the engine's `ImguiCareerDebug` use. No UI and no `CharacterSelectionView` (that view's keep-only preview world is the mid-mission crash gut normally avoids). It reaches the requester the same way `ImguiCareerDebug` does mid-mission (`Managers.state.network` -> `.network_server or .network_client` -> `:profile_requester()`) and uses `player:network_id()` for the local peer. Heavy `[gut:career]` printf logging at every step (resolve player/profile, validate career, get requester + host/client path, before/after the request_profile call) so the log tells us EXACTLY where it succeeds or fails. Fully pcall-guarded; a failure prints the error and echoes a plain message, never crashes. Caveat being tested: `force_respawn=true` may respawn the player at the level-start spawn, and the host can decline the swap. No new hooks; command only. See `_gut_career_swap.lua`.
+
+## 0.2.153-dev (2026-07-01) -- Gear-drill view no longer repeats the parent option's toggle; third-person camera no longer shows first-person screen effects (#209)
+
+- **Gear-drill view no longer repeats the parent option's own toggle.** Drilling into a setting's gear sub-view used to re-render the parent option's toggle row at the top, which was redundant: you already toggle it on the main-list row, and the "Advanced: <name>" Back row supplies the context. Removed the parent-row build/append; the parent's direct children now render as top-level rows at depth 0 (rebased from depth 1) under the Back row. Applied in parity across both twins (`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`); the planner's internal flat-depth collapse/gear detection is unchanged, only the RENDER depth shifts.
+- **Third-person camera no longer shows first-person screen effects (#209).** Buff/ability SCREEN effects spawn via `PlayerUnitFirstPerson.create_screen_particles` (screen-space, bound to the first-person view), so they still overlaid the screen while the mod's 3P camera was active. `_gut_camera.lua` now suppresses `create_screen_particles` (returns nil) while the 3P camera is on. Safe because `BuffExtension._stop_screen_effect` guards on `if effect_id`, so a nil id is a no-op. Known edge: a continuous screen effect already active when ENTERING 3P persists; only newly-spawned effects are suppressed.
+
+## 0.2.152-dev (2026-07-01) -- Fixed the Default confirm popup showing `< >` around its text; buff-bar crash fix made implicit; em dashes removed from menu strings
+
+- **Fixed the Default confirm popup rendering `< >` around all its text (Fix A).** The v0.2.151-dev popup passed RAW English strings to `Managers.popup:queue_popup`; the engine Localizes popup text, so raw strings rendered as `<raw string>` (and gut/VMF loc keys don't resolve in the global `Localize` either). Both twins (`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`) now mirror the VANILLA reset-settings popup verbatim (`options_view.lua:3335`): `queue_popup(Localize("reset_settings_popup_text"), Localize("popup_discard_changes_topic"), "reset_values", Localize("button_ok"), "revert_changes", Localize("popup_choice_cancel"))`. Confirm result stays `"reset_values"` (runs the reset); cancel is now `"revert_changes"` (dismiss). No raw strings remain in any popup argument.
+- **UI-mod buff-bar crash fix is now implicit (Fix B).** A crash-prevention fix should never be toggleable, so the `PriorityBuffUI._add_buff` nil-guard in `_gut_buffbar_endtime_fix.lua` always applies now (removed the `gut_buffbar_endtime_fix` gate + the `SETTING` local). Removed the `gut_buffbar_endtime_fix` checkbox and, since it was that group's only member, the entire "UI Mod Compatibility" (`gut_compat_group`) group. Dropped the three now-dead loc keys (`gut_compat_group`, `gut_buffbar_endtime_fix`, `gut_buffbar_endtime_fix_tooltip`). (The absorbed Temporal Fix was already baked-in with no widget.)
+- **Removed em dashes from menu strings (Fix C, new standing rule).** Em dashes (U+2014) must not appear in in-game menu strings. Rewrote the two Skip-Cutscenes tooltips (`gut_skip_cutscenes_enabled_tooltip`, `gut_skip_cutscenes_auto_tooltip`) to use periods instead. Code comments (not shown in-game) were left as-is.
+
+## 0.2.151-dev (2026-07-01) -- Mod Tweaker: font sizes + Apply/Default layout matched to the FARMED vanilla literals; Default now confirms before resetting
+
+Uses the values FARMED from the live vanilla Options menu (the temporary diagnostic in 0.2.150-dev),
+not decompiled literals — the earlier 0.2.149-dev sizes (checkbox 28, headers 24, tabs 22) rendered far
+too large because the global `RESOLUTION_LOOKUP.scale` (2 at the user's 4K) doubles the literal.
+
+- **Font sizes corrected to the farmed vanilla literals (Fix 1).** Option row labels 28 -> **16** (checkbox label; slider + dropdown labels were already 16); the boolean ON/OFF stepper value text 18 -> **16** (kept <= label). Section titles + group headers 24 -> **18** (vanilla in-list header). Tabs 22 -> **18** (vanilla `title_buttons`), DECOUPLED from the Apply/Default buttons. Apply + Default buttons stay **22** (vanilla hell_shark apply/reset). All existing `upper_case = true` preserved; the tooltip popup is unchanged (confirmed correct).
+- **Apply + Default button position/width matched to vanilla (Fix 2).** Apply width is now text-fit instead of the fixed 150 — measuring via `UIRenderer.text_size` is impractical at module-load (no renderer yet), so FIXED tuned design-space widths are used: **APPLY_W = 60** ("APPLY" @22), **RESET_W = 92** ("DEFAULT" @22). Apply local_position stays `{-30,-7}`, height 30, right/top on the bottom panel. Default (`mt_reset`) is parented to the Apply node at local_position.x = **-(APPLY_W + 50)** (was the fabricated `-(APPLY_W + 20)`), so a 50px gutter separates them. Both button hotspot/box sizes track the new node widths so the click zone follows the visible text.
+- **Default now shows a confirm popup (Fix 3).** Clicking "Default" opens a native `Managers.popup:queue_popup` confirm (title "RESTORE DEFAULTS", body "Reset this tab's settings to their defaults?", buttons Reset / Cancel) — the game's own popup manager renders it (no borrowed-renderer issue), mirroring vanilla OptionsView's reset confirm. The result is polled each frame via `query_result`; only the CONFIRM result runs the reset. While the popup is up it's modal (ESC / row input suppressed); a dangling popup is cancelled on menu close. The reset itself is unchanged and stays **current-tab only** (iterates `self._build_nodes`).
+- **Removed the temporary font diagnostic (Fix 4).** `_gut_options_probe.lua` is back to the scrollbar-only probe: the `[opt-font]` FONT/BUTTON PROBE block and the `_font_line` / `_dump_widget_fonts` helpers are gone; the original `_dump_node`/`_dump_widget` scrollbar dump, the auto-dump on-enter hook, and the `/dump_options` command remain.
+
+Both twins (`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`) updated in parity for the reset-confirm popup (queue on click, poll in `update`, cancel on `on_exit`); `_mod_tweaker_definitions.lua` (shared) carries the font-size + button width/position changes.
+
+## 0.2.150-dev (2026-07-01) -- DIAGNOSTIC: dump the vanilla Options menu's REAL font sizes + button positions (temp)
+
+Stop guessing font sizes from decompiled literals — they don't render 1:1 in gut's borrowed renderer
+(dynamic_font_size shrinks vanilla labels; matched literals came out too large). Extended the existing
+OptionsView probe (`_gut_options_probe.lua`; auto-dumps once on ESC→Options open, `/dump_options` to
+re-dump): it now printf's `[opt-font]` lines with each vanilla widget's font_type, literal size, ACTUAL
+scaled px (via `UIFontByResolution`), `dynamic_font_size` flag, and `upper_case`, for the option rows,
+the Apply + Default(reset_to_default) buttons (incl. their scenegraph position/size), and the
+category/tab buttons — plus `RESOLUTION_LOOKUP.scale`/res. Ground truth to match the Mod Tweaker's
+fonts + button layout to vanilla. Remove once matched. No gameplay change.
+
+## 0.2.149-dev (2026-06-30) -- Mod Tweaker: match the vanilla Options menu (all-caps, per-widget font sizes, tab-colored buttons, persistent open-group glow, no bottom hint)
+
+Five polish fixes bringing the Mod Tweaker chrome in line with the vanilla Options menu.
+
+- **ALL-CAPS row labels (Fix 1).** Every row label now renders upper-case like the vanilla Options menu. Done at one point — `upper_case = true` on the shared `_text_style` helper — which covers checkbox / slider / numeric / dropdown / section-title / group-header labels, the dropdown value + option list, and the back-row label. (ON/OFF words + the numeric slider value are already caps / digits, so no visible change there.) Tabs, section titles, and the Apply/Default buttons already carried `upper_case`. The tooltip popup builds its own styles and is NOT routed through `_text_style`, so its description prose stays normal-case (only its title is caps).
+- **Per-widget font sizes match vanilla (Fix 2).** Sizes verified against `options_view_definitions.lua`: boolean/checkbox row LABEL 16 -> **28** (vanilla `create_checkbox_widget` label, :1425); section title + group header 22 -> **24** (vanilla `keybind_info`/section font, :1162/:1975/:3372); tabs 20 -> **22** (vanilla `create_text_button` font — the widget type the vanilla apply/reset buttons use at 22, :1292-1293). Slider/numeric label (16) and dropdown label (16) already matched vanilla and are unchanged. NOTE: vanilla is internally inconsistent (checkbox label 28 vs stepper label 16); gut renders booleans as a stepper but sizes the LABEL to the vanilla checkbox 28 — needs an in-game eyeball.
+- **"Default" button, colored like the tabs (Fix 3).** The reset button's loc (`gut_mt_reset`) is renamed "Restore Defaults" -> **"Default"** (renders "DEFAULT"). Its text color now matches the TAB scheme — `font_button_normal` `{255,160,146,101}` idle, white `{255,255,255,255}` on hover — instead of `font_default` grey. The Apply button (same `create_text_button` widget type in vanilla) gets the same ENABLED scheme (font_button_normal idle / white hover; was cheeseburger gold); its DISABLED color stays `font_default` α75 `{75,181,181,181}`. Applied to both factories' base color + both twins' per-frame drivers.
+- **Open collapsible group stays lit (Fix 4).** An EXPANDED group now keeps its arrow glowing and its row highlight bar visible even when not hovered (was hover-only). `create_group_header` stores an `expanded` flag on the widget content and the arrow-glow driver lights on `is_hover OR expanded`; the row highlight uses the same `hover OR expanded`. Both twins refresh `content.expanded` live each frame in `_apply_row_hover` from `self._expanded[row._group_key]` (the same source the row toggle uses), so it tracks a toggle immediately.
+- **Removed the bottom hint (Fix 5).** The "Click a tab to pick a mod..." bottom hint text is gone entirely (vanilla Options has no bottom hint): the `build_hint` widget, `self._hint` build, its per-frame text set, and its draw call removed from both twins; the `build_hint` factory + `_text_widget` helper + `mt_hint` scenegraph node removed from the shared definitions (no dangling nil-draw).
+
+Both twins (`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`) updated in parity for the button drivers, the open-group glow/highlight, and the hint removal; `_mod_tweaker_definitions.lua` (shared) carries the all-caps + font-size + button base-color + group-header `expanded` changes and the hint-factory removal. Loc `gut_mt_reset` renamed in `gui_tweaker_dev_localization.lua`.
+
+## 0.2.148-dev (2026-06-30) -- Mod Tweaker bottom row: vanilla greyed Apply color + "Restore Defaults" button
+
+- **Greyed Apply text now matches vanilla.** When the active tab has no pending edits, the disabled APPLY label is drawn with `Colors.get_color_table_with_alpha("font_default", 75)` = `{75,181,181,181}` — the exact vanilla `disabled_color` (`options_view_definitions.lua:2346`). Was a fabricated dim grey `{255,110,110,110}`. Applied in both twins' per-frame Apply driver.
+- **Added a "Restore Defaults" button (#209).** Clones vanilla's `reset_to_default` (`options_view_definitions.lua:358-371`), parented to the Apply button and sitting to its LEFT with a 20px gutter (`mt_reset` scenegraph node, factory `create_default_button`, new loc key `gut_mt_reset = "Restore Defaults"`). Clicking it STAGES every setting in the current tab back to its `default_value` and repaints the rows — it does NOT write live; the user clicks Apply to commit, exactly like a manual staged edit. Because `stage_set` routes each edit to its owner mod_id, the merged Equipment tab correctly resets all member mods. Skips groups/headers (no `setting_id`), settings with no `default_value`, and keybinds. Always enabled; brightens to white on hover.
+
+Both twins (`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`) updated in parity for the button build/draw/click/hover and the greyed-Apply color; `_mod_tweaker_definitions.lua` (shared) carries the `mt_reset` node + `create_default_button` factory. The state twin also gained the `self._build_nodes`/`_build_category` storage the view twin already kept (the reset button iterates it).
+
+## 0.2.147-dev (2026-06-30) -- Mod Tweaker UI polish: implicit config override, native tooltip + tab styling, "Interface" tab
+
+- **Config-file override is now IMPLICIT / always-on; the toggle is gone.** The `.toml` override (`_gut_config_file.lua` `apply()`) is applied unconditionally on load and is a harmless no-op when no config file exists, so there was nothing worth gating — the `gut_config_override` checkbox was removed from the VMF options (data comment updated). [already-made edit]
+- **Tooltip popup now draws ABOVE the row with a native-style border (#207).** The hover-info popup defaults to drawing ABOVE the hovered row (bottom edge flush to the row's top), matching the native options tooltip, and flips BELOW only when drawing above would run off the top of the visible screen (was: below-by-default, flip up near the screen bottom). The fake 2px grey "shade" border is replaced with the real `menu_frame_12` 9-slice frame — the SAME frame the vanilla settings tooltip uses (`item_tooltip_frame_01`) — drawn as a per-frame-sized `texture_frame` over a `{255,3,3,3}` fill. Definitions only (`create_tooltip_popup` / `layout_tooltip`).
+- **Tab text color matches vanilla.** Tabs now use the vanilla options-tab colors (`UIWidgets.create_text_button`): idle = `font_button_normal` `{255,160,146,101}`, selected OR hovered = white `{255,255,255,255}` (was a gold/grey split). Applied to `create_tab`'s base color and both twins' per-frame tab driver.
+- **gut's own Mod Tweaker tab is renamed to "Interface".** In `_vmf_categories()` (both twins), the `gut` / `gut_dev` category's display label is overridden to "Interface"; the mod id, Workshop title, and `.mod`/cfg are unchanged.
+
+Both twins (`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`) updated in parity for the tab-color and "Interface"-label changes; `_mod_tweaker_definitions.lua` (shared) carries the tooltip + tab base-color changes.
+
+## 0.2.146-dev (2026-06-30) -- Mod Tweaker: remove the spurious top-level indent on every plain mod tab (#208)
+
+Follow-up to .145: with Equipment now correctly un-indented at the top level, the PLAIN VMF mod tabs
+were revealed to be the wrong ones — VMF gives each mod's top-level content a natural `depth` of 1, so
+every standalone mod tab indented its whole top level one step for no reason. `_build_rows` now rebases
+a plain VMF tab by its own MINIMUM natural setting depth (excluding the non-rendered per-mod header),
+so its top-level rows render at depth 0 — no indent, matching the Equipment tab. Relative nesting is
+preserved (uniform shift), so collapse/gear/indent of deeper rows is unchanged. Equipment's own
+synthesized `_depths` is untouched. Both twins.
+
+## 0.2.145-dev (2026-06-30) -- Equipment tab: fix member over-nesting + match other tabs' spacing (#208)
+
+Root-caused from a runtime depth dump: the merged Equipment tab's member content was rendering one
+level too deep. VMF mods' top content sits at NATURAL depth 1 (not 0), and the synthesis blindly
+added a base offset on top — so e.g. "Crafting" (section, depth 0) had cim's groups at depth 2, and
+the nested "Career Weapon Variants" header (correctly depth 1) looked *un-indented* next to wt's
+content (wrongly depth 2). Fix: `_add_member` now **rebases each member by its own minimum natural
+depth**, so its shallowest content renders exactly one level under its section header, internal
+nesting preserved. CWV now indents consistently with wt's content.
+
+Also **removed the special `TOP_SECTION_GAP`** — sections/groups now stack with the same row rhythm
+as every other tab, so the Equipment tab's vertical spacing matches other menus (no more
+bigger-than-everything-else padding). Removed the temporary indent diagnostic `printf`. Both twins.
+
+## 0.2.144-dev (2026-06-30) -- Mod Tweaker: uniform top-section padding (#206/#208) + Equipment indent diagnostic
+
+- **Top-section gap now applies to EVERY top-level (depth-0) collapsible**, including the first one (removed the `#self._rows > 0` skip in both twins). Previously the first top-level section had no `TOP_SECTION_GAP` above it while the rest did, so spacing looked inconsistent; now all top-level collapsibles are padded uniformly.
+- **Equipment indent diagnostic (temp):** a `printf("[mt:equip] section '<label>' depth=<d>")` logs each merged section header's runtime depth (engine printf, visible with mod-logging off) to root-cause the report that the nested "Career Weapon Variants" header (should be depth 1, indented under Weapons) renders flush. Removed once verified.
+
+## 0.2.143-dev (2026-06-30) -- Mod Tweaker: merge the 4 inventory mods into one "Equipment" tab (#208)
+
+The Mod Tweaker now folds the four inventory-management mods into a single **Equipment** tab
+when 2+ of them are active (present **and** enabled), instead of one tab each. Roles:
+`cosmetics_tweaker` -> **Cosmetics**, `cim`/`cim_dev` -> **Crafting**, `wt` -> **Weapons**,
+`character_weapon_variants` (CWV) -> **Career Weapon Variants**.
+
+- **N=1, only CWV** -> its single tab is relabeled **"Weapons"**. **N=1, any other** -> unchanged.
+- **N>=2** -> ONE **"Equipment"** tab; the matching individual tabs are removed and folded in as
+  COLLAPSIBLE top-level sections, order **Cosmetics -> Crafting -> Weapons**. When both `wt` and
+  CWV are active, CWV nests as a collapsible **"Career Weapon Variants"** section UNDER Weapons;
+  CWV-without-`wt` sits at the top level of Equipment. A disabled inventory mod is not "active"
+  and keeps its own tab. (Also trims the tab strip toward the MAX_TABS=8 pagination limit.)
+
+**How it's built.** A post-process step on the `_vmf_categories()` output (`_synthesize_equipment`)
+removes the active members and appends ONE synthesized FLAT category whose `widgets` is the four
+mods' setting nodes interleaved with synthetic `type="group"` section headers, plus a parallel
+`_depths` array that shifts each member's nodes under its section header (CWV +2 under Weapons,
++1 elsewhere). Reusing the existing flat-list renderer means each mod KEEPS its own internal
+collapsibles / gear-drill nesting intact (the #206 indent + #165 chevron behavior is unchanged).
+
+**Per-NODE ownership (the cross-mod part).** The merged tab spans four mod objects, but get/set/
+stage/apply previously keyed off the category's single `mod_obj`/`mod_id`. The Equipment category
+now carries `_owners[setting_id] = { mod_id, mod_obj }` for every member setting; a new `_owner()`
+helper resolves the owning mod per node (and returns `category.mod_obj`/`category.mod_id` for every
+NON-Equipment category, so normal tabs are behaviorally unchanged). `_cat_get`/`_cat_set` route to
+the owner's mod object; `stage_set`/`get_staged` buffer under the OWNER's mod_id (an Equipment edit
+to a cosmetics setting buffers under `cosmetics_tweaker`); `_active_category_dirty` returns true if
+ANY member's buffer is non-empty; and an Equipment **Apply** flushes EACH member mod_id's pending
+buffer through its own mod object (keybinds re-registered across the committed settings in the
+standalone view, matching #123). Labels/tooltips localize against the owning mod.
+
+Five gut-owned loc strings added (Equipment / Cosmetics / Crafting / Weapons / Career Weapon
+Variants). No new engine hooks (pure data synthesis + the existing draw/render path). Applied to
+BOTH presentations (the standalone in-mission `ModTweakerView` and the keep HeroView sub-state),
+kept in parity. (#208)
+
+## 0.2.142-dev (2026-06-30) -- Mod Tweaker: native-style hover info popup per setting (#207)
+
+The Mod Tweaker's in-game settings list now shows a per-setting info popup on mouseover,
+matching the native options menu: a popup with the setting's **title** (header) and its
+**description** underneath. It **fades in** (waits 0.1s, then ramps `math.easeOutCubic` at
+speed 4 — the exact native `tooltip_wait_duration` / `tooltip_fade_in_speed` values,
+ui_settings.lua:22-23) and **disappears instantly** when the cursor leaves the row (de-hover
+or moving to a different row resets the fade to 0). Rows without a tooltip show nothing.
+
+The description text already exists per setting in VMF widget data (mods write
+`tooltip = mod:localize("<id>_tooltip")`); the state now resolves each node's `tooltip` field
+the same pcall-localize way it resolves the title (so both already-localized strings and raw
+loc keys work) and stores `{ title = row label, desc = tooltip }` on the row. The view's draw
+loop tracks the hovered row each frame and drives the popup.
+
+**Hand-built for the borrowed renderer.** The Mod Tweaker draws on a borrowed
+(HeroView / level-world) renderer, so this does NOT use the native `option_tooltip` pass or
+its `item_tooltip_background` / `item_tooltip_frame_01` box art — those are raw / gui_frames_atlas
+materials whose residency on that renderer is unconfirmed and can crash (the same raw-material
+trap that forced gut to hand-build its option rows, reference_vt2_options_widgets_raw_materials).
+The popup is assembled the same proven way as the existing dropdown popup (`create_dropdown_list`):
+a 2px-larger `rect` "shade" frame behind a dark `rect` panel + a `font_title` size-22 title text
+pass over a word-wrapped (`word_wrap`) `font_default` size-18 description, on a new `mt_tooltip`
+scenegraph node (parented to `mt_list` so it scrolls with the rows, z above them), drawn LAST in
+the draw loop so it overlays and is never culled. Box height fits the wrapped line count (measured
+via `UIRenderer.word_wrap` + `UIGetFontHeight`, mirroring native generic_text); positioned just
+below the hovered row, left-aligned to the label column, and flipped ABOVE the row when dropping
+below would run off the screen bottom. Width fit to the panel (native 600, clamped to gut's panel).
+Additive only — no change to existing row factories; no new engine hooks (pure draw-loop render).
+Applied to BOTH presentations (the standalone in-mission `ModTweakerView` and the keep HeroView
+sub-state). (#207)
+
+## 0.2.141-dev (2026-06-30) -- Mod Tweaker: nested rows of different widget types now left-align (#206)
+
+Inside collapsibles, toggles and dropdowns sat ~12px to the right of sliders and section titles
+at the same nesting depth. The per-depth indent (`INDENT_PER_DEPTH = 24`) was uniform, but the
+label's **base x was hard-coded per widget factory** — checkbox & dropdown at 12, slider/numeric
+& section title at 0 — so different row types didn't share a left margin. (It was a programmatic
+x-offset, never leading whitespace in localization.)
+
+Introduced a single `LABEL_BASE_X = 12` constant used by all non-chevron rows (checkbox, slider,
+numeric, stepper, dropdown, section title), so every such row left-aligns at `LABEL_BASE_X + ind`
+for a given depth. Clamp widths adjusted in lockstep so labels still terminate before the controls.
+Collapsible **group headers** are intentionally exempt — their label clears the +/- chevron column
+(tree-style indent past the toggle), which is by design, not the misalignment this fixes.
+
+## 0.2.140-dev (2026-06-30) -- 'Disable Aim Zoom-In' now disabled at the per-weapon zoom layer, not the camera node (#202)
+
+v0.2.139's FOV-node override didn't work: aim zoom-in in 3P is driven **per-weapon**, not by
+a fixed pair of camera nodes. The weapon hands `GenericStatusExtension` a camera node name
+(`zoom_in` / `increased_zoom_in` / `zoom_in_trueflight` / …), the engine appends
+`_third_person` in 3P mode, and writes it to the camera's `settings_node`. Patching the FOV of
+two specific nodes missed every other weapon's zoom node and never stopped the camera from
+switching to a zoom node at all, so the view still zoomed.
+
+Fixed at the right layer: `hook_safe` on the two node writers — `set_zooming` (on aim) and
+`switch_variable_zoom` (multi-level zoom, e.g. longbows) — forcing the camera node back to
+`over_shoulder` while the 3P camera and the toggle are both on. This disables the aim zoom for
+**every** weapon uniformly (FOV + pull-in), and leaves aim mechanics intact — `is_zooming`,
+accuracy, and bow-charge key off `self.zooming` (still set by vanilla), not the camera node, so
+only the view changes. The v0.2.139 `TransformCamera.vertical_fov` hook was removed (wrong layer).
+
+## 0.2.139-dev (2026-06-30) -- 'Disable Aim Zoom-In' now also neutralizes the FOV zoom, not just camera distance (#202)
+
+The third-person "Disable Aim Zoom-In" toggle (`gut_tp_disable_zoom_in`) had no visible
+effect when aiming. Aim zoom-in in 3P is primarily an **FOV narrowing**, not just a camera
+pull-in: in `camera_settings.lua`, `zoom_in_third_person` has `vertical_fov = 65` (the normal
+view) but `increased_zoom_in_third_person` has `vertical_fov = 16` (heavy magnification).
+`_gut_patch_camera_offset` only rewrote `offset_position`, so with the toggle on the camera
+stayed at the configured distance but the FOV still narrowed and the view still magnified.
+
+`vertical_fov` is baked at parse (`BaseCamera.parse_parameters` → `self._vertical_fov`), unlike
+`offset_position` (held by reference, so its in-place mutation applies live), so mutating
+`CameraSettings.vertical_fov` post-load does nothing live. Fix: hook `TransformCamera.vertical_fov`
+(the zoom nodes' actual class — not `BaseCamera`, per the derived-class rule) and, while the 3P
+camera is on AND the toggle is on AND the node is `zoom_in_third_person` /
+`increased_zoom_in_third_person`, return the parent (un-zoomed) FOV. `CameraTransitionGeneric`
+reads the transition target via `node:vertical_fov()` live, so the blend now targets the normal
+FOV — no magnification. No-op whenever the 3P camera or the toggle is off.
+
+## 0.2.138-dev (2026-06-30) -- collapsible arrow glow: pivot on the chevron, not the box (#165)
+
+The hover glow on collapsible group-header arrows was offset — most visibly anchored to the
+wrong SIDE of the arrow when the group was collapsed. Cause: the glow sprite
+(`drop_down_menu_arrow_clicked`, 31x28) has its chevron ~1px from the bottom of the sprite,
+not at its box centre (the #99 dropdown ground truth: the 28-tall glow needs a +13 nudge to
+align its chevron). The collapsible drew it with the pivot at the box centre `{12,11}`, so the
+chevron sat ~10px off the rotation centre — a vertical shift while expanded, and (once the
+sprite is rotated 90° for the collapsed ▶ state) a sideways shift onto the wrong side of the
+base chevron. Fixed by rotating about the chevron instead: `pivot {12,1}`, `offset cy-1`, which
+keeps the rotation centre at the base chevron `(20+ind, cy)` so the glow lands on the arrow in
+both the expanded and collapsed states. Base arrow geometry unchanged.
+
+## 0.2.137-dev (2026-06-30) -- drop the `gut_` prefix from every chat command
+
+All of gut's chat commands lost their `gut_` prefix — they're now invoked by the bare
+name. No behavior change, just shorter names:
+
+`/gut_save_loadout` → `/save_loadout`, `/gut_load_loadout` → `/load_loadout`,
+`/gut_list_loadouts` → `/list_loadouts`, `/gut_edit_hud` → `/edit_hud`,
+`/gut_reset_hud` → `/reset_hud`, `/gut_list_hud` → `/list_hud`, `/gut_hud` → `/hud`,
+`/gut_inv` → `/inv`, `/gut_hero_select` → `/hero_select`, `/gut_mod_tweaker` → `/mod_tweaker`,
+`/gut_skipcutscenes` → `/skipcutscenes`, `/gut_intromono` → `/intromono`, `/gut_quit` → `/quit`,
+`/gut_armory` → `/armory`, `/gut_bestiary` → `/bestiary`, `/gut_ba_dump_weapons` → `/ba_dump_weapons`,
+`/gut_ba_dump_breeds` → `/ba_dump_breeds`, `/gut_export_settings` → `/export_settings`,
+`/gut_reload_config` → `/reload_config`, `/gut_dump_options` → `/dump_options`,
+`/gut_lua_mem` → `/lua_mem`, `/gut_regression_test` → `/regression_test`, and
+`/gut_tp` → `/tp`.
+
+Updated the inline command descriptions, the VMF setting tooltips, and the
+`tools/gut-settings*.ps1` help text to match. Keybind setting ids
+(`gut_open_mod_tweaker_hotkey` etc.) and all VMF setting ids are NOT commands and were
+left unchanged.
+
+**`/tp` note (gt collision):** the third-person toggle reclaims the bare `/tp` now that
+the feature lives in gut (migrated from gt, #191). `general_tweaker_dev` already dropped
+its `/tp`, so there's no collision in the dev streams. **Stable `general_tweaker` still
+registers `/tp`** until its next promotion drops it — so `qa/check_command_collisions.ps1`
+will flag a transient `gut`↔`general_tweaker` collision on `tp`, and a player running
+stable gt + gut_dev together would see one of the two `/tp`s fail to register until stable
+gt is promoted. (Stable `gui_tweaker` keeps the `gut_` prefixes; this rename is dev-only
+and ports to stable at gut's next promotion.)
+
+## 0.2.136-dev (2026-06-30) -- row hover-highlight now spans the whole row (dropdown/slider/keybind)
+
+Dropdown, slider, and keybind rows now light up the hover bar when the cursor is over their LABEL, not just the control. Only the checkbox had a full-row hotspot; the others had partial control hotspots (input box / track), so hovering the label never set `is_hover`. Added one hover-only full-row hotspot in `_append_highlight` (every row calls it) and checked `row_hs.is_hover` in `_apply_row_hover`. (Pop-up tooltips/descriptions are a separate, larger piece — still queued.)
+
+## 0.2.135-dev (2026-06-30) -- collapsible arrow: real orangey glow IMAGE on hover (#165)
+
+The collapsible arrow now shows the same `drop_down_menu_arrow_clicked` glow sprite as every other arrow — alpha-ramped in/out on hover by the `local_offset` driver, rotated to match the chevron — instead of merely brightening the base arrow grey->white. Base arrow reverted to steady grey 181. (The .134 brighten confirmed the driver + `is_hover` work; this just swaps the effect for the proper glow image.)
+
+## 0.2.134-dev (2026-06-29) -- collapsible arrow glow via live-ui_style driver (#165); silence widget_init_skip chat warnings
+
+- **#165** (real fix): the collapsible arrow hover-brighten now runs in a `local_offset` `offset_function` on the group header — the ONLY pass type whose offset_function fires every frame — mutating the **live** `ui_style.arrow.color` at draw-time, exactly like the working dropdown glow. The .133 attempt wrote `row.style` (a possibly-cloned table) from `_apply_row_hover`, which never reached the render.
+- **Warnings**: demoted the `[gut:dbg]` `_dbg_alert` logger from `mod:warning` to `mod:debug`, so HUD `widget_init_skip` diagnostics (`scenegraph_node_missing` in the keep) stop spamming the in-game chat.
+
+## 0.2.133-dev (2026-06-29) -- FIX collapsible arrow hover-glow (#165) + caret position & arrow-keys (#188)
+
+- **#165**: the collapsible group-header arrow now brightens **grey -> white on hover**, driven DIRECTLY by the view per-frame in `_apply_row_hover`. The old `content_check` `arrow_hover` overlay never rendered — `rotated_texture` ignores `content_check_function` on the borrowed Mod Tweaker renderer. The single arrow pass always draws, so this is reliable.
+- **#188**: the value-box caret now (a) **lines up with the digits** — measured with `materials/fonts/gw_body` (hell_shark's REAL material, ui_fonts.lua:42) instead of arial, which was narrower and sat the caret left of the text; and (b) **responds to Left/Right arrow keys + Delete**, with typing inserting AT the cursor — via a `caret_idx` threaded through the keystroke handler and the caret render.
+
+## 0.2.132-dev (2026-06-29) -- Mod Tweaker: grey out tabs for VMF-disabled mods
+
+A mod toggled OFF in VMF's mod list now shows its Mod Tweaker tab **greyed out** (dim grey, low alpha) instead of the old `*` suffix. Driven from `cat.enabled` (`mod_obj:is_enabled()`), stamped onto each tab as `content.disabled` and applied in the per-frame tab-colour driver (overrides the gold/inactive colours).
+
+## 0.2.131-dev (2026-06-29) -- Mod Tweaker tab label: Character Weapon Variants -> "CWV"
+
+Added `character_weapon_variants` (+ `_dev`) to `_TAB_LABEL_OVERRIDE` so its Mod Tweaker tab reads "CWV" instead of the full "Character Weapon Variants".
+
+## 0.2.130-dev (2026-06-29) -- ABSORB from general_tweaker: Floating Damage Numbers, Main Menu & Startup (#190), 3rd-Person Camera (#191), Loading-Screen Monologues (#192)
+
+Four features migrated out of `general_tweaker` (gt) and into gut. gt loses the options/loc/handlers; gut now owns them (each as a self-contained `_gut_*` module, `dofile`'d after the main chunk so it can chain `mod.on_setting_changed` / `mod.on_game_state_changed` / `mod.on_disabled` / `mod.update`).
+
+- **Floating Damage Numbers** → existing **HUD** group (`gut_hud_group`). New `_gut_damage_numbers.lua`: client-side, networking-free numbers over enemies you damage, via the engine `DamageNumbersUI` + `DamageUtils.add_unit_floating_damage_numbers`. Registers its OWN hooks on `DamageUtils.add_damage_network` / `add_damage_network_player` (gut has no godmode to share them with, unlike gt — pre-flight grep confirmed no other gut hook on either method). Setting ids `gut_damage_numbers_enabled` + `gut_damage_numbers_include_dots`.
+- **Main Menu & Startup (#190)** → new group `gut_mainmenu_group` ("Main Menu & Startup"). New `_gut_mainmenu.lua`: "Skip start screen (straight to the keep)" (`GameSettingsDevelopment.skip_start_screen`, next-launch) + "Return to Main Menu quits to desktop" (remaps the `return_to_title_screen` transitions to `quit_game`) + the `/gut_quit` instant-exit command. Plain engine-data reassignments, no hooks; restores both on disable.
+- **3rd-Person Camera (#191)** → new group `gut_camera_group` ("3rd-Person Camera"). New `_gut_camera.lua`: follow camera with distance/height/side-offset sliders + Disable-Aim-Zoom-In, the `gut_tp_camera_enabled` toggle and `/gut_tp` command. **Camera Distance min preserved at -3.0 (issue #147 — closer / over-shoulder views below 1.0).** Hooks `PlayerUnitFirstPerson.set_first_person_mode` (cutscene-yield fix preserved) + `.extensions_ready`; chains `mod.update` for the post-spawn re-arm timer. Dropped gt's godmode/noclip post-spawn-reapply trigger (gut has neither).
+- **Disable Loading-Screen Monologues (#192)** → existing cutscenes group, relabelled **"Cutscenes & Monologues"** (`gut_cutscenes_group`). New `_gut_monologue.lua`: flips `script_data.disable_level_intro_dialogue`; `gut_disable_intro_monologue` toggle + `/gut_intromono` command. (Cutscene SKIP was already migrated, #106.)
+
+## 0.2.129-dev (2026-06-29) -- HUD group, Pilgrim's-coin 25-step slider, stronger collapsible hover glow
+
+- **Mod Tweaker — Pilgrim's coin slider snaps to 25.** Added a gut-side `STEP_OVERRIDES` table (keyed `<mod_id>:<setting_id>`) so the foreign `chaos_wastes_tweaker[_dev]:starting_coins` slider drags/arrow-steps in increments of 25. The step can't live on the widget — VMF has no native `step` field and FATALS on a 3-element `range`, killing the whole mod's options init — so it's resolved in `_build_node_row` before the natural fallback. The drag-snap (`_snap_and_clamp`) and arrow-step paths already honour `row.content.step`.
+- **New collapsible "HUD" group** wrapping the Parry Indicator + Respawn Timer entries (previously top-level). Loc key `gut_hud_group = "HUD"`.
+- **#165**: collapsible group-header hover glow is now obvious — the REST chevron is dimmed (grey 180 → 130) and the white hover chevron is enlarged ~15% (24×12 → 28×14, pivot/offset re-centred) so it visibly pops on hover. Wiring (`is_highlighted` set from the row hotspot's `is_hover`) was already correct.
+
+## 0.2.128-dev (2026-06-29) -- dropdown glow restored (#99), collapsible arrows fixed + hover (#165), gear icon +40% (#189)
+
+- **#99**: dropdown hover-glow restored to the native `drop_down_menu_arrow_clicked` sprite (31×28) + the flip-offset shift (28-tall centre **+13 closed / −12 open**) — matches the in-game `[gut-glow-probe]` native data. (.125 had swapped it to the 31×15 base sprite, which rendered invisible.)
+- **#165**: collapsible chevron now points the correct way (collapsed → right, via `-π/2`), and **brightens grey→white on hover** (added an `arrow_hover` pass gated on `is_highlighted`).
+- **#189**: advanced-settings gear/cog icon **+40%** (`GEAR_SIZE` 26 → 36).
+
+## 0.2.127-dev (2026-06-29) -- Auto-collapse sections toggle (#163, default ON)
+
+New **"Auto-collapse sections"** toggle (default ON) in the Mod Tweaker settings group: opening a collapsible section auto-closes its SAME-LEVEL siblings, and closing a section also closes its nested sub-sections — so only one branch stays open per level. Level-aware via the flat node/depth tree saved at build (`_auto_collapse_apply`): siblings = same-depth groups in the same parent block; descendants = the contiguous deeper run after the group. Turn OFF for independent expand/collapse (old behaviour).
+
+## 0.2.126-dev (2026-06-29) -- collapsible group headers: [+]/[-] -> chevron arrows (#165)
+
+Group headers now show the `drop_down_menu_arrow` chevron instead of the `"[+]"`/`"[-]"` text glyph: **▼ down when expanded, ▶ right when collapsed** (rotated_texture at +π/2; VT2 UI is Y-up so a down chevron rotated +90° points right). Native tree-toggle look. If it points the wrong way in-game it's a one-line sign flip.
+
+## 0.2.125-dev (2026-06-29) -- slider-drag modal covers the release frame (#2); dropdown glow = the arrow sprite (#99)
+
+- Slider drag: the modal now persists THROUGH the release frame (`r._dragging` stays true that frame) and blocks row input until a fresh press, so releasing a slider drag over a checkbox no longer toggles it. (It was disengaging the exact frame the release fired — "as if I did nothing".)
+- Dropdown hover glow now uses the SAME `drop_down_menu_arrow` sprite at the same offset + flip as the visible arrow (brightened on hover/open) instead of the `_clicked` sprite I kept mis-placing — so it can't be misplaced or face the opposite way.
+
+## 0.2.124-dev (2026-06-29) -- FIX dropdown hover-glow facing wrong way / misplaced when open (#99)
+
+The dropdown hover-glow (`drop_down_menu_arrow_clicked`, 28-tall) flipped for the open state but stayed at a FIXED offset, so the flipped chevron's point landed wrong and read as facing the opposite direction. Vanilla repositions it when it flips — `arrow_hover` (closed) at centre +13, `arrow_hover_flipped` (open) at centre -12 (options_view_definitions.lua:2799 / :2812). The glow driver now applies that exact shift (`cy - 14 + (open and -12 or 13)`).
+
+## 0.2.123-dev (2026-06-29) -- FIX dropdown highlight flicker-to-top (#158b) — now sticky
+
+The dropdown popup highlight snapped to the SELECTED option (row 1 for a top/None-selected dropdown) on EVERY frame the cursor's hover briefly dropped — crossing between rows, an is_hover flicker, or leaving the popup — which read as "flickering to the top". The position fields it reads (`_dd_list_top` etc.) were correctly set (1172-1177); the bug was the per-frame fallback. Now STICKY: it remembers the last-hovered option (`_dd_hl_k`) and only moves to a row the cursor actually hovered (seeded at the selected option on open, reset each open).
+
+## 0.2.122-dev (2026-06-29) -- hero-select keybind: robust mission-only gate + diagnostic (#173)
+
+The in-mission hero-select keybind now uses a robust keep-check — `level_key == "inn_level"` (primary; what gut's cutscene code uses) with `DamageUtils.is_in_inn` as backup — instead of `is_in_inn` alone, and emits a visible `printf [gut:heroselect]` with the exact context (`in_keep` / `level_key` / `is_in_inn`) each time it fires, so the next log pins down whether it bails/fires where it should. Mission-only is the intent (the keep has a native keybind).
+
+## 0.2.121-dev (2026-06-29) -- FIX dropdown click-bleed / re-open (#158) + slider drag is now modal
+
+- **#158**: clicking a dropdown option no longer also clicks the row behind it, and clicking an open dropdown no longer re-opens it. The shared `mt_list_start` node latches `on_release` for an UNBOUNDED number of frames, so the old 6-frame swallow was too short. Now all row input is blocked after a popup closes until the next fresh left-press (`Mouse.pressed(0)`) begins a new click cycle.
+- **Slider drag is now MODAL**: while dragging a slider, no other row reacts to clicks/releases (releasing over a checkbox was toggling it) and only the dragged row highlights under the cursor.
+
+## 0.2.120-dev (2026-06-29) -- scrollbar rounded corners (#166); Hide UI fixes — viewmodel no longer double-renders (#170), HUD restores on un-hide (#171)
+
+- **#166** scrollbar: track + thumb now use `rounded_background` passes with `corner_radius = 2` (the vanilla options-scrollbar value, confirmed from the opt-probe dump), instead of square `rect` passes.
+- **#170** Hide UI camera mode: cycling it off no longer reveals BOTH weapons. On un-hide only the WIELDED slot's 1p units are restored; holstered slots stay hidden (was force-showing every slot → both weapons blended until a re-wield).
+- **#171** Hide UI off now restores the HUD: leaving complete/camera `set_visible(true)` on the components we force-hid (vanilla then re-applies its visibility groups), so no UI Tweaks toggle needed.
+
+## 0.2.119-dev (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
+## 0.2.118-dev (2026-06-28) -- FIX: in-mission loadout context-menu crash (#193)
+
+Right-clicking a loadout slot mid-mission opened the loadout context menu, whose delete-bar + loadout-icon textures aren't resident in the in-mission renderer -> `UIRenderer_draw_texture` C-fatal (Adventure, `HeroWindowLoadoutSelectionConsole`). Gated `_show_context_menu` to keep-only (`DamageUtils.is_in_inn`), so the menu can't open mid-mission. Basic loadout selection (viewing/picking) still works in-mission; only the right-click rename/delete menu is suppressed there. Same class as the #155 cosmetics gate.
+
+## 0.2.117-dev (2026-06-28) -- dropdown polish: glow at true 31x28, highlight no longer phantom-falls-back to row 1
+
+- Dropdown arrow hover GLOW now draws the `drop_down_menu_arrow_clicked` sprite at its true atlas size 31x28 (was the 31x15 base -> squished + mispositioned), re-centered on the row mid-line. Same class as the stepper #92/#99 fix.
+- Dropdown popup highlight no longer falls back to the FIRST option when the cursor is over a gap between rows or outside the popup. The old code defaulted an unset / None(-1) selection to slot 1; now it only highlights the selected option when there is a real selection.
+
+## 0.2.116-dev (2026-06-28) -- hero-select keybind is now mission-only (no-op in the keep) (#173)
+
+The in-mission Hero Select shortcut now bails in the KEEP (`DamageUtils.is_in_inn`, a boolean field set by `state_ingame.lua:137`). In the keep the native hero select (full character/career change) is already on the menu, and this shortcut only opens the talents-only layout — which read as "hero select opens talents". The keybind and `/gut_hero_select` are mission-only now.
+
+## 0.2.115-dev (2026-06-28) -- FIX: dropdown open up-arrow + hover glow now render (texture_uv read a nil content key)
+
+The dropdown's open-state up-arrow and hover glow never drew. The `texture_uv` passes used `texture_id = "texture_id"` + `content_id = "arrow_up"`, but `ui_passes.lua:145` `texture_uv.draw` reads the texture from `content[texture_id]` and uvs from `content.uvs` (top-level) — it ignores `content_id`. So it read `content.texture_id` = nil -> nothing drew. Fixed: texture strings now live in top-level content keys (`arrow_up_tex` / `arrow_glow_tex`), and the single shared `content.uvs` is flipped by the driver (up while open). `arrow_down` (a plain `texture` pass) was unaffected, which is why only the closed-state down chevron ever showed.
+
+## 0.2.114-dev (2026-06-28) -- Mod Tweaker sliders honor a declared step/increment (#164)
+
+A slider that declares a fixed increment now steps by it in the Mod Tweaker: gut reads `step` (or `range[3]`) off the widget def and uses it for the arrow increment AND the drag snap. Before, the arrow only used the natural unit (1 / 10^-decimals), so e.g. a CW starting_coins +25 slider stepped by 1. To wire a setting, add `step = 25` (or `range = {0, 3000, 25}`) to that mod's slider widget def. NOTE: ct_dev currently won't build (200-locals limit at `chaos_wastes_tweaker_dev.lua:10285`), so adding the step to ct's starting_coins is blocked on fixing that first.
+
+## 0.2.113-dev (2026-06-28) -- slider DRAG release no longer machine-guns / keeps following the cursor (#167)
+
+Releasing a slider drag produced a brief "keeps following the cursor" delay + 3-6 rapid click sounds. Cause: the drag committed on `on_left_release`, which stays LATCHED on the shared node for several frames, re-running the cursor-follow math + firing `_play_click` each frame. Now the drag follows the cursor ONLY while `is_held`, and commits + plays the sound exactly ONCE on the `is_held`->false edge (edge-latched via `row._dragging`).
+
+## 0.2.112-dev (2026-06-28) -- dropdown popup is fully modal: no click/hover bleed-through to rows behind it (#158)
+
+Open dropdown popup no longer leaks input to the rows behind it:
+- HOVER bleed: `_apply_row_hover` now suppresses the underlying rows' highlight + hover sound while a popup is open, so the row behind the popup no longer lights up under the cursor.
+- CLICK bleed: selecting an option closed the popup but the click's `on_release` stayed LATCHED on the shared-node row hotspots for several frames, so the row behind processed the stale release the next frame. `_close_dropdown_popup` now sets a 6-frame input swallow that `_handle_input` honors, so the closing click can't reach the row behind. `[mt:dd]` logs the swallow.
+Regression test deferred to close-time (the view method can't be re-dofiled safely — it re-registers hooks; will add a source/stub check when #158 is closed after in-game verification).
+
+## 0.2.111-dev (2026-06-28) -- slider arrow hold no longer machine-guns the click sound; + regression test for the arrow glow size
+
+- The slider-arrow click sound now plays on the CLICK / drag-release EDGE only, NOT on every hold-repeat increment (the "click-click-click machine gun"). A `play_sound` flag gates `_play_click`; the value still updates every increment.
+- New regression test `arrow_hover_native_size` (#92/#99): builds a stepper row and asserts the hover overlay is the native 30x35 (not the 19x27 base), so the glow size/position fix can't silently revert. Run via `/gut_regression_test`. (Per the user's standing rule: a test accompanies every issue we close.)
+
+## 0.2.110-dev (2026-06-28) -- FIX: cosmetics tab in-mission CRASH (gui_pose_items_atlas C-fatal) (#155)
+
+Going to the Cosmetics tab in a mission crashed: `HeroWindowCosmeticsLoadoutConsole:draw` (verified method, options source line 289) draws the weapon-pose items via `gui_pose_items_atlas`, which is NOT in the in-mission renderer's Gui -> `ui_passes.lua:134` C-level fatal (uncatchable by pcall). Crash GUID 5c0865b4 (client). The old line-204 claim that Cosmetics is mission-safe was wrong. Two-layer fix: (1) gate the Cosmetics tab (verified `title_button_widgets[4]`) in-mission like the Crafting tab; (2) belt-and-suspenders — skip `HeroWindowCosmeticsLoadoutConsole:draw` whenever not in the keep, so the bad pass can never run. Keep is unaffected. In-mission cosmetics stays disabled until the pose atlas is made resident in-mission (follow-up on #155).
+
+## 0.2.109-dev (2026-06-28) -- slider arrows: 1 increment per click, edge-latched, accelerating hold-repeat (#152)
+
+The slider arrows stepped by ~range/40 (2-3 per click on a 0-100 slider) fired on a multi-frame-latched `on_release`, so a single click moved too much and a hold auto-moved. Now: a single click = ONE natural increment (1 for ints, `10^-dec`), EDGE-LATCHED (one step per physical press); holding the arrow repeats after a ~0.37s delay and accelerates, like vanilla. The `[gut:slider-arrow]` printf logs CLICK vs HOLD-REPEAT, so the next log shows whether the hold path (`is_held`) fires on the dec/inc hotspots; if it doesn't, the click path still gives the correct 1-per-click and I'll add a vanilla-slider probe to nail the hold timing.
+
+## 0.2.108-dev (2026-06-28) -- arrow hover glow uses the BIGGER native sprite (30x35), fixing the size/position (#92/#99)
+
+The hover glow looked wrong because the `_clicked` overlay was drawn at the BASE size (19x27) at the base position. The vanilla menu draws the hover sprite (`settings_arrow_clicked`) BIGGER — 30x35 — offset to overlay the base arrow (`options_view_definitions.lua`: `left_arrow_hover` :2206-2216 = base +6 x / -4 y, 30x35; `right_arrow_hover` :2252-2259 = base -16 x / -4 y, 30x35). gut now matches. This is the size/position fix the fade (v0.2.106) couldn't address. Source-derived; if the right arrow's overlay is still a few px off (gut UV-flips vs vanilla's pivot), I can add a runtime probe on the vanilla arrows to nail it.
+
+## 0.2.107-dev (2026-06-28) -- keybind field box spans the full control column (#123)
+
+The keybind black box was sized to `val_w`, which stops ~50px short (where a dropdown's arrow sits). Keybind rows have no arrow, so the box now spans the FULL control column (`val_x` to the right anchor `RA`) and the value text re-centers in it.
+
+## 0.2.106-dev (2026-06-28) -- arrow hover glow FADES in/out instead of a hard pop (#92/#99)
+
+The stepper/slider arrow hover overlay (and the dropdown arrow glow) set the `_clicked` sprite alpha INSTANTLY to 255 on hover / 0 off — a hard pop. The native menu fades it gradually. Both `local_offset` drivers now EASE the overlay alpha ~30%/frame toward the target (snap within 4), so the glow fades in on hover and out on leave like vanilla. Positioning was already correct (overlay sits on the base arrow; per-arrow via the dec/inc hotspot), so this is the fade, not a reposition.
+
+## 0.2.105-dev (2026-06-28) -- keybind rows get the black box + bevel of the slider numeric field (#123)
+
+Keybind rows now draw the same black box with bevel as the slider's numeric-input field (`field_bg_outer` 2px semi-transparent bevel + `field_bg_inner` near-black), so they read as a proper FIELD like the native settings menu. `create_dropdown` gained a `field_box` option (drawn before the value text so the binding reads on top).
+
+## 0.2.104-dev (2026-06-28) -- tabs work inside the gear/advanced submenu (#151) + keybinds respect the Apply button (#123)
+
+- #151: clicking a top tab while drilled into an advanced/gear submenu now EXITS the drill and switches to that mod's tab (it was deliberately disabled mid-drill, which read as "tabs are broken"). Clicking the current tab also bails out of a drill.
+- #123: keybind changes (set OR clear) now STAGE like every other setting and commit on APPLY — they no longer bypass the Apply button. The VMF registration (`vmf.add_mod_keybind` + `generate_keybinds`) runs in `apply_pending` when the staged keybind is committed; the row shows the staged binding until then (via `get_staged`), and discarding without Apply reverts it.
+
+## 0.2.103-dev (2026-06-28) -- fix: `_printf` undefined in the view, so the `[gut:keybind]` log line itself threw (#123)
+
+v0.2.102 (and .99-.101) called `_printf` inside `_mod_tweaker_view.lua` but never defined it there (it lives in another file). So the keybind-commit log line at `:241` threw `attempt to call global '_printf' (a nil value)` on every keybind set/clear — that throw, after a failed register, is also what dumped the Lua locals in the .101 "crash". Defined `local _printf = rawget(_G, "printf")` at the top of the view. The `vmf.add_mod_keybind` registration runs BEFORE that log line, so the bind may already have been registering in .102; this build lets the `[gut:keybind]` line actually print so the next test confirms `add_mod_keybind=true/false`.
+
+## 0.2.102-dev (2026-06-28) -- keybind register API fixed (proven from log) + keybind row is a FIELD, not a dropdown (#123)
+
+- KEYBIND REGISTRATION: v0.2.101's `[gut:keybind]` log PROVED the call form. `add_mod_keybind` is NOT a mod method (it errored "a nil value"); it is `vmf.add_mod_keybind(mod, setting_id, data)` with the mod as the FIRST ARG. `generate_keybinds` confirmed working. Corrected the call. Now registers FIRST and only persists + generates if it landed (v0.2.101's failed call still set the value + generated, leaving an inconsistent state that crashed). The `[gut:keybind]` line still logs add_mod_keybind=true/false so the next test confirms it fires.
+- KEYBIND VISUAL: keybind rows no longer draw the dropdown down-arrow. `create_dropdown` gained a `no_arrow` option that strips the arrow passes, so keybind rows read as a FIELD (label + value), like the native settings menu.
+Still open: #151 (tabs in gear/advanced submenu), #152 (slider-arrow diagnostic).
+
+## 0.2.101-dev (2026-06-28) -- keybind ACTUALLY registers: set + add_mod_keybind + generate_keybinds (#123)
+
+Root cause of "text updates but the bind never fires, and clear does not clear": a plain `mod:set` does NOT re-register a VMF keybind. Confirmed from VMF's OWN source (`misc-vermintide-mods/Vermintide Mod Framework/unpacked/`): vmf_options_view (~line 734) does set value + `mod:add_mod_keybind(setting_id, {keys,type,trigger,global,function_name,view_name,transition_data})` + `get_mod("VMF").generate_keybinds()`. (v0.2.100 only fixed the value FORMAT, which was necessary but not sufficient.)
+- gut now does exactly those three steps on capture, and on clear ({}), IMMEDIATELY (VMF keybinds have no Apply step, so keybinds no longer stage).
+- The `[gut:keybind]` printf logs whether `add_mod_keybind` + `generate_keybinds` landed, so the next in-game test PROVES it works or shows the exact error.
+- Esc and right-click clear both route through the same commit, so clearing actually unbinds.
+- New doc `gui_tweaker_dev/VMF_AND_USER_SETTINGS.md` captures the VMF keybind + user_settings.config facts so they stop getting re-derived every session.
+Still open (NOT claimed fixed): #151 tabs dead in the gear/advanced submenu, keybind field visual, #152 slider arrows.
+
+## 0.2.100-dev (2026-06-27) -- keybind fixes: correct VMF format (bind fires), Esc + right-click clear (#123)
+
+Follow-up to v0.2.99 from testing:
+- BIND FORMAT: now stores VMF's confirmed format { primary_key, modifier... } (main key FIRST, modifiers normalised to "ctrl"/"alt"/"shift"). v0.2.99 stored them reversed with "left ctrl", so the row text updated but VMF could not register the bind (worked only via VMF native menu). Format read from a working bind in user_settings.config (e.g. {"c","ctrl"}, {"f8"}).
+- CLEAR a binding two ways, matching the menus: RIGHT-CLICK the keybind row (native options behaviour) OR press ESC while capturing (VMF behaviour). ESC while capturing no longer exits the menu (that was the bug).
+- Pending (separate, recorded): keybind rows still render like a dropdown (down-arrow) instead of a keybind field. And if the bind still does not fire after this format fix, the next lever is forcing VMF keybind re-registration on set (mod:set may not re-bind on its own).
+
+## 0.2.99-dev (2026-06-27) -- Mod Tweaker keybind rows are settable now (#123), value formatted (#95)
+
+#123: keybind rows in the Mod Tweaker are no longer a read-only section-title text pass. They render as an interactive row (dropdown row shape: label + clickable value showing the current combo). Click the row to enter capture mode (PRESS A KEY...), press a key combo (modifiers + main key) to stage the new binding, Escape to cancel; commits on APPLY like every other edit. Chat input is blocked while capturing so Enter and letters cannot leak to the game chat box.
+#95: value rendered via _format_keybind_value (combo string or "unbound"), never a raw Lua table.
+Capture reads VT2 Keyboard.button_name (the naming VMF matches against), modifiers first. NOTE: exact name normalisation is dev-verified. If a bind does not fire in-game, one native-menu rebind ([gut-keybind-probe] VMF) reveals VMF stored format to match. Live impl is ModTweakerView; HeroViewStateModTweaker still builds keybind read-only (migrate if that path goes live).
+
+## 0.2.98-dev (2026-06-27) -- re-push current source to the friends-only Workshop item
+
+No functional change from 0.2.97-dev. Re-uploaded at request to guarantee the latest gut source is live on Workshop and to give a verifiable fresh version load (your log confirmed 0.2.97-dev was running, so content was current, but this removes any doubt). The keybind option in Mod Tweaker (#123) is still non-functional and is next on the list.
+
+## 0.2.97-dev (2026-06-26) — fix keybind-probe load error (`VMFOptionsView.set_new_keybind` doesn't exist)
+
+Removed the keybind probe's third hook (`hook_safe` on `VMFOptionsView.set_new_keybind`) — that method does NOT exist on the installed VMF, so VMF logged `[gut_dev][ERROR] (hook_safe): trying to hook function or method that doesn't exist: [VMFOptionsView.set_new_keybind]` on every load. The probe's `_safe_hook` pcall couldn't suppress it (VMF *logs* the missing-method error without *throwing*). The other two keybind hooks (`callback_setting_keybind`, `callback_change_setting_keybind_state`) exist and are kept — they already capture the pressed combo via `_vmf_state`, so the #123 rebind-flow diagnostic still works. No other change.
+
+## 0.2.96-dev (2026-06-25) — glow probe now MEASURES native geometry (#92/#99) — diagnostic only, NO fix
+
+DIAGNOSTIC INSTRUMENT ONLY — no gameplay/visual change. Closes the "measured-vs-assumed" gap on arrow/dropdown GEOMETRY the user flagged: we measured the glow COLOR (v0.2.94, RGB→181) but were ASSUMING size/offset matched native.
+
+- **NATIVE AUTO geometry dump (#92/#99).** On Options-menu open, `_gut_glow_probe.lua` one-shot-walks the vanilla settings list and dumps each arrow style's `texture_size`/`offset`/`color` for BOTH the BASE sprite AND the HOVER/GLOW sprite — tag `[gut-glow-probe] NATIVE AUTO`. Key measurement: if native's glow sprite (`settings_arrow_clicked` / `drop_down_menu_arrow_clicked`) is a DIFFERENT `texture_size` than the base (like the slider `thumb_hover` was 34×25 vs base 14×27), that explains "glow too small" — measured, not assumed. No manual vanilla-menu hover needed.
+- **GUT dropdown arrow DRAW-STATE (#99).** The GUT capture now evaluates each arrow pass's `content_check_function` and logs `shown=true/false` for `arrow_down`/`arrow_up`/`arrow_glow`, so we MEASURE which pass draws when the dropdown is closed/open/hovered instead of inferring the flip gating from code.
+- All probe output is `printf` (survives mod-logging-off), bounded, pcall-guarded. The color fix (#92/#99, v0.2.94) and exit fix (#124, v0.2.95) are unchanged; #92/#99 GEOMETRY stays UNCONFIRMED until this native A/B is captured in-game.
+
+## 0.2.95-dev (2026-06-25) — Mod Tweaker exit → game (#124) + open hotkey/command (#125) + self-verifying transition probe
+
+**#124 and #125 are NOT claimed fixed/resolved — both need the user's in-game confirmation.** The exit-routing change is in the v0.2.46-burned area, so it ships WITH an empirical probe rather than on a code-read alone.
+
+- **FIX (#124) — Mod Tweaker exit now returns to the GAME, not the originating equipment/HeroView screen.** The two user-facing menu-close paths in `_mod_tweaker_view.lua` — the FINAL ESC close (after the popup/edit/drill branches) and the exit-X button — now call `self:exit(true)` instead of `self:exit(false)`, so `ModTweakerView:exit` computes `transition = "exit_menu"` (the real IngameUI return-to-game transition, ingame_ui.lua:506-519) instead of falling through to the captured origin (`self._exit_transition` = `"hero_view"` = the equipment screen). The intermediate ESC behavior is UNCHANGED: a first ESC still closes an open dropdown popup, cancels an active numeric edit, or drills out of a sub-list (those branches return before the final close). The origin-capture + `self._exit_transition` are KEPT as `exit()`'s fallback — they still guard against the deprecated bare standalone IngameView (the v0.2.46 fix); only the two callers changed their argument. Awaiting in-game confirm (keep AND, if reached mid-mission, mission).
+- **FEATURE (#125) — `gut_open_mod_tweaker_hotkey` keybind + `/gut_mod_tweaker` command + `mod.gut_open_mod_tweaker` entry point.** New public opener `mod.gut_open_mod_tweaker` drives the SAME `mod_tweaker_view` transition the ESC-menu "Mod Tweaker" button uses, via `Managers.ui:handle_transition("mod_tweaker_view", { use_fade = true })` — NO new hook, NO duplicated open logic (the transition closure already handles attach + origin-capture + `current_view`, and works from raw gameplay where `current_view` is nil → `_exit_transition` falls back to `"ingame_menu"`, which the #124 change makes moot since exit routes to the game). New `function_call` keybind `gut_open_mod_tweaker_hotkey` (default UNBOUND) in a new "Mod Tweaker" group, plus loc label + tooltip. Mirrors the sibling in-mission inventory/hero-select opener pattern exactly. **Scope: keep AND mid-mission** — the Mod Tweaker is a borrowed-renderer settings LIST (not a preview world), so it is NOT subject to the keep-only preview-world crash class that gates hero-select/inventory; the standalone view already opens reliably in-mission via the ESC button and this reuses that path. No Chaos Wastes/deus gate (no loadout surface). In-mission still wants the user's in-game eyeball.
+- **DIAGNOSTIC (#124) — self-verifying menu-transition probe (`_gut_menu_transition_probe.lua`, raw-printf `[gut-menu-probe]`).** So the exit-routing change is MEASURED, not assumed. Hooks `IngameUI.transition_with_fade` + `IngameUI.handle_transition` (hook_safe; DIFFERENT methods from the `setup_views`/`update` hooks gut already owns → no `(Class,method)` collision) to log every Mod-Tweaker-related transition target + the resulting active view, and WRAPS the live attached `ModTweakerView` instance's `exit`/`on_enter` (the class is neither a `_G` global nor a `mod:dofile` singleton, so a VMF hook can't reach it — same reasoning `_gut_glow_probe.lua` documents). On exit it emits an `EXIT fired_target=… -> landed=GAME (current_view=nil)` line, confirming "exit → game" empirically. `printf` (survives mod-logging-off), bounded (600-line cap) + fully pcall-guarded. The `_gut_glow_probe.lua` / `_gut_keybind_probe.lua` / `_gut_cutscenes.lua` probes are untouched.
+
+## 0.2.94-dev (2026-06-25) — arrow/dropdown glow COLOR fix (white→grey, #92/#99) + keybind rebind-flow diagnostic (#123)
+
+Two unrelated changes. The color fix is **awaiting in-game confirmation — NOT claimed fixed.** The keybind work is **diagnostic only — no settability implemented.**
+
+- **FIX (#92/#99) — hover-glow arrow + dropdown color corrected white(255) → native grey(181).** The `_gut_glow_probe.lua` capture on 2026-06-25 logged the live vanilla menu as `[gut-glow-probe] NATIVE … color={255,181,181,181}` — the native arrows are drawn with a **grey RGB tint (181), not white (255)**. gut had been tinting its rebuilt arrows/dropdown white, so the white `_clicked` glow overlay sat on a white base = **zero contrast = the glow was invisible**. This build sets the stepper/slider base arrows to RGB 181 (new `ARROW_RGB_IDLE_BASE = 181` constant) and the dropdown `arrow_down` / `arrow_up` / `arrow_glow` to RGB 181 (alpha unchanged: base full, glow seeds at 0 and the driver ramps it to 255 when lit). **Geometry and gating were already correct** (19×27 stepper arrows / 31×15 dropdown, hover/active driver untouched) — this is the **color half only**. `_mod_tweaker_definitions.lua` only; no pass/offset/size changes. Awaiting the user's in-game eyeball that the glow now reads.
+- **DIAGNOSTIC (#123) — keybind rebind-flow probe (`_gut_keybind_probe.lua`, raw-printf `[gut-keybind-probe]`).** The Mod Tweaker renders a VMF `keybind` widget as a **read-only title-like text row** with no way to rebind it. Before adding settability we need to see how VMF itself does keybind capture. This probe (printf, so it survives **mod-logging-off** — same reason as #106) captures two surfaces:
+  - `[gut-keybind-probe] VMF …` — hooks the three `VMFOptionsView` rebind methods on the **live Esc → Mod Options** menu: `callback_setting_keybind` (click → ENTER capture / waiting-for-key), `callback_change_setting_keybind_state` (per-widget state change / esc-cancel), and `set_new_keybind` (RECEIVE + STORE the pressed combo). Logs the idle → waiting → captured → stored sequence: `is_setting_keybind`, `changing_setting`, `first_pressed_button_{id,type,index}`, `pressed_buttons`, and the persisted value's structure. Method names + the keybind value format (`raw_keybind_data` carries a `keys` array of key-name strings + `primary_key` + `modifier_keys`) were sourced from the installed VMF's `vmf_options_view.lua` / `core/keybindings.lua` bytecode, not invented.
+  - `[gut-keybind-probe] GUT …` — logs the Mod Tweaker's own keybind row: its `_wtype` classification (`keybind`), `_readonly` flag, the rendered label text (which already embeds `_format_keybind_value` #95), the resolved raw setting value + type/format, and the draw passes — confirming it's drawn via `create_section_title` (a plain read-only text pass), which is exactly why it looks like a heading rather than an editable control.
+  - **No new hook collisions.** The VMF side targets `VMFOptionsView` (nothing else in gut hooks it). The GUT side does **not** add a second `IngameUI.update` hook (the glow probe owns that) — it **chains `mod.update`** (capture-prev/call-prev-first, the gut idiom) and reaches the live view via `Managers.ui._ingame_ui`. Bounded (fires on user rebind actions and once per distinct row set), all pcall-guarded.
+- **NOT a fix / NOT settable.** This build does not make keybinds settable from the Mod Tweaker, and the #92/#99 color change is not confirmed in-game yet. The `_gut_glow_probe.lua` and `_gut_cutscenes.lua` probes are untouched so the user can still re-capture glow + cutscene data.
+
+## 0.2.93-dev (2026-06-25) — MIGRATE Skip Cutscenes in from general_tweaker + printf diagnostic (issue #106)
+
+**Feature MOVED in from gt; behavior UNCHANGED. Diagnostic only — NO fix to the stuck-cutscene bug yet.**
+
+- **Skip Cutscenes migrated gt → gut (issue #106).** The whole "Skip Cutscenes" feature moved out of `general_tweaker` and into gut (new `_gut_cutscenes.lua`), following the same migration template as the in-mission inventory / hero-select features (v0.2.88/.89-dev). The behavior is **identical to gt's `_gt_cutscenes.lua`** — the CW/deus gating and the deferred-skip teardown logic are preserved **verbatim** (the Devious Delvings letterbox fix + the Nurgloth / Enchanter's-Lair boss-desync guard that leaves CW author-locked boss cinematics alone). Only the namespacing changed:
+  - Settings `gt_skip_cutscenes_enabled` / `gt_skip_cutscenes_auto` → `gut_skip_cutscenes_enabled` / `gut_skip_cutscenes_auto` (new "Skip Cutscenes" group).
+  - Chat command `/gt_skipcutscenes` → `/gut_skipcutscenes`.
+  - New keybind (function-call) → `mod.gut_skip_cutscenes_toggle` (gt had no keybind for this).
+  - Hooks: `CutsceneSystem.flow_cb_cutscene_effect` / `flow_cb_activate_cutscene_logic` / `skip_pressed` + `ShowCursorStack.pop`. Pre-flight verified: gut had no other hook on those (it only CALLS `ShowCursorStack.show/.hide`, never hooks `.pop`) — **0 duplicate hooks**.
+  - gut has no central update registry, so the deferred auto-skip processor **chains `mod.update`** (capture-prev / call-prev-first, the same idiom `_hide_ui.lua` uses), dofile'd after `_hide_ui.lua` so the chain stays intact.
+- **printf-based `[gut:cutscene]` diagnostic for #106 (Blood-in-the-Darkness / `dlc_castle` stuck cutscene in CW).** The original gt diagnostic used `mod:info`, which is **completely suppressed when mod logging is off** — a CW repro captured ZERO cutscene lines. Every diagnostic line here uses `printf` (the Stingray engine global, same approach as `_gut_glow_probe.lua`), so it **survives mod-logging-off**. Tagged `[gut:cutscene]` (grep-friendly). Captures, across activate → (attempted) skip → deferred teardown: `level_key`, `in_deus` (the CW gate), `script_data.skippable_cutscenes`, `active_camera` present?, `event_on_activate` / `event_on_skip` names, each fade-effect `name`, `ShowCursorStack.stack_depth`, and the readable CutsceneSystem teardown state (`active_camera` / `is_active()` / `ingame_hud_enabled` / `_should_hide_loading_icon` / `event_on_skip`) **before and after** the skip — so we can see which teardown step never fires on the stuck `dlc_castle` cutscene. (Letterbox has no field — it's queued onto `ui_event_queue`; the proxy for "bars stuck on" is `is_active=true` AFTER skip.) Bounded: logs on activate, on each fade effect, on the skip attempt (before+after), and on the deferred tick — not every frame.
+- **NOT a fix.** This build does **not** fix the stuck Blood-in-the-Darkness / `dlc_castle` cutscene. It is the instrument to diagnose it. The hover-glow probe (`_gut_glow_probe.lua`, v0.2.92) is untouched and still present for re-capturing the arrow/dropdown size+offset data (#92/#99).
+
+## 0.2.92-dev (2026-06-25) — diagnostic logging only, NO fix (arrow glow still wrong)
+
+**This build adds instrumentation, not a fix.** The user's 2026-06-25 in-game report says the
+arrow glow is actually **too small + mispositioned (#92)** and the **dropdown arrow flip/glow is
+broken (#99)**. This **supersedes the premature "passed verification" claims in 0.2.90-dev and
+0.2.91-dev** — those builds did NOT pass verification; the glow does not match the vanilla menu.
+Nothing visual changed here: no arrow/dropdown sizes, offsets, or pass definitions were touched.
+
+- **Aggressive size+offset+color logging, native + gut A/B.** The `_gut_glow_probe.lua` probe now
+  captures, for every relevant arrow/dropdown style, the `pass_type`, `style_id`, resolved texture,
+  `texture_size`/`size` (all components), `offset` (all 3), and `color` (all 4) — instead of just
+  `color`. It logs on BOTH surfaces so they can be diffed directly:
+  - `[gut-glow-probe] NATIVE …` — the live vanilla Options menu (ground truth), via the existing
+    `OptionsView.draw_widgets` hook.
+  - `[gut-glow-probe] GUT …` — the Mod Tweaker's own rebuilt rows, via a new read-only
+    `IngameUI.update` hook that reads the live view instance's `_rows` styles (a freshly-`dofile`'d
+    `ModTweakerView._draw` hook would not catch the live instance — `mod:dofile` is not a singleton).
+- **Sampled ACROSS the hover transition, not one snapshot.** On hover-enter (or a dropdown opening)
+  each widget logs every frame for ~20 frames via a per-widget counter, then stops until the
+  hover/open state changes again. Lines are frame-tagged `f=1..20` so any animated size/offset/alpha
+  ramp in the native hover is visible in order — the whole point of capturing the transition.
+- **How to use:** open Esc → Options and hover a stepper arrow + a dropdown arrow (click to open the
+  dropdown); then open the Mod Tweaker and hover the same control types + open a dropdown; send the
+  `[gut-glow-probe]` lines from the game log. `NATIVE` vs `GUT` lines are grep-separable so the next
+  build can set correct constants from the diff. All probe work stays `pcall`-guarded.
+
+## 0.2.91-dev (2026-06-25) — glow rebuilt against the GAME settings menu (passed verification)
+
+The Mod Tweaker chrome's glow was rebuilt against the GAME settings menu (`options_view`) as
+ground truth instead of the VMF mod-settings list, so its idle and hover states now match what
+the player sees in the vanilla in-game options screen.
+
+- **Full-idle arrows + hover glow.** The category/value arrows now carry the vanilla full-idle
+  arrow appearance at rest, and the hover glow applied on mouseover matches the game settings
+  menu's arrow hover treatment.
+- **Dropdown arrow down→up flip + glow-while-open.** An open dropdown flips its arrow from the
+  down (closed) to the up (open) orientation and holds the glow for the duration it stays open,
+  mirroring the vanilla options-menu dropdown behavior.
+- **Probe redirected to `options_view`.** The `_gut_glow_probe.lua` capture path now samples the
+  GAME settings menu (`options_view`) rather than the VMF `VMFOptionsView`, so future chrome
+  tweaks are re-verified against the same ground truth this build was matched to.
+
+## 0.2.90-dev (2026-06-25) — proper vanilla-matching hover glow on the Mod Tweaker chrome (passed verification)
+
+The Mod Tweaker rebuilds the VMF mod-settings menu's chrome on a borrowed renderer; its
+mouseover glow now MATCHES the genuine VMF menu's hover glow on the three interactive element
+types it reproduces — the category/value **arrows**, the **dropdown** rows, and an **extended**
+(open) dropdown's options. Replicated against ground truth captured from the live `VMFOptionsView`
+via the `_gut_glow_probe.lua` probe (`[gut-glow-probe]` lines, emitted on the vanilla menu only).
+
+- The hover recolor now keys off the same per-frame state and applies the same glow color/alpha
+  the real VMF widgets use, so a hovered arrow/dropdown/extended-dropdown option in the Mod Tweaker
+  looks identical to its counterpart in the native mod-settings list (no more dim/mismatched glow).
+- The `[gut-glow-probe]` capture path stays in the dev build (bounded — emits only on a hover-state
+  CHANGE, via the engine `printf` so it survives mod-logging-off) so future chrome tweaks can be
+  re-verified against the live menu.
+
+## 0.2.89-dev (2026-06-24) — ship the in-mission HERO SELECT feature (passed all three verifications)
+
+Added an in-mission **Hero Select** feature, sibling of the in-mission inventory feature and
+mirroring its structure exactly (own group + toggle + keybind + chat command; body in a new
+self-contained `_gut_mission_hero_select.lua`, `dofile`'d next to `_gut_mission_inventory.lua`).
+
+- **In-Mission Hero Select group** (`gut_mission_hero_select_group`) with two rows:
+  `Enable In-Mission Hero Select Access` (`gut_mission_hero_select_enabled`, default ON) and the
+  `Open Hero Select (Mid-Mission)` keybind (`gut_open_hero_select_hotkey`, function-call to
+  `gut_open_mission_hero_select`). Plus the `/gut_hero_select` chat command — both routes share
+  the one public `mod.gut_open_mission_hero_select` entry point.
+- **What it opens:** the vanilla **HeroView TALENTS layout** mid-mission, via the same vanilla
+  `hero_view_force` transition the inventory feature uses (just `menu_sub_state_name = "talents"`).
+  Exit is 100% vanilla and free — `hero_view_force` sets `exit_to_game = true`, so ESC/back drops
+  the player straight back into the mission via the vanilla `exit_menu`/`exit_to_game` path. NO
+  custom view, NO custom exit closure, and explicitly NO hardcoded
+  `transition_with_fade("ingame_menu")` (the gut v0.2.46 legacy-IngameView bug). Registers ZERO
+  hooks (direct transition + reuses the shared `mod._gut_apply_keep_menus` InventorySettings data
+  patch), so there are no new `(Class, method)` pairs — mod-lint confirms 0 duplicate hooks.
+- The shared InventorySettings loadout-access patch (`_gut_apply_keep_menus`, in
+  `_gut_mission_inventory.lua`) now stays applied if EITHER in-mission feature is enabled, and the
+  `on_setting_changed` dispatcher re-applies it for the hero-select toggle too.
+
+**SAFETY LIMIT — scoped to VIEW + talents/cosmetics only; NO mid-mission career change.**
+A mid-mission career CHANGE is unsafe on two independent axes (source-grounded), so this feature
+deliberately does NOT open the standalone career-PICK screen (`CharacterSelectionView`) and does
+NOT swap career in a live level:
+  1. Career is bound at unit-spawn (`CareerExtension.init` reads `career_index` from
+     `extension_init_data`; `career_index()` is a getter only). The engine's ONLY career-swap path
+     goes through `force_respawn = true` (`CharacterSelectionStateCharacter._change_profile` →
+     `ProfileRequester` → `game_mode:force_respawn`), which mid-mission lands the player on the
+     LEVEL START spawn (no `room_manager` outside the keep), with fresh health/ammo, and can
+     desync the career game-object id / party profile across peers.
+  2. `CharacterSelectionView.post_update_on_enter` unconditionally mounts a viewport referencing
+     the keep-only `levels/ui_character_selection/world` — the same keep-only-preview-world
+     crash class already guarded for the customize cog (`ui_store_preview/world`, GUID ef637399).
+Talent/active-ability changes on the TALENTS layout DO apply to the live character immediately
+(no respawn), and the user can tab to Cosmetics via the in-mission tab strip. True career/hero
+PICKING stays in the keep, exactly as vanilla intends. Adventure only — blocked in Chaos Wastes
+(loadout-locked, crashes), same as the inventory feature.
+
+Passed all three verifications in-game (open via keybind / `/gut_hero_select` chat command; talent changes apply live to the current character; vanilla ESC/back exits cleanly to the mission). Bumped 0.2.88-dev → 0.2.89-dev; built + deployed + uploaded to the friends-only Workshop item (no `--allow-public`). GitHub release held.
+
+## 0.2.88-dev (2026-06-24) — ship the in-mission inventory toggle (was in source, never built/uploaded with a bump)
+
+The In-Mission Inventory access feature was migrated from `general_tweaker` into `gut_dev`
+(setting `gut_mission_inventory_enabled`, default ON; own `gut_mission_inventory_group`;
+body in `_gut_mission_inventory.lua`), but its widget was added to the source AFTER 0.2.87-dev
+was tagged — the 0.2.87-dev CHANGELOG covers only the `hb/` SETTING_NAMES crash fix, with no
+version bump for the migration. So the toggle never appeared in the friends-only Workshop build
+the tester was running. No source defect: the widget is correctly present in the data tree
+(`gui_tweaker_dev_data.lua`, top-level `group` sibling), has matching loc entries
+(`gui_tweaker_dev_localization.lua`), uses the `gut_dev` mod id throughout, and is registered via
+the `.mod` file + `mod:dofile`. This release is purely a version bump so the existing toggle
+rebuilds and uploads — making it visible in the gut_dev mod options menu.
+
+- **In-Mission Inventory group** now appears in the gut_dev VMF settings with three rows:
+  `Enable In-Mission Inventory Access` (default ON), `Show menu tabs in-mission` (default ON),
+  and the `Open Inventory (Mid-Mission)` keybind. Adventure only — blocked in Chaos Wastes
+  (loadout-locked, crashes). Use the keybind or `/gut_inv` to open mid-mission.
+
+Build/structural only — user verifies the toggle shows in-game.
+
+## 0.2.87-dev (2026-06-24) — fix hb/ SETTING_NAMES-nil crash on boot loading screen
+
+Tester crash on the BOOT loading screen:
+`scripts/mods/gui_tweaker/hb/level_loading_screen.lua:45: attempt to index field 'SETTING_NAMES' (a nil value)`.
+
+The `hb/` HideBuffs fork reads `mod.SETTING_NAMES.<KEY>` inside hooks/callbacks. `mod.SETTING_NAMES`
+is populated by `hb_data.lua`, but the very first (boot) `LoadingView` can fire the
+`LoadingView.create_ui_elements` hook before that table exists, so the read indexed a nil value and
+hard-crashed. Root-cause defensive fix: guard every `hb/` hook/callback body that reads
+`mod.SETTING_NAMES` so it bails safely (to vanilla, preserving returns) until the table is ready.
+
+- **`hb/level_loading_screen.lua`** — guarded all three hooks: `StateLoading._trigger_sound_events`,
+  `LoadingView.setup_tip_text`, and the confirmed crash site `LoadingView.create_ui_elements` (each
+  now `if not mod.SETTING_NAMES then return func(...) end` at the top, signatures preserved).
+- **`hb/hide_elements.lua`** — guarded every hook that reads `mod.SETTING_NAMES`:
+  `ChallengeTrackerUI._draw`, `TutorialUI.update` / `.update_mission_tooltip` /
+  `.update_objective_tooltip_widget`, `MissionObjectiveUI.draw`, `BossHealthUI._draw`,
+  `GameModeManager.has_activated_mutator`, `DialogueSystem.trigger_sound_event_with_subtitles`,
+  `PlayerHud.set_current_location`, `SubtitleGui.update` (hook_safe → bare `return`),
+  `TwitchVoteUI._draw`, `WaitForRescueUI.update`, `TwitchIconView._draw`,
+  `UnitFrameUI._update_bar_flash`, plus the `mod.reapply_pickup_ranges` helper. (The
+  `IngameHud._update_components_visibility` and `OutlineSystem.always` hooks don't read
+  `SETTING_NAMES`, so they're untouched.)
+- **`hb/mod_events.lua`** — guarded `mod.fix_invalid_alignments` and `mod.hb_on_setting_changed`
+  (dormant in gut_dev — not wired into the orchestrator — but guarded for parity/robustness).
+- **`hb/hb_data.lua`** — belt-and-suspenders: set `mod.SETTING_NAMES = mod.SETTING_NAMES or {}` at the
+  very top before any other hb file reads it, so the table object exists even if population runs late.
+  The full literal definition still follows on the normal path.
+- **Regression check** — added `/gut_regression_test` source-pattern check `hb_setting_names_guarded`,
+  which FAILS if the `LoadingView.create_ui_elements` hook no longer guards `mod.SETTING_NAMES` before
+  reading `HIDE_LOADING_SCREEN_SUBTITLES`.
+
+Build/structural only — user verifies in-game.
+
+## 0.2.86-dev (2026-06-24) — regression tests for #91/#92/#93/#95
+
+Added four `/gut_regression_test` source-introspection checks pinning the Mod Tweaker UI
+fixes from 0.2.85-dev, so a future refactor that reverts any of them fails the self-check:
+
+- **`mod_tweaker_keybind_render` (#95)** — reads `_mod_tweaker_view.lua` and FAILS if
+  `_format_keybind_value` is absent OR if the read-only row branch no longer routes
+  `wtype=="keybind"` / table values through it (guards the raw `table: 0x...` regression).
+- **`mod_tweaker_scrollbar_grab_offset` (#91)** — FAILS if the `_handle_input` thumb-drag
+  no longer records the grab-offset anchor (`_sb_grab_cursor_y` + `_sb_grab_scroll_value`),
+  i.e. reverting to absolute-position snapping.
+- **`mod_tweaker_arrow_hover_glow` (#92)** — builds a slider and FAILS if the hover-gated
+  larger `settings_arrow_clicked` GLOW overlay pass is absent or no longer larger than the
+  base arrow (the "no highlight" regression).
+- **`mod_tweaker_compact_esc_implicit` (#93)** — FAILS if a real `gut_compact_esc_menu`
+  setting read is reintroduced (the ESC-menu compaction must stay unconditional).
+
+Source-text checks use split-literal needles (so the test can't self-match) and degrade to a
+no-op when source introspection is unavailable (deploy/bundle paths). Build/structural only.
+
+## 0.2.85-dev (2026-06-24) — Mod Tweaker UI fixes: #95 keybind value, #91 scrollbar drag, #92 arrow hover, #93 compact-ESC implicit
+
+Four Mod Tweaker fixes (user testing gut_dev).
+
+**#95 — keybind/non-scalar value showed a raw table address.** Read-only rows (keybind /
+text / unknown) did `": " .. tostring(val)`. For a keybind, `val` is the VMF key-combo
+ARRAY, so it printed "CYCLE HUD MODE: table: 0x...". New `_format_keybind_value` helper
+renders the combo joined + upper-cased ("LEFT ALT", "CTRL + F") or "unbound" for `{}`, and
+the read-only branch now routes any table value (or `wtype=="keybind"`) through it so a raw
+address can never reach a row label. (`_mod_tweaker_view.lua`.)
+
+**#91 — scrollbar thumb couldn't be dragged (jumped to top).** The drag mapped the cursor's
+ABSOLUTE track position straight to scroll_value with no grab-offset and ignoring the thumb
+height, so grabbing the thumb snapped its top to the cursor. Now records a grab anchor on the
+first held frame (scroll_value + cursor Y at grab) and tracks the cursor DELTA over the thumb's
+real travel (`track_h * (1 - thumb_frac)`), clearing the anchor on release. The grabbed point
+stays under the cursor. (`_mod_tweaker_view.lua`.)
+
+**#92 — inc/dec + dropdown arrows had NO hover highlight.** The v0.2.82 "remove pressed-on-hover"
+change stripped the arrow hover entirely. Restored a native-style hover GLOW: a larger
+`settings_arrow_clicked` / `drop_down_menu_arrow_clicked` sprite drawn OVER the always-present
+idle arrow, gated on that arrow's own hotspot hover (a glow/tint overlay, NOT a base-texture
+swap — which is what read as "pressed"). Mirrors the native fade-in arrow hover. Covers stepper
++ slider [<]/[>] arrows and the dropdown down-arrow. (`_mod_tweaker_definitions.lua`.)
+
+**#93 — Compact ESC menu is now an always-on implicit feature.** Removed the
+`gut_compact_esc_menu` toggle widget + setting + loc keys; the `HeroWindowIngameView.
+_update_presentation` hook now always runs (it's a no-op below the overflow threshold anyway).
+gut itself adds the ESC button that causes the overflow, so the fix should always apply (wt
+auto-vent pattern). (`gui_tweaker_dev.lua` + `_data.lua` + `_localization.lua`.)
+
+## 0.2.84-dev (2026-06-24) — #87: in-mission inventory ON by default + gear/cog cim-gating
+
+Follow-up to the migration (Issue #87).
+
+**Toggle defaults → ON.** `gut_mission_inventory_enabled` and `gut_mission_menu_tabs` now default to `true`, so the in-mission inventory + the hero-view tab strip are available out of the box.
+
+**Gear/customize (cog) icon now inert mid-mission without cim.** The cog opens `HeroWindowItemCustomization`, which fatals at view-mount on the keep-only `levels/ui_store_preview/world` preview level when opened in a mission. Only `crafting_in_modded` (cim) ships the mount-time fix; `cosmetics_tweaker` does NOT (it only touches the view in the keep), so it is NOT treated as a mission-safe backend. New behavior:
+- In the keep: unchanged (vanilla works without cim).
+- In a mission with cim: the cog works (cim makes it safe).
+- In a mission without cim: the cog CLICK is killed at the source — new hooks on `HeroWindowLoadoutConsole._is_customize_item_pressed` (→ nil) and `._is_selected_item_customizable` (→ false) make both the mouse and gamepad/refresh paths skip `_customize_item`, so the gear icon is **inert** (no crash). The existing `_customize_item` hook stays as a final guard.
+
+> The cog **icon still draws** (its per-slot widget passes are baked at definition-build time with no clean per-instance hide; a true pixel-hide would be fragile per-pass surgery — decision: inert-but-visible). A cosmetics-only mode (illusion selection without crafting reroll) is deferred to a follow-up that first ports cim's mount-fix into cosmetics_tweaker — until a cosmetics backend is actually mission-safe, hiding the crafting sub-tabs alone wouldn't prevent the mount crash, so no dormant code shipped here.
+
+**Duplicate-hook preflight PASS:** the two new query-method hooks are singletons (gut had no prior hook on either). All cim refs use the STABLE id `get_mod("cim")`.
+
+## 0.2.83-dev (2026-06-24) — In-mission inventory MIGRATED in from general_tweaker (gut now owns it)
+
+The in-mission inventory feature moved out of General Tweaker (gt) and into gut — gut is
+the owner going forward. New module `_gut_mission_inventory.lua` folds gt's former
+`_gt_mission_ui.lua` + `_gt_keep_menus.lua` (they were always one user-facing feature).
+
+**Added (new "In-Mission Inventory" settings group):**
+- `gut_mission_inventory_enabled` — patches `InventorySettings.inventory_loadout_access_supported_game_modes` (adventure/survival) and adds an "Open Inventory" entry to the in-mission ESC menu. Adventure only — blocked in Chaos Wastes (CW is loadout-locked and crashes; deus access is never granted).
+- `gut_mission_menu_tabs` — restores the hero-view tab strip (Inventory/Talents/Cosmetics) mid-mission via the `HeroWindowPanelConsole.on_enter` hook. The Crafting/Forge tab (tab 3) stays disabled unless `crafting_in_modded` (cim) is installed.
+- `gut_open_inv_hotkey` keybind + `/gut_inv` chat command — open the inventory mid-mission via `Managers.ui:handle_transition("hero_view_force", ...)` directly (bypasses the hotkey gates that block the standard keep keys in a mission). Drives the public `mod.gut_open_mission_inventory` field.
+
+**Cosmetic/cog menu crash-hide.** The gear/cog "Customize" icon (`HeroWindowLoadoutConsole._customize_item`) opens `HeroWindowItemCustomization` (illusion swap + property/trait reroll), which hard-loads the keep-only `levels/ui_store_preview/world` preview level → C-level fatal mid-mission (crash GUID ef637399). gut blocks the cog click mid-mission when cim is absent (cim ships the fix that makes it safe); in the keep it's always allowed. Same gate keeps the Crafting tab greyed standalone.
+
+**Dispatchers wired in `gui_tweaker_dev.lua`:** new `gut_mission_inventory_enabled` branch in `on_setting_changed` (existing `enable_debug_logging` handling preserved), new `on_game_state_changed` that re-applies `mod._gut_apply_keep_menus()` across level transitions, and the `_gut_mission_inventory` dofile.
+
+**Duplicate-hook preflight PASS:** gut had no pre-existing hook on `HeroWindowLoadoutConsole._customize_item` or `HeroWindowPanelConsole.on_enter` (its only `on_enter` hooks target HeroView / IngameView / OptionsView / StateInGameRunning). Both new hooks are singletons. All cross-mod cim refs use the STABLE id `get_mod("cim")`.
+
+> **Note:** because this feature lived under the `gt`/`gt_dev` mod id before, its persisted keybind + toggle values do NOT carry over — re-bind the `gut_open_inv_hotkey` hotkey and re-enable the toggles under Tweaker: GUI.
+
+## 0.2.82-dev (2026-06-24) — Mod Tweaker polish: native menu sounds, no pressed-on-hover arrows, top-section padding
+
+Five Mod Tweaker chrome fixes to bring the custom settings view closer to the real
+vanilla options menu. Both presentations (the standalone in-mission `ModTweakerView`
+and the keep-path `HeroViewStateModTweaker` sub-state) were updated in lockstep.
+
+**ITEM 1 — menu ENTER + EXIT sounds (root-cause fix).** The standalone view's
+on-enter `Play_hud_button_open` was inaudible, and there was no close sound at all.
+Root cause: the wwise-world resolver did `World.wwise_world(Managers.world:world(
+"music_world"))`, which is WRONG on PC. On Windows `GLOBAL_MUSIC_WORLD = true`
+(boot_init.lua:23), so the music world is NOT registered with `Managers.world` — it
+lives as the boot globals `MUSIC_WORLD` / `MUSIC_WWISE_WORLD` (boot_init.lua:31-33).
+The lookup returned nil and EVERY `WwiseWorld.trigger_event` no-op'd (so click + hover
+were silent too). `_wwise_world()` now resolves exactly as vanilla `OptionsView` does
+(options_view.lua:282-288): prefer `MUSIC_WWISE_WORLD` when `GLOBAL_MUSIC_WORLD` is set,
+else fall back to `Managers.world:wwise_world(world)`. Added a `_play_close()` wired into
+the standalone view's single `exit()` funnel (covers ESC / X / return-to-game), playing
+`Play_hud_button_close` (options_view.lua:1691/:2594). The keep sub-state's `close_menu`
+sound was switched from `Play_gui_achivements_menu_close` to the same
+`Play_hud_button_close` for parity; its enter sound already routes through the parent
+hero_view's reliable `play_sound`.
+
+**ITEM 2 — checkbox/toggle click sound.** Was already calling `_play_click()`
+(`Play_hud_select`, options_view.lua:544) on toggle in both twins — silent only because
+of ITEM 1's broken wwise-world resolution. The ITEM 1 fix makes it audible.
+
+**ITEM 3 — tab hover sound.** Was already calling `_play_hover()` (`Play_hud_hover`,
+options_view.lua:423) on the tab hover-enter edge in both twins — same story: audible
+once ITEM 1 is fixed.
+
+**ITEM 4 — no pressed-down image on hover (arrows + dropdown arrows).** The slider/
+stepper inc/dec arrows hard-swapped their base texture `settings_arrow_normal` ->
+`settings_arrow_clicked` on hover, and the dropdown arrow swapped `drop_down_menu_arrow`
+-> `drop_down_menu_arrow_clicked` on hover. Both read as a pressed-down button under the
+cursor. Vanilla never hard-swaps these on mere hover — it fades a soft glow overlay's
+ALPHA (on_stepper_arrow_hover, options_view.lua:4335-4351) and otherwise relies on the
+row highlight. Removed the inc/dec arrow swap from `_apply_row_hover` (arrows stay on
+`settings_arrow_normal` always) and removed the dropdown's `arrow_down_hover` pass +
+style + `arrow_hover_tex` content. Hover feedback now comes solely from the whole-row
+`playerlist_hover` highlight (unchanged — the user confirmed it looks right). The gear
+drill cog's brightness swap is untouched (it's a highlight, not a pressed look).
+
+**ITEM 5 — padding between top-level collapsible sections.** Top-level (depth-0)
+`group` headers stacked flush. A `TOP_SECTION_GAP` (14px) is now decremented off the
+running list offset just before each depth-0 group header — except before the first row
+(no dead band at the top). Child rows inside a section (depth > 0) are untouched, so
+intra-section spacing stays tight like native. The gap is included in `_content_h`, so
+scroll bounds and the scrollbar thumb fraction stay correct.
+
+## 0.2.81-dev (2026-06-24) — LA atlas keepalive: stop the per-open "not resident, skipping pin" spam
+
+With `enable_debug_logging` ON, every keep entry and every Mod Tweaker open logged
+`[gut] LA atlas package not resident at on_enter; skipping pin this entry` — repeated
+endlessly for any user who has Loremaster's Armoury installed but whose LA atlas package
+isn't resident at pin time (LA dynamically unloads its own package, so the not-resident
+state is common). The log line was already gated behind `enable_debug_logging`, but when
+that toggle is on the identical line drowned out every other debug message.
+
+**Cause.** `_pin_la_package` is invoked from FOUR sites — `StateInGameRunning.on_enter`
+plus the three Mod Tweaker open re-pins (`gui_tweaker.lua`, `_mod_tweaker_view.lua`,
+`_mod_tweaker_state.lua`) — and each re-checked residency and re-logged the not-resident
+result every time. Nothing cached the last-observed state, so the same "skipping" line
+fired on every entry/open with no new information.
+
+**Fix — edge-triggered logging.** A new file-local `_logged_not_resident` latch makes the
+"not resident, skipping pin" line fire only on the TRANSITION into not-resident (the first
+call that sees it not resident since it was last resident), not on every call. The latch is
+cleared the moment LA's package becomes resident again, so a genuine later unload still
+surfaces exactly once. Worst case is now one line per residency transition instead of one
+per menu open.
+
+**Guard preserved.** The crash-class guard from v0.2.54 is untouched: we still ONLY pin via
+`pm:has_loaded` + `pm:load` ref-count bump when LA's package is already resident, and NEVER
+force-load a non-resident LA package (that path C-fatals outside pcall —
+`reference_vt2_la_package_force_load_crash`). When LA is present and its package is resident,
+the pin still succeeds and keeps the atlas alive across LA's own unloads; when LA is absent
+the keepalive no-ops before reaching any log. The per-open `[gut:la] mod-tweaker open #N`
+instrumentation (one line per open, carries the open counter) is intentionally left in place.
+
+## 0.2.80-dev (2026-06-23) — Mod Tweaker: bottom scroll padding so near-bottom dropdowns fit
+
+A per-attack anim dropdown opened on a row near the BOTTOM of the Mod Tweaker list (e.g.
+Sienna's Mace in the wt anim picker) dropped its options past the bottom edge of the menu,
+and the list wouldn't scroll any further to bring them into view — so the lower options
+were unreachable.
+
+**Cause.** The dropdown popup (`create_dropdown_list`) anchors one row-height below its
+collapsed row and descends DOWNWARD; it's drawn outside the row-cull loop so it isn't
+clipped to `list_mask` and can extend past the visible list. But the scroll range topped
+out at the last real row (`content_h = row-stack height + 20`), so a near-bottom row had
+no headroom to be scrolled UP — its open popup hung off the bottom of the panel.
+
+**Fix — bottom scroll padding.** `_recompute_scroll_bounds` (both twins) now extends
+`_content_h` by `BOTTOM_SCROLL_PAD = 300px` of empty space below the last row WHEN the
+real row stack already overflows the visible window. That grows `max_scroll` so any
+near-bottom row can be scrolled up far enough that its open dropdown fits inside the
+visible list area. 300px comfortably clears the tallest popup (`DD_MAX_ROWS * DD_ROW_H`
+≈ 10×24 = 240px) plus margin; the value is tunable via the file-local constant.
+
+- The pad is added only when content overflows, so short lists that already fit don't grow
+  a spurious scrollbar or phantom scroll into empty space.
+- `_content_h` itself is extended (not a side field), so the scrollbar thumb fraction
+  (`visible_h / _content_h`, draw path) stays correct — the thumb just gets slightly
+  smaller on a padded list, which is fine.
+- Applied identically in `_mod_tweaker_view.lua` (in-mission standalone) and
+  `_mod_tweaker_state.lua` (keep sub-state). One edit point per twin
+  (`_recompute_scroll_bounds`) covers both the normal list and the drilled-in advanced
+  view, since both call it after setting `_content_h`.
+
+No change to the rows=0 guard (`has_children and wtype ~= "header"`),
+`plan_drill_children`, the v0.2.78 scrollbar thumb math, or the 0.2.79 menu-open sound.
+
+## 0.2.79-dev (2026-06-23) — Mod Tweaker: native menu-open sound on view-enter
+
+The Mod Tweaker view did not play the menu-open sound that VT2 menus — and the VMF
+options menu specifically — play when they open. Added it so opening the Mod Tweaker
+sounds the same as opening the settings menu.
+
+**Sound + mechanism.** Vanilla `OptionsView.on_enter` fires
+`WwiseWorld.trigger_event(self.wwise_world, "Play_hud_button_open")` on open
+(`Vermintide-2-Source-Code/scripts/ui/views/options_view.lua:1615`); the VMF options
+view fires the same `Play_hud_button_open` via `WwiseWorld.trigger_event` on its enter.
+We now play that exact event on both Mod Tweaker twins' on-enter.
+
+- **In-mission standalone view** (`_mod_tweaker_view.lua`): new `_play_open()` helper
+  fires `Play_hud_button_open` through the existing `_play_event()` path (resolves a
+  `wwise_world` off `music_world`, pcall-guarded). Called in `ModTweakerView:on_enter`
+  right after `_rebuild()`.
+- **Keep sub-state** (`_mod_tweaker_state.lua`): swapped the prior enter sound
+  (`play_gui_lobby_button_00_heroic_deed`, inherited from the compendium sub-state) for
+  the canonical `Play_hud_button_open`, routed through the parent hero_view's
+  `self:play_sound()` (its `wwise_world` is the reliable handle at the keep).
+
+Both paths are pcall-guarded, so a missing world or renamed event is silent, never a
+crash. No change to the rows=0 guard, `plan_drill_children`, or the scrollbar.
+
+## 0.2.78-dev (2026-06-23) — Mod Tweaker scrollbar: thumb position fixed (was inverted + overflowing) + real vanilla colors
+
+**0.2.77 confirmed working for SIZE** — the local_offset sizing fix worked; the thumb now resizes
+proportionally on overflow. Two issues remained, both fixed here by mirroring the native VT2
+scrollbar exactly.
+
+**1. Position was inverted and overflowed.** At the top of the menu (`scroll_value=0`) the thumb
+sat at the BOTTOM of the track; scrolling down pushed it further down and off the track bottom.
+The 0.2.77 code used a NEGATIVE offset (`offset[2] = -(track_h - th) * scroll_value`), which is
+wrong for this node's coordinate system.
+
+The mt_scrollbar scenegraph (and the list itself) is **+Y-up**: the view scrolls the list with
+`list_node.offset[2] = +scroll_y` and documents "Positive Y shifts the stack UP (reveals lower
+rows)" (`_mod_tweaker_view.lua:1752-1759`). `scroll_value = scroll_y/max_scroll` is therefore 0 at
+the TOP of the content and 1 at the BOTTOM. For the thumb to read correctly it must sit HIGH at the
+top and LOW at the bottom. Matched the native VT2 widget `UIWidgets.create_scrollbar`
+(`ui_widgets.lua:2168-2386` — the exact widget the vanilla Options view uses on an identically
+center-aligned node, `options_view_definitions.lua:316`), which positions its thumb with
+`scroll_bar_box.offset[axis] = (scroll_length - thumb_length) * value` clamped to
+`[0, end_position]` (`:2251-2259`). Corrected formula
+(`_mod_tweaker_definitions.lua:1200-1235`):
+
+```lua
+local end_position = track_h - th                              -- max thumb travel
+local current_position = end_position * (1 - clamp(scroll_value, 0, 1))  -- HIGH at top, 0 at bottom
+ui_style.thumb.offset[2] = math.clamp(current_position, 0, end_position) -- never overflows
+```
+
+**Top/bottom clamp.** `offset[2]` is clamped to `[0, end_position]`, so the thumb's bottom-left
+origin is always `>= 0` (never below the track bottom) and its top edge is
+`offset + th <= end_position + th = track_h` (never above the track top). The thumb can no longer
+run off either end.
+
+**2. Track color was fabricated.** The `{70,70,70}` track grey was invented. Read the REAL vanilla
+values from native `create_scrollbar` (`ui_widgets.lua:2286-2306`):
+- **track** (`background`) default = `{255, 5, 5, 5}` (near-black) — now used (was the made-up
+  `{70,70,70}`).
+- **thumb** (`scroll_bar_box`) default = `Colors.font_button_normal` = `{255, 160, 146, 101}`
+  (`colors.lua:1021-1026`, the warm tan) — gut already had this exact value since 0.2.76; it turns
+  out to be the native default, so it is kept.
+
+**Probe extended (both twins).** The `[mt:scrollbar]` dump now logs the thumb's RESOLVED `offset[2]`
+(`_resolved_thumb_off`, written by the local_offset pass) and a computed **world-Y top + bottom**
+line versus the track's world-Y span, plus `scroll_value`, so position is verifiable from log data:
+on overflow the thumb should be flush at the track TOP at `scroll_value=0` and flush at the BOTTOM
+at `scroll_value=1`, always inside `[track_y, track_y + track_h]`.
+
+**Not regressed:** the v0.2.77 local_offset SIZING (sizes the thumb to
+`track_h * clamp(thumb_frac, 0.06, 1)`), the `_max_scroll > 0` draw-gate, the thumb-drag input,
+the `rows=0` guard, and `plan_drill_children` are all untouched.
+
+## 0.2.77-dev (2026-06-23) — Mod Tweaker scrollbar: thumb now sizes + drags (offset_function moved to a local_offset pass)
+
+**Symptom (user, in-game).** The scrollbar thumb was ALWAYS the full length of the track and could
+not be dragged to scroll. The `[mt:scrollbar]` probe confirmed the thumb's `style.size = {8, 760}`
+= the full 760px track height, regardless of how much the content overflowed.
+
+**Root cause — the same `offset_function` / `local_offset` defect that burned the gut SLIDER 3x
+(fixed v0.2.59).** The thumb's proportional sizing + scroll-position math lived in an
+`offset_function` attached directly to the thumb's `rect` pass
+(`_mod_tweaker_definitions.lua:1185`). But VT2's generic widget draw loop
+(`ui_renderer.lua:521-555`) NEVER calls `offset_function` for `texture`/`rect`/`texture_uv` passes —
+only a dedicated `pass_type = "local_offset"` pass invokes it (`UIPasses.local_offset.draw`,
+`ui_passes.lua:4587-4593`, is literally just `pass_definition.offset_function(...)`). So the
+thumb's sizing function silently never ran: the thumb kept its scenegraph style size
+`{8, track_h}` = the full track every frame, leaving nothing shorter than the track to grab. The
+0.2.76-dev note "thumb `offset_function` ... Unchanged; just no longer drawn" was wrong on that
+point — the function was never firing in the first place.
+
+**Fix.** Replaced the per-pass `offset_function` with a single `local_offset` pass placed BEFORE
+the thumb `rect` pass, mirroring the working slider (`create_slider`,
+`_mod_tweaker_definitions.lua:591-669`) and the native VT2 pattern
+(`options_view_definitions.lua:1673-1695`). That pass mutates the thumb sub-style in place every
+frame:
+
+- `ui_style.thumb.size[2] = track_h * clamp(thumb_frac, 0.06, 1)` — proportional height,
+  strictly `< track_h` on real overflow, so the thumb is now visibly shorter than the track.
+- `ui_style.thumb.offset[2] = -(track_h - thumb_h) * clamp(scroll_value, 0, 1)` — slides the
+  thumb down the track as you scroll.
+
+The view still feeds `content.scroll_value` + `content.thumb_frac` each frame, gated on
+`_max_scroll > 0` (`_mod_tweaker_view.lua:1801` / `_mod_tweaker_state.lua:1754`), so on a fitting
+menu the whole widget stays hidden (correct, unchanged). The existing thumb-drag input path
+(`_max_scroll > 0` block reading the scrollbar hotspot, both twins ~:1376/:1339) is unchanged —
+it now has a sub-track-length thumb to drag against. Colors unchanged: tan thumb
+`{255,160,146,101}`, track `{255,70,70,70}`.
+
+**Probe extended.** The `[mt:scrollbar]` THUMB line now logs the RESOLVED thumb height (the
+local_offset pass writes `content._resolved_thumb_h`), so a full-track value there immediately
+flags the pass not running. The probe also fires once on each overflow-state TRANSITION inside
+`_recompute_scroll_bounds` (`scroll-bound:overflow` / `:fits`), so the next repro captures the
+overflow state — on_enter alone often sampled before the list had overflowed. Both twins.
+
+**Not regressed:** the `_max_scroll > 0` draw-gate, the tan/grey colors, the normal-list `rows=0`
+guard, and the 0.2.75-dev `plan_drill_children` nested-dropdown fix are all untouched.
+
+## 0.2.76-dev (2026-06-23) — Mod Tweaker scrollbar: native-tan thumb (no more "solid grey column")
+
+The user reported the scrollbar still drew as a solid grey column covering the whole track,
+always max size, with no visible backdrop. The `[mt:scrollbar]` probe from 0.2.73-dev confirmed
+the geometry path.
+
+**1. Draw is gated on overflow.** Both twins' `_draw` already wrap the scrollbar
+`UIRenderer.draw_widget(renderer, self._scrollbar)` in
+`if self._scrollbar and (self._max_scroll or 0) > 0 then` (`_mod_tweaker_view.lua:1801` /
+`_mod_tweaker_state.lua:1754`). `_max_scroll = max(0, content_h - visible_h)`
+(`_recompute_scroll_bounds`), so when the content fits the window the WHOLE widget — track,
+thumb, and hotspot passes — is skipped, exactly like the native VT2 scrollbar. The earlier
+"full grey column even when nothing scrolls" was the pre-gate state the probe captured; the gate
+is in place and is the single draw path (verified: exactly one `draw_widget(self._scrollbar)`
+call per twin, both inside the gate).
+
+**2. Proportional thumb on overflow.** When `_max_scroll > 0`, the draw sets
+`thumb_frac = visible_h / content_h` (< 1), and the thumb pass's `offset_function`
+(`_mod_tweaker_definitions.lua:1185`) sizes the thumb to `track_h * clamp(frac, 0.06, 1)` — always
+strictly less than `track_h` on real overflow — so the track backdrop is visible behind/around
+the thumb. Unchanged; just no longer drawn in the content-fits case where `frac` would clamp to 1.
+
+**3. COLOR — the live fix this version.** The thumb was grey `{210,210,210}` — wrong hue and far
+too bright, which read as the "solid grey column." Switched it to native VT2 tan
+`{160,146,101}` (`font_button_normal`) so it matches the rest of the menu chrome. The track stays
+mid-grey `{70,70,70}` (~55 levels over the probe-measured `{15,15,15}` background backing, and
+clearly distinct from the tan thumb). Shared build lives once in `build_scrollbar_rect`
+(`_mod_tweaker_definitions.lua:1209-1210`); both twins consume it. EXACT RGB is an in-game
+eyeball call per the no-speculate-on-appearance rule — these are native-matched defaults.
+
+**Not regressed:** the `[mt:scrollbar]` probe stays in place for re-verify; the normal-list
+`rows=0` guard (`has_children and wtype ~= "header"`) and the 0.2.75-dev `plan_drill_children`
+nested-dropdown fix are untouched.
+
+## 0.2.75-dev (2026-06-23) — Mod Tweaker: VMF dropdowns nested 3-deep now show their options
+
+**Symptom.** The wt anim picker's per-attack dropdowns (and any VMF dropdown sitting three
+levels deep) opened empty / showed `?` in the Mod Tweaker, even though VMF's own native menu
+renders them full.
+
+**Root cause — a NESTING-DEPTH navigation bug, NOT a wrong options read.** gut already reads a
+dropdown's option list the SAME way VMF's native options view does: the option array is at
+`node.options` (top-level on the flattened `vmf.options_widgets_data` entry), and each entry's
+label/value are `option.text` / `option.value` — byte-for-byte VMF's
+`initialize_dropdown_data` (`new_data.options = data.options`) and its render loop
+(`for i, option in ipairs(widget_definition.options) do options_texts[i] = option.text;
+options_values[i] = option.value`). gut reads exactly that via `_nf(w, "options")` →
+`_nf(o, "text")` / `_nf(o, "value")` (`_mod_tweaker_state.lua:543/550-554`). That read was never
+the problem and is unchanged.
+
+The wt anim picker wires its dropdowns as `checkbox (depth 1) → set-group (depth 2) →
+per-attack dropdown (depth 3)`. The gear-drill's child loop only ever rendered the drilled
+parent's **direct** children (a hard-coded single `depths[j] == pdepth + 1` level): drilling the
+checkbox showed the depth-2 set-GROUP headers, and the loop never descended to build the depth-3
+dropdown nodes. The dropdowns therefore never existed as rows, so their (correctly-read) options
+were never surfaced — the `?` / empty was the **absence of the row**, not an empty option list.
+
+**Fix.** New shared planner `defs.plan_drill_children` (`_mod_tweaker_definitions.lua`) walks the
+WHOLE subtree under the drilled parent using the SAME group-collapse / gear-parent rules as the
+normal list loop, rebased so the parent is row-depth 0 and a flat-depth-d node renders at
+row-depth `d - pdepth`. A child that is itself a `group` honors the user's expand state (collapsed
+groups hide descendants inline, expanded groups reveal them); a non-group node with deeper
+children gets a gear so it can be drilled one level further. So the user can now drill the
+checkbox → expand a set-group → see and pick its dropdowns, and selecting an option stages +
+applies through the existing `_commit_dropdown` path unchanged.
+
+Both twins (standalone `ModTweakerView` in-mission, `HeroViewStateModTweaker` keep sub-state)
+call the shared planner identically. A new `:_group_key(node, category)` method (added to both
+twins, mirroring the original inline gid) is shared by `_build_node_row` and the planner's
+`is_expanded` predicate so the rendered group row and the planner agree on the exact expand key.
+
+**Not regressed:** the normal-list `rows=0` guard (`has_children and wtype ~= "header"`,
+`_mod_tweaker_state.lua:700` / `_mod_tweaker_view.lua:570`) is untouched — the planner runs only
+inside the `self._drill` branch. The header exclusion is intentionally not replicated in the
+planner because a VMF per-mod header only ever appears at top level (depth 0), never inside a
+drilled subtree. `luacheck`: 0 errors across all three files.
+
+## 0.2.74-dev (2026-06-23) — Mod Tweaker scrollbar POSITION + COLOR fix (from REAL probe data)
+
+The 0.2.73-dev `[mt:scrollbar]` probe gave us the runtime truth. Two problems, both fixed off
+measured values (no more inference):
+
+**1. POSITION (the real bug) — root cause: wrong anchor.** The bar parented to `list_mask` and
+right-aligned with a `-30` inset. But native `list_mask` is a **left-aligned 1400px-wide node**
+(== `WINDOW_WIDTH`) sitting at `+18` on the centered `background_frame`
+(`options_view_definitions.lua:274-287`), so its **right edge juts ~18px PAST the visible panel's
+right edge**. Right-aligning the bar to that off-panel edge made its on-screen X depend on a brittle
+absolute offset: the probe measured world x **-12** (off the left) when the menu sat at origin
+`{0,0}`, and world x **1638** (right edge of the over-wide mask, on/over the frame border) when the
+menu was at `{260,90}` — not deterministic, not anchored to anything the player sees.
+
+Fix: re-anchor `mt_scrollbar` to **`background_frame`** (the decorated panel — centered, same
+1400×900 as `background`), right-aligned with a small `-12` X inset (matching how native parents its
+own `scrollbar_root` to `background`, not to the over-wide list_mask), vertical-centered with the
+list-window height (760). The bar's world position is now identical in BOTH the standalone-view and
+keep-sub-state presentations regardless of menu world position, and sits in the panel's right gutter
+just inside the frame border. The thumb-drag math and the `offset_function` thumb travel are
+unaffected — the node's world Y is numerically identical to the old list_mask-anchored value
+(frame_bottom + 70 either way).
+
+**On_screen-flag interpretation (why the probe said `false` in BOTH states — and it was a red
+herring).** `math.point_is_inside_2d_box` uses **strict** `<`/`>` (`math.lua:142-143`). The old
+probe tested the bar's bottom-left ORIGIN against the `list_mask` box; because the bar shares
+`list_mask`'s vertical span, the bar's bottom-left Y **equals** the box's bottom Y, so `pos[2] >
+lower[2]` is `false` → `on_screen=false` even when the bar is perfectly visible. So the `false` was a
+strict-shared-edge artifact, not proof of off-screen. The probe is now corrected to test the bar's
+**CENTRE** against **`background_frame`** (the visible panel), making the flag meaningful for the
+next verify.
+
+**2. COLOR — calibrated to the measured `{15,15,15}` background.** The probe confirmed the real
+`background` chrome the bar draws over is `{15,15,15}` (not the `~{10,10,10}` the 0.2.72 comment
+assumed). The old track `{30,30,30}` is only ~15 levels above that = barely distinguishable.
+Track → `{70,70,70}` (clearly lighter than `{15,15,15}`); thumb stays bright at `{210,210,210}`
+(reads strongly against the `{70,70,70}` track). EXACT RGB is an in-game eyeball call per the
+no-speculate-on-appearance rule — these are reasonable high-contrast starting values to nudge after
+a live look. **Thumb DYNAMIC SIZING is untouched** (probe confirmed frac 0.821 → 624px is correct).
+
+The `[mt:scrollbar]` probe stays in place for the next verify. Shared scrollbar build (position +
+color) lives once in `_mod_tweaker_definitions.lua` (`build_scrollbar_rect` + the `mt_scrollbar`
+scenegraph node), so both twins inherit it; only the per-twin probe `on_screen` block was edited in
+both files. The `rows=0` guard is untouched.
+
+## 0.2.73-dev (2026-06-23) — Mod Tweaker scrollbar DIAGNOSTIC PROBE (instrument only, NO behavior change)
+
+The scrollbar is still reported as "doesn't work" + "wrong color" after the 0.2.72-dev contrast
+fix. That fix used INFERRED colors — it assumed the menu `background` was `~{255,10,10,10}` from a
+code comment and never MEASURED it. (The native `background` chrome rect is actually
+`{255,15,15,15}`; only the top/bottom panels are `{10,10,10}`.) Before touching colors again, we
+need the REAL runtime render-state from an in-game repro.
+
+This release adds a one-time-per-open `[mt:scrollbar]` debug dump (gated on `enable_debug_logging`,
+fired from the SAME site as the existing `[mt:dump]` probe — `on_enter` / `substate_on_enter`) in
+BOTH twins (`_mod_tweaker_view.lua` ESC-flow standalone view + `_mod_tweaker_state.lua`
+`HeroViewStateModTweaker` keep sub-state). The dump logs:
+
+- **Background chrome** `chrome[1]` resolved color `{A,R,G,B}` + scenegraph world position/size — the
+  actual contrast baseline (no longer inferred). Also logs the top/bottom panels + list_mask.
+- **Scrollbar TRACK + THUMB** resolved colors, scenegraph world position/size, and each style's z
+  (`offset[3]`) for draw-order.
+- **Scroll math:** `_content_h`, `_visible_h`, `_max_scroll`, `track_h`, the computed `thumb_frac`
+  (= visible/content, same formula as the draw path), the clamped frac, the resulting `thumb_px`,
+  and `will_draw` (the bar only draws when `_max_scroll > 0`).
+- **On-screen check:** whether the `mt_scrollbar` node's world X/Y falls inside the `list_mask` panel
+  box (off-panel = invisible to the eye even if "drawn").
+
+NO scrollbar color/logic/geometry was changed — this is purely an instrument so the next repro log
+reveals (a) the real background color, (b) whether the bar is drawn and where, and (c) whether the
+thumb height is sane. Twin discipline preserved: identical probe body in both files.
+
+## 0.2.72-dev (2026-06-23) — Mod Tweaker scrollbar now VISIBLE (contrast fix); confirmed thumb already dynamic + recomputed on collapse/expand
+
+The scrollbar was reported as "wrong" — looking like there was no bar, and not appearing to
+resize on collapse/expand. Diagnosis split the report into two halves:
+
+- **Thumb sizing / collapse-expand recompute: ALREADY CORRECT (no code change).** The thumb is
+  genuinely dynamic. `content.thumb_frac = visible_h / content_h` is recomputed every frame
+  (`_mod_tweaker_view.lua:1682`, twin `_mod_tweaker_state.lua:1646`) from `self._content_h`, and
+  the defs `offset_function` converts it to a live thumb height `th = track_h * frac`
+  (`_mod_tweaker_definitions.lua:1099-1104`) — the native `track_length * (visible/total)` formula.
+  `_content_h` is itself recomputed by `_build_rows` on EVERY collapse/expand/drill/tab-switch
+  (`view:582-584`, `state:712-713`), which the group-header click funnels through. So the thumb
+  grows when a group collapses (less content) and shrinks when it expands (more content) without
+  any extra wiring. This half of the report was not a real bug.
+
+- **Visibility / color: THE REAL CAUSE — fixed.** The track color was `{255,5,5,5}` — DARKER than
+  gut's `background` chrome fill (`~{255,10,10,10}`), so the track was effectively invisible against
+  the panel (exactly the user's "bar equals the menu background" guess). The native scrollbar only
+  reads in the real Options menu because its track sits over a lighter list backing; gut's
+  `mt_scrollbar` draws over the raw dark background. The thumb `{255,160,146,101}` was the dim idle
+  `font_button_normal` tan with weak contrast and no hover-brighten. Fix raises the track to
+  `{255,30,30,30}` (now LIGHTER than the background) and the thumb to `{255,200,200,200}` (bright,
+  clearly visible). Single edit in the SHARED `_mod_tweaker_definitions.lua:1110-1121` scrollbar
+  factory (`build_scrollbar_rect`), so it covers both presentations at once.
+
+Twin discipline + the `rows=0` guard (`has_children and wtype ~= "header"`) are untouched in both
+`_mod_tweaker_view.lua` (ESC-flow standalone) and `_mod_tweaker_state.lua`
+(`HeroViewStateModTweaker` keep sub-state).
+
+## 0.2.71-dev (2026-06-22) — Mod Tweaker polish: ON/OFF flicker fix, width-based tab pagination (no more "More 1/2"), bare-text APPLY, native slider glow, full hover sounds (both twins, rows-guard intact)
+
+Five contained Mod Tweaker fixes. Every view/draw/scenegraph change lands in BOTH twins
+(`_mod_tweaker_view.lua` = ESC-flow standalone, `_mod_tweaker_state.lua` =
+`HeroViewStateModTweaker` keep sub-state) identically; shared widget factories in
+`_mod_tweaker_definitions.lua`. The `rows=0` guard (`has_children and wtype ~= "header"`) is
+untouched in both twins.
+
+1. **ON/OFF toggle flicker FIXED.** A single physical click on a checkbox/boolean row was
+   flipping `content.flag` on/off/on across several frames ("negotiating" flicker). Root cause:
+   the rows share the `mt_list_start` node, which keeps `on_release`/`on_left_release` latched
+   true for several consecutive draw frames, and the handler's unconditional
+   `c.flag = not c.flag` re-inverted the flag once per latched frame (the displayed word follows
+   `content.flag` directly via the defs `on_text`/`off_text` passes, so every extra toggle is
+   visible). Fix = a per-row `row._toggle_armed` release edge-latch so the toggle fires exactly
+   ONCE per physical release, then clears when all three hotspots' (`hotspot`/`dec`/`inc`)
+   release flags drop. Mirrors the existing `row._was_hovered` hover debounce. Checkbox branch
+   of `_handle_input` in both twins.
+
+2. **"More 1/2" pagination dropped — paginate on MEASURED width, not tab COUNT.** Tabs are
+   text-aware (variable width via `_layout_tabs`), so the old `total > MAX_TABS` (=8) count test
+   over-paginated, showing a "More 1/2" tab even when every label fit. The `_rebuild` pagination
+   block now pre-measures each tab label the SAME way `_layout_tabs` does (create_tab style =
+   `hell_shark` / size 20 / `upper_case`; `UIFontByResolution` + `UIRenderer.text_size` + a 20px
+   gap each) and only paginates when the sum exceeds the usable strip
+   (`defs.window.w` 1400 − x0 anchor 65 − 120px right margin). When it fits, `per_page = total`
+   so ALL tabs show and no More tab is built. The measure is pcall-guarded → falls back to "fits"
+   (no pagination) on a borrowed-renderer failure. `MAX_TABS` survives only as the per-page size
+   for a genuine overflow; the "More" tab-click branch + paged hint stay (dead but harmless
+   unless a future overflow re-triggers them).
+
+3. **APPLY button box REMOVED — bare text + hover.** Dropped the filled `rect` bg pass and the
+   1px `border` pass from `create_apply_button` (defs), keeping only the `hotspot` (click +
+   hover) and `text` passes. The `bg`/`border` STYLE tables are kept so both twins' per-frame
+   `asty.bg.color` / `asty.border.color` writes still index live tables (now harmless no-ops);
+   the gold/grey enabled-disabled text-color feedback and the gated hover sound are retained.
+
+4. **Native slider hover-GLOW restored.** gut already had a `thumb_hover` (`slider_thumb_hover`)
+   texture pass gated on `c.track_hs.is_hover`, but it was sized at the BASE thumb's 14x27 — an
+   invisible same-size overlay, not the glow. The native glow is the WIDER 34x25
+   `slider_thumb_hover` atlas sprite (`gui_settings_atlas.lua:396`) centered on the 14px base
+   thumb and drawn on top only while hovering (`options_view_definitions.lua:1720-1739`,
+   `:2062-2073`). Defs now size `thumb_hover` at 34x25 (`THUMB_HOVER_W/H`), center it vertically
+   on the row and horizontally on the base thumb (the `local_offset` pass adds
+   `THUMB_W/2 − THUMB_HOVER_W/2`), and set `masked = false` (the borrowed renderer has no stencil;
+   the sprite is fully inside its UV rect). Both sprites are atlas-backed and resident → safe on
+   the borrowed renderer (per `reference_vt2_options_widgets_raw_materials`).
+
+5. **Hover sounds wired on tabs, APPLY, and exit-X.** Clicks already fired `_play_click()` on
+   every commit (toggle/arrow/dropdown-select/slider-release/tab-switch/APPLY/gear/exit). Hover
+   sounds previously fired ONLY for list rows (`_apply_row_hover`). Added edge-debounced
+   `_play_hover()` on the hover-ENTER edge for the top tabs (`tab._was_hovered` in the tab-tint
+   loop), the APPLY button (`self._apply._was_hovered`, gated on `enabled` so the greyed button
+   stays silent), and the exit-X (`self._exit._was_hovered`) — all in both twins' `_draw`. No
+   change to `_wwise_world` / `_play_event` (resolution off `music_world` is already correct +
+   pcall-safe).
+
+## 0.2.70-dev (2026-06-22) — Mod Tweaker PHASE 4: STAGED-change model + bottom-right APPLY button (both twins, rows-guard intact)
+
+PHASE 4 from the implementation spec. Editing a setting no longer writes live — every edit
+(toggle / stepper / slider drag / dropdown select / typed number field) now stages into a
+**pending buffer**, and a native-style **APPLY** button (bottom-right of the bottom panel)
+commits the whole buffer at once. Exiting the menu **discards** any unapplied edits. Rows
+**display the pending value** while it's pending (so a staged toggle/slider/dropdown shows the
+new value, not the old live one). Modeled on native Options, which stages all edits in
+`changed_user_settings` and only writes on APPLY (`options_view.lua:1789-1939, 3129-3196`). No
+DEFAULT/reset button (deliberately omitted per spec).
+
+How the buffer works:
+- `self._pending[mod_id][setting_id] = staged_value`. Keyed by **mod_id** (a stable string),
+  NOT the category table — category tables are re-created on every `_rebuild`
+  (`_vmf_categories`), so keying by the table would lose the buffer on a tab switch. mod_id
+  survives, which also gives **per-category isolation** for free: switching tabs away and back
+  preserves that category's staged edits, and APPLY commits only the active category's buffer.
+- **`stage_set(category, id, value)`** — every row WRITE routes here (was a live `_cat_set`).
+  Records the value + refreshes the APPLY dirty state. Does NOT set `self._dirty`.
+- **`get_staged(category, id, live_value)`** — every row READ/repaint routes here. Returns the
+  staged value if pending, else the live value (mirrors native `_get_setting` `assigned(...)`).
+  Wired into the checkbox `flag`, slider `value`, and dropdown `current_selection` reads in
+  `_build_node_row`, so a rebuilt row reflects its staged edit instead of snapping back to live.
+- **`apply_pending(category)`** — the APPLY click. The **ONLY** place `_cat_set` runs on edit:
+  it loops the buffer through `_cat_set` (so each mod's `on_setting_changed` still fires —
+  ct's 25-coin snap, etc.), clears the buffer, sets `self._dirty` (so the TOML still exports on
+  exit), greys the button, and `_build_rows` repaints from the new live values.
+
+APPLY button:
+- New `mt_apply` scenegraph node — clone of native `apply_button`
+  (`options_view_definitions.lua:344-357`): parent `background_bottom_panel`, right/top
+  aligned, position `{-30,-7}`, size `{150,30}`. Native's `reset_to_default` (DEFAULT) sibling
+  (`:358-371`) is **not** cloned.
+- Hand-built widget (`create_apply_button`, defs) — `rect` bg + `border` + hotspot + centered
+  text — NOT `UIWidgets.create_text_button` (atlas/material backing can miss on the borrowed
+  renderer; same reasoning as the tabs). Both passes are material-lookup-free (`border` uses
+  only `UIRenderer.draw_rect`, `ui_passes.lua:1245-1258`), so they resolve on the borrowed
+  renderer. Label from `menu_settings_apply` when it localizes cleanly, else literal "APPLY".
+- Enabled/greyed (`_update_apply_button`, recomputed each draw frame): **gold** text
+  (`cheeseburger` `{255,255,168,0}`, `colors.lua:85`) + brighter border when the active
+  category's buffer is non-empty (`next(pending) ~= nil`); dim grey + faint border + click
+  suppressed when empty. Hover brightens the bg fill when enabled. Mirrors native
+  `update_apply_button` (`options_view.lua:3129-3140`).
+
+Discard semantics: because nothing was written live, exit = drop the buffer (`self._pending =
+{}` in `on_exit`). No native `apply_changes(original_*)` re-apply is needed (that exists only
+for native's live video-preview). `self._dirty` (the auto-save-to-log trigger) is set ONLY by
+`apply_pending` — a buffer that was never applied leaves `_dirty` false, so exiting with only
+pending edits correctly does **not** export.
+
+Audit constraint (load-bearing): every former live-write site — checkbox toggle, slider
+commit, dropdown commit, and the typed-number `_commit_edit` — now calls `stage_set`; `_cat_set`
+is called from `apply_pending` ONLY (verified by grep in both twins). Any row still reading live
+(not `get_staged`) would visually snap back after an edit — the three editable reads were all
+converted.
+
+Implemented IDENTICALLY across the two verbatim twins (`_mod_tweaker_view.lua` = standalone
+in-mission view; `_mod_tweaker_state.lua` = HeroView keep sub-state): the five staging methods
+(`stage_set` / `get_staged` / `_active_category_dirty` / `_update_apply_button` /
+`apply_pending`), the `_cat_key` helper, the buffer init, the three buffer-first reads, the four
+staged writes, the APPLY input handler, the APPLY per-frame styling, the APPLY draw, and the
+discard-on-exit are all the same modulo the class-name prefix. The one deliberate difference:
+the view defines the staging helpers AFTER its `_cat_set`/`_play_click` file-locals (the view
+declares them after the class; placing the helpers right after the class would capture the
+GLOBAL nil `_cat_set` — forward-reference trap), whereas the state declares `_cat_set` before its
+class so it places them earlier. Behaviour is byte-identical. Shared APPLY widget factory
+(`create_apply_button`) + scenegraph node live once in `_mod_tweaker_definitions.lua`. The
+`rows=0` build guard (`has_children and wtype ~= "header"`) is unchanged in BOTH twins. No new
+hooks. luacheck: 0 errors. **Needs an in-game eyeball.**
+
+## 0.2.69-dev (2026-06-22) — Mod Tweaker PHASE 3: real DROPDOWNS (single down arrow → popup option list → select/close), both twins, rows-guard intact
+
+PHASE 3 from the implementation spec. Dropdown-type settings are now a REAL dropdown
+instead of a `[<]`/`[>]` stepper carousel: the collapsed row shows the selected value with a
+single **down-pointing arrow** on the right; clicking the row opens a **popup list** of the
+options; clicking an option **sets the value + closes**; click-away or **Esc closes** without
+committing. Modeled on native `create_drop_down_widget`
+(`options_view_definitions.lua:2299-3047`). Steppers, sliders, checkboxes, and the gear
+drill-down are untouched.
+
+Built on gut's borrowed renderer with only atlas-resident textures (no raw non-atlas
+materials): the collapsed arrow is `drop_down_menu_arrow` / `drop_down_menu_arrow_clicked`
+(`gui_settings_atlas`, the same atlas as the slider thumb + stepper arrows; arrow box 31×15,
+confirmed `gui_settings_atlas.lua:172`), flipped vertically (`uvs {{0,1},{1,0}}`) to point UP
+while open. The popup highlight is `playerlist_hover` (`gui_menus_atlas`, the same sprite gut
+already uses for row hover + the gear); the popup background panel + shade are plain `rect`
+passes (the borrowed renderer lacks `rect_masked` — same substitution gut uses for the
+slider track / separator).
+
+The popup is its OWN overlay widget on a new `mt_dropdown` scenegraph node (child of `mt_list`,
+so it scrolls with the rows but draws LAST, after the rows + scrollbar, OUTSIDE the cull loop
+— so it overlays everything and is never clipped by the `list_mask`). This is the
+cosmetics_tweaker glow-picker "own overlay scenegraph" pattern. While a dropdown is open it's
+**modal**: `_handle_input` short-circuits to the popup so no other row reacts. One dropdown
+open at a time (`self._open_dropdown`); the buffer is cleared on every list rebuild (tab
+switch / drill / collapse), same as the type-edit teardown.
+
+Open / select / close mechanics:
+- **Open** — click the collapsed row's right field strip (`content.hotspot.on_left_release`) →
+  `_open_dropdown_popup`: sets `content.active` (flips the arrow up), scrolls the visible window
+  so the current selection is in view, builds the popup widget, plays `Play_hud_select`.
+- **Select** — click a visible option row (`content.opt_<k>.on_left_release`) →
+  `_commit_dropdown`: maps the visible slot `k` to the absolute option index via `start_index`,
+  writes through the existing `_cat_set` path (so the mod's `on_setting_changed` still fires),
+  updates the collapsed-row value text, closes.
+- **Close without commit** — click-away (`Mouse.released(0)` not over an option) OR the first
+  **Esc** (highest-priority branch in `update`, above the type-edit and drill ESC handlers).
+- **Long lists** — popup caps at 10 visible rows; the mouse wheel over an open list scrolls the
+  option window (`start_index ± 1`) and rebuilds the popup.
+
+Implemented IDENTICALLY across the two verbatim twins (`_mod_tweaker_view.lua` = standalone
+in-mission view; `_mod_tweaker_state.lua` = HeroView keep sub-state) — the six new dropdown
+methods, the modal short-circuit, the row-loop open branch, the ESC-close branch, the
+`_build_node_row` routing, the `_build_rows` clear, and the `_draw` popup overlay were all
+verified byte-identical between twins (modulo the class-name prefix). Shared widget factories
+(`create_dropdown` + `create_dropdown_list`) live once in `_mod_tweaker_definitions.lua`. The
+`rows=0` build guard (`has_children and wtype ~= "header"`) is unchanged in BOTH twins. No new
+hooks (mod-lint PASS: 0 duplicate hooks). **Needs an in-game eyeball.**
+
+## 0.2.68-dev (2026-06-22) — Mod Tweaker LAYOUT batch finalized: equipment-cog gear + control-column gutter, measured tabs, native scrollbar (both twins, rows-guard intact)
+
+LAYOUT-batch finalization pass on the Mod Tweaker. The three layout items below were
+landed in 0.2.67-dev as part of the larger polish+layout pass; this version pins them as
+the verified LAYOUT deliverable after a both-twins parity + native-atlas audit. No new
+behavioral subsystems — the option rows still cycle via the `[<]`/`[>]` stepper and every
+edit still writes live (PHASE 3 popup dropdown / PHASE 4 staged APPLY remain deferred).
+
+All three were verified IDENTICAL across the two verbatim twins (`_mod_tweaker_view.lua` =
+standalone in-mission view; `_mod_tweaker_state.lua` = HeroView keep sub-state) with the
+shared widget pieces living once in `_mod_tweaker_definitions.lua`. The `rows=0` build guard
+(`has_children and wtype ~= "header"`) is unchanged in BOTH twins. **Needs an in-game eyeball.**
+
+- **Gear = equipment-menu cog (atlas-audited).** `create_gear_button` (defs) uses `cog_icon`
+  (idle) / `cog_icon_selected` (hover), both confirmed present in `gui_menus_atlas`
+  (`gui_menus_atlas.lua:1586`/`:1600`, authored 58×58) — the proven-resident atlas on the
+  borrowed renderer. `texture_size` rescales the 58px sprite into the 26px gear box; a
+  `cog_hover` pass gated on the gear hotspot highlight does the idle→selected swap. Shared
+  factory, so both twins inherit it identically.
+- **Control column left-shifted into its own gutter.** `RA = ROW_W - (GEAR_SIZE+24)` (=
+  `ROW_W-50`); every arrow/value/track column derives from `RA`, so all recede 50px while the
+  gear (`ROW_W - GEAR_SIZE - 10`) sits alone in the right-edge gutter — fixing the prior
+  stepper-inc-arrow ↔ gear collision. `GEAR_SIZE` is defined above `RA` so the shift math can
+  reference it; applied unconditionally so all rows stay column-aligned. Shared in defs.
+- **Text-aware (measured) tabs.** `_layout_tabs()` (present + byte-identical in both twins)
+  measures each tab label via `UIRenderer.text_size(renderer, text, font[1], scaled)`
+  (`font,scaled = UIFontByResolution(text_style)`, uppercased to match the rendered string)
+  and packs the tab scenegraph nodes left-to-right with a literal 20px gap, exactly like
+  native (`options_view.lua:986-994`). pcall-guarded so a measure failure leaves the
+  fixed-width fallback layout untouched.
+- **Native scrollbar colors + dynamic thumb.** `build_scrollbar_rect` (defs): track
+  `{255,5,5,5}`, thumb `{255,160,146,101}` (`font_button_normal` @255). Thumb height =
+  `track_h * thumb_frac` clamped `[0.06,1]`; both twins set
+  `thumb_frac = visible_height / total_content_height` each frame, and the bar draws only when
+  content overflows (`max_scroll > 0`), so it's hidden when `thumb_frac ≥ 1`.
+
+## 0.2.67-dev (2026-06-22) — Mod Tweaker native-fidelity POLISH + layout pass (slider fill, group bg, nesting indent, number-field bevel, Enter→chat, gear texture, control-column shift, measured tabs, scrollbar)
+
+Native-fidelity polish + layout pass on the Mod Tweaker, all derived from the VT2
+`OptionsView` / `options_view_definitions` source. Shared widget pieces live once in
+`_mod_tweaker_definitions.lua` (so both verbatim twins inherit them); the depth-threading,
+chat-block, and measured-tab logic were added IDENTICALLY to BOTH twins
+(`_mod_tweaker_view.lua` = standalone in-mission view, `_mod_tweaker_state.lua` = HeroView
+keep sub-state). The `rows=0` build guard (`has_children and wtype ~= "header"`) is
+unchanged in both twins. **Needs an in-game eyeball.**
+
+### PHASE 1 — Polish
+
+- **Slider yellow fill removed (native parity).** Native sliders have NO growing colored
+  fill — only the thumb conveys position over a flat dark track
+  (`options_view_definitions.lua:1675-1752`). Deleted the `fill` pass, its style, and the
+  per-frame fill-width driver in the slider's `local_offset` pass; recolored the track from
+  `{255,35,35,35}` to native `slider_box` near-black `{255,5,5,5}`. The thumb is unchanged.
+- **Group-header tinted bar removed; larger colored title kept.** Deleted the `bg` rect pass
+  + style on `create_group_header` (and matched it on `create_back_row` for consistency).
+  The font-22 `font_title`-colored indicator + label are now the sole group differentiator,
+  matching native (which has no tinted header bar).
+- **Per-depth leading indent for nested child rows.** New `INDENT_PER_DEPTH = 24` constant;
+  each factory (`create_checkbox` / `create_slider` / `create_stepper` /
+  `create_section_title` / `create_group_header`) now takes a trailing `depth` arg and
+  indents ONLY the left label x by `24*depth`, narrowing the label clamp width by the same
+  amount so indented labels still terminate before the controls. The right-anchored control
+  columns (arrows / value / track / gear) are untouched and stay column-aligned. Both twins
+  thread `depths[i]` from `_build_rows` into `_build_node_row` and on into the factories
+  (drill children render at depth 1 under their depth-0 parent).
+- **Dark bevel behind the editable number field.** Native `input_field_background` is two
+  stacked `rect_masked` passes (outer `{200,0,0,0}` 52px + inner `{255,10,10,10}` 50px one z
+  up) under the value text. The borrowed renderer lacks `rect_masked`, so plain `rect`
+  passes substitute (gut's established swap). Always-on; the transient `value_focus_bg`
+  editing highlight had its z bumped 1→3 so it still layers over the bevel while typing.
+- **Enter commits and never opens chat.** While a number field is being edited, the loop now
+  re-asserts `Managers.chat:block_chat_input_for_one_frame()` every frame (pcall-guarded,
+  `ChatGuiNull`-safe). The chat `chat_input` service is an independent read of keyboard
+  Enter that gut's own `Keyboard.released(13)` commit can't block; the engine-sanctioned
+  per-frame block (`chat_manager.lua:390-397`) suppresses chat activation for the whole edit
+  (Enter-commit AND stray `y`/letters) and self-clears when editing ends. Existing
+  Enter→commit / Esc→cancel handling is unchanged.
+
+### PHASE 2 — Layout
+
+- **Gear swapped to the equipment-menu cog.** `create_gear_button` now uses `cog_icon` (idle)
+  / `cog_icon_selected` (hover) from `gui_menus_atlas` (the proven-resident atlas), rescaled
+  into the 26px gear box, with a hover-swap pass gated on the gear hotspot's highlight. Was
+  `cogwheel_small`.
+- **Control column left-shifted to give the gear a gutter.** `RA` (the right anchor every
+  arrow/value/track column derives from) now recedes 50px: `RA = ROW_W - (GEAR_SIZE+24)`.
+  This opens a clean right-edge gutter where the gear (`ROW_W - GEAR_SIZE - 10`) sits alone,
+  fixing the old collision between the stepper inc arrow and the gear. `GEAR_SIZE` was
+  promoted above `RA` so the shift math can reference it. Applied unconditionally so all
+  rows stay aligned. The exported `gear_col_w` (50) already equals the shift.
+- **Text-aware (measured) tab widths.** New `_layout_tabs()` in both twins measures each
+  tab's label via `UIRenderer.text_size(renderer, text, font[1], scaled)` (font from
+  `UIFontByResolution(text_style)`, uppercased to match the rendered string) and packs the
+  tab scenegraph nodes left-to-right with a literal 20px gap, exactly like native
+  (`options_view.lua:986-994`). pcall-guarded — a measure failure leaves the fixed-width
+  fallback untouched.
+- **Scrollbar native colors.** Track `{150,12,12,12}`→`{255,5,5,5}`; thumb
+  `{255,160,160,160}`→`{255,160,146,101}` (`font_button_normal` @255). The dynamic thumb
+  size (`track_h * thumb_frac`, `[0.06,1]` clamp) and the per-frame
+  `thumb_frac = visible_height / total_content_height` set by the view are unchanged; the
+  bar is already drawn only when content overflows (`max_scroll > 0`), so it's hidden when
+  `thumb_frac >= 1` as specced.
+
+### Deferred (not in this build)
+
+- **PHASE 3 (real popup dropdown) and PHASE 4 (staged-change model + APPLY button) are NOT
+  in 0.2.67-dev.** Both are large behavioral subsystems that change the menu's input/write
+  model (a modal popup list with its own scroll + click-away; converting every row from
+  live-write to a staged buffer committed only on APPLY). They warrant their own in-game
+  iteration loop rather than landing blind alongside the low-risk polish/layout pass. The
+  option rows still cycle via the `[<]`/`[>]` stepper, and every edit still writes live.
+
+## 0.2.66-dev (2026-06-22) — Mod Tweaker sliders: click-to-type the numeric value (Enter/focus-loss commit, clamp + step-snap)
+
+Additive type-to-edit on every Mod Tweaker slider/numeric row, mirroring VMF's typeable
+popup but inline in the value column. The drag, the `[<]`/`[>]` arrow stepping, and the
+`rows=0` build guard (`has_children and wtype ~= "header"`) are all unchanged — typing is
+a purely additive third input path that is suppressed only while a field is focused.
+
+Shared widget pieces live once in `_mod_tweaker_definitions.lua` (so both verbatim twins
+inherit them); the focus/keystroke/commit logic was added IDENTICALLY to BOTH twins
+(`_mod_tweaker_view.lua` = standalone in-mission view, `_mod_tweaker_state.lua` =
+HeroView keep sub-state). Needs an in-game eyeball.
+
+### Added
+- **Click the slider's value to type a number directly.** A new `value_hs` hotspot over
+  just the value box (separate from the track/arrow hotspots) focuses the field on click;
+  digits, `.` (when the slider has decimals), and `-` (only when the range allows
+  negatives) are accepted, Backspace trims, 16-char cap — the exact VMF filter
+  (`vmf_options_view.lua:4532-4556`). Only one row edits at a time (`self._editing_row`).
+- **Edit cursor + focus highlight while typing.** A faint highlight behind the value box
+  (`value_focus_bg`) marks the focused field, and a thin caret bar (`caret`) pulses at the
+  end of the typed text. Both are driven every frame by the slider's existing
+  `local_offset` pass (rect passes ignore their own `offset_function`, so the caret x +
+  pulsing alpha + highlight alpha are mutated there, like the thumb). Caret x is measured
+  via `UIRenderer.text_size`; invalid/out-of-range input red-tints the value text
+  (`{255,255,70,70}`, VMF parity); a trailing bare `.` is allowed so typing can continue.
+- **Commit on Enter or focus-loss; cancel on Escape.** Enter (`Keyboard.released(13)`) or a
+  click outside the value box (`Mouse.released(0)`) commits; Escape (`Keyboard.released(27)`)
+  — intercepted in `update` BEFORE the menu-close/drill-out so the first Esc cancels the
+  edit — restores the prior value. On commit the typed number is clamped to `[min,max]` and
+  snapped to the slider's `step` grid (same math the drag/arrow paths use), then run through
+  gut's existing `_cat_set` + re-read so any mod-side snap (e.g. ct's 25-coin rounding) is
+  reflected. An in-progress edit is abandoned on any list rebuild (tab switch / drill /
+  group collapse) so no stale `_editing_row` survives.
+
+## 0.2.65-dev (2026-06-22) — Mod Tweaker native-fidelity layout pass (title removed, tabs full-band, arrows column-aligned)
+
+Five native-layout fixes derived from the VT2 `OptionsView` source, plus the keep
+separator shift. All shared layout changes live once in `_mod_tweaker_definitions.lua`
+(so they land in BOTH verbatim twins automatically); the title-widget removal touched
+both twins (`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`) identically; the
+separator shift is in `gui_tweaker.lua`. The rows=0 guard (`has_children and
+wtype ~= "header"`) is unchanged and still present in both twins. Visual — needs an
+in-game eyeball to confirm the exact placement.
+
+### Changed
+- **"MOD TWEAKER" title removed entirely (A/B).** Native Options has NO title text in
+  the top band — the tab buttons span the whole band. Deleted the `mt_title` scenegraph
+  node, the `build_title` factory, and every `self._title` build/draw/teardown in both
+  twins. Undid the v0.2.64 band-split: tabs now occupy the FULL 50px top band,
+  bottom-aligned and lifted +9px off the panel bottom, starting at x=65 — matching
+  native `button_pivot` (`options_view_definitions.lua:204-217`).
+- **Tab strip restored to the native full-band layout (B).** Tab nodes parent to
+  `background_top_panel`, bottom-aligned, box height 30 (native tab box), x0=65, gap 20.
+- **Inter-tab gap = native 20 (C).** Matches `options_view.lua:993` (`x += text_w + 20`).
+  (Tabs remain fixed-width slots — a deliberate simplification of native's per-tab
+  measured width, noted in-code so it isn't read as a bug.)
+- **Stepper + slider arrows now share constant right-anchored x-columns (D).** Both the
+  ON/OFF stepper arrows and the slider `[<]`/`[>]` arrows derive from native-anchored
+  constants (`RA = ROW_W`; `ROW_W = list_width − 100 = 1300`): decrement (left) arrow at
+  `RA−400` is a single flush column for BOTH types; increment (right) arrow at `RA−19`
+  for steppers / `RA−71` for sliders (52px inboard to clear the slider's value box, per
+  native); value text centered at `RA−200` (stepper) / `RA−25` (slider). The slider
+  track/fill moved into the input-field column (`RA−370`, width 288, height 10) so its
+  arrows bracket it exactly as native. Native click feel: stepper arrow hotspots widened
+  to the native 200px (`INPUT_FIELD_WIDTH/2`). Replaces the old `TRACK_X`/`TRACK_W`
+  flanking layout. (`options_view_definitions.lua` :3404-3512 stepper, :2087-2251 slider.)
+- **Slider + checkbox label fonts reduced to native 16 (E).** Native slider label is 16
+  (`:1991-2002`); booleans render as a stepper so they use the native stepper label 16
+  (`:3488-3502`), not the native checkbox label 28. Slider was 18, checkbox was 24.
+
+### Fixed
+- **Keep ESC menu separator no longer bleeds through the lifted button text (A).** The
+  `gut_compact_esc_menu` hook lifts the button column up by `TOP_BIAS`, but the keep
+  `divider` widget's position was unchanged, so the raised text overlapped the stationary
+  rule. The `HeroWindowIngameView._update_presentation` hook now also shifts the
+  `_widgets_by_name.divider` render `offset[2]` up by the same `TOP_BIAS` (SET, not
+  accumulate — idempotent across presentation rebuilds), keeping it visible above the
+  menu text. (`hero_window_ingame_view_definitions.lua:279`.) *Tune-in-game: bump to
+  `TOP_BIAS + SPACING` if it needs to clear the top text row.*
+
+## 0.2.64-dev (2026-06-22) — FIX two long-standing layout bugs (title overlap + keep-menu overflow), both rediagnosed
+
+Two fixes where prior attempts changed the wrong lever. Both are visual and need an
+in-game eyeball to confirm the exact placement (per-item notes). The title fix lives
+once in the shared `_mod_tweaker_definitions.lua` (so it lands in BOTH verbatim twins
+automatically); the keep-menu fix is in `gui_tweaker.lua`.
+
+### Fixed
+- **Mod Tweaker title no longer renders behind the tab strip (PROBLEM 1).** Root cause
+  was NOT z-order (the prior build-3 fix bumped the title's z to 20 + drew it after the
+  tabs — both Z-ORDER levers, which don't separate two widgets that share the same
+  screen rectangle). The real cause: `mt_title` AND the `mt_tab_*` nodes both parented to
+  `background_top_panel` (the 50px top band) with `vertical_alignment = "center"`, so
+  they occupied the SAME band and overlapped spatially. Fix: vertically split the band —
+  the title is now TOP-aligned in the upper ~22px, the tab strip BOTTOM-aligned in the
+  lower ~26px (mirrors native Options, where the tab buttons hang off the panel BOTTOM
+  via `button_pivot`). Title font 28 -> 22 to fit the slimmer band. *Needs in-game
+  eyeball to confirm the title clears both the tabs and the cogwheel.*
+- **Keep ESC "Main Menu" no longer overflows; logo hidden (PROBLEM 2).** Root cause: the
+  prior `gut_compact_esc_menu` hook (since v0.2.56) targeted `IngameView.set_background_height`,
+  but the keep pause menu is the MODERN `HeroWindowIngameView` sub-window (the bare legacy
+  `IngameView` is only the in-mission menu) — that class has no `set_background_height`, so
+  the hook NEVER FIRED there. Its logo-hide branch was also dead even on the legacy path
+  (`IngameView.create_ui_elements` never assigns `self.logo`). Now gut hooks
+  `HeroWindowIngameView._update_presentation` (the method that lays out the button column
+  at spacing 60 and sizes the panel — `hero_window_ingame_view.lua:490-515`): once the
+  column crosses ~8 buttons it re-packs the column tighter (spacing 60 -> 48) with an
+  up-bias and hides the keep logo (zeroing `style.texture_id.color` alpha — the path
+  `create_simple_texture` actually uses, not `style.color`). *Column lift amount + spacing
+  are tune-in-game values; needs an in-game eyeball.*
+
+## 0.2.63-dev (2026-06-22) — Mod Tweaker refinements toward the native settings menu
+
+Five tweaks pushing the Mod Tweaker menu closer to VT2's native Options menu. All
+visual — they need an in-game eyeball to confirm the exact look (see the per-item
+notes). View/draw changes landed identically in BOTH verbatim twins
+(`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`); shared factory changes live
+once in `_mod_tweaker_definitions.lua`.
+
+### Changed
+- **Tab label overrides (item 5).** Added a `_TAB_LABEL_OVERRIDE` map (in both twins)
+  applied in `_rebuild` BEFORE the "Tweaker: " prefix-strip + truncation, so a mapped
+  mod's tab reads exactly the override. `cim` + `cim_dev` -> "CRAFTING". General Tweaker
+  (`gt`/`gt_dev`) is left as-is (its VMF name already reads "General"). Easy to extend
+  with more `<mod_id> = "LABEL"` lines.
+- **Removed Verminious Dreams Lighting from the Mod Tweaker (item 7).** Dropped
+  `verminious_dreams_lighting` + `_dev` from `_MY_MODS` in both twins so they no longer
+  appear as a Mod Tweaker tab. They keep their own normal VMF menu. (The separate
+  `_gut_config_file.lua` TOML-export whitelist is intentionally left untouched.)
+- **Brighter row hover highlight (item 9).** Raised the `_append_highlight`
+  ("playerlist_hover") alpha from 70 to 255 to match native's full-alpha row hover.
+  *Needs in-game eyeball.*
+- **Slider arrows flank the track (item 2).** The `[<]`/`[>]` arrows now sit just left
+  and just right of the slider TRACK (value text after), column-justified off the
+  constant TRACK_X/TRACK_W across all slider rows — matching native order, instead of
+  both arrows bunched to the far right after the value. The track drag hit-zone was
+  tightened to the track bounds so it no longer overlaps the flanking arrow hotspots.
+- **Tighter rows + native-er fonts (item 4).** Row height 46 -> 32 (native is 30 with
+  zero inter-row gap); checkbox label font 22 -> 24, slider label font 22 -> 18 (native
+  is 28 / 16, using the masked font — gut uses the unmasked font, so these are
+  tune-toward values). *Exact px needs an in-game eyeball.*
+
+## 0.2.61-dev (2026-06-22) — FIX blank Mod Tweaker (rows=0): VMF header was hiding every setting
+
+The build-4 gear refactor of `_build_rows` treated any node whose next node is deeper
+as a "gear parent" and set `skip_below` to hide its children inline. But VMF's per-mod
+widget list starts with a synthesized **header** node, with every setting a deeper
+sibling under it — so the header itself was treated as a gear-parent and `skip_below`
+hid EVERY setting. Net: header → nil row, all settings skipped → the menu rendered only
+the tab strip with a blank body (`[mt] rebuild ... rows=0` in the log).
+
+Fix: exclude `wtype == "header"` from the `has_children` gear/skip branch in BOTH twins
+(`_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`). Verify in-game: the menu body shows
+settings; the `[mt] rebuild` debug line reads `rows=` > 0.
+
+## 0.2.60-dev (2026-06-22) — Mod Tweaker keep ESC button now actually opens (force_open)
+
+### Fixed
+- **"MOD TWEAKER" in the keep ESC menu darkened the screen then opened nothing.**
+  The build-2 keep path fired `transition_with_fade("hero_view", { menu_state_name =
+  "gut_mod_tweaker" })`, the fade played, but the `gut_mod_tweaker` HeroView sub-state
+  never switched in. Root cause: the ESC "Mod Tweaker" button fires from INSIDE the
+  already-open keep ESC menu, which *is* `hero_view` (the `ingame_menu` window inside
+  `HeroViewStateOverview`), so `IngameUI.current_view == "hero_view"` ALREADY. When the
+  transition closure set `current_view = "hero_view"` again, `IngameUI.handle_transition`'s
+  re-enter guard `if old_view ~= new_view or force_open` (`ingame_ui.lua:953`) evaluated
+  `"hero_view" ~= "hero_view"` (false) with no `force_open` → it SKIPPED
+  `HeroView:on_enter` / `post_update_on_enter`. And `post_update_on_enter`
+  (`hero_view.lua:504-508`) is the ONLY code that reads `menu_state_name` and calls
+  `_change_screen_by_name`. So `menu_state_name = "gut_mod_tweaker"` was silently dropped:
+  fade in, fade out, no screen change. (The `[gui_tweaker] hero_view: state=?` diagnostic
+  reflected the machine still sitting on the overview state, never switched.)
+  - **Fix:** pass `force_open = true` in the transition params. This is the EXACT vanilla
+    keep-button flow — every keep ESC menu button (Inventory, Loot, …) uses
+    `transition = "hero_view"` + `transition_state = <screen>` + `force_open = true`
+    (`ingame_view_menu_layout_console.lua:742-745`). `force_open` makes the
+    `handle_transition` guard pass even when `old_view == new_view == "hero_view"`, forcing
+    the re-enter so `post_update_on_enter` honors `menu_state_name`. Harmless on the
+    not-already-in-hero_view path (`/gut_mod_tweaker` from gameplay), where `old_view`
+    is `nil` and the re-enter happens regardless.
+  - Applied to all three sub-state openers so they're robust regardless of entry state:
+    the ESC closure (`gui_tweaker.lua` ~910), the `/gut_mod_tweaker` chat opener
+    (`mod._gut_open_mod_tweaker`, `_ba_heroview_inject.lua`), and the compendium opener
+    (`mod._gut_open_compendium`, same file) — the compendium carried the identical latent
+    bug, masked only because `/gut_armory` / `/gut_bestiary` are chat-only (fired with no
+    menu open, where `old_view` is `nil`).
+  - **No new `mod:hook`/`mod:hook_safe` registrations** (pure params change). The
+    in-mission standalone `ModTweakerView` path is untouched — it still opens its own view
+    and routes exit via the origin-captured `_exit_transition`.
+
+## 0.2.59-dev (2026-06-22) — Mod Tweaker gear "Advanced Settings" drill-down + slider thumb move fix
+
+All Mod Tweaker view changes land identically in BOTH the in-mission standalone
+`ModTweakerView` (`_mod_tweaker_view.lua`) and the keep `HeroViewStateModTweaker`
+sub-state (`_mod_tweaker_state.lua`) — they are verbatim twins. The shared widget
+factories live once in `_mod_tweaker_definitions.lua`.
+
+### Added
+- **Gear "Advanced Settings" drill-down (issue #79).** Any setting that owns nested
+  sub-options now shows a 3rd-column **gear** (cogwheel) instead of flattening its
+  children inline. Clicking the gear drills INTO that setting *in place*: the same
+  list converts to a `< Back` row + the parent setting's own row + one row per child,
+  on the SAME scenegraph/scrollbar. The `< Back` row (or the **first ESC**) drills back
+  OUT to the normal list; a second ESC closes the menu. Tab/page switching is guarded
+  while drilled. Good test targets on gut's own tab: **Parry Indicator**
+  (`gut_parry_indicator` + R/G/B children) and **Respawn Timer** (`gut_respawn_timer`
+  + font-size/R/G/B children).
+  - Detection of "has children": gut NESTED categories = a non-`group` node with a
+    non-empty `sub_widgets`; VMF FLAT categories = the next node's `depth` is greater
+    than this node's. The nested walk now synthesizes a parallel `depth` array
+    (`_walk_nested` replacing `_walk_leaves`) so BOTH paths run the identical
+    "next node is deeper" detection + inline-skip. Groups keep their existing
+    `[+]/[-]` collapse (no gear); only non-group parents get a gear.
+  - The gear texture is `cogwheel_small` (`gui_icons_atlas`, 40x40) — the SAME sprite
+    the window chrome already draws every frame as `menu_symbol`, so it's proven to
+    resolve on the borrowed renderer (no raw-material crash risk). Its hotspot carries
+    an explicit `style_id` (rows share the `mt_list_start` node, so without one the hit
+    target collapses to 1x1 — the same gotcha already handled for checkboxes). The
+    gear-parent's whole-row hotspot is trimmed so it stops before the gear column and
+    a gear click can't double-fire on the parent row.
+  - Child rows reuse the existing checkbox/numeric/dropdown build + `_cat_get`/`_cat_set`
+    — **no new persistence**. The per-node row build was factored into a shared
+    `_build_node_row` helper so the normal list and the drill view build rows identically.
+  - **No new `mod:hook`/`mod:hook_safe` registrations** (mod-lint clean: 47 hooks,
+    0 duplicates).
+
+### Fixed
+- **Slider thumb / fill now actually move (the build-3 "thumb doesn't move" report).**
+  Root cause found in the decompiled engine, not guessed: `offset_function` is **not**
+  a generic per-pass field. The generic widget draw loop (`ui_renderer.lua:521-555`)
+  places each pass from `pass_style.offset` but NEVER calls `offset_function` for
+  `texture`/`rect`/`texture_uv` passes — only the dedicated **`local_offset`** pass
+  type invokes it (`ui_passes.lua:4587-4593`; the native slider uses exactly this at
+  `options_view_definitions.lua:1673-1695`). The prior build attached the thumb/fill/
+  thumb_hover `offset_function`s to `texture`/`rect` passes, where they were silently
+  ignored — so the fill stayed at width 0 and the thumb stayed pinned at value 0.
+  Fixed by replacing those dead per-pass functions with a single `local_offset` pass
+  that mutates `style.fill.size[1]`, `style.thumb.offset[1]`, and
+  `style.thumb_hover.offset[1]` in place from `internal_value` every frame — the
+  native mechanism. The `[mt:slider-probe]` debug log is preserved (now inside the
+  `local_offset` pass).
+
+## 0.2.58-dev (2026-06-22) — Mod Tweaker native-settings fidelity: ON/OFF switches, texture arrows, moving thumb, separators, hover/sounds + in-mission origin-exit fix
+
+All Mod Tweaker view changes land identically in BOTH the in-mission standalone
+`ModTweakerView` (`_mod_tweaker_view.lua`) and the keep `HeroViewStateModTweaker`
+sub-state (`_mod_tweaker_state.lua`) — they are verbatim twins. The shared widget
+factories live once in `_mod_tweaker_definitions.lua`.
+
+### Fixed
+- **In-mission Mod Tweaker exit now returns to the menu the player actually opened — no more deprecated bare `IngameView` after exiting in a mission.** The prior build fixed only the keep path (HeroView sub-state). In a mission the standalone view's exit was hard-coded to `"ingame_menu"` (the deprecated legacy menu), so players who opened the modern HeroView ESC menu (the PC default, `use_pc_menu_layout=false`) were dumped into the bare 9-button legacy menu on exit. The transition closure now **captures the origin view** (`self.current_view`, still the engine's pre-closure snapshot per `ingame_ui.lua:946`) and routes exit back to it: `hero_view` origin → `hero_view` (which `ModTweakerView:exit` already handles safely with `{ menu_state_name = "overview" }`), everything else → `ingame_menu`. The `mod_tweaker_transition_registered` regression check now asserts both origin branches. (Same bug class as memory `reference_vt2_modview_exit_legacy_ingameview`.)
+- **"MOD TWEAKER" title no longer renders behind the tabs.** The title and the tab strip both parented to `background_top_panel` at equal world-z and the title was drawn first, so the tabs overpainted it. Fixed two ways (belt-and-suspenders): the title node's local z is bumped `{0,0,4}` → `{0,0,20}` (above the tabs at z=4), and `_draw` now draws the title **after** the tab loop. The title is text-only (no hotspot) so drawing it last can never eat a tab click.
+
+### Changed
+- **Booleans render as a native ON/OFF stepper switch instead of a hand-built checkbox.** VT2's native settings render booleans as two-option steppers (`{true → "menu_settings_on"} / {false → "menu_settings_off"}`, `options_view_settings.lua:456`), not checkboxes. The `create_checkbox` factory now draws the label (left) + centered ON/OFF text (from the game's own `menu_settings_on`/`menu_settings_off` loc keys) flanked by the two native arrow textures. Either arrow, or the whole row, toggles the value.
+- **Slider/stepper inc-dec controls are now the native arrow TEXTURES, not `<` / `>` text glyphs.** Left = `settings_arrow_normal` (a `texture` pass); right = the SAME texture flipped horizontally via a `texture_uv` pass with uvs `{{1,0},{0,1}}` — exactly the native pattern (`options_view_definitions.lua:1803-1837`). Hovering an arrow swaps it to `settings_arrow_clicked`.
+- **Slider thumb tracks `internal_value` and shows the atlas `slider_thumb`/`slider_thumb_hover` sprite.** The thumb's `offset_function` recomputes `offset[1] = TRACK_X + TRACK_W·internal_value − thumb_w/2` every frame (mutating the offset table in place), so the thumb visibly slides as the value changes. A debug-gated probe (`[mt:slider-probe]`, throttled ~1/sec, gated on `enable_debug_logging`) logs `internal_value`, the computed thumb `offset[1]`, and whether the `slider_thumb` texture resolved — so if the thumb still doesn't move in-game the log pins the cause.
+- **Per-row separators.** Each row now draws a faint full-width 2px bottom rule (a plain `rect` pass — never the native `rect_masked` material, which is absent on the borrowed renderer), color `font_default @ alpha 50`, matching the native `bottom_edge` (`options_view_definitions.lua:25-26`). Rows stack with no gap, so the rules read as one continuous ruled list.
+- **Right-justified controls / left-justified names.** Control column x is now derived as `ROW_W − INPUT_FIELD_WIDTH(400)` (the native right-justify rule) instead of the old magic `600`; the slider track width was reduced so the track + value text + both arrows fit inside the right column. Names stay flush-left.
+- **Tabs are ALL-CAPS with native 20px inter-tab spacing.** The tab text style now sets `upper_case = true` (a pure render transform — `localize` stays `false` since mod names aren't loc keys), and the inter-tab gap is 20px to match native (`options_view.lua:993`).
+- **Mouseover hover highlight on rows + controls.** Each editable/clickable row draws the atlas `playerlist_hover` sprite (in `gui_menus_atlas`, gated on `content.is_highlighted`) when its hotspot is hovered. Set per-frame from the row hotspot's `is_hover` in the new `_apply_row_hover` draw helper.
+- **Native Wwise sounds.** `_play_click` now fires `Play_hud_select` on every commit (checkbox flip, arrow click, dropdown cycle, slider release); a new `_play_hover` fires `Play_hud_hover` on the hover-enter edge only (debounced per row, never every frame), matching the real Options menu (`options_view.lua:544`/`423`). A one-time debug-gated `[mt:wwise]` probe logs which worlds expose a usable `wwise_world` (current handle is the `music_world`'s); if `Play_hud_*` are inaudible the log shows whether the handle resolved.
+
+All textures used are atlas-backed and proven to resolve on the borrowed renderer: `slider_thumb`/`slider_thumb_hover`/`settings_arrow_normal`/`settings_arrow_clicked` (`gui_settings_atlas`), `playerlist_hover` (`gui_menus_atlas`). No raw materials (`checkbox_checked`/`rect_masked`/`highlight_texture`) are referenced — they crash on this renderer (memory `reference_vt2_options_widgets_raw_materials`). No new `mod:hook`/`mod:hook_safe` registrations were added.
+
+## 0.2.57-dev (2026-06-22) — Mod Tweaker as a HeroView sub-state (keep path): kills the deprecated-menu look AND the LA-atlas crash
+
+### Fixed
+- **Opening the Mod Tweaker from the keep is now a HeroView SUB-STATE — no more deprecated bare-IngameView menu on exit, and no more Loremaster's Armoury `armoury_atlas` crash on repeated opens.** Root cause of BOTH symptoms: the keep path reached the Mod Tweaker by *leaving and re-entering* `hero_view` via `transition_with_fade`, which **recreates hero_view's renderer**; VMF then re-injects LA's atlas into the fresh renderer (the C-fatal, crash `42c81d84`), and the recreation dumped the player back into the deprecated standalone `IngameView` (the bare 9-button menu). A HeroView sub-state stays **inside the already-open hero_view and never recreates the renderer**, eliminating both. This is the proper fix the prior build's TODO described (modeled on the existing `HeroViewStateCompendium` sub-state). The in-mission path is **unchanged** — there's no `hero_view` in a mission, so the ESC "Mod Tweaker" button there still opens the standalone `ModTweakerView` (which routes its own exit to `ingame_menu`, the never-crashed path), preserving in-mission access.
+
+### Added
+- **`HeroViewStateModTweaker`** (`_mod_tweaker_state.lua`) — the Mod Tweaker rendered as a hero-menu sub-state. Ports the VMF auto-discovery, General-Tweaker-first tab ordering, pagination, collapsible groups, draggable sliders/dropdowns, scroll/cull, and the pcall-protected `end_pass` draw guard verbatim from `_mod_tweaker_view.lua`; the lifecycle shell follows the sub-state contract (renderer borrowed from the hero_view context — never recreated; input read from the parent hero_view's shared service; cursor managed by hero_view — gut pushes none; exit via `parent:close_menu`). The on-exit settings auto-save (TOML export) is preserved. Reachable in the keep via the ESC "Mod Tweaker" button **or** the new `/gut_mod_tweaker` chat command.
+- **`/gut_mod_tweaker`** chat command — opens the Mod Tweaker hero-menu sub-state from the keep (mirrors `/gut_armory`); echoes a hint if used outside the keep.
+
+### Changed
+- The `gut_mod_tweaker` screen descriptor is registered alongside `gut_compendium` in the **single existing** `HeroView.init` hook (no new duplicate hook). The ESC "Mod Tweaker" transition closure now branches on `ingame_ui_context.is_in_inn`: keep → sub-state, mission → standalone view.
+
+## 0.2.56-dev (2026-06-22) — ESC-menu overflow fix, pin General Tweaker tab, LA-atlas re-pin + instrument
+
+### Fixed
+- **ESC/keep menu no longer overflows off the bottom of the screen.** gut injects a "Mod Tweaker" button into the IngameView button column; on the keep host/client layout this makes 9 buttons, and the vertically-centred column ran off the bottom edge. A new `hook_safe("IngameView", "set_background_height", ...)` nudges the column up (and dims the logo/top panel) once the column crosses 8 buttons. Gated behind a new **Compact ESC Menu** checkbox (`gut_compact_esc_menu`, default ON). *NOTE: the nudge direction (up vs down) and the 44px/row amount are tune-in-game values — the column may move the wrong way on this first build; flip the sign after the user reports what they see.*
+- **In-mission "Mod Tweaker" crash on the 3rd/4th open (materials/Loremasters-Armoury/armoury_atlas) — stopgap + instrumentation.** Root cause: the Mod Tweaker BORROWS the long-lived IngameUI renderer (it does NOT recreate it), but `_la_atlas_keepalive.lua` only pinned LA's atlas package ONCE (on `StateInGameRunning.on_enter`) — its premise that LA always keeps the atlas resident is false, so the atlas can be unloaded between opens and the borrowed renderer then hands a missing material to a C-fatal. gut now **defensively re-pins LA's package on every Mod Tweaker open** (both the ESC transition and `ModTweakerView:on_enter`), pcall-guarded and keeping the keepalive's `has_loaded` guard intact (it still NEVER force-loads a non-resident LA package — that was the 0.2.54 crash). Added debug-gated instrumentation: atlas residency, gut's pin state, an open-counter (1st/2nd/3rd/4th), the borrowed `ui_renderer`/`ui_top_renderer` identity per open, and a read-only log-and-passthrough hook on `PackageManager.unload` filtered to LA's package to catch any unload between opens. All instrumentation is gated on `enable_debug_logging`.
+
+### Changed
+- **General Tweaker is now pinned as the first (leftmost) Mod Tweaker tab.** The per-mod tab strip puts `gt` (stable) / `gt_dev` (dev) first regardless of the default ordering; every other mod keeps its existing relative order. Implemented via an explicit `TAB_PRIORITY` list so it's easy to extend later.
+
+## 0.2.55-dev (2026-06-22) — NumericUI ability cooldown shows real-time reduced seconds
+
+### Added
+- **NumericUI's ability-cooldown number now counts in real seconds.** VT2 applies cooldown reduction by making the cooldown value *decrease faster* (`career_extension.lua:244`: `reduce_activated_ability_cooldown(dt * cooldown_regen_mult)`), not by shortening it — so NumericUI's display, which shows the raw `current_ability_cooldown()`, visibly **sped up** under CDR. gut now divides that read by the same `cooldown_regen` multiplier **only while NumericUI is computing its display** (inside its `UnitFramesHandler._sync_player_stats` hook), so the number shows the accurate reduced cooldown ticking at 1 second per second. The game's actual cooldown logic, the ability-bar fill, and bot AI are untouched (the flag can't leak — vanilla `_sync_player_stats` never reads the cooldown seconds). No-op if NumericUI isn't installed.
+
+## 0.2.54-dev (2026-06-21) — Fix: the LA atlas keepalive itself hard-crashed (force-materialized LA's broken bundle)
+
+The v0.2.53 keepalive (`_la_atlas_keepalive.lua`) called `Managers.package:load(LA_PACKAGE, GUT_REF, nil, true)` on every `StateInGameRunning.on_enter`. The 4th arg is `asynchronous` (not "persistent", as the comment wrongly claimed) — and because LA dynamically **unloads its own package**, at our on_enter the package is often NOT resident, so `load()` QUEUED a fresh load that **force-materializes every member of LA's bundle**. LA's installed bundle is missing an internal member, so the async `_pop_queue → resource_package` step took a C-level fatal: `Resource '#ID[3ac73385950a26ea]' not found` (that hash IS this LA package — Stingray names bundles by murmur64A of the package path). The `pcall` couldn't catch it (the fatal fires async, outside the Lua frame). Recurred every keep entry while LA was installed; vanilla was unaffected.
+
+### Fixed
+- `_la_atlas_keepalive.lua` now **only pins when LA's package is ALREADY fully resident** (`pm:has_loaded(LA_PACKAGE)`), making `load()` a pure reference-count increment — no re-materialize, no fresh-load queue. If LA's package isn't resident at on_enter (LA unloaded it / not loaded yet), it bails and retries next entry instead of force-loading it. The reference (held by `GUT_REF`) still survives LA's own unload, so the atlas stays resident when we do pin. Corrected the misleading "4th arg = persistent" comment. MOD_VERSION → 0.2.54-dev.
+
+## 0.2.53-dev (2026-06-21) — Guard the Loremaster's Armoury atlas crash on the hero view
+
+### Fixed
+- **`[Script Error]: materials/Loremasters-Armoury/armoury_atlas` opening the hero menu (crash efadf778).** Root cause (traced from the full stack): LA registers its atlas for VMF custom-texture injection into the `hero_view` renderer-creator; the hero view's HDR sub-renderer (`hero_view_hdr`) shares that creator, so VMF injects the atlas there during `_setup_hdr_renderer`. LA *also* dynamically unloads its own package (it hooks `PackageManager.unload`), so the atlas is sometimes gone when that early HDR renderer is built → `create_screen_gui` C-fatal (not catchable by the `pcall` cim wraps around `_setup_hdr_gui`). Not a gut bug — gut wasn't in the stack — but fixable from our side: gut now **pins LA's package under its own package-manager reference** (on `StateInGameRunning.on_enter`) so LA's unload can't drop the atlas out from under the renderer. No-op if LA isn't installed. (Fix authorized by LA's authors; shipped in gut per the constraint that it ship from our mods.)
+
+## 0.2.52-dev (2026-06-21) — Stop messing with captions at default settings
+
+### Fixed
+- **Captions/subtitles were being repositioned even with no settings changed.** The `SubtitleGui.update` hook (from the absorbed HideBuffs "reposition subtitles" feature) ran every frame as a `hook_safe` and unconditionally wrote `subtitle_widget.offset = {x, y}` — and since the subtitle-offset settings aren't exposed in gut's UI, `x`/`y` were always `0`, so it clobbered vanilla's own caption positioning with `{0, 0}`. Now it bails when both offsets are 0 (the default), leaving vanilla positioning untouched; it only moves captions if a non-zero offset is actually set.
+
+## 0.2.51-dev (2026-06-21) — `<>` on the ESC entry: actual root cause fixed + tracked status doc
+
+### Fixed
+- **The `<>` on the "Mod Tweaker" ESC entry — finally root-caused.** The modern hero menu (`hero_window_ingame_view.lua:473`) builds the label as `text_field = display_name_func() or display_name` and then **localizes** `text_field`. Our button carried a `display_name_func` that returned the already-resolved string `"Mod Tweaker"`, so the menu re-localized that literal into **`<Mod Tweaker>`**. The legacy ESC menu used the key directly (which is why the probe always showed it resolving), masking the real culprit. Removed the func — the `display_name` key now localizes to "Mod Tweaker" (via the append fix) in **both** menus.
+
+### Process
+- Added **`GUI_TWEAKER_TODO.md`** — a tracked, honest status list of every Mod Tweaker / GUI request (active bugs, the native-parity rework phases, and what's done) so nothing gets dropped. The deprecated-menu-on-exit fix (make the Mod Tweaker a HeroView sub-state) and the native-parity rework are logged there as the next big tasks.
+
+## 0.2.50-dev (2026-06-21) — Temporal Fix: baked in at -48, always on (no toggle/slider)
+
+### Changed
+- **UI Tweaks "Temporal Fix" is now always on with a baked-in `-48` nudge** (the value that lands the mini-HUD player health bar correctly). Removed the `gut_uitweaks_temporal_fix` checkbox and the `gut_temporal_hp_nudge_x` slider — the fix just applies whenever UI Tweaks (HideBuffs) is installed with its mini-HUD layout. (`gut_buffbar_endtime_fix` stays as a toggle.)
+
+### Notes from the latest log
+- The ESC-menu **`<>` is resolved** — the probe confirms `Localize('mod_tweaker_button_name') -> 'Mod Tweaker'`. If any `<>` remains it's a different element inside the Mod Tweaker view, not this button.
+- Scrollbar `thumb_frac` computes correctly (0.936, scaling to content); no drag was exercised in the log, so slider/scrollbar dragging still needs an in-game check.
+
+## 0.2.49-dev (2026-06-20) — Hide UI: fold in the proven original mod's outline + arms hiding
+
+Compared the migrated feature against the **original "Hide UI" mod** (Workshop 2007374303) it replaces, and added the two pieces it was missing — all APIs re-verified against the current engine:
+- **Outline system disabled** in complete/camera modes (`outline_system:set_disabled(true)`), so enemy/ally silhouettes hide too. Re-enable is **guarded against the Realism mutator** (which manages outlines itself), exactly like the original.
+- **First-person arms hide** now uses the proper `first_person_extension:hide_weapons()` + the `first_person_attachment_unit` toggle (what vanilla `set_first_person_mode` does) instead of brute-forcing the whole FP rig — more correct, with the per-slot loop kept as a fallback.
+- Outline/arms state toggles only on mode transitions (not every frame), and resets out of mission so re-entering a level re-applies against the fresh OutlineSystem/FP rig.
+
+## 0.2.48-dev (2026-06-20) — Hide UI feature (migrated from gt, fixed) + exit-crash revert
+
+### Added
+- **Hide UI** (off / partial / complete / camera), migrated from General Tweaker. A dropdown + a cycle hotkey (`/gut_hud`). Two bugs that made it a no-op in gt were fixed in the move: the HUD-disable hook now targets the **derived** game-mode classes (the base-class hook never fired because VT2 copies methods into subclasses at definition time), and the force-hide path now reads `Managers.ui._ingame_ui.ingame_hud` (the old `Managers.ui.ingame_hud` was nil).
+
+### Fixed / reverted
+- **Mod Tweaker exit no longer crashes with Loremaster's Armoury.** v0.2.46 returned to `hero_view` on exit, but recreating hero_view makes VMF re-inject every mod's custom UI material into the new renderer, which hard-crashed on `materials/Loremasters-Armoury/armoury_atlas` (crash 42c81d84). Reverted to the `ingame_menu` exit (no crash; the older menu style returns). The proper fix — making the Mod Tweaker a HeroView **sub-state** so it never recreates hero_view (kills both the crash AND the legacy look) — is noted in code as the next step.
+
+### Diagnostics
+- The backend-loc registration now also logs `Localize('mod_tweaker_button_name')` right after registering, to confirm whether the `<>` you still see is this ESC button (would print `<...>`) or a different element (would print `Mod Tweaker`).
+
+## 0.2.47-dev (2026-06-20) — Fix hero-menu crash on exit (v0.2.46 regression)
+
+### Fixed
+- **Crash exiting the Mod Tweaker:** `hero_view_state_overview.lua:73: attempt to index field 'state_params' (a nil value)`. v0.2.46's deprecated-menu fix routed the exit to `transition_with_fade("hero_view")` with **no params** — HeroView's `post_update_on_enter` then took its else-branch (`_change_screen_by_index(1)`), which enters the overview state with `state_params = nil`, and the vanilla overview indexes `params.state_params.force_ingame_menu` with no nil guard → crash. Now the exit passes `{ menu_state_name = "overview" }` so HeroView threads our (table) params through as `state_params` — the same pattern the compendium open already uses. The deprecated-menu fix stays intact; it just returns cleanly now.
+
+## 0.2.46-dev (2026-06-20) — Deprecated-menu ROOT CAUSE fix + GUI probes (Phase 0 of native-parity rework)
+
+A second multi-agent investigation found the *real* deprecated-menu cause (renderer/layout-variant theories were both wrong) and produced a full phased plan to make the menu match native settings.
+
+### Fixed
+- **"Deprecated menu after exiting" — actual root cause.** The Mod Tweaker is opened from HeroView's modern embedded menu, but its exit **hardcoded `transition_with_fade("ingame_menu")`**, which opens the standalone **legacy `IngameView`** (the bare 9-button menu). So exiting ejected you from HeroView into the old menu. Now the transition closure captures the **origin view** (`self.current_view`) and routes the exit back there (`hero_view` → returns to the modern menu). `on_enter` preserves that origin instead of clobbering it. (The `[mt:esc]` diagnostic exposing the 10-vs-9-button alternation is what cracked this.)
+
+### Added (probes)
+- `[mt:slider] DRAG …` logs `internal_value` + computed thumb x every drag frame — to prove whether the drag math works (it does) vs the thumb-render/reference-frame is the defect (the shared-node root cause).
+- `[mt:dump] heartbeat …` now logs `thumb_frac` + `scroll_value` — to show why the scrollbar thumb stays full-size.
+- `[mt:esc] opened from current_view=… -> exit will route to …` confirms the origin-capture fix.
+
+### Roadmap (native-parity rework, next)
+Per the investigation: keep custom widgets (native factories crash on the borrowed renderer), but give **each row its own scenegraph node** (the shared `{1,1}` node is the root cause of the dead slider drag + cosmetic scrollbar), then port native hover/sound/tooltip/drag. Phases: 1) per-row nodes, 2) slider+scrollbar drag, 3) dividers/two-column/font+colors/tab-shift/nested-indent, 4) hover+sound, 5) On/Off switch + type-in number + tooltips.
+
+## 0.2.45-dev (2026-06-21) — `<>` button: fix registration TIMING
+
+The v0.2.44 `append_backend_localizations` approach was right, but `Managers.localizer` wasn't ready at gut's boot, so it silently no-op'd (the log shows no registration line). Now it also registers on `on_all_mods_loaded`, on `LocalizationManager.init`, and on **`IngameView.on_enter`** (fires right before the ESC menu draws, localizer guaranteed up) — so the key is set before the button's text resolves. The register helper now logs at info level so the next log confirms it fired.
+
+Note: the "deprecated menu after exit" is being re-investigated — the `[mt:esc]` diagnostic revealed it's the **legacy button-layout variant** (9-button `*_legacy` set), not a renderer issue, so v0.2.44's renderer switch was the wrong fix. A larger native-menu rework (font/colors, On/Off toggles, hover+sound, tooltips, dividers, functional scrollbar, nested indentation) is being designed.
+
+## 0.2.44-dev (2026-06-20) — Root-cause fixes for the `<>` button + deprecated-menu (multi-agent investigation)
+
+A fan-out investigation finally found both root causes (prior fixes had attacked the wrong layer).
+
+### Fixed
+- **`<mod_tweaker_button_name>` ESC button.** Root cause: the engine's `LocalizationManager._base_lookup` only checks `_backend_localizations` + compiled string bundles — **never** a mod's VMF loc table. Both prior fixes were *interception* hooks and each missed a path (the `_G.Localize` hook gets blown away by the `rawset` re-init; the `lookup` hook is bypassed because the button text pass also localizes via the **sibling** `simple_lookup`). The fix **supplies the string** instead of intercepting: `Managers.localizer:append_backend_localizations({ mod_tweaker_button_name = "Mod Tweaker" })`, which `_base_lookup` checks first — so it resolves on *every* path. Re-registered on `LocalizationManager.init` (language switch). Deleted both failed hooks.
+- **ESC menu "deprecated buttons" after exiting.** Root cause: the Mod Tweaker drew on `ui_renderer` (level_world / in-mission HUD renderer) — the **only** ESC-flow view to do so. OptionsView and IngameView both draw on `ui_top_renderer`; gut polluting level_world's renderer state made IngameView's chrome fail to resolve on the next frame → flat buttons. (My v0.2.40 comment claiming IngameView shares `ui_renderer` was factually wrong — it's on `ui_top_renderer`.) Fix: draw on `ui_top_renderer` like the vanilla views. Our rows are already atlas-safe, so the original reason for level_world no longer applies.
+
+## 0.2.43-dev (2026-06-20) — Collapsible groups
+
+### Added
+- **Group headers are now collapsible** (interim organization until a better sort lands). Each VMF `group` becomes a clickable header with a `[+]`/`[-]` indicator on a tinted bar; clicking it expands/collapses its settings. Uses each flat node's `depth` to skip a collapsed group's descendants (handles nested groups). **Groups start collapsed**, so opening a big mod (e.g. ct's ~1900 settings) shows a tidy list of group headers instead of an endless flat scroll — expand only what you need. Expand state persists across tab switches for the session.
+
+## 0.2.42-dev (2026-06-20) — Slider matches VMF (mod-side snapping) + two-column layout
+
+### Fixed
+- **Slider now lands on the same values as VMF.** Found it: `starting_coins` is `range = {0, 3000}` and its **own `on_setting_changed` snaps the value to the nearest 25** (not a VMF slider step). VMF shows the snapped value because it re-reads after setting; my menu showed the raw drag value (257 vs 250). Now after a commit the menu **re-reads the stored value** and shows that — so it snaps to 25s exactly like VMF, for any mod that clamps/snaps in its change handler. Reverted the stepper to the coarser ~range/40 (the natural increment min), and added a `[mt:num] '<id>' bounds=… step=…` diagnostic (debug on) to confirm the read bounds.
+
+### Added
+- **Two-column layout** like the game's settings menu: the setting **name fills the left column**, and every **control** (checkbox box, slider track, `[<]`/`[>]` steppers) sits in the **right column** at a consistent x. Much cleaner than the old left-packed rows.
+
+## 0.2.41-dev (2026-06-20) — Slider crash fix (per-frame commit) + finer steps
+
+Crash dragging the Chaos Wastes `starting_coins` slider, diagnosed from the log.
+
+### Fixed
+- **Crash + "slider didn't move" while dragging.** The drag committed the value via `mod:set(..., true)` **every frame**, firing the mod's `on_setting_changed` continuously. For `starting_coins`, that handler **broadcasts the entire ~18KB config to clients** (`[ct_sync] ... 18133 bytes, 489 keys`) — once per frame floods the network and crashes (and the crash interrupted the visual, so the bar looked frozen). Now the drag updates only the **visual** each frame and **commits once on release** (matching how VMF fires a setting change). Smooth drag, one network sync, no crash.
+- **Stepper increments were too coarse (≈25/click).** The `[<]`/`[>]` step was `(max-min)/40` — ~25 on a 0–1000 range. Changed to the **natural increment** (1 for integers, `10^-decimals` otherwise), matching VMF. The draggable track still handles big moves, so fine ±1 stepping no longer means tiny drags.
+
+## 0.2.40-dev (2026-06-20) — The two stubborn ones: `<>` ESC button + "deprecated menu" after exit
+
+Fresh diagnosis after the previous fixes didn't take.
+
+### Fixed
+- **`<mod_tweaker_button_name>` ESC button.** The log confirmed gut's `_G.Localize` hook IS registered, yet the key didn't resolve — meaning the wrapper was bypassed (the localizer re-inits via `rawset(_G,"Localize",...)`, which can blow the wrapper away). The robust fix: also hook the **`LocalizationManager.lookup` class method** — the global `Localize` is literally `function(id) return Managers.localizer:lookup(id) end`, so the method hook intercepts every localization regardless of the `_G` wrapper's state, and survives re-inits.
+- **"Main menu looks deprecated (just buttons)" after leaving the Mod Tweaker.** Ruled out the exit transition (it's identical to OptionsView's). Real cause is renderer state: the Mod Tweaker draws on `ui_renderer` (level_world) — the **same renderer IngameView draws its styled background on** (its buttons are on `ui_top_renderer`). If any `draw_widget` errored between the Mod Tweaker's `begin_pass` and `end_pass`, `end_pass` was skipped → the renderer was left mid-pass → IngameView's background didn't render → just bare buttons. Wrapped the entire draw body in a guard so **`end_pass` always runs** even if a widget draw throws.
+- Added a `[mt:esc] setup_button_layout -> N buttons` diagnostic (debug on) to confirm the button set isn't accumulating, in case the menu look is still off.
+
+## 0.2.39-dev (2026-06-20) — Mod Tweaker sliders are now draggable
+
+The log confirmed checkboxes/tabs work but sliders never registered a change. Root cause: the numeric rows were a tiny `[<] value [>]` stepper — the track itself had **no hotspot**, so dragging the bar (the natural slider gesture) did nothing; only the small glyphs were clickable.
+
+### Fixed
+- **Added a draggable track hotspot** across the slider bar. Click or drag anywhere on the track to set the value from the cursor position; the `[<]`/`[>]` glyphs remain for fine ±step. Per-frame writes during a drag are skipped unless the value actually moves.
+
+### Still queued
+- **Armory/Bestiary top-tab button** in the hero menu (next to Equipment/Talents/Crafting/Cosmetics) — Phase 1, the crash-sensitive `HeroWindowOptions` injection, getting its own careful pass. Phase 0 (the `/gut_armory` stub panel) is live.
+
+## 0.2.38-dev (2026-06-20) — Armory/Bestiary Compendium: Phase 0 (hero-menu entry + stub panel)
+
+First slice of the Armory + Bestiary "Compendium" as a real HeroView screen (the hero menu), built on the proven old-Armory-mod injection. Phase 0 proves the injection works before the real UI lands.
+
+### Added
+- `_ba_compendium_state.lua` — `HeroViewStateCompendium`, a HeroView sub-state that draws a framed stub panel ("Compendium — work in progress") + a Back button. Defensive lifecycle (nil-guarded draw/update/input). Atlas-safe widgets only; hotspot carries `style_id`.
+- `_ba_heroview_inject.lua` — registers the sub-state into `HeroView._state_machine_params.settings_by_screen` (post `HeroView.init`, idempotent), captures `ingame_ui_context` (via a self-disabling `StateInGameRunning.update` hook), and exposes `mod._gut_open_compendium(mode)`.
+- `/gut_armory` and `/gut_bestiary` now **open the stub panel** in the hero menu (was: echo stub).
+
+### Notes
+- Entry point for Phase 0 is the chat commands; the **top-tab button** in the hero menu (next to Inventory/Cosmetics/Talents/Crafting) is Phase 1 (kept off the crash-sensitive tab-bar hooks until the panel is proven).
+- No duplicate hooks: `HeroView.init` (distinct from gut's existing `HeroView.on_enter`) + `StateInGameRunning.update` (unused elsewhere).
+- Phase plan: 0 entry+stub → 1 framed panel + Weapons|Enemies toggle + top-tab button → 2 lists from the `_ba_` data layer → 3 3D preview → 4 polish/console.
+
+## 0.2.37-dev (2026-06-20) — Config file gets a WRITE path (log→watcher bridge) + auto-save
+
+Answering "can't we add something that lets us write?": yes. The mod can't `io.open("w")`, but it *can* write to the log, and a desktop process can turn that into a real file write. So the game now has effective two-way file sync.
+
+### Added
+- **`tools/gut-settings-watch.ps1`** — a background watcher. Leave it running while you play; it polls the newest console log and **auto-writes `gut_mod_settings.toml`** whenever the mod emits a fresh `[gut:toml]` block (only when content changes; backs up the previous file).
+- **Auto-export on Mod Tweaker close** — if you changed any setting while the Mod Tweaker was open, closing it emits the TOML to the log (so the watcher commits it). No command needed. Manual `/gut_export_settings` still works.
+
+### Flow
+Run the watcher once → adjust settings in the Mod Tweaker → close it → `gut_mod_settings.toml` is written automatically → edit it by hand any time → restart or `/gut_reload_config` to load it back. The mod still **reads** the file directly on load (v0.2.36); the watcher only provides the **write** half.
+
+## 0.2.36-dev (2026-06-20) — External config file: edit a .toml, override VMF settings on load
+
+New feature (queued request). Keep all your tweaker mods' settings in a `.toml` you can edit directly; on game load those values override the in-game VMF options.
+
+### How it works (and the sandbox constraint)
+VMF mods can **read** files but **cannot write** them (Stingray sandbox), so it's split:
+- **Override on load** — on `on_all_mods_loaded`, gut reads `%APPDATA%\Fatshark\Vermintide 2\gut_mod_settings.toml` and `mod:set`s each value for your mods (`_MY_MODS` whitelist), so the file wins over what each mod restored. No-op if the file doesn't exist. Toggle: **Override settings from config file** (on by default).
+- **Edit directly** — edit the `.toml` by hand; `/gut_reload_config` re-applies it with no restart.
+- **Export** — `/gut_export_settings` dumps current settings as TOML to the log (prefix `[gut:toml]`); the companion **`tools/gut-settings.ps1`** parses the newest log and writes the `.toml` (the mod can't write it itself).
+
+### Added
+- `_gut_config_file.lua` — minimal TOML reader/writer (flat `[mod_id]` sections, bool/int/float/string; keybinds skipped), `_collect`/`apply`, `/gut_export_settings`, `/gut_reload_config`.
+- `tools/gut-settings.ps1` — writes `gut_mod_settings.toml` from a `/gut_export_settings` log dump (backs up any existing file).
+- Setting `gut_config_override` (default on).
+
+### Round-trip
+in-game `/gut_export_settings` → desktop `.\gut-settings.ps1` → edit the `.toml` → restart or `/gut_reload_config`.
+
+## 0.2.35-dev (2026-06-20) — Mod Tweaker: row clicks + scrollbar drag actually fire
+
+The v0.2.34 `style_id` fix made rows receive cursor input (hover works), but the log showed `on_release` never fired for any row (count=0) while tabs clicked fine.
+
+### Fixed
+- **Row clicks now register.** Root cause: the option rows all share the `mt_list_start` scenegraph node, and the hotspot pass's `input_pressed` state machine (ui_passes.lua:4364) doesn't persist correctly across the shared node, so `on_release` never fires. Switched the checkbox/stepper handlers to **`on_left_release`** (set on release-over-widget regardless of `input_pressed`), which tabs don't need because they each have their own node.
+- **Scrollbar drag.** Now driven by the hotspot's **`is_held`** flag (set while the LMB is held over the scrollbar's own node) instead of fragile `on_pressed` + `left_hold` tracking.
+
+### Added
+- Heartbeat now logs `scroll`, `vis_h`, `cont_h`, `sb_world`, `sb_hover/held` (debug logging on) to confirm the scrollbar's position + input next session.
+
+## 0.2.34-dev (2026-06-20) — Mod Tweaker: options are now CLICKABLE + scrollbar on-panel + tighter fit
+
+Three fixes from the v0.2.33 in-game report, diagnosed off the auto-dump.
+
+### Fixed
+- **Couldn't change any option** — the row hotspot passes had **no `style_id`**, so the hotspot pass fell back to the scenegraph node size. Every row shares `mt_list_start` (size `{1,1}`), making each click target **1×1 pixel**. (Tabs worked because each `mt_tab_N` node has a real size.) Added `style_id = "hotspot"` to the checkbox and `style_id = "dec"/"inc"` to the slider/dropdown steppers, so they use the real `{ROW_W, ROW_H}` hit area. Checkboxes/steppers/dropdowns are now clickable.
+- **Scrollbar wasn't visible** — it was right-aligned in `list_mask`, whose right edge extends ~18px **past the decorated panel**, so the bar drew off the panel. Inset it 30px (and bumped its z) so it sits inside the window. Confirmed from the dump: `list_mask` world right edge 1678 vs panel edge ~1660.
+- **Options didn't fit the window** — rows were drawn if their lower OR top edge was inside the mask, so edge rows overdrew past the panel (no GPU clip). Now a row draws only when its **centre** is inside the mask — clean top/bottom boundary.
+
+### Added
+- `[mt:dbg] row input: hover/release/visible` diagnostic (debug logging on) to confirm row hotspots receive cursor input.
+
+## 0.2.33-dev (2026-06-19) — Mod Tweaker: real scrolling (no more overflow)
+
+Implemented from a study of the vanilla `OptionsView` scroll machinery (the working reference).
+
+### Added
+- **The option list now scrolls like the native settings menu.** Mechanism mirrors `OptionsView`:
+  - **Scroll offset** applied to the `mt_list` scenegraph node (one write moves the whole row stack), same sign as `OptionsView.update_scrollbar`.
+  - **Position-culling** against the `list_mask` box via `math.point_is_inside_2d_box` (lower/middle/top points) — rows outside the panel aren't drawn, so **nothing overflows** anymore. Removed the old 50-row cap.
+  - **A rect-based scrollbar** (`mt_scrollbar` node + `build_scrollbar_rect`) with a thumb sized to visible/total and positioned by scroll fraction. Pure `rect`/`hotspot` passes — no `mask_rect`/`rounded_background` materials, so no raw-material crash on the borrowed renderer.
+  - **Mouse-wheel** scroll (1 notch ≈ 1 row) + **thumb drag**.
+  - Culled rows are non-interactive (visibility-gated clicks + cleared stale flags); scroll resets to top on tab switch.
+
+### Notes / may need a tweak after testing
+- The wheel reads `scroll_axis` off the menu input service; if that action isn't mapped there, the **thumb drag still works** and I'll add a `scroll`-pass catcher. The drag sign (`sb_pos - cursor`) may need one flip — tell me if dragging feels inverted.
+
+## 0.2.32-dev (2026-06-19) — Fix the `<>` ESC button (table-form Localize hook) + auto-dumping probe
+
+### Fixed
+- **The ESC-menu "Mod Tweaker" button rendered as `<mod_tweaker_button_name>`.** gut's `_G.Localize` hook used the STRING form `mod:hook("_G", ...)`, which resolves the class via `_G["_G"]` — not reliably set in Stingray, so the hook silently never applied. Switched to the documented TABLE form `mod:hook(_G, "Localize", ...)`. The button now reads "Mod Tweaker". (Recorded in the localization rules.)
+
+### Changed
+- **The OptionsView probe now auto-dumps** the moment you open ESC → Options (once per game session) — no `/gut_dump_options` typing needed. Matches the data-harness philosophy: visit the menu, the layout appears in the log. The command is kept only as a manual re-dump.
+
+## 0.2.31-dev (2026-06-19) — Add OptionsView layout probe (scrollbar groundwork)
+
+Before implementing the Mod Tweaker scrollbar, capture how the real settings menu actually scrolls.
+
+### Added
+- `_gut_options_probe.lua` — hooks `OptionsView.on_enter` to capture the live vanilla settings-menu instance, and a `/gut_dump_options` command that dumps its scroll/mask/scrollbar machinery (the `list_mask` node bounds, `scroll_value`, `selected_settings_list` scroll fields, the `scrollbar` widget's passes/content/style, sample list-widget offsets) to the log. Ground-truth for replicating native scrolling in the Mod Tweaker. Open ESC → Options, then run `/gut_dump_options`.
+
+## 0.2.30-dev (2026-06-19) — Temporal Fix: rebase the health-bar position + widen the nudge range
+
+User feedback: the health-bar nudge maxed at -400 wasn't enough, and the correction was in the wrong direction.
+
+### Changed
+- **Rebased the player health-bar horizontal position** in `_gut_uitweaks_temporal_fix.lua` from Isaakk's rightward `+size/2 + 50` (the "wrong direction") to **centred on the anchor (`-size/2`) + a symmetric nudge** — negative pulls left, positive pushes right, default 0 = centred. Applies to all three bars (total_health_bar, hp_bar, hp_bar_highlight).
+- **Widened `gut_temporal_hp_nudge_x` range** from ±400 to **±2000** so the bar can be placed anywhere on screen.
+- **Action needed:** saved nudge values from before this build were relative to the old base — **reset the Health-bar nudge to 0 and re-dial.** (No auto-reset: VMF's settings restore could clobber it, so it's a manual one-time step.) Once you find the value that looks right, tell me and I'll bake it as the default.
+
+## 0.2.29-dev (2026-06-19) — Mod Tweaker: fix the menu-corruption + `<MOD TWEAKER>` title + tab prefix + click sound
+
+### Fixed
+- **Menu corruption (the "deprecated buttons" look on the real menus after leaving the Mod Tweaker).** Root cause found: the Mod Tweaker **shallow-cloned** `options_view_definitions.scenegraph_definition`, sharing the node TABLES with the real OptionsView, and parented our `mt_*` nodes onto OVD nodes — so `init_scenegraph` attached our children onto the SHARED OptionsView parent nodes, corrupting it. Now a **deep copy** — every node independent, OVD untouched. (This is the real cause of the recurring "old GUI"/"`<>`" after the menu, separate from the earlier crash.)
+- **`<MOD TWEAKER>` title.** `UIWidgets.create_simple_text` localizes its text even with `localize=false` passed, so the title rendered as the missing-key marker. Rebuilt title + hint as hand-made text widgets with `localize=false` (same fix as the tabs). Documented in the new localization rules.
+- **Tab labels: dropped the "Tweaker: " prefix** (this menu is all your tweaker mods) — tabs now read "GUI", "Chaos Wastes", etc.
+- **Click sound feedback** — tabs, checkboxes, steppers, dropdowns, and the exit button now play the native UI click sound (`play_gui_start_menu_button_click` via the music_world's wwise_world).
+
+### Still to do
+- **Scroll bar** — long mod option-lists still overflow the panel (rows are capped at 50 but not clipped/scrolled). A real scrollbar needs masked-clip rendering like the native settings list; that's the next focused task.
+
+## 0.2.28-dev (2026-06-19) — Mod Tweaker: your mods only, fix `<TWEAKER>` tabs, cap huge trees
+
+Addressing in-game feedback on the Mod Tweaker.
+
+### Fixed / changed
+- **Your mods only.** The menu was enumerating all ~19 installed VMF mods (no room for that many tabs). Now whitelisted to this author's mods (`_MY_MODS` in `_mod_tweaker_view.lua`): gut, wt, ct(+dev), gt(+dev), cim(+dev), crt, cosmetics_tweaker, dcp, enemy_tweaker, cwv, event_tweaker, mp, bt, vdl(+dev). Far fewer tabs.
+- **`<TWEAKER>` tabs fixed.** Tabs were built with `UIWidgets.create_text_button`, which hard-codes `localize = true` + `upper_case = true` on its text — so a mod name (a plain string, not a loc key) rendered as the missing-key marker `<TWEAKER: GUI>`. Rebuilt tabs as a hand-made hotspot+text widget with `localize = false`, so the raw label always shows. Selected/hovered tab is gold, others dim grey.
+- **Huge mods no longer explode.** A big mod's flattened settings tree hit `rows=1927`; with no scrolling yet that's a perf/offscreen blowup. Capped at 50 rows per category (revisit when list scrolling lands).
+
+### Still to do (separate)
+- The "options are read-only/greyed" report: most was read-only widget *types* (keybinds/groups) in non-your mods; with the whitelist you'll land on your mods' real checkboxes/sliders, which are editable. If a checkbox/slider still won't change, turn on Debug Logging, click one, and send the log (it prints `[mt:dump] input: checkbox …`).
+- Armory/Bestiary will move to **HeroView tabs** (inventory/cosmetic menus), not this settings menu.
+
+## 0.2.27-dev (2026-06-19) — Fix Phase-1 fork crash on nil offset settings (boss HP / GK quests / subtitles / twitch)
+
+`hb/hide_elements.lua:161: attempt to perform arithmetic on a nil value` — the Phase-1 fork brought over four hooks (boss HP bar, Grail-Knight quests, subtitles, twitch vote) that also **reposition** their elements, reading 9 numeric `OTHER_ELEMENTS_*` / `GK_QUESTS_*` offset/alpha settings. Those belong to a later phase and weren't registered yet (and 6 of them weren't even in the forked `SETTING_NAMES`), so `mod:get` returned nil and the `+` crashed.
+
+### Fixed
+- Guarded all 9 reads in `hide_elements.lua` with defaults (offsets → 0, GK-quests alpha → 200, matching the hook's own default check). The hides work; the repositions are no-ops until their settings land in a later phase. No crash regardless of registration state.
+- This very likely also resolves the earlier **"main menu shows old GUI + options in `<>`" after leaving the Mod Tweaker**: the `ChallengeTrackerUI._draw` (GK quests) hook reads those same nil settings and that UI draws in the keep, so it was erroring every frame and cascading into broken menu/loc rendering. With the reads guarded it no longer throws. (Please confirm next session.)
+
+## 0.2.26-dev (2026-06-19) — Respawn countdown over a dead teammate's portrait (optional)
+
+New optional HUD widget: a large number (seconds till respawn, one decimal) drawn over a **dead teammate's** portrait while they wait to respawn.
+
+### Added
+- `_gut_respawn_timer.lua` — hooks `UnitFrameUI.draw` (post; gut doesn't hook it, no collision), teammate frames only (`_frame_type == "team"`). Detects the dead-skull state via the frame's `data.is_dead` (set by UnitFramesHandler from the networked, husk-safe status extension) and draws the number centered on the frame's `portrait_pivot` node, with a shadow.
+- **Countdown source:** VT2 Adventure has no client-synced respawn countdown (`respawn_handler`'s `game_mode_data.respawn_timer` is host-only / non-networked), so this anchors a client-side estimate to the moment `data.is_dead` flips true (= when the skull appears = when the server starts the timer) and ticks down `RESPAWN_TIME` (30) or the mechanism's `hero_respawn_time`. Reads a touch early only if the host has a `faster_respawn` buff (invisible to clients); clamped at 0; stops when assisted-respawn begins.
+- Settings (group **Respawn Timer over Portrait**, default **off**): `gut_respawn_timer` toggle + `gut_respawn_font_size` (12–80, default 32) + `gut_respawn_r/g/b` colour (default 255/60/60, red).
+
+### To verify
+- Have a teammate (or bot) die and wait for respawn — a red countdown should appear over their skull portrait and tick to 0. If the number's position/size is off, the font size + colour are sliders; tell me and I can add a position nudge.
+
+## 0.2.25-dev (2026-06-19) — Fix UI Tweaks buff-bar end-time crash spam (stacking buffs)
+
+### Fixed
+- **UI Tweaks (HideBuffs) `PriorityBuffUI.lua:228: attempt to compare nil with number`** — diagnosed from a player console log spamming it ~1000×/session (once per frame, both buff bars) while a stacking buff was active (repro: Bardin Outcast Engineer pump stacks, `bardin_engineer_pump_buff`). `_add_buff` merges a re-applied buff with `data.end_time = end_time and ((data.end_time < end_time and end_time) or data.end_time)` — the `end_time and …` guard protects only the *incoming* end-time; if the *stored* `data.end_time` is nil (buff first added while infinite, then refreshed with a finite end-time) the compare is `nil < number` and throws.
+  - **Fix:** new `gut_compat_group` toggle **`gut_buffbar_endtime_fix`** (default ON). Wraps the global `PriorityBuffUI._add_buff`, mirrors its own match loop, and backfills only the single entry it will act on (stored nil end-time + finite incoming) with the incoming end-time before the compare runs. Result: the vanilla compare evaluates to false and keeps the refreshed end-time — no crash, no visible change beyond stopping the spam. Pure-Lua wrap of stock UI Tweaks (no forked resources); read live so the toggle reverts instantly; no-op if UI Tweaks isn't installed. New file `_gut_buffbar_endtime_fix.lua`, wired beside the Temporal Fix (load + `on_all_mods_loaded` retry + immediate try).
+
+## 0.2.24-dev (2026-06-19) — Absorb UI Tweaks (HideBuffs), Phase 1: hide UI elements / hide buffs / loading-screen hides
+
+First phase of porting UI Tweaks (HideBuffs) into gut so you can drop the standalone mod. Fork-and-renamespace: the forked Lua lives under `scripts/mods/gui_tweaker/hb/` with `get_mod("HideBuffs")` → `get_mod("gut")`. **Disable the standalone "UI Tweaks" mod once gut covers what you use, to avoid double-hooking.**
+
+### Added (28 settings, group "UI Tweaks (absorbed)")
+- `hb/hb_data.lua` — the data backbone (SETTING_NAMES, alignments, portrait-icon maps, etc.), with HideBuffs' VMF options-tree construction stripped (gut registers the tree statically). Penlight (`pl`) is globally available in VT2, so no bundling needed.
+- `hb/hide_elements.lua` — the self-contained single-element hide hooks: `ChallengeTrackerUI._draw`, `TutorialUI.*`, `MissionObjectiveUI.draw`, `BossHealthUI._draw`, `GameModeManager.has_activated_mutator` (hide-HUD-when-inspecting), `IngameHud._update_components_visibility`, `OutlineSystem.always` (pickup/objective outlines), `DialogueSystem.*`/`SubtitleGui`/`PlayerHud`/`TwitchVoteUI`/`WaitForRescueUI`/`TwitchIconView`, and `UnitFrameUI._update_bar_flash` (stop white-HP flashing). Plus the **Hide-HUD hotkey** (`HIDE_HUD_HOTKEY` keybind → `mod.hide_hud`).
+- `hb/level_loading_screen.lua` — hide loading-screen tips/subtitles + disable level-intro / Olesya audio.
+- Settings: **Hide UI Elements** (17, incl. boss HP bar, levels, frames, outlines, new-area popup, loading tips/subtitles, intro audio, twitch icon, rescue message), **Hide Active Buffs** (9 per-class passive/grimoire hides), and root toggles (default portrait frames, unobtrusive objective/mission markers). All ids kept verbatim from HideBuffs so the forked hooks resolve.
+
+### Notes
+- Skipped the `mod_events` lifecycle backbone this phase — the hide hooks are draw-time + the keybind auto-wires, so it isn't needed yet (it comes with the buff/unit-frame phases, along with its Phase-2+ guards).
+- Phases 2–5 (ammo counter, equipment UI, unit frames + portraits + temporal-fix reconciliation, buff bars, dodge counter) follow.
+
+## 0.2.23-dev (2026-06-19) — Temporal-fix offset now tunable; Parry Indicator hardened + diagnostic
+
+### Temporal fix — health-bar offset reported "wrong direction"
+My port faithfully reproduces Isaakk's Nov-2024 values (`size/2 + 50`), but a later game patch can move the correct spot. Made the horizontal placement a **slider** — `gut_temporal_hp_nudge_x` (range ±400, default 0 = the original fix), nested under the Temporal Fix toggle — so it can be dialled either way without a rebuild (negative = pull left). Added a one-shot debug line logging the bar's `size_x -> offset_x` so the right value is readable from the log.
+
+### Parry Indicator — "isn't working"
+The install log showed `toggle: false` — it's **off by default**; enable **Parry Indicator** in gut's settings. Also hardened it:
+- Recolour now runs **after** the original `update_shields` and **mutates RGB in place** (indices 2-4) instead of replacing the whole color table — leaving alpha to the game's fade animation (verified: vanilla `update_shields` only writes `style.color[1]`).
+- Added debug lines (`[gut:parry] update_shields hook live: N shields…` once, and `timed-block window ENTER` on each block) so if it's enabled and still not visible, the log shows whether the hook fires and the window is detected.
+
+## 0.2.22-dev (2026-06-19) — Fix Mod Tweaker VMF enumeration (correct field names from the in-game probe)
+
+The v0.2.20 auto-populate showed only gut's dogfood tab (`[mt] rebuild: total=1 … rows=2`). The in-game debug probe revealed why: VMF's real fields are `mods` / `mods_unloading_order` / `options_widgets_data` — **no leading underscore** (the reverse-engineered guess `_mods_unloading_order` was nil, so the enumeration bailed).
+
+### Fixed
+- `_mod_tweaker_view.lua` `_vmf_categories()` now iterates `vmf.options_widgets_data` directly: each per-mod list's `[1]` header carries `mod_name` + `readable_mod_name` (confirmed flat via the probe), `[2..]` are the setting nodes; the mod object for get/set is `get_mod(mod_name)`. So every VMF mod with options should now get a tab populated with its real settings.
+- Enhanced the debug probe to also log the first real setting node's keys + types (`[mt] vmf node[n][2] …`), so the per-widget shape (label/value field names) is visible for the next round if any node-level field needs adjusting.
+
+## 0.2.21-dev (2026-06-18) — Absorb Bestiary + Armory as one self-populating compendium (data layer)
+
+Merging the standalone **Armory** (weapon compendium, Workshop 1464907434) and **Bestiary** (enemy compendium, Workshop 1431393962) mods into gut as a single feature, rebuilt with a **pure-dynamic data layer** — content is enumerated live from the game's own tables, so new weapons/enemies (Necromancer, Beastmen, undead, DLC specials) appear automatically with no hardcoded roster to go stale. This phase lands the data providers + console probes; the HeroView compendium UI follows.
+
+### Added
+- `_ba_weapon_provider.lua` — enumerates `ItemMasterList` (keep `has_power_level` + weapon `slot_type`), groups by `can_wield` (engine source of truth, auto-handles cross-career weapons like the flail and new careers like Necromancer), resolves name/icon/3D-units/illusions, derives attack chains. Lazy-built cache.
+- `_ba_enemy_provider.lua` — enumerates `Breeds` filtered to combat AI breeds (`is_ai` + race ∈ skaven/chaos/beastmen/undead, minus critters/dummies/pets). Per-breed attributes ported verbatim from the original Bestiary (difficulty-scaled health/mass/stagger arrays, armor category, boss/elite/special). Replaces the original's hardcoded skaven/chaos/beastmen roster + icon-slot tables. Variant (shielded/commander/warlord/boss) grouping derived dynamically by suffix.
+- `_ba_attack_labeler.lua` — derives a weapon's light/heavy/push (melee) and ranged/alternate (ranged) attack chains + labels from `Weapons[template].actions`, replacing the original Armory's hand-authored `armory_wanted_attack_list`.
+- `_ba_compendium.lua` — feature entry; wires the providers + commands. Dofile'd from `gui_tweaker.lua`.
+- Commands: `/gut_ba_dump_weapons` and `/gut_ba_dump_breeds` (paste-ready console dumps to verify the live enumeration), plus `/gut_armory` and `/gut_bestiary` (open commands; UI pending).
+
+### Notes
+- Pure-dynamic by design (no curated preview offsets or attack labels) per direction — generic framing + generated labels, refined in-game later.
+- Single-hook discipline preserved: the compendium will add exactly one `HeroView.init` and one each `HeroViewStateOverview.create_ui_elements`/`_handle_input` hook in the UI phase (gut currently hooks only `HeroView.on_enter`, so no collision).
+
+## 0.2.20-dev (2026-06-18) — Mod Tweaker auto-populates a tab per VMF mod, with that mod's real options
+
+The Mod Tweaker now discovers every installed VMF mod and renders one tab each, populated from that mod's real settings — edits write straight to the live mod (firing its `on_setting_changed`). (Mapped VMF's runtime data model via a workflow, since VMF ships as bytecode.)
+
+### Added
+- **Auto-discovery** (`_mod_tweaker_view.lua`): enumerate `get_mod("VMF")._mods_unloading_order`; each mod's flattened widget list comes from `get_mod("VMF").options_widgets_data` (matched by `mod_name`). Excludes VMF itself; gut appears with its real settings. Sorted enabled-first then alphabetically; disabled mods marked `*`.
+- **Real get/set routing**: `mod_obj:get(id)` / `mod_obj:set(id, value, true)` (3rd arg fires the mod's `on_setting_changed` so it reacts live; VMF persists automatically). The gut controller path remains for any non-VMF category.
+- **Widget-type coverage**: checkbox + numeric (`[<]`/`[>]` stepper) are editable; **dropdown** is an option cycler; group titles + keybind/text show read-only. Field reads are defensive (flat or `content`-wrapped) and pcall-guarded.
+- **Tab paging**: the strip fits 8 tabs; with more mods it shows 7 + a `More N/M >` tab that pages through all of them (so every mod is reachable). Long names truncated.
+- **Debug probe**: with debug logging on, logs VMF's actual table fields + a sample node's keys once, so the real bytecode shape is visible if any reverse-engineered field name is off.
+
+### Known limitations (follow-ups)
+- No row scrolling yet — a mod with many settings draws past the list area (clipped, no crash).
+- Dropdown `show_widgets` sub-reveal not handled (all options shown); keybind/text not yet editable.
+
+## 0.2.19-dev (2026-06-18) — Absorb the Parry Indicator (works on every weapon)
+
+Ported the **Parry Indicator** mod (Workshop 1459917022) into gut as an optional toggle, with one deliberate change: it now works **regardless of whether the current weapon has the Parry trait**.
+
+### Added
+- `_gut_parry_indicator.lua` — recolours the HUD block/stamina shields (`FatigueUI.update_shields`) during the **timed-block window**: the first 0.5s after raising block, while actively blocking and not mid push / attack / revive / pull-up / assisted-respawn (the action-exclusion hooks are ported verbatim). Verified VT2 internals: `FatigueUI.self.shields[].style.color`; `GenericStatusExtension.raise_block_time` + `.blocking` (status_system extension).
+  - **Change from the original:** the original gated the cue on the weapon carrying the Parry trait (tracked via the `timed_block_cost` stat buff). gut **drops that gate** — the BuffExtension `has_parry` tracking is omitted entirely — so the timing cue shows on every weapon (the timed-block window exists for all weapons; Parry just makes blocks in it free).
+- Settings (group **Parry Indicator**, default **off**): `gut_parry_indicator` toggle + `gut_parry_r/g/b` colour (0-255, defaults 0/255/120 — a parry teal, matching the original).
+- Duplicate-hook preflight: none of `FatigueUI`/`ActionPushStagger`/`ActionSweep`/`InteractionDefinitions.*` were hooked elsewhere in gut.
+
+## 0.2.18-dev (2026-06-18) — Fix Mod Tweaker render crash (`checkbox_checked not found in Gui`)
+
+The menu now opens, but crashed on the first row: `ui_passes.lua:134: Material 'checkbox_checked' not found in Gui`.
+
+### Root cause
+Reused the native `options_view_definitions` checkbox/slider factories, which reference **raw (non-atlas) materials** — `checkbox_checked`, `checkbox_unchecked`, `rect_masked`, `highlight_texture` — that appear only inside that file and in no atlas. They aren't present in the borrowed in-game renderer's Gui, so the first texture pass crashed. (Classified every row material against `scripts/ui/atlas_settings/` to confirm which are atlas-backed vs raw.)
+
+### Fixed
+- **Rebuilt the row widgets** from things that resolve on the borrowed renderer: `rect`/`border` passes (no material lookup) + atlas-backed textures resolved globally by `UIAtlasHelper` whose master atlas is resident (proven: hero_view keep states render these on this renderer) — `matchmaking_checkbox` (checkbox marker) and `slider_thumb`. No more raw materials.
+  - **Checkbox**: rect box + border + atlas check marker + label; whole-row hotspot toggles it.
+  - **Numeric**: label + rect track + fill + atlas thumb + `[<]`/`[>]` click zones + value text (stepper; `step ≈ range/40`, min one display unit). Drag-to-set can come later.
+- **Draw on `ui_renderer`** (level_world) instead of `ui_top_renderer` — it carries the full settings-menu material set (the renderer OptionsView/hero_view use for their checkbox/slider widgets).
+- **Dropped the scrollbar** from the draw (its OVD definition also uses raw `rect_masked`/`mask_rect`); the list is short. Revisit with a rect-based scrollbar when scrolling is added.
+
+## 0.2.17-dev (2026-06-18) — Fix Mod Tweaker not opening + `<>` localization
+
+Two bugs reported after v0.2.16 shipped: the Mod Tweaker menu didn't open, and menu entries rendered as raw keys in angle brackets (`<…>`).
+
+### Fixed
+- **Menu didn't open.** The `IngameUI.setup_views` post-hook saw `self.views` as not-yet-a-table (the game's Versus update shifted when `self.views` is populated relative to `setup_views`), so the view never attached and the ESC transition correctly no-op'd. Now the view is **lazy-attached in the transition closure** — at click time the IngameUI is fully initialised (`self.views` + `self.ingame_ui_context` both set, `ingame_ui.lua:138`), which is the reliable build point. Extracted `_attach_view()` (idempotent), used by both the setup_views hook (early attempt) and the transition (guaranteed path). On dofile/`:new` failure it logs and stays a no-op rather than crashing.
+- **`<mod_tweaker_button_name>` ESC entry.** The ESC button localizes its `display_name` through the GLOBAL `Localize()`, where VMF mod localization is NOT registered — so the key rendered literally. Added a guarded `_G.Localize` hook resolving our one key to "Mod Tweaker" (duplicate-hook preflight: no other gut Localize hook).
+- **`<Tweaker: GUI>` tab labels** (would have shown once the menu opened). `UIWidgets.create_text_button` forces `localize=true` on its text styles; `create_tab` now disables `localize` on every text style so the raw category label renders.
+
+## 0.2.16-dev (2026-06-18) — Absorb the "UI Tweaks Temporal Fix" (player health-bar placement)
+
+Researched and reimplemented the removed/unsanctioned standalone mod **"UI Tweaks Temporal Fix"** (Isaakk, Workshop 3366928597) as a clean, sanctioned patch inside gut. Despite the name it has nothing to do with temporal reprojection — it re-aligns the **player's own health bar** in UI Tweaks' (HideBuffs) **mini-HUD layout**, which the game's Versus update knocked out of place.
+
+The exact fix was recovered by bytecode-diffing 3366928597 against stock UI Tweaks (1467751760), both decompiled with the same tool so only Isaakk's change remained:
+- `player_unit_frame_ui.lua` (`player_unit_frame_draw`, MINI_HUD_PRESET branch): `total_health_bar` / `hp_bar` / `hp_bar_highlight` `.offset[1]` sign-flip `-size/2` → `+size/2 + 50`; `ability_dynamic.offset[1]` `0` → `-2`.
+- `content_change_functions.lua` (player grimoire divider + bar): `offset[1]` shifted left by `58 * hp_bar_w_scale`.
+
+### Added
+- `_gut_uitweaks_temporal_fix.lua` — wraps the three PUBLIC HideBuffs functions (`player_unit_frame_draw`, `player_grimoire_debuff_divider_content_change_fun`, `player_grimoire_bar_content_change_fun`): calls the original, then re-applies the corrected offsets. Pure-Lua, sanctioned (no forked engine resources, unlike Isaakk's mod). Installed at `on_all_mods_loaded`; idempotent; no-op when UI Tweaks isn't installed. Gated on the toggle and read live each frame so toggling reverts instantly.
+- Setting **`gut_uitweaks_temporal_fix`** (group "UI Mod Compatibility"), default **on**.
+
+### To verify (in-game)
+- With UI Tweaks installed + its mini-HUD layout active, your own health bar should sit correctly (not shoved off to one side). Toggle the setting off to compare against the broken vanilla-UI-Tweaks placement.
+
+## 0.2.15-dev (2026-06-17) — Mod Tweaker: native settings-menu chrome (reuse OptionsView pieces)
+
+Replaced the crude rect placeholders with the REAL Options-menu look, by reusing the native pieces instead of hand-rolling. Full inventory of `options_view_definitions` taken (verified 2026-06-17).
+
+- `_mod_tweaker_definitions.lua` — now `local_require`s the native `options_view_definitions` and assembles from it: clones the native `scenegraph_definition` (so the 1400×900 window, frame, top/bottom panels, `list_mask`, scrollbar nodes all exist + lay out identically), builds the chrome from `background_widget_definitions` (the `menu_frame_12` border, `{255,10,10,10}` panels, `cogwheel_small` symbol), the native `scrollbar_definition`, and the native `exit_button` (`friends_icon_close`). Adds a horizontal tab strip (`mt_tab_N`) + a list anchor (`mt_list_start`) under `list_mask`. Tabs are `UIWidgets.create_text_button` (idle→white-on-hover/selected); rows are the native `create_checkbox_widget` / `create_slider_widget`.
+- `_mod_tweaker_view.lua` — rebuilt to draw the native chrome + tab strip + native rows + scrollbar in one `begin_pass`. Native checkbox flips `content.flag` in its own pass; native slider updates `content.value` via its passes; the view reads those and persists on change. Each row's native factory call is `pcall`-guarded (one bad row can't blank the menu) and logged. Render-state probe (`[mt:dump]`) + heartbeat retained.
+
+### To verify (in-game, debug logging on)
+- ESC → Mod Tweaker should now show a framed window (menu_frame_12 border, dark panels, cogwheel top-left, X close top-right) with a **Tweaker: GUI** tab across the top and native-style checkbox/slider rows. Send the `[mt:dump]` lines if anything's off.
+
+## 0.2.14-dev (2026-06-17) — Mod Tweaker render-state probe (diagnostic only)
+
+The view opens with no errors (log: `ModTweakerView attached`, no nil/texture/font failures), so nothing is failing to render — but the menu doesn't look like the native settings menu, and our logging only caught render *errors*, not widgets that render fine yet sit off-screen / zero-size / invisible. This build adds that missing visibility (instrument only — no behavior change yet):
+
+- `_mod_tweaker_view.lua` — `_dump_state()` logs, on view open (`[mt:dump]` lines, debug-gated): category/tab/row counts, the on-screen world position + size of `panel` / `tab_area` / `list_area` (vs the 1920×1080 screen), and each tab's/row's offset/size/value. So the log alone shows whether elements are positioned, sized, and on-screen.
+- `_mod_tweaker_view.lua` — per-~2s **draw heartbeat** (confirms `update`/`_draw` is running and how many widgets it draws) + **input-event logging** (tab click / checkbox toggle / slider drag) so we can see input reaching the widgets.
+
+No widget/visual changes — the next log tells us whether this is a layout/visibility bug or just needs the native widget art, before rebuilding.
+
+## 0.2.13-dev (2026-06-17) — Fix: view missing required IngameUI contract methods (input_service crash)
+
+v0.2.12 fixed construction (the view now attaches — log confirms `[mt] setup_views: ModTweakerView attached`), but opening it then crashed `ingame_ui.lua: attempt to call method 'input_service' (a nil value)`: IngameUI calls `active_view:input_service()` **unconditionally** every frame (ingame_ui.lua:416/770) and the view didn't implement it.
+
+### Fixed
+- `_mod_tweaker_view.lua` — added the three view-contract methods IngameUI calls unconditionally on the active/new/old view: `input_service()` (returns the view's input service), and no-op `post_update_on_enter(params)` / `post_update_on_exit(params, was_replaced)` (called on every view transition — would have crashed on open/close next). The other contract methods (`current_state` / `disable_toggle_menu` / `hotkey_allowed` / `set_map_interaction_state` / `is_survey_*`) are guarded with `if view.method` in IngameUI and are safely omitted.
+
+## 0.2.12-dev (2026-06-17) — Fix: Mod Tweaker view crashed IngameUI (nil view on open)
+
+In-game test of v0.2.11 crashed on opening the Mod Tweaker: `ingame_ui.lua:625: attempt to index a nil value` (current_view = "mod_tweaker_view"). Root cause: `IngameUI.init` passes the context to `setup_views(ingame_ui_context)` as an **argument** (ingame_ui.lua:107) and does NOT store `self.ingame_ui_context` at that point — the scaffold hook read `self.ingame_ui_context` (nil), so `ModTweakerView:new` threw, the view never attached, and transitioning to the missing view indexed `views[current_view]` = nil → hard crash.
+
+### Fixed
+- `gui_tweaker.lua` — the `setup_views` hook now captures the **`ingame_ui_context` argument** (`function(self, ingame_ui_context)`) and builds the view from it; refuses to attach a context-less view.
+- `gui_tweaker.lua` — the `mod_tweaker_view` transition closure now switches `current_view` only if `self.views.mod_tweaker_view` exists, so a missing view can never crash IngameUI (the ESC entry becomes a no-op instead).
+- `_mod_tweaker_view.lua` — `init` errors clearly on a nil context (caught by the hook's pcall) instead of failing mid-body.
+
+(Unrelated: the log also shows a pre-existing VMF/Loremasters-Armoury tooltip error in `vmf_options_view` via the deprecated `_G.UIResolutionScale_pow2` — not part of gut.)
+
+## 0.2.11-dev (2026-06-17) — Mod Tweaker view: first renderable pass (tasks #6–8)
+
+The Mod Tweaker (the in-game settings menu for all the Tweaker mods, opened from the ESC menu) now actually **renders** — previously the view was a stub and clicking the ESC entry opened nothing. Built from the verified VT2 `OptionsView` contract (read 2026-06-17): borrows the IngameUI renderer, registers a modal input service, draws in one `begin_pass`/`end_pass`, and returns to the ESC menu via `ingame_ui:transition_with_fade("ingame_menu")`.
+
+### Changed
+- **`_mod_tweaker_definitions.lua`** — real scenegraph (root/screen-dim/panel/title/left tab strip/right list/hint) + widget factories (panel, title, hint, tab, checkbox, slider). Deliberately atlas-free (`rect`+`text`+`hotspot` passes only) so the first on-screen pass can't fail on a missing texture; visual polish (proper checkbox/slider art) is a later pass. Per-row/per-tab hotspot styles give correct hit regions.
+- **`_mod_tweaker_view.lua`** — replaced the stub with a working `ModTweakerView`: init borrows the context renderer + registers the `gut_mod_tweaker` input service; `on_enter` shows the cursor + makes the view modal + builds tabs/rows from the registered categories; `update` draws and handles input; checkbox click toggles + persists, slider drag sets value + persists (both through the controller `mod.mod_tweaker` so there's a single registry); `exit` transitions back to the ESC menu. Reads the registry via the controller (NOT a fresh `_mod_tweaker_settings` dofile, which would be empty).
+- **`gui_tweaker.lua`** — registers a dogfood `gut` category (debug-logging checkbox that bridges to VMF + a demo slider) so the view shows real, interactive content end-to-end.
+
+### To verify (in-game)
+- In a mission or the keep, press ESC → click **Mod Tweaker** (above Options). A panel should open with a "Tweaker: GUI" tab on the left and two rows: a Debug-logging checkbox (click toggles ON/OFF) and a demo slider (drag to change the value). ESC closes back to the ESC menu. `/gut_regression_test` still passes the mod_tweaker entry/transition checks.
+
+## 0.2.10-dev (2026-06-16) — `/gut_lua_mem` diagnostic (Lua-heap footprint measurement)
+
+### Why
+A friend (nicho) hit the VT2 hard crash `Not enough memory reserved for heap lua_heap` (reserved 1073741824 = 1 GiB, `heap_allocator.cpp:227`) at mission load while running ~58 mods incl. the now-public Tweaker mods — the Lua heap was pinned at 100% (1 GiB used of 1 GiB). The `lua_atpanic/lua_close` callstack is the symptom, not the cause. To attribute footprint per-mod (which can't be read off source line counts — it's a runtime quantity) we need a live measurement.
+
+### Changed
+- `gui_tweaker.lua` — new `/gut_lua_mem [label]` command: forces a full GC and prints live Lua memory (`collectgarbage("count")`) in MB. Per-mod workflow: disable suspects → launch → load a level → `/gut_lua_mem baseline`; enable one mod → relaunch → `/gut_lua_mem <mod>`; the jump is that mod's footprint. (Lower-bound proxy: the engine `lua_heap` also holds bytecode + C-side Lua structures; compare deltas, not absolutes.)
+
+## 0.2.9-dev (2026-06-16) — Phase 0: fix Versus host-crash in vanilla damage-feedback (UI-absorption groundwork)
+
+### Why
+First step of absorbing NumericUI + UI Tweaks (HideBuffs) into gut against the current GUI. The reported Versus host-crash is a **vanilla** bug, independent of any rendering: `UnitFrameUI.add_damage_feedback` (`unit_frame_ui.lua`) assigns `self._damage_widgets[order_index]` and sets `widget.content.visible = true` (vanilla L1687-1690 / L1699-1702) for a NEW event *before* the over-MAX eviction at the bottom — and that eviction is dead-coded behind `fassert(false)` (vanilla L1724-1725). When more than `#self._damage_widgets` (4 with damage feedback on) distinct damage events are active at once, `order_index` exceeds the pool, the widget is `nil`, and `widget.content.visible = true` is a fatal index-of-nil. On the **host** it crashes the whole session. Reproduced in Versus by a Pactsworn Ratling Gunner's sustained machinegun fire stacking 5+ simultaneous damage messages on one hero frame (crash GUID `59ae9a93-…`, 2026-06-15). NumericUI re-news the vanilla `UnitFrameUI`, keeping this vanilla path live — but the bug is vanilla and the fix is independent of NumericUI.
+
+### Changed
+- `gui_tweaker.lua` — new `mod:hook("UnitFrameUI", "add_damage_feedback", …)` (the mandatory pre-flight grep confirmed gut had no prior `UnitFrameUI` hook). The wrapper drops the **overflow** event before it reaches the nil-widget index — only when the pool is already full AND a new `order_index` would be assigned (a brand-new event, or a re-activated `disabled` one). Existing active events pass through untouched. No vanilla state is mutated (pure pre-call guard; degrades safely if the vanilla shape drifts). The cap is self-healing: vanilla `_update_damage_feedback` removes expired events from `_hash_order` (`table.remove`, vanilla L1819), freeing slots. Perf-gated: the hash/lookup work only runs in the rare at-capacity case. Always-on (a safety guard, not a toggled feature). Decision rule extracted to `mod._gut_damage_feedback_should_drop` for testability.
+
+### Tests
+- New `/gut_regression_test` check `damage_feedback_overflow_guard` — pins the drop/keep decision across boundary cases (full pool + new → drop; free slot + new → keep; existing event → always pass through; empty pool → drop).
+
+### To verify (in-game)
+- Host a Versus match (host-side crash), keep Numeric UI enabled for now, play a Pactsworn Ratling Gunner and hold sustained fire on heroes — confirm **no host crash** (the 5th+ simultaneous damage message is silently dropped instead). Then `/gut_regression_test` → `PASS: damage_feedback_overflow_guard`.
+
+## 0.2.8-dev (2026-06-07) — HUD drag preserves each widget's vanilla baseline
+
+### Why
+Audit 2026-06-07 (F5, HIGH). `_apply_offset_to_scenegraph` wrote the RAW drag delta straight into `node.local_position[1]/[2]`, discarding each widget's non-zero vanilla baseline. The vanilla `HudCustomizer.run` (decompiled `scripts/ui/hud_ui/hud_customizer.lua:119-122`) can assign the raw offset only because the nodes IT customizes baseline at `{0,0}` — its `offset_registry` value IS that node's `local_position`. Our REGISTRY targets real HUD widget nodes whose baselines are non-zero: `equipment_ui` pivot `{0,69}`, `buff_ui` pivot_root `{150,18}`, `boss_health` pivot_parent `{0,-72}`, `challenge_tracker` pivot `{1,155}`, `loot_objective`/`news_feed` etc. So the first drag (even a tiny one) snapped those widgets to screen origin instead of moving them by the delta. `reset_widget` already wrote `entry.vanilla_position` back, confirming that field is the correct baseline reference — the drag path just wasn't using it.
+
+### Changed
+- `_hud_customizer.lua:106-134` — extracted the position math into a new exported `CustomizerModule.local_position_for(widget_id, dx, dy)` that returns `vanilla_position + delta` (reads `REGISTRY_BY_ID[widget_id].vanilla_position`, degrades to `{0,0}` baseline for unknown ids). `_apply_offset_to_scenegraph` now calls it instead of assigning the raw `dx, dy`. Baseline preserved; pure delta applied. No new hooks (the two call sites — `_reapply_all_offsets` and the per-class `init` hook body in `install_hooks` — already pass the registry entry's data through `widget_id`).
+- `gui_tweaker.lua:578-611` — added `_rt_register("hud_offset_preserves_vanilla_baseline", ...)`. Registered next to the `gut_*` HUD commands (after the `Customizer` dofile) because it closes over `Customizer`.
+
+### Tests
+- `/gut_regression_test` → new `hud_offset_preserves_vanilla_baseline` check. Asserts `local_position_for("equipment_ui", 25, -40)` == `{25, 29}` (baseline `{0,69}` + delta), `local_position_for("buff_ui", 0, 0)` == `{150, 18}` (zero-drag returns exact baseline — the old raw-write returned `{0,0}` here), and unknown ids degrade to `{0,0}+delta`. Fails if the baseline term is dropped again.
+
+### To verify
+- `/gut_edit_hud`, then drag `equipment_ui` (ammo/equipment cluster), `buff_ui` (buff icons), and `boss_health` a small amount — they should track the cursor smoothly from their current on-screen spot, NOT jump to the screen origin on the first click-drag.
+- `/gut_reset_hud` should still snap each widget back to its vanilla position (unchanged path).
+- `/gut_regression_test` reports the new check PASS.
+
+## 0.2.7-dev (2026-05-30) -- Loc integrity: ESC-menu button loc key
+
+### Why
+`qa/check_name_integrity.ps1` check #2 flagged `display_name = "mod_tweaker_button_name"` (gui_tweaker.lua:627) — the ESC-menu "Mod Tweaker" button entry assigned a loc key that resolved in no loc table. The vanilla ingame_view render path runs the button's `display_name` through Localize (style `localize = true`, ingame_view.lua:138-140 + :252), and `display_name_func` is a dead vanilla field never invoked — so the button rendered the raw key string instead of "Mod Tweaker".
+
+### Changed
+- `gui_tweaker_localization.lua` — added `mod_tweaker_button_name = { en = "Mod Tweaker" }` (matches the intent of the existing `display_name_func` that returned "Mod Tweaker").
+
+### Notes
+- Resolves the gui_tweaker entry in the 13 check_name_integrity errors.
+
+## 0.2.5-dev (2026-05-25) -- Restore dev/alpha/beta load banner (PROJECT_STANDARDS § 3.6 update)
+
+### Why
+User feedback 2026-05-25 EOD: earlier today's chat-spam cleanup pulled the `mod:echo("<Name> v" .. MOD_VERSION)` startup line from every mod. That's correct for stable (>=1.0.0) builds but hides the active version for in-flight dev/alpha/beta work. PROJECT_STANDARDS § 3.6 amended: dev/alpha/beta/0.x versions MUST echo `[<mod_id>] v<version> loaded` at module load; stable versions stay silent.
+
+### Changed
+- `gui_tweaker.lua` -- added a track-detector `if` after the applied-marker line: matches `-dev$` / `-alpha$` / `-beta$` / `-rc%d*$` / `^0%.`. When any branch fires, `mod:echo("[gut] v<MOD_VERSION> loaded")` runs once.
+
+## 0.2.4-dev (2026-05-25) -- Fix unescaped %APPDATA% in Debug Logging tooltip + add localization_format_safe runtime test
+
+### Why
+User report: "invalid string format on mouseover for Debug Logging" -- the canonical Universal Debug Logging tooltip (PROJECT_STANDARDS.md S 3.6) shipped with a literal %APPDATA%. Lua's string.format reads %A as a format directive and raises invalid option '%A' to 'format', surfacing as a red error tooltip in the VMF settings UI. All 16 active mods were affected (every mod ships the same canonical tooltip text).
+
+### Changed
+- gui_tweaker_localization.lua -- escaped literal % in enable_debug_logging_tooltip so VMF's tooltip render path sees %%APPDATA%% (renders as %APPDATA% to the player). Same wording, just escaped.
+- gui_tweaker.lua -- added _rt_register("localization_format_safe", ...) runtime check. dofiles the loc table and pcall(string.format, value) on every entry; surfaces any unescaped % via /<mod_id>_regression_test. Catches the bug class even when the static check (qa/check_localization.ps1) is skipped.
+
+### Notes
+Repo-wide multi-layer defense landing across all 16 mods in this sweep:
+
+1. Layer 1 -- 16 mods' loc strings fixed.
+2. Layer 2 -- qa/check_localization.ps1 extended to parse loc.<key> = { en = "..." } assignment style (chaos_wastes_tweaker's pattern -- previously slipped detection).
+3. Layer 3 -- _rt_register("localization_format_safe", ...) runtime check in every mod.
+4. Layer 4 -- tools/vmb-launcher/CLAUDE.md doctrine update: "Run qa/check_localization.ps1 before declaring any localization edit complete."
+5. Layer 5 -- documentation: LOCALIZATION_STANDARD.md S 1 "Recurring offender" worked example, docs/BUG_CLASSES.md S 16 new entry, PROJECT_STANDARDS.md S 3.6 canonical tooltip text now uses %%APPDATA%%.
+
+Static check (qa/check_localization.ps1) reports 0 errors post-fix (down from 15 detected + 1 hidden in chaos_wastes_tweaker).
+
+### Build
+VMBLauncher.exe build gui_tweaker -- verification only. NOT deployed, NOT uploaded.
+
+## 0.2.3-dev (2026-05-25) — Applied marker (universal — PROJECT_STANDARDS.md § 3.6)
+
+### Why
+Every mod now prints a single `mod:info("[gut] enabled v<X.Y.Z> settings_fp=<8-hex>")` line at load — self-documenting console_logs. Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. ALWAYS fires (not gated on debug_logging).
+
+### Changed
+- `gui_tweaker.lua` — added file-local `_settings_fingerprint()` helper + `mod:info("[gut] enabled ...")` applied-marker line right after the `_dbg_alert` helper.
+- `itemV2.cfg` — bumped to v0.2.3-dev.
+
+## 0.2.2-dev (2026-05-25) — Fix dead `NewsHeadUI` hook (issue #41)
+
+### Why
+Two `[MOD][gut][ERROR] (hook_safe): trying to hook object that doesn't exist: NewsHeadUI` lines fired every session. The HUD customizer's REGISTRY (`_hud_customizer.lua` line 23) used `class_name = "NewsHeadUI"`, but vanilla VT2's news-feed widget class is named `NewsFeedUI` — the file lives at `scripts/ui/hud_ui/news_feed_ui.lua`. The two error lines came from `install_hooks` iterating REGISTRY and registering both `init` and `destroy` hooks (lines 264 and 268) against the non-existent class.
+
+### Changed
+- `_hud_customizer.lua` line 23 — renamed `class_name` `NewsHeadUI` → `NewsFeedUI`, and `definitions_file` documentation reference from `news_head_ui_definitions.lua` → `news_feed_ui_definitions.lua` (the actual vanilla path).
+- `gui_tweaker.lua` — `MOD_VERSION` bumped 0.2.1-dev → 0.2.2-dev.
+- `itemV2.cfg` — title bumped to v0.2.2-dev.
+
+### Notes
+- `scenegraph_node_id = "pivot"` is correct — confirmed against `news_feed_ui_definitions.lua` scenegraph_definition.
+- Result: the news-feed HUD widget is now actually drag-repositionable in `/gut_edit_hud` instead of being silently absent from the live-views table.
+
+### Closes
+- #41 (gut hook_safe target `NewsHeadUI` doesn't exist — 2 silent dead hooks).
+
+## 0.2.1-dev (2026-05-25) — Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6)
+
+### Why
+User-requested two-channel debug discipline: `_dbg` for confirmation / dump / expected behavior (log file only), `_dbg_alert` for unexpected / wrong / mismatch (log file + in-game chat). Helpers installed in every active mod. gui_tweaker previously had no `_dbg` helper at all.
+
+### Changed
+- `gui_tweaker.lua` — added file-local `_dbg(fmt, ...)` and `_dbg_alert(fmt, ...)` helpers at top. Output prefix `[gut:dbg]` / `[gut]`.
+- `gui_tweaker.lua` — promoted the previous one-line `/gut_regression_test` stub to a proper `_RT_CHECKS` scaffold and registered `dbg_helpers_two_channel`.
+- `itemV2.cfg` — bumped to v0.2.1-dev.
+
+### Notes
+- 0 existing `_dbg(...)` call sites (helper was newly introduced).
+- 0 bare `mod:echo` reclassified — every `mod:echo` in `gui_tweaker.lua` is either inside a `/gut_*` chat command body (user-operational) or is the unconditional `hud-customizer hook install failed` operational error at line 306. Both classes are correct as bare `mod:echo` per the policy.

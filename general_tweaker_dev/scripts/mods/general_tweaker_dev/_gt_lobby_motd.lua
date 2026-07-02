@@ -57,9 +57,8 @@ local CHUNK_SIZE = 400
 local function _dbg_alert(fmt, ...)
     if type(mod._gt_dbg_alert) == "function" then
         mod._gt_dbg_alert(fmt, ...)
-    elseif mod:get("enable_debug_logging") then
-        mod:info("[gt:dbg] " .. fmt, ...)
-        mod:echo("[gt] " .. fmt, ...)
+    else
+        mod:debug("[gt:dbg] " .. fmt, ...)
     end
 end
 
@@ -229,7 +228,7 @@ mod._gt_lobby_register_join_handler("motd", _on_player_joined_party)
 -- Chat command: preview MOTD locally on the host (renamed lt_motd_test ->
 -- gt_lobby_motd_test per merge)
 -- ----------------------------------------------------------------------------
-mod:command("gt_lobby_motd_test", "Preview MOTD locally (host only)", function()
+mod:command("lobby_motd_test", "Preview MOTD locally (host only)", function()
     local text = mod:get("gt_lobby_motd_text")
     if not text or text == "" then
         Managers.chat:add_local_system_message(1, "[gt:lobby] gt_lobby_motd_text is empty.", true)
@@ -248,22 +247,22 @@ end)
 -- Chat command: set MOTD text (replaces the v0.2.61 removed text_input widget,
 -- which was an invalid VMF type and caused widget#103 failure on data.lua load)
 -- ----------------------------------------------------------------------------
-mod:command("gt_lobby_motd_set", "Set the MOTD text (host-side; sent to joiners when enabled)", function(...)
+mod:command("lobby_motd_set", "Set the MOTD text (host-side; sent to joiners when enabled)", function(...)
     local text = table.concat({...}, " ")
     if text == "" then
         mod:echo("[gt_lobby_motd] Current MOTD: %s", tostring(mod:get("gt_lobby_motd_text") or "(empty)"))
-        mod:echo("Usage: /gt_lobby_motd_set <text>")
+        mod:echo("Usage: /lobby_motd_set <text>")
         return
     end
     mod:set("gt_lobby_motd_text", text)
     mod:echo("[gt_lobby_motd] MOTD set to: %s", text)
-    mod:info("[gt:lobby:motd] set text len=%d via /gt_lobby_motd_set", #text)
+    mod:info("[gt:lobby:motd] set text len=%d via /lobby_motd_set", #text)
 end)
 
-mod:command("gt_lobby_motd_clear", "Clear the MOTD text (host-side)", function()
+mod:command("lobby_motd_clear", "Clear the MOTD text (host-side)", function()
     mod:set("gt_lobby_motd_text", "")
     mod:echo("[gt_lobby_motd] MOTD cleared.")
-    mod:info("[gt:lobby:motd] cleared via /gt_lobby_motd_clear")
+    mod:info("[gt:lobby:motd] cleared via /lobby_motd_clear")
 end)
 
 -- ----------------------------------------------------------------------------

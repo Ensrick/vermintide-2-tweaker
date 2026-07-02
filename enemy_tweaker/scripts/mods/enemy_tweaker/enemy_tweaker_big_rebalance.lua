@@ -28,6 +28,16 @@
 
 local mod = get_mod("enemy_tweaker")
 
+-- BR ON ICE (bt retired 2026-06-08). Belt-and-suspenders: if any stray loader
+-- still require()'s this file, return the no-op stub immediately so none of the
+-- BR data tables / hook installers below run or consume lua_heap. Seed the
+-- external mod._bloodlust_health sink so a reader gets {} not nil. To revive BR,
+-- delete this guard block.
+if true then
+    mod._bloodlust_health = mod._bloodlust_health or {}
+    return { on_enabled = function() end, on_setting_changed = function() end, on_disabled = function() end }
+end
+
 -- Canonical registration list moved to the new `bt` (buff_tweaker) mod.
 -- et no longer ships its own copy nor performs the master pre-register
 -- pass. It reads bt's `is_br_active()` public API to gate per-feature
@@ -56,13 +66,11 @@ local function _warn(fmt, ...)
     mod:warning("[BR] " .. fmt, ...)
 end
 
--- Local _dbg wrapper for the BR module — gated on enable_debug_logging (same
+-- Local _dbg wrapper for the BR module — routes through mod:debug (same
 -- contract as the main file's helper, just lives here so we don't reach across
 -- modules for hot per-event logging). Issue #17 auto-probe call sites.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[et:dbg] [BR] " .. fmt, ...)
-    end
+    mod:debug("[et:dbg] [BR] " .. fmt, ...)
 end
 
 -- Short hash of attacker_unit for log correlation. Stingray unit handles are

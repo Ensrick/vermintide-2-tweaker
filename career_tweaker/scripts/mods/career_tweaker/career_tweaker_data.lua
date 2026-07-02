@@ -65,7 +65,7 @@ return {
                     -- v0.3.21-dev: bypass the LEVEL gate on owned careers. DLC
                     -- ownership is preserved (unowned-DLC careers stay locked).
                     -- Hooks ProgressionUnlocks.is_unlocked_for_profile only.
-                    { setting_id = "unlock_all_careers",            type = "checkbox", default_value = false, tooltip = mod:localize("unlock_all_careers_tooltip") },
+                    { setting_id = "unlock_all_careers",            type = "checkbox", default_value = false, tooltip = "unlock_all_careers_tooltip" },
                 },
             },
             -- ============================================================
@@ -117,6 +117,9 @@ return {
             -- (SHARED with wt + et). Individual toggles overlay content into
             -- those pre-registered names.
             -- ============================================================
+--[==[ BIG REBALANCE WIDGETS — ON ICE (bt retired 2026-06-08). The cbr_group menu
+-- group is commented out so the inert BR toggles don't appear in the VMF menu.
+-- To restore, delete this opener line and the closing long-comment marker below.
             {
                 setting_id  = "cbr_group",
                 type        = "group",
@@ -393,7 +396,7 @@ return {
                                     cb("cbr_bh_passive_melee_kill"),
                                     -- MUTEX cluster member: bh_passive_choice (see career_tweaker.lua mutex.declare).
                                     -- Inlined instead of using cb() to attach the mutex-aware tooltip.
-                                    { setting_id = "cbr_bh_passive_perks_rework", type = "checkbox", default_value = false, tooltip = mod:localize("cbr_bh_passive_perks_rework_tooltip") },
+                                    { setting_id = "cbr_bh_passive_perks_rework", type = "checkbox", default_value = false, tooltip = "cbr_bh_passive_perks_rework_tooltip" },
                                     cb("cbr_bh_railgun_delayed_80"),
                                     cb("cbr_bh_row6_talent_6_3_shotgun_cdr"),
                                     cb("cbr_bh_row2_talent_2_2_as_every_3_shots"),
@@ -518,6 +521,7 @@ return {
                     }
                 end)(),
             },
+]==]
             {
                 setting_id = "talent_reworks_group",
                 type       = "group",
@@ -564,6 +568,7 @@ return {
                                     { setting_id = "rework_dr_engineer_ingenious_ordnance_240s",       type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_engineer_full_head_of_steam_4pct",       type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_engineer_gromril_plated_shot_full_speed", type = "checkbox", default_value = false },
+                                    { setting_id = "rework_dr_engineer_leading_shots",                 type = "checkbox", default_value = false, tooltip = "rework_dr_engineer_leading_shots_description" },
                                 },
                             },
                         },
@@ -588,6 +593,7 @@ return {
                                 sub_widgets = {
                                     { setting_id = "rework_es_mercenary_hellborgs_tutelage",            type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit", type = "checkbox", default_value = false },
+                                    { setting_id = "rework_es_mercenary_enhanced_training_tiered",      type = "checkbox", default_value = false },
                                 },
                             },
                             {
@@ -672,8 +678,15 @@ return {
                                 setting_id  = "rework_bw_unchained_group",
                                 type        = "group",
                                 sub_widgets = {
-                                    { setting_id = "rework_bw_unchained_wildfire_burst_and_radius",                  type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_unstable_strength_rescale",                  type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_unstable_strength_dot",                      type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_natural_talent_ranged",                     type = "checkbox", default_value = false },
                                     { setting_id = "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",      type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_abandon_innate_flame_unending",             type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_chain_reaction_ignite",                      type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_fuel_for_the_fire_vent",                     type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_career_skill_max_us",                        type = "checkbox", default_value = false },
+                                    { setting_id = "rework_bw_unchained_wildfire_burst_and_radius",                  type = "checkbox", default_value = false },
                                 },
                             },
                         },
@@ -705,7 +718,7 @@ return {
                                     { setting_id = "rework_wh_bountyhunter_rile_the_mob_movement",                        type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload",     type = "checkbox", default_value = false },
                                     -- MUTEX cluster member: bh_passive_choice (see career_tweaker.lua mutex.declare)
-                                    { setting_id = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",    type = "checkbox", default_value = false, tooltip = mod:localize("rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip") },
+                                    { setting_id = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",    type = "checkbox", default_value = false, tooltip = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip" },
                                     { setting_id = "rework_wh_bountyhunter_just_reward_5s_cooldown",                      type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill",         type = "checkbox", default_value = false },
                                 },
@@ -738,42 +751,47 @@ return {
                 type        = "group",
                 sub_widgets = {
                     { setting_id = "trn_kruber_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_es_mercenary", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_mercenary_tooltip") },
-                        { setting_id = "trn_es_huntsman", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_huntsman_tooltip") },
-                        { setting_id = "trn_es_knight", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_knight_tooltip") },
-                        { setting_id = "trn_es_questingknight", type = "checkbox", default_value = false, tooltip = mod:localize("trn_es_questingknight_tooltip") },
+                        { setting_id = "trn_es_mercenary", type = "checkbox", default_value = false, tooltip = "trn_es_mercenary_tooltip" },
+                        { setting_id = "trn_es_huntsman", type = "checkbox", default_value = false, tooltip = "trn_es_huntsman_tooltip" },
+                        { setting_id = "trn_es_knight", type = "checkbox", default_value = false, tooltip = "trn_es_knight_tooltip" },
+                        { setting_id = "trn_es_questingknight", type = "checkbox", default_value = false, tooltip = "trn_es_questingknight_tooltip" },
                     } },
                     { setting_id = "trn_bardin_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_dr_ranger", type = "checkbox", default_value = false, tooltip = mod:localize("trn_dr_ranger_tooltip") },
-                        { setting_id = "trn_dr_ironbreaker", type = "checkbox", default_value = false, tooltip = mod:localize("trn_dr_ironbreaker_tooltip") },
-                        { setting_id = "trn_dr_slayer", type = "checkbox", default_value = false, tooltip = mod:localize("trn_dr_slayer_tooltip") },
+                        { setting_id = "trn_dr_ranger", type = "checkbox", default_value = false, tooltip = "trn_dr_ranger_tooltip" },
+                        { setting_id = "trn_dr_ironbreaker", type = "checkbox", default_value = false, tooltip = "trn_dr_ironbreaker_tooltip" },
+                        { setting_id = "trn_dr_slayer", type = "checkbox", default_value = false, tooltip = "trn_dr_slayer_tooltip" },
                     } },
                     { setting_id = "trn_kerillian_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_we_waywatcher", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_waywatcher_tooltip") },
-                        { setting_id = "trn_we_maidenguard", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_maidenguard_tooltip") },
-                        { setting_id = "trn_we_shade", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_shade_tooltip") },
-                        { setting_id = "trn_we_thornsister", type = "checkbox", default_value = false, tooltip = mod:localize("trn_we_thornsister_tooltip") },
+                        { setting_id = "trn_we_waywatcher", type = "checkbox", default_value = false, tooltip = "trn_we_waywatcher_tooltip" },
+                        { setting_id = "trn_we_maidenguard", type = "checkbox", default_value = false, tooltip = "trn_we_maidenguard_tooltip" },
+                        { setting_id = "trn_we_shade", type = "checkbox", default_value = false, tooltip = "trn_we_shade_tooltip" },
+                        { setting_id = "trn_we_thornsister", type = "checkbox", default_value = false, tooltip = "trn_we_thornsister_tooltip" },
                     } },
                     { setting_id = "trn_saltzpyre_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_wh_bountyhunter", type = "checkbox", default_value = false, tooltip = mod:localize("trn_wh_bountyhunter_tooltip") },
-                        { setting_id = "trn_wh_zealot", type = "checkbox", default_value = false, tooltip = mod:localize("trn_wh_zealot_tooltip") },
-                        { setting_id = "trn_wh_priest", type = "checkbox", default_value = false, tooltip = mod:localize("trn_wh_priest_tooltip") },
+                        { setting_id = "trn_wh_bountyhunter", type = "checkbox", default_value = false, tooltip = "trn_wh_bountyhunter_tooltip" },
+                        { setting_id = "trn_wh_zealot", type = "checkbox", default_value = false, tooltip = "trn_wh_zealot_tooltip" },
+                        { setting_id = "trn_wh_priest", type = "checkbox", default_value = false, tooltip = "trn_wh_priest_tooltip" },
                     } },
                     { setting_id = "trn_sienna_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_bw_adept", type = "checkbox", default_value = false, tooltip = mod:localize("trn_bw_adept_tooltip") },
-                        { setting_id = "trn_bw_scholar", type = "checkbox", default_value = false, tooltip = mod:localize("trn_bw_scholar_tooltip") },
-                        { setting_id = "trn_bw_necromancer", type = "checkbox", default_value = false, tooltip = mod:localize("trn_bw_necromancer_tooltip") },
+                        { setting_id = "trn_bw_adept", type = "checkbox", default_value = false, tooltip = "trn_bw_adept_tooltip" },
+                        { setting_id = "trn_bw_scholar", type = "checkbox", default_value = false, tooltip = "trn_bw_scholar_tooltip" },
+                        { setting_id = "trn_bw_necromancer", type = "checkbox", default_value = false, tooltip = "trn_bw_necromancer_tooltip" },
                     } },
                 },
             },
-            -- Universal Debug Logging toggle (PROJECT_STANDARDS.md § 3.6).
-            -- Must be at the BOTTOM of the widget tree, top-level (NOT inside
-            -- any group), key `enable_debug_logging` verbatim across every mod.
+            -- ============================================================
+            -- Armor & Overcharge (hook-based; v0.3.32-dev)
+            -- ============================================================
             {
-                setting_id    = "enable_debug_logging",
-                type          = "checkbox",
-                default_value = false,
-                tooltip       = mod:localize("enable_debug_logging_tooltip"),
+                setting_id  = "armor_overcharge_group",
+                type        = "group",
+                sub_widgets = {
+                    { setting_id = "armor_gromril_ignore_chip",             type = "checkbox", default_value = false, tooltip = "armor_gromril_ignore_chip_tooltip" },
+                    { setting_id = "armor_specials_dont_break_gromril",     type = "checkbox", default_value = false, tooltip = "armor_specials_dont_break_gromril_tooltip" },
+                    { setting_id = "unchained_no_overcharge_from_ff",       type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_ff_tooltip" },
+                    { setting_id = "unchained_no_overcharge_from_disablers", type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_disablers_tooltip" },
+                    { setting_id = "oe_benefit_from_cooldown_reduction",    type = "checkbox", default_value = false, tooltip = "oe_benefit_from_cooldown_reduction_tooltip" },
+                },
             },
         },
     },

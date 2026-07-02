@@ -33,7 +33,7 @@ local mod = get_mod("cosmetics_tweaker")
 local M = {}
 
 local function _enabled()
-    return mod:get("enable_debug_logging") == true
+    return true
 end
 
 -- ===========================================================================

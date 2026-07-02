@@ -1,5 +1,7 @@
 # Verminious Dreams Lighting — Changelog
 
+## 1.0.7 (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
+
 ## 1.0.6 (2026-05-25) -- Remove startup banner echo + tidy on_setting_changed (chat-echo policy: PROJECT_STANDARDS § 3.6)
 
 ### Why
