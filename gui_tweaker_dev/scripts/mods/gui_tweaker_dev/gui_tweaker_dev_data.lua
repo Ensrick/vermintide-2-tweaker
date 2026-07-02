@@ -312,6 +312,26 @@ return {
                 },
             },
             -- ================================================================
+            -- Native Loadouts (Modded Realm) -- issue #175
+            -- ================================================================
+            -- When in the modded (EAC-untrusted) realm, the native I-VI loadout bar
+            -- reads/writes a modded-only store so official loadouts stay untouched.
+            -- Inert in the official realm and in Versus. Default ON. See
+            -- _gut_native_loadouts.lua. Label ordered A->Z between "Mod Tweaker" and
+            -- "On-Screen Overlays".
+            {
+                setting_id  = "gut_native_loadouts_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gut_native_loadouts_enabled",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = "gut_native_loadouts_enabled_tooltip",
+                    },
+                },
+            },
+            -- ================================================================
             -- On-Screen Overlays
             -- ================================================================
             -- Optional overlays drawn on top of the game: parry-block colour,

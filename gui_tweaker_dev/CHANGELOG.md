@@ -5,6 +5,57 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.170-dev (2026-07-02) -- FEATURE: modded-realm-scoped native loadouts (#175)
+
+### Why
+In the modded (EAC-untrusted) realm the game's native saved-loadout system (the I-VI
+loadout bar) reads and writes the SAME PlayFab-backed store as the official realm, so
+modded play can overwrite official loadouts. The character-data commit push
+(`updateHeroAttributes`, playfab_mirror_base.lua:2891/2903) is NOT eac-gated (unlike
+stats/weaves/poses at :2826/2839/2857), so modded equips reach the official cloud data.
+
+### Changed
+- **New `_gut_native_loadouts.lua`.** While in the modded realm (Adventure only), the
+  native I-VI loadout bar -- gear, cosmetics, per-loadout talents, and bot designation --
+  reads and writes a modded-only VMF store (`native_loadouts`), fully isolated from the
+  official-realm loadouts. Default ON. Inert in the official realm and in Versus.
+- **Isolation approach:** intercept the backend MIRROR, `PlayFabMirrorAdventure`, which is
+  the single convergence point below the item + talents interfaces (and any MoreItemsLibrary
+  interface swap or Loremaster's Armoury dispatch, which all call the mirror). Hook the four
+  mirror WRITE methods (`set_character_data` / `set_loadout_index` / `add_loadout` /
+  `delete_loadout`) to capture into the store and NO-OP vanilla, so `_career_data` /
+  `_characters_data` are never mutated -- the commit diff (`_check_career_data`) then finds
+  nothing dirty and never pushes modded loadouts to PlayFab. Hook the three mirror READ
+  methods (`get_character_data` / `get_career_loadouts` / `has_loadout`) to serve from the
+  store, so the interface caches refresh with modded values and the in-session equip/spawn
+  flow works unchanged. Hooked on the concrete runtime subclass `PlayFabMirrorAdventure`
+  (NOT `PlayFabMirrorBase`) because class.lua copies parent methods into the child.
+- **Seeding:** on first activation per career the official loadouts (contents + selected
+  index + per-loadout talents) are snapshotted once into the store; official data is only
+  ever READ, later official changes do not re-sync.
+- **Bot designation:** `HeroWindowLoadoutSelectionConsole._save_bot_equipment` writes the
+  bot loadout index to the store and skips the `PlayerData.loadout_selection.bot_equipment`
+  write; `BackendInterfaceItemPlayfab.refresh_bot_loadouts` (hook_safe overlay) resolves the
+  bot loadout from the store.
+- **Dangling id validation:** stored gear ids are validated against the backend once per
+  career per session; dead ids are dropped (printf, no crash). Cosmetic/pose slots degrade
+  gracefully to empty via vanilla.
+- **Realm signal:** `script_data["eac-untrusted"]` (application_parameter.lua:150; named
+  `in_modded_realm` at mod_manager.lua:22). Failsafe: any uncertainty => fully inert.
+- Master toggle `gut_native_loadouts_enabled` in a new top-level "Native Loadouts (Modded
+  Realm)" group (gui_tweaker_dev_data.lua / _localization.lua). Diagnostics via `printf`
+  with the `[gut_dev:NATIVE_LOADOUTS]` prefix on load, seed, sanitize, and every write.
+
+### Notes
+- Cross-mod: our hooks sit at the mirror layer, BELOW cim's / cosmetics_tweaker's
+  BackendUtils + interface hooks, so they do not collide; mp installs zero backend hooks.
+- Loadout cap read from `InventorySettings.MAX_NUM_CUSTOM_LOADOUTS` (6 today), never
+  hardcoded, so issue #231's raise to 30 needs no change here.
+- Regression markers: `native_loadouts_installed`, `native_loadouts_failsafe_inert`,
+  `native_loadouts_no_hardcoded_6`, `native_loadouts_hook_targets_unique` (`/gut_dev`
+  regression_test). Needs in-game verification (see the ship report).
+- Dedicated-server hosting (`PlayFabMirrorDedicated`) is out of scope (P2P host only).
+
 ## 0.2.169-dev (2026-07-02) -- FIX: "Parting of the Waves" brief fade-IN on auto-skip (#140)
 
 - **Skip Cutscenes fade-in fix.** On the mission "Parting of the Waves" (`dlc_portals`),

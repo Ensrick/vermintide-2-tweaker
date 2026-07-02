@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.169-dev"
+local MOD_VERSION = "0.2.170-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1666,6 +1666,22 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_parry_indicator")
 -- Optional: large respawn countdown over a dead teammate's portrait (client-safe
 -- estimate anchored to the dead-skull state). See _gut_respawn_timer.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_respawn_timer")
+
+-- Modded-realm-scoped native loadouts (#175): while in the modded (EAC-untrusted) realm,
+-- the native I-VI loadout bar reads/writes a MODDED-ONLY VMF store so official-realm
+-- loadouts are never touched by modded play. Intercepts the backend MIRROR
+-- (PlayFabMirrorAdventure) reads/writes -- the single convergence point below the item +
+-- talents interfaces (PRE-FLIGHT: gut has no other hook on PlayFabMirrorAdventure,
+-- BackendInterfaceItemPlayfab.refresh_bot_loadouts, or HeroWindowLoadoutSelectionConsole
+-- ._save_bot_equipment; gut's only HeroWindowLoadoutSelectionConsole hook is on
+-- ._show_context_menu in _gut_mission_inventory.lua). Inert in the official realm and in
+-- Versus. See _gut_native_loadouts.lua for the full isolation rationale.
+local _gut_native_loadouts = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_native_loadouts")
+if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.rt_checks) == "table" then
+    for _, c in ipairs(_gut_native_loadouts.rt_checks) do
+        _rt_register(c.name, c.fn)
+    end
+end
 
 -- Floating Damage Numbers (MIGRATED from general_tweaker 2026-06-29): client-side,
 -- networking-free numbers over enemies you damage, via the engine's own

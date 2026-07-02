@@ -267,6 +267,19 @@ return {
     },
 
     -- ============================================================
+    -- Native Loadouts (Modded Realm) -- issue #175
+    -- ============================================================
+    gut_native_loadouts_group = {
+        en = "Native Loadouts (Modded Realm)",
+    },
+    gut_native_loadouts_enabled = {
+        en = "[untested] Store modded loadouts separately",
+    },
+    gut_native_loadouts_enabled_tooltip = {
+        en = "While you are in the modded realm, the game's built-in I to VI loadout bar (gear, cosmetics, talents, and bot loadout) reads and writes a modded-only store, kept separate from your official-realm loadouts. Modded changes never touch your official loadouts, and official changes never leak into modded. On first use each career's official loadouts are copied in once as a starting point. Has no effect in the official realm or in Versus. On by default.",
+    },
+
+    -- ============================================================
     -- On-Screen Overlays (parry indicator, respawn timer, damage numbers)
     -- ============================================================
     -- Label de-jargoned from "HUD"; setting_id (gut_hud_group) unchanged.
