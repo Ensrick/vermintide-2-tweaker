@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.214-dev"
+local MOD_VERSION = "0.7.215-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1189,6 +1189,74 @@ mod:hook("DeusChestExtension", "can_be_unlocked", function(func, self)
         return false
     end
     return true
+end)
+
+-- #252: same-tier temper (upgrade) altar re-roll shows the wrong (red) prompt.
+-- The can_be_unlocked / update_upgrade_chest_color hooks above let a RE-ARMED upgrade altar
+-- re-roll at the SAME rarity, but DeusUpgradeWeaponInteractionUI._populate_widget
+-- (deus_upgrade_weapon_interaction_ui.lua:18-107) runs its OWN rarity test
+-- (`weapon_rarity_order < chest_rarity_order`, :46) and at same tier takes the else branch
+-- (:92-99), painting the RED disabled_text `reliquary_inactive_rarity`. ct never hooked this UI,
+-- so the panel still reads "cannot upgrade" even though the altar is lit + interactable.
+-- FIX: post-hook (hook_safe, runs after vanilla) the DERIVED class's _populate_widget (the method
+-- is defined on DeusUpgradeWeaponInteractionUI, per the repo "hook the derived class" rule). For a
+-- re-armed (uses>0) UPGRADE altar whose wielded rarity ORDER == the stored purchase's (== ONLY; a
+-- real downgrade `order >` keeps the red text and is still blocked by can_be_unlocked; a real
+-- upgrade `order <` already hits vanilla's available branch), repaint as available: item tooltip +
+-- rarity + cost (mirrors vanilla :62-91), clear disabled_text, and set reward_info_text
+-- (localize=false / white) to a plain re-roll message (no em dash). Everything is pcall-guarded, so
+-- any API drift degrades to vanilla's (red) presentation rather than crashing.
+CT_RELIQUARY_REROLL_MARKER = "reliquary_reroll_message:same_tier_upgrade_altar_v0.7.215"
+mod:hook_safe("DeusUpgradeWeaponInteractionUI", "_populate_widget", function(self, interactable_unit, wielded_slot_name)
+    pcall(function()
+        local DCT = rawget(_G, "DEUS_CHEST_TYPES")
+        if not (DCT and interactable_unit) then return end
+        local SU = rawget(_G, "ScriptUnit")
+        local pickup_ext = SU and SU.has_extension and SU.has_extension(interactable_unit, "pickup_system")
+        if not (pickup_ext and pickup_ext._chest_type == DCT.upgrade) then return end
+        local go_id = pickup_ext._go_id
+        local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+        if uses == 0 then return end                        -- first use: leave vanilla path
+        -- Others still joining -> vanilla shows the joining message; leave it. Derive from the
+        -- profile_synchronizer (vanilla :52), NOT a self field (the agent's `self._others_actually_ingame`
+        -- does not exist) -- same gate the can_be_unlocked hook above uses.
+        local nm = Managers.state and Managers.state.network
+        local ps = nm and nm.profile_synchronizer
+        if not (ps and ps.others_actually_ingame and ps:others_actually_ingame()) then return end
+        local mechanism = Managers.mechanism and Managers.mechanism:game_mechanism()
+        local drc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+        if not drc then return end
+        local stored = pickup_ext.get_stored_purchase and pickup_ext:get_stored_purchase()
+        if not stored then return end
+        local melee, ranged = drc:get_own_loadout()
+        local equipped = (wielded_slot_name == "slot_melee") and melee or ranged
+        if not equipped then return end
+        local rs = rawget(_G, "RaritySettings")
+        local wr = rs and rs[equipped.rarity]
+        local cr = rs and rs[stored.rarity]
+        if not (wr and cr) then return end
+        if wr.order ~= cr.order then return end             -- ONLY same-tier; up/downgrade untouched
+        local chest_info_widget = self._widgets_by_name and self._widgets_by_name.chest_content
+        local tooltip_widget    = self._widgets_by_name and self._widgets_by_name.weapon_tooltip
+        if not (chest_info_widget and tooltip_widget) then return end
+        local peer_id = drc:get_own_peer_id()
+        local soft = drc:get_player_soft_currency(peer_id) or 0
+        local cost = pickup_ext:get_purchase_cost() or 0
+        tooltip_widget.content.item = equipped
+        tooltip_widget.content.force_equipped = true
+        tooltip_widget.style.item.draw_end_passes = true
+        local rarity = stored.rarity
+        chest_info_widget.content.rarity_text = rs[rarity].display_name
+        local Cols = rawget(_G, "Colors")
+        if Cols and Cols.get_table then chest_info_widget.style.rarity.text_color = Cols.get_table(rarity) end
+        chest_info_widget.content.cost_text = soft .. "/" .. cost
+        chest_info_widget.style.cost_text.text_color = (cost <= soft)
+            and { 255, 255, 255, 255 } or { 255, 255, 0, 0 }
+        chest_info_widget.content.reward_info_text = "Re-rolls this weapon's traits and properties"
+        chest_info_widget.content.show_coin_icon = true
+        chest_info_widget.content.disabled_text = nil
+        self._calculate_offset = true
+    end)
 end)
 
 -- ============================================================
@@ -4758,6 +4826,18 @@ mod:hook(_G, "Localize", function(func, key, ...)
                 return m .. "\n8 second cooldown."
             end
             return m
+        end
+        -- #133: the VANILLA Manann's Tempest weapon trait (deus_crit_chain_lightning) also
+        -- gains the 8s cooldown when tweak_manann_tempest_cooldown is on - the
+        -- ProcFunctions.chain_lightning hook gates BOTH the mod boon AND this trait. The mod-boon
+        -- branch above only covers description_ct_boon_manann_tempest; append the same note to the
+        -- vanilla trait's advanced_description (weapon_traits_morris.lua:563) so its tooltip tracks
+        -- behavior too. Appends to func()'s vanilla string so it stays EXACTLY vanilla with the
+        -- tweak off; the vanilla %s target-count placeholder is substituted downstream by
+        -- UIUtils.get_trait_description. No `%` in the appended line, so no %% escaping needed.
+        if key == "description_deus_crit_chain_lightning"
+            and effective_setting("tweak_manann_tempest_cooldown") then
+            return func(key, ...) .. "\n8 second cooldown."
         end
         if key == "description_deus_reckless_swings" and reckless_swings_originals then
             return RECKLESS_SWINGS_DESC_OVERRIDE
@@ -12992,6 +13072,20 @@ _rt_register("perf104_census_installed", function()
     end
     if type(CT_PERF_WINDOW) ~= "number" or CT_PERF_WINDOW <= 0 then
         return "CT_PERF_WINDOW not a positive number"
+    end
+end)
+
+_rt_register("reliquary_reroll_message_hook", function()
+    -- v0.7.215 (#252): the same-tier re-roll prompt repaint is a single hook_safe on
+    -- DeusUpgradeWeaponInteractionUI._populate_widget. Verify the marker survived into the
+    -- bundle and the vanilla class/method is still present to hook.
+    if type(CT_RELIQUARY_REROLL_MARKER) ~= "string" or #CT_RELIQUARY_REROLL_MARKER == 0 then
+        return "CT_RELIQUARY_REROLL_MARKER not defined (#252 reroll-message hook missing)"
+    end
+    local cls = rawget(_G, "DeusUpgradeWeaponInteractionUI")
+    if not cls then return nil end
+    if type(cls._populate_widget) ~= "function" then
+        return "_populate_widget missing on DeusUpgradeWeaponInteractionUI"
     end
 end)
 
