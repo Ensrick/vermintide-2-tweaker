@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.64-dev"
+local MOD_VERSION = "0.9.65-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -882,6 +882,21 @@ mod.on_game_state_changed = function(status, state_name)
     -- Fix: PC-A itself re-emits its `_local_la_equips` on every state
     -- change. Drain logic lives in mod.update (after locals are declared).
     mod._la_self_rebroadcast_pending = true
+
+    -- v0.9.65-dev (#233): arm a bounded, per-frame CLIENT-side re-apply of every
+    -- REMOTE peer's cached LA offhand/illusion equip after a level transition. The
+    -- self-rebroadcast above only re-emits the LOCAL player's equips to the network;
+    -- it does NOT restore a remote wearer's shield on THIS machine. The host's own
+    -- post-transition rebroadcast races ahead of a still-loading client (the client's
+    -- peer_ingame flips true ~25ms AFTER the host emits, so the "all" send never
+    -- reaches it) and nothing re-sends -- so the host's kind="unit" LA shield reverted
+    -- to vanilla on the client at every mission<->keep transition. `_la_equips_by_peer`
+    -- survives transitions (only cleared on peer disconnect), so we already hold the
+    -- authoritative data locally; the mod.update drain (search
+    -- `_la_reapply_remote_until`) walks it and drives the existing `_ensure_offhand_mesh`
+    -- pulse until each remote wearer's mesh converges. Refreshed on every state
+    -- callback; the last one (StateIngame/enter) sets the ~10s window from load-done.
+    mod._la_reapply_remote_until = os.clock() + 10
 
     -- v0.9.13-dev: snapshot LA state on every game-state change. Gated on the
     -- debug_dumps toggle. Fires on inn entry, mission entry, mission exit —
@@ -2573,18 +2588,33 @@ local _in_create_equipment = false
 -- ScriptWorld.render early-returns before any blend. Stopped the crash but skipped
 -- blend+apply+render_world -> the 3D weapon panel rendered BLANK (#235).
 --
--- #235 FIX (render-preserving, chaining-independent, zero package load): KEEP the
--- ui_hdr env intact so the world renders, and pin the blend target to the only
--- variation ui_hdr defines ("default"). Two sites:
---   (a) this _create_preview_widget hook_safe no longer neuters -- it is now a
---       pure [235] diagnostic (printf survives mod-logging-OFF). Vanilla calls
---       _create_preview_widget AFTER the viewport pass created the world
---       (hero_window_item_customization.lua:373-380) and NO mod hooks it.
---   (b) the _update_environment hook below forces force_default=true in mission,
---       so shading_settings[1] stays "default" for the whole preview lifetime.
--- ui_hdr + "default" is proven blend-safe (the two vanilla witnesses above), so
--- the weapon renders LIT instead of blank, with no AV and no mid-mission package
--- hitch. Keep path is a pure pass-through (full store-preview lighting there).
+-- 0.9.64-dev FIX (crash-only, render-preserving): KEEP the env intact so the world
+-- renders and pin the blend target to "default" (the _update_environment hook below
+-- forces force_default=true in mission). That killed both the AV and the blank --
+-- the panel now draws -- but it draws PURE BLACK (user test 2026-07-03). The
+-- 0.9.64-dev prediction "renders LIT under generic UI-HDR lighting" was wrong.
+--
+-- 0.9.65-dev (DIAGNOSTIC): why black. The mission env is NOT ui_store_preview, and
+-- cosmetics does NOT own the widget definition mid-mission -- a sibling mod does.
+-- gut's in-mission loadout panel mounts this view via its "cosmetics path" and its
+-- _create_item_preview_widget_definition substitute STRIPS level_name and sets
+-- shading_environment = "environment/ui_hdr" (gui_tweaker_dev/_gut_mission_inventory
+-- .lua:207,236; cim's equivalent is crafting_in_modded_dev.lua:2079-2106, env
+-- _FORGE_MISSION_SAFE_ENV). So mid-mission the preview world has NO level (no baked
+-- or level light units) and the ui_hdr env. ui_hdr is a 2D-UI TONEMAPPING env: its
+-- only other users render emissive 2D GUI (HeroView HDR-GUI hero_view.lua:167-181,
+-- LoadingView loading_view.lua:113-118). It carries no sun / ambient / IBL to light
+-- a 3D object, so the "default" blend leaves the weapon unlit = BLACK. The keep is
+-- fine because there it is ui_store_preview + levels/ui_store_preview/world + the
+-- keep-resident weapons_default_01 studio-lighting variation.
+--
+-- The correct lighting fix cannot be picked from source alone: we need to know
+-- whether ui_hdr exposes a tonable "exposure" mid-mission, whether the black is
+-- under-exposure (fixable by a scalar) vs zero captured light (needs a spawned
+-- light or a re-pointed lit env), and which lit env/light unit is actually resident.
+-- So this build INSTRUMENTS + runs a bounded, self-gated exposure EXPERIMENT
+-- (project doctrine: diagnose before mitigating). It changes NO blend variation, so
+-- it cannot reintroduce the AV; keep path stays a pure pass-through.
 -- Pre-flight: cosmetics_tweaker hooks _create_preview_widget NOWHERE else.
 mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(self)
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
@@ -2597,12 +2627,72 @@ mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(
         if printf then printf("[235][cos] in mission: no preview world on _create_preview_widget") end
         return
     end
-    -- Do NOT neuter: leave the shading_environment (ui_hdr) intact so the world
-    -- renders. The _update_environment hook below pins the blend to "default".
-    local has_env = World.has_data(world, "shading_environment")
+
+    -- [235] state capture: the env object, its tonemapping "exposure" (camera_manager
+    -- .lua:335 reads/writes this every frame on the gameplay env, so an ok read => a
+    -- valid env that exposes it), the live blend target, and whether ANY level spawned
+    -- into the preview world (the mission-safe defs strip it -> expect level_spawned=false).
+    -- Direct env NAME + whether the def stripped the level. UIWidget.init keeps the
+    -- widget's style verbatim (ui_widget.lua:15,41), so the mission-safe def's chosen
+    -- shading_environment / level_name are readable straight off the widget style --
+    -- no inference needed. This is the decisive "which env is the mission preview".
+    local vp_style    = pw.style and pw.style.viewport
+    local env_name    = vp_style and vp_style.shading_environment
+    local style_level = vp_style and vp_style.level_name
+    local env = World.has_data(world, "shading_environment") and World.get_data(world, "shading_environment") or nil
+    local ss  = World.has_data(world, "shading_settings") and World.get_data(world, "shading_settings") or nil
+    local osd = pw.content and pw.content.object_set_data
+    local exp_ok, exp = pcall(function() return env and ShadingEnvironment.scalar(env, "exposure") end)
     if printf then
-        printf("[235][cos] mission preview world kept renderable (has_shading_env=%s) -> _update_environment pins blend to \"default\"",
-            tostring(has_env))
+        printf("[235][cos] mission preview: env_name=%s style_level=%s env_obj=%s exposure_ok=%s exposure=%s blend[1]=%s level_spawned=%s osd_level=%s",
+            tostring(env_name), tostring(style_level), tostring(env),
+            tostring(exp_ok), tostring(exp),
+            tostring(ss and ss[1]), tostring(osd and osd.level ~= nil), tostring(osd and osd.level_name))
+    end
+
+    -- Residency probe for the NEXT-round fix (env re-point or spawned light).
+    -- can_get may not accept every type string; pcall so a bad type never fatals.
+    if printf then
+        local function res(kind, name)
+            local ok, r = pcall(function() return Application.can_get(kind, name) end)
+            if not ok then return "err" end
+            return tostring(r)
+        end
+        printf("[235][cos] residency(shading_environment): ui_hdr=%s ui_store_preview=%s ui_loot_preview=%s",
+            res("shading_environment", "environment/ui_hdr"),
+            res("shading_environment", "environment/ui_store_preview"),
+            res("shading_environment", "environment/ui_loot_preview"))
+    end
+
+    -- Bounded exposure EXPERIMENT: ONLY when the env is valid and exposure is
+    -- readable. shading_callback is the sanctioned post-blend / pre-apply hook
+    -- (script_world.lua:120-133); the preview world sets none, so adding one just
+    -- overrides exposure each frame (blend re-seeds it from "default" first, then this
+    -- overrides, then apply pushes it). This is on the preview world's OWN env object,
+    -- separate from HeroView's ui_hdr GUI world. If the weapon becomes visible, ui_hdr
+    -- has capturable light and the fix is a scalar set; if it stays black, ui_hdr has
+    -- no 3D light and we pivot to a spawned light or a re-pointed lit env.
+    if env and exp_ok and type(exp) == "number" and not World.has_data(world, "shading_callback") then
+        local TEST_EXPOSURE = 16.0
+        local cb_logged = false
+        World.set_data(world, "shading_callback", function(cb_world, cb_env, cb_viewport)
+            local ok, err = pcall(function()
+                local before = ShadingEnvironment.scalar(cb_env, "exposure")
+                ShadingEnvironment.set_scalar(cb_env, "exposure", TEST_EXPOSURE)
+                if not cb_logged and printf then
+                    printf("[235][cos] shading_callback: exposure %s -> %s (experiment)", tostring(before), tostring(TEST_EXPOSURE))
+                    cb_logged = true
+                end
+            end)
+            if not ok and not cb_logged and printf then
+                printf("[235][cos] shading_callback set_scalar(exposure) FAILED (%s) -> env not tonable; pivot to spawned light", tostring(err))
+                cb_logged = true
+            end
+        end)
+        if printf then printf("[235][cos] installed exposure-boost experiment (test=%s)", tostring(TEST_EXPOSURE)) end
+    elseif printf then
+        printf("[235][cos] NO exposure experiment (env=%s exp_ok=%s exp_type=%s) -> pure instrument this run",
+            tostring(env ~= nil), tostring(exp_ok), type(exp))
     end
 end)
 
@@ -2615,7 +2705,9 @@ end)
 -- blends shading_settings[1] each frame (script_world.lua:122); a variation ui_hdr
 -- lacks -> native ShadingEnvironment.blend AV (the real #228 trigger). Forcing
 -- force_default=true keeps shading_settings[1] = "default", so blend only ever
--- asks for the variation ui_hdr has: the weapon renders LIT, no AV, no blank.
+-- asks for the variation ui_hdr has (no AV, no blank) -- BUT ui_hdr carries no 3D
+-- scene lighting, so the weapon draws BLACK (see the 0.9.65-dev diagnostic on the
+-- _create_preview_widget hook above; the lighting fix is still pending runtime data).
 -- _update_environment is the SOLE writer of shading_settings[1] (only caller is
 -- _present_item), so this one hook covers every re-present (reroll/illusion tabs).
 -- Keep path is a pure pass-through (full per-weapon studio lighting preserved).
@@ -2623,6 +2715,18 @@ end)
 mod:hook("HeroWindowItemCustomization", "_update_environment", function(func, self, item_preview_environment, force_default)
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
     if in_keep then return func(self, item_preview_environment, force_default) end
+    -- [235] log each distinct env vanilla requests before we pin it to "default"
+    -- (catches items whose item_data.item_preview_environment is NOT weapons_default_01
+    -- -- such an env would need its own variation and could change the black-render story).
+    if printf then
+        mod._lv235_seen_env = mod._lv235_seen_env or {}
+        local k = tostring(item_preview_environment)
+        if not mod._lv235_seen_env[k] then
+            mod._lv235_seen_env[k] = true
+            printf("[235][cos] _update_environment(mission): vanilla requested env=%s force_default_in=%s -> forcing \"default\"",
+                k, tostring(force_default))
+        end
+    end
     return func(self, item_preview_environment, true)  -- pin blend target to "default"
 end)
 
@@ -7842,6 +7946,69 @@ mod.update = function(dt)
             end
         end
         -- If player_unit not yet ready, keep flag pending and retry next frame.
+    end
+
+    -- v0.9.65-dev (#233): CLIENT-side self-heal of REMOTE peers' kind="unit" LA
+    -- offhand meshes after a level transition. Armed by on_game_state_changed
+    -- (`_la_reapply_remote_until`). The host's post-transition rebroadcast of its own
+    -- shield races the client's load window and is dropped (the "all" send fires ~25ms
+    -- before the client's peer_ingame flips true), and nothing re-sends -- so the host's
+    -- LA shield reverted to vanilla on the client at every mission<->keep transition.
+    -- `_la_equips_by_peer` survives the transition (only cleared on peer disconnect), so
+    -- we hold the authoritative equip locally and drive the SAME gated
+    -- `_ensure_offhand_mesh` pulse the recv/retry paths use, once the remote wearer's
+    -- husk spawns. Runs every frame within the bounded window; `_ensure_offhand_mesh`
+    -- self-gates (no-op once the mesh matches, per-owner 1.5s cooldown + 3-try cap), so
+    -- it converges then quiesces with no flicker. The pulse's re-wield re-runs
+    -- get_item_units (mesh swap) and re-fires the husk paint, so no separate per-frame
+    -- repaint is needed. Symmetric across peers -- on the host it's redundant with the
+    -- inbound client rebroadcast but idempotent. No new hook, RPC, or force-load; no
+    -- World.destroy_unit (the mesh restore is the slot-level wield pulse). Visible via
+    -- the existing `[cos-la-sync] RE-SWAP tag=transition` mod:info line in _ensure_offhand_mesh.
+    if mod._la_reapply_remote_until then
+        if os.clock() >= mod._la_reapply_remote_until then
+            mod._la_reapply_remote_until = nil
+        else
+            -- pcall local_player() -- the C peer_id() path asserts if the network
+            -- backend isn't set yet on the first post-load frames (same guard the
+            -- self-rebroadcast drain uses). Skip this frame if unresolved; the window
+            -- persists and retries next frame.
+            local pm = Managers and Managers.player
+            local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
+            local local_peer = lp_ok and lp and lp.peer_id or nil
+            if local_peer and _la_equips_by_peer then
+                for peer, slots in pairs(_la_equips_by_peer) do
+                    if peer ~= local_peer and type(slots) == "table" then
+                        local wu = _wearer_unit_for_peer(peer)
+                        local inv = wu and ScriptUnit and ScriptUnit.has_extension
+                            and ScriptUnit.has_extension(wu, "inventory_system")
+                        local equipment = inv and inv._equipment
+                        if equipment then
+                            for _, eq in pairs(slots) do
+                                if type(eq) == "table" and eq.armoury_key
+                                    and (eq.kind == "offhand" or eq.kind == "illusion") then
+                                    -- Clean bail if the wearer isn't CURRENTLY wielding the hand this
+                                    -- offhand lives on (e.g. ranged weapon out -> no shield unit
+                                    -- rendered): nothing to restore, so skip the pulse entirely. Avoids
+                                    -- a wasteful melee<->ranged wield flicker on a husk holding a
+                                    -- ranged weapon, and keeps the window fully silent until there is
+                                    -- an actual wrong-mesh shield to fix. Mirrors the wielded-field the
+                                    -- helper itself reads. When the shield IS wielded but vanilla,
+                                    -- `live` is present -> `_ensure_offhand_mesh` runs and its own
+                                    -- mesh-already-correct gate + cooldown/try-cap bound the work.
+                                    local wielded_field = (eq.hand_field == "right_hand_unit")
+                                        and "right_hand_wielded_unit_3p" or "left_hand_wielded_unit_3p"
+                                    local live = equipment[wielded_field]
+                                    if live and Unit.alive(live) then
+                                        _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, "transition")
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
 
     if not _la_bridge_init_done then

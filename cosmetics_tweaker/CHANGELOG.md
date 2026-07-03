@@ -1,5 +1,46 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.65-dev — 2026-07-03 — DIAGNOSTIC: in-mission weapon preview renders PURE BLACK (#235 follow-up)
+
+> The 0.9.64-dev crash fix worked (no AV, no blank) but the user's 2026-07-03 in-game test shows the mid-mission 3D weapon panel drawing PURE BLACK. Instrument-only build: it captures the data needed to pick the lighting fix and runs one bounded, self-gated exposure experiment. Build-only; the user runs it in-game and reports back.
+
+### Corrected root cause of the black render (source-proven)
+The 0.9.64-dev note predicted the weapon would render "LIT under generic UI-HDR lighting." That was wrong. Mid-mission the customization preview world is NOT `environment/ui_store_preview`, and cosmetics_tweaker does NOT own the widget definition that decides the env -- a sibling mod does. gut's in-mission loadout panel mounts this view via its "cosmetics path" (per the shipped repro line: `es_deus_01` spear+shield, cog opened via the gut panel, `gut logged "customize view mounting mid-mission (cosmetics path, no cim)"`); gut's `_create_item_preview_widget_definition` substitute STRIPS `level_name` and sets `shading_environment = "environment/ui_hdr"` (`gui_tweaker_dev/_gut_mission_inventory.lua:207,236`; cim's equivalent is `crafting_in_modded_dev.lua:2079-2106`). So mid-mission the preview world has NO level (no baked/level light units) and the `ui_hdr` env. `ui_hdr` is a 2D-UI TONEMAPPING environment -- its only other users render emissive 2D GUI (`HeroView._setup_hdr_renderer` hero_view.lua:167-181; `LoadingView` loading_view.lua:113-118) -- and carries no sun / ambient / IBL to light a 3D object. Blending its `"default"` variation therefore leaves the weapon unlit = BLACK. The keep looks right because there it is `environment/ui_store_preview` + `levels/ui_store_preview/world` + the keep-resident `weapons_default_01` studio-lighting variation (`hero_window_item_customization.lua:405-406`, `:1377-1381`).
+
+### Why instrument, not fix
+The correct lighting fix cannot be chosen from source alone: the shading-environment resources are binary, so we cannot tell whether `ui_hdr` mid-mission exposes a tonable `exposure`, whether the black is under-exposure (a scalar set fixes it) vs zero captured light (needs a spawned light or a re-pointed lit env), or which lit env / light unit is actually resident. Per project doctrine (diagnose before mitigating), this build gathers that data instead of guessing.
+
+### What it does (both existing hooks extended -- NO new hooks)
+- `_create_preview_widget` `hook_safe` (mission branch): logs `[235][cos] mission preview: env_name=... style_level=... env_obj=... exposure_ok=... exposure=... blend[1]=... level_spawned=... osd_level=...`. `env_name`/`style_level` are read DIRECTLY off the widget style (`UIWidget.init` keeps `widget.style` verbatim, ui_widget.lua:15,41), so we get the definitive mission env name and whether the level was stripped without inference; the rest is env-object validity + tonemap exposure via `ShadingEnvironment.scalar` + the live blend target. Plus a `[235][cos] residency(shading_environment): ...` line probing `ui_hdr` / `ui_store_preview` / `ui_loot_preview` via `Application.can_get` (each pcall-guarded so a bad type string can't fatal) to plan the next-round fix.
+- Bounded exposure EXPERIMENT: ONLY if the env is valid and `exposure` reads back a number, it installs a per-frame `shading_callback` (the sanctioned post-blend/pre-apply hook, `script_world.lua:120-133`) on the preview world's OWN env object that overrides `exposure` to a high test value (16.0) and logs the before/after once. Changes NO blend variation, so it cannot reintroduce the #228 AV. Keep path stays a pure pass-through.
+- `_update_environment` hook: unchanged force-to-`"default"` behavior; now also logs each DISTINCT env vanilla requested (`[235][cos] _update_environment(mission): vanilla requested env=...`) to catch items whose `item_data.item_preview_environment` is not `weapons_default_01`.
+
+### Verify in-game (what to send back)
+- Mid-mission (adventure or CW), open a weapon's customization gear icon through the gut in-mission loadout panel, same as the black-render repro.
+- Report whether the weapon is now VISIBLE (even over-bright/washed) or STILL BLACK, and paste the `grep [235]` lines from the console log (`%APPDATA%\Fatshark\Vermintide 2\console_logs\`). The decisive lines are `mission preview: env_name=... exposure=... level_spawned=...` (the definitive mission env name + exposure value + whether a level spawned), `residency(shading_environment): ...`, and `shading_callback: exposure X -> 16.0`.
+- Outcome map: visible-after-boost => `ui_hdr` has capturable light, fix = set exposure (tune value); still-black with `exposure_ok=true` => `ui_hdr` has no 3D light, fix = spawn a light or re-point to a resident lit env (residency line says which); `exposure_ok=false` => env degenerate, different approach.
+
+### Files
+- `cosmetics_tweaker.lua` — `_create_preview_widget` and `_update_environment` hook bodies extended in place (no new hooks); outdated `ui_hdr`-render comments corrected; `MOD_VERSION` `0.9.64-dev` → `0.9.65-dev`.
+
+### Also in this build: FIX — host's LA shield reverts to native on the CLIENT after a level transition (#233 follow-up)
+
+The 0.9.64-dev RE-SWAP fix restored the host's LA shield on the client only when the `cos_la_apply` broadcast arrives LIVE mid-mission; it did NOT survive a mission<->keep transition. A two-player session (2026-07-03, CLIENT `console-...-8be4551c`, HOST `console-...-8ffe6f74`) proved why:
+
+- The host DOES re-broadcast its own shield on every transition (`on_game_state_changed` -> self-rebroadcast -> `SYNC emit HOST->all wearer=<host> ... Kotbs01` at HOST 17:49:52.675, and again at 17:52:02.696). But the client logged ZERO for the host wearer afterwards — no RECV, no RE-SWAP.
+- Cause is a TIMING race, not a handler bail: the host emits `network_send(...,"all",...)` ~25ms BEFORE the client's `peer_ingame` flips true (CLIENT 17:49:52.700), so the client isn't yet in the game-session and the RPC isn't delivered; nothing re-sends once it is.
+- The asymmetry: the self-rebroadcast is symmetric in code, but the CLIENT (which loads slower) always emits to an already-loaded host (its own shield syncs fine every time — HOST's isolated `RE-SWAP tag=recv` at 17:49:53 is the host applying the CLIENT's rebroadcast, with the RECV line deduped), while the HOST emits to a still-loading client (dropped). The passive husk `get_item_units` swap at spawn is unreliable (the reason the active `_ensure_offhand_mesh` pulse was added in 0.9.64), and it did not restore the host's shield either (CLIENT `HUSK wield_slot entry wearer=<host>` at 17:49:52.710 with no following host-shield swap/paint).
+
+Fix — CLIENT-side self-heal from the surviving cache (no new hook, RPC, or force-load):
+- `_la_equips_by_peer` survives transitions (only cleared on peer disconnect), so the authoritative equip is already on the client. `on_game_state_changed` now arms a bounded ~10s window (`mod._la_reapply_remote_until`); `mod.update` walks `_la_equips_by_peer` for every REMOTE peer's `offhand`/`illusion` entry and drives the existing gated `_ensure_offhand_mesh` pulse once the wearer's husk spawns.
+- `_ensure_offhand_mesh` self-gates (no-op once the live mesh matches, per-owner 1.5s cooldown + 3-try cap), so it converges then quiesces — no flicker, no pulse-storm. The pulse's re-wield re-runs `get_item_units` (mesh swap) and re-fires the husk paint, so no separate per-frame repaint is needed. Symmetric across peers (idempotent on the host). Diagnostics reuse the existing `[cos-la-sync] RE-SWAP` mod:info line, now tagged `tag=transition`.
+- Constraints honored: no new `mod:hook` (reuses the `on_game_state_changed` VMF callback + `mod.update`); no networked-fn hook touched; no `World.destroy_unit`; no force-loads; re-apply via `_ensure_offhand_mesh`.
+
+Files (also in this build):
+- `cosmetics_tweaker.lua` — `mod.on_game_state_changed`: arm `mod._la_reapply_remote_until`; `mod.update`: new bounded per-frame drain that re-applies remote peers' cached LA offhand meshes via `_ensure_offhand_mesh` (tag=transition). No new hooks; no `MOD_VERSION` change (already `0.9.65-dev`).
+
+Verify in-game (2 players): host equips a kind="unit" LA shield, transition mission<->keep, and confirm the CLIENT console shows `[cos-la-sync] RE-SWAP tag=transition ... ok=true/true` for wearer=<host> and the shield renders correctly (not vanilla).
+
 ## 0.9.64-dev — 2026-07-02 — FIX: post-spawn LA offhand mesh RE-SWAP (#233 host shield late on client, #234 mid-mission model change)
 
 > Diagnosed from the 2026-07-02 client session log (`console-2026-07-02-18.36.15-228bfc0a`, prior build v0.9.63-dev; user = CLIENT of host `110000106beb4a3`). The v0.9.61-dev `[cos-la-sync]` instrumentation captured both failures in the act. Build-only; in-game verification is the user's (the new `[cos-la-sync] RE-SWAP` line proves the path fires next session).
