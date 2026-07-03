@@ -5,6 +5,129 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.182-dev (2026-07-02) -- #155/#172: in-mission Cosmetics split (tab is vanilla, gear icon is cosmetics_tweaker)
+
+The in-mission Cosmetics access is now split in two, per user direction:
+
+### (a) Cosmetics TAB works mid-mission WITHOUT cosmetics_tweaker (#172, reverses the #155 gate)
+The Cosmetics tab is vanilla UI, so it is now enabled mid-mission unconditionally and no longer
+depends on Tweaker: Cosmetics or on the pose atlas being injected.
+
+- **`_gut_mission_inventory.lua`** — `tb[4]` (the Cosmetics tab) is set `disable_button = false`
+  unconditionally in the `HeroWindowPanelConsole.on_enter` tab-strip hook (was: gated on
+  `mod._gut_pose_atlas_ingame`).
+- **Actually addressed the #155 crash class, not just ungated.** The crash was
+  `HeroWindowCosmeticsLoadoutConsole` drawing the equipped weapon-POSE item icon through the
+  `gui_pose_items_atlas` material, which vanilla only adds to the ingame Gui when `is_in_inn`
+  (`ingame_ui_settings.lua:590,679`), so mid-mission it C-fatals at `ui_passes.lua:134` (GUID
+  5c0865b4). Fix: replaced the former **whole-window draw-skip** (which blanked the entire tab)
+  with a targeted filter — a new hook on `HeroWindowCosmeticsLoadoutConsole._equip_item_presentation`
+  skips presenting the POSE slot's item (`slot.type == ItemType.POSE == "weapon_pose"`,
+  `inventory_settings.lua:9,88-96`) when mid-mission AND the atlas isn't resident
+  (`mod._gut_pose_atlas_ingame` false, published by `_gut_gui_material_guard.lua`). The pose slot
+  then renders empty (its slot-type icon is `store_tag_icon_pose`, a store atlas — safe), while
+  hat/skin/frame present normally, so the tab is fully usable with no C-fatal. When the atlas IS
+  resident, the guard injects it and poses show.
+- **Pose PICKER guarded too.** Clicking the emptied pose slot opens the `pose_selection` layout
+  (`HeroWindowCosmeticsLoadoutPoseInventoryConsole`), a 100%-pose grid. New draw hook skips its
+  draw mid-mission when the atlas isn't resident (blank picker, ESC still works — update/input
+  run), preventing the same C-fatal. It borrows the parent `world_previewer`, so there is no
+  separate preview-world mount crash to guard.
+
+### (b) GEAR ICON (illusion-swap customize) is cosmetics_tweaker-gated (#172)
+The per-slot gear/cog customize popup (`HeroWindowItemCustomization`) is the only part that
+depends on Tweaker: Cosmetics mid-mission.
+
+- **`_gut_mission_inventory.lua`** — `_gut_customize_allowed()` now returns
+  `in_keep or get_mod("cosmetics_tweaker") ~= nil` (was `in_keep or cim or cosmetics_tweaker`).
+  gut's #84 preview-world mount-fix already activates on the cosmetics_tweaker path (cim absent),
+  and cim's own mount-fix covers the cim-present case, so the view still mounts cleanly.
+- **cim note (cited).** cim also hooks `HeroWindowItemCustomization` (`illusion_swap.lua` illusion
+  swaps via `_on_illusion_index_pressed`; `standard_forge.lua` reroll), so the gear-icon view is a
+  shared surface. A cim user still reaches apply-illusion / reroll mid-mission through the standard
+  crafting BENCH (the Crafting tab from 0.2.181, `forge` layout → `CraftPageApplySkin` /
+  `CraftPageRollProperties`), so this gating removes only the gear-icon *shortcut* for a
+  cim-without-cosmetics_tweaker user, not their crafting. **Flagged for the user to confirm** the
+  intended split (drop cim from the shortcut vs. keep `cim OR cosmetics_tweaker`).
+
+### Regression
+- New `_rt_register("cosmetics_split_tab_ungated_gear_gated")`: asserts tb[4] is enabled
+  unconditionally, the `_equip_item_presentation` pose filter is present, and the gear-icon gate is
+  keyed on cosmetics_tweaker specifically.
+
+### Verify in-game (Adventure mission)
+1. WITHOUT Tweaker: Cosmetics installed: open the mid-mission menu, the **Cosmetics** tab is
+   clickable and shows hat/skin/frame (pose slot may be empty if the pose atlas isn't loaded); no
+   crash on open or when clicking the pose slot. The per-slot **gear icon** is inert.
+2. WITH Tweaker: Cosmetics installed: the gear icon opens the illusion-swap customize popup.
+
+## 0.2.181-dev (2026-07-02) -- #80: in-mission Crafting tab honors the bench toggle; Compendium usable mid-mission
+
+### In-mission Crafting tab now works (#80)
+With "Allow crafting bench in mission" (`gut_cim_bench_in_mission`) ON, the Crafting tab
+in the mid-mission HeroView menu is now enabled and routes to the standard crafting bench.
+Previously the toggle only reached cim's hotkey / `/cim_craft_standard` command paths; the
+tab stayed greyed.
+
+- **`_gut_mission_inventory.lua`** — the `HeroWindowPanelConsole.on_enter` tab-strip hook now
+  drives `tb[3]` (the Crafting/Forge tab, asserted `hero_window_crafting` at
+  `hero_window_panel_console.lua:140`) off `gut_cim_bench_in_mission` **AND** `get_mod("cim")`
+  **AND** Adventure (`current_mechanism_name() ~= "deus"`). `disable_button` is set BOTH ways
+  so the state is deterministic (was: only disabled when cim absent, leaving the tab in
+  whatever vanilla `create_ui_elements` left — its `1..N can_add` loop actually enables
+  `forge` in Adventure, so the tab was inconsistent). Toggle OFF / cim absent / Chaos Wastes =
+  greyed, exactly as before.
+- **Routing:** clicking the tab calls the vanilla `set_layout_by_name("forge")` within the
+  already-open view — the standard bench (`HeroWindowCrafting` family that cim's
+  `standard_forge.lua` on_enter hooks activate), the SAME surface `/cim_craft_standard` opens
+  (`menu_state_name = "forge"`). It never reaches the Athanor (`weave_forge`, a separate state
+  cim keeps Keep-only). No `_cim_open_standard_inv_pending` handshake needed: a layout switch
+  doesn't re-run `HeroView.on_enter` (`hero_view.lua:323`), the sole reader of the
+  loadout-access gate; the view was already opened with that access via gut's mission-inventory
+  patch.
+- **Mission-safety:** the standard bench is material-clean in Adventure (flat atlas widgets, no
+  preview world / shading env — per cim's `standard_forge.lua` notes; `/cim_craft_standard`
+  already opens it mid-mission). The crash-prone gear-icon Customization view
+  (`HeroWindowItemCustomization`, `levels/ui_store_preview/world`) is a separate loadout-cog
+  path gut already guards and is not reachable from this tab.
+
+### Compendium (Armory + Bestiary) usable mid-mission — no toggle
+The Armory + Bestiary compendium now opens and works during a mission, not just in the keep.
+
+- **`_ba_heroview_inject.lua`** — removed the `ctx.is_in_inn == false` keep-block from
+  `mod._gut_open_compendium`. The from-outside open now uses `hero_view_force` mid-mission
+  (sets `exit_to_game` so ESC/close returns to gameplay; `ingame_ui_settings.lua:441-443`) and
+  the normal `hero_view` transition in the keep. Both are `is_transition_allowed` mid-mission
+  (`ingame_ui.lua:872` blocks only `profile_view` / `inventory_view_force` when
+  matchmaking-ready).
+- **`_ba_compendium_tabs.lua`** — `_apply_tab_state` no longer greys the Armory/Bestiary tabs
+  out of the keep; they are enabled everywhere.
+- **Mission-safety:** both surfaces are atlas/primitive UI only — the Bestiary sub-state
+  (`HeroViewStateCompendium`) and the in-menu Armory window (`HeroWindowArmory`) draw flat
+  rect/border/text/hotspot passes on the shared `ui_(top_)renderer` with no viewport, no
+  preview world, no keep-only material — so they carry none of the mid-mission crash classes
+  the crafting/cosmetics tabs guard against. (`HeroWindowBackgroundConsole._update_object_sets`
+  is already wrapped for the custom `gut_armory` layout.)
+
+### Regression
+- New `_rt_register("crafting_tab_honors_bench_toggle")`: asserts the tab reads
+  `gut_cim_bench_in_mission` and `tb[3].disable_button` is driven by `bench_ok`.
+- New `_rt_register("compendium_mission_access_ungated")`: asserts the compendium keep-echo is
+  gone from `_gut_open_compendium` and `_apply_tab_state` no longer greys tabs out of the keep.
+
+### Loc
+- `gut_mission_menu_tabs_tooltip` no longer claims the Crafting tab is permanently disabled;
+  `gut_cim_bench_in_mission_tooltip` now mentions the mid-mission Crafting tab entry point.
+
+### Verify in-game (Adventure only, never Chaos Wastes)
+1. Options: enable "Show menu tabs in-mission" + "Allow crafting bench in mission" (cim
+   installed). Start an Adventure mission, `/inv` to open the menu, confirm the **Crafting**
+   tab is no longer greyed, click it, and run a salvage / re-roll to confirm the standard bench
+   works with no crash. Toggle "Allow crafting bench in mission" OFF and confirm the tab greys
+   back out.
+2. `/armory` and `/bestiary` mid-mission: both open (Bestiary stub panel / Armory list); ESC
+   returns to gameplay. With the menu open (`/inv`), the Armory/Bestiary tabs are clickable.
+
 ## 0.2.180-dev (2026-07-02) -- Loadouts rename + crafting-bench-in-mission option moved here from cim
 
 ### Changed (user direction 2026-07-02)

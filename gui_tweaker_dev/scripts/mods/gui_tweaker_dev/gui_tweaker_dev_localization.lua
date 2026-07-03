@@ -228,7 +228,7 @@ return {
         en = "Show menu tabs in-mission (Inventory/Talents/Cosmetics)",
     },
     gut_mission_menu_tabs_tooltip = {
-        en = "Restores the top tabs (Inventory, Talents, Cosmetics) while the menu is open mid-mission, with talent changes applying to your character immediately. The Crafting tab stays disabled because opening the forge mid-mission crashes the game; PC only, off by default.",
+        en = "Restores the top tabs (Inventory, Talents, Cosmetics) while the menu is open mid-mission, with talent changes applying to your character immediately. The Crafting tab is enabled too when 'Allow crafting bench in mission' is on and Crafting in Modded is installed (it opens the standard bench, not the Athanor); PC only, off by default.",
     },
     gut_open_inv_hotkey = {
         en = "Open Inventory (Mid-Mission)",
@@ -240,7 +240,7 @@ return {
         en = "[untested] Allow crafting bench in mission",
     },
     gut_cim_bench_in_mission_tooltip = {
-        en = "Requires Crafting in Modded (this option only appears when it is installed). OFF (default): the standard crafting bench does not open during missions. ON: it also opens inside Adventure missions via Crafting in Modded's bench hotkey or /cim_craft_standard; the Athanor stays Keep-only either way. In-mission menus were never meant to run mid-mission, so if you hit a crash with this on, please send the log.",
+        en = "Requires Crafting in Modded (this option only appears when it is installed). OFF (default): the standard crafting bench does not open during missions. ON: it also opens inside Adventure missions via Crafting in Modded's bench hotkey, /cim_craft_standard, or the Crafting tab in the mid-mission menu (when 'Show menu tabs in-mission' is on); the Athanor stays Keep-only either way. In-mission menus were never meant to run mid-mission, so if you hit a crash with this on, please send the log.",
     },
 
     -- ============================================================

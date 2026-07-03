@@ -168,21 +168,23 @@ local function _ensure_defs_injected()
     printf("[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)")
 end
 
--- Per-instance pass (after vanilla create_ui_elements): grey our tabs mid-mission
--- (the Compendium is keep/inn-only, so mirror the crafting/cosmetics tab-gating).
--- In the keep they stay enabled (vanilla's can_add loop already left them so).
+-- Per-instance pass (after vanilla create_ui_elements): keep our tabs ENABLED
+-- everywhere -- the Compendium (Armory + Bestiary) opens in the keep AND
+-- mid-mission (2026-07-02, no toggle). Both surfaces are atlas/primitive UI with no
+-- preview world or keep-only material, so they carry none of the mid-mission crash
+-- classes the crafting/cosmetics tabs gate against. Force disable_button = false so
+-- neither a vanilla can_add pass nor the eac-untrusted default can leave them greyed.
 local function _apply_tab_state(self)
     local tabs = self._title_button_widgets
     if type(tabs) ~= "table" then
         return
     end
-    local in_keep = self.is_in_inn and true or false
     for i = 1, #tabs do
         local w = tabs[i]
         if w and MODE_BY_SGID[w.scenegraph_id] then
             local hotspot = w.content and w.content.button_hotspot
             if hotspot then
-                hotspot.disable_button = not in_keep
+                hotspot.disable_button = false
             end
         end
     end
@@ -232,8 +234,9 @@ mod:hook("HeroWindowPanelConsole", "_on_panel_button_selected", function(func, s
     local mode = w and MODE_BY_SGID[w.scenegraph_id]
     if mode then
         local hotspot = w.content and w.content.button_hotspot
-        -- Greyed mid-mission (Compendium is keep-only): consume the press silently.
-        -- The opener itself also keep-gates, so this is belt-and-suspenders.
+        -- Belt-and-suspenders: if the tab is greyed for any reason, consume the
+        -- press silently. Post-2026-07-02 the Compendium is enabled everywhere
+        -- (keep + mission), so this normally never triggers.
         if hotspot and hotspot.disable_button then
             return
         end

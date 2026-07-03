@@ -104,13 +104,16 @@ end
 function mod._gut_open_compendium(mode)
     local ctx = mod._gut_ingame_ui_context
     if not ctx then
-        mod:echo("Hero menu isn't ready yet - open the keep first, then retry.")
+        mod:echo("Hero menu isn't ready yet - jump into the keep or a mission, then retry.")
         return
     end
-    if ctx.is_in_inn == false then
-        mod:echo("The Compendium only opens in the keep/inn.")
-        return
-    end
+    -- (2026-07-02) The Compendium (Armory + Bestiary) opens in the keep AND
+    -- mid-mission, no toggle. Its surfaces are atlas/primitive UI only -- the
+    -- Bestiary sub-state (HeroViewStateCompendium) and the in-menu Armory window
+    -- (HeroWindowArmory) draw flat rect/border/text/hotspot passes on the shared
+    -- ui_(top_)renderer with NO viewport, NO preview world, NO keep-only material
+    -- -- so they carry none of the mid-mission crash classes the crafting/cosmetics
+    -- tabs guard against. The former `is_in_inn == false` keep-gate is gone.
     local ingame_ui = ctx.ingame_ui
     if not (ingame_ui and ingame_ui.transition_with_fade) then
         mod:echo("Could not open the hero view (ingame_ui unavailable).")
@@ -137,13 +140,19 @@ function mod._gut_open_compendium(mode)
         end
         return
     end
-    -- From OUTSIDE hero_view (e.g. /armory typed while walking the keep): the fresh
-    -- open needs force_open so the sub-state applies. IngameUI.handle_transition only
-    -- runs post_update_on_enter (the sole consumer of menu_state_name) when
-    -- old_view ~= new_view OR force_open (ingame_ui.lua:953). Here old_view is not
-    -- hero_view, so this is safe (no duplicate-world re-enter). Mirrors the vanilla
-    -- keep-button flow (ingame_view_menu_layout_console.lua:742-745).
-    ingame_ui:transition_with_fade("hero_view", {
+    -- From OUTSIDE hero_view (e.g. /armory typed while walking the keep OR mid-mission
+    -- gameplay): the fresh open needs force_open so the sub-state applies. IngameUI
+    -- .handle_transition only runs post_update_on_enter (the sole consumer of
+    -- menu_state_name) when old_view ~= new_view OR force_open (ingame_ui.lua:953).
+    -- Here old_view is not hero_view, so this is safe (no duplicate-world re-enter).
+    -- In the keep use the normal "hero_view" transition; mid-mission use
+    -- "hero_view_force", which sets exit_to_game (ingame_ui_settings.lua:441-443) so
+    -- ESC/close returns to gameplay -- the same call gut's mission-inventory opener
+    -- relies on. Both are is_transition_allowed mid-mission (ingame_ui.lua:872 blocks
+    -- only profile_view / inventory_view_force when matchmaking-ready). Mirrors the
+    -- vanilla keep-button flow (ingame_view_menu_layout_console.lua:742-745).
+    local in_keep = ctx.is_in_inn and true or false
+    ingame_ui:transition_with_fade(in_keep and "hero_view" or "hero_view_force", {
         menu_state_name = "gut_compendium",
         gut_compendium_mode = mode or "armory",
         force_open = true,

@@ -128,15 +128,25 @@ end)
 -- Cross-mod ref targets the STABLE cim id (`get_mod("cim")`), per the dev-clone
 -- isolation rule — never cim_dev, even from gut_dev.
 local function _gut_customize_allowed()
-    -- Allowed in the keep always. Mid-mission it needs a mission-safe backend for the
-    -- Customization view (HeroWindowItemCustomization): either cim (which ships the
-    -- preview-world mount-fix + modded crafting) OR cosmetics_tweaker (illusion/cosmetic
-    -- swaps -- #84/#87). gut carries its own copy of the mount-fix (below) so the
-    -- cosmetics_tweaker path mounts even without cim. gut ALONE (neither present) leaves
-    -- the cog inert mid-mission. STABLE cross-mod ids only (never cim_dev), per the
-    -- dev-clone isolation rule.
+    -- Gear-icon (cog) Customization view = HeroWindowItemCustomization (weapon illusion
+    -- swap + reroll). Allowed in the keep always (vanilla works there). Mid-mission it is
+    -- gated on Tweaker: Cosmetics (cosmetics_tweaker) SPECIFICALLY (user direction
+    -- 2026-07-02, #172): the illusion-swap gear icon is Cosmetics' surface. When
+    -- cosmetics_tweaker is present the preview-world mount-fix makes the view mount
+    -- cleanly mid-mission -- gut's own ported copy (below, #84) when cim is ABSENT, or
+    -- cim's own mount-fix when cim is present (gut's is inert then). Without
+    -- cosmetics_tweaker the cog is inert mid-mission.
+    --
+    -- WHY NOT `or cim`: cim ALSO hooks HeroWindowItemCustomization (illusion_swap.lua does
+    -- illusion swaps via _on_illusion_index_pressed; standard_forge.lua does reroll), so
+    -- the gear icon is a shared surface -- but per the user the SHORTCUT keys on
+    -- cosmetics_tweaker. A cim user still reaches apply-illusion / reroll mid-mission
+    -- through the standard crafting BENCH (the Crafting tab, gut_cim_bench_in_mission ->
+    -- forge layout -> CraftPageApplySkin / CraftPageRollProperties), so this gating does
+    -- not remove cim's crafting; it only moves the gear-icon shortcut behind
+    -- cosmetics_tweaker. STABLE cross-mod ids only (never cim_dev), per the dev-clone rule.
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    return in_keep or (get_mod("cim") ~= nil) or (get_mod("cosmetics_tweaker") ~= nil)
+    return in_keep or (get_mod("cosmetics_tweaker") ~= nil)
 end
 
 mod:hook("HeroWindowLoadoutConsole", "_customize_item", function(func, self, item)
@@ -154,17 +164,17 @@ mod:hook("HeroWindowLoadoutConsole", "_customize_item", function(func, self, ite
     if allowed then
         return func(self, item)
     end
-    mod:echo("Customize is disabled mid-mission unless Crafting in Modded or Cosmetics Tweaker is loaded.")
+    mod:echo("The customize gear icon is disabled mid-mission unless Tweaker: Cosmetics is loaded. (Crafting in Modded users: use the Crafting tab / bench for illusions and re-rolls.)")
 end)
 
--- Kill the cog CLICK at the source mid-mission (no cim), so the gear icon is INERT
--- rather than a guarded-but-clickable crash hazard. Returning nil from
+-- Kill the cog CLICK at the source mid-mission (no cosmetics_tweaker), so the gear icon
+-- is INERT rather than a guarded-but-clickable crash hazard. Returning nil from
 -- _is_customize_item_pressed makes the mouse path (_handle_input:266) skip
 -- _customize_item; returning false from _is_selected_item_customizable makes the
 -- gamepad/refresh path (_on_window_input:239) skip it too. Both no-op the wrapped
 -- function entirely when disallowed (no vanilla side effects to preserve — these are
--- pure read-only "is X pressed/customizable" queries). When allowed (keep or cim),
--- run vanilla unchanged.
+-- pure read-only "is X pressed/customizable" queries). When allowed (keep or
+-- cosmetics_tweaker), run vanilla unchanged.
 mod:hook("HeroWindowLoadoutConsole", "_is_customize_item_pressed", function(func, self)
     if not _gut_customize_allowed() then return nil end
     return func(self)
@@ -289,14 +299,13 @@ end)
 -- PC console-layout only. The PC-options layout (HeroWindowOptions, "Use PC menu
 -- layout" ON) already draws its strip in-mission, so it needs nothing here.
 --
--- Crafting/Forge (tab 3) is gated OFF unless cim is loaded -- its item-customization
--- sub-path is the same ui_store_preview crash the _customize_item hook above guards
--- (belt-and-suspenders with that guard). NOTE: vanilla does NOT grey tab 3 in a
--- normal Adventure/Deus mission (the `forge` layout's can_add_function only blocks
--- versus/inn_vs, hero_window_layout_console.lua:139-141), so this disable_button
--- write is what keeps Crafting greyed with gut standalone. Tab 3 is asserted to be
--- the crafting tab in vanilla (hero_window_panel_console.lua:140,
--- text_field == "hero_window_crafting"). Loot is not a tab on this strip.
+-- Crafting/Forge (tab 3): ENABLED mid-mission when gut_cim_bench_in_mission is ON
+-- + cim present + Adventure (see the per-tab block below for the full rationale);
+-- otherwise greyed. Tab 3 is asserted to be the crafting tab in vanilla
+-- (hero_window_panel_console.lua:140, text_field == "hero_window_crafting").
+-- vanilla does NOT grey tab 3 in a normal Adventure/Deus mission (the `forge`
+-- layout's can_add_function only blocks versus/inn_vs,
+-- hero_window_layout_console.lua:139-141). Loot is not a tab on this strip.
 -- Inventory/Talents/Cosmetics are mission-safe (talent changes apply live).
 -- Pre-flight: no other gut hook targets HeroWindowPanelConsole.
 mod:hook_safe("HeroWindowPanelConsole", "on_enter", function(self)
@@ -310,49 +319,99 @@ mod:hook_safe("HeroWindowPanelConsole", "on_enter", function(self)
         self:_setup_text_buttons_width()
         self:_setup_input_buttons()
     end)
-    -- Gate the Crafting/Forge tab unless cim is present (item-customization
-    -- preview-level crash). STABLE cim id only.
+    -- Crafting/Forge tab (tab 3): ENABLE mid-mission only when the user turned ON
+    -- gut's OWN "Allow crafting bench in mission" toggle (gut_cim_bench_in_mission)
+    -- AND cim is present (cim owns the modded standard bench + the preview-world
+    -- mount fix) AND we're in Adventure (never Chaos Wastes/deus -- CW is
+    -- loadout-locked and its package set lacks the crafting resources, same rule as
+    -- gut_open_mission_inventory). disable_button is set explicitly BOTH ways so the
+    -- final state is deterministic regardless of what vanilla create_ui_elements
+    -- left (its 1..N can_add loop enables `forge` in Adventure; the eac-untrusted
+    -- write at :142 only greys it transiently before that loop overwrites it) --
+    -- when the gate is OFF we force it greyed, matching "the tab stays as it is
+    -- today" (#80). Clicking the tab switches to the vanilla `forge` LAYOUT within
+    -- this already-open view: the standard crafting bench (HeroWindowCrafting family
+    -- that cim's standard_forge.lua on_enter hooks activate) -- the SAME surface
+    -- /cim_craft_standard opens (menu_state_name "forge"), NEVER the Athanor
+    -- (weave_forge is a separate state cim keeps keep-only). No
+    -- _cim_open_standard_inv_pending handshake is needed: a layout switch does not
+    -- re-run HeroView.on_enter (hero_view.lua:323), the sole reader of the
+    -- loadout-access gate -- the view was already opened with that access via gut's
+    -- mission-inventory patch. STABLE cim id only (dev-clone isolation rule).
     local tb = self._title_button_widgets
-    if tb and tb[3] and not get_mod("cim") then
-        tb[3].content.button_hotspot.disable_button = true
+    if tb and tb[3] then
+        local mech = Managers.mechanism and Managers.mechanism.current_mechanism_name
+            and Managers.mechanism:current_mechanism_name()
+        local bench_ok = mod:get("gut_cim_bench_in_mission")
+            and get_mod("cim") ~= nil
+            and mech ~= "deus"
+        tb[3].content.button_hotspot.disable_button = not bench_ok
     end
-    -- (#155) COSMETICS tab (tb[4]): HeroWindowCosmeticsLoadoutConsole draws weapon-pose
-    -- items via the `gui_pose_items_atlas` material (inside materials/ui/ui_1080p_pose_cosmetics),
-    -- which vanilla only adds to the ingame renderer's Gui when is_in_inn -> mid-mission it's
-    -- absent and the pose draw takes a C-FATAL at ui_passes.lua:134 (crash GUID 5c0865b4).
-    -- The GUI material guard (_gut_gui_material_guard.lua) now INJECTS that material into the
-    -- in-mission ingame renderers WHEN its resource is resident, publishing the outcome in
-    -- mod._gut_pose_atlas_ingame. Enable the tab mid-mission ONLY when the atlas actually
-    -- made it into the Gui (else keep it gated -- a blank or re-crashing tab helps no one).
-    -- The draw hook below is belt-and-suspenders on the same signal.
+    -- (#172) COSMETICS tab (tb[4]): vanilla UI (change hat/skin/frame/pose mid-mission).
+    -- ENABLED unconditionally mid-mission and does NOT depend on cosmetics_tweaker -- it is
+    -- vanilla, so it must not require Tweaker: Cosmetics. The historical #155 crash
+    -- (HeroWindowCosmeticsLoadoutConsole drawing weapon-POSE item icons through the
+    -- `gui_pose_items_atlas` material, which vanilla only adds to the ingame Gui when
+    -- is_in_inn, C-fatalling at ui_passes.lua:134) is now addressed at the SOURCE by the
+    -- _equip_item_presentation hook below (pose items are filtered out of the grid when the
+    -- atlas isn't resident), NOT by gating the whole tab. When the atlas IS resident,
+    -- _gut_gui_material_guard.lua injects it into the ingame Gui and poses show too.
     if tb and tb[4] then
-        local pose_ok = mod._gut_pose_atlas_ingame and true or false
-        tb[4].content.button_hotspot.disable_button = not pose_ok
-        printf("[gut:155] in-mission Cosmetics tab %s (pose atlas in Gui=%s)",
-            pose_ok and "ENABLED" or "gated", tostring(pose_ok))
+        tb[4].content.button_hotspot.disable_button = false
     end
-    mod:debug("[gut:mission-tabs] in-mission tab strip enabled (tabs=%s, forge_gated=%s, cosmetics_gated=%s)",
-        tostring(tb and #tb or 0), tostring(not get_mod("cim")),
-        tostring(not (mod._gut_pose_atlas_ingame and true or false)))
+    mod:debug("[gut:mission-tabs] in-mission tab strip enabled (tabs=%s, bench=%s, pose_atlas_ingame=%s)",
+        tostring(tb and #tb or 0),
+        tostring(mod:get("gut_cim_bench_in_mission") and get_mod("cim") and true or false),
+        tostring(mod._gut_pose_atlas_ingame and true or false))
 end)
 
 -- ============================================================
--- (#155) Cosmetics-loadout window crash guard (mid-mission)
+-- (#155/#172) Cosmetics-loadout window: in-mission pose-item filter
 -- ============================================================
--- HeroWindowCosmeticsLoadoutConsole:draw draws the weapon-POSE items via the
--- `gui_pose_items_atlas` material, which is NOT resident in the in-mission renderer's
--- Gui -> ui_passes.lua:134 takes a C-LEVEL fatal (uncatchable by pcall — same class as
--- the LA armoury_atlas crash). Crash GUID 5c0865b4-... (client). The tab gate above
--- blocks the click path; this is the belt-and-suspenders: SKIP this window's draw whenever
--- we're not in the keep, so the bad texture pass can never run. In the keep (where the
--- atlas is resident) draw runs unchanged. gut hooks this class NOWHERE else -> no dup hook.
-mod:hook("HeroWindowCosmeticsLoadoutConsole", "draw", function(func, self, ...)
+-- HeroWindowCosmeticsLoadoutConsole._equip_item_presentation sets each equipped cosmetic
+-- slot's item icon. The weapon-POSE slot (InventorySettings slot_pose, type ItemType.POSE
+-- = "weapon_pose", cosmetic_index 4) resolves its icon into the `gui_pose_items_atlas`
+-- material, which vanilla only adds to the ingame Gui when is_in_inn -> mid-mission the
+-- atlas is absent and the pose-icon draw takes a C-LEVEL fatal at ui_passes.lua:134
+-- (uncatchable by pcall; same class as the LA armoury_atlas crash). Crash GUID 5c0865b4 (#155).
+--
+-- ROOT FIX (replaces the former whole-window draw-skip, which blanked the entire tab and
+-- made it unusable -- #172 wants the tab usable): when we're NOT in the keep AND the pose
+-- atlas did NOT make it into the ingame Gui (mod._gut_pose_atlas_ingame false -- published
+-- by _gut_gui_material_guard.lua after its can_get-gated injection attempt), SKIP presenting
+-- the POSE slot's item. The pose slot then renders EMPTY (no gui_pose_items_atlas texture is
+-- ever drawn), while hat/skin/frame present normally -> the tab is fully usable with no
+-- C-fatal. When the atlas IS resident (the guard injected it), nothing is filtered and poses
+-- show. The empty pose slot's slot-type indicator icon is `store_tag_icon_pose` (a store/HUD
+-- atlas, not the pose atlas -- carousel_ui_settings.lua:741), so the empty slot is itself safe.
+-- Pre-flight: gut hooks HeroWindowCosmeticsLoadoutConsole NOWHERE else (the prior draw hook is
+-- removed) -> no dup hook.
+local _POSE_SLOT_TYPE = "weapon_pose"   -- InventorySettings ItemType.POSE (slot_pose)
+mod:hook("HeroWindowCosmeticsLoadoutConsole", "_equip_item_presentation", function(func, self, item, slot)
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    -- Safe to draw in the keep always; mid-mission only once the material guard has
-    -- injected gui_pose_items_atlas into the ingame Gui (mod._gut_pose_atlas_ingame).
-    -- Without it, skipping the draw prevents the ui_passes.lua:134 C-fatal (blank tab).
+    if not in_keep
+        and slot and slot.type == _POSE_SLOT_TYPE
+        and not (mod._gut_pose_atlas_ingame and true or false) then
+        mod:debug("[gut:155] filtered POSE item from in-mission Cosmetics grid (gui_pose_items_atlas not resident -> would C-fatal); pose slot shown empty")
+        return
+    end
+    return func(self, item, slot)
+end)
+
+-- (#155/#172) Pose PICKER window guard. Clicking the (now-empty) pose slot still opens the
+-- `pose_selection` layout -> HeroWindowCosmeticsLoadoutPoseInventoryConsole, whose ENTIRE grid
+-- is weapon-pose items drawn through `gui_pose_items_atlas`. If that atlas isn't resident in
+-- the ingame Gui (mod._gut_pose_atlas_ingame false) the grid draw C-fatals (ui_passes.lua:134),
+-- same class as the loadout window. Since this window is 100% pose items (nothing else to show),
+-- SKIP its whole draw mid-mission when the atlas is absent -- the picker shows blank and the user
+-- can ESC/back out (update/input still run; only draw is skipped), no crash. When the atlas IS
+-- resident, the guard injected it and the picker draws normally. The window borrows the parent's
+-- world_previewer (params.world_previewer) rather than creating its own world, so there is no
+-- separate preview-world mount crash to guard here. gut hooks this class NOWHERE else -> no dup hook.
+mod:hook("HeroWindowCosmeticsLoadoutPoseInventoryConsole", "draw", function(func, self, ...)
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
     if not in_keep and not (mod._gut_pose_atlas_ingame and true or false) then
-        mod:debug("[gut:cosmetics-guard] skipped HeroWindowCosmeticsLoadoutConsole:draw mid-mission (gui_pose_items_atlas not in Gui -> would C-fatal)")
+        mod:debug("[gut:155] skipped HeroWindowCosmeticsLoadoutPoseInventoryConsole:draw mid-mission (gui_pose_items_atlas not resident -> would C-fatal); pose picker blank until atlas resident")
         return
     end
     return func(self, ...)

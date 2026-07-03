@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.180-dev"
+local MOD_VERSION = "0.2.182-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1661,6 +1661,98 @@ _rt_register("cim_bench_write_through_present", function()
         if data_txt and not data_txt:find('setting_id    = "gut_cim_bench' .. '_in_mission"', 1, true) then
             return "cim-bench regression: gut_cim_bench_in_mission widget missing from gut's In-Mission Menus"
         end
+    end
+end)
+
+-- (#80) The in-mission Crafting TAB must be gated on gut's OWN
+-- gut_cim_bench_in_mission toggle + cim presence (not a bare cim-presence check),
+-- and tb[3].disable_button must be driven by that result BOTH ways. Source-pattern
+-- guard on _gut_mission_inventory.lua (located via mod.gut_open_mission_inventory,
+-- defined there). Split needles so this check can't self-match. No-op if unreadable.
+_rt_register("crafting_tab_honors_bench_toggle", function()
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_inventory or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local gate_needle = 'mod:get("gut_cim_bench' .. '_in_mission")'
+    local tab_needle  = "tb[3].content.button_hotspot.disable" .. "_button = not bench_ok"
+    if not txt:find(gate_needle, 1, true) then
+        return "#80 regression: the in-mission Crafting tab no longer reads gut_cim_bench_in_mission (bench toggle stopped gating the tab)"
+    end
+    if not txt:find(tab_needle, 1, true) then
+        return "#80 regression: the Crafting tab (tb[3]) disable_button is no longer driven by bench_ok"
+    end
+end)
+
+-- (2026-07-02) The Compendium (Armory + Bestiary) must open + work mid-mission with
+-- NO keep gate: the is_in_inn keep-block is gone from mod._gut_open_compendium, and
+-- the tab-state pass no longer greys the compendium tabs out of the keep. Source-
+-- pattern guard on _ba_heroview_inject.lua (via mod._gut_open_compendium) + its
+-- sibling _ba_compendium_tabs.lua. Split needles so this check can't self-match.
+_rt_register("compendium_mission_access_ungated", function()
+    local ok, info = pcall(debug.getinfo, mod._gut_open_compendium or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local inject_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local function read_all(path)
+        local fh = io.open(path, "r")
+        if not fh then return nil end
+        local t = fh:read("*a")
+        fh:close()
+        return t
+    end
+    local inject_txt = read_all(inject_path)
+    if inject_txt then
+        -- The compendium-specific keep echo is gone (the Mod Tweaker path keeps its
+        -- own distinct message, so this needle is specific to the compendium).
+        local keepgate_needle = "The Compendium only opens in the " .. "keep/inn."
+        if inject_txt:find(keepgate_needle, 1, true) then
+            return "compendium regression: the is_in_inn keep-gate was reintroduced in _gut_open_compendium (mid-mission open blocked again)"
+        end
+    end
+    local tabs_path = inject_path:gsub("_ba_heroview_inject%.lua$", "_ba_compendium_tabs.lua")
+    if tabs_path ~= inject_path then
+        local tabs_txt = read_all(tabs_path)
+        if tabs_txt then
+            local grey_needle = "disable_button = not in" .. "_keep"
+            if tabs_txt:find(grey_needle, 1, true) then
+                return "compendium regression: _apply_tab_state greys the compendium tabs out of the keep again (mid-mission tabs disabled)"
+            end
+        end
+    end
+end)
+
+-- (#155/#172) In-mission Cosmetics split: the TAB is vanilla UI (enabled unconditionally,
+-- pose items filtered when the atlas isn't resident so no gui_pose_items_atlas C-fatal), the
+-- gear-icon customize is gated on cosmetics_tweaker specifically. Source-pattern guard on
+-- _gut_mission_inventory.lua (via mod.gut_open_mission_inventory). Split needles so this check
+-- can't self-match. No-op if unreadable.
+_rt_register("cosmetics_split_tab_ungated_gear_gated", function()
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_inventory or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- (a) Cosmetics tab (tb[4]) enabled unconditionally mid-mission.
+    local tab_needle = "tb[4].content.button_hotspot.disable" .. "_button = false"
+    if not txt:find(tab_needle, 1, true) then
+        return "#172 regression: the in-mission Cosmetics tab (tb[4]) is no longer enabled unconditionally"
+    end
+    -- (a) Pose items filtered from the grid when the atlas isn't resident.
+    local filter_needle = "slot.type == _POSE" .. "_SLOT_TYPE"
+    if not txt:find(filter_needle, 1, true) then
+        return "#155 regression: the pose-item grid filter (_equip_item_presentation) is gone -- gui_pose_items_atlas C-fatal could return"
+    end
+    -- (b) Gear-icon customize gated on cosmetics_tweaker specifically (NOT cim).
+    local gate_needle = 'return in_keep or (get_mod("cosmetics' .. '_tweaker") ~= nil)'
+    if not txt:find(gate_needle, 1, true) then
+        return "#172 regression: the gear-icon customize gate is no longer keyed on cosmetics_tweaker specifically"
     end
 end)
 
