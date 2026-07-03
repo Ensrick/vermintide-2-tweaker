@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.209-dev"
+local MOD_VERSION = "0.7.210-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5361,29 +5361,39 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
     local profile = _CURSE_SKY_PROFILES[theme]
     if not profile then return end
 
-    -- Multiply each existing color by the curse profile's per-var tint.
-    -- ShadingEnvironment.vector3 returns a fresh Vector3 each call (valid
-    -- within this frame) — safe to read, multiply, and write back.
-    local function mul_set(var_name)
+    -- User brightness knob (#243): scales the INTERIOR channels (fill, ambient
+    -- bounce, exposure) so an already-dark injected map can be lifted to taste
+    -- without touching the exterior sky/sun/fog color that carries the curse
+    -- mood. 1.0 = the baked profile exactly as-is (no behavior change). One
+    -- cheap settings read per callback, dwarfed by the ShadingEnvironment calls.
+    local b = tonumber(mod:get("curse_lighting_brightness")) or 1.0
+
+    -- Multiply each existing color by the curse profile's per-var tint (and, for
+    -- interior channels, by the user brightness `s`). ShadingEnvironment.vector3
+    -- returns a fresh Vector3 each call (valid within this frame) — safe to read,
+    -- multiply, and write back.
+    local function mul_set(var_name, s)
         local t = profile[var_name]
         if not t then return end
+        s = s or 1.0
         local v = ShadingEnvironment.vector3(shading_env, var_name)
         if v then
             ShadingEnvironment.set_vector3(shading_env, var_name,
-                Vector3(v.x * t[1], v.y * t[2], v.z * t[3]))
+                Vector3(v.x * t[1] * s, v.y * t[2] * s, v.z * t[3] * s))
         end
     end
-    mul_set("skydome_tint_color")
-    mul_set("sun_color")
-    mul_set("secondary_sun_color")
-    mul_set("ambient_tint")
-    mul_set("ambient_tint_top")
-    mul_set("fog_color")
+    mul_set("skydome_tint_color")      -- exterior sky: curse hue only, no brightness lift
+    mul_set("sun_color")               -- exterior direct sun: no lift
+    mul_set("secondary_sun_color", b)  -- fill light (interior): lifted by brightness
+    mul_set("ambient_tint", b)         -- interior bounce: lifted
+    mul_set("ambient_tint_top", b)     -- interior top ambient: lifted
+    mul_set("fog_color")               -- exterior haze: no lift
 
-    if profile.exposure_mul and profile.exposure_mul ~= 1.0 then
+    local exp = (profile.exposure_mul or 1.0) * b
+    if exp ~= 1.0 then
         local cur = ShadingEnvironment.scalar(shading_env, "exposure")
         if cur then
-            ShadingEnvironment.set_scalar(shading_env, "exposure", cur * profile.exposure_mul)
+            ShadingEnvironment.set_scalar(shading_env, "exposure", cur * exp)
         end
     end
 end)

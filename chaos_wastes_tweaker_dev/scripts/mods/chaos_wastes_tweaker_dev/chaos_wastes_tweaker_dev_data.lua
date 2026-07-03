@@ -562,6 +562,9 @@ local data = {
                     { setting_id = "cursed_mission_count", type = "numeric", default_value = 0, range = { 0, 30 }, decimals_number = 0, tooltip = "cursed_mission_count_tooltip" },
                     { setting_id = "disable_dominant_god", type = "checkbox", default_value = true, tooltip = "disable_dominant_god_tooltip" },
                     { setting_id = "finale_dominant_god", type = "dropdown", default_value = 0, options = finale_god_options, tooltip = "finale_dominant_god_tooltip" },
+                    -- #243: user brightness knob for the injected-map curse lighting
+                    -- (CameraManager.shading_callback). 1.0 = baked profile as-is.
+                    { setting_id = "curse_lighting_brightness", type = "numeric", default_value = 1.0, range = { 0.5, 2.5 }, decimals_number = 2, tooltip = "curse_lighting_brightness_tooltip" },
                 },
             },
             -- ============================================================

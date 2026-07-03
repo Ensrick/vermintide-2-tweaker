@@ -50,7 +50,7 @@ return {
     gt_btlab_d7_leash_lines_tooltip = { en = "Draws a line in the world from each bot to the teammate it follows and another from each bot to you, so you can see the leash at a glance. Purely visual." },
 
     gt_btlab_d8_tp_counter = { en = "[diagnostic] D8: Teleport counter" },
-    gt_btlab_d8_tp_counter_tooltip = { en = "Counts each bot's teleports for the current mission and how many moved it toward you versus away from you. A high away-from-you count is the signature of the teleport-away problem." },
+    gt_btlab_d8_tp_counter_tooltip = { en = "Splits each bot's teleports this mission into how many moved it toward you versus away from you. A high away-from-you count is the signature of the teleport-away problem." },
 
     gt_btlab_d9_hasteleported_probe = { en = "[diagnostic] D9: has_teleported flag probe" },
     gt_btlab_d9_hasteleported_probe_tooltip = { en = "Logs when a bot becomes able to teleport again after a previous teleport. Helps confirm that repeated teleports are being spaced out correctly." },
@@ -59,24 +59,24 @@ return {
     gt_btlab_d10_tp_snapshot_tooltip = { en = "On each teleport, saves a snapshot of where everyone was, who was downed, and who each bot was following, keeping the last ten. Lets you reconstruct exactly what happened around a bad teleport." },
 
     gt_btlab_f1_follow_you = { en = "[fix] F1: Bots follow you" },
-    gt_btlab_f1_follow_you_tooltip = { en = "Forces every bot to follow you instead of whichever teammate the game picked, so they stay near you. Takes priority over the follow-nearest-human fix when both are on." },
+    gt_btlab_f1_follow_you_tooltip = { en = "Overrides whichever teammate the game picked so every bot stays near you. Takes priority over the follow-nearest-human fix when both are on." },
 
     gt_btlab_f2_block_away = { en = "[fix] F2: Block teleports away from you" },
-    gt_btlab_f2_block_away_tooltip = { en = "Blocks any teleport that would move a bot farther from you than it already is. Logs each blocked teleport so you can confirm it worked." },
+    gt_btlab_f2_block_away_tooltip = { en = "Any teleport that would move a bot farther from you than it already is gets cancelled. Logs each blocked teleport so you can confirm it worked." },
 
     gt_btlab_f3_teleport_to_you = { en = "[fix] F3: Teleport bots to you" },
     gt_btlab_f3_teleport_to_you_tooltip = { en = "When a bot would teleport to a teammate, sends it to you instead, so bots appear next to you rather than vanishing to someone far away. Logs each redirect." },
 
     gt_btlab_f4_proximity_veto = { en = "[fix] F4: Block teleports while near you" },
-    gt_btlab_f4_proximity_veto_tooltip = { en = "Blocks a bot from teleporting while it is already within the radius set below of you. Logs each blocked teleport." },
+    gt_btlab_f4_proximity_veto_tooltip = { en = "While a bot is already within the radius set below of you, it cannot teleport. Logs each blocked teleport." },
     gt_btlab_f4_radius = { en = "F4: Proximity radius (metres)" },
     gt_btlab_f4_radius_tooltip = { en = "How close a bot must be to you for its teleport to be blocked. Default 25, range 5 to 60; only used when this fix is on." },
 
     gt_btlab_f5_nearest_human = { en = "[fix] F5: Bots follow nearest human" },
-    gt_btlab_f5_nearest_human_tooltip = { en = "Makes each bot follow the nearest living human player instead of a single shared target, so bots spread out in multiplayer. The follow-you fix takes priority when both are on." },
+    gt_btlab_f5_nearest_human_tooltip = { en = "Instead of all bots sharing one follow target, each picks the nearest living human player, so bots spread out in multiplayer. The follow-you fix takes priority when both are on." },
 
     gt_btlab_f6_stuck_only = { en = "[fix] F6: Only teleport when genuinely stuck" },
-    gt_btlab_f6_stuck_only_tooltip = { en = "Only lets a bot teleport when it is genuinely stuck (unable to find a path, or off the walkable area), so a bot that can still walk to you will not teleport. Logs each distance-only teleport it blocks." },
+    gt_btlab_f6_stuck_only_tooltip = { en = "A bot counts as stuck only when it cannot find a path or is off the walkable area; one that can still walk to you will not teleport. Logs each distance-only teleport it blocks." },
 
     gt_btlab_f7_threshold_raise = { en = "[fix] F7: Raise teleport threshold" },
     gt_btlab_f7_threshold_raise_tooltip = { en = "Blocks teleports until a bot is at least the distance set below from the teammate it follows, so bots walk much farther before teleporting. Logs each blocked teleport." },
@@ -84,7 +84,7 @@ return {
     gt_btlab_f7_distance_tooltip = { en = "How far a bot must fall behind before it is allowed to teleport. Default 80, range 40 to 200; only used when this fix is on." },
 
     gt_btlab_f8_combat_hold = { en = "[fix] F8: Hold teleports during your combat" },
-    gt_btlab_f8_combat_hold_tooltip = { en = "Blocks bot teleports while enemies are within the radius set below of you, so bots do not leash away mid-fight. Logs each blocked teleport." },
+    gt_btlab_f8_combat_hold_tooltip = { en = "While enemies are within the radius set below of you, bots are kept from teleporting away mid-fight. Logs each blocked teleport." },
     gt_btlab_f8_radius = { en = "F8: Combat enemy radius (metres)" },
     gt_btlab_f8_radius_tooltip = { en = "How close an enemy must be to you to count as being in combat for this fix. Default 15, range 5 to 40; only used when this fix is on." },
 
@@ -94,7 +94,7 @@ return {
     gt_btlab_f9_seconds_tooltip = { en = "How long a bot must wait after teleporting before it can teleport again. Default 3, range 0.5 to 15; only used when this fix is on." },
 
     gt_btlab_f10_direction_aware = { en = "[fix] F10: Block backward teleports" },
-    gt_btlab_f10_direction_aware_tooltip = { en = "Blocks a teleport when the teammate a bot follows is behind the way you are heading, so bots are not yanked backward as you move forward. Logs each blocked teleport." },
+    gt_btlab_f10_direction_aware_tooltip = { en = "When the teammate a bot follows is behind the way you are heading, that teleport is stopped so bots are not yanked backward as you move forward. Logs each blocked teleport." },
 
     -- Loose bot options (A->Z by display label; status tags ignored).
     gt_ai_afk_takeover = { en = "[untested] AFK Bot Takeover" },
@@ -122,34 +122,34 @@ return {
     -- gt_bot_split_among_players + gt_bot_follow_host checkboxes into one
     -- tri-state setting.
     gt_bot_follow_mode = { en = "[untested] Bot follow mode" },
-    gt_bot_follow_mode_tooltip = { en = "Choose who bots follow: Default (normal behavior), Follow Host (all bots stick to the host), or Split (one bot per human, host first). Bots still break off to revive or rescue an ally, and this only works when you are the host." },
+    gt_bot_follow_mode_tooltip = { en = "Three modes: Default (normal behavior), Follow Host (all bots stick to the host), or Split (one bot per human, host first). Bots still break off to revive or rescue an ally, and this only works when you are the host." },
     gt_bot_follow_mode_default     = { en = "Default" },
     gt_bot_follow_mode_follow_host = { en = "Follow Host" },
     gt_bot_follow_mode_split       = { en = "Split" },
 
     ai_takeover_enabled = { en = "[untested] Bot Takeover" },
-    ai_takeover_enabled_tooltip = { en = "Hands your character over to bot AI so you can step away or test, and gives control back when you turn it off. Not available in Versus or the keep, and your consumables and ammo are not kept when control changes." },
+    ai_takeover_enabled_tooltip = { en = "Step away or test while bot AI drives your character, and take control back by turning it off. Not available in Versus or the keep, and your consumables and ammo are not kept when control changes." },
 
     -- Replicant Bots ports (v0.2.131-dev). All host-side, default OFF, ported
     -- from the "Replicant Bots - Different Bots Experimental Branch" mod.
     gt_bot_drink_potions_in_danger = { en = "[untested] Bots drink potions when in danger (Replicant)" },
-    gt_bot_drink_potions_in_danger_tooltip = { en = "Lets a bot drink a potion it is carrying when a boss or a group of elites gets close, instead of hoarding it. Works only when you are the host." },
+    gt_bot_drink_potions_in_danger_tooltip = { en = "When a boss or a group of elites gets close, a bot will drink a potion it is carrying instead of hoarding it. Works only when you are the host." },
 
     gt_bot_rescue_awaiting = { en = "[confirmed working] Bots rescue allies awaiting respawn" },
-    gt_bot_rescue_awaiting_tooltip = { en = "Lets bots go free a teammate waiting to be rescued at a respawn point, which vanilla bots ignore. Works only when you are the host; experimental, so verify it in game." },
+    gt_bot_rescue_awaiting_tooltip = { en = "Vanilla bots ignore a teammate waiting to be rescued at a respawn point; this sends them to go free that ally. Works only when you are the host; experimental, so verify it in game." },
 
     gt_no_bots = { en = "[untested] Disable Bots" },
     gt_no_bots_tooltip = { en = "Keeps bots from filling empty party slots and instantly removes any already present, for true solo runs. Works only when you are the host and stays in effect across missions until you turn it off." },
 
     gt_bot_fast_reactions = { en = "[untested] Faster bot reactions (Replicant)" },
-    gt_bot_fast_reactions_tooltip = { en = "Makes bots react to threats much faster, cutting their reaction time to a fraction of a second. Works only when you are the host." },
+    gt_bot_fast_reactions_tooltip = { en = "Cuts bot reaction time to threats down to a fraction of a second. Works only when you are the host." },
 
     -- (gt_bot_follow_distance_enabled removed 2026-06-30 -- the slider below is now the sole control; 40 = off.)
     gt_bot_follow_distance_m = { en = "[untested] Follow snap-back distance (meters)" },
     gt_bot_follow_distance_m_tooltip = { en = "How far a bot may fall behind before it snaps back to you; 40 (the maximum) does nothing, and lower values keep bots closer, with about 15 to 20 the practical limit. Works only when you are the host." },
 
     gt_improved_bot_combat = { en = "[untested] Improved Bot Combat" },
-    gt_improved_bot_combat_tooltip = { en = "Improves bot teammates in combat: smarter attack choices, pinging the elite hitting them, not chasing distant specials, ignoring far-off gunners, not over-focusing bosses, and better ability timing for several careers. Works only when you are the host; if you also run the standalone Bot Improvements - Combat Returns mod, turn that off so they do not both apply." },
+    gt_improved_bot_combat_tooltip = { en = "Bot teammates make smarter attack choices, ping the elite hitting them, stop chasing distant specials, ignore far-off gunners, do not over-focus bosses, and time abilities better for several careers. Works only when you are the host; if you also run the standalone Bot Improvements - Combat Returns mod, turn that off so they do not both apply." },
 
     -- ============================================================
     -- Cheats and Debug
@@ -173,7 +173,7 @@ return {
     noclip_boost_multiplier = { en = "[confirmed working] Noclip Shift-Boost Multiplier" },
     noclip_boost_multiplier_tooltip = { en = "How much holding Left Shift multiplies your flight speed. At 3.0 you fly about three times faster than the base speed." },
     noclip_hotkey = { en = "[confirmed working] Noclip Toggle" },
-    noclip_hotkey_tooltip = { en = "Key that turns noclip flight on and off. It remembers your state, so pressing it again returns you to normal movement." },
+    noclip_hotkey_tooltip = { en = "Remembers your state, so one press drops you into noclip flight and the next returns you to normal movement." },
 
     -- ---- Buffs & Stats ----
     buffs_group = { en = "Buffs & Stats" },
@@ -237,7 +237,7 @@ return {
     gt_cs_mission_ai = { en = "[untested] Enable AI in Missions" },
     gt_cs_mission_ai_tooltip = { en = "Turns AI on for spawned enemies so they actually move and fight; with it off, they stand still. On by default." },
     gt_cs_keep_ai = { en = "[untested] Enable AI in Keep" },
-    gt_cs_keep_ai_tooltip = { en = "Allows enemy AI to run in the keep. This often crashes, because most enemies need navigation data the keep lacks, so it is off by default." },
+    gt_cs_keep_ai_tooltip = { en = "Off by default because it often crashes: most enemies need navigation data the keep lacks. Enabling it lets enemy AI run in the keep anyway." },
 
     gt_cs_grudge = { en = "[untested] Enable Grudge-Marked Modifiers" },
     gt_cs_grudge_tooltip = { en = "Adds grudge-marked modifiers to newly spawned enemies: Disabled for none, Random to roll a number of them (set by the slider below), or Manual to apply exactly the ones you check. There is a limit on active modifiers, so extras are skipped once it is reached." },
@@ -370,7 +370,7 @@ return {
     -- Modded Lobby Manifest -- nested collapsible; also holds Message of the Day.
     gt_lobby_manifest_group = { en = "Modded Lobby Manifest" },
     gt_lobby_manifest_broadcast_enabled = { en = "[untested] Broadcast my mod list (as host)" },
-    gt_lobby_manifest_broadcast_enabled_tooltip = { en = "As host, share your mod list with the lobby so joining players can see which mods they are missing if their join fails. Does not affect players who join successfully." },
+    gt_lobby_manifest_broadcast_enabled_tooltip = { en = "Lets players whose join fails see which mods they are missing, by sharing your mod list with the lobby as host. Does not affect players who join successfully." },
 
     -- Message of the Day (master toggle + nested send/greet options).
     gt_lobby_motd_enabled = { en = "[untested] Send MOTD to joiners" },
@@ -431,7 +431,7 @@ return {
     -- ============================================================
     gt_solo_group = { en = "Visuals and Audio" },
     gt_solo_assassin_hero_vo = { en = "[untested] Assassin/Packmaster hero voice callout" },
-    gt_solo_assassin_hero_vo_tooltip = { en = "Makes your hero call out the instant a Gutter Runner or Packmaster spawns, even when you are playing solo." },
+    gt_solo_assassin_hero_vo_tooltip = { en = "Even in solo play, your hero calls out the instant a Gutter Runner or Packmaster spawns." },
     gt_solo_disable_fog = { en = "[untested] Disable fog" },
     gt_solo_disable_fog_tooltip = { en = "Turns off the level's fog for clearer visibility. Purely visual and affects only your own game." },
     gt_solo_disable_mutator_explosions = { en = "[untested] Disable mutator death explosions" },

@@ -119,6 +119,8 @@ local loc = {
     finale_god_tzeentch = { en = "Tzeentch" },
     finale_god_khorne   = { en = "Khorne" },
     finale_god_slaanesh = { en = "Slaanesh" },
+    curse_lighting_brightness = { en = "Curse Lighting Brightness" },
+    curse_lighting_brightness_tooltip = { en = "Brightens or dims the curse atmosphere on injected adventure missions (interior bounce, fill light, exposure). 1.0 = default. Raise it if a dark interior map is too dark under a curse; lower it for a moodier look. No effect on vanilla Chaos Wastes maps." },
     -- Curse labels carry their HOST GOD as a prefix ("Disable: <God>: <Curse>") and are
     -- alphabetized (god, then curse) to match the menu widget order in *_data.lua. God
     -- grouping is authoritative from vanilla deus_map_populate_settings.lua `all_curses`

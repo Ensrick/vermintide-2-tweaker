@@ -1,5 +1,9 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.173-dev (2026-07-02) -- #222 strict re-sweep: option tooltips no longer restate their title
+
+- **#222 strict re-sweep (follow-up to the too-lenient v0.2.171 pass).** VMF builds each option popup as `title .. "\n" .. body` (confirmed in VMF source options.lua), so a body that opens by re-naming the option shows the title twice. v0.2.171 only stripped 3 blatant lead-ins; this pass rewrites 18 more `_tooltip` bodies whose openers echoed the title via "Turns on X" / "Hotkey to X" / "Makes ... X" / value-noun forms (bot-teleport-lab fixes, bot AI toggles, ai_takeover, noclip hotkey, keep-AI, lobby manifest broadcast, solo assassin VO, etc.). Each now opens with the behavior, effect, or range. No magnitudes, mechanics, chat commands, `%%` escaping, host-only/PC-only/Versus caveats, or mutex hints changed.
+
 ## v0.2.172-dev (2026-07-02) -- /catchup command (alias of /unstuck)
 
 - **New chat command `/catchup`** (user request): teleports you to the nearest living teammate, preferring humans - identical behavior to `/unstuck`. Implemented by extracting the existing `/unstuck` body into a shared local (`_gt_unstuck_to_teammate` in `_gt_godmode_qol.lua`) and registering both command names against it; no behavior change to `/unstuck`. Collision pre-flight: repo-wide grep found no other mod registering `catchup`.
