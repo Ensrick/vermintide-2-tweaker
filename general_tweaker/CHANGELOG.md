@@ -1,5 +1,11 @@
 # General Tweaker Changelog
 
+## v0.2.175 (2026-07-03) -- Promotion refresh: Bot Teleport Lab settings removed before the public release
+
+Refresh of the (not-yet-uploaded) v0.2.173 promotion, syncing the dev line at v0.2.175-dev. Absorbs dev v0.2.174-dev (#222 tooltip re-sweep round 2: action-hotkey and enable/disable tooltip bodies) and dev v0.2.175-dev:
+
+- **Bot Teleport Lab settings section removed entirely** (master + 10 diagnostic toggles + 10 fix-candidate toggles + numeric params, and all localization). New diagnostics doctrine: data-collecting probes are never menu toggles - they run implicitly in the DEV stream only. In this stable build the probes are fully inert (the `IS_DEV_STREAM` gate evaluates false), and the retired F1-F10 fix candidates are dormant regardless of any previously saved settings, so nothing from the old lab can activate here. The proven bot-teleport fixes (#139) in `_gt_bot_fixes.lua` and the Bots menu are unaffected.
+- **"Dev Tools" section** (bot behavior HUD, leash lines) exists only in the dev clone; its widget group is not built in this stable mod.
 ## v0.2.173 (2026-07-03) -- STABLE PROMOTION: full sync of the public item to the dev line at v0.2.173-dev
 
 First full dev->stable promotion since the dev/stable split. The public item jumps from v0.2.73-alpha (a late-May build plus two cherry-picks) to a direct port of `general_tweaker_dev` v0.2.173-dev: mod id renamed `gt_dev` -> `gt`, dev status labels ("[untested]" / "[confirmed working]") stripped from all menu strings, MOD_VERSION normalized to clean semver. Highlights over the outgoing stable build:

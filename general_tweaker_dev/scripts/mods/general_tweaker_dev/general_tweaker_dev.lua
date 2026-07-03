@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.174-dev"
+local MOD_VERSION = "0.2.175-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1516,6 +1516,120 @@ _rt_register("bot_follow_mode_dropdown_consolidated", function()
     end
 end)
 
+_rt_register("btlab_settings_removed", function()
+    -- v0.2.175-dev: the Bot Teleport Lab settings section (master + 10 D-toggles +
+    -- 10 F-toggles + 4 numeric params) was removed. Diagnostics are now implicit /
+    -- always-on in the dev build; the two visual tools moved to "Dev Tools". No
+    -- gt_btlab_ widget may remain in the data tree, else a friend's saved F-toggle
+    -- could resurface behind a ghost UI. Walk the tree and fail on any survivor.
+    local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return "could not require data file" end
+    local offending
+    local function walk(node)
+        if offending or type(node) ~= "table" then return end
+        local sid = node.setting_id
+        if type(sid) == "string" and sid:find("^gt_btlab_") then offending = sid return end
+        for _, child in pairs(node) do if type(child) == "table" then walk(child) end end
+    end
+    walk(data)
+    if offending then
+        return "a gt_btlab_ widget still exists in the data tree: " .. tostring(offending)
+    end
+end)
+
+_rt_register("btlab_fixes_dormant", function()
+    -- v0.2.175-dev: the retired F1..F10 bisection candidates must be DORMANT --
+    -- their three dispatch fns early-return on the module flag _BTLAB_FIXES_ARMED
+    -- (false) regardless of any (removed) setting, so a stale saved F-toggle can't
+    -- resurrect a behavior change. Behavioral proof: call each with nil args and
+    -- assert the dormant return. The proven #139 fixes in _gt_bot_fixes.lua are a
+    -- SEPARATE path and are unaffected.
+    if type(mod._gt_btlab_veto_teleport) ~= "function"
+        or type(mod._gt_btlab_override_follow_unit) ~= "function"
+        or type(mod._gt_btlab_redirect_teleport) ~= "function" then
+        return "a gt_btlab fix dispatch fn is missing (expected all three present but dormant)"
+    end
+    local veto = mod._gt_btlab_veto_teleport(nil, nil, nil, nil)
+    if veto ~= false then return "veto_teleport not dormant (returned " .. tostring(veto) .. ", want false)" end
+    local ovr = mod._gt_btlab_override_follow_unit(nil, nil)
+    if ovr ~= nil then return "override_follow_unit not dormant (returned " .. tostring(ovr) .. ", want nil)" end
+    local redir = mod._gt_btlab_redirect_teleport(nil, nil)
+    if redir ~= false then return "redirect_teleport not dormant (returned " .. tostring(redir) .. ", want false)" end
+end)
+
+_rt_register("devtools_group_dev_gated", function()
+    -- v0.2.175-dev: the "Dev Tools" group (gt_devtools_bot_hud + gt_devtools_leash_lines)
+    -- exists ONLY in the dev clone and is appended after "Cheats and Debug". This
+    -- test runs inside the dev mod, so require() returns the tree WITH Dev Tools.
+    -- (1) behavioral: the group + both children are present and ordered after
+    -- cheats_debug_group. (2) source-pattern: the data file gates the append on the
+    -- sed-safe get_mod("gt" .. "_dev") needle (survives the dev->stable gt_dev->gt
+    -- sed, so the group never builds in the promoted stable clone).
+    local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return "could not require data file" end
+    local widgets = data.options and data.options.widgets
+    if type(widgets) ~= "table" then return "data.options.widgets missing" end
+    local cheats_i, devtools_i
+    for i = 1, #widgets do
+        local sid = widgets[i].setting_id
+        if sid == "cheats_debug_group" then cheats_i = i end
+        if sid == "gt_devtools_group" then devtools_i = i end
+    end
+    if not devtools_i then return "gt_devtools_group not present in the dev data tree (append broken?)" end
+    if cheats_i and devtools_i < cheats_i then
+        return "gt_devtools_group must sort AFTER cheats_debug_group (A->Z)"
+    end
+    local want = { gt_devtools_bot_hud = false, gt_devtools_leash_lines = false }
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if node.setting_id and want[node.setting_id] ~= nil then want[node.setting_id] = true end
+        for _, child in pairs(node) do if type(child) == "table" then walk(child) end end
+    end
+    walk(widgets[devtools_i])
+    for id, found in pairs(want) do
+        if not found then return id .. " missing from the Dev Tools group" end
+    end
+    -- Source-pattern needle (best-effort; degrades if the deploy hides source).
+    local iok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
+    if iok and type(info) == "table" and info.source then
+        local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+        local data_path = src:gsub("_gt_bot_teleport_lab%.lua$", "general_tweaker_dev_data.lua")
+        local f = io.open(data_path, "r")
+        if f then
+            local txt = f:read("*a")
+            f:close()
+            if txt and not txt:find('get_mod("gt" .. "_dev")', 1, true) then
+                return "data file Dev Tools append missing the sed-safe get_mod(\"gt\" .. \"_dev\") gate"
+            end
+        end
+    end
+end)
+
+_rt_register("devtools_bot_hud_wired", function()
+    -- v0.2.175-dev: the bot behavior HUD must be wired -- the per-frame ring-buffer
+    -- poll dispatch fn present (driven from _gt_bot_fixes.lua's PlayerBotBase.update
+    -- merge-dispatch), and the lab source must read the current BT leaf action from
+    -- the blackboard (running_nodes) and gate the HUD on its toggle. Source read is
+    -- best-effort and degrades if the deploy doesn't expose source.
+    if type(mod._gt_btlab_observe_update) ~= "function" then
+        return "mod._gt_btlab_observe_update missing -- HUD ring-buffer poll chokepoint gone"
+    end
+    local ok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find("running_nodes", 1, true) then
+        return "lab source missing running_nodes read -- current BT action poll gone"
+    end
+    if not txt:find("gt_devtools_bot_hud", 1, true) then
+        return "lab source missing gt_devtools_bot_hud gate -- HUD not wired to its toggle"
+    end
+end)
+
 _rt_register("bt_health_conditions_nilguarded_marker_present", function()
     -- #59 secondary fix (v0.2.149-dev): nil-guard the BTConditions.at_*_health
     -- + can_transition_*_health + less_than_one_health condition family so a
@@ -1998,9 +2112,12 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_improved_bot_combat")
 -- player" bug. Defines mod._gt_btlab_* observer fns that are dispatched from the
 -- EXISTING _gt_bot_fixes.lua hook bodies (should_teleport / .run / update /
 -- _assign_destination_points) -- NO new hooks on those already-hooked pairs (VMF
--- single-hook rule). Registers its own D6/D7 draw update consumer + the
--- /bot_tp_dump + /bot_tp_snap chat commands. All diagnostics default OFF; runtime
--- dispatch is call-time resolved, so load order after _gt_bot_fixes is not
+-- single-hook rule). v0.2.175-dev: the D-probes are now IMPLICIT + always-on in
+-- the dev build (IS_DEV_STREAM gate, no menu toggles); the two visual tools (bot
+-- behavior HUD + leash lines) moved to the dev-only "Dev Tools" settings group and
+-- also require host; the former F1..F10 fix candidates are dormant. Registers its
+-- own draw update consumer + the /bot_tp_dump + /bot_tp_snap chat commands.
+-- Runtime dispatch is call-time resolved, so load order after _gt_bot_fixes is not
 -- required. See _gt_bot_teleport_lab.lua header for the merge-dispatch design.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab")
 

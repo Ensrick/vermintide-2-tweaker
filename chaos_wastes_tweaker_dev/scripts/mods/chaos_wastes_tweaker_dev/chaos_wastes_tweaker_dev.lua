@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.211-dev"
+local MOD_VERSION = "0.7.212-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -4016,6 +4016,10 @@ mod:hook("DeusMechanism", "game_round_ended", function(func, self, t, dt, reason
                 original_god = vote_data.dominant_god
                 vote_data.dominant_god = god
                 restored = true
+                -- #145 (read-only): note the finale override is active, and whether
+                -- disable_dominant_god will neuter it on the graph.
+                pcall(printf, "[ct:citadel145] finale override active: finale_dominant_god=%s -> %s | disable_dominant_god=%s (if true, override is neutered on the graph)",
+                    tostring(god_index), tostring(god), tostring(mod:get("disable_dominant_god")))
             end
         end
     end
@@ -5566,6 +5570,39 @@ local function restore_available_curses(saved)
     end
 end
 
+-- ============================================================
+-- #145 DIAGNOSTIC (read-only): Citadel of Eternity resolved-god census
+-- ============================================================
+-- Citadel of Eternity is TWO nodes: the approach SIGNATURE map (level key
+-- sig_citadel_<god>_pathN) and the finale ARENA map (arena_citadel_<god>_path1).
+-- Vanilla assigns the run's single dominant_god to the "final" node and hot-spot-
+-- spreads it to the adjacent approach (deus_populate_graph.lua:686-690). The mod's
+-- `disable_dominant_god` (default ON) sets config.NO_DOMINANT_GOD=true, which SKIPS
+-- that reservation -> the `finale_dominant_god` override (whose only delivery vector
+-- IS the reservation) is neutered, and the two Citadel maps then roll INDEPENDENT
+-- gods (#145). This host-only probe prints the resolved god per Citadel sub-map so a
+-- live run confirms the mechanism on the user's seed. printf (mod:debug is silent
+-- with logging off). Read-only: printf only.
+CT_CITADEL145_MARKER = "citadel145:resolved_god_census_v0.7.212"
+mod._ct_citadel145_dump = function(graph, no_dominant_god, dominant_god)
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if not is_server or type(graph) ~= "table" then return end
+    local found = false
+    for _, n in pairs(graph) do
+        local lvl = type(n) == "table" and n.level
+        if type(lvl) == "string" and (string.find(lvl, "^sig_citadel") or string.find(lvl, "^arena_citadel")) then
+            found = true
+            pcall(printf, "[ct:citadel145] level=%s node_type=%s god=%s theme=%s curse=%s | NO_DOMINANT_GOD=%s dominant_god=%s finale_setting=%s disable_dominant_god=%s",
+                tostring(lvl), tostring(n.node_type or n.level_type), tostring(n.god),
+                tostring(n.theme), tostring(n.curse), tostring(no_dominant_god), tostring(dominant_god),
+                tostring(mod:get("finale_dominant_god")), tostring(mod:get("disable_dominant_god")))
+        end
+    end
+    if found then
+        pcall(printf, "[ct:citadel145] (two Citadel nodes with DIFFERENT gods = disable_dominant_god neutered the finale override; NO_DOMINANT_GOD skips the finale reservation)")
+    end
+end
+
 mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dominant_god, with_belakor)
     -- CW graph generation runs on BOTH host and client (deterministic from
     -- seed). Use effective_setting(name) — returns mod:get() on host, the
@@ -5695,6 +5732,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         local cursed, total = count_cursed(result[1])
         _dbg("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
         dump_graph(result[1], "post-run")
+        mod._ct_citadel145_dump(result[1], config and config.NO_DOMINANT_GOD, dominant_god)  -- #145
         restore_curse_count()
         -- v0.7.64 graph sync — see ct_graph_snapshot_chunk block above.
         local is_server = Managers and Managers.player and Managers.player.is_server
@@ -5735,6 +5773,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     local cursed, total = count_cursed(result[1])
     _dbg("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
     dump_graph(result[1], "post-run-shop-converted")
+    mod._ct_citadel145_dump(result[1], config and config.NO_DOMINANT_GOD, dominant_god)  -- #145
     restore_curse_count()
     -- v0.7.64 graph sync — see ct_graph_snapshot_chunk block above.
     local is_server = Managers and Managers.player and Managers.player.is_server
@@ -5881,6 +5920,32 @@ do
     end
 end
 
+-- ============================================================
+-- #143 DIAGNOSTIC (read-only): Morgrim's Bomb appearance-by-source census
+-- ============================================================
+-- "Morgrim's Bomb" == holy_hand_grenade. spawn_type (arg to PickupSystem._spawn_pickup,
+-- the single spawn chokepoint, pickup_system.lua:1208) is the source discriminator:
+--   "spawner"    = world spread-pool sampler (the 0.8 spawn_weighting path; suspected
+--                  #143 origin -- reducing it blind crashed the sampler in v0.7.143,
+--                  reverted v0.7.145, so we MEASURE before renormalizing).
+--   "guaranteed" = level-baked spawner.  "dropped" = drop_item_on_ability_use bomb-boon
+--   drop (source c/#120/#101).  "buff" = buff_spawn_pickup.
+-- The chokepoint catches boon drops too (they route through _spawn_pickup as "dropped"),
+-- so this one probe splits world-weight appearances from boon-driven ones -- the exact
+-- question #143 needs answered before a safe grenade-pool renormalization. printf
+-- (mod:debug is silent with logging off); Morgrim's is infrequent so no flood.
+-- Read-only: printf only.
+CT_MORGRIM143_MARKER = "morgrim143:appearance_by_spawn_type_census_v0.7.212"
+do
+    local _by_source = {}
+    mod._ct_morgrim143_count = function(spawn_type, on_adv)
+        local k = tostring(spawn_type)
+        _by_source[k] = (_by_source[k] or 0) + 1
+        pcall(printf, "[ct:morgrim143] Morgrim's appeared: source=%s (x%d this session) injected_adv=%s",
+            k, _by_source[k], tostring(on_adv))
+    end
+end
+
 mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
     local on_adv = on_injected_adventure_level()
 
@@ -5901,6 +5966,12 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     -- so this tallies EVERYTHING. Returns a single unit (or nil) in vanilla.
     local spawned = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
     if mod._ct_tally_count then mod._ct_tally_count(pickup_name, spawned) end
+    -- #143 (read-only): tag every CONFIRMED Morgrim's Bomb spawn with its source
+    -- (world spread-pool vs level-baked vs bomb-boon drop) so a live run settles
+    -- whether the over-appearance origin is the world weight or the boon re-drop.
+    if pickup_name == "holy_hand_grenade" and spawned ~= nil and mod._ct_morgrim143_count then
+        mod._ct_morgrim143_count(spawn_type, on_adv)
+    end
     return spawned
 end)
 -- Note: previous versions attempted to make altars/chests walk-through by mutating
@@ -12875,6 +12946,26 @@ _rt_register("upgrade_altar_rarity_decouple", function()
     end
     if CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER ~= "upgrade_altar_rarity_decouple:relaxed_gates_no_bump_v0.7.211" then
         return "CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER mismatch — got: " .. tostring(CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER)
+    end
+end)
+
+-- v0.7.212-dev #143 DIAGNOSTIC: presence check for the Morgrim's-Bomb appearance-by-source census.
+_rt_register("morgrim143_probe_installed", function()
+    if type(mod._ct_morgrim143_count) ~= "function" then
+        return "#143 REGRESSION: mod._ct_morgrim143_count missing (Morgrim's appearance-by-source probe stripped)"
+    end
+    if CT_MORGRIM143_MARKER ~= "morgrim143:appearance_by_spawn_type_census_v0.7.212" then
+        return "#143 REGRESSION: CT_MORGRIM143_MARKER mismatch — got: " .. tostring(CT_MORGRIM143_MARKER)
+    end
+end)
+
+-- v0.7.212-dev #145 DIAGNOSTIC: presence check for the Citadel resolved-god census.
+_rt_register("citadel145_probe_installed", function()
+    if type(mod._ct_citadel145_dump) ~= "function" then
+        return "#145 REGRESSION: mod._ct_citadel145_dump missing (Citadel resolved-god probe stripped)"
+    end
+    if CT_CITADEL145_MARKER ~= "citadel145:resolved_god_census_v0.7.212" then
+        return "#145 REGRESSION: CT_CITADEL145_MARKER mismatch — got: " .. tostring(CT_CITADEL145_MARKER)
     end
 end)
 

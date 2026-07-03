@@ -48,7 +48,7 @@ local GT_CS_GRUDGE_OPTIONS = {
     { text = "gt_cs_grudge_manual",   value = "MANUAL", show_widgets = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 } },
 }
 
-return {
+local _data = {
     name = "Tweaker: General",
     description = mod:localize("mod_description"),
     is_togglable = true,
@@ -59,207 +59,17 @@ return {
         widgets = {
             -- ============================================================
             -- Bots -- AI teammate behavior fixes (see _gt_bot_fixes.lua).
-            -- Nested sub-group (Bot Teleport Lab) first, then loose options
-            -- A->Z by display label (status tags ignored). All default OFF;
-            -- host-side only (bots exist on the host), no network registration
-            -- so they can't affect non-modded peers.
+            -- Loose options A->Z by display label (status tags ignored). All
+            -- default OFF; host-side only (bots exist on the host), no network
+            -- registration so they can't affect non-modded peers. (The former
+            -- Bot Teleport Lab nested group was removed in v0.2.175-dev -- its
+            -- diagnostics are now implicit + always-on in the dev build, and its
+            -- two visual tools moved to the dev-only "Dev Tools" group below.)
             -- ============================================================
             {
                 setting_id  = "gt_bot_options_group",
                 type        = "group",
                 sub_widgets = {
-                    -- Bot Teleport Lab = diagnostics-only tools to observe/probe
-                    -- the "bots teleport away" bug. A master checkbox
-                    -- (gt_btlab_enabled) gates 10 D-toggles + 10 F-toggles. The
-                    -- 20 are listed in D1..D10 / F1..F10 NUMERIC order (NOT
-                    -- alphabetical) -- the numbering is deliberate and maps to
-                    -- _gt_bot_teleport_lab.lua. All default OFF; host-side.
-                    {
-                        setting_id  = "gt_btlab_group",
-                        type        = "group",
-                        sub_widgets = {
-                            {
-                                setting_id    = "gt_btlab_enabled",
-                                type          = "checkbox",
-                                default_value = false,
-                                tooltip       = "gt_btlab_enabled_tooltip",
-                                -- Master gate: every D-toggle also requires this ON
-                                -- (code reads `mod:get("gt_btlab_enabled") and
-                                -- mod:get("gt_btlab_dNN_...")`). VMF auto-hides these
-                                -- sub_widgets while the master is unchecked.
-                                sub_widgets   = {
-                                    {
-                                        setting_id    = "gt_btlab_d1_teleport_events",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d1_teleport_events_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d2_follow_tracker",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d2_follow_tracker_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d3_distance_readout",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d3_distance_readout_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d4_segment_probe",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d4_segment_probe_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d5_aid_probe",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d5_aid_probe_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d6_bot_hud",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d6_bot_hud_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d7_leash_lines",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d7_leash_lines_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d8_tp_counter",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d8_tp_counter_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d9_hasteleported_probe",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d9_hasteleported_probe_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_d10_tp_snapshot",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_d10_tp_snapshot_tooltip",
-                                    },
-                                    -- FIXES (F1..F10): the toggles that actually
-                                    -- STOP "bots teleport away". Listed in F1..F10
-                                    -- NUMERIC order (NOT alphabetical) -- the
-                                    -- numbering is deliberate and maps to the fix
-                                    -- dispatch fns in _gt_bot_teleport_lab.lua.
-                                    -- Each ALSO requires the master gate above.
-                                    -- F4/F7/F8/F9 carry a nested numeric param.
-                                    -- All default OFF; host-side.
-                                    {
-                                        setting_id    = "gt_btlab_f1_follow_you",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f1_follow_you_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f2_block_away",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f2_block_away_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f3_teleport_to_you",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f3_teleport_to_you_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f4_proximity_veto",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f4_proximity_veto_tooltip",
-                                        sub_widgets   = {
-                                            {
-                                                setting_id      = "gt_btlab_f4_radius",
-                                                type            = "numeric",
-                                                default_value   = 25.0,
-                                                range           = { 5.0, 60.0 },
-                                                decimals_number = 0,
-                                                tooltip         = "gt_btlab_f4_radius_tooltip",
-                                            },
-                                        },
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f5_nearest_human",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f5_nearest_human_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f6_stuck_only",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f6_stuck_only_tooltip",
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f7_threshold_raise",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f7_threshold_raise_tooltip",
-                                        sub_widgets   = {
-                                            {
-                                                setting_id      = "gt_btlab_f7_distance",
-                                                type            = "numeric",
-                                                default_value   = 80.0,
-                                                range           = { 40.0, 200.0 },
-                                                decimals_number = 0,
-                                                tooltip         = "gt_btlab_f7_distance_tooltip",
-                                            },
-                                        },
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f8_combat_hold",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f8_combat_hold_tooltip",
-                                        sub_widgets   = {
-                                            {
-                                                setting_id      = "gt_btlab_f8_radius",
-                                                type            = "numeric",
-                                                default_value   = 15.0,
-                                                range           = { 5.0, 40.0 },
-                                                decimals_number = 0,
-                                                tooltip         = "gt_btlab_f8_radius_tooltip",
-                                            },
-                                        },
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f9_cooldown",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f9_cooldown_tooltip",
-                                        sub_widgets   = {
-                                            {
-                                                setting_id      = "gt_btlab_f9_seconds",
-                                                type            = "numeric",
-                                                default_value   = 3.0,
-                                                range           = { 0.5, 15.0 },
-                                                decimals_number = 1,
-                                                tooltip         = "gt_btlab_f9_seconds_tooltip",
-                                            },
-                                        },
-                                    },
-                                    {
-                                        setting_id    = "gt_btlab_f10_direction_aware",
-                                        type          = "checkbox",
-                                        default_value = false,
-                                        tooltip       = "gt_btlab_f10_direction_aware_tooltip",
-                                    },
-                                },
-                            },
-                        },
-                    },
                     -- Loose options, A->Z by display label (status tags ignored):
                     {
                         setting_id    = "gt_ai_afk_takeover",
@@ -1104,3 +914,47 @@ return {
         },
     },
 }
+
+-- Dev Tools (dev-stream only). The whole group is appended ONLY in the dev clone.
+-- `"gt" .. "_dev"` has NO contiguous "gt_dev" substring, so it SURVIVES the
+-- dev->stable sed that rewrites the literal `gt_dev` on line 1 to `gt`; in the
+-- promoted stable clone `mod` == get_mod("gt") while get_mod("gt".."_dev") resolves
+-- to the (absent) dev mod -> nil, so the group is never built and "Dev Tools"
+-- simply doesn't exist. VMF loads loc -> data -> script, so `mod` (line 1) is
+-- resolved by data-load time. Inserted right after "Cheats and Debug" so the
+-- top-level A->Z order (Bots, Cheats and Debug, Dev Tools, Gameplay, Host-Side
+-- Lobby Controls, Info, Visuals and Audio) holds. Both toggles default OFF; the
+-- feature code (_gt_bot_teleport_lab.lua) also gates on IS_DEV_STREAM + host.
+if mod == get_mod("gt" .. "_dev") then
+    local widgets = _data.options.widgets
+    local insert_at = #widgets + 1
+    for i = 1, #widgets do
+        if widgets[i].setting_id == "cheats_debug_group" then
+            insert_at = i + 1
+            break
+        end
+    end
+    table.insert(widgets, insert_at, {
+        setting_id  = "gt_devtools_group",
+        type        = "group",
+        sub_widgets = {
+            -- Bot behavior HUD (supersedes the former Bot Teleport Lab D6 head-text).
+            -- Host-only; draws one on-screen column per bot.
+            {
+                setting_id    = "gt_devtools_bot_hud",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "gt_devtools_bot_hud_tooltip",
+            },
+            -- 3D leash lines (former Bot Teleport Lab D7). Host-only, visual.
+            {
+                setting_id    = "gt_devtools_leash_lines",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "gt_devtools_leash_lines_tooltip",
+            },
+        },
+    })
+end
+
+return _data

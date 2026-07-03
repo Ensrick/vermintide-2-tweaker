@@ -20,82 +20,6 @@ return {
     -- ============================================================
     gt_bot_options_group = { en = "Bots" },
 
-    -- Bot Teleport Lab (diagnostics; _gt_bot_teleport_lab.lua). All host-side,
-    -- default OFF. Master gate gt_btlab_enabled + 10 D-toggles + 10 F-toggles in
-    -- numeric order. Output goes to the console log via engine printf (tags
-    -- [gt:btlab:dNN] / [gt:btlab:fNN]), visible even with mod-logging off.
-    gt_btlab_group = { en = "Bot Teleport Lab (Diagnostics)" },
-    gt_btlab_enabled = { en = "[diagnostic] Enable Bot Teleport Lab" },
-    gt_btlab_enabled_tooltip = { en = "A set of tools for watching and fixing bots that teleport away from you. This master switch reveals the diagnostics below, which only observe bot behavior; each of them also needs it on, and everything here works only when you are the host." },
-
-    gt_btlab_d1_teleport_events = { en = "[diagnostic] D1: Teleport events" },
-    gt_btlab_d1_teleport_events_tooltip = { en = "Logs a line each time a bot teleports to catch up: which bot, where it went, who it was following, how far away it was, and whether it ended up closer to or farther from you. This is the main readout for the teleport-away problem." },
-
-    gt_btlab_d2_follow_tracker = { en = "[diagnostic] D2: Follow-unit tracker" },
-    gt_btlab_d2_follow_tracker_tooltip = { en = "Logs whenever a bot changes which teammate it is following, showing the old and new target. Helps reveal whether a follow-target change is what leads to a teleport." },
-
-    gt_btlab_d3_distance_readout = { en = "[diagnostic] D3: Live distance readout" },
-    gt_btlab_d3_distance_readout_tooltip = { en = "About once a second, logs each bot's distance to the teammate it follows and to you, so you can watch the gap grow toward a teleport." },
-
-    gt_btlab_d4_segment_probe = { en = "[diagnostic] D4: Segment gate probe" },
-    gt_btlab_d4_segment_probe_tooltip = { en = "Logs whether a bot was allowed to teleport based on its position along the level path. A bot will not teleport to a teammate who is behind it on the path, which explains some teleports that do not happen." },
-
-    gt_btlab_d5_aid_probe = { en = "[diagnostic] D5: Aid-exception probe" },
-    gt_btlab_d5_aid_probe_tooltip = { en = "Logs why a bot did or did not skip a teleport to help an ally. Bots hold off teleporting when they are busy reviving, rescuing, or fighting a priority target." },
-
-    gt_btlab_d6_bot_hud = { en = "[diagnostic] D6: On-screen bot labels" },
-    gt_btlab_d6_bot_hud_tooltip = { en = "Floating text over each bot shows its name and career, who it is following, and its distance to that teammate and to you. Purely visual; if the labels do not appear, use the log-based readouts instead." },
-
-    gt_btlab_d7_leash_lines = { en = "[diagnostic] D7: Leash lines (3D)" },
-    gt_btlab_d7_leash_lines_tooltip = { en = "A line runs in the world from each bot to the teammate it follows, and another from each bot to you, so you can see the leash at a glance. Purely visual." },
-
-    gt_btlab_d8_tp_counter = { en = "[diagnostic] D8: Teleport counter" },
-    gt_btlab_d8_tp_counter_tooltip = { en = "Splits each bot's teleports this mission into how many moved it toward you versus away from you. A high away-from-you count is the signature of the teleport-away problem." },
-
-    gt_btlab_d9_hasteleported_probe = { en = "[diagnostic] D9: has_teleported flag probe" },
-    gt_btlab_d9_hasteleported_probe_tooltip = { en = "Logs when a bot becomes able to teleport again after a previous teleport. Helps confirm that repeated teleports are being spaced out correctly." },
-
-    gt_btlab_d10_tp_snapshot = { en = "[diagnostic] D10: Teleport snapshots" },
-    gt_btlab_d10_tp_snapshot_tooltip = { en = "On each teleport, saves a snapshot of where everyone was, who was downed, and who each bot was following, keeping the last ten. Lets you reconstruct exactly what happened around a bad teleport." },
-
-    gt_btlab_f1_follow_you = { en = "[fix] F1: Bots follow you" },
-    gt_btlab_f1_follow_you_tooltip = { en = "Overrides whichever teammate the game picked so every bot stays near you. Takes priority over the follow-nearest-human fix when both are on." },
-
-    gt_btlab_f2_block_away = { en = "[fix] F2: Block teleports away from you" },
-    gt_btlab_f2_block_away_tooltip = { en = "Any teleport that would move a bot farther from you than it already is gets cancelled. Logs each blocked teleport so you can confirm it worked." },
-
-    gt_btlab_f3_teleport_to_you = { en = "[fix] F3: Teleport bots to you" },
-    gt_btlab_f3_teleport_to_you_tooltip = { en = "When a bot would teleport to a teammate, sends it to you instead, so bots appear next to you rather than vanishing to someone far away. Logs each redirect." },
-
-    gt_btlab_f4_proximity_veto = { en = "[fix] F4: Block teleports while near you" },
-    gt_btlab_f4_proximity_veto_tooltip = { en = "While a bot is already within the radius set below of you, it cannot teleport. Logs each blocked teleport." },
-    gt_btlab_f4_radius = { en = "F4: Proximity radius (metres)" },
-    gt_btlab_f4_radius_tooltip = { en = "How close a bot must be to you for its teleport to be blocked. Default 25, range 5 to 60; only used when this fix is on." },
-
-    gt_btlab_f5_nearest_human = { en = "[fix] F5: Bots follow nearest human" },
-    gt_btlab_f5_nearest_human_tooltip = { en = "Instead of all bots sharing one follow target, each picks the nearest living human player, so bots spread out in multiplayer. The follow-you fix takes priority when both are on." },
-
-    gt_btlab_f6_stuck_only = { en = "[fix] F6: Only teleport when genuinely stuck" },
-    gt_btlab_f6_stuck_only_tooltip = { en = "A bot counts as stuck only when it cannot find a path or is off the walkable area; one that can still walk to you will not teleport. Logs each distance-only teleport it blocks." },
-
-    gt_btlab_f7_threshold_raise = { en = "[fix] F7: Raise teleport threshold" },
-    gt_btlab_f7_threshold_raise_tooltip = { en = "Blocks teleports until a bot is at least the distance set below from the teammate it follows, so bots walk much farther before teleporting. Logs each blocked teleport." },
-    gt_btlab_f7_distance = { en = "F7: Teleport threshold (metres)" },
-    gt_btlab_f7_distance_tooltip = { en = "How far a bot must fall behind before it is allowed to teleport. Default 80, range 40 to 200; only used when this fix is on." },
-
-    gt_btlab_f8_combat_hold = { en = "[fix] F8: Hold teleports during your combat" },
-    gt_btlab_f8_combat_hold_tooltip = { en = "While enemies are within the radius set below of you, bots are kept from teleporting away mid-fight. Logs each blocked teleport." },
-    gt_btlab_f8_radius = { en = "F8: Combat enemy radius (metres)" },
-    gt_btlab_f8_radius_tooltip = { en = "How close an enemy must be to you to count as being in combat for this fix. Default 15, range 5 to 40; only used when this fix is on." },
-
-    gt_btlab_f9_cooldown = { en = "[fix] F9: Teleport cooldown" },
-    gt_btlab_f9_cooldown_tooltip = { en = "After a bot teleports, blocks it from teleporting again for the number of seconds set below, so it cannot rapidly re-teleport. Logs each blocked teleport." },
-    gt_btlab_f9_seconds = { en = "F9: Cooldown (seconds)" },
-    gt_btlab_f9_seconds_tooltip = { en = "How long a bot must wait after teleporting before it can teleport again. Default 3, range 0.5 to 15; only used when this fix is on." },
-
-    gt_btlab_f10_direction_aware = { en = "[fix] F10: Block backward teleports" },
-    gt_btlab_f10_direction_aware_tooltip = { en = "When the teammate a bot follows is behind the way you are heading, that teleport is stopped so bots are not yanked backward as you move forward. Logs each blocked teleport." },
-
     -- Loose bot options (A->Z by display label; status tags ignored).
     gt_ai_afk_takeover = { en = "[untested] AFK Bot Takeover" },
     gt_ai_afk_takeover_tooltip = { en = "If you give no input for 20 seconds, a bot takes over your character, and you resume control the moment you press anything. Affects only your own character and works during missions only, not in Versus or the keep." },
@@ -316,6 +240,18 @@ return {
     ult_player_cap_value_tooltip = { en = "The longest career ability cooldown allowed for human players, in seconds. Set to 0 for an always-ready ult." },
     ult_reset_hotkey = { en = "[untested] Ult Reset" },
     ult_reset_hotkey_tooltip = { en = "Your career ability becomes ready to use again at once. A one-time effect; it does not keep the ability charged." },
+
+    -- ============================================================
+    -- Dev Tools (dev-stream only; the group is appended in the data file ONLY
+    -- when mod == get_mod("gt".."_dev")). Bot behavior HUD + leash lines.
+    -- ============================================================
+    gt_devtools_group = { en = "Dev Tools" },
+
+    gt_devtools_bot_hud = { en = "[untested] Bot behavior HUD" },
+    gt_devtools_bot_hud_tooltip = { en = "Draws a column per bot showing its current behavior-tree action, the teammate it follows, distance to that teammate and to you, whether it just teleported, its teleport tally, and the last twenty actions it entered. On-screen, host-only, dev build only." },
+
+    gt_devtools_leash_lines = { en = "[untested] Bot leash lines (3D)" },
+    gt_devtools_leash_lines_tooltip = { en = "Runs a line in the world from each bot to the teammate it follows and another to you, so the follow leash is visible at a glance. Purely visual, host-only, dev build only." },
 
     -- ============================================================
     -- Gameplay
