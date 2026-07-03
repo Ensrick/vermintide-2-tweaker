@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.212-dev"
+local MOD_VERSION = "0.7.213-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5257,6 +5257,80 @@ mod:hook("NetworkedFlowStateManager", "clear_object_state", function(func, self,
         end
     end
     return func(self, unit)
+end)
+
+-- ============================================================
+-- Hardening: NetworkedFlowStateManager 512-cap OVERFLOW guard (host)
+-- ============================================================
+-- The clear_object_state hook above fixes the vanilla _num_states LEAK
+-- (destroyed units never decrementing the counter). But the crash can ALSO
+-- recur WITHOUT a leak, and it did: v0.7.211-dev host crash on
+-- dlc_termite_3_tzeentch_path1 (Devious Delvings / Tzeentch), Chest of
+-- Trials active, enemy_tweaker caps raised. Crash dump
+-- console-2026-07-03-18.41.50-d6dbb15d.
+--
+-- Mechanism: a Chest of Trials terror event applies the
+-- `cursed_chest_objective_unit` buff to EVERY non-special trash spawn
+-- (deus_generic_terror_events.lua:26 cursed_chest_enemy_spawned_func), and
+-- each buff (morris_buff_settings.lua:614 apply_objective_unit) spawns a
+-- `units/hub_elements/objective_unit` carrying a `chest_open_state`
+-- networked flow state. entity_manager2.lua:390 clears the state on unit
+-- DESTROY, but under raised enemy caps the fight holds 512+ live
+-- objective_units AT ONCE (and mark_for_deletion lags actual destroy), so
+-- the states are genuinely live -- the leak fix can't reclaim them. Vanilla
+-- flow_cb_create_state fatals on the assert at
+-- networked_flow_state_manager.lua:381:
+--   "[NetworkedFlowStateManager] Too many object states(512)."
+--
+-- Guard (host-authoritative create path): intercept create. Near the cap,
+-- first reclaim slots held by units that are already DEAD but whose destroy
+-- has not yet fired clear_object_state (mark_for_deletion lag / any residual
+-- leak vector). If STILL full after reclaim, SKIP the create -- return the
+-- vanilla "declined to create" shape (nothing), which the flow callback
+-- already tolerates (flow_callbacks.lua:1292 `if created then`). A trash-mob
+-- objective marker without its networked chest_open_state is a cosmetic
+-- degradation on that one unit; a host crash ends the whole team's run.
+-- The full-table sweep only runs when _num_states is within 1 of the cap,
+-- so normal play (which never approaches 511) pays zero cost.
+CT_FLOWSTATE_CAP_GUARD_MARKER = "networked_flow_state_cap_guard:reclaim_dead_then_skip_v0.7.213"
+mod:hook("NetworkedFlowStateManager", "flow_cb_create_state", function(func, self, unit, state_name, ...)
+    local num = self._num_states
+    local max = self._max_states
+    if type(num) == "number" and type(max) == "number" and num >= max - 1 then
+        -- Reclaim slots from units that are already dead (destroy lag / leak).
+        local states = self._object_states
+        if type(states) == "table" then
+            local dead, reclaimed = nil, 0
+            for u, unit_states in pairs(states) do
+                if not (Unit and Unit.alive and Unit.alive(u)) then
+                    local c = 0
+                    if type(unit_states) == "table" and type(unit_states.states) == "table" then
+                        for _ in pairs(unit_states.states) do c = c + 1 end
+                    end
+                    dead = dead or {}
+                    dead[#dead + 1] = u
+                    reclaimed = reclaimed + c
+                end
+            end
+            if dead then
+                for i = 1, #dead do states[dead[i]] = nil end
+                if reclaimed > 0 and type(self._num_states) == "number" then
+                    self._num_states = math.max(0, self._num_states - reclaimed)
+                end
+            end
+        end
+        -- Still full after reclaim? Decline the create instead of fatalling.
+        if type(self._num_states) == "number" and self._num_states >= max then
+            if not mod._ct_flowstate_cap_warned then
+                mod._ct_flowstate_cap_warned = true
+                pcall(printf,
+                    "[ct:flowcap] NetworkedFlowStateManager at cap (%s/%s); declining create state=%s to avoid host crash (further skips silent this session)",
+                    tostring(self._num_states), tostring(max), tostring(state_name))
+            end
+            return
+        end
+    end
+    return func(self, unit, state_name, ...)
 end)
 
 -- ============================================================
@@ -12797,6 +12871,23 @@ _rt_register("networked_flow_state_leak_patched", function()
     -- Embedded marker for the bundled patch:
     local _MARKER = "Too many object states"
     if #_MARKER == 0 then return "marker constant missing" end
+end)
+
+_rt_register("networked_flow_state_cap_guarded", function()
+    -- v0.7.213: the leak fix (clear_object_state) balances CHURN, but the 512
+    -- cap can be hit by genuinely-live objective_units during a Chest of Trials
+    -- under enemy_tweaker raised caps. The guard hooks flow_cb_create_state to
+    -- reclaim dead-unit slots then decline the create instead of fatalling.
+    -- Verify the marker constant survived into the bundle and the method is
+    -- still hookable on the class.
+    if type(CT_FLOWSTATE_CAP_GUARD_MARKER) ~= "string" or #CT_FLOWSTATE_CAP_GUARD_MARKER == 0 then
+        return "CT_FLOWSTATE_CAP_GUARD_MARKER not defined (overflow guard missing)"
+    end
+    local cls = rawget(_G, "NetworkedFlowStateManager")
+    if not cls then return nil end
+    if type(cls.flow_cb_create_state) ~= "function" then
+        return "flow_cb_create_state missing on NetworkedFlowStateManager"
+    end
 end)
 
 _rt_register("starting_coins_setter_not_adder", function()
