@@ -1,5 +1,9 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.209-dev (2026-07-03) - Belakor curse lighting: stop crushing already-dark interior maps (CANDIDATE, needs in-game eyeball)
+
+- **Be'lakor curse lighting brightened on injected adventure maps so already-dark interiors aren't near-black.** User reported Devious Delvings (`dlc_termite_2`, a Verminious Dreams mines map) going too dark under the Be'lakor curse. ct's per-curse lighting runs only on injected adventure maps (`CameraManager.shading_callback`, gated on `on_injected_adventure_level()`), and the Be'lakor profile's tints are **multiplicative** - so a factor below 1.0 on the interior channels (ambient bounce, fill light, exposure) crushes a scene whose baked atmosphere is already dim. Fix: the interior-bounce channels no longer darken at all (`ambient_tint` 0.75/0.65/1.00 -> 1.00/0.90/1.22, `ambient_tint_top` -> 0.92/0.85/1.18, `secondary_sun_color` fill -> 0.90/0.85/1.10, `exposure_mul` 0.92 -> 1.02); they now carry only the purple **hue** (green pulled below blue). The exterior sky + direct sun stay dim (sky 0.45/0.30/0.70, sun 0.62/0.60/0.92) so open-air Be'lakor missions keep their oppressive mood. Data-only change - no added per-frame cost (relevant to #104). **Visual tuning; not verified in-engine - needs the user's eyes. If interiors are now right but exteriors read too bright, or it is still dark, the next step is a live brightness knob.**
+
 ## 0.7.208-dev (2026-07-02) - #222 strict re-sweep: option tooltips no longer restate their title
 
 VMF draws each option's title as the orange first line of the hover popup, then the

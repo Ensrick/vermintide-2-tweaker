@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.208-dev"
+local MOD_VERSION = "0.7.209-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5308,17 +5308,24 @@ local _CURSE_SKY_PROFILES = {
         fog_color            = { 1.25, 0.40, 1.10 },
         exposure_mul         = 0.97,
     },
-    -- BELAKOR — twilight purple. v0.7.21: brightened ambient (interior
-    -- bounce) so rooms aren't pitch-black, slightly dimmed exterior
-    -- (sky + sun) so the outdoor mood stays oppressive. Per user feedback.
+    -- BELAKOR — twilight purple. v0.7.21 brightened interiors; v0.7.207-dev
+    -- brightens them further after a report that already-dark INTERIOR maps
+    -- (repro: Devious Delvings / dlc_termite_2, a mines level) went near-black
+    -- under the curse. Root cause: these tints are MULTIPLICATIVE, so a factor
+    -- < 1 on the interior channels (ambient / fill / exposure) crushes a scene
+    -- whose baked atmosphere is already dim. Fix: the interior-bounce channels
+    -- no longer darken at all (ambient/fill/exposure >= 1.0) and only carry the
+    -- purple HUE (green pulled below blue); the EXTERIOR sky + direct sun stay
+    -- dim so open-air Belakor missions keep their oppressive mood. VISUAL -
+    -- needs in-game confirmation; if still off, wire a live brightness knob.
     belakor = {
-        skydome_tint_color   = { 0.40, 0.25, 0.65 },   -- slightly darker sky
-        sun_color            = { 0.50, 0.50, 0.85 },   -- slightly dimmer direct sun
-        secondary_sun_color  = { 0.55, 0.50, 0.90 },   -- brighter fill (helps interiors)
-        ambient_tint         = { 0.75, 0.65, 1.00 },   -- BRIGHTER interior bounce (was 0.45/0.40/0.75)
-        ambient_tint_top     = { 0.60, 0.55, 1.00 },   -- brighter top ambient
-        fog_color            = { 0.40, 0.30, 0.75 },   -- keep fog
-        exposure_mul         = 0.92,                    -- less darkening (was 0.85)
+        skydome_tint_color   = { 0.45, 0.30, 0.70 },   -- exterior sky: still dim + purple
+        sun_color            = { 0.62, 0.60, 0.92 },   -- exterior direct sun: slightly dim
+        secondary_sun_color  = { 0.90, 0.85, 1.10 },   -- fill: near-neutral, lifted (was 0.55/0.50/0.90) — interiors
+        ambient_tint         = { 1.00, 0.90, 1.22 },   -- interior bounce: NO darkening, purple-shifted (was 0.75/0.65/1.00)
+        ambient_tint_top     = { 0.92, 0.85, 1.18 },   -- top ambient: near-neutral, purple (was 0.60/0.55/1.00)
+        fog_color            = { 0.45, 0.35, 0.80 },   -- keep fog purple
+        exposure_mul         = 1.02,                    -- tiny lift, no global dim (was 0.92)
     },
 }
 
