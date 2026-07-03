@@ -44,10 +44,10 @@ return {
     gt_btlab_d5_aid_probe_tooltip = { en = "Logs why a bot did or did not skip a teleport to help an ally. Bots hold off teleporting when they are busy reviving, rescuing, or fighting a priority target." },
 
     gt_btlab_d6_bot_hud = { en = "[diagnostic] D6: On-screen bot labels" },
-    gt_btlab_d6_bot_hud_tooltip = { en = "Draws text above each bot showing its name and career, who it is following, and its distance to that teammate and to you. Purely visual; if the labels do not appear, use the log-based readouts instead." },
+    gt_btlab_d6_bot_hud_tooltip = { en = "Floating text over each bot shows its name and career, who it is following, and its distance to that teammate and to you. Purely visual; if the labels do not appear, use the log-based readouts instead." },
 
     gt_btlab_d7_leash_lines = { en = "[diagnostic] D7: Leash lines (3D)" },
-    gt_btlab_d7_leash_lines_tooltip = { en = "Draws a line in the world from each bot to the teammate it follows and another from each bot to you, so you can see the leash at a glance. Purely visual." },
+    gt_btlab_d7_leash_lines_tooltip = { en = "A line runs in the world from each bot to the teammate it follows, and another from each bot to you, so you can see the leash at a glance. Purely visual." },
 
     gt_btlab_d8_tp_counter = { en = "[diagnostic] D8: Teleport counter" },
     gt_btlab_d8_tp_counter_tooltip = { en = "Splits each bot's teleports this mission into how many moved it toward you versus away from you. A high away-from-you count is the signature of the teleport-away problem." },
@@ -158,10 +158,10 @@ return {
 
     -- Loose cheat primitives (A->Z).
     clear_enemies_hotkey = { en = "[untested] Clear Enemy Spawns" },
-    clear_enemies_hotkey_tooltip = { en = "Instantly removes every enemy currently alive. Works only when you are the host, and skips enemies tied to mission objectives so nothing breaks." },
+    clear_enemies_hotkey_tooltip = { en = "Every enemy currently alive vanishes at once, except any tied to mission objectives so nothing breaks. Works only when you are the host." },
 
     disable_enemy_spawns = { en = "[untested] Disable Enemy Spawns" },
-    disable_enemy_spawns_tooltip = { en = "Stops all new enemies from appearing: hordes, specials, bosses, patrols, and ambient critters. Enemies already present are left alone, and turning it off resumes normal spawning." },
+    disable_enemy_spawns_tooltip = { en = "No new enemies appear at all: hordes, specials, bosses, patrols, and ambient critters. Enemies already present are left alone, and turning it off resumes normal spawning." },
 
     godmode_enabled = { en = "[confirmed working] Godmode" },
     godmode_enabled_tooltip = { en = "Makes you invincible: you take no damage and cannot be grabbed or pinned by disablers, and enemies stop noticing you. Your third-person body fades out while it is on; your own view stays normal." },
@@ -178,30 +178,30 @@ return {
     -- ---- Buffs & Stats ----
     buffs_group = { en = "Buffs & Stats" },
     base_crit_chance = { en = "[untested] Base Crit Chance (%%)" },
-    base_crit_chance_tooltip = { en = "Sets how often your current career lands a critical hit. Most careers start at 5%%; it resets to the career's normal value when you switch careers and after a game restart." },
+    base_crit_chance_tooltip = { en = "Most careers start at 5%%; this raises or lowers that rate for your current career. It resets to the career's normal value when you switch careers and after a game restart." },
     gt_fall_damage_enabled = { en = "[untested] Fall damage multiplier" },
-    gt_fall_damage_enabled_tooltip = { en = "Turns on the multiplier below; when off, fall damage is normal. The host's setting applies to everyone in the lobby." },
+    gt_fall_damage_enabled_tooltip = { en = "When off, fall damage is normal; when on, the multiplier below takes effect. The host's setting applies to everyone in the lobby." },
     gt_fall_damage_mult = { en = "[untested] Fall damage multiplier (1 = normal, 0 = none, 5 = 5x)" },
-    gt_fall_damage_mult_tooltip = { en = "Scales fall damage: 1.0 is normal, 0 removes it entirely, and up to 5.0 makes tall falls five times as deadly. Only used while the fall damage toggle above is on." },
+    gt_fall_damage_mult_tooltip = { en = "1.0 is normal, 0 removes fall damage entirely, and up to 5.0 makes tall falls five times as deadly. Only used while the fall damage toggle above is on." },
     movement_speed = { en = "[untested] Movement Speed (m/s)" },
-    movement_speed_tooltip = { en = "Sets how fast players move, in metres per second (default 4). Resets after a game restart, and in a lobby the host's value affects everyone." },
+    movement_speed_tooltip = { en = "The default is 4 metres per second; higher values make everyone move faster. Resets after a game restart, and in a lobby the host's value affects everyone." },
 
     -- ---- Level Control ----
     level_control_group = { en = "Level Control" },
     fail_level_hotkey = { en = "[untested] Fail Level" },
-    fail_level_hotkey_tooltip = { en = "Instantly fails the current mission. Does nothing in the keep." },
+    fail_level_hotkey_tooltip = { en = "Sends the whole team straight to the defeat screen, ending the run on the spot. Available during a mission only, not in the keep." },
     fix_sound_hotkey = { en = "[untested] Fix Vortex Sound" },
-    fix_sound_hotkey_tooltip = { en = "Stops the looping vortex sound effect that can get stuck after restarting a mission during a wind or storm. Works during missions only." },
+    fix_sound_hotkey_tooltip = { en = "Silences the looping wind or storm effect that can get stuck after a mid-storm mission restart. Works during a mission only." },
     kill_bots_hotkey = { en = "[untested] Kill Bots" },
-    kill_bots_hotkey_tooltip = { en = "Kills every bot in your party. On the official realm this is only allowed before the round starts; on the modded realm there is no restriction." },
+    kill_bots_hotkey_tooltip = { en = "On the official realm this is only allowed before the round starts; the modded realm has no restriction. Every bot in your party goes down at once." },
     restart_level_hotkey = { en = "[untested] Restart Level" },
-    restart_level_hotkey_tooltip = { en = "Restarts the current mission. Does nothing in the keep." },
+    restart_level_hotkey_tooltip = { en = "Reloads the current mission from the beginning with the same team and difficulty. Does nothing in the keep." },
     die_hotkey = { en = "[untested] Suicide" },
-    die_hotkey_tooltip = { en = "Kills your own character. Does nothing in the keep." },
+    die_hotkey_tooltip = { en = "Your own character drops dead on the spot. Does nothing in the keep." },
     gt_bot_toggle_hotkey = { en = "[untested] Toggle Bots On/Off" },
-    gt_bot_toggle_hotkey_tooltip = { en = "Allows or blocks bots on the current level, letting them spawn in the keep or removing them mid-mission. Keep bots can occasionally cause a rare crash." },
+    gt_bot_toggle_hotkey_tooltip = { en = "On the current level, bots either start spawning (including in the keep) or are removed mid-mission. Keep bots can occasionally cause a rare crash." },
     win_level_hotkey = { en = "[untested] Win Level" },
-    win_level_hotkey_tooltip = { en = "Instantly completes the current mission. Does nothing in the keep." },
+    win_level_hotkey_tooltip = { en = "Jumps straight to the end-of-mission victory screen and its rewards. Does nothing in the keep." },
 
     -- ---- Spawners ----
     -- Creature Spawner + Item Spawner (ported from Aussiemon's CreatureSpawner
@@ -219,28 +219,28 @@ return {
     gt_cs_unit_list_all     = { en = "All" },
 
     gt_cs_spawn = { en = "[untested] Keybind: Spawn Creature" },
-    gt_cs_spawn_tooltip = { en = "Spawns the currently selected enemy where your crosshair points. Works only when you are the host, and it ignores the usual spawn limits." },
+    gt_cs_spawn_tooltip = { en = "Drops the currently selected enemy at wherever your crosshair points, ignoring the usual spawn limits. Works only when you are the host." },
     gt_cs_next = { en = "[untested] Keybind: Next Creature" },
-    gt_cs_next_tooltip = { en = "Selects the next enemy in the active list. Skips any you cannot spawn, such as DLC you do not own." },
+    gt_cs_next_tooltip = { en = "Moves the selection forward by one in the active list, skipping any you cannot spawn such as DLC you do not own." },
     gt_cs_prev = { en = "[untested] Keybind: Previous Creature" },
-    gt_cs_prev_tooltip = { en = "Selects the previous enemy in the active list." },
+    gt_cs_prev_tooltip = { en = "Moves the selection back by one in the active list." },
     gt_cs_destroy = { en = "[untested] Keybind: Destroy Spawned Creatures" },
-    gt_cs_destroy_tooltip = { en = "Removes every enemy you have spawned. Works only when you are the host, and note it also clears other enemies in the level, not just yours." },
+    gt_cs_destroy_tooltip = { en = "Clears the whole level of enemies, not just the ones you placed. Works only when you are the host." },
 
     gt_cs_spawn_slot_1 = { en = "[untested] Keybind: Spawn Saved Slot 1" },
-    gt_cs_spawn_slot_1_tooltip = { en = "Spawns whatever enemy you saved to slot 1." },
+    gt_cs_spawn_slot_1_tooltip = { en = "Whatever enemy you saved to slot 1 appears at your crosshair." },
     gt_cs_spawn_slot_2 = { en = "[untested] Keybind: Spawn Saved Slot 2" },
-    gt_cs_spawn_slot_2_tooltip = { en = "Spawns whatever enemy you saved to slot 2." },
+    gt_cs_spawn_slot_2_tooltip = { en = "Whatever enemy you saved to slot 2 appears at your crosshair." },
     gt_cs_spawn_slot_3 = { en = "[untested] Keybind: Spawn Saved Slot 3" },
-    gt_cs_spawn_slot_3_tooltip = { en = "Spawns whatever enemy you saved to slot 3." },
+    gt_cs_spawn_slot_3_tooltip = { en = "Whatever enemy you saved to slot 3 appears at your crosshair." },
 
     gt_cs_mission_ai = { en = "[untested] Enable AI in Missions" },
-    gt_cs_mission_ai_tooltip = { en = "Turns AI on for spawned enemies so they actually move and fight; with it off, they stand still. On by default." },
+    gt_cs_mission_ai_tooltip = { en = "On by default, so spawned enemies actually move and fight; with it off, they just stand still." },
     gt_cs_keep_ai = { en = "[untested] Enable AI in Keep" },
     gt_cs_keep_ai_tooltip = { en = "Off by default because it often crashes: most enemies need navigation data the keep lacks. Enabling it lets enemy AI run in the keep anyway." },
 
     gt_cs_grudge = { en = "[untested] Enable Grudge-Marked Modifiers" },
-    gt_cs_grudge_tooltip = { en = "Adds grudge-marked modifiers to newly spawned enemies: Disabled for none, Random to roll a number of them (set by the slider below), or Manual to apply exactly the ones you check. There is a limit on active modifiers, so extras are skipped once it is reached." },
+    gt_cs_grudge_tooltip = { en = "Newly spawned enemies can carry grudge-mark modifiers: Disabled for none, Random to roll a number of them (set by the slider below), or Manual to apply exactly the ones you check. There is a cap on active modifiers, so extras are skipped once it is reached." },
     gt_cs_grudge_disabled = { en = "Disabled" },
     gt_cs_grudge_random   = { en = "Random" },
     gt_cs_grudge_manual   = { en = "Manual" },
@@ -285,24 +285,24 @@ return {
 
     gt_is_group = { en = "Item Spawner" },
     gt_is_next_hotkey = { en = "[untested] Next Pickup" },
-    gt_is_next_hotkey_tooltip = { en = "Selects the next pickup you can spawn. Spawn the selected one with the Spawn Pickup hotkey." },
+    gt_is_next_hotkey_tooltip = { en = "Moves the selection forward by one through the pickups you can place. Drop it with the Spawn Selected Pickup key." },
     gt_is_prev_hotkey = { en = "[untested] Previous Pickup" },
-    gt_is_prev_hotkey_tooltip = { en = "Selects the previous pickup you can spawn." },
+    gt_is_prev_hotkey_tooltip = { en = "Moves the selection back by one through the pickups you can place." },
     gt_is_spawn_hotkey = { en = "[untested] Spawn Selected Pickup" },
-    gt_is_spawn_hotkey_tooltip = { en = "Spawns the currently selected pickup at your feet. Training dummies can only be spawned by the host." },
+    gt_is_spawn_hotkey_tooltip = { en = "The currently selected pickup appears at your feet. Training dummies can only be placed by the host." },
 
     -- ---- Time & Pause ----
     time_group = { en = "Time & Pause" },
     time_scale_value = { en = "[untested] Time Scale" },
-    time_scale_value_tooltip = { en = "Sets the game speed, from 1 (slowest) to 24 (fastest), with 13 being normal. Reapplied each mission but reset when the game restarts." },
+    time_scale_value_tooltip = { en = "Ranges from 1 (slowest) to 24 (fastest), with 13 being normal game speed. Reapplied each mission but reset when the game restarts." },
     time_faster_hotkey = { en = "[untested] Time Faster" },
-    time_faster_hotkey_tooltip = { en = "Speeds up the game by one step." },
+    time_faster_hotkey_tooltip = { en = "Bumps the Time Scale up by one step." },
     time_slower_hotkey = { en = "[untested] Time Slower" },
-    time_slower_hotkey_tooltip = { en = "Slows down the game by one step." },
+    time_slower_hotkey_tooltip = { en = "Bumps the Time Scale down by one step." },
     pause_value = { en = "[untested] Pause Speed" },
     pause_value_tooltip = { en = "The game speed used while paused, from 1 to 24. 1 is the slowest (closest to a real pause, though the interface keeps updating) and 13 is normal; the game has no true freeze." },
     pause_hotkey = { en = "[untested] Pause Toggle" },
-    pause_hotkey_tooltip = { en = "Toggles a host-only slow-motion pause. Clients see it too, since game speed is controlled by the host." },
+    pause_hotkey_tooltip = { en = "Flips a host-only slow-motion pause on or off. Clients see it too, since game speed is controlled by the host." },
 
     -- ---- Ult ----
     ult_group = { en = "Ult" },
@@ -315,7 +315,7 @@ return {
     ult_player_cap_value = { en = "[untested] Max Player Ult Cooldown (seconds)" },
     ult_player_cap_value_tooltip = { en = "The longest career ability cooldown allowed for human players, in seconds. Set to 0 for an always-ready ult." },
     ult_reset_hotkey = { en = "[untested] Ult Reset" },
-    ult_reset_hotkey_tooltip = { en = "Instantly refreshes your career ability so it is ready to use again. A one-time effect; it does not keep the ability charged." },
+    ult_reset_hotkey_tooltip = { en = "Your career ability becomes ready to use again at once. A one-time effect; it does not keep the ability charged." },
 
     -- ============================================================
     -- Gameplay
@@ -346,18 +346,18 @@ return {
     gt_gk_opt_damage_taken = { en = "Damage Reduction" },
 
     disable_friendly_fire = { en = "[confirmed working] Disable Friendly Fire" },
-    disable_friendly_fire_tooltip = { en = "Turns off all friendly fire damage, both ranged and melee. Higher difficulties normally allow friendly ranged fire; this stops it." },
+    disable_friendly_fire_tooltip = { en = "No damage passes between teammates, ranged or melee. Higher difficulties normally let friendly ranged fire through; this stops that." },
 
     gt_adventure_save_trait_chance = { en = "[untested] Healer's Touch, Home Brewer, Grenadier %% Chance" },
-    gt_adventure_save_trait_chance_tooltip = { en = "Sets the save chance for the Adventure charm traits Home Brewer, Healer's Touch, and Grenadier. Vanilla is 25%% each; raise it up to 75 to make them more worthwhile (each player sets their own)." },
+    gt_adventure_save_trait_chance_tooltip = { en = "Vanilla gives these three Adventure charm traits a 25%% save chance each; raise it up to 75 to make them more worthwhile. Each player sets their own." },
 
     -- (gt_prio_specials_group became a master toggle gt_prio_specials_enabled 2026-06-30.)
     gt_prio_specials_enabled = { en = "[untested] Prioritize Specials (Tagging, Deepwood and Soulstealer)" },
     gt_prio_specials_enabled_tooltip = { en = "Biases your aim toward Special enemies, with three sub-toggles to choose where it applies: crosshair tagging, the Deepwood Staff bolt, and the Soulstealer Staff soul. Only affects your own targeting." },
     gt_prio_special_deepwood = { en = "[untested] Deepwood Staff" },
-    gt_prio_special_deepwood_tooltip = { en = "The Sister of the Thorn's Deepwood Staff seeking bolt prefers a Special in your aim over the nearest enemy to your crosshair, falling back to normal aim when no Special is in view. Affects only you." },
+    gt_prio_special_deepwood_tooltip = { en = "Its seeking bolt prefers a Special in your aim over the nearest enemy to your crosshair, falling back to normal aim when no Special is in view. Affects only you." },
     gt_prio_special_soulstealer = { en = "[untested] Soulstealer Staff" },
-    gt_prio_special_soulstealer_tooltip = { en = "The Necromancer's Soulstealer Staff homing soul locks onto a Special in your aim before a closer non-Special. Affects only you." },
+    gt_prio_special_soulstealer_tooltip = { en = "Its homing soul locks onto a Special in your aim before a closer non-Special. Affects only you." },
     gt_prio_special_tag = { en = "[confirmed working] Tagging" },
     gt_prio_special_tag_tooltip = { en = "When you tag an enemy, prefer a Special along your aim even if an elite or a pickup is in the way. Affects only you." },
 
@@ -378,16 +378,16 @@ return {
     gt_lobby_motd_once_per_peer_per_session = { en = "[untested] Only greet each peer once per session" },
     gt_lobby_motd_once_per_peer_per_session_tooltip = { en = "On by default: greet each player at most once while you are hosting. Turn it off to greet them again every time they join, which is handy when someone reconnects." },
     gt_lobby_motd_send_chat = { en = "[untested] Send via chat" },
-    gt_lobby_motd_send_chat_tooltip = { en = "Show the message in the receiver's chat, one line per break." },
+    gt_lobby_motd_send_chat_tooltip = { en = "The message arrives in the receiver's chat window, one line per break." },
     gt_lobby_motd_send_popup = { en = "[untested] Send via popup" },
-    gt_lobby_motd_send_popup_tooltip = { en = "Show the message as a popup with an OK button on the receiver's screen." },
+    gt_lobby_motd_send_popup_tooltip = { en = "The message pops up on the receiver's screen with an OK button to dismiss it." },
 
     gt_lobby_manifest_failnotify_enabled = { en = "[untested] Show missing mods when a join fails" },
     gt_lobby_manifest_failnotify_enabled_tooltip = { en = "When you fail to join a modded host over a mod mismatch, replace the generic error with a list of the mods you are missing plus a button to open the Workshop. Falls back to the normal error if the host is not sharing its mod list." },
 
     -- Loose lobby options (A->Z by display label).
     allow_duplicate_careers = { en = "[confirmed working] Allow Duplicate Careers" },
-    allow_duplicate_careers_tooltip = { en = "Lets more than one player pick the same hero and career in a lobby." },
+    allow_duplicate_careers_tooltip = { en = "More than one player can pick the same hero and career in the same lobby." },
 
     gt_lobby_kick_idle_enabled = { en = "[untested] Auto-kick idle players in keep" },
     gt_lobby_kick_idle_enabled_tooltip = { en = "While in the keep, warn and then kick players who stand still too long (the host and bots are never affected). Works only when you are the host, and you can exempt specific players." },
@@ -403,16 +403,16 @@ return {
     gt_auto_ready_on_vote_pass_tooltip = { en = "When a mission vote passes, skip the bridge countdown and start immediately. Host only; leave it off if you enjoy the bridge sequence." },
 
     gt_lobby_session_ignore_enabled = { en = "[untested] Enable ignore list" },
-    gt_lobby_session_ignore_enabled_tooltip = { en = "Auto-kick players on your ignore list when they try to join, either for this session only or permanently. Works only when you are the host." },
+    gt_lobby_session_ignore_enabled_tooltip = { en = "Players on your ignore list are turned away the moment they try to join, either for this session only or permanently. Works only when you are the host." },
 
     gt_lobby_slot_reservations_enabled = { en = "[untested] Enable slot reservations" },
-    gt_lobby_slot_reservations_enabled_tooltip = { en = "Reserve lobby slots for specific players by their Steam ID. Works only when you are the host, and other joiners are turned away while a reserved slot is still waiting for its player." },
+    gt_lobby_slot_reservations_enabled_tooltip = { en = "Named players get lobby slots held for them by their Steam ID; other joiners are turned away while a held slot still waits for its player. Works only when you are the host." },
 
     gt_ready_up_hotkey = { en = "[confirmed working] Ready Up (Skip Countdown)" },
-    gt_ready_up_hotkey_tooltip = { en = "Skips the Bridge of Shadows countdown and starts the mission right away. Host only." },
+    gt_ready_up_hotkey_tooltip = { en = "Starts the mission right away, cutting straight past the Bridge of Shadows countdown. Host only." },
 
     gt_unlock_all_weaves = { en = "[confirmed working] Unlock All Ranked Weaves" },
-    gt_unlock_all_weaves_tooltip = { en = "Unlocks every ranked weave in the Winds of Magic ladder so you can play any of them without grinding to unlock it. You still need the Winds of Magic DLC, and this only affects your own game." },
+    gt_unlock_all_weaves_tooltip = { en = "Every ranked weave in the Winds of Magic ladder becomes playable without grinding up the ladder first. You still need the Winds of Magic DLC, and this only affects your own game." },
 
     -- ============================================================
     -- Info -- on-screen text readouts / warnings.
@@ -433,15 +433,15 @@ return {
     gt_solo_assassin_hero_vo = { en = "[untested] Assassin/Packmaster hero voice callout" },
     gt_solo_assassin_hero_vo_tooltip = { en = "Even in solo play, your hero calls out the instant a Gutter Runner or Packmaster spawns." },
     gt_solo_disable_fog = { en = "[untested] Disable fog" },
-    gt_solo_disable_fog_tooltip = { en = "Turns off the level's fog for clearer visibility. Purely visual and affects only your own game." },
+    gt_solo_disable_fog_tooltip = { en = "The level's fog stops rendering, giving a cleaner line of sight. Purely visual and affects only your own game." },
     gt_solo_disable_mutator_explosions = { en = "[untested] Disable mutator death explosions" },
     gt_solo_disable_mutator_explosions_tooltip = { en = "Removes the purple burst that enemies leave behind when they die under the Explosive mutator or boon." },
     gt_solo_disable_sun_shadows = { en = "[untested] Disable sun shadows" },
-    gt_solo_disable_sun_shadows_tooltip = { en = "Turns off sun shadows for clearer visibility and a small performance gain. Purely visual and affects only your own game." },
+    gt_solo_disable_sun_shadows_tooltip = { en = "Sun shadows stop rendering, for clearer visibility and a small performance gain. Purely visual and affects only your own game." },
     gt_solo_disable_ult_vo = { en = "[untested] Disable your ult voice line" },
     gt_solo_disable_ult_vo_tooltip = { en = "Silences your own character's voice line when you use your career ultimate." },
     gt_solo_draw_boss_spheres = { en = "[untested] Draw boss-event spheres" },
-    gt_solo_draw_boss_spheres_tooltip = { en = "Draws red wireframe spheres at the boss and main-path event spots on the level, as a debug or streamer aid." },
+    gt_solo_draw_boss_spheres_tooltip = { en = "Red wireframe markers appear at the boss and main-path event spots on the level, as a debug or streamer aid." },
     gt_more_corpses_count = { en = "[untested] Max Ragdolls" },
     gt_more_corpses_count_tooltip = { en = "How many ragdolls and corpses stay on the ground before the game starts removing them. Vanilla is 24; raise it up to 300 for a more cinematic battlefield, though high values can strain slower machines." },
 
@@ -458,7 +458,7 @@ return {
     gt_lobby_motd_text_tooltip = { en = "The message players receive when they join. Type a backslash and n where you want a line break." },
 
     -- Failed-join manifest reveal (rendered text; _gt_lobby_failed_join_reveal.lua).
-    gt_lobby_failnotify_title              = { en = "Cannot join -- modded host" },
+    gt_lobby_failnotify_title              = { en = "Cannot join: modded host" },
     gt_lobby_failnotify_required_header    = { en = "You are missing %%d mods required by the host:" },
     gt_lobby_failnotify_version_header     = { en = "%%d mods have a version mismatch:" },
     gt_lobby_failnotify_cosmetic_footer    = { en = "Host also has %%d cosmetic mods you don't (gameplay unaffected)." },
