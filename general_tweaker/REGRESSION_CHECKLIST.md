@@ -35,8 +35,8 @@ Last updated: 2026-05-22.
 |-------|-------|
 | Symptom | VMF dropdown shows `<<key>>` or `<<<key>>>` cascades on second/third dropdown sharing an options table. |
 | Root cause | VMF's `localize_dropdown_data` mutates `option.text` in place. Two dropdowns referencing the same options table get the first localized; the second tries to localize the already-localized string. |
-| Mod(s) | enemy_tweaker, career_tweaker, any mod with multiple dropdowns of the same option set |
-| Fix version(s) | enemy_tweaker v0.4.2-dev, crt v0.2.18-dev (talent-swap dropdown cascade) |
+| Mod(s) | enemy_tweaker, career_tweaker, **general_tweaker (Choose Grail Knight Quests — 3 shared dropdowns)**, any mod with multiple dropdowns of the same option set |
+| Fix version(s) | enemy_tweaker v0.4.2-dev, crt v0.2.18-dev (talent-swap dropdown cascade), **gt v0.2.96-dev (`_gt_gk_quest_options()` factory + loc keys; guarded by `_rt_register("gk_quest_dropdowns_dont_share_options")`)** |
 | Category | STATIC |
 | Repro | 1. Define `local _SHARED = { { text = "off", value = "off" }, ... }`. 2. Use `options = _SHARED` on two different dropdown widgets. 3. Open settings. |
 | Expected post-fix | Each dropdown gets its own options table (inline literal or factory function `_build_options()`). No bracket cascade. |

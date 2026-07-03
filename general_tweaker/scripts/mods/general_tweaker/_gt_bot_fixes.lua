@@ -17,6 +17,174 @@ local POSITION_LOOKUP = POSITION_LOOKUP
 local HEALTH_ALIVE = HEALTH_ALIVE
 local Vector3 = Vector3
 local BackendUtils = BackendUtils
+local Unit = Unit
+local Managers = Managers
+local ALIVE = ALIVE
+local Vector3Box = Vector3Box
+local Breeds = Breeds
+
+-- Source-pattern marker for the FIX 1 give-half completion (v0.2.138-dev). The
+-- /gt_regression_test "necro_potion_give_half_targeted_promote" check asserts
+-- this constant + the SwapFromStorageType.Same promote so a refactor that
+-- regresses to a blind SwapFromStorageType.First swap (which can mis-promote the
+-- grimoire/skull and re-break the give) gets caught. See FIX 1 header below.
+GT_NECRO_POTION_GIVE_HALF_MARKER_v0_2_138 = "gt-necro-potion-give-half-targeted-promote"
+
+-- ============================================================================
+-- REPLICANT BOTS PORT 1: Faster bot reactions (gt_bot_fast_reactions)
+-- ----------------------------------------------------------------------------
+-- Ported from "Replicant Bots - Different Bots Experimental Branch"
+-- (DifferentBots.lua:273-306 + :3056-3058). Two parts, both gated on the
+-- gt_bot_fast_reactions toggle:
+--   1) Overwrite BotConstants.default.OPPORTUNITY_TARGET_REACTION_TIMES with a
+--      flat {min=0.2,max=0.5} for EVERY difficulty so bots stop sitting on a
+--      10-20s reaction delay before engaging an opportunity target.
+--   2) Make AiUtils.calculate_bot_threat_time return the raw
+--      bot_threat.start_time / bot_threat.duration (no random start_delay), so
+--      bots dodge/react to telegraphed attacks immediately instead of rolling a
+--      delayed reaction (vanilla: ai_utils.lua:723-739 returns
+--      start_time+start_delay, duration-start_delay).
+--
+-- The source mod's on_disabled is author-flagged broken ("Disable function ...
+-- is not properly written!"), so we do a REAL snapshot/restore: deep-copy the
+-- vanilla table the first time we apply, and write it back verbatim on toggle
+-- off. Host-side only (bot AI is server-side); no RPC. See on_setting_changed
+-- dispatch in general_tweaker.lua for the apply/restore call sites.
+-- ============================================================================
+local _gt_fast_react_value = { min = 0.2, max = 0.5 }
+local _gt_fast_react_vanilla_snapshot   -- deep-copy of the vanilla reaction table (nil until first apply)
+local _gt_fast_react_applied = false
+
+local function _gt_deep_copy(t)
+    if type(t) ~= "table" then return t end
+    local out = {}
+    for k, v in pairs(t) do
+        out[k] = _gt_deep_copy(v)
+    end
+    return out
+end
+
+-- Apply the fast reaction-time table to every difficulty key the vanilla table
+-- already defines (read live, not a static roster, so future difficulties are
+-- covered). Snapshots the vanilla table on the first apply for restore.
+local function _gt_apply_fast_reactions()
+    local bc = BotConstants and BotConstants.default
+    if not bc then return end
+    local vanilla = bc.OPPORTUNITY_TARGET_REACTION_TIMES
+    if type(vanilla) ~= "table" then return end
+
+    if not _gt_fast_react_vanilla_snapshot then
+        _gt_fast_react_vanilla_snapshot = _gt_deep_copy(vanilla)
+    end
+
+    local fast = {}
+    for difficulty_key in pairs(_gt_fast_react_vanilla_snapshot) do
+        fast[difficulty_key] = { min = _gt_fast_react_value.min, max = _gt_fast_react_value.max }
+    end
+    bc.OPPORTUNITY_TARGET_REACTION_TIMES = fast
+    _gt_fast_react_applied = true
+
+    mod:debug("[gt:bot] fast reactions applied (OPPORTUNITY_TARGET_REACTION_TIMES -> {min=0.2,max=0.5} for all difficulties)")
+end
+
+-- Restore the snapshotted vanilla reaction-time table.
+local function _gt_restore_fast_reactions()
+    local bc = BotConstants and BotConstants.default
+    if not (bc and _gt_fast_react_vanilla_snapshot) then return end
+    bc.OPPORTUNITY_TARGET_REACTION_TIMES = _gt_deep_copy(_gt_fast_react_vanilla_snapshot)
+    _gt_fast_react_applied = false
+
+    mod:debug("[gt:bot] fast reactions restored (vanilla OPPORTUNITY_TARGET_REACTION_TIMES re-applied)")
+end
+
+-- Public so general_tweaker.lua's on_setting_changed can drive apply/restore.
+mod._gt_apply_fast_reactions   = _gt_apply_fast_reactions
+mod._gt_restore_fast_reactions = _gt_restore_fast_reactions
+
+-- The raw-return threat-time hook. Gated; when on, return the un-delayed
+-- start_time/duration so bots react to telegraphed attacks immediately.
+-- (Source: DifferentBots.lua:3056-3058.) NEW (Class, method) pair -- no other
+-- gt hook targets AiUtils.calculate_bot_threat_time (the only other AiUtils hook
+-- in this repo is _gt_solo_qol.lua's generic_mutator_explosion).
+mod:hook("AiUtils", "calculate_bot_threat_time", function (func, bot_threat)
+    if mod:get("gt_bot_fast_reactions") then
+        return bot_threat.start_time, bot_threat.duration
+    end
+    return func(bot_threat)
+end)
+
+-- ----------------------------------------------------------------------------
+-- FIX 0 (CRASH): BTBotMeleeAction.enter nil slot_data hard crash
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   Vanilla BTBotMeleeAction.enter (bt_bot_melee_action.lua:70-92) does:
+--       local slot_data = inventory_ext:get_slot_data(wielded_slot_name)  -- :82
+--       local item_data = slot_data.item_data                            -- :83  <-- CRASH
+--       ...
+--       blackboard.wielded_item_template = item_template                 -- :86
+--   When the bot's wielded slot is TRANSIENT/EMPTY for a frame -- e.g. the bot
+--   was just given a weapon (CW bot-weapon mirror / cim / wt bot loadout / a
+--   vanilla bot inventory re-equip) and the slot has no data yet -- get_slot_data
+--   returns nil and :83 fatals "attempt to index local 'slot_data' (a nil value)"
+--   (reported 2026-06-20, GUID 35c69dda; on the HOST, bots are host-only).
+--
+--   Guarding enter ALONE is not enough: enter writes blackboard.wielded_item_template
+--   (nil in the empty-slot case), and the SAME frame the whole melee node derefs it
+--   unguarded -- _update_melee (:418): _choose_attack (:209/:220),
+--   _defend.defense_meta_data (:499), _can_stagger_target.actions (:562),
+--   _time_to_next_attack / _attack .attack_meta_data/.actions/.name (:584-600).
+--   So the node must NOT run a frame with a nil weapon.
+--
+-- FIX (two halves; the WHOLE melee node is made safe for a nil weapon)
+--   1) HERE: wrap enter. Replicate vanilla's early, always-safe blackboard setup
+--      (node_timer :71, the melee table :72-78, set_aiming :88-91) ourselves, then
+--      only attempt the slot_data -> item_template resolution when slot_data is
+--      present. If the wielded slot is empty, leave wielded_item_template = nil and
+--      skip the crashing :83 deref. (We never call func, so vanilla's :83 can't run.)
+--   2) In _gt_improved_bot_combat.lua, the consolidated (BTBotMeleeAction, "run")
+--      hook bails the node ("done","evaluate") whenever wielded_item_template is nil,
+--      so _update_melee never derefs the nil weapon. The bot leaves melee for one
+--      frame and the BT re-selects next frame once the slot is populated.
+--
+--   UNGATED -- this is a crash fix, not the smarter-combat feature, so it must hold
+--   regardless of the gt_improved_bot_combat toggle. Host-side only (bots are
+--   host-only); no RPC, so it's inert/crash-safe on clients. Nil-guarded throughout.
+mod:hook("BTBotMeleeAction", "enter", function (func, self, unit, blackboard, t)
+    local inventory_ext = blackboard.inventory_extension
+    local slot_data
+    if inventory_ext then
+        local wielded_slot_name = inventory_ext:get_wielded_slot_name()
+        if wielded_slot_name then
+            slot_data = inventory_ext:get_slot_data(wielded_slot_name)
+        end
+    end
+
+    -- Slot is populated -> vanilla path is safe; let it run unchanged.
+    if slot_data then
+        return func(self, unit, blackboard, t)
+    end
+
+    -- Slot transient/empty -> replicate vanilla's always-safe early setup WITHOUT
+    -- the :83 deref, leaving wielded_item_template = nil. The consolidated `run`
+    -- hook then bails the node until the slot is populated.
+    blackboard.node_timer = t
+    blackboard.melee = {
+        engage_change_time = 0,
+        engage_position_set = false,
+        engage_update_time = 0,
+        engaging = false,
+        engage_position = Vector3Box(0, 0, 0),
+    }
+    blackboard.wielded_item_template = nil
+
+    local input_ext = blackboard.input_extension
+    if input_ext then
+        local soft_aiming = true
+        input_ext:set_aiming(true, soft_aiming)
+    end
+
+    mod:debug("[gt:bot] BTBotMeleeAction.enter saw empty wielded slot (bot mid weapon-swap) -- deferred melee 1 frame (crash guard)")
+end)
 
 -- ----------------------------------------------------------------------------
 -- FIX 1: Necromancer bot can't hand off potions (skull occupies slot_potion)
@@ -51,16 +219,62 @@ local BackendUtils = BackendUtils
 --   storage (harmless for a bot; bots don't use the Necromancer utility skull).
 --   Throttled to ~1s; idempotent (once the potion is primary it has
 --   can_give_other and the promote condition is false).
-mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, context, t)
-    if not mod:get("gt_bot_necro_potion_handoff") then
-        return
+--
+--   GIVE-HALF COMPLETION (v0.2.138-dev): the promote must target the REAL potion
+--   BY IDENTITY (SwapFromStorageType.Same + the potion's item_data), not storage
+--   index 1 (SwapFromStorageType.First). slot_potion storage can also hold the
+--   grimoire (non-giveable) and the demoted skull, so a blind First-swap promoted
+--   the wrong occupant -> primary stayed non-giveable -> the give interaction
+--   never resolved the real potion -> the bot looped "trying to pass but can't".
+--   See the inline rationale at the swap call. Marker:
+--   GT_NECRO_POTION_GIVE_HALF_MARKER_v0_2_138.
+-- Find the nearest ALIVE hero/bot ally to `unit` (excludes self). Returns the
+-- ally unit or nil. Source: side.PLAYER_AND_BOT_UNITS (side_manager.lua), the
+-- same roster the vanilla bot aid-picker walks.
+local function _gt_nearest_alive_ally(unit)
+    local side_manager = Managers.state.side
+    local side = side_manager and side_manager.side_by_unit[unit]
+    if not side then
+        return nil
     end
-
-    local blackboard = self._blackboard
-    if not blackboard then
-        return
+    local units = side.PLAYER_AND_BOT_UNITS
+    local self_pos = POSITION_LOOKUP[unit]
+    if not self_pos then
+        return nil
     end
+    local best, best_d
+    for i = 1, #units do
+        local u = units[i]
+        if u ~= unit and HEALTH_ALIVE[u] then
+            local p = POSITION_LOOKUP[u]
+            if p then
+                local d = Vector3.distance_squared(self_pos, p)
+                if not best_d or d < best_d then
+                    best_d = d
+                    best = u
+                end
+            end
+        end
+    end
+    return best
+end
 
+-- Navmesh-valid position of a unit -- the same source vanilla's teleport check
+-- reads (bt_bot_conditions.lua:1232 last_position_on_navmesh). Falls back to the
+-- raw position lookup if the whereabouts extension is missing.
+local function _gt_navmesh_pos(target_unit)
+    if not target_unit then
+        return nil
+    end
+    local wb = ScriptUnit.has_extension(target_unit, "whereabouts_system")
+    local p = wb and wb:last_position_on_navmesh()
+    return p or POSITION_LOOKUP[target_unit]
+end
+
+-- FIX 1 body, extracted into a tick fn so the SINGLE PlayerBotBase.update hook
+-- below can drive it alongside the other per-frame bot features. Unchanged
+-- logic; see the FIX 1 header above for the full rationale + citations.
+local function _gt_necro_potion_tick(self, unit, blackboard, t)
     -- Throttle: this runs per-bot per-frame; once a second is plenty.
     local next_t = blackboard._gt_necro_promote_t or 0
     if t < next_t then
@@ -80,41 +294,344 @@ mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, contex
 
     local primary = inventory_extension:get_slot_data("slot_potion")
     if not primary then
-        -- No primary potion-slot item (potion already given/used). Leave the
-        -- skull where it is; nothing to promote.
         return
     end
 
     local primary_template = inventory_extension:get_item_template(primary)
     if primary_template and primary_template.can_give_other then
-        -- A real potion is already primary -- nothing to do (idempotent exit).
         return
     end
 
-    -- Primary is the (non-giveable) skull. Promote a stored real potion if one
-    -- exists. We only swap when a genuinely giveable item is stored so we never
-    -- promote a grimoire (also slot_potion, but no can_give_other).
     local stored = inventory_extension:get_additional_items("slot_potion")
     if not stored then
         return
     end
 
-    local has_giveable_potion = false
+    -- GIVE-HALF FIX (v0.2.138-dev): find the EXACT giveable-potion item_data in
+    -- storage and promote THAT specific one, not blindly storage index 1.
+    --
+    -- The old code scanned storage for *a* giveable potion but then called
+    -- swap_equipment_from_storage(..., SwapFromStorageType.First, ...), which
+    -- promotes stored_items[1] unconditionally (get_additional_item_swap_id
+    -- returns item_id=1 for the First swap type, ignoring the compare arg --
+    -- simple_inventory_extension.lua:2364-2365). slot_potion storage is NOT
+    -- potion-only: the grimoire also lives in slot_potion (is_grimoire, no
+    -- can_give_other -- grimoire.lua:62; bots stash it there, see
+    -- bt_bot_conditions.lua:1244-1259 should_drop_grimoire), and the demoted
+    -- skull lands there too. So with storage = {grimoire, real_potion} (or
+    -- {skull, ...}) the First swap promotes the grimoire/skull to primary, NOT
+    -- the potion. That leaves slot_potion primary STILL non-giveable, so the
+    -- vanilla give chain (scoring player_bot_base.lua:882-888 -> wield
+    -- slot_potion -> interactions.lua give `set_interactor_data`:1707-1711 +
+    -- transfer `stop`:1640-1664 gated on can_give_other:1646) can't resolve the
+    -- real potion -- the bot keeps re-offering and gets STUCK trying to pass.
+    --
+    -- Fix: locate the giveable potion's exact item_data reference (it lives in
+    -- the live `stored` array we already iterate) and promote it by identity via
+    -- SwapFromStorageType.Same, passing that item_data as the compare item.
+    -- get_additional_item_swap_id(Same) returns the index where
+    -- stored_items[i] == compare_item (:2374-2385), so the REAL potion lands in
+    -- primary regardless of storage ordering; the grimoire/skull never get
+    -- mis-promoted. Once the potion is primary, the whole vanilla give chain
+    -- (and the bot drinking its own potion) just works.
+    local giveable_item_data
     for i = 1, #stored do
         local item_data = stored[i]
         local template = item_data and BackendUtils.get_item_template(item_data)
         if template and template.can_give_other then
-            has_giveable_potion = true
+            giveable_item_data = item_data
             break
         end
     end
 
-    if has_giveable_potion then
-        -- Bring the stored potion to primary, demote the skull to storage --
-        -- exactly what the human's "tap potion key" does. Max additional slot
-        -- count for Necro slot_potion is 1, so First == the potion.
-        inventory_extension:swap_equipment_from_storage("slot_potion", SwapFromStorageType.First, primary.item_data)
-        mod:debug("[gt:bot] promoted Necromancer bot potion to primary so it can hand off / drink it")
+    if giveable_item_data then
+        inventory_extension:swap_equipment_from_storage("slot_potion", SwapFromStorageType.Same, giveable_item_data)
+
+        mod:debug("[gt:bot] promoted Necromancer bot's REAL potion (by identity) to primary so it can hand off / drink it")
+    end
+end
+
+-- ----------------------------------------------------------------------------
+-- FIX 4: Bots auto pull-up from ledge-hang after a few seconds
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   The ledge-hanging character state has NO self-rescue path -- it waits for
+--   another unit's `pull_up` interaction or, after
+--   PlayerUnitMovementSettings.ledge_hanging.time_until_fall_down = 30s, drops
+--   the hanger (player_character_state_ledge_hanging.lua:91-111). A bot left
+--   hanging just hangs until a human comes back.
+-- FIX
+--   After the configured delay of continuous ledge-hang, do the engine's own
+--   pull-up: StatusUtils.set_pulled_up_network(bot, true, helper)
+--   (status_utils.lua:84). The state polls is_pulled_up() every frame (line 91)
+--   and transitions to leave_ledge_hanging_pull_up. set_pulled_up needs an ALIVE
+--   helper unit for its dialogue branch (generic_status_extension.lua:1462), so
+--   we credit the nearest alive ally; if none is alive we skip (no one to pull
+--   you up). Host-side only.
+local function _gt_ledge_pullup_tick(self, unit, blackboard, t)
+    local status_extension = blackboard.status_extension or ScriptUnit.has_extension(unit, "status_system")
+    if not status_extension or not status_extension:get_is_ledge_hanging() then
+        blackboard._gt_ledge_since = nil
+        return
+    end
+    if status_extension:is_pulled_up() then
+        blackboard._gt_ledge_since = nil
+        return
+    end
+
+    local since = blackboard._gt_ledge_since
+    if not since then
+        blackboard._gt_ledge_since = t
+        return
+    end
+
+    local delay = 3   -- v0.2.128-dev: hard-coded (was gt_bot_ledge_pullup_delay)
+    if t - since < delay then
+        return
+    end
+
+    local helper = _gt_nearest_alive_ally(unit)
+    if not helper then
+        return
+    end
+
+    StatusUtils.set_pulled_up_network(unit, true, helper)
+    blackboard._gt_ledge_since = nil
+
+    mod:debug("[gt:bot] pulled bot up from ledge after %.1fs", delay)
+end
+
+-- ----------------------------------------------------------------------------
+-- FIX 5: Bots stuck on a ladder teleport to a teammate
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   Bot pathing can wedge on ladder smart-object transitions. The bot's
+--   PlayerBotNavigation tracks the active transition as `_current_transition`
+--   with `.type == "ladder"` and an entry timestamp `.t`
+--   (player_bot_navigation.lua:276-339). A wedged bot keeps that ladder
+--   transition active far longer than a normal climb.
+-- FIX
+--   When a bot has sat on a ladder transition longer than the configured delay,
+--   teleport it to the followed teammate's last navmesh position using the same
+--   primitives the vanilla teleport node uses (bt_bot_teleport_to_ally_action.lua
+--   :82-98): locomotion:teleport_to + fall-damage suppression + navigation
+--   :teleport. Host-side only.
+local function _gt_ladder_unstick_tick(self, unit, blackboard, t)
+    local nav = blackboard.navigation_extension
+    local transition = nav and nav._current_transition
+    if not (transition and transition.type == "ladder") then
+        blackboard._gt_ladder_since = nil
+        return
+    end
+
+    local since = blackboard._gt_ladder_since
+    if not since then
+        blackboard._gt_ladder_since = t
+        return
+    end
+
+    local delay = 4   -- v0.2.128-dev: hard-coded (was gt_bot_ladder_unstick_delay)
+    if t - since < delay then
+        return
+    end
+
+    -- Prefer the unit the bot is following; fall back to nearest alive ally.
+    local group_ext = blackboard.ai_bot_group_extension
+    local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+    local anchor = (follow_unit and HEALTH_ALIVE[follow_unit] and follow_unit) or _gt_nearest_alive_ally(unit)
+    local pos = _gt_navmesh_pos(anchor)
+    local locomotion = blackboard.locomotion_extension
+    if not (pos and locomotion and nav) then
+        return
+    end
+
+    locomotion:teleport_to(pos)
+    local status_extension = blackboard.status_extension
+    if status_extension then
+        status_extension:set_falling_height(true, pos.z)
+        status_extension:set_ignore_next_fall_damage(true)
+    end
+    nav:teleport(pos)
+    if blackboard.ai_extension and blackboard.ai_extension.clear_failed_paths then
+        blackboard.ai_extension:clear_failed_paths()
+    end
+    blackboard._gt_ladder_since = nil
+
+    mod:debug("[gt:bot] teleported bot off a stuck ladder after %.1fs", delay)
+end
+
+-- ----------------------------------------------------------------------------
+-- FIX 6: Bots instantly grab their targeted/pinged pickup (no walking)
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   Bots normally walk to within 3.2m before looting (BTConditions.can_loot,
+--   bt_bot_conditions.lua:877). Vanilla already has a failsafe: when an ordered
+--   pickup has no navmesh path, player_bot_base.lua:1606-1633 sets
+--   `forced_pickup_unit`, and can_loot then bypasses the distance gate because
+--   `is_forced_pickup = forced_pickup_unit == interaction_unit` short-circuits
+--   the `max_dist > dist` checks (bt_bot_conditions.lua:884-890).
+-- FIX
+--   Make that failsafe always-on for a bot's CURRENT pickup candidate: point
+--   both `interaction_unit` and `forced_pickup_unit` at the live candidate
+--   (mule/ordered first, then health, then ammo). is_forced_pickup then trips
+--   and the bot loots from where it stands. We skip when the bot has an aid
+--   target so we never stomp a revive interaction. EXPERIMENTAL -- verify
+--   in-game. Host-side only.
+local function _gt_instant_pickup_tick(self, unit, blackboard, t)
+    if blackboard.target_ally_need_type then
+        return
+    end
+    local pickup = blackboard.mule_pickup or blackboard.health_pickup or blackboard.ammo_pickup
+    if not (pickup and Unit.alive(pickup)) then
+        return
+    end
+    blackboard.interaction_unit = pickup
+    blackboard.forced_pickup_unit = pickup
+end
+
+-- ----------------------------------------------------------------------------
+-- REPLICANT BOTS PORT 2: Bots drink potions when in danger
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   Vanilla bots never drink their OWN potion -- player_bot_base.lua only ever
+--   hands a potion to an ally or picks one up; there's no self-use behavior. So
+--   a bot can sit on a Strength/Speed/Conc potion through a whole boss fight.
+-- FIX (gt idiom; NOT a copy of Replicant's bt_bot_drink_pot_action BT node)
+--   Throttled per-bot tick (mirrors the other _gt_*_tick fns). When a bot holds
+--   a giveable/usable potion in slot_potion AND a "danger" is within range
+--   (a breed.boss monster/lord, or a cluster of >= 3 elites = a roaming patrol),
+--   drive the drink the way BTBotHealAction does: wield slot_potion and hold the
+--   use input until the potion is consumed (slot empties). Reads LIVE breed data
+--   each scan (breed.boss / breed.elite off the resolved Breed table), not a
+--   static name roster. One drink per held potion (_gt_drinking latch cleared
+--   when the slot empties). Host-side only (bots are host-only). Default OFF.
+local _GT_BOT_DANGER_RANGE = 18.0          -- meters; danger scan radius
+local _GT_BOT_DANGER_RANGE_SQ = _GT_BOT_DANGER_RANGE * _GT_BOT_DANGER_RANGE
+local _GT_BOT_PATROL_ELITE_THRESHOLD = 3   -- >= this many elites in range == "patrol"
+
+-- True if a boss/lord breed, or a cluster of elites (a roaming patrol), is
+-- within range of `self_pos`. Reads the live Breed table off each AI unit's
+-- ai_system extension (not a static breed-name list).
+local function _gt_danger_near(unit, self_pos)
+    if not self_pos then return false end
+    local side_manager = Managers.state.side
+    local side = side_manager and side_manager.side_by_unit[unit]
+    if not side then return false end
+
+    -- AI enemy units of this side (Side:enemy_units() -> the compact _enemy_units
+    -- roster, swap-remove maintained so 1..#enemy_units has no holes).
+    local enemy_units = side.enemy_units and side:enemy_units()
+    if not enemy_units then return false end
+
+    local elite_count = 0
+    for i = 1, #enemy_units do
+        local enemy = enemy_units[i]
+        if ALIVE[enemy] then
+            local ep = POSITION_LOOKUP[enemy]
+            if ep and Vector3.distance_squared(self_pos, ep) <= _GT_BOT_DANGER_RANGE_SQ then
+                local breed = Unit.get_data(enemy, "breed")
+                if breed then
+                    if breed.boss then
+                        return true   -- a monster/lord in range -> danger
+                    elseif breed.elite then
+                        elite_count = elite_count + 1
+                        if elite_count >= _GT_BOT_PATROL_ELITE_THRESHOLD then
+                            return true   -- elite cluster -> treat as a patrol
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function _gt_drink_potion_tick(self, unit, blackboard, t)
+    local inventory_extension = blackboard.inventory_extension
+    if not inventory_extension then
+        blackboard._gt_drinking = nil
+        return
+    end
+
+    -- If we latched a drink, keep holding the use input until the potion slot
+    -- empties (consumed), then release the latch. This survives the BT trying to
+    -- re-wield a combat weapon for the few frames the drink takes.
+    if blackboard._gt_drinking then
+        local still_have = inventory_extension:get_slot_data("slot_potion")
+        local input_ext = blackboard.input_extension
+        if still_have and input_ext then
+            input_ext:wield("slot_potion")
+            input_ext:hold_attack()
+            -- Safety timeout: never hold longer than ~1.5s.
+            if t < (blackboard._gt_drinking_until or 0) then
+                return
+            end
+        end
+        blackboard._gt_drinking = nil
+        blackboard._gt_drinking_until = nil
+        return
+    end
+
+    -- Throttle the danger scan (once a second is plenty).
+    local next_t = blackboard._gt_drink_scan_t or 0
+    if t < next_t then
+        return
+    end
+    blackboard._gt_drink_scan_t = t + 1.0
+
+    -- Must actually hold a usable potion in slot_potion. can_give_other gates out
+    -- the Necromancer skull and other non-potion slot_potion occupants.
+    local potion = inventory_extension:get_slot_data("slot_potion")
+    if not potion then return end
+    local template = inventory_extension:get_item_template(potion)
+    if not (template and template.can_give_other) then return end
+
+    local self_pos = POSITION_LOOKUP[unit]
+    if not _gt_danger_near(unit, self_pos) then return end
+
+    -- Latch the drink for up to ~1.5s of held use input.
+    blackboard._gt_drinking = true
+    blackboard._gt_drinking_until = t + 1.5
+
+    mod:debug("[gt:bot] bot drinking its potion (danger in range)")
+end
+
+-- ----------------------------------------------------------------------------
+-- CONSOLIDATION SITE: _gt_bot_update_consolidated
+-- ----------------------------------------------------------------------------
+-- The SINGLE PlayerBotBase.update hook. VMF silently drops a second hook on the
+-- same (Class, method), so every per-frame bot feature dispatches from here,
+-- each gated on its own toggle. DO NOT add another PlayerBotBase.update hook --
+-- add a gated `_gt_*_tick` fn above and a line below instead.
+mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, context, t)
+    local blackboard = self._blackboard
+    if not blackboard then
+        return
+    end
+
+    -- v0.2.128-dev: all four per-frame bot features now gate on the single
+    -- bundled `gt_bot_behavior_improvements` toggle (was four separate ids:
+    -- gt_bot_necro_potion_handoff / gt_bot_ledge_pullup / gt_bot_ladder_unstick
+    -- / gt_bot_instant_pickup).
+    if mod:get("gt_bot_behavior_improvements") then
+        _gt_necro_potion_tick(self, unit, blackboard, t)
+        _gt_ledge_pullup_tick(self, unit, blackboard, t)
+        _gt_ladder_unstick_tick(self, unit, blackboard, t)
+        _gt_instant_pickup_tick(self, unit, blackboard, t)
+    end
+
+    -- Replicant Bots port: drink a held potion when a boss/lord or patrol is
+    -- near (separate toggle from the bundle above).
+    if mod:get("gt_bot_drink_potions_in_danger") then
+        _gt_drink_potion_tick(self, unit, blackboard, t)
+    end
+
+    -- Bot Teleport Lab (diagnostics) dispatch: registers the bot for the D6/D7
+    -- draw tick, watches the has_teleported clear (D9), and prints the D3
+    -- distance readout. Merged here (VMF drops a 2nd PlayerBotBase.update hook);
+    -- pcall-guarded + gated on gt_btlab_enabled inside the lab fn.
+    if mod._gt_btlab_observe_update then
+        mod._gt_btlab_observe_update(self, unit, blackboard, t)
     end
 end)
 
@@ -148,7 +665,7 @@ mod:hook("BTConditions", "can_activate_ability", function (func, blackboard, arg
         return result
     end
 
-    if not mod:get("gt_bot_ironbreaker_revive_in_ult") then
+    if not mod:get("gt_bot_behavior_improvements") then   -- v0.2.128-dev: bundled (was gt_bot_ironbreaker_revive_in_ult)
         return result
     end
 
@@ -206,7 +723,11 @@ end)
 mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit, blackboard, breed, t)
     local ally, real_dist, need_type, look_at = func(self, unit, blackboard, breed, t)
 
-    if not mod:get("gt_bot_rescue_awaiting") then
+    -- Continue if the kept-separate awaiting-rescue toggle is on (FIX 3) OR the
+    -- bundled behavior-improvements toggle is on (FIX 3b revive/rescue-priority,
+    -- v0.2.128-dev: was gt_bot_revive_priority / gt_bot_rescue_priority).
+    if not (mod:get("gt_bot_rescue_awaiting")
+            or mod:get("gt_bot_behavior_improvements")) then
         return ally, real_dist, need_type, look_at
     end
 
@@ -221,10 +742,34 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         return ally, real_dist, need_type, look_at
     end
 
-    local player_and_bot_units = side.PLAYER_AND_BOT_UNITS
+    -- ROOT-CAUSE FIX (v0.2.89-dev): iterate the RAW side roster, NOT
+    -- side.PLAYER_AND_BOT_UNITS. SideManager._update_frame_tables rebuilds
+    -- PLAYER_AND_BOT_UNITS every frame and only keeps units for which
+    -- is_valid(unit) is true, where is_valid (side_manager.lua:338-339) is
+    -- `unit_alive(unit) and not status:is_ready_for_assisted_respawn()`. So an
+    -- awaiting-rescue ally is ALWAYS filtered out of PLAYER_AND_BOT_UNITS, which
+    -- is exactly the list the old wrapper walked -- `considered` was 0 forever
+    -- and no rescue ever happened (the bug the host saw with the toggle ON).
+    -- side:player_units() (side.lua:222) returns the unfiltered `_player_units`
+    -- roster, which DOES keep the awaiting unit (added at respawn-spawn via
+    -- add_player_unit_to_side, removed only on despawn). The per-candidate gates
+    -- below (ready / alive / path) still apply, so only a genuine awaiting+
+    -- reachable ally is ever picked.
+    local player_and_bot_units = side:player_units()
     local self_pos = POSITION_LOOKUP[unit]
     local best_unit, best_dist
     local considered, blocked_path, not_alive = 0, 0, 0
+
+    do
+        -- Throttled heartbeat: proves the wrapper runs and shows the roster size,
+        -- so a repro distinguishes "hook never fired" from "no awaiting ally in
+        -- roster". Fires even when considered == 0 (unlike the summary below).
+        local next_hb = blackboard._gt_rescue_hb_t or 0
+        if t >= next_hb then
+            blackboard._gt_rescue_hb_t = t + 3.0
+            mod:debug("[gt:bot-rescue] scan roster=%d prior_need=%s", #player_and_bot_units, tostring(need_type))
+        end
+    end
 
     for k = 1, #player_and_bot_units do
         local player_unit = player_and_bot_units[k]
@@ -234,7 +779,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
             local ready = status_ext and status_ext:is_ready_for_assisted_respawn()
 
             if ready then
-                -- DIAGNOSTIC (v0.2.71): log every awaiting-rescue candidate with the
+                -- DIAGNOSTIC (v0.2.85-dev): log every awaiting-rescue candidate with the
                 -- two gates that decide whether we can rescue it, so a repro tells us
                 -- exactly why no pick happens: considered=0 => the CW respawn state
                 -- never sets is_ready_for_assisted_respawn; health_alive=false => the
@@ -243,16 +788,19 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                 considered = considered + 1
                 local alive = HEALTH_ALIVE[player_unit] and true or false
                 local _, allowed_aid_path = self:_ally_path_allowed(unit, player_unit, t)
+                local cand_pos = POSITION_LOOKUP[player_unit]
 
-                mod:debug("[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s",
-                    k, tostring(alive), tostring(allowed_aid_path and true or false))
+                mod:debug("[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s has_pos=%s",
+                    k, tostring(alive), tostring(allowed_aid_path and true or false), tostring(cand_pos ~= nil))
 
                 if not alive then
                     not_alive = not_alive + 1
                 elseif not allowed_aid_path then
                     blocked_path = blocked_path + 1
-                else
-                    local d = Vector3.distance(self_pos, POSITION_LOOKUP[player_unit])
+                elseif self_pos and cand_pos then
+                    -- nil-guard both positions: a just-spawned remote awaiting unit
+                    -- can momentarily lack a POSITION_LOOKUP entry (skip this frame).
+                    local d = Vector3.distance(self_pos, cand_pos)
                     if not best_dist or d < best_dist then
                         best_dist = d
                         best_unit = player_unit
@@ -262,8 +810,6 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         end
     end
 
-    -- Throttled per-bot summary so we see WHY a rescue did/didn't fire
-    -- without spamming when no one is awaiting rescue.
     if considered > 0 then
         local next_t = blackboard._gt_rescue_log_t or 0
         if t >= next_t then
@@ -273,11 +819,639 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         end
     end
 
-    if best_unit then
+    if best_unit and mod:get("gt_bot_rescue_awaiting") then
         -- Relabel as knocked_down so the existing revive branch handles it; the
         -- contextual interaction resolves to assisted_respawn on this ally.
+        -- (Gated on gt_bot_rescue_awaiting so the awaiting scan above can run for
+        -- the priority toggles without rescuing awaiting allies when its own
+        -- toggle is off.)
+        mod:debug("[gt:bot-rescue] RESCUE picked awaiting ally dist=%.1f -> relabel knocked_down", best_dist or -1)
         return best_unit, best_dist, "knocked_down", false
+    end
+
+    -- ========================================================================
+    -- FIX 3b (v0.2.106-dev): force revive/rescue priority over the snap-back leash
+    -- ------------------------------------------------------------------------
+    -- The vanilla picker already ranks aid by `dist = real_dist - utility`
+    -- (player_bot_base.lua:991; utility=200 for knocked_down/ledge/hook at
+    -- :909-917) with NO max-aid-distance cap -- a downed ally already wins up to
+    -- ~200 m further than a follow target. But a frame where vanilla picks a
+    -- follow/heal target instead can leave the bot with the team. These toggles
+    -- make it EXPLICIT: re-scan for the nearest PATHABLE knocked_down (revive) /
+    -- ledge|hook (rescue) ally and return it as the top-priority target with its
+    -- TRUE need_type, so bt_bot's can_revive / can_rescue_* drive the right
+    -- contextual interaction. Setting target_ally_need_type also auto-exempts the
+    -- bot from FIX 7's leash (:561-563), so it walks the whole way. Path-gated
+    -- (engine's own _ally_path_allowed) so a bot never strands itself on an
+    -- unreachable ally. Host-side (bot AI is server-side).
+    -- v0.2.128-dev: both revive- and rescue-priority now gate on the single
+    -- bundled toggle (was gt_bot_revive_priority / gt_bot_rescue_priority).
+    local _force_revive = mod:get("gt_bot_behavior_improvements")
+    local _force_rescue = _force_revive
+    if _force_revive or _force_rescue then
+        local _fr_unit, _fr_eff, _fr_need
+        local _prev = blackboard.target_ally_unit   -- stickiness: don't flip-flop
+        for k = 1, #player_and_bot_units do
+            local pu = player_and_bot_units[k]
+            if pu ~= unit then
+                local st = ScriptUnit.has_extension(pu, "status_system")
+                local nt
+                if st then
+                    if _force_revive and st:is_knocked_down() then
+                        nt = "knocked_down"
+                    elseif _force_rescue and st:is_hanging_from_hook() then
+                        nt = "hook"
+                    elseif _force_rescue and st:get_is_ledge_hanging() and not st:is_pulled_up() then
+                        nt = "ledge"
+                    end
+                end
+                if nt then
+                    -- Mandatory engine path-gate: only force-pick a reachable ally.
+                    local _, _aid_path = self:_ally_path_allowed(unit, pu, t)
+                    local cpos = POSITION_LOOKUP[pu]
+                    if _aid_path and self_pos and cpos then
+                        local d = Vector3.distance(self_pos, cpos)
+                        -- 3 m sticky credit to the previously-chosen target so the
+                        -- pick doesn't oscillate between two near-equidistant allies.
+                        local eff = (pu == _prev) and (d - 3.0) or d
+                        if not _fr_eff or eff < _fr_eff then
+                            _fr_eff, _fr_unit, _fr_need = eff, pu, nt
+                        end
+                    end
+                end
+            end
+        end
+        if _fr_unit then
+            local _real = Vector3.distance(self_pos, POSITION_LOOKUP[_fr_unit])
+            mod:debug("[gt:bot-priority] FORCE %s ally dist=%.1f (prior_need=%s)", _fr_need, _real, tostring(need_type))
+            return _fr_unit, _real, _fr_need, false
+        end
     end
 
     return ally, real_dist, need_type, look_at
 end)
+
+-- #139 helper: does this ally unit currently need aid (knocked down / hanging
+-- from a hook / ledge-hanging-not-yet-pulled-up)? Mirrors the inline status
+-- checks in FIX 3b above. Used by FIX 7 to avoid snap-leashing a bot ONTO a
+-- downed follow target (the bot should path in and revive, not teleport).
+local function _gt_unit_needs_aid(u)
+    if not (u and ALIVE[u]) then return false end
+    local st = ScriptUnit.has_extension(u, "status_system")
+    if not st then return false end
+    return st:is_knocked_down()
+        or st:is_hanging_from_hook()
+        or (st:get_is_ledge_hanging() and not st:is_pulled_up())
+end
+
+-- v0.2.152-dev (#139 sibling): does ANY teammate on the bot's side currently
+-- need aid? Returns the first downed/hooked/ledge ally found (or nil). Used by
+-- FIX 7 to suppress the tighter leash when there's a reviveable teammate the
+-- bot could path to -- prevents teleporting AWAY from where help is needed
+-- (the user-reported case: bot leashed to LIVING far player, separate teammate
+-- goes down, leash fires, bot teleports away from the downed teammate). FIX 3b
+-- will assign `target_ally_need_type` within a tick or two and the bot will
+-- walk in; we just need to keep the bot from teleporting away in the meantime.
+local function _gt_any_side_teammate_needs_aid(self_unit)
+    local sm = Managers.state and Managers.state.side
+    if not sm then return nil end
+    local side = sm.side_by_unit and sm.side_by_unit[self_unit]
+    local punits = side and side.PLAYER_UNITS
+    if not punits then return nil end
+    for i = 1, #punits do
+        local u = punits[i]
+        if u ~= self_unit and _gt_unit_needs_aid(u) then
+            return u
+        end
+    end
+    return nil
+end
+
+-- #139 probe helper: like _gt_unit_needs_aid but also counts a teammate who is
+-- fully dead and waiting to be freed at a rescue point. ready_for_assisted_respawn
+-- is a plain field on GenericStatusExtension, set via set_ready_for_assisted_respawn
+-- (generic_status_extension.lua:1329) when the respawn unit is available -- read it
+-- directly (field access can't error).
+local function _gt_unit_needs_aid_or_rescue(u)
+    if _gt_unit_needs_aid(u) then return true end
+    if not (u and ALIVE[u]) then return false end
+    local st = ScriptUnit.has_extension(u, "status_system")
+    return st ~= nil and st.ready_for_assisted_respawn == true
+end
+
+-- #139 probe helper: nearest side teammate who is downed or awaiting rescue,
+-- with the metric distance from self_unit. Returns (unit, dist_m) or (nil, nil).
+-- POSITION_LOOKUP can momentarily lack an entry during despawn -- nil-guarded.
+local function _gt_nearest_needing_aid(self_unit)
+    local self_pos = POSITION_LOOKUP[self_unit]
+    if not self_pos then return nil, nil end
+    local sm = Managers.state and Managers.state.side
+    local side = sm and sm.side_by_unit and sm.side_by_unit[self_unit]
+    local punits = side and side.PLAYER_UNITS
+    if not punits then return nil, nil end
+    local best, best_d
+    for i = 1, #punits do
+        local u = punits[i]
+        if u ~= self_unit and _gt_unit_needs_aid_or_rescue(u) then
+            local p = POSITION_LOOKUP[u]
+            if p then
+                local d = Vector3.distance(self_pos, p)
+                if not best_d or d < best_d then
+                    best, best_d = u, d
+                end
+            end
+        end
+    end
+    return best, best_d
+end
+
+-- ----------------------------------------------------------------------------
+-- FIX 7: Tighter bot follow leash (configurable teleport distance)
+-- ----------------------------------------------------------------------------
+-- Vanilla teleports a bot to its follow target only at >= 40 m
+-- (FOLLOW_TELEPORT_DISTANCE_SQ = 1600, bt_bot_conditions.lua:1206 + 1241). This
+-- lets a configurable, tighter distance trigger the SAME teleport so bots stay
+-- closer. We call the original first (the 40 m rule + all its gates still
+-- apply); only if it declined do we re-check the identical gates with our
+-- distance. The aid exception is preserved (target_ally_need_type / priority
+-- target => never teleport), so a bot going for a revive still ignores the
+-- leash. Faithful re-implementation of bt_bot_conditions.lua:1208-1241.
+-- gt tighter-leash decision, extracted VERBATIM from the former should_teleport
+-- hook body so the Bot Teleport Lab veto layer can wrap the whole decision
+-- (see the hook below). Returns true if the gt tighter leash wants a teleport
+-- the vanilla 40 m rule declined. All the original gates + the #139 / #139s
+-- downed-teammate guards + their printf rate-limit latches are preserved exactly.
+local function _gt_tighter_leash_wants(blackboard)
+    -- (The "Tighter bot follow distance" enable toggle was removed 2026-06-30;
+    -- the distance slider is the sole control -- 40 (its default/max) = vanilla no-op.)
+    local dist_m = mod:get("gt_bot_follow_distance_m") or 40.0
+    if dist_m >= 40.0 then
+        -- Not tighter than vanilla's 40 m; nothing to add.
+        return false
+    end
+
+    local group_ext = blackboard.ai_bot_group_extension
+    local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+    if not ALIVE[follow_unit] or blackboard.has_teleported then
+        return false
+    end
+
+    local self_unit = blackboard.unit
+    local conflict_director = Managers.state.conflict
+    local self_segment = conflict_director:get_player_unit_segment(self_unit) or 1
+    local target_segment = conflict_director:get_player_unit_segment(follow_unit)
+    if not target_segment or target_segment < self_segment then
+        return false
+    end
+
+    local has_priority_target = blackboard.target_unit and blackboard.target_unit == blackboard.priority_target_enemy
+    if blackboard.target_ally_need_type or has_priority_target then
+        return false
+    end
+
+    local self_wb = ScriptUnit.has_extension(self_unit, "whereabouts_system")
+    local follow_wb = ScriptUnit.has_extension(follow_unit, "whereabouts_system")
+    local self_position = self_wb and self_wb:last_position_on_navmesh()
+    local follow_position = follow_wb and follow_wb:last_position_on_navmesh()
+    if not self_position or not follow_position then
+        return false
+    end
+
+    local d2 = Vector3.distance_squared(self_position, follow_position)
+    local fire = d2 >= dist_m * dist_m
+
+    -- #139 FIX (v0.2.148-dev): never tighter-leash-SNAP a bot toward a follow
+    -- target that is DOWNED (knocked down / hook / ledge). On the frame a split
+    -- teammate is *newly* downed -- before the aid-picker assigns
+    -- target_ally_need_type (the exemption checked above at :926) -- the bot is
+    -- still in follow mode pointed at that teammate, so the tighter leash would
+    -- teleport it ONTO the downed player instead of letting it path in to revive
+    -- (the reported "teleport to a newly-downed player instead of reviving").
+    -- Suppress the GT tighter leash here; vanilla's 40 m teleport (the captured
+    -- func() result in the hook) still applies as the last-resort catch for
+    -- truly-far cases. _gt139_suppressed rate-limits the printf to once per
+    -- suppressed window (should_teleport runs per-bot per-tick).
+    if fire and _gt_unit_needs_aid(follow_unit) then
+        if rawget(_G, "printf") and not blackboard._gt139_suppressed then
+            blackboard._gt139_suppressed = true
+            printf("[gt_bot:139] tighter-leash teleport SUPPRESSED toward downed follow at %.1fm -- bot will path to revive", math.sqrt(d2))
+        end
+        return false
+    end
+    blackboard._gt139_suppressed = nil
+
+    -- v0.2.152-dev (#139 sibling case): suppress the tighter leash when ANY
+    -- teammate on this side currently needs aid. The leash target (follow_unit)
+    -- may be a LIVING far player while a different teammate is downed nearby;
+    -- snapping to the leash target would teleport the bot AWAY from where help
+    -- is needed. FIX 3b's aid-priority hook assigns target_ally_need_type
+    -- within a tick or two; let the leash sit out the brief race. The :926
+    -- aid exemption above only catches the case where target_ally_need_type is
+    -- ALREADY set; this catches the inter-tick window before the picker runs.
+    if fire then
+        local aid_target = _gt_any_side_teammate_needs_aid(self_unit)
+        if aid_target then
+            if rawget(_G, "printf") and not blackboard._gt139side_suppressed then
+                blackboard._gt139side_suppressed = true
+                printf("[gt_bot:139s] tighter-leash teleport SUPPRESSED -- teammate needs aid (bot will path to help instead of leashing away)")
+            end
+            return false
+        end
+    end
+    blackboard._gt139side_suppressed = nil
+
+    if fire then
+        mod:debug("[gt:bot-leash] should_teleport TRUE at %.1fm (tighter leash, thresh=%.1fm)", math.sqrt(d2), dist_m)
+    end
+    return fire
+end
+
+mod:hook("BTConditions", "should_teleport", function (func, blackboard)
+    -- Bot Teleport Lab (diagnostics) dispatch: D1 decision-recorder + D4 segment
+    -- probe + D5 aid probe. Merged here because VMF drops a 2nd hook on this
+    -- (Class, method); the lab defines mod._gt_btlab_observe_should_teleport
+    -- (pcall-guarded, gated on gt_btlab_enabled). See _gt_bot_teleport_lab.lua.
+    if mod._gt_btlab_observe_should_teleport then
+        mod._gt_btlab_observe_should_teleport(blackboard)
+    end
+
+    -- CAPTURE the vanilla decision (do NOT early-return it) so the Bot Teleport
+    -- Lab veto layer below can override even a vanilla-40 m TRUE. If vanilla
+    -- declined, the gt tighter leash may still add a teleport.
+    local want = func(blackboard) and true or false
+    local reason = want and "vanilla_40m" or nil
+    if not want then
+        want = _gt_tighter_leash_wants(blackboard)
+        if want then reason = "tighter_leash" end
+    end
+    -- #139 probe: stamp which branch wants the teleport so the .run probe can
+    -- name the trigger. Stamped every call (nil when no teleport is wanted);
+    -- cleared below on veto and read+cleared in BTBotTeleportToAllyAction.run.
+    -- A .run that fires with reason nil means a non-should_teleport trigger
+    -- (e.g. FIX 5's ladder unstick) -- the probe reports that as "other".
+    blackboard._gt139_tp_reason = reason
+
+    -- Bot Teleport Lab veto layer (F2/F4/F6/F7/F8/F9/F10). Runs AFTER the whole
+    -- decision so it can suppress even a vanilla-40 m teleport. Gated +
+    -- pcall-guarded inside mod._gt_btlab_veto_teleport; a true here BLOCKS.
+    if want and mod._gt_btlab_veto_teleport then
+        local group_ext = blackboard.ai_bot_group_extension
+        local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+        if mod._gt_btlab_veto_teleport(blackboard, blackboard.unit, follow_unit, nil) then
+            blackboard._gt139_tp_reason = nil
+            return false
+        end
+    end
+
+    return want
+end)
+
+-- #139 regression marker (read by bot_leash_no_snap_to_downed_marker_present in
+-- the main file). If a refactor drops the downed-follow leash guard above, this
+-- disappears and the test fails.
+GT_BOT139_LEASH_AID_GUARD_MARKER_v0_2_148 = "gt-bot139-no-snap-to-downed-follow"
+GT_BOT139_LEASH_AID_SIDEAID_MARKER_v0_2_152 = "gt-bot139-no-leash-away-from-side-aid"
+GT_BOT_FOLLOW_MODE_DROPDOWN_MARKER_v0_2_152 = "gt-bot-follow-mode-dropdown-consolidation"
+
+-- Debug confirmation that the teleport ACTION actually executed -- a SEPARATE
+-- (Class, method) pair from FIX 7's BTConditions.should_teleport, so not a
+-- duplicate hook. Fires for every bot teleport (vanilla 40 m, the tighter leash,
+-- and FIX 5's ladder-unstick); debug-gated, host-side. If the log shows
+-- `should_teleport TRUE` but never this line, the BT selector is gating the
+-- action upstream (combat/aid subtree winning), not FIX 7.
+-- CONVERTED from hook_safe to a FULL mod:hook (v Bot-Teleport-Lab) so the lab's
+-- D1 event log can read the bot's position BEFORE and AFTER the teleport (a
+-- hook_safe post-callback only sees the AFTER position). The pre-existing FIX 7
+-- debug + #139 printf body is PRESERVED verbatim below, just relocated to run
+-- after func(). Still a SEPARATE (Class, method) pair from FIX 7's
+-- BTConditions.should_teleport, so no duplicate-hook collision.
+mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackboard, t, dt)
+    -- Bot Teleport Lab F3 (teleport_to_you): redirect the teleport to YOUR
+    -- navmesh position instead of follow_unit. If it fully handles the teleport
+    -- (returns true), SKIP vanilla func() and report "done" like vanilla run().
+    -- Gated + pcall-guarded inside mod._gt_btlab_redirect_teleport.
+    if mod._gt_btlab_redirect_teleport and mod._gt_btlab_redirect_teleport(unit, blackboard) then
+        return "done"
+    end
+
+    -- Bot Teleport Lab: capture the bot's position BEFORE the teleport (boxed so
+    -- it survives the wrapped call). Returns nil unless the lab is enabled.
+    local btlab_pre
+    if mod._gt_btlab_pre_teleport then
+        btlab_pre = mod._gt_btlab_pre_teleport(unit, blackboard)
+    end
+
+    -- #139 decision-point probe (default-on, printf): capture the pre-teleport
+    -- distance to the nearest downed/awaiting-rescue teammate as a SCALAR (so it
+    -- survives the teleport) plus the branch that wanted this teleport (stamped
+    -- by the should_teleport hook above).
+    local p139_aid_unit, p139_pre_dist = _gt_nearest_needing_aid(unit)
+    local p139_reason = (blackboard and blackboard._gt139_tp_reason) or "other"
+
+    local result = func(self, unit, blackboard, t, dt)
+
+    -- ---- PRESERVED FIX 7 / #139 body (unchanged) ----
+    mod:debug("[gt:bot-leash] TELEPORT executed (bot snapped to its follow target)")
+    -- #139 probe (printf -> visible with mod-logging off). If this still reports
+    -- `follow downed=true` AFTER the v0.2.148-dev guard above, the snap came from
+    -- vanilla's 40 m teleport (func()), not GT's tighter leash -- extend the fix
+    -- to gate the vanilla path too. If it never fires for the downed case, the
+    -- guard is doing its job and bots now path to revives.
+    if rawget(_G, "printf") then
+        local group_ext = blackboard and blackboard.ai_bot_group_extension
+        local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+        printf("[gt_bot:139] TELEPORT executed (follow downed=%s)",
+            tostring(follow_unit ~= nil and _gt_unit_needs_aid(follow_unit) or false))
+    end
+
+    -- #139 decision-point probe: only emit when a teammate is actually down or
+    -- awaiting rescue (the scenario of interest). One line per teleport event.
+    -- post_dist near 0 after the snap means the bot teleported ONTO the downed
+    -- player (the reported bug); a large post_dist means it snapped to a living
+    -- follow while a different teammate is still down. dist_to_downed is the
+    -- PRE-teleport distance; target is where the bot ended up.
+    if p139_aid_unit and rawget(_G, "printf") then
+        local ce = ScriptUnit.has_extension(unit, "career_system")
+        local bot_career = (ce and ce.career_name and ce:career_name()) or "?"
+        local post = POSITION_LOOKUP[unit]
+        local aid_post = POSITION_LOOKUP[p139_aid_unit]
+        local post_dist = (post and aid_post) and Vector3.distance(post, aid_post) or -1
+        local tx, ty, tz = -1, -1, -1
+        if post then
+            tx, ty, tz = Vector3.x(post), Vector3.y(post), Vector3.z(post)
+        end
+        printf("[139:bot_tp] bot=%s dist_to_downed=%.1fm reason=%s post_dist=%.1fm target=%.1f,%.1f,%.1f t=%.2f",
+            bot_career, p139_pre_dist or -1, p139_reason, post_dist, tx, ty, tz, t)
+    end
+    if blackboard then
+        blackboard._gt139_tp_reason = nil
+    end
+
+    -- Bot Teleport Lab dispatch (post): D1 full event line + D8 counter + D9 set
+    -- + D10 snapshot. pcall-guarded + gated inside the lab fn.
+    if mod._gt_btlab_observe_teleport then
+        mod._gt_btlab_observe_teleport(self, unit, blackboard, btlab_pre)
+    end
+
+    return result
+end)
+
+-- ----------------------------------------------------------------------------
+-- FIX 8: Don't fail the mission while a bot is still alive
+-- ----------------------------------------------------------------------------
+-- GameModeAdventure.evaluate_end_conditions calls
+-- GameModeHelper.side_is_dead("heroes", ignore_bots = true)
+-- (game_mode_adventure.lua:92), so the run is declared lost when all HUMANS are
+-- down even if a bot is alive and standing. We force ignore_bots = false for the
+-- "heroes" side so a living bot counts -- the mission only ends when no teammate
+-- (human OR bot) remains. Pairs with "Bots rescue allies awaiting respawn". The
+-- wipe check runs server-side (GameModeManager.server_update), so this is
+-- effectively host-side.
+mod:hook("GameModeHelper", "side_is_dead", function (func, side_name, ignore_bots)
+    if mod:get("gt_bot_behavior_improvements") and side_name == "heroes" then   -- v0.2.128-dev: bundled (was gt_bot_mission_fail_prevention)
+        return func(side_name, false)
+    end
+    return func(side_name, ignore_bots)
+end)
+
+-- ----------------------------------------------------------------------------
+-- FIX 9: Split bots among human players (one bot per human, round-robin)
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   VT2 picks ONE move-target human per side and points EVERY bot's
+--   data.follow_unit at that SAME human (ai_bot_group_system.lua:1085 -> per-bot
+--   write :1119-1120). The ONLY case the engine spreads bots one-per-human is
+--   the 2-human + 2-bot CARRY event (:760 follow_unit_table). It also abandons a
+--   player who stands still for AFK_TIME_LIMIT = 20s (the "~18s" the user
+--   remembered) and swarms a moving player -- but ONLY in the 1-2-player branch
+--   (_find_closest_move_target:846-848; constants :651-652). The 3+ branch
+--   ignores AFK entirely.
+--
+-- FIX
+--   Post-hook _assign_destination_points -- the single per-frame chokepoint where
+--   data.follow_unit is written for every bot. We run AFTER the engine's scalar
+--   write, build a deterministic mapping (humans sorted host-first, bots sorted
+--   by unit) and overwrite data.follow_unit/data.follow_position so bot[i]
+--   follows human[(i-1) % H + 1]: 2 humans + 2 bots -> host gets one, client the
+--   other; 3 humans + 1 bot -> the lone bot follows the host. Stamping last every
+--   frame also overrides the 20s stand-still re-targeting, so a bot stays on its
+--   assigned human even when that human is idle.
+--
+-- COMPOSITION (confirmed against source)
+--   follow_unit is the FOLLOW target ONLY; the aid/revive target is separate
+--   (blackboard.target_ally_*, set in _select_ally_by_utility), so FIX 3/3b still
+--   preempt follow in the BT -- a bot assigned to the client still breaks off to
+--   revive the host, then returns. FIX 5 (ladder anchor, :243) and FIX 7 (leash,
+--   :613) READ this same follow_unit, so they retarget to each bot's assigned
+--   human; FIX 7's aid exception is intact. Host-side only (bot AI is
+--   server-side); no RPC -- inert + crash-safe on clients.
+
+-- Active HUMAN player units on a side, host first. Uses human_players() (NOT
+-- side.PLAYER_UNITS, which also contains BOTS), filtered to this side + alive +
+-- not vortex/disabled, so a bot is never assigned to follow another bot or an
+-- incapacitated human.
+local function _gt_split_humans_for_side(side, side_manager, host_unit)
+    local active, disabled = {}, {}
+    local pm = Managers.player
+    local humans = pm and pm.human_players and pm:human_players()
+    if not humans then return active end
+    for _, player in pairs(humans) do
+        local u = player and player.player_unit
+        if u and Unit.alive(u) and side_manager.side_by_unit[u] == side then
+            local st = ScriptUnit.has_extension(u, "status_system")
+            if st and not st.near_vortex then
+                if st:is_disabled() then
+                    disabled[#disabled + 1] = u
+                else
+                    active[#active + 1] = u
+                end
+            end
+        end
+    end
+    if #active == 0 then active = disabled end   -- all humans down? still cluster somewhere
+    table.sort(active, function(a, b)
+        if a == host_unit then return true end
+        if b == host_unit then return false end
+        return tostring(a) < tostring(b)   -- stable per-unit ordinal (spawned units lack a level_index)
+    end)
+    return active
+end
+
+-- v0.2.152-dev: resolve the new gt_bot_follow_mode dropdown. Falls back to the
+-- legacy gt_bot_follow_host / gt_bot_split_among_players checkboxes on first
+-- read so users with the old settings keep their behaviour (no forced reset).
+-- Returns "default" | "follow_host" | "split".
+local function _gt_resolve_follow_mode()
+    local m = mod:get("gt_bot_follow_mode")
+    if m == "follow_host" or m == "split" or m == "default" then return m end
+    -- Legacy migration path (settings predate the dropdown).
+    if mod:get("gt_bot_follow_host") then return "follow_host" end
+    if mod:get("gt_bot_split_among_players") then return "split" end
+    return "default"
+end
+mod._gt_resolve_follow_mode = _gt_resolve_follow_mode
+
+-- Bot Teleport Lab F1/F5 follow-unit override pass. Runs AFTER any follow-mode
+-- assignment (called at each exit of the hook below) so it is the FINAL word on
+-- data.follow_unit. mod._gt_btlab_override_follow_unit is gated internally
+-- (returns nil unless the lab master + F1/F5 are on), so this is a cheap no-op
+-- when the lab is off. Never overrides a parked (hold_position) bot.
+local function _gt_apply_btlab_follow_override(bot_ai_data)
+    if not mod._gt_btlab_override_follow_unit then return end
+    if type(bot_ai_data) ~= "table" then return end
+    for bot_unit, data in pairs(bot_ai_data) do
+        if data and not data.hold_position then
+            local new_follow = mod._gt_btlab_override_follow_unit(bot_unit, data.follow_unit)
+            if new_follow then
+                data.follow_unit = new_follow
+            end
+        end
+    end
+end
+
+mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, bot_ai_data) -- luacheck: ignore self
+    -- Bot Teleport Lab (diagnostics) D2 follow-tracker dispatch. This pair is
+    -- ALREADY hooked (this FIX 9 hook_safe), so the lab CANNOT take a fresh hook
+    -- (VMF would silently drop it) -- it merges here. Placed at the TOP so it
+    -- fires for every follow-mode (incl. "default", which early-returns below);
+    -- it reads the follow_unit vanilla just assigned. NOTE: when the user runs
+    -- Follow-Host / Split mode, the block below REWRITES follow_unit later in
+    -- this same tick, so D2 logs the pre-override target for those modes (the
+    -- D1/D3/D4 observers show the final value). pcall-guarded + gated in the lab.
+    if mod._gt_btlab_track_follow then
+        mod._gt_btlab_track_follow(bot_ai_data)
+    end
+
+    local mode = _gt_resolve_follow_mode()
+    local follow_host = (mode == "follow_host")
+    if mode == "default" then
+        -- Lab F1/F5 still get to re-point follow_unit off vanilla's assignment.
+        _gt_apply_btlab_follow_override(bot_ai_data)
+        return
+    end
+    if type(bot_ai_data) ~= "table" then return end
+
+    local side_manager = Managers.state and Managers.state.side
+    local pm = Managers.player
+    if not (side_manager and pm) then return end
+
+    local probe = next(bot_ai_data)
+    if not probe then return end
+    local side = side_manager.side_by_unit[probe]
+    if not side then return end
+
+    local host = pm.local_player and pm:local_player()
+    local host_unit = host and host.player_unit
+
+    -- "Bots always follow host" takes PRECEDENCE over "split among players" when
+    -- both are on (they're opposite strategies; precedence avoids a VMF mutex whose
+    -- checkbox wouldn't visually refresh -- see reference_vmf_checkbox_cached_display_state).
+    -- All bots leash to the host; set ONLY follow_unit and leave vanilla's fanned-out
+    -- follow_position (the spread distance) intact -- same reasoning as the split fix,
+    -- so the bots don't crowd the host / block shots.
+    if follow_host then
+        if not (host_unit and HEALTH_ALIVE[host_unit]) then return end   -- host dead/unit-less: leave vanilla
+        local n = 0
+        for _, data in pairs(bot_ai_data) do
+            if data and not data.hold_position then
+                data.follow_unit = host_unit
+                n = n + 1
+            end
+        end
+        do
+            local t = (Managers.time and Managers.time:time("game")) or 0
+            if t >= (self._gt_followhost_log_t or 0) then
+                self._gt_followhost_log_t = t + 3.0
+                mod:debug("[gt:bot-follow-host] %d bots leashed to host", n)
+            end
+        end
+        -- Lab F1/F5 override runs LAST (after the follow-host assignment).
+        _gt_apply_btlab_follow_override(bot_ai_data)
+        return
+    end
+
+    local humans = _gt_split_humans_for_side(side, side_manager, host_unit)
+    local num = #humans
+    if num == 0 then return end
+
+    -- Deterministic bot order so bot[i] -> human[i] is stable frame-to-frame.
+    local bots = {}
+    for bot_unit in pairs(bot_ai_data) do bots[#bots + 1] = bot_unit end
+    table.sort(bots, function(a, b) return tostring(a) < tostring(b) end)
+
+    for i = 1, #bots do
+        local data = bot_ai_data[bots[i]]
+        -- Don't override a parked (hold-position) bot.
+        if data and not data.hold_position then
+            local human = humans[(i - 1) % num + 1]
+            if HEALTH_ALIVE[human] then   -- re-validate: don't strand on a just-died target
+                -- Re-point ONLY the leader; leave data.follow_position alone.
+                -- Vanilla _assign_destination_points already wrote a fanned-out spread
+                -- point (ai_bot_group_system.lua:1115) for this bot index a moment ago.
+                -- Stamping POSITION_LOOKUP[human] here made bots stand ON the player /
+                -- on their shot line (gt too-close report). follow_unit alone keeps
+                -- the split assignment + the comfortable vanilla follow distance.
+                data.follow_unit = human
+            end
+        end
+    end
+
+    do
+        local t = (Managers.time and Managers.time:time("game")) or 0
+        if t >= (self._gt_split_log_t or 0) then
+            self._gt_split_log_t = t + 3.0
+            mod:debug("[gt:bot-split] %d bots across %d humans (host-first round-robin)", #bots, num)
+        end
+    end
+
+    -- Lab F1/F5 override runs LAST (after the split round-robin assignment).
+    _gt_apply_btlab_follow_override(bot_ai_data)
+end)
+
+-- ----------------------------------------------------------------------------
+-- REPLICANT BOTS PORT 3: Announce when a bot's guard breaks
+-- ----------------------------------------------------------------------------
+-- Ported from DifferentBots.lua:2443-2472. When a BOT teammate's block is
+-- broken, post a chat line so the human knows. Scope dropdown:
+--   "none"   -> disabled
+--   "host"   -> local system message on the host only (add_local_system_message)
+--   "global" -> broadcast to the whole lobby (send_chat_message)
+-- Bots are host-only, so this hook only ever fires on the host. set_block_broken
+-- early-returns in vanilla when the value is unchanged (generic_status_extension
+-- .lua:994-996), so we only message on the rising edge (was not broken, now is).
+-- mod:hook (full wrapper) so we can read self.block_broken BEFORE vanilla flips
+-- it. New (Class, method) pair: the only other gt hook on GenericStatusExtension
+-- is `update_falling` in general_tweaker.lua -- a different method, no dup.
+mod:hook("GenericStatusExtension", "set_block_broken", function (func, self, block_broken, t, attacker_unit)
+    local scope = mod:get("gt_bot_guard_break_msg")
+    -- Rising edge only: was unbroken, now breaking.
+    if scope and scope ~= "none" and block_broken and not self.block_broken then
+        local unit = self.unit
+        local owner = unit and Managers.player and Managers.player:unit_owner(unit)
+        if owner and owner.bot_player then
+            local line = mod:localize("gt_bot_guard_break_chat")
+            if line and line ~= "" then
+                if scope == "global" and Managers.chat and Managers.chat.send_chat_message then
+                    local host = Managers.player:local_player()
+                    local lpid = host and host:local_player_id()
+                    if lpid then
+                        -- channel 1, host as sender, message already localized (localize=false).
+                        Managers.chat:send_chat_message(1, lpid, line, false)
+                    end
+                elseif Managers.chat and Managers.chat.add_local_system_message then
+                    -- "host" scope (and global fallback): local system message.
+                    Managers.chat:add_local_system_message(1, line, false)
+                end
+            end
+        end
+    end
+
+    return func(self, block_broken, t, attacker_unit)
+end)
+
+-- Boot-time apply: on_setting_changed doesn't fire at load, so if the user
+-- already had Faster bot reactions ON, apply it now (BotConstants is a settings
+-- global populated at engine boot, before mods load). Snapshots vanilla first.
+if mod:get("gt_bot_fast_reactions") then
+    _gt_apply_fast_reactions()
+end

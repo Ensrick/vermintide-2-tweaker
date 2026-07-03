@@ -58,7 +58,7 @@ local function _dbg_alert(fmt, ...)
     if type(mod._gt_dbg_alert) == "function" then
         mod._gt_dbg_alert(fmt, ...)
     else
-        mod:warning("[gt:dbg] " .. fmt, ...)
+        mod:debug("[gt:dbg] " .. fmt, ...)
     end
 end
 
@@ -210,42 +210,25 @@ _on_player_joined_party = function(peer_id, local_player_id, party_id, slot_id, 
 end
 
 -- ----------------------------------------------------------------------------
--- state.event registration
+-- party-join handler registration (audit 2026-06-07, F3, v0.2.80-dev)
 -- ----------------------------------------------------------------------------
--- `Managers.state.event` is built per game state (StateInGame, StateLoading,
--- StateTitleScreen). The "on_player_joined_party" event is triggered from
--- `party_manager.lua:562` which runs only during StateInGame. The event
--- manager is rebuilt on every state transition, so we must re-register on
--- every fresh handle via gt's central update registry.
-local _last_state_event = nil
-local function _update_register(_dt)
-    local ev = Managers.state and Managers.state.event
-    if ev and ev ~= _last_state_event then
-        _last_state_event = ev
-        -- Stingray ev:register expects (object, event_name, METHOD_NAME_STRING).
-        -- Function-value 3rd arg triggers "No function found with name '[function]'".
-        mod.gt_lobby_motd_on_player_joined_party = _on_player_joined_party
-        ev:register(mod, "on_player_joined_party", "gt_lobby_motd_on_player_joined_party")
-    end
-end
-
-if type(mod._gt_register_update) == "function" then
-    mod._gt_register_update("gt_lobby_motd_register_event", _update_register)
-end
-
--- Immediate attempt in case state.event already exists at module load
--- (hot-reload mid-mission).
-if Managers.state and Managers.state.event then
-    _last_state_event = Managers.state.event
-    mod.gt_lobby_motd_on_player_joined_party = _on_player_joined_party
-    Managers.state.event:register(mod, "on_player_joined_party", "gt_lobby_motd_on_player_joined_party")
-end
+-- The "on_player_joined_party" event is triggered from party_manager.lua:562.
+-- Previously this module registered its own (mod, "on_player_joined_party")
+-- handler, but EventManager keys callbacks by (object, event_name) -- three
+-- lobby modules registering the same pair was last-writer-wins, so only one of
+-- {motd, session_ignore, slot_reservations} ever fired. We now APPEND our
+-- join-handler to gt's shared dispatcher (mod._gt_lobby_register_join_handler,
+-- defined in general_tweaker.lua) which owns the single registration plus
+-- the per-state-transition re-register. The handler now receives the true event
+-- payload (peer_id, ...) -- the previous self-registration was silently
+-- mis-threaded by the object-prepend in EventManager.trigger.
+mod._gt_lobby_register_join_handler("motd", _on_player_joined_party)
 
 -- ----------------------------------------------------------------------------
 -- Chat command: preview MOTD locally on the host (renamed lt_motd_test ->
 -- gt_lobby_motd_test per merge)
 -- ----------------------------------------------------------------------------
-mod:command("gt_lobby_motd_test", "Preview MOTD locally (host only)", function()
+mod:command("lobby_motd_test", "Preview MOTD locally (host only)", function()
     local text = mod:get("gt_lobby_motd_text")
     if not text or text == "" then
         Managers.chat:add_local_system_message(1, "[gt:lobby] gt_lobby_motd_text is empty.", true)
@@ -264,22 +247,22 @@ end)
 -- Chat command: set MOTD text (replaces the v0.2.61 removed text_input widget,
 -- which was an invalid VMF type and caused widget#103 failure on data.lua load)
 -- ----------------------------------------------------------------------------
-mod:command("gt_lobby_motd_set", "Set the MOTD text (host-side; sent to joiners when enabled)", function(...)
+mod:command("lobby_motd_set", "Set the MOTD text (host-side; sent to joiners when enabled)", function(...)
     local text = table.concat({...}, " ")
     if text == "" then
         mod:echo("[gt_lobby_motd] Current MOTD: %s", tostring(mod:get("gt_lobby_motd_text") or "(empty)"))
-        mod:echo("Usage: /gt_lobby_motd_set <text>")
+        mod:echo("Usage: /lobby_motd_set <text>")
         return
     end
     mod:set("gt_lobby_motd_text", text)
     mod:echo("[gt_lobby_motd] MOTD set to: %s", text)
-    mod:info("[gt:lobby:motd] set text len=%d via /gt_lobby_motd_set", #text)
+    mod:info("[gt:lobby:motd] set text len=%d via /lobby_motd_set", #text)
 end)
 
-mod:command("gt_lobby_motd_clear", "Clear the MOTD text (host-side)", function()
+mod:command("lobby_motd_clear", "Clear the MOTD text (host-side)", function()
     mod:set("gt_lobby_motd_text", "")
     mod:echo("[gt_lobby_motd] MOTD cleared.")
-    mod:info("[gt:lobby:motd] cleared via /gt_lobby_motd_clear")
+    mod:info("[gt:lobby:motd] cleared via /lobby_motd_clear")
 end)
 
 -- ----------------------------------------------------------------------------
@@ -288,5 +271,6 @@ end)
 M.show_locally = _show_motd_locally
 M.send_to_peer = _send_motd_to_peer
 M.reset_session = function() _greeted_peers = {} end
+M.on_player_joined_party = _on_player_joined_party
 
 return M

@@ -108,37 +108,16 @@ local function _on_player_joined_party(peer_id, local_player_id, party_id, slot_
     _kick(peer_id, "on ignore list")
 end
 
--- Register on every game-state entry. The event manager is rebuilt between
--- state transitions, so a single boot-time register would silently drop after
--- the first map load. gt's on_game_state_changed wrapper (registered below)
--- triggers the re-registration; we lazily (re)register on first call too.
-local _registered_for = nil
-local function _ensure_event_registered()
-    local em = Managers.state and Managers.state.event
-    if not em then return end
-    if _registered_for == em then return end
-    -- Stingray em:register expects (object, event_name, METHOD_NAME_STRING).
-    -- Function-value 3rd arg triggers "No function found with name '[function]'".
-    mod.gt_lobby_session_ignore_on_player_joined_party = _on_player_joined_party
-    em:register(mod, "on_player_joined_party", "gt_lobby_session_ignore_on_player_joined_party")
-    _registered_for = em
-end
-
--- gt already owns mod.on_game_state_changed (defined in general_tweaker.lua).
--- Wrap it the same way the gt debug-mode block does (do-block + prev chain) so
--- we don't clobber the gt camera/noclip/AI/pause logic that lives on it.
-do
-    local prev = mod.on_game_state_changed
-    mod.on_game_state_changed = function(status, state)
-        if prev then prev(status, state) end
-        if status == "enter" then
-            _ensure_event_registered()
-        end
-    end
-end
-
--- Try once at file load too (covers reload-into-keep case where state is up).
-_ensure_event_registered()
+-- audit 2026-06-07 (F3, v0.2.80-dev): this module used to register its own
+-- (mod, "on_player_joined_party") event handler. EventManager keys callbacks by
+-- (object, event_name), so three lobby modules registering the same pair was
+-- last-writer-wins and only one fired. We now APPEND our join-handler to gt's
+-- shared dispatcher (mod._gt_lobby_register_join_handler, defined in
+-- general_tweaker.lua) which owns the single (mod, "on_player_joined_party")
+-- registration and the per-state-transition re-register. The handler receives
+-- the true event payload (peer_id, ...) -- the previous self-registration was
+-- silently mis-threaded by the object-prepend in EventManager.trigger.
+mod._gt_lobby_register_join_handler("session_ignore", _on_player_joined_party)
 
 -- ---------------------------------------------------------------------------
 -- chat commands  (all host-only; client invocations bail silently with a hint)
@@ -151,7 +130,7 @@ local function _require_host()
     return false
 end
 
-mod:command("gt_lobby_ignore", "Add a player to the session ignore list (Steam ID or name).", function(arg)
+mod:command("lobby_ignore", "Add a player to the session ignore list (Steam ID or name).", function(arg)
     if not _require_host() then return end
     local sid = _resolve_arg_to_sid(arg)
     if not sid then _say("Could not resolve '" .. tostring(arg) .. "' to a peer.") return end
@@ -161,7 +140,7 @@ mod:command("gt_lobby_ignore", "Add a player to the session ignore list (Steam I
     if _is_ignored(sid) then _kick(sid, "added to ignore list") end
 end)
 
-mod:command("gt_lobby_ignore_persist", "Add a Steam ID to the persistent ignore list.", function(arg)
+mod:command("lobby_ignore_persist", "Add a Steam ID to the persistent ignore list.", function(arg)
     if not _require_host() then return end
     local sid = _resolve_arg_to_sid(arg)
     if not sid then _say("Could not resolve '" .. tostring(arg) .. "' to a peer.") return end
@@ -172,9 +151,9 @@ mod:command("gt_lobby_ignore_persist", "Add a Steam ID to the persistent ignore 
     if _is_ignored(sid) then _kick(sid, "added to persistent ignore list") end
 end)
 
-mod:command("gt_lobby_unignore", "Remove a Steam ID from both ignore tiers.", function(arg)
+mod:command("lobby_unignore", "Remove a Steam ID from both ignore tiers.", function(arg)
     if not _require_host() then return end
-    if not arg or arg == "" then _say("Usage: /gt_lobby_unignore <steam_id>") return end
+    if not arg or arg == "" then _say("Usage: /lobby_unignore <steam_id>") return end
     local sid = tostring(arg)
     mod._gt_lobby_session_ignore[sid] = nil
     local p = _persistent()
@@ -182,7 +161,7 @@ mod:command("gt_lobby_unignore", "Remove a Steam ID from both ignore tiers.", fu
     _say("Removed " .. sid .. " from ignore list.")
 end)
 
-mod:command("gt_lobby_ignored", "Print the session + persistent ignore lists.", function()
+mod:command("lobby_ignored", "Print the session + persistent ignore lists.", function()
     if not _require_host() then return end
     local s_keys, p_keys = {}, {}
     for k, _ in pairs(mod._gt_lobby_session_ignore) do s_keys[#s_keys + 1] = k end
@@ -192,7 +171,7 @@ mod:command("gt_lobby_ignored", "Print the session + persistent ignore lists.", 
     _say("Persistent ignore (" .. #p_keys .. "): " .. (p_keys[1] and table.concat(p_keys, ", ") or "(none)"))
 end)
 
-mod:command("gt_lobby_ignore_last", "Re-add the most recently kicked-by-host peer to the session ignore list.", function()
+mod:command("lobby_ignore_last", "Re-add the most recently kicked-by-host peer to the session ignore list.", function()
     if not _require_host() then return end
     local sid = mod._gt_lobby_si_last_kicked
     if not sid then _say("No recent host-kicked peer recorded this session.") return end
@@ -210,5 +189,6 @@ M.kick                = _kick
 M.say                 = _say
 M.resolve_arg_to_sid  = _resolve_arg_to_sid
 M.is_host             = _is_host
+M.on_player_joined_party = _on_player_joined_party
 
 return M

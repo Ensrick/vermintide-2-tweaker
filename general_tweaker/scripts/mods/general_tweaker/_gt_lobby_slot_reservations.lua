@@ -13,7 +13,7 @@ local M = {}
 --
 -- Persistence key:  "gt_lobby_sr_reservations" = { [steam_id_string] = slot_index, ... }
 -- Master toggle:    "gt_lobby_slot_reservations_enabled"
--- Chat commands:    /gt_lobby_reserve, /gt_lobby_unreserve, /gt_lobby_reservations
+-- Chat commands:    /lobby_reserve, /lobby_unreserve, /lobby_reservations
 
 local STORAGE_KEY = "gt_lobby_sr_reservations"
 local TOGGLE_KEY  = "gt_lobby_slot_reservations_enabled"
@@ -133,20 +133,20 @@ end
 -- Chat commands (host-only). Renamed lt_* -> gt_lobby_* per merge.
 -- ---------------------------------------------------------------------------
 
-mod:command("gt_lobby_reserve", "Reserve a lobby slot for a Steam ID. Usage: /gt_lobby_reserve <steam_id> <slot 1-4>",
+mod:command("lobby_reserve", "Reserve a lobby slot for a Steam ID. Usage: /lobby_reserve <steam_id> <slot 1-4>",
     function(steam_id_arg, slot_arg)
         if not _is_host() then
-            mod:echo(TAG .. " /gt_lobby_reserve: host only.")
+            mod:echo(TAG .. " /lobby_reserve: host only.")
             return
         end
         local steam_id = _normalize_id(steam_id_arg)
         local slot     = _parse_slot(slot_arg)
         if not steam_id then
-            mod:echo(TAG .. " /gt_lobby_reserve: missing or invalid steam_id.")
+            mod:echo(TAG .. " /lobby_reserve: missing or invalid steam_id.")
             return
         end
         if not slot then
-            mod:echo(TAG .. " /gt_lobby_reserve: slot must be 1, 2, 3, or 4.")
+            mod:echo(TAG .. " /lobby_reserve: slot must be 1, 2, 3, or 4.")
             return
         end
         local reservations = _load()
@@ -155,20 +155,20 @@ mod:command("gt_lobby_reserve", "Reserve a lobby slot for a Steam ID. Usage: /gt
         mod:echo(TAG .. " Reserved slot " .. slot .. " for " .. steam_id .. ".")
     end)
 
-mod:command("gt_lobby_unreserve", "Remove a slot reservation. Usage: /gt_lobby_unreserve <steam_id>",
+mod:command("lobby_unreserve", "Remove a slot reservation. Usage: /lobby_unreserve <steam_id>",
     function(steam_id_arg)
         if not _is_host() then
-            mod:echo(TAG .. " /gt_lobby_unreserve: host only.")
+            mod:echo(TAG .. " /lobby_unreserve: host only.")
             return
         end
         local steam_id = _normalize_id(steam_id_arg)
         if not steam_id then
-            mod:echo(TAG .. " /gt_lobby_unreserve: missing or invalid steam_id.")
+            mod:echo(TAG .. " /lobby_unreserve: missing or invalid steam_id.")
             return
         end
         local reservations = _load()
         if reservations[steam_id] == nil then
-            mod:echo(TAG .. " /gt_lobby_unreserve: no reservation for " .. steam_id .. ".")
+            mod:echo(TAG .. " /lobby_unreserve: no reservation for " .. steam_id .. ".")
             return
         end
         reservations[steam_id] = nil
@@ -176,7 +176,7 @@ mod:command("gt_lobby_unreserve", "Remove a slot reservation. Usage: /gt_lobby_u
         mod:echo(TAG .. " Removed reservation for " .. steam_id .. ".")
     end)
 
-mod:command("gt_lobby_reservations", "List current slot reservations.", function()
+mod:command("lobby_reservations", "List current slot reservations.", function()
     local reservations = _load()
     if not next(reservations) then
         mod:echo(TAG .. " No reservations.")
@@ -200,40 +200,21 @@ mod:command("gt_lobby_reservations", "List current slot reservations.", function
 end)
 
 -- ---------------------------------------------------------------------------
--- Event registration: Managers.state.event is rebuilt on every game-state
--- transition (StateInGame, StateLoading, StateTitleScreen...). A boot-time
--- register is silently dropped after the first map load, so we pointer-compare
--- the current event manager via gt's central update consumer registry and
--- re-register when it changes. Uses gt's _register_update (exposed on the mod
--- table at boot) to avoid the legacy `_prev_update = mod.update` chain that
--- gt's Issue #16 refactor replaced.
+-- Event registration (audit 2026-06-07, F3, v0.2.80-dev)
+-- ---------------------------------------------------------------------------
+-- Previously this module registered its own (mod, "on_player_joined_party")
+-- handler. EventManager keys callbacks by (object, event_name), so three lobby
+-- modules registering the same pair was last-writer-wins -- only one ran. We
+-- now APPEND our join-handler to gt's shared dispatcher
+-- (mod._gt_lobby_register_join_handler, defined in general_tweaker.lua),
+-- which owns the single (mod, "on_player_joined_party") registration plus the
+-- per-state-transition re-register (Managers.state.event is rebuilt on every
+-- game-state transition). The handler now receives the true event payload
+-- (peer_id, ...) -- the previous self-registration was silently mis-threaded by
+-- the object-prepend in EventManager.trigger.
 -- ---------------------------------------------------------------------------
 
-local _last_state_event = nil
-local function _update_register(_dt)
-    local ev = Managers.state and Managers.state.event
-    if ev and ev ~= _last_state_event then
-        _last_state_event = ev
-        -- Stingray ev:register expects (object, event_name, METHOD_NAME_STRING).
-        -- Passing a function value here triggers
-        -- "No function found with name '[function]' on supplied object".
-        -- Attach the callback as a method on `mod` first, then register by name.
-        mod.gt_lobby_slot_reservations_on_player_joined_party = _on_player_joined_party
-        ev:register(mod, "on_player_joined_party", "gt_lobby_slot_reservations_on_player_joined_party")
-    end
-end
-
--- gt exposes its update registrar via mod._gt_register_update (see
--- general_tweaker.lua, "mod.update subscriber registry" section).
-if type(mod._gt_register_update) == "function" then
-    mod._gt_register_update("gt_lobby_slot_reservations_register_event", _update_register)
-end
-
-if Managers.state and Managers.state.event then
-    _last_state_event = Managers.state.event
-    mod.gt_lobby_slot_reservations_on_player_joined_party = _on_player_joined_party
-    Managers.state.event:register(mod, "on_player_joined_party", "gt_lobby_slot_reservations_on_player_joined_party")
-end
+mod._gt_lobby_register_join_handler("slot_reservations", _on_player_joined_party)
 
 M.on_player_joined_party = _on_player_joined_party
 

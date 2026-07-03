@@ -1,5 +1,19 @@
 # General Tweaker Changelog
 
+## v0.2.173 (2026-07-03) -- STABLE PROMOTION: full sync of the public item to the dev line at v0.2.173-dev
+
+First full dev->stable promotion since the dev/stable split. The public item jumps from v0.2.73-alpha (a late-May build plus two cherry-picks) to a direct port of `general_tweaker_dev` v0.2.173-dev: mod id renamed `gt_dev` -> `gt`, dev status labels ("[untested]" / "[confirmed working]") stripped from all menu strings, MOD_VERSION normalized to clean semver. Highlights over the outgoing stable build:
+
+- **Architecture**: the single 246 KB monolith was split into ~25 `_gt_*.lua` feature modules (dev refactor phases 1-4, no behavior change).
+- **Bots suite (new to stable)**: Bot Behavior Improvements + Improved Bot Combat, faster reactions, bots drink potions / rescue players awaiting rescue, bot follow mode + snap-back distance, #139 bot-teleport fixes (both cases) plus the Bot Teleport Lab (10 diagnostics, 10 fixes), Allow Bots in Keep revived incl. necromancer skeletons (#65), Disable Bots fixed (#194), Bot Takeover /ai + AFK takeover with RPC schema versioning (#44), guard-break announcements, Prioritize Specials (Deepwood / Soulstealer / tagging sub-toggles).
+- **Spawners & cheats (new to stable)**: Creature Spawner (/spawncreature family), Item Spawner (/spawnitem), Level Control (/win /fail /restart /die /respawn /fix_sound), Time & Pause (/pause /time_faster /time_slower), Buffs & Stats (base crit chance, /gigapower, /infinite_ammo, /stamina, /ultreset), fall-damage multiplier, weave unlock, Max Ragdolls slider + fog / sun-shadow / mutator-explosion / ult-VO toggles.
+- **QoL**: /catchup alias of /unstuck, /cloak, /unkillable, /inndmg, /inn, auto-restart on team wipe (now also works in Chaos Wastes + Weaves), Info readouts (assassin / packmaster / boss path progress).
+- **Chat commands de-prefixed** (dev v0.2.164): every /gt_* command dropped the prefix - e.g. /gt_lobby_reserve is now /lobby_reserve.
+- **Migrated OUT to Tweaker: GUI (gut)**: in-mission inventory / keep menus (#62), skip cutscenes + loading-screen monologues (#106 / #192), 3rd-person camera (#191), floating damage numbers (#190), level-intro audio; per-mod debug toggle removed, diagnostics route through VMF logging (#169).
+- **Menu & loc**: full settings reorg (A->Z groups, master toggles, nested fine-tunes), #222 tooltip de-duplication sweeps, em dashes removed from menu strings, plain-English option descriptions.
+
+Per-version history for everything between v0.2.74-dev and v0.2.173-dev lives in `general_tweaker_dev/CHANGELOG.md`.
+
 ## v0.2.73-alpha (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
 
 ## v0.2.72-alpha (2026-06-24) -- Remove in-mission inventory / Keep Menus (migrated to GUI Tweaker); resolves #62
