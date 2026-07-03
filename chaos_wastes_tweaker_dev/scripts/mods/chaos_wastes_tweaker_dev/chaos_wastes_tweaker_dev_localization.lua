@@ -187,7 +187,7 @@ local loc = {
     arena_ammo_count_tooltip = { en = "Only affects Chaos Wastes finale missions. Default = vanilla (2 ammo boxes). 0 = no ammo boxes. 1-10 = override to this many. Host-authoritative." },
     enable_campaign_potions = { en = "Rework: Enable Strength/Speed/Ability Potions" },
     any_trait_any_weapon = { en = "[untested] Rework: Any Trait on Any Weapon" },
-    any_trait_any_weapon_tooltip = { en = "Removes the category restriction on trait rolls, so a weapon isn't limited to its own trait list. Gated to Exotic+Unique unless 'Trait Tier by Rarity' is on." },
+    any_trait_any_weapon_tooltip = { en = "Lets a weapon roll any trait usable in its slot (melee or ranged), not just its own weapon-type list. The melee/ranged split is kept: melee weapons never roll ranged traits and vice versa. Gated to Exotic+Unique unless 'Trait Tier by Rarity' is on." },
     tweak_trait_tier_by_rarity = { en = "[untested] Rework: Trait Tier by Rarity" },
     tweak_trait_tier_by_rarity_tooltip = { en = "Common weapons get the weakest version of each trait and Unique the strongest, with every rarity in between able to roll one. Each upgrade rerolls the trait." },
     tweak_shard_strike_duration = { en = "Rework: Shard Strike duration (sec)" },

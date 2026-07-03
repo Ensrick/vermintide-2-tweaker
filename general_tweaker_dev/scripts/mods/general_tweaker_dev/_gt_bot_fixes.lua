@@ -1152,6 +1152,13 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
 
     -- ---- PRESERVED FIX 7 / #139 body (unchanged) ----
     mod:debug("[gt:bot-leash] TELEPORT executed (bot snapped to its follow target)")
+    -- #261: every leash yank carries its cause. The lab's dispatch printfs a
+    -- [gt:btlab:tether] block (current action + action ring buffer, ~2s per-bot
+    -- cooldown) so the yank is visible with mod logging OFF. Dev-gated + pcall
+    -- inside the lab fn; a no-op in stable. No new hook (this run hook already exists).
+    if mod._gt_btlab_report_tether then
+        mod._gt_btlab_report_tether(unit, blackboard)
+    end
     -- #139 probe (printf -> visible with mod-logging off). If this still reports
     -- `follow downed=true` AFTER the v0.2.148-dev guard above, the snap came from
     -- vanilla's 40 m teleport (func()), not GT's tighter leash -- extend the fix
@@ -1401,6 +1408,11 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
         if t >= (self._gt_split_log_t or 0) then
             self._gt_split_log_t = t + 3.0
             mod:debug("[gt:bot-split] %d bots across %d humans (host-first round-robin)", #bots, num)
+            -- #261: mirror the split round-robin summary to printf in dev so it is
+            -- visible with mod logging OFF (mod:debug is not). No-op in stable.
+            if mod._gt_btlab_pf_dev then
+                mod._gt_btlab_pf_dev("[gt:bot-split] %d bots across %d humans (host-first round-robin)", #bots, num)
+            end
         end
     end
 

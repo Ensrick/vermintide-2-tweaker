@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.175-dev"
+local MOD_VERSION = "0.2.176-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1627,6 +1627,69 @@ _rt_register("devtools_bot_hud_wired", function()
     end
     if not txt:find("gt_devtools_bot_hud", 1, true) then
         return "lab source missing gt_devtools_bot_hud gate -- HUD not wired to its toggle"
+    end
+end)
+
+_rt_register("breach_probe_present_dev_gated", function()
+    -- #261 (v0.2.176-dev): the always-on radius-breach probe must be present and
+    -- dev-gated. It runs inside mod._gt_btlab_observe_update (dispatched from the
+    -- existing PlayerBotBase.update merge-dispatch) behind the IS_DEV_STREAM gate,
+    -- and printfs the [gt:btlab:breach] block. Source read is best-effort.
+    if type(mod._gt_btlab_observe_update) ~= "function" then
+        return "mod._gt_btlab_observe_update missing -- radius-breach probe host removed"
+    end
+    local ok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find("[gt:btlab:breach]", 1, true) then
+        return "radius-breach printf tag [gt:btlab:breach] missing from lab source"
+    end
+    if not txt:find("if not IS_DEV_STREAM then return end", 1, true) then
+        return "IS_DEV_STREAM gate missing from lab source -- breach probe may not be dev-gated"
+    end
+end)
+
+_rt_register("tether_dump_present", function()
+    -- #261 (v0.2.176-dev): every leash yank must dump its cause. mod._gt_btlab_report_tether
+    -- printfs the [gt:btlab:tether] block (current action + ring buffer, ~2s cooldown),
+    -- dispatched from the existing BTBotTeleportToAllyAction.run hook in _gt_bot_fixes.lua.
+    if type(mod._gt_btlab_report_tether) ~= "function" then
+        return "mod._gt_btlab_report_tether missing -- leash/tether printf dump removed"
+    end
+    local ok, info = pcall(debug.getinfo, mod._gt_btlab_report_tether, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find("[gt:btlab:tether]", 1, true) then
+        return "tether printf tag [gt:btlab:tether] missing from lab source"
+    end
+end)
+
+_rt_register("btlab_no_class_hooks", function()
+    -- #261 (v0.2.176-dev): the lab must stay merge-dispatch -- ZERO class hooks
+    -- (VMF single-hook rule; all injection points ride existing _gt_bot_fixes.lua
+    -- hooks). The only "mod:hook" mentions in the lab are backtick-wrapped in
+    -- comments with no open-paren, so a literal "mod:hook(" / "mod:hook_safe("
+    -- match means a real hook call slipped in. Source read is best-effort.
+    local ok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if txt:find("mod:hook(", 1, true) or txt:find("mod:hook_safe(", 1, true) then
+        return "a mod:hook( / mod:hook_safe( call appeared in _gt_bot_teleport_lab.lua -- must stay merge-dispatch (no new hooks)"
     end
 end)
 

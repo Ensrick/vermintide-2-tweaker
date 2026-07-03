@@ -232,6 +232,99 @@ local function _reset_mission_state()
 end
 
 -- ============================================================================
+-- #261 always-on instrumentation (radius breach + tether dump). All host-side,
+-- always-on in dev (no toggles), printf so it's visible with mod logging OFF.
+-- Issue #261: in split follow mode a bot pursues an objective OUTSIDE the follow
+-- radius, then gets leash-yanked -- these probes capture, per event, WHAT the bot
+-- was doing when it left the radius and every yank's cause. Event-driven +
+-- cooldown-throttled; no new per-frame log lines.
+-- ============================================================================
+
+-- Compact one-line dump of a bot's action ring buffer, newest first, each entry
+-- "id@-<age>s" (age = now - entry.t). "(none)" if empty.
+local function _ring_compact(unit, now)
+    local log = _action_log[unit]
+    if not (log and #log > 0) then return "(none)" end
+    local parts = {}
+    for i = #log, 1, -1 do
+        local e = log[i]
+        local age = (now and e.t) and (now - e.t) or nil
+        parts[#parts + 1] = age and string.format("%s@-%.1fs", e.id or "?", age)
+                                 or tostring(e.id or "?")
+    end
+    return table.concat(parts, " ")
+end
+
+-- Per-human distance summary from a bot: "name=Xm, name=Ym", plus nearest
+-- (name, dist). Uses Managers.player:human_players() (humans only). nil-guarded.
+local function _human_dist_summary(unit)
+    local pm = Managers.player
+    local humans = pm and pm.human_players and pm:human_players()
+    local bot_pos = POSITION_LOOKUP[unit]
+    local parts, nearest_name, nearest_d = {}, nil, nil
+    if humans and bot_pos then
+        for _, player in pairs(humans) do
+            local u = player and player.player_unit
+            local p = u and POSITION_LOOKUP[u]
+            if p then
+                local d  = Vector3.distance(bot_pos, p)
+                local nm = (player.name and player:name()) or "?"
+                parts[#parts + 1] = string.format("%s=%.1fm", nm, d)
+                if not nearest_d or d < nearest_d then nearest_d, nearest_name = d, nm end
+            end
+        end
+    end
+    return table.concat(parts, ", "), nearest_name, nearest_d
+end
+
+-- #261 RADIUS-BREACH block: printf ONE compact block (3 lines, tag
+-- [gt:btlab:breach]) when a bot's distance to its CURRENT follow anchor crosses
+-- ABOVE the leash radius. Answers "what was the bot trying to do when it left the
+-- radius": current BT leaf action + per-human distances + the action ring buffer.
+local function _report_breach(unit, blackboard, follow, dist, radius, now)
+    pcall(function()
+        local action = _current_bot_action(blackboard) or "?"
+        _pf("[gt:btlab:breach] bot=%s LEFT follow radius: follow=%s dist=%.1fm radius=%.1fm action=%s",
+            _unit_label(unit), _unit_label(follow), dist, radius, action)
+        local human_line, nearest_name, nearest_d = _human_dist_summary(unit)
+        _pf("[gt:btlab:breach]   humans: %s (nearest=%s @ %s)",
+            (human_line ~= "" and human_line) or "none",
+            nearest_name or "none",
+            nearest_d and string.format("%.1fm", nearest_d) or "n/a")
+        _pf("[gt:btlab:breach]   actions(newest->oldest): %s", _ring_compact(unit, now))
+    end)
+end
+
+-- #261 TETHER dump: printf a [gt:btlab:tether] block (2 lines) whenever a bot is
+-- leash-yanked/teleported, so every observed yank carries its cause (current
+-- action + ring buffer). Per-bot ~2s cooldown (stamped on the blackboard) so an
+-- oscillation doesn't flood. Dispatched from the EXISTING BTBotTeleportToAllyAction
+-- .run hook body in _gt_bot_fixes.lua (no new hook).
+mod._gt_btlab_report_tether = function(unit, blackboard)
+    if not IS_DEV_STREAM then return end
+    if not (unit and blackboard) then return end
+    pcall(function()
+        local now  = _now()
+        local last = blackboard._gt_btlab_tether_t or -1e9
+        if now - last < 2.0 then return end
+        blackboard._gt_btlab_tether_t = now
+        local follow = _follow_unit(blackboard)
+        local action = _current_bot_action(blackboard) or "?"
+        local d      = follow and _dist_units(unit, follow)
+        _pf("[gt:btlab:tether] YANK bot=%s follow=%s dist=%s action=%s",
+            _unit_label(unit), _unit_label(follow),
+            d and string.format("%.1fm", d) or "n/a", action)
+        _pf("[gt:btlab:tether]   actions(newest->oldest): %s", _ring_compact(unit, now))
+    end)
+end
+
+-- Dev-gated printf passthrough for sibling files (e.g. _gt_bot_fixes.lua leash /
+-- split summaries) so their mod:debug lines become visible with logging OFF.
+mod._gt_btlab_pf_dev = function(fmt, ...)
+    if IS_DEV_STREAM then _pf(fmt, ...) end
+end
+
+-- ============================================================================
 -- D2  follow_tracker  --  merged into FIX 9's _assign_destination_points hook
 -- ----------------------------------------------------------------------------
 -- Log each bot's follow_unit and, when it CHANGES, old -> new with both units'
@@ -241,14 +334,22 @@ mod._gt_btlab_track_follow = function(bot_ai_data)
     if not IS_DEV_STREAM then return end
     if type(bot_ai_data) ~= "table" then return end
     pcall(function()
+        -- #261: name the resolved follow MODE that drove the assignment
+        -- (default / follow_host / split), read from FIX 9's own resolver.
+        -- NOTE: this dispatch runs at the TOP of _assign_destination_points, so
+        -- in follow_host/split mode it reports the PRE-override target (vanilla's
+        -- pick); FIX 9 rewrites follow_unit later in the same tick. The final
+        -- post-split anchor is what the breach / tether probes read (via
+        -- _follow_unit(blackboard) at observe / teleport time).
+        local mode = (mod._gt_resolve_follow_mode and mod._gt_resolve_follow_mode()) or "?"
         for bot_unit, data in pairs(bot_ai_data) do
             if data then
                 local new_follow = data.follow_unit
                 local last = _follow_last[bot_unit]
                 if new_follow ~= last then
                     _follow_last[bot_unit] = new_follow
-                    _pf("[gt:btlab:d2] bot=%s follow CHANGED %s -> %s",
-                        _unit_label(bot_unit), _unit_label(last), _unit_label(new_follow))
+                    _pf("[gt:btlab:d2] bot=%s mode=%s follow CHANGED %s -> %s",
+                        _unit_label(bot_unit), mode, _unit_label(last), _unit_label(new_follow))
                 end
             end
         end
@@ -759,11 +860,13 @@ mod._gt_btlab_redirect_teleport = function(unit, blackboard)
 end
 
 -- ============================================================================
--- D3 + D9(clear) + bot registry  --  merged into PlayerBotBase.update
+-- D3 + D9(clear) + bot registry + action ring buffer + #261 breach probe
+--   -- merged into PlayerBotBase.update
 -- ----------------------------------------------------------------------------
--- Registers the bot (so the D6/D7 draw tick has a blackboard + can enumerate
--- bots), watches for the has_teleported true->false clear (D9), and prints the
--- throttled distance readout (D3).
+-- Registers the bot (so the HUD / leash-line draw has a blackboard + can
+-- enumerate bots), watches for the has_teleported true->false clear (D9), prints
+-- the throttled distance readout (D3), polls the current BT leaf action into the
+-- always-on ring buffer, and runs the #261 radius-breach edge probe.
 -- ============================================================================
 mod._gt_btlab_observe_update = function(self, unit, blackboard, t) -- luacheck: ignore self
     if not IS_DEV_STREAM then return end
@@ -800,23 +903,51 @@ mod._gt_btlab_observe_update = function(self, unit, blackboard, t) -- luacheck: 
                 leash)
         end
 
-        -- Bot behavior HUD (Dev Tools): poll the current BT leaf action and push a
-        -- ring-buffer entry when it CHANGES. Gated on the HUD toggle so there is
-        -- zero extra per-frame work when the HUD is off. Per-frame string read +
-        -- a small table only on a transition (capped at _ACTION_LOG_MAX). Host is
-        -- implied: bot units only exist on the host.
-        if mod:get("gt_devtools_bot_hud") then
-            local action_id = _current_bot_action(blackboard)
-            if action_id and action_id ~= _action_last[unit] then
-                _action_last[unit] = action_id
-                local log = _action_log[unit]
-                if not log then
-                    log = {}
-                    _action_log[unit] = log
-                end
-                log[#log + 1] = { t = t, id = action_id }
-                while #log > _ACTION_LOG_MAX do
-                    table.remove(log, 1)
+        -- Action ring buffer: poll the current BT leaf action and push an entry
+        -- when it CHANGES. ALWAYS-ON in dev now (was HUD-toggle-gated) so the #261
+        -- breach / tether printf blocks AND the HUD both draw from it. Per-frame
+        -- string read + a small table only on a transition (capped _ACTION_LOG_MAX).
+        -- Host is implied: bot units only exist on the host.
+        local action_id = _current_bot_action(blackboard)
+        if action_id and action_id ~= _action_last[unit] then
+            _action_last[unit] = action_id
+            local log = _action_log[unit]
+            if not log then
+                log = {}
+                _action_log[unit] = log
+            end
+            log[#log + 1] = { t = t, id = action_id }
+            while #log > _ACTION_LOG_MAX do
+                table.remove(log, 1)
+            end
+        end
+
+        -- #261 RADIUS-BREACH probe (always-on in dev): edge-triggered when the bot
+        -- crosses ABOVE the leash radius from its CURRENT follow anchor. The radius
+        -- is gt_bot_follow_distance_m; the leash treats >= 40 as OFF (matches
+        -- _gt_tighter_leash_wants in _gt_bot_fixes.lua: `if dist_m >= 40 then return
+        -- false`), so we only probe when 0 < radius < 40. Hysteresis: re-arm only
+        -- after the bot drops back under 80% of the radius. Per-bot ~3s cooldown.
+        -- Edge + hysteresis + cooldown state stamped on the blackboard (per-bot,
+        -- per-mission; nil-armed reads as armed).
+        do
+            local radius = mod:get("gt_bot_follow_distance_m") or 40.0
+            if radius > 0 and radius < 40.0 then
+                local follow = _follow_unit(blackboard)
+                local d = follow and _dist_units(unit, follow)
+                if d then
+                    local armed = blackboard._gt_btlab_breach_armed
+                    if armed == nil then armed = true end
+                    if armed and d > radius then
+                        blackboard._gt_btlab_breach_armed = false
+                        local last = blackboard._gt_btlab_breach_t or -1e9
+                        if t - last >= 3.0 then
+                            blackboard._gt_btlab_breach_t = t
+                            _report_breach(unit, blackboard, follow, d, radius, t)
+                        end
+                    elseif (not armed) and d <= radius * 0.8 then
+                        blackboard._gt_btlab_breach_armed = true
+                    end
                 end
             end
         end

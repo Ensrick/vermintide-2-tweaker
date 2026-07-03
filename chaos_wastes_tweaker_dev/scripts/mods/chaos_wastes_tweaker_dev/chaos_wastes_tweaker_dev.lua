@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.213-dev"
+local MOD_VERSION = "0.7.214-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -3502,11 +3502,39 @@ local function apply_weapon_trait_filter()
     end
 
     local any_trait = effective_setting("any_trait_any_weapon")
-    local expanded_pool = any_trait and get_all_trait_combos()
+    -- #119/#260: when "Any Trait on Any Weapon" is on, expand each weapon's pool to the
+    -- full trait UNION of its OWN combat class (melee or ranged), NOT the cross-slot global
+    -- union that get_all_trait_combos() returns. This lifts the weapon-TYPE restriction (any
+    -- trait allowed within the slot, #119) while STRICTLY preserving the melee/ranged split
+    -- (no melee trait leaks onto a ranged weapon or vice versa, #260) - matching the
+    -- tier-by-rarity path's class-union rule (get_tier_filtered_combos / _ct_get_trait_class_pools).
+    -- Falls back to the old global union only if WeaponTraits.combinations isn't loaded yet,
+    -- so early-timing rolls behave exactly as before.
+    local slot_pools = any_trait and mod._ct_get_trait_class_pools()
+    local melee_expanded, ranged_expanded
+    if slot_pools then
+        melee_expanded, ranged_expanded = {}, {}
+        for trait in pairs(slot_pools.melee) do melee_expanded[#melee_expanded + 1] = { trait } end
+        for trait in pairs(slot_pools.ranged) do ranged_expanded[#ranged_expanded + 1] = { trait } end
+    end
+    local global_expanded = (any_trait and not slot_pools) and get_all_trait_combos()
     local saved = {}
 
     for item_key, data in pairs(DeusWeapons) do
         local original = data.baked_trait_combinations
+        local expanded_pool
+        if any_trait then
+            if slot_pools then
+                local ttn = data.trait_table_name
+                local is_ranged = type(ttn) == "string" and not ttn:find("melee")
+                local slot_list = is_ranged and ranged_expanded or melee_expanded
+                if slot_list and #slot_list > 0 then
+                    expanded_pool = slot_list
+                end
+            else
+                expanded_pool = global_expanded
+            end
+        end
         local base = expanded_pool or original
         if base then
             local filtered = {}
@@ -5456,8 +5484,56 @@ local function _current_node_is_belakor()
     return _current_node_curse() == "curse_belakor_totems"
 end
 
+-- #104 perf census tuning: sample window (seconds) and marker.
+CT_PERF_CENSUS_MARKER = "perf104:flowstate_enemy_fps_census_v0.7.214"
+CT_PERF_WINDOW = 5.0
 mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading_env, viewport)
     if not on_injected_adventure_level() then return end
+    -- #104 perf census (diagnose-before-mitigate). The shading_callback is the
+    -- per-frame, injected-map-gated path, so sample a throttled LOAD census here
+    -- BEFORE the curse-theme early returns below (so it runs on EVERY injected
+    -- frame, cursed or not). User reports FPS drops localized to the first-grimoire
+    -- Chest of Trials on Blood in the Darkness; the leading suspect is the same
+    -- cursed_chest objective_unit / networked-flow-state load that overflowed the
+    -- 512 cap (#262) - hundreds of linked objective_units tank framerate long
+    -- before they crash. This prints flow-state count + live enemy count + avg fps
+    -- + worst single frame every CT_PERF_WINDOW s so a repro AT the chest shows
+    -- exactly what spikes. Cheap per frame (one guarded clock read + a counter).
+    do
+        local now = (Managers and Managers.time and Managers.time:time("game")) or nil
+        if now then
+            local st = mod._ct_perf
+            if not st or now < st.census then
+                st = { last = now, census = now, frames = 0, worst = 0 }
+                mod._ct_perf = st
+            end
+            local dt = now - st.last
+            st.last = now
+            if dt > st.worst then st.worst = dt end
+            st.frames = st.frames + 1
+            local elapsed = now - st.census
+            if elapsed >= CT_PERF_WINDOW then
+                local nfs = Managers.state and Managers.state.networked_flow_state
+                local flow_states = (nfs and type(nfs._num_states) == "number") and nfs._num_states or -1
+                local cd = Managers.state and Managers.state.conflict_director
+                local enemies = (cd and type(cd._num_spawned_ai) == "number") and cd._num_spawned_ai or -1
+                local lvl = "?"
+                local gm = Managers.state and Managers.state.game_mode
+                if gm and gm.level_key then
+                    local ok, k = pcall(gm.level_key, gm)
+                    if ok and k then lvl = k end
+                end
+                pcall(printf,
+                    "[ct:perf] level=%s theme=%s window=%.1fs frames=%d avg_fps=%.1f worst_frame_ms=%.1f flow_states=%d enemies=%d",
+                    tostring(lvl), tostring(_current_node_theme() or "none"),
+                    elapsed, st.frames, (elapsed > 0 and st.frames / elapsed) or 0,
+                    st.worst * 1000, flow_states, enemies)
+                st.census = now
+                st.frames = 0
+                st.worst = 0
+            end
+        end
+    end
     local theme = _current_node_theme()
     if not theme or theme == "wastes" then return end
     local profile = _CURSE_SKY_PROFILES[theme]
@@ -8445,22 +8521,37 @@ sync_bomb_cooldown()
 -- and works for intervals SHORTER or longer than the vanilla 180/180/120. interval 0
 -- = leave vanilla untouched. Runs on the proc'ing player's machine; the interval is
 -- host-synced via effective_setting so every peer uses the host's value.
-if rawget(_G, "BuffFunctionTemplates") and BuffFunctionTemplates.functions
-        and BuffFunctionTemplates.functions.drop_item_on_ability_use then
-    mod:hook(BuffFunctionTemplates.functions, "drop_item_on_ability_use", function(func, owner_unit, buff, params, ...)
-        func(owner_unit, buff, params, ...)
+-- #120 fix (v0.7.214-dev RETARGET): the real reason the cooldown "did nothing" was
+-- that this hook was never installed. `drop_item_on_ability_use` is a PROC function,
+-- dispatched at proc time via `ProcFunctions[buff.buff_func]`
+-- (buff_extension.lua:1351-1352) and registered into the global `ProcFunctions`
+-- (DLCSettings.morris.proc_functions -> DLCUtils.merge, buff_templates.lua:9589). It
+-- is NOT a member of `BuffFunctionTemplates.functions` (that key is nil there), so the
+-- old guard was always false and `mod:hook` never ran -> total no-op. Retargeted to the
+-- global `ProcFunctions`; the dispatch re-reads `ProcFunctions[name]` on EVERY proc
+-- (no add-buff caching), so a table-entry hook is honored. The wrapper CAPTURES and
+-- RETURNS the proc's value: dispatch does `success = buff_func(...)` and `success`
+-- gates `remove_on_proc` removal (buff_extension.lua:1354). Vanilla's proc returns nil,
+-- so this is behavior-identical today, but returning it keeps us correct if a future
+-- patch makes the proc return a value.
+if rawget(_G, "ProcFunctions") and ProcFunctions.drop_item_on_ability_use then
+    mod:hook(ProcFunctions, "drop_item_on_ability_use", function(func, owner_unit, buff, params, ...)
+        local ret = func(owner_unit, buff, params, ...)
 
         local interval = effective_setting("bomb_boon_cooldown")
-        if not (interval and interval > 0) then return end
-        if not (rawget(_G, "ALIVE") and ALIVE[owner_unit]) then return end
-
-        local buff_ext = ScriptUnit.has_extension(owner_unit, "buff_system")
-        local cd = buff_ext and buff_ext.get_non_stacking_buff
-            and buff_ext:get_non_stacking_buff("drop_item_on_ability_use_cooldown")
-        if cd then
-            cd.duration = interval
-            pcall(printf, "[ct-bomb-boon] drop_item cooldown overridden -> %ds", interval)
+        if interval and interval > 0 and rawget(_G, "ALIVE") and ALIVE[owner_unit] then
+            local buff_ext = ScriptUnit.has_extension(owner_unit, "buff_system")
+            local cd = buff_ext and buff_ext.get_non_stacking_buff
+                and buff_ext:get_non_stacking_buff("drop_item_on_ability_use_cooldown")
+            if cd then
+                -- Re-anchors to the ORIGINAL drop: start_time is unchanged, so
+                -- end_time = start_time + interval. Idempotent across repeat pops.
+                cd.duration = interval
+                pcall(printf, "[ct-bomb-boon] drop_item cooldown overridden -> %ds", interval)
+            end
         end
+
+        return ret
     end)
 end
 
@@ -12887,6 +12978,20 @@ _rt_register("networked_flow_state_cap_guarded", function()
     if not cls then return nil end
     if type(cls.flow_cb_create_state) ~= "function" then
         return "flow_cb_create_state missing on NetworkedFlowStateManager"
+    end
+end)
+
+_rt_register("perf104_census_installed", function()
+    -- v0.7.214: #104 host FPS-drop diagnostic. A throttled census folded into the
+    -- CameraManager.shading_callback hook prints flow-state/enemy/fps every
+    -- CT_PERF_WINDOW s on injected maps so the localized drop at the first-grimoire
+    -- Chest of Trials (Blood in the Darkness) can be correlated with objective_unit
+    -- load. Verify the marker + window constant survived into the bundle.
+    if type(CT_PERF_CENSUS_MARKER) ~= "string" or #CT_PERF_CENSUS_MARKER == 0 then
+        return "CT_PERF_CENSUS_MARKER not defined (perf census missing)"
+    end
+    if type(CT_PERF_WINDOW) ~= "number" or CT_PERF_WINDOW <= 0 then
+        return "CT_PERF_WINDOW not a positive number"
     end
 end)
 
