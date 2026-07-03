@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.210-dev"
+local MOD_VERSION = "0.7.211-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -573,15 +573,13 @@ CT_BOT_WEAP_OPENED_RARITY_MARKER = "bot_weap:opened_rarity_pre_bump_v0.7.169"
 -- the regression-test callbacks read these markers, so a global is fine.)
 CT_ALTAR_VISUAL_PROBE_MARKER = "altar_visual_probe:readonly_update_hook_v0.7.157"
 
--- v0.7.158-dev Task 1: the REAL upgrade-altar "goes dark after first use" fix.
--- Hooks DeusChestExtension._setup_rarity (the single writer of self._rarity) to
--- bump a re-armed upgrade altar's rolled rarity strictly above the player's
--- wielded (just-upgraded) weapon, so update_upgrade_chest_color stops firing
--- `lua_interact_disabled` and the altar stays usable/lit until the usable rarity
--- ceiling. Source-pattern verified by /ct_regression_test check
--- `upgrade_altar_rarity_bump`.
+-- v0.7.211-dev #102 DECOUPLE: keep-lit visual decoupled from reward rarity. The old v0.7.158
+-- _setup_rarity rarity-bump was REMOVED (it climbed the reward tier on reuse); instead a re-armed
+-- upgrade altar stays lit + usable via relaxed update_upgrade_chest_color / can_be_unlocked gates
+-- (`<=` -> strict `<`), so the reward never climbs. Source-pattern verified by /ct_regression_test
+-- check `upgrade_altar_rarity_decouple`.
 -- (Global, not a main-chunk local: see note on CT_ALTAR_VISUAL_PROBE_MARKER above.)
-CT_UPGRADE_ALTAR_RARITY_BUMP_MARKER = "upgrade_altar_rarity_bump:setup_rarity_hook_v0.7.158"
+CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER = "upgrade_altar_rarity_decouple:relaxed_gates_no_bump_v0.7.211"
 
 -- Chest of Trials uniqueness (Task B, #117). ALWAYS-ON as of v0.7.177-dev (the
 -- prior `cursed_chest_unique_trials` toggle was removed). Two host-authoritative
@@ -784,6 +782,8 @@ mod._ct_rarity_by_order = mod._ct_rarity_by_order
 -- Return the rarity NAME one tier above `weapon_rarity_name`, capped at `unique`
 -- (order 5). Returns nil if RaritySettings isn't loaded or the input is unknown,
 -- in which case the caller leaves the vanilla-rolled rarity untouched.
+-- NOTE (v0.7.211-dev): no longer called after the #102 rarity-decouple; the reward-rarity
+-- bump it powered was removed. Retained only as a generic tier-step helper.
 mod._ct_altar_next_rarity_above = function(weapon_rarity_name)
     local rs = rawget(_G, "RaritySettings")
     if type(weapon_rarity_name) ~= "string" or not rs then return nil end
@@ -1098,73 +1098,97 @@ mod:hook("DeusChestExtension", "_generate_upgraded_weapon", function(func, self,
     return func(self, weapon, slot_name, rarity, mixed_go_id, profile_index, career_index)
 end)
 
--- TODO #102/#103: DECOUPLE keep-lit/usable from reward rarity (deferred — needs in-game verify).
+-- #102 (rarity escalation) FIXED v0.7.211-dev: DECOUPLE keep-lit visual from reward rarity.
 -- ----------------------------------------------------------------------------------------------
--- #102 (escalation): the `_setup_rarity` hook below keeps a re-armed upgrade altar LIT by bumping
--- its rolled `_rarity` strictly ABOVE the player's wielded weapon every re-roll. That is exactly
--- the "reward climbs a tier each use" behavior the user wants gone. Simply deleting the bump,
--- however, re-introduces the v0.7.158 "goes dark after first use" regression, because vanilla
--- gates the altar on `chest_rarity_order <= weapon_rarity_order` in TWO places:
---     * DeusChestExtension.can_be_unlocked   (deus_chest_extension.lua:505-517) — GAMEPLAY gate
---     * DeusChestExtension.update_upgrade_chest_color (211-243) — fires `lua_interact_disabled`
---       (the dark/greyed look) under the same `<=` condition.
--- DECOUPLE PLAN (source-grounded, all cited above):
---   1. Remove this `_setup_rarity` bump so `_rarity` stays at the rolled tier (no climb).
---   2. Add hooks on `can_be_unlocked` + `update_upgrade_chest_color` that, ONLY for a re-armed
---      upgrade altar (`_altar_uses_by_go_id[self._go_id] > 0`), relax the disable test from
---      `chest_rarity_order <= weapon_rarity_order` to strictly `<` — i.e. ALLOW a same-rarity
---      re-roll (exotic altar re-rolls the weapon at exotic) while still forbidding a downgrade.
---      The cost table supports this: DeusCostSettings.deus_chest.upgrade[r][r] is populated
---      (e.g. exotic→exotic = 175, deus_cost_settings.lua:159-165), so get_purchase_cost stays
---      finite and can_be_unlocked's cost branch passes.
---   (Neither method is hooked yet in ct_dev, so no VMF dup-hook risk — but verify before adding.)
--- #103 (used-up mesh on re-use): the re-arm must also clear the looted visual — re-fire
---   `lua_update_<chest_type>` + the rolled `lua_update_<rarity>` event, reset `_animation_state`
---   away from "looted", and clear `_prev_update_upgrade_chest_color_event` so the color update
---   re-evaluates. The open_chest re-arm + this hook already do some of this; the gap is the
---   per-tick `lua_update_collected` re-derivation in update() (deus_chest_extension.lua:175-182)
---   forcing the looted mesh back. Cross-reference `_peregrinaje_extract` for how Peregrinaje keeps
---   altars visually reusable across uses.
--- WHY DEFERRED: this altar re-arm path has regressed across v0.7.129/.130/.131/.151/.157/.158 and
---   is networked + per-tick-clobbered; the fix above is well-understood but MUST be verified in a
---   live run (single-altar reuse + the dark/looted visual) before shipping. Do NOT ship blind.
+-- Root cause: self._rarity is BOTH the reward tier (open_chest -> _generate_upgraded_weapon(...,
+-- self._rarity), deus_chest_extension.lua:558) AND the input to the dark-gate (update_upgrade_
+-- chest_color :236 / can_be_unlocked :513, both `chest_rarity_order <= weapon_rarity_order`). The
+-- old v0.7.158 fix kept a re-armed altar LIT by bumping self._rarity strictly ABOVE the wielded
+-- weapon every re-roll; that leaked into the reward, climbing plentiful->rare->exotic->unique.
 --
--- v0.7.158-dev Task 1: AUTHORITATIVE upgrade-altar rarity bump (the part of the
--- "goes dark after first use" fix that has to survive the per-tick clobber).
--- Vanilla update() (deus_chest_extension.lua:140) re-calls _setup_rarity every
--- time the setup block re-runs (and our re-arm forces it to by zeroing
--- _profile_index), so any _rarity we write in the open_chest re-arm branch is
--- overwritten one tick later by the constant-seed roll. Hooking _setup_rarity
--- (which is the SINGLE writer of self._rarity) lets us re-apply the bump on every
--- re-roll: for an upgrade altar that has been used at least once this run, force
--- the rolled rarity strictly above the player's wielded (just-upgraded) weapon,
--- capped at `unique`. That stops update_upgrade_chest_color from firing
--- `lua_interact_disabled` (the dark look) and keeps can_be_unlocked true until
--- the usable rarity ceiling is reached. Single hook on this (Class, method).
--- mod:hook (full wrapper) because we override BOTH the return value AND the
--- self._rarity field vanilla just set.
-mod:hook("DeusChestExtension", "_setup_rarity", function(func, self, seed, chest_type)
-    local rolled = func(self, seed, chest_type)
+-- FIX (Option B, user-chosen 2026-07-02): stop bumping self._rarity entirely (it stays at the
+-- constant per-go_id rolled tier, so the reward never climbs), and relax the two dark-gates from
+-- `<=` to strict `<` for a RE-ARMED upgrade altar (uses > 0). A same-tier re-roll stays LIT and
+-- usable (a rare altar re-rolls a rare weapon at rare, with fresh props via the _generate_upgraded_
+-- weapon seed-mix hook above) while a genuine DOWNGRADE still greys out. Same-tier upgrade cost is
+-- populated + finite (DeusCostSettings.deus_chest.upgrade[r][r] = base[r]*0.5, e.g. rare=100,
+-- deus_cost_settings.lua:137-173), so get_purchase_cost / can_be_unlocked's cost branch pass.
+-- Depletion is unaffected: a spent altar keeps _is_purchased=true, which both hooks below (and
+-- vanilla can_interact) already treat as unusable.
+--
+-- Both methods are otherwise unhooked in ct_dev (verified). Both hooks pass through to vanilla for
+-- first-use (uses==0) and every non-upgrade chest, so the ONLY behavior change is that a re-armed
+-- upgrade altar allows a same-tier re-roll instead of greying out. /ct_regression_test guards this
+-- via `upgrade_altar_rarity_decouple`. #103 (looted mesh on non-final use) is a SEPARATE visual
+-- path (the open_chest re-arm below) and is unaffected by this decouple.
+
+-- Relaxed VISUAL gate. Reimplements vanilla update_upgrade_chest_color (deus_chest_extension.lua:
+-- 211-243) with the rarity test loosened `<=` -> `<`. The rarity flow event is `"lua_update_" ..
+-- rarity` (vanilla's file-local LUA_UPDATE_RARITY_EVENTS[rarity], built the same way at :52; it is
+-- NOT a global, so it cannot be read via _G). Single hook on this (Class, method).
+mod:hook("DeusChestExtension", "update_upgrade_chest_color", function(func, self)
     local DCT = rawget(_G, "DEUS_CHEST_TYPES")
-    if not (DCT and chest_type == DCT.upgrade) then return rolled end
     local go_id = self._go_id
     local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
-    if uses == 0 then return rolled end  -- first/only use: untouched vanilla roll
-    local wielded = self._get_wielded_weapon and self:_get_wielded_weapon()
-    local wielded_rarity = wielded and wielded.rarity
-    local bumped = mod._ct_altar_next_rarity_above(wielded_rarity)
-    if not bumped then return rolled end
-    -- Only ever raise the tier, never lower it below the vanilla roll.
-    local rs = rawget(_G, "RaritySettings")
-    local rolled_order = rolled and rs and rs[rolled] and rs[rolled].order or 0
-    local bumped_order = rs and rs[bumped] and rs[bumped].order or 0
-    if bumped_order <= rolled_order then return rolled end
-    self._rarity = bumped
-    if self.unit and Unit and Unit.flow_event then
-        pcall(Unit.flow_event, self.unit, "lua_update_" .. bumped)
+    if uses == 0 or not (DCT and self._chest_type == DCT.upgrade) then
+        return func(self)  -- first use / non-upgrade: pure vanilla
     end
-    self._prev_update_upgrade_chest_color_event = nil
-    return bumped
+    local rarity = self._rarity
+    if not rarity then return end
+    if self._is_purchased then return end          -- depleted/looted: leave vanilla dark state
+    local wielded = self._get_wielded_weapon and self:_get_wielded_weapon()
+    if not wielded then return end
+    local rs = rawget(_G, "RaritySettings")
+    local wr = rs and rs[wielded.rarity]
+    local cr = rs and rs[rarity]
+    if not (wr and cr) then return func(self) end
+    -- RELAXED: `<` not `<=`, so same-tier stays lit; only a downgrade greys out.
+    local event = (cr.order < wr.order) and "lua_interact_disabled" or ("lua_update_" .. rarity)
+    if not self._prev_update_upgrade_chest_color_event or self._prev_update_upgrade_chest_color_event ~= event then
+        if self.unit and Unit and Unit.flow_event
+            and (not Unit.alive or Unit.alive(self.unit)) then
+            pcall(Unit.flow_event, self.unit, event)
+        end
+        self._prev_update_upgrade_chest_color_event = event
+    end
+end)
+
+-- Relaxed INTERACTION gate. Without it the altar would look lit but reject the interact. Reimplements
+-- vanilla can_be_unlocked (deus_chest_extension.lua:487-537) with the SAME `<=` -> `<` loosening,
+-- gated to a re-armed upgrade altar; every other vanilla gate (can_interact, cost affordability,
+-- others_actually_ingame) is preserved exactly. Single hook on this (Class, method).
+mod:hook("DeusChestExtension", "can_be_unlocked", function(func, self)
+    local DCT = rawget(_G, "DEUS_CHEST_TYPES")
+    local go_id = self._go_id
+    local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+    if uses == 0 or not (DCT and self._chest_type == DCT.upgrade) then
+        return func(self)  -- first use / non-upgrade: pure vanilla
+    end
+    if not self:can_interact() then return false end
+    local drc = self._deus_run_controller
+    local own_peer_id = drc and drc.get_own_peer_id and drc:get_own_peer_id()
+    local soft = (own_peer_id and drc.get_player_soft_currency and drc:get_player_soft_currency(own_peer_id)) or 0
+    local cost = self:get_purchase_cost() or math.huge
+    local sd = rawget(_G, "script_data")
+    local can_unlock = (sd and sd.unlock_all_deus_chests) or cost <= soft
+    if can_unlock then
+        local wielded = self._get_wielded_weapon and self:_get_wielded_weapon()
+        if wielded then
+            local rs = rawget(_G, "RaritySettings")
+            local wr = rs and rs[wielded.rarity]
+            local cr = rs and rs[self._rarity]
+            if wr and cr and cr.order < wr.order then  -- RELAXED: block only a real downgrade
+                can_unlock = false
+            end
+        end
+    end
+    if not can_unlock then return false end
+    local nm = Managers.state and Managers.state.network
+    local ps = nm and nm.profile_synchronizer
+    if ps and ps.others_actually_ingame and not ps:others_actually_ingame() then
+        return false
+    end
+    return true
 end)
 
 -- ============================================================
@@ -7430,37 +7454,22 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
                 _dbg("[altar_reuse] go_id=%s type=%s used %d/%d -> re-arm",
                     tostring(go_id), tostring(self._chest_type), uses, max_uses)
 
-                -- v0.7.158-dev Task 1 (the REAL "goes dark after first use" fix):
-                -- For an UPGRADE altar the dark/disabled look is NOT driven by
-                -- collected_by_peers — it's update_upgrade_chest_color (deus_chest_
-                -- extension.lua:211-243) firing `lua_interact_disabled` because,
-                -- after the first upgrade, the wielded weapon's rarity now matches
-                -- the altar's rolled `_rarity` (chest_rarity_order <= weapon_rarity_
-                -- order). The altar also becomes genuinely unusable (can_be_unlocked
-                -- lines 505-517). The vanilla re-roll keeps the SAME rarity (constant
-                -- per-go_id seed), so we bump `_rarity` strictly above the just-
-                -- upgraded weapon (capped at `unique`) and clear the cached color
-                -- event so update_upgrade_chest_color re-evaluates to a usable, lit
-                -- state. Server-authoritative state lives on the ext locally; this
-                -- runs on the interacting peer (host solo = direct, correct).
+                -- v0.7.211-dev #102 DECOUPLE (was the v0.7.158 rarity bump): do NOT bump
+                -- self._rarity on re-arm. The reward tier is self._rarity (open_chest ->
+                -- _generate_upgraded_weapon), so bumping it climbed the reward each use. Instead
+                -- self._rarity stays at the constant rolled tier and the relaxed
+                -- update_upgrade_chest_color / can_be_unlocked hooks (near _generate_upgraded_weapon,
+                -- `<=` -> strict `<` for a re-armed upgrade altar) keep the altar lit + usable at
+                -- same-tier without inflating the reward. Here we just refresh the rolled tier's glow
+                -- and clear the cached color memo so the color logic re-evaluates on the next tick.
                 if self._chest_type == DEUS_CHEST_TYPES.upgrade then
-                    local wielded = self._get_wielded_weapon and self:_get_wielded_weapon()
-                    local wielded_rarity = wielded and wielded.rarity
-                    local bumped = mod._ct_altar_next_rarity_above(wielded_rarity)
-                    if bumped then
-                        self._rarity = bumped
-                        -- Re-fire the rarity flow event so the altar's hologram/glow
-                        -- reflects the new tier (mirrors _setup_rarity line 357).
-                        if self.unit and Unit and Unit.flow_event then
-                            pcall(Unit.flow_event, self.unit, "lua_update_" .. bumped)
-                        end
+                    if self._rarity and self.unit and Unit and Unit.flow_event
+                        and (not Unit.alive or Unit.alive(self.unit)) then
+                        pcall(Unit.flow_event, self.unit, "lua_update_" .. self._rarity)
                     end
-                    -- Clear the cached color-event memo so update_upgrade_chest_color
-                    -- (line 238) re-emits a fresh event next tick instead of staying
-                    -- on the stale `lua_interact_disabled` it set on the last use.
                     self._prev_update_upgrade_chest_color_event = nil
-                    _dbg("[altar_reuse] upgrade re-arm go_id=%s wielded_rarity=%s -> altar_rarity=%s",
-                        tostring(go_id), tostring(wielded_rarity), tostring(self._rarity))
+                    _dbg("[altar_reuse] upgrade re-arm go_id=%s altar_rarity=%s (no bump, decoupled)",
+                        tostring(go_id), tostring(self._rarity))
                 end
 
                 -- v0.7.157-dev Task A [altar_visual_probe]: collected_by_peers AFTER
@@ -12856,16 +12865,16 @@ _rt_register("altar_visual_probe_present", function()
     end
 end)
 
--- v0.7.158-dev Task 1: presence check for the upgrade-altar rarity-bump fix
--- (the real "goes dark after first use" fix). The _setup_rarity hook is the
--- load-bearing path (survives the per-tick _rarity clobber); this asserts the
--- marker so a future session can't silently strip it.
-_rt_register("upgrade_altar_rarity_bump", function()
-    if type(CT_UPGRADE_ALTAR_RARITY_BUMP_MARKER) ~= "string" then
-        return "CT_UPGRADE_ALTAR_RARITY_BUMP_MARKER not defined — upgrade-altar dark-after-first-use fix may have been stripped"
+-- v0.7.211-dev #102 DECOUPLE: presence check that the rarity-escalation fix is in place, i.e.
+-- the reward-rarity bump is GONE and a re-armed upgrade altar is kept usable via the relaxed
+-- update_upgrade_chest_color / can_be_unlocked gate hooks instead. Guards against a future session
+-- re-introducing the climbing bump.
+_rt_register("upgrade_altar_rarity_decouple", function()
+    if type(CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER) ~= "string" then
+        return "CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER not defined — #102 rarity-decouple fix may have been stripped"
     end
-    if CT_UPGRADE_ALTAR_RARITY_BUMP_MARKER ~= "upgrade_altar_rarity_bump:setup_rarity_hook_v0.7.158" then
-        return "CT_UPGRADE_ALTAR_RARITY_BUMP_MARKER mismatch — got: " .. tostring(CT_UPGRADE_ALTAR_RARITY_BUMP_MARKER)
+    if CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER ~= "upgrade_altar_rarity_decouple:relaxed_gates_no_bump_v0.7.211" then
+        return "CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER mismatch — got: " .. tostring(CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER)
     end
 end)
 
