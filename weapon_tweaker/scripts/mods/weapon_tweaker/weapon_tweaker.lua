@@ -101,7 +101,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.201-dev"
+local MOD_VERSION = "0.12.202-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -154,13 +154,25 @@ mod:info("Weapon Tweaker v%s loaded", MOD_VERSION)
 -- output_mode_debug / output_mode_warning (PROJECT_STANDARDS.md § 3.6).
 -- v0.12.83-dev: two-helper policy per PROJECT_STANDARDS.md § 3.6.
 -- `_dbg` = confirmation / expected behavior — mod:debug channel.
--- `_dbg_alert` = unexpected / wrong / mismatch — mod:warning channel.
+-- `_dbg_alert` = unexpected / wrong / mismatch — LOG-ONLY via engine printf.
 local function _dbg(fmt, ...)
     mod:debug("[wt:dbg] " .. fmt, ...)
 end
 
+-- v0.12.202-dev (Issue #240 / BUG_CLASSES.md §17B): _dbg_alert is now log-only via
+-- engine printf. It previously routed through mod:warning, which posts to CHAT by
+-- default (VMF `warning` = mode 3, send_to_chat = mode >= 2), so routine diagnostics --
+-- most visibly the [wt:attach_probe] missing-node trace for a staff in a Kruber ranged
+-- slot -- spammed the user's chat on every inventory refresh. printf always lands in
+-- console-*.log (even with mod-logging off) and never touches chat; pcall-guarded so a
+-- bad format arg can't fault the caller. Mirrors et v0.7.25-dev; folds into the #169
+-- VMF-native-logging sweep. Chat stays reserved for genuine failures, which would call
+-- mod:warning directly (wt currently has none).
+mod._wt_alerts_log_only_marker = "wt-alert-helpers-log-only-printf-240"
 local function _dbg_alert(fmt, ...)
-    mod:warning("[wt:dbg] " .. fmt, ...)
+    if not pcall(printf, "[wt:dbg] " .. fmt, ...) then
+        pcall(printf, "[wt:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -5846,9 +5858,12 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
     -- Walk every spawn_data entry on every slot the previewer is currently
     -- displaying, look at the actually-attached `unit_attachment_node_linking`
     -- (the post-substitution table when a helper fired), check each source
-    -- node against the live character body. Anything missing here is an
-    -- IMMINENT engine fatal -- and the absence of any alert is the green
-    -- light that the fix held.
+    -- node against the live character body. A missing node here USED to be an
+    -- imminent engine fatal, but the universal GearUtils.link_units guard
+    -- (WT_LINK_UNITS_NODE_GUARD_MARKER, below) now drops any missing-node link
+    -- before vanilla's Unit.node can fatal, on every spawn path -- so this probe
+    -- is now a benign, debug-gated trace (it flags a boot-substitution gap, not a
+    -- crash). Kept as a diagnostic; downgraded from _dbg_alert to _dbg in v0.12.202.
     local body = self.character_unit
     if not body or not _is_unit(body) then return r1, r2, r3 end
     local info_by_slot = self._item_info_by_slot
@@ -5866,11 +5881,19 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
                                 local src = e and e.source
                                 if type(src) == "string"
                                         and not Unit.has_node(body, src) then
-                                    _dbg_alert(
-                                        "[wt:attach_probe] MISSING NODE on body "
-                                        .. "(engine read path): career=%s slot=%s "
-                                        .. "entry=%d state=%s source=%s "
-                                        .. "-- engine fatal expected",
+                                    -- v0.12.202-dev: NOT fatal. The universal
+                                    -- GearUtils.link_units guard (WT_LINK_UNITS_NODE_GUARD
+                                    -- _MARKER) drops this link before vanilla's
+                                    -- Unit.node (gear_utils.lua:297-298) can engine-fatal,
+                                    -- on every spawn path. So this is a benign debug trace
+                                    -- (a boot-substitution gap, e.g. a_unwielded_staff on a
+                                    -- Kruber ranged slot), routed through _dbg (debug-gated,
+                                    -- log-only) -- NOT _dbg_alert. Was a chat-spamming false
+                                    -- alarm before (#240).
+                                    _dbg(
+                                        "[wt:attach_probe] missing node on body "
+                                        .. "(career=%s slot=%s entry=%d state=%s source=%s) "
+                                        .. "-- neutralized by link_units guard, not fatal",
                                         tostring(career_name), tostring(slot_name),
                                         entry_idx, state, src)
                                 end
@@ -6899,6 +6922,11 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg raised on call" end
     ok = pcall(_dbg_alert, "smoke test")
     if not ok then return "_dbg_alert raised on call" end
+    -- #240 / §17B: _dbg_alert must be log-only (engine printf), never mod:warning
+    -- (which posts to chat). The marker is set only on the printf-routed helper.
+    if mod._wt_alerts_log_only_marker ~= "wt-alert-helpers-log-only-printf-240" then
+        return "_dbg_alert not rerouted to log-only printf (#240 regression)"
+    end
 end)
 
 

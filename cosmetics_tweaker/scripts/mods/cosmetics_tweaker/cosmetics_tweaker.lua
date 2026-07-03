@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.65-dev"
+local MOD_VERSION = "0.9.66-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -886,16 +886,17 @@ mod.on_game_state_changed = function(status, state_name)
     -- v0.9.65-dev (#233): arm a bounded, per-frame CLIENT-side re-apply of every
     -- REMOTE peer's cached LA offhand/illusion equip after a level transition. The
     -- self-rebroadcast above only re-emits the LOCAL player's equips to the network;
-    -- it does NOT restore a remote wearer's shield on THIS machine. The host's own
-    -- post-transition rebroadcast races ahead of a still-loading client (the client's
+    -- it does NOT restore a remote wearer's shield/illusion on THIS machine. The host's
+    -- own post-transition rebroadcast races ahead of a still-loading client (the client's
     -- peer_ingame flips true ~25ms AFTER the host emits, so the "all" send never
-    -- reaches it) and nothing re-sends -- so the host's kind="unit" LA shield reverted
-    -- to vanilla on the client at every mission<->keep transition. `_la_equips_by_peer`
-    -- survives transitions (only cleared on peer disconnect), so we already hold the
+    -- reaches it) and nothing re-sends -- so the host's LA offhand reverted on the
+    -- client at every mission<->keep transition. `_la_equips_by_peer` survives
+    -- transitions (only cleared on peer disconnect), so we already hold the
     -- authoritative data locally; the mod.update drain (search
-    -- `_la_reapply_remote_until`) walks it and drives the existing `_ensure_offhand_mesh`
-    -- pulse until each remote wearer's mesh converges. Refreshed on every state
-    -- callback; the last one (StateIngame/enter) sets the ~10s window from load-done.
+    -- `_la_reapply_remote_until`) walks it and re-drives the recv/retry apply (texture
+    -- re-paint + kind="unit" mesh pulse) until each remote wearer converges. Refreshed
+    -- on every state callback; the last one (StateIngame/enter) sets the ~10s window
+    -- from load-done.
     mod._la_reapply_remote_until = os.clock() + 10
 
     -- v0.9.13-dev: snapshot LA state on every game-state change. Gated on the
@@ -2608,13 +2609,12 @@ local _in_create_equipment = false
 -- fine because there it is ui_store_preview + levels/ui_store_preview/world + the
 -- keep-resident weapons_default_01 studio-lighting variation.
 --
--- The correct lighting fix cannot be picked from source alone: we need to know
--- whether ui_hdr exposes a tonable "exposure" mid-mission, whether the black is
--- under-exposure (fixable by a scalar) vs zero captured light (needs a spawned
--- light or a re-pointed lit env), and which lit env/light unit is actually resident.
--- So this build INSTRUMENTS + runs a bounded, self-gated exposure EXPERIMENT
--- (project doctrine: diagnose before mitigating). It changes NO blend variation, so
--- it cannot reintroduce the AV; keep path stays a pure pass-through.
+-- The 0.9.65-dev instrument answered it (host log 2026-07-03 21:22): ui_hdr has NO
+-- 3D radiance (a 160x exposure boost stayed pure black) and, crucially,
+-- environment/ui_store_preview IS resident mid-mission. So THIS build FIXES it:
+-- re-point the preview world's shading env to ui_store_preview and let vanilla's
+-- studio-lit weapons_default_01 variation blend (re-point block below + the
+-- _update_environment hook). Keep path stays a pure pass-through.
 -- Pre-flight: cosmetics_tweaker hooks _create_preview_widget NOWHERE else.
 mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(self)
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
@@ -2664,35 +2664,41 @@ mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(
             res("shading_environment", "environment/ui_loot_preview"))
     end
 
-    -- Bounded exposure EXPERIMENT: ONLY when the env is valid and exposure is
-    -- readable. shading_callback is the sanctioned post-blend / pre-apply hook
-    -- (script_world.lua:120-133); the preview world sets none, so adding one just
-    -- overrides exposure each frame (blend re-seeds it from "default" first, then this
-    -- overrides, then apply pushes it). This is on the preview world's OWN env object,
-    -- separate from HeroView's ui_hdr GUI world. If the weapon becomes visible, ui_hdr
-    -- has capturable light and the fix is a scalar set; if it stays black, ui_hdr has
-    -- no 3D light and we pivot to a spawned light or a re-pointed lit env.
-    if env and exp_ok and type(exp) == "number" and not World.has_data(world, "shading_callback") then
-        local TEST_EXPOSURE = 16.0
-        local cb_logged = false
-        World.set_data(world, "shading_callback", function(cb_world, cb_env, cb_viewport)
-            local ok, err = pcall(function()
-                local before = ShadingEnvironment.scalar(cb_env, "exposure")
-                ShadingEnvironment.set_scalar(cb_env, "exposure", TEST_EXPOSURE)
-                if not cb_logged and printf then
-                    printf("[235][cos] shading_callback: exposure %s -> %s (experiment)", tostring(before), tostring(TEST_EXPOSURE))
-                    cb_logged = true
-                end
-            end)
-            if not ok and not cb_logged and printf then
-                printf("[235][cos] shading_callback set_scalar(exposure) FAILED (%s) -> env not tonable; pivot to spawned light", tostring(err))
-                cb_logged = true
-            end
-        end)
-        if printf then printf("[235][cos] installed exposure-boost experiment (test=%s)", tostring(TEST_EXPOSURE)) end
+    -- #235 FIX: re-point this mission preview world's shading env from the unlit
+    -- ui_hdr (set by gut/cim's mission-safe def) to environment/ui_store_preview --
+    -- the SAME studio-lit env the keep uses, verified RESIDENT mid-mission by the
+    -- residency probe above (host log 2026-07-03 21:22: ui_store_preview=true, while
+    -- the 160x exposure boost on ui_hdr stayed pure black -> ui_hdr has no 3D
+    -- radiance). This is the spawn_level re-point pattern (script_world.lua:399-405):
+    -- re-point the EXISTING env object to the new resource. weapons_default_01 is a
+    -- variation DEFINED in ui_store_preview (keep witnesses: store_window_item_preview
+    -- .lua:88+1367, hero_window_gotwf_item_preview.lua:67+607,
+    -- hero_window_item_customization.lua:406+1378), so once the world runs
+    -- ui_store_preview the _update_environment hook can let vanilla's weapons_default_01
+    -- through with NO #228 AV -- that AV was specifically an UNDEFINED variation on
+    -- ui_hdr, structurally impossible on an env that defines it. Runs before the first
+    -- render (on_enter _create_ui_elements -> _create_preview_widget:367 precedes
+    -- _present_item -> _update_environment). Gated on residency + pcall'd, so a failed
+    -- or unavailable re-point leaves the world on ui_hdr and _update_environment falls
+    -- back to forcing "default" (unlit but AV-safe). NEVER touches the keep path.
+    local store_env = "environment/ui_store_preview"
+    local store_resident = false
+    do
+        local ok, r = pcall(function() return Application.can_get("shading_environment", store_env) end)
+        store_resident = (ok and r) and true or false
+    end
+    if env and store_resident then
+        local ok = pcall(World.set_shading_environment, world, env, store_env)
+        if ok then
+            World.set_data(world, "cos_preview_env_repointed", true)
+            if printf then printf("[235][cos] re-pointed mission preview env %s -> %s (studio-lit, resident); _update_environment will allow weapons_default_01",
+                tostring(env_name), store_env) end
+        elseif printf then
+            printf("[235][cos] set_shading_environment(%s) FAILED -> staying on ui_hdr, forcing \"default\" (unlit but AV-safe)", store_env)
+        end
     elseif printf then
-        printf("[235][cos] NO exposure experiment (env=%s exp_ok=%s exp_type=%s) -> pure instrument this run",
-            tostring(env ~= nil), tostring(exp_ok), type(exp))
+        printf("[235][cos] NOT re-pointing (env=%s store_resident=%s) -> forcing \"default\" (unlit but AV-safe)",
+            tostring(env ~= nil), tostring(store_resident))
     end
 end)
 
@@ -2706,8 +2712,14 @@ end)
 -- lacks -> native ShadingEnvironment.blend AV (the real #228 trigger). Forcing
 -- force_default=true keeps shading_settings[1] = "default", so blend only ever
 -- asks for the variation ui_hdr has (no AV, no blank) -- BUT ui_hdr carries no 3D
--- scene lighting, so the weapon draws BLACK (see the 0.9.65-dev diagnostic on the
--- _create_preview_widget hook above; the lighting fix is still pending runtime data).
+-- scene lighting, so the weapon draws BLACK. #235 FIX: the _create_preview_widget
+-- hook above re-points the mission preview world to environment/ui_store_preview
+-- (resident mid-mission) when it can. When that succeeded (flagged
+-- cos_preview_env_repointed on the world), we let vanilla's weapons_default_01
+-- variation through here instead of forcing "default" -- that variation IS defined in
+-- ui_store_preview, so it blends keep-identically with NO #228 AV, and the weapon is
+-- lit like the keep. If the re-point did NOT happen (env not resident / re-point
+-- failed), fall back to forcing "default" (unlit but AV-safe).
 -- _update_environment is the SOLE writer of shading_settings[1] (only caller is
 -- _present_item), so this one hook covers every re-present (reroll/illusion tabs).
 -- Keep path is a pure pass-through (full per-weapon studio lighting preserved).
@@ -2715,19 +2727,27 @@ end)
 mod:hook("HeroWindowItemCustomization", "_update_environment", function(func, self, item_preview_environment, force_default)
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
     if in_keep then return func(self, item_preview_environment, force_default) end
-    -- [235] log each distinct env vanilla requests before we pin it to "default"
-    -- (catches items whose item_data.item_preview_environment is NOT weapons_default_01
-    -- -- such an env would need its own variation and could change the black-render story).
+    -- Did _create_preview_widget re-point this preview world to ui_store_preview?
+    local pw = self and self._preview_widget
+    local world = pw and pw.element and pw.element.pass_data and pw.element.pass_data[1] and pw.element.pass_data[1].world
+    local repointed = world and World.has_data(world, "cos_preview_env_repointed")
+        and World.get_data(world, "cos_preview_env_repointed") or false
+    -- [235] log each distinct env vanilla requests (once per value), plus whether we
+    -- ALLOW it (re-pointed to ui_store_preview) or force "default" (fallback).
     if printf then
         mod._lv235_seen_env = mod._lv235_seen_env or {}
         local k = tostring(item_preview_environment)
         if not mod._lv235_seen_env[k] then
             mod._lv235_seen_env[k] = true
-            printf("[235][cos] _update_environment(mission): vanilla requested env=%s force_default_in=%s -> forcing \"default\"",
-                k, tostring(force_default))
+            printf("[235][cos] _update_environment(mission): vanilla requested env=%s force_default_in=%s repointed=%s -> %s",
+                k, tostring(force_default), tostring(repointed),
+                repointed and "ALLOW (studio-lit)" or "forcing \"default\"")
         end
     end
-    return func(self, item_preview_environment, true)  -- pin blend target to "default"
+    if repointed then
+        return func(self, item_preview_environment, force_default)  -- allow weapons_default_01 -> keep-identical studio lighting
+    end
+    return func(self, item_preview_environment, true)  -- fallback: pin blend target to "default" (AV-safe)
 end)
 
 -- v0.9.43-dev SCREEN trace NOTE: the customization view ENTER anchor is
@@ -7948,25 +7968,40 @@ mod.update = function(dt)
         -- If player_unit not yet ready, keep flag pending and retry next frame.
     end
 
-    -- v0.9.65-dev (#233): CLIENT-side self-heal of REMOTE peers' kind="unit" LA
-    -- offhand meshes after a level transition. Armed by on_game_state_changed
+    -- v0.9.66-dev (#233): CLIENT-side self-heal of REMOTE peers' cached LA offhand/
+    -- illusion equips after a level transition. Armed by on_game_state_changed
     -- (`_la_reapply_remote_until`). The host's post-transition rebroadcast of its own
-    -- shield races the client's load window and is dropped (the "all" send fires ~25ms
+    -- equip races the client's load window and is dropped (the "all" send fires ~25ms
     -- before the client's peer_ingame flips true), and nothing re-sends -- so the host's
-    -- LA shield reverted to vanilla on the client at every mission<->keep transition.
-    -- `_la_equips_by_peer` survives the transition (only cleared on peer disconnect), so
-    -- we hold the authoritative equip locally and drive the SAME gated
-    -- `_ensure_offhand_mesh` pulse the recv/retry paths use, once the remote wearer's
-    -- husk spawns. Runs every frame within the bounded window; `_ensure_offhand_mesh`
-    -- self-gates (no-op once the mesh matches, per-owner 1.5s cooldown + 3-try cap), so
-    -- it converges then quiesces with no flicker. The pulse's re-wield re-runs
-    -- get_item_units (mesh swap) and re-fires the husk paint, so no separate per-frame
-    -- repaint is needed. Symmetric across peers -- on the host it's redundant with the
-    -- inbound client rebroadcast but idempotent. No new hook, RPC, or force-load; no
-    -- World.destroy_unit (the mesh restore is the slot-level wield pulse). Visible via
-    -- the existing `[cos-la-sync] RE-SWAP tag=transition` mod:info line in _ensure_offhand_mesh.
+    -- LA offhand reverted on the client at every mission<->keep transition.
+    -- `_la_equips_by_peer` survives (only cleared on peer disconnect), so we hold the
+    -- authoritative equip locally and re-drive the recv/retry apply every frame within a
+    -- bounded window until the remote wearer's husk spawns and wields the offhand.
+    --
+    -- v0.9.66-dev fix over v0.9.65-dev, which shipped a SILENT NO-OP (0 lines in the
+    -- 2026-07-03 21:15 retest): the old block called ONLY `_ensure_offhand_mesh`, which
+    -- early-returns for any non-kind="unit" LA variant -- so a kind="texture" illusion
+    -- (the breton shields in that retest get RECV but never a RE-SWAP) was never
+    -- re-painted and the whole walk logged nothing. Now we call `_try_apply_by_peer`
+    -- (re-paints the texture AND returns true only when the offhand is currently wielded)
+    -- and, only when it reports the offhand wielded, `_ensure_offhand_mesh` (re-swaps a
+    -- kind="unit" mesh; self-gated/no-op for kind="texture"). Gating the pulse on the
+    -- wield state avoids a wasteful melee<->ranged flicker on a husk holding a ranged
+    -- weapon and targets exactly the visible-revert case. Both self-gate (paint
+    -- idempotent; pulse per-owner 1.5s cooldown + 3-try cap); each (peer|armoury) is
+    -- FROZEN once applied so there is no per-frame repaint. Two bounded diagnostics per
+    -- window (armed + summary) so a silent no-op can never ship undetected again. No new
+    -- hook/RPC/force-load; no World.destroy_unit.
     if mod._la_reapply_remote_until then
         if os.clock() >= mod._la_reapply_remote_until then
+            -- Window closed: emit the one-line summary (from the frozen dispositions),
+            -- then disarm.
+            local st = mod._la_reapply_stats
+            if st then
+                mod:info("[cos-la-sync] TRANSITION-WALK done applied=%d skipped_unwielded=%d skipped_unresolved=%d",
+                    st.applied or 0, st.unwielded or 0, st.unresolved or 0)
+                mod._la_reapply_stats = nil
+            end
             mod._la_reapply_remote_until = nil
         else
             -- pcall local_player() -- the C peer_id() path asserts if the network
@@ -7977,36 +8012,73 @@ mod.update = function(dt)
             local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
             local local_peer = lp_ok and lp and lp.peer_id or nil
             if local_peer and _la_equips_by_peer then
+                local st = mod._la_reapply_stats
+                if not st then
+                    -- First active frame of this window: arm + count what we hold, so
+                    -- an empty cache (nothing to restore) is distinguishable from a walk
+                    -- that reached entries but the apply no-op'd.
+                    local peer_n, entry_n = 0, 0
+                    for p, sl in pairs(_la_equips_by_peer) do
+                        if p ~= local_peer and type(sl) == "table" then
+                            local has = false
+                            for _, e in pairs(sl) do
+                                if type(e) == "table" and e.armoury_key
+                                    and (e.kind == "offhand" or e.kind == "illusion") then
+                                    entry_n = entry_n + 1
+                                    has = true
+                                end
+                            end
+                            if has then peer_n = peer_n + 1 end
+                        end
+                    end
+                    st = { applied = 0, unwielded = 0, unresolved = 0, seen = {} }
+                    mod._la_reapply_stats = st
+                    mod:info("[cos-la-sync] TRANSITION-WALK armed local=%s remote_peers=%d offhand_entries=%d",
+                        tostring(local_peer), peer_n, entry_n)
+                end
                 for peer, slots in pairs(_la_equips_by_peer) do
                     if peer ~= local_peer and type(slots) == "table" then
                         local wu = _wearer_unit_for_peer(peer)
-                        local inv = wu and ScriptUnit and ScriptUnit.has_extension
-                            and ScriptUnit.has_extension(wu, "inventory_system")
-                        local equipment = inv and inv._equipment
-                        if equipment then
-                            for _, eq in pairs(slots) do
-                                if type(eq) == "table" and eq.armoury_key
-                                    and (eq.kind == "offhand" or eq.kind == "illusion") then
-                                    -- Clean bail if the wearer isn't CURRENTLY wielding the hand this
-                                    -- offhand lives on (e.g. ranged weapon out -> no shield unit
-                                    -- rendered): nothing to restore, so skip the pulse entirely. Avoids
-                                    -- a wasteful melee<->ranged wield flicker on a husk holding a
-                                    -- ranged weapon, and keeps the window fully silent until there is
-                                    -- an actual wrong-mesh shield to fix. Mirrors the wielded-field the
-                                    -- helper itself reads. When the shield IS wielded but vanilla,
-                                    -- `live` is present -> `_ensure_offhand_mesh` runs and its own
-                                    -- mesh-already-correct gate + cooldown/try-cap bound the work.
-                                    local wielded_field = (eq.hand_field == "right_hand_unit")
-                                        and "right_hand_wielded_unit_3p" or "left_hand_wielded_unit_3p"
-                                    local live = equipment[wielded_field]
-                                    if live and Unit.alive(live) then
-                                        _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, "transition")
+                        for slot_name, eq in pairs(slots) do
+                            if type(eq) == "table" and eq.armoury_key
+                                and (eq.kind == "offhand" or eq.kind == "illusion") then
+                                local dkey = tostring(peer) .. "|" .. tostring(eq.armoury_key)
+                                -- Freeze each entry once it has been applied (offhand
+                                -- wielded + re-painted/pulsed) so we don't repaint per frame.
+                                if st.seen[dkey] ~= "applied" then
+                                    if not wu then
+                                        st.seen[dkey] = "unresolved"
+                                    else
+                                        -- Re-paint: handles kind="texture" AND repaints a
+                                        -- kind="unit" after its mesh swap. Returns true only
+                                        -- when the offhand is currently wielded (its own
+                                        -- guard reads left/right_hand_wielded_unit_3p).
+                                        local applied = _try_apply_by_peer(peer, slot_name, eq.kind,
+                                            eq.armoury_key, eq.vanilla_key)
+                                        if applied then
+                                            -- Offhand wielded: also re-swap a kind="unit" mesh
+                                            -- (self-gated/no-op for kind="texture").
+                                            _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, "transition")
+                                            st.seen[dkey] = "applied"
+                                        else
+                                            st.seen[dkey] = "unwielded"
+                                        end
                                     end
                                 end
                             end
                         end
                     end
                 end
+                -- Recompute the tallies from the frozen dispositions so the summary is
+                -- stable regardless of per-frame churn (an entry migrates
+                -- unresolved -> unwielded -> applied and then freezes).
+                local a, uw, ur = 0, 0, 0
+                for _, d in pairs(st.seen) do
+                    if d == "applied" then a = a + 1
+                    elseif d == "unwielded" then uw = uw + 1
+                    else ur = ur + 1 end
+                end
+                st.applied, st.unwielded, st.unresolved = a, uw, ur
             end
         end
     end

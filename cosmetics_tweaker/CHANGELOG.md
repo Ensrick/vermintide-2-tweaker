@@ -1,5 +1,52 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.66-dev — 2026-07-03 — FIX: #233 transition self-heal shipped inert in 0.9.65 (texture illusions never re-painted) + arming diagnostics
+
+> The 0.9.65-dev transition self-heal NEVER FIRED in the 2026-07-03 21:15 two-player retest: zero `[cos-la-sync] RE-SWAP tag=transition` lines in either log across multiple keep<->mission transitions, and the host's LA offhand still reverted on the CLIENT after mission->keep. Root-caused from both logs (HOST `console-...-f5038769`, CLIENT `console-...-be3b66c7`); this build fixes the walk and adds two bounded diagnostics so a silent no-op can never ship undetected again.
+
+### Root cause (why 0.9.65 was a silent no-op)
+The walk DID run and DID reach the offhand entries (proven: `on_game_state_changed` fires and the self-rebroadcast drain right above it logged `[ct la-rebroadcast] re-emitted` after transitions at 21:24:01.924 / 21:27:22.471; the client's `_la_equips_by_peer[host]` was populated by RECV at 21:19:03 / 21:23:12 / 21:24:56; and the host's husk was wielding `slot_melee` at 21:20:48, 3s into the 10s window). Two defects made it inert:
+1. **Texture illusions were never re-painted.** 0.9.65's walk called ONLY `_ensure_offhand_mesh`, which early-returns for any LA variant whose `kind ~= "unit"` (`cosmetics_tweaker.lua:6707`). The reverted items in the retest were kind="texture" LA variants (the breton shields Alberic01 / Luidhard01 get RECV lines but NEVER a RE-SWAP, unlike the kind="unit" empire shield which does). So for a texture illusion the walk silently no-op'd, and the texture re-paint (`_try_apply_by_peer`) had been dropped from 0.9.65 entirely.
+2. **Everything was gated behind the mesh-only path**, so the walk produced zero log lines even when it reached live entries — it looked completely dead.
+
+### The fix
+For each remote peer's cached offhand/illusion entry, within the ~10s post-transition window, re-drive the SAME apply the recv/retry paths use:
+- `_try_apply_by_peer(...)` — re-paints the texture (handles kind="texture" AND repaints a kind="unit" after its swap) and returns true only when the offhand is currently wielded (its own guard reads `left/right_hand_wielded_unit_3p`, the same field the working recv path uses).
+- Only when that reports the offhand wielded, `_ensure_offhand_mesh(..., "transition")` — re-swaps a kind="unit" mesh (self-gated/no-op for kind="texture"), producing the visible `[cos-la-sync] RE-SWAP tag=transition` line.
+
+Gating the mesh pulse on the wield state (via `_try_apply_by_peer`'s return, not a duplicated field read) replaces 0.9.65's brittle pre-guard: it avoids a wasteful melee<->ranged wield flicker on a husk holding a ranged weapon and targets exactly the visible-revert case. Each `(peer|armoury)` is FROZEN once applied, so there is no per-frame repaint; the paint is idempotent and the pulse keeps its per-owner 1.5s cooldown + 3-try cap.
+
+### Never ship a silent no-op again (two bounded diagnostics per window)
+- On the first active frame: `[cos-la-sync] TRANSITION-WALK armed local=<peer> remote_peers=<n> offhand_entries=<n>` — distinguishes an empty cache from a walk that reached entries.
+- On window close: `[cos-la-sync] TRANSITION-WALK done applied=<n> skipped_unwielded=<n> skipped_unresolved=<n>` — tallied from frozen per-entry dispositions (stable regardless of frame count). Two lines per transition, no per-frame spam. Reuses the existing `[cos-la-sync]` `mod:info` channel that reaches the console log with mod-logging OFF.
+
+### Verify in-game (2 players)
+Host equips an LA offhand (test BOTH a kind="unit" empire shield and a kind="texture" breton shield illusion) -> transition mission<->keep. CLIENT console should show `[cos-la-sync] TRANSITION-WALK armed ... offhand_entries>=1`, then for a kind="unit" item `RE-SWAP tag=transition ... ok=true/true`, and `TRANSITION-WALK done applied>=1`; the host's offhand should render correctly (not vanilla) on the client after the transition.
+
+### Files
+- `cosmetics_tweaker.lua` — `mod.update` transition-walk block rewritten: `_try_apply_by_peer` (texture re-paint) + wield-gated `_ensure_offhand_mesh` pulse, frozen-per-entry, with armed/summary `mod:info` diagnostics; `mod.on_game_state_changed` comment updated; `MOD_VERSION` `0.9.65-dev` -> `0.9.66-dev`. No new hooks/RPCs/force-loads.
+
+### Also in this build: #235 - in-mission weapon preview now LIT (was pure black in 0.9.65)
+
+> The 0.9.65-dev diagnostic build resolved the data question. Host log 2026-07-03 21:22 `[235]` lines: `env_name=environment/ui_hdr style_level=nil exposure_ok=true exposure=0.1 level_spawned=false`; `residency(shading_environment): ui_hdr=true ui_store_preview=true ui_loot_preview=false`; and the exposure experiment (`0.1 -> 16`, ~160x) left the weapon PURE BLACK per the user. Build-only; in-game verification is the user's.
+
+#### Root cause (data-confirmed)
+The mid-mission preview world runs `environment/ui_hdr` (set by gut/cim's mission-safe `_create_item_preview_widget_definition` substitute, which also strips the level -> `level_spawned=false`). `ui_hdr` is a 2D-UI tonemapping env with NO 3D scene radiance, so no exposure value can reveal the weapon (160x stayed black). The keep is lit because there the world runs `environment/ui_store_preview` + the `weapons_default_01` studio-lighting variation.
+
+#### Fix (re-point to the resident lit env; NO new hooks; keep path untouched)
+The instrument proved `environment/ui_store_preview` is RESIDENT mid-mission (`residency ui_store_preview=true`). Two existing hooks, extended in place:
+- `_create_preview_widget` hook_safe (mission): after the `[235]` env/residency logs, re-point the preview world's shading env from ui_hdr to `environment/ui_store_preview` via `World.set_shading_environment(world, env, name)` -- the spawn_level re-point pattern (`script_world.lua:399-405`). Gated on `Application.can_get("shading_environment", ...)` and pcall'd; on success flags `cos_preview_env_repointed` on the world. The 16x exposure experiment was removed. Runs before the first render (`_create_ui_elements` -> `_create_preview_widget` at hero_window_item_customization.lua:367 precedes `_present_item` -> `_update_environment`).
+- `_update_environment` hook (mission): when the world was re-pointed, let vanilla's requested `weapons_default_01` variation blend through (keep-identical studio lighting) instead of forcing "default"; otherwise fall back to forcing "default" (unlit but safe).
+
+#### Why this cannot re-trigger the #228 AV
+The #228 AV was specifically an UNDEFINED blend variation: `weapons_default_01` requested on `ui_hdr`, which does not define it, indexes a nil variation -> native AV. `weapons_default_01` IS a defined variation of `environment/ui_store_preview` (keep witnesses: store_window_item_preview.lua:88+1367, hero_window_gotwf_item_preview.lua:67+607, hero_window_item_customization.lua:406+1378), so on the re-pointed env it blends exactly as it does in the keep every day. The guard is structural (residency + defined-variation), which is the only real protection since the per-frame blend in `ScriptWorld.render` is native and cannot be pcall-wrapped. If ui_store_preview is ever not resident, the gate fails closed to today's safe-but-black "default".
+
+#### Verify in-game (#235)
+Mid-mission (adventure or CW), open a weapon's customization gear icon through the gut in-mission loadout panel. Expected: the 3D weapon is LIT like the keep (studio lighting), spins, and survives reroll/illusion re-present; no crash. The `[235]` log should show `re-pointed mission preview env environment/ui_hdr -> environment/ui_store_preview` and `_update_environment(mission): ... repointed=true -> ALLOW (studio-lit)`. Keep customization must look exactly as before.
+
+#### Files
+- `cosmetics_tweaker.lua` — `_create_preview_widget` and `_update_environment` hook bodies extended in place (NO new hooks): re-point to ui_store_preview + allow weapons_default_01 when re-pointed; 16x exposure experiment removed; env_name/residency `[235]` diagnostics kept. No `MOD_VERSION` bump (shares the 0.9.66-dev bump above).
+
 ## 0.9.65-dev — 2026-07-03 — DIAGNOSTIC: in-mission weapon preview renders PURE BLACK (#235 follow-up)
 
 > The 0.9.64-dev crash fix worked (no AV, no blank) but the user's 2026-07-03 in-game test shows the mid-mission 3D weapon panel drawing PURE BLACK. Instrument-only build: it captures the data needed to pick the lighting fix and runs one bounded, self-gated exposure experiment. Build-only; the user runs it in-game and reports back.
