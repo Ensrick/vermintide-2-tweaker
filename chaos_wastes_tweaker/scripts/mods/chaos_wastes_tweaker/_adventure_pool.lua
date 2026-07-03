@@ -325,9 +325,38 @@ local function make_cw_pickup_settings(vanilla)
             grenades      = adv and adv.grenades or 5,
             healing       = adv and adv.healing or { first_aid_kit = 2, healing_draught = 2 },
             level_events  = adv and adv.level_events or { explosive_barrel = 2, lamp_oil = 2 },
-            -- Aggressive CW pickup counts (user spec: at least 30 each if they fit).
-            -- The _can_spawn hook below grants eligibility on any non-tome/grim primary
-            -- spawner, so these compete with ammo/healing/grenades for unclaimed slots.
+            -- CW pickup counts. The _can_spawn hook below grants eligibility on any
+            -- non-tome/grim primary spawner, so deus_potions, deus_soft_currency and
+            -- deus_weapon_chest all compete for the SAME finite, shared primary spawner
+            -- pool (pickup_system.lua:467-633 iterates pickup_types over one `spawners`
+            -- array and permanently table.remove()s each consumed spawner at :621-626).
+            -- This is unlike a vanilla CW level, where potion spawners and
+            -- painting_scrap→coin spawners are type-partitioned and never contend.
+            --
+            -- Coin-starvation fix (Abundance-of-Life curse): the curse mutator
+            -- (mutator_curse_abundance_of_life.lua:7-11) carries
+            -- pickup_system_multipliers = { deus_potions = 3, ... } applied by
+            -- MutatorHandler.pickup_settings_updated_settings (mutator_handler.lua:544-560)
+            -- BEFORE spawning. It triples deus_potions but leaves deus_soft_currency
+            -- untouched (not a key in the curse table), so in the SHARED primary pool
+            -- a potions-first allocation pass (pairs() order is non-deterministic in
+            -- Lua 5.1) could drain the spawner list and drop coins into silent
+            -- spawn_debt (pickup_system.lua:629).
+            --
+            -- v0.7.165-dev ROBUST fix lives in the `_can_spawn` hook in
+            -- chaos_wastes_tweaker.lua (search `_spawner_reserved_for_coins`): a
+            -- deterministic ~40% slice of primary spawners is reserved COIN-ONLY by
+            -- DENYING deus_potions/deus_weapon_chest eligibility there, so potions can
+            -- never claim them regardless of iteration order or the ×3 curse. That
+            -- GUARANTEES coins (the prior count-only ratio only reduced the odds).
+            --
+            -- These counts are now just "how many of each to request"; the guarantee
+            -- is the reservation, not the ratio. Request coins generously enough to
+            -- fill the reserved slice, and keep potions at a level that feels normal
+            -- on NON-cursed injected levels too (×3 curse → 90 requested potions, but
+            -- they're confined to the unreserved ~60% of spawners). Only counts change
+            -- here — the deus_potions spawn_weighting table is untouched, so the
+            -- [0,1) sampler-sum crash class does not apply.
             deus_potions       = 30,
             deus_soft_currency = 30,
             deus_weapon_chest  = 5,  -- altars (1 temper + 1 melee swap + 1 ranged swap + 2 boon)
@@ -341,6 +370,11 @@ local function make_cw_pickup_settings(vanilla)
         }
     end
     local function secondary()
+        -- Secondary draws from a SEPARATE spawner pool (self.secondary_pickup_spawners,
+        -- pickup_system.lua:443-449) but the SAME curse multiplier is reapplied to it
+        -- (:446). The `_can_spawn` coin reservation (v0.7.165-dev) fires for secondary
+        -- spawners too (same hook, same percentage_through_level hash), so coins are
+        -- guaranteed here as well -- no need for a coins-heavy ratio as a defense.
         return {
             ammo               = 3,
             grenades           = 4,
@@ -448,6 +482,22 @@ local POOL_SAFETY_THRESHOLD = 4  -- Minimum unique entries needed per (journey �
 -- accumulating extra entries.
 local _snapshot = nil
 
+-- Registry of duplicate aliases already minted this session, keyed by
+-- "<journey>\0<pool_type>" -> ordered array of alias keys (array index = dup slot).
+-- Lives on the module table (like IS_INJECTED_ADVENTURE_LEVEL) so it survives across
+-- the many inject_pool() calls per session (fired on every pool-setting change).
+--
+-- WHY: reset_to_snapshot() restores LEVEL_AVAILABILITY but NOT the `_dupN` entries
+-- added to DEUS_LEVEL_SETTINGS / LevelSettings / NetworkLookup.level_keys. Without
+-- reuse, the mint loop's `until not rawget(DEUS_LEVEL_SETTINGS, alias_key)` guard
+-- skips every prior `_dupN` and coins a fresh name on each run, so every re-inject
+-- grows NetworkLookup.level_keys (a network-synced table we must never SHRINK —
+-- removing entries can desync peers) without bound. Reusing the SAME alias per
+-- (pool, slot) makes alias creation idempotent and bounds the alias set at
+-- POOL_SAFETY_THRESHOLD-1 per pool. Keyed by journey+pool (not base+occurrence) so
+-- it's immune to Lua 5.1 pairs() iteration-order changes between runs.
+_M._dup_alias_registry = _M._dup_alias_registry or {}
+
 local function take_snapshot()
     if _snapshot then return end
     _snapshot = {}
@@ -530,48 +580,72 @@ local function inject_duplicate_aliases()
                     local n = #keys
                     if n > 0 and n < POOL_SAFETY_THRESHOLD then
                         local deficit = POOL_SAFETY_THRESHOLD - n
+                        -- Aliases minted for THIS (journey, pool) on prior runs. We reuse
+                        -- them per dup slot instead of minting new "_dupN" names each run
+                        -- (see _dup_alias_registry note above) so NetworkLookup.level_keys
+                        -- doesn't grow unboundedly across pool-setting changes.
+                        local pool_id = tostring(journey_name) .. "\0" .. pool_type
+                        local slots = _M._dup_alias_registry[pool_id]
+                        if not slots then
+                            slots = {}
+                            _M._dup_alias_registry[pool_id] = slots
+                        end
                         -- Round-robin duplicate-create across existing keys.
                         local dup_idx = 0
                         while deficit > 0 do
-                            local base_key = keys[(dup_idx % n) + 1]
-                            local base_dls = rawget(DEUS_LEVEL_SETTINGS, base_key)
-                            if not base_dls then break end
-                            local suffix_n = 1
-                            local alias_key
-                            repeat
-                                alias_key = base_key .. "_dup" .. suffix_n
-                                suffix_n = suffix_n + 1
-                            until not rawget(DEUS_LEVEL_SETTINGS, alias_key) and not pool[alias_key]
+                            local alias_key = slots[dup_idx + 1]
+                            local alias_dls = alias_key and rawget(DEUS_LEVEL_SETTINGS, alias_key)
 
-                            DEUS_LEVEL_SETTINGS[alias_key] = {
-                                base_level_name = base_dls.base_level_name,
-                                paths           = table.clone(base_dls.paths or { 1 }),
-                                themes          = table.clone(base_dls.themes or { "wastes" }),
-                                pickup_settings = base_dls.pickup_settings,
-                                deus_weapon_chest_distribution = base_dls.deus_weapon_chest_distribution,
-                                display_name    = base_dls.display_name,
-                                locations       = base_dls.locations or {},
-                                packages        = base_dls.packages or {},
-                            }
-                            -- Mirror LevelSettings permutation entries so the engine can
-                            -- resolve <alias>_<theme>_path<n>.
-                            for _, theme_name in ipairs(ALL_THEMES) do
-                                for _, path in ipairs(DEUS_LEVEL_SETTINGS[alias_key].paths) do
-                                    local original_perm = base_key .. "_" .. theme_name .. "_path" .. path
-                                    local alias_perm    = alias_key .. "_" .. theme_name .. "_path" .. path
-                                    local source = rawget(LevelSettings, original_perm)
-                                    if source and not rawget(LevelSettings, alias_perm) then
-                                        local clone = table.clone(source)
-                                        clone.level_key = alias_perm
-                                        clone.level_id  = alias_perm
-                                        LevelSettings[alias_perm] = clone
+                            if not alias_dls then
+                                -- No reusable alias for this slot yet (first run, or a larger
+                                -- deficit than any previous run) -- mint one and record it in
+                                -- the registry so later runs REUSE it (bounded growth).
+                                local base_key = keys[(dup_idx % n) + 1]
+                                local base_dls = rawget(DEUS_LEVEL_SETTINGS, base_key)
+                                if not base_dls then break end
+                                local suffix_n = 1
+                                repeat
+                                    alias_key = base_key .. "_dup" .. suffix_n
+                                    suffix_n = suffix_n + 1
+                                until not rawget(DEUS_LEVEL_SETTINGS, alias_key) and not pool[alias_key]
+
+                                DEUS_LEVEL_SETTINGS[alias_key] = {
+                                    base_level_name = base_dls.base_level_name,
+                                    paths           = table.clone(base_dls.paths or { 1 }),
+                                    themes          = table.clone(base_dls.themes or { "wastes" }),
+                                    pickup_settings = base_dls.pickup_settings,
+                                    deus_weapon_chest_distribution = base_dls.deus_weapon_chest_distribution,
+                                    display_name    = base_dls.display_name,
+                                    locations       = base_dls.locations or {},
+                                    packages        = base_dls.packages or {},
+                                }
+                                -- Mirror LevelSettings permutation entries so the engine can
+                                -- resolve <alias>_<theme>_path<n>.
+                                for _, theme_name in ipairs(ALL_THEMES) do
+                                    for _, path in ipairs(DEUS_LEVEL_SETTINGS[alias_key].paths) do
+                                        local original_perm = base_key .. "_" .. theme_name .. "_path" .. path
+                                        local alias_perm    = alias_key .. "_" .. theme_name .. "_path" .. path
+                                        local source = rawget(LevelSettings, original_perm)
+                                        if source and not rawget(LevelSettings, alias_perm) then
+                                            local clone = table.clone(source)
+                                            clone.level_key = alias_perm
+                                            clone.level_id  = alias_perm
+                                            LevelSettings[alias_perm] = clone
+                                        end
+                                        register_network_lookup_key(alias_perm)
                                     end
-                                    register_network_lookup_key(alias_perm)
                                 end
+                                slots[dup_idx + 1] = alias_key
+                                alias_dls = DEUS_LEVEL_SETTINGS[alias_key]
                             end
+
+                            -- Add (or re-add, after reset_to_snapshot cleared the pool) the
+                            -- alias to this pool. On the reuse path the DEUS_LEVEL_SETTINGS /
+                            -- LevelSettings / NetworkLookup entries persist from the first
+                            -- mint, so only the pool membership needs restoring.
                             pool[alias_key] = {
-                                themes = DEUS_LEVEL_SETTINGS[alias_key].themes,
-                                paths  = DEUS_LEVEL_SETTINGS[alias_key].paths,
+                                themes = alias_dls.themes,
+                                paths  = alias_dls.paths,
                             }
                             injected = injected + 1
                             deficit = deficit - 1

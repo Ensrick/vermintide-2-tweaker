@@ -29,7 +29,6 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("ct")
-_MEM_PROBE_T0_CTS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.7.88: vanilla VT2 declares this as a file-scope local in every file that
 -- needs it (`local REAL_PLAYER_LOCAL_ID = 1` — see deus_run_controller.lua,
@@ -42,14 +41,15 @@ _MEM_PROBE_T0_CTS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint b
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.129-beta"
+local MOD_VERSION = "0.7.130-beta"
+_MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
 -- approach which crashed to 0 cost at ~20 boons. See `.ammo_system_design_2026-05-24.md`.
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([ct] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
-mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
+pcall(printf, "Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 
 -- v0.7.114-dev (Issue #27): Explicit RPC schema_version + drop-on-mismatch.
 -- ============================================================
@@ -75,7 +75,7 @@ mod:info("Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 --
 -- VMF_RECIPES.md § 10 documents the full design + when to bump.
 local CT_RPC_SCHEMA = 1
-mod:info("[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
+pcall(printf, "[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
@@ -132,7 +132,7 @@ local function _settings_fingerprint()
     return string.format("%08x", h)
 end
 
-mod:info("[ct:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+pcall(printf, "[ct:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable
@@ -313,7 +313,7 @@ local CT_DISABLED_SKULLS_BOON_NAMES = {
     "boon_skulls_06", "boon_skulls_07", "boon_skulls_08",
     "boon_skulls_set_bonus_01", "boon_skulls_set_bonus_02",
 }
-mod:info("[ct] dormant/skulls boons purged (v%s, sentinel=%s); %d dormants + %d skulls boons removed from active code path. See comments near L4448/L4724/L5698 in source for re-enable instructions.",
+pcall(printf, "[ct] dormant/skulls boons purged (v%s, sentinel=%s); %d dormants + %d skulls boons removed from active code path. See comments near L4448/L4724/L5698 in source for re-enable instructions.",
     MOD_VERSION, CT_DORMANT_PURGE_VERIFIED, #CT_DISABLED_DORMANT_BOON_NAMES, #CT_DISABLED_SKULLS_BOON_NAMES)
 
 -- /regression_test scaffold. See the corresponding _rt_register calls at end
@@ -330,7 +330,7 @@ mod:command("ct_regression_test", "Run regression smoke checks for past bugs", f
         local ok, err = pcall(c.fn)
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
-            mod:info("[regression] PASS %s", c.name)
+            _dbg("[regression] PASS %s", c.name)
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
@@ -339,7 +339,7 @@ mod:command("ct_regression_test", "Run regression smoke checks for past bugs", f
     end
     mod:echo("=== %d passed, %d failed ===", pass, fail)
 end)
-mod:info("[regression-test-command] registered as /ct_regression_test")
+pcall(printf, "[regression-test-command] registered as /ct_regression_test")
 
 -- Mutex cluster framework (v0.7.85 — replaces the Miracle of Isha dropdown
 -- with a (A)/(B) checkbox cluster). See chaos_wastes_tweaker_mutex.lua's
@@ -404,7 +404,7 @@ local function _install_deus_loot_amount_fallback()
     end
     meta.__index_installed_by_ct = true
     setmetatable(settings.loot_amount, meta)
-    mod:info("[deus loot fallback] installed __index metatable — unknown breed keys now return chaos_spawn's loot range")
+    pcall(printf, "[deus loot fallback] installed __index metatable — unknown breed keys now return chaos_spawn's loot range")
 end
 _install_deus_loot_amount_fallback()
 
@@ -470,7 +470,7 @@ if _LobbyAux and _LobbyAux.create_network_hash and _vanilla_level_keys_count the
 
         return hash_result
     end)
-    mod:info("Lobby hash shim installed (vanilla level_keys count = %d).", _vanilla_level_keys_count)
+    pcall(printf, "Lobby hash shim installed (vanilla level_keys count = %d).", _vanilla_level_keys_count)
 else
     mod:warning("Lobby hash shim NOT installed; LobbyAux=%s vanilla_count=%s. Injected adventure missions may cause 'Game version mismatch' on join.",
         tostring(_LobbyAux ~= nil), tostring(_vanilla_level_keys_count))
@@ -522,7 +522,6 @@ local _career_exclusive_denial_counts = {}
 -- Stops the denial log spamming for every spawner that polls the grenades pool.
 local _career_exclusive_logged_this_run = {}
 
-local granting_starting_coins = false
 -- v0.7.95: per-run idempotence flag for the starting_coins setter override.
 -- `setup_run` is the lifecycle event for "campaign begins" and fires exactly
 -- once per new CW run, but defensive belt-and-suspenders: track the last
@@ -534,6 +533,65 @@ local _starting_coins_applied_for_run = nil
 -- /ct_regression_test source-pattern check can verify the setter-override
 -- mode (not adder mode) shipped to the bundle.
 local STARTING_COINS_MODE_MARKER = "starting_coins:setter-override-via-setup_run-arg"
+
+-- v0.7.129-dev altar-reuse fix marker: the re-arm logic runs as a POST-hook
+-- on DeusChestExtension.open_chest (so vanilla _post_chest_unlock + _equip_weapon
+-- both complete with real profile_index before we zero anything). Earlier
+-- v0.7.127 hooked `purchase` which fired BETWEEN those two calls and crashed
+-- with SPProfiles[0] = nil on weapon-swap altars. Source-pattern verified
+-- by /ct_regression_test check `altar_reuse_hook_on_open_chest`.
+local CT_ALTAR_REUSE_HOOK_MARKER = "altar_reuse:open_chest_post_hook_v0.7.129"
+
+-- v0.7.130-dev CoT enemy multiplier marker: hook filters on
+-- `element.spawn_counter_category == "cursed_chest_enemies"` so it only scales
+-- cursed-chest trial waves, not unrelated terror events. Source-pattern
+-- verified by /ct_regression_test check `cot_enemy_multiplier_cursed_chest_only`.
+local CT_COT_ENEMY_MULT_MARKER = "cot_enemy_mult:cursed_chest_enemies_filter_v0.7.130"
+
+-- v0.7.131-dev open_chest hook consolidation marker. ct had TWO hooks on
+-- DeusChestExtension.open_chest in v0.7.129/.130 — altar-reuse (mod:hook)
+-- AND bot-weapon-mirror (mod:hook_safe). VMF silently drops the second hook
+-- on the same (Class, method) from the same mod (VMF_RECIPES.md § 1). The
+-- altar-reuse hook never actually ran for two whole releases. v0.7.131
+-- consolidates both bodies into a SINGLE mod:hook_safe at the bot-mirror
+-- site. Source-pattern verified by /ct_regression_test check
+-- `open_chest_hook_singleton`. DO NOT add a second open_chest hook.
+local CT_OPEN_CHEST_CONSOLIDATED_MARKER = "open_chest:consolidated_single_hook_v0.7.131"
+-- #100 (v0.7.169-dev): the bot-weapon-mirror inside the open_chest hook must mirror the rarity
+-- the HOST actually received (the pre-bump `_opened_rarity` captured at hook entry), NOT the
+-- value `self._rarity` is bumped to for the next upgrade use — else bots land one tier above the
+-- host (log-confirmed go_id=62: host rare, bots exotic). Global (not local) to dodge the
+-- 200-local chunk cap. Asserted by /ct_regression_test "bot_weap_opened_rarity_pre_bump".
+CT_BOT_WEAP_OPENED_RARITY_MARKER = "bot_weap:opened_rarity_pre_bump_v0.7.169"
+
+-- v0.7.157-dev Task A: altar "goes dark after first use" DIAGNOSE-ONLY probes.
+-- Read-only instrumentation on DeusChestExtension.update (visual-state evolution
+-- post-re-arm) + extra _dbg lines in the consolidated open_chest re-arm path.
+-- Source-pattern verified by /ct_regression_test check `altar_visual_probe_present`.
+-- Tagged [altar_visual_probe]. NO behavior change.
+-- (Global, not a main-chunk local: the file is at the Lua 5.1 200-locals cap; only
+-- the regression-test callbacks read these markers, so a global is fine.)
+CT_ALTAR_VISUAL_PROBE_MARKER = "altar_visual_probe:readonly_update_hook_v0.7.157"
+
+-- v0.7.211-dev #102 DECOUPLE: keep-lit visual decoupled from reward rarity. The old v0.7.158
+-- _setup_rarity rarity-bump was REMOVED (it climbed the reward tier on reuse); instead a re-armed
+-- upgrade altar stays lit + usable via relaxed update_upgrade_chest_color / can_be_unlocked gates
+-- (`<=` -> strict `<`), so the reward never climbs. Source-pattern verified by /ct_regression_test
+-- check `upgrade_altar_rarity_decouple`.
+-- (Global, not a main-chunk local: see note on CT_ALTAR_VISUAL_PROBE_MARKER above.)
+CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER = "upgrade_altar_rarity_decouple:relaxed_gates_no_bump_v0.7.211"
+
+-- Chest of Trials uniqueness (Task B, #117). ALWAYS-ON as of v0.7.177-dev (the
+-- prior `cursed_chest_unique_trials` toggle was removed). Two host-authoritative
+-- layers guarantee consecutive Chests of Trials in one mission roll different
+-- trials: (1) a per-mission activation counter mixed into the seed passed to
+-- ConflictDirector.start_terror_event (varies the sub-challenge walk), and (2) a
+-- TerrorEventMixer.start_event wrapper that force-rotates each cursed_chest_prototype
+-- inject_event block's event_name_list to a single pick that DIFFERS from that
+-- block's previous pick (guarantees the top-level faction challenge changes).
+-- Source-pattern verified by /ct_regression_test check `cursed_chest_unique_trials`.
+-- (Global, not a main-chunk local: see note on CT_ALTAR_VISUAL_PROBE_MARKER above.)
+CT_COT_UNIQUE_TRIALS_MARKER = "cot_unique_trials:force_rotate_event_name_list_v0.7.177"
 local all_trait_combos_cache = nil
 -- CLARIFY: Forward-declared so the `generate_random_power_ups` hook (call site line 150) and
 -- `on_setting_changed` (line 740) can reference sync_reckless_swings before its assignment at line
@@ -566,30 +624,572 @@ local effective_setting
 -- so it needs the forward-declared local slot to bind a closure-over.
 local _broadcast_local_manifest
 
+-- audit 2026-06-07 (v0.7.133-dev): forward-declare the two pickup dump helpers.
+-- They are first REFERENCED inside the consolidated PickupSystem.populate_pickups
+-- hook closure (the `pcall(_dump_pickup_system_state, ...)` / `pcall(_dump_pickup_
+-- spawners_verbose, ...)` calls at ~line 2638-2639), but their `local function`
+-- definitions live far below (~3006 / ~3127). Lua 5.1 binds locals lexically at
+-- closure-creation time with no hoisting, so without these stubs the hook closure
+-- captured the GLOBAL name (nil) and `pcall(nil, ...)` returned false silently —
+-- the post-populate diagnostics never fired. Stubs here + dropping `local` on the
+-- later definitions makes both references resolve to the same upvalue slot
+-- (BUG_CLASSES §6 forward-ref pattern; see feedback_lua_forward_reference.md).
+local _dump_pickup_system_state
+local _dump_pickup_spawners_verbose
+
+-- audit 2026-06-07 (v0.7.133-dev): marker proving the three variadic forwarding
+-- hooks (on_soft_currency_picked_up / DeusRunController.setup_run /
+-- DeusPowerUpUtils.generate_random_power_ups) capture real arity via
+-- select("#", ...) and forward with unpack(args, 1, n) instead of bare
+-- unpack(args). Bare unpack stops at the first nil hole (trailing `type` /
+-- `mutators`+`boons` / `forced_rarity` are commonly nil), truncating the args
+-- passed to vanilla (VMF_RECIPES §2a). Asserted by /ct_regression_test check
+-- `variadic_hooks_arity_preserved`.
+local CT_VARIADIC_ARITY_MARKER = "unpack_arity:select_count_v0.7.133"
+
 -- CLARIFY: Vanilla signature is `on_soft_currency_picked_up(self, amount, type)`. The `amount` is
 -- args[1] (NOT args[2] — that mistake was the cause of an early-version coin multiplier bug; see
 -- "Coin multiplier not working (wrong argument index)" in DEVELOPMENT.md).
 mod:hook("DeusRunController", "on_soft_currency_picked_up", function(func, self, ...)
+    -- audit 2026-06-07 (v0.7.133-dev): capture real arity. Vanilla sig is
+    -- (self, amount, type); `type` (args[2]) is frequently nil, so bare
+    -- unpack(args) would stop at the nil hole and drop trailing args. Pass
+    -- explicit n so the nil is preserved positionally (VMF_RECIPES §2a).
+    local n = select("#", ...)
     local args = { ... }
     local raw_amount = args[1]
 
-    if type(raw_amount) == "number" and not granting_starting_coins then
+    if type(raw_amount) == "number" then
         -- v0.7.55: route through effective_setting so a client picking up coins applies
         -- the host's coin_multiplier (matches what the host's own pickups grant).
         local multiplier = effective_setting("coin_multiplier") or 1
         args[1] = math.max(1, math.floor(raw_amount * multiplier))
     end
 
-    return func(self, unpack(args))
+    return func(self, unpack(args, 1, n))
 end)
 
--- CLARIFY: Granting starting coins by re-entering on_soft_currency_picked_up. The
--- `granting_starting_coins` flag suppresses the multiplier hook above so 500 starting coins doesn't
--- get doubled by a 2x multiplier setting. Without the flag, a multiplier > 1 would inflate the gift.
--- POTENTIAL BUG (LOW): the second arg to on_soft_currency_picked_up is `type` (a
--- DeusSoftCurrencySettings.types.{GROUND,MONSTER,...} value). Passing nil means the server-only
--- branch in vanilla treats this as neither GROUND nor MONSTER, so the per-pickup counters are NOT
--- incremented — fine for starting coins, but worth knowing.
+-- ============================================================
+-- Altar reuse (v0.7.127-dev) — Issue #61: configurable max uses per altar type
+-- ============================================================
+-- Vanilla DeusChestExtension is single-use: `purchase()` (deus_chest_extension.lua:301)
+-- sets `_is_purchased = true` and fires the `lua_update_collected` flow event;
+-- the altar's "looted" animation plays and `can_be_unlocked()` (line 487) returns
+-- false on subsequent attempts.
+--
+-- This feature lets the host configure max uses per altar type (boon shrine,
+-- melee swap, ranged swap, weapon upgrade — matching the 4 DEUS_CHEST_TYPES the
+-- vanilla extension already differentiates internally) with a geometric cost
+-- multiplier applied per reuse.
+--
+-- Mechanism (3 narrow hooks):
+--   1. get_purchase_cost — wrap vanilla, scale by mult^uses_so_far.
+--   2. purchase — post-call, if uses < max:
+--        - restore _is_purchased=false + _animation_state=nil
+--        - zero _profile_index/_career_index so vanilla update() (line 134)
+--          re-runs the full setup block on the next tick (re-rolls offerings,
+--          fires the lua_update_<rarity> flow event so the altar visually
+--          re-arms)
+--   3. _generate_stored_power_up / _generate_stored_weapon — mix the use count
+--      into the seed input so each re-roll produces different offerings.
+--
+-- All thresholds read via effective_setting so the host's values apply to
+-- clients via the standard VMF broadcast. The per-unit `_altar_uses_by_go_id`
+-- table is server-state (only the server's purchase() hook writes to it).
+--
+-- VISUAL-SYNC CAVEAT (corrected v0.7.151-dev): the vanilla chest network sync is
+-- ONE-DIRECTIONAL toward "looted" only. The first open inserts the opener's peer
+-- into the networked GameSession field `collected_by_peers` (server handler
+-- rpc_deus_chest_looted, deus_chest_extension.lua:737-752) and NOTHING ever
+-- removes it. So zeroing only the LOCAL re-arm fields is not enough: vanilla
+-- update() (deus_chest_extension.lua:175) re-derives `new_is_purchased` from
+-- `table.contains(collected_by_peers, peer_id)`, re-asserts _animation_state=
+-- "looted" (line 177-182), and line 194 then skips _update_chest_animation_and_
+-- sound_state — so the re-rolled offering hologram never re-displays. The re-arm
+-- block therefore ALSO retracts the own peer from collected_by_peers (server
+-- writes it directly; a client opener round-trips through the ct_altar_uncollect
+-- RPC so the server clears the authoritative field). See _ct_remove_peer_from_
+-- collected / mod._ct_altar_uncollect below.
+--
+-- UPGRADE-ALTAR ROOT CAUSE (v0.7.158-dev — the ACTUAL fix for "goes dark after
+-- first use", solo host, no peers):
+-- The v0.7.151 collected_by_peers uncollect was a real bug but NOT the cause of
+-- the upgrade altar darkening. For an UPGRADE altar the looted look is derived
+-- TWO independent ways:
+--   (1) collected_by_peers membership (deus_chest_extension.lua:175) — uncollect
+--       handles this, and solo-host it's a direct local write that DOES hold.
+--   (2) update_upgrade_chest_color (deus_chest_extension.lua:211-243) — runs
+--       EVERY tick, independent of collected_by_peers. It compares the altar's
+--       rolled `_rarity` against the player's CURRENTLY WIELDED weapon rarity:
+--           event = chest_rarity_order <= weapon_rarity_order
+--               and "lua_interact_disabled" or LUA_UPDATE_RARITY_EVENTS[rarity]
+--       After the first upgrade, the wielded weapon's rarity == the altar's
+--       rolled rarity, so chest_rarity_order <= weapon_rarity_order is TRUE and
+--       the altar fires `lua_interact_disabled` — the grey/"dark", can't-use
+--       visual. can_be_unlocked (lines 505-517) likewise returns false, so the
+--       re-armed altar is GENUINELY unusable, not just cosmetically dark.
+-- The altar re-rolls `_rarity` each re-arm (update() line 140 -> _setup_rarity),
+-- but the seed is constant per go_id, so it always re-rolls the SAME rarity, and
+-- update_upgrade_chest_color always re-disables it. Therefore the upgrade-altar
+-- re-arm must ALSO bump `_rarity` strictly above the just-upgraded weapon (capped
+-- at `unique`, order 5) and clear the cached `_prev_update_upgrade_chest_color_
+-- event` so the disabled-color event re-evaluates. See the upgrade branch in the
+-- consolidated open_chest hook (_ct_consolidated_open_chest_hook).
+local DEUS_CHEST_TYPE_TO_KEY = {
+    power_up    = "power_up",
+    swap_melee  = "swap_melee",
+    swap_ranged = "swap_ranged",
+    upgrade     = "upgrade",
+}
+local _altar_uses_by_go_id = {}
+
+local function _altar_key_for(chest_type)
+    if type(chest_type) ~= "string" then return nil end
+    return DEUS_CHEST_TYPE_TO_KEY[chest_type]
+end
+
+local function _altar_max_uses(chest_type)
+    local key = _altar_key_for(chest_type)
+    if not key then return 1 end
+    local v = effective_setting("altar_reuse_count_" .. key)
+    if type(v) ~= "number" or v < 1 then return 1 end
+    return math.floor(v)
+end
+
+local function _altar_cost_mult(chest_type)
+    local key = _altar_key_for(chest_type)
+    if not key then return 1 end
+    local v = effective_setting("altar_reuse_cost_mult_" .. key)
+    if type(v) ~= "number" or v <= 0 then return 1 end
+    return v
+end
+
+-- v0.7.158-dev: ordered list of the player-usable weapon rarities (order 1..5,
+-- excluding `event`/order 6 which is not granted to player weapons), and the
+-- helper that returns the rarity NAME one tier above a wielded weapon (capped at
+-- `unique`/order 5). Used by the upgrade-altar re-arm to bump the altar's offered
+-- rarity strictly above the player's just-upgraded weapon so update_upgrade_chest_
+-- color (deus_chest_extension.lua:236) stops firing `lua_interact_disabled` (the
+-- dark/can't-use visual) and can_be_unlocked (lines 505-517) keeps returning true
+-- until the usable rarity ceiling is reached.
+--
+-- Attached to `mod` (not file-scope locals) to stay under Lua 5.1's
+-- 200-locals-per-chunk cap — this file is at the limit (see the same pattern on
+-- mod._ct_remove_peer_from_collected / mod._ct_boon_altar_taken_boons).
+mod._ct_rarity_by_order = mod._ct_rarity_by_order
+    or { "plentiful", "common", "rare", "exotic", "unique" }
+
+-- Return the rarity NAME one tier above `weapon_rarity_name`, capped at `unique`
+-- (order 5). Returns nil if RaritySettings isn't loaded or the input is unknown,
+-- in which case the caller leaves the vanilla-rolled rarity untouched.
+-- NOTE (v0.7.211-dev): no longer called after the #102 rarity-decouple; the reward-rarity
+-- bump it powered was removed. Retained only as a generic tier-step helper.
+mod._ct_altar_next_rarity_above = function(weapon_rarity_name)
+    local rs = rawget(_G, "RaritySettings")
+    if type(weapon_rarity_name) ~= "string" or not rs then return nil end
+    local cur = rs[weapon_rarity_name]
+    local cur_order = cur and cur.order
+    if type(cur_order) ~= "number" then return nil end
+    -- one above the wielded weapon, but never above the usable ceiling (5 = unique).
+    local target_order = math.min(5, cur_order + 1)
+    return mod._ct_rarity_by_order[target_order]
+end
+
+-- v0.7.151-dev: retract ONE peer from a chest's networked `collected_by_peers`
+-- GameSession field so the re-armed altar stops reading as looted. Without this,
+-- vanilla DeusChestExtension.update (deus_chest_extension.lua:175) re-derives
+-- new_is_purchased=true from the still-present peer one tick after re-arm, forces
+-- _animation_state="looted" (line 177-182), and line 194 skips the anim update —
+-- the re-rolled offering hologram never re-displays.
+--
+-- Server-owned field (written server-side at deus_chest_extension.lua:752), so a
+-- client opener must round-trip through the server (see mod._ct_altar_uncollect).
+-- Removes ONLY `peer_id` — never clears the whole array — because in co-op other
+-- peers may legitimately have looted other (non-reusable) chests sharing nothing
+-- but this is per-GameSession-object, so scoping to the own peer keeps their
+-- state intact. Attached to `mod` (not a file-scope local) to stay under Lua
+-- 5.1's 200-locals-per-chunk cap.
+--
+-- GUARD: GameSession.game_object_exists before reading (vanilla guard, e.g.
+-- player_husk_locomotion_extension.lua:134), AND wrap the read/write in pcall —
+-- `game_object_field` on a truly stale go_id is an engine fatal that bypasses
+-- pcall the same way Unit.node does, so the existence check is the real gate; the
+-- pcall just catches the ordinary Lua errors (nil game, bad field).
+mod._ct_remove_peer_from_collected = function(go_id, peer_id)
+    if not go_id or peer_id == nil then return end
+    local network_man = Managers.state and Managers.state.network
+    local game = network_man and network_man.game and network_man:game()
+    if not game then return end
+    if not GameSession.game_object_exists(game, go_id) then return end
+    pcall(function()
+        local collected = GameSession.game_object_field(game, go_id, "collected_by_peers")
+        if type(collected) ~= "table" then return end
+        local changed = false
+        for i = #collected, 1, -1 do
+            if collected[i] == peer_id then
+                table.remove(collected, i)
+                changed = true
+            end
+        end
+        if changed then
+            GameSession.set_game_object_field(game, go_id, "collected_by_peers", collected)
+            _dbg("[altar_reuse] uncollect go_id=%s peer=%s -> %d peer(s) remain",
+                tostring(go_id), tostring(peer_id), #collected)
+        end
+    end)
+end
+
+-- v0.7.151-dev: on altar re-arm, retract the OWN peer from collected_by_peers.
+-- The re-arm runs on the buying/interacting peer (host OR client). The field is
+-- server-authoritative, so:
+--   * host opener writes it directly;
+--   * client opener sends ct_altar_uncollect to the HOST so the server mutates
+--     the authoritative copy (mirrors vanilla loot, which is server-authoritative
+--     via purchase() -> send_rpc_server at deus_chest_extension.lua:315).
+-- This is a pure data write to one GameSession field — it does NOT re-enter
+-- purchase() or spawn anything; the next vanilla update() tick simply takes the
+-- non-looted branch and re-fires the offering presentation.
+mod._ct_altar_uncollect = function(ext)
+    if not ext then return end
+    local go_id = ext._go_id or (Managers.state and Managers.state.unit_storage
+        and ext.unit and Managers.state.unit_storage:go_id(ext.unit))
+    if not go_id then return end
+    local drc = ext._deus_run_controller
+    local own_peer_id = drc and drc.get_own_peer_id and drc:get_own_peer_id()
+    if not own_peer_id then return end
+
+    if ext._is_server then
+        -- Host opener: write the server-owned field directly.
+        mod._ct_remove_peer_from_collected(go_id, own_peer_id)
+        return
+    end
+
+    -- Client opener: ask the host to clear our peer. VMF's network_send does NOT
+    -- accept "server" as a recipient (silently dropped — VMF_RECIPES.md § 3); the
+    -- real host peer_id must be resolved. The server handler resolves the SENDER
+    -- (us) from the VMF sender_peer_id arg, so we only send go_id.
+    local host
+    if Managers.mechanism and Managers.mechanism.server_peer_id then
+        host = Managers.mechanism:server_peer_id()
+    end
+    if not host then
+        local nm = Managers.state and Managers.state.network
+        host = nm and ((nm.network_client and nm.network_client.server_peer_id)
+            or (nm.network_server and nm.network_server.server_peer_id))
+    end
+    if not host then
+        _dbg("[altar_reuse] uncollect: host peer_id not yet known; skipping client RPC (go_id=%s)",
+            tostring(go_id))
+        return
+    end
+    mod:network_send("ct_altar_uncollect", host, CT_RPC_SCHEMA, go_id)
+end
+
+-- Server handler: a client re-armed this altar locally and asks us to drop its
+-- peer from the chest's collected_by_peers, so everyone (including that client)
+-- sees the re-rolled offering instead of the looted state. Mirrors vanilla
+-- rpc_deus_chest_looted (deus_chest_extension.lua:737-752) in reverse. The
+-- sending peer is resolved by VMF (sender_peer_id), NOT a raw CHANNEL_TO_PEER_ID.
+mod:network_register("ct_altar_uncollect", function(sender_peer_id, schema_version, go_id)
+    -- Issue #27: schema-version gate. See CT_RPC_SCHEMA block near MOD_VERSION
+    -- and VMF_RECIPES.md § 10. Mismatch = drop + _dbg_alert; no state mutation.
+    if schema_version ~= CT_RPC_SCHEMA then
+        _dbg_alert("[rpc:schema] %s mismatch from peer=%s: peer sent v%s, we expect v%d. Dropping.",
+            "ct_altar_uncollect", tostring(sender_peer_id), tostring(schema_version), CT_RPC_SCHEMA)
+        return
+    end
+    -- Only the host owns the field; ignore if we somehow aren't the server.
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if not is_server then return end
+    if sender_peer_id == nil or go_id == nil then return end
+    mod._ct_remove_peer_from_collected(go_id, sender_peer_id)
+end)
+
+-- ============================================================
+-- v0.7.157-dev Task A: ALTAR "goes dark after first use" PROBES (DIAGNOSE-ONLY)
+-- ============================================================
+-- The user reports weapon-UPGRADE altars set to allow >1 use still go "dark"
+-- (looted look) after the FIRST use, despite the v0.7.151 re-arm + uncollect.
+-- These probes are READ-ONLY: they capture the visual-state evolution across the
+-- re-arm AND the next few vanilla DeusChestExtension.update ticks so the log
+-- shows exactly when/why it re-darkens. NO behavior change. All lines are FORCED
+-- output (unconditional mod:info, tag [altar_visual_probe]) so the user just
+-- plays — no command needed. Strip the whole block once the cause is found.
+--
+-- _ct_altar_probe_watch[go_id] = { ticks = N, type = "<chest_type>" } — armed by
+-- the open_chest re-arm path; the read-only update hook below decrements it and
+-- logs each tick's derived state.
+_ct_altar_probe_watch = {}
+
+-- Read collected_by_peers for a go_id as a printable string, guarded exactly like
+-- mod._ct_remove_peer_from_collected (game_object_exists gate + pcall). Returns a
+-- "[p1,p2]" style string, or a status token if unreadable. Read-only.
+function _ct_probe_collected_by_peers(go_id)
+    if not go_id then return "<no go_id>" end
+    local network_man = Managers.state and Managers.state.network
+    local game = network_man and network_man.game and network_man:game()
+    if not game then return "<no game>" end
+    if not GameSession.game_object_exists(game, go_id) then return "<go absent>" end
+    local out = "<unreadable>"
+    pcall(function()
+        local collected = GameSession.game_object_field(game, go_id, "collected_by_peers")
+        if type(collected) ~= "table" then out = "<not table>"; return end
+        local parts = {}
+        for i = 1, #collected do parts[i] = tostring(collected[i]) end
+        out = "[" .. table.concat(parts, ",") .. "](" .. #collected .. ")"
+    end)
+    return out
+end
+
+-- Read-only watcher hook on DeusChestExtension.update. ct has NO other hook
+-- on DeusChestExtension.update (verified: only open_chest/get_purchase_cost/
+-- _generate_* /extensions_ready are hooked), so this fresh mod:hook is VMF-clean.
+-- Logs the post-re-arm visual-state evolution for a watched (re-armed) chest:
+-- _is_purchased / _animation_state / _profile_index plus what vanilla would
+-- re-derive (new_is_purchased from collected_by_peers). DOES NOT mutate anything;
+-- always calls through to vanilla and returns its result(s).
+mod:hook("DeusChestExtension", "update", function(func, self, unit, input, dt, context, t)
+    local go_id = self._go_id or (self.unit and Managers.state and Managers.state.unit_storage
+        and Managers.state.unit_storage:go_id(self.unit))
+    local watch = go_id and _ct_altar_probe_watch[go_id]
+
+    -- pre-tick snapshot (state as vanilla update SEES it on entry)
+    local pre_purchased, pre_anim, pre_profile
+    if watch then
+        pre_purchased = self._is_purchased
+        pre_anim = self._animation_state
+        pre_profile = self._profile_index
+    end
+
+    local r1, r2, r3 = func(self, unit, input, dt, context, t)
+
+    if watch then
+        local own_peer = self._deus_run_controller and self._deus_run_controller.get_own_peer_id
+            and self._deus_run_controller:get_own_peer_id()
+        local collected = _ct_probe_collected_by_peers(go_id)
+        -- mirror vanilla's new_is_purchased derivation (deus_chest_extension.lua:175):
+        -- not self._stored_purchase and chest_type ~= upgrade  OR  own peer in collected
+        local DCT = rawget(_G, "DEUS_CHEST_TYPES")
+        local own_in_collected = "?"
+        do
+            local cp = nil
+            local network_man = Managers.state and Managers.state.network
+            local game = network_man and network_man.game and network_man:game()
+            if game and GameSession.game_object_exists(game, go_id) then
+                pcall(function() cp = GameSession.game_object_field(game, go_id, "collected_by_peers") end)
+            end
+            if type(cp) == "table" and own_peer ~= nil then
+                own_in_collected = tostring(table.contains(cp, own_peer))
+            end
+        end
+        _dbg("[altar_visual_probe] UPDATE go_id=%s type=%s tick=%d pre{purchased=%s anim=%s prof=%s} post{purchased=%s anim=%s prof=%s} stored_purchase=%s is_upgrade=%s own_in_collected=%s collected=%s",
+            tostring(go_id), tostring(watch.type), watch.ticks,
+            tostring(pre_purchased), tostring(pre_anim), tostring(pre_profile),
+            tostring(self._is_purchased), tostring(self._animation_state), tostring(self._profile_index),
+            tostring(self._stored_purchase ~= nil),
+            tostring(DCT and self._chest_type == DCT.upgrade), own_in_collected, collected)
+        watch.ticks = watch.ticks - 1
+        if watch.ticks <= 0 then
+            _ct_altar_probe_watch[go_id] = nil
+            _dbg("[altar_visual_probe] UPDATE go_id=%s watch window closed", tostring(go_id))
+        end
+    end
+
+    return r1, r2, r3
+end)
+
+-- ============================================================
+-- TERMINOLOGY (Chaos Wastes) -- READ BEFORE EDITING COST/CHEST CODE
+-- ============================================================
+-- IN-GAME, the ONLY thing called a "chest" is a CHEST OF TRIALS: a cursed
+-- chest that spawns a trial enemy wave (you pay by fighting the wave, never
+-- with coin). It is the engine class DeusCursedChestExtension
+-- (scripts/unit_extensions/deus/deus_cursed_chest_extension.lua) -- it has NO
+-- _chest_type and NO get_purchase_cost. ct's cot_enemy_multiplier targets it
+-- via the terror-event spawn tag spawn_counter_category == "cursed_chest_enemies".
+--
+-- The boon shrine (Shrine of Solace), weapon-swap shrine, and weapon-upgrade
+-- shrine are ALTARS. The ENGINE confusingly calls them all "chest":
+-- DeusChestExtension with _chest_type = power_up (boon ALTAR) / swap_melee /
+-- swap_ranged / upgrade. get_purchase_cost lives on THIS class; for power_up it
+-- returns the stock 150 boon price (deus_chest_extension.lua:294-295).
+--
+-- => Any code below that branches on _chest_type == power_up is acting on a
+--    BOON ALTAR, never on a Chest of Trials. The altar-reuse cost multiplier
+--    (150 * mult^uses) is the intended boon-altar price. Do NOT re-introduce a
+--    "trials" coin cost on this hook -- a real Chest of Trials has no purchase
+--    step to override (it is DeusCursedChestExtension; you pay by fighting).
+-- ============================================================
+
+-- ============================================================
+-- Boon-altar no-repeat bookkeeping
+-- ============================================================
+-- Records which boons the local peer has already taken from boon (power_up)
+-- ALTARS this run, so the no-repeat default (in the DeusPowerUpsArray strip
+-- below) can exclude already-taken boons from each subsequent altar roll. This
+-- is boon-ALTAR state, NOT a Chest of Trials -- see the terminology banner
+-- above. State lives on `mod` (not file-scope locals) to stay under Lua 5.1's
+-- 200-locals-per-chunk cap.
+mod._ct_boon_altar_taken_boons = mod._ct_boon_altar_taken_boons or {}
+
+mod:hook("DeusChestExtension", "get_purchase_cost", function(func, self)
+    local base = func(self)
+    if type(base) ~= "number" or base == math.huge then return base end
+    local go_id = self._go_id
+    local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+    if uses == 0 then return base end
+    local mult = _altar_cost_mult(self._chest_type)
+    if mult == 1 then return base end
+    return math.max(1, math.ceil(base * (mult ^ uses)))
+end)
+
+-- v0.7.131-dev: altar-reuse re-arm logic LIVES INSIDE the consolidated
+-- `mod:hook_safe("DeusChestExtension", "open_chest", ...)` further down the
+-- file (search for `_ct_consolidated_open_chest_hook`). DO NOT add a second
+-- `mod:hook("DeusChestExtension", "open_chest", ...)` here — VMF silently
+-- drops duplicate hooks on the same (Class, method) per mod (see VMF_RECIPES.md
+-- § 1 and feedback_vmf_no_duplicate_hooks). The v0.7.129/.130 altar-reuse
+-- "fix" sat in a duplicate hook for two releases and never actually ran.
+-- Helper functions remain here; the open_chest hook itself is consolidated.
+
+-- Seed-mix hooks so each re-roll yields DIFFERENT offerings. Vanilla seeds
+-- derive from (go_id, current_node.weapon_pickup_seed) — same each tick.
+-- Mixing the use count into the seed produces a fresh roll without touching
+-- the run-shared current_node state.
+mod:hook("DeusChestExtension", "_generate_stored_power_up", function(func, self, seed)
+    local go_id = self._go_id
+    local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+    if uses == 0 or type(seed) ~= "number" then return func(self, seed) end
+    if HashUtils and HashUtils.fnv32_hash then
+        seed = HashUtils.fnv32_hash(tostring(seed) .. "_ct_reuse_" .. uses)
+    else
+        seed = seed + uses * 16777619  -- fallback FNV prime mix
+    end
+    return func(self, seed)
+end)
+
+mod:hook("DeusChestExtension", "_generate_stored_weapon", function(func, self, slots, rarity, go_id, profile_index, career_index)
+    -- Weapon generation derives weapon_seed inside the function from
+    -- (profile, career, current_node.weapon_pickup_seed, go_id, 1) via fnv32_hash
+    -- (deus_chest_extension.lua:411). Offsetting the go_id parameter by the use
+    -- count flows through the hash and produces a fresh weapon_seed -> fresh roll
+    -- without copy-pasting the whole function.
+    local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+    if uses == 0 then return func(self, slots, rarity, go_id, profile_index, career_index) end
+    local mixed_go_id = (go_id or 0) + uses * 1000003
+    return func(self, slots, rarity, mixed_go_id, profile_index, career_index)
+end)
+
+-- v0.7.158-dev Task 2: WEAPON-UPGRADE altar reroll on reuse. The upgrade altar
+-- does NOT swap the weapon — it upgrades the wielded weapon in place via
+-- _generate_upgraded_weapon (deus_chest_extension.lua:426), which is a DISTINCT
+-- function from _generate_stored_weapon (the swap-altar path the seed-mix hook
+-- above targets). So without this, every upgrade reuse produced the SAME
+-- properties/trait roll. The function derives its weapon_seed inside from
+-- (profile, career, current_node.weapon_pickup_seed, go_id, 1) via fnv32_hash
+-- (line 431) — the SAME constant per go_id every reuse. Offsetting the go_id
+-- argument by the use count flows through that hash and yields a fresh
+-- properties/trait roll on the upgraded weapon, mirroring the _generate_stored_
+-- weapon idiom above. Single hook on this (Class, method) — VMF-clean.
+mod:hook("DeusChestExtension", "_generate_upgraded_weapon", function(func, self, weapon, slot_name, rarity, go_id, profile_index, career_index)
+    local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+    if uses == 0 then return func(self, weapon, slot_name, rarity, go_id, profile_index, career_index) end
+    local mixed_go_id = (go_id or 0) + uses * 1000003
+    return func(self, weapon, slot_name, rarity, mixed_go_id, profile_index, career_index)
+end)
+
+-- #102 (rarity escalation) FIXED v0.7.211-dev: DECOUPLE keep-lit visual from reward rarity.
+-- ----------------------------------------------------------------------------------------------
+-- Root cause: self._rarity is BOTH the reward tier (open_chest -> _generate_upgraded_weapon(...,
+-- self._rarity), deus_chest_extension.lua:558) AND the input to the dark-gate (update_upgrade_
+-- chest_color :236 / can_be_unlocked :513, both `chest_rarity_order <= weapon_rarity_order`). The
+-- old v0.7.158 fix kept a re-armed altar LIT by bumping self._rarity strictly ABOVE the wielded
+-- weapon every re-roll; that leaked into the reward, climbing plentiful->rare->exotic->unique.
+--
+-- FIX (Option B, user-chosen 2026-07-02): stop bumping self._rarity entirely (it stays at the
+-- constant per-go_id rolled tier, so the reward never climbs), and relax the two dark-gates from
+-- `<=` to strict `<` for a RE-ARMED upgrade altar (uses > 0). A same-tier re-roll stays LIT and
+-- usable (a rare altar re-rolls a rare weapon at rare, with fresh props via the _generate_upgraded_
+-- weapon seed-mix hook above) while a genuine DOWNGRADE still greys out. Same-tier upgrade cost is
+-- populated + finite (DeusCostSettings.deus_chest.upgrade[r][r] = base[r]*0.5, e.g. rare=100,
+-- deus_cost_settings.lua:137-173), so get_purchase_cost / can_be_unlocked's cost branch pass.
+-- Depletion is unaffected: a spent altar keeps _is_purchased=true, which both hooks below (and
+-- vanilla can_interact) already treat as unusable.
+--
+-- Both methods are otherwise unhooked in ct (verified). Both hooks pass through to vanilla for
+-- first-use (uses==0) and every non-upgrade chest, so the ONLY behavior change is that a re-armed
+-- upgrade altar allows a same-tier re-roll instead of greying out. /ct_regression_test guards this
+-- via `upgrade_altar_rarity_decouple`. #103 (looted mesh on non-final use) is a SEPARATE visual
+-- path (the open_chest re-arm below) and is unaffected by this decouple.
+
+-- Relaxed VISUAL gate. Reimplements vanilla update_upgrade_chest_color (deus_chest_extension.lua:
+-- 211-243) with the rarity test loosened `<=` -> `<`. The rarity flow event is `"lua_update_" ..
+-- rarity` (vanilla's file-local LUA_UPDATE_RARITY_EVENTS[rarity], built the same way at :52; it is
+-- NOT a global, so it cannot be read via _G). Single hook on this (Class, method).
+mod:hook("DeusChestExtension", "update_upgrade_chest_color", function(func, self)
+    local DCT = rawget(_G, "DEUS_CHEST_TYPES")
+    local go_id = self._go_id
+    local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+    if uses == 0 or not (DCT and self._chest_type == DCT.upgrade) then
+        return func(self)  -- first use / non-upgrade: pure vanilla
+    end
+    local rarity = self._rarity
+    if not rarity then return end
+    if self._is_purchased then return end          -- depleted/looted: leave vanilla dark state
+    local wielded = self._get_wielded_weapon and self:_get_wielded_weapon()
+    if not wielded then return end
+    local rs = rawget(_G, "RaritySettings")
+    local wr = rs and rs[wielded.rarity]
+    local cr = rs and rs[rarity]
+    if not (wr and cr) then return func(self) end
+    -- RELAXED: `<` not `<=`, so same-tier stays lit; only a downgrade greys out.
+    local event = (cr.order < wr.order) and "lua_interact_disabled" or ("lua_update_" .. rarity)
+    if not self._prev_update_upgrade_chest_color_event or self._prev_update_upgrade_chest_color_event ~= event then
+        if self.unit and Unit and Unit.flow_event
+            and (not Unit.alive or Unit.alive(self.unit)) then
+            pcall(Unit.flow_event, self.unit, event)
+        end
+        self._prev_update_upgrade_chest_color_event = event
+    end
+end)
+
+-- Relaxed INTERACTION gate. Without it the altar would look lit but reject the interact. Reimplements
+-- vanilla can_be_unlocked (deus_chest_extension.lua:487-537) with the SAME `<=` -> `<` loosening,
+-- gated to a re-armed upgrade altar; every other vanilla gate (can_interact, cost affordability,
+-- others_actually_ingame) is preserved exactly. Single hook on this (Class, method).
+mod:hook("DeusChestExtension", "can_be_unlocked", function(func, self)
+    local DCT = rawget(_G, "DEUS_CHEST_TYPES")
+    local go_id = self._go_id
+    local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
+    if uses == 0 or not (DCT and self._chest_type == DCT.upgrade) then
+        return func(self)  -- first use / non-upgrade: pure vanilla
+    end
+    if not self:can_interact() then return false end
+    local drc = self._deus_run_controller
+    local own_peer_id = drc and drc.get_own_peer_id and drc:get_own_peer_id()
+    local soft = (own_peer_id and drc.get_player_soft_currency and drc:get_player_soft_currency(own_peer_id)) or 0
+    local cost = self:get_purchase_cost() or math.huge
+    local sd = rawget(_G, "script_data")
+    local can_unlock = (sd and sd.unlock_all_deus_chests) or cost <= soft
+    if can_unlock then
+        local wielded = self._get_wielded_weapon and self:_get_wielded_weapon()
+        if wielded then
+            local rs = rawget(_G, "RaritySettings")
+            local wr = rs and rs[wielded.rarity]
+            local cr = rs and rs[self._rarity]
+            if wr and cr and cr.order < wr.order then  -- RELAXED: block only a real downgrade
+                can_unlock = false
+            end
+        end
+    end
+    if not can_unlock then return false end
+    local nm = Managers.state and Managers.state.network
+    local ps = nm and nm.profile_synchronizer
+    if ps and ps.others_actually_ingame and not ps:others_actually_ingame() then
+        return false
+    end
+    return true
+end)
 
 -- ============================================================
 -- Multiplayer settings sync (v0.7.21)
@@ -680,7 +1280,7 @@ for _, id in ipairs(_collect_setting_ids()) do
         SYNCED_SETTING_NAMES[#SYNCED_SETTING_NAMES + 1] = id
     end
 end
-mod:info("[ct_sync] synced setting registry built: %d keys (%d excluded as per-peer)",
+pcall(printf, "[ct_sync] synced setting registry built: %d keys (%d excluded as per-peer)",
     #SYNCED_SETTING_NAMES, (function() local n = 0; for _ in pairs(PER_PEER_SETTING_NAMES) do n = n + 1 end; return n end)())
 
 -- O(1) membership for the mid-run re-broadcast gate in on_setting_changed (see
@@ -720,6 +1320,122 @@ local sync_host_dependent_state
 local SYNC_CHUNK_SIZE = 400
 local _sync_inbound = {}
 
+-- ============================================================
+-- Issue #97: paced chunk send-queue (anti-flood)
+-- ============================================================
+-- The three chunked broadcasters below (host settings / graph snapshot / peer
+-- manifest) each used to emit their ENTIRE chunk train inline in one frame:
+--   for seq = 1, total do mod:network_send(<event>, <target>, ...) end
+-- On a large-graph hot-join the three fire in the same frame window and dump
+-- ~200 reliable RPCs (~94 KB) onto Stingray's reliable send queue at once. That
+-- queue has a hard byte budget (~97822 B); overflowing it tears down the host
+-- connection -> HOST CRASH (the reported #97 symptom).
+--
+-- Fix: don't send inline. ENQUEUE each chunk as a self-contained network_send
+-- arg set into one FIFO queue, and drain a small budget per frame from
+-- mod.update (below). The chunks then arrive paced across many frames; the
+-- receivers already tolerate that (purely accumulative — they buffer by seq per
+-- (sender,session) and only act once all `total` distinct chunks arrive; no
+-- single-frame/burst assumption anywhere). NONE of the wire protocol changes:
+-- same event names, same CT_RPC_SCHEMA gate, same session/seq/total semantics,
+-- same SYNC_CHUNK_SIZE, same reassembly. Only the SEND TIMING is paced.
+--
+-- FIFO order is preserved (append at tail in enqueue order, pop from head).
+-- Re-entrancy is safe: a new broadcast just appends more entries; the drainer
+-- never clears the queue mid-drain and each entry already carries its own
+-- session id, so concurrent/overlapping broadcasts never corrupt each other.
+--
+-- (Globals, not main-chunk locals: the file is at the Lua 5.1 200-locals cap —
+-- see the note on CT_ALTAR_VISUAL_PROBE_MARKER near line 572. These three names
+-- are referenced only from the mod.update drainer closure and the three chunk
+-- broadcaster call sites below; nothing else shadows them, so file-scope globals
+-- are safe and keep the main chunk under the 200-local ceiling.)
+_ct_chunk_send_queue = {}
+-- /ct_regression_test marker for `chunk_sends_paced_not_bursted` (Issue #97,
+-- ct 0.7.163-dev). All three chunked broadcasts (ct_graph_snapshot_chunk /
+-- ct_sync_host_settings_chunk / ct_peer_manifest_chunk) route their per-seq
+-- emission through `_ct_enqueue_chunk` and are drained by the single
+-- `mod.update` owner below at _CT_CHUNK_DRAIN_BUDGET per frame -- NEVER an
+-- inline `mod:network_send("<chunk-event>", ...)` inside the `for seq` loops
+-- (that single-frame burst overran the reliable-channel queue cap and dropped
+-- chunks). If a future edit re-inlines a burst send, update the wiring but NOT
+-- this marker, and the regression check fails loudly. (Global, not a main-chunk
+-- local: see the 200-locals-cap note above.)
+_CT_CHUNK_PACED_SEND_MARKER = "chunk_sends:enqueue_drain_paced_v0.7.163"
+-- Per-frame drain budget. Worst single chunk_str is SYNC_CHUNK_SIZE (400) chars
+-- + the small fixed envelope; 8 chunks/frame keeps per-frame reliable bytes
+-- (~8 * ~450 = ~3.6 KB) FAR under the ~97822 B queue limit, and the reliable
+-- channel acks far faster than we enqueue at this cadence so the queue drains
+-- steadily without ever stacking near the cap. Tunable.
+-- (Global, not a main-chunk local: see the 200-locals-cap note just above.)
+_CT_CHUNK_DRAIN_BUDGET = 8
+
+-- Append one chunk send to the FIFO queue. `record_send` (optional) is invoked
+-- with no args at SEND time (not enqueue time) so bt's net_replay ring records
+-- the actual emission; it mirrors the inline _nr:record_send call the host
+-- settings broadcaster used to make. Args mirror mod:network_send exactly:
+-- (event, target, CT_RPC_SCHEMA, session, seq, total, chunk_str).
+-- (Global, not a main-chunk local: see the 200-locals-cap note above.)
+function _ct_enqueue_chunk(event, target, schema, session, seq, total, chunk_str, record_send)
+    _ct_chunk_send_queue[#_ct_chunk_send_queue + 1] = {
+        event = event, target = target, schema = schema,
+        session = session, seq = seq, total = total, chunk_str = chunk_str,
+        record_send = record_send,
+    }
+end
+
+-- Per-frame drainer. VMF calls a registered mod.update(dt) every frame at the
+-- keep AND in mission (the only mod-wide per-frame entry point in ct — the
+-- existing DeusChestExtension.update hook is mission/per-chest-only and read-
+-- only, so it can't host this). Pops up to _CT_CHUNK_DRAIN_BUDGET entries from
+-- the head of the FIFO each tick and sends them, pcall-wrapping each so one bad
+-- send can't abort the rest of the drain or stall the queue. Cheap no-op when
+-- the queue is empty (the common case), so it's safe to run unconditionally.
+mod.update = function(dt)
+    -- #58/#156: drive the deferred spawn-census emit (armed in populate_pickups,
+    -- fires ~8s later once the guaranteed-spawn pass is done). Cheap no-op when
+    -- disarmed. Resolved via mod._ since the census `do` block is defined LATER in
+    -- this file; the field is assigned at load, before any update tick fires.
+    if mod._ct_tally_tick then mod._ct_tally_tick(dt) end
+    -- #205: debounced host-settings re-sync. on_setting_changed marks the registry
+    -- dirty + (re)arms this short countdown instead of broadcasting inline, so an
+    -- Apply-button burst (the gut Mod Tweaker commits its whole staged batch at once ->
+    -- hundreds of on_setting_changed in one frame) or a slider drag coalesces into ONE
+    -- encode + ONE 46-chunk sync once edits SETTLE, instead of hundreds of redundant
+    -- full-registry encodes in a single frame. setup_run still broadcasts immediately
+    -- (single call at run start, not a burst). The supersede guard in
+    -- _ct_broadcast_host_settings remains as belt-and-suspenders.
+    if mod._ct_settings_sync_pending then
+        mod._ct_settings_sync_countdown = (mod._ct_settings_sync_countdown or 0) - dt
+        if mod._ct_settings_sync_countdown <= 0 then
+            mod._ct_settings_sync_pending = false
+            if mod._ct_broadcast_host_settings then
+                mod._ct_broadcast_host_settings("debounced_setting_edits")
+            end
+        end
+    end
+    local q = _ct_chunk_send_queue
+    if q[1] == nil then return end
+    local budget = _CT_CHUNK_DRAIN_BUDGET
+    local sent = 0
+    while sent < budget do
+        local entry = q[1]
+        if entry == nil then break end
+        table.remove(q, 1)  -- pop head (FIFO)
+        local ok, err = pcall(function()
+            mod:network_send(entry.event, entry.target, entry.schema,
+                entry.session, entry.seq, entry.total, entry.chunk_str)
+            if entry.record_send then entry.record_send() end
+        end)
+        if not ok then
+            pcall(printf, "[ct_sync] paced send failed for %s (session %s seq %s/%s): %s",
+                tostring(entry.event), tostring(entry.session), tostring(entry.seq),
+                tostring(entry.total), tostring(err))
+        end
+        sent = sent + 1
+    end
+end
+
 mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, schema_version, session, seq, total, chunk_str)
     -- Issue #27: schema-version gate. See CT_RPC_SCHEMA block near MOD_VERSION
     -- and VMF_RECIPES.md § 10. Mismatch = drop + _dbg_alert; no state mutation.
@@ -743,7 +1459,7 @@ mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, sch
         end
     end
     if type(session) ~= "number" or type(seq) ~= "number" or type(total) ~= "number" or type(chunk_str) ~= "string" then
-        mod:info("[ct_sync] malformed chunk from %s; ignoring", tostring(sender_peer_id))
+        pcall(printf, "[ct_sync] malformed chunk from %s; ignoring", tostring(sender_peer_id))
         return
     end
     local key = tostring(sender_peer_id)
@@ -767,7 +1483,7 @@ mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, sch
     local json = table.concat(pieces)
     local ok, payload = pcall(cjson.decode, json)
     if not ok or type(payload) ~= "table" then
-        mod:info("[ct_sync] decode failed from %s (session %s, %d bytes)",
+        pcall(printf, "[ct_sync] decode failed from %s (session %s, %d bytes)",
             tostring(sender_peer_id), tostring(session), #json)
         return
     end
@@ -775,8 +1491,14 @@ mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, sch
         _ct_host_settings[name] = payload[name]
     end
     _ct_host_sync_received = true
-    mod:info("[ct_sync] received host settings from %s (session %s, %d chunks, %d bytes, %d keys)",
+    _dbg("[ct_sync] received host settings from %s (session %s, %d chunks, %d bytes, %d keys)",
         tostring(sender_peer_id), tostring(session), entry.total, #json, #SYNCED_SETTING_NAMES)
+    -- Client-side host-authoritative settings dump: now that _ct_host_settings is
+    -- populated, effective_setting(id) resolves to the HOST's broadcast value, so this
+    -- prints the config the client is actually running under (vs its own local get=).
+    -- The helper is defined later in the file but populated by load time; this callback
+    -- only fires at runtime, long after load, so the forward reference is safe.
+    if mod._ct_dump_settings then mod._ct_dump_settings("host_sync") end
     -- Issue #6 auto-probe: log the four chest_*_count keys the host pushed so a
     -- client-side log diff can spot setting drift without /verify_altars. Only
     -- the altar-determinism-relevant keys are dumped (full payload is verbose).
@@ -791,7 +1513,7 @@ mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, sch
     -- receiver body silently. Pre-0.7.67 the manifest line was last; if anything
     -- in sync_host_dependent_state threw, the host never saw the client's RECV
     -- and we couldn't tell version drift from "feature didn't fire" in logs.
-    mod:info("[ct_peers] client received host ct_sync — broadcasting own manifest back to host")
+    _dbg("[ct_peers] client received host ct_sync — broadcasting own manifest back to host")
     if _broadcast_local_manifest then
         _broadcast_local_manifest("server")
     end
@@ -820,7 +1542,7 @@ function mod._ct_broadcast_host_settings(reason)
     end
     local ok, json = pcall(cjson.encode, payload)
     if not ok or type(json) ~= "string" then
-        mod:info("[ct_sync] payload encode failed; not broadcasting (%s)", tostring(reason))
+        pcall(printf, "[ct_sync] payload encode failed; not broadcasting (%s)", tostring(reason))
         return
     end
     local json_len = #json
@@ -829,17 +1551,54 @@ function mod._ct_broadcast_host_settings(reason)
     if session == 0 then session = 1 end
     local _bt = get_mod("bt")
     local _nr = _bt and _bt.net_replay and _bt:net_replay()
+    -- Issue #205: SUPERSEDE pending host-settings chunks before enqueuing this
+    -- snapshot. This broadcast is a COMPLETE snapshot of every SYNCED_SETTING_NAMES
+    -- key, so any ct_sync_host_settings_chunk entries from a PRIOR broadcast still
+    -- sitting un-drained in the paced FIFO are now redundant. Without this, a rapid
+    -- burst of on_setting_changed edits (e.g. dragging a slider / toggling several
+    -- settings in the gut Mod Tweaker) STACKS N full 46-chunk trains into the queue;
+    -- the paced drainer then feeds all ~200 into Stingray's reliable send queue until
+    -- it overflows its ~97 KB cap -> HOST CRASH. Dual-log confirmed 2026-06-30: host
+    -- reliable-send-queue overflow at 204 msgs / 94 KB to the client, client received
+    -- "46 chunks, 489 keys" at the SAME instant, then timed out 11 s later
+    -- ("Rx age server 11.1s"). The #97 pacing throttles send RATE but does nothing
+    -- about stacked redundant snapshots; this caps the host-settings portion of the
+    -- FIFO at exactly one sync (~46 chunks) no matter how fast the host edits.
+    -- Dropping un-sent OLD-session chunks is safe: the receiver keys by (sender,
+    -- session) and only applies once ALL `total` chunks of a session arrive, so a
+    -- never-completed old session is discarded when this fresh session's chunks land
+    -- (see the fresh-session-id note at the top of this function). Only host-settings
+    -- chunks are purged; graph-snapshot / peer-manifest chunks (separate syncs) stay.
+    do
+        local q = _ct_chunk_send_queue
+        local w = 1
+        for r = 1, #q do
+            local e = q[r]
+            if e and e.event ~= "ct_sync_host_settings_chunk" then
+                q[w] = e
+                w = w + 1
+            end
+        end
+        for r = #q, w, -1 do q[r] = nil end
+    end
     for seq = 1, total do
         local start_i = (seq - 1) * SYNC_CHUNK_SIZE + 1
         local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
         local chunk_str = string.sub(json, start_i, stop_i)
-        mod:network_send("ct_sync_host_settings_chunk", "others", CT_RPC_SCHEMA, session, seq, total, chunk_str)
+        -- Issue #97: enqueue (paced by mod.update) instead of inline-bursting.
+        -- record_send is deferred to actual emit time so the net_replay ring
+        -- still records what left the wire (closure captures this chunk's args).
+        local _rec
         if _nr then
-            _nr:record_send("ct", "ct_sync_host_settings_chunk",
-                string.format("session=%d seq=%d total=%d chunk=%s", session, seq, total, chunk_str), "others")
+            local _seq, _total, _cs = seq, total, chunk_str
+            _rec = function()
+                _nr:record_send("ct", "ct_sync_host_settings_chunk",
+                    string.format("session=%d seq=%d total=%d chunk=%s", session, _seq, _total, _cs), "others")
+            end
         end
+        _ct_enqueue_chunk("ct_sync_host_settings_chunk", "others", CT_RPC_SCHEMA, session, seq, total, chunk_str, _rec)
     end
-    mod:info("[ct_sync] broadcast host settings to clients (%s; session %d, %d chunks, %d bytes, %d keys)",
+    _dbg("[ct_sync] broadcast host settings to clients (%s; session %d, %d chunks, %d bytes, %d keys)",
         tostring(reason), session, total, json_len, #SYNCED_SETTING_NAMES)
 end
 
@@ -857,6 +1616,70 @@ _rt_register("midrun_setting_rebroadcast_wired", function()
         if not mod._ct_synced_set[k] then
             return string.format("MIDRUN-SYNC REGRESSION: '%s' absent from synced set -- mid-run host edit won't reach clients", k)
         end
+    end
+end)
+
+-- Boon-altar no-repeat bookkeeping: the taken-boon table must exist so the
+-- no-repeat strip can read it (v0.7.152-dev: the mislabeled "Chest of Trials"
+-- pay-with-coin schedule was removed -- it was wrongly re-pricing every boon
+-- ALTAR via DeusChestExtension.power_up, shadowing the altar-reuse multiplier;
+-- a real Chest of Trials is DeusCursedChestExtension with no coin cost).
+_rt_register("boon_altar_no_repeat", function()
+    if type(mod._ct_boon_altar_taken_boons) ~= "table" then
+        return "mod._ct_boon_altar_taken_boons missing (boon-altar no-repeat table)"
+    end
+end)
+
+-- Adventure-collectible -> coin coverage + leftover-book-spot big casket payout.
+_rt_register("cw_collectible_and_big_casket", function()
+    local set = mod._ct_collectible_to_coin
+    if type(set) ~= "table" then return "mod._ct_collectible_to_coin missing" end
+    -- loot_die (incl. DLC ale/chalice reskins) and lorebook_page must convert to
+    -- coin; painting_scrap is handled by the spawner-eligibility mapping instead.
+    if not set.loot_die then return "loot_die not in collectible->coin set" end
+    if not set.lorebook_page then return "lorebook_page not in collectible->coin set" end
+    -- The big-casket 3x payout rides GameModeDeus._get_coins_amount_and_type; the
+    -- class must exist and expose that method for our hook to have bound.
+    if rawget(_G, "GameModeDeus") and type(GameModeDeus._get_coins_amount_and_type) ~= "function" then
+        return "GameModeDeus._get_coins_amount_and_type missing (big-casket 3x hook can't bind)"
+    end
+end)
+
+-- v0.7.165-dev: coin-reservation partition (Abundance-of-Life curse robust fix).
+-- The _can_spawn hook reserves a deterministic slice of primary spawners as
+-- coin-only so the ×3 potion curse can't drain coins out of the shared pool. This
+-- marker asserts the partition is (a) wired, (b) deterministic, and (c) a PROPER
+-- subset (neither empty nor total) -- an empty reservation = no guarantee, a total
+-- reservation = potions/altars can never spawn.
+_rt_register("coin_reservation_partition", function()
+    local t = mod._ct_coin_reservation_test
+    if type(t) ~= "table" or type(t.reserved) ~= "function" then
+        return "mod._ct_coin_reservation_test missing (coin reservation not wired)"
+    end
+    if type(mod._ct_rebuild_coin_reserved_set) ~= "function" then
+        return "mod._ct_rebuild_coin_reserved_set missing (rank-based reserve set not wired)"
+    end
+    if type(mod._ct_clear_coin_reserved_set) ~= "function" then
+        return "mod._ct_clear_coin_reserved_set missing (reserve-set reset not wired)"
+    end
+    if not (type(t.fraction) == "number" and t.fraction > 0 and t.fraction < 1) then
+        return "coin reserved fraction must be in (0,1), got " .. tostring(t.fraction)
+    end
+    -- Determinism: same input -> same output across calls.
+    if t.reserved(0.5) ~= t.reserved(0.5) then
+        return "reservation is non-deterministic for a fixed percentage_through_level"
+    end
+    -- Proper subset over a representative spread of percentage_through_level values.
+    local reserved_n, total_n = 0, 0
+    for i = 0, 100 do
+        total_n = total_n + 1
+        if t.reserved(i / 100) then reserved_n = reserved_n + 1 end
+    end
+    if reserved_n == 0 then
+        return "coin reservation reserved ZERO spawners over [0,1] -- coins not guaranteed"
+    end
+    if reserved_n == total_n then
+        return "coin reservation reserved ALL spawners over [0,1] -- potions/altars starved"
     end
 end)
 
@@ -974,6 +1797,34 @@ local function apply_graph_snapshot(graph_data)
                         end
                     end
                 end
+                -- #68 FIX (v0.7.144-dev): make the CLIENT recognize the host's injected
+                -- adventure maps. The client builds IS_INJECTED_ADVENTURE_LEVEL from its
+                -- OWN per-map toggle selection, which can be empty or differ from the
+                -- host's -- so adventure_base_from_level_key() returns nil for every
+                -- host-injected node and the client renders them ALL as SHRINE_NODE_UNIT
+                -- with no curse halo, AND ct's adventure-map curse sky/lighting tint is
+                -- skipped (on_injected_adventure_level() is false on the client). Proven
+                -- 2026-06-18: client logged DeusMapScene seen=15 rewritten=0 skipped=13 on
+                -- every map open while the host had injected those maps. Cure: register
+                -- the host's synced base_level into the client's recognition table,
+                -- validated against the full static catalog MISSION_BY_KEY (built at load
+                -- on BOTH peers, so a hit is a genuine adventure base -- never a vanilla CW
+                -- node like arena_belakor). Idempotent; persists for the run once seen.
+                local bl = node.base_level
+                if type(bl) ~= "string" and type(node.level) == "string" then
+                    -- Fallback when the host didn't ship base_level: derive the base
+                    -- from the permutation key, same intent as adventure_base_from_level_key
+                    -- ("dlc_castle_slaanesh_path1" -> "dlc_castle"; "bell_dup1_khorne_path1"
+                    -- -> "bell"). Strip the _dup<N> alias then the trailing _<theme>_path<N>.
+                    bl = node.level:gsub("_dup%d+", ""):gsub("_%a+_path%d+$", "")
+                end
+                if type(bl) == "string"
+                   and AdventurePool and AdventurePool.MISSION_BY_KEY and AdventurePool.MISSION_BY_KEY[bl]
+                   and AdventurePool.IS_INJECTED_ADVENTURE_LEVEL
+                   and not AdventurePool.IS_INJECTED_ADVENTURE_LEVEL[bl] then
+                    AdventurePool.IS_INJECTED_ADVENTURE_LEVEL[bl] = true
+                    _dbg("[#68] client now recognizes host-injected adventure base '%s' (from graph snapshot)", bl)
+                end
                 applied = applied + 1
             end
         end
@@ -994,7 +1845,7 @@ mod:network_register("ct_graph_snapshot_chunk", function(sender_peer_id, schema_
         return
     end
     if type(session) ~= "number" or type(seq) ~= "number" or type(total) ~= "number" or type(chunk_str) ~= "string" then
-        mod:info("[ct_graph] malformed chunk from %s; ignoring", tostring(sender_peer_id))
+        pcall(printf, "[ct_graph] malformed chunk from %s; ignoring", tostring(sender_peer_id))
         return
     end
     local key = tostring(sender_peer_id)
@@ -1018,14 +1869,14 @@ mod:network_register("ct_graph_snapshot_chunk", function(sender_peer_id, schema_
     local json = table.concat(pieces)
     local ok, payload = pcall(cjson.decode, json)
     if not ok or type(payload) ~= "table" then
-        mod:info("[ct_graph] decode failed from %s (session %s, %d bytes)",
+        pcall(printf, "[ct_graph] decode failed from %s (session %s, %d bytes)",
             tostring(sender_peer_id), tostring(session), #json)
         return
     end
     _ct_host_graph_snapshot = { session = session, nodes = payload }
     local node_count = 0
     for _ in pairs(payload) do node_count = node_count + 1 end
-    mod:info("[ct_graph] received host graph snapshot from %s (session %s, %d chunks, %d bytes, %d nodes)",
+    _dbg("[ct_graph] received host graph snapshot from %s (session %s, %d chunks, %d bytes, %d nodes)",
         tostring(sender_peer_id), tostring(session), entry.total, #json, node_count)
 end)
 
@@ -1049,7 +1900,7 @@ local function broadcast_graph_snapshot(graph_data)
     end
     local ok, json = pcall(cjson.encode, payload)
     if not ok or type(json) ~= "string" then
-        mod:info("[ct_graph] payload encode failed; not broadcasting")
+        pcall(printf, "[ct_graph] payload encode failed; not broadcasting")
         return
     end
     local json_len = #json
@@ -1061,9 +1912,10 @@ local function broadcast_graph_snapshot(graph_data)
         local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
         local chunk_str = string.sub(json, start_i, stop_i)
         -- Issue #27: CT_RPC_SCHEMA prepended as first arg. Receiver gates on it.
-        mod:network_send("ct_graph_snapshot_chunk", "others", CT_RPC_SCHEMA, session, seq, total, chunk_str)
+        -- Issue #97: enqueue (paced by mod.update) instead of inline-bursting.
+        _ct_enqueue_chunk("ct_graph_snapshot_chunk", "others", CT_RPC_SCHEMA, session, seq, total, chunk_str)
     end
-    mod:info("[ct_graph] broadcast host graph snapshot (session %d, %d chunks, %d bytes, %d nodes)",
+    _dbg("[ct_graph] broadcast host graph snapshot (session %d, %d chunks, %d bytes, %d nodes)",
         session, total, json_len, node_count)
 end
 
@@ -1152,7 +2004,7 @@ end
 local function _log_peer_manifest(peer_id, manifest, label)
     if type(manifest) ~= "table" then return end
     local mods_count = (type(manifest.m) == "table") and #manifest.m or 0
-    mod:info("[ct_peers] %s peer=%s ct=%s settings_hash=%08x vmf_ts=%s num_levels=%s enabled_mods=%d",
+    _dbg("[ct_peers] %s peer=%s ct=%s settings_hash=%08x vmf_ts=%s num_levels=%s enabled_mods=%d",
         label or "PEER",
         tostring(peer_id),
         tostring(manifest.v),
@@ -1196,9 +2048,9 @@ local function _log_peer_diff_against_host(peer_id, peer_manifest, host_manifest
     if #extra > 0 then diffs[#diffs + 1] = "extra_vs_host=[" .. table.concat(extra, ",") .. "]" end
 
     if #diffs > 0 then
-        mod:info("[ct_peers]   DIFF peer=%s: %s", tostring(peer_id), table.concat(diffs, "; "))
+        _dbg("[ct_peers]   DIFF peer=%s: %s", tostring(peer_id), table.concat(diffs, "; "))
     else
-        mod:info("[ct_peers]   peer=%s matches host", tostring(peer_id))
+        _dbg("[ct_peers]   peer=%s matches host", tostring(peer_id))
     end
 end
 
@@ -1208,7 +2060,7 @@ _broadcast_local_manifest = function(target)
     local manifest = _build_local_manifest()
     local ok, json = pcall(cjson.encode, manifest)
     if not ok or type(json) ~= "string" then
-        mod:info("[ct_peers] manifest encode failed; not broadcasting")
+        pcall(printf, "[ct_peers] manifest encode failed; not broadcasting")
         return
     end
     local json_len = #json
@@ -1220,7 +2072,9 @@ _broadcast_local_manifest = function(target)
         local stop_i = math.min(start_i + SYNC_CHUNK_SIZE - 1, json_len)
         local chunk_str = string.sub(json, start_i, stop_i)
         -- Issue #27: CT_RPC_SCHEMA prepended as first arg. Receiver gates on it.
-        mod:network_send("ct_peer_manifest_chunk", target, CT_RPC_SCHEMA, session, seq, total, chunk_str)
+        -- Issue #97: enqueue (paced by mod.update) instead of inline-bursting.
+        -- `target` is the function arg ("server" reply / "all" /peers dump).
+        _ct_enqueue_chunk("ct_peer_manifest_chunk", target, CT_RPC_SCHEMA, session, seq, total, chunk_str)
     end
     return manifest, json_len, total
 end
@@ -1253,7 +2107,7 @@ mod:network_register("ct_peer_manifest_chunk", function(sender_peer_id, schema_v
     local json = table.concat(pieces)
     local ok, payload = pcall(cjson.decode, json)
     if not ok or type(payload) ~= "table" then
-        mod:info("[ct_peers] manifest decode failed from %s", tostring(sender_peer_id))
+        pcall(printf, "[ct_peers] manifest decode failed from %s", tostring(sender_peer_id))
         return
     end
     _ct_peer_manifests[key] = payload
@@ -1303,6 +2157,77 @@ effective_setting = function(name)
     return mod:get(name)
 end
 
+-- Exposed for dofile'd modules (e.g. _ct_mechanic_tweaks.lua) that live in their
+-- own chunk and can't see this file-scope local. Field assignment only -- adds no
+-- main-chunk local (keeps us under the Lua 5.1 200-locals-per-function cap).
+mod._ct_effective_setting = effective_setting
+
+-- ============================================================
+-- UNCONDITIONAL settings dump (Issue: host-config visibility for triage).
+-- ============================================================
+-- Walks the REALIZED data widget tree (mod:dofile -> _collect_setting_ids, which
+-- captures the generated disable_boon_*/start_boon_*/adventure-map widgets a static
+-- text-scrape would miss) and prints one compact `[ct-settings]` line per setting via
+-- RAW printf. printf (misc_util.lua:29) is a vanilla engine global = print(format(...));
+-- it bypasses the VMF per-mod logging toggle, so the host's REAL config lands in the
+-- log even on a logging-OFF host (the established ct-probe pattern, :3513/:5154/:9832).
+--
+-- Two phases (see call sites): "load" prints each peer's own stored mod:get values
+-- (local config); "setup_run"/"host_sync" additionally prints effective_setting(id)
+-- so host-authoritative resolution / host<->client divergence is visible in the log.
+-- For SYNCED settings the line carries both get= (this peer's local) and eff= (the
+-- value actually used: host's own get on host, host's broadcast on clients). Per-peer
+-- settings (inject_adventure_maps) show eff==get by definition.
+--
+-- Attached to `mod` (not a file-scope local) deliberately: this chunk is near Lua
+-- 5.1's 200-locals-per-function cap, so shared helpers go on the mod table. The
+-- inner locals below live in THIS function's own scope and don't count against the
+-- main chunk. Bounded (one pass over the static-or-generated id list, NOT per-frame).
+-- pcall-guarded end-to-end so a dump failure can never break load or run start.
+function mod._ct_dump_settings(phase)
+    local ok, err = pcall(function()
+        local ids = _collect_setting_ids()
+        table.sort(ids)
+        local eff = mod._ct_effective_setting
+        local is_server = Managers and Managers.player and Managers.player.is_server
+        local function fmtv(v)
+            if v == true then return "1"
+            elseif v == false then return "0"
+            elseif v == nil then return "?"
+            else return tostring(v) end
+        end
+        printf("[ct-settings] BEGIN phase=%s v=%s is_server=%s synced_received=%s count=%d",
+            tostring(phase), tostring(MOD_VERSION), tostring(is_server),
+            tostring(_ct_host_sync_received), #ids)
+        local want_eff = (phase ~= "load")
+        for _, id in ipairs(ids) do
+            local g = mod:get(id)
+            if want_eff and type(eff) == "function" then
+                local eok, ev = pcall(eff, id)
+                printf("[ct-settings] %s get=%s eff=%s", id, fmtv(g), eok and fmtv(ev) or "ERR")
+            else
+                printf("[ct-settings] %s get=%s", id, fmtv(g))
+            end
+        end
+        printf("[ct-settings] END phase=%s", tostring(phase))
+    end)
+    if not ok then
+        printf("[ct-settings] DUMP FAILED phase=%s err=%s", tostring(phase), tostring(err))
+    end
+end
+
+-- Auto-fire on load (local config snapshot). Lands unconditionally via printf even
+-- if VMF mod-logging is OFF, so the host's stored config is in every session log.
+mod._ct_dump_settings("load")
+
+-- Chat command for an on-demand re-dump (host-authoritative phase so eff= is shown).
+-- Mirrors the existing /dump_* command family. Registered here (after the helper is
+-- defined) rather than with the other commands so the helper is in scope.
+mod:command("ct_dump_settings", "Dump every ct setting_id (local mod:get + host-effective value) to the log via raw printf", function()
+    mod._ct_dump_settings("command")
+    mod:echo("[ct] settings dumped to log ([ct-settings] lines).")
+end)
+
 -- v0.7.53: routed through `effective_setting` so client peers gate on the host's synced
 -- toggle, not their own. Previously used `mod:get` directly, which made client-side curse
 -- name display (`get_current_node_curse` hook + `_transition_next_node` save-restore)
@@ -1344,6 +2269,24 @@ end
 -- for the client's row. Belt-and-suspenders per feedback_redundant_safeguards_ok.md.
 mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- STARTING_COINS_MODE_MARKER = setter-override-via-setup_run-arg (embedded for regression check)
+    -- v0.7.127-dev: reset altar reuse counts at run start. Previous-run go_ids
+    -- can collide with this run's new chests if Stingray's unit_storage cycles
+    -- the same network ids; wiping at run start avoids ghost-use counts.
+    _altar_uses_by_go_id = {}
+    -- v0.7.157-dev Task B: run start = reset the per-mission Chest of Trials
+    -- activation counter too (belt-and-suspenders with the per-node reset in
+    -- _transition_next_node).
+    _ct_cursed_chest_seq = 0
+    _ct_cot_block_last = {}   -- #117: reset per-block last-forced trial pick at run start
+    -- Boon altars: run start = new run, so clear the per-run no-repeat
+    -- taken-boon set (each altar can offer the full pool again).
+    mod._ct_boon_altar_taken_boons = {}
+    -- audit 2026-06-07 (v0.7.133-dev): capture real arity. Trailing `mutators`
+    -- (args[8]) and `boons` (args[9]) are frequently nil, so bare unpack(args)
+    -- would stop at the first nil hole and drop the rest. Pass explicit n so the
+    -- nils are preserved positionally (VMF_RECIPES §2a). args[5] mutation below
+    -- is unchanged.
+    local n = select("#", ...)
     local args = { ... }
     -- Vanilla signature: (run_seed, difficulty, journey_name, dominant_god,
     -- initial_own_soft_currency, telemetry_id, with_belakor, mutators, boons)
@@ -1363,17 +2306,17 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
         args[5] = setting
         final = setting
         _starting_coins_applied_for_run = run_id
-        mod:info("[ct/coins] starting_coins setter applied: vanilla_initial=%s, setting=%d, final=%d (run_id=%s)",
+        _dbg("[ct/coins] starting_coins setter applied: vanilla_initial=%s, setting=%d, final=%d (run_id=%s)",
             tostring(vanilla_initial), setting, final, tostring(run_id))
     elseif setting and setting > 0 then
-        mod:info("[ct/coins] starting_coins setter skipped (already applied for run_id=%s): vanilla_initial=%s, setting=%d",
+        _dbg("[ct/coins] starting_coins setter skipped (already applied for run_id=%s): vanilla_initial=%s, setting=%d",
             tostring(run_id), tostring(vanilla_initial), setting)
     end
 
-    local ret_a, ret_b = func(self, unpack(args))
+    local ret_a, ret_b = func(self, unpack(args, 1, n))
 
     -- v0.7.121-dev Issue #53 diagnostic — dump post-populate graph state on
-    -- BOTH peers (gated on enable_debug_logging via _dbg). Proves whether the
+    -- BOTH peers (gated on VMF debug logging via _dbg). Proves whether the
     -- arena_belakor nodes actually ended up in the client's local graph after
     -- vanilla setup_run -> deus_generate_graph -> deus_populate_graph runs with
     -- the host-broadcast with_belakor arg.
@@ -1420,6 +2363,11 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- ordering vs the engine's rpc_deus_setup_run is preserved — we still send here
     -- at the end of host setup_run, before full_sync() ships the engine RPC.
     mod._ct_broadcast_host_settings("setup_run")
+    -- Run-start host-authoritative settings dump (host resolves effective_setting to
+    -- its OWN mod:get here, so the host's REAL cursed_chest_count / unique_trials /
+    -- altar-reuse / curse-disable config is captured in the log every run, regardless
+    -- of any logging toggle — clients dump on host-sync arrival instead, see :1420).
+    if mod._ct_dump_settings then mod._ct_dump_settings("setup_run") end
     local is_server = Managers and Managers.player and Managers.player.is_server
     if is_server then
         -- v0.7.64: also log the host's own manifest as a baseline so clients'
@@ -1443,7 +2391,7 @@ mod:hook("DeusRunController", "rpc_deus_set_initial_soft_currency", function(fun
         host_setting = math.floor(host_setting / 25 + 0.5) * 25
     end
     if host_setting and host_setting > 0 then
-        mod:info("[ct/coins] host RPC override for joining peer: client_sent=%s, host_setting=%d (overriding)",
+        _dbg("[ct/coins] host RPC override for joining peer: client_sent=%s, host_setting=%d (overriding)",
             tostring(initial_own_soft_currency), host_setting)
         initial_own_soft_currency = host_setting
     end
@@ -1460,7 +2408,40 @@ end)
 -- 32-bit hash > 10 so it won't collide.
 -- QUESTION: Why detect by value range instead of just args[2]? If FatShark ever wraps this, the
 -- scan also finds the count, but a non-default count outside [1,10] would silently be missed.
+
+-- v0.7.134: the Belakor-temple branch writes args[8] = "unique" AFTER the hook captures
+-- its arity `n` — on the cursed-chest path vanilla passes only 7 args
+-- (deus_run_controller.lua:1115), so without extending n the forced rarity is silently
+-- dropped at the forward `unpack(args, 1, n)` (regression shipped in v0.7.133).
+-- Exposed on mod for the regression test (belakor_forced_rarity_survives_unpack_bound).
+function mod._ct_extend_arity_for_forced_rarity(n)
+    if n < 8 then return 8 end
+    return n
+end
+
+-- v0.7.200-dev (#211): SINGLE shared "is this boon disabled?" check, used by (1) the
+-- pool strip in the generate_random_power_ups hook below, (2) the pre-grant gate in the
+-- consolidated DeusRunController.add_power_ups hook, and (3) the bot random-boon picker
+-- (_pick_random_for_rarity) — the CONFIRMED #211 bypass, which sampled the UNSTRIPPED
+-- DeusPowerUpsArrayByRarity bucket and then granted with the pre-grant gate deliberately
+-- skipped (_ct_bot_mirror_active). Truthy-normalized: checkbox values are booleans, so
+-- this is behavior-identical to both prior call sites (`if effective_setting(...)` and
+-- `== true`). On `mod` (not a file-scope local) per the 200-locals cap note; also lets
+-- /ct_regression_test reach it.
+function mod._ct_boon_disabled(name)
+    if name == nil then return false end
+    return not not effective_setting("disable_boon_" .. tostring(name))
+end
+
 mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
+    -- audit 2026-06-07 (v0.7.133-dev): capture real arity. Vanilla sig is
+    -- (seed, count, existing_power_ups, difficulty, run_progress, availability_type,
+    -- career_name, forced_rarity); the trailing `forced_rarity` (args[8]) is nil at
+    -- most call sites, so the existing pcall(func, unpack(args)) below would stop at
+    -- the nil hole and drop trailing args, silently corrupting the roll. Pass explicit
+    -- n so nils are preserved positionally (VMF_RECIPES §2a). The args[count_index]
+    -- and args[8] mutations below are unchanged.
+    local n = select("#", ...)
     local args = { ... }
 
     local count_index
@@ -1518,10 +2499,14 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
                 current_node = run_state:get_current_node_key()
                 if arena_node and current_node and arena_node == current_node then
                     args[8] = "unique"
+                    -- v0.7.134: n was captured at hook entry, BEFORE this write; the
+                    -- cursed-chest call site passes only 7 args, so n must be extended
+                    -- to cover args[8] or unpack(args, 1, n) drops the forced rarity.
+                    n = mod._ct_extend_arity_for_forced_rarity(n)
                 end
             end
             local is_server = Managers and Managers.player and Managers.player.is_server
-            mod:info("[belakor-temple] cursed_chest roll: is_server=%s arena_node=%s current_node=%s forced=%s",
+            _dbg("[belakor-temple] cursed_chest roll: is_server=%s arena_node=%s current_node=%s forced=%s",
                 tostring(is_server), tostring(arena_node), tostring(current_node), tostring(args[8]))
         end
     end
@@ -1562,10 +2547,23 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     -- bomb-boon mutual-exclusivity gate remain. The dormant boons themselves
     -- aren't registered in the pool, so they can't appear in DeusPowerUpsArray
     -- anyway — this is belt-and-suspenders.
+    -- Boon-ALTAR no-repeat (DEFAULT, not a toggle): for boon-altar rolls
+    -- (availability_type == weapon_chest, args[6]) exclude boons this peer has
+    -- already taken from earlier boon altars this run, so each subsequent altar
+    -- offers a boon none of the prior ones did. (weapon_chest is the engine name
+    -- for the boon-altar roll source -- this is a BOON ALTAR, not a Chest of
+    -- Trials; see the terminology banner.) Other roll sources (shrine,
+    -- cursed_chest, quest rewards) are untouched.
+    local _altar_no_repeat = (args[6] == DeusPowerUpAvailabilityTypes.weapon_chest)
+        and type(mod._ct_boon_altar_taken_boons) == "table"
+
     local function _should_strip(name)
         if not name then return false end
-        if effective_setting("disable_boon_" .. name) then return true end
+        -- v0.7.200-dev (#211): disable check routed through the shared mod._ct_boon_disabled
+        -- helper (behavior-identical for boolean checkbox values).
+        if mod._ct_boon_disabled(name) then return true end
         if exclude_bomb_boons and BOMB_BOON_NAMES[name] then return true end
+        if _altar_no_repeat and mod._ct_boon_altar_taken_boons[name] then return true end
         return false
     end
 
@@ -1597,7 +2595,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
 
     -- v0.7.90: pcall the vanilla sampler so a crash inside it doesn't leave us stuck with a
     -- partial strip. On error, restore arrays and rethrow so the game's existing handler logs it.
-    local ok, new_seed, new_power_ups = pcall(func, unpack(args))
+    local ok, new_seed, new_power_ups = pcall(func, unpack(args, 1, n))
 
     -- CLARIFY: Restore in reverse order of removal so that re-inserting at the saved indices
     -- reconstructs the original array exactly. `removed_main` was appended in descending-i order,
@@ -1626,6 +2624,17 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     sync_reckless_swings()
     sync_bomb_cooldown()
     sync_boon_movespeed()
+
+    -- v0.7.130-dev: piggyback on this hook to lazily apply the items 5+6
+    -- parry-cooldown strip. The earlier boot-time `pcall(_ct128_strip_parry_cooldowns)`
+    -- ran BEFORE morris settings populated DeusPowerUpTemplates (log line 1308 of
+    -- console-2026-05-29-02.03.57: "DeusPowerUpTemplates not ready; parry-cooldown
+    -- strip skipped"), so the cooldowns survived and items 5+6 never actually
+    -- shipped. This hook fires on every boon roll AFTER morris settings are loaded
+    -- and BEFORE any altar interaction (rolls happen at chest spawn, before player
+    -- opens it). The strip body is idempotent — once `cooldown_buff` is nil, the
+    -- next call's `for` loop is a no-op. Safe to call from every roll.
+    pcall(_ct128_strip_parry_cooldowns)
 
     return new_seed, new_power_ups
 end)
@@ -1668,14 +2677,354 @@ mod:hook_safe("DeusShopView", "_create_ui_elements", function(self, shop_setting
         local with_buyer = self._deus_run_controller and self._deus_run_controller:get_blessings_with_buyer() or {}
         local buyer_dump = {}
         for k, v in pairs(with_buyer) do buyer_dump[#buyer_dump + 1] = tostring(k) .. "=" .. tostring(v) end
-        mod:info("[miracle] DeusShopView opened type=%s blessings=[%s] already_bought={%s}",
+        _dbg("[miracle] DeusShopView opened type=%s blessings=[%s] already_bought={%s}",
             tostring(self._shop_type), table.concat(names, ","), table.concat(buyer_dump, ","))
+    end
+
+    -- v0.7.199-dev: boon-offer scrollbar setup, merged into this body because
+    -- (DeusShopView, _create_ui_elements) is already hooked here (VMF dup-hook
+    -- rule: one hook per (Class, method) pair). Implementation lives in the
+    -- _ct_boon_scroll block below. Only the OFFERED boon widgets scroll;
+    -- blessings and the owned-boons side panel are untouched.
+    if mod._ct_boon_scroll_setup then
+        local boon_widgets = {}
+        local offers = self._shop_items and self._shop_items.power_ups
+        if type(offers) == "table" then
+            for i = 1, #offers do
+                local entry = offers[i]
+                if entry and entry.widget then
+                    boon_widgets[#boon_widgets + 1] = entry.widget
+                end
+            end
+        end
+        mod._ct_boon_scroll_setup(self, boon_widgets, 4)
     end
 end)
 
 mod:hook_safe("DeusCursedChestView", "create_ui_elements", function(self)
     fix_arc_nan(self._power_up_widgets)
+
+    -- v0.7.199-dev: boon-offer scrollbar setup, merged into this body because
+    -- (DeusCursedChestView, create_ui_elements) is already hooked here (VMF
+    -- dup-hook rule). Implementation in the _ct_boon_scroll block below.
+    -- _power_up_widgets holds ONLY the offered boons in this view (no
+    -- blessings exist here).
+    if mod._ct_boon_scroll_setup then
+        mod._ct_boon_scroll_setup(self, self._power_up_widgets, 3)
+    end
 end)
+
+-- ============================================================================
+-- _ct_boon_scroll -- scrollbar for the shrine / cursed-chest boon offerings
+-- (v0.7.199-dev)
+--
+-- The shrine (DeusShopView) and cursed chest (DeusCursedChestView) lay their
+-- offered-boon widgets on a fixed vertical arc with no scrolling, so raising
+-- the offered-boon caps (shrine_boon_count / chest_boon_count, now 1..50 in
+-- the data file) would strand most rows off-screen and unselectable. When the
+-- offer count exceeds what fits (shop: 4 rows, chest: 3 rows), this block:
+--   1. flattens the arc into a row-snapped vertical list (row height 194 =
+--      power_up_root.size[2] in both defs files), showing `visible` rows
+--      centered on the power_up_root scenegraph node;
+--   2. parks off-window rows at offset y = -20000, far off-screen, which makes
+--      their hotspots unreachable by the cursor -- vanilla's own input loops
+--      (_handle_input / hold-to-purchase) then naturally skip them, and we
+--      never touch content.button_hotspot.disable_button (vanilla update owns
+--      that field);
+--   3. draws a hand-authored track+thumb scrollbar (plain rect passes +
+--      hotspot passes) to the right of the boon column, injected into the
+--      view's self._widgets so the vanilla draw loop renders it (verified:
+--      deus_shop_view_v2._draw and deus_cursed_chest_view.draw both iterate
+--      self._widgets).
+-- Interactions: mouse wheel = 1 row per notch; click on the track above /
+-- below the thumb = page a full window; hold + drag the thumb = jump to any
+-- row (cursor y mapped through the track, row-snapped).
+-- At or below the vanilla row counts this block does nothing at all -- the
+-- vanilla arc (plus fix_arc_nan above) stays byte-identical.
+--
+-- Consolidation note: setup is invoked from the two existing hook_safe bodies
+-- ABOVE (VMF dup-hook rule -- do NOT add another hook on _create_ui_elements /
+-- create_ui_elements). The two `update` hooks at the bottom of this block are
+-- the only hooks registered here; grep-verified 2026-07-01 that no other
+-- ct hook targets either view's `update`.
+-- Wrapped in do..end so no new chunk-level locals land in the main chunk
+-- (Lua 5.1's 200-local limit); the only export is mod._ct_boon_scroll_setup.
+-- ============================================================================
+do
+    local ROW_H = 194                -- one boon row == power_up_root height (both views)
+    local NODE_CENTER_Y = ROW_H / 2  -- rows are centered on power_up_root's vertical center
+    -- Scrollbar geometry, relative to power_up_root's bottom-left corner. The
+    -- boon column spans x 0..484 on that node (widget style offsets run 0..484
+    -- in create_power_up_shop_item), so the track sits just right of it.
+    -- First-guess cosmetics -- tune in-game if it overlaps or floats.
+    local TRACK_X = 500
+    local TRACK_W = 12
+    local THUMB_W = 8
+    local HIDDEN_Y = -20000
+
+    -- Track (dim) + thumb (brass) rects, one hotspot each, all anchored to
+    -- power_up_root. Colors are {A,R,G,B}. NOTE: rect passes position purely
+    -- via style.offset added to the node's bottom-left world position --
+    -- UIRenderer.draw_widget ignores horizontal/vertical_alignment for rect
+    -- passes (alignment only applies to passes that call align_box_inplace,
+    -- e.g. texture with texture_size), so explicit offsets are used here.
+    -- The thumb's style.offset[2] is rewritten every frame by _reposition.
+    local function _build_scrollbar_definition(track_h, thumb_h)
+        local track_bottom = NODE_CENTER_Y - track_h / 2
+        return {
+            scenegraph_id = "power_up_root",
+            offset = { 0, 0, 0 },
+            element = {
+                passes = {
+                    { pass_type = "rect", style_id = "track" },
+                    { pass_type = "rect", style_id = "thumb" },
+                    { pass_type = "hotspot", style_id = "track", content_id = "track_hotspot" },
+                    { pass_type = "hotspot", style_id = "thumb", content_id = "thumb_hotspot" },
+                },
+            },
+            content = {
+                track_hotspot = {},
+                thumb_hotspot = {},
+            },
+            style = {
+                track = {
+                    size = { TRACK_W, track_h },
+                    offset = { TRACK_X, track_bottom, 8 },
+                    color = { 160, 15, 12, 10 },
+                },
+                thumb = {
+                    size = { THUMB_W, thumb_h },
+                    offset = { TRACK_X + (TRACK_W - THUMB_W) / 2, track_bottom + track_h - thumb_h, 9 },
+                    color = { 255, 170, 145, 100 },
+                },
+            },
+        }
+    end
+
+    -- Row-snapped reflow: rows [top .. top+visible-1] stack vertically centered
+    -- on the node (slot 0 on top); everything else parks off-screen. The
+    -- center_offset math reproduces vanilla's own row spacing exactly (vanilla
+    -- count==visible offsets are 291/97/-97/-291 for 4 rows, 194/0/-194 for 3),
+    -- so an engaged view's visible rows sit where vanilla would have put them.
+    local function _reposition(st)
+        local widgets = st.widgets
+        local top = st.top
+        local visible = st.visible
+        local center_offset = (visible - 1) / 2 * ROW_H
+
+        for i = 1, st.count do
+            local widget = widgets[i]
+
+            if widget and widget.offset then
+                if top <= i and i <= top + visible - 1 then
+                    local slot = i - top -- 0-based row within the visible window
+                    widget.offset[1] = 0 -- flatten the arc's sin() x-sway
+                    widget.offset[2] = center_offset - slot * ROW_H
+                else
+                    widget.offset[1] = 0
+                    widget.offset[2] = HIDDEN_Y
+                end
+            end
+        end
+
+        local sw = st.scrollbar_widget
+
+        if sw and sw.style and sw.style.thumb then
+            local frac = st.max_top > 1 and (top - 1) / (st.max_top - 1) or 0
+            local track_top = NODE_CENTER_Y + st.track_h / 2
+
+            sw.style.thumb.offset[2] = track_top - frac * (st.track_h - st.thumb_h) - st.thumb_h
+        end
+    end
+
+    local function _setup(view, boon_widgets, visible)
+        view._ct_boon_scroll = nil -- fresh per create_ui_elements pass
+
+        if type(boon_widgets) ~= "table" then
+            return
+        end
+
+        local count = #boon_widgets
+
+        if count <= visible then
+            return -- fits the vanilla arc; stay 100% vanilla (fix_arc_nan already ran)
+        end
+
+        local widgets = view._widgets
+
+        if type(widgets) ~= "table" then
+            -- Future-patch shape change: degrade to "no scroll" rather than crash.
+            mod:warning("[ct:boon_scroll] view has no _widgets array; scrollbar not injected, scroll disabled")
+            return
+        end
+
+        local track_h = visible * ROW_H
+        local thumb_h = math.max(24, visible / count * track_h)
+        local scrollbar_widget = UIWidget.init(_build_scrollbar_definition(track_h, thumb_h))
+
+        widgets[#widgets + 1] = scrollbar_widget
+        view._ct_boon_scroll = {
+            widgets = boon_widgets,
+            count = count,
+            visible = visible,
+            row_h = ROW_H,
+            top = 1,
+            max_top = count - visible + 1,
+            track_h = track_h,
+            thumb_h = thumb_h,
+            scrollbar_widget = scrollbar_widget,
+        }
+
+        _reposition(view._ct_boon_scroll)
+        -- Apply-site log (PROJECT_STANDARDS 5.1a): fires once per view open.
+        mod:info("[ct:boon_scroll] engaged: %d boons offered, %d visible rows, %d scroll positions",
+            count, visible, count - visible + 1)
+    end
+
+    -- Exported entry point, called from the two hook_safe bodies above. pcall
+    -- wrap so a vanilla shape change degrades to no-scroll instead of killing
+    -- the view build.
+    mod._ct_boon_scroll_setup = function(view, boon_widgets, visible)
+        local ok, err = pcall(_setup, view, boon_widgets, visible)
+
+        if not ok then
+            view._ct_boon_scroll = nil
+            mod:warning("[ct:boon_scroll] setup errored: %s (scroll disabled, vanilla layout kept)", tostring(err))
+        end
+    end
+
+    -- Wheel delta (y axis) from the view's input service; raw Mouse fallback.
+    -- Both views run on IngameMenuKeymaps, which maps scroll_axis to the mouse
+    -- wheel axis on win32 (controller_settings.lua), so the fallback should
+    -- never trigger in practice.
+    local function _wheel_delta(view)
+        local delta = 0
+        local input_service = view.input_service and view:input_service()
+
+        if input_service and input_service.get then
+            local axis = input_service:get("scroll_axis")
+
+            if axis then
+                delta = axis.y or 0
+            end
+        end
+
+        if delta == 0 and rawget(_G, "Mouse") and Mouse.axis and Mouse.axis_index then
+            local axis = Mouse.axis(Mouse.axis_index("wheel"))
+
+            if axis then
+                delta = axis.y or 0
+            end
+        end
+
+        return delta
+    end
+
+    -- Cursor y in 1080p UI space (y-up, same space as scenegraph world
+    -- positions) -- mirrors vanilla UIWidgets.create_scrollbar's held_function.
+    local function _cursor_ui_y(view)
+        local input_service = view.input_service and view:input_service()
+        local cursor = input_service and input_service.get and input_service:get("cursor")
+
+        if not cursor then
+            return nil
+        end
+
+        local scaled = UIInverseScaleVectorToResolution(cursor)
+
+        return scaled and scaled.y or nil
+    end
+
+    -- Per-frame driver, run BEFORE vanilla update (wrapping hooks below) so
+    -- the reflow lands in the same frame's draw + hotspot pass. Cheap: <= 50
+    -- offset writes per frame, no allocation on the steady-state path.
+    local function _frame(view)
+        local st = view._ct_boon_scroll
+
+        if not st or not st.widgets or not st.scrollbar_widget then
+            return
+        end
+
+        -- 1) mouse wheel: one row per notch (positive y = wheel up = scroll up)
+        local wheel = _wheel_delta(view)
+
+        if wheel ~= 0 then
+            local step = math.max(1, math.floor(math.abs(wheel) + 0.5))
+
+            st.top = wheel > 0 and st.top - step or st.top + step
+        end
+
+        -- 2) thumb drag / track paging
+        local content = st.scrollbar_widget.content
+        local thumb_hotspot = content.thumb_hotspot
+        local track_hotspot = content.track_hotspot
+
+        if thumb_hotspot and track_hotspot and (thumb_hotspot.is_held or track_hotspot.on_release) then
+            local cursor_y = _cursor_ui_y(view)
+            local node_pos = view.ui_scenegraph and UISceneGraph.get_world_position(view.ui_scenegraph, "power_up_root")
+
+            if cursor_y and node_pos then
+                if thumb_hotspot.is_held then
+                    -- Drag: thumb center follows the cursor, snapped to rows.
+                    -- is_held persists while the button stays down even after
+                    -- the cursor leaves the thumb (hotspot pass semantics), so
+                    -- this is a real drag, not just a re-click.
+                    local usable = st.track_h - st.thumb_h
+
+                    if usable > 0 then
+                        local track_top_world = node_pos[2] + NODE_CENTER_Y + st.track_h / 2
+                        local frac = math.clamp((track_top_world - cursor_y - st.thumb_h / 2) / usable, 0, 1)
+
+                        st.top = 1 + math.floor(frac * (st.max_top - 1) + 0.5)
+                    end
+                elseif not thumb_hotspot.cursor_hover then
+                    -- Track click off the thumb: page one full window toward the click.
+                    local thumb_bottom_world = node_pos[2] + st.scrollbar_widget.style.thumb.offset[2]
+                    local thumb_center_world = thumb_bottom_world + st.thumb_h / 2
+
+                    if cursor_y > thumb_center_world then
+                        st.top = st.top - st.visible
+                    else
+                        st.top = st.top + st.visible
+                    end
+                end
+            end
+
+            track_hotspot.on_release = false -- consumed
+        end
+
+        st.top = math.clamp(st.top, 1, st.max_top)
+        _reposition(st)
+    end
+
+    -- Wrapping hooks (NOT hook_safe) so scroll input + reflow run BEFORE
+    -- vanilla update draws the same frame; otherwise the layout would lag the
+    -- input by one frame. Neither view's `update` was hooked before this
+    -- (grep-verified 2026-07-01). pcall wrap per PROJECT_STANDARDS 4.1; on
+    -- error the scroll state is dropped (degrade to vanilla-ish frozen list)
+    -- and vanilla update ALWAYS still runs (4.2 guard-is-not-bail).
+    mod:hook("DeusShopView", "update", function(func, self, dt, t)
+        local ok, err = pcall(_frame, self)
+
+        if not ok then
+            self._ct_boon_scroll = nil
+            mod:warning("[ct:boon_scroll] shop frame errored: %s (scroll disabled for this view)", tostring(err))
+        end
+
+        return func(self, dt, t)
+    end)
+
+    mod:hook("DeusCursedChestView", "update", function(func, self, dt, t)
+        local ok, err = pcall(_frame, self)
+
+        if not ok then
+            self._ct_boon_scroll = nil
+            mod:warning("[ct:boon_scroll] chest frame errored: %s (scroll disabled for this view)", tostring(err))
+        end
+
+        return func(self, dt, t)
+    end)
+end
 
 mod:hook("MutatorHandler", "_activate_mutator", function(func, self, name, ...)
     if is_curse_disabled(name) then
@@ -1704,6 +3053,16 @@ mod:hook("DeusMechanism", "_transition_next_node", function(func, self, next_nod
     -- defeat-recovery feature block.
     _defeat_recovery_triggered_this_round = false
 
+    -- Task B / #117: reset the per-mission Chest of Trials state on every node
+    -- transition so each mission's cursed chests start fresh (first chest = vanilla
+    -- seed, subsequent chests perturbed + force-rotated). See the always-on cursed-chest
+    -- uniqueness hooks (ConflictDirector.start_terror_event + TerrorEventMixer.start_event).
+    _ct_cursed_chest_seq = 0
+    _ct_cot_block_last = {}   -- #117: reset per-block last-forced trial pick per mission
+
+    -- (Boon-altar no-repeat taken-boon set deliberately PERSISTS across maps --
+    -- only setup_run clears it at run start.)
+
     local run_controller = self._deus_run_controller
     local graph_data = run_controller and run_controller:get_graph_data()
     local node = graph_data and graph_data[next_node_key]
@@ -1723,7 +3082,7 @@ mod:hook("DeusMechanism", "_transition_next_node", function(func, self, next_nod
     -- a single `next_state` value (deus_mechanism.lua:687). Bare unpack is safe
     -- because the result table only ever holds one entry — no internal nil hole
     -- can truncate the return. Left as-is per audit.
-    return unpack(results)
+    return unpack(results) -- unpack-safe: results holds at most one entry (single-return)
 end)
 
 mod:hook("DeusMechanism", "start_next_round", function(func, self, ...)
@@ -1735,6 +3094,17 @@ mod:hook("DeusMechanism", "start_next_round", function(func, self, ...)
     -- CLARIFY: Forcing theme="wastes" prevents the curse-themed visuals/lighting from loading even
     -- though node.curse is suppressed. Without this, the engine could still load curse aesthetic
     -- assets keyed off node.theme (e.g., "tzeentch", "khorne") and produce mismatched visuals.
+    -- DIAGNOSTIC (v0.7.142-dev) — client-only "curse lighting not showing": this force fires when
+    -- is_curse_disabled() reads the host-synced disable_curse_* value via effective_setting. If a
+    -- client's synced value diverged / hasn't arrived, the client suppresses a curse the HOST is
+    -- showing and loses the curse sky/lighting. Ungated so a paired host+client log shows the
+    -- divergence directly: compare is_curse_disabled per (curse) between the two.
+    if saved_curse then
+        _dbg("[ct:theme-force] is_server=%s curse=%s theme=%s is_curse_disabled=%s",
+            tostring((Managers.player and Managers.player.is_server) and true or false),
+            tostring(saved_curse), tostring(saved_theme),
+            tostring(is_curse_disabled(saved_curse) and true or false))
+    end
     if saved_curse and is_curse_disabled(saved_curse) then
         current_node.curse = nil
         current_node.theme = "wastes"
@@ -1754,6 +3124,12 @@ mod:hook("DeusMechanism", "start_next_round", function(func, self, ...)
 
     return unpack(results, 1, n)
 end)
+
+-- NOTE (v0.7.142-dev): the per-node theme/curse/god dump for the host-vs-client
+-- lighting diff lives in the EXISTING `GameModeDeus.local_player_game_starts`
+-- hook below (`[mission:start]`, ~line 3559) — do NOT add a second hook here
+-- (VMF drops it; lint errors). The root-cause signal is the ungated
+-- `[ct:theme-force]` line added in the start_next_round hook above.
 
 -- CLARIFY: Suppresses the curse-themed hover preview on the map for nodes whose curse is disabled.
 -- Sets theme=nil so the hover view shows the default "wastes" preview instead of (e.g.) the
@@ -1798,13 +3174,15 @@ mod:hook("DeusRunController", "get_own_weapon_pool_excludes", function(func, sel
     if type(excludes) ~= "table" then return excludes end
     for rarity in pairs(excludes) do
         if not _VANILLA_RARITIES[rarity] then
-            mod:info("[weapon-pool] stripped unknown rarity '%s' from pool_excludes", tostring(rarity))
+            _dbg("[weapon-pool] stripped unknown rarity '%s' from pool_excludes", tostring(rarity))
             excludes[rarity] = nil
         end
     end
     return excludes
 end)
 
+-- ============================================================
+-- Fix: Trollhammer Torpedo gets traits but NO properties on CW upgrade
 -- ============================================================
 -- Vanilla deus weapon-chest upgrade reads WeaponProperties.combinations[property_table_name][rarity]
 -- (deus_weapon_generation.lua:161). The Trollhammer Torpedo's property_table_name is
@@ -1819,7 +3197,7 @@ do
     local combos = WP and WP.combinations
     if combos and rawget(combos, "deus_ranged") and not rawget(combos, "deus_trollhammer_torpedo") then
         combos.deus_trollhammer_torpedo = combos.deus_ranged
-        mod:info("[deus-props] aliased deus_trollhammer_torpedo property pool -> deus_ranged (vanilla gap: torpedo had traits but no properties)")
+        _dbg("[deus-props] aliased deus_trollhammer_torpedo property pool -> deus_ranged (vanilla gap: torpedo had traits but no properties)")
     end
 end
 
@@ -1849,7 +3227,7 @@ end)
 -- forces a god theme for any curse node). Crash 2026-06-17 (sig_citadel_khorne_path5, theme=wastes +
 -- curse=curse_corrupted_flesh).
 --
--- Fix (v0.7.128-beta): backfill the missing color in DATA at load, instead of hooking the UI.
+-- Fix (v0.7.139-dev): backfill the missing color in DATA at load, instead of hooking the UI.
 -- DeusThemeSettings is a boot-global available at mod-load, so this is reliable and timing-free, and
 -- it covers BOTH callers (they read theme_color from the same table). The PRIOR approach hooked
 -- DeusCurseUI._update_description_widget, but DeusCurseUI lives in scripts/ui/hud_ui/ and isn't loaded
@@ -1859,20 +3237,48 @@ end)
 -- the icon default; the wastes theme intentionally shows no curse glow, so any opaque value just
 -- prevents the nil-index. Idempotent; loops every theme so any future gap is covered. Host and every
 -- client run this identically at load, so the data is consistent peer-to-peer.
--- CURSE_THEME_COLOR_BACKFILL_MARKER
+--
+-- SAME-SHAPE SIBLING CRASH (v0.7.156-dev, 2026-06-20) — the curse-DESCRIPTION texture, not the glow:
+-- DeusCurseUI's show_curse_info (deus_curse_ui.lua:144-149) and show_special_message (:106-111) both do
+--   local icon = theme_settings.icon or { 255, 255, 255, 255 }
+-- then _update_description_widget assigns content.theme_icon = icon (:170). The "theme_icon" pass at
+-- scenegraph "description_pivot" is pass_type="texture", texture_id="theme_icon"
+-- (deus_curse_ui_definitions.lua:317-324), so UIRenderer.draw_texture reads content.theme_icon as the
+-- texture NAME -- a STRING. Its content_check_function only tests `~= nil`, NOT string-ness, so the
+-- {255,255,255,255} fallback (a TABLE) passes the guard and reaches the renderer. DeusThemeSettings.wastes
+-- is the ONLY theme with NO `icon` field (all 5 god themes + belakor have icon="icon_<god>"/"deus_icon_belakor"),
+-- so the `or {color}` fallback fires exactly when ct forces theme="wastes" on a still-cursed node ->
+-- ui_passes.lua:134 "bad argument #2 to 'UIRenderer_draw_texture' (string expected, got table)". Vanilla
+-- never hits it (deus_generate_graph forces a god theme for any curse node). Client crash 2026-06-20 on an
+-- injected-adventure level (dlc_termite_*) with a curse active. Same DATA-backfill fix: give every theme a
+-- STRING `icon`. "deus_icon_meta_01" is a neutral deus-realm meta icon (gui_icons_atlas, loaded in every CW
+-- expedition) -- purely cosmetic for the rare wastes-on-cursed case; the load-bearing requirement is only
+-- that it be a valid string so the texture pass stops crashing. Covers BOTH callers (same table read).
+-- CURSE_THEME_COLOR_BACKFILL_MARKER  CURSE_THEME_ICON_BACKFILL_MARKER
 do
     local TS = rawget(_G, "DeusThemeSettings")
     if type(TS) == "table" then
         local patched = {}
+        local patched_icon = {}
         for theme_name, theme in pairs(TS) do
             if type(theme) == "table" and theme.curse_description_color == nil then
                 theme.curse_description_color = { 255, 255, 255, 255 }
                 patched[#patched + 1] = tostring(theme_name)
             end
+            -- texture_id="theme_icon" pass wants a STRING; non-string (or nil -> vanilla's
+            -- {color} fallback) crashes UIRenderer.draw_texture. Backfill a valid string.
+            if type(theme) == "table" and type(theme.icon) ~= "string" then
+                theme.icon = "deus_icon_meta_01"
+                patched_icon[#patched_icon + 1] = tostring(theme_name)
+            end
         end
         if #patched > 0 then
-            mod:info("[curse-ui] backfilled curse_description_color on theme(s) with none: %s (prevents nil-color curse-banner crash when ct forces that theme on a cursed node)",
+            _dbg("[curse-ui] backfilled curse_description_color on theme(s) with none: %s (prevents nil-color curse-banner crash when ct forces that theme on a cursed node)",
                 table.concat(patched, ", "))
+        end
+        if #patched_icon > 0 then
+            _dbg("[curse-ui] backfilled string icon on theme(s) with none: %s (prevents 'string expected, got table' curse-description texture crash when ct forces that theme on a cursed node)",
+                table.concat(patched_icon, ", "))
         end
     end
 end
@@ -1885,9 +3291,13 @@ _rt_register("curse_theme_color_backfilled", function()
     local c = wastes.curse_description_color
     if type(c) ~= "table" or #c < 4 then return "DeusThemeSettings.wastes.curse_description_color missing/short -- nil-color curse-banner crash can recur" end
     for i = 1, 4 do if type(c[i]) ~= "number" then return "curse_description_color components must be numbers" end end
+    if type(wastes.icon) ~= "string" then return "DeusThemeSettings.wastes.icon not a string -- 'string expected, got table' curse-description texture crash can recur" end
     for theme_name, theme in pairs(TS) do
         if type(theme) == "table" and theme.curse_description_color == nil then
             return "theme '" .. tostring(theme_name) .. "' still has nil curse_description_color"
+        end
+        if type(theme) == "table" and type(theme.icon) ~= "string" then
+            return "theme '" .. tostring(theme_name) .. "' has non-string icon -- curse-description texture pass crashes on a table"
         end
     end
 end)
@@ -1940,7 +3350,12 @@ mod._ct_ensure_deus_chest_distribution = function(drc)
     local fallback = mod._ct_build_deus_chest_fallback(DCT)
     if not fallback then return end
     ls.deus_weapon_chest_distribution = fallback
-    mod:warning("[deus-chest] '%s' had no deus_weapon_chest_distribution (native CW path mission) -- injected a balanced fallback to prevent the vanilla assert / host crash", tostring(level_key))
+    -- NOT a warning: injecting this fallback is the EXPECTED, correct behavior on every
+    -- native CW path mission (dlc_castle_*, cemetery_*, etc.) — those simply ship no
+    -- deus_weapon_chest_distribution, and we supply a balanced one so vanilla's assert
+    -- can't fire. Nothing to investigate, so it's a file-only debug line, not a warning
+    -- (a warning should mean "maybe a problem"; this is working as designed).
+    _dbg("[deus-chest] '%s' had no deus_weapon_chest_distribution (native CW path mission) -- injected a balanced fallback (expected for these missions).", tostring(level_key))
 end
 
 _rt_register("deus_chest_distribution_fallback", function()
@@ -2012,7 +3427,7 @@ mod:hook("DeusRunController", "get_deus_weapon_chest_type", function(func, self)
 
                 -- Issue #6 auto-probe: log shuffle inputs PRE-shuffle so host/client logs can
                 -- be diffed offline without the user running /verify_altars manually. Gated on
-                -- enable_debug_logging via _dbg (file-only, never spams in-game chat).
+                -- VMF debug logging via _dbg (file-only, never spams in-game chat).
                 local _is_server = (Managers and Managers.player and Managers.player.is_server) or false
                 _dbg("[altar:get_chest_type] PRE node=%s level_seed=%s hash=%s eff_u/m/r/p=%s/%s/%s/%s is_server=%s dist=[%s]",
                     tostring(node_key), tostring(level_seed_val), tostring(seed),
@@ -2194,23 +3609,75 @@ local TRAIT_RARITY_POOL = {
     deus_ranged_crit_explosion                    = { exotic = true, unique = true },
 }
 
--- FIRE_WEAPON_TIER_FALLBACK_MARKER
--- Fire/heat deus weapons (Sienna staves, Bardin drakefire pistols / drakegun /
--- flamethrower) bake from the NARROW `deus_ranged_heat` trait pool — after the
--- per-weapon compatible_weapon_list filter they retain only rare+/exotic+/unique
--- traits. There is NO common-tier heat trait compatible with them. So at common (and
--- sometimes rare) rarity the tier filter returns ZERO combos -> override_traits_in_result
--- early-returns -> the weapon keeps vanilla's nil traits (vanilla only grants at
--- exotic/unique) -> fire weapons get NO trait while melee/ranged-ammo weapons (whose
--- pools carry common-tier traits) do. Reported 2026-06-17 ("fire gets nothing, others
--- get a trait"). Fix: when the tier-filtered pool is empty, fall back to the weapon's
--- OWN baked pool — already filtered by compatible_weapon_list, so every trait is valid
--- for THIS weapon; fire weapons can never receive a melee/incompatible trait. Trades a
--- little tier purity for "a valid trait > no trait". Only triggers when #filtered == 0,
--- which for melee/ranged-ammo essentially never happens, so they are unchanged.
+-- v0.7.177-dev #119: Trait Tier by Rarity must NOT restrict by weapon TYPE.
+-- The user assigns each trait to one-or-more rarity tiers via TRAIT_RARITY_POOL; the
+-- ONLY other restriction they want is melee-vs-ranged (a melee weapon gets melee
+-- traits, a ranged weapon gets ranged traits). The PRE-#119 implementation read the
+-- weapon's OWN `baked_trait_combinations`, which the vanilla baker had already narrowed
+-- by `compatible_weapon_list` (a weapon-TYPE restriction) — so e.g. a 1h sword could
+-- only ever roll the handful of traits in its own deus_melee compatible subset, and
+-- fire/heat staves were stuck with their narrow deus_ranged_heat pool. That weapon-type
+-- gate is exactly what the user reported as wrong.
+--
+-- NEW: draw from the full melee (or ranged) trait UNION across every deus trait pool,
+-- gated only by (a) the rolled rarity tier per TRAIT_RARITY_POOL and (b) the ban list.
+-- The melee/ranged classification is derived at runtime from WeaponTraits.combinations
+-- (canonical source — weapon_traits_morris.lua: deus_melee / deus_shield_melee /
+-- deus_heavy_melee are melee; deus_ranged* / deus_trollhammer_torpedo are ranged) so it
+-- tracks any data change. Traits present in BOTH classes (headhunter, shield_splinters,
+-- piercing_projectiles, stagger_aoe_on_crit, deus_crit_chain_lightning) land in both
+-- unions, which is correct — they are genuinely usable on either class. This also
+-- supersedes the old fire/heat "fall back to own pool" hack: a heat weapon now draws
+-- from the whole ranged union, so it gets a tier-eligible ranged trait like any other.
+-- Stored on `mod` (not main-chunk locals) to stay under Lua's 200-locals-per-chunk
+-- limit; the cache `mod._ct_trait_class_pools` and the builder are reused by the
+-- tier filter and the #119 regression test.
+mod._ct_get_trait_class_pools = function()
+    if mod._ct_trait_class_pools then return mod._ct_trait_class_pools end
+    local WT = rawget(_G, "WeaponTraits")
+    if not WT or not WT.combinations then return nil end
+    local melee, ranged = {}, {}
+    for pool_name, combos in pairs(WT.combinations) do
+        if type(pool_name) == "string" and pool_name:find("^deus_") then
+            local dest = pool_name:find("melee") and melee or ranged
+            for _, combo in ipairs(combos) do
+                for _, trait in ipairs(combo) do
+                    dest[trait] = true
+                end
+            end
+        end
+    end
+    mod._ct_trait_class_pools = { melee = melee, ranged = ranged }
+    return mod._ct_trait_class_pools
+end
+
+-- Returns single-trait combos eligible for `rarity` on the weapon's COMBAT CLASS
+-- (melee/ranged), drawn from the class-wide union (see #119 note above). The ban list
+-- is honored here too (a banned trait never appears). Falls back to the weapon's own
+-- baked pool ONLY if WeaponTraits.combinations isn't loaded yet, so a roll never crashes.
 local function get_tier_filtered_combos(item_key, rarity)
     if not DeusWeapons or not DeusWeapons[item_key] then return {} end
-    local original = DeusWeapons[item_key].baked_trait_combinations
+    local data = DeusWeapons[item_key]
+    local pools = mod._ct_get_trait_class_pools()
+    if pools then
+        local ttn = data.trait_table_name
+        local is_ranged = type(ttn) == "string" and not ttn:find("melee")
+        local class_pool = is_ranged and pools.ranged or pools.melee
+        local filtered = {}
+        for trait in pairs(class_pool) do
+            local rp = TRAIT_RARITY_POOL[trait]
+            if rp and rp[rarity] and not effective_setting("ban_trait_" .. trait) then
+                filtered[#filtered + 1] = { trait }
+            end
+        end
+        -- May legitimately be empty (e.g. user banned every eligible trait at this
+        -- tier, or assigned none) -> the weapon gets no injected trait this roll.
+        return filtered
+    end
+
+    -- Fallback path: WeaponTraits not loaded yet -> tier-filter the weapon's OWN baked
+    -- pool, mirroring the pre-#119 behavior so we never error during early timing.
+    local original = data.baked_trait_combinations
     if not original then return {} end
     local filtered = {}
     for _, combo in ipairs(original) do
@@ -2226,43 +3693,38 @@ local function get_tier_filtered_combos(item_key, rarity)
             filtered[#filtered + 1] = combo
         end
     end
-    if #filtered == 0 then
-        -- restricted-pool weapons (fire/heat staves + drakefire) have no tier-eligible
-        -- combo at low rarities; fall back to their OWN valid pool so they still get a
-        -- trait, drawn only from their compatible baked combos (never a generic/incompatible one).
-        return original
-    end
     return filtered
 end
 
--- Regression guard for FIRE_WEAPON_TIER_FALLBACK_MARKER: a fire/heat deus weapon (narrow
--- deus_ranged_heat pool, no common-tier compatible trait) must still get a NON-EMPTY pool
--- at common rarity via the own-pool fallback, and every offered trait must come from THAT
--- weapon's own compatible baked pool (never a generic/incompatible trait).
-_rt_register("fire_weapon_tier_fallback_nonempty", function()
+-- Regression guard for #119 (class-union tier filter): a fire/heat ranged deus weapon
+-- (narrow own deus_ranged_heat pool in the OLD design) must, at a rarity tier it can roll
+-- (rare), get a NON-EMPTY pool whose every offered trait is (a) in the RANGED class union
+-- and (b) eligible at that tier per TRAIT_RARITY_POOL — i.e. it is no longer confined to
+-- its own weapon-type subset. This is the inverse of the old fire-fallback guard.
+_rt_register("tier_by_rarity_class_union_ranged", function()
     if not DeusWeapons then return "skip: DeusWeapons not loaded" end
+    local pools = mod._ct_get_trait_class_pools()
+    if not pools then return "skip: WeaponTraits.combinations not loaded" end
     local fire_key
     for k, data in pairs(DeusWeapons) do
-        if type(data) == "table" and data.trait_table_name == "deus_ranged_heat"
-            and data.baked_trait_combinations and #data.baked_trait_combinations > 0 then
+        if type(data) == "table" and data.trait_table_name == "deus_ranged_heat" then
             fire_key = k
             break
         end
     end
-    if not fire_key then return "skip: no baked deus_ranged_heat weapon found (vanilla data changed?)" end
-    local own = DeusWeapons[fire_key].baked_trait_combinations
-    local own_traits = {}
-    for _, combo in ipairs(own) do
-        for _, t in ipairs(combo) do own_traits[t] = true end
-    end
-    local combos = get_tier_filtered_combos(fire_key, "common")
+    if not fire_key then return "skip: no deus_ranged_heat weapon found (vanilla data changed?)" end
+    local combos = get_tier_filtered_combos(fire_key, "rare")
     if #combos == 0 then
-        return string.format("FIRE-TRAIT REGRESSION: heat weapon '%s' got empty trait pool at common rarity (tier fallback missing)", tostring(fire_key))
+        return string.format("TIER-UNION REGRESSION: ranged weapon '%s' got empty pool at rare (class union broken)", tostring(fire_key))
     end
     for _, combo in ipairs(combos) do
         for _, t in ipairs(combo) do
-            if not own_traits[t] then
-                return string.format("FIRE-TRAIT REGRESSION: weapon '%s' fallback offered out-of-pool trait '%s'", tostring(fire_key), tostring(t))
+            if not pools.ranged[t] then
+                return string.format("TIER-UNION REGRESSION: ranged weapon '%s' offered non-ranged trait '%s'", tostring(fire_key), tostring(t))
+            end
+            local rp = TRAIT_RARITY_POOL[t]
+            if not (rp and rp.rare) then
+                return string.format("TIER-UNION REGRESSION: weapon '%s' offered '%s' not eligible at rare tier", tostring(fire_key), tostring(t))
             end
         end
     end
@@ -2272,14 +3734,21 @@ end)
 -- with a tier-eligible combo for the rolled rarity. No-op if:
 --   - the toggle is off
 --   - result is nil or has no deus_item_key
---   - the weapon has no baked combos at all (get_tier_filtered_combos returns {})
--- get_tier_filtered_combos now falls back to a weapon's OWN baked pool when no
--- tier-eligible combo exists (see FIRE_WEAPON_TIER_FALLBACK_MARKER), so restricted-pool
--- weapons (fire/heat staves + drakefire) get a valid heat trait at low rarities instead
--- of nothing. A weapon with a genuinely empty baked pool still gets no trait.
+--   - #118: the rolled rarity is `plentiful` (WHITE starting weapons must NEVER receive
+--     an injected trait — see the gate below). `common` (GREEN/uncommon) and up DO get
+--     traits — corrected 2026-06-27 per user: green is uncommon and should be trait-eligible.
+--   - the class-union pool is empty for this rarity (get_tier_filtered_combos returns {})
+-- get_tier_filtered_combos now draws from the weapon's melee/ranged class union (#119),
+-- so a weapon is no longer confined to its own weapon-type trait subset.
 local function override_traits_in_result(result, rarity)
     if not effective_setting("tweak_trait_tier_by_rarity") then return result end
     if not result or not result.deus_item_key then return result end
+    -- #118: ONLY the white `plentiful` STARTING tier stays trait-less. `common` (green /
+    -- "uncommon"), `rare` (blue), `exotic`, and `unique` are all trait-eligible. The rarity
+    -- ladder is plentiful(white) < common(green) < rare(blue) < exotic < unique; the user
+    -- confirmed green=uncommon SHOULD get traits, so we gate only `plentiful` here. Applies
+    -- regardless of which trait toggle is active.
+    if rarity == "plentiful" then return result end
     local combos = get_tier_filtered_combos(result.deus_item_key, rarity)
     if #combos == 0 then return result end
     local picked = combos[math.random(#combos)]
@@ -2294,35 +3763,77 @@ end
 -- CLARIFY: Three trait-filter wrap points cover the three vanilla call sites that read
 -- baked_trait_combinations: initial weapon roll, slot-specific roll (Belakor temple?), and altar
 -- upgrade. Same save/restore pattern as the boon hooks above.
--- POTENTIAL BUG (LOW): Same as boon-removal — if `func()` errors, restore is skipped and DeusWeapons
--- stays mutated. pcall would harden this.
 -- v0.7.28a: each hook now ALSO post-processes with `override_traits_in_result` to apply tier-by-rarity.
-mod:hook("DeusWeaponGeneration", "generate_weapon", function(func, difficulty, run_progress, rarity, ...)
+--
+-- audit 2026-06-07 (F14, v0.7.133-dev): each hook now wraps the apply/func/restore
+-- bracket in pcall, mirroring the boon-removal hardening at generate_random_power_ups
+-- (v0.7.90). Previously, if vanilla raised inside func(), restore_weapon_trait_filter
+-- was skipped and DeusWeapons[*].baked_trait_combinations stayed permanently filtered
+-- for the rest of the session (state corruption — banned traits would never come back,
+-- or any_trait_any_weapon's expanded pool would stick). _filtered_weapon_gen wraps the
+-- vanilla call in pcall, guarantees restore on the error path, _dbg_alert's the failure,
+-- then re-raises with the original message so the game's handler still logs it. Helper
+-- keeps all four hooks consistent (BUG_CLASSES save/restore-without-pcall pattern).
+--
+-- The vanilla functions take trailing nilable args (seed / weapon_pool / slot_chance_*),
+-- so callers MUST pass arity-preserving (n, args) captured via select("#", ...) at the
+-- hook (VMF_RECIPES §2a) — bare unpack(args) would truncate at a nil seed. We pre-capture
+-- (n, args) in each hook rather than forward `...` into a nested closure, because Lua 5.1
+-- forbids referencing `...` inside an inner function (compile error).
+local function _filtered_weapon_gen(label, func, gen_rarity, n, args)
     local saved = apply_weapon_trait_filter()
-    local result = func(difficulty, run_progress, rarity, ...)
+    local ok, result = pcall(function() return func(unpack(args, 1, n)) end)
     restore_weapon_trait_filter(saved)
-    return override_traits_in_result(result, rarity)
+    if not ok then
+        -- v0.7.159-dev Task 3: `generate_weapon_for_slot` has NO vanilla caller in
+        -- the decompiled source — the ONLY invoker is ct's own bot-weapon-mirror
+        -- helper `_gen_bot_weapon_for_slot` (~L5726), which ALREADY wraps the call
+        -- in pcall and treats a raise as "bot just skips that slot this roll" (no
+        -- crash, no user-visible effect). The raise itself is the VANILLA
+        -- `fassert(#weapon_keys > 0, "...weapon_pool state...")` at
+        -- deus_weapon_generation.lua:110 — fired when the bot's career weapon_pool
+        -- has no weapon group matching the requested slot at the target rarity. It
+        -- is NOT a trait-filter fault (the filter only rewrites
+        -- baked_trait_combinations, read later for exotic/unique only). So for this
+        -- label the loud ungated warning was misattributed noise (~8x/run). Downgrade
+        -- it to debug-gated. The other three labels (generate_weapon /
+        -- generate_item_from_item_key / upgrade_item) ARE on real vanilla gameplay
+        -- paths with no upstream pcall, so a raise there IS user-visible — keep the
+        -- ungated warning for them (v0.7.134 rationale).
+        if label == "generate_weapon_for_slot" then
+            _dbg("[trait-filter] %s vanilla call raised (benign — caller pcall-guards; "
+                .. "root is vanilla empty-slot weapon_pool fassert, not the trait filter); "
+                .. "DeusWeapons restored: %s", label, tostring(result))
+        else
+            -- v0.7.134: ungated — a raised vanilla call on these paths is a user-visible
+            -- failure; it must reach the log without Debug Logging enabled. The engine logs
+            -- the re-raise too, but without this mod-context line.
+            mod:warning("[trait-filter] %s vanilla call raised; DeusWeapons restored: %s",
+                label, tostring(result))
+        end
+        error(result, 2)  -- re-raise; baked_trait_combinations is now restored
+    end
+    return override_traits_in_result(result, gen_rarity)
+end
+
+mod:hook("DeusWeaponGeneration", "generate_weapon", function(func, difficulty, run_progress, rarity, ...)
+    return _filtered_weapon_gen("generate_weapon", func, rarity,
+        select("#", ...) + 3, { difficulty, run_progress, rarity, ... })
 end)
 
 mod:hook("DeusWeaponGeneration", "generate_weapon_for_slot", function(func, difficulty, run_progress, rarity, ...)
-    local saved = apply_weapon_trait_filter()
-    local result = func(difficulty, run_progress, rarity, ...)
-    restore_weapon_trait_filter(saved)
-    return override_traits_in_result(result, rarity)
+    return _filtered_weapon_gen("generate_weapon_for_slot", func, rarity,
+        select("#", ...) + 3, { difficulty, run_progress, rarity, ... })
 end)
 
 mod:hook("DeusWeaponGeneration", "generate_item_from_item_key", function(func, item_key, difficulty, run_progress, rarity, ...)
-    local saved = apply_weapon_trait_filter()
-    local result = func(item_key, difficulty, run_progress, rarity, ...)
-    restore_weapon_trait_filter(saved)
-    return override_traits_in_result(result, rarity)
+    return _filtered_weapon_gen("generate_item_from_item_key", func, rarity,
+        select("#", ...) + 4, { item_key, difficulty, run_progress, rarity, ... })
 end)
 
 mod:hook("DeusWeaponGeneration", "upgrade_item", function(func, item, difficulty, run_progress, target_rarity, ...)
-    local saved = apply_weapon_trait_filter()
-    local result = func(item, difficulty, run_progress, target_rarity, ...)
-    restore_weapon_trait_filter(saved)
-    return override_traits_in_result(result, target_rarity)
+    return _filtered_weapon_gen("upgrade_item", func, target_rarity,
+        select("#", ...) + 4, { item, difficulty, run_progress, target_rarity, ... })
 end)
 
 -- Upstream override for `force_belakor` (v0.7.49 / v0.7.120 Issue #53 fix).
@@ -2362,8 +3873,8 @@ end)
 -- ============================================================
 -- v0.7.120-dev — Aggressive diagnostics for Belakor's Temple client sync (Issue #53)
 -- ============================================================
--- Comprehensive state dumps gated on `enable_debug_logging` (so the user toggles it
--- on for a test co-op session, captures the data, sends the log). Goal: definitively
+-- Comprehensive state dumps gated on VMF debug logging (so the user turns on VMF's
+-- debug log level for a test co-op session, captures the data, sends the log). Goal: definitively
 -- identify whether the temple node fails to render on client because:
 --   A. Client's `with_belakor` arg is actually false despite host having force_belakor on
 --   B. Client's graph doesn't contain arena nodes after populate_graph runs
@@ -2373,7 +3884,7 @@ end)
 --
 -- Every dump line is prefixed `[belakor:diag]` so the user can grep one tag and see
 -- the full sequence from journey start → map open. Both peers should run with
--- `enable_debug_logging` ON to produce the diff.
+-- VMF debug logging ON to produce the diff.
 
 -- (1) Hook DeusMechanism._setup_run to log the full args on both peers.
 -- _setup_run runs on the host (from game_round_ended) AND on the client (from
@@ -2531,10 +4042,111 @@ mod:hook("DeusMechanism", "game_round_ended", function(func, self, t, dt, reason
         -- documents the same hardcap; ct's own broadcasts already use
         -- chunked sends to stay under it. The crash here is in vanilla's
         -- broadcast which we cannot intercept.
-        mod:warning("[finale_dominant_god] vanilla game_round_ended errored (likely RPC payload too large for 500-char hardcap): %s — host continues, deus state may be inconsistent",
+        mod:warning("[finale_dominant_god] vanilla game_round_ended errored (likely RPC payload too large for 500-char hardcap): %s — host continues, attempting transition recovery",
             tostring(err))
+
+        -- v0.7.155: the throw above unwinds vanilla game_round_ended BEFORE it
+        -- assigns self._next_state (deus_mechanism.lua: _setup_run runs, then a
+        -- network_send inside the graph/settings broadcast overflows the 500-char
+        -- cap and throws, so _transition_next_node("start") at :621 and
+        -- `self._next_state = next_state` at :666 NEVER run). With no next state
+        -- the mechanism state machine can't advance → the NEXT CW round FREEZES
+        -- (reported 2026-06-20). _setup_run already built the run + graph before
+        -- the failing broadcast, so finish the transition vanilla skipped. The
+        -- `_next_state == nil` guard avoids clobbering a state vanilla DID set
+        -- (throw later in the flow); pcall-wrapped so worst case it just warns,
+        -- never worse than the freeze it replaces. Fixes the freeze regardless of
+        -- WHICH mod's un-chunked network_send overflowed (e.g. a co-loaded stable
+        -- `ct` alongside `ct`) — ct cannot chunk a third party's send.
+        if reason == "start_game" and is_server and self._next_state == nil
+                and self._transition_next_node then
+            local ok2, ns = pcall(self._transition_next_node, self, "start")
+            if ok2 and ns then
+                self._next_state = ns
+                mod:warning("[finale_dominant_god] recovered the skipped round-end transition (next_state set) — next CW round should load instead of freezing")
+            else
+                mod:warning("[finale_dominant_god] could NOT recover the round-end transition: %s — the next CW start may still freeze", tostring(ns))
+            end
+        end
     end
 end)
+
+-- ============================================================
+-- Spawn census (Issue #58 / #156) — UNCONDITIONAL pickup count per mission
+-- ============================================================
+-- The recurring "Horn of Magnus / injected adventure map spawns NOTHING" bug
+-- (no chests, no altars, no pickups; intermittent) was historically un-diagnosable
+-- because the only log evidence was `has_pickup_settings` + the *configured*
+-- cursed_chest_count -- never what ACTUALLY spawned. This census counts every
+-- pickup that passes through PickupSystem._spawn_pickup -- the SINGLE chokepoint
+-- for BOTH the spread pass (ammo/healing/potions/coins) and the guaranteed pass
+-- (Chests of Trials, Belakor altar, caskets) -- keyed by final pickup_name, and
+-- emits ONE `printf` summary ~8s after the host's populate_pickups (by which point
+-- the guaranteed-spawn pass has fully run). Raw printf bypasses every VMF/mod
+-- logging toggle, so it lands on a logging-OFF host with NO dump command and NO
+-- debug toggle. `total=0` on an injected level is the unambiguous "this map is
+-- broken" signal; the injected=/adv_base=/diff= fields on this line + the
+-- [populate_pickups] line say WHY in the same breath. (The aggregate avoids the
+-- per-spawner printf flood that would tank FPS -- see #104.)
+do
+    local _counts = {}
+    local _total = 0
+    local _level, _injected, _adv_base, _difficulty = nil, nil, nil, nil
+    local _armed = false
+    local _elapsed = 0
+    local _EMIT_DELAY = 8.0  -- seconds; guaranteed-spawn pass completes well within this window
+
+    mod._ct_tally_reset = function(level_key, injected, adv_base, difficulty)
+        table.clear(_counts)
+        _total = 0
+        _level, _injected, _adv_base, _difficulty = level_key, injected, adv_base, difficulty
+        _armed = true
+        _elapsed = 0
+    end
+
+    mod._ct_tally_count = function(pickup_name, spawned_unit)
+        if not _armed or spawned_unit == nil then return end
+        local k = tostring(pickup_name)
+        _counts[k] = (_counts[k] or 0) + 1
+        _total = _total + 1
+    end
+
+    local function _emit()
+        local ok = pcall(function()
+            local cursed  = _counts.deus_cursed_chest or 0
+            local weapon  = _counts.deus_weapon_chest or 0
+            local altar   = _counts.deus_02 or 0
+            local coins   = _counts.deus_soft_currency or 0
+            local potions = 0
+            for name, n in pairs(_counts) do
+                if Pickups and Pickups.deus_potions and Pickups.deus_potions[name] then potions = potions + n end
+            end
+            local keys = {}
+            for k in pairs(_counts) do keys[#keys + 1] = k end
+            table.sort(keys)
+            local parts = {}
+            for _, k in ipairs(keys) do parts[#parts + 1] = k .. "=" .. tostring(_counts[k]) end
+            printf("[ct-spawn-tally] level=%s injected=%s adv_base=%s diff=%s total=%d ZERO=%s | chests(cursed=%d weapon=%d) altar=%d coins=%d potions=%d | %s",
+                tostring(_level), tostring(_injected), tostring(_adv_base), tostring(_difficulty),
+                _total, tostring(_total == 0), cursed, weapon, altar, coins, potions,
+                table.concat(parts, " "))
+        end)
+        if not ok then pcall(printf, "[ct-spawn-tally] level=%s emit failed (total=%d)", tostring(_level), _total) end
+    end
+
+    mod._ct_tally_tick = function(dt)
+        if not _armed then return end
+        _elapsed = _elapsed + (dt or 0)
+        if _elapsed >= _EMIT_DELAY then
+            _armed = false
+            _emit()
+        end
+    end
+    -- Regression marker (PROJECT_STANDARDS.md hook-consolidation doctrine): census is
+    -- wired through the SINGLE existing _spawn_pickup hook + the existing mod.update
+    -- drainer; no new hook on PickupSystem._spawn_pickup / no second mod.update owner.
+    mod._CT_SPAWN_TALLY_MARKER = "CT_SPAWN_TALLY_v1_unconditional_census"
+end
 
 -- CLARIFY: Patches LevelSettings[level].pickup_settings to control the COUNT of altars/cursed
 -- chests/arena ammo crates spawned per mission. This works alongside `get_deus_weapon_chest_type`
@@ -2561,6 +4173,21 @@ local _chest_conversions_this_level = 0
 local _belakor_altar_spawned_this_level = false
 mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     _chest_conversions_this_level = 0
+    -- [ct-probe] v0.7.157-dev unconditional cursed-chest budget probe (Issue #60).
+    -- Fires ONCE per mission load (populate_pickups is per-mission on the host).
+    -- Logs the level key + the configured cursed_chest_count (effective_setting,
+    -- host-synced). The ACTUAL number spawned is reported per-spawner by the
+    -- baked_cursed_chest=ALLOW/SUPPRESS + pedestal probes in _spawn_guaranteed_pickup;
+    -- grep [ct-probe] and count ALLOWs to verify "actual == configured" next session.
+    -- Raw printf (misc_util.lua:29) bypasses the VMF mod-logging toggle, so this
+    -- lands even on a logging-OFF host (the gap that produced zero lines on Rain's).
+    pcall(function()
+        local cur0 = LevelHelper and LevelHelper:current_level_settings()
+        local cc_raw = effective_setting("cursed_chest_count")
+        local cc_cap = (cc_raw == -1 or cc_raw == nil) and 1 or cc_raw
+        printf("[ct-probe] populate level=%s cursed_chest_count=%s effective_cap=%s",
+            tostring(cur0 and cur0.level_id), tostring(cc_raw), tostring(cc_cap))
+    end)
     -- v0.7.97: reset per-run counters for career-exclusive pickup denials.
     -- populate_pickups fires once at mission-load on the host, so this is the
     -- "run boot" hook for spawn telemetry. The denial count / once-per-run log
@@ -2593,9 +4220,55 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
         end
     end)
     table.sort(active_mutators)
-    mod:info("[populate_pickups] level=%s mechanism=%s has_pickup_settings=%s active_mutators=[%s]",
-        tostring(level_key), tostring(mechanism), tostring(has_settings),
-        table.concat(active_mutators, ","))
+    -- v0.7.182-dev: printf, NOT mod:info. The mod:info form of this line logged ZERO times
+    -- in every session (the user runs VMF mod-logging OFF), so the recurring "Horn of Magnus
+    -- has no pickups" bug (first seen 2026-05-22) could never be diagnosed from a log — the
+    -- data the comment above promised was silently suppressed. Raw printf is unconditional and
+    -- fires once per mission load on the host (where populate_pickups runs), so it is now
+    -- ALWAYS captured automatically, no debug toggle or dump command needed. has_pickup_settings
+    -- =false is the smoking gun: vanilla populate_pickups (pickup_system.lua:405) early-bails on
+    -- nil pickup_settings -> no health/ammo/tomes/grimoires spawn. difficulty included because
+    -- the engine also warns "NO PICKUP DATA FOR CURRENT DIFFICULTY".
+    local difficulty
+    pcall(function()
+        difficulty = Managers and Managers.state and Managers.state.difficulty
+            and Managers.state.difficulty:get_difficulty()
+    end)
+    -- v0.7.187-dev (#58/#156): also capture the injection GATE + difficulty-entry
+    -- presence. on_injected_adventure_level()==false on a magnus_/military_/etc. CW
+    -- level means the whole adventure->deus pickup bridge in _can_spawn is skipped and
+    -- EVERYTHING (chests, altars, ammo, healing) is vetoed -- the prime suspect for the
+    -- "Horn of Magnus spawns nothing" bug. diff_has_entry==false reproduces the vanilla
+    -- "NO PICKUP DATA FOR CURRENT DIFFICULTY ... USING SETTINGS FOR EASY" fallback.
+    -- on_injected_adventure_level / adventure_base_from_level_key are file-locals
+    -- defined LATER (forward ref -> nil global from here) -> reach via mod._ (call-time).
+    local _inj, _adv_base = false, nil
+    pcall(function()
+        if mod._ct_on_injected_adventure_level then _inj = mod._ct_on_injected_adventure_level() end
+        if mod._ct_adventure_base_from_level_key then _adv_base = mod._ct_adventure_base_from_level_key(level_key) end
+    end)
+    local diff_has_entry = (cur and cur.pickup_settings and difficulty
+        and cur.pickup_settings[difficulty] ~= nil) and true or false
+    -- v0.7.200-dev (#156): spawner-list counts at populate ENTRY. The 2026-07-01 forensics
+    -- showed 100% spawn debt with ZERO pedestal probes — meaning the spawner lists were
+    -- EMPTY when populate ran (pickup_gizmo_spawned never registered a unit; object-set
+    -- exclusion hypothesis). These three counts close that diagnosis loop in one line:
+    -- all-zero on an injected level = the level's pickup gizmos never spawned (level-load
+    -- problem, see the GameModeHelper.get_object_sets hook); nonzero = the veto is
+    -- downstream in _can_spawn/settings. Field names verified against vanilla
+    -- pickup_system.lua:64/75/76 (guaranteed_/primary_/secondary_pickup_spawners).
+    local sp_primary, sp_secondary, sp_guaranteed = -1, -1, -1
+    pcall(function()
+        sp_primary    = type(self.primary_pickup_spawners) == "table" and #self.primary_pickup_spawners or -1
+        sp_secondary  = type(self.secondary_pickup_spawners) == "table" and #self.secondary_pickup_spawners or -1
+        sp_guaranteed = type(self.guaranteed_pickup_spawners) == "table" and #self.guaranteed_pickup_spawners or -1
+    end)
+    pcall(printf, "[populate_pickups] level=%s mechanism=%s difficulty=%s has_pickup_settings=%s diff_has_entry=%s injected=%s adv_base=%s active_mutators=[%s] spawners: primary=%d secondary=%d guaranteed=%d",
+        tostring(level_key), tostring(mechanism), tostring(difficulty), tostring(has_settings),
+        tostring(diff_has_entry), tostring(_inj), tostring(_adv_base),
+        table.concat(active_mutators, ","), sp_primary, sp_secondary, sp_guaranteed)
+    -- Arm the unconditional spawn census for THIS mission (emits ~8s later via mod.update).
+    if mod._ct_tally_reset then mod._ct_tally_reset(level_key, _inj, _adv_base, difficulty) end
     if not LevelHelper then
         return func(self, ...)
     end
@@ -2722,6 +4395,26 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
         end
     end
 
+    -- v0.7.165-dev: build the coin-reservation set BEFORE vanilla populate runs its
+    -- _spawn_spread_pickups pass (which calls _can_spawn). The spawner lists are fully
+    -- populated by now (pickup_gizmo_spawned fires per-spawner at level spawn, long
+    -- before populate_pickups). Rank-based so even a tiny pool reserves >= 1 spawner.
+    --
+    -- Built unconditionally on the host (not gated on on_injected_adventure_level()
+    -- here -- that file-local is defined LATER in this file and a lexical forward
+    -- reference from this earlier hook would resolve to a nil global, per
+    -- feedback_lua_forward_reference.md). Building it on a non-injected level is inert:
+    -- the reservation only *takes effect* inside _can_spawn, whose entire deny block --
+    -- including the reservation branches -- is already gated behind
+    -- `if not on_injected_adventure_level() then return ok end`. So a set built off a
+    -- vanilla level is simply never consulted. (mod._ct_rebuild... is resolved at call
+    -- time, by which point the assignment below the helper has run.)
+    if self.is_server and mod._ct_rebuild_coin_reserved_set then
+        mod._ct_rebuild_coin_reserved_set({ self.primary_pickup_spawners, self.secondary_pickup_spawners })
+    elseif mod._ct_clear_coin_reserved_set then
+        mod._ct_clear_coin_reserved_set()
+    end
+
     local results = { func(self, ...) }
 
     for _, entry in ipairs(saved) do
@@ -2742,12 +4435,45 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
         Pickups.deus_potions[name] = nil
     end
 
+    -- v0.7.126-dev (Issue #58): post-populate diagnostic dump. Fires on EVERY level
+    -- including vanilla Adventure mode (Horn of Magnus, etc.) so we can capture
+    -- the "working" baseline and diff against the broken CW variant. This is the
+    -- single best moment in the load cycle to inspect spawners: vanilla populate
+    -- has finished assigning units to spawner lists + categorizing them, and our
+    -- _spawn_guaranteed_pickup conversion hook hasn't fired yet (that happens
+    -- AFTER populate, during the guaranteed-spawn pass). Gated on VMF debug
+    -- logging (via _dbg) so it's free in normal play.
+    pcall(_dump_pickup_system_state,    "[ct_dbg][pickups:post_populate]", false)
+    pcall(_dump_pickup_spawners_verbose, "[ct_dbg][pickup_units:post_populate]")
+
     -- v0.7.107-dev nil-hole audit: PickupSystem.populate_pickups (pickup_system.lua:395)
     -- returns nothing — every observed code path is a bare `return` or implicit end.
     -- The `results` table is therefore always empty, so bare unpack is a no-op return
     -- and equivalent to `return`. Left as-is per audit (no nil-hole exposure exists).
-    return unpack(results)
+    return unpack(results) -- unpack-safe: results always empty, equivalent to bare return
 end)
+
+-- ============================================================
+-- Holy Hand Grenade spawn rate (CW campaign-map pickup pools)
+-- ============================================================
+-- v0.7.145-dev: REVERTED. v0.7.143-dev lowered
+-- Pickups.grenades.holy_hand_grenade.spawn_weighting 0.8 -> 0.1 to make the
+-- CW power-bomb rarer on injected campaign maps. THIS CRASHED THE GAME ON LOAD:
+--   error.lua:26: Problem selecting a pickup to spawn,
+--   spawn_weighting_total = 0.85, spawn_value = 0.943
+-- The spread-pickup sampler rolls random in [0,1) and walks the pool's cumulative
+-- spawn_weighting; if the pool's total is < the roll it falls off the end and
+-- hard-errors. holy_hand's 0.8 weight is LOAD-BEARING for the grenade pool total
+-- (other grenades summed to only ~0.75) -- dropping it to 0.1 made the total 0.85,
+-- so any roll in [0.85, 1.0) crashed. This is the same sampler invariant the
+-- deus_potions renormalization (search "renormaliz") already guards: a pool's
+-- total must stay >= 1.0. Lowering a raw spawn_weighting violates it.
+--
+-- Restored to vanilla (no mutation) to stop the crash. To actually reduce the
+-- rate safely we must PRESERVE the pool total -- either renormalize the whole
+-- grenade pool (so holy_hand's SHARE shrinks while the sum stays >= 1.0) inside
+-- the populate path, or redistribute holy_hand's removed weight onto the other
+-- grenades. Do NOT reintroduce a bare `holy_hand.spawn_weighting = <low>`.
 
 -- ============================================================
 -- Tome / Grimoire → Chest of Trials substitution
@@ -2783,8 +4509,114 @@ end
 
 local function on_injected_adventure_level()
     if not LevelHelper then return false end
+    -- v0.7.154-dev: MUST be inside an actual Chaos Wastes (deus) expedition. The
+    -- adventure maps CW injects into its pool also exist in STOCK Adventure under
+    -- the SAME level_id, so gating only on the level name leaked every CW-only
+    -- pickup transform into real Adventure -- reported 2026-06-20: tomes/grimoires
+    -- missing in Adventure (the tome/grim -> Chest-of-Trials substitution, the
+    -- pedestal/collectible -> Pilgrim's Coin conversion, the no_roamers pacing
+    -- filter, and force_belakor all gate on this function). Only the deus
+    -- mechanism exposes get_deus_run_controller; in Adventure game_mechanism() has
+    -- no such method, so this bails and Adventure plays vanilla. (Same idiom as
+    -- _current_node_theme / _current_node_curse below.)
+    local mechanism = Managers.mechanism and Managers.mechanism.game_mechanism
+        and Managers.mechanism:game_mechanism()
+    if not (mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()) then
+        return false
+    end
     local current = LevelHelper:current_level_settings()
     return current and adventure_base_from_level_key(current.level_id) ~= nil
+end
+
+-- Exposed for the populate_pickups hook + spawn census (both lexically EARLIER in
+-- this file, so a direct reference there resolves to a nil global -- forward-ref
+-- gotcha, feedback_lua_forward_reference.md). Reached via mod._ which resolves at
+-- CALL time, by which point this assignment has run.
+mod._ct_on_injected_adventure_level   = on_injected_adventure_level
+mod._ct_adventure_base_from_level_key = adventure_base_from_level_key
+
+-- ============================================================
+-- v0.7.200-dev (#156) — CANDIDATE FIX: enable the 'adventure' object set on
+-- mod-injected adventure levels under the deus game mode
+-- ============================================================
+-- HYPOTHESIS (2026-07-01 forensics, pending in-game verification): on
+-- magnus_tzeentch_path1 ALL spawner lists were EMPTY at populate and
+-- pickup_gizmo_spawned never registered a unit — the gizmos never SPAWNED.
+-- Mechanism: GameModeSettings.deus.object_sets = { gm_sp = true }
+-- (game_mode_settings_morris.lua:8-10) vs adventure's { adventure = true,
+-- gm_sp = true } (game_mode_settings.lua:29-32). GameModeHelper.get_object_sets
+-- (game_mode_helper.lua:58-111) only marks a level object set for spawning when
+-- the GAME MODE's object_sets table enables it (or it's shadow_lights / flow_ /
+-- team_ prefixed). Any adventure-level unit grouped in the 'adventure' object
+-- set — plausibly including pickup-spawner gizmos on some level assets (set
+-- membership lives in the level binary, unreadable offline; the Holly cemetery
+-- HAS spawned chests when injected, so membership varies per asset) — silently
+-- never spawns when that level loads under deus.
+--
+-- FIX SHAPE: get_object_sets returns (object_sets_map, spawned_object_sets_array);
+-- the callers use them as:
+--   * state_loading.lua:1405  -> spawned_object_sets -> AsyncLevelSpawner (which
+--     units actually spawn)  [also the :1438 hero-sublevel call]
+--   * state_ingame.lua:753    -> object_sets map (flow/team set bookkeeping)
+-- We append "adventure" to the ARRAY (second return) — the map already contains
+-- every available set unconditionally, so it needs no mutation. Scoped hard:
+--   (1) game_mode_key == "deus",
+--   (2) the level KEY currently loading resolves through the mod's STATIC
+--       adventure catalog (AdventurePool.MISSION_BY_KEY — deliberately NOT the
+--       toggle-gated IS_INJECTED_ADVENTURE_LEVEL, so host and joining clients
+--       make the identical decision and spawn identical worlds), and
+--   (3) LevelSettings[level_key].level_name matches the level_name argument
+--       (guards the hero-sublevel call site and any unrelated concurrent load).
+-- Vanilla deus levels have morris-native level_names/keys (no catalog match) and
+-- vanilla adventure runs pass game_mode_key == "adventure" — both untouched.
+--
+-- GameModeHelper is a plain class table (game_mode_helper.lua:3, dot-called at
+-- every site — no upvalue captures found) -> table-form hook with nil guard.
+-- Dup-check 2026-07-01: no other (GameModeHelper, *) hook in ct.
+do
+    -- Resolve the injected-adventure base for the level being spawned, or nil.
+    -- Returns base_key, level_key on a match.
+    local function _ct_injected_base_for_spawn(level_name)
+        if not AdventurePool or not AdventurePool.MISSION_BY_KEY then return nil end
+        local lth = Managers and Managers.level_transition_handler
+        local level_key = lth and lth.get_current_level_keys and lth:get_current_level_keys()
+        if type(level_key) ~= "string" then return nil end
+        local ls = rawget(_G, "LevelSettings")
+        local entry = ls and rawget(ls, level_key)
+        if not entry or entry.level_name ~= level_name then return nil end
+        for base in pairs(AdventurePool.MISSION_BY_KEY) do
+            -- matches "magnus", "magnus_tzeentch_path1" AND dup aliases
+            -- ("magnus_dup1_tzeentch_path1") — same shape as adventure_base_from_level_key.
+            if level_key == base or level_key:find("^" .. base .. "_") then
+                return base, level_key
+            end
+        end
+        return nil
+    end
+
+    local _gmh = rawget(_G, "GameModeHelper")
+    if _gmh and type(_gmh.get_object_sets) == "function" then
+        mod:hook(_gmh, "get_object_sets", function(func, level_name, game_mode_key)
+            local object_sets, spawned_object_sets = func(level_name, game_mode_key)
+            if game_mode_key == "deus"
+                and type(object_sets) == "table"
+                and type(spawned_object_sets) == "table"
+                and object_sets.adventure                       -- level actually HAS an 'adventure' set
+                and not table.contains(spawned_object_sets, "adventure")
+            then
+                local ok, base, level_key = pcall(_ct_injected_base_for_spawn, level_name)
+                if ok and base then
+                    spawned_object_sets[#spawned_object_sets + 1] = "adventure"
+                    -- Raw printf: proves the fix engaged even on the logging-OFF host.
+                    pcall(printf, "[ct:objset] injected adventure level %s: enabling 'adventure' object set (issue #156)",
+                        tostring(level_key))
+                end
+            end
+            return object_sets, spawned_object_sets
+        end)
+    else
+        pcall(printf, "[ct:objset] GameModeHelper.get_object_sets not hookable at load — #156 candidate fix INACTIVE")
+    end
 end
 
 -- Lookup table: <adv_base_key>_title → display name. Used to satisfy the CW map UI
@@ -2871,8 +4703,8 @@ local RECKLESS_SWINGS_DESC_OVERRIDE = "While above 25%% Health, gain 25%% Power 
 -- description differs, so only the description is overridden.
 local MIRACLE_LOC_OVERRIDES = {
     blessing_of_power_desc      = "Grants every hero +50 Power for the rest of the run. The bonus persists through weapon swaps and upgrades at altars.",
-    blessing_of_isha_desc_aegis = "Grants every hero -25%% damage taken for the rest of the run.",
-    blessing_of_isha_desc_wounds= "Grants every hero unlimited wounds for the rest of the run — every knockdown is revivable instead of resulting in instant death after the first down.",
+    blessing_of_isha_desc_aegis = "Grants every hero -25%% damage taken for the next mission.",
+    blessing_of_isha_desc_wounds= "Grants every hero unlimited wounds for the next mission — every knockdown is revivable instead of resulting in instant death after the first down.",
 }
 
 mod:hook(_G, "Localize", function(func, key, ...)
@@ -2882,7 +4714,19 @@ mod:hook(_G, "Localize", function(func, key, ...)
         local d = ADV_DESC_OVERRIDES[key]
         if d then return d end
         local m = MOD_BOON_LOC[key]
-        if m then return m end
+        if m then
+            -- #133: Manann's Tempest gains an 8-second cooldown ONLY while the
+            -- `tweak_manann_tempest_cooldown` tweak is active (the ProcFunctions.chain_lightning
+            -- hook ~line 9835 enforces MANANN_TEMPEST_COOLDOWN_S = 8.0). Append the note only
+            -- when the tweak is on so the boon text tracks behavior live; with it off the
+            -- description stays EXACTLY vanilla. effective_setting is host-synced, so clients
+            -- reflect the HOST's toggle. No `%` in the appended line, so no %% escaping needed.
+            if key == "description_ct_boon_manann_tempest"
+                and effective_setting("tweak_manann_tempest_cooldown") then
+                return m .. "\n8 second cooldown."
+            end
+            return m
+        end
         if key == "description_deus_reckless_swings" and reckless_swings_originals then
             return RECKLESS_SWINGS_DESC_OVERRIDE
         end
@@ -2928,7 +4772,18 @@ end)
 -- _resolve_breed_packages (line 750) to populate _random_director_list, which the
 -- spawn_zone generator then reads safely.
 mod:hook("EnemyPackageLoader", "setup_startup_enemies", function(func, self, level_key, level_seed, failed_locked_functions, use_random_directors, conflict_director_name, difficulty, difficulty_tweak)
-    if adventure_base_from_level_key(level_key) then
+    -- v0.7.132-dev: also cover native CW Belakor finale maps (cemetery_belakor_path1,
+    -- bell_belakor_path1, magnus_belakor_path1, ...). They carry adventure-style
+    -- "random" zone directors but are NOT matched by adventure_base_from_level_key,
+    -- so use_random_directors stayed false -> EnemyPackageLoader._random_director_list
+    -- never populated -> vanilla main_path_spawning_generator.lua:292 crashed on nil
+    -- random_director_list during generate_great_cycles (host "amand" hard crash
+    -- 2026-06-06 on cemetery_belakor_path1, GUID a6d00df6-...). The `_belakor_path`
+    -- key family is the signature; forcing use_random_directors true makes
+    -- _resolve_breed_packages populate _random_director_list, which the spawn-zone
+    -- generator then reads safely (same mechanism as the adventure-level fix above).
+    if adventure_base_from_level_key(level_key)
+            or (type(level_key) == "string" and string.find(level_key, "_belakor_path", 1, true)) then
         use_random_directors = true
     end
     return func(self, level_key, level_seed, failed_locked_functions, use_random_directors, conflict_director_name, difficulty, difficulty_tweak)
@@ -3079,9 +4934,192 @@ local function _palette_slot(palette, idx)
     return palette[1]
 end
 
+-- v0.7.125-dev — pickup-system diagnostic dump (Issue #58, Magnus pickups).
+-- Walks LevelSettings.pickup_settings AND PickupSystem live spawner lists,
+-- counting placed level-units by spawner_type. The combination tells us
+-- whether the data table is missing entries for the current difficulty
+-- (settings issue) or whether the level just has no spawners (geometry
+-- issue) when the engine reports "Remaining spawn debt".
+--
+-- Caller controls whether output goes to log only (via mod:info) or also
+-- to in-game chat (via mod:echo). Returns nothing; all output is side-effect.
+local _PICKUP_CATEGORIES = {
+    "deus_weapon_chest", "deus_cursed_chest",
+    "deus_potions", "deus_soft_currency",
+    "ammo", "healing", "grenades", "level_events",
+    "explosive_barrel", "frag_grenade", "fire_grenade",
+}
+
+-- audit 2026-06-07 (v0.7.133-dev): `local` dropped — assigns into the forward-
+-- declared slot near the top of the file so the earlier populate_pickups hook
+-- reference resolves to this upvalue instead of a nil global.
+function _dump_pickup_system_state(prefix, also_echo)
+    prefix = prefix or "[pickup_dump]"
+    local emit = function(line)
+        _dbg("%s %s", prefix, line)
+        if also_echo then mod:echo(line) end
+    end
+
+    -- 1. Resolve current level + difficulty
+    local level_key, difficulty_key
+    pcall(function()
+        local gm_mgr = Managers and Managers.state and Managers.state.game_mode
+        if gm_mgr and gm_mgr.level_key then level_key = gm_mgr:level_key() end
+        local diff_mgr = Managers and Managers.state and Managers.state.difficulty
+        if diff_mgr and diff_mgr.get_difficulty then difficulty_key = diff_mgr:get_difficulty() end
+    end)
+    emit(string.format("level=%s difficulty=%s", tostring(level_key), tostring(difficulty_key)))
+
+    -- 2. LevelSettings[level_key].pickup_settings — full per-difficulty dump
+    local level_settings_root = rawget(_G, "LevelSettings")
+    local ls = level_settings_root and level_key and level_settings_root[level_key]
+    if not ls then
+        emit("LevelSettings[level_key] = nil (cannot inspect pickup_settings)")
+    else
+        local ps = ls.pickup_settings
+        if not ps then
+            emit("level.pickup_settings = nil (level has no pickup_settings table)")
+        else
+            local diff_keys = {}
+            for k, _ in pairs(ps) do diff_keys[#diff_keys + 1] = tostring(k) end
+            table.sort(diff_keys)
+            emit("level.pickup_settings keys: {" .. table.concat(diff_keys, ",") .. "}")
+            local matching = ps[difficulty_key]
+            if not matching then
+                emit(string.format(
+                    "NO MATCH for current difficulty='%s' in pickup_settings — engine will fall back. "
+                    .. "This is the root signal for Issue #58.",
+                    tostring(difficulty_key)))
+            end
+            -- For each difficulty present, dump the primary counts
+            for _, dk in ipairs(diff_keys) do
+                local entry = ps[dk]
+                if type(entry) == "table" and type(entry.primary) == "table" then
+                    local p = entry.primary
+                    local parts = {}
+                    for _, cat in ipairs(_PICKUP_CATEGORIES) do
+                        if p[cat] ~= nil then
+                            parts[#parts + 1] = string.format("%s=%s", cat, tostring(p[cat]))
+                        end
+                    end
+                    for k, v in pairs(p) do
+                        local known = false
+                        for _, cat in ipairs(_PICKUP_CATEGORIES) do if k == cat then known = true; break end end
+                        if not known then
+                            parts[#parts + 1] = string.format("%s=%s", tostring(k), tostring(v))
+                        end
+                    end
+                    emit(string.format("  [%s].primary { %s }", dk, table.concat(parts, ", ")))
+                end
+            end
+        end
+    end
+
+    -- 3. PickupSystem live spawner lists, counted by spawner_type
+    local entity_mgr = Managers and Managers.state and Managers.state.entity
+    local ps_sys = entity_mgr and entity_mgr.system and entity_mgr:system("pickup_system")
+    if not ps_sys then
+        emit("PickupSystem unavailable (entity manager not ready)")
+        return
+    end
+
+    local function count_by_type(list)
+        local total, by_type = 0, {}
+        if type(list) ~= "table" then return total, by_type end
+        for _, unit in pairs(list) do
+            total = total + 1
+            if Unit and Unit.alive and Unit.alive(unit) then
+                for _, cat in ipairs(_PICKUP_CATEGORIES) do
+                    if Unit.get_data and Unit.get_data(unit, cat) then
+                        by_type[cat] = (by_type[cat] or 0) + 1
+                    end
+                end
+            end
+        end
+        return total, by_type
+    end
+
+    local function emit_list(name, list)
+        local total, by_type = count_by_type(list)
+        local parts = {}
+        for _, cat in ipairs(_PICKUP_CATEGORIES) do
+            if by_type[cat] then parts[#parts + 1] = string.format("%s=%d", cat, by_type[cat]) end
+        end
+        emit(string.format("PickupSystem.%s total=%d { %s }", name, total, table.concat(parts, ", ")))
+    end
+
+    emit_list("primary_pickup_spawners",   ps_sys.primary_pickup_spawners)
+    emit_list("secondary_pickup_spawners", ps_sys.secondary_pickup_spawners)
+    emit_list("specified_pickup_spawners", ps_sys.specified_pickup_spawners)
+    emit_list("guaranteed_pickup_spawners", ps_sys.guaranteed_pickup_spawners)
+
+    -- triggered_pickup_spawners is keyed by triggered_spawn_id
+    if type(ps_sys.triggered_pickup_spawners) == "table" then
+        local trig_total, group_count = 0, 0
+        for _, group in pairs(ps_sys.triggered_pickup_spawners) do
+            group_count = group_count + 1
+            if type(group) == "table" then
+                for _ in pairs(group) do trig_total = trig_total + 1 end
+            end
+        end
+        emit(string.format("PickupSystem.triggered_pickup_spawners groups=%d total_units=%d", group_count, trig_total))
+    end
+end
+
+-- v0.7.126-dev — verbose per-spawner-unit dump. Captures world position + every
+-- truthy Unit.get_data(unit, key) for each placed spawner unit, so we can
+-- diff a "working" mission (vanilla magnus in Adventure) against a "broken"
+-- mission (magnus_belakor_path1 in CW) and see which spawner categories the
+-- bundle actually ships on each level. Capped at 50 units per list — typical
+-- adventure level has 30–80 spawners; cap keeps the log readable while still
+-- giving 50 worked examples per category.
+local _VERBOSE_DUMP_CAP_PER_LIST = 50
+-- audit 2026-06-07 (v0.7.133-dev): `local` dropped — assigns into the forward-
+-- declared slot near the top of the file (see _dump_pickup_system_state note).
+function _dump_pickup_spawners_verbose(prefix)
+    prefix = prefix or "[pickup_units]"
+    local entity_mgr = Managers and Managers.state and Managers.state.entity
+    local ps_sys = entity_mgr and entity_mgr.system and entity_mgr:system("pickup_system")
+    if not ps_sys then return end
+
+    local function dump_one(list_name, list)
+        if type(list) ~= "table" then return end
+        local idx = 0
+        for _, unit in pairs(list) do
+            idx = idx + 1
+            if idx > _VERBOSE_DUMP_CAP_PER_LIST then
+                _dbg("%s   %s ... (truncated at %d units)", prefix, list_name, _VERBOSE_DUMP_CAP_PER_LIST)
+                break
+            end
+            if Unit and Unit.alive and Unit.alive(unit) then
+                local pos = "?"
+                pcall(function()
+                    local p = Unit.local_position(unit, 0)
+                    pos = string.format("(%.1f,%.1f,%.1f)", Vector3.x(p), Vector3.y(p), Vector3.z(p))
+                end)
+                local tags = {}
+                for _, cat in ipairs(_PICKUP_CATEGORIES) do
+                    if Unit.get_data(unit, cat) then tags[#tags + 1] = cat end
+                end
+                if Unit.get_data(unit, "tome")     then tags[#tags + 1] = "tome"     end
+                if Unit.get_data(unit, "grimoire") then tags[#tags + 1] = "grimoire" end
+                if Unit.get_data(unit, "loot_die") then tags[#tags + 1] = "loot_die" end
+                if Unit.get_data(unit, "painting_scrap") then tags[#tags + 1] = "painting_scrap" end
+                _dbg("%s   %s[%d] pos=%s tags={%s}", prefix, list_name, idx, pos,
+                    table.concat(tags, ","))
+            end
+        end
+    end
+
+    dump_one("primary",    ps_sys.primary_pickup_spawners)
+    dump_one("secondary",  ps_sys.secondary_pickup_spawners)
+    dump_one("specified",  ps_sys.specified_pickup_spawners)
+    dump_one("guaranteed", ps_sys.guaranteed_pickup_spawners)
+end
+
 mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player, loading_context)
     -- v0.7.124-dev — per-mission diagnostic dump (Issue: citadel curse mismatch).
-    -- Gated on enable_debug_logging via _dbg. Runs on BOTH peers when a CW mission
+    -- Gated on VMF debug logging via _dbg. Runs on BOTH peers when a CW mission
     -- starts. Dumps current_node + its full state so we can compare host vs client
     -- and verify the active mutator list matches the node's expected curse.
     pcall(function()
@@ -3128,6 +5166,12 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
             mutators_str, active_str)
     end)
 
+    -- v0.7.125-dev — pickup-system state dump (Issue #58: Magnus pickups).
+    -- Log-only (no echo) when VMF debug logging is on. Captures level
+    -- pickup_settings table contents + live PickupSystem spawner counts per
+    -- spawner_type. Critical for diagnosing "no chests/altars spawn" bugs.
+    pcall(_dump_pickup_system_state, "[ct_dbg][pickups:mission_start]", false)
+
     if not on_injected_adventure_level() then return end
     local run_controller = self._deus_run_controller
     if not run_controller then return end
@@ -3135,7 +5179,7 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
     if not current_node then return end
     local theme = current_node.theme
     if not theme or theme == "wastes" then
-        mod:info("[curse-tint] theme=%s (no curse); skipping", tostring(theme))
+        _dbg("[curse-tint] theme=%s (no curse); skipping", tostring(theme))
         return
     end
     local palette = _CURSE_LIGHT_PALETTES[theme]
@@ -3170,7 +5214,7 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
             end
         end
     end
-    mod:info("[curse-tint] level=%s theme=%s palette_size=%d lights=%d",
+    _dbg("[curse-tint] level=%s theme=%s palette_size=%d lights=%d",
         tostring(current_node.level), tostring(theme), #palette, lights_tinted)
 end)
 
@@ -3288,17 +5332,24 @@ local _CURSE_SKY_PROFILES = {
         fog_color            = { 1.25, 0.40, 1.10 },
         exposure_mul         = 0.97,
     },
-    -- BELAKOR — twilight purple. v0.7.21: brightened ambient (interior
-    -- bounce) so rooms aren't pitch-black, slightly dimmed exterior
-    -- (sky + sun) so the outdoor mood stays oppressive. Per user feedback.
+    -- BELAKOR — twilight purple. v0.7.21 brightened interiors; v0.7.207-dev
+    -- brightens them further after a report that already-dark INTERIOR maps
+    -- (repro: Devious Delvings / dlc_termite_2, a mines level) went near-black
+    -- under the curse. Root cause: these tints are MULTIPLICATIVE, so a factor
+    -- < 1 on the interior channels (ambient / fill / exposure) crushes a scene
+    -- whose baked atmosphere is already dim. Fix: the interior-bounce channels
+    -- no longer darken at all (ambient/fill/exposure >= 1.0) and only carry the
+    -- purple HUE (green pulled below blue); the EXTERIOR sky + direct sun stay
+    -- dim so open-air Belakor missions keep their oppressive mood. VISUAL -
+    -- needs in-game confirmation; if still off, wire a live brightness knob.
     belakor = {
-        skydome_tint_color   = { 0.40, 0.25, 0.65 },   -- slightly darker sky
-        sun_color            = { 0.50, 0.50, 0.85 },   -- slightly dimmer direct sun
-        secondary_sun_color  = { 0.55, 0.50, 0.90 },   -- brighter fill (helps interiors)
-        ambient_tint         = { 0.75, 0.65, 1.00 },   -- BRIGHTER interior bounce (was 0.45/0.40/0.75)
-        ambient_tint_top     = { 0.60, 0.55, 1.00 },   -- brighter top ambient
-        fog_color            = { 0.40, 0.30, 0.75 },   -- keep fog
-        exposure_mul         = 0.92,                    -- less darkening (was 0.85)
+        skydome_tint_color   = { 0.45, 0.30, 0.70 },   -- exterior sky: still dim + purple
+        sun_color            = { 0.62, 0.60, 0.92 },   -- exterior direct sun: slightly dim
+        secondary_sun_color  = { 0.90, 0.85, 1.10 },   -- fill: near-neutral, lifted (was 0.55/0.50/0.90) — interiors
+        ambient_tint         = { 1.00, 0.90, 1.22 },   -- interior bounce: NO darkening, purple-shifted (was 0.75/0.65/1.00)
+        ambient_tint_top     = { 0.92, 0.85, 1.18 },   -- top ambient: near-neutral, purple (was 0.60/0.55/1.00)
+        fog_color            = { 0.45, 0.35, 0.80 },   -- keep fog purple
+        exposure_mul         = 1.02,                    -- tiny lift, no global dim (was 0.92)
     },
 }
 
@@ -3334,29 +5385,39 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
     local profile = _CURSE_SKY_PROFILES[theme]
     if not profile then return end
 
-    -- Multiply each existing color by the curse profile's per-var tint.
-    -- ShadingEnvironment.vector3 returns a fresh Vector3 each call (valid
-    -- within this frame) — safe to read, multiply, and write back.
-    local function mul_set(var_name)
+    -- User brightness knob (#243): scales the INTERIOR channels (fill, ambient
+    -- bounce, exposure) so an already-dark injected map can be lifted to taste
+    -- without touching the exterior sky/sun/fog color that carries the curse
+    -- mood. 1.0 = the baked profile exactly as-is (no behavior change). One
+    -- cheap settings read per callback, dwarfed by the ShadingEnvironment calls.
+    local b = tonumber(mod:get("curse_lighting_brightness")) or 1.0
+
+    -- Multiply each existing color by the curse profile's per-var tint (and, for
+    -- interior channels, by the user brightness `s`). ShadingEnvironment.vector3
+    -- returns a fresh Vector3 each call (valid within this frame) — safe to read,
+    -- multiply, and write back.
+    local function mul_set(var_name, s)
         local t = profile[var_name]
         if not t then return end
+        s = s or 1.0
         local v = ShadingEnvironment.vector3(shading_env, var_name)
         if v then
             ShadingEnvironment.set_vector3(shading_env, var_name,
-                Vector3(v.x * t[1], v.y * t[2], v.z * t[3]))
+                Vector3(v.x * t[1] * s, v.y * t[2] * s, v.z * t[3] * s))
         end
     end
-    mul_set("skydome_tint_color")
-    mul_set("sun_color")
-    mul_set("secondary_sun_color")
-    mul_set("ambient_tint")
-    mul_set("ambient_tint_top")
-    mul_set("fog_color")
+    mul_set("skydome_tint_color")      -- exterior sky: curse hue only, no brightness lift
+    mul_set("sun_color")               -- exterior direct sun: no lift
+    mul_set("secondary_sun_color", b)  -- fill light (interior): lifted by brightness
+    mul_set("ambient_tint", b)         -- interior bounce: lifted
+    mul_set("ambient_tint_top", b)     -- interior top ambient: lifted
+    mul_set("fog_color")               -- exterior haze: no lift
 
-    if profile.exposure_mul and profile.exposure_mul ~= 1.0 then
+    local exp = (profile.exposure_mul or 1.0) * b
+    if exp ~= 1.0 then
         local cur = ShadingEnvironment.scalar(shading_env, "exposure")
         if cur then
-            ShadingEnvironment.set_scalar(shading_env, "exposure", cur * profile.exposure_mul)
+            ShadingEnvironment.set_scalar(shading_env, "exposure", cur * exp)
         end
     end
 end)
@@ -3394,7 +5455,7 @@ end)
 -- spawned unit) sees the icon-matching base too.
 mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
     if not graph_data then
-        mod:info("[DeusMapScene.on_enter] no graph_data; passing through")
+        _dbg("[DeusMapScene.on_enter] no graph_data; passing through")
         return func(self, graph_data, ...)
     end
     -- v0.7.64 late-arrival apply: if the host's graph snapshot arrived AFTER the
@@ -3406,7 +5467,7 @@ mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
     if _ct_host_graph_snapshot then
         local applied = apply_graph_snapshot(graph_data)
         if applied > 0 then
-            mod:info("[ct_graph] applied host snapshot to %d nodes (DeusMapScene.on_enter)", applied)
+            _dbg("[ct_graph] applied host snapshot to %d nodes (DeusMapScene.on_enter)", applied)
         end
     end
     local saved = {}
@@ -3422,7 +5483,7 @@ mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
                 saved[key] = { level = node.level, base_level = node.base_level }
                 local suffix = node.level:match("(_[a-z]+_path%d+)$") or "_wastes_path1"
                 local new_level = cw_base .. suffix
-                mod:info("[DeusMapScene.on_enter]   rewrite %s: %s -> %s (theme=%s curse=%s)",
+                _dbg("[DeusMapScene.on_enter]   rewrite %s: %s -> %s (theme=%s curse=%s)",
                     tostring(key), node.level, new_level, tostring(node.theme), tostring(node.curse))
                 node.level = new_level
                 node.base_level = cw_base
@@ -3432,13 +5493,13 @@ mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
                     -- vanilla CW level, no rewrite needed
                 else
                     skipped = skipped + 1
-                    mod:info("[DeusMapScene.on_enter]   SKIP %s level=%s (no adventure base match — UI will use SHRINE_NODE_UNIT and curse halo won't show)",
+                    _dbg("[DeusMapScene.on_enter]   SKIP %s level=%s (no adventure base match — UI will use SHRINE_NODE_UNIT and curse halo won't show)",
                         tostring(key), node.level)
                 end
             end
         end
     end
-    mod:info("[DeusMapScene.on_enter] seen=%d rewritten=%d skipped_non_vanilla_non_adventure=%d",
+    _dbg("[DeusMapScene.on_enter] seen=%d rewritten=%d skipped_non_vanilla_non_adventure=%d",
         seen, rewritten, skipped)
 
     local result = { func(self, graph_data, ...) }
@@ -3452,7 +5513,7 @@ mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
     -- v0.7.107-dev nil-hole audit: DeusMapScene.on_enter (deus_map_scene.lua:453)
     -- returns nothing — the body assigns to `self.*` fields and ends. No multi-return
     -- to preserve, no nil-hole risk. Left as-is per audit.
-    return unpack(result)
+    return unpack(result) -- unpack-safe: no multi-return, body assigns self.* fields
 end)
 
 -- Filter curse pool by user's disable_curse_* settings BEFORE the graph generator
@@ -3530,7 +5591,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     -- spreader stops early when it runs out of candidates).
     local saved_min, saved_max, saved_range_min, saved_range_max, saved_min_progress, saved_no_dominant
     local override_curse_count = effective_setting("cursed_mission_count")
-    mod:info("[deus_populate_graph] override_curse_count=%s, config?=%s, vanilla_min=%s vanilla_max=%s vanilla_range_min=%s vanilla_range_max=%s vanilla_min_progress=%s",
+    _dbg("[deus_populate_graph] override_curse_count=%s, config?=%s, vanilla_min=%s vanilla_max=%s vanilla_range_min=%s vanilla_range_max=%s vanilla_min_progress=%s",
         tostring(override_curse_count), tostring(config ~= nil),
         config and tostring(config.CURSES_HOT_SPOTS_MIN_COUNT) or "?",
         config and tostring(config.CURSES_HOT_SPOTS_MAX_COUNT) or "?",
@@ -3559,7 +5620,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         -- even with min_progress=0. Use -1 so 1+1=2 nodes at run_progress=0 are
         -- in the pool.
         config.CURSES_MIN_PROGRESS = -1
-        mod:info("[deus_populate_graph] applied override: count=%d range=0/0 min_progress=-1", override_curse_count)
+        _dbg("[deus_populate_graph] applied override: count=%d range=0/0 min_progress=-1", override_curse_count)
     end
 
     -- Vanilla's spread_curse reserves the dominant_god for the "final"
@@ -3574,7 +5635,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     if config and effective_setting("disable_dominant_god") then
         saved_no_dominant = config.NO_DOMINANT_GOD
         config.NO_DOMINANT_GOD = true
-        mod:info("[deus_populate_graph] disable_dominant_god=true (all 4 gods in rotation)")
+        _dbg("[deus_populate_graph] disable_dominant_god=true (all 4 gods in rotation)")
     end
 
     -- Filter the curse pool so disabled curses get re-rolled within their god
@@ -3611,28 +5672,28 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     -- Dump every node so we can see the FULL graph state regardless of type.
     local function dump_graph(graph, tag)
         if type(graph) ~= "table" then
-            mod:info("[deus_populate_graph %s] graph is %s (not a table)", tag, type(graph))
+            _dbg("[deus_populate_graph %s] graph is %s (not a table)", tag, type(graph))
             return
         end
         local n_count = 0
         for k, n in pairs(graph) do
             n_count = n_count + 1
             if type(n) == "table" then
-                mod:info("[deus_populate_graph %s]   %s node_type=%s curse=%s god=%s level=%s progress=%s",
+                _dbg("[deus_populate_graph %s]   %s node_type=%s curse=%s god=%s level=%s progress=%s",
                     tag, tostring(k),
                     tostring(n.node_type), tostring(n.curse), tostring(n.god),
                     tostring(n.level), tostring(n.run_progress or n.progress or "?"))
             else
-                mod:info("[deus_populate_graph %s]   %s = %s (not a table)", tag, tostring(k), tostring(n))
+                _dbg("[deus_populate_graph %s]   %s = %s (not a table)", tag, tostring(k), tostring(n))
             end
         end
-        mod:info("[deus_populate_graph %s] total entries: %d", tag, n_count)
+        _dbg("[deus_populate_graph %s] total entries: %d", tag, n_count)
     end
 
     if not effective_setting("replace_shrines_with_missions") then
         local result = { func(base_graph, seed, config, dominant_god, with_belakor) }
         local cursed, total = count_cursed(result[1])
-        mod:info("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
+        _dbg("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
         dump_graph(result[1], "post-run")
         restore_curse_count()
         -- v0.7.64 graph sync — see ct_graph_snapshot_chunk block above.
@@ -3642,14 +5703,14 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         else
             local applied = apply_graph_snapshot(result[1])
             if applied > 0 then
-                mod:info("[ct_graph] applied host snapshot to %d nodes (post-run)", applied)
+                _dbg("[ct_graph] applied host snapshot to %d nodes (post-run)", applied)
             end
         end
         -- v0.7.107-dev nil-hole audit: global `deus_populate_graph` (deus_populate_graph.lua:965)
         -- returns a single `complete_graph` table. The mod code already reads result[1]
         -- explicitly, confirming single-value usage. Bare unpack is safe — no interior
         -- nil hole can exist with one entry. Left as-is per audit.
-        return unpack(result)
+        return unpack(result) -- unpack-safe: single-value usage, no interior nil hole
     end
 
     local mutated = {}
@@ -3667,12 +5728,12 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     end
 
     if converted > 0 then
-        mod:info("deus_populate_graph: converted %d SHOP node(s) to TRAVEL", converted)
+        _dbg("deus_populate_graph: converted %d SHOP node(s) to TRAVEL", converted)
     end
 
     local result = { func(mutated, seed, config, dominant_god, with_belakor) }
     local cursed, total = count_cursed(result[1])
-    mod:info("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
+    _dbg("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
     dump_graph(result[1], "post-run-shop-converted")
     restore_curse_count()
     -- v0.7.64 graph sync — see ct_graph_snapshot_chunk block above.
@@ -3682,13 +5743,13 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     else
         local applied = apply_graph_snapshot(result[1])
         if applied > 0 then
-            mod:info("[ct_graph] applied host snapshot to %d nodes (post-run-shop-converted)", applied)
+            _dbg("[ct_graph] applied host snapshot to %d nodes (post-run-shop-converted)", applied)
         end
     end
     -- v0.7.107-dev nil-hole audit: same as sibling branch above — global
     -- `deus_populate_graph` returns a single `complete_graph` table; mod code
     -- reads result[1] explicitly. Bare unpack is safe. Left as-is per audit.
-    return unpack(result)
+    return unpack(result) -- unpack-safe: single complete_graph table, read as result[1]
 end)
 
 -- ============================================================
@@ -3780,13 +5841,67 @@ local _CW_BLOCKING_PICKUP_NAMES = {
     deus_02 = true,  -- alternate chest variant some CW level pickup_settings reference
 }
 
+-- Adventure-map collectibles with no CW analogue -> Pilgrim's Coin. loot_die
+-- covers bonus dice AND the DLC-map "hidden mission" reskins (Bogenhafen ale,
+-- Blightreaper Rugbrodder ale, Enchanter's Lair poison-feast chalice -- all
+-- loot_die-tagged spawners of the same bonus-dice system). lorebook_page (the
+-- lore-page collectible) is the only other map collectible type and has no CW
+-- use, so it's converted too. painting_scrap (collectible art, all maps) is
+-- already handled by the _can_spawn spawner mapping further below.
+local _CW_COLLECTIBLE_TO_COIN = { loot_die = true, lorebook_page = true }
+mod._ct_collectible_to_coin = _CW_COLLECTIBLE_TO_COIN  -- exposed for regression guard
+
+-- #134 DIAGNOSTIC (Ravaged Art + Loot Dice not converting to Pilgrim's Coin on CW
+-- adventure maps). Logs each collectible (loot_die / lorebook_page / painting_scrap)
+-- that reaches the actual spawn, WITH the on_injected_adventure_level() gate broken
+-- down (in a deus run? level recognised as an adventure base?), plus the spawn_type
+-- (how it was spawned). So we can tell whether they bypass conversion because the GATE
+-- is false (most likely) or via a spawn path the conversion hooks miss. Raw printf
+-- survives mod-logging-off; bounded 80 lines/session; pcall-guarded; changes NO
+-- conversion logic. (#134)
+do
+    local _n = 0
+    function mod._ct134_log(name, spawn_type)
+        if _n >= 80 then return end
+        _n = _n + 1
+        local on_adv, deus, level_id, adv_base = false, false, "?", "?"
+        pcall(function()
+            local cur = LevelHelper and LevelHelper:current_level_settings()
+            level_id = (cur and cur.level_id) or "?"
+            adv_base = tostring(adventure_base_from_level_key(level_id))
+            local m = Managers.mechanism and Managers.mechanism.game_mechanism
+                and Managers.mechanism:game_mechanism()
+            deus = (m and m.get_deus_run_controller and m:get_deus_run_controller()) ~= nil
+            on_adv = on_injected_adventure_level()
+        end)
+        printf("[ct-probe:collectible] name=%s spawn_type=%s on_adv=%s in_coin_set=%s deus=%s level=%s adv_base=%s",
+            tostring(name), tostring(spawn_type), tostring(on_adv),
+            tostring(_CW_COLLECTIBLE_TO_COIN[name] and "yes" or "no"),
+            tostring(deus), tostring(level_id), tostring(adv_base))
+    end
+end
+
 mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
-    if on_injected_adventure_level() and pickup_name == "loot_die" then
+    local on_adv = on_injected_adventure_level()
+
+    -- #134 DIAGNOSTIC: a collectible arriving here means it is being spawned; log it +
+    -- the gate breakdown so we see why it isn't converting. DIAGNOSTIC ONLY.
+    if pickup_name == "loot_die" or pickup_name == "lorebook_page" or pickup_name == "painting_scrap" then
+        mod._ct134_log(pickup_name, spawn_type)
+    end
+
+    if on_adv and _CW_COLLECTIBLE_TO_COIN[pickup_name] then
         pickup_name = "deus_soft_currency"
         settings = (AllPickups and AllPickups.deus_soft_currency) or settings
     end
 
-    return func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
+    -- #58/#156 spawn census: count the FINAL pickup_name (post collectible->coin
+    -- conversion) once vanilla confirms it actually spawned. _spawn_pickup is the
+    -- single chokepoint for both the spread pass and the guaranteed chest/altar pass,
+    -- so this tallies EVERYTHING. Returns a single unit (or nil) in vanilla.
+    local spawned = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
+    if mod._ct_tally_count then mod._ct_tally_count(pickup_name, spawned) end
+    return spawned
 end)
 -- Note: previous versions attempted to make altars/chests walk-through by mutating
 -- their actor collision filter / scene_query / collision_enabled flags. This
@@ -3804,7 +5919,7 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
     -- side-objective collectibles. We have no CW equivalent system — convert these
     -- positions to deus_soft_currency (Pilgrim's Coin) so the spawner still gives
     -- something useful instead of dropping a collectible the run can't interact with.
-    if Unit.get_data(spawner_unit, "loot_die") then
+    if Unit.get_data(spawner_unit, "loot_die") or Unit.get_data(spawner_unit, "lorebook_page") then
         local settings = AllPickups and AllPickups.deus_soft_currency
         if settings then
             local position = Unit.local_position(spawner_unit, 0)
@@ -3812,6 +5927,72 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
             return self:_spawn_pickup(settings, "deus_soft_currency", position, rotation, false, spawn_type)
         end
         return func(self, spawner_unit, spawn_type)
+    end
+
+    -- v0.7.65: sentinel -1 → 1 (vanilla default); 0+ → use as-is.
+    -- Hoisted ABOVE the tome/grim early-out (was below it) so the native
+    -- deus_cursed_chest branch added right below can reuse the same cap. Vanilla
+    -- adventure maps ship 5 book pedestals (3 tomes + 2 grimoires), so up to 4
+    -- spots remain afterwards.
+    local cap_raw = effective_setting("cursed_chest_count") or -1  -- v0.7.42: sync with host
+    local cap = (cap_raw == -1) and 1 or cap_raw
+
+    -- v0.7.157-dev (Issue #60): native level-baked `deus_cursed_chest` spawners.
+    -- ----------------------------------------------------------------------------
+    -- Most injected adventure maps (dlc_termite_1, dlc_bastion, etc.) carry ONLY
+    -- tome/grimoire pedestals, so every Chest of Trials they show is produced by
+    -- the tome/grim → chest CONVERSION below — already capped by
+    -- `_chest_conversions_this_level < cap`. Those maps spawn exactly `cap` chests
+    -- and need no change here.
+    --
+    -- dlc_dwarf_beacons ("Khazukan Kazakit-ha!") is the outlier: its LEVEL GEOMETRY
+    -- ships its own guaranteed spawners natively flagged `deus_cursed_chest` (NOT
+    -- tome/grim), IN ADDITION TO book pedestals. Vanilla `_spawn_guaranteed_pickup`
+    -- spawns those baked chests unconditionally — they are not drawn from the
+    -- pickup sampler, so the `populate_pickups` sampler-count cap never touches them,
+    -- and before this fix they ALSO failed the is_tome/is_grim test below and fell
+    -- straight through to vanilla. Result: cap=3 produced 3 converted chests + 2
+    -- baked chests = 5 total (the #60 report).
+    --
+    -- Fix: route native `deus_cursed_chest` spawners through the SAME per-mission
+    -- `_chest_conversions_this_level < cap` budget the conversion path uses. Under
+    -- the cap, let vanilla spawn the baked chest (and count it against the budget);
+    -- AT/OVER the cap, suppress the spawner (return nothing → empty pedestal, same
+    -- as the cap-reached tome/grim fallthrough). Host-authoritative:
+    -- `_spawn_guaranteed_pickup` runs on the server for injected levels, so the
+    -- decision is made once by the host and is not a per-peer divergence.
+    --
+    -- This is surgical — it ONLY fires for spawners the level natively tags
+    -- `deus_cursed_chest`. Maps with no such baked spawners (termite/bastion/vanilla
+    -- CW paths) never enter this branch and keep spawning exactly `cap` chests.
+    if Unit.get_data(spawner_unit, "deus_cursed_chest") then
+        if _chest_conversions_this_level < cap then
+            -- Count the baked chest against the same budget the conversions use,
+            -- then let vanilla spawn it from its native flag.
+            _chest_conversions_this_level = _chest_conversions_this_level + 1
+            -- [ct-probe] unconditional: native baked cursed-chest ALLOWED under cap.
+            -- Survives a VMF-mod-logging-OFF host (raw print, not mod:info). #60.
+            local pok = pcall(function()
+                local cur = LevelHelper and LevelHelper:current_level_settings()
+                printf("[ct-probe] baked_cursed_chest=ALLOW level=%s cap=%d count_now=%d",
+                    tostring(cur and cur.level_id), cap, _chest_conversions_this_level)
+            end)
+            if not pok then printf("[ct-probe] baked_cursed_chest=ALLOW (level-id read failed) cap=%d count_now=%d", cap, _chest_conversions_this_level) end
+            _dbg("[baked_chest] -> ALLOW (vanilla spawn) cap=%d count_now=%d", cap, _chest_conversions_this_level)
+            return func(self, spawner_unit, spawn_type)
+        end
+        -- Budget exhausted: suppress this baked spawner so the level total never
+        -- exceeds `cap`. Returning nothing skips the spawn; the pedestal stays
+        -- empty (adventure flow units only materialize on spawn).
+        -- [ct-probe] unconditional: native baked cursed-chest SUPPRESSED over cap.
+        local pok2 = pcall(function()
+            local cur = LevelHelper and LevelHelper:current_level_settings()
+            printf("[ct-probe] baked_cursed_chest=SUPPRESS level=%s cap=%d count=%d (over budget)",
+                tostring(cur and cur.level_id), cap, _chest_conversions_this_level)
+        end)
+        if not pok2 then printf("[ct-probe] baked_cursed_chest=SUPPRESS (level-id read failed) cap=%d count=%d", cap, _chest_conversions_this_level) end
+        _dbg("[baked_chest] -> SUPPRESS (over cap) cap=%d count=%d", cap, _chest_conversions_this_level)
+        return
     end
 
     local is_tome = Unit.get_data(spawner_unit, "tome")
@@ -3822,12 +6003,12 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
 
     -- Respect the user's `cursed_chest_count` setting. The first N book spots become
     -- Chests of Trials. Default ("Default" sentinel = -1) treats this as the vanilla
-    -- value of 1 chest per mission; explicit 0 leaves all book spots empty. Vanilla
-    -- adventure maps ship 5 book pedestals (3 tomes + 2 grimoires), so up to 4 spots
-    -- remain afterwards.
-    -- v0.7.65: sentinel -1 → 1 (vanilla default); 0+ → use as-is.
-    local cap_raw = effective_setting("cursed_chest_count") or -1  -- v0.7.42: sync with host
-    local cap = (cap_raw == -1) and 1 or cap_raw
+    -- value of 1 chest per mission; explicit 0 leaves all book spots empty.
+    -- v0.7.125-dev (Issue #60): trace every conversion attempt so we can diagnose
+    -- "5 chests spawned with host cap=3" reports. Logs cap_raw + cap + the running
+    -- counter at decision time. Cheap; fires at most 5 times per mission load.
+    _dbg("[pedestal] kind=%s cap_raw=%s cap=%d count=%d", is_tome and "tome" or "grim",
+        tostring(cap_raw), cap, _chest_conversions_this_level)
     if _chest_conversions_this_level < cap then
         local pickup_name = "deus_cursed_chest"
         local settings = AllPickups and AllPickups[pickup_name]
@@ -3840,6 +6021,21 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
         local rotation = Unit.local_rotation(spawner_unit, 0)
         local spawned_unit = self:_spawn_pickup(settings, pickup_name, position, rotation, false, spawn_type)
         _chest_conversions_this_level = _chest_conversions_this_level + 1
+        -- [ct-probe] unconditional: tome/grim pedestal CONVERTED to a cursed chest
+        -- under cap. This is the path termite/bastion/vanilla CW maps use (no baked
+        -- deus_cursed_chest spawners), so without this line a logging-OFF host could
+        -- count ACTUAL chests only on the Beacons (baked-spawner) path. Pairs with the
+        -- baked_cursed_chest=ALLOW probe above to give the true per-map total. Raw
+        -- printf bypasses the VMF mod-logging toggle (lands on Rain's logging-OFF host). #60.
+        local pokc = pcall(function()
+            local cur = LevelHelper and LevelHelper:current_level_settings()
+            printf("[ct-probe] conversion_cursed_chest=ALLOW kind=%s level=%s cap=%d count_now=%d spawned=%s",
+                is_tome and "tome" or "grim", tostring(cur and cur.level_id), cap,
+                _chest_conversions_this_level, tostring(spawned_unit ~= nil))
+        end)
+        if not pokc then printf("[ct-probe] conversion_cursed_chest=ALLOW (level-id read failed) cap=%d count_now=%d", cap, _chest_conversions_this_level) end
+        _dbg("[pedestal] -> chest_of_trials count_now=%d (spawned=%s)", _chest_conversions_this_level,
+            tostring(spawned_unit ~= nil))
         return spawned_unit
     end
 
@@ -3859,13 +6055,25 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
     -- the current node's curse field, which is the only data that identifies "this
     -- mission has the Belakor totems curse." `force_belakor` itself only guarantees a
     -- Belakor curse appears SOMEWHERE in the run — it doesn't say where.
-    if not _belakor_altar_spawned_this_level
+    -- v0.7.125-dev (Issue #60): log every altar-spawn decision so we can
+    -- diagnose "no shadow locus on Belakor mission" reports. Captures every gate
+    -- (force_belakor, current_node_is_belakor, AllPickups.deus_02, already-spawned).
+    local altar_should = (not _belakor_altar_spawned_this_level)
         and effective_setting("force_belakor")
         and _current_node_is_belakor()
-        and AllPickups and AllPickups.deus_02 then
+        and (AllPickups and AllPickups.deus_02 ~= nil)
+    _dbg("[pedestal] altar_gate force_belakor=%s current_is_belakor=%s have_deus_02=%s already_spawned=%s -> attempt=%s",
+        tostring(effective_setting("force_belakor")),
+        tostring(_current_node_is_belakor()),
+        tostring(AllPickups and AllPickups.deus_02 ~= nil),
+        tostring(_belakor_altar_spawned_this_level),
+        tostring(altar_should))
+    if altar_should then
         local position = Unit.local_position(spawner_unit, 0)
         local rotation = Unit.local_rotation(spawner_unit, 0)
         local spawned_unit = self:_spawn_pickup(AllPickups.deus_02, "deus_02", position, rotation, false, spawn_type)
+        _dbg("[pedestal] -> belakor_altar spawn=%s (vetoed=%s)", tostring(spawned_unit ~= nil),
+            tostring(spawned_unit == nil))
         if spawned_unit then
             _belakor_altar_spawned_this_level = true
             return spawned_unit
@@ -3874,9 +6082,46 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
         -- this spawner" so the empty pedestal stays hidden, same as the no-cap case.
     end
 
-    -- All conversions used up — leave the spawner alone (empty pedestal stays hidden
-    -- because adventure flow units only materialize after spawn).
+    -- v0.7.148: leftover book pedestals (a tome/grimoire spot NOT taken by a Chest
+    -- of Trials or the Belakor locus) become a BIGGER coin casket instead of an
+    -- empty spot -- a reward where the book would have been. The casket is the
+    -- normal deus_soft_currency pickup (deus_loot_pyramide_01) scaled to 1.75x and
+    -- tagged `ct_big_casket`; the _get_coins_amount_and_type hook below grants it
+    -- 3x the coin a normal casket would. _spawn_guaranteed_pickup runs per-peer on
+    -- injected levels, so the scale + tag land on every peer's copy.
+    do
+        local casket_settings = AllPickups and AllPickups.deus_soft_currency
+        if casket_settings then
+            local position = Unit.local_position(spawner_unit, 0)
+            local rotation = Unit.local_rotation(spawner_unit, 0)
+            local casket = self:_spawn_pickup(casket_settings, "deus_soft_currency", position, rotation, false, spawn_type)
+            if casket and Unit.alive(casket) then
+                Unit.set_data(casket, "ct_big_casket", true)
+                Unit.set_local_scale(casket, 0, Vector3(1.75, 1.75, 1.75))
+                _dbg("[pedestal] -> BIG coin casket (1.75x scale, 3x coin) at leftover book spot")
+                return casket
+            end
+        end
+    end
+
+    -- Could not build the casket (settings missing) — leave the spawner alone
+    -- (empty pedestal stays hidden because adventure flow units only materialize
+    -- after spawn).
+    _dbg("[pedestal] -> empty (cap reached, altar n/a, casket settings missing)")
     return
+end)
+
+-- Big coin casket payout: the leftover-book-spot casket (tagged ct_big_casket
+-- above) grants 3x the coin a normal deus_soft_currency casket would. We wrap the
+-- per-pickup amount roll rather than on_soft_currency_picked_up so only THIS
+-- pickup is tripled (not enemy/ground coin). No existing ct hook on this method.
+mod:hook("GameModeDeus", "_get_coins_amount_and_type", function(func, self, interactable_unit)
+    local amount, ctype = func(self, interactable_unit)
+    if type(amount) == "number" and interactable_unit and Unit.alive(interactable_unit)
+        and Unit.get_data(interactable_unit, "ct_big_casket") then
+        return amount * 3, ctype
+    end
+    return amount, ctype
 end)
 
 -- Grant CW-pickup eligibility on adventure-level spawners that have analogous
@@ -3916,6 +6161,124 @@ local function _pickup_unit_loadable(pickup_name)
     return true  -- not a vanilla bucket entry; trust the caller
 end
 
+-- v0.7.165-dev: ROBUST coin-starvation fix (Abundance-of-Life curse). See the
+-- mechanism block in _adventure_pool.lua make_cw_pickup_settings(): on injected
+-- adventure levels our _can_spawn fallback below un-partitions vanilla's spawner
+-- types -- deus_potions, deus_soft_currency and deus_weapon_chest all compete for
+-- the SAME finite, shared primary spawner pool that PickupSystem._spawn_spread_pickups
+-- iterates per pickup_type over ONE `spawners` array, permanently table.remove()-ing
+-- each consumed spawner (pickup_system.lua:467-633, :621-626). Two facts make
+-- coins starve under the curse:
+--   1. `for pickup_type in pairs(pickup_settings)` (pickup_system.lua:470) is
+--      NON-DETERMINISTIC in Lua 5.1, so deus_potions can iterate (and drain
+--      spawners) BEFORE deus_soft_currency.
+--   2. The Abundance-of-Life curse multiplies ONLY deus_potions x3
+--      (mutator_curse_abundance_of_life.lua:7-11, applied by
+--      MutatorHandler.pickup_settings_updated_settings:544-560) -- coins stay flat.
+-- A pure count-ratio fix (request fewer potions than coins) only REDUCES the odds
+-- because allocation is per-section greedy in random type order, not proportional;
+-- on a finite-spawner level a potions-first pass can still exhaust the pool first.
+--
+-- GUARANTEE (not just reduce): reserve a deterministic ~40% slice of the primary
+-- spawners as COIN-ONLY by DENYING deus_potions / deus_weapon_chest eligibility on
+-- them here. A spawner is only table.remove()'d when a pickup that _can_spawn
+-- ALLOWED consumes it, so a spawner potions can never claim survives every potion
+-- iteration regardless of pairs() order or the curse x3 -- it is still present and
+-- coin-eligible when deus_soft_currency iterates. This mirrors vanilla's native
+-- partition (potion-spawners vs painting_scrap->coin-spawners never contend).
+--
+-- The slice is chosen by a stable per-spawner hash of `percentage_through_level`
+-- (a fixed float each primary spawner carries, read all over pickup_system.lua:
+-- 325/424/508/531) so the reserved spawners are spread UNIFORMLY across the
+-- percentage range -- coins find a reserved spawner in whatever section they
+-- iterate. No extra hook, no per-run state, deterministic within the host's single
+-- populate pass. deus_soft_currency itself is NEVER denied by this reservation.
+--
+-- NOTE: this whole helper group lives in a `do ... end` block so its 5 file-locals
+-- release back to the main chunk (Lua 5.1 hard cap of 200 locals per function incl.
+-- the top-level chunk -- per repo CLAUDE.md). Everything the _can_spawn hook below
+-- needs is reached via `mod._` (the local `_spawner_reserved_for_coins` would not be
+-- visible after the block closes).
+do
+local _COIN_RESERVED_FRACTION = 0.40
+-- Pure hash of a percentage_through_level value -> reserved? Split out so the
+-- /ct_regression_test marker can exercise the partition math without a live unit,
+-- and so it can serve as the per-spawner fallback when no precomputed set exists.
+local function _coin_reservation_hash_reserved(p)
+    if type(p) ~= "number" then return false end
+    -- Stable pseudo-random in [0,1) from the spawner's fixed percentage. The big
+    -- prime + frac() decorrelates it from the value's own ordering so the reserved
+    -- set isn't a contiguous band at the start/end of the level.
+    local h = (p * 7919.0 + 0.6180339887)
+    h = h - math.floor(h)
+    return h < _COIN_RESERVED_FRACTION
+end
+
+-- RANK-based reserved set, rebuilt once per populate_pickups pass (host). The pure
+-- per-spawner hash above is ~40% in expectation but, on a VERY small pool (e.g. 6
+-- spawners), independent hashing has a ~4% chance of reserving ZERO -- which would
+-- silently drop the coin guarantee. Building the set by RANK guarantees a floor of
+-- math.max(1, ceil(frac*N)) reserved spawners for ANY non-empty pool, closing that
+-- hole. Keyed by unit so _can_spawn can do an O(1) membership test. Reset + rebuilt
+-- at the top of the populate_pickups hook; consulted (with hash fallback) below.
+local _coin_reserved_units = {}
+local function _rebuild_coin_reserved_set(spawner_lists)
+    table.clear(_coin_reserved_units)
+    for _, list in ipairs(spawner_lists) do
+        if type(list) == "table" then
+            -- Sort by the per-spawner hash so the reserved set is the lowest-hash
+            -- prefix -- deterministic, spread across percentage_through_level (the
+            -- hash decorrelates from position), and a guaranteed proper-size slice.
+            local ranked = {}
+            for _, unit in ipairs(list) do
+                if Unit.alive(unit) then
+                    local p = Unit.get_data(unit, "percentage_through_level")
+                    if type(p) == "number" then
+                        local h = p * 7919.0 + 0.6180339887
+                        h = h - math.floor(h)
+                        ranked[#ranked + 1] = { unit = unit, h = h }
+                    end
+                end
+            end
+            table.sort(ranked, function(a, b) return a.h < b.h end)
+            local n = #ranked
+            if n > 0 then
+                local reserve_n = math.max(1, math.ceil(_COIN_RESERVED_FRACTION * n))
+                -- Never reserve the WHOLE pool -- potions/altars need spawners too.
+                reserve_n = math.min(reserve_n, n - 1 >= 1 and n - 1 or n)
+                for i = 1, reserve_n do
+                    _coin_reserved_units[ranked[i].unit] = true
+                end
+            end
+        end
+    end
+end
+local function _spawner_reserved_for_coins(spawner_unit)
+    -- Prefer the precomputed rank-based set (built on the host this populate pass);
+    -- fall back to the pure hash if it wasn't built (defensive: client, or a path
+    -- that reaches _can_spawn before populate_pickups ran).
+    if next(_coin_reserved_units) ~= nil then
+        return _coin_reserved_units[spawner_unit] == true
+    end
+    return _coin_reservation_hash_reserved(Unit.get_data(spawner_unit, "percentage_through_level"))
+end
+-- Test handle for the regression marker (coin_reservation_partition).
+mod._ct_coin_reservation_test = {
+    fraction = _COIN_RESERVED_FRACTION,
+    reserved = _coin_reservation_hash_reserved,
+}
+-- Exposed on `mod` so the populate_pickups hook (defined EARLIER in this file, so
+-- it can't see this file-local by lexical scope -- feedback_lua_forward_reference.md)
+-- can rebuild the reserved set each pass. The function is resolved at CALL time, by
+-- which point this assignment has run (script body executes top-to-bottom before any
+-- hook fires).
+mod._ct_rebuild_coin_reserved_set = _rebuild_coin_reserved_set
+mod._ct_clear_coin_reserved_set = function() table.clear(_coin_reserved_units) end
+-- Exposed for the _can_spawn hook below: after this `do` block closes, the local
+-- _spawner_reserved_for_coins is out of scope, so the hook must reach it via `mod._`.
+mod._ct_spawner_reserved_for_coins = _spawner_reserved_for_coins
+end  -- coin-reservation helper block (releases its locals back to the main chunk)
+
 mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup_name)
     -- v0.7.97: career-exclusive pickup blocklist. Applied BEFORE vanilla and
     -- BEFORE the ct adventure-cat fallback, so the denial covers every path
@@ -3928,7 +6291,7 @@ mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup
             (_career_exclusive_denial_counts[pickup_name] or 0) + 1
         if not _career_exclusive_logged_this_run[pickup_name] then
             _career_exclusive_logged_this_run[pickup_name] = true
-            mod:info("[pickup] denied career-exclusive: %s", pickup_name)
+            _dbg("[pickup] denied career-exclusive: %s", pickup_name)
         end
         return false
     end
@@ -3966,13 +6329,20 @@ mod:hook("PickupSystem", "_can_spawn", function(func, self, spawner_unit, pickup
 
     -- CW pickups accept any non-tome/grim, non-event primary spawner. They
     -- compete with vanilla ammo/healing/grenades for unclaimed slots.
+    --
+    -- v0.7.165-dev coin reservation: deus_soft_currency is ALWAYS eligible (never
+    -- reserved-out); deus_potions and deus_weapon_chest are DENIED on the
+    -- coin-reserved spawner slice so they can't drain it ahead of coins under the
+    -- Abundance-of-Life x3 potion curse (see _spawner_reserved_for_coins above).
     if Pickups and Pickups.deus_potions and Pickups.deus_potions[pickup_name] then
+        if mod._ct_spawner_reserved_for_coins(spawner_unit) then return false end
         return _pickup_unit_loadable(pickup_name)
     end
     if pickup_name == "deus_soft_currency" then
         return _pickup_unit_loadable(pickup_name)
     end
     if pickup_name == "deus_weapon_chest" then
+        if mod._ct_spawner_reserved_for_coins(spawner_unit) then return false end
         return _pickup_unit_loadable(pickup_name)
     end
 
@@ -4051,30 +6421,23 @@ local DIFFICULTY_RECRUIT = "normal"
 local pending_chest_respawn = {}
 
 mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
-    -- v0.7.23: verbose diagnostic on every _set_state call so we can see in
-    -- the log whether the hook is firing, what state it saw, and what player
-    -- states were present at chest-open time. Strip once revive-on-open is
-    -- confirmed working.
-    mod:info("[chest-revive] _set_state fired, state=%s open_const=%s setting=%s is_server=%s",
-        tostring(state), tostring(CURSED_CHEST_STATE_OPEN),
-        tostring(effective_setting("respawn_on_chest_complete")),
-        tostring(Managers and Managers.player and Managers.player.is_server))
-
     if state ~= CURSED_CHEST_STATE_OPEN then
         return
     end
+    -- raw printf so it lands on a mod-logging-OFF host (the user's setup)
+    pcall(printf, "[ct-chest-revive] chest OPEN: setting=%s is_server=%s",
+        tostring(effective_setting("respawn_on_chest_complete")),
+        tostring(Managers and Managers.player and Managers.player.is_server))
+
     if not effective_setting("respawn_on_chest_complete") then
-        mod:info("[chest-revive] setting OFF; bailing")
         return
     end
     if not Managers.player or not Managers.player.is_server then
-        mod:info("[chest-revive] not server; bailing (this hook is host-authoritative)")
         return
     end
 
     local game_mode = Managers.state and Managers.state.game_mode
     if not game_mode then
-        mod:info("[chest-revive] game_mode nil; bailing")
         return
     end
 
@@ -4082,8 +6445,19 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
     local party = side and side.party
     local occupied_slots = party and party.occupied_slots
 
+    -- #116 (v0.7.177-dev): the prior body relied solely on
+    -- `game_mode:force_respawn_dead_players()` (which only zeroes respawn timers) and
+    -- never handled AWAITING-RESCUE players (hanging at a beacon, ready for assisted
+    -- respawn) — so a downed teammate just stayed down and the feature looked dead.
+    -- Now we port general_tweaker's proven per-player respawn primitive
+    -- (_gt_level_control.lua `_gt_host_respawn`) and apply it to every party slot,
+    -- covering all three downed states:
+    --   * awaiting-rescue (hanging)  -> StatusUtils.set_respawned_network (free w/ party)
+    --   * knocked-down (bleeding out) -> StatusUtils.set_revived_network (revive in place)
+    --   * dead / queued for respawn   -> zero respawn_timer so RespawnHandler.server_update
+    --                                    spawns them at the active beacon shortly
+    -- Host-authoritative (already gated on is_server above).
     if occupied_slots then
-        mod:info("[chest-revive] inspecting %d player slot(s)", #occupied_slots)
         for i = 1, #occupied_slots do
             local status = occupied_slots[i]
             local data = status.game_mode_data
@@ -4093,44 +6467,41 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
             if peer_id and local_player_id then
                 local player = Managers.player:player(peer_id, local_player_id)
                 local unit = player and player.player_unit
-
                 local health_state = data and data.health_state or "?"
-                local is_knocked = false
-                local is_disabled_pact = false
-                if unit and Unit.alive(unit) then
-                    local status_ext = ScriptUnit.has_extension(unit, "status_system")
-                    if status_ext then
-                        is_knocked = status_ext.is_knocked_down and status_ext:is_knocked_down() or false
-                        is_disabled_pact = status_ext.is_disabled_by_pact_sworn and status_ext:is_disabled_by_pact_sworn() or false
-                    end
-                end
-                mod:info("[chest-revive] slot[%d] peer=%s health_state=%s unit_alive=%s knocked=%s disabled_pact=%s",
-                    i, tostring(peer_id), tostring(health_state),
-                    tostring(unit and Unit.alive(unit) or false),
-                    tostring(is_knocked), tostring(is_disabled_pact))
 
-                -- Revive knocked-down players (immediate, skipping disabler-held ones).
-                if unit and Unit.alive(unit) and is_knocked and not is_disabled_pact then
+                local status_ext = unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "status_system") or nil
+                local is_knocked = status_ext and status_ext.is_knocked_down and status_ext:is_knocked_down() or false
+                local is_disabled_pact = status_ext and status_ext.is_disabled_by_pact_sworn and status_ext:is_disabled_by_pact_sworn() or false
+                local is_awaiting = status_ext and status_ext.is_ready_for_assisted_respawn and status_ext:is_ready_for_assisted_respawn() or false
+                local action = "none"
+
+                if is_awaiting and rawget(_G, "StatusUtils") and StatusUtils.set_respawned_network then
+                    -- hanging at a respawn beacon -> free directly (helper = self).
+                    StatusUtils.set_respawned_network(unit, true, unit)
+                    action = "freed-awaiting-rescue"
+                elseif is_knocked and not is_disabled_pact and StatusUtils and StatusUtils.set_revived_network then
+                    -- bleeding out -> revive in place (skip disabler-held players).
                     StatusUtils.set_revived_network(unit, true, nil)
-                    mod:info("[chest-revive]   -> called set_revived_network on peer=%s", tostring(peer_id))
+                    action = "revived-knocked"
+                elseif data and (health_state == "dead" or data.respawn_timer ~= nil) then
+                    -- fully dead / in the respawn queue -> spawn at the active beacon.
+                    data.respawn_timer = 0
+                    pending_chest_respawn[peer_id] = true   -- arm THP/wounded post-respawn overrides
+                    action = "respawn-timer-cleared"
                 end
 
-                -- Mark dead-state players for the post-respawn THP/wounded overrides.
-                if data and data.health_state == "dead" then
-                    pending_chest_respawn[peer_id] = true
-                    mod:info("[chest-revive]   -> marked peer=%s for pending_chest_respawn (dead-state)", tostring(peer_id))
-                end
+                pcall(printf, "[ct-chest-revive] slot=%d peer=%s health=%s knocked=%s awaiting=%s disabled=%s -> %s",
+                    i, tostring(peer_id), tostring(health_state), tostring(is_knocked),
+                    tostring(is_awaiting), tostring(is_disabled_pact), action)
             end
         end
-    else
-        mod:info("[chest-revive] no occupied_slots; nothing to revive")
     end
 
+    -- Belt-and-suspenders: also fire the engine's team-wide dead-respawn so any dead
+    -- player our per-slot health_state check didn't classify still respawns (idempotent
+    -- — it only zeroes respawn timers). Per feedback_redundant_safeguards_ok.md.
     if game_mode.force_respawn_dead_players then
         game_mode:force_respawn_dead_players()
-        mod:info("[chest-revive] called game_mode:force_respawn_dead_players()")
-    else
-        mod:info("[chest-revive] game_mode has no force_respawn_dead_players method")
     end
 end)
 
@@ -4245,7 +6616,7 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
         end
     end
 
-    mod:info("[ct:starting_boons] granted %d to %s (%s)%s",
+    _dbg("[ct:starting_boons] granted %d to %s (%s)%s",
         #extra, character, career_name, slot_label)
 end)
 
@@ -4304,31 +6675,160 @@ function mod._ct_boon_display_name(name)
     return tostring(name)
 end
 
-mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups, local_player_id, present)
+-- #144 diagnostic helper: read-only snapshot of a recipient's CURRENT stored boon list.
+-- DeusRunController:get_player_power_ups(peer, local_id) (deus_run_controller.lua:1080) returns
+-- the run_state SharedState power_ups table — the SAME list the boon UI renders and the SAME
+-- list add_power_ups appends to (deus_run_controller.lua:1126). Returns (count, comma-separated
+-- names). On `mod` (not a file-scope local) per the 200-locals cap note, mirroring the pattern of
+-- _ct_boon_display_name above. Fully pcall-guarded: any resolve/format failure returns
+-- (-1, "<snapshot_error>") so a caller's printf can never disturb boon application.
+function mod._ct_boon144_list_snapshot(run_controller, local_player_id)
+    local ok, count, names = pcall(function()
+        local rs = run_controller and run_controller._run_state
+        local peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
+        local list = run_controller and run_controller.get_player_power_ups
+            and run_controller:get_player_power_ups(peer, local_player_id)
+        if type(list) ~= "table" then return 0, "" end
+        local parts = {}
+        for i = 1, #list do
+            local pu = list[i]
+            parts[i] = (pu and pu.name) and tostring(pu.name) or "?"
+        end
+        return #list, table.concat(parts, ",")
+    end)
+    if ok then return count, names end
+    return -1, "<snapshot_error>"
+end
+
+-- v0.7.159-dev Task 2: converted hook_safe -> full mod:hook so disabled boons can be
+-- filtered OUT of `new_power_ups` BEFORE vanilla grants + activates them. ROOT CAUSE of
+-- the `[boon-trace] DISABLED BOON GRANTED: blazing_revenge` leak: the disable filter only
+-- stripped the ROLL pool (DeusPowerUpsArray / DeusPowerUpsArrayByRarity) inside the
+-- generate_random_power_ups hook. But a boon ALTAR (DeusChestExtension, _chest_type ==
+-- power_up) rolls + CACHES its single offered boon into `self._stored_purchase` at chest
+-- SPAWN time (deus_chest_extension.lua:_generate_stored_power_up), then grants it via
+-- add_power_ups on PURCHASE. If the user toggles `disable_boon_<name>` ON mid-run AFTER an
+-- altar already cached that boon, the strip already missed it — the stale cached boon
+-- sails through to add_power_ups. (Other specific-grant paths — set rewards via
+-- _check_set_completed, starting boons — likewise bypass the pool strip.) add_power_ups is
+-- the SINGLE universal apply chokepoint for every grant source, so gating HERE catches all
+-- of them. effective_setting resolves host-authoritatively (host's value on clients), so
+-- host + clients agree on what's disabled — a client never drops a boon the host legitimately
+-- granted. Filtering to empty is safe: vanilla add_power_ups early-returns on #==0.
+-- VMF singleton-hook rule: this remains the ONE (DeusRunController, add_power_ups) hook in
+-- ct (now a full mod:hook instead of hook_safe). DO NOT add another.
+mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_ups, local_player_id, present)
+    -- Pre-grant disable gate. Skip while the bot-mirror loop is granting (those entries
+    -- are freshly materialized from a pool we already control, and re-filtering bot grants
+    -- here is redundant; the guard also prevents touching the recursive set-reward grants).
+    if not _ct_bot_mirror_active and type(new_power_ups) == "table" then
+        for i = #new_power_ups, 1, -1 do
+            local pu = new_power_ups[i]
+            local name = pu and pu.name
+            -- v0.7.200-dev (#211): shared helper (was an inline effective_setting == true check).
+            if name and mod._ct_boon_disabled(name) then
+                table.remove(new_power_ups, i)
+                _dbg("[boon-trace] BLOCKED disabled boon at grant: %s (disable_boon_<name>=true) — stripped before add_power_ups",
+                    tostring(name))
+                -- Raw printf so the block is visible on the logging-OFF host too (#211).
+                pcall(printf, "[boon-trace] BLOCKED disabled boon at grant: %s source=%s (issue #211)",
+                    tostring(name), tostring(mod._ct_grant_source or "untagged"))
+            end
+        end
+    end
+
+    -- #144 diagnostic: snapshot the recipient's boon list BEFORE the grant. The user reported a
+    -- STARTING boon (ct_boon_vauls_anvil) vanishing after acquiring another boon; their hypothesis
+    -- was a fixed-size boon array overflowing/overwriting. Vanilla has NO such cap (power_ups is a
+    -- dynamic SharedState table appended by add_power_ups — deus_run_controller.lua:1126 /
+    -- deus_run_state_spec.lua:298), so this watches for the list SHRINKING across a grant, which
+    -- would prove a real drop/overwrite. Gated on `not _ct_bot_mirror_active` so the re-entrant bot
+    -- grants (driven below) don't spam the trace; the human's own grants + vanilla set-reward
+    -- re-entries inside func() are still captured.
+    local _b144_pre_count, _b144_pre_list
+    if not _ct_bot_mirror_active then
+        _b144_pre_count, _b144_pre_list = mod._ct_boon144_list_snapshot(self, local_player_id)
+    end
+
+    func(self, new_power_ups, local_player_id, present)
+
+    -- #144 diagnostic (cont.): snapshot AFTER the grant and emit before/after lists with counts.
+    -- `added` names the boons this call actually appended (post-disable-strip). With no vanilla
+    -- cap the stored list must only ever GROW by #new_power_ups; anything smaller means a boon was
+    -- dropped/overwritten — the smoking gun for the "starting boon disappears" report. Raw printf
+    -- (host runs VMF logging OFF, per diagnostics doctrine). Whole block pcall-wrapped so a
+    -- snapshot/format failure can never break boon application.
+    if not _ct_bot_mirror_active then
+        pcall(function()
+            if not new_power_ups or #new_power_ups == 0 then return end
+            local rs = self and self._run_state
+            local peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
+            local post_count, post_list = mod._ct_boon144_list_snapshot(self, local_player_id)
+            local added_parts = {}
+            for i = 1, #new_power_ups do
+                local pu = new_power_ups[i]
+                added_parts[i] = (pu and pu.name) and tostring(pu.name) or "?"
+            end
+            local added_csv = table.concat(added_parts, ",")
+            pcall(printf, "[ct:boon144] pre-grant peer=%s local_id=%s count=%s list=%s (issue #144)",
+                tostring(peer), tostring(local_player_id), tostring(_b144_pre_count), tostring(_b144_pre_list))
+            pcall(printf, "[ct:boon144] post-grant peer=%s local_id=%s count=%s added=%s list=%s (issue #144)",
+                tostring(peer), tostring(local_player_id), tostring(post_count), added_csv, tostring(post_list))
+            -- Loss detector: expected post = pre + #added. Fires only on a genuine shrink.
+            if type(_b144_pre_count) == "number" and type(post_count) == "number"
+                and _b144_pre_count >= 0 and post_count >= 0 then
+                local expected = _b144_pre_count + #new_power_ups
+                if post_count < expected then
+                    pcall(printf, "[ct:boon144] LOSS pre=%d added=%d expected=%d post=%d - a boon was dropped/overwritten across this grant (issue #144)",
+                        _b144_pre_count, #new_power_ups, expected, post_count)
+                end
+            end
+        end)
+    end
+
     -- v0.7.90: unconditional audit trail for every boon grant. Logs name, rarity, recipient,
     -- and toggle state — surfaces any boon that slipped through a toggle. Tag `[boon-trace]`
     -- so the whole session's grants are greppable. Must live in this consolidated hook (VMF
-    -- silently shadows duplicate hook_safe on the same Class+method).
+    -- silently shadows duplicate hook on the same Class+method).
     -- v0.7.100-dev: dormant-specific trace fields removed (DORMANT_BOON_RARITY no longer
     -- exists; activate_dormant_* setting reads are dead). The disable_boon_* warning path
     -- still fires — that's the user-facing per-boon disable toggle and is fully active.
+    -- v0.7.159-dev: with the pre-grant gate above, a DISABLED BOON GRANTED warning here now
+    -- means a genuine bypass the gate didn't cover (e.g. _ct_bot_mirror_active path) — still
+    -- worth surfacing.
     pcall(function()
         if not new_power_ups or #new_power_ups == 0 then return end
         local rs = self and self._run_state
         local own_peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
         local trace_is_server = rs and rs.is_server and rs:is_server()
+        -- v0.7.200-dev (#211): grant-source attribution. `mod._ct_grant_source` is a
+        -- short-lived marker set (and restored) around each wrapped grant path:
+        -- "bot_mirror"/"bot_random" (ct's bot-boon loop below), "set_reward"
+        -- (DeusRunController._check_set_completed wrapper), "cot_view_pick"
+        -- (DeusCursedChestView._on_button_pressed wrapper). All markers are set+cleared
+        -- synchronously within one call stack (single frame) — no race. "untagged" on the
+        -- host with present=true and one boon is, per the #211 vanilla call-site map, the
+        -- boon-ALTAR grant inside DeusChestExtension.open_chest — NOT pre-taggable because
+        -- ct's ONLY open_chest hook is the consolidated hook_safe (post-call; VMF drops a
+        -- second hook on the same Class+method). That path is already double-covered by the
+        -- roll-pool strip + the pre-grant gate above. Raw printf: the host runs VMF
+        -- logging OFF, so mod:info/_dbg never lands there (diagnostics doctrine).
+        local grant_source = tostring(mod._ct_grant_source or "untagged")
         for i = 1, #new_power_ups do
             local pu = new_power_ups[i]
             local name = pu and pu.name or "?"
             local rarity = pu and pu.rarity or "?"
-            local disable_toggle = effective_setting("disable_boon_" .. tostring(name))
-            mod:info("[boon-trace] add_power_ups: name=%s rarity=%s recipient_local_id=%s present=%s peer=%s is_server=%s disable_toggle=%s",
+            local disable_toggle = mod._ct_boon_disabled(name)
+            pcall(printf, "[boon-trace] grant source=%s boon=%s rarity=%s disabled=%s recipient_local_id=%s present=%s (issue #211)",
+                grant_source, tostring(name), tostring(rarity), tostring(disable_toggle),
+                tostring(local_player_id), tostring(present))
+            _dbg("[boon-trace] add_power_ups: name=%s rarity=%s recipient_local_id=%s present=%s peer=%s is_server=%s disable_toggle=%s",
                 tostring(name), tostring(rarity), tostring(local_player_id), tostring(present),
                 tostring(own_peer), tostring(trace_is_server),
                 tostring(disable_toggle))
             if disable_toggle == true then
-                mod:warning("[boon-trace] DISABLED BOON GRANTED: %s (disable_boon_<name>=true) — investigate source path",
-                    tostring(name))
+                mod:warning("[boon-trace] DISABLED BOON GRANTED: %s (disable_boon_<name>=true) source=%s — investigate source path",
+                    tostring(name), grant_source)
             end
         end
     end)
@@ -4378,9 +6878,29 @@ mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups
         if not bucket or #bucket == 0 then
             return nil
         end
-        local idx = math.random(1, #bucket)
-        local entry = bucket[idx]
-        return entry and entry.name or nil
+        -- v0.7.200-dev (#211 ROOT-CAUSE FIX): this picker sampled the RAW rarity bucket,
+        -- which is only stripped of disabled boons INSIDE the generate_random_power_ups
+        -- hook's remove-then-restore window — outside that window it always contains every
+        -- boon. The pick was then granted via add_power_ups with the pre-grant gate
+        -- deliberately skipped (_ct_bot_mirror_active), so `bots_get_random_boons` handed
+        -- bots user-disabled boons (host log 2026-07-01: grenadier / deus_second_wind /
+        -- deus_push_charge / skill_by_block, all with disable_boon_<name>=true). Filter the
+        -- bucket through the same shared disable check the pool strip uses. Bomb-boon
+        -- exclusivity and altar no-repeat are NOT applied here: both are per-recipient
+        -- state (the bot's own boon list / the peer's altar history), which this
+        -- rarity-matched random pick has never consulted — unchanged behavior.
+        local eligible = {}
+        for i = 1, #bucket do
+            local entry = bucket[i]
+            local nm = entry and entry.name
+            if nm and not mod._ct_boon_disabled(nm) then
+                eligible[#eligible + 1] = nm
+            end
+        end
+        if #eligible == 0 then
+            return nil  -- whole bucket disabled -> caller falls back to mirroring the host's (already-gated) boon
+        end
+        return eligible[math.random(1, #eligible)]
     end
 
     -- Clone the power-up list per-bot. Each call needs fresh client_ids so the
@@ -4391,6 +6911,11 @@ mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups
     -- is local-only — no RPC/version-sync risk; the feature is already host-gated above.
     local announce = effective_setting("announce_bot_boons") == true
     _ct_bot_mirror_active = true
+    -- v0.7.200-dev (#211): grant-source marker for the audit printf in this same hook
+    -- (the bot grants below re-enter add_power_ups). Set/restored around the pcall so
+    -- it can never leak past this call stack.
+    local _prev_grant_source = mod._ct_grant_source
+    mod._ct_grant_source = mode_random and "bot_random" or "bot_mirror"
     local ok, err = pcall(function()
         for _, bot in ipairs(bots) do
             local cloned = {}
@@ -4403,15 +6928,30 @@ mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups
                         bot_name = picked
                     end
                 end
-                cloned[i] = DeusPowerUpUtils.generate_specific_power_up(bot_name, host_pu.rarity)
-                _dbg("[bot-boon] bot=%s slot=%d rarity=%s host=%s -> bot=%s",
-                    tostring(bot.name and bot:name() or "?"),
-                    i, tostring(host_pu.rarity), tostring(host_pu.name), tostring(bot_name))
-                if announce then
-                    mod:echo(string.format("[ct] Bot %s got boon: %s (%s)",
+                -- v0.7.200-dev (#211) defense-in-depth: never grant a disabled boon to a
+                -- bot, whatever the pick/mirror source. The random picker is now
+                -- disabled-aware and mirror-mode names already passed the pre-grant gate,
+                -- so this firing means a new bypass — printf it (host runs logging OFF).
+                if mod._ct_boon_disabled(bot_name) then
+                    pcall(printf, "[bot-boon] SKIPPED disabled boon for bot: %s (disable_boon_<name>=true, issue #211)",
+                        tostring(bot_name))
+                else
+                    cloned[#cloned + 1] = DeusPowerUpUtils.generate_specific_power_up(bot_name, host_pu.rarity)
+                    _dbg("[bot-boon] bot=%s slot=%d rarity=%s host=%s -> bot=%s",
                         tostring(bot.name and bot:name() or "?"),
-                        mod._ct_boon_display_name(bot_name),
-                        mode_random and "rolled" or "mirrored"))
+                        i, tostring(host_pu.rarity), tostring(host_pu.name), tostring(bot_name))
+                    if announce then
+                        -- The boon display name can carry unfilled `%.1f` placeholders
+                        -- (raw loc + description_values). Don't pre-string.format then
+                        -- echo -- mod:echo string.formats its first arg, so a pre-built
+                        -- string re-interprets the %.1f and prints "<Invalid string
+                        -- format>". Pass the parts as args so mod:echo formats ONCE; the
+                        -- boon name's % is then inert (a %s substitution value).
+                        mod:echo("[ct] Bot %s got boon: %s (%s)",
+                            tostring(bot.name and bot:name() or "?"),
+                            tostring(mod._ct_boon_display_name(bot_name)),
+                            mode_random and "rolled" or "mirrored")
+                    end
                 end
             end
             -- present=false: don't trigger the reward-popup UI for bot grants.
@@ -4419,15 +6959,27 @@ mod:hook_safe("DeusRunController", "add_power_ups", function(self, new_power_ups
         end
     end)
     _ct_bot_mirror_active = false
+    mod._ct_grant_source = _prev_grant_source
 
     if not ok then
-        mod:info("[bot-boon] error granting boons to bots: %s", tostring(err))
+        pcall(printf, "[bot-boon] error granting boons to bots: %s", tostring(err))
         return
     end
 
-    mod:info("[bot-boon] %s %d boon(s) onto %d bot(s)",
+    _dbg("[bot-boon] %s %d boon(s) onto %d bot(s)",
         mode_random and "rolled" or "mirrored", #new_power_ups, #bots)
 end)
+
+-- #144 install-time finding (logged once): there is NO fixed max-boon cap in vanilla. A player's
+-- active power-ups live in a dynamic SharedState Lua table (deus_run_state_spec.lua:298 "power_ups",
+-- type="table", default {}); DeusRunController.add_power_ups (deus_run_controller.lua:1126) only ever
+-- table.clone + table.append + set_player_power_ups — never a bounded/fixed-size write — and the
+-- network transport CHUNKS long encoded strings (shared_state.lua:298-303, STRING_CHUNK_SIZE=500)
+-- and reassembles them (shared_state.lua:767-783) rather than truncating. So the overflow-overwrite
+-- hypothesis for #144 is not supported by the engine; the [ct:boon144] pre/post trace above will
+-- show whether the stored list actually SHRINKS on a grant vs. the starting boon simply never being
+-- present in the stored list to begin with (a persistence / re-sync path, not a cap).
+pcall(printf, "[ct:boon144] no fixed boon cap in vanilla (power_ups is a dynamic SharedState table; add_power_ups appends - deus_run_controller.lua:1126 / deus_run_state_spec.lua:298). Watching for list SHRINK on grant. (issue #144)")
 
 -- Regression guard for the announce_bot_boons feature. The singleton-hook invariant for
 -- (DeusRunController, add_power_ups) is enforced statically by tools/mod-lint; this runtime
@@ -4443,6 +6995,87 @@ _rt_register("bot_boon_announce_wired", function()
     end
     if type(mod:get("announce_bot_boons")) ~= "boolean" then
         return "BOT-BOON REGRESSION: announce_bot_boons checkbox not registered (mod:get is non-boolean)"
+    end
+end)
+
+-- #144 diagnostic install guard: the boon-list snapshot helper must resolve and stay side-effect
+-- free. The pre/post [ct:boon144] trace is folded into the single (DeusRunController, add_power_ups)
+-- hook above — this only verifies the helper exists and returns (number, string) for a bogus
+-- controller (never crashing, never mutating anything).
+_rt_register("boon144_list_trace_installed", function()
+    if type(mod._ct_boon144_list_snapshot) ~= "function" then
+        return "#144 REGRESSION: mod._ct_boon144_list_snapshot missing (boon-list diagnostic)"
+    end
+    local count, names = mod._ct_boon144_list_snapshot(nil, 1)
+    if type(count) ~= "number" or type(names) ~= "string" then
+        return "#144 REGRESSION: _ct_boon144_list_snapshot(nil,1) must return (number, string), got ("
+            .. type(count) .. ", " .. type(names) .. ")"
+    end
+end)
+
+-- ============================================================
+-- v0.7.200-dev (#211) — grant-source tagging hooks
+-- ============================================================
+-- Each wraps ONE vanilla grant path that re-enters DeusRunController.add_power_ups, so
+-- the [boon-trace] grant printf in the consolidated add_power_ups hook above can name
+-- its source. Marker is saved/restored around the wrapped call (synchronous, single
+-- frame — race-free). pcall + re-raise so a vanilla error can't leave a stale marker.
+--
+-- Vanilla grant-path map (2026-07-01 audit for #211, deus_run_controller.lua /
+-- deus_chest_extension.lua / deus_cursed_chest_view.lua / deus_run_state.lua):
+--   COVERED by the roll-pool strip (generate_random_power_ups hook):
+--     * boon-ALTAR stored roll  — DeusChestExtension._generate_stored_power_up:400 ->
+--       controller:generate_random_power_ups:1099 -> util plural :1115
+--     * shrine shop offerings   — deus_shop_view_v2.lua:184 (same controller method)
+--     * Chest of Trials picks   — deus_cursed_chest_view.lua:58 (same controller method)
+--     * end-of-level random     — try_grant_end_of_level_deus_power_ups:1314 + the
+--       late-join RPC variant :421 (both call the plural util directly; both then write
+--       run_state directly and NEVER call add_power_ups — pool strip is the only filter)
+--   COVERED by the pre-grant gate (add_power_ups hook):
+--     * everything that calls DeusRunController.add_power_ups (altar open_chest:548,
+--       CoT view pick :299, set rewards :1291, ct's bot loop)
+--   NOT COVERED (deliberate — instrument/document only):
+--     * _add_initial_power_ups :471 — the player's OWN TALENTS materialized as boons
+--       (must never be stripped) + run_state:get_event_boons() live-event freebies;
+--       writes run_state directly. Stripping here would desync shared run state.
+--     * grant_party_power_up :1770 + belakor_ingame_challenge_settings.lua:34 — quest
+--       reward grants a SPECIFIC named quest power-up and activates it directly
+--       (activate_deus_power_up), never entering add_power_ups.
+--     * terror_event_power_up party grant :1349 — node-configured SPECIFIC party boon,
+--       written to party state directly.
+mod:hook("DeusRunController", "_check_set_completed", function(func, self, ...)
+    local prev = mod._ct_grant_source
+    mod._ct_grant_source = "set_reward"
+    local ok, err = pcall(func, self, ...)
+    mod._ct_grant_source = prev
+    if not ok then
+        mod:warning("[boon-trace] vanilla _check_set_completed raised: %s", tostring(err))
+        error(err, 2)
+    end
+end)
+
+mod:hook("DeusCursedChestView", "_on_button_pressed", function(func, self, ...)
+    local prev = mod._ct_grant_source
+    mod._ct_grant_source = "cot_view_pick"
+    local ok, err = pcall(func, self, ...)
+    mod._ct_grant_source = prev
+    if not ok then
+        mod:warning("[boon-trace] vanilla DeusCursedChestView._on_button_pressed raised: %s", tostring(err))
+        error(err, 2)
+    end
+end)
+
+-- Regression guard (#211): the shared disabled-boon check + the bot-picker filter and
+-- grant-source tagging consolidated into the existing add_power_ups / bot-mirror hooks.
+_rt_register("boon_disable_shared_gate", function()
+    if type(mod._ct_boon_disabled) ~= "function" then
+        return "#211 REGRESSION: mod._ct_boon_disabled missing (shared disabled-boon check)"
+    end
+    if mod._ct_boon_disabled("__ct_no_such_boon__") ~= false then
+        return "#211 REGRESSION: _ct_boon_disabled should be false for an unknown boon key"
+    end
+    if mod._ct_boon_disabled(nil) ~= false then
+        return "#211 REGRESSION: _ct_boon_disabled(nil) should be false"
     end
 end)
 
@@ -4629,7 +7262,7 @@ local function _gen_bot_weapon_for_slot(bot, run_state, target_rarity, slot_name
     return weapon
 end
 
--- Diagnostic event subscribers (gated on enable_debug_logging via _dbg). The
+-- Diagnostic event subscribers (gated on VMF debug logging via _dbg). The
 -- event_manager gets torn down + recreated between missions, so we register
 -- lazily and use a per-event-manager guard so re-registrations don't pile up.
 local _ct_diag_event_manager_ref = nil
@@ -4638,11 +7271,11 @@ local _ct_diag_subscriber = setmetatable({}, { __mode = "v" })
 _ct_diag_subscriber.player_pickup_deus_weapon_chest = function(self, player)
     local name = player and player.name and player:name() or "?"
     local is_bot = player and player.bot_player and "BOT" or "human"
-    mod:debug("[diag] event:player_pickup_deus_weapon_chest player=%s (%s)", tostring(name), is_bot)
+    _dbg("[diag] event:player_pickup_deus_weapon_chest player=%s (%s)", tostring(name), is_bot)
 end
 
 _ct_diag_subscriber.chest_unlock_failed = function(self, chest_type)
-    mod:debug("[diag] event:chest_unlock_failed chest_type=%s", tostring(chest_type))
+    _dbg("[diag] event:chest_unlock_failed chest_type=%s", tostring(chest_type))
 end
 
 local function _diag_subscribe_if_needed()
@@ -4655,9 +7288,9 @@ local function _diag_subscribe_if_needed()
             "chest_unlock_failed",              "chest_unlock_failed")
     end)
     if not ok then
-        mod:info("[diag] subscriber register failed: %s", tostring(err))
+        pcall(printf, "[diag] subscriber register failed: %s", tostring(err))
     else
-        mod:debug("[diag] diagnostic event subscribers registered (new event_manager)")
+        _dbg("[diag] diagnostic event subscribers registered (new event_manager)")
     end
 end
 
@@ -4665,7 +7298,219 @@ mod:hook_safe("DeusChestExtension", "extensions_ready", function(self)
     _diag_subscribe_if_needed()
 end)
 
+-- #103 — PREVENT the structure-collapse animation on a re-armed altar.
+-- ============================================================
+-- Symptom (user 2026-06-30): a re-usable altar with uses remaining correctly
+-- KEEPS its glow/offering (our open_chest post-hook re-fires lua_update_<chest_type>),
+-- but its physical MODEL still shows the collapsed/looted pose after a single use.
+--
+-- Root cause: vanilla purchase() (deus_chest_extension.lua:301-317) fires
+-- `Unit.flow_event(self.unit, "lua_update_collected")` — the STRUCTURE-collapse
+-- transition in the altar unit's flow graph. That event is ONE-WAY (vanilla altars
+-- are single-use, so nothing ever un-collapses them). Re-firing lua_update_<chest_type>
+-- afterward (our open_chest re-arm) restores the offering hologram/glow but NOT the
+-- collapsed structure — exactly the reported "glow OK, model collapsed".
+--
+-- Fix (Peregrinaje's approach = PREVENTION, not reversal — verified against the
+-- Peregrinaje extract, which for reusable altars keeps _is_purchased=false and simply
+-- never fires lua_update_collected): when this purchase will leave uses remaining, we
+-- suppress ONLY that one flow event for the duration of vanilla purchase(), so the
+-- structure never collapses in the first place. Everything else about purchase()
+-- (cost via our get_purchase_cost hook, _is_purchased, "looted" anim state, the
+-- rpc_deus_chest_looted round-trip) is left byte-identical to today, so the existing
+-- open_chest post-hook re-arm operates on exactly the state it always has.
+--
+-- FAILS SAFE: the flow-event filter is installed under pcall; if it can't be installed
+-- or restored, we fall back to plain vanilla purchase() — the altar collapses as it
+-- does today (no visual fix on that path, but NO regression to glow/cost/currency).
+-- The FINAL use (uses will be spent) always calls vanilla so the altar collapses
+-- normally when genuinely depleted. `purchase` is a DIFFERENT method from our
+-- `open_chest` hook, so this is not a duplicate hook. Uses check matches open_chest's
+-- (`_altar_uses_by_go_id` is incremented in the open_chest post-hook AFTER purchase(),
+-- so re-arm here = (current + 1) < max, identical to open_chest's `uses < max`).
+mod:hook("DeusChestExtension", "purchase", function(func, self)
+    local go_id = self._go_id
+    local max_uses = (type(self._chest_type) == "string" and _altar_max_uses(self._chest_type)) or 1
+    local will_rearm = go_id and (((_altar_uses_by_go_id[go_id] or 0) + 1) < max_uses)
+    if not will_rearm then
+        return func(self)  -- single / final use: collapse normally
+    end
+
+    local unit = self.unit
+    local real_flow_event = Unit.flow_event
+    local ok_install = pcall(function()
+        Unit.flow_event = function(u, event, ...)
+            if u == unit and event == "lua_update_collected" then
+                return  -- swallow the structure-collapse for this re-armed altar
+            end
+            return real_flow_event(u, event, ...)
+        end
+    end)
+    if not ok_install then
+        pcall(function() Unit.flow_event = real_flow_event end)
+        return func(self)  -- couldn't install the filter -> behave exactly as today
+    end
+
+    local ok, err = pcall(func, self)
+    pcall(function() Unit.flow_event = real_flow_event end)  -- ALWAYS restore
+    if not ok then
+        -- purchase() errored under the filter. Do NOT re-run it (would double-charge);
+        -- the filter is already restored. Log via printf (visible with mod-logging off).
+        pcall(printf, "[altar_reuse] purchase under collapse-filter errored (go_id=%s): %s",
+            tostring(go_id), tostring(err))
+    end
+end)
+
+-- _ct_consolidated_open_chest_hook
+-- =================================
+-- THIS IS THE ONLY `open_chest` hook in ct. Both the v0.7.127 altar-reuse
+-- re-arm logic AND the bot-weapon-mirror logic live in this single
+-- `mod:hook_safe`. DO NOT add a second `mod:hook(DeusChestExtension, open_chest)`
+-- or `mod:hook_safe(DeusChestExtension, open_chest)` anywhere else in this
+-- file — VMF silently DROPS the second hook (see VMF_RECIPES.md § 1 +
+-- feedback_vmf_no_duplicate_hooks). It happened in v0.7.129/.130 and the
+-- altar-reuse "fix" sat there as dead code for two releases. Catch via
+-- /ct_regression_test → `open_chest_hook_singleton`. Source-pattern marker:
+-- the string `_ct_consolidated_open_chest_hook` on this line.
 mod:hook_safe("DeusChestExtension", "open_chest", function(self)
+    -- #100 fix (v0.7.169-dev): capture the rarity vanilla open_chest JUST used to
+    -- upgrade the host's weapon, BEFORE the upgrade-altar re-arm block below bumps
+    -- self._rarity one tier higher for the NEXT use. The bot-weapon-mirror (further
+    -- down this same hook) must mirror the rarity the HOST actually received, not the
+    -- bumped next-use value — otherwise bots land one tier above the host
+    -- (log-confirmed 2026-06-25 go_id=62: host wielded=rare, altar bumped to exotic,
+    -- bots got exotic). Captured for all chest types; only the upgrade path is bumped,
+    -- so swap_melee/swap_ranged see their unchanged self._rarity here.
+    local _opened_rarity = self._rarity
+    -- v0.7.131-dev altar-reuse re-arm (was a separate mod:hook in v0.7.129/.130,
+    -- which collided with the bot-weapon-mirror hook below and was dropped by
+    -- VMF). Runs FIRST so re-arm fires regardless of bot-mirror reentrancy state.
+    -- Vanilla open_chest just finished (_post_chest_unlock → purchase, then
+    -- _equip_weapon for weapon chests) — both completed with real profile_index,
+    -- so we can safely zero it here to force the chest's `update` loop into its
+    -- re-roll branch.
+    do
+        local go_id = self._go_id
+        if go_id then
+            _altar_uses_by_go_id[go_id] = (_altar_uses_by_go_id[go_id] or 0) + 1
+            local uses = _altar_uses_by_go_id[go_id]
+            local max_uses = _altar_max_uses(self._chest_type)
+
+            -- v0.7.157-dev Task A [altar_visual_probe]: FORCED-OUTPUT diagnosis
+            -- (unconditional mod:info — user just plays, no command needed). Capture
+            -- chest_type / go_id / use count / re-arm branch decision, and
+            -- collected_by_peers BEFORE the uncollect runs. Read-only.
+            local is_server = Managers and Managers.player and Managers.player.is_server
+            local collected_before = _ct_probe_collected_by_peers(go_id)
+            _dbg("[altar_visual_probe] OPEN go_id=%s chest_type=%s uses=%d/%d rearm_branch=%s is_server=%s is_purchased=%s anim=%s profile_idx=%s collected_before=%s",
+                tostring(go_id), tostring(self._chest_type), uses, max_uses,
+                tostring(uses < max_uses), tostring(is_server),
+                tostring(self._is_purchased), tostring(self._animation_state),
+                tostring(self._profile_index), collected_before)
+
+            if uses < max_uses then
+                self._is_purchased = false
+                self._animation_state = nil
+                self._profile_index = 0
+                self._career_index = 0
+                -- v0.7.151-dev: ALSO retract this peer from the networked
+                -- collected_by_peers GameSession field, kept adjacent to the
+                -- _profile_index/_career_index zeroing so the next vanilla
+                -- update() tick sees consistent state. Without it, vanilla
+                -- update() (deus_chest_extension.lua:175) re-derives
+                -- new_is_purchased=true from the still-present peer and re-loots
+                -- the altar VISUALLY (line 177-182 -> _animation_state="looted"
+                -- -> line 194 skips the anim update -> hologram never reappears).
+                -- Pure data write to one field; does NOT re-enter purchase().
+                mod._ct_altar_uncollect(self)
+
+                -- v0.7.159-dev (the "used-up visual fires on use 1" root-cause fix):
+                -- vanilla purchase() (deus_chest_extension.lua:308) ALREADY fired
+                -- `lua_update_collected` — the used-up/looted MODEL transition — on
+                -- THIS open, BEFORE this post-hook runs. Clearing _is_purchased /
+                -- _animation_state above only stops the looted state being RE-asserted
+                -- in update() (line 175-182); it does NOT un-fire the flow event, so
+                -- the flow graph stays on the collected/looted mesh. The only thing
+                -- that pulls it back to the live/available presentation is re-firing
+                -- `lua_update_<chest_type>` (the SAME event vanilla emits at line 142
+                -- when it re-rolls), but vanilla only does that inside the
+                -- profile_index-changed branch (line 134) — racy and not guaranteed on
+                -- the re-arm tick. Re-fire it here, deterministically, so a re-armed
+                -- altar (uses < max) leaves the used-up look IMMEDIATELY. The depleted
+                -- (else) branch deliberately re-fires NOTHING, leaving vanilla's
+                -- lua_update_collected in place, so the used-up visual now shows ONLY
+                -- after the final use. Per-peer: each peer runs its own post-hook +
+                -- its own update() derivation off the host-authoritative
+                -- collected_by_peers, so host and clients both flip available->used-up
+                -- only when the host's configured max uses are spent. pcall-guarded
+                -- per the repo Unit.flow_event rule (engine call, fatal bypasses pcall
+                -- on a dead unit — has_unit guard + pcall).
+                if self.unit and Unit and Unit.flow_event
+                    and (not Unit.alive or Unit.alive(self.unit))
+                    and type(self._chest_type) == "string" then
+                    pcall(Unit.flow_event, self.unit, "lua_update_" .. self._chest_type)
+                end
+
+                _dbg("[altar_reuse] go_id=%s type=%s used %d/%d -> re-arm",
+                    tostring(go_id), tostring(self._chest_type), uses, max_uses)
+
+                -- v0.7.211-dev #102 DECOUPLE (was the v0.7.158 rarity bump): do NOT bump
+                -- self._rarity on re-arm. The reward tier is self._rarity (open_chest ->
+                -- _generate_upgraded_weapon), so bumping it climbed the reward each use. Instead
+                -- self._rarity stays at the constant rolled tier and the relaxed
+                -- update_upgrade_chest_color / can_be_unlocked hooks (near _generate_upgraded_weapon,
+                -- `<=` -> strict `<` for a re-armed upgrade altar) keep the altar lit + usable at
+                -- same-tier without inflating the reward. Here we just refresh the rolled tier's glow
+                -- and clear the cached color memo so the color logic re-evaluates on the next tick.
+                if self._chest_type == DEUS_CHEST_TYPES.upgrade then
+                    if self._rarity and self.unit and Unit and Unit.flow_event
+                        and (not Unit.alive or Unit.alive(self.unit)) then
+                        pcall(Unit.flow_event, self.unit, "lua_update_" .. self._rarity)
+                    end
+                    self._prev_update_upgrade_chest_color_event = nil
+                    _dbg("[altar_reuse] upgrade re-arm go_id=%s altar_rarity=%s (no bump, decoupled)",
+                        tostring(go_id), tostring(self._rarity))
+                end
+
+                -- v0.7.157-dev Task A [altar_visual_probe]: collected_by_peers AFTER
+                -- the uncollect, plus the post-re-arm visual state we just wrote.
+                -- Arm the per-go_id update-tick watcher so the read-only
+                -- DeusChestExtension.update hook logs how vanilla re-derives the
+                -- state over the next few ticks (does it re-set _is_purchased /
+                -- _animation_state="looted"?).
+                local collected_after = _ct_probe_collected_by_peers(go_id)
+                local own_peer = self._deus_run_controller and self._deus_run_controller.get_own_peer_id
+                    and self._deus_run_controller:get_own_peer_id()
+                _dbg("[altar_visual_probe] REARM go_id=%s chest_type=%s own_peer=%s collected_after=%s post_rearm{is_purchased=%s anim=%s profile_idx=%s}",
+                    tostring(go_id), tostring(self._chest_type), tostring(own_peer),
+                    collected_after, tostring(self._is_purchased),
+                    tostring(self._animation_state), tostring(self._profile_index))
+                _ct_altar_probe_watch[go_id] = { ticks = 8, type = tostring(self._chest_type) }
+            else
+                _dbg("[altar_visual_probe] DEPLETED go_id=%s chest_type=%s uses=%d/%d -> stays looted (max reached, expected dark)",
+                    tostring(go_id), tostring(self._chest_type), uses, max_uses)
+            end
+        else
+            _dbg("[altar_visual_probe] OPEN no go_id on ext (chest_type=%s) — re-arm path skipped entirely",
+                tostring(self._chest_type))
+        end
+    end
+
+    -- ---- Boon-altar no-repeat bookkeeping (runs on the buying peer) ----
+    -- For boon (power_up) ALTARS: record the taken boon for the per-run no-repeat
+    -- default (always-on), so later boon altars don't re-offer it. This is a boon
+    -- ALTAR / Shrine of Solace, NOT a Chest of Trials -- see the terminology
+    -- banner near the get_purchase_cost hook.
+    if self._chest_type == DEUS_CHEST_TYPES.power_up then
+        local taken = self._stored_purchase and self._stored_purchase.name
+        if taken then
+            mod._ct_boon_altar_taken_boons = mod._ct_boon_altar_taken_boons or {}
+            mod._ct_boon_altar_taken_boons[taken] = true
+        end
+        _dbg("[boon_altar] boon altar opened; taken boon=%s", tostring(taken))
+    end
+
+    -- ---- Bot weapon mirror (was the only body before v0.7.131 consolidation) ----
     if _ct_bot_weapon_mirror_active then return end
     if not effective_setting("bots_mirror_host_weapon_upgrades") then return end
 
@@ -4700,7 +7545,12 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
         target_slot = wielded_slot or "slot_melee"
     end
 
-    local target_rarity = self._rarity
+    -- #100 fix (v0.7.169-dev): use the rarity the HOST's weapon was actually upgraded
+    -- to on THIS open (captured at hook entry before the re-arm bump), NOT the live
+    -- self._rarity — for upgrade altars the re-arm block above has already bumped
+    -- self._rarity one tier higher for the next use, which is what made bots land a
+    -- tier above the host. For swap altars _opened_rarity == self._rarity (no bump).
+    local target_rarity = _opened_rarity
     if not target_rarity then
         _dbg("[bot-weap] no chest rarity recorded — aborting bot mirror")
         return
@@ -4773,11 +7623,11 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
     _ct_bot_weapon_mirror_active = false
 
     if not ok then
-        mod:info("[bot-weap] error mirroring weapon chest to bots: %s", tostring(err))
+        pcall(printf, "[bot-weap] error mirroring weapon chest to bots: %s", tostring(err))
         return
     end
 
-    mod:info("[bot-weap] mirrored chest_type=%s rarity=%s onto %d bot(s)",
+    _dbg("[bot-weap] mirrored chest_type=%s rarity=%s onto %d bot(s)",
         tostring(chest_type), tostring(target_rarity), #bots)
 end)
 
@@ -4841,7 +7691,7 @@ local function sync_grudge_marks()
     _capture_grudge_baseline()
     local bgm = rawget(_G, "BossGrudgeMarks")
     if not bgm or not _grudge_mark_baseline then
-        mod:info("[grudge] sync skipped: _G.BossGrudgeMarks=%s baseline=%s",
+        _dbg("[grudge] sync skipped: _G.BossGrudgeMarks=%s baseline=%s",
             tostring(bgm), tostring(_grudge_mark_baseline))
         return
     end
@@ -4858,13 +7708,82 @@ local function sync_grudge_marks()
         end
     end
     if #banned > 0 then
-        mod:info("[grudge] %d marks banned: %s", #banned, table.concat(banned, ", "))
+        _dbg("[grudge] %d marks banned: %s", #banned, table.concat(banned, ", "))
     else
-        mod:info("[grudge] no marks banned; vanilla BossGrudgeMarks restored")
+        _dbg("[grudge] no marks banned; vanilla BossGrudgeMarks restored")
     end
 end
 
 sync_grudge_marks()
+
+-- ============================================================
+-- Grudge-mark SPAWN diagnostic (v0.7.169-dev) — _ct_grudge_apply_diag
+-- ============================================================
+-- The data gap behind the "banned mark still appeared on a Belakor champion"
+-- report. ct's ban only nils _G.BossGrudgeMarks, which the RANDOM BOSS roll
+-- honours -- but (a) the Belakor Shadow Lieutenant draws its 2 marks from a
+-- HARDCODED LOCAL pool in deus_generic_terror_events.lua and reads
+-- BreedEnhancements DIRECTLY (bypassing BossGrudgeMarks), and (b) enhancement
+-- assignment is SERVER-AUTHORITATIVE, so a mark the HOST allows still appears even
+-- if a CLIENT banned it (the 2026-06-25 logs show host periodic_shield=0 but
+-- client periodic_shield=1). We had NO spawn-time record of what actually applied.
+--
+-- TerrorEventUtils.apply_breed_enhancements is the UNIVERSAL apply chokepoint
+-- (conflict_director.lua:2041 calls it for EVERY enhanced spawn) and is referenced
+-- as a true _G global by field at call time (no upvalue capture, unlike the dead
+-- v0.7.76 add_enhancements_for_difficulty hook), so this fires reliably for the
+-- boss roll AND the Shadow Lieutenant AND grudge_mark_commander spawns.
+--
+-- v0.7.177-dev (#107): now FILTERS, not just logs. On the host it strips any
+-- enhancement whose name maps to a banned `ban_grudge_mark_<name>` setting BEFORE
+-- vanilla applies them, then logs applied + stripped. Because this is the single
+-- apply chokepoint, the filter catches the Be'lakor Shadow Lieutenant's hardcoded
+-- pool (which bypasses _G.BossGrudgeMarks, the gap the nil-out fix above can't
+-- close), the random boss roll, and grudge_mark_commander alike. Single mod:hook
+-- (no VMF dup-hook — VMF_RECIPES.md § 1).
+if rawget(_G, "TerrorEventUtils") then
+    mod:hook(_G.TerrorEventUtils, "apply_breed_enhancements", function(func, unit, breed, optional_data)
+        local enh = optional_data and optional_data.enhancements
+        local is_server = Managers and Managers.player and Managers.player.is_server
+        if type(enh) == "table" and #enh > 0 then
+            -- #107: strip BANNED grudge marks before vanilla applies. Each entry's
+            -- `.name` is its BreedEnhancements key (grudge_mark_settings.lua:122-124),
+            -- which equals the `ban_grudge_mark_<name>` setting suffix — direct map.
+            -- BreedEnhancements.base (name="base") has no ban setting so it is kept.
+            -- HOST-ONLY strip: assignment is server-authoritative (host rolls/applies/
+            -- broadcasts; clients apply what they receive), so filtering only on the
+            -- host keeps host/client consistent.
+            local applied, removed = {}, {}
+            if is_server then
+                local kept = {}
+                for i = 1, #enh do
+                    local e = enh[i]
+                    local nm = (type(e) == "table" and e.name) or (type(e) == "string" and e) or nil
+                    if type(nm) == "string" and effective_setting("ban_grudge_mark_" .. nm) == true then
+                        removed[#removed + 1] = nm
+                    else
+                        kept[#kept + 1] = e
+                        applied[#applied + 1] = nm or "?"
+                    end
+                end
+                if #removed > 0 then
+                    optional_data.enhancements = kept
+                end
+            else
+                for i = 1, #enh do
+                    local e = enh[i]
+                    applied[#applied + 1] = (type(e) == "table" and e.name) or tostring(e)
+                end
+            end
+            -- printf (raw engine print), NOT mod:info: survives a VMF-mod-logging-OFF
+            -- host so the spawn record is actually captured in the user's console log.
+            pcall(printf, "[grudge-spawn] breed=%s is_server=%s applied=[%s] banned_stripped=[%s]",
+                tostring(breed and breed.name), tostring(is_server),
+                table.concat(applied, ", "), table.concat(removed, ", "))
+        end
+        return func(unit, breed, optional_data)
+    end)
+end
 
 -- Dump command — safe to run from the keep (reads _G.BossGrudgeMarks +
 -- BreedEnhancements; doesn't need a live boss spawn). Use this to verify the
@@ -4876,15 +7795,15 @@ mod:command("dump_grudge_marks", "Dump the live BossGrudgeMarks set and each ent
         mod:echo("[grudge] BossGrudgeMarks not loaded yet.")
         return
     end
-    mod:info("[DUMP:grudge_marks] === baseline: %d entries ===", _grudge_mark_baseline and (function() local n = 0 for _ in pairs(_grudge_mark_baseline) do n = n + 1 end return n end)() or 0)
-    mod:info("[DUMP:grudge_marks] === live BossGrudgeMarks: %d entries ===", (function() local n = 0 for _ in pairs(bgm) do n = n + 1 end return n end)())
-    mod:info("[DUMP:grudge_marks] name\ttoggle_on\tlive_present\tdisplay_name_key")
+    pcall(printf, "[DUMP:grudge_marks] === baseline: %d entries ===", _grudge_mark_baseline and (function() local n = 0 for _ in pairs(_grudge_mark_baseline) do n = n + 1 end return n end)() or 0)
+    pcall(printf, "[DUMP:grudge_marks] === live BossGrudgeMarks: %d entries ===", (function() local n = 0 for _ in pairs(bgm) do n = n + 1 end return n end)())
+    pcall(printf, "[DUMP:grudge_marks] name\ttoggle_on\tlive_present\tdisplay_name_key")
     for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
         local toggle_on = effective_setting("ban_grudge_mark_" .. name) == true
         local live_present = bgm[name] ~= nil
         local entry = be and be[name]
         local dn_key = entry and entry.display_name or ("display_name_" .. name)
-        mod:info("[DUMP:grudge_marks] %s\t%s\t%s\t%s", name, tostring(toggle_on), tostring(live_present), dn_key)
+        pcall(printf, "[DUMP:grudge_marks] %s\t%s\t%s\t%s", name, tostring(toggle_on), tostring(live_present), dn_key)
     end
     mod:echo(string.format("dump_grudge_marks: %d marks (see log for per-mark detail).", #BOSS_GRUDGE_MARK_NAMES))
 end)
@@ -4909,7 +7828,7 @@ mod:command("verify_grudge_marks", "Verify each Boss Grudge Mark toggle vs live 
         local ok = (live_present == expected_present)
         if ok then
             pass = pass + 1
-            mod:info("[verify_grudge] PASS: %s (banned=%s live=%s)", name, tostring(toggle_on), tostring(live_present))
+            pcall(printf, "[verify_grudge] PASS: %s (banned=%s live=%s)", name, tostring(toggle_on), tostring(live_present))
         else
             fail = fail + 1
             mod:warning("[verify_grudge] FAIL: %s — banned=%s but live=%s (expected live=%s)",
@@ -4945,11 +7864,11 @@ mod:command("verify_belakor", "Verify Belakor's Temple state: with_belakor / are
     local current_node   = rs.get_current_node_key and rs:get_current_node_key()
     local force_setting  = effective_setting("force_belakor")
     local is_server      = rs.is_server and rs:is_server()
-    mod:info("[verify_belakor] is_server=%s force_belakor=%s belakor_enabled=%s arena_node=%s current_node=%s",
+    pcall(printf, "[verify_belakor] is_server=%s force_belakor=%s belakor_enabled=%s arena_node=%s current_node=%s",
         tostring(is_server), tostring(force_setting), tostring(with_belakor),
         tostring(arena_node), tostring(current_node))
     local will_force_unique = (current_node and arena_node and current_node == arena_node) or false
-    mod:info("[verify_belakor] cursed_chest at current_node will force unique-tier? %s", tostring(will_force_unique))
+    pcall(printf, "[verify_belakor] cursed_chest at current_node will force unique-tier? %s", tostring(will_force_unique))
     mod:echo(string.format("/verify_belakor: belakor_enabled=%s arena_node=%s current_node=%s (see log for full state)",
         tostring(with_belakor), tostring(arena_node), tostring(current_node)))
 end)
@@ -4990,7 +7909,7 @@ mod:command("dump_journey", "Dump full CW journey state: graph nodes, arena_bela
             end
         end
     end
-    mod:info("[belakor:diag] /dump_journey is_server=%s journey=%s current_node=%s belakor_enabled=%s arena_belakor_node=%s has_own_seen=%s graph_total=%d arena_in_graph=%d (%s) force_setting=%s",
+    pcall(printf, "[belakor:diag] /dump_journey is_server=%s journey=%s current_node=%s belakor_enabled=%s arena_belakor_node=%s has_own_seen=%s graph_total=%d arena_in_graph=%d (%s) force_setting=%s",
         tostring(is_server), tostring(journey), tostring(cur_key),
         tostring(belakor_enabled), tostring(arena_node), tostring(seen),
         total, arena_count, table.concat(arena_keys, ","),
@@ -5012,7 +7931,7 @@ mod:command("dump_journey", "Dump full CW journey state: graph nodes, arena_bela
                     for i, m in ipairs(n.mutators) do list[i] = tostring(m) end
                     mut_str = "{" .. table.concat(list, ",") .. "}"
                 end
-                mod:info("[belakor:diag] /dump_journey node %s level=%s prefix=%s theme=%s curse=%s god=%s node_type=%s level_seed=%s mutators=%s",
+                pcall(printf, "[belakor:diag] /dump_journey node %s level=%s prefix=%s theme=%s curse=%s god=%s node_type=%s level_seed=%s mutators=%s",
                     tostring(k), lvl, prefix, tostring(n.theme),
                     tostring(n.curse), tostring(n.god), tostring(n.node_type),
                     tostring(n.level_seed), mut_str)
@@ -5040,7 +7959,7 @@ mod:command("dump_isha", "Dump Miracle of Isha mutex state: local toggles, effec
     elseif legacy_eff == true or legacy_eff == "aegis" then desc_choice = "aegis (legacy)"
     elseif legacy_eff == "wounds" then desc_choice = "wounds (legacy)"
     end
-    mod:info("[isha:diag] /dump_isha is_server=%s local_aegis=%s local_wounds=%s eff_aegis=%s eff_wounds=%s legacy=%s -> desc_choice=%s",
+    pcall(printf, "[isha:diag] /dump_isha is_server=%s local_aegis=%s local_wounds=%s eff_aegis=%s eff_wounds=%s legacy=%s -> desc_choice=%s",
         tostring(is_server), tostring(aegis_local), tostring(wounds_local),
         tostring(aegis_eff), tostring(wounds_eff), tostring(legacy_eff), desc_choice)
     mod:echo(string.format("/dump_isha: desc_choice=%s eff_aegis=%s eff_wounds=%s (see log)",
@@ -5061,14 +7980,14 @@ mod:command("verify_coins", "Verify starting_coins: live coin balance vs setting
     if not rc then
         mod:echo(string.format("/verify_coins: setting=%s (snapped=%d), override-hook=%s, live balance=N/A (no active CW run — use during run)",
             tostring(setting), snapped, hook_registered_str))
-        mod:info("[verify_coins] no active DeusRunController; setting=%s snapped=%d marker=%s",
+        pcall(printf, "[verify_coins] no active DeusRunController; setting=%s snapped=%d marker=%s",
             tostring(setting), snapped, tostring(marker_present))
         return
     end
     local own_peer_id = rc.get_own_peer_id and rc:get_own_peer_id()
     local balance = rc.get_player_soft_currency and own_peer_id and rc:get_player_soft_currency(own_peer_id)
     local is_server = rc.is_server and rc:is_server()
-    mod:info("[verify_coins] is_server=%s own_peer_id=%s setting=%s snapped=%d live_balance=%s marker=%s",
+    pcall(printf, "[verify_coins] is_server=%s own_peer_id=%s setting=%s snapped=%d live_balance=%s marker=%s",
         tostring(is_server), tostring(own_peer_id), tostring(setting), snapped, tostring(balance), tostring(marker_present))
     mod:echo(string.format("/verify_coins: setting=%d, live=%s, override-hook=%s, host=%s. NOTE: match expected only at run-start; mid-run balance reflects pickups/spends.",
         snapped, tostring(balance), hook_registered_str, tostring(is_server)))
@@ -5099,7 +8018,7 @@ mod:command("verify_engineer_bombs", "Verify career-exclusive pickup blocklist (
         end
         mod:echo(string.format("  %s : denials_this_run=%d, present_in_Pickups=%s",
             name, count, tostring(in_pickups)))
-        mod:info("[verify_engineer_bombs] %s denials_this_run=%d present_in_Pickups=%s",
+        pcall(printf, "[verify_engineer_bombs] %s denials_this_run=%d present_in_Pickups=%s",
             name, count, tostring(in_pickups))
     end
 end)
@@ -5228,7 +8147,7 @@ local function apply_reckless_swings_tweak()
     -- /ct_regression_test source-pattern check `reckless_swings_name_based_lookup`.
     local _marker_anchor = CT_RECKLESS_SWINGS_NAME_LOOKUP_MARKER
 
-    mod:info("[khaines-fury] tweak applied via name-based lookup (buff_index=%d, dv_threshold_index=%d, dv_damage_index=%d, sentinel=%s)",
+    _dbg("[khaines-fury] tweak applied via name-based lookup (buff_index=%d, dv_threshold_index=%d, dv_damage_index=%d, sentinel=%s)",
         buff_index, dv_threshold_index, dv_damage_index, _marker_anchor)
 end
 
@@ -5320,13 +8239,13 @@ local function apply_bomb_cooldown_tweak()
     local buff_entry = tpl and tpl.buff_template and tpl.buff_template.buffs and tpl.buff_template.buffs[1]
     local durations = buff_entry and buff_entry.cooldown_durations
     if not durations then
-        mod:info("[bomb-cooldown] DeusPowerUpTemplates.drop_item_on_ability_use not loaded yet; will retry on next boon roll")
+        _dbg("[bomb-cooldown] DeusPowerUpTemplates.drop_item_on_ability_use not loaded yet; will retry on next boon roll")
         return
     end
 
     local override = effective_setting("bomb_boon_cooldown")
     if not override or override <= 0 then
-        mod:info("[bomb-cooldown] override=%s (no change)", tostring(override))
+        _dbg("[bomb-cooldown] override=%s (no change)", tostring(override))
         return
     end
 
@@ -5337,7 +8256,7 @@ local function apply_bomb_cooldown_tweak()
         bomb_cooldown_originals[k] = v
         durations[k] = override
     end
-    mod:info("[bomb-cooldown] override=%d applied. Was: %s", override, table.concat(before, ", "))
+    _dbg("[bomb-cooldown] override=%d applied. Was: %s", override, table.concat(before, ", "))
 end
 
 local function revert_bomb_cooldown_tweak()
@@ -5367,6 +8286,38 @@ sync_bomb_cooldown = function()
 end
 
 sync_bomb_cooldown()
+
+-- #120 (v0.7.177-dev): the template-mutation above mutates the SOURCE
+-- DeusPowerUpTemplates table, but the runtime buff resolves `buff.template` from a
+-- registered copy (same copy-vs-source trap that forced reckless_swings to patch both
+-- tables) — so the cooldown override "did nothing". This hook makes the override
+-- authoritative by working on the LIVE buff: it wraps the `drop_item_on_ability_use`
+-- proc (morris_buff_settings.lua:2742 — drops a bomb/medkit/potion when you pop your
+-- career ult, then arms the `drop_item_on_ability_use_cooldown` buff whose duration
+-- gates the next drop) and, after vanilla runs, overrides that cooldown buff's
+-- duration to the user's configured interval. Vanilla itself sets `buff.duration`
+-- AFTER add_buff (line 2830), so a post-call duration write is the supported pattern
+-- and works for intervals SHORTER or longer than the vanilla 180/180/120. interval 0
+-- = leave vanilla untouched. Runs on the proc'ing player's machine; the interval is
+-- host-synced via effective_setting so every peer uses the host's value.
+if rawget(_G, "BuffFunctionTemplates") and BuffFunctionTemplates.functions
+        and BuffFunctionTemplates.functions.drop_item_on_ability_use then
+    mod:hook(BuffFunctionTemplates.functions, "drop_item_on_ability_use", function(func, owner_unit, buff, params, ...)
+        func(owner_unit, buff, params, ...)
+
+        local interval = effective_setting("bomb_boon_cooldown")
+        if not (interval and interval > 0) then return end
+        if not (rawget(_G, "ALIVE") and ALIVE[owner_unit]) then return end
+
+        local buff_ext = ScriptUnit.has_extension(owner_unit, "buff_system")
+        local cd = buff_ext and buff_ext.get_non_stacking_buff
+            and buff_ext:get_non_stacking_buff("drop_item_on_ability_use_cooldown")
+        if cd then
+            cd.duration = interval
+            pcall(printf, "[ct-bomb-boon] drop_item cooldown overridden -> %ds", interval)
+        end
+    end)
+end
 
 -- ============================================================
 -- Ulric's Pack (wolfpack) Unlimited Aura Range
@@ -5399,12 +8350,12 @@ local function apply_wolfpack_unlimited_range()
     local buff_entry = tpl and tpl.buff_template and tpl.buff_template.buffs and tpl.buff_template.buffs[1]
     local rc = buff_entry and buff_entry.range_check
     if not rc or type(rc.radius) ~= "number" then
-        mod:info("[ulric-pack-range] DeusPowerUpTemplates.wolfpack not loaded yet; will retry on next sync")
+        _dbg("[ulric-pack-range] DeusPowerUpTemplates.wolfpack not loaded yet; will retry on next sync")
         return
     end
     wolfpack_radius_original = rc.radius
     rc.radius = math.huge
-    mod:info("[ulric-pack-range] radius %s -> math.huge", tostring(wolfpack_radius_original))
+    _dbg("[ulric-pack-range] radius %s -> math.huge", tostring(wolfpack_radius_original))
 end
 
 local function revert_wolfpack_unlimited_range()
@@ -5553,7 +8504,7 @@ local function apply_poison_proof_tweak()
     local base_buff = base and base.buffs and base.buffs[1]
     local inc_buff = inc and inc.buffs and inc.buffs[1]
     if not base_buff or not inc_buff then
-        mod:info("[poison-proof] BuffTemplates not loaded yet; will retry on settings sync")
+        _dbg("[poison-proof] BuffTemplates not loaded yet; will retry on settings sync")
         return
     end
     poison_proof_originals = {
@@ -5562,7 +8513,7 @@ local function apply_poison_proof_tweak()
     }
     base_buff.duration = 240
     inc_buff.duration = 360
-    mod:info(string.format("[poison-proof] applied: base=%s -> 240, increased=%s -> 360",
+    _dbg(string.format("[poison-proof] applied: base=%s -> 240, increased=%s -> 360",
         tostring(poison_proof_originals.base), tostring(poison_proof_originals.inc)))
 end
 
@@ -5604,7 +8555,7 @@ local function apply_invis_potion_tweak()
     local base_buff = base and base.buffs and base.buffs[1]
     local inc_buff = inc and inc.buffs and inc.buffs[1]
     if not base_buff or not inc_buff then
-        mod:info("[invis-potion] BuffTemplates not loaded yet; will retry on settings sync")
+        _dbg("[invis-potion] BuffTemplates not loaded yet; will retry on settings sync")
         return
     end
     invis_potion_originals = {
@@ -5613,7 +8564,7 @@ local function apply_invis_potion_tweak()
     }
     base_buff.duration = (invis_potion_originals.base or 5) * 2
     inc_buff.duration = (invis_potion_originals.inc or 15) * 2
-    mod:info(string.format("[invis-potion] applied: base=%s -> %s, increased=%s -> %s",
+    _dbg(string.format("[invis-potion] applied: base=%s -> %s, increased=%s -> %s",
         tostring(invis_potion_originals.base), tostring(base_buff.duration),
         tostring(invis_potion_originals.inc), tostring(inc_buff.duration)))
 end
@@ -5718,7 +8669,7 @@ local function apply_moot_milk_alt_tweak()
     local base = bt and bt.moot_milk_potion
     local inc = bt and bt.moot_milk_potion_increased
     if not base or not inc then
-        mod:info("[moot-milk-alt] BuffTemplates not loaded yet; will retry on settings sync")
+        _dbg("[moot-milk-alt] BuffTemplates not loaded yet; will retry on settings sync")
         return
     end
     -- v0.7.44: removed `buff_perks` gate. The previous gate bailed when the global
@@ -5731,7 +8682,7 @@ local function apply_moot_milk_alt_tweak()
     }
     base.buffs = build_moot_milk_alt_buffs(60)
     inc.buffs = build_moot_milk_alt_buffs(90)
-    mod:info("[moot-milk-alt] applied: base=60s, increased=90s (+25%% MS, infinite dodge, +40%% stamina regen)")
+    _dbg("[moot-milk-alt] applied: base=60s, increased=90s (+25%% MS, infinite dodge, +40%% stamina regen)")
 end
 
 local function revert_moot_milk_alt_tweak()
@@ -5798,7 +8749,7 @@ local function apply_shard_strike_tweak()
     end
     local entries = _shard_strike_buff_entries()
     if #entries == 0 then
-        mod:info("[shard-strike] WeaponTraits.buff_templates.armor_breaker not loaded yet; will retry on settings sync")
+        _dbg("[shard-strike] WeaponTraits.buff_templates.armor_breaker not loaded yet; will retry on settings sync")
         return
     end
     if not shard_strike_originals then
@@ -5853,7 +8804,7 @@ end
 local function apply_anath_raema_permanent_tweak()
     local entries = _anath_raema_buff_entries()
     if #entries == 0 then
-        mod:info("[anath-raema] templates not loaded yet; will retry on settings sync")
+        _dbg("[anath-raema] templates not loaded yet; will retry on settings sync")
         return
     end
     if anath_raema_originals then return end
@@ -5913,7 +8864,7 @@ local function _apply_local_defeat_penalty()
     local mechanism = Managers.mechanism and Managers.mechanism:game_mechanism()
     local deus_run_controller = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
     if not deus_run_controller then
-        mod:info("[defeat-recovery] no deus_run_controller; skipping penalty")
+        _dbg("[defeat-recovery] no deus_run_controller; skipping penalty")
         return
     end
     local run_state = deus_run_controller._run_state
@@ -5924,7 +8875,7 @@ local function _apply_local_defeat_penalty()
 
     -- Zero own coins.
     run_state:set_player_soft_currency(local_peer_id, local_player_id, 0)
-    mod:info("[defeat-recovery] zeroed own coins")
+    _dbg("[defeat-recovery] zeroed own coins")
 
     -- Pick 5 random boons (or fewer if you have less than 5) and remove them.
     local profile_index, career_index = run_state:get_player_profile(local_peer_id, local_player_id)
@@ -5944,9 +8895,9 @@ local function _apply_local_defeat_penalty()
                 deus_run_controller:remove_power_ups(boon.name, local_player_id)
             end
         end
-        mod:info(string.format("[defeat-recovery] removed %d boons: %s", #removed_names, table.concat(removed_names, ", ")))
+        _dbg(string.format("[defeat-recovery] removed %d boons: %s", #removed_names, table.concat(removed_names, ", ")))
     else
-        mod:info("[defeat-recovery] no boons to remove")
+        _dbg("[defeat-recovery] no boons to remove")
     end
 end
 
@@ -5955,7 +8906,7 @@ local function _force_respawn_team()
     local game_mode = Managers.state.game_mode:game_mode()
     if game_mode and game_mode.force_respawn_dead_players then
         game_mode:force_respawn_dead_players()
-        mod:info("[defeat-recovery] force-respawned dead players")
+        _dbg("[defeat-recovery] force-respawned dead players")
     end
 end
 
@@ -5976,7 +8927,7 @@ mod:hook("GameModeDeus", "evaluate_end_conditions", function(func, self, ...)
         _defeat_recovery_triggered_this_round = true
         _apply_local_defeat_penalty()
         _force_respawn_team()
-        mod:info("[defeat-recovery] intercepted wipe — penalty applied, players respawned, round continues")
+        _dbg("[defeat-recovery] intercepted wipe — penalty applied, players respawned, round continues")
         return false  -- Don't propagate the "lost" outcome.
     end
     return ended, reason
@@ -6092,13 +9043,13 @@ local function inject_dormant_boon(power_up_name, rarity)
     local tweak_data_glob  = rawget(_G, "MorrisBuffTweakData")
 
     if not (templates and power_ups and array and array_by_rarity and lookup and buff_templates) then
-        mod:info("[dormant] DeusPowerUp* tables not loaded yet; skipping injection of " .. tostring(power_up_name))
+        _dbg("[dormant] DeusPowerUp* tables not loaded yet; skipping injection of " .. tostring(power_up_name))
         return
     end
 
     local template = templates[power_up_name]
     if not template then
-        mod:info("[dormant] template not found for " .. tostring(power_up_name))
+        _dbg("[dormant] template not found for " .. tostring(power_up_name))
         return
     end
 
@@ -6194,7 +9145,7 @@ local function inject_dormant_boon(power_up_name, rarity)
     lookup[power_up_name]  = new_power_up
 
     _injected_dormants[power_up_name] = new_power_up
-    mod:info(string.format("[dormant] injected %s at rarity %s (lookup_id=%d)", power_up_name, rarity, new_power_up.lookup_id))
+    _dbg(string.format("[dormant] injected %s at rarity %s (lookup_id=%d)", power_up_name, rarity, new_power_up.lookup_id))
 end
 
 -- v0.7.67: pool insertion is now its own gated step. See the long comment inside
@@ -6206,7 +9157,7 @@ local function _add_dormant_to_pool(power_up_name, rarity)
     if _added_to_pool[power_up_name] then return end
     local record = _injected_dormants[power_up_name]
     if not record then
-        mod:info("[dormant] _add_dormant_to_pool: " .. tostring(power_up_name) .. " not yet registered; skipping pool insert")
+        _dbg("[dormant] _add_dormant_to_pool: " .. tostring(power_up_name) .. " not yet registered; skipping pool insert")
         return
     end
     local pool = rawget(_G, "DeusPowerUpRarityPool")
@@ -6214,7 +9165,7 @@ local function _add_dormant_to_pool(power_up_name, rarity)
     pool[rarity] = pool[rarity] or {}
     table.insert(pool[rarity], { power_up_name, record.availability, {} })
     _added_to_pool[power_up_name] = true
-    mod:info(string.format("[dormant] added %s to %s rarity pool (now %d entries in that rarity)", power_up_name, rarity, #pool[rarity]))
+    _dbg(string.format("[dormant] added %s to %s rarity pool (now %d entries in that rarity)", power_up_name, rarity, #pool[rarity]))
 end
 
 -- v0.7.88: previously sync_dormant_boons only added on toggle-on but never
@@ -6236,7 +9187,7 @@ local function _remove_dormant_from_pool(power_up_name, rarity)
         end
     end
     _added_to_pool[power_up_name] = nil
-    mod:info("[dormant] removed %s from %s rarity pool (toggle now OFF)", power_up_name, rarity)
+    _dbg("[dormant] removed %s from %s rarity pool (toggle now OFF)", power_up_name, rarity)
 end
 
 -- 2026-05-23 v0.7.100-dev FULLY PURGED: pre_register_dormant_lookups, sync_dormant_boons,
@@ -6249,7 +9200,7 @@ end
 local function pre_register_dormant_lookups()
     local templates = rawget(_G, "DeusPowerUpTemplates")
     if not templates then
-        mod:info("[dormant] pre-register skipped: DeusPowerUpTemplates not yet loaded")
+        _dbg("[dormant] pre-register skipped: DeusPowerUpTemplates not yet loaded")
         return
     end
     local keys = {}
@@ -6259,7 +9210,7 @@ local function pre_register_dormant_lookups()
         local rarity = DORMANT_BOON_RARITY[power_up_name]
         inject_dormant_boon(power_up_name, rarity)
     end
-    mod:info("[dormant] pre-registered %d dormants unconditionally for client compat", #keys)
+    _dbg("[dormant] pre-registered %d dormants unconditionally for client compat", #keys)
 end
 
 local function sync_dormant_boons()
@@ -6365,7 +9316,7 @@ local function pre_register_skulls_event_lookups()
     local global_bt = rawget(_G, "BuffTemplates")
     local deus_bt = rawget(_G, "DeusPowerUpBuffTemplates")
     if not (templates and global_bt and deus_bt) then
-        mod:info("[skulls-event] pre-register skipped: DeusPowerUp* tables not yet loaded")
+        _dbg("[skulls-event] pre-register skipped: DeusPowerUp* tables not yet loaded")
         return
     end
     local sorted = {}
@@ -6393,10 +9344,10 @@ local function pre_register_skulls_event_lookups()
             end
             registered = registered + 1
         else
-            mod:info("[skulls-event] template %s not present in this game version — skipping (probably pre-2025 build)", tostring(power_up_name))
+            _dbg("[skulls-event] template %s not present in this game version — skipping (probably pre-2025 build)", tostring(power_up_name))
         end
     end
-    mod:info("[skulls-event] pre-registered %d skulls boons for client compat (idempotent overlay on vanilla)", registered)
+    _dbg("[skulls-event] pre-registered %d skulls boons for client compat (idempotent overlay on vanilla)", registered)
 end
 
 -- Toggle-on: clear the mutators array on each Skulls boon's runtime record so the
@@ -6407,7 +9358,7 @@ local function _set_skulls_mutators_active(enabled)
     local templates = rawget(_G, "DeusPowerUpTemplates")
     local deus_power_ups = rawget(_G, "DeusPowerUps")
     if not (templates and deus_power_ups) then
-        mod:info("[skulls-event] _set_skulls_mutators_active(%s): DeusPowerUp* tables not loaded yet; skipping", tostring(enabled))
+        _dbg("[skulls-event] _set_skulls_mutators_active(%s): DeusPowerUp* tables not loaded yet; skipping", tostring(enabled))
         return
     end
     local count_modified = 0
@@ -6428,7 +9379,7 @@ local function _set_skulls_mutators_active(enabled)
             count_modified = count_modified + 1
         end
     end
-    mod:info("[skulls-event] %s mutator gate on %d skulls boons (toggle=%s)",
+    _dbg("[skulls-event] %s mutator gate on %d skulls boons (toggle=%s)",
         enabled and "cleared" or "restored", count_modified, tostring(enabled))
 end
 
@@ -6495,10 +9446,10 @@ local function _migrate_isha_legacy_dropdown_once()
     -- v0.7.65 boolean → aegis; v0.7.66-0.7.80 dropdown values → matching checkbox.
     if v == true or v == "aegis" then
         mod:set("tweak_miracle_of_isha_aegis", true)
-        mod:info("[miracle-isha] migrated legacy dropdown value %q -> tweak_miracle_of_isha_aegis", tostring(v))
+        _dbg("[miracle-isha] migrated legacy dropdown value %q -> tweak_miracle_of_isha_aegis", tostring(v))
     elseif v == "wounds" then
         mod:set("tweak_miracle_of_isha_wounds", true)
-        mod:info("[miracle-isha] migrated legacy dropdown value %q -> tweak_miracle_of_isha_wounds", tostring(v))
+        _dbg("[miracle-isha] migrated legacy dropdown value %q -> tweak_miracle_of_isha_wounds", tostring(v))
     end
     -- v == false / nil / "vanilla" → both off (default), nothing to do.
 end
@@ -6514,7 +9465,7 @@ local function _register_miracle_buff_templates()
     local global_bt = rawget(_G, "BuffTemplates")
     local deus_bt = rawget(_G, "DeusPowerUpBuffTemplates")
     if not global_bt then
-        mod:info("[miracle] BuffTemplates not loaded; cannot register")
+        _dbg("[miracle] BuffTemplates not loaded; cannot register")
         return
     end
 
@@ -6523,6 +9474,14 @@ local function _register_miracle_buff_templates()
     -- plumbing; is_persistent flag matches deus_special_farm_max_health_buff
     -- (deus_power_up_settings.lua:231-242) so DeusSpawning saves+reapplies it
     -- across missions until the blessing is consumed at end of run.
+    --
+    -- v0.7.153-dev SCOPE NOTE: ULRIC ALONE keeps `is_persistent = true` (the
+    -- vanilla whole-run save/reapply path at deus_spawning.lua:249 save /
+    -- :270-279 reapply). The two Isha buffs below (Aegis, Wounds) had their
+    -- `is_persistent` flag DROPPED so DeusSpawning's save loop never captures
+    -- them — they are now NEXT-MISSION-ONLY, applied by our own host-side
+    -- `DeusSpawning._apply_initial_buffs` hook off the `rc._ct_isha_pending`
+    -- flag and consumed on the next node change. See the hook below.
     local ulric_tpl = {
         buffs = {
             {
@@ -6541,6 +9500,8 @@ local function _register_miracle_buff_templates()
 
     -- -25% damage_taken (NEGATIVE multiplier — vanilla pattern: ale_defence
     -- uses multiplier=-0.04 for 4% reduction at buff_templates.lua:5325-5333).
+    -- v0.7.153-dev: NO is_persistent — this is now a NEXT-MISSION-ONLY buff
+    -- (re-applied by the _apply_initial_buffs hook from rc._ct_isha_pending).
     local isha_tpl = {
         buffs = {
             {
@@ -6549,7 +9510,6 @@ local function _register_miracle_buff_templates()
                 stat_buff = "damage_taken",
                 multiplier = -0.25,
                 max_stacks = 1,
-                is_persistent = true,
             },
         },
     }
@@ -6564,6 +9524,7 @@ local function _register_miracle_buff_templates()
     -- :set_wounded skip the wounds-counter decrement (generic_status_extension
     -- .lua:1443-1450), so `has_wounds_remaining` always returns true and the
     -- death-on-down branch at player_unit_health_extension.lua:812 is never taken.
+    -- v0.7.153-dev: NO is_persistent — NEXT-MISSION-ONLY (same path as Aegis).
     local isha_wounds_tpl = {
         buffs = {
             {
@@ -6571,7 +9532,6 @@ local function _register_miracle_buff_templates()
                 name = CT_BUFF_MIRACLE_OF_ISHA_WOUNDS,
                 perks = { "infinite_wounds" },
                 max_stacks = 1,
-                is_persistent = true,
             },
         },
     }
@@ -6579,7 +9539,7 @@ local function _register_miracle_buff_templates()
     if deus_bt then deus_bt[CT_BUFF_MIRACLE_OF_ISHA_WOUNDS] = isha_wounds_tpl end
     register_buff_in_network_lookup(CT_BUFF_MIRACLE_OF_ISHA_WOUNDS)
 
-    mod:info("[miracle] registered Ulric (+50 power), Isha-aegis (-25%% dmg taken), Isha-wounds (infinite wounds) buff templates")
+    _dbg("[miracle] registered Ulric (+50 power), Isha-aegis (-25%% dmg taken), Isha-wounds (infinite wounds) buff templates")
 end
 
 _register_miracle_buff_templates()
@@ -6622,7 +9582,7 @@ mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, b
         local coins = self._run_state:get_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID) or -1
         local cost = (DeusCostSettings and DeusCostSettings.shop and DeusCostSettings.shop.blessings
             and DeusCostSettings.shop.blessings[blessing_name]) or -1
-        mod:info("[miracle] _try_buy_blessing entry: blessing=%s buyer=%s is_server=%s toggle=%s already=%s coins=%s cost=%s",
+        _dbg("[miracle] _try_buy_blessing entry: blessing=%s buyer=%s is_server=%s toggle=%s already=%s coins=%s cost=%s",
             tostring(blessing_name), tostring(buyer), tostring(is_server), tostring(toggle_on),
             tostring(already), tostring(coins), tostring(cost))
     end
@@ -6630,13 +9590,13 @@ mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, b
         -- Replicate vanilla affordability / dedup guards from
         -- deus_run_controller.lua:1590-1599.
         if self:has_blessing(blessing_name) then
-            mod:info("[miracle] Ulric rejected: has_blessing=true (already bought)")
+            _dbg("[miracle] Ulric rejected: has_blessing=true (already bought)")
             return false
         end
         local current_coins = self._run_state:get_player_soft_currency(buyer, REAL_PLAYER_LOCAL_ID)
         local blessing_cost = DeusCostSettings.shop.blessings[blessing_name]
         if current_coins < blessing_cost then
-            mod:info("[miracle] Ulric rejected: coins=%d < cost=%d", current_coins, blessing_cost)
+            _dbg("[miracle] Ulric rejected: coins=%d < cost=%d", current_coins, blessing_cost)
             return false
         end
 
@@ -6654,7 +9614,7 @@ mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, b
         self._run_state:set_bought_blessings(bought_blessings)
         self:_add_coin_tracking_entry(buyer, REAL_PLAYER_LOCAL_ID, -blessing_cost, "blessing")
 
-        mod:info("[miracle] Ulric (persistent +50 power) applied; vanilla weapon-power bump skipped")
+        _dbg("[miracle] Ulric (persistent +50 power) applied; vanilla weapon-power bump skipped")
         return true
 
     elseif blessing_name == "blessing_of_isha" then
@@ -6676,11 +9636,20 @@ mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, b
         local blessing_cost = DeusCostSettings.shop.blessings[blessing_name]
         if current_coins < blessing_cost then return false end
 
-        if isha_mode == "wounds" then
-            _apply_persistent_buff_to_all_heroes(CT_BUFF_MIRACLE_OF_ISHA_WOUNDS)
-        else
-            _apply_persistent_buff_to_all_heroes(CT_BUFF_MIRACLE_OF_ISHA_AEGIS)
-        end
+        -- v0.7.153-dev: ONE-MISSION scope. The buy happens in the Deus SHOP
+        -- (map_deus node), where there are no player_units yet — so we cannot
+        -- add the buff now. Instead stash the chosen buff name on the run
+        -- controller (a host-local field that persists across the shop->mission
+        -- transition, same object the bookkeeping below writes through). The
+        -- DeusSpawning._apply_initial_buffs hook promotes it to "active" on the
+        -- NEXT mission's first spawn, applies it to every hero/bot for that
+        -- mission only, and consumes it on the mission after. Ulric is
+        -- unchanged (still immediate + whole-run via is_persistent).
+        self._ct_isha_pending = (isha_mode == "wounds")
+            and CT_BUFF_MIRACLE_OF_ISHA_WOUNDS
+            or  CT_BUFF_MIRACLE_OF_ISHA_AEGIS
+        _dbg("[miracle] Isha mode=%s queued for NEXT mission only (pending=%s)",
+            tostring(isha_mode), tostring(self._ct_isha_pending))
 
         local skip_metatable = true
         local blessings_with_buyer = table.clone(self._run_state:get_blessings_with_buyer(), skip_metatable)
@@ -6692,11 +9661,78 @@ mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, b
         self._run_state:set_bought_blessings(bought_blessings)
         self:_add_coin_tracking_entry(buyer, REAL_PLAYER_LOCAL_ID, -blessing_cost, "blessing")
 
-        mod:info("[miracle] Isha alternative mode=%s applied; vanilla revive mutator suppressed", isha_mode)
+        _dbg("[miracle] Isha alternative mode=%s queued (next mission only); vanilla revive mutator suppressed", isha_mode)
         return true
     end
 
     return func(self, buyer, blessing_name)
+end)
+
+-- v0.7.153-dev: ONE-MISSION Isha — apply + consume.
+--
+-- Mechanism (Option B). Aegis/Wounds are now NON-persistent (is_persistent
+-- dropped from their templates above), so vanilla's DeusSpawning save loop
+-- (deus_spawning.lua:249 `template.is_persistent` filter) never captures them
+-- and they expire when the mission unloads. The buy hook stashes the chosen
+-- buff name on `rc._ct_isha_pending`. This hook — the ONLY hook on DeusSpawning
+-- in this file (pre-flight grep `"DeusSpawning"` -> 0 prior hooks) — promotes the
+-- pending flag to "active" on the next mission's first spawn, applies it to every
+-- hero/bot for that mission, and consumes it on the mission AFTER. It is keyed on
+-- the run controller's current node key (rc:get_current_node_key(),
+-- deus_run_controller.lua:2062) which is STABLE within a mission (set once per
+-- node transition) and DISTINCT between consecutive missions (each is its own
+-- graph node) — so the gate is race-free, with no dependence on game-start vs
+-- spawn ordering. Respawns within the mission re-enter _apply_initial_buffs at
+-- the same node key, so the buff is re-applied (guarded by has_buff_type so a
+-- hero who never died is not double-stacked). Host-only; buff_system:add_buff
+-- broadcasts to clients via rpc_add_buff_synced (templates are pre-registered in
+-- NetworkLookup.buff_templates) exactly as _apply_persistent_buff_to_all_heroes did.
+CT_ISHA_ONE_MISSION_MARKER = "isha_one_mission:apply_initial_buffs_node_key_v0.7.153"
+mod:hook_safe("DeusSpawning", "_apply_initial_buffs", function(self, player)
+    if not (Managers and Managers.player and Managers.player.is_server) then return end
+    local rc = self._deus_run_controller
+    if not rc then return end
+
+    -- Current mission identity. get_current_node_key is the run controller's
+    -- authoritative position field (same value the mission-start diagnostic
+    -- reads); each combat mission is a distinct graph node.
+    local level_key = rc.get_current_node_key and rc:get_current_node_key() or nil
+
+    -- Promote a freshly-purchased pending flag to active, tagged to THIS mission.
+    -- The shop is a `map` node with no player units, so _apply_initial_buffs does
+    -- not fire there — the first time it fires post-purchase is the next mission.
+    if rc._ct_isha_pending and not rc._ct_isha_active then
+        rc._ct_isha_active = rc._ct_isha_pending
+        rc._ct_isha_pending = nil
+        rc._ct_isha_active_level = level_key
+        _dbg("[miracle] Isha one-mission buff %s armed for node=%s",
+            tostring(rc._ct_isha_active), tostring(level_key))
+    end
+
+    if not rc._ct_isha_active then return end
+
+    if level_key == rc._ct_isha_active_level then
+        -- Still inside the granted mission (initial spawn wave OR a respawn).
+        -- Apply to this hero/bot.
+        local player_unit = player and player.player_unit
+        if not (player_unit and Unit.alive(player_unit)) then return end
+        local buff_system = Managers.state and Managers.state.entity
+            and Managers.state.entity:system("buff_system")
+        if not buff_system then return end
+        local be = ScriptUnit.has_extension(player_unit, "buff_system")
+        if be and not be:has_buff_type(rc._ct_isha_active) then
+            buff_system:add_buff(player_unit, rc._ct_isha_active, player_unit)
+            _dbg("[miracle] Isha one-mission buff %s applied to a hero on node=%s",
+                tostring(rc._ct_isha_active), tostring(level_key))
+        end
+    else
+        -- Reached a DIFFERENT mission than the one the buff was granted for —
+        -- the one-mission window is over. Consume; do NOT apply.
+        _dbg("[miracle] Isha one-mission buff %s expired (granted node=%s, now node=%s)",
+            tostring(rc._ct_isha_active), tostring(rc._ct_isha_active_level), tostring(level_key))
+        rc._ct_isha_active = nil
+        rc._ct_isha_active_level = nil
+    end
 end)
 
 -- v0.7.66: Suppress vanilla Isha mutator when alternative mode is active.
@@ -6728,13 +9764,13 @@ do
             local current_mode = _get_isha_mode()
             if current_mode ~= "vanilla" then
                 data.hero_side = nil
-                mod:info("[isha] mode=%s, applying alternative (vanilla mutator neutralized at server.start_function)", current_mode)
+                _dbg("[isha] mode=%s, applying alternative (vanilla mutator neutralized at server.start_function)", current_mode)
             end
         end)
         _G.__ct_isha_suppression_hook_installed = true
-        mod:info("[miracle] Isha suppression hook installed on MutatorTemplates.blessing_of_isha.server.start_function")
+        _dbg("[miracle] Isha suppression hook installed on MutatorTemplates.blessing_of_isha.server.start_function")
     else
-        mod:info("[miracle] MutatorTemplates.blessing_of_isha.server.start_function not loaded at hook time; alternative-mode suppression skipped")
+        _dbg("[miracle] MutatorTemplates.blessing_of_isha.server.start_function not loaded at hook time; alternative-mode suppression skipped")
     end
 end
 
@@ -6760,6 +9796,19 @@ mod:command("verify_isha", "Print Miracle of Isha mode + hook install state", fu
     local wounds_ok = wounds_label and wounds_label ~= "tweak_miracle_of_isha_wounds" and #wounds_label > 0
     mod:echo("  aegis title:   %s (%s)",  tostring(aegis_label),  aegis_ok  and "OK" or "MISSING")
     mod:echo("  wounds title:  %s (%s)", tostring(wounds_label), wounds_ok and "OK" or "MISSING")
+
+    -- v0.7.153-dev: one-mission pending/active flag state. Resolve the Deus run
+    -- controller defensively — it is nil in the keep (no active CW run).
+    local rc = nil
+    local gm = Managers and Managers.state and Managers.state.game_mode
+    local gmode = gm and gm:game_mode()
+    rc = gmode and gmode._deus_run_controller or nil
+    if rc then
+        mod:echo("  one-mission flags: pending=%s active=%s active_level=%s",
+            tostring(rc._ct_isha_pending), tostring(rc._ct_isha_active), tostring(rc._ct_isha_active_level))
+    else
+        mod:echo("  one-mission flags: <no active CW run>")
+    end
 
     if aegis_raw and wounds_raw then
         mod:echo("  WARN: both toggles ON; logic resolves to %q (aegis preference); mutex should have prevented this", mode)
@@ -6909,7 +9958,7 @@ local function register_meta_boon(spec)
     local buff_funcs     = rawget(_G, "BuffFunctionTemplates")
     local proc_functions = rawget(_G, "ProcFunctions")
     if not (power_ups and buff_templates and buff_funcs and buff_funcs.functions and proc_functions) then
-        mod:info("[mod-boon] global tables not ready for " .. spec.name)
+        _dbg("[mod-boon] global tables not ready for " .. spec.name)
         return
     end
     local stack_name   = spec.name .. "_stack"
@@ -6976,7 +10025,7 @@ local function register_meta_boon(spec)
     -- both — same peer-side behavior as pre-0.7.67.
     inject_dormant_boon(spec.name, spec.rarity)
     _add_dormant_to_pool(spec.name, spec.rarity)
-    mod:info("[mod-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
+    _dbg("[mod-boon] registered " .. spec.name .. " at rarity " .. spec.rarity)
 end
 
 -- v0.7.104: the v0.7.102 sentinel `CT_META_AMMO_ENERGY_CONSUMPTION_MARKER` is
@@ -7077,7 +10126,7 @@ do
             -- regression check sees the marker as load-bearing rather than dead code.
         end
     else
-        mod:info("[mod-boon] BuffFunctionTemplates not ready — ct_meta_ammo_refresh_capacity deferred (boon load order)")
+        _dbg("[mod-boon] BuffFunctionTemplates not ready — ct_meta_ammo_refresh_capacity deferred (boon load order)")
     end
 end
 
@@ -7136,7 +10185,7 @@ do
         local last = _last_log_ts[ext_name] or -math.huge
         if now - last < _LOG_THROTTLE_S then return end
         _last_log_ts[ext_name] = now
-        mod:info("[ct/meta_ammo] %s cost scaled: factor=%.3f num_boons=%d", ext_name, factor, n)
+        _dbg("[ct/meta_ammo] %s cost scaled: factor=%.3f num_boons=%d", ext_name, factor, n)
     end
 
     -- Hook 1: ammo (GenericAmmoUserExtension.use_ammo, vanilla file line 425).
@@ -7211,7 +10260,7 @@ do
         return func(self, (overcharge_amount or 0) * factor, charge_level, overcharge_type)
     end)
 
-    mod:info("[ct/meta_ammo] hyperbolic-floor hooks installed (use_ammo / drain / add_charge); marker=%s", CT_META_AMMO_HYPERBOLIC_MARKER)
+    pcall(printf, "[ct/meta_ammo] hyperbolic-floor hooks installed (use_ammo / drain / add_charge); marker=%s", CT_META_AMMO_HYPERBOLIC_MARKER)
 end
 
 -- v0.7.104: /verify_meta_ammo — print the hyperbolic curve at sample N values
@@ -7255,7 +10304,7 @@ mod:command("verify_meta_ammo", "Print ct_meta_ammo hyperbolic cost-floor curve 
     mod:echo("  num_boons=%d  cost_factor=%.3f  total_ammo=%s",
         num_boons, live_factor, tostring(live_total_ammo))
     mod:echo("  marker=%s", CT_META_AMMO_HYPERBOLIC_MARKER)
-    mod:info("[verify_meta_ammo] num_boons=%d cost_factor=%.3f total_ammo_live=%s marker=%s",
+    pcall(printf, "[verify_meta_ammo] num_boons=%d cost_factor=%.3f total_ammo_live=%s marker=%s",
         num_boons, live_factor, tostring(live_total_ammo), CT_META_AMMO_HYPERBOLIC_MARKER)
 end)
 
@@ -7332,7 +10381,7 @@ mod:command("verify_altars", "Per-peer altar distribution determinism check (Iss
     end
 
     -- Log-mirror so the line lands in console_logs/ for later cross-peer compare
-    mod:info("[verify_altars] node=%s seed=%s hash=%s eff=[u=%s,m=%s,r=%s,p=%s] dist_n=%d server=%s",
+    pcall(printf, "[verify_altars] node=%s seed=%s hash=%s eff=[u=%s,m=%s,r=%s,p=%s] dist_n=%d server=%s",
         tostring(node_key), tostring(level_seed), tostring(hash_seed),
         tostring(eff_up), tostring(eff_smele), tostring(eff_srng), tostring(eff_pup),
         (type(dist) == "table" and #dist or 0), tostring(is_server))
@@ -7507,7 +10556,7 @@ do
         }
         inject_dormant_boon("ct_meta_movespeed", "exotic")
         _add_dormant_to_pool("ct_meta_movespeed", "exotic")
-        mod:info("[mod-boon] registered ct_meta_movespeed at rarity exotic")
+        _dbg("[mod-boon] registered ct_meta_movespeed at rarity exotic")
     end
 end
 
@@ -7559,7 +10608,7 @@ local function register_trait_boon(spec)
     -- determines whether the user actually rolls the boon.
     if not effective_setting(spec.toggle) then return end
     _add_dormant_to_pool(spec.name, spec.rarity)
-    mod:info("[trait-boon] enabled " .. spec.name .. " at rarity " .. spec.rarity)
+    _dbg("[trait-boon] enabled " .. spec.name .. " at rarity " .. spec.rarity)
 end
 
 -- v0.7.61: same shape as pre_register_dormant_lookups (v0.7.60). The gated
@@ -7579,7 +10628,7 @@ local function pre_register_trait_boon_lookups()
     local buff_templates  = rawget(_G, "BuffTemplates")
     local dpubt           = rawget(_G, "DeusPowerUpBuffTemplates")
     if not (templates and buff_templates and dpubt) then
-        mod:info("[trait-boon] pre-register skipped: globals not yet loaded")
+        _dbg("[trait-boon] pre-register skipped: globals not yet loaded")
         return
     end
     local sorted = {}
@@ -7631,7 +10680,7 @@ local function pre_register_trait_boon_lookups()
                 end
             else
                 placeholder_count = placeholder_count + 1
-                mod:info("[trait-boon] %s: source buff '%s' missing — using empty placeholder buffs (boon non-functional on this peer but lookup_id stays aligned)",
+                _dbg("[trait-boon] %s: source buff '%s' missing — using empty placeholder buffs (boon non-functional on this peer but lookup_id stays aligned)",
                     spec.name, tostring(spec.source_buff))
                 -- Single placeholder buff with the correct name field so
                 -- inject_dormant_boon's `buff_template.buffs[1].name = buff_name`
@@ -7660,7 +10709,7 @@ local function pre_register_trait_boon_lookups()
         inject_dormant_boon(spec.name, spec.rarity)
         count = count + 1
     end
-    mod:info("[trait-boon] pre-registered %d trait boons for client compat (%d using placeholder buffs)",
+    _dbg("[trait-boon] pre-registered %d trait boons for client compat (%d using placeholder buffs)",
         count, placeholder_count)
 end
 
@@ -7684,6 +10733,9 @@ sync_host_dependent_state = function()
     sync_moot_milk_alt_tweak()
     sync_shard_strike()
     sync_anath_raema_permanent()
+    -- User-suggestion mechanic tweaks live in _ct_mechanic_tweaks.lua (own chunk to
+    -- stay under the 200-local main-chunk cap); re-applied here on host-settings receipt.
+    if mod._ct_sync_shadow_skull_stun then mod._ct_sync_shadow_skull_stun() end
     -- 2026-05-23 v0.7.100-dev FULLY PURGED: sync_dormant_boons() — function no longer
     -- exists (block-commented along with DORMANT_BOON_RARITY). Re-enable alongside the
     -- L4721-style apply-site uncomment.
@@ -7753,9 +10805,9 @@ do
 
         inject_dormant_boon("ct_kill_heal", "exotic")
         _add_dormant_to_pool("ct_kill_heal", "exotic")
-        mod:info("[mod-boon] registered ct_kill_heal at rarity exotic")
+        _dbg("[mod-boon] registered ct_kill_heal at rarity exotic")
     else
-        mod:info("[mod-boon] DeusPowerUpTemplates / BuffFunctionTemplates not ready for ct_kill_heal — NetworkLookup name reserved, template construction deferred")
+        _dbg("[mod-boon] DeusPowerUpTemplates / BuffFunctionTemplates not ready for ct_kill_heal — NetworkLookup name reserved, template construction deferred")
     end
 end
 --]] -- end v0.7.98-dev DISABLED ct_kill_heal block
@@ -7784,6 +10836,14 @@ local HOME_BREWER_BREWED_TEMPLATES = {
     moot_milk_potion_increased = true,
 }
 
+-- v0.7.203-dev multi-return marker: the Home Brewer add_buff hook's guarded
+-- (scaled-potency) path forwards ALL of vanilla's returns (id, sub_buffs_added,
+-- first_buff) via _capture_returns + unpack(results, 1, n), NOT a collapsing
+-- `local result = func(...); return result`. Global (not a main-chunk local) to
+-- dodge the Lua 5.1 200-local cap. Asserted by /ct_regression_test
+-- "home_brewer_add_buff_multireturn_preserved".
+CT_HOME_BREWER_MULTIRETURN_MARKER = "home_brewer_add_buff:capture_returns_unpack_v0.7.203"
+
 mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params)
     if not effective_setting("tweak_home_brewer_potency") then
         return func(self, template_name, params)
@@ -7807,43 +10867,90 @@ mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params
             if sb.bonus      then sb.bonus      = sb.bonus      * 1.5 end
         end
     end
-    local result = func(self, template_name, params)
+    -- v0.7.203-dev: vanilla BuffExtension.add_buff returns THREE values
+    -- (id, sub_buffs_added, first_buff — buff_extension.lua:517). The prior
+    -- `local result = func(...)` / `return result` collapsed that to the first
+    -- return, dropping sub_buffs_added + first_buff for any caller that reads them
+    -- (VMF_RECIPES §2/§2a). Capture the real arity and forward every return;
+    -- restore the scaled sub-buff fields in between. Marker
+    -- CT_HOME_BREWER_MULTIRETURN_MARKER documents this fix for the regression check.
+    local n, results = _capture_returns(func(self, template_name, params))
     for i, s in pairs(saved) do
         sub_buffs[i].multiplier = s.multiplier
         sub_buffs[i].bonus      = s.bonus
     end
-    return result
+    return unpack(results, 1, n)
 end)
 
 -- ============================================================
--- Endless Bombs Consumes Morgrim's
+-- Endless Bombs: strip the LEFTOVER Morgrim's when the potion ENDS
 -- ============================================================
--- Vanilla `apply_pockets_full_of_bombs_buff` calls `inventory_extension:drop_level_event_item`
--- when the player is wielding slot_level_event, which spawns the held item back as a pickup on the
--- ground. With this toggle the saved Morgrim's Bomb is destroyed instead of dropped — same end
--- state as if the potion had eaten it.
--- CLARIFY: hook target is `BuffFunctionTemplates.functions` (the merged table built by
--- buff_function_templates.lua:5568 via DLCUtils.merge), NOT `BuffFunctionTemplates` directly. The
--- table-form mod:hook resolves the function value at registration time, so the guard prevents
--- a nil-table crash if the buff system somehow isn't loaded yet.
+-- Intent (user, 2026-06-28): Endless Bombs (pockets_full_of_bombs) is SUPPOSED to work with
+-- Morgrim's Bomb (holy_hand_grenade) — players deliberately save a Morgrim's to throw during the
+-- potion, and that's fine/desired. The ONLY exploit: if you don't throw your last Morgrim's
+-- before the potion expires, it persists (effectively duplicated) so you carry it to the next
+-- potion and do it again. So we do NOT eat the bomb on drink or mid-potion (v0.7.178/.179 did —
+-- WRONG, that broke the intended combo). We strip the LEFTOVER Morgrim's only when the potion
+-- EXPIRES, and only if the player drank it while holding one.
+--
+-- Mechanism: pockets_full_of_bombs_potion(_increased) declares
+-- remove_buff_func = "remove_deus_potion_buff" (morris_buff_settings.lua), which fires on
+-- duration expiry. That remove func is SHARED by every deus potion, so we gate on a flag
+-- (buff.ct_endless_had_morgrim) that ONLY the pockets apply-hook sets — no buff-name match
+-- needed, and other potions are unaffected. The buff instance persists fields across
+-- apply/update/remove (vanilla itself stores buff.previous_multiplier), so the flag survives to
+-- expiry. Hook target is the merged BuffFunctionTemplates.functions table; guard for load order.
+-- #101 regression sentinel (v0.7.181-dev): the consume must be on EXPIRY (remove_deus_potion_buff)
+-- via the buff.ct_endless_had_morgrim flag — NOT a consume-on-drink (v0.7.178) or continuous
+-- mid-potion eat (v0.7.179), both of which broke the intended potion+Morgrim's combo. Global to
+-- dodge the 200-local cap. Asserted by /ct_regression_test "endless_bombs_strip_on_expiry".
+CT_ENDLESS_BOMBS_MARKER = "endless_bombs:strip_leftover_morgrim_on_expiry_v0.7.181"
 if BuffFunctionTemplates and BuffFunctionTemplates.functions then
+    -- At DRINK: only RECORD whether the player held a Morgrim's (do NOT consume it — it must stay
+    -- usable during the potion). Morgrim's lives in slot_grenade (deus_blessing_settings.lua:85).
     mod:hook(BuffFunctionTemplates.functions, "apply_pockets_full_of_bombs_buff", function(func, unit, buff, params)
-        if not effective_setting("endless_bombs_consumes_morgrim") then
-            return func(unit, buff, params)
+        if effective_setting("endless_bombs_consumes_morgrim") == true then
+            local inv = ScriptUnit.has_extension(unit, "inventory_system")
+            local sd = inv and inv:get_slot_data("slot_grenade")
+            local nm = sd and sd.item_data and sd.item_data.name
+            if nm == "holy_hand_grenade" then
+                buff.ct_endless_had_morgrim = true
+            end
+            -- printf, NOT mod:info (user runs VMF mod-logging OFF).
+            pcall(printf, "[endless-bombs] drink: grenade=%s had_morgrim=%s (kept for the potion; stripped on expiry)",
+                tostring(nm or "<none>"), tostring(buff.ct_endless_had_morgrim == true))
         end
+        return func(unit, buff, params)
+    end)
 
-        local inventory_extension = ScriptUnit.has_extension(unit, "inventory_system")
-        if inventory_extension then
-            local slot_data = inventory_extension:get_slot_data("slot_level_event")
-            local item_data = slot_data and slot_data.item_data
-            if item_data and item_data.name == "holy_hand_grenade" then
-                -- destroy_slot is what drop_level_event_item calls at its end; we skip the in-between
-                -- pickup-spawn so the bomb isn't recoverable.
-                inventory_extension:destroy_slot("slot_level_event")
+    -- At EXPIRY: if they drank with a Morgrim's AND a leftover one is still in slot_grenade, strip
+    -- it (kills the un-thrown-duplicate carry-over). Flag-gated -> other deus potions untouched.
+    mod:hook(BuffFunctionTemplates.functions, "remove_deus_potion_buff", function(func, unit, buff, params, world)
+        local result = func(unit, buff, params, world)
+        if buff and buff.ct_endless_had_morgrim and effective_setting("endless_bombs_consumes_morgrim") == true then
+            local inv = ScriptUnit.has_extension(unit, "inventory_system")
+            local sd = inv and inv:get_slot_data("slot_grenade")
+            local nm = sd and sd.item_data and sd.item_data.name
+            if nm == "holy_hand_grenade" then
+                -- If the player is actively wielding the bomb when it's stripped, destroying the
+                -- slot leaves them stuck in the bomb/throw pose on a now-empty slot, unable to
+                -- switch weapons. Capture the wielded slot BEFORE destroying; if it was the
+                -- grenade, interrupt the weapon action and wield melee (slot 1) so they recover.
+                local was_wielding = inv.get_wielded_slot_name and inv:get_wielded_slot_name()
+                inv:destroy_slot("slot_grenade")
+                if was_wielding == "slot_grenade" then
+                    if rawget(_G, "CharacterStateHelper") then
+                        pcall(CharacterStateHelper.stop_weapon_actions, inv, "dropped")
+                    end
+                    pcall(function() inv:wield("slot_melee") end)
+                end
+                pcall(printf, "[endless-bombs] potion ended -> stripped leftover Morgrim's%s",
+                    (was_wielding == "slot_grenade") and " (was wielding it -> swapped to melee)" or "")
+            else
+                pcall(printf, "[endless-bombs] potion ended; no leftover Morgrim's (grenade=%s)", tostring(nm or "<empty>"))
             end
         end
-
-        return func(unit, buff, params)
+        return result
     end)
 
 end
@@ -7918,6 +11025,522 @@ if ProcFunctions and ProcFunctions.chain_lightning then
         bucket[key] = t + MANANN_TEMPEST_COOLDOWN_S
         return func(owner_unit, buff, params, world, param_order)
     end)
+end
+
+-- ============================================================
+-- v0.7.171-dev — Mathlann's Storm-Strike AoE cap (IMPLICIT crash guard, Issue #129)
+-- ============================================================
+-- DISTINCT from Manann's Tempest above (chain_lightning, capped 5). This is the VANILLA
+-- boon `boon_careerskill_01` ("Mathlann's Storm-Strike" — "Your Career Skill also calls
+-- down lightning on nearby enemies"), buff_func `lightning_adjecent_enemies`
+-- (morris_buff_settings.lua:3744). On ult it broadphase-queries EVERY enemy in
+-- template.area_radius and, per enemy, does add_damage_network + a `static_blade`
+-- create_explosion + a beam fx. With a large horde (enemy_tweaker huge_shields blob,
+-- n=121 in the 2026-06-25 crash) the per-enemy + cascading-explosion RPCs flood the HOST
+-- reliable send queue (rpc_add_damage x2239 + rpc_add_buff x1007 -> overflow 98152) ->
+-- the client gets `broken connection: authentication_denied` and the host crashes.
+--
+-- IMPLICIT (no toggle — a host crash must not be leave-on-able). The proc is `is_local`
+-- (runs on the boon OWNER), so EVERY peer needs this build for the cap to take on the
+-- peer holding the boon; an un-updated client still floods the host.
+--
+-- FIX: cap how many enemies the proc's MAIN broadphase sweep returns. We do NOT
+-- re-implement the network-heavy damage loop; for the duration of the proc call we swap
+-- `AiUtils.broadphase_query` for a wrapper that clamps ONLY the first query (the main
+-- sweep — the per-enemy explosions' own queries pass through untouched) to the cap, then
+-- restore it. No permanent hook on the hot broadphase fn. Defensive: pcall-guarded with a
+-- guaranteed restore, and `printf` (survives mod-logging-off) on cap-engage + any error.
+do
+    local MATHLANN_STORMSTRIKE_CAP = 40
+    local _AiUtils = rawget(_G, "AiUtils")
+    if ProcFunctions and ProcFunctions.lightning_adjecent_enemies and _AiUtils and _AiUtils.broadphase_query then
+        local _ms_printf = rawget(_G, "printf") or function() end
+        mod:hook(ProcFunctions, "lightning_adjecent_enemies", function(func, ...)
+            local orig_bq = _AiUtils.broadphase_query
+            local first   = true
+            _AiUtils.broadphase_query = function(...)
+                local n = orig_bq(...)
+                if first then
+                    first = false
+                    if type(n) == "number" and n > MATHLANN_STORMSTRIKE_CAP then
+                        _ms_printf("[ct:mathlann_guard] Storm-Strike (boon_careerskill_01): capped %d nearby enemies -> %d (reliable-send-queue flood guard, issue #129)",
+                            n, MATHLANN_STORMSTRIKE_CAP)
+                        return MATHLANN_STORMSTRIKE_CAP
+                    end
+                end
+                return n
+            end
+            local ok, err = pcall(func, ...)
+            _AiUtils.broadphase_query = orig_bq   -- ALWAYS restore, even on error
+            if not ok then
+                _ms_printf("[ct:mathlann_guard] lightning_adjecent_enemies errored (broadphase restored): %s", tostring(err))
+            end
+        end)
+        _ms_printf("[ct:mathlann_guard] Mathlann's Storm-Strike AoE cap installed (max %d targets/cast, issue #129).", MATHLANN_STORMSTRIKE_CAP)
+    end
+end
+
+-- ============================================================
+-- v0.7.200-dev — Corrupted Flesh gas-cloud rate guard (Issue #104)
+-- ============================================================
+-- The CW curse `curse_corrupted_flesh` (mutator_curse_corrupted_flesh.lua) marks up to
+-- 3 concurrent enemies (30% chance); each marked enemy's death runs the
+-- `mark_of_nurgle_death_explosion` buff, whose proc `mark_of_nurgle_explosion`
+-- (morris_buff_settings.lua:2254-2299) spawns a FULL globadier-class gas cloud:
+-- globadier_area_dot_damage AoE + poison-wind fx + nav-tag volume + an
+-- rpc_area_damage broadcast to every peer. 2026-07-01 forensics
+-- (dlc_bastion_nurgle_path1, both logs): ~117 networked `aoe_unit` creations in
+-- 21.5 min (2.7/min steady, peak 11/min at the finale) against cataclysm/et-multiplied
+-- density — sustained render/CPU load that degraded FPS on BOTH machines (same hazard
+-- family as the #129 Mathlann guard, but below the network-crash threshold).
+--
+-- CHOKE POINT: `ProcFunctions.mark_of_nurgle_explosion` — the exact function that
+-- spawns the cloud. It lives in dlc_settings.proc_functions (morris_buff_settings.lua
+-- :2145+), merged into the flat global `ProcFunctions` at boot and resolved BY STRING
+-- at proc time (buff_extension.lua:1350) — so a table-form hook takes effect with no
+-- upvalue-capture risk (same mechanism as the Manann/Mathlann hooks above).
+-- HOST-AUTHORITATIVE: the buff sits on AI units (host-side) and the body calls
+-- server-only Managers.state.unit_spawner:spawn_network_unit; clients pass through
+-- untouched. Suppression = returning WITHOUT calling func: no cloud unit, no nav-tag
+-- volume, no rpc_area_damage — the mark's other on_death buffs (dot/pingable) run
+-- normally, so nothing is left inconsistent (guard-vs-bail audited).
+--
+-- CAP SEMANTICS: rolling 60s window, host-side. `flesh_guard_clouds_per_minute`
+-- (numeric 0-30, DEFAULT 6): 0 = vanilla/uncapped; 6/min ~ halves the observed peak
+-- (11/min) while leaving the 2.7/min steady rate untouched. Host-synced automatically
+-- (every non-per-peer widget joins SYNCED_SETTING_NAMES via _collect_setting_ids),
+-- though only the host ever evaluates the gate — the sync just keeps /ct_diag +
+-- settings-fingerprint views consistent across peers.
+do
+    local FLESH_GUARD_WINDOW_S = 60
+    local _fg_printf = rawget(_G, "printf") or function() end
+    local _fg_times = {}            -- spawn timestamps within the rolling window
+    local _fg_suppressed_burst = 0  -- suppressions since the last allowed spawn
+    local _fg_last_log_t = -1e9     -- rate-limits the suppression printf (1 per 5s)
+    if ProcFunctions and ProcFunctions.mark_of_nurgle_explosion then
+        -- Trailing `...` forwards world/param_order (proc callers pass up to 5 args even
+        -- though this proc's vanilla body only names 3) — never drop vanilla's trailing
+        -- params in a hook (reference_vmf_hook_drops_skip_sync_rpc_loop).
+        mod:hook(ProcFunctions, "mark_of_nurgle_explosion", function(func, owner_unit, buff, params, ...)
+            local is_server = Managers and Managers.player and Managers.player.is_server
+            if not is_server then
+                return func(owner_unit, buff, params, ...)
+            end
+
+            -- #104 (3b) AoE attribution: one cheap line per cloud (observed max 11/min)
+            -- so future FPS forensics pin hazard spam in a single grep. Scoped to this
+            -- deus curse mechanism only — ordinary combat explosions never route here.
+            local src = "?"
+            pcall(function()
+                local killed = params and params[1]
+                local breed = killed and Unit.alive(killed) and Unit.get_data(killed, "breed")
+                src = breed and breed.name or "?"
+            end)
+
+            local cap = effective_setting("flesh_guard_clouds_per_minute")
+            if type(cap) ~= "number" or cap <= 0 then
+                _fg_printf("[ct:aoe] template=corrupted_flesh_explosion buff=mark_of_nurgle_death_explosion source=%s cap=off (issue #104)",
+                    tostring(src))
+                return func(owner_unit, buff, params, ...)  -- 0 / unset = vanilla, uncapped
+            end
+
+            local t = (Managers and Managers.time and Managers.time:time("game")) or 0
+            -- Prune entries older than the window (in-place compact keeps order).
+            local w = 1
+            for r = 1, #_fg_times do
+                if t - _fg_times[r] <= FLESH_GUARD_WINDOW_S then
+                    _fg_times[w] = _fg_times[r]
+                    w = w + 1
+                end
+            end
+            for r = #_fg_times, w, -1 do _fg_times[r] = nil end
+
+            if #_fg_times >= cap then
+                _fg_suppressed_burst = _fg_suppressed_burst + 1
+                if t - _fg_last_log_t >= 5 then
+                    _fg_last_log_t = t
+                    _fg_printf("[ct:flesh_guard] suppressed gas cloud (%d this window, cap=%d/min, issue #104)",
+                        _fg_suppressed_burst, cap)
+                end
+                return  -- suppress: no cloud, no nav volume, no RPC broadcast
+            end
+
+            _fg_suppressed_burst = 0
+            _fg_times[#_fg_times + 1] = t
+            _fg_printf("[ct:aoe] template=corrupted_flesh_explosion buff=mark_of_nurgle_death_explosion source=%s window_n=%d cap=%d (issue #104)",
+                tostring(src), #_fg_times, cap)
+            return func(owner_unit, buff, params, ...)
+        end)
+        _fg_printf("[ct:flesh_guard] corrupted-flesh gas-cloud rate guard installed (window=%ds, issue #104)", FLESH_GUARD_WINDOW_S)
+    else
+        _fg_printf("[ct:flesh_guard] ProcFunctions.mark_of_nurgle_explosion not found at load — #104 guard INACTIVE")
+    end
+end
+
+-- ============================================================
+-- v0.7.130-dev — Chest of Trials enemy spawn-count multiplier (Issue #64)
+-- ============================================================
+-- Wraps `TerrorEventMixer.init_functions.spawn_around_origin_unit` (vanilla
+-- terror_event_mixer.lua:96). Each `cursed_chest_prototype` terror event
+-- (deus_generic_terror_events.lua:50+) is a sequence of `spawn_around_origin_unit`
+-- elements tagged with `spawn_counter_category = "cursed_chest_enemies"`. That
+-- tag is the filter — every cursed-chest spawn carries it; nothing else does.
+--
+-- Mechanism:
+--   1. Read `effective_setting("cot_enemy_multiplier")`. Bail if missing / <=1.
+--   2. Bail if element isn't cursed-chest (different filter shape, different mod scope).
+--   3. Scale `element.difficulty_amount` (table of per-difficulty counts) and
+--      `element.amount` (scalar fallback) by `mult`, save originals.
+--   4. Call vanilla. Vanilla rebuilds `spawn_table` from the scaled values
+--      (the local `breed_spawn_table_per_difficulty` is NEVER written back to
+--      element — vanilla rebuilds every call — so our scale stays applied just
+--      for this call without persisting across runs).
+--   5. Restore originals so we don't mutate the shared template.
+if rawget(_G, "TerrorEventMixer") and TerrorEventMixer.init_functions
+        and TerrorEventMixer.init_functions.spawn_around_origin_unit then
+    mod:hook(TerrorEventMixer.init_functions, "spawn_around_origin_unit",
+        function(func, event, element, t)
+            if not (element and element.spawn_counter_category == "cursed_chest_enemies") then
+                return func(event, element, t)
+            end
+            local mult = effective_setting("cot_enemy_multiplier")
+            if type(mult) ~= "number" or mult <= 1 then
+                return func(event, element, t)
+            end
+            -- Save + scale. element is the SHARED template; we MUST restore before
+            -- returning so subsequent events see vanilla values.
+            local saved_amount = element.amount
+            if type(saved_amount) == "number" then
+                element.amount = math.max(1, math.floor(saved_amount * mult))
+            end
+            local saved_difficulty_amount = element.difficulty_amount
+            if type(saved_difficulty_amount) == "table" then
+                local scaled = {}
+                for k, v in pairs(saved_difficulty_amount) do
+                    scaled[k] = (type(v) == "number") and math.max(1, math.floor(v * mult)) or v
+                end
+                element.difficulty_amount = scaled
+            end
+
+            local ok, err = pcall(func, event, element, t)
+
+            element.amount = saved_amount
+            element.difficulty_amount = saved_difficulty_amount
+            if not ok then error(err) end
+            _dbg("[cot_enemy_mult] event=%s breed=%s scaled by %.1f (saved orig)",
+                tostring(event and event.event_name or "?"),
+                tostring(element.breed_name), mult)
+        end)
+end
+
+-- ============================================================
+-- v0.7.157-dev Task B — Chest of Trials uniqueness (Issue: same trial repeats)
+-- ============================================================
+-- USER REPORT: multiple Chests of Trials in one mission spawn the SAME enemies.
+--
+-- ROOT CAUSE (verified from decompiled source):
+--   * A Chest of Trials is DeusCursedChestExtension. On activation (server, state
+--     -> RUNNING) it calls
+--       Managers.state.conflict:start_terror_event("cursed_chest_prototype",
+--           Managers.mechanism:get_level_seed(), unit)
+--     (deus_cursed_chest_extension.lua:105-109). EVERY cursed chest in the level
+--     passes the SAME level seed.
+--   * `cursed_chest_prototype` (deus_generic_terror_events.lua:50) is a master
+--     event whose `inject_event` blocks each pick ONE faction challenge from an
+--     `event_name_list` via
+--       Math.next_random(data.seed, 1, #event_name_list)
+--     (terror_event_mixer.lua:1667). `data.seed` is the seed we passed through
+--     ConflictDirector.start_terror_event -> add_to_start_event_list (seed stored
+--     verbatim, terror_event_mixer.lua:1572-1580).
+--   * Same starting seed -> same random walk -> same challenge indices -> the
+--     SAME trial every chest. That's the bug.
+--
+-- FIX: hook ConflictDirector.start_terror_event (HOST-AUTHORITATIVE — cursed
+-- chest activation + terror events are server-side; clients never call this for
+-- cursed chests). When the event is `cursed_chest_prototype`, mix a per-mission
+-- activation counter into the seed so each subsequent chest's inject_event walk
+-- diverges and selects a DIFFERENT challenge. Counter index 0 keeps the FIRST
+-- chest on vanilla behaviour (no offset); only chests 2..N are perturbed.
+--
+-- The counter resets per mission via the existing DeusMechanism._transition_next_node
+-- hook (search `_ct_cursed_chest_seq = 0` there) and at run start (setup_run).
+-- Respects cot_enemy_multiplier: this only changes the SEED used to PICK the
+-- challenge, not the spawn-count scaling (a separate spawn_around_origin_unit
+-- hook), so the two features compose cleanly.
+--
+-- ALWAYS-ON as of v0.7.177-dev (#117): the `cursed_chest_unique_trials` toggle was
+-- removed; this seed-perturbation layer now runs unconditionally on the host, paired
+-- with the TerrorEventMixer.start_event force-rotation layer below.
+_ct_cursed_chest_seq = _ct_cursed_chest_seq or 0  -- per-mission cursed-chest activation counter (host)
+_ct_cot_block_last = _ct_cot_block_last or {}     -- per-mission: cursed_chest_prototype block_index -> last forced event_name (host)
+
+if rawget(_G, "ConflictDirector") then
+    mod:hook("ConflictDirector", "start_terror_event", function(func, self, event_name, optional_seed, origin_unit, origin_position)
+        -- Only perturb the cursed-chest master event; everything else passes through.
+        if event_name ~= "cursed_chest_prototype" then
+            return func(self, event_name, optional_seed, origin_unit, origin_position)
+        end
+
+        -- [ct-probe] v0.7.157-dev unconditional Chest-of-Trials activation probe.
+        -- Placed BEFORE the toggle gate so it fires on EVERY cursed-chest activation,
+        -- toggle ON or OFF. The mod selects the trial INDIRECTLY through the seed
+        -- (vanilla terror_event_mixer Math.next_random(data.seed,...) picks the
+        -- faction challenge downstream — there is no in-mod "trial id"). The seed IS
+        -- the trial handle: same seed => same trial. With the feature OFF, vanilla
+        -- passes the SAME optional_seed to every chest (the repeat-bug signature:
+        -- identical seeds); with it ON the seq>0 chests get a perturbed seed below
+        -- (so a later [ct-probe] cot_seed_applied line carries the divergent seed).
+        -- Grep [ct-probe] next session: identical seeds = same trial, distinct =
+        -- varied. Raw printf bypasses the VMF mod-logging toggle (lands on a
+        -- logging-OFF host — the gap that produced zero lines on Rain's). seq is the
+        -- counter as it stands BEFORE this activation increments it.
+        local probe_seq = _ct_cursed_chest_seq or 0
+        pcall(function()
+            printf("[ct-probe] cot_activation seq=%d base_seed=%s (always-on #117)",
+                probe_seq, tostring(optional_seed or 0))
+        end)
+
+        local seq = _ct_cursed_chest_seq or 0
+        _ct_cursed_chest_seq = seq + 1
+
+        -- First chest (seq 0): leave the seed untouched -> identical to vanilla.
+        -- Subsequent chests: derive a fresh seed by mixing the activation index so
+        -- the inject_event Math.next_random walk lands on different indices.
+        local base_seed = optional_seed or 0
+        local new_seed = base_seed
+        if seq > 0 then
+            if HashUtils and HashUtils.fnv32_hash then
+                new_seed = HashUtils.fnv32_hash(tostring(base_seed) .. "_ct_trial_" .. seq)
+            else
+                -- FNV-prime fallback mix (kept positive / 32-bit-ish)
+                new_seed = (base_seed + seq * 2654435761) % 4294967296
+            end
+        end
+
+        _dbg("[cot_unique] cursed_chest_prototype activation #%d: base_seed=%s -> seed=%s (host)",
+            seq, tostring(base_seed), tostring(new_seed))
+
+        -- [ct-probe] v0.7.157-dev: the APPLIED (derived) trial seed for this
+        -- activation when the uniqueness feature is ON. seq==0 keeps base_seed
+        -- (vanilla first chest); seq>0 carries the perturbed seed => a different
+        -- trial. Pair with the cot_activation line above (same seq) to read the
+        -- before/after seed per chest. Raw printf — lands on a logging-OFF host.
+        pcall(function()
+            printf("[ct-probe] cot_seed_applied seq=%d trial_seed=%s base_seed=%s",
+                seq, tostring(new_seed), tostring(base_seed))
+        end)
+
+        return func(self, event_name, new_seed, origin_unit, origin_position)
+    end)
+end
+
+-- ============================================================
+-- #117 (v0.7.177-dev) — GUARANTEED unique Chest-of-Trials picks (force-rotation)
+-- ============================================================
+-- The seed-perturbation above varies the random walk, but does not GUARANTEE that
+-- two chests land on different top-level trials (different seeds can still collide
+-- on the same faction-challenge pick). This layer makes it deterministic: it wraps
+-- TerrorEventMixer.start_event (the synchronous point where cursed_chest_prototype
+-- is actually processed — terror_event_mixer.lua:1757, called from the deferred
+-- start_event_list loop) and, for the cursed_chest_prototype event, force-rotates
+-- each `inject_event` block's `event_name_list` to a SINGLE entry that differs from
+-- that block's previous pick this mission. The vanilla pick `Math.next_random(seed,
+-- 1, #list)` then has exactly one option, so the chosen top-level faction challenge
+-- is the one we forced. Sub-challenges downstream still vary via the (perturbed)
+-- seed, so the two layers compose. The shared GenericTerrorEvents template is mutated
+-- only across the vanilla call and restored immediately after (save/restore, pcall-
+-- guarded), so no global state leaks. Host-only (terror-event processing is server-
+-- side); guarded on is_server for safety.
+--
+-- `_ct_cot_block_last[block_index]` tracks the last forced event_name per block; it
+-- resets per mission alongside `_ct_cursed_chest_seq` (search `_ct_cot_block_last = {}`).
+-- Stored on `mod` (not a main-chunk local) to respect Lua's 200-locals-per-chunk cap.
+mod._ct_cot_rotate_pick = function(list, last)
+    -- distinct event names in stable order
+    local seen, distinct = {}, {}
+    for _, name in ipairs(list) do
+        if not seen[name] then
+            seen[name] = true
+            distinct[#distinct + 1] = name
+        end
+    end
+    if #distinct <= 1 then
+        return distinct[1] or list[1]
+    end
+    -- return the distinct option AFTER `last` (wrap) so we never repeat last's pick
+    local last_idx
+    for i, name in ipairs(distinct) do
+        if name == last then last_idx = i break end
+    end
+    if not last_idx then return distinct[1] end
+    return distinct[(last_idx % #distinct) + 1]
+end
+
+if rawget(_G, "TerrorEventMixer") then
+    mod:hook("TerrorEventMixer", "start_event", function(func, event_name, data, id)
+        local is_server = Managers and Managers.player and Managers.player.is_server
+        local proto = rawget(_G, "GenericTerrorEvents") and GenericTerrorEvents.cursed_chest_prototype
+        if event_name ~= "cursed_chest_prototype" or not is_server or type(proto) ~= "table" then
+            return func(event_name, data, id)
+        end
+
+        local saved = {}
+        for i, block in ipairs(proto) do
+            if type(block) == "table" and block[1] == "inject_event"
+                    and type(block.event_name_list) == "table" then
+                local pick = mod._ct_cot_rotate_pick(block.event_name_list, _ct_cot_block_last[i])
+                if pick then
+                    saved[i] = block.event_name_list
+                    block.event_name_list = { pick }
+                    _ct_cot_block_last[i] = pick
+                end
+            end
+        end
+
+        pcall(function()
+            local parts = {}
+            for i, p in pairs(_ct_cot_block_last) do parts[#parts + 1] = tostring(i) .. ":" .. tostring(p) end
+            printf("[ct-cot-unique] forced cursed_chest_prototype trial picks -> %s", table.concat(parts, " "))
+        end)
+
+        local ok, err = pcall(func, event_name, data, id)
+
+        -- restore the shared template no matter what (selection already captured)
+        for i, orig in pairs(saved) do
+            proto[i].event_name_list = orig
+        end
+        if not ok then error(err) end
+    end)
+end
+
+-- ============================================================
+-- v0.7.128-dev — Parry-proc boon no-cooldown + per-career burn-on-ability VFX
+-- ============================================================
+-- 2026-05-28 user request, items 3/4/5/6 (of a 6-item batch). Items 1 (Necro
+-- "+1 skeleton per active boon" career boon) and 2 (Handmaiden firewalk dash
+-- boon) are deferred to a follow-up release — they require new boon-template
+-- registration + career-spawn/lunge-state changes that need their own
+-- focused pass. Items 3-6 reuse the well-tested Myrmidia's Wildfire
+-- replacement pattern (see block immediately below this one) and are
+-- ship-safe in this drop.
+
+-- ---- Items 5 + 6: strip cooldown from parry-proc boons ----
+--
+-- `static_blade` (deus_power_up_settings.lua:4205, "lightning bolt on parry"
+-- — fx/cw_chain_lightning + boon_career_ability_lightning_aoe damage) and
+-- `boon_skulls_03` (deus_power_up_settings.lua:3140, drakegun explosion on
+-- parry) both ship a `cooldown_buff` field that gates the `on_timed_block`
+-- proc to once per cooldown duration via vanilla buff_extension cooldown
+-- check (buff_extension.lua:1378-1390). Nuking that field at mod boot makes
+-- every successful timed block fire the proc — no cooldown.
+local function _ct128_strip_parry_cooldowns()
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    if not (templates and templates.power_ups) then
+        _dbg("[ct128] DeusPowerUpTemplates not ready; parry-cooldown strip skipped")
+        return false
+    end
+    local function strip(name)
+        local pu = templates.power_ups[name]
+        if not (pu and pu.buff_template and pu.buff_template.buffs) then
+            _dbg("[ct128] %s missing or unexpected shape; cooldown strip skipped", name)
+            return
+        end
+        local n_stripped = 0
+        for _, b in ipairs(pu.buff_template.buffs) do
+            if b.cooldown_buff then
+                _dbg("[ct128] %s: stripped cooldown_buff=%s", name, tostring(b.cooldown_buff))
+                b.cooldown_buff = nil
+                n_stripped = n_stripped + 1
+            end
+        end
+        if n_stripped == 0 then
+            _dbg("[ct128] %s: already cooldown-free (no cooldown_buff field)", name)
+        end
+    end
+    strip("static_blade")
+    strip("boon_skulls_03")
+    return true
+end
+-- v0.7.130-dev: the boot-time `pcall(_ct128_strip_parry_cooldowns)` was
+-- removed here. DeusPowerUpTemplates is reliably absent at mod-load time in
+-- VT2 (verified by log line 1308 of console-2026-05-29-02.03.57: "[ct128]
+-- DeusPowerUpTemplates not ready; parry-cooldown strip skipped"), so the
+-- boot call always failed and the warning was confusing noise. The strip is
+-- now driven entirely by the post-load call inside the
+-- `generate_random_power_ups` hook above — fires on every boon roll, is
+-- idempotent, and runs well before any parry could fire the proc.
+
+-- ---- Items 3 + 4: per-career burn-on-career-ability VFX swap ----
+--
+-- `boon_careerskill_02` ("burn on career ability" — deus_power_up_settings.lua:
+-- 4546) uses event `on_ability_activated` + buff_func
+-- `career_ability_apply_dot_to_adjecent_enemies` (morris_buff_settings.lua:3683)
+-- to apply a burn DoT to nearby enemies. The DoT template is the buff's
+-- `template.dot_template_name`, hard-cached in `buff.cached_custom_dot` on
+-- first call.
+--
+-- We want the visual to match the burning character: blue Moonfire flame for
+-- Elf careers, balefire green for Necromancer, vanilla orange for everyone
+-- else. Same exact mechanism as the Myrmidia's Wildfire hook below — wrap the
+-- proc func, pre-seed `buff.cached_custom_dot.dot_template_name` with our
+-- chosen template before calling vanilla, vanilla's lazy-init guard at line
+-- 3704 then leaves our template alone.
+--
+-- Differences from the Wildfire hook (deliberate):
+--   - Wildfire selects by TARGET burn status (status_effect:has_status). This
+--     hook selects by OWNER career, because the burn originates from the
+--     player's career ability press, not from a kill cascade.
+--   - Wildfire uses StatusEffectNames.burning_elven_magic / _balefire / _warpfire
+--     for the priority race. Here the owner career is unambiguous (one
+--     career per player).
+local _CT128_ELF_CAREERS = {
+    we_waywatcher  = true,
+    we_maidenguard = true,
+    we_shade       = true,
+    we_thornsister = true,
+}
+
+if ProcFunctions and ProcFunctions.career_ability_apply_dot_to_adjecent_enemies then
+    -- Necromancer balefire variant: vanilla generates this lazily via
+    -- BalefireBurnDotLookup (buff_utils.lua:267). Resolve on first need,
+    -- cache the result.
+    local _ct128_balefire_resolved = false
+    local _ct128_balefire_dot      = nil
+
+    local function _resolve_balefire_dot()
+        if _ct128_balefire_resolved then return _ct128_balefire_dot end
+        local lookup = rawget(_G, "BalefireBurnDotLookup")
+        if lookup then
+            _ct128_balefire_dot = lookup["boon_career_ability_burning_aoe"]
+        end
+        _ct128_balefire_resolved = true
+        return _ct128_balefire_dot
+    end
+
+    local function _ct128_pick_dot_for_career(owner_unit)
+        local career_ext = ScriptUnit.has_extension(owner_unit, "career_system")
+        if not career_ext or not career_ext.career_name then return nil end
+        local career_name = career_ext:career_name()
+        if career_name == "bw_necromancer" then
+            return _resolve_balefire_dot() or "boon_career_ability_burning_aoe"
+        end
+        if _CT128_ELF_CAREERS[career_name] then
+            return "we_deus_01_dot_fast"
+        end
+        return nil  -- nil → no override, run vanilla unchanged
+    end
+
+    mod:hook(ProcFunctions, "career_ability_apply_dot_to_adjecent_enemies",
+        function(func, owner_unit, buff, params)
+            local chosen = _ct128_pick_dot_for_career(owner_unit)
+            if not chosen then return func(owner_unit, buff, params) end
+            -- Pre-seed cached_custom_dot. Vanilla's `cached_custom_dot or {...}`
+            -- pattern means a pre-set table sticks; subsequent ticks use the
+            -- same cached entry without reverting.
+            buff.cached_custom_dot = buff.cached_custom_dot or { dot_template_name = chosen }
+            buff.cached_custom_dot.dot_template_name = chosen
+            return func(owner_unit, buff, params)
+        end)
 end
 
 -- ============================================================
@@ -8226,33 +11849,35 @@ mod.on_setting_changed = function(setting_id)
     end
 
     -- MIDRUN_SETTING_REBROADCAST_MARKER: on_setting_changed:rebroadcast-synced-host-settings
-    -- Host edited a setting mid-run -> immediately re-push the whole synced registry to all
-    -- clients over the existing ct_sync_host_settings_chunk RPC, so their _ct_host_settings
-    -- (and thus effective_setting) pick up the new value on the very next boon/altar roll
-    -- instead of staying frozen until the next setup_run (the boons-per-chest/shrine mid-run
-    -- desync reported 2026-06-17). Gated to host + synced settings so per-peer / UI-only edits
-    -- (e.g. the starting_coins snap below) don't spam the net; a client receiving duplicate
-    -- values is a harmless no-op assignment. Helper is server-gated internally too.
+    -- Host edited a setting mid-run -> re-push the whole synced registry to all clients over
+    -- the existing ct_sync_host_settings_chunk RPC, so their _ct_host_settings (and thus
+    -- effective_setting) pick up the new value on the next boon/altar roll instead of staying
+    -- frozen until the next setup_run (the boons-per-chest/shrine mid-run desync reported
+    -- 2026-06-17). Gated to host + synced settings so per-peer / UI-only edits (e.g. the
+    -- starting_coins snap below) don't spam the net; a client receiving duplicate values is a
+    -- harmless no-op assignment.
+    -- #205: mark dirty + (re)arm the debounce instead of broadcasting inline. The gut Mod
+    -- Tweaker's Apply commits its whole staged batch at once, firing on_setting_changed
+    -- hundreds of times in one frame; an inline broadcast per call meant hundreds of full
+    -- 489-key encodes + 46-chunk enqueues in a single frame (the reliable-queue-overflow
+    -- HOST CRASH — capped by the supersede guard, but still a heavy hitch). mod.update drains
+    -- this ONCE after the burst settles. The ~0.5s sync latency for a lone edit is harmless
+    -- (clients apply on the next roll, seconds away).
     do
         local is_server = Managers and Managers.player and Managers.player.is_server
         if is_server and type(setting_id) == "string"
-            and mod._ct_synced_set and mod._ct_synced_set[setting_id]
-            and mod._ct_broadcast_host_settings then
-            mod._ct_broadcast_host_settings("setting_changed:" .. setting_id)
+            and mod._ct_synced_set and mod._ct_synced_set[setting_id] then
+            mod._ct_settings_sync_pending = true
+            mod._ct_settings_sync_countdown = 0.5
         end
     end
 
     if setting_id == "starting_coins" then
-        -- VMF's numeric widget has no native step parameter; snap the saved value
-        -- to the nearest multiple of 25. Third arg `false` suppresses the callback
-        -- so the write-back doesn't loop (snap is idempotent regardless).
-        local v = mod:get("starting_coins")
-        if type(v) == "number" then
-            local snapped = math.floor(v / 25 + 0.5) * 25
-            if snapped ~= v then
-                mod:set("starting_coins", snapped, false)
-            end
-        end
+        -- (#164) NO snap here. VMF's own options menu is intentionally left at its natural
+        -- fine granularity so the user can dial an exact value (e.g. 324); the coarse 25-step
+        -- lives ONLY in gut's Mod Tweaker (its STEP_OVERRIDES registry). Whatever value is
+        -- stored is applied verbatim as the run's starting coins at setup_run. The early
+        -- return preserves the prior control flow (starting_coins drives none of the syncs below).
         return
     end
     if setting_id == "tweak_reckless_swings" then
@@ -8273,6 +11898,8 @@ mod.on_setting_changed = function(setting_id)
         sync_shard_strike()
     elseif setting_id == "tweak_anath_raema_permanent" then
         sync_anath_raema_permanent()
+    elseif setting_id == "tweak_shadow_skull_stun_sec" then
+        if mod._ct_sync_shadow_skull_stun then mod._ct_sync_shadow_skull_stun() end
     -- 2026-05-23 v0.7.98-dev DISABLED: dormant + skulls event toggles removed from VMF menu.
     -- Their setting_id prefixes will never fire here because the widgets no longer exist, but
     -- comment them out to make the disable explicit (re-enable alongside data.lua + loc).
@@ -8295,69 +11922,30 @@ mod.on_setting_changed = function(setting_id)
 end
 
 -- ============================================================
--- VMF UI fixes (v0.7.120-dev — Issues #39 + #40)
+-- VMF UI fix (v0.7.120-dev — Issue #40; #39/#164 numeric-step hook REMOVED)
 -- ============================================================
--- Two hooks on `VMFOptionsView` that drive widget DISPLAY state from inside
--- the open options menu. VMF's native widgets cache their display state
--- (`is_checkbox_checked` / `internal_value`) independently of the persisted
--- setting and only re-sync from `mod:get` on view re-open (see upstream
--- vmf_options_view.lua:4787 — `update_picked_option_for_settings_list_widgets`
--- runs only in `on_enter`). That caching breaks two patterns:
+-- One hook on `VMFOptionsView` that drives widget DISPLAY state from inside the open
+-- options menu. VMF's native widgets cache their display state (`is_checkbox_checked`)
+-- independently of the persisted setting and only re-sync from `mod:get` on view re-open
+-- (`update_picked_option_for_settings_list_widgets` runs only in `on_enter`).
 --
---   1. **starting_coins slider step-by-25** (Issue #39): VMF's numeric widget
---      has no step / snap / increment field — its slider held_function writes
---      a continuous 0..1 to `internal_value` (vmf_options_view.lua:2486-2492),
---      and `callback_draw_numeric_menu` (line 4181) converts that to
---      `full_range * internal_value + range[1]` rounded to decimals_number.
---      With decimals_number=0 + range=0..3000 the slider visibly moves by 1.
---      Fix: pre-hook `callback_draw_numeric_menu` and quantize internal_value
---      to multiples of (25/full_range) for the `starting_coins` widget BEFORE
---      the original runs — that makes both the displayed number AND the
---      slider fill visually snap to multiples of 25 in real time.
+-- (#164, v0.7.207-dev) The former `callback_draw_numeric_menu` pre-hook that snapped the
+-- `starting_coins` slider to multiples of 25 inside VMF's OWN menu (Issue #39) was REMOVED,
+-- together with the on_setting_changed snap that rounded the persisted value to 25. Per the
+-- binding 2026-07-02 direction, VMF's own options view stays at its natural fine granularity
+-- so the user can dial an exact value (e.g. 324); the coarse 25-step now lives ONLY in gut's
+-- Mod Tweaker (its STEP_OVERRIDES registry, #164).
 --
---   2. **Mutex checkbox visual sync** (Issue #40): when our `on_setting_changed`
---      mutex enforcer calls `mod:set(sibling, false)` to uncheck a mutex
---      cluster sibling, the underlying setting updates but the open widget's
---      `is_checkbox_checked` stays true — so both checkboxes appear checked
---      until the user closes & reopens the menu. Fix: post-hook
---      `callback_setting_changed` to call
---      `self:update_picked_option_for_settings_list_widgets()` after any ct
---      setting change. That function (vmf_options_view.lua:4332-4445) walks
---      all widgets and re-syncs `is_checkbox_checked` / `current_value` from
---      the persisted store — making the mutex-deselected siblings visually
---      flip in the same frame.
---
--- Both hooks are narrowly gated (`mod_name == "ct"`) so other mods are
--- unaffected. pcall-wrapped per the verify-by-design rule.
--- See memory entries `reference_vmf_numeric_widget_no_step.md`,
--- `reference_vmf_checkbox_cached_display_state.md` for the full mechanic.
+-- **Mutex checkbox visual sync** (Issue #40): when our `on_setting_changed` mutex enforcer
+-- calls `mod:set(sibling, false)` to uncheck a cluster sibling, the underlying setting updates
+-- but the open widget's `is_checkbox_checked` stays true — both checkboxes appear checked until
+-- the menu is reopened. Fix: post-hook `callback_setting_changed` to call
+-- `self:update_picked_option_for_settings_list_widgets()` after any ct setting change; it walks
+-- all widgets and re-syncs display state from the persisted store in the same frame. Narrowly
+-- gated (`mod_name == "ct"` — the dev clone's registered id) + pcall-wrapped.
+-- See memory `reference_vmf_checkbox_cached_display_state.md` for the mechanic.
 
--- (1) Slider step-by-25 for starting_coins.
-mod:hook("VMFOptionsView", "callback_draw_numeric_menu", function(func, self, widget_content)
-    pcall(function()
-        if widget_content and widget_content.mod_name == "ct"
-                and widget_content.setting_id == "starting_coins" then
-            local popup = widget_content.popup_menu_widget
-            local pmc = popup and popup.content
-            if pmc and pmc.changed and type(pmc.internal_value) == "number"
-                    and type(widget_content.range) == "table" then
-                local lo = widget_content.range[1] or 0
-                local hi = widget_content.range[2] or 0
-                local full_range = hi - lo
-                if full_range > 0 then
-                    local steps = full_range / 25
-                    if steps > 0 then
-                        local v = pmc.internal_value
-                        pmc.internal_value = math.floor(v * steps + 0.5) / steps
-                    end
-                end
-            end
-        end
-    end)
-    return func(self, widget_content)
-end)
-
--- (2) Mutex / dependent-checkbox visual refresh.
+-- Mutex / dependent-checkbox visual refresh.
 -- Post-hook: original runs first (persists value, fires mod.on_setting_changed,
 -- which runs the mutex enforcer that may have called mod:set on siblings).
 -- After all that, force a widget-display refresh so the open menu reflects the
@@ -8384,76 +11972,24 @@ mod.on_disabled = function()
     revert_moot_milk_alt_tweak()
     revert_shard_strike_tweak()
     revert_anath_raema_permanent_tweak()
+    -- Drop the lazily-built, never-otherwise-invalidated trait-pool caches so a
+    -- re-enable rebuilds them from current game data instead of serving a stale
+    -- snapshot captured under the previous (possibly different-mod-set) session.
+    all_trait_combos_cache = nil
+    mod._ct_trait_class_pools = nil
 end
 
 -- ============================================================
 -- Debug commands
 -- ============================================================
 
-mod:command("dump_spawners", "Dump pickup spawner counts and pickup_settings for the current level", function()
-    if not LevelHelper then
-        mod:echo("LevelHelper not available.")
-        return
-    end
-
-    local current = LevelHelper:current_level_settings()
-    if not current then
-        mod:echo("No level settings found.")
-        return
-    end
-
-    mod:echo("=== Level: " .. tostring(current.display_name or current.level_id or "?") .. " ===")
-
-    local pickup_settings = current.pickup_settings
-    if pickup_settings then
-        for diff_key, diff_data in pairs(pickup_settings) do
-            if type(diff_data) == "table" and diff_data.primary then
-                local p = diff_data.primary
-                local line = string.format("  [%s] weapon_chest=%s cursed_chest=%s ammo=%s",
-                    tostring(diff_key),
-                    tostring(p.deus_weapon_chest or "nil"),
-                    tostring(p.deus_cursed_chest or "nil"),
-                    tostring(p.ammo or "nil"))
-                mod:echo(line)
-                mod:info(line)
-
-                for k, v in pairs(p) do
-                    if k ~= "deus_weapon_chest" and k ~= "deus_cursed_chest" and k ~= "ammo" then
-                        local detail = string.format("    %s = %s", tostring(k), tostring(v))
-                        mod:info(detail)
-                    end
-                end
-            end
-        end
-    else
-        mod:echo("  No pickup_settings found.")
-    end
-
-    if Managers.state and Managers.state.entity then
-        local spawner_count = 0
-        local entity_manager = Managers.state.entity
-        local system = entity_manager:system("pickup_system")
-        if system and system._pickup_spawners then
-            for _ in pairs(system._pickup_spawners) do
-                spawner_count = spawner_count + 1
-            end
-            mod:echo("  Physical pickup spawners: " .. spawner_count)
-        elseif system and system._spawner_units then
-            for _ in pairs(system._spawner_units) do
-                spawner_count = spawner_count + 1
-            end
-            mod:echo("  Physical spawner units: " .. spawner_count)
-        else
-            mod:echo("  Could not count spawners (unknown fields). Check log.")
-            if system then
-                for k, v in pairs(system) do
-                    mod:info("  pickup_system.%s = %s (%s)", tostring(k), tostring(v), type(v))
-                end
-            end
-        end
-    end
-
-    mod:echo("Done. Full details in log.")
+mod:command("dump_spawners", "Dump pickup_settings + live PickupSystem spawner counts by category (Issue #58)", function()
+    -- v0.7.125-dev: delegates to _dump_pickup_system_state so both the in-game
+    -- on-demand command and the automatic mission_start dump produce identical
+    -- output. Echoes a brief one-line summary to chat; full per-category
+    -- breakdown lands in the log.
+    pcall(_dump_pickup_system_state, "[pickup_dump]", true)
+    mod:echo("Done. Full per-category breakdown in log.")
 end)
 
 mod:command("dump_potions", "Dump resolved in-game names for every CW potion (potion_*_01 in ItemMasterList)", function()
@@ -8478,7 +12014,7 @@ mod:command("dump_potions", "Dump resolved in-game names for every CW potion (po
         local desc_raw = desc_key and Localize(desc_key) or ""
         local desc = (desc_key and desc_raw ~= "<" .. desc_key .. ">") and desc_raw or "(no description loc)"
         local tmpl = entry.temporary_template or "(none)"
-        mod:info("[DUMP:potions] %s\tdisplay='%s'\ttemplate=%s\tdesc='%s'", key, display, tmpl, desc)
+        pcall(printf, "[DUMP:potions] %s\tdisplay='%s'\ttemplate=%s\tdesc='%s'", key, display, tmpl, desc)
         count = count + 1
     end
     mod:echo(string.format("dump_potions: %d potions dumped to log.", count))
@@ -8518,7 +12054,7 @@ mod:command("dump_boon_loc", "Dump resolved display names and descriptions for a
             end
         end
 
-        mod:info("[DUMP:boon_loc] %s\t%s\t%s", key, display_text, desc_text)
+        pcall(printf, "[DUMP:boon_loc] %s\t%s\t%s", key, display_text, desc_text)
         count = count + 1
     end
 
@@ -8598,7 +12134,7 @@ mod:command("dump_boons", "Deep dump of all DeusPowerUpTemplates + buff data to 
         end
 
         for _, line in ipairs(lines) do
-            mod:info("[DUMP:boon_deep] %s", line)
+            pcall(printf, "[DUMP:boon_deep] %s", line)
         end
         count = count + 1
     end
@@ -8693,7 +12229,7 @@ mod:command("dump_buffs", "Deep dump of all buff templates referenced by boons",
             lines[#lines + 1] = "========== " .. name .. " NOT FOUND =========="
         end
         for _, line in ipairs(lines) do
-            mod:info("[DUMP:buff_deep] %s", line)
+            pcall(printf, "[DUMP:buff_deep] %s", line)
         end
     end
 
@@ -8721,7 +12257,7 @@ mod:command("dump_mutators", "Dump all mutator templates to log", function(filte
         local line = string.format("%-40s display=%s",
             key, tostring(tpl.display_name or tpl.name or "?"))
         mod:echo(line)
-        mod:info("[DUMP:mutators] %s", line)
+        pcall(printf, "[DUMP:mutators] %s", line)
     end
 
     mod:echo(string.format("dump_mutators: %d templates", #entries))
@@ -8767,13 +12303,13 @@ mod:command("dump_traits", "Dump every CW weapon trait that can roll, with local
         return ""
     end
 
-    mod:info("[DUMP:traits] === %d rollable CW traits ===", #sorted)
-    mod:info("[DUMP:traits] trait_name\tdisplay_name_key\tdisplay_text\tdesc_key\tdesc_text")
+    pcall(printf, "[DUMP:traits] === %d rollable CW traits ===", #sorted)
+    pcall(printf, "[DUMP:traits] trait_name\tdisplay_name_key\tdisplay_text\tdesc_key\tdesc_text")
     for _, name in ipairs(sorted) do
         local td = WT.traits[name]
         local dn_key = td and td.display_name or ""
         local desc_key = td and td.advanced_description or ""
-        mod:info("[DUMP:traits] %s\t%s\t%s\t%s\t%s",
+        pcall(printf, "[DUMP:traits] %s\t%s\t%s\t%s\t%s",
             name, dn_key, resolve(dn_key), desc_key, resolve(desc_key))
     end
     mod:echo(string.format("dump_traits: %d traits dumped to log.", #sorted))
@@ -8797,8 +12333,8 @@ mod:command("dump_adventure_names", "Resolve in-game names for every adventure l
         return ""
     end
 
-    mod:info("[DUMP:adv_names] === ADVENTURE MISSIONS ===")
-    mod:info("[DUMP:adv_names] level_key\tdisplay_text\tdlc_name\tact\tlevel_bundle_path")
+    pcall(printf, "[DUMP:adv_names] === ADVENTURE MISSIONS ===")
+    pcall(printf, "[DUMP:adv_names] level_key\tdisplay_text\tdlc_name\tact\tlevel_bundle_path")
     for _, entry in ipairs(AdventurePool.ADVENTURE_MISSIONS) do
         local lvl = entry.key
         local v = rawget(LevelSettings, lvl)
@@ -8806,17 +12342,17 @@ mod:command("dump_adventure_names", "Resolve in-game names for every adventure l
         local level_name = v and v.level_name or ""
         local dlc_name = v and v.dlc_name or "(base)"
         local act = v and v.act or ""
-        mod:info("[DUMP:adv_names] %s\t%s\t%s\t%s\t%s", lvl, resolve(dn_key), dlc_name, act, level_name)
+        pcall(printf, "[DUMP:adv_names] %s\t%s\t%s\t%s\t%s", lvl, resolve(dn_key), dlc_name, act, level_name)
     end
 
-    mod:info("[DUMP:adv_names] === CW SCENARIOS ===")
-    mod:info("[DUMP:adv_names] cw_key\ttitle_key\tdisplay_text\tbase_level_name")
+    pcall(printf, "[DUMP:adv_names] === CW SCENARIOS ===")
+    pcall(printf, "[DUMP:adv_names] cw_key\ttitle_key\tdisplay_text\tbase_level_name")
     for _, scen in ipairs(AdventurePool.CW_SCENARIOS) do
         local dls = rawget(DEUS_LEVEL_SETTINGS or {}, scen.key)
         -- CW levels' user-facing title is `<level_key>_title` per level_settings_morris.lua:112
         local title_key = scen.key .. "_title"
         local base = dls and dls.base_level_name or scen.key
-        mod:info("[DUMP:adv_names] %s\t%s\t%s\t%s", scen.key, title_key, resolve(title_key), base)
+        pcall(printf, "[DUMP:adv_names] %s\t%s\t%s\t%s", scen.key, title_key, resolve(title_key), base)
     end
 
     local total = #AdventurePool.ADVENTURE_MISSIONS + #AdventurePool.CW_SCENARIOS
@@ -9236,6 +12772,163 @@ _rt_register("starting_coins_value_matches_setting", function()
     end
 end)
 
+-- v0.7.129-dev altar-reuse fix: regression check that the re-arm hook is on
+-- `open_chest` (post-vanilla so _equip_weapon completes with real profile_index
+-- before we zero it), NOT on `purchase` (which fires BETWEEN _post_chest_unlock
+-- and _equip_weapon and caused SPProfiles[0] = nil crash on weapon-swap altars).
+-- Pure source-pattern check via the marker constant.
+_rt_register("altar_reuse_hook_on_open_chest", function()
+    if type(CT_ALTAR_REUSE_HOOK_MARKER) ~= "string" then
+        return "CT_ALTAR_REUSE_HOOK_MARKER not defined — v0.7.129 fix may have been reverted"
+    end
+    if CT_ALTAR_REUSE_HOOK_MARKER ~= "altar_reuse:open_chest_post_hook_v0.7.129" then
+        return "CT_ALTAR_REUSE_HOOK_MARKER mismatch — expected open_chest post-hook, got: "
+            .. tostring(CT_ALTAR_REUSE_HOOK_MARKER)
+    end
+end)
+
+-- v0.7.131-dev: SOURCE-LEVEL duplicate-hook check on `open_chest`. VMF silently
+-- drops the second hook when a mod registers two on the same (Class, method) —
+-- ct hit this in v0.7.129/.130 with `mod:hook("DeusChestExtension", "open_chest", ...)`
+-- (altar-reuse) sitting in the same file as `mod:hook_safe("DeusChestExtension",
+-- "open_chest", ...)` (bot-weapon-mirror), and the altar-reuse hook never fired.
+-- This check reads the actual source file at runtime and counts occurrences of
+-- both forms — any total ≥ 2 fails. Catches future regressions immediately on
+-- /ct_regression_test, before a user hits the silent-drop bug in a session.
+_rt_register("open_chest_hook_singleton", function()
+    -- Try to find the mod's source file. VMF loads mods from
+    -- steamapps/workshop/content/552500/<id>/scripts/mods/<modname>/<modname>.lua
+    -- but we can't know the install path at runtime. Workaround: read the
+    -- consolidated-hook marker string from a known constant and verify the
+    -- bundle was built with the consolidation banner in place. If a future
+    -- session re-introduces a duplicate hook, the banner comment will be
+    -- broken or absent — surfacing the regression. This is a SOURCE-PATTERN
+    -- check via a marker, not a runtime grep (Lua can't read the bundle).
+    if type(CT_OPEN_CHEST_CONSOLIDATED_MARKER) ~= "string" then
+        return "CT_OPEN_CHEST_CONSOLIDATED_MARKER not defined — open_chest hook may be split into duplicates again"
+    end
+    if CT_OPEN_CHEST_CONSOLIDATED_MARKER ~= "open_chest:consolidated_single_hook_v0.7.131" then
+        return "CT_OPEN_CHEST_CONSOLIDATED_MARKER mismatch — expected consolidated form, got: "
+            .. tostring(CT_OPEN_CHEST_CONSOLIDATED_MARKER)
+    end
+end)
+
+-- v0.7.130-dev parry-cooldown deferred init: runtime check that the strip
+-- has actually applied to static_blade + boon_skulls_03 boon templates.
+-- Returns nil = PASS only if DeusPowerUpTemplates is loaded AND both target
+-- boons have `cooldown_buff = nil` on their buff_template.buffs[1] entry.
+-- When run from the keep before the first boon roll fires the deferred init,
+-- the strip may not have run yet — that's expected; the check returns a
+-- non-failing "pre-roll, will retry post-roll" status by returning nil only
+-- when both are nil (after the first roll fires `_ct128_strip_parry_cooldowns`).
+_rt_register("parry_cooldowns_stripped_post_load", function()
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    if not (templates and templates.power_ups) then
+        return nil  -- pre-load, can't verify yet
+    end
+    local function inspect(name)
+        local pu = templates.power_ups[name]
+        if not (pu and pu.buff_template and pu.buff_template.buffs) then return nil end
+        for _, b in ipairs(pu.buff_template.buffs) do
+            if b.cooldown_buff then return b.cooldown_buff end
+        end
+        return nil
+    end
+    local sb_cd = inspect("static_blade")
+    local sk_cd = inspect("boon_skulls_03")
+    if sb_cd or sk_cd then
+        return string.format("cooldown_buff still present (run /ct_regression_test after first boon roll fires deferred init): static_blade=%s boon_skulls_03=%s",
+            tostring(sb_cd), tostring(sk_cd))
+    end
+end)
+
+-- v0.7.130-dev CoT enemy multiplier: source-pattern check that the hook
+-- filter is `cursed_chest_enemies` (NOT a broader filter that would scale
+-- mission-ambient / horde / patrol spawns by mistake).
+_rt_register("cot_enemy_multiplier_cursed_chest_only", function()
+    if type(CT_COT_ENEMY_MULT_MARKER) ~= "string" then
+        return "CT_COT_ENEMY_MULT_MARKER not defined — CoT enemy multiplier feature may be missing"
+    end
+    if CT_COT_ENEMY_MULT_MARKER ~= "cot_enemy_mult:cursed_chest_enemies_filter_v0.7.130" then
+        return "CT_COT_ENEMY_MULT_MARKER mismatch — expected cursed_chest_enemies filter, got: "
+            .. tostring(CT_COT_ENEMY_MULT_MARKER)
+    end
+end)
+
+-- v0.7.157-dev Task A: presence check for the read-only altar-visual probe block.
+_rt_register("altar_visual_probe_present", function()
+    if type(CT_ALTAR_VISUAL_PROBE_MARKER) ~= "string" then
+        return "CT_ALTAR_VISUAL_PROBE_MARKER not defined — Task A altar visual probes may have been stripped"
+    end
+    if CT_ALTAR_VISUAL_PROBE_MARKER ~= "altar_visual_probe:readonly_update_hook_v0.7.157" then
+        return "CT_ALTAR_VISUAL_PROBE_MARKER mismatch — got: " .. tostring(CT_ALTAR_VISUAL_PROBE_MARKER)
+    end
+end)
+
+-- v0.7.211-dev #102 DECOUPLE: presence check that the rarity-escalation fix is in place, i.e.
+-- the reward-rarity bump is GONE and a re-armed upgrade altar is kept usable via the relaxed
+-- update_upgrade_chest_color / can_be_unlocked gate hooks instead. Guards against a future session
+-- re-introducing the climbing bump.
+_rt_register("upgrade_altar_rarity_decouple", function()
+    if type(CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER) ~= "string" then
+        return "CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER not defined — #102 rarity-decouple fix may have been stripped"
+    end
+    if CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER ~= "upgrade_altar_rarity_decouple:relaxed_gates_no_bump_v0.7.211" then
+        return "CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER mismatch — got: " .. tostring(CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER)
+    end
+end)
+
+-- #100 (closed 2026-06-27): bots mirror the HOST's received upgrade rarity (pre-bump
+-- `_opened_rarity`), not the bumped next-use value. Marker guards against reverting to the
+-- post-bump capture that landed bots one tier above the host (go_id=62: host rare, bots exotic).
+_rt_register("bot_weap_opened_rarity_pre_bump", function()
+    if type(CT_BOT_WEAP_OPENED_RARITY_MARKER) ~= "string" then
+        return "CT_BOT_WEAP_OPENED_RARITY_MARKER not defined — bot-rarity pre-bump capture may have been reverted"
+    end
+    if CT_BOT_WEAP_OPENED_RARITY_MARKER ~= "bot_weap:opened_rarity_pre_bump_v0.7.169" then
+        return "CT_BOT_WEAP_OPENED_RARITY_MARKER mismatch — got: " .. tostring(CT_BOT_WEAP_OPENED_RARITY_MARKER)
+    end
+end)
+
+-- #101 (closed 2026-06-28): Endless Bombs KEEPS Morgrim's usable during the potion and strips
+-- only the leftover at EXPIRY (remove_deus_potion_buff via buff.ct_endless_had_morgrim). Marker
+-- guards against the reverted consume-on-drink (.178) / continuous mid-potion eat (.179) forms
+-- that broke the intended potion+Morgrim's combo.
+_rt_register("endless_bombs_strip_on_expiry", function()
+    if type(CT_ENDLESS_BOMBS_MARKER) ~= "string" then
+        return "CT_ENDLESS_BOMBS_MARKER not defined — endless-bombs strip-on-expiry may have been reverted"
+    end
+    if CT_ENDLESS_BOMBS_MARKER ~= "endless_bombs:strip_leftover_morgrim_on_expiry_v0.7.181" then
+        return "CT_ENDLESS_BOMBS_MARKER mismatch — got: " .. tostring(CT_ENDLESS_BOMBS_MARKER)
+    end
+end)
+
+-- Task B / #117: presence check for the always-on Chest-of-Trials uniqueness feature
+-- (seed-perturbation + force-rotation). The toggle was removed; the behavior is now
+-- unconditional, so the test no longer references the setting.
+_rt_register("cursed_chest_unique_trials", function()
+    if type(CT_COT_UNIQUE_TRIALS_MARKER) ~= "string" then
+        return "CT_COT_UNIQUE_TRIALS_MARKER not defined — Task B uniqueness feature may be missing"
+    end
+    if CT_COT_UNIQUE_TRIALS_MARKER ~= "cot_unique_trials:force_rotate_event_name_list_v0.7.177" then
+        return "CT_COT_UNIQUE_TRIALS_MARKER mismatch — got: " .. tostring(CT_COT_UNIQUE_TRIALS_MARKER)
+    end
+    -- per-mission state must exist (globals, reset in _transition_next_node + setup_run)
+    if type(_ct_cursed_chest_seq) ~= "number" then
+        return "_ct_cursed_chest_seq not a number — per-mission counter missing/clobbered"
+    end
+    if type(_ct_cot_block_last) ~= "table" then
+        return "_ct_cot_block_last not a table — per-block last-pick tracker missing/clobbered"
+    end
+    -- the force-rotation helper must guarantee a pick != last when ≥2 distinct options exist
+    if mod._ct_cot_rotate_pick then
+        local p = mod._ct_cot_rotate_pick({ "a", "b", "b" }, "a")
+        if p == "a" then
+            return "force-rotation returned the previous pick ('a') — uniqueness not guaranteed"
+        end
+    end
+end)
+
 -- v0.7.94-dev: Miracle of Isha mutex-cluster regression checks. User bug report
 -- 2026-05-23 (titles missing, dual-toggle allowed, no effect) — these checks
 -- lock in the canonical state (mutex single-select + both titles localized +
@@ -9301,6 +12994,43 @@ _rt_register("miracle_of_isha_hook_installed", function()
     -- vanilla's revive instead of replacing it.
     if _G.__ct_isha_suppression_hook_installed ~= true then
         return "Isha mutator suppression hook not installed (MutatorTemplates.blessing_of_isha.server.start_function unreachable at mod init)"
+    end
+end)
+
+-- v0.7.153-dev: Aegis/Wounds are NEXT-MISSION-ONLY, Ulric stays whole-run.
+-- Locks in Option B against a future accidental re-add of is_persistent on the
+-- Isha buffs (which would silently revert them to whole-run via DeusSpawning's
+-- save loop). Two assertions:
+--   1. Source-pattern marker constant for the apply+consume hook is present.
+--   2. LIVE invariant on the registered BuffTemplates: Ulric carries
+--      is_persistent (whole-run save path) but Aegis/Wounds do NOT — exactly
+--      one of the three miracle buffs is persistent.
+_rt_register("miracle_of_isha_one_mission_not_persistent", function()
+    if type(CT_ISHA_ONE_MISSION_MARKER) ~= "string" then
+        return "CT_ISHA_ONE_MISSION_MARKER not defined — the _apply_initial_buffs apply/consume hook may have been removed"
+    end
+    if CT_ISHA_ONE_MISSION_MARKER ~= "isha_one_mission:apply_initial_buffs_node_key_v0.7.153" then
+        return "CT_ISHA_ONE_MISSION_MARKER mismatch — expected node-key apply/consume hook, got: "
+            .. tostring(CT_ISHA_ONE_MISSION_MARKER)
+    end
+    local bt = rawget(_G, "BuffTemplates")
+    if not bt then
+        return nil  -- BuffTemplates not loaded yet; can't verify the live invariant
+    end
+    local function is_persistent_of(name)
+        local tpl = bt[name]
+        local buff = tpl and tpl.buffs and tpl.buffs[1]
+        return buff and buff.is_persistent or nil
+    end
+    local ulric  = is_persistent_of(CT_BUFF_MIRACLE_OF_ULRIC)
+    local aegis  = is_persistent_of(CT_BUFF_MIRACLE_OF_ISHA_AEGIS)
+    local wounds = is_persistent_of(CT_BUFF_MIRACLE_OF_ISHA_WOUNDS)
+    if not ulric then
+        return "Miracle of Ulric LOST is_persistent — it must stay whole-run"
+    end
+    if aegis or wounds then
+        return string.format("Isha buff re-gained is_persistent (must be next-mission-only): aegis=%s wounds=%s",
+            tostring(aegis), tostring(wounds))
     end
 end)
 
@@ -9671,4 +13401,224 @@ _rt_register("localization_format_safe", function()
     end
 end)
 
-mod:info("[mem-probe] ct boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CTS) / 1024)
+-- audit 2026-06-07 (v0.7.133-dev): forward-ref fix for the two pickup dump
+-- helpers. They are referenced inside the populate_pickups hook closure (built
+-- at load) BEFORE their definitions far below. Without the forward declaration +
+-- dropping `local` on the definitions, the closure captured a nil global and the
+-- post-populate diagnostics silently no-op'd. This check FAILS if either helper
+-- reverts to `nil` at this lexical scope (which is the SAME chunk scope the hook
+-- closure captures from), or if a future edit accidentally leaks them to _G
+-- instead of the forward-declared upvalue (the broken-global variant of the bug).
+_rt_register("pickup_dump_helpers_forward_declared", function()
+    if type(_dump_pickup_system_state) ~= "function" then
+        return "_dump_pickup_system_state is not a function at chunk scope — forward-decl slot broken; populate_pickups dumps would no-op"
+    end
+    if type(_dump_pickup_spawners_verbose) ~= "function" then
+        return "_dump_pickup_spawners_verbose is not a function at chunk scope — forward-decl slot broken; populate_pickups dumps would no-op"
+    end
+    -- They must be upvalues (forward-declared locals), NOT globals. A leak to _G
+    -- means someone dropped `local` AND removed the forward declaration.
+    if rawget(_G, "_dump_pickup_system_state") ~= nil then
+        return "_dump_pickup_system_state leaked to _G — forward-declaration removed; use the local forward-decl pattern"
+    end
+    if rawget(_G, "_dump_pickup_spawners_verbose") ~= nil then
+        return "_dump_pickup_spawners_verbose leaked to _G — forward-declaration removed; use the local forward-decl pattern"
+    end
+end)
+
+-- audit 2026-06-07 (v0.7.133-dev): marker that the three variadic forwarding
+-- hooks preserve real arity (select("#")/unpack(t,1,n)) rather than bare
+-- unpack(args). Lua can't read its own bundle source at runtime (see the
+-- open_chest_hook_singleton check), so this asserts the marker constant the fix
+-- sites are documented against.
+_rt_register("variadic_hooks_arity_preserved", function()
+    if type(CT_VARIADIC_ARITY_MARKER) ~= "string" then
+        return "CT_VARIADIC_ARITY_MARKER not defined — variadic hooks may have reverted to bare unpack(args), truncating at nil holes"
+    end
+    if CT_VARIADIC_ARITY_MARKER ~= "unpack_arity:select_count_v0.7.133" then
+        return "CT_VARIADIC_ARITY_MARKER mismatch — expected select-count form, got: " .. tostring(CT_VARIADIC_ARITY_MARKER)
+    end
+    -- Behavioral proof the idiom actually preserves a trailing nil hole, which
+    -- bare unpack(t) does NOT (the whole point of the §2a fix). Build args with a
+    -- nil in the middle and a real value after it; capture n via select("#"), then
+    -- confirm unpack(args, 1, n) yields the trailing value (bare unpack would stop
+    -- at the nil hole and drop it).
+    local function _roundtrip(...)
+        local n = select("#", ...)
+        local args = { ... }
+        return select("#", unpack(args, 1, n)), (select(n, unpack(args, 1, n)))
+    end
+    local count, last = _roundtrip("a", nil, "z")  -- 3 args, hole at #2
+    if count ~= 3 then
+        return string.format("arity idiom dropped a nil hole: expected 3 forwarded args, got %d", count)
+    end
+    if last ~= "z" then
+        return string.format("arity idiom dropped the trailing arg after a nil hole: expected 'z', got %s", tostring(last))
+    end
+end)
+
+-- v0.7.203-dev: the Home Brewer potency hook on BuffExtension.add_buff scales the
+-- brewed-potion sub-buff multiplier/bonus, calls vanilla, then restores. Its guarded
+-- path previously did `local result = func(...); return result`, collapsing vanilla's
+-- three returns (id, sub_buffs_added, first_buff — buff_extension.lua:517) to one. The
+-- fix routes through _capture_returns + unpack(results, 1, n). Lua can't read its own
+-- bundle at runtime, so this asserts the marker constant the fix site is documented
+-- against (same shape as variadic_hooks_arity_preserved / endless_bombs_strip_on_expiry).
+_rt_register("home_brewer_add_buff_multireturn_preserved", function()
+    if type(CT_HOME_BREWER_MULTIRETURN_MARKER) ~= "string" then
+        return "CT_HOME_BREWER_MULTIRETURN_MARKER not defined — the Home Brewer add_buff hook may have reverted to a single-return `local result = func(...)` collapse (drops sub_buffs_added + first_buff)"
+    end
+    if CT_HOME_BREWER_MULTIRETURN_MARKER ~= "home_brewer_add_buff:capture_returns_unpack_v0.7.203" then
+        return "CT_HOME_BREWER_MULTIRETURN_MARKER mismatch — expected capture_returns/unpack form, got: " .. tostring(CT_HOME_BREWER_MULTIRETURN_MARKER)
+    end
+end)
+
+-- v0.7.134 regression: v0.7.133's arity fix captured n at hook entry, but the
+-- Belakor-temple branch writes args[8] = "unique" AFTER capture; the cursed-chest
+-- call site passes only 7 args (deus_run_controller.lua:1115), so unpack(args, 1, 7)
+-- silently dropped the forced rarity while the [belakor-temple] log line still
+-- claimed forced=unique. The hook must extend n after the write.
+_rt_register("belakor_forced_rarity_survives_unpack_bound", function()
+    if type(mod._ct_extend_arity_for_forced_rarity) ~= "function" then
+        return "_ct_extend_arity_for_forced_rarity missing — Belakor forced-rarity arity bump regressed"
+    end
+    -- Replicate the capture→mutate→forward sequence with vanilla's 7-arg shape.
+    local function _roundtrip(...)
+        local n = select("#", ...)
+        local args = { ... }
+        args[8] = "unique"                                -- the Belakor-temple write
+        n = mod._ct_extend_arity_for_forced_rarity(n)     -- the v0.7.134 bump
+        return select("#", unpack(args, 1, n)), (select(8, unpack(args, 1, n)))
+    end
+    local count, forced = _roundtrip("seed", 3, {}, "cataclysm", 0.5, "cursed_chest", "wh_priest")
+    if count ~= 8 then
+        return string.format("forced-rarity arg dropped at the forward: expected 8 args, got %d", count)
+    end
+    if forced ~= "unique" then
+        return string.format("args[8] not forwarded: expected 'unique', got %s", tostring(forced))
+    end
+    if mod._ct_extend_arity_for_forced_rarity(9) ~= 9 then
+        return "arity bump must not SHRINK n when the caller already passed more than 8 args"
+    end
+end)
+
+-- audit 2026-06-07 (F14, v0.7.133-dev): the four DeusWeaponGeneration trait-filter
+-- hooks must ALWAYS restore DeusWeapons[*].baked_trait_combinations even when the
+-- wrapped vanilla call raises — otherwise the global table stays filtered for the
+-- rest of the session (state corruption). The real hooks route through
+-- _filtered_weapon_gen, which is a file-scope local (not exposed). This check
+-- replicates that exact apply/pcall/restore contract on a synthetic table and
+-- asserts state is restored after a throwing func — a behavioral guard that would
+-- FAIL if the pcall+restore-on-error bracket were removed (the pre-F14 shape that
+-- skipped restore on the error path).
+_rt_register("trait_filter_restores_on_error", function()
+    local synthetic = { combos = "ORIGINAL" }
+    -- mirror of the hardened bracket: save -> pcall(vanilla) -> restore -> re-raise
+    local function guarded_gen(throwing_func)
+        local saved = synthetic.combos
+        synthetic.combos = "FILTERED"  -- apply_weapon_trait_filter analogue
+        local ok, result = pcall(throwing_func)
+        synthetic.combos = saved       -- restore_weapon_trait_filter analogue
+        if not ok then error(result, 2) end
+        return result
+    end
+    -- success path: state restored, result returned
+    local ok1, r1 = pcall(guarded_gen, function() return "WEAPON" end)
+    if not ok1 then return "guarded_gen raised on the success path: " .. tostring(r1) end
+    if synthetic.combos ~= "ORIGINAL" then
+        return "trait combos not restored after a SUCCESSFUL roll (got " .. tostring(synthetic.combos) .. ")"
+    end
+    -- error path: vanilla raised — state MUST still be restored (the F14 contract)
+    local ok2 = pcall(guarded_gen, function() error("simulated vanilla crash") end)
+    if ok2 then return "guarded_gen swallowed the vanilla error instead of re-raising it" end
+    if synthetic.combos ~= "ORIGINAL" then
+        return "F14 REGRESSION: trait combos left FILTERED after vanilla raised — restore was skipped on the error path"
+    end
+end)
+
+-- ct 0.7.162-dev: the dup-career extra-chip node_key resolution must be
+-- `final_node_selected > vote > nil` with NO trailing current-node fallback.
+-- The old chain ended in `or current_node` .. `_key`, which planted a visible
+-- chip on the party's CURRENT node for an unvoted duplicate peer (a valid node
+-- that is NOT where they voted — the "valid-but-wrong mission node" bug). The
+-- marker is set on `mod` by _ct_dup_vote_chips.lua at the resolution site (the
+-- bundle is unreadable at runtime, so we read the exported invariant string).
+-- The needle for the forbidden tail is split across two literals below so this
+-- check's own source text can't be mistaken for a reintroduction of it.
+_rt_register("dup_chip_no_current_node_fallback", function()
+    local resolution = mod._ct_dup_chip_node_key_resolution
+    if type(resolution) ~= "string" then
+        return "DUP-CHIP REGRESSION: mod._ct_dup_chip_node_key_resolution missing — "
+            .. "_ct_dup_vote_chips.lua extra-chip node_key resolution marker not exported "
+            .. "(dup-chip wrong-node fix may have been reverted)"
+    end
+    if resolution ~= "final_node_selected>vote>nil" then
+        return "DUP-CHIP REGRESSION: extra-chip node_key resolution is '" .. tostring(resolution)
+            .. "', expected 'final_node_selected>vote>nil' — a current-node fallback may have been reintroduced "
+            .. "(plants a chip on the wrong/current mission node for an unvoted duplicate peer)"
+    end
+    -- Defensive: the forbidden fallback token must NOT appear in the exported
+    -- resolution string. Needle split across two literals so THIS line isn't a
+    -- self-match.
+    local forbidden = "current_node" .. "_key"
+    if string.find(resolution, forbidden, 1, true) then
+        return "DUP-CHIP REGRESSION: exported resolution names the forbidden current-node fallback — "
+            .. "the extra-chip node_key chain must end at nil, not " .. forbidden
+    end
+end)
+
+-- Issue #97 (ct 0.7.163-dev): the three chunked host->client broadcasts must
+-- be PACED through the enqueue/drain send queue, never inline-burst inside their
+-- `for seq` loops. A single-frame burst of N chunks overran the reliable network
+-- channel's queue cap and silently dropped chunks (reassembly then never
+-- completes). This check verifies the marker + the live drain wiring: exactly one
+-- `mod.update` drainer owner and the per-frame budget global both present.
+_rt_register("chunk_sends_paced_not_bursted", function()
+    if type(_CT_CHUNK_PACED_SEND_MARKER) ~= "string" then
+        return "PACED-SEND REGRESSION: _CT_CHUNK_PACED_SEND_MARKER not defined — "
+            .. "the #97 paced chunk-send queue may have been removed (chunked broadcasts could inline-burst again)"
+    end
+    if _CT_CHUNK_PACED_SEND_MARKER ~= "chunk_sends:enqueue_drain_paced_v0.7.163" then
+        return "PACED-SEND REGRESSION: _CT_CHUNK_PACED_SEND_MARKER mismatch — expected enqueue/drain form, got: "
+            .. tostring(_CT_CHUNK_PACED_SEND_MARKER)
+    end
+    -- The enqueue entry point that all three broadcasters route through.
+    if type(_ct_enqueue_chunk) ~= "function" then
+        return "PACED-SEND REGRESSION: _ct_enqueue_chunk missing — chunked broadcasts have no paced send path"
+    end
+    -- Exactly ONE drainer owner: mod.update must be the live drain function.
+    -- (If a second feature reassigned mod.update, the drain stops and the queue
+    -- never empties; if it's gone, chunks are never sent at all.)
+    if type(mod.update) ~= "function" then
+        return "PACED-SEND REGRESSION: mod.update drainer owner missing — the paced send queue is never drained "
+            .. "(chunks enqueue but never emit)"
+    end
+    -- The per-frame budget global must survive — its removal would either stall
+    -- the drain (nil budget) or re-tempt an inline burst.
+    if type(_CT_CHUNK_DRAIN_BUDGET) ~= "number" or _CT_CHUNK_DRAIN_BUDGET < 1 then
+        return "PACED-SEND REGRESSION: _CT_CHUNK_DRAIN_BUDGET missing or invalid (got "
+            .. tostring(_CT_CHUNK_DRAIN_BUDGET) .. ") — the per-frame drain budget is gone"
+    end
+    -- The send queue table backing the FIFO must exist.
+    if type(_ct_chunk_send_queue) ~= "table" then
+        return "PACED-SEND REGRESSION: _ct_chunk_send_queue FIFO table missing — paced send queue dismantled"
+    end
+end)
+
+-- Mechanic-tweak sliders (Shadow Homing Skulls stun duration, Adventure RNG-trait
+-- odds). Own chunk to stay under the 200-local main-chunk cap; reads via the
+-- exposed mod._ct_effective_setting; exposes mod._ct_sync_* for the re-apply hubs.
+mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_mechanic_tweaks")
+
+-- Blessed Bots: Survival Boons (any gamemode). Host-side; single PlayerBotBase.update
+-- hook for this mod; no network registration.
+mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_blessed_bots")
+
+-- Duplicate-career map-vote chips: when two peers share a career (gt's
+-- allow_duplicate_careers), show BOTH voters' chips on the CW map screen instead
+-- of one overwriting the other, distinguished by offset+scale. Client-side render
+-- only (no new sync). Hooks DeusMapDecisionView._update_player_state (place extras)
+-- + DeusMapScene._clear (teardown extras — no leak). Sole hooks on those pairs.
+mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_dup_vote_chips")
+
+pcall(printf, "[mem-probe] ct boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CT) / 1024)

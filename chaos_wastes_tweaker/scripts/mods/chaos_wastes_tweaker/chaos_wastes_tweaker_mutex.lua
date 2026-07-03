@@ -18,7 +18,7 @@
 --
 -- Why a separate file: the cluster table is data, and the enforcer
 -- is a tiny pure function — keeping them out of the main mod file
--- avoids visual noise in `career_tweaker.lua` and lets future mods
+-- avoids visual noise in `chaos_wastes_tweaker.lua` and lets future mods
 -- copy the helper verbatim if they want the same pattern.
 
 local mod = get_mod("ct")
@@ -92,7 +92,7 @@ function M.enforce(setting_id)
 end
 
 -- Diagnostic: returns the active member of a cluster, or nil if all
--- members are unchecked (= vanilla). Useful for /crt_status or a
+-- members are unchecked (= vanilla). Useful for /cw_status or a
 -- future dump command.
 function M.active(group_id)
     local members = M.CLUSTERS[group_id]

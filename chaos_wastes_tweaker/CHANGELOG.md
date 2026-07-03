@@ -1,5 +1,39 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.130-beta (2026-07-03) — Full promotion: stable brought to parity with ct_dev 0.7.211-dev
+
+Wholesale promotion of all `chaos_wastes_tweaker_dev` work through **0.7.211-dev** into the public stable mod (previously cherry-picked one fix at a time; this catches stable up in one pass). Source mirrored with the `ct_dev`→`ct` / `chaos_wastes_tweaker_dev`→`chaos_wastes_tweaker` rename, the dev-only `[untested]`/`[confirmed working]` menu labels stripped (stable carries none), and version normalized to the stable `-beta` line. Committed only — **no Workshop upload** in this change. Per-fix detail lives in the dev CHANGELOG (0.7.140-dev … 0.7.211-dev); the notable user-facing items:
+
+**Crash / stability fixes**
+- Host crash from the settings-sync flood on the Apply-button burst — paced + debounced re-sync (#205, dev .191/.192).
+- Host crash on client hot-join from the chunked graph-sync flooding the reliable send queue — paced send-queue (#97, dev .163).
+- Mathlann's Storm-Strike AoE capped at 40 targets to stop the reliable-send-queue overflow (#129, dev .172).
+- Client rendering injected adventure maps as shrines / losing curse lighting (#68, dev .144).
+- CW round-end RPC overflow no longer freezes the next expedition (dev .155); CW pickup transforms no longer leak into real Adventure (dev .154).
+
+**Altars & Chests of Trials**
+- Multi-use (reusable) upgrade/swap/boon altars: re-armed altars stay lit/available and only show the looted mesh after the FINAL use (dev .151/.158/.166), collapse-animation fix (#103, dev .193).
+- **#102: multi-use temper altar no longer escalates the upgrade to exotic/unique on reuse** — reward rarity decoupled from the keep-lit visual (dev .211).
+- Chest of Trials: pay-with-coin schedule, no-repeat boon offerings, uniqueness across consecutive chests (#117), optional revive on completion (#116) (dev .147/.177).
+
+**Boons & curses**
+- Disabled boons no longer leak through at grant (#211, dev .159/.200); boon-offer scrollbar + boon-count caps raised to 50 (dev .199).
+- Miracle of Isha (Aegis / Unlimited Wounds) now lasts the next mission only (dev .153).
+- **Curse lighting: Be'lakor darkness on already-dark interior maps eased + a live "Curse Lighting Brightness" knob** to self-tune the injected-map curse atmosphere (#243, dev .209/.210).
+- Bomb-boon balance: Endless-Bombs-consumes-Morgrim's redone to strip on potion expiry (#101), cooldown fixes (#120, dev .178/.180/.181).
+
+**Features & menu**
+- Finale God is now a named dropdown instead of a numeric slider (dev .206).
+- Pilgrim's-coin starting value settable to an exact figure again (#164, dev .207); guaranteed coin spawns under the Abundance-of-Life curse (dev .165).
+- Both voters' map-vote chips render for duplicate careers on the CW map screen (#122, dev .160–.162/.194).
+- Skull-stun slider, Adventure RNG-trait odds, Blessed Bots survival boons (dev .140).
+- Large settings-menu reorganization: Shrines/Altars/Chests grouping, Disabled Curses god-prefixed + alphabetized, tooltip sweeps so descriptions don't restate the title (#222, dev .190–.208), plus a localization reorder/cleanup (#220, dev .201/.205).
+- Traits: #118/#119 trait-gate corrections (dev .177/.178).
+
+**Diagnostics** (route through VMF debug logging — silent unless the user enables it): #144 boon-list trace, #156/#104 spawn-census + gas-cloud guard, #60 baked-spawner cursed-chest cap.
+
+Some of the most recent items (#102 altar decouple, #243 curse brightness) are shipped-but-not-yet-user-verified in-engine; they carry no menu label in stable.
+
 ## 0.7.129-beta — 2026-06-28
 - Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
 
