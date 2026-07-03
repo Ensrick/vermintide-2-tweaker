@@ -258,9 +258,7 @@ local _WEAPON_SET = {
     wh_flail_shield            = "D",
     -- SET E — Witch Hunter 1H Axe
     we_1h_axe                  = "E",
-    -- SET F — 1H Mace / Skullsplitter (#181): Saltzpyre's Skullsplitter & Tome on
-    -- Kruber renders as a regular 1H Skullsplitter (hammer right hand, no book).
-    wh_hammer_book             = "F",
+    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> _CONFIRMED.kruber; removed here.
 }
 
 -- Friendly SET label shown in each weapon's group title, e.g. "[Greathammer]".
@@ -468,7 +466,7 @@ local _WEAPON_TEMPLATE = {
     bw_flame_sword             = "flaming_sword_template_1",
     wh_flail_shield            = "one_handed_flail_shield_template",
     we_1h_axe                  = "we_one_hand_axe_template",
-    wh_hammer_book             = "one_handed_hammer_book_priest_template",  -- #181
+    -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _CONFIRMED.kruber; removed (#181).
     -- v0.12.188-dev: dr_2h_cog_hammer, wh_2h_hammer, wh_fencing_sword and the 7
     -- Sienna staves + Deus were BAKED (es_) and removed here (see _WEAPON_SET note).
 }
@@ -674,25 +672,7 @@ local _WEAPON_ATTACKS = {
         "attack_swing_up",  -- vanilla carries anim_event_3p="attack_swing_up_left" here
         "parry_pose",
     },
-    -- SET F — 1H Mace / Skullsplitter (#181). Source attack anim_events from
-    -- one_handed_hammer_book_priest_template (deduped; inspect omitted). The stab/book
-    -- specials (attack_swing_*_stab, spell_pose) have no clean 1H-mace twin — map to the
-    -- nearest SET F event or leave UNSET (falls through to idle, no T-pose, no crash).
-    wh_hammer_book = {
-        "attack_push",
-        "attack_swing_charge_left_diagonal",
-        "attack_swing_charge_stab",
-        "attack_swing_heavy_left_diagonal",
-        "attack_swing_heavy_stab",
-        "attack_swing_left_diagonal",
-        "attack_swing_left_diagonal_last",
-        "attack_swing_right_diagonal",
-        "attack_swing_right_diagonal_axe",
-        "attack_swing_stab",
-        "attack_swing_up_left",
-        "parry_pose",
-        "spell_pose",
-    },
+    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> _CONFIRMED.kruber; removed here.
     -- v0.12.188-dev: the 7 Sienna staves + Deus (bw_skullstaff_beam/_fireball/
     -- _flamethrower/_geiser/_spear, bw_necromancy_staff, bw_deus_01) were BAKED
     -- (es_) and removed here (see _WEAPON_SET note).
@@ -1025,27 +1005,139 @@ local _SALTZ_SET_VOCAB = {
 -- removed from _NEEDS_ANIMS.saltzpyre, so the catalog gate drops them. The
 -- _SALTZ_* picker tables are emptied to keep the mirror in lockstep. Re-populate
 -- with the next Saltzpyre batch. (_SALTZ_SET_LABEL/_SALTZ_SET_VOCAB left defined.)
--- v0.12.194-dev (#160): re-populated with the Kruber Executioner Sword, which
--- routes to Saltzpyre's 2H Sword (SET G) via the to_2h_sword wield redirect
--- (wt_wield_patches). Kept in lockstep with _NEEDS_ANIMS.saltzpyre (wt_port_status).
+-- v0.12.194-dev (#160): re-populated with the Kruber Executioner Sword (SET G).
+-- v0.12.201-dev: Executioner Sword BAKED (wh_) -> _CONFIRMED.saltzpyre; REPLACED here
+-- by the Saltzpyre batch-2 — 11 cross-character 3P ports queued for the tester's
+-- dev-picker tuning. SET A/B targets are Warrior-Priest weapons (bless DLC); their
+-- anims live on the shared Saltzpyre body but may be absent without the DLC (picker
+-- falls through to idle, no T-pose, no crash). Every wield-render target is a wh_*
+-- redirect already present in _WIELD_ANIM_CAREER_3P_PATCHES_BULK (wt_wield_patches).
+-- Kept in lockstep with _NEEDS_ANIMS.saltzpyre (wt_port_status).
 local _SALTZ_WEAPON_SET = {
-    es_2h_sword_executioner = "G",  -- Kruber: Executioner Sword -> Saltzpyre 2H Sword
+    -- SET A — Warrior Priest Greathammer (to_2h_hammer_priest)
+    es_2h_hammer          = "A",
+    dr_2h_cog_hammer      = "A",
+    dr_2h_pick            = "A",
+    bw_1h_mace            = "A",
+    bw_ghost_scythe       = "A",
+    -- SET B — Warrior Priest Dual Hammers (to_dual_hammers_priest)
+    dr_dual_wield_hammers = "B",
+    -- SET G — Saltzpyre 2H Sword (to_2h_sword)
+    es_bastard_sword      = "G",
+    -- SET C — Dual Axe & Falchion (to_dual_axe_sword_wh). SHIELD ports: the right-hand
+    -- weapon is the tunable render; the shield offhand model is a separate later pass.
+    es_mace_shield         = "C",
+    es_sword_shield        = "C",
+    es_sword_shield_breton = "C",
+    dr_shield_axe          = "C",
 }
 
--- Source template per Saltzpyre port (where anim_event_3p is written) = the
--- `to_2h_sword` redirect target. Confirmed against ItemMasterList.wh_2h_sword.template.
+-- Source template per Saltzpyre port (where anim_event_3p is written) = the port's
+-- own source weapon template. Confirmed against ItemMasterList.
 local _SALTZ_WEAPON_TEMPLATE = {
-    es_2h_sword_executioner = "two_handed_swords_template_1",  -- Kruber: Executioner Sword
+    -- SET A — WP Greathammer
+    es_2h_hammer          = "two_handed_hammers_template_1",
+    dr_2h_cog_hammer      = "two_handed_cog_hammers_template_1",
+    dr_2h_pick            = "two_handed_picks_template_1",
+    bw_1h_mace            = "one_handed_hammer_wizard_template_1",
+    bw_ghost_scythe       = "staff_scythe",
+    -- SET B — WP Dual Hammers
+    dr_dual_wield_hammers = "dual_wield_hammers_template",
+    -- SET G — Saltzpyre 2H Sword
+    es_bastard_sword      = "bastard_sword_template",
+    -- SET C — Dual Axe & Falchion (shield ports)
+    es_mace_shield         = "one_handed_hammer_shield_template_1",
+    es_sword_shield        = "one_handed_sword_shield_template_1",
+    es_sword_shield_breton = "one_handed_sword_shield_template_2",
+    dr_shield_axe          = "one_hand_axe_shield_template_1",
 }
 
--- Per-weapon source attack anim_events (one dropdown each), deduped from the
--- source template's actions. Receiver-independent (the executioner's own source
--- attacks — identical to _KERI_WEAPON_ATTACKS.es_2h_sword_executioner).
+-- Per-weapon source attack anim_events (one dropdown each), deduped from the source
+-- template's actions. Receiver-independent — each list is copied VERBATIM from the
+-- matching _KERI_WEAPON_ATTACKS entry (bw_1h_mace from the Kruber _WEAPON_ATTACKS).
 local _SALTZ_WEAPON_ATTACKS = {
-    es_2h_sword_executioner = {  -- Kruber: Executioner Sword (two_handed_swords_executioner_template_1)
-        "attack_swing_charge_left_down", "attack_swing_charge_right_down", "attack_swing_down_left",
-        "attack_swing_down_right", "attack_swing_left", "attack_swing_right",
-        "attack_swing_left_diagonal_last", "attack_swing_left_diagonal", "attack_push", "parry_pose",
+    -- SET A — WP Greathammer
+    es_2h_hammer = {
+        "attack_swing_charge", "attack_swing_charge_right", "attack_swing_charge_left",
+        "attack_swing_heavy_right", "attack_swing_heavy", "attack_swing_down_left",
+        "attack_swing_left", "attack_swing_left_diagonal", "attack_swing_down_right",
+        "attack_push", "parry_pose",
+    },
+    dr_2h_cog_hammer = {
+        "attack_swing_charge", "attack_swing_charge_pose", "attack_swing_charge_right_down",
+        "attack_swing_down_right", "attack_swing_down_left", "attack_swing_up",
+        "attack_swing_up_pose", "attack_swing_right_diagonal", "attack_swing_left_diagonal",
+        "attack_swing_up_right", "attack_swing_left", "attack_push", "attack_swing_charge_right",
+        "attack_swing_heavy", "attack_swing_heavy_right", "parry_pose",
+    },
+    dr_2h_pick = {
+        "attack_swing_charge_left_down", "attack_swing_charge_right_down",
+        "attack_swing_charge_left_down_pose", "attack_swing_right_diagonal",
+        "attack_swing_left_diagonal", "attack_swing_down_left_axe", "attack_swing_down_left",
+        "attack_swing_down_right_axe", "attack_swing_down_right", "attack_swing_left",
+        "attack_push", "parry_pose",
+    },
+    bw_1h_mace = {
+        "attack_push",
+        "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_left_pose",
+        "attack_swing_charge_right_pose",
+        "attack_swing_down",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_left_up",
+        "attack_swing_heavy_right_up",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_left_diagonal_last",
+        "attack_swing_right_diagonal",
+        "parry_pose",
+    },
+    bw_ghost_scythe = {
+        "attack_swing_charge_left", "attack_swing_charge_right", "attack_swing_charge_left_diagonal",
+        "attack_swing_left_diagonal", "attack_swing_up_right", "attack_swing_left",
+        "attack_swing_right", "attack_swing_heavy", "attack_swing_heavy_right",
+        "attack_swing_heavy_left_diagonal", "attack_swing_left_diagonal_last", "attack_push",
+        "parry_pose", "special_action", "special_action_02",
+    },
+    -- SET B — WP Dual Hammers
+    dr_dual_wield_hammers = {
+        "attack_swing_charge_down", "attack_swing_charge_right", "attack_swing_charge_left",
+        "attack_swing_heavy_down", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_left_diagonal",
+        "attack_swing_left", "attack_swing_down", "attack_swing_left_diagonal", "attack_swing_up",
+        "attack_swing_stab", "attack_push", "parry_pose",
+    },
+    -- SET G — Saltzpyre 2H Sword
+    es_bastard_sword = {
+        "attack_swing_charge_left_diagonal", "attack_swing_charge_right_diagonal_pose",
+        "swap_charge_stance", "attack_swing_charge_down_pose", "attack_swing_charge_left_diagonal_pose",
+        "attack_swing_heavy_left_diagonal", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_down",
+        "attack_swing_up_left", "attack_swing_right", "attack_swing_down", "attack_swing_down_right",
+        "attack_push", "parry_pose",
+    },
+    -- SET C — Dual Axe & Falchion (shield ports)
+    es_mace_shield = {
+        "attack_swing_charge", "attack_swing_charge_left_pose", "attack_swing_charge_pose",
+        "attack_swing_heavy", "attack_swing_heavy_left", "attack_swing_left",
+        "attack_swing_right_diagonal", "attack_swing_up_left", "attack_swing_down",
+        "attack_push", "parry_pose",
+    },
+    es_sword_shield = {
+        "attack_swing_charge", "attack_swing_charge_stab", "attack_swing_charge_right_pose",
+        "attack_swing_heavy", "attack_swing_heavy_right", "attack_swing_heavy_stab",
+        "attack_swing_left_diagonal", "attack_swing_right_diagonal", "attack_swing_stab",
+        "attack_swing_left", "attack_push", "parry_pose",
+    },
+    es_sword_shield_breton = {
+        "attack_swing_charge_left_diagonal", "attack_swing_charge", "attack_swing_charge_stab",
+        "attack_swing_heavy_down", "attack_swing_heavy", "attack_swing_heavy_stab",
+        "attack_swing_up_left", "attack_swing_down_right", "attack_swing_heavy_breton",
+        "attack_swing_stab", "attack_push", "parry_pose",
+    },
+    dr_shield_axe = {
+        "attack_swing_charge", "attack_swing_charge_right_pose", "attack_swing_charge_left_diagonal_pose",
+        "attack_swing_charge_left_pose", "attack_swing_heavy", "attack_swing_heavy_down",
+        "attack_swing_heavy_right", "attack_swing_left_diagonal", "attack_swing_right_diagonal",
+        "attack_swing_down", "attack_swing_up_left", "attack_push", "parry_pose",
     },
 }
 
@@ -1147,283 +1239,19 @@ local _KERI_SET_VOCAB = {
 -- SET per Kerillian port = the `we_*` wield redirect target (wt_wield_patches;
 -- the `to_*` event on each port's source template). Kept in lockstep with
 -- _NEEDS_ANIMS.kerillian (wt_port_status.lua).
-local _KERI_WEAPON_SET = {
-    -- SET A — Elf 2H Axe/Glaive (to_2h_axe_we); staves render as the 2H glaive.
-    es_2h_hammer               = "A",
-    wh_2h_hammer               = "A",
-    dr_2h_cog_hammer           = "A",
-    dr_2h_pick                 = "A",
-    bw_ghost_scythe            = "A",
-    bw_skullstaff_beam         = "A",
-    bw_skullstaff_fireball     = "A",
-    bw_skullstaff_flamethrower = "A",
-    bw_skullstaff_geiser       = "A",
-    bw_skullstaff_spear        = "A",
-    bw_necromancy_staff        = "A",
-    bw_deus_01                 = "A",
-    -- SET B — Elf 2H Sword (to_2h_sword_we)
-    es_2h_sword_executioner    = "B",
-    es_bastard_sword           = "B",
-    -- SET C — Elf 1H Sword (to_1h_sword)
-    wh_fencing_sword           = "C",
-    bw_1h_flail_flaming        = "C",
-    bw_dagger                  = "C",
-    bw_flame_sword             = "C",
-    -- SET D — Elf 1H Axe (to_1h_axe)
-    wh_1h_hammer               = "D",
-    dr_1h_hammer               = "D",
-    -- SET E — Elf Spear & Shield (to_1h_spear_shield)
-    es_mace_shield             = "E",
-    es_sword_shield            = "E",
-    es_sword_shield_breton     = "E",
-    wh_flail_shield            = "E",
-    wh_hammer_book             = "E",
-    wh_hammer_shield           = "E",
-    dr_shield_axe              = "E",
-    -- SET F — Dual Swords (to_dual_swords)
-    wh_dual_hammer             = "F",
-    dr_dual_wield_axes         = "F",
-    dr_dual_wield_hammers      = "F",
-    -- SET G — Sword & Dagger (to_dual_sword_dagger)
-    es_dual_wield_hammer_sword = "G",
-    wh_dual_wield_axe_falchion = "G",
-    -- SET H — Elf Javelin (to_javelin)
-    dr_1h_throwing_axes        = "H",
-    -- NOTE: the ranged firearm ports that route to to_repeating_crossbow_elf
-    -- (wh_brace_of_pistols/wh_crossbow/wh_deus_01/wh_repeating_pistols, es_blunderbuss/
-    -- es_handgun/es_repeating_handgun, dr_deus_01/dr_drake_pistol/dr_drakegun/dr_rakegun/
-    -- dr_steam_pistol) are intentionally EXCLUDED from the picker — same as the Kruber /
-    -- Saltzpyre precedent: the elf repeating crossbow authors only attack_shoot + to_zoom
-    -- in 3P, so there's no meaningful per-attack tuning surface.
-}
+-- v0.12.201-dev: Kerillian batch-1 fully BAKED (we_) -> _CONFIRMED.kerillian; emptied in lockstep.
+local _KERI_WEAPON_SET = {}
 
 -- Source template per Kerillian port (where anim_event_3p is written). Confirmed
 -- against ItemMasterList.
-local _KERI_WEAPON_TEMPLATE = {
-    es_2h_hammer               = "two_handed_hammers_template_1",
-    wh_2h_hammer               = "two_handed_hammer_priest_template",
-    dr_2h_cog_hammer           = "two_handed_cog_hammers_template_1",
-    dr_2h_pick                 = "two_handed_picks_template_1",
-    bw_ghost_scythe            = "staff_scythe",
-    bw_skullstaff_beam         = "staff_blast_beam_template_1",
-    bw_skullstaff_fireball     = "staff_fireball_fireball_template_1",
-    bw_skullstaff_flamethrower = "staff_flamethrower_template",
-    bw_skullstaff_geiser       = "staff_fireball_geiser_template_1",
-    bw_skullstaff_spear        = "staff_spark_spear_template_1",
-    bw_necromancy_staff        = "staff_death",
-    bw_deus_01                 = "bw_deus_01_template_1",
-    es_2h_sword_executioner    = "two_handed_swords_executioner_template_1",
-    es_bastard_sword           = "bastard_sword_template",
-    wh_fencing_sword           = "fencing_sword_template_1",
-    bw_1h_flail_flaming        = "one_handed_flails_flaming_template",
-    bw_dagger                  = "one_handed_daggers_template_1",
-    bw_flame_sword             = "flaming_sword_template_1",
-    wh_1h_hammer               = "one_handed_hammer_priest_template",
-    dr_1h_hammer               = "one_handed_hammer_template_2",
-    es_mace_shield             = "one_handed_hammer_shield_template_1",
-    es_sword_shield            = "one_handed_sword_shield_template_1",
-    es_sword_shield_breton     = "one_handed_sword_shield_template_2",
-    wh_flail_shield            = "one_handed_flail_shield_template",
-    wh_hammer_book             = "one_handed_hammer_book_priest_template",
-    wh_hammer_shield           = "one_handed_hammer_shield_priest_template",
-    dr_shield_axe              = "one_hand_axe_shield_template_1",
-    wh_dual_hammer             = "dual_wield_hammers_priest_template",
-    dr_dual_wield_axes         = "dual_wield_axes_template_1",
-    dr_dual_wield_hammers      = "dual_wield_hammers_template",
-    es_dual_wield_hammer_sword = "dual_wield_hammer_sword_template",
-    wh_dual_wield_axe_falchion = "dual_wield_axe_falchion_template",
-    dr_1h_throwing_axes        = "one_handed_throwing_axes_template",
-}
+-- v0.12.201-dev: emptied in lockstep with the Kerillian batch-1 bake (see _KERI_WEAPON_SET).
+local _KERI_WEAPON_TEMPLATE = {}
 
 -- Per-weapon source attack anim_events (one dropdown each), deduped from the
 -- source template's actions (inspect events excluded). Receiver-independent: the
 -- shared source templates match the Kruber tables above.
-local _KERI_WEAPON_ATTACKS = {
-    -- SET A — Elf 2H Axe/Glaive
-    es_2h_hammer = {
-        "attack_swing_charge", "attack_swing_charge_right", "attack_swing_charge_left",
-        "attack_swing_heavy_right", "attack_swing_heavy", "attack_swing_down_left",
-        "attack_swing_left", "attack_swing_left_diagonal", "attack_swing_down_right",
-        "attack_push", "parry_pose",
-    },
-    wh_2h_hammer = {
-        "attack_swing_charge_right", "attack_swing_charge", "attack_swing_charge_right_down",
-        "attack_swing_up", "attack_swing_heavy_right", "attack_swing_heavy_right_diagonal",
-        "attack_swing_down_right", "attack_swing_up_left", "attack_swing_left",
-        "attack_push", "attack_slam", "parry_pose", "parry_pose_02", "attack_slam_charge",
-    },
-    dr_2h_cog_hammer = {
-        "attack_swing_charge", "attack_swing_charge_pose", "attack_swing_charge_right_down",
-        "attack_swing_down_right", "attack_swing_down_left", "attack_swing_up",
-        "attack_swing_up_pose", "attack_swing_right_diagonal", "attack_swing_left_diagonal",
-        "attack_swing_up_right", "attack_swing_left", "attack_push", "attack_swing_charge_right",
-        "attack_swing_heavy", "attack_swing_heavy_right", "parry_pose",
-    },
-    dr_2h_pick = {
-        "attack_swing_charge_left_down", "attack_swing_charge_right_down",
-        "attack_swing_charge_left_down_pose", "attack_swing_right_diagonal",
-        "attack_swing_left_diagonal", "attack_swing_down_left_axe", "attack_swing_down_left",
-        "attack_swing_down_right_axe", "attack_swing_down_right", "attack_swing_left",
-        "attack_push", "parry_pose",
-    },
-    bw_ghost_scythe = {
-        "attack_swing_charge_left", "attack_swing_charge_right", "attack_swing_charge_left_diagonal",
-        "attack_swing_left_diagonal", "attack_swing_up_right", "attack_swing_left",
-        "attack_swing_right", "attack_swing_heavy", "attack_swing_heavy_right",
-        "attack_swing_heavy_left_diagonal", "attack_swing_left_diagonal_last", "attack_push",
-        "parry_pose", "special_action", "special_action_02",
-    },
-    bw_skullstaff_beam = {
-        "attack_shoot_beam_start", "attack_shoot_sparks", "flamethrower_charge_start",
-        "attack_shoot_beam_spark", "cooldown_start",
-    },
-    bw_skullstaff_fireball = {
-        "attack_shoot_fireball", "attack_shoot_fireball_charged", "attack_charge_fireball",
-        "cooldown_start",
-    },
-    bw_skullstaff_flamethrower = {
-        "attack_shoot_flamethrower", "attack_shoot_flamethrower_charged",
-        "flamethrower_charge_start", "cooldown_start",
-    },
-    bw_skullstaff_geiser = {
-        "attack_shoot_fireball", "attack_geiser_placed", "attack_geiser_start", "cooldown_start",
-    },
-    bw_skullstaff_spear = {
-        "attack_shoot_rapid_right", "attack_shoot_rapid_left", "attack_shoot_spear_charged",
-        "attack_charge_spear", "cooldown_start",
-    },
-    bw_necromancy_staff = {
-        "chain_attack", "chain_attack_02", "soul_rip_attack", "soul_rip_pop",
-        "soul_rip_start", "cooldown_start",
-    },
-    bw_deus_01 = {
-        "attack_shoot_fireball", "attack_geiser_placed", "attack_geiser_start", "cooldown_start",
-    },
-    -- SET B — Elf 2H Sword
-    es_2h_sword_executioner = {
-        "attack_swing_charge_left_down", "attack_swing_charge_right_down", "attack_swing_down_left",
-        "attack_swing_down_right", "attack_swing_left", "attack_swing_right",
-        "attack_swing_left_diagonal_last", "attack_swing_left_diagonal", "attack_push", "parry_pose",
-    },
-    es_bastard_sword = {
-        "attack_swing_charge_left_diagonal", "attack_swing_charge_right_diagonal_pose",
-        "swap_charge_stance", "attack_swing_charge_down_pose", "attack_swing_charge_left_diagonal_pose",
-        "attack_swing_heavy_left_diagonal", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_down",
-        "attack_swing_up_left", "attack_swing_right", "attack_swing_down", "attack_swing_down_right",
-        "attack_push", "parry_pose",
-    },
-    -- SET C — Elf 1H Sword
-    wh_fencing_sword = {
-        "attack_swing_stab_charge", "attack_swing_stab", "attack_swing_right", "attack_swing_left",
-        "attack_swing_right_diagonal", "attack_push", "parry_pose", "attack_shoot", "front_idle_exit",
-    },
-    bw_1h_flail_flaming = {
-        "attack_swing_charge_down", "attack_swing_charge", "attack_swing_heavy_down",
-        "attack_swing_heavy_left", "attack_swing_left", "attack_swing_right_diagonal",
-        "attack_swing_left_diagonal", "attack_swing_down_right", "attack_swing_right",
-        "attack_push", "parry_pose",
-    },
-    bw_dagger = {
-        "attack_swing_charge", "attack_swing_charge_left", "attack_swing_heavy",
-        "attack_swing_heavy_right", "attack_swing_left_diagonal", "attack_swing_right_diagonal",
-        "attack_swing_stab", "attack_swing_left", "attack_push", "parry_pose",
-    },
-    bw_flame_sword = {
-        "attack_swing_charge_right", "attack_swing_charge", "attack_swing_heavy",
-        "attack_swing_right_spell", "attack_swing_left", "attack_swing_right_diagonal",
-        "attack_swing_stab", "attack_swing_left_diagonal", "attack_push", "parry_pose",
-    },
-    -- SET D — Elf 1H Axe
-    wh_1h_hammer = {
-        "attack_swing_charge_left_diagonal", "attack_swing_charge_right_diagonal_pose",
-        "attack_swing_charge_left_diagonal_pose", "attack_swing_heavy_down", "attack_swing_heavy_down_right",
-        "attack_swing_left_diagonal", "attack_swing_right_diagonal", "attack_swing_left_diagonal_last",
-        "attack_swing_down_right", "attack_swing_right", "attack_push", "parry_pose",
-    },
-    dr_1h_hammer = {
-        "attack_swing_charge_left_diagonal", "attack_swing_charge_left_diagonal_pose",
-        "attack_swing_charge_right_diagonal_pose", "attack_swing_heavy_down", "attack_swing_heavy_down_right",
-        "attack_swing_left_diagonal", "attack_swing_right_diagonal", "attack_swing_left_diagonal_last",
-        "attack_swing_down_right", "attack_swing_right", "attack_push", "parry_pose",
-    },
-    -- SET E — Elf Spear & Shield
-    es_mace_shield = {
-        "attack_swing_charge", "attack_swing_charge_left_pose", "attack_swing_charge_pose",
-        "attack_swing_heavy", "attack_swing_heavy_left", "attack_swing_left",
-        "attack_swing_right_diagonal", "attack_swing_up_left", "attack_swing_down",
-        "attack_push", "parry_pose",
-    },
-    es_sword_shield = {
-        "attack_swing_charge", "attack_swing_charge_stab", "attack_swing_charge_right_pose",
-        "attack_swing_heavy", "attack_swing_heavy_right", "attack_swing_heavy_stab",
-        "attack_swing_left_diagonal", "attack_swing_right_diagonal", "attack_swing_stab",
-        "attack_swing_left", "attack_push", "parry_pose",
-    },
-    es_sword_shield_breton = {
-        "attack_swing_charge_left_diagonal", "attack_swing_charge", "attack_swing_charge_stab",
-        "attack_swing_heavy_down", "attack_swing_heavy", "attack_swing_heavy_stab",
-        "attack_swing_up_left", "attack_swing_down_right", "attack_swing_heavy_breton",
-        "attack_swing_stab", "attack_push", "parry_pose",
-    },
-    wh_flail_shield = {
-        "attack_swing_charge", "attack_swing_charge_pose", "attack_swing_charge_down_pose",
-        "attack_swing_left", "attack_swing_heavy_left", "attack_swing_down", "attack_swing_heavy_down",
-        "attack_swing_down_right", "attack_slam", "attack_swing_left_diagonal",
-        "attack_swing_right_diagonal", "attack_push", "parry_pose",
-    },
-    wh_hammer_book = {
-        "attack_swing_charge_stab", "attack_swing_charge_left_diagonal", "attack_swing_heavy_left_diagonal",
-        "attack_swing_left_diagonal_last", "attack_swing_stab", "attack_swing_heavy_stab",
-        "attack_swing_right_diagonal", "attack_swing_right_diagonal_axe", "attack_swing_left_diagonal",
-        "attack_swing_up_left", "attack_push", "parry_pose", "spell_pose",
-    },
-    wh_hammer_shield = {
-        "attack_swing_charge", "attack_swing_charge_left_pose", "attack_swing_charge_pose",
-        "attack_swing_heavy", "attack_swing_heavy_left", "attack_swing_left",
-        "attack_swing_right_diagonal", "attack_swing_up_left", "attack_swing_down",
-        "attack_push", "parry_pose",
-    },
-    dr_shield_axe = {
-        "attack_swing_charge", "attack_swing_charge_right_pose", "attack_swing_charge_left_diagonal_pose",
-        "attack_swing_charge_left_pose", "attack_swing_heavy", "attack_swing_heavy_down",
-        "attack_swing_heavy_right", "attack_swing_left_diagonal", "attack_swing_right_diagonal",
-        "attack_swing_down", "attack_swing_up_left", "attack_push", "parry_pose",
-    },
-    -- SET F — Dual Swords
-    wh_dual_hammer = {
-        "attack_swing_charge_down", "attack_swing_charge_right", "attack_swing_charge_left",
-        "attack_swing_heavy_down", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_left_diagonal",
-        "attack_swing_left", "attack_swing_down", "attack_swing_left_diagonal", "attack_swing_up",
-        "attack_swing_stab", "attack_push", "parry_pose",
-    },
-    dr_dual_wield_axes = {
-        "attack_swing_charge_left", "attack_swing_charge_right", "attack_swing_charge_diagonal",
-        "attack_swing_heavy_right", "attack_swing_heavy", "attack_swing_heavy_left_diagonal",
-        "attack_swing_left_diagonal", "attack_swing_right_diagonal", "attack_swing_left",
-        "attack_swing_right", "attack_swing_down", "attack_push", "parry_pose",
-    },
-    dr_dual_wield_hammers = {
-        "attack_swing_charge_down", "attack_swing_charge_right", "attack_swing_charge_left",
-        "attack_swing_heavy_down", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_left_diagonal",
-        "attack_swing_left", "attack_swing_down", "attack_swing_left_diagonal", "attack_swing_up",
-        "attack_swing_stab", "attack_push", "parry_pose",
-    },
-    -- SET G — Sword & Dagger
-    es_dual_wield_hammer_sword = {
-        "attack_swing_charge_left", "attack_swing_charge_right", "attack_swing_heavy_left_diagonal",
-        "attack_swing_heavy_right_diagonal", "attack_swing_left_diagonal", "attack_swing_right",
-        "attack_swing_right_diagonal", "attack_swing_left", "attack_swing_down", "attack_push", "parry_pose",
-    },
-    wh_dual_wield_axe_falchion = {
-        "attack_swing_charge_down", "attack_swing_charge_left", "attack_swing_heavy_down",
-        "attack_swing_heavy_left", "attack_swing_right", "attack_swing_right_diagonal",
-        "attack_swing_left_diagonal", "attack_swing_down_left", "attack_swing_down", "attack_push", "parry_pose",
-    },
-    -- SET H — Elf Javelin
-    dr_1h_throwing_axes = {
-        "attack_throw", "throw_charge", "reload", "reload_last",
-    },
-}
+-- v0.12.201-dev: emptied in lockstep with the Kerillian batch-1 bake (see _KERI_WEAPON_SET).
+local _KERI_WEAPON_ATTACKS = {}
 
 -- The receiver dispatch table. Kruber points at the EXISTING (unchanged) Kruber
 -- tables; Saltzpyre at the new ones above. Move-label maps empty for Saltzpyre

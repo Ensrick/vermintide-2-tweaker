@@ -99,6 +99,10 @@ local _CONFIRMED = {
         dr_2h_cog_hammer = true,           -- -> Empire Greathammer (re-tuned, #182)
         wh_2h_hammer = true,               -- -> Empire Greathammer (re-tuned, #180)
         wh_fencing_sword = true,           -- -> Empire 1H Sword (Rapier, #178)
+        -- v0.12.201-dev: Skullsplitter & Tome BAKED es_ (one_handed_hammer_book_priest
+        -- _template) from the tester's picks — the tester tuned it as a full anim remap
+        -- (1H Skullsplitter vocab), not the mesh-swap the #181 note anticipated.
+        wh_hammer_book = true,             -- -> 1H Mace/Skullsplitter (#181)
     },
     bardin = {
         bw_1h_crowbill = true, es_1h_sword = true, we_1h_sword = true,
@@ -109,6 +113,22 @@ local _CONFIRMED = {
         es_2h_heavy_spear = true, es_2h_sword = true, es_deus_01 = true,
         es_halberd = true, wh_1h_axe = true, wh_1h_falchion = true,
         wh_2h_billhook = true, wh_2h_sword = true,
+        -- v0.12.201-dev: Kerillian batch-1 (33 ports) BAKED career-scoped (we_) into
+        -- _3p_template_remaps (weapon_tweaker.lua) from the tester's persisted dev-picker
+        -- picks (user_settings(4).config 2026-07-03) — every batch-1 port was fully tuned.
+        -- Moved out of _NEEDS_ANIMS.kerillian (now emptied) -> tag flips to [Working].
+        es_2h_hammer = true, wh_2h_hammer = true, dr_2h_cog_hammer = true,
+        dr_2h_pick = true, bw_ghost_scythe = true, bw_skullstaff_beam = true,
+        bw_skullstaff_fireball = true, bw_skullstaff_flamethrower = true,
+        bw_skullstaff_geiser = true, bw_skullstaff_spear = true,
+        bw_necromancy_staff = true, bw_deus_01 = true, es_2h_sword_executioner = true,
+        es_bastard_sword = true, wh_fencing_sword = true, bw_1h_flail_flaming = true,
+        bw_dagger = true, bw_flame_sword = true, wh_1h_hammer = true, dr_1h_hammer = true,
+        es_mace_shield = true, es_sword_shield = true, es_sword_shield_breton = true,
+        wh_flail_shield = true, wh_hammer_book = true, wh_hammer_shield = true,
+        dr_shield_axe = true, wh_dual_hammer = true, dr_dual_wield_axes = true,
+        dr_dual_wield_hammers = true, es_dual_wield_hammer_sword = true,
+        wh_dual_wield_axe_falchion = true, dr_1h_throwing_axes = true,
     },
     saltzpyre = {
         bw_1h_crowbill = true, dr_2h_axe = true, es_1h_flail = true,
@@ -139,6 +159,9 @@ local _CONFIRMED = {
         bw_skullstaff_spear = true,        -- -> WP Greathammer
         bw_necromancy_staff = true,        -- -> WP Greathammer
         bw_deus_01 = true,                 -- -> WP Greathammer
+        -- v0.12.201-dev: Kruber Executioner Sword (#160) BAKED wh_ (two_handed_swords
+        -- _executioner_template_1 -> Saltzpyre 2H Sword) from the tester's picks.
+        es_2h_sword_executioner = true,    -- -> Saltzpyre 2H Sword
     },
     -- wh_priest: all 7 entries ✅/🔁 (ANIMATION_COVERAGE.md:181-185). The only
     -- cross-prefix entry es_1h_flail is ✅; everything else is native wh_*.
@@ -192,7 +215,8 @@ local _NEEDS_ANIMS = {
     -- _CONFIRMED above. Only wh_hammer_book remains [Needs Animations] (no picks
     -- captured yet — its 3P is a mesh-swap, not an anim remap; #181).
     kruber = {
-        wh_hammer_book             = "1H Mace/Skullsplitter",  -- #181: Skullsplitter & Tome → 1H Skullsplitter (mesh swap drops the book)
+        -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _CONFIRMED.kruber. Emptied.
+        -- Next Kruber batch (if any) is queued here.
     },
     -- v0.12.188-dev: all 17 Saltzpyre batch-1/2/3 ports BAKED career-scoped (wh_)
     -- into _3p_template_remaps from the user's persisted dev-picker picks and moved
@@ -200,9 +224,27 @@ local _NEEDS_ANIMS = {
     -- v0.12.194-dev (#160): re-surfaced the Kruber Executioner Sword for Saltzpyre
     -- per-attack tuning. VALUE = the picker SET label; kept in lockstep with
     -- _SALTZ_WEAPON_SET (wt_dev_anim_picker.lua).
+    -- v0.12.201-dev: Saltzpyre batch-2 — 11 cross-character 3P ports queued for the
+    -- tester's dev-picker tuning (es_2h_sword_executioner from batch-1 was BAKED (wh_)
+    -- -> _CONFIRMED.saltzpyre). VALUE = the picker SET display label (_SALTZ_SET_LABEL);
+    -- kept in lockstep with _SALTZ_WEAPON_SET (wt_dev_anim_picker.lua). Every wield-render
+    -- target has a wh_* redirect in _WIELD_ANIM_CAREER_3P_PATCHES_BULK (wt_wield_patches).
     saltzpyre = {
-        -- SET G — Saltzpyre 2H Sword (to_2h_sword -> two_handed_swords_template_1)
-        es_2h_sword_executioner    = "2H Sword",  -- Kruber: Executioner Sword
+        -- SET A — Warrior Priest Greathammer
+        es_2h_hammer           = "Warrior Priest Greathammer",
+        dr_2h_cog_hammer       = "Warrior Priest Greathammer",
+        dr_2h_pick             = "Warrior Priest Greathammer",
+        bw_1h_mace             = "Warrior Priest Greathammer",
+        bw_ghost_scythe        = "Warrior Priest Greathammer",
+        -- SET B — Warrior Priest Dual Hammers
+        dr_dual_wield_hammers  = "Warrior Priest Dual Hammers",
+        -- SET G — 2H Sword
+        es_bastard_sword       = "2H Sword",
+        -- SET C — Dual Axe & Falchion (shield ports; shield offhand model is a later pass)
+        es_mace_shield         = "Dual Axe & Falchion",
+        es_sword_shield        = "Dual Axe & Falchion",
+        es_sword_shield_breton = "Dual Axe & Falchion",
+        dr_shield_axe          = "Dual Axe & Falchion",
     },
     -- v0.12.193-dev: Kerillian batch 1 — the "next group" of cross-character 3P ports
     -- surfaced for dev-picker tuning (mirrors the Saltzpyre batch-1 setup). Every
@@ -211,50 +253,8 @@ local _NEEDS_ANIMS = {
     -- VALUE = the Kerillian-native wield-redirect the port's 3P borrows (the picker SET
     -- label). Kept in lockstep with _KERI_WEAPON_SET (wt_dev_anim_picker.lua).
     kerillian = {
-        -- SET A — Elf 2H Axe/Glaive (to_2h_axe_we); staves render as the 2H glaive
-        es_2h_hammer               = "Elf 2H Axe/Glaive",
-        wh_2h_hammer               = "Elf 2H Axe/Glaive",
-        dr_2h_cog_hammer           = "Elf 2H Axe/Glaive",
-        dr_2h_pick                 = "Elf 2H Axe/Glaive",
-        bw_ghost_scythe            = "Elf 2H Axe/Glaive",
-        bw_skullstaff_beam         = "Elf 2H Axe/Glaive",
-        bw_skullstaff_fireball     = "Elf 2H Axe/Glaive",
-        bw_skullstaff_flamethrower = "Elf 2H Axe/Glaive",
-        bw_skullstaff_geiser       = "Elf 2H Axe/Glaive",
-        bw_skullstaff_spear        = "Elf 2H Axe/Glaive",
-        bw_necromancy_staff        = "Elf 2H Axe/Glaive",
-        bw_deus_01                 = "Elf 2H Axe/Glaive",
-        -- SET B — Elf 2H Sword (to_2h_sword_we)
-        es_2h_sword_executioner    = "Elf 2H Sword",
-        es_bastard_sword           = "Elf 2H Sword",
-        -- SET C — Elf 1H Sword (to_1h_sword)
-        wh_fencing_sword           = "Elf 1H Sword",
-        bw_1h_flail_flaming        = "Elf 1H Sword",
-        bw_dagger                  = "Elf 1H Sword",
-        bw_flame_sword             = "Elf 1H Sword",
-        -- SET D — Elf 1H Axe (to_1h_axe)
-        wh_1h_hammer               = "Elf 1H Axe",
-        dr_1h_hammer               = "Elf 1H Axe",
-        -- SET E — Elf Spear & Shield (to_1h_spear_shield)
-        es_mace_shield             = "Elf Spear & Shield",
-        es_sword_shield            = "Elf Spear & Shield",
-        es_sword_shield_breton     = "Elf Spear & Shield",
-        wh_flail_shield            = "Elf Spear & Shield",
-        wh_hammer_book             = "Elf Spear & Shield",
-        wh_hammer_shield           = "Elf Spear & Shield",
-        dr_shield_axe              = "Elf Spear & Shield",
-        -- SET F — Dual Swords (to_dual_swords)
-        wh_dual_hammer             = "Dual Swords",
-        dr_dual_wield_axes         = "Dual Swords",
-        dr_dual_wield_hammers      = "Dual Swords",
-        -- SET G — Sword & Dagger (to_dual_sword_dagger)
-        es_dual_wield_hammer_sword = "Sword & Dagger",
-        wh_dual_wield_axe_falchion = "Sword & Dagger",
-        -- SET H — Elf Javelin (to_javelin)
-        dr_1h_throwing_axes        = "Elf Javelin",
-        -- NOTE: the ranged firearm ports that route to to_repeating_crossbow_elf are
-        -- intentionally EXCLUDED from the picker (Kruber/Saltzpyre precedent — the elf
-        -- repeating crossbow authors only attack_shoot + to_zoom in 3P, no tuning surface).
+        -- v0.12.201-dev: Kerillian batch-1 (all 33 ports) BAKED (we_) -> _CONFIRMED.kerillian
+        -- from the tester's fully-tuned picks. Emptied. Next Kerillian batch (if any) queued here.
     },
 }
 

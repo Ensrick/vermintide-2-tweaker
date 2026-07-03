@@ -101,7 +101,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.200-dev"
+local MOD_VERSION = "0.12.201-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1610,6 +1610,558 @@ local _3p_template_remaps = {
         },
     },
 }
+
+do
+    local R = _3p_template_remaps
+    -- ============================================================
+    -- v0.12.201-dev: BAKED tester 3P picks (Downloads/user_settings(4).config,
+    -- 2026-07-03) — Kerillian batch-1 (33 ports) + Saltzpyre Executioner Sword
+    -- + Kruber Skullsplitter & Tome. Same career-scoped pattern as the
+    -- v0.12.149-.188 bakes: native owner prefix = false (owner plays UNTOUCHED),
+    -- we_ = Kerillian redirect, wh_ = (non-WP) Saltzpyre, es_ = Kruber. Emitted as
+    -- post-definition assignments (mirrors the longbow-port block below) so each
+    -- new we_/wh_/es_ MERGES into the existing es_/wh_ literal entry without
+    -- disturbing it. 3P-only (Unit.animation_event hook); identity entries are
+    -- harmless re-fires; __unset__ picks were omitted (fall through to native).
+    -- dual_wield_axes_template_1 gets NO dr_=false (its Bardin remap is per-career
+    -- dr_ironbreaker/ranger/engineer; a dr_ prefix=false would shadow them).
+    -- ============================================================
+    -- kerillian (we_): es_2h_hammer -> two_handed_hammers_template_1
+    R.two_handed_hammers_template_1 = R.two_handed_hammers_template_1 or {}
+    R.two_handed_hammers_template_1.es_ = R.two_handed_hammers_template_1.es_ or false
+    R.two_handed_hammers_template_1.we_ = {
+        attack_push                = "attack_push",
+        attack_swing_charge        = "attack_swing_charge_left",
+        attack_swing_charge_left   = "attack_swing_charge_left",
+        attack_swing_charge_right  = "attack_swing_charge_left",
+        attack_swing_down_left     = "attack_swing_heavy_down",
+        attack_swing_down_right    = "attack_swing_right",
+        attack_swing_heavy         = "attack_swing_heavy_left",
+        attack_swing_heavy_right   = "attack_swing_heavy_left",
+        attack_swing_left          = "attack_swing_left",
+        attack_swing_left_diagonal = "attack_swing_left_diagonal",
+        parry_pose                 = "parry_pose",
+    }
+    -- kerillian (we_): wh_2h_hammer -> two_handed_hammer_priest_template
+    R.two_handed_hammer_priest_template = R.two_handed_hammer_priest_template or {}
+    R.two_handed_hammer_priest_template.wh_ = R.two_handed_hammer_priest_template.wh_ or false
+    R.two_handed_hammer_priest_template.we_ = {
+        attack_push                       = "attack_push",
+        attack_slam                       = "attack_swing_left_diagonal",
+        attack_slam_charge                = "attack_swing_heavy_left",
+        attack_swing_charge               = "attack_swing_charge_left",
+        attack_swing_charge_right         = "attack_swing_charge_down",
+        attack_swing_charge_right_down    = "attack_swing_charge_down",
+        attack_swing_down_right           = "attack_swing_right",
+        attack_swing_heavy_right          = "attack_swing_heavy_left",
+        attack_swing_heavy_right_diagonal = "attack_swing_heavy_down",
+        attack_swing_left                 = "attack_swing_right",
+        attack_swing_up                   = "attack_swing_left",
+        attack_swing_up_left              = "attack_swing_left",
+        parry_pose                        = "parry_pose",
+        parry_pose_02                     = "parry_pose",
+    }
+    -- kerillian (we_): dr_2h_cog_hammer -> two_handed_cog_hammers_template_1
+    R.two_handed_cog_hammers_template_1 = R.two_handed_cog_hammers_template_1 or {}
+    R.two_handed_cog_hammers_template_1.dr_ = R.two_handed_cog_hammers_template_1.dr_ or false
+    R.two_handed_cog_hammers_template_1.we_ = {
+        attack_push                    = "attack_push",
+        attack_swing_charge            = "attack_swing_heavy_left",
+        attack_swing_charge_pose       = "attack_swing_heavy_left",
+        attack_swing_charge_right      = "attack_swing_charge_down",
+        attack_swing_charge_right_down = "attack_swing_heavy_left",
+        attack_swing_down_left         = "attack_swing_right",
+        attack_swing_down_right        = "attack_swing_right",
+        attack_swing_heavy             = "attack_swing_heavy_down",
+        attack_swing_heavy_right       = "attack_swing_heavy_down",
+        attack_swing_left              = "attack_swing_right",
+        attack_swing_left_diagonal     = "attack_swing_left",
+        attack_swing_right_diagonal    = "attack_swing_right",
+        attack_swing_up                = "attack_swing_left",
+        attack_swing_up_pose           = "attack_swing_left",
+        attack_swing_up_right          = "attack_swing_right",
+        parry_pose                     = "parry_pose",
+    }
+    -- kerillian (we_): dr_2h_pick -> two_handed_picks_template_1
+    R.two_handed_picks_template_1 = R.two_handed_picks_template_1 or {}
+    R.two_handed_picks_template_1.dr_ = R.two_handed_picks_template_1.dr_ or false
+    R.two_handed_picks_template_1.we_ = {
+        attack_push                        = "attack_push",
+        attack_swing_charge_left_down      = "attack_swing_charge_left",
+        attack_swing_charge_left_down_pose = "attack_swing_charge_left",
+        attack_swing_charge_right_down     = "attack_swing_charge_down",
+        attack_swing_down_left             = "attack_swing_right",
+        attack_swing_down_left_axe         = "attack_swing_right",
+        attack_swing_down_right            = "attack_swing_right",
+        attack_swing_down_right_axe        = "attack_swing_right",
+        attack_swing_left                  = "attack_swing_right",
+        attack_swing_left_diagonal         = "attack_swing_left",
+        attack_swing_right_diagonal        = "attack_swing_right",
+        parry_pose                         = "parry_pose",
+    }
+    -- kerillian (we_): bw_ghost_scythe -> staff_scythe
+    R.staff_scythe = R.staff_scythe or {}
+    R.staff_scythe.bw_ = R.staff_scythe.bw_ or false
+    R.staff_scythe.we_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_left          = "attack_swing_charge_left",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_left",
+        attack_swing_charge_right         = "attack_swing_charge_down",
+        attack_swing_heavy                = "attack_swing_heavy_down",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_left",
+        attack_swing_heavy_right          = "attack_swing_heavy_down",
+        attack_swing_left                 = "attack_swing_left",
+        attack_swing_left_diagonal        = "attack_swing_left_diagonal",
+        attack_swing_left_diagonal_last   = "attack_swing_heavy_left",
+        attack_swing_right                = "attack_swing_right",
+        attack_swing_up_right             = "attack_swing_right",
+        parry_pose                        = "parry_pose",
+        special_action                    = "attack_swing_heavy_left",
+        special_action_02                 = "attack_swing_heavy_down",
+    }
+    -- kerillian (we_): bw_skullstaff_beam -> staff_blast_beam_template_1
+    R.staff_blast_beam_template_1 = R.staff_blast_beam_template_1 or {}
+    R.staff_blast_beam_template_1.bw_ = R.staff_blast_beam_template_1.bw_ or false
+    R.staff_blast_beam_template_1.we_ = {
+        attack_shoot_beam_spark   = "attack_swing_heavy_down",
+        attack_shoot_beam_start   = "attack_swing_left",
+        attack_shoot_sparks       = "attack_swing_heavy_left",
+        cooldown_start            = "parry_pose",
+        flamethrower_charge_start = "attack_swing_right",
+    }
+    -- kerillian (we_): bw_skullstaff_fireball -> staff_fireball_fireball_template_1
+    R.staff_fireball_fireball_template_1 = R.staff_fireball_fireball_template_1 or {}
+    R.staff_fireball_fireball_template_1.bw_ = R.staff_fireball_fireball_template_1.bw_ or false
+    R.staff_fireball_fireball_template_1.we_ = {
+        attack_charge_fireball        = "attack_swing_charge_left",
+        attack_shoot_fireball         = "attack_swing_right",
+        attack_shoot_fireball_charged = "attack_swing_left",
+        cooldown_start                = "parry_pose",
+    }
+    -- kerillian (we_): bw_skullstaff_flamethrower -> staff_flamethrower_template
+    R.staff_flamethrower_template = R.staff_flamethrower_template or {}
+    R.staff_flamethrower_template.bw_ = R.staff_flamethrower_template.bw_ or false
+    R.staff_flamethrower_template.we_ = {
+        attack_shoot_flamethrower         = "attack_swing_right",
+        attack_shoot_flamethrower_charged = "attack_swing_left",
+        cooldown_start                    = "parry_pose",
+        flamethrower_charge_start         = "attack_swing_charge_left",
+    }
+    -- kerillian (we_): bw_skullstaff_geiser -> staff_fireball_geiser_template_1
+    R.staff_fireball_geiser_template_1 = R.staff_fireball_geiser_template_1 or {}
+    R.staff_fireball_geiser_template_1.bw_ = R.staff_fireball_geiser_template_1.bw_ or false
+    R.staff_fireball_geiser_template_1.we_ = {
+        attack_geiser_placed  = "attack_swing_left",
+        attack_geiser_start   = "attack_swing_charge_left",
+        attack_shoot_fireball = "attack_swing_right",
+        cooldown_start        = "parry_pose",
+    }
+    -- kerillian (we_): bw_skullstaff_spear -> staff_spark_spear_template_1
+    R.staff_spark_spear_template_1 = R.staff_spark_spear_template_1 or {}
+    R.staff_spark_spear_template_1.bw_ = R.staff_spark_spear_template_1.bw_ or false
+    R.staff_spark_spear_template_1.we_ = {
+        attack_charge_spear        = "attack_swing_charge_left",
+        attack_shoot_rapid_left    = "attack_swing_left",
+        attack_shoot_rapid_right   = "attack_swing_right",
+        attack_shoot_spear_charged = "attack_swing_left",
+        cooldown_start             = "parry_pose",
+    }
+    -- kerillian (we_): bw_necromancy_staff -> staff_death
+    R.staff_death = R.staff_death or {}
+    R.staff_death.bw_ = R.staff_death.bw_ or false
+    R.staff_death.we_ = {
+        chain_attack    = "attack_swing_left",
+        chain_attack_02 = "attack_swing_right",
+        cooldown_start  = "parry_pose",
+        soul_rip_attack = "attack_swing_charge_left",
+        soul_rip_pop    = "attack_swing_left",
+        soul_rip_start  = "attack_swing_right",
+    }
+    -- kerillian (we_): bw_deus_01 -> bw_deus_01_template_1
+    R.bw_deus_01_template_1 = R.bw_deus_01_template_1 or {}
+    R.bw_deus_01_template_1.bw_ = R.bw_deus_01_template_1.bw_ or false
+    R.bw_deus_01_template_1.we_ = {
+        attack_geiser_placed  = "attack_swing_left",
+        attack_geiser_start   = "attack_swing_charge_left",
+        attack_shoot_fireball = "attack_swing_right",
+        cooldown_start        = "parry_pose",
+    }
+    -- kerillian (we_): es_2h_sword_executioner -> two_handed_swords_executioner_template_1
+    R.two_handed_swords_executioner_template_1 = R.two_handed_swords_executioner_template_1 or {}
+    R.two_handed_swords_executioner_template_1.es_ = R.two_handed_swords_executioner_template_1.es_ or false
+    R.two_handed_swords_executioner_template_1.we_ = {
+        attack_push                     = "attack_push",
+        attack_swing_charge_left_down   = "attack_swing_charge",
+        attack_swing_charge_right_down  = "attack_swing_charge",
+        attack_swing_down_left          = "attack_swing_right",
+        attack_swing_down_right         = "attack_swing_right",
+        attack_swing_left               = "attack_swing_left",
+        attack_swing_left_diagonal      = "attack_swing_left",
+        attack_swing_left_diagonal_last = "attack_swing_heavy",
+        attack_swing_right              = "attack_swing_heavy_right",
+        parry_pose                      = "parry_pose",
+    }
+    -- kerillian (we_): es_bastard_sword -> bastard_sword_template
+    R.bastard_sword_template = R.bastard_sword_template or {}
+    R.bastard_sword_template.es_ = R.bastard_sword_template.es_ or false
+    R.bastard_sword_template.we_ = {
+        attack_push                             = "attack_push",
+        attack_swing_charge_down_pose           = "attack_swing_charge",
+        attack_swing_charge_left_diagonal       = "attack_swing_charge",
+        attack_swing_charge_left_diagonal_pose  = "attack_swing_charge",
+        attack_swing_charge_right_diagonal_pose = "attack_swing_charge",
+        attack_swing_down                       = "attack_swing_left",
+        attack_swing_down_right                 = "attack_swing_heavy_right",
+        attack_swing_heavy_down                 = "attack_swing_heavy",
+        attack_swing_heavy_left_diagonal        = "attack_swing_left",
+        attack_swing_heavy_right_diagonal       = "attack_swing_right",
+        attack_swing_right                      = "attack_swing_right",
+        attack_swing_up_left                    = "attack_swing_left",
+        parry_pose                              = "parry_pose",
+        swap_charge_stance                      = "attack_swing_charge",
+    }
+    -- kerillian (we_): wh_fencing_sword -> fencing_sword_template_1
+    R.fencing_sword_template_1 = R.fencing_sword_template_1 or {}
+    R.fencing_sword_template_1.wh_ = R.fencing_sword_template_1.wh_ or false
+    R.fencing_sword_template_1.we_ = {
+        attack_push                 = "attack_swing_heavy_down_right",
+        attack_shoot                = "attack_push",
+        attack_swing_left           = "attack_swing_left",
+        attack_swing_right          = "attack_swing_right_diagonal",
+        attack_swing_right_diagonal = "attack_swing_right_diagonal",
+        attack_swing_stab           = "attack_swing_stab",
+        attack_swing_stab_charge    = "attack_swing_charge_down",
+        front_idle_exit             = "attack_swing_left",
+        parry_pose                  = "parry_pose",
+    }
+    -- kerillian (we_): bw_1h_flail_flaming -> one_handed_flails_flaming_template
+    R.one_handed_flails_flaming_template = R.one_handed_flails_flaming_template or {}
+    R.one_handed_flails_flaming_template.bw_ = R.one_handed_flails_flaming_template.bw_ or false
+    R.one_handed_flails_flaming_template.we_ = {
+        attack_push                 = "attack_push",
+        attack_swing_charge         = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_charge_down    = "attack_swing_charge_down",
+        attack_swing_down_right     = "attack_swing_heavy_down_right",
+        attack_swing_heavy_down     = "attack_swing_heavy_down",
+        attack_swing_heavy_left     = "attack_swing_heavy_left_up",
+        attack_swing_left           = "attack_swing_left_diagonal",
+        attack_swing_left_diagonal  = "attack_swing_left_diagonal",
+        attack_swing_right          = "attack_swing_heavy_down_right",
+        attack_swing_right_diagonal = "attack_swing_right_diagonal",
+        parry_pose                  = "parry_pose",
+    }
+    -- kerillian (we_): bw_dagger -> one_handed_daggers_template_1
+    R.one_handed_daggers_template_1 = R.one_handed_daggers_template_1 or {}
+    R.one_handed_daggers_template_1.bw_ = R.one_handed_daggers_template_1.bw_ or false
+    R.one_handed_daggers_template_1.we_ = {
+        attack_push                 = "attack_push",
+        attack_swing_charge         = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_charge_left    = "attack_swing_charge_down",
+        attack_swing_heavy          = "attack_swing_heavy_left_up",
+        attack_swing_heavy_right    = "attack_swing_heavy_down_right",
+        attack_swing_left           = "attack_swing_left",
+        attack_swing_left_diagonal  = "attack_swing_left_diagonal",
+        attack_swing_right_diagonal = "attack_swing_right_diagonal",
+        attack_swing_stab           = "attack_swing_stab",
+        parry_pose                  = "parry_pose",
+    }
+    -- kerillian (we_): bw_flame_sword -> flaming_sword_template_1
+    R.flaming_sword_template_1 = R.flaming_sword_template_1 or {}
+    R.flaming_sword_template_1.bw_ = R.flaming_sword_template_1.bw_ or false
+    R.flaming_sword_template_1.we_ = {
+        attack_push                 = "attack_push",
+        attack_swing_charge         = "attack_swing_charge_down",
+        attack_swing_charge_right   = "attack_swing_charge_down",
+        attack_swing_heavy          = "attack_swing_heavy_down_right",
+        attack_swing_left           = "attack_swing_left",
+        attack_swing_left_diagonal  = "attack_swing_left_diagonal",
+        attack_swing_right_diagonal = "attack_swing_right_diagonal",
+        attack_swing_right_spell    = "attack_swing_heavy_left_up",
+        attack_swing_stab           = "attack_swing_stab",
+        parry_pose                  = "parry_pose",
+    }
+    -- kerillian (we_): wh_1h_hammer -> one_handed_hammer_priest_template
+    R.one_handed_hammer_priest_template = R.one_handed_hammer_priest_template or {}
+    R.one_handed_hammer_priest_template.wh_ = R.one_handed_hammer_priest_template.wh_ or false
+    R.one_handed_hammer_priest_template.we_ = {
+        attack_push                             = "attack_push",
+        attack_swing_charge_left_diagonal       = "attack_swing_charge_left_diagonal",
+        attack_swing_charge_left_diagonal_pose  = "attack_swing_charge_left_diagonal_pose",
+        attack_swing_charge_right_diagonal_pose = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_down_right                 = "attack_swing_right",
+        attack_swing_heavy_down                 = "attack_swing_heavy_down",
+        attack_swing_heavy_down_right           = "attack_swing_heavy_down_right",
+        attack_swing_left_diagonal              = "attack_swing_left",
+        attack_swing_left_diagonal_last         = "attack_swing_left",
+        attack_swing_right                      = "attack_swing_right",
+        attack_swing_right_diagonal             = "attack_swing_right",
+        parry_pose                              = "parry_pose",
+    }
+    -- kerillian (we_): dr_1h_hammer -> one_handed_hammer_template_2
+    R.one_handed_hammer_template_2 = R.one_handed_hammer_template_2 or {}
+    R.one_handed_hammer_template_2.dr_ = R.one_handed_hammer_template_2.dr_ or false
+    R.one_handed_hammer_template_2.we_ = {
+        attack_push                             = "attack_push",
+        attack_swing_charge_left_diagonal       = "attack_swing_charge_left_diagonal",
+        attack_swing_charge_left_diagonal_pose  = "attack_swing_charge_left_diagonal_pose",
+        attack_swing_charge_right_diagonal_pose = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_down_right                 = "attack_swing_right",
+        attack_swing_heavy_down                 = "attack_swing_heavy_down",
+        attack_swing_heavy_down_right           = "attack_swing_heavy_down_right",
+        attack_swing_left_diagonal              = "attack_swing_left",
+        attack_swing_left_diagonal_last         = "attack_swing_left",
+        attack_swing_right                      = "attack_swing_right",
+        attack_swing_right_diagonal             = "attack_swing_right",
+        parry_pose                              = "parry_pose",
+    }
+    -- kerillian (we_): es_mace_shield -> one_handed_hammer_shield_template_1
+    R.one_handed_hammer_shield_template_1 = R.one_handed_hammer_shield_template_1 or {}
+    R.one_handed_hammer_shield_template_1.es_ = R.one_handed_hammer_shield_template_1.es_ or false
+    R.one_handed_hammer_shield_template_1.we_ = {
+        attack_push                   = "attack_push",
+        attack_swing_charge           = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_charge_left_pose = "attack_swing_charge_left",
+        attack_swing_charge_pose      = "attack_swing_charge_stab",
+        attack_swing_down             = "push_stab",
+        attack_swing_heavy            = "attack_swing_heavy_stab",
+        attack_swing_heavy_left       = "attack_swing_heavy_left",
+        attack_swing_left             = "attack_swing_heavy_left",
+        attack_swing_right_diagonal   = "attack_swing_heavy_down_right",
+        attack_swing_up_left          = "attack_swing_heavy_left",
+        parry_pose                    = "parry_pose",
+    }
+    -- kerillian (we_): es_sword_shield -> one_handed_sword_shield_template_1
+    R.one_handed_sword_shield_template_1 = R.one_handed_sword_shield_template_1 or {}
+    R.one_handed_sword_shield_template_1.es_ = R.one_handed_sword_shield_template_1.es_ or false
+    R.one_handed_sword_shield_template_1.we_ = {
+        attack_push                    = "attack_push",
+        attack_swing_charge            = "attack_swing_charge_left",
+        attack_swing_charge_right_pose = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_charge_stab       = "attack_swing_charge_stab",
+        attack_swing_heavy             = "attack_swing_heavy_left",
+        attack_swing_heavy_right       = "attack_swing_heavy_down_right",
+        attack_swing_heavy_stab        = "attack_swing_heavy_stab",
+        attack_swing_left              = "attack_swing_heavy_left",
+        attack_swing_left_diagonal     = "attack_swing_heavy_left",
+        attack_swing_right_diagonal    = "attack_swing_heavy_down_right",
+        attack_swing_stab              = "push_stab",
+        parry_pose                     = "parry_pose",
+    }
+    -- kerillian (we_): es_sword_shield_breton -> one_handed_sword_shield_template_2
+    R.one_handed_sword_shield_template_2 = R.one_handed_sword_shield_template_2 or {}
+    R.one_handed_sword_shield_template_2.es_ = R.one_handed_sword_shield_template_2.es_ or false
+    R.one_handed_sword_shield_template_2.we_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge               = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_left",
+        attack_swing_charge_stab          = "attack_swing_charge_stab",
+        attack_swing_down_right           = "attack_swing_heavy_left",
+        attack_swing_heavy                = "attack_swing_heavy_left",
+        attack_swing_heavy_breton         = "attack_swing_stab_lh",
+        attack_swing_heavy_down           = "attack_swing_heavy_down_right",
+        attack_swing_heavy_stab           = "attack_swing_heavy_stab",
+        attack_swing_stab                 = "attack_swing_stab",
+        attack_swing_up_left              = "attack_swing_heavy_down_right",
+        parry_pose                        = "parry_pose",
+    }
+    -- kerillian (we_): wh_flail_shield -> one_handed_flail_shield_template
+    R.one_handed_flail_shield_template = R.one_handed_flail_shield_template or {}
+    R.one_handed_flail_shield_template.wh_ = R.one_handed_flail_shield_template.wh_ or false
+    R.one_handed_flail_shield_template.we_ = {
+        attack_push                   = "attack_push",
+        attack_slam                   = "push_stab",
+        attack_swing_charge           = "attack_swing_charge_stab",
+        attack_swing_charge_down_pose = "attack_swing_charge_stab",
+        attack_swing_charge_pose      = "attack_swing_charge_stab",
+        attack_swing_down             = "attack_swing_heavy_left",
+        attack_swing_down_right       = "attack_swing_heavy_down_right",
+        attack_swing_heavy_down       = "attack_swing_heavy_left",
+        attack_swing_heavy_left       = "attack_swing_heavy_left",
+        attack_swing_left             = "attack_swing_heavy_left",
+        attack_swing_left_diagonal    = "attack_swing_heavy_left",
+        attack_swing_right_diagonal   = "attack_swing_heavy_down_right",
+        parry_pose                    = "parry_pose",
+    }
+    -- kerillian (we_): wh_hammer_book -> one_handed_hammer_book_priest_template
+    R.one_handed_hammer_book_priest_template = R.one_handed_hammer_book_priest_template or {}
+    R.one_handed_hammer_book_priest_template.wh_ = R.one_handed_hammer_book_priest_template.wh_ or false
+    R.one_handed_hammer_book_priest_template.we_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_left",
+        attack_swing_charge_stab          = "attack_swing_charge_stab",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_stab",
+        attack_swing_heavy_stab           = "attack_swing_stab",
+        attack_swing_left_diagonal        = "attack_swing_heavy_left",
+        attack_swing_left_diagonal_last   = "attack_swing_heavy_left",
+        attack_swing_right_diagonal       = "attack_swing_heavy_down_right",
+        attack_swing_right_diagonal_axe   = "attack_swing_heavy_down_right",
+        attack_swing_stab                 = "push_stab",
+        attack_swing_up_left              = "attack_swing_heavy_left",
+        parry_pose                        = "parry_pose",
+        spell_pose                        = "attack_push",
+    }
+    -- kerillian (we_): wh_hammer_shield -> one_handed_hammer_shield_priest_template
+    R.one_handed_hammer_shield_priest_template = R.one_handed_hammer_shield_priest_template or {}
+    R.one_handed_hammer_shield_priest_template.wh_ = R.one_handed_hammer_shield_priest_template.wh_ or false
+    R.one_handed_hammer_shield_priest_template.we_ = {
+        attack_push                   = "attack_push",
+        attack_swing_charge           = "attack_swing_charge_stab",
+        attack_swing_charge_left_pose = "attack_swing_charge_left",
+        attack_swing_charge_pose      = "attack_swing_charge_stab",
+        attack_swing_down             = "attack_swing_heavy_left",
+        attack_swing_heavy            = "attack_swing_heavy_stab",
+        attack_swing_heavy_left       = "attack_swing_heavy_left",
+        attack_swing_left             = "attack_swing_heavy_left",
+        attack_swing_right_diagonal   = "attack_swing_heavy_down_right",
+        attack_swing_up_left          = "attack_swing_heavy_left",
+        parry_pose                    = "parry_pose",
+    }
+    -- kerillian (we_): dr_shield_axe -> one_hand_axe_shield_template_1
+    R.one_hand_axe_shield_template_1 = R.one_hand_axe_shield_template_1 or {}
+    R.one_hand_axe_shield_template_1.dr_ = R.one_hand_axe_shield_template_1.dr_ or false
+    R.one_hand_axe_shield_template_1.we_ = {
+        attack_push                            = "attack_push",
+        attack_swing_charge                    = "attack_swing_charge_left",
+        attack_swing_charge_left_diagonal_pose = "attack_swing_charge_stab",
+        attack_swing_charge_left_pose          = "attack_swing_charge_left",
+        attack_swing_charge_right_pose         = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_down                      = "attack_swing_heavy_left",
+        attack_swing_heavy                     = "attack_swing_heavy_stab",
+        attack_swing_heavy_down                = "attack_swing_heavy_left",
+        attack_swing_heavy_right               = "attack_swing_heavy_down_right",
+        attack_swing_left_diagonal             = "attack_swing_heavy_left",
+        attack_swing_right_diagonal            = "attack_swing_heavy_down_right",
+        attack_swing_up_left                   = "attack_swing_heavy_left",
+        parry_pose                             = "parry_pose",
+    }
+    -- kerillian (we_): wh_dual_hammer -> dual_wield_hammers_priest_template
+    R.dual_wield_hammers_priest_template = R.dual_wield_hammers_priest_template or {}
+    R.dual_wield_hammers_priest_template.wh_ = R.dual_wield_hammers_priest_template.wh_ or false
+    R.dual_wield_hammers_priest_template.we_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_down          = "attack_swing_charge_left",
+        attack_swing_charge_left          = "attack_swing_charge_left",
+        attack_swing_charge_right         = "attack_swing_charge_right",
+        attack_swing_down                 = "attack_swing_right",
+        attack_swing_heavy_down           = "attack_swing_heavy_left_diagonal",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_left_diagonal",
+        attack_swing_heavy_right_diagonal = "attack_swing_heavy_right",
+        attack_swing_left                 = "attack_swing_left",
+        attack_swing_left_diagonal        = "attack_swing_left_diagonal",
+        attack_swing_stab                 = "push_stab",
+        attack_swing_up                   = "attack_swing_right_diagonal",
+        parry_pose                        = "parry_pose",
+    }
+    -- kerillian (we_): dr_dual_wield_axes -> dual_wield_axes_template_1
+    R.dual_wield_axes_template_1 = R.dual_wield_axes_template_1 or {}
+    R.dual_wield_axes_template_1.we_ = {
+        attack_push                      = "attack_push",
+        attack_swing_charge_diagonal     = "attack_swing_charge_right",
+        attack_swing_charge_left         = "attack_swing_charge_left",
+        attack_swing_charge_right        = "attack_swing_charge_right",
+        attack_swing_down                = "attack_swing_left",
+        attack_swing_heavy               = "attack_swing_heavy_right",
+        attack_swing_heavy_left_diagonal = "attack_swing_heavy_left_diagonal",
+        attack_swing_heavy_right         = "attack_swing_heavy_right",
+        attack_swing_left                = "attack_swing_left",
+        attack_swing_left_diagonal       = "attack_swing_left_diagonal",
+        attack_swing_right               = "attack_swing_right",
+        attack_swing_right_diagonal      = "attack_swing_right_diagonal",
+        parry_pose                       = "parry_pose",
+    }
+    -- kerillian (we_): dr_dual_wield_hammers -> dual_wield_hammers_template
+    R.dual_wield_hammers_template = R.dual_wield_hammers_template or {}
+    R.dual_wield_hammers_template.dr_ = R.dual_wield_hammers_template.dr_ or false
+    R.dual_wield_hammers_template.we_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_down          = "attack_swing_charge_left",
+        attack_swing_charge_left          = "attack_swing_charge_left",
+        attack_swing_charge_right         = "attack_swing_charge_right",
+        attack_swing_down                 = "attack_swing_right",
+        attack_swing_heavy_down           = "attack_swing_heavy_right",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_left_diagonal",
+        attack_swing_heavy_right_diagonal = "attack_swing_heavy_right",
+        attack_swing_left                 = "attack_swing_left",
+        attack_swing_left_diagonal        = "attack_swing_left",
+        attack_swing_stab                 = "push_stab",
+        attack_swing_up                   = "attack_swing_right",
+        parry_pose                        = "parry_pose",
+    }
+    -- kerillian (we_): es_dual_wield_hammer_sword -> dual_wield_hammer_sword_template
+    R.dual_wield_hammer_sword_template = R.dual_wield_hammer_sword_template or {}
+    R.dual_wield_hammer_sword_template.es_ = R.dual_wield_hammer_sword_template.es_ or false
+    R.dual_wield_hammer_sword_template.we_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_left          = "attack_swing_charge",
+        attack_swing_charge_right         = "attack_swing_charge",
+        attack_swing_down                 = "push_stab",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy",
+        attack_swing_heavy_right_diagonal = "attack_swing_heavy",
+        attack_swing_left                 = "attack_swing_heavy_left_diagonal",
+        attack_swing_left_diagonal        = "attack_swing_left",
+        attack_swing_right                = "attack_swing_right",
+        attack_swing_right_diagonal       = "attack_swing_right_diagonal",
+        parry_pose                        = "parry_pose",
+    }
+    -- kerillian (we_): wh_dual_wield_axe_falchion -> dual_wield_axe_falchion_template
+    R.dual_wield_axe_falchion_template = R.dual_wield_axe_falchion_template or {}
+    R.dual_wield_axe_falchion_template.wh_ = R.dual_wield_axe_falchion_template.wh_ or false
+    R.dual_wield_axe_falchion_template.we_ = {
+        attack_push                 = "attack_push",
+        attack_swing_charge_down    = "attack_swing_charge",
+        attack_swing_charge_left    = "attack_swing_charge_diagonal",
+        attack_swing_down           = "attack_swing_right",
+        attack_swing_down_left      = "attack_swing_stab",
+        attack_swing_heavy_down     = "attack_swing_heavy",
+        attack_swing_heavy_left     = "attack_swing_heavy_left_diagonal",
+        attack_swing_left_diagonal  = "attack_swing_right_diagonal",
+        attack_swing_right          = "attack_swing_right",
+        attack_swing_right_diagonal = "attack_swing_left",
+        parry_pose                  = "parry_pose",
+    }
+    -- kerillian (we_): dr_1h_throwing_axes -> one_handed_throwing_axes_template
+    R.one_handed_throwing_axes_template = R.one_handed_throwing_axes_template or {}
+    R.one_handed_throwing_axes_template.dr_ = R.one_handed_throwing_axes_template.dr_ or false
+    R.one_handed_throwing_axes_template.we_ = {
+        attack_throw = "attack_swing_up",
+        reload       = "attack_throw",
+        reload_last  = "attack_throw",
+        throw_charge = "throw_charge",
+    }
+    -- saltzpyre (wh_): es_2h_sword_executioner -> two_handed_swords_executioner_template_1
+    R.two_handed_swords_executioner_template_1 = R.two_handed_swords_executioner_template_1 or {}
+    R.two_handed_swords_executioner_template_1.es_ = R.two_handed_swords_executioner_template_1.es_ or false
+    R.two_handed_swords_executioner_template_1.wh_ = {
+        attack_push                     = "attack_push",
+        attack_swing_charge_left_down   = "attack_swing_charge_diagonal_left",
+        attack_swing_charge_right_down  = "attack_swing_charge_diagonal_right",
+        attack_swing_down_left          = "attack_swing_heavy_left_diagonal",
+        attack_swing_down_right         = "attack_swing_heavy_right_diagonal",
+        attack_swing_left               = "attack_swing_left_diagonal",
+        attack_swing_left_diagonal      = "attack_swing_right_diagonal",
+        attack_swing_left_diagonal_last = "attack_swing_left_diagonal",
+        attack_swing_right              = "attack_swing_right_diagonal",
+        parry_pose                      = "parry_pose",
+    }
+    -- kruber (es_): wh_hammer_book -> one_handed_hammer_book_priest_template
+    R.one_handed_hammer_book_priest_template = R.one_handed_hammer_book_priest_template or {}
+    R.one_handed_hammer_book_priest_template.wh_ = R.one_handed_hammer_book_priest_template.wh_ or false
+    R.one_handed_hammer_book_priest_template.es_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_left_diagonal_pose",
+        attack_swing_charge_stab          = "attack_swing_charge_right_diagonal_pose",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_down",
+        attack_swing_heavy_stab           = "attack_swing_heavy_down_right",
+        attack_swing_left_diagonal        = "attack_swing_left_diagonal",
+        attack_swing_left_diagonal_last   = "attack_swing_left_diagonal_last",
+        attack_swing_right_diagonal       = "attack_swing_right_diagonal",
+        attack_swing_right_diagonal_axe   = "attack_swing_right_diagonal",
+        attack_swing_stab                 = "attack_swing_right",
+        attack_swing_up_left              = "attack_swing_left_diagonal",
+        parry_pose                        = "parry_pose",
+        spell_pose                        = "attack_swing_right",
+    }
+end
 
 local function _resolve_template_remap(template_name, career)
     local entry = _3p_template_remaps[template_name]

@@ -1,5 +1,24 @@
 # wt 3P Animation Coverage Matrix
 
+> **UPDATE 2026-07-03 (v0.12.201-dev):** the tester fully tuned every open
+> `[Needs Animations]` port across all three pickers; all **35** were baked
+> career-scoped into `_3p_template_remaps` and moved to `_CONFIRMED`
+> (`wt_port_status.lua`): **Kerillian batch-1 (33 ports)**, **Saltzpyre
+> Executioner Sword** (`es_2h_sword_executioner`, #160), and **Kruber
+> Skullsplitter & Tome** (`wh_hammer_book`, #181 - tuned as a full anim remap,
+> not a mesh-swap). The Kerillian/Kruber picker gates are now empty; the stale
+> baked picker tables were cleaned up in lockstep.
+>
+> **Then queued Saltzpyre batch-2 (11 ports)** into the dev 3P Anim Picker for the
+> tester: **WP Greathammer (A)** `es_2h_hammer`, `dr_2h_cog_hammer`, `dr_2h_pick`,
+> `bw_1h_mace`, `bw_ghost_scythe`; **WP Dual Hammers (B)** `dr_dual_wield_hammers`;
+> **2H Sword (G)** `es_bastard_sword`; **Dual Axe & Falchion (C)** `es_mace_shield`,
+> `es_sword_shield`, `es_sword_shield_breton`, `dr_shield_axe` (shield ports - the
+> right-hand weapon is the tunable render; the shield offhand model is a later pass).
+> Picker wiring only, nothing baked - `_NEEDS_ANIMS.saltzpyre` + `_SALTZ_*` picker
+> tables (`wt_dev_anim_picker.lua`) carry these 11.
+
+
 > Generated 2026-06-11 from a full source audit (wt v0.12.118-dev) of
 > `wt_unlock_data.lua` (`weapon_unlock_map`) cross-referenced against every
 > remap layer, template patcher, and model-substitute hook in
