@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.66-dev"
+local MOD_VERSION = "0.9.67-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -8452,12 +8452,95 @@ end
 -- them into LA's queue. AttachmentUtils is a global table so we hook with
 -- table form (string form would never resolve).
 if rawget(_G, "AttachmentUtils") then
-    mod:hook_safe(AttachmentUtils, "link", function(world, source, target, node_linking)
-        if not LA_BRIDGE.registered then return end
-        if type(target) ~= "userdata" then return end
-        if not Unit.has_data(target, "unit_name") then return end
-        LA_BRIDGE.maybe_queue_unit(world, target, Unit.get_data(target, "unit_name"))
-    end)
+    -- Residency check: Application.can_get("unit", path) is the engine's
+    -- authoritative "will World.spawn_unit succeed?" answer. Fail-open (treat as
+    -- resident) when the API is unavailable or errors, so we never wrongly
+    -- suppress a genuinely spawnable unit. Block-scoped so it does not consume a
+    -- main-chunk local slot (Lua 5.1 200-local ceiling).
+    local function _unit_resident(path)
+        if type(path) ~= "string" or path == "" then return true end
+        local cg = Application and Application.can_get
+        if not cg then return true end
+        local ok, res = pcall(cg, "unit", path)
+        if not ok then return true end
+        return res and true or false
+    end
+
+    -- issue #270 (crash A) -- residency gate on the attachment SPAWN choke point.
+    -- Every hat/attachment apply path (PlayerUnitAttachmentExtension.create_
+    -- attachment, PlayerHuskAttachmentExtension.create_attachment, spawn_resynced_
+    -- loadout) funnels through AttachmentUtils.create_attachment, which at
+    -- attachment_utils.lua:16 spawns `item_units.unit` via UnitSpawner.spawn_
+    -- local_unit -> World.spawn_unit. On a viewer machine the wearer's swapped
+    -- headpiece package is often NOT resident (the mod's hat-swap path equips
+    -- outside the native inventory_list declaration, so viewers never preload
+    -- it), and World.spawn_unit C-asserts (c_api_world.cpp:67), CTD'ing the
+    -- viewer. `item_units.unit` is provably identical to `item_data.unit`
+    -- (backend_utils.lua:153 `unit = item_data.unit`; the skin block only
+    -- overrides left/right_hand/ammo units, never `unit`), so we gate on
+    -- item_data.unit here BEFORE native spawns or links anything. Non-resident ->
+    -- skip cleanly, returning the SAME empty slot_data shape vanilla produces when
+    -- an item has no `.unit` (attachment_utils.lua:38-44). Viewer sees no hat
+    -- (ugly) instead of crashing. NOTE: returning early also avoids native's
+    -- unit=nil path calling AttachmentUtils.link(target=nil) -> Unit.node crash.
+    if AttachmentUtils.create_attachment then
+        mod:hook(AttachmentUtils, "create_attachment", function(func, world, owner_unit, attachments, slot_name, item_data, show)
+            local path = item_data and item_data.unit
+            if type(path) == "string" and path ~= "" and not _unit_resident(path) then
+                mod:info("[cos-hat] SKIP non-resident headpiece=%s slot=%s owner=%s (viewer package not resident; no hat instead of crash)",
+                    tostring(path), tostring(slot_name),
+                    tostring(type(owner_unit) == "userdata" and "unit" or owner_unit))
+                return { unit = nil, name = item_data and item_data.name, item_data = item_data }
+            end
+            return func(world, owner_unit, attachments, slot_name, item_data, show)
+        end)
+    end
+
+    -- issue #270 (crash B) -- Unit.node guard on the attachment LINK path.
+    -- Converted from hook_safe to a full wrapper so we can pre-validate nodes
+    -- BEFORE native runs. AttachmentUtils.link (attachment_utils.lua:70-71) calls
+    -- Unit.node(source|target, node_name), an ENGINE C-assert (c_api_unit.cpp:74,
+    -- `index != SceneGraph::NOT_FOUND`) that BYPASSES pcall when the node is
+    -- absent -- e.g. a hat unit that spawned wrong/nodeless (missing j_head), or a
+    -- nil target from a skipped spawn. Validate every source/target node with the
+    -- non-fatal Unit.has_node companion; if any is missing, abort the link cleanly
+    -- (no World.link_unit, no partial state). The prior hook_safe's LA-bridge
+    -- queue logic is preserved verbatim as the post-step after a successful link.
+    if AttachmentUtils.link then
+        mod:hook(AttachmentUtils, "link", function(func, world, source, target, node_linking)
+            local bad_node, bad_unit
+            if type(source) ~= "userdata" or not Unit.alive(source) then
+                bad_node, bad_unit = "<source-unit>", "source"
+            elseif type(target) ~= "userdata" or not Unit.alive(target) then
+                bad_node, bad_unit = "<target-unit>", "target"
+            elseif type(node_linking) == "table" then
+                for _, ld in ipairs(node_linking) do
+                    local sn, tn = ld.source, ld.target
+                    if type(sn) == "string" and not Unit.has_node(source, sn) then
+                        bad_node, bad_unit = sn, "source"
+                        break
+                    end
+                    if type(tn) == "string" and not Unit.has_node(target, tn) then
+                        bad_node, bad_unit = tn, "target"
+                        break
+                    end
+                end
+            end
+            if bad_node then
+                mod:info("[cos-hat] SKIP attach no-node=%s unit=%s (aborting link, no partial state)",
+                    tostring(bad_node), tostring(bad_unit))
+                return
+            end
+
+            func(world, source, target, node_linking)
+
+            -- Preserved LA-bridge post-logic (was the pre-#270 hook_safe body).
+            if not LA_BRIDGE.registered then return end
+            if type(target) ~= "userdata" then return end
+            if not Unit.has_data(target, "unit_name") then return end
+            LA_BRIDGE.maybe_queue_unit(world, target, Unit.get_data(target, "unit_name"))
+        end)
+    end
 end
 
 -- LA hooks World.link_unit too — some hats are linked via the lower-level

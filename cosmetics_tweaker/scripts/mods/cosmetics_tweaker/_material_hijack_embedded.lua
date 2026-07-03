@@ -353,9 +353,23 @@ end)
 -- can't catch.
 mod:hook("UnitSpawner", "spawn_local_unit", function (func, self, unit_name, position, rotation, material)
     if not _has_unit(unit_name) then
-        mod:warning("[mh_embed] UnitSpawner:spawn_local_unit — unit not in resources, refusing to spawn: %s",
+        -- issue #270 (crash A): DO NOT delegate to native here. Vanilla
+        -- UnitSpawner.spawn_local_unit calls World.spawn_unit(self.world,
+        -- unit_name, ...) UNCONDITIONALLY (unit_spawner.lua:294), which C-asserts
+        -- (`can_get(unit_type, unit_name)`, c_api_world.cpp:67) on a non-resident
+        -- unit and hard-crashes the client -- bypassing pcall. The old
+        -- `return func(...)` here therefore DID crash: the "refusing to spawn" log
+        -- was misleading (it refused our texture work but still called native, so
+        -- a non-resident headpiece on a viewer machine CTD'd them). Returning nil
+        -- skips the spawn entirely. Every mod-side caller that can feed a
+        -- non-resident headpiece here is guarded to tolerate a nil/absent unit:
+        -- AttachmentUtils.create_attachment has a residency gate and
+        -- AttachmentUtils.link has a Unit.has_node guard (both cosmetics_tweaker.lua).
+        -- Log-only via mod:info (reaches the console log with mod logging OFF; no
+        -- chat spam, unlike the old mod:warning).
+        mod:info("[cos-hat] SKIP non-resident spawn unit=%s (would C-assert in World.spawn_unit)",
             tostring(unit_name))
-        return func(self, unit_name, position, rotation, material)
+        return nil
     end
 
     local unit = World.spawn_unit(self.world, unit_name, position, rotation, material)

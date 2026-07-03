@@ -1,5 +1,36 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.67-dev — 2026-07-03 — CRASH HOTFIX: #270 LA hat swap CTDs OTHER players (non-resident headpiece reaches engine spawn/link)
+
+> EMERGENCY hotfix. In the 2026-07-03 21:48 three-player session, TWO viewers crashed to desktop when the Kruber mercenary wearer swapped hats. The mod's hat-swap path equips headpieces outside the native `inventory_list` declaration, so the wearer's chosen vanilla headpiece packages (`es_m_hat_01/05/07/08/09/10/12`) are NOT resident on viewer machines. The pre-existing mh_embed guard DETECTED the non-residency (7 correct `refusing to spawn` log lines across both logs) but the flow proceeded past the refusal and hit the engine two ways. Root-caused from the two crash logs' Lua stacks; wearer's own log shows no crash (resources resident locally).
+
+### Two holes, both closed
+
+**Crash A -- non-resident SPAWN C-assert (client ed0f25d9, 21:53:11).**
+Lua stack: `rpc_create_attachment` -> `PlayerHuskAttachmentExtension.create_attachment` -> `AttachmentUtils.create_attachment` (attachment_utils.lua:16 `spawn_local_unit`) -> our mh_embed `UnitSpawner.spawn_local_unit` hook -> `World.spawn_unit` -> `Assertion failed can_get(unit_type, unit_name)` (c_api_world.cpp:67) -> CTD, on `es_m_hat_12`. Root cause: the mh_embed refusal branch logged `refusing to spawn` but then ran `return func(self, unit_name, ...)`, and vanilla `spawn_local_unit` calls `World.spawn_unit` UNCONDITIONALLY (unit_spawner.lua:294) -- so it C-asserted anyway. The "refusal" only skipped our texture work, not the spawn.
+
+**Crash B -- `Unit.node` C-assert on the LINK path (client 294ac4b9, 21:55:53).**
+`refusing to spawn es_m_hat_10` -> 678ms later `UnitApi node failed, node j_head not found in unit` -> `Assertion failed index != SceneGraph::NOT_FOUND` (c_api_unit.cpp:74) -> CTD. Stack: `PlayerUnitAttachmentExtension.update_resync_loadout` -> `spawn_resynced_loadout` -> `create_attachment` -> `AttachmentUtils.link` (attachment_utils.lua:70-71 `Unit.node`). A hat unit reached `AttachmentUtils.link` without the `j_head` attach node; `Unit.node` is an engine fatal that bypasses pcall.
+
+### The fix (three layers; minimal, no hat-system restructure)
+1. **`AttachmentUtils.create_attachment` residency gate (NEW hook).** Primary choke point -- every hat/attachment apply path funnels through it. If `item_data.unit` is a non-resident unit (`Application.can_get("unit", path)` false), skip cleanly and return the same empty `slot_data` shape vanilla produces for a unit-less item (attachment_utils.lua:38-44). No spawn, no link -> neither C-assert can fire. `item_units.unit` is provably identical to `item_data.unit` (backend_utils.lua:153; skin block never overrides `unit`), so gating on `item_data.unit` is exact -- and side-effect-free (does NOT re-call the heavily-hooked `get_item_units`).
+2. **`AttachmentUtils.link` `Unit.has_node` guard.** Converted the existing `hook_safe` to a full wrapper (MERGE, not a 2nd hook -- VMF drops duplicates) so it validates every source/target node with the non-fatal `Unit.has_node` BEFORE native runs; any missing node or nil/dead unit aborts the link cleanly (no partial state). Backstops a resident-but-wrong/nodeless unit reaching link. LA-bridge queue post-logic preserved verbatim.
+3. **mh_embed `spawn_local_unit` refusal returns nil, not `func()`.** Engine-boundary backstop for ANY spawn site: a non-resident unit now skips the spawn instead of delegating to the crashing native call.
+
+### New skip diagnostics (log-visible with mod logging OFF, chat-silent)
+All via the existing `[cos-la-sync]`-style `mod:info` channel (empirically lands in this user's console log; `mod:debug`/`_trace` do not):
+- `[cos-hat] SKIP non-resident headpiece=<path> slot=<slot> owner=<unit>` (create_attachment gate)
+- `[cos-hat] SKIP attach no-node=<node> unit=<source|target>` (link guard)
+- `[cos-hat] SKIP non-resident spawn unit=<path>` (mh_embed backstop; replaces the misleading chat-spamming `refusing to spawn` mod:warning)
+
+### Verify in-game (3 players)
+Wearer plays Kruber mercenary; two others spectate. Wearer rapidly swaps between the vanilla mercenary hats (and any LA hat family). Expected on BOTH viewers: NO crash; if a headpiece package isn't resident the viewer sees the wearer bare-headed (or their prior hat) -- ugly, not fatal. Viewer consoles should show `[cos-hat] SKIP ...` lines instead of the `refusing to spawn` -> `<<Lua Error>>` -> assert -> CTD sequence. Wearer view unchanged.
+
+### Files
+- `cosmetics_tweaker.lua` -- new `AttachmentUtils.create_attachment` residency-gate hook + `AttachmentUtils.link` hook_safe->hook conversion with `Unit.has_node` guard (block-scoped `_unit_resident` helper); `MOD_VERSION` `0.9.66-dev` -> `0.9.67-dev`.
+- `_material_hijack_embedded.lua` -- `UnitSpawner.spawn_local_unit` refusal branch returns nil instead of the crashing `return func(...)`; log switched mod:warning -> mod:info.
+- No new RPCs, no package force-loads, no `World.destroy_unit`.
+
 ## 0.9.66-dev — 2026-07-03 — FIX: #233 transition self-heal shipped inert in 0.9.65 (texture illusions never re-painted) + arming diagnostics
 
 > The 0.9.65-dev transition self-heal NEVER FIRED in the 2026-07-03 21:15 two-player retest: zero `[cos-la-sync] RE-SWAP tag=transition` lines in either log across multiple keep<->mission transitions, and the host's LA offhand still reverted on the CLIENT after mission->keep. Root-caused from both logs (HOST `console-...-f5038769`, CLIENT `console-...-be3b66c7`); this build fixes the walk and adds two bounded diagnostics so a silent no-op can never ship undetected again.
