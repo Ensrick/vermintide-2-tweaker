@@ -1,5 +1,9 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.172-dev (2026-07-02) -- /catchup command (alias of /unstuck)
+
+- **New chat command `/catchup`** (user request): teleports you to the nearest living teammate, preferring humans - identical behavior to `/unstuck`. Implemented by extracting the existing `/unstuck` body into a shared local (`_gt_unstuck_to_teammate` in `_gt_godmode_qol.lua`) and registering both command names against it; no behavior change to `/unstuck`. Collision pre-flight: repo-wide grep found no other mod registering `catchup`.
+
 ## v0.2.171-dev (2026-07-02) -- #222 loc sweep: drop leading option-title restatement from tooltips
 
 - **#222 loc sweep: removed leading option-title restatement from 3 option tooltips so the popup body no longer repeats the orange header.** VMF draws each option's title as the popup header automatically, so a body that reopened with that same title showed the name twice.

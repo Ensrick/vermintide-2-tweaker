@@ -31,8 +31,11 @@ local mod = get_mod("gt_dev")
 -- ============================================================
 -- Unstuck (teleport to nearest living teammate)
 -- ============================================================
+-- Registered under TWO command names (user request 2026-07-02): /unstuck
+-- (original) and /catchup (alias). Same body via the shared local below.
+-- Collision pre-flight: repo-wide grep found no other mod:command("catchup").
 
-mod:command("unstuck", "Teleport to nearest living teammate (prefers humans)", function()
+local function _gt_unstuck_to_teammate()
     local pm = Managers.player
     if not pm then mod:echo("Not in a level.") return end
     local player = pm:local_player()
@@ -71,7 +74,10 @@ mod:command("unstuck", "Teleport to nearest living teammate (prefers humans)", f
     else
         mod:echo("No living teammate found.")
     end
-end)
+end
+
+mod:command("unstuck", "Teleport to nearest living teammate (prefers humans)", _gt_unstuck_to_teammate)
+mod:command("catchup", "Teleport to nearest living teammate (prefers humans); alias of /unstuck", _gt_unstuck_to_teammate)
 
 -- ============================================================
 -- Friendly Fire Toggle
