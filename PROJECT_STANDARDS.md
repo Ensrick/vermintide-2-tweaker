@@ -1272,9 +1272,36 @@ gh issue list --repo Ensrick/vermintide-2-tweaker --state all # incl. closed
 4. Run `gh issue list` at the start of a session if you want a picture of
    what's open before diving in.
 
-### Labels
-`audit`, `crash`, `regression`, `refactor`, `blocked`, `deferred`, plus the
-defaults (`bug`, `enhancement`, `documentation`, `wontfix`).
+### Labels (canonical taxonomy — do NOT invent new status labels)
+
+Every issue carries three dimensions: **status + type + mod**. Nothing else is a
+status. This was ad-hoc "wild west" through 2026-07-03 (four overlapping status
+labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix.
+
+**Status (0–2) — the ONLY "ready to test" signal, applied when work has shipped:**
+- `verify-fix` — a code fix shipped; the user tests it in-game.
+- `diagnostics-armed` — a diagnostic/probe shipped; repro in-game to capture data.
+- An issue with **neither** status label has **not been worked yet** (this is how the
+  user sees the untouched backlog at a glance).
+- **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
+  merged into `diagnostics-armed`. Do not recreate them.
+
+**Type (exactly 1):**
+- `bug` — something is broken.
+- `enhancement` — improve an existing feature, OR a chore / refactor / audit task.
+- `feature` — a new capability or system that does not exist yet.
+- `crash` is a **severity flag layered on `bug`** (a crash issue carries BOTH `bug`
+  and `crash`), not a separate type.
+
+**Mod (1+):** `ct`, `gt`, `gut`, `cim`, `wt`, `cwv`, `cosmetics`, `et`, `mp`, `crt`,
+`cross-mod`, `tooling`. (`enemy` retired 2026-07-03 → `et`.)
+
+**Optional modifiers (informational, never a substitute for a type):** `regression`
+(a fix that broke a working feature), `audit`, `refactor`, `blocked`, `deferred`.
+
+When you ship a fix or a diagnostic for an issue, add the matching status label in the
+**same pass** as the CHANGELOG entry (rule #5 territory). Filing a new issue: give it a
+type + mod immediately; add a status label only once you have actually shipped work.
 
 ### What used to live here
 A status roadmap (`✅ DONE / ⚠ PARTIAL / ❌ TODO` tables across "High ROI",
