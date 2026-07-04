@@ -1,5 +1,14 @@
 # wt 3P Animation Coverage Matrix
 
+> **CORRECTION 2026-07-03 (v0.12.203-dev):** the v0.12.201 claim below ("all 35 were
+> baked") was WRONG. The picker stores picks under two config namespaces (weapon-only
+> vs template-qualified); v0.12.201 read only weapon-only, capturing Kerillian but
+> DROPPING ~30 Kruber/Saltzpyre event-picks (billhook polearm, dual axes, crowbill,
+> flaming flail, staves) - they T-posed. v0.12.203 regenerates a FAITHFUL image of the
+> tester config for all 3 receivers by merging both namespaces: `we_` 33 (byte-identical
+> to v0.12.201), `es_` (Kruber) 21, `wh_` (Saltzpyre) 20. See memory
+> `reference_wt_anim_picker_two_key_namespaces` + CHANGELOG v0.12.203.
+
 > **UPDATE 2026-07-03 (v0.12.201-dev):** the tester fully tuned every open
 > `[Needs Animations]` port across all three pickers; all **35** were baked
 > career-scoped into `_3p_template_remaps` and moved to `_CONFIRMED`
