@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.360-dev — 2026-07-03 — Fix MP CLIENT CTD wielding Kruber Axe & Shield (#280)
+
+**Symptom:** In multiplayer, when a remote player wielded the Kruber Axe & Shield variant (`cwv_es_axe_shield`), every OTHER player's game (the clients) hard-crashed: `simple_husk_inventory_extension.lua: attempt to index local 'slot_data' (a nil value)` in `start_weapon_fx`, under `rpc_wield_equipment`. The wielder themselves was fine; only the remote viewers crashed.
+
+**Root cause (confirmed against decompiled source):** CWV variant entries inherit `.name` from their cloned base (the clone-name-clobber), so `cwv_es_axe_shield.name == "dr_shield_axe"`. The equipment RPC syncs the item to peers by `.name`, i.e. the vanilla base key `dr_shield_axe` (Bardin's 1H axe & shield, `item_master_list_exported.lua:7358`). A remote client not playing Bardin resolves that base entry and tries to spawn its 3P units — `wpn_dw_axe_01_t1_3p` (axe) and `wpn_dw_shield_01_3p` (shield) — which are NON-resident there. Vanilla `SimpleHuskInventoryExtension._wield_slot` faults spawning the non-resident 3P unit (`gear_utils.lua:190`) AFTER `GearUtils.destroy_equipment` cleared `equipment.wielded_slot` (line 658) but BEFORE it re-sets it (line 775). cosmetics_tweaker's `_wield_slot` wrap pcall-swallows the fault (`cosmetics_tweaker.lua:7363`), so `wield()` runs on with `equipment.wielded_slot == nil` and vanilla `start_weapon_fx` (line 790) indexes `equipment.slots[nil]` -> `get_item_template(nil)` -> CTD. (The local wielder resolves the variant's own Kruber-native, resident units, so it never crashes.)
+
+**Fix (both halves):**
+- **Primary (residency):** `_force_load_axe_shield_husk_units()` force-loads the `dr_shield_axe` base weapon's `right_hand_unit`/`left_hand_unit` (1P + 3P) at mod init via `Managers.package:load(unit_path, ref, nil, sync, prioritize)`, pcall-guarded, residency re-verified with `has_loaded` — mirroring the shipped musket-bayonet / javelin loaders. The 3P units are now resident on every client, so the husk spawn succeeds and `_wield_slot` reaches line 775. (`Application.can_get` is intentionally NOT used as a pre-gate: it reports `false` for exactly the units we must load.)
+- **Belt-and-suspenders (guard):** a defensive `mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx", ...)` that no-ops the fx spawn when `equipment.wielded_slot` / slot_data is nil (weapon particle fx just doesn't play that frame — cosmetic, never a CTD). General: protects ANY husk weapon against this crash class, not only the axe & shield. Log-only `printf` trace (pcall-wrapped) captures wielded_slot/career/fx/husk unit for any recurrence. Verified sole hook on `(SimpleHuskInventoryExtension, start_weapon_fx)` in CWV (VMF duplicate-hook pre-flight).
+- **Regression test:** `/cwv_regression_test` -> `cwv_husk_fx_guard_installed` asserts both the guard hook and the base-unit force-load landed at load time.
+
+**In-game verify:** host + client in MP; host wields Kruber Axe & Shield CWV variant; client should NOT crash (residual: the husk may render Bardin's dwarf axe & shield mesh rather than the Kruber mesh — cosmetic, tracked separately from the CTD).
+
 ## 0.1.359-dev — 2026-07-01 — Settings menu: sort variant toggles A->Z
 
 Settings-menu ordering polish, no functional changes.

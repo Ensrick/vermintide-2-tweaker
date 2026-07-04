@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.359-dev"
+local MOD_VERSION = "0.1.360-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -4263,6 +4263,135 @@ local function _force_load_musket_melee_assets()
 end
 
 _force_load_musket_melee_assets()
+
+-- ============================================================
+-- Cross-character husk weapon residency  (Issue #280)
+-- ============================================================
+-- CLIENT CTD when a remote player (husk) wields the Kruber Axe & Shield
+-- variant (`cwv_es_axe_shield`, base `dr_shield_axe`).
+--
+-- ROOT CAUSE (confirmed against decompiled source):
+--   * CWV variant entries inherit `.name` from their cloned base — the
+--     "clone-name-clobber" (feedback_cwv_clone_name_clobber.md). The variant
+--     `cwv_es_axe_shield` therefore has `.name = "dr_shield_axe"`.
+--   * The host wields the variant; the equipment RPC syncs the item to peers
+--     by its `.name`, i.e. the BASE key `dr_shield_axe` (Bardin's 1H axe &
+--     shield). A remote client that is NOT playing Bardin looks up the
+--     VANILLA `ItemMasterList.dr_shield_axe`
+--     (item_master_list_exported.lua:7358) and tries to spawn its 3P units:
+--       - right_hand_unit "units/weapons/player/wpn_dw_axe_01_t1/wpn_dw_axe_01_t1"
+--       - left_hand_unit  "units/weapons/player/wpn_dw_shield_01_t1/wpn_dw_shield_01"
+--     Both are NON-resident on that client (nobody there loaded Bardin's kit).
+--   * Vanilla `SimpleHuskInventoryExtension._wield_slot`
+--     (simple_husk_inventory_extension.lua:641) spawns the 3P unit at
+--     gear_utils.lua:190. On a non-resident unit it faults AFTER
+--     `GearUtils.destroy_equipment` (line 658, which clears
+--     `equipment.wielded_slot`) but BEFORE line 775 re-sets it.
+--     cosmetics_tweaker's `_wield_slot` wrap pcall-swallows that fault
+--     (cosmetics_tweaker.lua:7363), so vanilla `wield()` proceeds with
+--     `equipment.wielded_slot == nil`, and `start_weapon_fx` (line 790) then
+--     indexes `equipment.slots[nil]` -> `get_item_template(nil)` -> hard
+--     CLIENT CTD. (The local wielder is fine: its own loadout stores the real
+--     variant key, so it resolves the variant's Kruber-native, resident units.)
+--
+-- PRIMARY FIX: force-load the BASE weapon's units (1P + 3P) so they are
+-- resident on EVERY client. Then the husk spawn succeeds, `_wield_slot`
+-- reaches line 775, `equipment.wielded_slot` is set, and `start_weapon_fx`
+-- reads a real slot. Mirrors the shipped musket-bayonet / javelin idiom:
+-- `Managers.package:load(unit_path, ref, nil, sync=true, prioritize=true)`,
+-- pcall-guarded (a unit path IS the vanilla pickup_package_loader form — see
+-- the throwing-axe / javelin loaders in this file), residency re-verified via
+-- `has_loaded`. `Application.can_get` is deliberately NOT used as a pre-gate:
+-- for the units we must load it reports `false` (that non-residency is the
+-- whole bug), so gating on it would skip exactly the loads we need.
+-- Wrapped in `do ... end` so the constant + helper locals release back to the
+-- main chunk (Lua 5.1 hard 200-local ceiling — this file already sits at the
+-- limit; see the `_om` holder note near the top). Runs once, immediately.
+do
+	local _AXE_SHIELD_BASE_KEY = "dr_shield_axe"
+
+	local function _force_load_axe_shield_husk_units()
+		if not (Managers and Managers.package) then return end
+		local base = rawget(ItemMasterList, _AXE_SHIELD_BASE_KEY)
+		if type(base) ~= "table" then
+			printf("[cwv axe-shield-residency] base '%s' absent from ItemMasterList; skipping force-load", _AXE_SHIELD_BASE_KEY)
+			return
+		end
+		local ref = "cwv_axe_shield_husk_units"
+		-- Husks spawn the 3P unit only (owner_unit_1p is nil for husks;
+		-- gear_utils.lua appends "_3p" at line 189). Load the 1P form too so any
+		-- inspect / hot-join / edge path is also covered — cost is two small
+		-- meshes, matching how the musket bayonet loads both hands.
+		local seen = {}
+		for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+			local u = base[field]
+			if type(u) == "string" and u ~= "" then
+				for _, path in ipairs({ u, u .. "_3p" }) do
+					if not seen[path] then
+						seen[path] = true
+						local ok, err = pcall(function()
+							Managers.package:load(path, ref, nil, true, true)
+						end)
+						if ok then
+							local resident = false
+							pcall(function() resident = Managers.package:has_loaded(path, ref) and true or false end)
+							printf("[cwv axe-shield-residency] force-loaded %s (ref=%s, resident=%s)", path, ref, tostring(resident))
+						else
+							printf("[cwv axe-shield-residency] FAILED to force-load %s: %s", path, tostring(err))
+						end
+					end
+				end
+			end
+		end
+		_cwv_axe_shield_residency_ran = true
+	end
+
+	_force_load_axe_shield_husk_units()
+end
+
+-- ============================================================
+-- Defensive guard: husk start_weapon_fx nil-slot crash  (Issue #280)
+-- ============================================================
+-- Belt-and-suspenders behind the force-load above. Even with the units
+-- resident, another residency edge case (a hot-join before the load lands, a
+-- DIFFERENT cross-char base whose units nobody preloaded, a mod load-order
+-- gap) can still leave vanilla `_wield_slot` bailing before it sets
+-- `equipment.wielded_slot` (simple_husk_inventory_extension.lua:775) — because
+-- cosmetics_tweaker's `_wield_slot` wrap pcall-swallows the spawn fault. When
+-- that happens, vanilla `start_weapon_fx` (line 790) indexes
+-- `equipment.slots[equipment.wielded_slot]` with a nil slot name ->
+-- `get_item_template(nil)` -> CLIENT CTD.
+--
+-- This wrapper no-ops the fx spawn when the wielded slot / slot_data is nil:
+-- the weapon particle fx simply does not play that frame (cosmetic, never a
+-- crash). Zero behavior change for the normal case (slot_data present ->
+-- vanilla runs verbatim). This is general (protects ANY husk weapon, not just
+-- the axe & shield), which is why it is the durable half of the fix.
+--
+-- HOOK PRE-FLIGHT (CLAUDE.md NON-NEGOTIABLE #8): grepped this file for
+-- `SimpleHuskInventoryExtension` / `start_weapon_fx` hooks before adding this.
+-- CWV's only other SimpleHuskInventoryExtension-class touch is none; the sole
+-- pre-existing husk-adjacent hook is `BackendUtils.get_item_template`
+-- (line ~3827, a different (Class, method)). This is the ONLY hook on
+-- (SimpleHuskInventoryExtension, start_weapon_fx) in CWV.
+mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx", function(func, self, fx_name)
+	local equipment = self and self._equipment
+	local wielded_slot = equipment and equipment.wielded_slot
+	local slot_data = wielded_slot and equipment.slots and equipment.slots[wielded_slot]
+	if not slot_data then
+		-- Log-only via engine `printf` (CLAUDE.md #9: user runs mod-logging
+		-- OFF, so mod:info/mod:warning are invisible / chat-spammy). pcall so
+		-- the diagnostic itself can never fault the wield path.
+		pcall(function()
+			printf("[cwv husk-fx-guard] SKIP start_weapon_fx: equipment.wielded_slot=%s slot_data=nil self.wielded_slot=%s career=%s fx=%s husk_unit=%s -- vanilla start_weapon_fx would CTD here (Issue #280); fx skipped, host+client stay alive",
+				tostring(wielded_slot), tostring(self and self.wielded_slot),
+				tostring(self and self._career_name), tostring(fx_name), tostring(self and self._unit))
+		end)
+		return
+	end
+	return func(self, fx_name)
+end)
+_cwv_husk_fx_guard_installed = true
 
 local function _spawn_and_link_musket_bayonet(world, rifle_unit, bayonet_unit_path, package_ref)
 	if not world or not rifle_unit or not Unit.alive(rifle_unit) then return nil end
@@ -10456,6 +10585,25 @@ _rt_register("cwv_wield_hook_unique", function()
         return string.format(
             "expected exactly 1 SimpleInventoryExtension wield safe-hook registration, got %d -- duplicate-hook regression (VMF silently shadows the first body; see VMF_RECIPES.md sec 1)",
             _cwv_wield_hook_registration_count)
+    end
+end)
+
+_rt_register("cwv_husk_fx_guard_installed", function()
+    -- Issue #280 (CLIENT CTD): a remote player wielding the Kruber Axe &
+    -- Shield variant crashed every non-Bardin client. Root cause: the variant
+    -- inherits `.name = "dr_shield_axe"` (clone-name-clobber), so the husk
+    -- resolves the vanilla base's NON-resident 3P units; vanilla `_wield_slot`
+    -- bails before setting `equipment.wielded_slot` (line 775),
+    -- cosmetics_tweaker's `_wield_slot` wrap pcall-swallows the fault, and
+    -- vanilla `start_weapon_fx` then indexes `equipment.slots[nil]` -> CTD.
+    -- Two-part fix: (1) force-load the base units so they are resident on
+    -- every client; (2) a defensive guard on start_weapon_fx that no-ops when
+    -- the wielded slot is nil. This test asserts BOTH landed at load time.
+    if _cwv_husk_fx_guard_installed ~= true then
+        return "SimpleHuskInventoryExtension.start_weapon_fx guard hook not installed (Issue #280 client-CTD regression)"
+    end
+    if _cwv_axe_shield_residency_ran ~= true then
+        return "dr_shield_axe base-unit force-load did not run (Issue #280 husk-residency primary fix)"
     end
 end)
 
