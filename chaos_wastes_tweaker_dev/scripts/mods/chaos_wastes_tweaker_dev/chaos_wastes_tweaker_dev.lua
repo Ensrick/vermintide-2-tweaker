@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.217-dev"
+local MOD_VERSION = "0.7.218-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1093,9 +1093,28 @@ end)
 -- weapon idiom above. Single hook on this (Class, method) — VMF-clean.
 mod:hook("DeusChestExtension", "_generate_upgraded_weapon", function(func, self, weapon, slot_name, rarity, go_id, profile_index, career_index)
     local uses = (go_id and _altar_uses_by_go_id[go_id]) or 0
-    if uses == 0 then return func(self, weapon, slot_name, rarity, go_id, profile_index, career_index) end
-    local mixed_go_id = (go_id or 0) + uses * 1000003
-    return func(self, weapon, slot_name, rarity, mixed_go_id, profile_index, career_index)
+    -- uses==0 -> go_id unchanged; re-armed -> the v0.7.158 seed-mix. eff_go_id unifies both
+    -- branches so behavior is identical to the prior two-branch form.
+    local eff_go_id = (uses == 0) and go_id or ((go_id or 0) + uses * 1000003)
+    local pre_key = type(weapon) == "table" and weapon.deus_item_key or nil
+    local a, b = func(self, weapon, slot_name, rarity, eff_go_id, profile_index, career_index)
+    -- #105 [ct:xchar105]: vanilla upgrade_item PRESERVES deus_item_key
+    -- (deus_weapon_generation.lua:252-254,185-194), so pre==post is EXPECTED; a mismatch
+    -- would prove a key swap. self._stored_purchase is the new weapon
+    -- (deus_chest_extension.lua:441). If pre==post but the elf longbow still reverts on
+    -- Kruber, the drop is render-side (wt create_equipment re-apply), not ct.
+    pcall(function()
+        local post = self._stored_purchase
+        local post_key = type(post) == "table" and post.deus_item_key or nil
+        local prof = rawget(_G, "SPProfiles")
+        prof = prof and profile_index and prof[profile_index]
+        local career = prof and prof.careers and career_index and prof.careers[career_index]
+        pcall(printf, "[ct:xchar105] upgrade-altar slot=%s career=%s rarity=%s pre_key=%s post_key=%s %s",
+            tostring(slot_name), tostring(career and career.name), tostring(rarity),
+            tostring(pre_key), tostring(post_key),
+            (pre_key ~= post_key) and "*** KEY CHANGED ***" or "(key preserved)")
+    end)
+    return a, b
 end)
 
 -- #102 (rarity escalation) FIXED v0.7.211-dev: DECOUPLE keep-lit visual from reward rarity.
@@ -4024,6 +4043,77 @@ mod:hook("BackendInterfaceDeusPlayFab", "deus_journey_with_belakor", function(fu
     return v
 end)
 
+-- #157 (crash+bug) - cross-character weapon CTDs the CW loadout backend.
+-- BackendInterfaceDeusBase.set_loadout_item (backend_interface_deus_base.lua:112-124)
+-- fasserts "[BackendInterfaceDeusBase] Item %q doesn't exist" when item_backend_id is
+-- absent from self._extra_deus_inventory. A wt cross-char item equipped mid-run routes
+-- its ITEMS-backend id through the deus loadout override (LOADOUT_INTERFACE_OVERRIDES
+-- slot_ranged="deus") -> id absent -> C-fatal. HOOK THE DERIVED CLASS: class() copies the
+-- base method onto BackendInterfaceDeusPlayFab at definition time, so a base-class hook
+-- never reaches the instance. Guard: id present or nil -> vanilla unchanged; a non-deus id
+-- -> log + BAIL so the CW loadout keeps its current valid deus weapon.
+mod:hook("BackendInterfaceDeusPlayFab", "set_loadout_item", function(func, self, item_backend_id, career_name, slot_name)
+    local inv = rawget(self, "_extra_deus_inventory")
+    if item_backend_id == nil or (type(inv) == "table" and inv[item_backend_id] ~= nil) then
+        return func(self, item_backend_id, career_name, slot_name)
+    end
+    pcall(printf, "[ct:crash157] BLOCKED set_loadout_item non-deus id: career=%s slot=%s id=%s (cross-char item has no deus inventory entry; kept current deus weapon to avoid CTD)",
+        tostring(career_name), tostring(slot_name), tostring(item_backend_id))
+end)
+
+-- #157 secondary (defensive, belt-and-suspenders): get_total_power_level
+-- (backend_interface_deus_base.lua:130-150) derefs self._extra_deus_inventory[id].power_level
+-- for slot_melee/slot_ranged with NO nil-check; a loadout slot referencing a missing id
+-- C-fatals when the power-level UI reads it. Reimplement with nil-skip; vanilla-identical
+-- when both entries are present.
+mod:hook("BackendInterfaceDeusPlayFab", "get_total_power_level", function(func, self, profile_name, career_name)
+    local inv = rawget(self, "_extra_deus_inventory")
+    local loadouts = self._loadouts and self._loadouts[career_name]
+    if type(inv) ~= "table" or type(loadouts) ~= "table" then
+        return func(self, profile_name, career_name)
+    end
+    local melee_id, ranged_id = loadouts.slot_melee, loadouts.slot_ranged
+    local melee_missing  = melee_id  and not inv[melee_id]
+    local ranged_missing = ranged_id and not inv[ranged_id]
+    if not (melee_missing or ranged_missing) then
+        return func(self, profile_name, career_name)  -- vanilla-identical
+    end
+    pcall(printf, "[ct:crash157] get_total_power_level guarded missing deus entry (career=%s melee_missing=%s ranged_missing=%s)",
+        tostring(career_name), tostring(melee_missing), tostring(ranged_missing))
+    local sum, count = 0, 0
+    if melee_id  and inv[melee_id]  and inv[melee_id].power_level  then sum = sum + inv[melee_id].power_level;  count = count + 1 end
+    if ranged_id and inv[ranged_id] and inv[ranged_id].power_level then sum = sum + inv[ranged_id].power_level; count = count + 1 end
+    local base = (rawget(_G, "PowerLevelFromLevelSettings") or {}).starting_power_level or 0
+    return (count > 0 and sum / count or 0) + base
+end)
+
+-- #273 [ct:revert273] keep-entry capture. BulldozerPlayer.spawn fires for the local player
+-- on every level load incl. return-to-keep. Log the ITEMS-backend loadout (character_data)
+-- melee/ranged keys for the local career, so a keep-restored base weapon (e.g. es_2h_sword
+-- Greatsword) vs the CW cross-char weapon is visible. Compare against the CW-EXIT line from
+-- game_round_ended. Local-human only, pcall-guarded. Distinct (Class,method); no other
+-- BulldozerPlayer hook in ct_dev.
+mod:hook_safe("BulldozerPlayer", "spawn", function(self)
+    pcall(function()
+        local pm = Managers.player
+        local lp = pm and pm.local_player and pm:local_player()
+        if not lp or lp ~= self or self.bot_player then return end
+        local sp = rawget(_G, "SPProfiles")
+        local prof = sp and self.profile_index and sp[self:profile_index()]
+        local career = prof and prof.careers and self.career_index and prof.careers[self:career_index()]
+        local career_name = career and career.name
+        if not career_name then return end
+        local mech = Managers.mechanism and Managers.mechanism.current_mechanism_name
+            and Managers.mechanism:current_mechanism_name()
+        local melee  = BackendUtils.get_loadout_item(career_name, "slot_melee")
+        local ranged = BackendUtils.get_loadout_item(career_name, "slot_ranged")
+        pcall(printf, "[ct:revert273] SPAWN mechanism=%s career=%s melee_key=%s(deus=%s) ranged_key=%s(deus=%s)",
+            tostring(mech), tostring(career_name),
+            tostring(melee and melee.key), tostring(melee and melee.deus_item_key),
+            tostring(ranged and ranged.key), tostring(ranged and ranged.deus_item_key))
+    end)
+end)
+
 -- ============================================================
 -- v0.7.120-dev — Aggressive diagnostics for Belakor's Temple client sync (Issue #53)
 -- ============================================================
@@ -4159,6 +4249,22 @@ end)
 -- mission-start; leaving it mutated would survive across rounds.
 mod:hook("DeusMechanism", "game_round_ended", function(func, self, t, dt, reason, reason_data)
     local is_server = Managers and Managers.player and Managers.player.is_server
+    -- #273 [ct:revert273] CW-EXIT capture (read-only). On the run-ending round (won/lost),
+    -- log the deus loadout the run held for the local career, to compare against what the
+    -- keep restores (BulldozerPlayer.spawn hook below) - catches Kruber's active weapon
+    -- reverting to the base Greatsword after a run.
+    if reason == "won" or reason == "lost" then
+        pcall(function()
+            local rc = self._deus_run_controller
+                or (self.get_deus_run_controller and self:get_deus_run_controller())
+            if rc and rc.get_own_loadout then
+                local melee, ranged = rc:get_own_loadout()
+                pcall(printf, "[ct:revert273] CW-EXIT reason=%s melee_key=%s ranged_key=%s",
+                    tostring(reason),
+                    tostring(melee and melee.deus_item_key), tostring(ranged and ranged.deus_item_key))
+            end
+        end)
+    end
     local restored = false
     local original_god
     local vote_data = self._vote_data
@@ -4474,7 +4580,11 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     -- means it shares the same pedestal a chest would have used, per user spec.
     _belakor_altar_spawned_this_level = false
 
-    if not altar_custom and not cursed_custom and not ammo_custom and not potions_on then
+    -- #143: on injected adventure levels we still need to renormalize the grenade pool
+    -- (Morgrim's over-spawn fix, below), so do NOT early-bail there even with no
+    -- altar/cursed/ammo/potion override active. _inj was computed above (call-time via
+    -- mod._ct_on_injected_adventure_level(), forward-ref safe).
+    if not altar_custom and not cursed_custom and not ammo_custom and not potions_on and not _inj then
         return func(self, ...)
     end
 
@@ -4553,6 +4663,52 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
         end
     end
 
+    -- #143: Morgrim's Bomb (holy_hand_grenade) over-spawn fix. The morgrim143 census
+    -- proved every Morgrim's appearance is source=spawner -- the vanilla spread-pool
+    -- sampler (pickup_system.lua:481-497) walking Pickups.grenades by spawn_weighting.
+    -- We HALVE holy_hand and hand the freed half to the OTHER grenades PROPORTIONALLY, so
+    -- the pool SUM is byte-identical to vanilla. That preserves the sampler invariant
+    -- (running total must reach the [0,1) roll); the v0.7.143 crash (total < roll) happened
+    -- only because that build LOWERED the total -- a sum-preserving redistribution provably
+    -- cannot reintroduce it. Scoped to injected adventure levels (_inj) and RESTORED after
+    -- vanilla populate runs, so vanilla Adventure and real CW arenas are untouched.
+    local saved_grenade_weights = nil
+    if _inj and Pickups and Pickups.grenades and Pickups.grenades.holy_hand_grenade
+            and Pickups.grenades.holy_hand_grenade.spawn_weighting then
+        local holy = Pickups.grenades.holy_hand_grenade
+        local holy_orig = holy.spawn_weighting
+        local sum_others, count_others = 0, 0
+        for name, s in pairs(Pickups.grenades) do
+            if name ~= "holy_hand_grenade" and s and s.spawn_weighting then
+                sum_others = sum_others + s.spawn_weighting
+                count_others = count_others + 1
+            end
+        end
+        -- Guard: if holy_hand is the ONLY grenade there is nowhere to move the freed
+        -- weight -- halving it would SHRINK the total and risk the sampler crash. Skip.
+        if holy_orig > 0 and sum_others > 0 and count_others > 0 then
+            saved_grenade_weights = {}
+            for name, s in pairs(Pickups.grenades) do
+                if s and s.spawn_weighting then saved_grenade_weights[name] = s.spawn_weighting end
+            end
+            local freed = holy_orig * 0.5
+            holy.spawn_weighting = holy_orig - freed
+            for name, s in pairs(Pickups.grenades) do
+                if name ~= "holy_hand_grenade" and s and s.spawn_weighting then
+                    s.spawn_weighting = s.spawn_weighting + freed * (s.spawn_weighting / sum_others)
+                end
+            end
+            -- printf (NOT mod:info -- user runs VMF logging OFF): after_sum MUST equal the
+            -- pre-change sum (holy_orig + sum_others), proving no total change -> no crash.
+            local after_sum = 0
+            for _, s in pairs(Pickups.grenades) do
+                if s and s.spawn_weighting then after_sum = after_sum + s.spawn_weighting end
+            end
+            pcall(printf, "[ct:morgrim143] grenade pool renorm: holy_hand %.4f -> %.4f, freed %.4f to %d others (pool sum %.4f -> %.4f)",
+                holy_orig, holy.spawn_weighting, freed, count_others, holy_orig + sum_others, after_sum)
+        end
+    end
+
     -- v0.7.165-dev: build the coin-reservation set BEFORE vanilla populate runs its
     -- _spawn_spread_pickups pass (which calls _can_spawn). The spawner lists are fully
     -- populated by now (pickup_gizmo_spawned fires per-spawner at level spawn, long
@@ -4591,6 +4747,16 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
     end
     for _, name in ipairs(added_potions) do
         Pickups.deus_potions[name] = nil
+    end
+
+    -- #143: restore vanilla grenade weights after populate's spread-pass consumed them,
+    -- leaving Pickups.grenades pristine for the next level (vanilla Adventure / real CW).
+    -- Mirrors the deus_potions save/restore above.
+    if saved_grenade_weights then
+        for name, original_w in pairs(saved_grenade_weights) do
+            local entry = Pickups.grenades[name]
+            if entry then entry.spawn_weighting = original_w end
+        end
     end
 
     -- v0.7.126-dev (Issue #58): post-populate diagnostic dump. Fires on EVERY level
@@ -4759,15 +4925,43 @@ do
             if game_mode_key == "deus"
                 and type(object_sets) == "table"
                 and type(spawned_object_sets) == "table"
-                and object_sets.adventure                       -- level actually HAS an 'adventure' set
-                and not table.contains(spawned_object_sets, "adventure")
             then
-                local ok, base, level_key = pcall(_ct_injected_base_for_spawn, level_name)
-                if ok and base then
-                    spawned_object_sets[#spawned_object_sets + 1] = "adventure"
-                    -- Raw printf: proves the fix engaged even on the logging-OFF host.
-                    pcall(printf, "[ct:objset] injected adventure level %s: enabling 'adventure' object set (issue #156)",
-                        tostring(level_key))
+                -- #52 DIAGNOSTIC ([ct:skull52]): census every object set for each
+                -- get_object_sets call during an injected-adventure load (main world AND
+                -- hero sublevels). Tower of Treachery (dlc_wizards_tower) gargoyle-skull
+                -- collectibles are the `gargoyle_head` level_event pickup, which that
+                -- level's pickup_settings does NOT list, so they are object-set / flow
+                -- spawned via placed pickup-spawner units; #156's 'adventure' enable may
+                -- be targeting the wrong set. This lists every set + whether it will spawn
+                -- under deus so we can identify the skull-bearing set. printf = visible with
+                -- mod-logging OFF. Gate on the CURRENT injected level key (looser than the
+                -- #156 level_name match, so sublevel calls are captured).
+                local lth = Managers and Managers.level_transition_handler
+                local cur_key = lth and lth.get_current_level_keys and lth:get_current_level_keys()
+                if type(cur_key) == "string" and adventure_base_from_level_key(cur_key) then
+                    local spawned_lookup = {}
+                    for _, s in ipairs(spawned_object_sets) do spawned_lookup[s] = true end
+                    local names = {}
+                    for set_name in pairs(object_sets) do names[#names + 1] = set_name end
+                    table.sort(names)
+                    pcall(printf, "[ct:skull52] key=%s level_name=%s object_sets=%d spawned=%d",
+                        tostring(cur_key), tostring(level_name), #names, #spawned_object_sets)
+                    for _, set_name in ipairs(names) do
+                        pcall(printf, "[ct:skull52]   set=%s spawned=%s",
+                            tostring(set_name), tostring(spawned_lookup[set_name] == true))
+                    end
+                end
+
+                -- #156 fix (behavior unchanged): enable the 'adventure' object set on the
+                -- injected MAIN adventure level if present and not already spawning.
+                if object_sets.adventure and not table.contains(spawned_object_sets, "adventure") then
+                    local ok, base, level_key = pcall(_ct_injected_base_for_spawn, level_name)
+                    if ok and base then
+                        spawned_object_sets[#spawned_object_sets + 1] = "adventure"
+                        -- Raw printf: proves the fix engaged even on the logging-OFF host.
+                        pcall(printf, "[ct:objset] injected adventure level %s: enabling 'adventure' object set (issue #156)",
+                            tostring(level_key))
+                    end
                 end
             end
             return object_sets, spawned_object_sets
@@ -5597,6 +5791,38 @@ local _CURSE_SKY_PROFILES = {
     },
 }
 
+-- ============================================================
+-- Per-MAP curse-lighting brightness overrides (#258, #271)
+-- ============================================================
+-- A few injected adventure maps read too dark even after the per-curse profile
+-- and the global curse_lighting_brightness knob. This table adds an EXTRA
+-- per-channel multiplier for those specific maps, applied ON TOP of the profile
+-- tint and the global knob inside the shading_callback below. Keyed by the
+-- injected-adventure BASE level_key (resolved from the CW permutation level_id via
+-- adventure_base_from_level_key), then by curse theme; "*" = every curse. A missing
+-- map, theme, or channel resolves to 1.0 (no change), so no other map regresses.
+-- Channel names match _CURSE_SKY_PROFILES vars, plus "exposure".
+--   #258 The Well of Dreams (dlc_termite_3): under Tzeentch the upper-hemisphere
+--        ambient (ambient_tint_top) crushes to near-black. Double it (amb_top
+--        +100%). Tzeentch only; other curses on this map read fine. (Sibling mod
+--        vdl made the analogous Adventure-mode fix for the same map/channel.)
+--   #271 Devious Delvings (dlc_termite_2): a dark mines interior. The curse look
+--        needs ~2x brighter overall, for EVERY curse -- doubling the four interior
+--        levers the brightness knob drives = "set the knob to 2.0 for this map only".
+local _CURSE_MAP_BRIGHTNESS = {
+    dlc_termite_3 = {
+        tzeentch = { ambient_tint_top = 2.0 },
+    },
+    dlc_termite_2 = {
+        ["*"] = {
+            secondary_sun_color = 2.0,
+            ambient_tint        = 2.0,
+            ambient_tint_top    = 2.0,
+            exposure            = 2.0,
+        },
+    },
+}
+
 local function _current_node_theme()
     if not (Managers.mechanism and Managers.mechanism.game_mechanism) then return nil end
     local mechanism = Managers.mechanism:game_mechanism()
@@ -5688,6 +5914,24 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
     -- cheap settings read per callback, dwarfed by the ShadingEnvironment calls.
     local b = tonumber(mod:get("curse_lighting_brightness")) or 1.0
 
+    -- Per-MAP brightness override (#258, #271): resolve an EXTRA per-channel
+    -- multiplier for maps that read too dark even after the profile + global knob.
+    -- Keyed by injected-adventure BASE key (from the CW permutation level_id) then
+    -- by curse theme, falling back to "*" = all curses. Missing map/theme/channel =
+    -- 1.0 (no change), so no other map regresses. Applied ON TOP of profile + b.
+    local map_over
+    do
+        local ls = LevelHelper and LevelHelper:current_level_settings()
+        local base_key = ls and adventure_base_from_level_key(ls.level_id)
+        local per_map = base_key and _CURSE_MAP_BRIGHTNESS[base_key]
+        if per_map then
+            map_over = per_map[theme] or per_map["*"]
+        end
+    end
+    local function map_mul(var_name)
+        return (map_over and map_over[var_name]) or 1.0
+    end
+
     -- Multiply each existing color by the curse profile's per-var tint (and, for
     -- interior channels, by the user brightness `s`). ShadingEnvironment.vector3
     -- returns a fresh Vector3 each call (valid within this frame) — safe to read,
@@ -5695,7 +5939,7 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
     local function mul_set(var_name, s)
         local t = profile[var_name]
         if not t then return end
-        s = s or 1.0
+        s = (s or 1.0) * map_mul(var_name)
         local v = ShadingEnvironment.vector3(shading_env, var_name)
         if v then
             ShadingEnvironment.set_vector3(shading_env, var_name,
@@ -5709,7 +5953,7 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
     mul_set("ambient_tint_top", b)     -- interior top ambient: lifted
     mul_set("fog_color")               -- exterior haze: no lift
 
-    local exp = (profile.exposure_mul or 1.0) * b
+    local exp = (profile.exposure_mul or 1.0) * b * map_mul("exposure")
     if exp ~= 1.0 then
         local cur = ShadingEnvironment.scalar(shading_env, "exposure")
         if cur then
@@ -5792,6 +6036,32 @@ mod:hook("DeusMapScene", "on_enter", function(func, self, graph_data, ...)
                     _dbg("[DeusMapScene.on_enter]   SKIP %s level=%s (no adventure base match — UI will use SHRINE_NODE_UNIT and curse halo won't show)",
                         tostring(key), node.level)
                 end
+            end
+            -- #68 DIAGNOSTIC ([ct:mapnode68]): log the 3D node model each graph node
+            -- resolves to. Vanilla deus_map_scene.lua:182-192 selects the node unit purely
+            -- from the prefix of node.level before the first '_':
+            --   sig_ -> SIG, pat_ -> TRAVEL, arena_ -> ARENA, key=="start" -> START,
+            --   everything else -> SHRINE (altar/shrine mesh, no curse halo).
+            -- Native CW Belakor-path variant keys (bell_belakor_path1, magnus_belakor_path1,
+            -- cemetery_belakor_path1, ...) have an unrecognized prefix and are NOT matched by
+            -- adventure_base_from_level_key, so the rewrite above skips them -> SHRINE. printf
+            -- so it is visible with mod-logging OFF (_dbg routes to mod:debug, unseen).
+            -- node.level here is POST-rewrite (the exact value spawn_graph_units consumes).
+            do
+                local lvl = node.level
+                local model
+                if key == "start" then
+                    model = "START"
+                else
+                    local us = lvl:find("_")
+                    local prefix = us and lvl:sub(1, us - 1) or lvl
+                    model = (prefix == "sig" and "SIG") or (prefix == "pat" and "TRAVEL")
+                        or (prefix == "arena" and "ARENA") or "SHRINE"
+                end
+                pcall(printf, "[ct:mapnode68] key=%s node_type=%s level=%s base_level=%s theme=%s curse=%s -> model=%s%s",
+                    tostring(key), tostring(node.node_type), tostring(lvl),
+                    tostring(node.base_level), tostring(node.theme), tostring(node.curse),
+                    model, base_key and " (ct-rewritten to TRAVEL)" or "")
             end
         end
     end
@@ -7982,6 +8252,21 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
             else
                 new_weapon = _gen_bot_weapon_for_slot(bot, run_state, target_rarity, target_slot, seed)
             end
+            -- #121 DIAGNOSTIC [ct:bots121]: log the tier the bot lands on vs the host's
+            -- opened tier. Post #100/#102, live self._rarity == _opened_rarity == target_rarity
+            -- and new_weapon.rarity should equal target_rarity (== host tier). ANY drift here
+            -- (bot_after order > host tier) is the "one tier above" smoking gun. Read-only.
+            pcall(function()
+                local pre_rarity = "n/a"
+                if chest_type == DEUS_CHEST_TYPES.upgrade then
+                    local c = _bot_get_current_loadout(bot, run_state, host_peer_id, target_slot)
+                    pre_rarity = c and tostring(c.rarity) or "none"
+                end
+                pcall(printf, "[ct:bots121] bot=%s chest=%s slot=%s host_opened_rarity=%s live_self_rarity=%s target_rarity=%s bot_before=%s bot_after=%s (issue #121)",
+                    tostring(bot.name and bot:name() or "?"), tostring(chest_type), tostring(target_slot),
+                    tostring(_opened_rarity), tostring(self._rarity), tostring(target_rarity),
+                    tostring(pre_rarity), tostring(new_weapon and new_weapon.rarity))
+            end)
             if new_weapon then
                 local equipped_ok, equip_err = _bot_equip_weapon(bot, new_weapon, target_slot, run_state, host_peer_id)
                 if not equipped_ok then
@@ -10611,6 +10896,20 @@ do
         if not ok2 or type(factor) ~= "number" or factor >= 1.0 then
             return func(self, amount)
         end
+        -- #131 DIAGNOSTIC [ct:moonfire131]: we_deus_01 (Moonfire Bow) is the ONLY
+        -- energy_system weapon, so EVERY drain routed here is a Moonfire shot. Log the
+        -- pre-shot energy pool + the discounted cost so the shots-per-bar inflation is
+        -- visible (per-shot cost = amount*factor, factor floored 0.25 -> up to 4x shots).
+        -- Reuses the _last_log_ts throttle table + os.clock the way _maybe_log does.
+        pcall(function()
+            local now131 = (os and os.clock and os.clock()) or 0
+            if now131 - (_last_log_ts["moonfire131"] or -math.huge) >= 1.0 then
+                _last_log_ts["moonfire131"] = now131
+                pcall(printf, "[ct:moonfire131] Moonfire energy shot: vanilla_cost=%.2f discounted=%.2f factor=%.3f boons=%d energy=%.1f/%.1f (issue #131)",
+                    tonumber(amount) or -1, (tonumber(amount) or 0) * factor, factor, n,
+                    tonumber(self._energy) or -1, tonumber(self._max_energy) or -1)
+            end
+        end)
         _maybe_log("drain", factor, n)
         return func(self, (amount or 0) * factor)
     end)
@@ -10691,6 +10990,32 @@ mod:command("verify_meta_ammo", "Print ct_meta_ammo hyperbolic cost-floor curve 
     mod:echo("  num_boons=%d  cost_factor=%.3f  total_ammo=%s",
         num_boons, live_factor, tostring(live_total_ammo))
     mod:echo("  marker=%s", CT_META_AMMO_HYPERBOLIC_MARKER)
+
+    -- #249 DIAGNOSTIC [ct:ammo249]: dump the wielded RANGED weapon's live ammo-extension
+    -- fields on THIS peer. Run /verify_meta_ammo on host AND client and compare: the HUD
+    -- shows ammo_count()+remaining_ammo(); buffed capacity is _max_ammo (total_ammo buff).
+    -- If the client's _max_ammo lags the host's, the "shows 36, actual 62" desync is captured.
+    pcall(function()
+        local is_server = Managers.player and Managers.player.is_server
+        local inv = ScriptUnit.has_extension(unit, "inventory_system")
+        local rsd = inv and inv.get_slot_data and inv:get_slot_data("slot_ranged")
+        if not rsd then
+            pcall(printf, "[ct:ammo249] is_server=%s no ranged slot equipped (issue #249)", tostring(is_server))
+            return
+        end
+        for _, u in ipairs({ rsd.right_unit_1p, rsd.left_unit_1p }) do
+            local ax = u and ScriptUnit.has_extension(u, "ammo_system")
+            if ax and ax.max_ammo then
+                pcall(printf, "[ct:ammo249] is_server=%s boons=%d HUD(clip=%s reserve=%s) _max_ammo=%s _orig_max=%s _available=%s _current=%s total_remaining=%s (issue #249)",
+                    tostring(is_server), num_boons,
+                    tostring(ax:ammo_count()), tostring(ax:remaining_ammo()),
+                    tostring(ax._max_ammo), tostring(ax._original_max_ammo),
+                    tostring(ax._available_ammo), tostring(ax._current_ammo),
+                    tostring(ax.total_remaining_ammo and ax:total_remaining_ammo()))
+            end
+        end
+    end)
+
     pcall(printf, "[verify_meta_ammo] num_boons=%d cost_factor=%.3f total_ammo_live=%s marker=%s",
         num_boons, live_factor, tostring(live_total_ammo), CT_META_AMMO_HYPERBOLIC_MARKER)
 end)
@@ -12192,6 +12517,17 @@ mod:hook("ActionChargedProjectileUtility", "fire_charged_projectile", function(f
         return original(self, value, stat_buff_name, ...)
     end
 
+    -- #259: also shim has_buff_perk so the RV-ability `free_grenade` PERK can't save Morgrim's,
+    -- while Endless Bombs (which uniquely also grants rewield_grenade_on_throw) still can.
+    local had_perk_override = rawget(buff_ext, "has_buff_perk") ~= nil
+    local orig_has_perk = buff_ext.has_buff_perk
+    buff_ext.has_buff_perk = function(self, perk_name, ...)
+        if perk_name == "free_grenade" and not orig_has_perk(self, "rewield_grenade_on_throw") then
+            return false
+        end
+        return orig_has_perk(self, perk_name, ...)
+    end
+
     local ok, a, b = pcall(func, projectile_context, ...)
 
     if had_instance_override then
@@ -12199,6 +12535,17 @@ mod:hook("ActionChargedProjectileUtility", "fire_charged_projectile", function(f
     else
         buff_ext.apply_buffs_to_value = nil
     end
+    if had_perk_override then
+        buff_ext.has_buff_perk = orig_has_perk
+    else
+        buff_ext.has_buff_perk = nil
+    end
+
+    -- #259 verify diagnostic (printf, NOT mod:info): after the throw, projectile_context
+    -- .free_grenade == true means the bomb was SAVED. endless_bombs flags the intended combo.
+    pcall(printf, "[ct:morgrim259] Morgrim's throw: saved=%s endless_bombs=%s (toggle blocks RV save unless endless_bombs)",
+        tostring(projectile_context.free_grenade == true),
+        tostring(orig_has_perk(buff_ext, "rewield_grenade_on_throw") and true or false))
 
     if not ok then
         error(a, 0)
