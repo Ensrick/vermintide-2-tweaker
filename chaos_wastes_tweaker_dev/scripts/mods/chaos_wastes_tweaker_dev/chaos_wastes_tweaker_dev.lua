@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.216-dev"
+local MOD_VERSION = "0.7.217-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -2335,6 +2335,58 @@ end
 -- already matches the host's broadcast), and the host-side RPC handler hook
 -- below ALSO enforces the host's setting on the value it ultimately writes
 -- for the client's row. Belt-and-suspenders per feedback_redundant_safeguards_ok.md.
+-- ============================================================
+-- Progressive Difficulty (run-wide toggle)
+-- ============================================================
+-- Steps the CW mission difficulty up one tier per mission after the first two.
+-- First 2 missions = the run's starting difficulty; mission 3 = start+1, mission 4 =
+-- start+2, ..., capped at Cataclysm 3 (never versus_base). Driven off the run
+-- controller's completed-level count (the mission ordinal): at mission N,
+-- get_completed_level_count() == N-1, so step = max(0, completed - 1).
+--   completed 0 (M1) -> +0 | completed 1 (M2) -> +0 | completed 2 (M3) -> +1 | ...
+--
+-- Lever: hook DeusRunController.get_run_difficulty, the value that flows through
+-- deus_mechanism get_next_level_data (deus_mechanism.lua:166) -> the level transition
+-- -> state_ingame.lua:245 `Managers.state.difficulty:set_difficulty(...)`, which the
+-- host RPCs to every client (difficulty_manager.lua:50). The CW path graph is
+-- generated ONCE at setup_run (deus_run_controller.lua:284) and takes NO difficulty
+-- argument (deus_generate_graph), so stepping the difficulty can NEVER reshape the
+-- graph. Deterministic on every peer (same host-synced start difficulty + completed
+-- count via effective_setting), so host and clients land on the same tier with no
+-- RPC-timing race.
+--
+-- Caveat: a peer that HOT-JOINS mid-run inherits the host's already-stepped difficulty
+-- as its "start" and could over-step; peers present at run start are unaffected.
+CT_PROGRESSIVE_DIFFICULTY_MARKER = "progressive_difficulty:step_after_two_missions_cap_cata3_v0.7.217"
+mod._ct_progdiff_step = function(start_key, completed_level_count)
+    local Diff = rawget(_G, "Difficulties")
+    local Lookup = rawget(_G, "DifficultyLookup")
+    if type(Diff) ~= "table" or type(Lookup) ~= "table" then return start_key end
+    local start_idx = Lookup[start_key]
+    if type(start_idx) ~= "number" then return start_key end
+    -- Cap at Cataclysm 3; NEVER step onto versus_base (the entry above cata3).
+    local cap_idx = Lookup["cataclysm_3"] or 7
+    local step = math.max(0, (tonumber(completed_level_count) or 0) - 1)
+    local target_idx = math.min(start_idx + step, cap_idx)
+    return Diff[target_idx] or start_key
+end
+
+mod:hook("DeusRunController", "get_run_difficulty", function(func, self)
+    local base = func(self)
+    if not effective_setting("progressive_difficulty") then return base end
+    local start_key = mod._ct_progdiff_start or base
+    local run_state = self and self._run_state
+    local completed = (run_state and run_state.get_completed_level_count
+        and run_state:get_completed_level_count()) or 0
+    local stepped = mod._ct_progdiff_step(start_key, completed)
+    if completed ~= mod._ct_progdiff_last_logged then
+        mod._ct_progdiff_last_logged = completed
+        pcall(printf, "[ct:progdiff] mission %d (completed=%d): start=%s -> difficulty=%s",
+            completed + 1, completed, tostring(start_key), tostring(stepped))
+    end
+    return stepped
+end)
+
 mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- STARTING_COINS_MODE_MARKER = setter-override-via-setup_run-arg (embedded for regression check)
     -- v0.7.127-dev: reset altar reuse counts at run start. Previous-run go_ids
@@ -2356,6 +2408,12 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- is unchanged.
     local n = select("#", ...)
     local args = { ... }
+    -- Progressive Difficulty: capture this run's TRUE starting difficulty (the
+    -- setup_run `difficulty` arg = args[2]) so the get_run_difficulty ramp computes
+    -- from a stable base, and reset the per-mission log throttle. At run start this is
+    -- the unstepped base on every peer present (step==0 at completed==0).
+    mod._ct_progdiff_start = args[2]
+    mod._ct_progdiff_last_logged = nil
     -- Vanilla signature: (run_seed, difficulty, journey_name, dominant_god,
     -- initial_own_soft_currency, telemetry_id, with_belakor, mutators, boons)
     -- so initial_own_soft_currency is args[5].
@@ -13071,6 +13129,34 @@ _rt_register("networked_flow_state_cap_guarded", function()
     if not cls then return nil end
     if type(cls.flow_cb_create_state) ~= "function" then
         return "flow_cb_create_state missing on NetworkedFlowStateManager"
+    end
+end)
+
+_rt_register("progressive_difficulty_installed", function()
+    if type(CT_PROGRESSIVE_DIFFICULTY_MARKER) ~= "string" or #CT_PROGRESSIVE_DIFFICULTY_MARKER == 0 then
+        return "CT_PROGRESSIVE_DIFFICULTY_MARKER not defined (progressive difficulty missing)"
+    end
+    -- Self-test the ramp: Legend (hardest) + many missions must CAP at cataclysm_3,
+    -- and the first two missions (completed 0 and 1) must stay at the start tier.
+    local step = mod._ct_progdiff_step
+    if step then
+        if rawget(_G, "Difficulties") then
+            if step("hardest", 0) ~= "hardest" or step("hardest", 1) ~= "hardest" then
+                return "progressive_difficulty steps within the first two missions"
+            end
+            if step("hardest", 2) ~= "cataclysm" then
+                return "progressive_difficulty mission-3 step wrong (expected cataclysm)"
+            end
+            if step("hardest", 100) ~= "cataclysm_3" then
+                return "progressive_difficulty does not cap at cataclysm_3 (got " .. tostring(step("hardest", 100)) .. ")"
+            end
+        end
+    else
+        return "mod._ct_progdiff_step not defined"
+    end
+    local cls = rawget(_G, "DeusRunController")
+    if cls and type(cls.get_run_difficulty) ~= "function" then
+        return "get_run_difficulty missing on DeusRunController"
     end
 end)
 

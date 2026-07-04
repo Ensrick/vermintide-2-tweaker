@@ -416,6 +416,16 @@ local data = {
         -- are flagged inline where they intentionally deviate from A->Z.
         widgets = {
             -- ============================================================
+            -- Progressive Difficulty (deliberate top-of-list placement: a
+            -- run-wide difficulty modifier, not one of the A-Z groups below)
+            -- ============================================================
+            {
+                setting_id = "progressive_difficulty",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "progressive_difficulty_tooltip",
+            },
+            -- ============================================================
             -- Adventure Maps
             -- ============================================================
             {

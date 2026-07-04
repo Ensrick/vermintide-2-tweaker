@@ -21,6 +21,8 @@ local loc = {
     inject_adventure_maps        = { en = "Inject Adventure Missions into CW Map Pool" },
     inject_adventure_maps_tooltip = { en = "Experimental. Injected missions carry Chaos Wastes pickups and altars, and their tome and grimoire spots become Chests of Trials. Finale arenas, the Citadel of Eternity, and Belakor's Temple are never replaced.\n\nHost-only. Requires game restart." },
     replace_shrines_with_missions = { en = "Replace Shrines with Missions" },
+    progressive_difficulty = { en = "Progressive Difficulty" },
+    progressive_difficulty_tooltip = { en = "The first two missions of a run use your starting difficulty. Every mission after that steps up one tier (for example Legend, then Cataclysm, then Cataclysm 2, then Cataclysm 3), capping at Cataclysm 3. Host-controlled: the whole lobby follows the host's setting." },
     replace_shrines_with_missions_tooltip = { en = "Longer expeditions with fewer free boons, since each shrine becomes an extra mission instead. Host-only. Applies to your next expedition." },
 
     -- ============================================================
