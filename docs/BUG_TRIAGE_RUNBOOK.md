@@ -231,6 +231,22 @@ UPLOAD - a local deploy alone is silently clobbered.
   `VMBLauncher deploy <mod> --no-remote` once, then continue. Do not loop on it.
 - [ ] **Commit and push:** `git add` the changed mod files + CHANGELOG, commit
   with a message naming the version and the bug, `git push`.
+- [ ] **Add the status label to the Issue NOW (same pass, do NOT wait for STEP
+  9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
+  and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
+  §11 requires it "in the same pass as the CHANGELOG entry":
+  - `gh issue edit <N> --add-label verify-fix` when you shipped a **code fix**
+    the user now confirms in-game (this is the common case).
+  - `gh issue edit <N> --add-label diagnostics-armed` when you shipped
+    **instrumentation only** (no behavior change) and need a repro to capture data.
+  - Never both, never invent a new status label. An issue with neither status
+    label reads as "not worked yet" - so a shipped-but-unlabeled fix is invisible
+    to the user's backlog view. Label every issue the ship addressed (here: the
+    primary Issue AND any it corroborates/fixes together).
+  - If the fix touched a dev-build menu option, also move its `_localization.lua`
+    status tag (`[untested]`/`[Issue N]` -> `[verify-fix]`) in the same pass
+    (issue #301; `LOCALIZATION_STANDARD.md` §13) - unless another session owns
+    that file right now, in which case note it and leave the tag to them.
 - [ ] **Remind the user to fully restart Steam** (tray -> Exit, reopen) if they
   are subscribed to the item - Steam re-pulls a self-authored upload only on a
   full Steam restart, not a game relaunch and not via deploy.
