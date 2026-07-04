@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.178-dev"
+local MOD_VERSION = "0.2.179-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1690,6 +1690,34 @@ _rt_register("btlab_no_class_hooks", function()
     if not txt then return end
     if txt:find("mod:hook(", 1, true) or txt:find("mod:hook_safe(", 1, true) then
         return "a mod:hook( / mod:hook_safe( call appeared in _gt_bot_teleport_lab.lua -- must stay merge-dispatch (no new hooks)"
+    end
+end)
+
+_rt_register("btlab_gui_material_guarded", function()
+    -- #293/#295 (v0.2.179-dev): the lab's World.create_screen_gui call takes a HARD
+    -- C-level fatal (bypasses pcall) if handed a non-resident material. ROOT CAUSE was
+    -- creating with FONT_MTRL (materials/fonts/arial), not a resident create material;
+    -- fixed to GUI_MTRL (gw_fonts, every vanilla debug GUI's material). Two invariants:
+    --   (1) the create call passes GUI_MTRL, never FONT_MTRL (regression on the root cause);
+    --   (2) the create is still pre-filtered by can_get("material", GUI_MTRL) (belt+suspenders).
+    -- Anchored on GUI_MTRL so the guard can't drift off the create call's material arg.
+    -- Source read is best-effort.
+    local ok, info = pcall(debug.getinfo, mod._gt_btlab_report_tether or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if txt:find("create_screen_gui(world, \"material\", FONT_MTRL", 1, true) then
+        return "create_screen_gui in _gt_bot_teleport_lab.lua creates with FONT_MTRL (arial) again -- #293/#295 root cause; must use GUI_MTRL (gw_fonts)"
+    end
+    if not txt:find("create_screen_gui(world, \"material\", GUI_MTRL", 1, true) then
+        return  -- HUD create path removed / rewritten -> nothing to guard
+    end
+    if not txt:find("can_get(\"material\", GUI_MTRL)", 1, true) then
+        return "create_screen_gui(GUI_MTRL) in _gt_bot_teleport_lab.lua is not pre-filtered by can_get(\"material\", GUI_MTRL) -- #293/#295 CTD guard removed"
     end
 end)
 

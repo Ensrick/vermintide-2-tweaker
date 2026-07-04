@@ -225,10 +225,11 @@ local function _reset_mission_state()
     _action_log  = {}
     _action_last = {}
     -- Also drop any cached draw resources so a stale world handle isn't reused.
-    mod._gt_btlab_line_object = nil
-    mod._gt_btlab_line_world  = nil
-    mod._gt_btlab_gui         = nil
-    mod._gt_btlab_gui_world   = nil
+    mod._gt_btlab_line_object  = nil
+    mod._gt_btlab_line_world   = nil
+    mod._gt_btlab_gui          = nil
+    mod._gt_btlab_gui_world    = nil
+    mod._gt_btlab_gui_deferred = nil
 end
 
 -- ============================================================================
@@ -977,7 +978,14 @@ end
 --          no-ops (never crashes / never affects gameplay).
 -- ============================================================================
 local FONT      = "arial"
-local FONT_MTRL = "materials/fonts/arial"
+local FONT_MTRL = "materials/fonts/arial"          -- Gui.text FONT-material arg (matches vanilla debug.lua font_mtrl)
+-- create_screen_gui MATERIAL. Must be gw_fonts, NOT FONT_MTRL: EVERY vanilla debug
+-- screen GUI creates with "materials/fonts/gw_fonts" (debug.lua:12, graph_drawer.lua:10,
+-- state_ingame.lua:2279-2280, achievement_manager.lua:947, ...). "materials/fonts/arial"
+-- is a valid Gui.text FONT material but NOT a resident create_screen_gui material, so
+-- passing it here was the #293/#295 "Gui material not found" C-fatal. gw_fonts is the
+-- engine's always-resident font atlas (the same self-test material the gut GUI guard uses).
+local GUI_MTRL  = "materials/fonts/gw_fonts"
 
 -- release cached draw resources + clear any lingering lines.
 local function _clear_and_null()
@@ -989,10 +997,11 @@ local function _clear_and_null()
             LineObject.dispatch(w, lo)
         end)
     end
-    mod._gt_btlab_line_object = nil
-    mod._gt_btlab_line_world  = nil
-    mod._gt_btlab_gui         = nil
-    mod._gt_btlab_gui_world   = nil
+    mod._gt_btlab_line_object  = nil
+    mod._gt_btlab_line_world   = nil
+    mod._gt_btlab_gui          = nil
+    mod._gt_btlab_gui_world    = nil
+    mod._gt_btlab_gui_deferred = nil   -- reset the #293/#295 defer breadcrumb latch
 end
 
 local function _do_draw(want_hud, want_lines)
@@ -1021,11 +1030,36 @@ local function _do_draw(want_hud, want_lines)
     local gui
     if want_hud then
         if mod._gt_btlab_gui_world ~= world then
-            mod._gt_btlab_gui       = nil
-            mod._gt_btlab_gui_world = world
+            mod._gt_btlab_gui          = nil
+            mod._gt_btlab_gui_world    = world
+            mod._gt_btlab_gui_deferred = nil   -- re-log one DEFERRED breadcrumb per world
         end
         if not mod._gt_btlab_gui then
-            mod._gt_btlab_gui = World.create_screen_gui(world, "material", FONT_MTRL, "immediate")
+            -- #293/#295 ROOT CAUSE: this used to create with FONT_MTRL (materials/fonts/arial),
+            -- which is NOT a resident create_screen_gui material -> the engine's C-level
+            -- "Gui material not found" assert, which BYPASSES pcall (the pcall wrapping
+            -- _do_draw at the call site did NOT catch it, so it hard-killed the process with
+            -- no Lua crash block, exactly what #295 saw). Fixed to GUI_MTRL (gw_fonts), the
+            -- material every vanilla debug GUI uses. Belt-and-suspenders: still PRE-FILTER with
+            -- Application.can_get (vanilla's non-faulting existence check, pickup_system.lua:882)
+            -- so a momentary non-residency during a mission<->keep world swap DEFERS the HUD a
+            -- frame instead of crashing. Fail CLOSED (skip) on any error -- a missing dev-HUD
+            -- overlay is harmless, a CTD is not.
+            local app = rawget(_G, "Application")
+            local ok, resident = pcall(function()
+                return app and app.can_get and app.can_get("material", GUI_MTRL)
+            end)
+            if ok and resident == true then
+                -- Breadcrumb bracket: if the C call below ever hard-crashes (#295), the log
+                -- ends right after this line, pinpointing create_screen_gui as the fatal.
+                _pf("[gt:btlab] create_screen_gui: material '%s' resident -- creating HUD gui", GUI_MTRL)
+                mod._gt_btlab_gui = World.create_screen_gui(world, "material", GUI_MTRL, "immediate")
+                _pf("[gt:btlab] create_screen_gui: HUD gui created OK")
+            elseif not mod._gt_btlab_gui_deferred then
+                mod._gt_btlab_gui_deferred = true   -- latch: log the defer once per world
+                _pf("[gt:btlab] create_screen_gui DEFERRED: material '%s' not resident (can_get=%s) -- HUD retries next frame (prevents #293/#295 'Gui material not found' CTD)",
+                    GUI_MTRL, tostring(resident))
+            end
         end
         gui = mod._gt_btlab_gui
     end
@@ -1140,8 +1174,20 @@ local function _btlab_draw(dt) -- luacheck: ignore dt
     local want_hud   = mod:get("gt_devtools_bot_hud")    and true or false
     local want_lines = mod:get("gt_devtools_leash_lines") and true or false
     if not (want_hud or want_lines) then
+        if mod._gt_btlab_draw_on then
+            mod._gt_btlab_draw_on = false
+            _pf("[gt:btlab] Dev Tools draw DISABLED -- overlay torn down")
+        end
         _clear_and_null()
         return
+    end
+    -- #295 breadcrumb: mark the exact frame the bot-testing-tools overlay turns ON. A hard
+    -- crash from the draw path that flushes no Lua block ends the log right after this line
+    -- (and the create_screen_gui bracket in _do_draw), localizing the fatal for the next repro.
+    if not mod._gt_btlab_draw_on then
+        mod._gt_btlab_draw_on = true
+        _pf("[gt:btlab] Dev Tools draw ENABLED (hud=%s lines=%s) -- building overlay",
+            tostring(want_hud), tostring(want_lines))
     end
     pcall(_do_draw, want_hud, want_lines)
 end
