@@ -443,6 +443,10 @@ end)
 -- cases (including on error, via pcall). Table-form hook resolves immediately,
 -- so guard that the table exists (NeuterUltEffects.lua:54 targets the same
 -- BuffFunctionTemplates.functions table).
+-- _pack captures pcall's returns WITH their count (Lua 5.1 has no table.pack) so
+-- the passthrough below can give unpack an explicit j arg and never truncate on
+-- a nil hole (VMF_RECIPES.md 2a).
+local function _pack(...) return select("#", ...), { ... } end
 if BuffFunctionTemplates and BuffFunctionTemplates.functions
    and BuffFunctionTemplates.functions.apply_huntsman_activated_ability then
     mod:hook(BuffFunctionTemplates.functions, "apply_huntsman_activated_ability", function (func, ...)
@@ -461,16 +465,16 @@ if BuffFunctionTemplates and BuffFunctionTemplates.functions
         PlayerUnitFirstPerson.play_remote_hud_sound_event = nop
         PlayerBotUnitFirstPerson.play_remote_hud_sound_event = nop
 
-        local results = { pcall(func, ...) }
+        -- results = { ok, r1, r2, ... }; n includes the pcall ok flag.
+        local n, results = _pack(pcall(func, ...))
 
         Unit.flow_event = saved_flow_event
         PlayerUnitFirstPerson.play_remote_hud_sound_event = saved_pu_remote_hud_sound
         PlayerBotUnitFirstPerson.play_remote_hud_sound_event = saved_bot_remote_hud_sound
 
-        local ok = table.remove(results, 1)
-        if not ok then
-            error(results[1], 0)  -- restore done; re-raise the original error unmangled
+        if not results[1] then
+            error(results[2], 0)  -- restore done; re-raise the original error unmangled
         end
-        return unpack(results)
+        return unpack(results, 2, n)  -- drop the ok flag; explicit j = no nil-hole truncation
     end)
 end

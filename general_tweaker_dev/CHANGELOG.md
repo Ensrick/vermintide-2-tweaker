@@ -1,5 +1,9 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.178-dev (2026-07-03) -- #255 harden the Huntsman-wrapper passthrough
+
+- **No behavior change.** The Huntsman `apply_huntsman_activated_ability` wrapper added in v0.2.177 restored the three nop'd engine functions and then re-returned the wrapped call's results with a bare `unpack()`. The `check_unpack_safety` gate (VMF_RECIPES.md 2a) flagged it as a potential nil-hole truncation. The wrapped buff function returns nothing today, so nothing was actually dropped, but the passthrough now captures the pcall result count via a `_pack` helper and calls `unpack(results, 2, n)` with an explicit end index - correct even if the function ever returns interior nils.
+
 ## v0.2.177-dev (2026-07-03) -- #255 disable ult + downed screen effects (ported from Neuter Ult Effects)
 
 - **Two new "Visuals and Audio" toggles (both default off, [untested], visual-only, own game only).** Root cause of #255: gt never actually had a "disable ult effects" option - a full setting_id inventory of the data file found only `gt_solo_disable_ult_vo` (the ult VOICE-line silencer). The standalone Neuter Ult Effects mod still works only because Fatshark's `mod_shim.lua` (lines 215-279) translates its now-dead `MOOD_BLACKBOARD` / `StateInGameRunning.update_mood` API onto the modern surface. This ports that modern translation directly into gt.
