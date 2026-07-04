@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.218-dev"
+local MOD_VERSION = "0.7.219-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -4269,6 +4269,7 @@ mod:hook("DeusMechanism", "game_round_ended", function(func, self, t, dt, reason
     local original_god
     local vote_data = self._vote_data
     if reason == "start_game" and is_server and vote_data then
+        local weekly_god = vote_data.dominant_god  -- #135: weekly/vote god BEFORE ct override
         local god_index = mod:get("finale_dominant_god")
         if god_index and god_index > 0 then
             local god = FINALE_GODS[god_index]
@@ -4282,6 +4283,13 @@ mod:hook("DeusMechanism", "game_round_ended", function(func, self, t, dt, reason
                     tostring(god_index), tostring(god), tostring(mod:get("disable_dominant_god")))
             end
         end
+        -- #135 (read-only): pin a "set X, got Y" mismatch to either the SELECTION
+        -- (resolved != chosen -> precedence bug here) or the graph NEUTERING (resolved
+        -- == chosen but a different god renders -> #145, fixed by _ct_force_finale_god).
+        pcall(printf, "[ct:god135] weekly/vote god=%s | finale setting=%s (%s) | resolved dominant_god=%s | disable_dominant_god=%s",
+            tostring(weekly_god), tostring(god_index),
+            tostring((god_index and god_index > 0 and FINALE_GODS[god_index]) or "rotation"),
+            tostring(vote_data.dominant_god), tostring(mod:get("disable_dominant_god")))
     end
 
     local ok, err = pcall(func, self, t, dt, reason, reason_data)
@@ -6165,6 +6173,76 @@ mod._ct_citadel145_dump = function(graph, no_dominant_god, dominant_god)
     end
 end
 
+-- ============================================================
+-- #145 FIX + #146 FEATURE: force the Citadel finale (and an optional SEPARATE
+-- approach) god onto the COMPLETED graph.
+-- ============================================================
+-- Vanilla reserves dominant_god on the ARENA "final" node at deus_populate_graph.lua:686-690;
+-- disable_dominant_god (config.NO_DOMINANT_GOD=true) SKIPS that reservation, neutering
+-- finale_dominant_god (#145). We restore authority by rewriting the FINISHED graph rather
+-- than the config, so regular missions keep all 4 gods (disable_dominant_god intact) while
+-- the Citadel maps honor the chosen god(s). Runs on host AND client from the same host-synced
+-- settings (effective_setting -> deterministic); the host also re-broadcasts (GRAPH_FIELD_MAP
+-- syncs level/theme/curse). Level keys arena_citadel_<god>_path1 / sig_citadel_<god>_path<1-5>
+-- exist for all 4 gods and are not aliased (deus_level_settings.lua:380-392,981-989), so
+-- swapping only the god segment (keeping path<N>) is always valid. #146: finale_approach_god
+-- (0 = follow finale) themes ONLY sig_citadel; finale_dominant_god governs arena_citadel.
+mod._ct_force_finale_god = function(graph, config)
+    if type(graph) ~= "table" then return end
+    local finale_idx = effective_setting("finale_dominant_god")
+    if type(finale_idx) ~= "number" or finale_idx <= 0 then return end
+    local finale_god = FINALE_GODS[finale_idx]
+    if not finale_god then return end
+    local approach_idx = effective_setting("finale_approach_god")
+    local approach_god = (type(approach_idx) == "number" and approach_idx > 0 and FINALE_GODS[approach_idx])
+        or finale_god
+
+    local function reassign(node, base, god)
+        local path = type(node.level) == "string" and node.level:match("_path(%d+)$")
+        if path then
+            node.level = base .. "_" .. god .. "_path" .. path
+        end
+        node.theme = god
+        node.god = god
+        -- Re-match the curse to the new god (a curse from another god's pool is the #145
+        -- symptom). Deterministic pick from the synced level_seed keeps host/client identical.
+        -- Guarded: an empty pool keeps the vanilla curse rather than risking a nil.
+        local pool = config and config.AVAILABLE_CURSES
+            and config.AVAILABLE_CURSES[node.level_type]
+            and config.AVAILABLE_CURSES[node.level_type][god]
+        if type(pool) == "table" and #pool > 0 then
+            local seed = math.floor(tonumber(node.level_seed) or 0)
+            node.curse = pool[(seed % #pool) + 1]
+        end
+    end
+
+    for _, n in pairs(graph) do
+        if type(n) == "table" and type(n.level) == "string" then
+            if string.find(n.level, "^arena_citadel") then
+                reassign(n, "arena_citadel", finale_god)   -- #145: finale arena
+            elseif string.find(n.level, "^sig_citadel") then
+                reassign(n, "sig_citadel", approach_god)    -- #146: approach map
+            end
+        end
+    end
+end
+
+-- #56 DIAGNOSTIC (read-only): Citadel curse host/client divergence probe. Runs on BOTH peers
+-- (unlike host-only _ct_citadel145_dump) AFTER the graph snapshot broadcast/apply, so it logs
+-- the curse each peer will render. Compare a host line to a client line for the same level: a
+-- curse/theme mismatch is the #56 divergence (client rolled its OWN graph before the host
+-- snapshot landed - the #136 seam). applied = apply_graph_snapshot's count on clients.
+mod._ct_curse56_dump = function(graph, is_server, applied)
+    if type(graph) ~= "table" then return end
+    for _, n in pairs(graph) do
+        local lvl = type(n) == "table" and n.level
+        if type(lvl) == "string" and (string.find(lvl, "^sig_citadel") or string.find(lvl, "^arena_citadel")) then
+            pcall(printf, "[ct:curse56] peer=%s level=%s curse=%s theme=%s | snapshot_applied=%s (host vs client MUST match; ref #136 populate_graph divergence)",
+                is_server and "HOST" or "CLIENT", tostring(lvl), tostring(n.curse), tostring(n.theme), tostring(applied))
+        end
+    end
+end
+
 mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dominant_god, with_belakor)
     -- CW graph generation runs on BOTH host and client (deterministic from
     -- seed). Use effective_setting(name) — returns mod:get() on host, the
@@ -6291,6 +6369,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
 
     if not effective_setting("replace_shrines_with_missions") then
         local result = { func(base_graph, seed, config, dominant_god, with_belakor) }
+        mod._ct_force_finale_god(result[1], config)  -- #145/#146
         local cursed, total = count_cursed(result[1])
         _dbg("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
         dump_graph(result[1], "post-run")
@@ -6300,11 +6379,13 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         local is_server = Managers and Managers.player and Managers.player.is_server
         if is_server then
             broadcast_graph_snapshot(result[1])
+            mod._ct_curse56_dump(result[1], true, nil)   -- #56
         else
             local applied = apply_graph_snapshot(result[1])
             if applied > 0 then
                 _dbg("[ct_graph] applied host snapshot to %d nodes (post-run)", applied)
             end
+            mod._ct_curse56_dump(result[1], false, applied)  -- #56
         end
         -- v0.7.107-dev nil-hole audit: global `deus_populate_graph` (deus_populate_graph.lua:965)
         -- returns a single `complete_graph` table. The mod code already reads result[1]
@@ -6332,6 +6413,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     end
 
     local result = { func(mutated, seed, config, dominant_god, with_belakor) }
+    mod._ct_force_finale_god(result[1], config)  -- #145/#146
     local cursed, total = count_cursed(result[1])
     _dbg("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
     dump_graph(result[1], "post-run-shop-converted")
@@ -6341,11 +6423,13 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     local is_server = Managers and Managers.player and Managers.player.is_server
     if is_server then
         broadcast_graph_snapshot(result[1])
+        mod._ct_curse56_dump(result[1], true, nil)   -- #56
     else
         local applied = apply_graph_snapshot(result[1])
         if applied > 0 then
             _dbg("[ct_graph] applied host snapshot to %d nodes (post-run-shop-converted)", applied)
         end
+        mod._ct_curse56_dump(result[1], false, applied)  -- #56
     end
     -- v0.7.107-dev nil-hole audit: same as sibling branch above — global
     -- `deus_populate_graph` returns a single `complete_graph` table; mod code

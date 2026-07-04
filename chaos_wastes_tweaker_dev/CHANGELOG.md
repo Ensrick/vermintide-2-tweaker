@@ -1,5 +1,14 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.219-dev (2026-07-03) - CT backlog batch B (graph-gen cluster): #145 fix + #146 feature + #135/#56 probes
+
+Isolated from batch A because these touch the regression-prone deus graph generation. All fold into existing hooks (no new `mod:hook`). **[untested] - graph-gen; verify in-game before trusting.**
+
+- **#145 (Citadel finale god mismatch) FIXED + #146 (separate approach god) FEATURE.** New `mod._ct_force_finale_god` post-processes the FINISHED graph (called in both `deus_populate_graph` branches after `func`), rewriting the god segment of `arena_citadel_*` (finale) to `finale_dominant_god` and `sig_citadel_*` (approach) to the new `finale_approach_god` (0 = follow finale). This restores the override's authority WITHOUT touching `config.NO_DOMINANT_GOD`, so regular missions keep all 4 gods (disable_dominant_god intact) while only the Citadel maps honor the chosen god(s). Level keys `arena_citadel_<god>_path<N>` / `sig_citadel_<god>_path<N>` exist for all 4 gods and aren't aliased, so swapping only the god segment (keeping `path<N>`) is always a valid level. The curse is re-matched to the new god from the synced `level_seed` (deterministic per peer); an empty pool keeps the vanilla curse. Deterministic on host + client (host-synced settings), and the host re-broadcasts the graph snapshot, so no RPC-timing race. **[untested] - CONFIRM the non-Tzeentch `arena_citadel` variants actually LOAD (the Citadel is canonically Tzeentch; khorne/nurgle/slaanesh variants exist on disk but need an in-game load check), and that approach != arena when `finale_approach_god` differs.**
+- **#146 UI:** new "Citadel Approach God" dropdown (`finale_approach_god`, default "Same as Finale God"), host-synced automatically.
+- **#135 (weekly god mismatch) - probe.** `[ct:god135]` in `game_round_ended` logs weekly/vote god vs the finale setting vs the resolved `dominant_god`. If resolved == chosen but a different god renders, that's #145 (now fixed); only `resolved != chosen` would be a selection bug. No selection bug found in code.
+- **#56 (Citadel curse client divergence) - probe.** `[ct:curse56]` runs on BOTH peers after the graph broadcast/apply, logging each Citadel node's curse/theme so a host-vs-client mismatch is captured (the #136 RPC-ordering seam). With the #145 fix both peers force the same curse deterministically, so this should now show host == client.
+
 ## 0.7.218-dev (2026-07-03) - CT backlog batch A: #157 crash fix, #143 + #259 fixes, #258/#271 lighting, + probes for #52/#68/#105/#121/#131/#249/#273
 
 Backlog push (investigation-agent findings, applied + verified against decompiled source). Fixes and read-only diagnostic probes; no graph-gen changes (those ship separately in batch B).

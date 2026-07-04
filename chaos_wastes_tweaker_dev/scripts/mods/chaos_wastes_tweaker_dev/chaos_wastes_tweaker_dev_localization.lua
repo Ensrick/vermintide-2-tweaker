@@ -121,6 +121,9 @@ local loc = {
     finale_god_tzeentch = { en = "Tzeentch" },
     finale_god_khorne   = { en = "Khorne" },
     finale_god_slaanesh = { en = "Slaanesh" },
+    finale_approach_god = { en = "[untested] Citadel Approach God" },
+    finale_approach_god_tooltip = { en = "Sets the god for the Citadel approach map (the mission before the finale arena), separately from the finale. Same as Finale God uses the finale's god. Only applies when Finale God is set. Host-only." },
+    finale_approach_same = { en = "Same as Finale God" },
     curse_lighting_brightness = { en = "Curse Lighting Brightness" },
     curse_lighting_brightness_tooltip = { en = "Brightens or dims the curse atmosphere on injected adventure missions (interior bounce, fill light, exposure). 1.0 = default. Raise it if a dark interior map is too dark under a curse; lower it for a moodier look. No effect on vanilla Chaos Wastes maps." },
     -- Curse labels carry their HOST GOD as a prefix ("Disable: <God>: <Curse>") and are
