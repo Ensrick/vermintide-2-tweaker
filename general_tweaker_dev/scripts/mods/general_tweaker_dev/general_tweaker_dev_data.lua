@@ -894,9 +894,11 @@ local _data = {
                 type        = "group",
                 sub_widgets = {
                     { setting_id = "gt_solo_assassin_hero_vo",           type = "checkbox", default_value = false, tooltip = "gt_solo_assassin_hero_vo_tooltip" },
+                    { setting_id = "gt_solo_disable_downed_fx",          type = "checkbox", default_value = false, tooltip = "gt_solo_disable_downed_fx_tooltip" },
                     { setting_id = "gt_solo_disable_fog",                type = "checkbox", default_value = false, tooltip = "gt_solo_disable_fog_tooltip" },
                     { setting_id = "gt_solo_disable_mutator_explosions", type = "checkbox", default_value = false, tooltip = "gt_solo_disable_mutator_explosions_tooltip" },
                     { setting_id = "gt_solo_disable_sun_shadows",        type = "checkbox", default_value = false, tooltip = "gt_solo_disable_sun_shadows_tooltip" },
+                    { setting_id = "gt_solo_disable_ult_fx",             type = "checkbox", default_value = false, tooltip = "gt_solo_disable_ult_fx_tooltip" },
                     { setting_id = "gt_solo_disable_ult_vo",             type = "checkbox", default_value = false, tooltip = "gt_solo_disable_ult_vo_tooltip" },
                     { setting_id = "gt_solo_draw_boss_spheres",          type = "checkbox", default_value = false, tooltip = "gt_solo_draw_boss_spheres_tooltip" },
                     -- Max Ragdolls -- single always-on slider (24 = vanilla default;

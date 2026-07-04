@@ -341,3 +341,136 @@ mod:hook("EnemyRecycler", "update", function (func, self, t, dt, player_position
     end)
     return func(self, t, dt, player_positions, threat_population, player_areas, use_player_areas)
 end)
+
+-- ----------------------------------------------------------------------------
+-- Disable ult / downed screen effects  (ported from "Neuter Ult Effects", #255)
+-- ----------------------------------------------------------------------------
+-- gt never shipped this toggle (a full setting_id inventory of the data file
+-- found only the ult VOICE silencer above). The standalone Neuter Ult Effects
+-- mod still works ONLY because Fatshark's mod_shim.lua translates its now-dead
+-- MOOD_BLACKBOARD / StateInGameRunning.update_mood API onto the modern surface
+-- (mod_shim.lua:215-279). We port that modern translation directly:
+--   1. MoodHandler.set_mood                 -- swallow the fullscreen mood
+--   2. BuffExtension._play_screen_effect     -- swallow the swirly screenspace FX
+--   3. BuffFunctionTemplates.functions.apply_huntsman_activated_ability
+--                                            -- nop Huntsman FOV/flow/sound
+-- All three gate on their own toggle and pass through untouched when off.
+-- Diagnostics use engine printf (user runs mod-logging OFF).
+
+-- set_mood(self, mood_name, reason, value): the 3rd arg `value` is the
+-- enable/disable flag -- truthy ENABLES the mood, falsy DISABLES it
+-- (mood_handler.lua:335-349 -- `if not value and not had_mood then return end`).
+-- We swallow ONLY the ENABLE calls for a targeted mood; disable calls always
+-- pass through, so toggling the option mid-effect can never strand a mood stuck
+-- on. (Deliberately stricter than mod_shim.lua, which swallows both directions.)
+--
+-- Ult career-ability moods. Every entry has a decompiled call site enabling it
+-- with value=true:
+--   skill_slayer            career_ability_dr_slayer.lua:248
+--   skill_zealot            career_ability_wh_zealot.lua:208
+--   skill_shade             buff_function_templates.lua:4621
+--   skill_huntsman_surge    buff_templates.lua:2700
+--   skill_huntsman_stealth  career_ability_es_huntsman.lua:219
+--   skill_maiden_guard      buff_function_templates.lua:5070  (Handmaiden stealth
+--                           dash -- NOT in the original Neuter mod list; found by
+--                           grepping every set_mood("skill_*") call site)
+-- skill_ranger is listed for parity with mod_shim.lua, but the current source
+-- has NO set_mood("skill_ranger") call site -- Ranger Veteran's ult visual is a
+-- screenspace FX (below), swallowed by _play_screen_effect, not a mood.
+local _ult_moods = {
+    skill_slayer           = true,
+    skill_zealot           = true,
+    skill_ranger           = true,  -- no modern set_mood call site; FX-only (see above)
+    skill_shade            = true,
+    skill_huntsman_surge   = true,
+    skill_huntsman_stealth = true,
+    skill_maiden_guard     = true,  -- buff_function_templates.lua:5070
+}
+
+-- Downed-family moods (generic_status_extension.lua):
+--   knocked_down   generic_status_extension.lua:1251
+--   bleeding_out   generic_status_extension.lua:1457
+--   wounded        generic_status_extension.lua:1458
+local _downed_moods = {
+    knocked_down = true,
+    bleeding_out = true,
+    wounded      = true,
+}
+
+mod:hook("MoodHandler", "set_mood", function (func, self, mood_name, reason, value)
+    if value then  -- only intercept ENABLE calls; disables pass through
+        if _ult_moods[mood_name] and mod:get("gt_solo_disable_ult_fx") then
+            printf("[gt:neuterfx] swallowed ult mood %s", tostring(mood_name))
+            return
+        end
+        if _downed_moods[mood_name] and mod:get("gt_solo_disable_downed_fx") then
+            printf("[gt:neuterfx] swallowed downed mood %s", tostring(mood_name))
+            return
+        end
+    end
+    return func(self, mood_name, reason, value)
+end)
+
+-- Screenspace FX played by BuffExtension._play_screen_effect (still-valid API,
+-- hooked directly by NeuterUltEffects.lua:151). The 8 ult-side effects (per the
+-- mod_shim FX list + NeuterUltEffects.ult_name_to_fx): Huntsman, Shade, Ranger,
+-- and Sister of the Thorn radiance (enter + loop).
+local _ult_screen_fx = {
+    ["fx/screenspace_huntsman_skill_01"]       = true,
+    ["fx/screenspace_huntsman_skill_02"]       = true,
+    ["fx/screenspace_shade_skill_01"]          = true,
+    ["fx/screenspace_shade_skill_02"]          = true,
+    ["fx/screenspace_ranger_skill_01"]         = true,
+    ["fx/screenspace_ranger_skill_02"]         = true,
+    ["fx/thornsister_avatar_screenspace"]      = true,
+    ["fx/thornsister_avatar_screenspace_loop"] = true,
+}
+
+mod:hook("BuffExtension", "_play_screen_effect", function (func, self, effect)
+    if mod:get("gt_solo_disable_ult_fx") and _ult_screen_fx[effect] then
+        printf("[gt:neuterfx] swallowed screen fx %s", tostring(effect))
+        return
+    end
+    return func(self, effect)
+end)
+
+-- Huntsman FOV/flow/sound wrapper. The mood + FX swallows above don't cover
+-- Huntsman's activated-ability FOV punch, its Unit.flow_event triggers, or the
+-- remote hud sound -- those fire inside
+-- BuffFunctionTemplates.functions.apply_huntsman_activated_ability
+-- (buff_function_templates.lua:4765). Port mod_shim.lua:249-277: nop the three
+-- engine functions it uses for the duration of the call, then restore in ALL
+-- cases (including on error, via pcall). Table-form hook resolves immediately,
+-- so guard that the table exists (NeuterUltEffects.lua:54 targets the same
+-- BuffFunctionTemplates.functions table).
+if BuffFunctionTemplates and BuffFunctionTemplates.functions
+   and BuffFunctionTemplates.functions.apply_huntsman_activated_ability then
+    mod:hook(BuffFunctionTemplates.functions, "apply_huntsman_activated_ability", function (func, ...)
+        if not mod:get("gt_solo_disable_ult_fx") then
+            return func(...)
+        end
+
+        printf("[gt:neuterfx] nop-ing Huntsman FOV/flow/sound for activated ability")
+
+        local saved_flow_event                = Unit.flow_event
+        local saved_pu_remote_hud_sound       = PlayerUnitFirstPerson.play_remote_hud_sound_event
+        local saved_bot_remote_hud_sound      = PlayerBotUnitFirstPerson.play_remote_hud_sound_event
+
+        local function nop() return end
+        Unit.flow_event = nop
+        PlayerUnitFirstPerson.play_remote_hud_sound_event = nop
+        PlayerBotUnitFirstPerson.play_remote_hud_sound_event = nop
+
+        local results = { pcall(func, ...) }
+
+        Unit.flow_event = saved_flow_event
+        PlayerUnitFirstPerson.play_remote_hud_sound_event = saved_pu_remote_hud_sound
+        PlayerBotUnitFirstPerson.play_remote_hud_sound_event = saved_bot_remote_hud_sound
+
+        local ok = table.remove(results, 1)
+        if not ok then
+            error(results[1], 0)  -- restore done; re-raise the original error unmangled
+        end
+        return unpack(results)
+    end)
+end
