@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.219-dev"
+local MOD_VERSION = "0.7.220-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -2405,6 +2405,46 @@ mod:hook("DeusRunController", "get_run_difficulty", function(func, self)
     end
     return stepped
 end)
+
+-- ============================================================
+-- Journey-completion difficulty crash guard (Issue #291)
+-- ============================================================
+-- Vanilla StatisticsUtil._register_completed_journey_difficulty resolves the run's
+-- difficulty via Managers.state.difficulty:get_default_difficulties(), which returns
+-- DefaultDifficulties -- whose top entry is base "cataclysm" (difficulty_settings.lua:412,
+-- list = normal/hard/harder/hardest/cataclysm). cataclysm_2 / cataclysm_3 are NOT in
+-- that list, so `table.find` returns nil and the very next line does
+-- `current_completed_difficulty < nil` -> hard CTD ("attempt to compare number with nil";
+-- decompiled statistics_util.lua:1054, shipped bytecode reports it as :997).
+--
+-- The progressive_difficulty ramp above pushes a CW run up to cataclysm_3, so WINNING a
+-- journey's final round (the Citadel) at cata2/cata3 crashed on the journey-stat write.
+-- Confirmed in the wild (console 2026-07-04 19.45.55 + issue #291 03.27): the crash fired
+-- ~1s after the ramp logged "-> difficulty=cataclysm_3", with journey_name="journey_citadel",
+-- difficulty_name="cataclysm_3", difficulty_index=nil, and NO third-party difficulty mod
+-- enabled. This guard ALSO shields against Onslaught / "Cata 3 & Deathwish" exposing the
+-- same tiers by other means.
+--
+-- Fix: clamp only the RECORDED difficulty to the highest tier the vanilla journey-stat DB
+-- can represent (base "cataclysm"). The player keeps journey-completion credit at that
+-- ceiling; the in-mission gameplay difficulty is untouched (this hook does not feed
+-- get_run_difficulty). The vanilla per-LEVEL recorder already guards this with
+-- `if difficulty then` (statistics_util.lua:1013), so only the journey recorder needs it.
+-- Cross-mod note: Loremaster's Armoury also hooks this function; it forwards the args
+-- unchanged to the original, so our clamp reaches the vanilla body regardless of chain order.
+CT_JOURNEY_DIFFICULTY_GUARD_MARKER = "journey_difficulty_clamp_to_default_max_v0.7.220"
+mod:hook("StatisticsUtil", "_register_completed_journey_difficulty",
+    function(func, statistics_db, player, journey_name, dominant_god, difficulty_name)
+        local dm = Managers.state.difficulty
+        local difficulties = dm and dm:get_default_difficulties()
+        if type(difficulties) == "table" and not table.find(difficulties, difficulty_name) then
+            local clamped = difficulties[#difficulties]
+            pcall(printf, "[ct:journeyguard] journey '%s' completed at '%s' (not in DefaultDifficulties) -> recording as '%s' to avoid statistics_util CTD (issue #291)",
+                tostring(journey_name), tostring(difficulty_name), tostring(clamped))
+            difficulty_name = clamped
+        end
+        return func(statistics_db, player, journey_name, dominant_god, difficulty_name)
+    end)
 
 mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- STARTING_COINS_MODE_MARKER = setter-override-via-setup_run-arg (embedded for regression check)
@@ -13588,6 +13628,28 @@ _rt_register("progressive_difficulty_installed", function()
     local cls = rawget(_G, "DeusRunController")
     if cls and type(cls.get_run_difficulty) ~= "function" then
         return "get_run_difficulty missing on DeusRunController"
+    end
+end)
+
+_rt_register("journey_difficulty_guard_installed", function()
+    -- Issue #291: guard against the vanilla journey-stat CTD when a CW journey is
+    -- won above base cataclysm (our progressive_difficulty ramp reaches cataclysm_3).
+    if type(CT_JOURNEY_DIFFICULTY_GUARD_MARKER) ~= "string" or #CT_JOURNEY_DIFFICULTY_GUARD_MARKER == 0 then
+        return "CT_JOURNEY_DIFFICULTY_GUARD_MARKER not defined (issue #291 guard missing)"
+    end
+    local su = rawget(_G, "StatisticsUtil")
+    if su and type(su._register_completed_journey_difficulty) ~= "function" then
+        return "_register_completed_journey_difficulty missing on StatisticsUtil"
+    end
+    -- Verify the crash precondition the guard clamps around still holds: cataclysm_3
+    -- must be ABSENT from DefaultDifficulties (else vanilla wouldn't have crashed and
+    -- the guard is dead code that should be revisited).
+    local dm = Managers and Managers.state and Managers.state.difficulty
+    if dm and dm.get_default_difficulties then
+        local defaults = dm:get_default_difficulties()
+        if type(defaults) == "table" and table.find(defaults, "cataclysm_3") then
+            return "cataclysm_3 now in DefaultDifficulties -- guard assumption changed, re-check #291"
+        end
     end
 end)
 
