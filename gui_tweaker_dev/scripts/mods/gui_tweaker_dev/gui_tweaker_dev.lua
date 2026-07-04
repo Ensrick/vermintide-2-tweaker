@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.182-dev"
+local MOD_VERSION = "0.2.183-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1861,8 +1861,33 @@ if _gut_buffbar_fix and _gut_buffbar_fix.apply then pcall(_gut_buffbar_fix.apply
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_parry_indicator")
 
 -- Optional: large respawn countdown over a dead teammate's portrait (client-safe
--- estimate anchored to the dead-skull state). See _gut_respawn_timer.lua.
+-- estimate anchored to the dead-skull state). Draws from IngameHud.update on
+-- IngameHud's own HUD renderer (#285 fix). See _gut_respawn_timer.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_respawn_timer")
+
+-- (#285) Guards the respawn-timer #285 fix: the draw must ride IngameHud.update
+-- (the mechanism proven by "Respawn CD", Workshop 3747644100) and must NOT
+-- reintroduce the broken UnitFrameUI.draw draw-path (which rendered nothing).
+_rt_register("respawn_timer_ingamehud_draw_path", function()
+    local fn = mod._gut_respawn_draw
+    if type(fn) ~= "function" then
+        return "respawn timer module not installed (mod._gut_respawn_draw missing)"
+    end
+    local ok, info = pcall(debug.getinfo, fn, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find('hook_safe("IngameHud", "update"', 1, true) then
+        return "respawn timer regressed: draw no longer rides hook_safe(IngameHud, update) -- #285"
+    end
+    if txt:find('"UnitFrameUI", "draw"', 1, true) then
+        return "respawn timer regressed: reintroduced the broken UnitFrameUI.draw hook (renders nothing) -- #285"
+    end
+end)
 
 -- Modded-realm-scoped native loadouts (#175): while in the modded (EAC-untrusted) realm,
 -- the native I-VI loadout bar reads/writes a MODDED-ONLY VMF store so official-realm

@@ -5,6 +5,35 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.183-dev (2026-07-03) -- #285: respawn-timer over the dead teammate portrait now actually renders
+
+The `gut_respawn_timer` feature (large seconds-to-respawn number over a dead teammate's
+HUD portrait) drew nothing in-game. Reimplemented `_gut_respawn_timer.lua` by porting the
+mechanism from the working Workshop mod "复活CD / Respawn CD (beta)" (id 3747644100).
+
+- **Root cause.** Every symbol the old version used was individually valid (the hook
+  installed and fired, `_frame_type == "team"`, `self.data.is_dead`, the `portrait_pivot`
+  scenegraph node, `get_world_position`, the font). The break was the draw *path*: it
+  drew from a `hook_safe("UnitFrameUI", "draw")` and issued its own
+  begin_pass/draw_text/end_pass on the LIVE frame's retained `ui_renderer` +
+  `ui_scenegraph`, right after the frame's own draw (which early-returns on
+  `not self._dirty` -- the steady state of a settled dead-skull portrait). Piggybacking an
+  immediate-mode pass onto that per-frame retained renderer never composited to screen.
+- **Fix.** The draw now rides `IngameHud.update` (ingame_hud.lua:372; gut has no other hook
+  on it) and uses IngameHud's own HUD renderer -- the same renderer gut's HUD customizer
+  overlay draws on (gui_tweaker_dev.lua:660) -- through a throwaway root scenegraph.
+  Position is read from the live `UnitFramesHandler` component's team-frame `portrait_pivot`
+  node (team_member_unit_frame_ui_definitions.lua:72). Font is the one Respawn CD uses:
+  `hell_shark_header` -> material `materials/fonts/gw_head`, font `gw_head` (ui_fonts.lua:58).
+- Detection reads the same `data.is_dead` the game maintains on each team frame
+  (unit_frames_handler.lua:775-776, set from `status_extension:is_dead()`); the countdown is
+  a client-safe estimate anchored to the game-time the flag flips, ticking down
+  `hero_respawn_time` (30 default). Teammates only; hidden over an open scoreboard/menu/view.
+- Setting ids (`gut_respawn_timer`, `gut_respawn_font_size`, `gut_respawn_r/g/b`) and the HUD
+  menu placement are unchanged, so existing user settings persist.
+- Coexistence: the reference mod can stay installed; the two do not share hooks or state
+  (double-draw at worst). New `/regression_test` check `respawn_timer_ingamehud_draw_path`.
+
 ## 0.2.182-dev (2026-07-02) -- #155/#172: in-mission Cosmetics split (tab is vanilla, gear icon is cosmetics_tweaker)
 
 The in-mission Cosmetics access is now split in two, per user direction:
