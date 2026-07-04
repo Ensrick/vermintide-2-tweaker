@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.215-dev"
+local MOD_VERSION = "0.7.216-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5595,7 +5595,11 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
             if elapsed >= CT_PERF_WINDOW then
                 local nfs = Managers.state and Managers.state.networked_flow_state
                 local flow_states = (nfs and type(nfs._num_states) == "number") and nfs._num_states or -1
-                local cd = Managers.state and Managers.state.conflict_director
+                -- v0.7.216: the ConflictDirector manager is Managers.state.conflict, NOT
+                -- Managers.state.conflict_director (that key is nil), so the first census
+                -- shipped enemies=-1 on every line. `_num_spawned_ai` is the live alive-AI
+                -- count (conflict_director.lua:2169).
+                local cd = Managers.state and Managers.state.conflict
                 local enemies = (cd and type(cd._num_spawned_ai) == "number") and cd._num_spawned_ai or -1
                 local lvl = "?"
                 local gm = Managers.state and Managers.state.game_mode
@@ -7567,7 +7571,16 @@ end
 -- event_manager gets torn down + recreated between missions, so we register
 -- lazily and use a per-event-manager guard so re-registrations don't pile up.
 local _ct_diag_event_manager_ref = nil
-local _ct_diag_subscriber = setmetatable({}, { __mode = "v" })
+-- NOTE (v0.7.216 fix): this table was `setmetatable({}, { __mode = "v" })` - a
+-- WEAK-VALUED table. Its values ARE the handler functions below, referenced nowhere
+-- else, so the GC collected them between file-load and the first mission; by the time
+-- _diag_subscribe_if_needed ran, `_ct_diag_subscriber.player_pickup_deus_weapon_chest`
+-- was nil and EventManager.register fatally fasserted "No function found with name ...
+-- on supplied object" (event_manager.lua:16) inside the pcall, so the pickup/chest
+-- diagnostic NEVER attached (it fired on every map populate). A plain strong table keeps
+-- the handlers alive; the module-scope local lives for the whole session (no leak), and
+-- the vanilla EventManager already stores subscribers weakly on its own side.
+local _ct_diag_subscriber = {}
 
 _ct_diag_subscriber.player_pickup_deus_weapon_chest = function(self, player)
     local name = player and player.name and player:name() or "?"
