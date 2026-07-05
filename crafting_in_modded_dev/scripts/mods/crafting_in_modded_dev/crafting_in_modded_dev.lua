@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.47-dev"
+local MOD_VERSION = "0.8.48-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -1818,20 +1818,24 @@ mod.open_forge = function()
     -- gated by allow_in_mission). User report 2026-05-25 EOD: requested
     -- access in the CW staging area where the menu should be available.
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    -- KEEP-ONLY GATE: the in-mission ATHANOR (weave forge) is hard-disabled,
-    -- independent of the `allow_in_mission` toggle. Even after the Fix B/B2..B6
-    -- material/HDR hardening, opening the forge mid-mission still hits a
-    -- render-level fatal in the shading-environment substitution path
-    -- (script_world.lua:176 `blend`, ShadingEnvironment — user report on
-    -- cim_dev, relates to Issue #81). Until that's resolved the weave forge is
-    -- Keep / CW-hub only, matching the public 0.8.8 build. The material-clean
-    -- standard crafting bench (`open_standard_crafting`) still opens in Adventure
-    -- missions and still honors `allow_in_mission`. The Fix B/B2..B6 hooks are
-    -- left in place (inert) so re-enabling the in-mission Athanor later is a
-    -- one-line gate change, not a re-port.
-    if not in_keep then
-        mod:echo("The Athanor (weave forge) only opens in the Keep. " ..
-                 "Use the standard crafting bench in missions (bind 'Standard crafting' or run /cim_craft_standard).")
+    -- In-mission Athanor is OPT-IN via `allow_in_mission` (the "Allow crafting
+    -- bench in mission" toggle in Tweaker: GUI's In-Mission Menus, which writes
+    -- through to cim's setting — issue #96). Re-enabled for #83 in v0.8.48-dev:
+    -- the v0.8.23 HARD keep-gate existed because a render-level fatal
+    -- (`script_world` blend) survived the Fix B/B2..B6 material/HDR hardening.
+    -- That fatal is now root-caused (via #228/#235): native
+    -- ShadingEnvironment.blend on a shading-env VARIATION the mission-
+    -- substituted env does not define is an ACCESS VIOLATION (a missing env
+    -- RESOURCE is a clean fatal instead), and the sole variation writer on
+    -- this surface is HeroWindowItemCustomization._update_environment. Both
+    -- layers are closed by the residency-probed env picker
+    -- (_cim_pick_mission_env) + the _update_environment variation pin below.
+    -- Fix B (no HDR worlds in mission) and the B2..B6 draw-site suppressions
+    -- stay unchanged — the mission forge draws on the base renderer.
+    if not in_keep and not mod:get("allow_in_mission") then
+        mod:echo("The Athanor opens in the Keep by default. Enable 'Allow crafting bench in mission' " ..
+                 "in Tweaker: GUI's In-Mission Menus to open it mid-run (experimental), " ..
+                 "or use the standard crafting bench (/cim_craft_standard).")
         return
     end
 
@@ -1962,10 +1966,9 @@ end
 -- Workaround: hook each window's `_create_viewport_definition` with a
 -- full mod:hook wrapper. Call the original, then if we're NOT in the
 -- keep, rewrite the returned table's `style.viewport.shading_environment`
--- to `environment/ui_hdr` — that env is loaded in every state (it's the
--- UI default that loading_view / hero_view's own viewport use), so it's
--- always available. Visual fidelity drops a bit mid-mission (the forge
--- lighting won't match the keep aesthetic) but no crash.
+-- to a MISSION-RESIDENT env (picker below). Visual fidelity drops a bit
+-- mid-mission (the forge lighting won't match the keep aesthetic) but no
+-- crash.
 --
 -- ALSO swap the `_inverted` variant (HeroWindowWeaveForgeOverview takes
 -- an `invert_rendering` arg that picks `_preview_inverted`). Same env
@@ -1974,8 +1977,45 @@ end
 -- The hook always fires (vanilla never opens the forge in mission so
 -- there's no path to clobber); gated on `not is_in_inn` so the keep
 -- forge keeps its proper lighting.
+--
+-- v0.8.48-dev (#83 re-enable): the substitute is no longer the fixed
+-- "environment/ui_hdr". Two findings from the #228/#235 investigation
+-- (cosmetics_tweaker 0.9.62..0.9.66-dev) improved the choice:
+--   * ui_hdr is a 2D-UI tonemapping env with no 3D radiance — item
+--     previews render pure BLACK on it mid-mission (#235 instrument
+--     data: a 160x exposure boost stayed black, host log 2026-07-03).
+--   * environment/ui_store_preview (the keep's studio-lit item-preview
+--     env) probed RESIDENT mid-mission (Application.can_get, same log)
+--     and is the env that defines the per-weapon blend variations, so
+--     it is both lit and blend-safe.
+--   * environment/blank is the engine default (GameSettingsDevelopment.
+--     default_environment, game_settings_development.lua:33), created at
+--     boot from resource_packages/boot_assets (boot.lua:137/598); it is
+--     resident in EVERY context and is what vanilla's own gamepad forge
+--     world uses (hero_view_state_weave_forge.lua:145). Flat lighting,
+--     structurally crash-free — the final fallback.
+-- Preference: ui_store_preview (lit) -> ui_hdr (proven mountable) ->
+-- blank. Residency is probed at USE time (it can differ per level) via
+-- Application.can_get("shading_environment", name) — vanilla's
+-- non-faulting existence check (pickup_system.lua:882 pattern),
+-- pcall-wrapped so an unsupported type string can never fatal.
+local _FORGE_ENV_FALLBACK = "environment/blank"
+local _FORGE_ENV_CANDIDATES = { "environment/ui_store_preview", "environment/ui_hdr" }
 
-local _FORGE_MISSION_SAFE_ENV = "environment/ui_hdr"
+local function _cim_env_resident(name)
+    local ok, r = pcall(function() return Application.can_get("shading_environment", name) end)
+    return ok and r == true
+end
+
+-- Parameterized + exposed so /cim_regression_test can drive the preference
+-- order with an injected probe (the real probe needs a live engine).
+function mod._cim_pick_mission_env(resident_fn)
+    resident_fn = resident_fn or _cim_env_resident
+    for _, name in ipairs(_FORGE_ENV_CANDIDATES) do
+        if resident_fn(name) then return name end
+    end
+    return _FORGE_ENV_FALLBACK
+end
 
 local function _is_in_keep()
     return DamageUtils and DamageUtils.is_in_inn and true or false
@@ -1995,7 +2035,17 @@ local function _swap_forge_env(viewport_def)
     local vp = style and style.viewport
     if vp and (vp.shading_environment == "environment/ui_weave_forge_preview"
             or vp.shading_environment == "environment/ui_weave_forge_preview_inverted") then
-        vp.shading_environment = _FORGE_MISSION_SAFE_ENV
+        local picked = mod._cim_pick_mission_env()
+        -- Always-on dev probe (#83): which env each mission forge world gets,
+        -- with the residency readouts that drove the choice. printf reaches the
+        -- console log even with mod-logging off.
+        if printf then
+            printf("[cim:83] forge viewport env: %s -> %s (resident: store=%s hdr=%s)",
+                tostring(vp.shading_environment), picked,
+                tostring(_cim_env_resident("environment/ui_store_preview")),
+                tostring(_cim_env_resident("environment/ui_hdr")))
+        end
+        vp.shading_environment = picked
     end
     return viewport_def
 end
@@ -2010,6 +2060,22 @@ end)
 
 mod:hook("HeroWindowWeaveProperties", "_create_viewport_definition", function(func, self)
     return _swap_forge_env(func(self))
+end)
+
+-- Diagnostics only (#83 re-enable). The ONE remaining ShadingEnvironment
+-- write on the weave-forge surface is set_fullscreen_effect_enable_state:
+-- set_scalar("fullscreen_blur_*") + apply on the BASE ui world's env
+-- (hero_view_state_weave_forge.lua:879-881, vanilla nil-guards the env).
+-- Never implicated in a crash, but if the user's in-mission test still dies
+-- on a shading path this breadcrumb says whether the blur toggle fired.
+-- hook_safe post-fire, printf-only, no behavior change.
+-- Pre-flight (repo hook rule): cim hooks HeroViewStateWeaveForge.
+-- set_fullscreen_effect_enable_state NOWHERE else (grep 2026-07-05).
+mod:hook_safe("HeroViewStateWeaveForge", "set_fullscreen_effect_enable_state", function(self, enabled)
+    if _is_in_keep() then return end
+    if printf then
+        printf("[cim:83] weave-forge set_fullscreen_effect_enable_state(%s) fired in mission", tostring(enabled))
+    end
 end)
 
 -- ============================================================
@@ -2072,10 +2138,13 @@ mod:hook("HeroWindowItemCustomization", "_create_item_preview_widget_definition"
     -- 2026-05-25 + crash GUID 3bd92d07 (issue #50).
     --
     -- Substitute: mirror vanilla's widget shape exactly, minus level_name
-    -- and object_sets. shading_environment swapped to the mission-safe env
-    -- already documented in _FORGE_MISSION_SAFE_ENV. LootItemUnitPreviewer
-    -- still renders the item via `resource_packages/levels/ui_loot_preview`
-    -- which is in GlobalResources (boot_init.lua:159).
+    -- and object_sets. shading_environment comes from the residency-probed
+    -- mission-env picker (_cim_pick_mission_env above) — preferring the
+    -- studio-lit environment/ui_store_preview when resident, so the
+    -- mid-mission 3D preview is LIT instead of ui_hdr-black (#235).
+    -- LootItemUnitPreviewer still renders the item via
+    -- `resource_packages/levels/ui_loot_preview` which is in
+    -- GlobalResources (boot_init.lua:159).
     return {
         element = {
             passes = {
@@ -2092,7 +2161,7 @@ mod:hook("HeroWindowItemCustomization", "_create_item_preview_widget_definition"
                 enable_sub_gui      = true,
                 fov                 = 65,
                 layer               = 962,
-                shading_environment = _FORGE_MISSION_SAFE_ENV,
+                shading_environment = mod._cim_pick_mission_env(),
                 viewport_name       = "item_preview",
                 viewport_type       = "default_forward",
                 world_name          = "item_preview",
@@ -2123,6 +2192,81 @@ mod:hook("HeroWindowItemCustomization", "_register_object_sets", function(func, 
         level_name = nil,
     }
     self:_show_object_set(nil, true)
+end)
+
+-- ------------------------------------------------------------
+-- Mid-mission item customization: blend-variation pin (#83 / #228 class)
+-- ------------------------------------------------------------
+-- THE root cause of the "script_world blend" fatal that forced the v0.8.23
+-- keep-only Athanor gate, per the corrected #228/#235 analysis
+-- (cosmetics_tweaker 0.9.66-dev): `ScriptWorld.render` blends the world's
+-- `shading_settings` every frame (script_world.lua:122); vanilla
+-- `_present_item` -> `_update_environment` writes a PER-WEAPON variation
+-- (`weapons_default_01`, hero_window_item_customization.lua:1377-1381 /
+-- :583-594) into that blend target. On the keep's env that variation is
+-- defined; on the mission-substituted world it may not be — and native
+-- `ShadingEnvironment.blend` on an UNDEFINED variation is an access
+-- violation (0xc0000005), not a catchable Lua error. (A missing env
+-- RESOURCE, by contrast, is a clean "Resource not loaded" fatal — the
+-- original forge symptom above.) The weave-forge windows themselves never
+-- write blend variations (grep-verified: their only ShadingEnvironment
+-- call is the set_scalar blur toggle in set_fullscreen_effect_enable_state),
+-- so `_update_environment` is the SOLE writer on the forge/customization
+-- surface, and this one hook covers every re-present (reroll / illusion tabs).
+--
+-- Decision: allow vanilla's requested variation only when the preview
+-- world's env actually defines it — i.e. environment/ui_store_preview
+-- (keep witnesses: store_window_item_preview.lua:88+1367,
+-- hero_window_gotwf_item_preview.lua:67+607,
+-- hero_window_item_customization.lua:406+1378) — or when cosmetics_tweaker's
+-- #235 re-point already moved the world onto it (World data flag
+-- `cos_preview_env_repointed`, cosmetics_tweaker.lua ~2690). Anything else
+-- (ui_hdr, blank, unknown) pins force_default=true so the blend only ever
+-- asks for "default", which every create_world env carries
+-- (world_manager.lua:44 hard-codes the "default" mood).
+--
+-- Cross-mod: cosmetics_tweaker hooks this same method with the same
+-- fail-safe direction; VMF chains hooks from DIFFERENT mods, and once any
+-- layer passes force_default=true the pin sticks — co-installation is safe
+-- in both orders.
+-- Pre-flight (repo hook rule): cim hooks HeroWindowItemCustomization.
+-- _update_environment NOWHERE else (grep 2026-07-05: existing cim hooks on
+-- this class are _create_item_preview_widget_definition,
+-- _register_object_sets, _enable_craft_button, _on_illusion_index_pressed,
+-- _update_state_craft_button, _update_property_option, on_enter).
+--
+-- Exposed decision helper so /cim_regression_test can pin the truth table.
+function mod._cim_env_allows_variation(env_name, repointed)
+    return env_name == "environment/ui_store_preview" or repointed == true
+end
+
+mod:hook("HeroWindowItemCustomization", "_update_environment", function(func, self, item_preview_environment, force_default)
+    if _is_in_keep() then
+        return func(self, item_preview_environment, force_default)
+    end
+    local pw = self and self._preview_widget
+    local vp_style = pw and pw.style and pw.style.viewport
+    local env_name = vp_style and vp_style.shading_environment
+    local world = pw and pw.element and pw.element.pass_data and pw.element.pass_data[1]
+        and pw.element.pass_data[1].world
+    local repointed = (world and World.has_data(world, "cos_preview_env_repointed")
+        and World.get_data(world, "cos_preview_env_repointed")) or false
+    local allow = mod._cim_env_allows_variation(env_name, repointed)
+    -- Always-on dev probe (#83): one line per distinct requested env.
+    if printf then
+        mod._cim_seen_variation_req = mod._cim_seen_variation_req or {}
+        local k = tostring(item_preview_environment) .. "|" .. tostring(env_name)
+        if not mod._cim_seen_variation_req[k] then
+            mod._cim_seen_variation_req[k] = true
+            printf("[cim:83] _update_environment(mission): requested=%s world_env=%s repointed=%s -> %s",
+                tostring(item_preview_environment), tostring(env_name), tostring(repointed),
+                allow and "ALLOW (env defines it)" or "pin \"default\" (AV-safe)")
+        end
+    end
+    if allow then
+        return func(self, item_preview_environment, force_default)
+    end
+    return func(self, item_preview_environment, true)
 end)
 
 -- ============================================================
@@ -7700,6 +7844,88 @@ _rt_register("issue96_allow_in_mission_widget_moved_to_gut", function()
         end
     end
     return nil
+end)
+
+_rt_register("forge_mission_env_picker_prefers_resident", function()
+    -- v0.8.48-dev (#83): the mission forge/preview worlds must get their
+    -- shading env from the residency-probed picker, preferring the studio-lit
+    -- ui_store_preview, then ui_hdr, then the boot-assets environment/blank
+    -- (engine default, resident everywhere). Drive the exposed helper with
+    -- injected probes so the preference order is pinned without a live engine.
+    if type(mod._cim_pick_mission_env) ~= "function" then
+        return "mod._cim_pick_mission_env missing"
+    end
+    local pick = mod._cim_pick_mission_env(function(n) return n == "environment/ui_store_preview" end)
+    if pick ~= "environment/ui_store_preview" then
+        return "expected ui_store_preview when resident, got " .. tostring(pick)
+    end
+    pick = mod._cim_pick_mission_env(function(n) return n == "environment/ui_hdr" end)
+    if pick ~= "environment/ui_hdr" then
+        return "expected ui_hdr when only it is resident, got " .. tostring(pick)
+    end
+    pick = mod._cim_pick_mission_env(function() return false end)
+    if pick ~= "environment/blank" then
+        return "expected environment/blank final fallback, got " .. tostring(pick)
+    end
+    pick = mod._cim_pick_mission_env(function() return true end)
+    if pick ~= "environment/ui_store_preview" then
+        return "expected ui_store_preview to win when everything is resident, got " .. tostring(pick)
+    end
+end)
+
+_rt_register("customization_variation_pin_decision", function()
+    -- v0.8.48-dev (#83 / #228 class): the _update_environment hook must allow
+    -- vanilla's per-weapon blend variation ONLY on an env that defines it
+    -- (ui_store_preview) or after cosmetics_tweaker's #235 re-point. An
+    -- undefined variation on any other env is a native ShadingEnvironment.blend
+    -- access violation — the fatal that forced the v0.8.23 keep-only gate.
+    if type(mod._cim_env_allows_variation) ~= "function" then
+        return "mod._cim_env_allows_variation missing"
+    end
+    if not mod._cim_env_allows_variation("environment/ui_store_preview", false) then
+        return "ui_store_preview must allow vanilla's variation (it defines weapons_default_01)"
+    end
+    if mod._cim_env_allows_variation("environment/ui_hdr", false) then
+        return "ui_hdr must NOT allow per-weapon variations (undefined variation = blend AV, #228)"
+    end
+    if mod._cim_env_allows_variation("environment/blank", false) then
+        return "environment/blank must NOT allow per-weapon variations"
+    end
+    if not mod._cim_env_allows_variation("environment/ui_hdr", true) then
+        return "a cosmetics_tweaker re-point (cos_preview_env_repointed) must unlock the variation"
+    end
+    if mod._cim_env_allows_variation(nil, false) then
+        return "nil env must pin to default (fail-safe)"
+    end
+end)
+
+_rt_register("open_forge_gate_honors_allow_in_mission", function()
+    -- v0.8.48-dev (#83): the v0.8.23 HARD keep-only gate in mod.open_forge is
+    -- replaced by the allow_in_mission opt-in. Source-pattern check so the
+    -- hard gate can't silently come back. Needles split so this test's own
+    -- source never self-matches. No-ops when source introspection is
+    -- unavailable (bundle/deploy path).
+    local ok, info = pcall(debug.getinfo, mod.open_forge or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- (a) the opt-in gate shape must be present TWICE (open_forge AND
+    --     open_standard_crafting), plain-text finds, no pattern escapes.
+    local optin_needle = 'if not in_keep and not mod:get("allow_in_mission")' .. ' then'
+    local first = txt:find(optin_needle, 1, true)
+    local second = first and txt:find(optin_needle, first + 1, true)
+    if not second then
+        return "#83 regression: expected the allow_in_mission opt-in gate in BOTH open_forge and open_standard_crafting"
+    end
+    -- (b) the old hard-gate echo must be gone.
+    local hard_needle = "The Athanor (weave forge) only opens" .. " in the Keep."
+    if txt:find(hard_needle, 1, true) then
+        return "#83 regression: the v0.8.23 hard keep-only gate echo is back in open_forge"
+    end
 end)
 
 mod:info("[mem-probe] cim_dev boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CIMD) / 1024)

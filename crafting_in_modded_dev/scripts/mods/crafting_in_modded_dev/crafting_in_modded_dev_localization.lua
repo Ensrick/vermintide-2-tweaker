@@ -9,10 +9,10 @@ return {
         en = "[working] Athanor (Mod Weapon Crafting)",
     },
     forge_hotkey = {
-        en = "[working] Open Athanor Crafting Menu (Keep only)",
+        en = "[verify-fix] [Issue 83] Open Athanor Crafting Menu",
     },
     forge_hotkey_description = {
-        en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Works in the Keep and the Chaos Wastes hub only, not inside missions; for in-mission crafting use the Standard Crafting Bench below.",
+        en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Always works in the Keep and the Chaos Wastes hub. Inside missions it is experimental and follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus, the same toggle the Standard Crafting Bench uses.",
     },
     standard_crafting_hotkey = {
         en = "[working] Open Standard Crafting Bench",

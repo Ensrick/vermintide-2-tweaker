@@ -1,5 +1,43 @@
 # Crafting in Modded Changelog
 
+## 0.8.48-dev (2026-07-05) - #83: re-enable the in-mission Athanor (blend-AV root fix, not a gate)
+
+**FEATURE RESTORE + CRASH FIX.** The Athanor (weave forge) opens in missions again behind the `allow_in_mission` opt-in (the "Allow crafting bench in mission" toggle in Tweaker: GUI's In-Mission Menus), replacing the v0.8.23 hard keep-only gate. The gate existed because a render-level fatal (`script_world` `blend`) survived the Fix B/B2..B6 material/HDR hardening; that fatal is now root-caused and fixed instead of gated.
+
+### Root cause (corrected via the #228/#235 investigation, cosmetics_tweaker 0.9.62..0.9.66-dev)
+
+Two distinct shading failure modes were being conflated:
+
+- A NON-RESIDENT shading-environment **resource** fails cleanly at world-create ("Resource not loaded" - the original `ui_weave_forge_preview` symptom, already fixed by the env substitution).
+- Blending an UNDEFINED shading-environment **variation** is a native `ShadingEnvironment.blend` ACCESS VIOLATION (0xc0000005) that no pcall can catch. `ScriptWorld.render` blends the world's `shading_settings` every frame (`script_world.lua:122`); vanilla `HeroWindowItemCustomization._present_item` -> `_update_environment` writes the per-weapon variation `weapons_default_01` (`hero_window_item_customization.lua:1377-1381` / `:583-594`) into that blend target. cim's mission substitute env was the fixed `environment/ui_hdr`, which does NOT define that variation -> AV on the first rendered frame of the Customization view reachable from the forge surface. The weave-forge windows themselves never write blend variations (grep-verified: their only ShadingEnvironment call is the `set_fullscreen_effect_enable_state` blur set_scalar), so `_update_environment` is the sole variation writer on this surface.
+
+### Fix (three parts, keep paths untouched)
+
+1. **Residency-probed mission env picker** (`mod._cim_pick_mission_env`, replaces the fixed `_FORGE_MISSION_SAFE_ENV = "environment/ui_hdr"`): prefers `environment/ui_store_preview` (the keep's studio-lit item-preview env - probed RESIDENT mid-mission in #235's 0.9.65-dev instrumentation, host log 2026-07-03, and it DEFINES the per-weapon variations), then `environment/ui_hdr`, then `environment/blank` (boot-assets engine default, `game_settings_development.lua:33`, resident everywhere; vanilla's own gamepad forge world uses it, `hero_view_state_weave_forge.lua:145`). Probe = pcall'd `Application.can_get("shading_environment", name)`, evaluated at use time. Applied to the three weave-forge viewport worlds (`_swap_forge_env`) AND cim's mission ItemCustomization preview def. Bonus: with `ui_store_preview` picked, the mission 3D preview is studio-LIT instead of ui_hdr-black (#235).
+2. **Blend-variation pin** (new `HeroWindowItemCustomization._update_environment` hook, dup-clean): in mission, vanilla's requested variation passes through only when the preview world's env defines it (`ui_store_preview`) or cosmetics_tweaker's #235 re-point flag (`cos_preview_env_repointed` World data) is set; otherwise `force_default=true` pins the blend to `"default"`, which every `create_world` env carries (`world_manager.lua:44`). Chains safely with cosmetics_tweaker's identical hook in either order (force_default=true is sticky in the safe direction).
+3. **Gate change** (`mod.open_forge`): hard keep-only block -> `if not in_keep and not mod:get("allow_in_mission")`, mirroring `open_standard_crafting`. Fix B (no HDR worlds in mission; base-renderer fallback) and the B2..B6 draw-site suppressions are UNCHANGED - the mission forge still drops the keep-only HDR glow decorations.
+
+### Diagnostics (always-on in dev, printf)
+
+- `[cim:83] forge viewport env: <orig> -> <picked> (resident: store=... hdr=...)` per mission forge world.
+- `[cim:83] _update_environment(mission): requested=... world_env=... repointed=... -> ALLOW / pin "default"` once per distinct request.
+- `[cim:83] weave-forge set_fullscreen_effect_enable_state(...) fired in mission` (hook_safe probe on the one remaining ShadingEnvironment write on the forge surface; never implicated, breadcrumb only).
+
+### Regression tests (/cim_regression_test)
+
+- `forge_mission_env_picker_prefers_resident` - pins the store -> hdr -> blank preference order via injected probes.
+- `customization_variation_pin_decision` - pins the allow/pin truth table (store allows, hdr/blank/nil pin, cosmetics re-point unlocks).
+- `open_forge_gate_honors_allow_in_mission` - source-pattern: the opt-in gate present in BOTH entry points, the v0.8.23 hard-gate echo gone.
+- `morris_hub_passes_open_forge_gate`, `heroview_hdr_not_forcebuilt_in_mission`, and all B2..B6 suppression tests unchanged (those layers stay).
+
+### In-game verify (#83)
+
+Enable "Allow crafting bench in mission" (Tweaker: GUI -> In-Mission Menus), start an adventure mission, press the Athanor hotkey (B): the forge should open and be usable (no CTD), with flat-but-lit weapon previews. The log should show the `[cim:83] forge viewport env` lines with `store=true`.
+
+### Files
+- `crafting_in_modded_dev.lua` - env picker + `_swap_forge_env` probe, ItemCustomization def env, `_update_environment` pin hook, `set_fullscreen_effect_enable_state` probe, `open_forge` gate, 3 new regression tests; `MOD_VERSION` `0.8.47-dev` -> `0.8.48-dev`.
+- `crafting_in_modded_dev_localization.lua` - `forge_hotkey` title `[working] ... (Keep only)` -> `[verify-fix] [Issue 83] Open Athanor Crafting Menu`; description reflects the opt-in.
+
 ## 0.8.47-dev (2026-07-04) - Localization: dev status-tag audit (#301)
 
 - Applied the dev localization status-tag doctrine (#301) to every widget-title loc entry.
