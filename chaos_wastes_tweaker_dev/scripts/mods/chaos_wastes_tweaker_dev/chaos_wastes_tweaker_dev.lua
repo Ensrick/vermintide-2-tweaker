@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.222-dev"
+local MOD_VERSION = "0.7.223-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1484,6 +1484,12 @@ mod.update = function(dt)
     -- disarmed. Resolved via mod._ since the census `do` block is defined LATER in
     -- this file; the field is assigned at load, before any update tick fires.
     if mod._ct_tally_tick then mod._ct_tally_tick(dt) end
+    -- #299: deferred host-side pass that teleports a chest-revived player back to a
+    -- teammate once they become controllable (they otherwise stand up alone at a
+    -- distant respawn beacon). Cheap no-op when nothing is armed. Resolved via mod._
+    -- since the tick + its pending table are defined later in this file (assigned at
+    -- load, before any update tick fires).
+    if mod._ct_chest_teleport_tick then mod._ct_chest_teleport_tick(dt) end
     -- #205: debounced host-settings re-sync. on_setting_changed marks the registry
     -- dirty + (re)arms this short countdown instead of broadcasting inline, so an
     -- Apply-button burst (the gut Mod Tweaker commits its whole staged batch at once ->
@@ -7208,6 +7214,14 @@ local DIFFICULTY_RECRUIT = "normal"
 -- in the same run can re-mark the same peer.
 local pending_chest_respawn = {}
 
+-- #299: peer_id -> { lpid, anchor (Vector3Box of the chest pos), ttl }. Armed by the
+-- chest hook for players it frees/respawns at a DISTANT beacon (awaiting-rescue or
+-- dead), consumed by mod._ct_chest_teleport_tick (driven from mod.update) which
+-- teleports them to a living teammate the instant they become controllable. Not a
+-- main-chunk local (this file sits at the Lua 5.1 200-locals cap) -- a mod field so
+-- both the hook and the tick reach it without adding to the chunk's local count.
+mod._ct_pending_team_teleport = mod._ct_pending_team_teleport or {}
+
 mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
     if state ~= CURSED_CHEST_STATE_OPEN then
         return
@@ -7245,6 +7259,21 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
     --   * dead / queued for respawn   -> zero respawn_timer so RespawnHandler.server_update
     --                                    spawns them at the active beacon shortly
     -- Host-authoritative (already gated on is_server above).
+    --
+    -- #299: capture the chest position ONCE. Players freed/respawned from a distant
+    -- beacon (awaiting-rescue or dead) stand up alone far from the group; we arm a
+    -- deferred teleport (mod._ct_chest_teleport_tick) that returns them to whichever
+    -- living teammate is nearest THIS chest once they're controllable. The team is
+    -- clustered at the chest when it opens, so it's the right "team" anchor.
+    local chest_pos_box
+    do
+        local chest_unit = self._unit
+        if chest_unit and Unit.alive(chest_unit) then
+            local ok, p = pcall(Unit.world_position, chest_unit, 0)
+            if ok and p then chest_pos_box = Vector3Box(p) end
+        end
+    end
+
     if occupied_slots then
         for i = 1, #occupied_slots do
             local status = occupied_slots[i]
@@ -7265,17 +7294,32 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
 
                 if is_awaiting and rawget(_G, "StatusUtils") and StatusUtils.set_respawned_network then
                     -- hanging at a respawn beacon -> free directly (helper = self).
+                    -- #299: they stand up AT that (distant) beacon, so arm the
+                    -- return-to-team teleport for once they're controllable.
                     StatusUtils.set_respawned_network(unit, true, unit)
                     action = "freed-awaiting-rescue"
+                    if chest_pos_box then
+                        -- freed=true: already freed here, so the tick must NOT re-free it.
+                        mod._ct_pending_team_teleport[peer_id] = { lpid = local_player_id, anchor = chest_pos_box, ttl = 20.0, freed = true }
+                    end
                 elseif is_knocked and not is_disabled_pact and StatusUtils and StatusUtils.set_revived_network then
                     -- bleeding out -> revive in place (skip disabler-held players).
+                    -- Already with the team where they fell -> NOT armed for teleport.
                     StatusUtils.set_revived_network(unit, true, nil)
                     action = "revived-knocked"
                 elseif data and (health_state == "dead" or data.respawn_timer ~= nil) then
                     -- fully dead / in the respawn queue -> spawn at the active beacon.
+                    -- #299: that beacon is ~70m ahead of the front player, so arm the
+                    -- return-to-team teleport for once the respawned unit is controllable.
                     data.respawn_timer = 0
                     pending_chest_respawn[peer_id] = true   -- arm THP/wounded post-respawn overrides
                     action = "respawn-timer-cleared"
+                    if chest_pos_box then
+                        -- freed=nil: the unit spawns HANGING at the beacon a few frames later
+                        -- (RespawnHandler sends ready_for_assisted_respawn=true), so the tick
+                        -- frees it once it appears, then teleports once it stands.
+                        mod._ct_pending_team_teleport[peer_id] = { lpid = local_player_id, anchor = chest_pos_box, ttl = 20.0 }
+                    end
                 end
 
                 pcall(printf, "[ct-chest-revive] slot=%d peer=%s health=%s knocked=%s awaiting=%s disabled=%s -> %s",
@@ -7292,6 +7336,109 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
         game_mode:force_respawn_dead_players()
     end
 end)
+
+-- ============================================================
+-- #299: return chest-revived players to the team
+-- ============================================================
+-- A player freed from AWAITING-RESCUE stands up at the respawn beacon they were
+-- hanging at; a DEAD player respawned by the chest spawns hanging at a beacon
+-- ~70m ahead of the front player (RespawnHandler DEFAULT_RESPAWN_DISTANCE). Either
+-- way the chest revive leaves them stranded far from the group. This deferred
+-- host-side pass (driven from the single mod.update owner above) teleports each
+-- armed player to a living teammate the instant they become controllable.
+--
+-- WHY DEFERRED, not inline in the chest hook:
+--   * awaiting-rescue: the freed unit is LINK-glued to its respawn flavour_unit
+--     through the recovery animation (player_character_state_waiting_for_assisted_
+--     respawn.lua:30 enable_linked_movement, :59 disable on exit -> "standing"), so
+--     a teleport during recovery is overwritten every frame until it stands.
+--   * dead: the unit does not even exist until RespawnHandler.server_update spawns
+--     it a few frames after we zero respawn_timer.
+-- Polling for "alive AND not status:is_disabled()" catches the exact frame the unit
+-- is standing + script-driven-movement, when locomotion:teleport_to sticks. This is
+-- also the ORDERING the reporter asked for: the human reaches the team as soon as
+-- they can move, minimizing the window where a bot would leash out to the beacon.
+-- Host-authoritative teleport mirrors RespawnHandler.server_update's own move
+-- (respawn_handler.lua:398-407): locomotion:teleport_to + rpc_teleport_unit_to.
+do
+    -- nearest ALIVE, controllable (not disabled) teammate to `anchor_pos`, excluding
+    -- `exclude_unit`. Human or bot -- either one anchors "the team". Returns unit/nil.
+    local function _nearest_controllable_teammate(anchor_pos, exclude_unit)
+        local pm = Managers.player
+        local players = pm and pm.human_and_bot_players and pm:human_and_bot_players()
+        if not players then return nil end
+        local best, best_d
+        for _, p in pairs(players) do
+            local u = p and p.player_unit
+            if u and u ~= exclude_unit and Unit.alive(u) then
+                local st = ScriptUnit.has_extension(u, "status_system")
+                local pos = POSITION_LOOKUP[u]
+                if st and pos and not st:is_disabled() then
+                    local d = anchor_pos and Vector3.distance_squared(anchor_pos, pos) or 0
+                    if not best_d or d < best_d then best_d, best = d, u end
+                end
+            end
+        end
+        return best
+    end
+
+    mod._ct_pending_team_teleport = mod._ct_pending_team_teleport or {}
+
+    mod._ct_chest_teleport_tick = function(dt)
+        local pending = mod._ct_pending_team_teleport
+        if not pending or next(pending) == nil then return end
+        if not (Managers.player and Managers.player.is_server) then
+            -- lost authority (mission end / became client): drop everything.
+            for k in pairs(pending) do pending[k] = nil end
+            return
+        end
+        for peer_id, entry in pairs(pending) do
+            local drop = false
+            pcall(function()
+                entry.ttl = (entry.ttl or 0) - (dt or 0)
+                local player = Managers.player:player(peer_id, entry.lpid)
+                local unit = player and player.player_unit
+                local st = unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "status_system") or nil
+                -- Dead-branch case: the respawned unit spawns HANGING at the beacon
+                -- (ready_for_assisted_respawn) and would wait for a manual rescue. Free it
+                -- ONCE (starts the same recovery the awaiting branch used), then fall
+                -- through to the controllable check. `freed` guards against re-sending.
+                if st and not entry.freed and st.is_ready_for_assisted_respawn and st:is_ready_for_assisted_respawn()
+                    and rawget(_G, "StatusUtils") and StatusUtils.set_respawned_network then
+                    StatusUtils.set_respawned_network(unit, true, unit)
+                    entry.freed = true
+                    pcall(printf, "[ct-chest-revive] freed respawned-hanging peer=%s at beacon; awaiting stand to teleport (#299)", tostring(peer_id))
+                end
+                if st and not st:is_disabled() then
+                    -- controllable now -> send them to the team.
+                    local anchor_pos = entry.anchor and entry.anchor:unbox()
+                    local teammate = _nearest_controllable_teammate(anchor_pos, unit)
+                    if teammate then
+                        local loco = ScriptUnit.has_extension(unit, "locomotion_system")
+                        local pos = Unit.local_position(teammate, 0)
+                        local rot = Unit.local_rotation(teammate, 0)
+                        if loco and pos then
+                            loco:teleport_to(pos, rot)
+                            local nm = Managers.state and Managers.state.network
+                            local go_id = nm and nm:unit_game_object_id(unit)
+                            if go_id then
+                                nm.network_transmit:send_rpc_clients("rpc_teleport_unit_to", go_id, pos, rot)
+                            end
+                            pcall(printf, "[ct-chest-revive] teleported peer=%s back to the team (#299)", tostring(peer_id))
+                        end
+                    else
+                        pcall(printf, "[ct-chest-revive] no controllable teammate to anchor peer=%s -- left in place (#299)", tostring(peer_id))
+                    end
+                    drop = true
+                elseif entry.ttl <= 0 then
+                    pcall(printf, "[ct-chest-revive] team-teleport TTL expired for peer=%s (never became controllable) (#299)", tostring(peer_id))
+                    drop = true
+                end
+            end)
+            if drop then pending[peer_id] = nil end
+        end
+    end
+end
 
 -- CLARIFY: THP override on the dead-respawn path. sync_health_state reads
 -- status.game_mode_data.temporary_health_percentage (player_unit_health_extension.lua:111), which
@@ -7808,6 +7955,23 @@ _rt_register("pickup_residency_guard_installed", function()
         if mod._ct_pickup_unit_spawn_safe({ unit_name = "units/mutator/__ct294_bogus_unit__" }) ~= false then
             return "#294 REGRESSION: guard must classify a non-resident unit_name as UNSAFE (would crash spawn_network_unit)"
         end
+    end
+end)
+
+-- #299 chest-revive team-teleport wiring: the deferred return-to-team pass must be
+-- present (function + pending table) so a chest-revived player can't be left stranded
+-- at a distant respawn beacon. The tick is driven from the single mod.update owner
+-- (verified separately by the paced-send drainer check); here we just assert the
+-- callable + its pending table exist and the feature toggle is registered.
+_rt_register("chest_revive_team_teleport_wired", function()
+    if type(mod._ct_chest_teleport_tick) ~= "function" then
+        return "#299 REGRESSION: mod._ct_chest_teleport_tick missing (chest-revive return-to-team teleport)"
+    end
+    if type(mod._ct_pending_team_teleport) ~= "table" then
+        return "#299 REGRESSION: mod._ct_pending_team_teleport table missing (teleport arm store)"
+    end
+    if type(mod:get("respawn_on_chest_complete")) ~= "boolean" then
+        return "#299 REGRESSION: respawn_on_chest_complete checkbox not registered (mod:get is non-boolean)"
     end
 end)
 
