@@ -256,7 +256,7 @@ local loc = {
     tweak_boon_movespeed = { en = "[working] Rework: Movement Speed property" },
     tweak_boon_movespeed_tooltip = { en = "Changes the 5%% movement speed bonus to 10%%." },
     bomb_boon_cooldown = { en = "[verify-fix] [Issue 120] Bomb Boon Cooldown (s)" },
-    bomb_boon_cooldown_tooltip = { en = "Applies to the 'drop a bomb or item on ability use' boon: minimum seconds between drops. 0 = vanilla (120 to 180). Lower it, for example to 60, to drop more often. Host-only." },
+    bomb_boon_cooldown_tooltip = { en = "Minimum seconds between procs for the bomb boons: the bomb-bubble boons (support bomb concentration, crit, healing, speed - they drop an area buff on every grenade explosion) and the 'drop a bomb or item on ability use' boon. 0 = vanilla (a bubble every explosion; the drop boon 120 to 180). Set it, for example to 60, to cap how often they trigger. Host-only." },
     bomb_boon_exclusive = { en = "[working] Bomb Boons Mutually Exclusive" },
     bomb_boon_exclusive_tooltip = { en = "Once you own any bomb boon, others are removed from the pool. Prevents stacking." },
     endless_bombs_consumes_morgrim = { en = "[untested] No Morgrim's Carry-Over (Endless Bombs)" },

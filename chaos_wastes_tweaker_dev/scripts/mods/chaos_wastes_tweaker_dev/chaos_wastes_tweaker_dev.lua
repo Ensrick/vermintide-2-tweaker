@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.229-dev"
+local MOD_VERSION = "0.7.230-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -9362,6 +9362,47 @@ if rawget(_G, "ProcFunctions") and ProcFunctions.drop_item_on_ability_use then
         end
 
         return ret
+    end)
+end
+
+-- ============================================================
+-- #120 (v0.7.230-dev): rate-limit the BOMB-BUBBLE boons (the real #120 target)
+-- ============================================================
+-- The hook above gates `drop_item_on_ability_use` (drop-a-bomb-on-ult). But #120 is
+-- about the "bomb bubble" boon set (`boon_supportbomb_concentration/crit/healing/
+-- speed_01`), which that hook never touches. Confirmed from console
+-- 2026-07-05-23.03.16 (v0.7.229-dev): the player held `boon_supportbomb_concentration_01`
+-- yet ZERO `[ct-bomb-boon]` markers fired -- because those boons proc through a DIFFERENT
+-- function, `grenade_explode_buff_area` on the `on_grenade_exploded` event
+-- (deus_power_up_settings.lua:4389+, shared by all four supportbomb boons; body at
+-- morris_buff_settings.lua:3131), which just `add_buff`s the AoE zone on EVERY grenade
+-- explosion with NO cooldown (boon_supportbomb_shared_data = {duration=10, radius=6} only,
+-- buff_tweak_data.lua:583). So the same `bomb_boon_cooldown` interval now ALSO gates the
+-- bubbles. `grenade_explode_buff_area` is a global `ProcFunctions` member (re-read per
+-- proc -> table hook honored) and server-only (its own is_server guard), so the
+-- host-synced interval applies uniformly. Duplicate-hook pre-flight: zero prior ct hooks
+-- on grenade_explode_buff_area (grep). Last-proc time is stamped on the buff INSTANCE
+-- (`_ct_last_bubble_t`) -> naturally per-owner + per-boon, auto-cleared when the run's
+-- buff is removed. interval 0 = leave vanilla untouched (a bubble every explosion).
+if rawget(_G, "ProcFunctions") and ProcFunctions.grenade_explode_buff_area then
+    mod:hook(ProcFunctions, "grenade_explode_buff_area", function(func, owner_unit, buff, params, ...)
+        local interval = effective_setting("bomb_boon_cooldown")
+        if interval and interval > 0 and buff then
+            local t = Managers and Managers.time and Managers.time:time("game")
+            if t then
+                local name = buff.template and buff.template.name or "?"
+                local last = buff._ct_last_bubble_t
+                if last and (t - last) < interval then
+                    pcall(printf, "[ct-bomb-boon] supportbomb '%s' gated: %.1fs since last < %ds -> bubble skipped",
+                        tostring(name), t - last, interval)
+                    return  -- rate-limited: skip the buff-area spawn this explosion
+                end
+                buff._ct_last_bubble_t = t
+                pcall(printf, "[ct-bomb-boon] supportbomb '%s' proc allowed (min interval %ds)",
+                    tostring(name), interval)
+            end
+        end
+        return func(owner_unit, buff, params, ...)
     end)
 end
 

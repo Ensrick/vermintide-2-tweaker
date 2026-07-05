@@ -1,5 +1,14 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.230-dev (2026-07-05) - #120: Bomb Boon Cooldown now gates the bomb-BUBBLE boons (was hitting the wrong boon)
+
+**Root cause found from console 2026-07-05-23.03.16 (v0.7.229-dev).** The player held `boon_supportbomb_concentration_01` (a bomb-bubble boon) but ZERO `[ct-bomb-boon]` markers fired: `bomb_boon_cooldown`'s only runtime gate was hooked on `ProcFunctions.drop_item_on_ability_use` (the drop-a-bomb-on-ult boon), while the bomb-BUBBLE boons #120 is about (`boon_supportbomb_concentration/crit/healing/speed_01`) proc through a different function - `grenade_explode_buff_area` on `on_grenade_exploded` (deus_power_up_settings.lua:4389+; body morris_buff_settings.lua:3131), which `add_buff`s the AoE zone on every grenade explosion with no cooldown at all (`boon_supportbomb_shared_data = {duration=10, radius=6}`, buff_tweak_data.lua:583). So the setting's code + tooltip targeted the drop-on-ult boon, not the bubbles the issue names.
+
+- **New gate on `ProcFunctions.grenade_explode_buff_area`** (the shared proc for all four supportbomb boons). Enforces the same `bomb_boon_cooldown` interval as a per-boon-instance minimum between bubble spawns: stamps `_ct_last_bubble_t` on the buff instance (naturally per-owner + per-boon, auto-cleared on run end), skips the `add_buff` when the interval hasn't elapsed. Server-only (vanilla's own is_server guard), host-synced via `effective_setting`. Prints `[ct-bomb-boon] supportbomb '<name>' proc allowed / gated ...` per proc so the next log verifies it. Duplicate-hook pre-flight: zero prior ct hooks on `grenade_explode_buff_area`.
+- **The existing `drop_item_on_ability_use` gate is kept** (no regression) - one setting now caps both bomb-boon families.
+- **Tooltip corrected** to name the bomb-bubble boons (concentration / crit / healing / speed) alongside the drop-on-ult boon, and to state 0 = vanilla (a bubble every explosion).
+- **`[verify-fix] [Issue 120]` tag kept** - needs one in-game run with a supportbomb boon + rapid grenade throws to confirm `[ct-bomb-boon] ... gated` appears and the bubble stops re-spawning under the interval.
+
 ## 0.7.229-dev (2026-07-05) - #145 CLOSED (user-confirmed in-game): Citadel finale-god override
 
 User confirmed the v0.7.219 fix in-game (finale god matches the `finale_dominant_god` setting; the non-Tzeentch `arena_citadel` variants load). Closing #145. No behavior change this build - it adds the missing regression coverage for the FIX and corrects the loc tag.
