@@ -973,6 +973,16 @@ local function _gt_unit_needs_aid(u)
         or (st:get_is_ledge_hanging() and not st:is_pulled_up())
 end
 
+-- #139 (v0.2.185-dev): the aid-priority master+sub gate, shared by FIX 3b's
+-- force-revive pick and the should_teleport leash veto. When ON, a downed/
+-- disabled teammate makes EVERY reachable bot drop what it is doing and path to
+-- the revive, ignoring the follow leash entirely (user decision on #139: all
+-- bots converge to revive). Awaiting-rescue is deliberately NOT part of "needs
+-- aid" here -- that stays owned by gt_bot_rescue_awaiting.
+local function _gt_aid_priority_on()
+    return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aid_priority")
+end
+
 -- v0.2.152-dev (#139 sibling): does ANY teammate on the bot's side currently
 -- need aid? Returns the first downed/hooked/ledge ally found (or nil). Used by
 -- FIX 7 to suppress the tighter leash when there's a reviveable teammate the
@@ -1089,46 +1099,13 @@ local function _gt_tighter_leash_wants(blackboard)
     local d2 = Vector3.distance_squared(self_position, follow_position)
     local fire = d2 >= dist_m * dist_m
 
-    -- #139 FIX (v0.2.148-dev): never tighter-leash-SNAP a bot toward a follow
-    -- target that is DOWNED (knocked down / hook / ledge). On the frame a split
-    -- teammate is *newly* downed -- before the aid-picker assigns
-    -- target_ally_need_type (the exemption checked above at :926) -- the bot is
-    -- still in follow mode pointed at that teammate, so the tighter leash would
-    -- teleport it ONTO the downed player instead of letting it path in to revive
-    -- (the reported "teleport to a newly-downed player instead of reviving").
-    -- Suppress the GT tighter leash here; vanilla's 40 m teleport (the captured
-    -- func() result in the hook) still applies as the last-resort catch for
-    -- truly-far cases. _gt139_suppressed rate-limits the printf to once per
-    -- suppressed window (should_teleport runs per-bot per-tick).
-    if fire and _gt_unit_needs_aid(follow_unit) then
-        if rawget(_G, "printf") and not blackboard._gt139_suppressed then
-            blackboard._gt139_suppressed = true
-            printf("[gt_bot:139] tighter-leash teleport SUPPRESSED toward downed follow at %.1fm -- bot will path to revive", math.sqrt(d2))
-        end
-        return false
-    end
-    blackboard._gt139_suppressed = nil
-
-    -- v0.2.152-dev (#139 sibling case): suppress the tighter leash when ANY
-    -- teammate on this side currently needs aid. The leash target (follow_unit)
-    -- may be a LIVING far player while a different teammate is downed nearby;
-    -- snapping to the leash target would teleport the bot AWAY from where help
-    -- is needed. FIX 3b's aid-priority hook assigns target_ally_need_type
-    -- within a tick or two; let the leash sit out the brief race. The :926
-    -- aid exemption above only catches the case where target_ally_need_type is
-    -- ALREADY set; this catches the inter-tick window before the picker runs.
-    if fire then
-        local aid_target = _gt_any_side_teammate_needs_aid(self_unit)
-        if aid_target then
-            if rawget(_G, "printf") and not blackboard._gt139side_suppressed then
-                blackboard._gt139side_suppressed = true
-                printf("[gt_bot:139s] tighter-leash teleport SUPPRESSED -- teammate needs aid (bot will path to help instead of leashing away)")
-            end
-            return false
-        end
-    end
-    blackboard._gt139side_suppressed = nil
-
+    -- #139 (v0.2.185-dev): the "teammate needs aid" leash suppression that used
+    -- to live here (the v0.2.148 snap-toward-downed guard + the v0.2.152 side-aid
+    -- guard) moved UP to the BTConditions.should_teleport hook as a single
+    -- BLANKET veto, so it also covers vanilla's 40 m teleport -- which this fn
+    -- never sees, since it only runs when vanilla already DECLINED. This fn is
+    -- now pure distance logic; the aid veto is applied once, to the final
+    -- decision, in the hook.
     if fire then
         mod:debug("[gt:bot-leash] should_teleport TRUE at %.1fm (tighter leash, thresh=%.1fm)", math.sqrt(d2), dist_m)
     end
@@ -1160,6 +1137,32 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- (e.g. FIX 5's ladder unstick) -- the probe reports that as "other".
     blackboard._gt139_tp_reason = reason
 
+    -- #139 FIX (v0.2.185-dev): BLANKET leash veto. With aid-priority ON, a bot
+    -- must NEVER teleport while any teammate is downed/disabled -- it drops
+    -- everything and paths in to revive (leash ignored; user decision on #139:
+    -- all bots converge to revive). This supersedes the old
+    -- in-_gt_tighter_leash_wants guards and, crucially, vetoes vanilla's 40 m
+    -- teleport too (reason == "vanilla_40m"), which those guards could not reach
+    -- (they only ran when vanilla had already declined). Root cause:
+    -- AIBotGroupSystem._update_move_targets drops disabled players from the
+    -- follow-candidate set unless EVERY player is down (ai_bot_group_system.lua
+    -- :695-719), so on a split-team down follow_unit flips to a living far player
+    -- and the leash yanks the bot AWAY from the downed one. Awaiting-rescue is
+    -- EXCLUDED (_gt_any_side_teammate_needs_aid = knocked/hook/ledge only), so it
+    -- stays owned by gt_bot_rescue_awaiting and a bot can still leash to a living
+    -- follow while a teammate merely awaits rescue (the split+leash benefit).
+    -- Independent of follow mode (split/host/default) -- that only changes WHO is
+    -- followed, not the teleport rule. _gt139_veto_latched rate-limits the printf.
+    if want and _gt_aid_priority_on() and _gt_any_side_teammate_needs_aid(blackboard.unit) then
+        if rawget(_G, "printf") and not blackboard._gt139_veto_latched then
+            blackboard._gt139_veto_latched = true
+            printf("[gt_bot:139] teleport VETOED (was %s) -- teammate needs aid, bot paths to revive", tostring(reason))
+        end
+        blackboard._gt139_tp_reason = nil
+        return false
+    end
+    blackboard._gt139_veto_latched = nil
+
     -- Bot Teleport Lab veto layer (F2/F4/F6/F7/F8/F9/F10). Runs AFTER the whole
     -- decision so it can suppress even a vanilla-40 m teleport. Gated +
     -- pcall-guarded inside mod._gt_btlab_veto_teleport; a true here BLOCKS.
@@ -1175,11 +1178,13 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     return want
 end)
 
--- #139 regression marker (read by bot_leash_no_snap_to_downed_marker_present in
--- the main file). If a refactor drops the downed-follow leash guard above, this
+-- #139 regression marker (read by bot_leash_veto_while_teammate_needs_aid_present
+-- in the main file). If a refactor drops the blanket leash veto above, this
 -- disappears and the test fails.
-GT_BOT139_LEASH_AID_GUARD_MARKER_v0_2_148 = "gt-bot139-no-snap-to-downed-follow"
-GT_BOT139_LEASH_AID_SIDEAID_MARKER_v0_2_152 = "gt-bot139-no-leash-away-from-side-aid"
+-- #139 (v0.2.185-dev): the v0.2.148 snap-toward-downed guard and the v0.2.152
+-- side-aid guard were consolidated into a single BLANKET leash veto in the
+-- should_teleport hook (covers vanilla 40 m + tighter leash). One marker now.
+GT_BOT139_LEASH_VETO_AIDPRIORITY_MARKER_v0_2_185 = "gt-bot139-teleport-veto-while-teammate-needs-aid"
 GT_BOT_FOLLOW_MODE_DROPDOWN_MARKER_v0_2_152 = "gt-bot-follow-mode-dropdown-consolidation"
 
 -- Debug confirmation that the teleport ACTION actually executed -- a SEPARATE

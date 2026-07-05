@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.184-dev"
+local MOD_VERSION = "0.2.185-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1483,24 +1483,29 @@ _rt_register("bots_in_keep_necro_pets_marker_present", function()
     end
 end)
 
-_rt_register("bot_leash_no_snap_to_downed_marker_present", function()
-    -- #139 (v0.2.148-dev): the tighter follow-leash (FIX 7) must NOT snap-teleport
-    -- a bot onto a DOWNED follow target — on the frame a split teammate is newly
-    -- downed the bot would otherwise teleport onto them instead of pathing in to
-    -- revive. The guard sets this marker; if it disappears the guard was removed.
-    if GT_BOT139_LEASH_AID_GUARD_MARKER_v0_2_148 ~= "gt-bot139-no-snap-to-downed-follow" then
-        return "bot #139 leash-aid guard marker absent — was the v0.2.148-dev fix reverted?"
+_rt_register("bot_leash_veto_while_teammate_needs_aid_present", function()
+    -- #139 (v0.2.185-dev): the v0.2.148 snap-toward-downed guard + the v0.2.152
+    -- side-aid guard were consolidated into ONE blanket leash veto in the
+    -- BTConditions.should_teleport hook: with aid-priority ON, a bot never
+    -- teleports (vanilla 40 m OR gt tighter leash) while any teammate is
+    -- downed/disabled — it paths in to revive (user decision on #139: all bots
+    -- converge). Marker + source-pattern check so a refactor that drops the veto,
+    -- or lets vanilla's 40 m path through again, gets caught.
+    if GT_BOT139_LEASH_VETO_AIDPRIORITY_MARKER_v0_2_185 ~= "gt-bot139-teleport-veto-while-teammate-needs-aid" then
+        return "bot #139 leash-veto marker absent — was the v0.2.185-dev consolidation reverted?"
     end
-end)
-
-_rt_register("bot_leash_no_teleport_away_from_side_aid_marker_present", function()
-    -- v0.2.152-dev (#139 sibling): the tighter follow-leash must also bail when
-    -- ANY teammate on the side needs aid (not just when follow_unit itself is
-    -- downed). Catches the case the user reported: bot leashed to a LIVING far
-    -- player, separate teammate goes down nearby, leash fires and teleports
-    -- the bot AWAY from where help is needed.
-    if GT_BOT139_LEASH_AID_SIDEAID_MARKER_v0_2_152 ~= "gt-bot139-no-leash-away-from-side-aid" then
-        return "bot #139 sibling-case (leash-away-from-downed) guard absent — was the v0.2.152-dev extension reverted?"
+    local ok, info = pcall(debug.getinfo, mod._gt_apply_fast_reactions or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    -- The veto must gate on aid-priority AND a downed teammate, applied to the
+    -- FINAL `want` (so it also catches reason == "vanilla_40m").
+    if not txt:find("_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid", 1, true) then
+        return "the #139 blanket teleport veto (aid-priority + any-teammate-needs-aid) is missing from _gt_bot_fixes.lua"
     end
 end)
 

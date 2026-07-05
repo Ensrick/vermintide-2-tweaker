@@ -1,5 +1,21 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.185-dev (2026-07-05) -- #139 bots teleport AWAY from downed players: blanket leash veto
+
+### Why
+Issue #139 (0-critical): when a teammate goes down while the team is split, bots teleport toward a *living* far player instead of pathing in to revive the downed one. Root cause verified in vanilla source: `AIBotGroupSystem._update_move_targets` builds its follow-candidate list from **non-disabled** players and only swaps the disabled list in when EVERY player is down (`ai_bot_group_system.lua:695-719`). So a single down flips the bot's `follow_unit` to a living player, and the follow leash (gt's tighter one OR vanilla's 40 m) yanks the bot AWAY from the downed teammate. The two prior passes (v0.2.148 snap-toward-downed guard, v0.2.152 side-aid guard) only suppressed gt's *tighter* leash and never vetoed vanilla's 40 m path, so the yank still fired in a wide split. The v0.2.148 guard also fought the wrong direction (the reporter clarified: teleporting *to* a downed player is fine; only awaiting-rescue is off-limits).
+
+### Changed
+- **New BLANKET leash veto in the `BTConditions.should_teleport` hook.** With aid-priority ON (`gt_bot_behavior_improvements` + `gt_bot_aid_priority`), a bot NEVER teleports while any teammate is downed/disabled (knocked down / hanging from hook / ledge-hanging) — it drops everything and paths in to revive. The veto is applied to the FINAL teleport decision, so it now catches **vanilla's 40 m teleport** (`reason == "vanilla_40m"`) as well as gt's tighter leash — the gap the old guards could not reach. Per the reporter's decision, **all reachable bots converge to revive** (FIX 3b's per-bot force-pick already assigns the downed ally to every bot that can path; the veto removes the teleport-away race). Independent of follow mode (split/host/default) — that only changes who is followed, not the teleport rule.
+- **Awaiting-rescue stays owned by `gt_bot_rescue_awaiting`.** The veto keys on `_gt_any_side_teammate_needs_aid` (knocked/hook/ledge only), NOT awaiting-rescue, so a bot can still leash to a living follow while a teammate merely awaits rescue at a respawn point (the intended split+leash benefit: in a 2-player lobby one bot stays with the living player). Awaiting-rescue players are already excluded from the follow set upstream, so the leash can never teleport a bot *to* one.
+- **Consolidated the two prior guards.** The v0.2.148 snap-toward-downed guard and the v0.2.152 side-aid guard were removed from `_gt_tighter_leash_wants` (now pure distance logic); the single hook-level veto supersedes both. New shared gate `_gt_aid_priority_on()`. Markers `GT_BOT139_LEASH_AID_GUARD_MARKER_v0_2_148` + `..._SIDEAID_MARKER_v0_2_152` replaced by `GT_BOT139_LEASH_VETO_AIDPRIORITY_MARKER_v0_2_185`.
+- **Diagnostics unchanged and still armed:** the `[139:bot_tp]` decision probe (reason / dist_to_downed / post_dist) and `[gt_bot:139] TELEPORT executed` lines remain; a new `[gt_bot:139] teleport VETOED` printf fires when the veto suppresses a leash while a teammate needs aid.
+- **Regression test:** the two old marker tests collapse into `bot_leash_veto_while_teammate_needs_aid_present` (marker + source-pattern check that the veto gates on `_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid`, applied to the final `want`).
+
+### Notes
+- Still `verify-fix` / needs in-game confirmation: host, split the team, down a teammate at distance, confirm bots WALK in to revive (no teleport to or away), and confirm one bot still leashes to the living player when a teammate is merely *awaiting rescue*.
+- Behavior gated on aid-priority ON, matching the issue spec; with it OFF the leash is pure distance again (no downed special-casing).
+
 ## v0.2.184-dev (2026-07-04) -- #306 Save coordinates / teleport (per-map position slots)
 
 ### Why
