@@ -194,6 +194,21 @@ if ($cfgTxt -notmatch 'published_id\s*=\s*(\d+)L') {
 }
 $publishedId = $matches[1]
 
+# ---------------------------------------------------------------------------
+# Preflight (issue #344): refuse to ship while ANY itemV2.cfg carries a wrong or
+# colliding published_id. An upload with a crossed id HIJACKS another mod's
+# Workshop item (2026-07-05: gut_dev's cfg transiently carried ct_dev's id and
+# the ship pushed gut content onto ct_dev's item). Same check the pre-commit
+# gate runs, moved to BEFORE ugc_tool ever sees a cfg.
+# ---------------------------------------------------------------------------
+$idCheck = Join-Path $repoRoot 'qa\check_published_ids.ps1'
+if (Test-Path $idCheck) {
+    & $idCheck
+    if ($LASTEXITCODE -ne 0) {
+        Fail "check_published_ids FAILED -- fix the cfg id(s) above before shipping. A crossed id hijacks another mod's Workshop item (issue #344)."
+    }
+}
+
 $luaPath    = Join-Path $modDir "scripts\mods\$Mod\$Mod.lua"
 $modVersion = '(unknown)'
 # The in-game load line uses the mod's INTERNAL short id (e.g. "gut", "gt", "ct"),
@@ -239,6 +254,20 @@ Write-Host "==> VMBLauncher $($launcherArgs -join ' ')" -ForegroundColor Cyan
 $launcherExit = $LASTEXITCODE
 if ($launcherExit -ne 0) {
     Fail "VMBLauncher 'all $Mod' exited $launcherExit (build/deploy/upload failed -- see output above)."
+}
+
+# ---------------------------------------------------------------------------
+# Mid-ship id-stomp detector (issue #344): in the 2026-07-05 incident the cfg
+# was CORRECT when this script read it (the banner printed the canonical id)
+# and a foreign id was written into it DURING the launcher window, so ugc_tool
+# uploaded to the wrong Workshop item while the ship summary looked clean.
+# Re-read the cfg and compare against the ship-start id; scream if it moved.
+# ---------------------------------------------------------------------------
+$cfgTxtAfter = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+if ($cfgTxtAfter -match 'published_id\s*=\s*(\d+)L' -and $matches[1] -ne $publishedId) {
+    Fail ("published_id CHANGED mid-ship: read $publishedId at ship start, cfg now carries $($matches[1]). " +
+          "ugc_tool may have uploaded to the WRONG Workshop item -- check workshop_log.txt for BOTH ids " +
+          "and re-verify both items' content before doing anything else (issue #344).")
 }
 
 # ---------------------------------------------------------------------------
