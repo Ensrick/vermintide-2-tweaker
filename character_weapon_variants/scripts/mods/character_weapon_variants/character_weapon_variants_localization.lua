@@ -3,7 +3,7 @@ return {
 		en = "Adds new weapon variants that combine models from different characters into lore-friendly weapons.",
 	},
 	mace_sword_tweak = {
-		en = "Mace and Sword Name and Cosmetic Tweak",
+		en = "[working] Mace and Sword Name and Cosmetic Tweak",
 	},
 	mace_sword_tweak_description = {
 		en = "When on, renames Kruber's vanilla Mace and Sword to 'Cudgel and Short Sword' and shrinks the off-hand sword to match the Shortsword. This only changes the vanilla weapon; the separate Sword and Mace variant added by this mod is left untouched.",
@@ -15,7 +15,7 @@ return {
 	-- ============================================================
 	-- Tuskgor Javelin (BOMB SLOT) — single-use thrown spear grenade
 	-- ============================================================
-	enable_cwv_tuskgor_javelin_bomb = { en = "Bomb Slot: Tuskgor Javelin (one-shot, full javelin moveset)" },
+	enable_cwv_tuskgor_javelin_bomb = { en = "[Issue 296] Bomb Slot: Tuskgor Javelin (one-shot, full javelin moveset)" },
 	enable_cwv_tuskgor_javelin_bomb_tooltip = { en = "When on, a Tuskgor Javelin can appear in the bomb pickup pool in every game mode without replacing the normal frag and fire bombs. It is a boar spear you can stab with in melee or throw once to pierce armour, shields, and a line of enemies, hitting hard on monsters and headshots, but the throw uses it up. It joins the pool on the next keep or level load." },
 	-- Item name + description (grenade slot). display_name rarely shown for grenade items, kept for completeness.
 	cwv_grenade_tuskgor_javelin_name = { en = "Tuskgor Javelin" },
@@ -26,7 +26,7 @@ return {
 	-- ============================================================
 	-- cwv_es_crossbow variant (v0.1.347-dev)
 	-- ============================================================
-	enable_cwv_es_crossbow         = { en = "Kruber: Crossbow (Saltzpyre's, rifle anims)" },
+	enable_cwv_es_crossbow         = { en = "[working] Kruber: Crossbow (Saltzpyre's, rifle anims)" },
 	enable_cwv_es_crossbow_tooltip = { en = "When on, adds a version of Saltzpyre's crossbow that Kruber can wield, animated like his handgun in the third-person view. It is on by default." },
 	cwv_es_crossbow_name           = { en = "Crossbow" },
 	cwv_es_crossbow_description    = { en = "An imperial-issue crossbow taken up by Reikland state troopers, the same Witch Hunter pattern weapon shouldered like a standard handgun." },

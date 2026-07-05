@@ -1,5 +1,19 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.362-dev — 2026-07-04 — Fix Axe & Falchion on Kruber: 4th light attack had no proper animation (#319)
+
+**Symptom:** the 4th light of the Axe & Falchion combo on Kruber played no distinct animation (repeat of the 3rd swing at best, body freeze at worst).
+
+**Root cause (confirmed against decompiled source):** the source template's 4th light `light_attack_down_left` fires `attack_swing_down_left` (`dual_wield_axe_falchion.lua:1080`), which is absent from Kruber's mace & sword vocab, so `_kruber_axe_falchion_remap` re-targeted it — but onto `attack_swing_left_diagonal`, which is Kruber's L1/L3 clip. Kruber's native light chain is left_diagonal → right → right_diagonal → LEFT (`dual_wield_hammer_sword.lua` chain sites :31/:86/:141/:196), so at chain position 4 the old target is either unreachable (the same chain-context class as the H1 heavy fix in this table) or a visible duplicate of the 3rd light.
+
+- **Fix:** `attack_swing_down_left` now remaps to `attack_swing_left` — Kruber's authored position-4 light clip (`dual_wield_hammer_sword.lua:1082`), direction-coherent with the source's down-left falchion swing and inside the closed vocab.
+- Note: this pair is CWV-managed by design (wt defers it, `wt_unlock_data.lua:157-160`); no wt R-table or picker change is involved. The "picks lost from config" theory in #319 does not apply here — no Kruber Axe & Falchion picks ever existed because the wt picker never offered a CWV-managed pair.
+- **In-game verify:** on any Kruber career with Axe & Falchion, swing the full 4-hit light chain in third person (or with a bot viewing); the 4th hit should play a distinct left-hand swing, not repeat the 3rd or freeze.
+
+## 0.1.361-dev — 2026-07-04 — Localization: applied dev status-tag doctrine (#301)
+
+Tagged all 3 option-title loc entries with a dev status prefix: 1 `[Issue 296]` (Bomb Slot: Tuskgor Javelin — open #296 javelin pickups never spawn / no resupply; note the bomb block is also currently guarded off in code via `_TJB_FEATURE_ON = false`, the v0.1.354 regression fix), 2 `[working]` (Mace and Sword tweak — established; Kruber Crossbow — added v0.1.347, observed in-game with only TODO-tracked polish, no open issue). No tags on tooltips, item names/descriptions, or the pickup-interaction string. #278/#279/#284/#317/#318 have no matching menu option-title entry (crafted-item crash, model-merge, compile ceiling, anim-picker tooling, disabled-tab styling) and were not applied.
+
 ## 0.1.360-dev — 2026-07-03 — Fix MP CLIENT CTD wielding Kruber Axe & Shield (#280)
 
 **Symptom:** In multiplayer, when a remote player wielded the Kruber Axe & Shield variant (`cwv_es_axe_shield`), every OTHER player's game (the clients) hard-crashed: `simple_husk_inventory_extension.lua: attempt to index local 'slot_data' (a nil value)` in `start_weapon_fx`, under `rpc_wield_equipment`. The wielder themselves was fine; only the remote viewers crashed.

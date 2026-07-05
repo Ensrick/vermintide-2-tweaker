@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.360-dev"
+local MOD_VERSION = "0.1.362-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -1405,9 +1405,14 @@ local _kruber_axe_falchion_remap = {
 	attack_swing_heavy_left  = "attack_swing_heavy_right_diagonal", -- H2 release (Kruber chained H2)
 
 	-- ===== LIGHT VARIANT =====
-	-- Source down_left → left_diagonal. Lights chain from idle and
-	-- left_diagonal is in the idle-light vocab; plays correctly.
-	attack_swing_down_left   = "attack_swing_left_diagonal",
+	-- Source down_left is the 4th light (light_attack_down_left,
+	-- dual_wield_axe_falchion.lua:1080). Kruber's native light chain is
+	-- left_diagonal → right → right_diagonal → LEFT (dual_wield_hammer_sword.lua
+	-- chain :31/:86/:141/:196), so attack_swing_left is his authored
+	-- position-4 clip. The old target left_diagonal is his L1/L3 clip —
+	-- unreachable (or a visible repeat) at chain position 4, the same
+	-- chain-context class as the H1 fix above (#319).
+	attack_swing_down_left   = "attack_swing_left",
 
 	-- ===== PUSH-ATTACK =====
 	-- Source `light_attack_bopp` fires `attack_swing_down`. In target vocab
