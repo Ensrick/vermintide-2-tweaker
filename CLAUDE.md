@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 8 | Before ANY `mod:hook`/`mod:hook_safe`: grep for existing hooks on that `(Class, method)`. VMF silently drops the 2nd - merge into the existing body. |
 | 9 | Diagnostics use engine `printf`, NOT `mod:info`/`mod:echo` (user runs with mod-logging OFF, so those are invisible). |
 | 10 | Never claim "fixed" / "feature-complete" until the USER confirms in-game. Compile success and structural review are not verification. |
-| 11 | Loc: raw setting keys in widget fields, never pre-localize before registration; escape a literal `%` as `%%`. No em dashes in menu-facing strings. |
+| 11 | Loc: raw setting keys in widget fields, never pre-localize before registration; escape a literal `%` as `%%`. No em dashes in menu-facing strings. Dev builds carry option-title status tags per `LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; stable (clean-versioned) never does. |
 | 12 | Mechanics claims: grep `C:\Users\danjo\source\repos\Vermintide-2-Source-Code` and cite `file:line`, else write `[unverified]`. Never invent internals. |
 | 13 | Deferred/blocked work goes to GitHub Issues (search first), not floating TODO comments. Label with the FIXED taxonomy — status (`verify-fix`/`diagnostics-armed` ONLY, added when work ships) + type (`bug`/`enhancement`/`feature`, with `crash` a flag on `bug`) + mod tag. Never invent a new status label. Full scheme: `PROJECT_STANDARDS.md` §11 "Labels". |
 | 14 | On any bug report: read `docs/BUG_TRIAGE_RUNBOOK.md` FIRST, then match `docs/BUG_CLASSES.md`, before diving into mod source. |
@@ -157,7 +157,7 @@ All active mods build via **VMB** (the launcher). Only frozen legacy `tweaker` u
 
 ## Dev/stable split workflow
 
-**Why + what's split.** The five public-Workshop mods (`ct`, `cim`, `gt`, `verminious_dreams_lighting`, `gut`) run two parallel Workshop items each: dev = friends-only, stable = public. Public subscribers want a stable bundle; the friends cohort wants visibility into in-flight work. Shipping every dev iteration to the public item cost ~80 cim subs in a few days in May 2026, hence the split. Everything else is single-stream (already friends-only or unpublished: `wt`, `cosmetics_tweaker`, `cwv`, `et`, `crt`, `bt`, `dcp`, `mp`).
+**Why + what's split.** The five public-Workshop mods (`ct`, `cim`, `gt`, `verminious_dreams_lighting`, `gut`) run two parallel Workshop items each: dev = friends-only, stable = public. Public subscribers want a stable bundle; the friends cohort wants visibility into in-flight work. Shipping every dev iteration to the public item cost ~80 cim subs in a few days in May 2026, hence the split. Everything else is single-stream (already friends-only or unpublished: `wt`, `cosmetics_tweaker`, `cwv`, `enemy`, `event`, `crt`, `bt`, `dcp`, `mp`).
 
 | Stable directory | Stable mod_id | Stable Workshop ID | Dev directory | Dev mod_id | Dev Workshop ID |
 |---|---|---|---|---|---|

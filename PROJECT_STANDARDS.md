@@ -445,7 +445,7 @@ Established 2026-05-25. User feedback: *"on enabling debug logging, I'm getting 
 | `mod.on_setting_changed` for routine settings | **NEVER** | Spams chat on every checkbox flip — including the universal `enable_debug_logging` toggle, which is what triggered this policy. Use `_dbg` if you need a trace. |
 | `mod.on_setting_changed` for explicit high-impact toggles | **OK** | Operational feedback the user expects in response to a deliberate action. Canonical examples: `bt`'s `bt_master_enable_br_registrations` ("can't apply yet — restart" / "master toggled OFF") at `buff_tweaker.lua:~275`; `gt`'s AI takeover toggle ("AI ON / OFF requested") at `general_tweaker.lua:~826-828`. |
 | `mod.on_enabled` echoing version / banner | **NEVER** | Same reasoning as module load — the applied marker line covers it. |
-| `mod.on_enabled` / `mod.on_disabled` for non-trivial state changes | **OK** | When the user toggles the whole mod off/on via the VMF menu, immediate chat confirmation of what unwound (or didn't) is high-impact operational feedback. Canonical examples: `et`'s "Enemy Tweaker enabled / disabled — compositions restored" at `enemy_tweaker.lua:~929/949`; `gt`'s `on_disabled` "Disable does not fully unwind active mutations" warning at `general_tweaker.lua:~849` (this is the canonical Issue #15 documented-limitation pattern from `docs/BUG_CLASSES.md § 7`). |
+| `mod.on_enabled` / `mod.on_disabled` for non-trivial state changes | **OK** | When the user toggles the whole mod off/on via the VMF menu, immediate chat confirmation of what unwound (or didn't) is high-impact operational feedback. Canonical examples: `enemy`'s "Enemy Tweaker enabled / disabled — compositions restored" at `enemy_tweaker.lua:~929/949`; `gt`'s `on_disabled` "Disable does not fully unwind active mutations" warning at `general_tweaker.lua:~849` (this is the canonical Issue #15 documented-limitation pattern from `docs/BUG_CLASSES.md § 7`). |
 | Inside `mod:command(...)` bodies (`/verify_*`, `/<mod>_regression_test`, `/dump`, status commands, etc.) | **OK** | User invoked the command via chat; reply belongs in chat. Don't gate these on `enable_debug_logging`. |
 | Routine confirmations / diagnostic traces | **NEVER bare `mod:echo`** — and NEVER `mod:warning` either | Use `_dbg` (debug channel, log-only) or a log-only printf helper. `mod:warning` posts to CHAT under VMF default settings (Issue #240; `BUG_CLASSES.md § 17 Variant B`). |
 | Unexpected guard / fallback recovery | `_dbg_alert` (or `mod:warning`) | Per two-channel discipline. NB: `mod:warning` lands in chat whenever VMF's warning channel is chat-enabled — which is the DEFAULT (mode 3), not only when debug logging is on. Acceptable for genuine anomalies; et routes its alert helpers through log-only printf instead (#240). |
@@ -739,7 +739,7 @@ approval; where earlier text conflicts, this section wins.
 
 **Pre-release-versioned mods (`-dev` / `-alpha` / `-beta` / `-rc<N>`) cover
 EVERY active mod in the repo, including single-stream PUBLIC ones like
-`wt`, `cosmetics_tweaker`, `et`, `crt`:** every update ships the FULL pipeline
+`wt`, `cosmetics_tweaker`, `enemy`, `event`, `crt`:** every update ships the FULL pipeline
 with NO per-build approval. The full pipeline is:
 
 1. `tools\ship\ship.ps1 -Mod <name>` builds, deploys to PC-A + PC-B, uploads
@@ -1293,8 +1293,13 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
 - `crash` is a **severity flag layered on `bug`** (a crash issue carries BOTH `bug`
   and `crash`), not a separate type.
 
-**Mod (1+):** `ct`, `gt`, `gut`, `cim`, `wt`, `cwv`, `cosmetics`, `et`, `mp`, `crt`,
-`cross-mod`, `tooling`. (`enemy` retired 2026-07-03 → `et`.)
+**Mod (1+):** `ct`, `gt`, `gut`, `cim`, `wt`, `cwv`, `cosmetics`, `enemy`, `event`,
+`mp`, `crt`, `cross-mod`, `tooling`. Each mod tag mirrors that mod's internal
+`new_mod` id root (e.g. `cosmetics` = `cosmetics_tweaker`, `enemy` =
+`enemy_tweaker`, `event` = `event_tweaker`). (`et` retired 2026-07-04 → split
+into `enemy` + `event`: the single `et` label was ambiguous between the two
+`*_tweaker` mods — its GitHub description said event_tweaker while a 2026-07-03
+merge had repurposed it onto enemy_tweaker issues. Do NOT recreate `et`.)
 
 **Optional modifiers (informational, never a substitute for a type):** `regression`
 (a fix that broke a working feature), `audit`, `refactor`, `blocked`, `deferred`.
@@ -1302,6 +1307,13 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
 When you ship a fix or a diagnostic for an issue, add the matching status label in the
 **same pass** as the CHANGELOG entry (rule #5 territory). Filing a new issue: give it a
 type + mod immediately; add a status label only once you have actually shipped work.
+
+**Dev localization tags move with the issue (issue #301).** Opening or closing an issue
+that touches a dev-build feature means updating that feature's option-title status tag in
+the SAME pass — e.g. add `[Issue N]` when you open, drop it (→ `[working]`/`[untested]`) when
+you close, add `[verify-fix]`/`[diag]` when you ship a candidate fix or arm diagnostics. Full
+tag vocabulary and rules: `LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; the QA scan is
+`qa/check_loc_tags.ps1`.
 
 ### What used to live here
 A status roadmap (`✅ DONE / ⚠ PARTIAL / ❌ TODO` tables across "High ROI",
