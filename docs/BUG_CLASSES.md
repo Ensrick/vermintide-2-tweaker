@@ -1011,3 +1011,42 @@ Queue/defer only for its OWN value (re-validation, last-write-wins on mashed com
 
 ### Reference fix
 `general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_saved_positions.lua` + `_gt_debug_highlights.lua` (gt_dev v0.2.189-dev, commit 7442d80): live seed before `teleport_to`; live `Unit.world_position` read in the overlay draw. The v0.2.188 defer-only attempt (e69ca76) is the documented dead end.
+
+## 22. ShadingEnvironment.blend native AV: undefined VARIATION vs non-resident RESOURCE (mission-substituted UI worlds)
+
+**First seen:** 2026-06-24 (cim_dev in-mission Athanor, keep-gated at v0.8.23); root-caused 2026-07-02/03 (cosmetics_tweaker 0.9.62..0.9.66-dev)
+**Canonical Issues:** [#228](https://github.com/Ensrick/vermintide-2-tweaker/issues/228), [#235](https://github.com/Ensrick/vermintide-2-tweaker/issues/235); applied to cim in [#83](https://github.com/Ensrick/vermintide-2-tweaker/issues/83) (v0.8.48-dev)
+**Lives in:** any mod that opens a keep-authored view mid-mission and substitutes its viewport world's `shading_environment` (cim forge/customization, gut mission inventory, cosmetics preview)
+
+### Symptoms
+Two DISTINCT failure modes that look alike in reports - distinguish them first:
+- **Non-resident env RESOURCE** -> clean engine fatal at world create: `Resource not loaded, type: ... ('shading_environment'), name: ...`. Happens at mount time.
+- **Undefined env VARIATION** -> native ACCESS VIOLATION (0xc0000005), main thread, Lua stack `[0] =[C] blend / [1] script_world.lua render / [2] world_manager.lua render`. Happens on a RENDERED frame (often ~1s after content load), and no pcall can catch it. The env resource IS resident - only the requested variation name is absent.
+
+### Diagnosis pattern
+1. `ScriptWorld.render` blends `World.get_data(world, "shading_settings")` every frame (script_world.lua:122; runtime line numbers shift - #228 logs said :176). `shading_settings[1]` starts as `"default"` (world_manager.lua:44), which EVERY env defines - safe.
+2. Find the variation writer. On the customization surface it is `HeroWindowItemCustomization._present_item -> _update_environment` writing `item_preview_environment or "weapons_default_01"` (hero_window_item_customization.lua:1377-1381 / :583-594). The weave-forge windows write NO variations (grep-verified; their only ShadingEnvironment call is the set_fullscreen_effect blur set_scalar).
+3. `weapons_default_01` etc. are variations of `environment/ui_store_preview` (keep witnesses: store_window_item_preview.lua:88+1367, hero_window_gotwf_item_preview.lua:67+607). `environment/ui_hdr` does NOT define them -> AV when a mission-substituted ui_hdr world receives that request.
+4. Bonus finding (#235 instrumentation, host log 2026-07-03): `environment/ui_store_preview` IS resident mid-mission (`Application.can_get("shading_environment", ...)` = true), while `ui_hdr` is a 2D tonemapping env with zero 3D radiance (16x exposure boost stayed pure black).
+
+### Fix template
+```lua
+-- 1. Pick the substitute env by RESIDENCY at use time, preferring the lit env
+--    that DEFINES the variations; environment/blank (boot_assets, engine
+--    default) is the never-fails fallback.
+local candidates = { "environment/ui_store_preview", "environment/ui_hdr" }
+-- pcall'd Application.can_get("shading_environment", name); fall back to "environment/blank"
+
+-- 2. Pin the blend variation on the writer: allow vanilla's request only when
+--    the world's env defines it, else force_default=true (blend asks only for
+--    "default").
+mod:hook("HeroWindowItemCustomization", "_update_environment", function(func, self, env, force_default)
+    if in_keep then return func(self, env, force_default) end
+    if world_env_defines_variation then return func(self, env, force_default) end
+    return func(self, env, true)
+end)
+```
+Multiple mods hooking the same writer chain safely: `force_default=true` is sticky in the safe direction.
+
+### Reference fix
+cosmetics_tweaker v0.9.66-dev (`_create_preview_widget` re-point + `_update_environment` pin, cosmetics_tweaker.lua ~2619-2751); cim_dev v0.8.48-dev (`mod._cim_pick_mission_env` + variation pin, commit 2a4c2c7). Memory: `reference_vt2_shading_env_variation_blend_av`.
