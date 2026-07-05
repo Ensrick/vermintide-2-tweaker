@@ -972,40 +972,42 @@ Gate the input grab on "no menu/view open": `local iui = Managers.ui._ingame_ui;
 
 ---
 
-## 21. POSITION_LOOKUP dead Vector3 outside the game-update phase (works-but-reports-failed)
+## 21. POSITION_LOOKUP dead Vector3 for the local player in mod code (works-but-reports-failed / per-frame error spam)
 
-**First seen:** 2026-07-05 (gt_dev v0.2.187, /recall_position_N)
+**First seen:** 2026-07-05 (gt_dev v0.2.187, /recall_position_N; second instance same day in _gt_debug_highlights)
 **Canonical Issue:** [#337](https://github.com/Ensrick/vermintide-2-tweaker/issues/337)
-**Lives in:** any chat-command / non-update-phase callback that reaches code reading `POSITION_LOOKUP[unit]`
+**Lives in:** ANY mod code path (chat command OR mod.update) that reads `POSITION_LOOKUP[<local player unit>]` directly, or calls a vanilla function that reads it internally
 
 ### Symptoms
-- An engine/vanilla call that reads `POSITION_LOOKUP` raises `bad argument #1 to '__index' (Vector3 expected, got userdata)` even though the unit is alive and the lookup "should" hold its position.
+- `bad argument #N to '__index'` / `(Vector3 expected, got userdata)` naming a line that reads `POSITION_LOOKUP[...]`, even though the unit is alive.
 - Partial success: everything the vanilla function did BEFORE the lookup read landed (e.g. `teleport_to` moves the player, then dies on its last line, `set_falling_height`), so the feature "works" while the mod's pcall reports failure - and the steps AFTER the raise are silently skipped (`set_ignore_next_fall_damage` in the teleport case).
-- Freshly created `Vector3(...)` values in the same callback work fine; only the STORED lookup entries are dead.
+- Or per-frame error spam from a mod.update consumer that reads the lookup directly (1182x in one session for the debug-highlights draw - which also meant the feature silently rendered nothing).
+- Freshly created `Vector3(...)` values in the same callback work fine; only the STORED lookup entry is dead.
 
 ### Diagnosis pattern
-1. The error names a vanilla line; check whether that line reads `POSITION_LOOKUP[...]` (or another per-frame temporary cache).
-2. Ask: what phase is my code running in? `POSITION_LOOKUP` holds raw Vector3 stack temporaries bulk-refreshed once per frame in `StateIngame.pre_update` (state_ingame.lua:808 -> `EngineOptimized.update_position_lookup`). Entries are valid ONLY inside that frame's Vector3 pool. VMF chat-command callbacks execute outside that window; every vanilla caller of the affected function runs in the update phase (e.g. all `teleport_to` callers are BT bot actions, bt_bot_teleport_to_ally_action.lua:84).
-3. Related but distinct: class "AI-takeover despawn 1-frame nil deref" (`memory: reference_vt2_ai_takeover_despawn_poslookup_crash`) - there the entry is NIL after despawn; here the entry EXISTS but is a dead pool handle.
+1. The error names a line; check whether it reads `POSITION_LOOKUP[...]` (or another per-frame temporary cache).
+2. Is the unit the LOCAL PLAYER? AI/pickup entries are re-seeded every frame by their own systems (aggro/ai_slot/spawner), but no Lua-reachable phase refreshes the local player's entry for mod code: `mod.update` and chat commands BOTH fire from `Managers.mod:update(dt)` at the TOP of the frame (boot.lua:749; vmf_loader.lua:52-54), before `StateIngame.pre_update`'s `UPDATE_POSITION_LOOKUP()` (state_ingame.lua:808). The entry a mod sees is a dead frame-pool handle - DEFERRING TO mod.update DOES NOT HELP (learned the hard way: the v0.2.188 deferral fix did not fix it).
+3. Vanilla never trips this because every vanilla caller runs inside the entity-update phase after the refresh (e.g. all `teleport_to` callers are BT bot actions, bt_bot_teleport_to_ally_action.lua:84).
+4. Related but distinct: class "AI-takeover despawn 1-frame nil deref" (`memory: reference_vt2_ai_takeover_despawn_poslookup_crash`) - there the entry is NIL after despawn; here the entry EXISTS but is a dead pool handle.
 
 ### Fix template
-Never call POSITION_LOOKUP-reading vanilla functions directly from a chat-command callback. Queue a plain-number payload (never Vector3/Quaternion userdata) and drain it one tick later from the mod's update path, rebuilding fresh temporaries at apply time:
+Two rules, by direction of access:
 
 ```lua
--- WRONG - chat-command context; teleport lands but set_falling_height reads a dead lookup entry
-mod:command("recall", "", function()
-    loco:teleport_to(Vector3(x, y, z), rot)
-end)
+-- READING a position in mod code: NEVER via POSITION_LOOKUP for the local player.
+-- WRONG (dead handle, per-frame spam):
+local player_pos = POSITION_LOOKUP[player_unit]
+-- RIGHT (live read, valid for the whole synchronous call):
+local player_pos = Unit.world_position(player_unit, 0)
 
--- RIGHT - queue plain numbers; drain inside the update phase (gt: mod._gt_register_update)
-mod:command("recall", "", function() _pending = { x = x, y = y, z = z } end)
-mod._gt_register_update("recall_drain", function()
-    local job = _pending
-    if not job then return end
-    _pending = nil
-    loco:teleport_to(Vector3(job.x, job.y, job.z), rot)   -- fresh temporaries, live pool
-end)
+-- CALLING a vanilla function that reads the lookup internally (teleport_to ->
+-- set_falling_height): seed a LIVE destination Vector3 into the entry first.
+local PL = rawget(_G, "POSITION_LOOKUP")
+if PL then PL[unit] = Vector3(x, y, z) end   -- harmless one-frame poke; engine
+loco:teleport_to(Vector3(x, y, z), rot)      -- bulk refresh rewrites it next frame
 ```
 
+Queue/defer only for its OWN value (re-validation, last-write-wins on mashed commands) - it does not change the lookup's validity.
+
 ### Reference fix
-`general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_saved_positions.lua` (gt_dev v0.2.188-dev, commit e69ca76): queue + `saved_pos_recall` update-registry drain; PHASE RULE docstring cites the full mechanism.
+`general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_saved_positions.lua` + `_gt_debug_highlights.lua` (gt_dev v0.2.189-dev, commit 7442d80): live seed before `teleport_to`; live `Unit.world_position` read in the overlay draw. The v0.2.188 defer-only attempt (e69ca76) is the documented dead end.
