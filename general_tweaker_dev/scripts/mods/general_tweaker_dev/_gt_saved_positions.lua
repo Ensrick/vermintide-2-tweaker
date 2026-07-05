@@ -25,8 +25,25 @@ local mod = get_mod("gt_dev")
 -- Level key: Managers.state.game_mode:level_key() (game_mode_manager.lua:897,
 -- returns self._level_key) — the mod's existing pattern (_gt_creature_spawner.lua:245).
 --
+-- PHASE RULE (#337): the teleport MUST run inside mod.update, never directly from
+-- the chat-command callback. teleport_to's last line is
+-- status_extension:set_falling_height(), which reads POSITION_LOOKUP[unit].z
+-- (generic_status_extension.lua:2586-2593). POSITION_LOOKUP holds raw Vector3
+-- STACK TEMPORARIES, bulk-refreshed once per frame in StateIngame.pre_update
+-- (state_ingame.lua:808) and valid only within that frame's Vector3 pool. The
+-- chat-command execution context sits outside that pool window, so the stored
+-- entry is a dead handle there: teleport_to teleports (mover + position + rotation
+-- all land), then dies on its last line with "bad argument #1 to '__index'
+-- (Vector3 expected, got userdata)" — a false "teleport failed" report that also
+-- skips set_ignore_next_fall_damage (recalling to a high ledge would take fall
+-- damage). Every vanilla teleport_to caller is an update-phase BT action
+-- (bt_bot_teleport_to_ally_action.lua:84 etc.), so vanilla never sees this.
+-- /recall_position_N therefore only QUEUES; the one-tick-deferred drain in the
+-- mod.update chain below performs the teleport in the same phase vanilla uses.
+--
 -- Owned by: general_tweaker_dev.lua entry point. Consumed via: mod:dofile
--- (runs after the main chunk, so any mod._* fields are already set). No hooks.
+-- (runs after the main chunk, so mod._gt_register_update exists). No hooks;
+-- registers one 'saved_pos_recall' consumer in the central update registry.
 
 local _SETTING     = "gt_saved_positions"
 local _SLOT_COUNT  = 10
@@ -109,7 +126,13 @@ local function _save_slot(slot)
     mod:echo("[gt] Saved position slot %d for this map.", slot)
 end
 
--- Teleport the local player back to per-map slot `slot`.
+-- Queue a recall of per-map slot `slot`. Validation runs here (instant feedback in
+-- chat); the TELEPORT itself is deferred one tick to the mod.update drain below --
+-- see the PHASE RULE (#337) in the file docstring. The payload is plain numbers
+-- (the persisted leaf), never Vector3/Quaternion temporaries, so it is safe to
+-- carry across the frame boundary.
+local _pending_recall = nil
+
 local function _recall_slot(slot)
     local unit = _local_player_unit()
     if not (unit and Unit.alive(unit)) then
@@ -134,6 +157,37 @@ local function _recall_slot(slot)
         return
     end
 
+    -- Last-write-wins: mashing two recall commands in one frame keeps the newest.
+    _pending_recall = { slot = slot, level_key = level_key, saved = saved }
+    _pf("[gt:saved_pos] RECALL slot=%d map=%s queued for next update tick (#337 phase rule)", slot, level_key)
+end
+
+-- Drain the queued recall inside the game-update phase, where POSITION_LOOKUP
+-- entries belong to the live frame pool (the phase every vanilla teleport_to
+-- caller runs in). Re-validates unit + level because a frame elapsed since queue
+-- time (level transitions and deaths are slower than one tick, but the guards are
+-- free and the failure echo names the reason).
+local function _drain_pending_recall()
+    local job = _pending_recall
+    if not job then return end
+    _pending_recall = nil
+
+    local slot, saved = job.slot, job.saved
+    local unit = _local_player_unit()
+    if not (unit and Unit.alive(unit)) then
+        mod:echo("[gt] recall_position_%d: player unit vanished before the teleport tick.", slot)
+        return
+    end
+    if _current_level_key() ~= job.level_key then
+        mod:echo("[gt] recall_position_%d: map changed before the teleport tick.", slot)
+        return
+    end
+    local loco = ScriptUnit.has_extension(unit, "locomotion_system")
+    if not (loco and loco.teleport_to) then
+        mod:echo("[gt] recall_position_%d: no locomotion extension on the player unit.", slot)
+        return
+    end
+
     -- Rebuild fresh stack temporaries from the stored components at apply time.
     local pos = Vector3(saved.x, saved.y, saved.z)
     local rot = nil
@@ -143,13 +197,24 @@ local function _recall_slot(slot)
 
     local ok, err = pcall(loco.teleport_to, loco, pos, rot)
     if not ok then
-        _pf("[gt:saved_pos] RECALL slot=%d map=%s FAILED: %s", slot, level_key, tostring(err))
+        _pf("[gt:saved_pos] RECALL slot=%d map=%s FAILED: %s", slot, job.level_key, tostring(err))
         mod:echo("[gt] recall_position_%d: teleport failed (see console log).", slot)
         return
     end
     _pf("[gt:saved_pos] RECALL slot=%d map=%s pos=(%.2f,%.2f,%.2f) rot=%s",
-        slot, level_key, saved.x, saved.y, saved.z, rot and "yes" or "no")
+        slot, job.level_key, saved.x, saved.y, saved.z, rot and "yes" or "no")
     mod:echo("[gt] Recalled to position slot %d.", slot)
+end
+
+-- Register the drain with gt's central per-frame consumer registry (Issue #16;
+-- isolated pcall per consumer, general_tweaker_dev.lua:337-352) -- the same path
+-- the ai_pending / afk_autobot / btlab_draw consumers use. Guarded like
+-- _gt_bot_teleport_lab.lua:1195 so a load-order surprise degrades to a chat
+-- error instead of a nil call.
+if mod._gt_register_update then
+    mod._gt_register_update("saved_pos_recall", _drain_pending_recall)
+else
+    mod:error("[gt:saved_pos] mod._gt_register_update missing -- recall drain not wired (#337)")
 end
 
 -- Expose for the main-file /gt_regression_test structural check (call-time resolved).

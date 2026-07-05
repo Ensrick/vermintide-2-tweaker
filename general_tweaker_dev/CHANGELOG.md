@@ -1,5 +1,34 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.188-dev (2026-07-05) -- #337 fix false "teleport failed" on /recall_position_N [verify-fix]
+
+### Why
+User report: the #306 save/recall teleport works (position + look land) but every recall
+echoes "teleport failed". Log (`console-2026-07-05-17.19.28-51bb12ee...`, v0.2.187-dev,
+inn_level, 3x repro at 17:24:18/:24/:32):
+`generic_status_extension.lua:2616: bad argument #1 to '__index' (Vector3 expected, got userdata)`.
+
+### Root cause
+`teleport_to` applies mover + position + rotation FIRST, then ends with
+`status_extension:set_falling_height()`, which reads `POSITION_LOOKUP[unit].z`
+(generic_status_extension.lua:2586-2593). POSITION_LOOKUP holds raw Vector3 stack
+temporaries refreshed once per frame in `StateIngame.pre_update` (state_ingame.lua:808),
+valid only inside that frame's Vector3 pool. The VMF chat-command callback runs outside
+that window, so the entry is a dead handle: the teleport lands, the last line raises, the
+pcall reports failure, and `set_ignore_next_fall_damage(true)` is skipped (a recall onto a
+high ledge would take fall damage). Every vanilla `teleport_to` caller is an update-phase
+BT bot action (bt_bot_teleport_to_ally_action.lua:84 etc.) - vanilla never sees this phase.
+
+### Changed
+- `_gt_saved_positions.lua`: `/recall_position_N` now only QUEUES (plain-number payload,
+  frame-boundary safe); a new `saved_pos_recall` consumer in the central update registry
+  (`mod._gt_register_update`, Issue #16) drains it one tick later inside the game-update
+  phase and performs the teleport there. Drain re-validates unit/level and owns the
+  success/failure echo. PHASE RULE documented in the file docstring.
+- VERIFY IN-GAME: save + recall a position - lands with saved look direction AND echoes
+  "Recalled to position slot N" (no failed message). Bonus: recall onto a high ledge -
+  no fall damage from the recall itself.
+
 ## v0.2.187-dev (2026-07-05) -- #302 Debug Highlights (phase 1: in-world wireframe overlay)
 
 ### Why
