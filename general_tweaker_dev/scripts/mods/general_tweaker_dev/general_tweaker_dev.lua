@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.181-dev"
+local MOD_VERSION = "0.2.182-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1513,6 +1513,101 @@ _rt_register("bot_follow_mode_dropdown_consolidated", function()
     end
     if type(mod._gt_resolve_follow_mode) ~= "function" then
         return "mod._gt_resolve_follow_mode helper missing — dropdown migration may be broken"
+    end
+end)
+
+_rt_register("bot_behavior_master_sub_widgets_registered", function()
+    -- #297 (v0.2.182-dev): gt_bot_behavior_improvements is a MASTER toggle with
+    -- 10 nested sub_widgets (8 checkboxes default ON + the 2 delay sliders,
+    -- defaults 3 / 4). Checkbox ids reuse the pre-bundle setting ids so persisted
+    -- pre-bundle user choices are restored; defaults must stay ON so the master
+    -- alone reproduces the former v0.2.128-dev bundle behavior.
+    local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return "could not require data file" end
+    local master
+    local function find(node)
+        if master or type(node) ~= "table" then return end
+        if node.setting_id == "gt_bot_behavior_improvements" then master = node return end
+        for _, child in pairs(node) do if type(child) == "table" then find(child) end end
+    end
+    find(data)
+    if not master then return "gt_bot_behavior_improvements widget missing from the data tree" end
+    if type(master.sub_widgets) ~= "table" then return "master toggle has no sub_widgets array" end
+    local want = {
+        gt_bot_necro_potion_handoff      = { wtype = "checkbox", default = true },
+        gt_bot_mission_fail_prevention   = { wtype = "checkbox", default = true },
+        gt_bot_ledge_pullup              = { wtype = "checkbox", default = true },
+        gt_bot_ledge_pullup_delay        = { wtype = "numeric",  default = 3 },
+        gt_bot_ladder_unstick            = { wtype = "checkbox", default = true },
+        gt_bot_ladder_unstick_delay      = { wtype = "numeric",  default = 4 },
+        gt_bot_instant_pickup            = { wtype = "checkbox", default = true },
+        gt_bot_greedy_pickup             = { wtype = "checkbox", default = true },
+        gt_bot_aid_priority              = { wtype = "checkbox", default = true },
+        gt_bot_ironbreaker_revive_in_ult = { wtype = "checkbox", default = true },
+    }
+    for _, w in ipairs(master.sub_widgets) do
+        local spec = w.setting_id and want[w.setting_id]
+        if spec then
+            if w.type ~= spec.wtype then
+                return w.setting_id .. " has type " .. tostring(w.type) .. ", want " .. spec.wtype
+            end
+            if w.default_value ~= spec.default then
+                return w.setting_id .. " default_value is " .. tostring(w.default_value) .. ", want " .. tostring(spec.default)
+            end
+            want[w.setting_id] = nil
+        end
+    end
+    for id in pairs(want) do
+        return id .. " missing from the master toggle's sub_widgets"
+    end
+end)
+
+_rt_register("bot_greedy_pickup_hooks_present", function()
+    -- #297 item 8 (v0.2.182-dev): the greedy-pickup post-passes must exist --
+    -- marker global set beside the FIX 10 hooks in _gt_bot_fixes.lua, plus both
+    -- hook_safe registrations on AIBotGroupSystem._update_mule_pickups /
+    -- _update_health_pickups (fresh (Class, method) pairs, grep-verified at
+    -- authoring time). Source read is best-effort.
+    if GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182 ~= "gt-bot-greedy-pickup-mule-health-postpass" then
+        return "greedy-pickup marker absent -- was the #297 item-8 feature removed?"
+    end
+    local ok, info = pcall(debug.getinfo, mod._gt_resolve_follow_mode or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find('"AIBotGroupSystem", "_update_mule_pickups"', 1, true) then
+        return "_update_mule_pickups hook missing from _gt_bot_fixes.lua"
+    end
+    if not txt:find('"AIBotGroupSystem", "_update_health_pickups"', 1, true) then
+        return "_update_health_pickups hook missing from _gt_bot_fixes.lua"
+    end
+end)
+
+_rt_register("bot_fix_delays_read_from_settings", function()
+    -- #297 (v0.2.182-dev): the ledge pull-up / ladder unstick delays are sliders
+    -- again. The tick bodies must read them via mod:get; a regression back to
+    -- the v0.2.128-dev hard-coded `local delay = 3` / `= 4` literals would
+    -- silently strand both sliders. Source read is best-effort.
+    local ok, info = pcall(debug.getinfo, mod._gt_resolve_follow_mode or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find('mod:get("gt_bot_ledge_pullup_delay")', 1, true) then
+        return "ledge pull-up delay no longer read via mod:get (hard-coded regression?)"
+    end
+    if not txt:find('mod:get("gt_bot_ladder_unstick_delay")', 1, true) then
+        return "ladder unstick delay no longer read via mod:get (hard-coded regression?)"
+    end
+    if txt:find("local delay = 3", 1, true) or txt:find("local delay = 4", 1, true) then
+        return "a hard-coded bot-fix delay literal is back in _gt_bot_fixes.lua"
     end
 end)
 

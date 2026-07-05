@@ -1,5 +1,31 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.182-dev (2026-07-04) -- #297 Bot Behavior Improvements master toggle + per-fix sub-menu + greedy pickup
+
+### Why
+Issue #297: the v0.2.128-dev bundling collapsed eight bot fixes into one opaque checkbox with hard-coded delays. This re-exposes each fix as a nested sub-toggle under the master (VMF native master-toggle pattern: `sub_widgets` on a checkbox auto-hide while it is unchecked, vmf_options_view.lua:4461-4463) and adds one brand-new behavior (greedy pickup, #297 item 8).
+
+### Changed
+- **`gt_bot_behavior_improvements` is now a MASTER toggle (still default OFF) with 10 nested sub-widgets, all read live inside the tick/hook bodies (no on_setting_changed wiring).** Every gate is now master AND sub-toggle. The 8 checkboxes default ON so the master alone reproduces the former bundle; checkbox ids reuse the pre-bundle setting ids retired in v0.2.128-dev, restoring any persisted pre-bundle user choices. In feature order:
+  1. `gt_bot_necro_potion_handoff` (on) -- FIX 1 Necromancer potion promote/hand-off tick.
+  2. `gt_bot_mission_fail_prevention` (on) -- FIX 8 `GameModeHelper.side_is_dead` hook (mission keeps going while a bot lives).
+  3. `gt_bot_ledge_pullup` (on) -- FIX 4 auto ledge recovery tick.
+  4. `gt_bot_ledge_pullup_delay` (slider, 3s, 0-10; 0 = instant) -- replaces the hard-coded `local delay = 3`.
+  5. `gt_bot_ladder_unstick` (on) -- FIX 5 stuck-ladder teleport tick.
+  6. `gt_bot_ladder_unstick_delay` (slider, 4s, 3-10) -- replaces the hard-coded `local delay = 4`.
+  7. `gt_bot_instant_pickup` (on) -- FIX 6 instant grab of the bot's targeted/pinged pickup.
+  8. `gt_bot_greedy_pickup` (on) -- NEW, see below.
+  9. `gt_bot_aid_priority` (on) -- FIX 3b force revive/rescue priority (one child drives both `_force_revive` and `_force_rescue`).
+  10. `gt_bot_ironbreaker_revive_in_ult` (on) -- FIX 2 `BTConditions.can_activate_ability` hook (revive during the Ironbreaker ult-hold).
+- **New behavior: greedy pickup (FIX 10, #297 item 8).** Vanilla bots leave potions/bombs on the ground while any alive human within 20 m has that slot empty (`AIBotGroupSystem._update_mule_pickups` only assigns `blackboard.mule_pickup` when `num_players == 0`, ai_bot_group_system.lua:1983-2012), and health items are reserved one-per-empty-slot-human out of the bot-assignable pool (`_update_health_pickups` :2104-2141, leftovers permutation-assigned at :2216/:2309 with the 15 m `allowed_to_take_health_pickup` follow-range gate :1847/:2236). Two fresh `hook_safe` post-passes (duplicate-hook pre-flight grep: the only prior AIBotGroupSystem hooks are `_assign_destination_points` and `_update_urgent_targets`) re-run the vanilla assignment loops without the human-slot gates for bots left empty-handed, honoring vanilla's own distance rules and never touching `force_use_health_pickup` (:2355-2358) -- so a bot still never self-heals while a human is dying nearby (:2145-2146), it just carries the item and hands it over per vanilla give-scoring (player_bot_base.lua:881-917). Host-side only; no RPC; marker `GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182`.
+- **FIX 3's kept-separate `gt_bot_rescue_awaiting` toggle is unchanged**; the shared `_select_ally_by_utility` wrapper now proceeds when rescue-awaiting is on OR (master AND `gt_bot_aid_priority`).
+- **Regression tests** (`/gt_regression_test`): `bot_behavior_master_sub_widgets_registered` (all 10 ids present under the master with the right types/defaults), `bot_greedy_pickup_hooks_present` (marker + both `_update_mule_pickups`/`_update_health_pickups` hook lines), `bot_fix_delays_read_from_settings` (delays read via mod:get, hard-coded literals gone).
+- Version bump 0.2.181-dev -> 0.2.182-dev; data widgets + localization (per #301 tag doctrine: `[working]` on the sub-toggles the CHANGELOG records as confirmed in-game -- necro handoff, ladder unstick + delay, instant pickup, Ironbreaker revive; `[untested]` on mission-fail prevention, ledge pull-up + delay, aid priority, and the new greedy pickup).
+
+### Notes
+- Greedy pickup is brand-new and untested in-game; the other nine children wrap logic that has shipped since v0.2.128-dev.
+- Master tooltip updated to say each fix is individually toggleable underneath.
+
 ## v0.2.181-dev (2026-07-04) -- #308 melee latency cosmetics: attack warning + health-bar smoothing
 
 ### Why

@@ -35,12 +35,46 @@ return {
     -- The chat line itself when a bot's guard breaks (code-referenced).
     gt_bot_guard_break_chat = { en = "A bot's guard was broken!" },
 
-    -- Bundled bot-behavior fixes (v0.2.128-dev). Replaces eight former toggles
-    -- (necro potion handoff, mission-fail prevention, ledge pull-up + delay,
-    -- ladder unstick + delay, instant pickup, revive priority, Ironbreaker
-    -- revive-in-ult, rescue priority). Delays are now hard-coded (3s / 4s).
+    -- Bot Behavior Improvements master toggle + nested sub-toggles (#297,
+    -- v0.2.182-dev). The master gates everything; each fix below is now
+    -- individually toggleable while the master is on. Checkbox ids reuse the
+    -- pre-bundle setting ids (retired v0.2.128-dev); the delay sliders replace
+    -- the formerly hard-coded 3s / 4s. Children in FEATURE order (matches the
+    -- data file), not A->Z. Tags: [working] where the CHANGELOG records an
+    -- in-game confirmation of the wrapped fix, [untested] otherwise; the
+    -- greedy-pickup item is brand-new (#297 item 8).
     gt_bot_behavior_improvements = { en = "[Issue 297, 139 & 142] Bot Behavior Improvements" },
-    gt_bot_behavior_improvements_tooltip = { en = "Bundles eight bot fixes under one switch: Necromancer potion handoff, not failing the mission while a bot is still alive, bot ledge recovery, freeing themselves when stuck on ladders, instantly grabbing pinged items, prioritizing reviving downed allies, reviving even during their ult, and rescuing trapped or hooked allies. Works only when you are the host." },
+    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, revive and rescue priority, and reviving during the Ironbreaker ult. Works only when you are the host." },
+
+    gt_bot_necro_potion_handoff = { en = "[working] Necromancer bots hand off potions" },
+    gt_bot_necro_potion_handoff_tooltip = { en = "A Necromancer bot brings a real potion forward over its skull item, so it can drink it or pass it to a teammate, which the skull otherwise blocks." },
+
+    gt_bot_mission_fail_prevention = { en = "[untested] Keep the mission going while a bot lives" },
+    gt_bot_mission_fail_prevention_tooltip = { en = "Normally the run ends when every human is down even if a bot still stands; with this on, the mission only fails when no teammate, human or bot, remains." },
+
+    gt_bot_ledge_pullup = { en = "[untested] Bots pull themselves up from ledges" },
+    gt_bot_ledge_pullup_tooltip = { en = "A bot left hanging from a ledge climbs back up on its own after the delay below instead of waiting for a rescue." },
+
+    gt_bot_ledge_pullup_delay = { en = "[untested] Ledge pull-up delay (seconds)" },
+    gt_bot_ledge_pullup_delay_tooltip = { en = "How many seconds a bot hangs from a ledge before climbing back up; 0 makes the recovery instant." },
+
+    gt_bot_ladder_unstick = { en = "[working] Bots free themselves from ladders" },
+    gt_bot_ladder_unstick_tooltip = { en = "A bot wedged on a ladder teleports to a teammate after the delay below instead of staying stuck there." },
+
+    gt_bot_ladder_unstick_delay = { en = "[working] Ladder unstick delay (seconds)" },
+    gt_bot_ladder_unstick_delay_tooltip = { en = "How many seconds a bot may sit on a ladder before it teleports to a teammate. Values below 3 would trigger during normal climbs, so 3 is the minimum." },
+
+    gt_bot_instant_pickup = { en = "[working] Bots instantly grab targeted items" },
+    gt_bot_instant_pickup_tooltip = { en = "The pickup a bot is going for, including pinged items, is grabbed from where the bot stands instead of it walking all the way over." },
+
+    gt_bot_greedy_pickup = { en = "[untested] Bots collect items players leave behind" },
+    gt_bot_greedy_pickup_tooltip = { en = "Normally bots refuse to take potions, bombs, and healing while a nearby player has a free slot for them; with this on they collect such items anyway, then carry them and hand them over when asked or needed." },
+
+    gt_bot_aid_priority = { en = "[untested] Bots prioritize reviving and rescuing" },
+    gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },
+
+    gt_bot_ironbreaker_revive_in_ult = { en = "[working] Ironbreaker bots revive during their ult" },
+    gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "The career skill no longer parks the bot in a blocking stance for its whole duration; the bot breaks off to revive or rescue an ally while the damage-reduction buff keeps running." },
 
     -- Bot follow mode dropdown (v0.2.152-dev) -- consolidates the previous
     -- gt_bot_split_among_players + gt_bot_follow_host checkboxes into one
