@@ -304,7 +304,21 @@ local function _draw(dt)
     if not want_any then _clear(); return end
 
     local player_unit = _local_player_unit()
-    local player_pos  = player_unit and POSITION_LOOKUP[player_unit]
+    -- DO NOT read POSITION_LOOKUP[player_unit] here: for the LOCAL PLAYER that entry
+    -- is a DEAD frame-pool Vector3 handle in this (mod.update) phase. AI/pickup
+    -- entries are refreshed every frame by their own systems (ai_slot/aggro/spawner),
+    -- but the player's is seeded once at spawn and never refreshed in Lua
+    -- (PositionLookupSystem.update is a no-op). The stale userdata fed
+    -- Vector3.distance_squared as arg#2 and raised "bad argument #2 (Vector3
+    -- expected, got userdata)" every frame -- 1182x in console-2026-07-05-17.19.28,
+    -- which also aborted the draw so NOTHING rendered. Same POSITION_LOOKUP-stale
+    -- class as the #337 recall crash. Read a LIVE position off the unit instead
+    -- (valid for the whole synchronous _draw frame, same as `up` below).
+    local player_pos = nil
+    if player_unit and Unit.alive(player_unit) then
+        local ok, wp = pcall(Unit.world_position, player_unit, 0)
+        if ok then player_pos = wp end
+    end
     if not player_pos then _clear(); return end
 
     local world = _world()

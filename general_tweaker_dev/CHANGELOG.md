@@ -1,5 +1,32 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.189-dev (2026-07-05) -- #337 round 2: POSITION_LOOKUP live seed + debug-highlights player read [verify-fix]
+
+### Why
+v0.2.188's one-tick deferral did NOT fix the false "teleport failed" (user re-test on
+v0.2.188, same error). Root of the miss: mod.update fires from ModManager:update at the
+TOP of the frame (boot.lua:749) - the same pre-refresh window chat commands run in
+(vmf_loader.lua:52-54, mods_update_event and execute_queued_chat_command are adjacent
+lines in the same caller). The LOCAL PLAYER's POSITION_LOOKUP entry is a dead Vector3
+handle in every mod-reachable phase - deferral cannot escape it.
+
+### Changed
+- `_gt_saved_positions.lua`: seed `POSITION_LOOKUP[unit]` with a context-fresh
+  DESTINATION Vector3 immediately before `teleport_to`, so `set_falling_height`
+  (its last line, generic_status_extension.lua:2590) reads a live handle carrying the
+  correct post-teleport z regardless of phase. Harmless one-frame poke: the engine's
+  bulk refresh rewrites the table before any other reader runs. Queue + drain retained
+  for re-validation and last-write-wins; docstrings corrected (the v0.2.188 "same phase
+  vanilla uses" claim was wrong).
+- `_gt_debug_highlights.lua`: same bug class in the overlay draw - it read
+  `POSITION_LOOKUP[player_unit]` every frame from mod.update, raising "bad argument #2
+  (Vector3 expected, got userdata)" 1182x in `console-2026-07-05-17.19.28` and aborting
+  the draw (nothing rendered). Now reads `Unit.world_position(player_unit, 0)` live.
+- VERIFY IN-GAME: (1) save + recall a position - lands with saved look AND echoes
+  "Recalled to position slot N", no failed message; check the log has no
+  `[gt:saved_pos] ... FAILED` line. (2) Turn on a Debug Highlights category - wireframes
+  actually render now.
+
 ## v0.2.188-dev (2026-07-05) -- #337 fix false "teleport failed" on /recall_position_N [verify-fix]
 
 ### Why

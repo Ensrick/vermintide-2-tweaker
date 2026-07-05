@@ -1004,6 +1004,22 @@ local function _clear_and_null()
     mod._gt_btlab_gui_deferred = nil   -- reset the #293/#295 defer breadcrumb latch
 end
 
+-- Live position for a unit THIS frame. CRITICAL: do NOT read POSITION_LOOKUP in this
+-- (mod.update) draw phase -- the LOCAL PLAYER's entry (and any followed player) is a
+-- DEAD frame-pool Vector3 handle here: AI/pickup entries are refreshed every frame by
+-- their own systems, but the player's is seeded once at spawn and never refreshed in
+-- Lua (PositionLookupSystem.update is a no-op). Reading it fed a stale userdata to
+-- Vector3.distance / LineObject.add_line; the pcall around _do_draw silently swallowed
+-- the throw, so the HUD reported "created OK" but painted NOTHING (the invisible-HUD
+-- symptom on the #293/#295 retest). Unit.world_position is fresh every frame. Same
+-- POSITION_LOOKUP-stale class as the #337 recall crash + the _gt_debug_highlights spam.
+local function _live_pos(unit)
+    if not (unit and ALIVE[unit]) then return nil end
+    local ok, wp = pcall(Unit.world_position, unit, 0)
+    if ok then return wp end
+    return nil
+end
+
 local function _do_draw(want_hud, want_lines)
     local world = Managers.world and Managers.world:world("level_world")
     if not world then
@@ -1065,7 +1081,7 @@ local function _do_draw(want_hud, want_lines)
     end
 
     local you     = _local_player_unit()
-    local you_pos = you and POSITION_LOOKUP[you]
+    local you_pos = _live_pos(you)
     local up      = Vector3(0, 0, 1.0)   -- lift lines off the floor
 
     local color_follow = Color(255, 255, 210, 40)    -- yellow: bot -> follow_unit
@@ -1074,11 +1090,11 @@ local function _do_draw(want_hud, want_lines)
     -- Leash lines: one per registered bot (prune dead/despawned bots here too).
     if lo then
         for unit, rec in pairs(_bots) do
-            if ALIVE[unit] and POSITION_LOOKUP[unit] then
+            local bot_pos = _live_pos(unit)
+            if bot_pos then
                 local bb         = rec.blackboard
-                local bot_pos    = POSITION_LOOKUP[unit]
                 local follow     = bb and _follow_unit(bb)
-                local follow_pos = follow and POSITION_LOOKUP[follow]
+                local follow_pos = _live_pos(follow)
                 if follow_pos then
                     LineObject.add_line(lo, color_follow, bot_pos + up, follow_pos + up)
                 end
@@ -1103,7 +1119,7 @@ local function _do_draw(want_hud, want_lines)
     -- Deterministic column order so columns don't swap frame to frame.
     local order = {}
     for unit in pairs(_bots) do
-        if ALIVE[unit] and POSITION_LOOKUP[unit] then
+        if ALIVE[unit] then
             order[#order + 1] = unit
         end
     end
@@ -1120,9 +1136,9 @@ local function _do_draw(want_hud, want_lines)
         local x    = margin_x + (ci - 1) * col_w
         local y    = top_y
 
-        local bot_pos  = POSITION_LOOKUP[unit]
+        local bot_pos  = _live_pos(unit)
         local follow   = bb and _follow_unit(bb)
-        local f_pos    = follow and POSITION_LOOKUP[follow]
+        local f_pos    = _live_pos(follow)
         local d_follow = (bot_pos and f_pos) and Vector3.distance(bot_pos, f_pos) or nil
         local d_you    = (bot_pos and you_pos) and Vector3.distance(bot_pos, you_pos) or nil
         local action   = _current_bot_action(bb) or "?"

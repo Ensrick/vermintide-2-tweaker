@@ -38,8 +38,26 @@ local mod = get_mod("gt_dev")
 -- skips set_ignore_next_fall_damage (recalling to a high ledge would take fall
 -- damage). Every vanilla teleport_to caller is an update-phase BT action
 -- (bt_bot_teleport_to_ally_action.lua:84 etc.), so vanilla never sees this.
--- /recall_position_N therefore only QUEUES; the one-tick-deferred drain in the
--- mod.update chain below performs the teleport in the same phase vanilla uses.
+-- ROUND 2 CORRECTION (v0.2.189): deferring to the update registry does NOT
+-- reach a safe phase -- mod.update fires from ModManager:update at the TOP of
+-- the frame (boot.lua:749, before StateIngame.pre_update's refresh at
+-- state_ingame.lua:808), the same window chat commands run in
+-- (vmf_loader.lua:52-54). The LOCAL PLAYER's lookup entry is dead in every
+-- mod-reachable phase. The actual fix is the live destination-Vector3 SEED
+-- written into POSITION_LOOKUP right before teleport_to (see the drain);
+-- the queue survives for its re-validation + last-write-wins value.
+--
+-- SUPERSEDED (2026-07-05, v0.2.188-dev): deferring to mod.update was NOT enough --
+-- the local player's POSITION_LOOKUP entry is STILL a stale frame-pool handle at
+-- drain time and set_falling_height crashed exactly as above (3x in
+-- console-2026-07-05-17.19.28). The real refresh site for the PLAYER entry is
+-- engine-side (PositionLookupSystem.update is a no-op and no Lua write refreshes
+-- the player unit per frame -- the "state_ingame.lua:808 pre_update" cite above is
+-- [unverified]/wrong: that file has zero POSITION_LOOKUP refs). Robust fix lives in
+-- _drain_pending_recall: seed a LIVE destination Vector3 into POSITION_LOOKUP[unit]
+-- synchronously right before teleport_to, so set_falling_height's read is valid no
+-- matter what phase we are in. The deferral is retained (harmless, keeps parity
+-- with vanilla's update-phase callers) but is no longer load-bearing for the crash.
 --
 -- Owned by: general_tweaker_dev.lua entry point. Consumed via: mod:dofile
 -- (runs after the main chunk, so mod._gt_register_update exists). No hooks;
@@ -162,11 +180,11 @@ local function _recall_slot(slot)
     _pf("[gt:saved_pos] RECALL slot=%d map=%s queued for next update tick (#337 phase rule)", slot, level_key)
 end
 
--- Drain the queued recall inside the game-update phase, where POSITION_LOOKUP
--- entries belong to the live frame pool (the phase every vanilla teleport_to
--- caller runs in). Re-validates unit + level because a frame elapsed since queue
--- time (level transitions and deaths are slower than one tick, but the guards are
--- free and the failure echo names the reason).
+-- Drain the queued recall one tick later. NOTE (#337 round 2): this still runs in
+-- ModManager:update (boot.lua:749), NOT the entity-update phase -- POSITION_LOOKUP
+-- is stale here too; the live seed below is what makes teleport_to safe. The
+-- deferral is kept for re-validation + last-write-wins, not phase correctness.
+-- Re-validates unit + level because a frame elapsed since queue time.
 local function _drain_pending_recall()
     local job = _pending_recall
     if not job then return end
@@ -194,6 +212,23 @@ local function _drain_pending_recall()
     if saved.qx and saved.qy and saved.qz and saved.qw then
         rot = Quaternion.from_elements(saved.qx, saved.qy, saved.qz, saved.qw)
     end
+
+    -- #337 FOLLOW-UP (2026-07-05): deferring the teleport to the update phase (the
+    -- drain runs here) was NOT sufficient -- the LOCAL PLAYER's POSITION_LOOKUP entry
+    -- is still a stale frame-pool Vector3 handle at this point. teleport_to's LAST
+    -- line, set_falling_height, reads POSITION_LOOKUP[unit].z
+    -- (generic_status_extension.lua:2590) and dies on that dead handle with
+    -- "bad argument #1 to '__index' (Vector3 expected, got userdata)" -- observed
+    -- 3x in console-2026-07-05-17.19.28. The mover/position/rotation had ALREADY
+    -- landed by then (teleport_to sets them first), so the teleport half-applied and
+    -- then falsely reported "failed", also skipping set_ignore_next_fall_damage.
+    -- FIX: seed a LIVE destination Vector3 into the lookup synchronously right before
+    -- the call, so set_falling_height's read is valid regardless of frame phase. The
+    -- game overwrites POSITION_LOOKUP[unit] next frame with the post-teleport
+    -- position (which matches this seed), so it is a harmless one-frame poke. rawget
+    -- so a missing global degrades to the prior behavior instead of erroring.
+    local _plookup = rawget(_G, "POSITION_LOOKUP")
+    if _plookup then _plookup[unit] = Vector3(saved.x, saved.y, saved.z) end
 
     local ok, err = pcall(loco.teleport_to, loco, pos, rot)
     if not ok then
