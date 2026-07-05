@@ -969,3 +969,43 @@ Gate the input grab on "no menu/view open": `local iui = Managers.ui._ingame_ui;
 
 ### Reference fix
 `gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_freecam.lua` (commit 84f49bb): `_menu_open()` gate + `_pending_menu_close` deferral + apply()-owned feedback.
+
+---
+
+## 21. POSITION_LOOKUP dead Vector3 outside the game-update phase (works-but-reports-failed)
+
+**First seen:** 2026-07-05 (gt_dev v0.2.187, /recall_position_N)
+**Canonical Issue:** [#337](https://github.com/Ensrick/vermintide-2-tweaker/issues/337)
+**Lives in:** any chat-command / non-update-phase callback that reaches code reading `POSITION_LOOKUP[unit]`
+
+### Symptoms
+- An engine/vanilla call that reads `POSITION_LOOKUP` raises `bad argument #1 to '__index' (Vector3 expected, got userdata)` even though the unit is alive and the lookup "should" hold its position.
+- Partial success: everything the vanilla function did BEFORE the lookup read landed (e.g. `teleport_to` moves the player, then dies on its last line, `set_falling_height`), so the feature "works" while the mod's pcall reports failure - and the steps AFTER the raise are silently skipped (`set_ignore_next_fall_damage` in the teleport case).
+- Freshly created `Vector3(...)` values in the same callback work fine; only the STORED lookup entries are dead.
+
+### Diagnosis pattern
+1. The error names a vanilla line; check whether that line reads `POSITION_LOOKUP[...]` (or another per-frame temporary cache).
+2. Ask: what phase is my code running in? `POSITION_LOOKUP` holds raw Vector3 stack temporaries bulk-refreshed once per frame in `StateIngame.pre_update` (state_ingame.lua:808 -> `EngineOptimized.update_position_lookup`). Entries are valid ONLY inside that frame's Vector3 pool. VMF chat-command callbacks execute outside that window; every vanilla caller of the affected function runs in the update phase (e.g. all `teleport_to` callers are BT bot actions, bt_bot_teleport_to_ally_action.lua:84).
+3. Related but distinct: class "AI-takeover despawn 1-frame nil deref" (`memory: reference_vt2_ai_takeover_despawn_poslookup_crash`) - there the entry is NIL after despawn; here the entry EXISTS but is a dead pool handle.
+
+### Fix template
+Never call POSITION_LOOKUP-reading vanilla functions directly from a chat-command callback. Queue a plain-number payload (never Vector3/Quaternion userdata) and drain it one tick later from the mod's update path, rebuilding fresh temporaries at apply time:
+
+```lua
+-- WRONG - chat-command context; teleport lands but set_falling_height reads a dead lookup entry
+mod:command("recall", "", function()
+    loco:teleport_to(Vector3(x, y, z), rot)
+end)
+
+-- RIGHT - queue plain numbers; drain inside the update phase (gt: mod._gt_register_update)
+mod:command("recall", "", function() _pending = { x = x, y = y, z = z } end)
+mod._gt_register_update("recall_drain", function()
+    local job = _pending
+    if not job then return end
+    _pending = nil
+    loco:teleport_to(Vector3(job.x, job.y, job.z), rot)   -- fresh temporaries, live pool
+end)
+```
+
+### Reference fix
+`general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_saved_positions.lua` (gt_dev v0.2.188-dev, commit e69ca76): queue + `saved_pos_recall` update-registry drain; PHASE RULE docstring cites the full mechanism.
