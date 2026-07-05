@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.186-dev"
+local MOD_VERSION = "0.2.188-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2093,6 +2093,14 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_inventory")
 -- (career swap would desync the deus profile/boon state). Full design + bundle
 -- evidence in _gut_mission_hero_select.lua and HERO_SELECT_RESEARCH_173.md.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_hero_select")
+
+-- In-mission MISSION MAP (#305): opens the start-game / mission-selection view (the
+-- keep "M" map) mid-mission via the vanilla `start_game_view_force` transition
+-- (mod.gut_open_mission_map + /map + the gut_mission_map_hotkey keybind, default M).
+-- Adventure-only (deus/versus/weave blocked); optional host-only toggle. StartGameView
+-- mounts NO keep-only world (unlike CharacterSelectionView), so this needs no backdrop
+-- swap and registers ZERO hooks. See _gut_mission_map.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_map")
 
 -- EXPERIMENTAL/diagnostic (#173 feasibility): /gut_swap_career <n> asks the game to
 -- swap the LOCAL player's CURRENT hero to career index n (1-4) mid-mission via the

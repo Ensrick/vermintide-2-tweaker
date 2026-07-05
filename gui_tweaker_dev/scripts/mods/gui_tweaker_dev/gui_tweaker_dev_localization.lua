@@ -254,6 +254,28 @@ return {
     },
 
     -- ============================================================
+    -- In-Mission Mission Map (#305)
+    -- ============================================================
+    gut_mission_map = {
+        en = "[untested] In-Mission Mission Map",
+    },
+    gut_mission_map_tooltip = {
+        en = "Opens the mission-selection map during a mission, the same screen the keep's M key shows. Use the keybind below (default M) or /map. Adventure only: it stays closed in Chaos Wastes and Versus. Off by default.",
+    },
+    gut_mission_map_hotkey = {
+        en = "[untested] Open Mission Map (Mid-Mission)",
+    },
+    gut_mission_map_hotkey_tooltip = {
+        en = "Hotkey to open the mission-selection map while in a mission; default M, same as /map. In the keep the game's own M key already does this, so the hotkey stays quiet there.",
+    },
+    gut_mission_map_host_only = {
+        en = "[untested] Mission map is host only",
+    },
+    gut_mission_map_host_only_tooltip = {
+        en = "When on, only the party host can open the mission map mid-mission; everyone else gets a short message instead. Off by default, so any player can open it to look around.",
+    },
+
+    -- ============================================================
     -- Main Menu & Startup (migrated from general_tweaker 2026-06-29, #190)
     -- ============================================================
     gut_mainmenu_group = {
@@ -299,10 +321,11 @@ return {
     },
     gut_use_non_modded_loadouts = {
         -- User-confirmed in-game 2026-07-02 (read-only official loadouts in modded).
-        en = "[Issue 287] [diag] Use non-modded loadouts",
+        -- #287 cosmetic-exemption fix awaiting in-game confirmation: [verify-fix].
+        en = "[verify-fix] [diag] [Issue 287] Use non-modded loadouts",
     },
     gut_use_non_modded_loadouts_tooltip = {
-        en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows exactly your official loadouts, and nothing you do in modded can change them - equips, talent changes, loadout switches, and bot designation all snap back. Turn off (default) to keep separate modded loadouts that never touch your official ones.",
+        en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows your official gameplay loadouts, and gear, talent, loadout-switch and bot-designation changes all snap back so your official saves are never touched. Cosmetics (weapon illusion, hat, portrait frame, victory pose) stay changeable and are kept modded-side only. Turn off (default) to keep fully separate modded loadouts that never touch your official ones.",
     },
 
     -- ============================================================

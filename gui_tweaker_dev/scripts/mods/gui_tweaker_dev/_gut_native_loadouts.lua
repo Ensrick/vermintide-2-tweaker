@@ -6,6 +6,13 @@
 -- official-realm loadouts are never touched by modded play and vice-versa. In the
 -- OFFICIAL realm, and in Versus, the feature is completely inert (pure vanilla).
 --
+-- ISSUE #287 (cosmetic exemption): the "Use non-modded loadouts" READONLY mode makes the
+-- GAMEPLAY loadout (gear/talents/loadout selection/bot) a read-only mirror of the official
+-- data, but cosmetic slots (COSMETIC_SLOT_SET - weapon illusion, hat, portrait frame,
+-- victory pose) stay freely editable. Their modded-only values live in a SEPARATE cosmetic
+-- overlay (_overlay), keyed by the official loadout index, and NEVER touch official data.
+-- STORE mode is unaffected (cosmetics already live in the full modded store there).
+--
 -- ISOLATION APPROACH (issue #175 requirement 6) -- why the MIRROR, not the interface:
 --   Every loadout read/write funnels through ONE object, the backend mirror
 --   (`PlayFabMirrorAdventure`, backend_manager_playfab.lua:417). The item interface,
@@ -75,6 +82,15 @@ for i = 1, #GEAR_SLOT_NAMES do GEAR_SLOT_SET[GEAR_SLOT_NAMES[i]] = true end
 -- melee/ranged slot. Jewelry may legitimately be empty, cosmetics degrade gracefully.
 local WEAPON_SLOT_SET = { slot_melee = true, slot_ranged = true }
 
+-- Cosmetic slots: pure-visual loadout slots (weapon illusion, hat, portrait frame,
+-- victory pose) with zero gameplay weight. Issue #287: these stay EDITABLE and persist
+-- modded-side even in READONLY ("Use non-modded loadouts") mode, where the gameplay
+-- loadout (gear/talents/loadout selection/bot) is official-read-only. This set is exactly
+-- LOADOUT_SLOT_NAMES minus GEAR_SLOT_NAMES (asserted in rt_checks); it matches vanilla
+-- CosmeticUtils cosmetic_slots {frame,hat,skin} plus slot_pose, which vanilla treats as
+-- cosmetic-equivalent (cosmetic_utils.lua:87-94; set_loadout_item pose branch :661).
+local COSMETIC_SLOT_SET = { slot_skin = true, slot_hat = true, slot_frame = true, slot_pose = true }
+
 -- The VMF settings key `characters_data` discriminates Adventure from Versus
 -- (`vs_characters_data`), set by the mirror subclass (playfab_mirror_adventure.lua).
 -- We scope the whole feature to the Adventure mirror; Versus stays vanilla.
@@ -115,6 +131,63 @@ local function _deepcopy(t)
 end
 
 -- ------------------------------------------------------------------
+-- Cosmetic overlay (issue #287): modded-only cosmetic slot values, consulted ONLY in
+-- READONLY mode so cosmetics stay editable while the gameplay loadout mirrors official
+-- read-only. Kept SEPARATE from _STORE so the STORE-mode full-loadout store and this
+-- overlay never entangle their loadout-index semantics: the overlay is keyed by the
+-- OFFICIAL selected loadout index (the same index the gear is read at in READONLY), so an
+-- overlaid hat always lines up with the official gear shown beside it.
+--   _OVERLAY[career_name] = { [official_loadout_index] = { slot_skin=id, slot_hat=id, ... } }
+-- An absent value falls through to the official cosmetic (an untouched cosmetic shows your
+-- official one). Official data is NEVER written.
+-- ------------------------------------------------------------------
+local _OVERLAY = nil
+
+local function _overlay()
+    if _OVERLAY == nil then
+        local s = mod:get("native_cosmetic_overlay")
+        _OVERLAY = (type(s) == "table") and s or {}
+    end
+    return _OVERLAY
+end
+
+local function _persist_overlay()
+    mod:set("native_cosmetic_overlay", _OVERLAY)
+end
+
+-- In READONLY the gameplay loadout selection is frozen at the OFFICIAL selected index
+-- (set_loadout_index is blocked), and vanilla get/set_character_data resolve a nil index
+-- to self._career_loadouts[career] (base:1911/1930). The cosmetic overlay MUST key off the
+-- same index so cosmetics and gear read from the same loadout row.
+local function _official_index(mirror, career_name, optional_loadout_index)
+    if optional_loadout_index then return optional_loadout_index end
+    local sel = mirror._career_loadouts and mirror._career_loadouts[career_name]
+    return sel or 1
+end
+
+-- READONLY cosmetic overlay read: overlaid value or nil (caller falls back to official).
+local function _overlay_get(mirror, career_name, key, optional_loadout_index)
+    local career_ov = _overlay()[career_name]
+    if not career_ov then return nil end
+    local row = career_ov[_official_index(mirror, career_name, optional_loadout_index)]
+    return row and row[key]
+end
+
+-- READONLY cosmetic overlay write: capture modded-side, never touch official. Returns the
+-- resolved index for logging.
+local function _overlay_set(mirror, career_name, key, value, optional_loadout_index)
+    local ov = _overlay()
+    local career_ov = ov[career_name]
+    if not career_ov then career_ov = {}; ov[career_name] = career_ov end
+    local idx = _official_index(mirror, career_name, optional_loadout_index)
+    local row = career_ov[idx]
+    if not row then row = {}; career_ov[idx] = row end
+    row[key] = value
+    _persist_overlay()
+    return idx
+end
+
+-- ------------------------------------------------------------------
 -- Realm detection + gate. Failsafe: any uncertainty => inert (official behavior).
 -- ------------------------------------------------------------------
 local function _in_modded_realm()
@@ -126,9 +199,12 @@ end
 --   MODE_OFF      official realm (or Versus/undeterminable): fully inert, vanilla behavior.
 --   MODE_STORE    modded, "Use non-modded loadouts" OFF (default): store overlay -
 --                 reads serve the modded store, writes captured into it, official untouched.
---   MODE_READONLY modded, "Use non-modded loadouts" ON: reads pass through to the
---                 official data, EVERY loadout write is blocked (no store, no official) -
---                 the player cannot modify loadouts from modded at all.
+--   MODE_READONLY modded, "Use non-modded loadouts" ON: the GAMEPLAY loadout
+--                 (gear/talents/loadout selection/bot) reads through to the official data
+--                 and every write is blocked - the player cannot modify it from modded.
+--                 EXCEPTION (issue #287): cosmetic slots (COSMETIC_SLOT_SET - illusion,
+--                 hat, frame, pose) stay editable; their modded values live in the
+--                 separate cosmetic overlay (_overlay), never touching official data.
 -- Pure logic exposed for regression testing. Setting default_value=false => nil reads as OFF.
 local MODE_OFF, MODE_STORE, MODE_READONLY = "off", "store", "readonly"
 M.MODE_OFF, M.MODE_STORE, M.MODE_READONLY = MODE_OFF, MODE_STORE, MODE_READONLY
@@ -137,6 +213,12 @@ function M.mode(is_modded, use_non_modded)
     if not is_modded then return MODE_OFF end
     if use_non_modded then return MODE_READONLY end
     return MODE_STORE
+end
+
+-- issue #287: in READONLY only cosmetic slots stay editable; every gameplay slot / talent
+-- write snaps back. Pure predicate exposed for regression testing.
+function M.readonly_slot_editable(slot_name)
+    return COSMETIC_SLOT_SET[slot_name] == true
 end
 
 local function _feature_mode()
@@ -276,10 +358,21 @@ end
 
 -- get_character_data(self, career_name, key, optional_loadout_index) -- base:1909
 mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, career_name, key, optional_loadout_index)
-    -- READONLY mode reads pass through: the official data IS the loadout source then.
-    if _mirror_mode(self) ~= MODE_STORE or not career_name then
+    local m = _mirror_mode(self)
+    if m == MODE_OFF or not career_name then
         return func(self, career_name, key, optional_loadout_index)
     end
+    -- READONLY: gameplay slots read straight from the official data; ONLY cosmetic slots
+    -- are served from the modded overlay (issue #287), so a hat/illusion/frame/pose set in
+    -- modded persists instead of snapping back. Gear/talents stay official read-only.
+    if m == MODE_READONLY then
+        if COSMETIC_SLOT_SET[key] then
+            local v = _overlay_get(self, career_name, key, optional_loadout_index)
+            if v ~= nil then return v end
+        end
+        return func(self, career_name, key, optional_loadout_index)
+    end
+    -- MODE_STORE: serve every slot from the store.
     _prepare(self, career_name)
     local entry = _store()[career_name]
     if not entry then
@@ -314,9 +407,30 @@ end)
 
 -- get_career_loadouts(self, career_name) -> (selected_index, loadouts_array) -- base:1944
 mod:hook("PlayFabMirrorAdventure", "get_career_loadouts", function(func, self, career_name)
-    if _mirror_mode(self) ~= MODE_STORE or not career_name then
+    local m = _mirror_mode(self)
+    if m == MODE_OFF or not career_name then
         return func(self, career_name)
     end
+    -- READONLY: return the official (selected, loadouts) array but overlay cosmetic slots
+    -- so the per-loadout previews (hero_window_loadout_selection_console.lua:153) match what
+    -- is actually equipped (issue #287). Deepcopy first - never mutate the official array.
+    if m == MODE_READONLY then
+        local selected, loadouts = func(self, career_name)
+        local career_ov = _overlay()[career_name]
+        if not career_ov or type(loadouts) ~= "table" then
+            return selected, loadouts
+        end
+        local out = _deepcopy(loadouts)
+        for idx, row in pairs(career_ov) do
+            if out[idx] then
+                for slot, v in pairs(row) do
+                    if COSMETIC_SLOT_SET[slot] then out[idx][slot] = v end
+                end
+            end
+        end
+        return selected, out
+    end
+    -- MODE_STORE.
     _prepare(self, career_name)
     local entry = _store()[career_name]
     if not entry then
@@ -352,6 +466,15 @@ mod:hook("PlayFabMirrorAdventure", "set_character_data", function(func, self, ca
         return func(self, career_name, key, value, set_mirror, optional_loadout_index)
     end
     if m == MODE_READONLY then
+        -- issue #287: cosmetic edits are allowed - captured into the modded overlay, official
+        -- data untouched. Gameplay-slot / talent writes stay blocked (snap back).
+        if COSMETIC_SLOT_SET[key] then
+            local idx = _overlay_set(self, career_name, key, value, optional_loadout_index)
+            _dirtify()   -- rebuild interface caches so the overlay value is picked up
+            printf("[gut_dev:NATIVE_LOADOUTS] set_character_data career=%s idx=%s key=%s -> cosmetic overlay (readonly, official untouched)",
+                tostring(career_name), tostring(idx), tostring(key))
+            return
+        end
         printf("[gut_dev:NATIVE_LOADOUTS] set_character_data career=%s key=%s BLOCKED (read-only non-modded loadouts)",
             tostring(career_name), tostring(key))
         return
@@ -466,6 +589,15 @@ mod:hook("PlayFabMirrorAdventure", "set_career_read_only_data", function(func, s
         return func(self, character, key, value, career, set_mirror, loadout_index)
     end
     if m == MODE_READONLY then
+        -- issue #287: mirror the set_character_data cosmetic exemption on the LA-bypass
+        -- write path too, so cosmetics equipped through an LA-cloned interface persist.
+        if COSMETIC_SLOT_SET[key] then
+            local idx = _overlay_set(self, career, key, value, loadout_index)
+            _dirtify()
+            printf("[gut_dev:NATIVE_LOADOUTS] set_career_read_only_data career=%s idx=%s key=%s -> cosmetic overlay (readonly, official untouched)",
+                tostring(career), tostring(idx), tostring(key))
+            return
+        end
         printf("[gut_dev:NATIVE_LOADOUTS] set_career_read_only_data career=%s key=%s BLOCKED (read-only non-modded loadouts)",
             tostring(career), tostring(key))
         return
@@ -541,31 +673,40 @@ end)
 -- Re-seed command. The seed is one-time by design, so a snapshot taken while the mirror
 -- held bad data (e.g. blacksmith items committed to the cloud by the pre-isolation #174
 -- bleed, seen 2026-07-02 on merc Kruber slot_melee) is frozen until explicitly reset.
--- /reset_modded_loadouts        -> wipe the whole modded store
+-- /reset_modded_loadouts        -> wipe the whole modded store + cosmetic overlay
 -- /reset_modded_loadouts <career> -> wipe one career (e.g. es_mercenary)
 -- Next loadout touch in modded re-seeds from the CURRENT official data. Official data is
--- never written; this only discards the modded-side copies (including any modded-only edits).
+-- never written; this only discards the modded-side copies (the STORE-mode loadouts AND the
+-- READONLY cosmetic overlay from issue #287), including any modded-only edits.
 -- ==================================================================
 mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from official (optional: career name)", function(career_arg)
     local store = _store()
+    local overlay = _overlay()
     if career_arg and career_arg ~= "" then
-        if not store[career_arg] then
+        if not store[career_arg] and not overlay[career_arg] then
             mod:echo("No modded loadout store for '" .. tostring(career_arg) .. "' (nothing to reset)")
             printf("[gut_dev:NATIVE_LOADOUTS] reset requested for unknown career=%s", tostring(career_arg))
             return
         end
         store[career_arg] = nil
+        overlay[career_arg] = nil
         _persist()
+        _persist_overlay()
         _dirtify()
         mod:echo("Modded loadouts reset for " .. career_arg .. "; they re-seed from official on next use")
         printf("[gut_dev:NATIVE_LOADOUTS] store reset career=%s (will re-seed from official)", career_arg)
     else
+        local seen = {}
+        for career_name in pairs(store) do seen[career_name] = true end
+        for career_name in pairs(overlay) do seen[career_name] = true end
         local n = 0
-        for career_name in pairs(store) do
+        for career_name in pairs(seen) do
             store[career_name] = nil
+            overlay[career_name] = nil
             n = n + 1
         end
         _persist()
+        _persist_overlay()
         _dirtify()
         mod:echo("Modded loadouts reset for " .. n .. " career(s); they re-seed from official on next use")
         printf("[gut_dev:NATIVE_LOADOUTS] store reset ALL (%d careers, will re-seed from official)", n)
@@ -605,6 +746,34 @@ M.rt_checks = {
         if M.mode(true, false) ~= M.MODE_STORE then return "modded default should be STORE" end
         if M.mode(true, nil) ~= M.MODE_STORE then return "nil setting should read as STORE (default OFF)" end
         if M.mode(true, true) ~= M.MODE_READONLY then return "use_non_modded on should be READONLY" end
+    end },
+    { name = "native_loadouts_cosmetic_exempt_readonly", fn = function()
+        -- issue #287: in READONLY, cosmetic slots stay editable (served/captured through the
+        -- overlay); every gameplay slot / talent write stays blocked. COSMETIC_SLOT_SET must
+        -- be exactly LOADOUT_SLOT_NAMES minus GEAR_SLOT_NAMES, with no leak into the gear set.
+        if type(M.readonly_slot_editable) ~= "function" then return "readonly_slot_editable missing" end
+        if type(_overlay) ~= "function" or type(_overlay_get) ~= "function" or type(_overlay_set) ~= "function" then
+            return "cosmetic overlay helpers missing"
+        end
+        local in_loadout = {}
+        for _, s in ipairs(LOADOUT_SLOT_NAMES) do in_loadout[s] = true end
+        for s in pairs(COSMETIC_SLOT_SET) do
+            if not in_loadout[s] then return "cosmetic slot not a loadout slot: " .. s end
+            if GEAR_SLOT_SET[s] then return "cosmetic slot leaked into GEAR_SLOT_SET: " .. s end
+            if not M.readonly_slot_editable(s) then return "readonly_slot_editable false for cosmetic " .. s end
+        end
+        for _, s in ipairs(LOADOUT_SLOT_NAMES) do
+            -- Every loadout slot is exactly one of gear or cosmetic (partition): both or
+            -- neither is a bug. Normalize to booleans so nil (absent) compares correctly.
+            local is_gear = GEAR_SLOT_SET[s] == true
+            local is_cos = COSMETIC_SLOT_SET[s] == true
+            if is_gear == is_cos then
+                return "slot not partitioned gear/cosmetic: " .. s
+            end
+        end
+        -- Gameplay slots and talents must NOT be editable in READONLY.
+        if M.readonly_slot_editable("slot_melee") then return "gear slot_melee editable in readonly" end
+        if M.readonly_slot_editable("talents") then return "talents editable in readonly" end
     end },
     { name = "native_loadouts_no_hardcoded_6", fn = function()
         local expected = InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS

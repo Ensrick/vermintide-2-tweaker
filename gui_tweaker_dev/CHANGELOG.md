@@ -5,6 +5,68 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.188-dev (2026-07-04) -- #305: In-mission mission map (keep "M" map mid-mission)
+
+New feature: open the mission-selection view (the keep's "M" map) during a mission.
+
+- **New `_gut_mission_map.lua`.** Public dispatch field `mod.gut_open_mission_map` fires
+  `Managers.ui:handle_transition("start_game_view_force", { menu_state_name = "play",
+  use_fade = true })` - the same transition + "play" screen the vanilla "M" hotkey routes
+  to (ingame_ui_settings.lua hotkey_map / start_game_view_force :451-454;
+  StartGameView.post_update_on_enter reads menu_state_name -> "play" =
+  StartGameStateSettingsOverview, start_game_view_definitions.lua:90-91). Bypasses the
+  keep-only hotkey gate exactly as the in-mission inventory does. Registers NO hooks:
+  StartGameView mounts no keep-only preview world (init binds the live "level_world" and
+  create_ui_elements builds only flat scenegraph widgets, start_game_view.lua:48,183-195),
+  so unlike the hero-select feature it needs no backdrop swap or restore hooks.
+- **Master toggle `gut_mission_map`** (In-Mission Menus group, default OFF) with
+  auto-hiding sub_widgets: **`gut_mission_map_hotkey`** keybind (default **M**,
+  function_call -> gut_open_mission_map) and **`gut_mission_map_host_only`** checkbox
+  (default OFF, issue #305 requirement). Feature does nothing while the master toggle is
+  off - the default-M keybind no-ops silently (VMF registers the keybind regardless of the
+  parent checkbox, so the handler gates on the setting itself). New chat command **`/map`**
+  (no collision - grep-clean across the repo).
+- **Adventure-only gate.** Opens only in the `adventure` mechanism. Blocked in `deus`
+  (Chaos Wastes - journey-selection layout, documented deus-view crash class, sibling
+  parity), `versus` (vanilla gates "M" behind _handle_versus_matchmaking), and
+  `weave`/anything else (no positive safety evidence). Keep presses are a silent no-op
+  (vanilla "M" already handles the keep). Exit is 100% vanilla (exit_to_game=true ->
+  "exit_menu", back to the mission).
+- Always-on `[gut_dev:MM]` printf diagnostic on every attempt naming the gate hit
+  (disabled/keep/mechanism/host_only/opened). New loc option titles carry `[untested]` tags.
+- **Untested:** needs in-game verification in an Adventure mission (open via M and /map,
+  ESC back to mission), in the keep (M still opens the vanilla map, no double-open), in
+  Chaos Wastes (blocked with the CW message), and as a client with host-only on and off.
+
+## 0.2.187-dev (2026-07-04) -- #287: cosmetics stay editable under "Use non-modded loadouts"
+
+Fixed issue #287: with **Use non-modded loadouts** (`gut_use_non_modded_loadouts`) ON, you
+could not change cosmetics (weapon illusion / hat / skin / portrait frame / victory pose) in
+the modded realm - the change snapped back. That READONLY mode makes the whole loadout a
+read-only mirror of your official data, and cosmetic equips were caught by the same
+snap-back as the gameplay loadout.
+
+- **Scope of the exemption.** Only the gameplay loadout (gear = ranged/melee/necklace/ring/
+  trinket, plus talents, loadout selection, and bot designation) stays read-only and snaps
+  back. Cosmetic slots (`slot_skin` / `slot_hat` / `slot_frame` / `slot_pose`) are now
+  editable in READONLY. The set is exactly `LOADOUT_SLOT_NAMES` minus `GEAR_SLOT_NAMES`
+  (asserted by a new `native_loadouts_cosmetic_exempt_readonly` regression check) and lines
+  up with vanilla `CosmeticUtils` cosmetic slots + `slot_pose`.
+- **Persistence, isolation preserved.** Cosmetic edits made in modded persist modded-side in
+  a NEW cosmetic overlay (VMF setting `native_cosmetic_overlay`), kept separate from the
+  STORE-mode loadout store and keyed by the OFFICIAL selected loadout index so an overlaid
+  hat always lines up with the official gear shown beside it. Official cloud data is NEVER
+  written - the "never touch your official loadouts" guarantee still holds, now for
+  cosmetics too. An untouched cosmetic falls through to your official one.
+- **Where it hooks.** `PlayFabMirrorAdventure.get_character_data` serves cosmetic slots from
+  the overlay (fixes the equipped snap-back); `get_career_loadouts` overlays cosmetics onto
+  the per-loadout previews so the I-VI bar matches; `set_character_data` and the LA-bypass
+  `set_career_read_only_data` capture cosmetic writes into the overlay instead of blocking
+  them. STORE mode (default, toggle OFF) is unchanged.
+- `/reset_modded_loadouts [career]` now also clears the cosmetic overlay.
+- Tooltip + option tag updated (`[verify-fix] [diag] [Issue 287]`), awaiting in-game
+  confirmation.
+
 ## 0.2.186-dev (2026-07-04) -- Ship #301 dev status-tag pass (rider on 0.2.185 #312 UI Tweaks work)
 
 ## 0.2.185-dev (2026-07-04) -- #312: UI Tweaks integration, phase 1

@@ -356,6 +356,34 @@ local options_data = {
                             },
                         },
                     },
+                    -- In-Mission Mission Map (#305): opens the start-game /
+                    -- mission-selection view (the keep "M" map) mid-mission. Master
+                    -- checkbox with auto-hiding sub_widgets (keybind default "M" +
+                    -- host-only toggle). Adventure only; blocked in Chaos
+                    -- Wastes/Versus. See _gut_mission_map.lua.
+                    {
+                        setting_id    = "gut_mission_map",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gut_mission_map_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id      = "gut_mission_map_hotkey",
+                                type            = "keybind",
+                                keybind_trigger = "pressed",
+                                keybind_type    = "function_call",
+                                function_name   = "gut_open_mission_map",
+                                default_value   = {"m"},
+                                tooltip         = "gut_mission_map_hotkey_tooltip",
+                            },
+                            {
+                                setting_id    = "gut_mission_map_host_only",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gut_mission_map_host_only_tooltip",
+                            },
+                        },
+                    },
                     -- Allow crafting bench in mission (moved FROM cim 2026-07-02,
                     -- user direction). Shown ONLY when Crafting in Modded is
                     -- installed (pruned below via _cim_present(), same treatment
@@ -379,8 +407,9 @@ local options_data = {
             -- the former gut_native_loadouts_group/_enabled widgets are gone). This
             -- group holds loadout MANAGEMENT options; more coming later.
             -- gut_use_non_modded_loadouts ON = modded reads your non-modded (official)
-            -- loadouts read-only: every loadout write is blocked, nothing modded can
-            -- change them. OFF (default) = modded loadouts stored separately.
+            -- loadouts read-only: gameplay writes (gear/talents/loadout switch/bot) are
+            -- blocked and snap back; cosmetics (illusion/hat/frame/pose) stay editable
+            -- modded-side (issue #287). OFF (default) = modded loadouts stored separately.
             {
                 setting_id  = "gut_loadout_manager_group",
                 type        = "group",
