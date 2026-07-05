@@ -1,5 +1,29 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.232-dev (2026-07-05) - CLOSED 6 user-confirmed-fixed issues: #143 #119 #133 #121 #115 #114 (regression guards + loc-tag flips)
+
+User confirmed all six fixed in-game; closing with regression guards where the fix was not
+already covered, and clearing each option's `[Issue N]` / `[verify-fix]` loc tag.
+
+- #143 (Morgrim's Bomb over-spawn): the live fix HALVES holy_hand_grenade's world
+  `spawn_weighting` on injected adventure maps and redistributes the freed half proportionally
+  so the pool SUM is byte-identical (a LOWERED total crashed the sampler in v0.7.143). NEW test
+  `morgrim143_renorm_fix` source-guards the sum-preserving renorm. The grant-side faucets (shrine
+  blessing pool, the drop-on-ability boon) remain toggleable via the existing per-boon disables.
+- #133 (Manann's Tempest description): with `tweak_manann_tempest_cooldown` ON, the vanilla
+  `deus_crit_chain_lightning` trait tooltip gains the "8 second cooldown." note via the
+  `_G.Localize` hook. NEW test `manann_tempest_trait_cooldown_note`.
+- #115 / #114 (Shrine / Chest boon GUI overflow): `mod._ct_boon_scroll_setup` adds a track+thumb
+  scrollbar so `shrine_boon_count` / `chest_boon_count` can exceed the fixed vanilla arc. NEW test
+  `boon_offer_scrollbar_wired` guards the export + both wiring sites (shrine @4 rows, chest @3).
+- #119 (Trait Tier by Rarity draws from the whole melee/ranged class union): already guarded by
+  `tier_by_rarity_class_union_ranged`; loc tag cleared.
+- #121 (Shared Reliquaries bot over-upgrade): resolved by the issue-100 pre-bump rarity capture +
+  issue-102 altar-rarity decouple, already guarded by `bot_weap_opened_rarity_pre_bump` +
+  `upgrade_altar_rarity_decouple`; loc tag cleared (kept `[diag]` - the `[ct:bots121]` probe stays
+  armed as recurrence insurance).
+- LOC: cleared `[Issue 119/133/115/114]` + `[verify-fix]`, and `[Issue 121]` (kept `[diag]`).
+
 ## 0.7.231-dev (2026-07-05) - CRASH FIX: no_roamers pairs(nil) on Belakor / deus missions (adventure-derived conflict directors)
 
 **Crash console 2026-07-05-23.30.21 (guid 4c84c68a), mission load of `military_belakor_path1`:** `scripts/settings/mutators/mutator_no_roamers.lua:6: bad argument #1 to 'pairs' (table expected, got nil)`. The `no_roamers` mutator iterates `pack_spawning_settings.difficulty_overrides`, which is nil on the `chaos_light` conflict director this Belakor node runs. Same crash class ct fixed in v0.7.41 for injected-adventure levels - but that fix gated the strip on `on_injected_adventure_level()`, and a Belakor node is a genuine deus mission (not injected-into-stock-Adventure), so the strip never fired and vanilla `no_roamers` crashed at `generate_spawns` during `state_ingame.on_enter`.

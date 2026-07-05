@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.231-dev"
+local MOD_VERSION = "0.7.232-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -13383,6 +13383,73 @@ _rt_register("morgrim143_probe_installed", function()
     end
     if CT_MORGRIM143_MARKER ~= "morgrim143:appearance_by_spawn_type_census_v0.7.212" then
         return "#143 REGRESSION: CT_MORGRIM143_MARKER mismatch — got: " .. tostring(CT_MORGRIM143_MARKER)
+    end
+end)
+
+-- v0.7.232-dev #143 FIX (closed, user-confirmed): the ACTUAL over-spawn fix, not the census.
+-- On injected adventure maps holy_hand_grenade's world spawn_weighting is HALVED and the freed
+-- half redistributed proportionally to the other grenades so the pool SUM stays byte-identical
+-- (a LOWERED total crashed the pickup sampler in v0.7.143). Inline (not a function), so guard by
+-- source-pattern via the file-local _rt_register. Split needle so this line can't self-match.
+_rt_register("morgrim143_renorm_fix", function()
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local needle = "saved_grenade" .. "_weights = {}"
+    if not txt:find(needle, 1, true) then
+        return "#143 REGRESSION: the holy_hand_grenade sum-preserving renorm is gone (Morgrim's Bomb over-spawn fix stripped; a blind weight cut risks the pickup-sampler crash)"
+    end
+end)
+
+-- v0.7.232-dev #133 FIX (closed, user-confirmed): with tweak_manann_tempest_cooldown ON, the
+-- VANILLA Manann's Tempest weapon trait (deus_crit_chain_lightning) tooltip gains the "8 second
+-- cooldown." note - the _G.Localize hook appends it to func()'s vanilla string, gated on the
+-- setting (stays EXACTLY vanilla with the tweak off). Inline in the Localize hook; guard by
+-- source-pattern via the file-local _rt_register. Split needle so this line can't self-match.
+_rt_register("manann_tempest_trait_cooldown_note", function()
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local needle = 'key == "description_deus_crit_chain' .. '_lightning"'
+    if not txt:find(needle, 1, true) then
+        return "#133 REGRESSION: the deus_crit_chain_lightning cooldown-note override is gone (Manann's Tempest trait tooltip no longer reflects the 8s-cooldown tweak)"
+    end
+end)
+
+-- v0.7.232-dev #115 (shrine) / #114 (chest) FIX (closed, user-confirmed): the offered-boon
+-- scrollbar lets shrine_boon_count / chest_boon_count exceed the fixed vanilla arc without
+-- overflow. The export mod._ct_boon_scroll_setup must exist AND be wired at BOTH offer surfaces
+-- (shrine boon_widgets @4 visible rows, cursed-chest _power_up_widgets @3). Split needles so
+-- these lines can't self-match.
+_rt_register("boon_offer_scrollbar_wired", function()
+    if type(mod._ct_boon_scroll_setup) ~= "function" then
+        return "#115/#114 REGRESSION: mod._ct_boon_scroll_setup missing (boon-offer scrollbar stripped; the GUI overflows above the vanilla cap)"
+    end
+    local ok, info = pcall(debug.getinfo, mod._ct_boon_scroll_setup, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local shrine_needle = "_ct_boon_scroll_setup(self, boon" .. "_widgets, 4)"
+    local chest_needle  = "_ct_boon_scroll_setup(self, self._power" .. "_up_widgets, 3)"
+    if not txt:find(shrine_needle, 1, true) then
+        return "#115 REGRESSION: shrine boon-offer scrollbar no longer wired (Shrine of Solace GUI overflows above 4 boons)"
+    end
+    if not txt:find(chest_needle, 1, true) then
+        return "#114 REGRESSION: cursed-chest boon-offer scrollbar no longer wired (Chest of Trials GUI overflows above 3 boons)"
     end
 end)
 
