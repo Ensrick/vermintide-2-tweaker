@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.195-dev"
+local MOD_VERSION = "0.2.197-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1971,14 +1971,21 @@ _rt_register("freecam_invariants", function()
     if not fc:find("is_input_blocked", 1, true) then
         return "freecam missing the PlayerInputExtension.is_input_blocked anti-bleed hook"
     end
-    -- INVARIANT 3: exit is a RAW keyboard poll (input is blocked to all services).
+    -- INVARIANT 3: an F8 raw keyboard poll is still offered as a convenience exit.
     if not fc:find("Keyboard.button", 1, true) then
-        return "freecam missing the raw Keyboard exit poll (chat/keybinds can't reach the user while active)"
+        return "freecam missing the raw Keyboard exit poll (belt-and-suspenders exit)"
     end
     -- INVARIANT 4: the disable_free_flight gate is NOT lifted (keeps the vanilla
     -- F8/F9/drop-player dispatcher from running and misfiring).
     if fc:find("disable_free_flight%s*=%s*false") then
         return "freecam lifts disable_free_flight -- exposes the vanilla free-flight key dispatch (#307 keeps the gate up)"
+    end
+    -- INVARIANT 5 (#307 hard-lock fix): after _enter_free_flight steals every device via
+    -- block_device_except_service, we MUST hand them back so ESC/keybind/checkbox exits
+    -- keep working (the character stays frozen by is_input_blocked). If this call is ever
+    -- removed the mod re-bricks: input locks with only the fragile F8 poll to escape.
+    if not fc:find("device_unblock_all_services", 1, true) then
+        return "freecam does not unblock input devices after entering free flight -- #307 hard input-lock regressed"
     end
 end)
 

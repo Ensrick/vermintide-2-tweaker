@@ -5,6 +5,60 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.197-dev (2026-07-05) -- #307: Free Camera "no cam" -- drive the camera from RAW input (the unblock starved the FreeFlight service) [verify-fix]
+
+- FIX (#307 follow-up): with the v0.2.196 hard-lock fix in hand (user confirmed: chat +
+  `/freecam` now escape cleanly, no force-close), the camera itself still did nothing -
+  "no cam, input still blocked" in the keep. Root cause found by comparing against the
+  reference "Photomode" mod: the vanilla camera driver reads the **FreeFlight input
+  service** (`get_service("FreeFlight"):get("move"/"look")`), and that service only
+  receives device input while free flight BLOCKS every device to it. v0.2.196 unblocks
+  the devices (correctly, to keep ESC/chat/keybind exits alive) - which STARVES that
+  service, so `_drive_free_cam` read all-zeros and never moved the camera.
+- **Fix:** `_drive_free_cam` now reads **raw `Keyboard`/`Mouse`** (WASD/E-Q via
+  `Keyboard.button`, look via `Mouse.axis("mouse")`, speed via `Mouse.axis("wheel")`) -
+  the exact pattern vanilla `scripts/freeflight.lua:17-60` uses. Raw hardware reads are
+  unaffected by input-service blocking, so the camera flies whether or not devices are
+  blocked, with zero dependency on the starved FreeFlight service. Camera math is the
+  vanilla free-fly (move in camera-local frame * speed * dt; mouse pan * rotation_speed).
+- **Triage diagnostics (always-on printf):** activation now logs `[gut_dev:FC]
+  render-state: world=.. vp=.. base_viewport=.. ff_viewport=.. active=..` so we can
+  confirm the detached viewport lives in the on-screen world; and a one-shot `[gut_dev:FC]
+  drive error (camera not moving): ..` surfaces any pcall failure in the driver (was
+  silently swallowed before). If the camera still doesn't render after this, that line
+  tells us render-vs-input in one toggle.
+- is_input_blocked freeze + device-unblock (v0.2.196) are unchanged; this only swaps how
+  the camera reads input.
+
+## 0.2.196-dev (2026-07-05) -- #307: Free Camera hard input-lock -- give the input devices BACK after entering free flight [verify-fix]
+
+- FIX (#307, crash-class): turning Free Camera ON locked ALL input and forced a game
+  close. Root cause, from the console log `console-2026-07-05-18.05.37`: activation
+  reached `[gut_dev:FC] activated` and the log then ended with NO `deactivated` line --
+  the user could never exit and force-closed via Steam. This repeated across FOUR builds
+  (v0.2.189 -> .194) because every prior fix treated a symptom.
+- **The real defect:** the engine's `_enter_free_flight` runs
+  `block_device_except_service("FreeFlight", <device>)` on keyboard/mouse/gamepad
+  (`free_flight_manager.lua:610-612`), which `set_blocked`s EVERY input service except
+  FreeFlight. That killed ESC, chat, VMF keybinds, the checkbox AND `/freecam`, leaving
+  the raw-F8 poll as the ONLY escape -- and that poll empirically never fired. A feature
+  that steals all input and hangs the whole escape on one fragile poll is one bug away
+  from a brick every single time.
+- **The fix:** immediately after `_enter_free_flight` succeeds, call
+  `device_unblock_all_services` on keyboard/mouse/gamepad (`_gut_freecam.lua`,
+  `_gut_apply_freecam`). We never needed that block to stop the character -- the
+  `PlayerInputExtension.is_input_blocked -> true` hook already nullifies every player read
+  (`player_input_extension.lua:146-157`, "the reliable stop"). FreeFlight was the block
+  exception and stays mapped to the devices, so the camera still flies from
+  `_drive_free_cam`; meanwhile ESC / keybind / checkbox / `/freecam` (and the kept F8
+  poll) ALL work again as exits. Vanilla itself unblocks these same services on exit
+  (`:642-644`), so the call is safe. No more single point of failure.
+- `[gut_dev:FC] activated` now logs `(input devices unblocked; character held by
+  is_input_blocked)`; the ON echo lists the menu toggle as an exit alongside F8.
+- rt: `freecam_invariants` gains INVARIANT 5 -- asserts `device_unblock_all_services` is
+  present in the module source, so removing the unblock (re-bricking the mod) fails the
+  regression test.
+
 ## 0.2.195-dev (2026-07-05) -- #336: mission map opens mid-mission with a black backdrop when no menu level is resident [verify-fix]
 
 - FIX (#336 follow-up): the in-mission mission map (#305) now OPENS mid-mission even

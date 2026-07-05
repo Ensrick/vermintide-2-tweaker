@@ -29,19 +29,24 @@ local mod = get_mod("gut_dev")
 --    which is the vanilla dispatcher that reads F8/F9/F10 and the
 --    Enter=teleport-player key. Leaving the gate up means that dispatcher never
 --    runs, so none of those keys can misfire. We drive the camera ourselves from
---    `mod.update` with a trimmed copy of the vanilla `_update_free_flight` camera
---    math (move/look/speed only -- free_flight_manager.lua:655-717), omitting the
---    drop-player / DOF / raycast keys (:719+). Pure "view the level".
+--    `mod.update` (_drive_free_cam) using the vanilla free-fly camera math, reading
+--    RAW Keyboard/Mouse for move/look/speed (see _drive_free_cam) rather than the
+--    "FreeFlight" input service - that service is starved once we unblock the devices.
+--    Omits the drop-player / DOF / raycast keys. Pure "view the level".
 --
---  * INPUT BLOCK: `_enter_free_flight` calls
---    `block_device_except_service("FreeFlight", ...)` on keyboard/mouse/gamepad
---    (:610-612), routing ALL input to the FreeFlight service. That stops the
---    character (the fix the old gt attempt lacked) -- but it ALSO means chat, VMF
---    keybinds and the ESC menu can't reach the user while active. So the ONLY way
---    out is a RAW keyboard poll (Keyboard.button, which reads hardware directly,
---    bypassing the service routing). Exit key = F8. Belt-and-suspenders: we also
---    hook `PlayerInputExtension.is_input_blocked -> true` for the local player, the
---    reliable per-frame block the device-routing empirically didn't guarantee.
+--  * INPUT BLOCK -- and why we IMMEDIATELY undo it (the #307 hard-lock root cause):
+--    `_enter_free_flight` calls `block_device_except_service("FreeFlight", ...)` on
+--    keyboard/mouse/gamepad (:610-612), which set_blocked's EVERY input service except
+--    FreeFlight. That froze the character but ALSO cut ESC, chat, VMF keybinds, the
+--    checkbox and /freecam -- leaving a single raw-F8 poll as the only exit. That poll
+--    empirically NEVER fired (no `deactivated` across 4 builds; users force-closed via
+--    Steam). So the moment we enter, we call `device_unblock_all_services` on all three
+--    devices to hand input back. We don't need the block to stop the character: the
+--    `PlayerInputExtension.is_input_blocked -> true` hook below nullifies every player
+--    read (player_input_extension.lua:146-157) -- the reliable freeze the old gt attempt
+--    lacked. FreeFlight was the block exception and stays mapped to the devices, so the
+--    camera still flies; and now ESC / keybind / checkbox / /freecam ALL work as exits,
+--    with the F8 raw poll kept as one more belt-and-suspenders route.
 --
 --  * TRANSITION SAFETY NET (a gap the Photo Mode mod itself has): on a world
 --    teardown mid-freecam the engine routes to `_clear_free_flight` (:531), which
@@ -114,68 +119,65 @@ local function _player_and_data()
     return player, ff.data[id]
 end
 
--- Trimmed faithful copy of FreeFlightManager._update_free_flight
--- (free_flight_manager.lua:655-717): reads the FreeFlight input service for
--- move/look/speed and writes the camera pose. Deliberately OMITS the vanilla
--- drop-player-at-camera (Enter), raycast, FOV and DOF key handling at :719+ so the
--- camera is view-only. Quaternion/Vector3/Matrix4x4 values are frame-local stack
--- temporaries; the persistent accumulators live in the data slot's Vector3Boxes.
+-- Drives the detached camera every frame from RAW Keyboard/Mouse input.
+--
+-- WHY RAW INPUT (not the "FreeFlight" input service): the vanilla camera driver reads
+-- `input_manager:get_service("FreeFlight"):get("move"/"look"/...)`, but that service only
+-- receives device input while free flight BLOCKS every device to it. We deliberately
+-- unblock the devices on enter (so ESC/keybind/chat stay usable - the #307 hard-lock
+-- fix), which starves that service = camera won't move ("no cam", reported on
+-- v0.2.196-dev). Raw `Keyboard.button`/`Mouse.axis` read hardware directly and are
+-- unaffected by service blocking, so the camera flies regardless. Pattern is vanilla
+-- `scripts/freeflight.lua:17-60` (the engine's own raw free-fly), adapted to drive the
+-- free-flight viewport camera. Quaternion/Vector3/Matrix4x4 are frame-local temporaries.
+local _drive_err_logged = false
 local function _drive_free_cam(dt, player, data)
-    local ff = Managers.free_flight
     local world = Managers.world:world(data.viewport_world_name)
     if not world then return end
+    if not ScriptWorld.has_viewport(world, data.viewport_name) then return end
     local viewport = ScriptWorld.free_flight_viewport(world, data.viewport_name)
     if not viewport then return end
     local cam = data.frustum_freeze_camera or ScriptViewport.camera(viewport)
-    local input = ff.input_manager and ff.input_manager:get_service("FreeFlight")
-    if not input then return end
 
-    -- speed scaling (mouse wheel)
-    local translation_change_speed = data.current_translation_max_speed * 0.5
-    local speed_change = Vector3.y(input:get("speed_change") or Vector3(0, 0, 0))
-    data.current_translation_max_speed = math.max(
-        data.current_translation_max_speed + speed_change * translation_change_speed, 0.01)
+    -- Raw device reads (see WHY above). move = (d-a, w-s, e-q); pan = mouse delta;
+    -- wheel.y = speed change. All bypass the blocked FreeFlight input service.
+    local pan = Mouse.axis(Mouse.axis_index("mouse")) or Vector3(0, 0, 0)
+    local wheel = Mouse.axis(Mouse.axis_index("wheel")) or Vector3(0, 0, 0)
+    local speed_change = Vector3.y(wheel)
+    local move = Vector3(
+        Keyboard.button(Keyboard.button_index("d")) - Keyboard.button(Keyboard.button_index("a")),
+        Keyboard.button(Keyboard.button_index("w")) - Keyboard.button(Keyboard.button_index("s")),
+        Keyboard.button(Keyboard.button_index("e")) - Keyboard.button(Keyboard.button_index("q")))
+
+    -- speed scaling (mouse wheel); current_translation_max_speed seeded to 10 by
+    -- register_player (free_flight_manager.lua:543).
+    local max_speed = data.current_translation_max_speed or 10
+    max_speed = math.max(max_speed + speed_change * (max_speed * 0.5), 0.01)
+    data.current_translation_max_speed = max_speed
 
     local cm = Camera.local_pose(cam)
     local trans = Matrix4x4.translation(cm)
     Matrix4x4.set_translation(cm, Vector3(0, 0, 0))
 
-    -- look (mouse), smoothed through the accumulator box
-    local mouse = input:get("look")
-    local rotation_accumulation = data.rotation_accumulation:unbox() + mouse
-    local rotation = rotation_accumulation * math.min(dt, 1) * (player.free_flight_movement_filter_speed or 15)
-    data.rotation_accumulation:store(rotation_accumulation - rotation)
-
-    local q1 = Quaternion(Vector3(0, 0, 1), -Vector3.x(rotation) * data.rotation_speed)
-    local q2 = Quaternion(Matrix4x4.x(cm), -Vector3.y(rotation) * data.rotation_speed)
+    -- look (mouse pan is already a per-frame delta, so no dt term). rotation_speed
+    -- seeded to 0.003 by register_player.
+    local rot_speed = data.rotation_speed or 0.003
+    local q1 = Quaternion(Vector3(0, 0, 1), -Vector3.x(pan) * rot_speed)
+    local q2 = Quaternion(Matrix4x4.x(cm), -Vector3.y(pan) * rot_speed)
     local q = Quaternion.multiply(q1, q2)
     cm = Matrix4x4.multiply(cm, Matrix4x4.from_quaternion(q))
 
-    -- move (WASD + E/Q up/down), accelerated toward wanted speed
-    local wanted_speed = input:get("move") * data.current_translation_max_speed
-    local current_speed = data.current_translation_speed:unbox()
-    local speed_difference = wanted_speed - current_speed
-    local speed_distance = Vector3.length(speed_difference)
-    local speed_difference_direction = Vector3.normalize(speed_difference)
-    if speed_change ~= 0 then
-        data.acceleration = (player.free_flight_acceleration_factor or 5) * Vector3.length(speed_difference)
-    end
-    local acceleration = data.acceleration
-    local new_speed = current_speed + speed_difference_direction * math.min(speed_distance, acceleration * dt)
-    data.current_translation_speed:store(new_speed)
-
-    local rot = Matrix4x4.rotation(cm)
-    local offset = (Quaternion.forward(rot) * new_speed.y
-                  + Quaternion.right(rot) * new_speed.x
-                  + Quaternion.up(rot) * new_speed.z) * dt
+    -- move in the camera's local frame, scaled by speed (units/sec) * dt.
+    local offset = Matrix4x4.transform(cm, move * (max_speed * dt))
     trans = Vector3.add(trans, offset)
     Matrix4x4.set_translation(cm, trans)
     ScriptCamera.set_local_pose(cam, cm)
 
     -- keep the audio listener + world observers with the camera (vanilla :709-717)
+    local rot = Matrix4x4.rotation(cm)
     local wwise_world = Managers.world:wwise_world(world)
     if wwise_world then WwiseWorld.set_listener(wwise_world, 0, cm) end
-    if ff._has_terrain and data.terrain_decoration_observer then
+    if Managers.free_flight._has_terrain and data.terrain_decoration_observer then
         TerrainDecoration.move_observer(world, data.terrain_decoration_observer, trans)
     end
     if data.scatter_system_observer then
@@ -219,12 +221,45 @@ mod._gut_apply_freecam = function(enabled)
             if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
             return
         end
+        -- ROOT-CAUSE FIX for the #307 hard input lock. `_enter_free_flight` runs
+        -- `block_device_except_service("FreeFlight", <device>)` on keyboard/mouse/gamepad
+        -- (free_flight_manager.lua:610-612), which set_blocked's EVERY input service except
+        -- FreeFlight - killing ESC, chat, VMF keybinds, the checkbox AND /freecam, so the
+        -- fragile raw-F8 poll became the ONLY way out. That poll empirically never fired
+        -- (no `deactivated` across 4 builds / multiple sessions; users force-closed via
+        -- Steam - console-2026-07-05-18.05.37 ends at `activated` with no exit). We do NOT
+        -- need that block: the is_input_blocked hook below already freezes the character
+        -- (PlayerInputExtension.get nullifies every read, player_input_extension.lua:146-157;
+        -- the memory note calls it "the reliable stop"). So immediately hand the devices
+        -- back. FreeFlight was the block exception and stays mapped to the devices
+        -- (register_input_manager, :49-51), so the camera still flies from _drive_free_cam;
+        -- meanwhile ESC / keybind / checkbox / /freecam all work again as exits. Vanilla
+        -- itself unblocks these exact services on exit (:642-644), so this is a safe call.
+        local im = Managers.free_flight.input_manager
+        if im then
+            pcall(im.device_unblock_all_services, im, "keyboard")
+            pcall(im.device_unblock_all_services, im, "mouse")
+            pcall(im.device_unblock_all_services, im, "gamepad")
+        end
         _exit_key_was_down = true   -- swallow the keypress that toggled us on
+        _drive_err_logged = false   -- re-arm the one-shot drive-error diagnostic
         _freecam_active = true
-        printf("[gut_dev:FC] activated")
+        printf("[gut_dev:FC] activated (input devices unblocked; character held by is_input_blocked)")
+        -- Render-state diagnostic (#307 "no cam" triage): confirm the free-flight
+        -- viewport was created in the ON-SCREEN world/viewport. If base_viewport is
+        -- false or the world is wrong, the detached cam renders off-screen.
+        do
+            local dw = Managers.world:world(data.viewport_world_name)
+            local base_ok = dw and ScriptWorld.has_viewport(dw, data.viewport_name) or false
+            local ff_ok = false
+            if dw then ff_ok = pcall(ScriptWorld.free_flight_viewport, dw, data.viewport_name) end
+            printf("[gut_dev:FC] render-state: world=%s vp=%s base_viewport=%s ff_viewport=%s active=%s",
+                tostring(data.viewport_world_name), tostring(data.viewport_name),
+                tostring(base_ok), tostring(ff_ok), tostring(data.active))
+        end
         -- apply() owns ALL activation feedback so every entry path (checkbox,
-        -- keybind, /freecam, deferred menu-close) shows the exit key.
-        mod:echo("Free camera: ON. WASD move, mouse look, E/Q up/down, wheel speed. F8 to exit.")
+        -- keybind, /freecam, deferred menu-close) shows the exit routes.
+        mod:echo("Free camera: ON. WASD move, mouse look, E/Q up/down, wheel speed. F8, or turn Free Camera off in the menu, to exit.")
     else
         local was_on = _freecam_active or _pending_menu_close
         _pending_menu_close = false
@@ -288,7 +323,11 @@ mod.update = function(dt)
         _prev_third_person = nil
         return
     end
-    pcall(_drive_free_cam, dt, player, data)
+    local ok, err = pcall(_drive_free_cam, dt, player, data)
+    if not ok and not _drive_err_logged then
+        _drive_err_logged = true   -- one-shot so we don't spam every frame
+        printf("[gut_dev:FC] drive error (camera not moving): %s", tostring(err))
+    end
 end
 
 -- Anti-bleed: while freecam owns the local player, block every input the character
