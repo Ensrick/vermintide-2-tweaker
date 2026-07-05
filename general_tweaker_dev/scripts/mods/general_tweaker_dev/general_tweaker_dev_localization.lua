@@ -429,7 +429,7 @@ return {
     gt_solo_disable_fog = { en = "[untested] Disable fog" },
     gt_solo_disable_fog_tooltip = { en = "The level's fog stops rendering, giving a cleaner line of sight. Purely visual and affects only your own game." },
     gt_solo_disable_mutator_explosions = { en = "[untested] Disable mutator death explosions" },
-    gt_solo_disable_mutator_explosions_tooltip = { en = "Removes the purple burst that enemies leave behind when they die under the Explosive mutator or boon." },
+    gt_solo_disable_mutator_explosions_tooltip = { en = "Removes the purple burst that enemies leave behind when they die under the Explosive mutator or boon. Works whether you host or join, and only changes what you see." },
     gt_solo_disable_sun_shadows = { en = "[untested] Disable sun shadows" },
     gt_solo_disable_sun_shadows_tooltip = { en = "Sun shadows stop rendering, for clearer visibility and a small performance gain. Purely visual and affects only your own game." },
     gt_solo_disable_ult_fx = { en = "[untested] [Issue 255] Disable ult screen effects" },

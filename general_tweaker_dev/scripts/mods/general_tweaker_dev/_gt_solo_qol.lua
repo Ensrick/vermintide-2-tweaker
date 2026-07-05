@@ -279,14 +279,54 @@ end)
 -- ----------------------------------------------------------------------------
 -- Disable the purple mutator explosion (elite/special death burst)
 -- ----------------------------------------------------------------------------
-mod:hook("AiUtils", "generic_mutator_explosion", function (func, killed_unit, blackboard, explosion_template_name)
-    if mod:get("gt_solo_disable_mutator_explosions")
-       and (explosion_template_name == "generic_mutator_explosion"
-         or explosion_template_name == "generic_mutator_explosion_medium"
-         or explosion_template_name == "generic_mutator_explosion_large") then
+-- #332: the Explosive-mutator death burst renders through TWO paths, and the
+-- toggle must cover both so it works as a CLIENT, not just as host (the option's
+-- True-Solo QoL origin was always host):
+--   1) HOST path -- AiUtils.generic_mutator_explosion runs on the server when an
+--      elite/special dies under the Explosive mutator/boon: it renders locally,
+--      then send_rpc_clients("rpc_create_explosion", ...) to every client
+--      (ai_utils.lua:575-589). Hook #1 suppresses the host's local render.
+--   2) CLIENT path -- each client renders the burst from its OWN
+--      AreaDamageSystem.rpc_create_explosion handler (area_damage_system.lua:489
+--      resolves the network id -> template name, :494 DamageUtils.create_explosion),
+--      NOT from generic_mutator_explosion, so hook #1 never fires on a client.
+--      Hook #2 suppresses that client render.
+-- Both filter STRICTLY by explosion-template name so normal bomb / artillery /
+-- grenadier explosions are never touched. Purely cosmetic (client create_explosion
+-- runs is_husk with is_server=false, so no authoritative damage rides this path);
+-- affects only what the local player sees, never anyone else.
+local function _gt_is_mutator_explosion(name)
+    return name == "generic_mutator_explosion"
+        or name == "generic_mutator_explosion_medium"
+        or name == "generic_mutator_explosion_large"
+end
+
+-- Hook #1 -- HOST render path. do_damage (vanilla's 4th arg, ai_utils.lua:575 --
+-- gates whether the blast deals damage) is now captured and forwarded; the prior
+-- 3-arg func() call silently passed do_damage=nil on every non-suppressed call.
+mod:hook("AiUtils", "generic_mutator_explosion", function (func, killed_unit, blackboard, explosion_template_name, do_damage)
+    if mod:get("gt_solo_disable_mutator_explosions") and _gt_is_mutator_explosion(explosion_template_name) then
         return
     end
-    return func(killed_unit, blackboard, explosion_template_name)
+    return func(killed_unit, blackboard, explosion_template_name, do_damage)
+end)
+
+-- Hook #2 -- CLIENT render path (#332). Drop the local render when the RPC
+-- resolves to a mutator template. Gated on `not self.is_server` so the host's
+-- re-broadcast to OTHER clients (the `if self.is_server` block at
+-- area_damage_system.lua:474-478) is never touched -- the fix affects only the
+-- local player's view. Full mod:hook (not hook_safe) so the render can actually
+-- be skipped. Duplicate-hook pre-flight (2026-07-05): no other gt hook targets
+-- AreaDamageSystem.rpc_create_explosion.
+mod:hook("AreaDamageSystem", "rpc_create_explosion", function (func, self, channel_id, attacker_unit_id, attacker_is_level_unit, position, rotation, explosion_template_name_id, scale, damage_source_id, attacker_power_level, is_critical_strike, source_attacker_unit_id)
+    if mod:get("gt_solo_disable_mutator_explosions") and not self.is_server then
+        local lookup = NetworkLookup and NetworkLookup.explosion_templates
+        local name = lookup and lookup[explosion_template_name_id]
+        if _gt_is_mutator_explosion(name) then
+            return
+        end
+    end
+    return func(self, channel_id, attacker_unit_id, attacker_is_level_unit, position, rotation, explosion_template_name_id, scale, damage_source_id, attacker_power_level, is_critical_strike, source_attacker_unit_id)
 end)
 
 -- ----------------------------------------------------------------------------

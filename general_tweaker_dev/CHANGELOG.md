@@ -1,5 +1,20 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.186-dev (2026-07-05) -- #332 Disable mutator death explosions now works client-side
+
+### Why
+Issue #332: two Visuals-and-Audio options came from the True-Solo QoL mod (where you are always host) and only worked as host. Part 1 (Disable mutator death explosions) is fixed here; Part 2 (Max Ragdolls) still needs a live client-session verify before deciding its fix, so it is untouched.
+
+### Changed
+- **`gt_solo_disable_mutator_explosions` now suppresses the CLIENT render path too.** The purple Explosive-mutator/boon death burst renders via two paths: on the HOST through `AiUtils.generic_mutator_explosion` (already hooked), and on each CLIENT through its own `AreaDamageSystem.rpc_create_explosion` handler (`area_damage_system.lua:489` resolves the network id -> template name, `:494` `DamageUtils.create_explosion`) — which the host-only hook never sees. Added a second `mod:hook` on `AreaDamageSystem.rpc_create_explosion` that drops the local render when the template resolves (via `NetworkLookup.explosion_templates`) to `generic_mutator_explosion` / `_medium` / `_large`. Both hooks filter strictly by template name, so normal bomb/artillery/grenadier explosions are untouched.
+- **Client-only, never affects others.** Hook #2 is gated on `not self.is_server`, so the host's re-broadcast to OTHER clients (`area_damage_system.lua:474-478`) is never touched. The client render path runs `is_husk` with `is_server=false`, so no authoritative damage rides it — the change is purely cosmetic to the local player's view, matching the option's intent.
+- **Fixed the adjacent host-side arg drop.** The existing `generic_mutator_explosion` hook captured only 3 params and called `func()` with 3, silently passing vanilla's 4th arg `do_damage` (`ai_utils.lua:575`, gates whether the blast deals damage) as nil on every non-suppressed call. Now captured and forwarded. Extracted the shared template test into `_gt_is_mutator_explosion`.
+- Duplicate-hook pre-flight (2026-07-05): no other gt hook targets `AreaDamageSystem.rpc_create_explosion`; the only `generic_mutator_explosion` hook is the one edited.
+
+### Notes
+- Still `[untested]` — needs an in-game verify as a non-host client (join a friend's lobby, enable the option, confirm the Explosive-mutator death burst no longer renders while normal bombs still do).
+- **Part 2 (Max Ragdolls, `gt_more_corpses_count`) NOT addressed here.** Source read is inconclusive: `UnitSpawner.update_death_watch_list` runs client-side and reads the local `RagdollSettings` cap, but the pruning count is host-authoritative (`Managers.state.conflict:total_num_ai_spawned()`) and network-unit deletion is host-driven, so a client cap may be overridden. Per the issue, this needs a live client-session verify before deciding whether it already works, is inherently host-side (tooltip note), or needs a client-local retention approach. #332 stays open for that half.
+
 ## v0.2.185-dev (2026-07-05) -- #139 bots teleport AWAY from downed players: blanket leash veto
 
 ### Why
