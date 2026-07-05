@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.224-dev"
+local MOD_VERSION = "0.7.225-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -11615,6 +11615,67 @@ end
 -- player ends up with this boon but no ranged weapon, the stat_buff is just inert
 -- (no shots fire = no extra projectiles). Skipping the gate for v0.7.34; can add an
 -- offer-time filter if it becomes a real issue.
+-- #144: Vaul's Anvil perk reconciler + probe (replaces vanilla always_blocking_update on ct's
+-- boon controller buff; registered into BuffFunctionTemplates.functions in pre_register_trait_boon_
+-- lookups and pointed at by the cloned controller sub-buff's update_func).
+--
+-- The boon's effect is the `deus_always_blocking_buff`, which drives status.override_blocking on/off
+-- (apply/remove_always_blocking, morris_buff_settings.lua:1003/1009). Vanilla maintains that perk
+-- ONLY reactively: block-broken lockout recovery, plus an ORPHANED weapon-swap trigger
+-- (always_blocking_weapon_swap, :3093) that NOTHING in the shipped engine ever calls. So once the
+-- perk is dropped -- e.g. by the block-broken 10s lockout, or a buff refresh on some equip/wield/
+-- pickup action -- there is no reliable path that re-adds it, and the boon "stops working" while
+-- still sitting in the boon list (exactly the #144 re-characterization). This reconciler is
+-- authoritative EVERY frame: the perk is present IFF a melee weapon is wielded AND the lockout is
+-- not active, so it self-heals any drop the moment the player is back on melee. Runs in the same
+-- buff-update context vanilla always_blocking_update did (buff_extension.lua:794), so add_buff/
+-- remove_buff of the perk carry the same authority/network path (apply/remove_always_blocking do
+-- the override_blocking network send). It also edge-logs `[ct:vaul]` (raw printf; the host runs VMF
+-- logging OFF) on every state change, including a `desync` watch (override_blocking not matching the
+-- wielded/lockout state even though the perk presence is correct) -- if that ever fires the loss is
+-- deeper than perk presence and the log will say so. On `mod.` (not a file-scope local) per the Lua
+-- 5.1 200-locals cap. pcall-free hot path but every engine call is existence-guarded.
+mod._ct_vauls_anvil_reconcile = function(unit, buff, params)  -- luacheck: ignore params
+    local buff_ext = ScriptUnit.has_extension(unit, "buff_system")
+    local inv_ext  = ScriptUnit.has_extension(unit, "inventory_system")
+    if not (buff_ext and inv_ext) then return end
+    local perk_name = (buff.template and buff.template.buff_to_add) or "deus_always_blocking_buff"
+    local eq       = inv_ext:equipment()
+    local wielded  = eq and eq.wielded and eq.wielded.slot_type or nil
+    local melee    = wielded == "melee"
+    local locked   = buff_ext:has_buff_type("deus_always_blocking_lock_out") and true or false
+    local want     = melee and not locked
+    local has_perk = buff_ext:has_buff_type(perk_name) and true or false
+    local action   = "none"
+
+    if want and not has_perk then
+        buff.buff_id = buff_ext:add_buff(perk_name)
+        has_perk = true
+        action = "readd"
+    elseif (not want) and has_perk then
+        if buff.buff_id then buff_ext:remove_buff(buff.buff_id) end
+        buff.buff_id = nil
+        has_perk = false
+        action = melee and "remove_lockout" or "remove_ranged"
+    end
+
+    -- Watch (not healed here): override_blocking should equal `want` once the perk state is right.
+    -- Per the engine, override_blocking is set ONLY by apply/remove_always_blocking, so reconciling
+    -- the perk above should keep it correct; a persistent desync would mean an external clear.
+    local status_ext = ScriptUnit.has_extension(unit, "status_system")
+    local override   = status_ext and status_ext.override_blocking
+    local desync     = status_ext and ((want and override ~= true) or ((not want) and override ~= nil)) or false
+
+    -- Edge-triggered: log only when the state changes, so per-mission volume stays tiny.
+    local sig = string.format("%s|%s|%s|%s|%s", tostring(wielded), tostring(locked), tostring(has_perk), tostring(override), action)
+    if buff._ct_vaul_sig ~= sig then
+        buff._ct_vaul_sig = sig
+        pcall(printf, "[ct:vaul] wielded=%s melee=%s locked=%s has_perk=%s override_blocking=%s want=%s action=%s desync=%s (#144)",
+            tostring(wielded), tostring(melee), tostring(locked), tostring(has_perk),
+            tostring(override), tostring(want), action, tostring(desync))
+    end
+end
+
 local CT_TRAIT_BOONS = {
     { name = "ct_boon_vauls_anvil",         toggle = "enable_boon_vauls_anvil",         rarity = "unique", icon = "deus_icon_meta_01", source_buff = "always_blocking" },
     { name = "ct_boon_manann_tempest",      toggle = "enable_boon_manann_tempest",      rarity = "unique", icon = "deus_icon_meta_01", source_buff = "deus_crit_chain_lightning" },
@@ -11651,6 +11712,24 @@ local function pre_register_trait_boon_lookups()
     if not (templates and buff_templates and dpubt) then
         _dbg("[trait-boon] pre-register skipped: globals not yet loaded")
         return
+    end
+    -- #144: register ct's Vaul's Anvil perk reconciler into the shared buff-function table
+    -- BEFORE any buff can resolve it. buff_extension.update calls
+    -- BuffFunctionTemplates.functions[update_func](...) UNGUARDED (buff_extension.lua:794), so a
+    -- buff must never name an unregistered function. We therefore only repoint the boon's
+    -- update_func to "ct_vauls_anvil_reconcile" when this registration actually succeeded; otherwise
+    -- the clone keeps vanilla "always_blocking_update" (always present) and simply falls back to
+    -- vanilla behavior -- no crash. BuffFunctionTemplates is a core global loaded before mods, so
+    -- readiness here is the normal case.
+    local _ct_reconciler_ready = false
+    do
+        local buff_funcs = rawget(_G, "BuffFunctionTemplates")
+        if buff_funcs and buff_funcs.functions and type(mod._ct_vauls_anvil_reconcile) == "function" then
+            buff_funcs.functions.ct_vauls_anvil_reconcile = mod._ct_vauls_anvil_reconcile
+            _ct_reconciler_ready = true
+        else
+            _dbg("[trait-boon] BuffFunctionTemplates not ready -- Vaul's Anvil keeps vanilla always_blocking_update (reconciler deferred)")
+        end
     end
     local sorted = {}
     for _, spec in ipairs(CT_TRAIT_BOONS) do sorted[#sorted + 1] = spec end
@@ -11707,6 +11786,24 @@ local function pre_register_trait_boon_lookups()
                 -- inject_dormant_boon's `buff_template.buffs[1].name = buff_name`
                 -- assignment doesn't nil-crash.
                 cloned_buffs[1] = { name = "placeholder" }
+            end
+            -- #144: repoint Vaul's Anvil's controller sub-buff to ct's self-healing reconciler
+            -- (mod._ct_vauls_anvil_reconcile). Vanilla always_blocking_update only re-applies the
+            -- perk reactively -- via block-broken lockout recovery and an ORPHANED weapon-swap
+            -- trigger (always_blocking_weapon_swap, morris_buff_settings.lua:3093, which nothing in
+            -- the engine ever fires) -- so once deus_always_blocking_buff is dropped by equip/wield
+            -- churn it can stay off (the "stops working after an equip action" report). The
+            -- reconciler is authoritative every frame: perk present IFF melee wielded AND not
+            -- lockout. Matched by the perk field so array order is irrelevant; only repointed when
+            -- the function is confirmed registered (see _ct_reconciler_ready) so the buff never
+            -- names an unregistered update_func.
+            if spec.name == "ct_boon_vauls_anvil" and _ct_reconciler_ready then
+                for _, sub in ipairs(cloned_buffs) do
+                    if type(sub) == "table" and sub.buff_to_add == "deus_always_blocking_buff"
+                        and sub.update_func == "always_blocking_update" then
+                        sub.update_func = "ct_vauls_anvil_reconcile"
+                    end
+                end
             end
             templates[spec.name] = {
                 advanced_description = "description_" .. spec.name,
