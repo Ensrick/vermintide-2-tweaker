@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.363-dev"
+local MOD_VERSION = "0.1.364-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -1526,11 +1526,6 @@ end)
 -- -15% damage, +15% speed, +15% cleave, -15% stagger
 -- ============================================================
 
-local _IL_DAMAGE_MULT  = 0.85
-local _IL_SPEED_MULT   = 1.15
-local _IL_CLEAVE_MULT  = 1.15
-local _IL_STAGGER_MULT = 0.85
-
 -- CLARIFY: Damage-profile clone. Each cwv template clone calls this once per
 -- sub-action's damage_profile string; the function is idempotent (early-return
 -- on existing clone) so the same source profile shared across multiple
@@ -1636,6 +1631,20 @@ end
 
 -- ANIM ADDENDUM: this function only touches stats + 3P fields. 1P animations
 -- are universal (see top-of-file ANIMATION ARCHITECTURE) and need no work.
+-- #284: The Imperial Longsword (2H) and Imperial Longsword + Shield
+-- constructors share the _IL_* multipliers, so both are scoped in one do..end
+-- (a sibling to the per-template blocks below) to release their top-level
+-- locals back to the main chunk. Lua 5.1 caps any function (incl. the main
+-- chunk) at 200 simultaneously-active locals. Both constructors are still
+-- defined and invoked exactly once, in original order, inside the block. The
+-- shared `_clone_damage_profile` helper stays OUTSIDE (declared above) because
+-- later weapon families reference it too.
+do  -- #284: scope imperial-longsword (2H + shield) template locals off the top-level chunk (>200-local limit)
+local _IL_DAMAGE_MULT  = 0.85
+local _IL_SPEED_MULT   = 1.15
+local _IL_CLEAVE_MULT  = 1.15
+local _IL_STAGGER_MULT = 0.85
+
 local function _create_imperial_longsword_template()
 	if not Weapons or not Weapons.bastard_sword_template then
 		mod:warning("bastard_sword_template not found — Imperial Longsword stat modifications unavailable")
@@ -1734,6 +1743,7 @@ local function _create_imperial_longsword_shield_template()
 end
 
 _create_imperial_longsword_shield_template()
+end  -- #284: end imperial-longsword (2H + shield) do-block
 
 -- ============================================================
 -- Elven Sword+Shield template (modified one_handed_sword_shield_template_1)
@@ -2591,6 +2601,7 @@ end  -- #284: end poleaxe do-block
 --     once `Projectiles.cwv_outrider_grenade` is set up.
 -- ============================================================
 
+do  -- #284: scope outrider grenade-launcher template locals off the top-level chunk (>200-local limit)
 local _OUTRIDER_PROJECTILE_SPEED = 3500
 local _OUTRIDER_RELOAD_MULT      = 0.75   -- 0.75× trollhammer reload = ~25% faster reload
 local _OUTRIDER_DAMAGE_MULT      = 0.65
@@ -2773,6 +2784,7 @@ local function _create_outrider_grenade_launcher_template()
 end
 
 _create_outrider_grenade_launcher_template()
+end  -- #284: end outrider grenade-launcher do-block
 
 -- ============================================================
 -- Crossbow base-template patches for Kruber (v0.1.347-dev)
@@ -6573,6 +6585,10 @@ end
 --   universal: attack_push, parry_pose
 -- Source events already in target (attack_swing_right,
 -- attack_swing_right_diagonal, attack_push, parry_pose) need no entry.
+-- #284: rapier constructor + its two private 3P remap tables wrapped in a
+-- do..end so their top-level locals release after the block (Lua 5.1 200-local
+-- limit). `_always_false` (referenced inside) stays declared above the block.
+do
 local _RAPIER_ANIM_REMAP_3P = {
 	-- Stab charge → heavy charge (closest charge anim).
 	attack_swing_stab_charge = "attack_swing_charge_left",
@@ -6678,6 +6694,7 @@ local function _create_rapier_template()
 end
 
 _create_rapier_template()
+end -- #284: end rapier constructor do..end block
 
 -- NOTE: brace_repeater_template + cwv_es_brace_repeater variant moved to
 -- weapon_tweaker in v0.1.187 (CWV-side). The functionality lives there

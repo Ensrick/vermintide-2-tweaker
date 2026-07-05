@@ -1,5 +1,20 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.364-dev — 2026-07-05 — More #284 headroom: wrap 3 more constructors (imperial longsword 2H + shield, outrider, rapier)
+
+**Why:** the v0.1.363-dev fix wrapped seven weapon-template constructors in `do..end`, bringing the main chunk down from its 200/200 ceiling to **170 active locals** (measured at that HEAD: appending 30 dummy top-level locals still built, 31 failed) — 30 slots of headroom. That cleared the compile break, but 30 slots is thin: `ship.ps1`'s GitHub-release stage rebuilds every mod, so a handful of new top-level locals in cwv would re-trip `main function has more than 200 local variables` and again break *every mod's* ship. This change widens the margin. (The .363 entry's "219 → ~189" was an estimate; the measured count at that commit was 170.)
+
+**Fix (no behavior change):** wrapped three more self-contained constructor regions in `do..end`, matching the .363 per-template pattern, so their private locals release from the top-level chunk:
+- **Imperial Longsword (2H) + Imperial Longsword & Shield** — one shared block, since both constructors use the `_IL_*` multipliers. The four `_IL_*` constants were relocated from above the shared `_clone_damage_profile` helper (which stays top-level — many weapon families reference it) to inside the block.
+- **Outrider Grenade Launcher** — own block (`_OUTRIDER_*` constants + constructor).
+- **Rapier** — own block (`_RAPIER_ANIM_REMAP_3P`, `_rapier_kruber_wield_3p` + constructor); `_always_false` stays top-level (referenced as an upvalue).
+
+Each region is a `[private constants/helpers + local function _create_X_template() + single immediate call]` unit that is referenced nowhere else (every other mention is a comment), so wrapping is a pure lexical-scoping change.
+
+**Result (measured):** this change frees **15** more locals, **170 → 155 active** — 45 slots of headroom below the 200 cap (#284's ten `do..end` blocks together account for the full 200 → 155). Headroom probe on this build: appending 40 dummy top-level locals still builds; 45 still builds; 46 fails. `VMBLauncher.exe build character_weapon_variants` → `[build] OK` (4 bundles).
+
+**Reference integrity:** every wrapped constant/constructor was grepped file-wide; no reference survives outside its block (declaration + in-block uses + comments only).
+
 ## 0.1.363-dev — 2026-07-05 — Fix compile failure: `main function has more than 200 local variables` (#284)
 
 **Symptom:** cwv stopped compiling with the Stingray error `main function has more than 200 local variables` at `character_weapon_variants.lua:10203`. Because `ship.ps1`'s GitHub-release stage (`publish-release.ps1`) rebuilds every mod, this broke the release stage of *every other mod's* ship even when that mod built/deployed/uploaded fine.
