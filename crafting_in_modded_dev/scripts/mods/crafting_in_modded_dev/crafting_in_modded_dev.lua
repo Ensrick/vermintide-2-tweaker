@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.49-dev"
+local MOD_VERSION = "0.8.50-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -6413,6 +6413,32 @@ _rt_register("single_on_enter_hook_per_class", function()
     end
     if #missing > 0 then
         return "classes not loaded (run in-keep): " .. table.concat(missing, ", ")
+    end
+end)
+
+_rt_register("weave_forge_hides_cost_readout", function()
+    -- (#239) In the modded Athanor all trait/property/talent Costs are faked to 0
+    -- (free crafting), so the vanilla "Cost: 0" readout is meaningless clutter. A
+    -- hook_safe on HeroWindowWeaveProperties._populate_menu_option_widget blanks
+    -- content.price_text AND zeroes the separate price_icon alpha while
+    -- _custom_forge_active. Source-pattern guard on THIS file (path via the
+    -- file-local _rt_register). Split needles so these lines can't self-match.
+    -- No-op if the source is unreadable.
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local hook_needle  = '"HeroWindowWeaveProperties", "_populate_menu_option' .. '_widget"'
+    local blank_needle = 'widget.content.price' .. '_text = ""'
+    if not txt:find(hook_needle, 1, true) then
+        return "#239 regression: the HeroWindowWeaveProperties._populate_menu_option_widget hook is gone (Cost:0 readout returns in the modded Athanor)"
+    end
+    if not txt:find(blank_needle, 1, true) then
+        return "#239 regression: the price_text blank is gone from the weave-forge cost-hide hook (Cost:0 readout returns)"
     end
 end)
 

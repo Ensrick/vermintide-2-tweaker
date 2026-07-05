@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.50-dev (2026-07-05) - #239 CLOSED (user-confirmed in-game): hide the meaningless "Cost: 0" readout in the modded Athanor
+
+- #239 CLOSED - user confirmed the v0.8.45-dev fix works in-game. The modded Athanor
+  fakes all essence/mastery costs to 0 (free crafting), so the vanilla per-option
+  "Cost: 0" readout on every trait/property/talent row is meaningless clutter. The
+  hook_safe on `HeroWindowWeaveProperties._populate_menu_option_widget` blanks
+  `content.price_text` and zeroes the separate `price_icon` alpha while
+  `_custom_forge_active` (per-widget, layout-safe, modded-forge only). The fix itself
+  is unchanged (live since v0.8.45-dev); this build adds the regression guard on close.
+- TEST: new `_rt_register("weave_forge_hides_cost_readout")` source-pattern guard -
+  asserts BOTH the `_populate_menu_option_widget` hook and the `price_text` blank
+  survive, so the Cost:0 readout cannot silently return (`/regression_test`).
+
 ## 0.8.49-dev (2026-07-05) - #83 round 2: panel smoke + top-array raw textures (session 9cc7ebf2)
 
 **CRASH FIX.** First in-mission Athanor test on v0.8.48-dev got PAST the blend layer (all three `[cim:83] forge viewport env` probes fired, `ui_store_preview` picked, resident) and crashed one frame later on the NEXT layer of the known keep-only-material class: `ui_passes.lua:194: Material 'forge_overview_top_glow_effect_smoke_1' not found in Gui`, from `HeroWindowWeaveForgePanel._draw` (log 18.29.57-9cc7ebf2, running v0.8.48-dev confirmed).
