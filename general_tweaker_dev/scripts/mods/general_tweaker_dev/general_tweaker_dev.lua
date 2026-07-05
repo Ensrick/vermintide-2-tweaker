@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.186-dev"
+local MOD_VERSION = "0.2.187-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -2412,5 +2412,11 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_hp_smoothing")
 -- for the saved_positions_module_wired regression check below. Load order
 -- irrelevant (no setting/state chain, no hooks).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_saved_positions")
+
+-- Debug Highlights (Dev Tools, #302): in-world LineObject wireframes for
+-- interactables, pickups, pickup spawners, enemy/player boxes, headshot nodes,
+-- and enemy aggro rings. Rides mod._gt_register_update; all toggles default OFF
+-- (zero per-frame work until enabled). Dev-only, client-safe. No new hooks.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_highlights")
 
 mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GT) / 1024)

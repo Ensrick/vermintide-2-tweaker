@@ -1,5 +1,36 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.187-dev (2026-07-05) -- #302 Debug Highlights (phase 1: in-world wireframe overlay)
+
+### Why
+Issue #302: a nested Dev Tools menu of toggles that visualize normally-invisible gameplay geometry in-world with colored wireframes, to make testing and bug-repro faster. The issue flags this as a research + phase-1 task: ship the feasible categories well, produce evidence-based feasibility verdicts for the rest.
+
+### Changed
+- **New file `_gt_debug_highlights.lua`** (dev-only, no new hooks). One shared `LineObject` per level world, rebuilt and dispatched every frame from `mod._gt_register_update("debug_highlights", ...)`. Draw core / lifecycle copied from `_gt_solo_qol.lua`'s boss-sphere debug draw (`Managers.world:world("level_world")` -> recreate on world change -> `World.create_line_object(world, false)` -> `LineObject.reset` -> add primitives -> `LineObject.dispatch(world, lo)`). Everything OFF == zero per-frame work (early-out before any enumeration); `_clear()` erases lingering lines and the mission-enter chain-wrap drops the stale world handle.
+- **Seven working categories, all client-safe, all default OFF** (master `gt_debug_highlights`, children under it via the VMF native master-toggle submenu):
+  - `[untested] Interactables` (yellow box) -- `get_entities("GenericUnitInteractableExtension"/"LocalInteractableExtension")`, `interactable_system.lua:11-17`.
+  - `[untested] Item Pickups` (green box) -- the four pickup extensions `pickup_system.lua:22-28`; `POSITION_LOOKUP[unit]`.
+  - `[untested] Pickup Spawn Points` (grey box, shown even when empty) -- `get_entities("PickupSpawnerExtension")`, client-safe route (`pickup_system.lua:110`).
+  - `[untested] Enemy Hitboxes` (red box) -- `ai_system` broadphase query around the player (`ai_system.lua:94`), `Unit.box(unit)` OOBB.
+  - `[untested] Player Hitboxes` (dark green box) -- `Managers.player:human_and_bot_players()`, `Unit.box(unit)`.
+  - `[untested] Headshot Zones` (orange sphere, APPROXIMATE) -- sphere at the breed head node (`breed.hit_zones[headshot-zone].actors[1]`, `breed_skaven_clan_rat.lua:89-97`); true hit-capsule dimensions are not exposed to Lua, so a fixed ~0.28 m radius proxy is drawn and labeled as such in the tooltip.
+  - `[untested] Aggro Ranges` (amber ring) -- `add_circle` at `breed.detection_radius` (`breed_skaven_clan_rat.lua:18`). Enemy perception is a radius + line-of-sight, not a cone.
+  - `[untested] Draw Distance` dropdown (20/30/50 m, default 30): all enumeration is distance-culled from the local player and unit-capped per category (this runs per frame).
+- **Wired** `mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_highlights")` in the main file; Dev Tools group widgets added to `general_tweaker_dev_data.lua`; loc titles + tooltips added (titles carry `[untested]` per LOCALIZATION_STANDARD section 13; tooltips name the color and both approximations).
+- **Always-on dev diagnostic** via engine `printf` tagged `[gt_dev:DH]`: one line when the master flips on/off, and one per second MAX summarizing per-category draw counts. No new `mod:hook` -- update-registry + enumeration only.
+
+### Notes
+- **WIREFRAME ONLY this build.** The issue also asks for translucent fills; filled world-gui triangles are deferred to a later phase (LineObject draws outlines, not filled faces).
+- **Deferred categories with feasibility verdicts** (evidence for the #302 tracking comment; no widget shipped for these to avoid dead toggles):
+  - **Ragdoll hitboxes (deep grey):** DEFERRED -- no clean client-side ragdoll-unit enumeration was established this round. Follow-up: identify the ragdoll unit set (candidate: dead AI still in the broadphase vs a ragdoll-state flag) before shipping.
+  - **AI vision cones:** DEFERRED (no honest general implementation). No per-breed FOV/angle field exists in the source (`fov`/`view_angle`/`field_of_view` not found as breed data). Regular enemy perception is 360 degrees within `detection_radius` + a LOS raycast (`target_selection_utils.lua`); the only real cones are hardcoded constants for specific states -- patrol passive `view_cone_dot = 0.5` (`target_selection_utils.lua:938`) and sleeping rat-ogre `view_cone_dot = 1` (`ai_breed_snippets.lua:54-59`). The aggro ring already carries the honest detection-range picture; a real cone would apply only to patrols (host-only blackboard state).
+  - **Monster/patrol spawn triggers (light red/pink):** FEASIBLE but HOST-ONLY, deferred. Enumerable via `Managers.state.conflict.level_analysis.terror_spawners[*].spawners` (`level_analysis.lua:650-664`) + patrol main-path nodes (`level_analysis.lua:426-431`, `Vector3Box:unbox()`). Conflict-director data is not populated on clients. A clean host-gated follow-up.
+  - **Navmesh (purple):** FEASIBLE but deferred on perf grounds (the issue puts it in the research-only bucket, code only if trivially safe -- a full per-frame navmesh redraw is not). Triangle enumeration IS exposed: `GwNavWorld.build_database_visual_representation` -> `database_tile_count` -> `database_tile_triangle_count` -> `database_triangle` returns per-triangle vertices (`navigation_utils.lua:33-83`). Needs its own tile-cull + throttle design; host-side `nav_world` from the conflict director.
+  - **Level geometry (white):** INFEASIBLE-as-specified. No `Level.*` binding returns collision or render meshes to outline (full `Level.*` surface audited; nothing exposes mesh/bounds). Closest proxy would be the navmesh wireframe as a floor stand-in.
+  - **Trigger volumes / other triggers:** INFEASIBLE-as-specified. Trigger volumes are name-keyed only -- `Level.is_point_inside_volume(level, name, pos)` membership tests exist, but there is no enumeration and no bounds getter (`volume_system.lua`). Only nav-tag volumes carry exportable geometry (`<level>_nav_tag_volumes.lua`).
+- **Host/client:** every SHIPPED category is client-safe (enumeration is per-peer), so no host gating was needed; the deferred spawn-triggers and navmesh categories are the host-only ones.
+- Still `[untested]` -- needs an in-game pass per category (see the issue). Enemy/headshot/aggro enumerate via the AI broadphase, proven in-repo host-side; client-side broadphase population is the main thing the in-game test must confirm.
+
 ## v0.2.186-dev (2026-07-05) -- #332 Disable mutator death explosions now works client-side
 
 ### Why

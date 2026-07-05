@@ -1155,6 +1155,73 @@ if mod == get_mod("gt" .. "_dev") then
                 default_value = false,
                 tooltip       = "gt_devtools_leash_lines_tooltip",
             },
+            -- Debug Highlights (#302). Master checkbox + per-category children
+            -- (VMF native master-toggle pattern: children auto-hide while the box
+            -- is unchecked). Feature code (_gt_debug_highlights.lua) draws one
+            -- LineObject overlay per frame; all children default OFF, client-safe.
+            -- Deferred categories (ragdolls, vision cones, navmesh, spawn-trigger
+            -- volumes, level geometry) ship no widget this round -- see #302.
+            {
+                setting_id    = "gt_debug_highlights",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "gt_debug_highlights_tooltip",
+                sub_widgets   = {
+                    {
+                        setting_id    = "gt_dh_interactables",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_dh_interactables_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_dh_pickups",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_dh_pickups_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_dh_pickup_spawners",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_dh_pickup_spawners_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_dh_hitboxes_enemies",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_dh_hitboxes_enemies_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_dh_hitboxes_players",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_dh_hitboxes_players_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_dh_headshot_zones",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_dh_headshot_zones_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_dh_aggro_ranges",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_dh_aggro_ranges_tooltip",
+                    },
+                    {
+                        setting_id    = "gt_dh_range",
+                        type          = "dropdown",
+                        default_value = 30,
+                        tooltip       = "gt_dh_range_tooltip",
+                        options       = {
+                            { text = "gt_dh_range_20", value = 20 },
+                            { text = "gt_dh_range_30", value = 30 },
+                            { text = "gt_dh_range_50", value = 50 },
+                        },
+                    },
+                },
+            },
         },
     })
 end

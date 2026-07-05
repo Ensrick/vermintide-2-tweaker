@@ -309,6 +309,39 @@ return {
     gt_devtools_leash_lines = { en = "[untested] Bot leash lines (3D)" },
     gt_devtools_leash_lines_tooltip = { en = "Runs a line in the world from each bot to the teammate it follows and another to you, so the follow leash is visible at a glance. Purely visual, host-only, dev build only." },
 
+    -- Debug Highlights (#302). Master + per-category wireframe overlays. Dev build
+    -- only; all children default OFF. Titles carry [untested] per LOCALIZATION_STANDARD
+    -- section 13; tooltips name the color and note the two known approximations.
+    gt_debug_highlights = { en = "[untested] Debug Highlights" },
+    gt_debug_highlights_tooltip = { en = "Master toggle for in-world debug wireframes. Turn on a category below. Wireframe only this build; dev build only, works on host and client." },
+
+    gt_dh_interactables = { en = "[untested] Interactables" },
+    gt_dh_interactables_tooltip = { en = "Yellow box around interactable objects: doors, chests, levers, anything used with the interact key." },
+
+    gt_dh_pickups = { en = "[untested] Item Pickups" },
+    gt_dh_pickups_tooltip = { en = "Green box on ground pickups: health, ammo, potions, bombs, tomes, grimoires." },
+
+    gt_dh_pickup_spawners = { en = "[untested] Pickup Spawn Points" },
+    gt_dh_pickup_spawners_tooltip = { en = "Grey box on pickup spawn points, shown even when the spawn is empty." },
+
+    gt_dh_hitboxes_enemies = { en = "[untested] Enemy Hitboxes" },
+    gt_dh_hitboxes_enemies_tooltip = { en = "Red box around each nearby enemy's bounding volume. Whole-unit box: per-limb capsules are not exposed to mods." },
+
+    gt_dh_hitboxes_players = { en = "[untested] Player Hitboxes" },
+    gt_dh_hitboxes_players_tooltip = { en = "Dark green box around each hero's bounding volume." },
+
+    gt_dh_headshot_zones = { en = "[untested] Headshot Zones" },
+    gt_dh_headshot_zones_tooltip = { en = "Orange sphere at each enemy's head node. Approximate radius: the true headshot capsule size is not exposed to mods." },
+
+    gt_dh_aggro_ranges = { en = "[untested] Aggro Ranges" },
+    gt_dh_aggro_ranges_tooltip = { en = "Amber ring at each enemy's detection radius. Enemy perception is a radius, not a cone." },
+
+    gt_dh_range = { en = "[untested] Draw Distance" },
+    gt_dh_range_tooltip = { en = "Only draw highlights within this distance of you. Higher values cost more per frame." },
+    gt_dh_range_20 = { en = "20 m" },
+    gt_dh_range_30 = { en = "30 m" },
+    gt_dh_range_50 = { en = "50 m" },
+
     -- ============================================================
     -- Gameplay
     -- ============================================================
