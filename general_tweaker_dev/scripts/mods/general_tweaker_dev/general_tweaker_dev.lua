@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.179-dev"
+local MOD_VERSION = "0.2.181-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -2232,5 +2232,14 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_solo_qol")
 -- [198:dummy] line with a hit count. Default-on, printf, no gameplay change, no
 -- new hook collision (nothing else hooks TrainingDummyHealthExtension).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_probe_dummy_hits")
+
+-- Client-side latency cosmetics (Issue #308). Both self-contained, all toggles
+-- default OFF, no networking, no gameplay-outcome change:
+--   * _gt_melee_warning  -- early-warning cue on enemy melee windups (hook_safe
+--     AnimationSystem.anim_event + IngameHud.update; rides mod._gt_register_update).
+--   * _gt_hp_smoothing   -- eases the local player's own health-bar drop
+--     (hook_safe UnitFrameUI.set_total_health_percentage + .update).
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_melee_warning")
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_hp_smoothing")
 
 mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GT) / 1024)

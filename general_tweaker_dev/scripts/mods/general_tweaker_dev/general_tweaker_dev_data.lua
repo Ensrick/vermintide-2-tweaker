@@ -94,18 +94,92 @@ local _data = {
                         },
                         tooltip       = "gt_bot_guard_break_msg_tooltip",
                     },
-                    -- Bundled bot-behavior fixes (v0.2.128-dev). Replaces the eight
-                    -- former individual toggles: necro potion handoff, don't-fail-
-                    -- while-a-bot-is-alive, auto ledge pull-up (3s), ladder unstick
-                    -- (4s), instant grab targeted items, prioritize revive, allow
-                    -- revive during ult, rescue ledge/hooked/disabled allies. The
-                    -- per-feature delays are now hard-coded (3s / 4s) in
-                    -- _gt_bot_fixes.lua.
+                    -- Bot Behavior Improvements MASTER toggle (#297, v0.2.182-dev).
+                    -- v0.2.128-dev bundled the eight former individual bot fixes
+                    -- under this one checkbox; #297 re-exposes each fix as a nested
+                    -- sub-widget (VMF native master-toggle pattern: children auto-
+                    -- hide while the box is unchecked, vmf_options_view.lua:4461-4463).
+                    -- The master still gates EVERYTHING (default OFF); every child
+                    -- defaults ON so the master alone reproduces the former bundle.
+                    -- Checkbox ids reuse the pre-bundle setting ids retired in
+                    -- v0.2.128-dev (no widget used them since), restoring persisted
+                    -- pre-bundle user choices. The two delay sliders replace the
+                    -- delays hard-coded (3s / 4s) since v0.2.128-dev; sub-toggles are
+                    -- read live inside the tick/hook bodies (_gt_bot_fixes.lua), so
+                    -- no on_setting_changed wiring. gt_bot_greedy_pickup is NEW
+                    -- (#297 item 8). Children kept in FEATURE order, NOT A->Z: each
+                    -- delay slider must sit directly under the toggle it tunes.
                     {
                         setting_id    = "gt_bot_behavior_improvements",
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gt_bot_behavior_improvements_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_bot_necro_potion_handoff",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_necro_potion_handoff_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_mission_fail_prevention",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_mission_fail_prevention_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_ledge_pullup",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_ledge_pullup_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_ledge_pullup_delay",
+                                type            = "numeric",
+                                default_value   = 3,
+                                range           = { 0, 10 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_ledge_pullup_delay_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_ladder_unstick",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_ladder_unstick_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_ladder_unstick_delay",
+                                type            = "numeric",
+                                default_value   = 4,
+                                range           = { 3, 10 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_ladder_unstick_delay_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_instant_pickup",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_instant_pickup_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_greedy_pickup",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_greedy_pickup_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_aid_priority",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_aid_priority_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_ironbreaker_revive_in_ult",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_ironbreaker_revive_in_ult_tooltip",
+                            },
+                        },
                     },
                     -- Bot follow mode (v0.2.152-dev) -- single dropdown
                     -- consolidating the previous gt_bot_split_among_players +
@@ -910,6 +984,75 @@ local _data = {
                         range           = { 1, 300 },
                         decimals_number = 0,
                         tooltip         = "gt_more_corpses_count_tooltip",
+                    },
+                    -- Melee Attack Warning (Issue #308) -- client-side windup cue.
+                    -- Master checkbox; sub_widgets auto-hide while off. All local
+                    -- + cosmetic; changes no gameplay outcome. See _gt_melee_warning.lua.
+                    {
+                        setting_id    = "gt_melee_warning",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_melee_warning_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_melee_warning_audio",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_melee_warning_audio_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_melee_warning_visual",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_melee_warning_visual_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_melee_warning_lead",
+                                type          = "dropdown",
+                                default_value = 100,
+                                options       = {
+                                    { text = "gt_melee_warning_lead_0",   value = 0 },
+                                    { text = "gt_melee_warning_lead_50",  value = 50 },
+                                    { text = "gt_melee_warning_lead_100", value = 100 },
+                                    { text = "gt_melee_warning_lead_150", value = 150 },
+                                    { text = "gt_melee_warning_lead_200", value = 200 },
+                                    { text = "gt_melee_warning_lead_250", value = 250 },
+                                },
+                                tooltip       = "gt_melee_warning_lead_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_melee_warning_scope",
+                                type          = "dropdown",
+                                default_value = "elites_only",
+                                options       = {
+                                    { text = "gt_melee_warning_scope_elites", value = "elites_only" },
+                                    { text = "gt_melee_warning_scope_all",    value = "all_melee" },
+                                },
+                                tooltip       = "gt_melee_warning_scope_tooltip",
+                            },
+                        },
+                    },
+                    -- Smooth Health-Bar Damage (Issue #308) -- presentation-only.
+                    -- Eases the local player's own health-bar drop. See _gt_hp_smoothing.lua.
+                    {
+                        setting_id    = "gt_hp_smoothing",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_hp_smoothing_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_hp_smoothing_ms",
+                                type          = "dropdown",
+                                default_value = 150,
+                                options       = {
+                                    { text = "gt_hp_smoothing_ms_100", value = 100 },
+                                    { text = "gt_hp_smoothing_ms_150", value = 150 },
+                                    { text = "gt_hp_smoothing_ms_200", value = 200 },
+                                    { text = "gt_hp_smoothing_ms_250", value = 250 },
+                                },
+                                tooltip       = "gt_hp_smoothing_ms_tooltip",
+                            },
+                        },
                     },
                 },
             },
