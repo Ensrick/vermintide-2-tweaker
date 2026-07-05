@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.67-dev"
+local MOD_VERSION = "0.9.68-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the

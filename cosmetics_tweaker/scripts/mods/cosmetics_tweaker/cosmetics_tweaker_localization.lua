@@ -7,37 +7,37 @@ local loc = {
     },
 
     unlock_all_illusions = {
-        en = "Unlock All Weapon Illusions",
+        en = "[working] Unlock All Weapon Illusions",
     },
     unlock_all_illusions_tooltip = {
         en = "Makes every weapon illusion selectable in the illusion browser. Works only in modded realm, and the change lasts for the current session.",
     },
     unlock_all_frames = {
-        en = "Unlock All Portrait Frames",
+        en = "[working] Unlock All Portrait Frames",
     },
     unlock_all_frames_tooltip = {
         en = "Makes every portrait frame equippable in modded realm, except frames from DLC you do not own. Restart the game after changing this.",
     },
     suppress_la_quest_markers = {
-        en = "Hide quest markers",
+        en = "[working] Hide quest markers",
     },
     suppress_la_quest_markers_tooltip = {
         en = "Hides all of Loremaster's Armoury's on-screen quest waypoints, such as those on the message board and pickups. The quests themselves still progress as normal.",
     },
     suppress_la_notifications = {
-        en = "Hide unread-letter notifications",
+        en = "[working] Hide unread-letter notifications",
     },
     suppress_la_notifications_tooltip = {
         en = "Hides the pop-up banner that reminds you of an unread Loremaster's Armoury quest letter. The letter is still waiting for you at the message board.",
     },
     la_killquest_crash_guard = {
-        en = "Kill-quest crash guard",
+        en = "[working] Kill-quest crash guard",
     },
     la_killquest_crash_guard_tooltip = {
         en = "Prevents Loremaster's Armoury from crashing the game when a player who has already left scores a kill. Leave this on unless you have a reason not to.",
     },
     la_disable_okri_challenges = {
-        en = "Disable Okri's Challenges",
+        en = "[working] Disable Okri's Challenges",
     },
     la_disable_okri_challenges_tooltip = {
         en = "Hides Loremaster's Armoury's quest line from Okri's challenge book, along with its progress tracking and reminder pop-ups. Because that quest line normally unlocks a few Kruber weapon skins when finished, those skins stay locked while it is hidden. Turn this off and restart the game to bring the quests back.",
@@ -52,22 +52,22 @@ local loc = {
     -- those skins are surfaced only through the in-cosmetic-picker glow menu.
 
     loremasters_armoury_group = {
-        en = "Loremaster's Armory",
+        en = "[working] Loremaster's Armory",
     },
     appearance_group = {
-        en = "Weapon Visual Tweaks",
+        en = "[working] Weapon Visual Tweaks",
     },
     cosmetic_availability_group = {
-        en = "Cosmetic Availability",
+        en = "[Issue 230] [verify-fix] Cosmetic Availability",
     },
     es_bastard_sword_thiccc = {
-        en = "Bretonian Longsword: Authentic Thiccness",
+        en = "[working] Bretonian Longsword: Authentic Thiccness",
     },
     es_bastard_sword_thiccc_tooltip = {
         en = "Slims the Bretonian Longsword's blade to 65%% of its normal width so it looks less like a slab. This also applies to the sword in Bretonian Sword and Shield, and it affects every hero who wields it.",
     },
     cos_moonfire_cosmetic_puff = {
-        en = "Moonfire Bow: Cosmetic AOE",
+        en = "[working] Moonfire Bow: Cosmetic AOE",
     },
     cos_moonfire_cosmetic_puff_tooltip = {
         en = "Adds the small blue moonfire burst to every hit from the Moonfire Bow. It is purely visual and deals no damage.",
@@ -121,22 +121,22 @@ local loc = {
     },
 
     tpe_group = {
-        en = "Third-Person Equipment (Experimental)",
+        en = "[untested] Third-Person Equipment (Experimental)",
     },
     tpe_enable = {
-        en = "Show Unwielded Weapons on Body",
+        en = "[untested] Show Unwielded Weapons on Body",
     },
     tpe_enable_tooltip = {
         en = "Shows the weapons you are not currently holding on your character's body, so your whole loadout is visible at once. This is experimental: the weapon positions are rough, so restart the level after turning it on.",
     },
     tpe_show_self_in_3p = {
-        en = "Hide Own Equipment in First Person",
+        en = "[untested] Hide Own Equipment in First Person",
     },
     tpe_show_self_in_3p_tooltip = {
         en = "Hides your own holstered weapons while you are in first-person view, where they would otherwise poke into the camera. Other players still see them normally.",
     },
     tpe_downscale_big_weapons = {
-        en = "Holstered Weapon Scale %%",
+        en = "[untested] Holstered Weapon Scale %%",
     },
     tpe_downscale_big_weapons_tooltip = {
         en = "Sets the size of the holstered weapons shown on your body, as a percentage where 100 is full size. Lower it to around 75 to 85 if larger weapons look oversized.",

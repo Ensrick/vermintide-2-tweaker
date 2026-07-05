@@ -6,7 +6,7 @@ return {
     -- ============================================================
     -- Starting state
     -- ============================================================
-    starting_state             = en("Starting State"),
+    starting_state             = en("[untested] Starting State"),
     starting_state_description = en("How your modded progression begins the first time you play. It is applied only once; to change it later, wipe your local progress with the /mp_reset chat command first."),
     starting_state_tooltip     = en("Choose how your modded progression begins the first time you play. It takes effect only once, so changing it later does nothing unless you first wipe your local progress with the /mp_reset chat command."),
     start_fresh            = en("Fresh (level 1)"),

@@ -1,5 +1,9 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.68-dev — 2026-07-04 — Localization: applied dev status-tag doctrine (#301)
+
+Tagged all 15 option-title loc entries (4 group titles + 11 checkbox/numeric titles) with a dev status prefix: 10 `[working]`, 4 `[untested]` (the experimental Third-Person Equipment group + its 3 options — reimplemented, coarse positions, unverified in-game), 1 `[Issue 230] [verify-fix]` (Cosmetic Availability group — the unobtainable-cosmetic ownership fix shipped 0.9.63-dev, awaiting in-game confirmation). Tags on option titles only; tooltips, descriptions, custom-illusion item name/description entries, and the ~1272 auto-generated Cosmetic Availability sub-toggles (programmatic labels in `_cosmetic_unlocks.lua`, not literal loc entries — represented by the group tag) were left untagged. The large open LA shield/hat rendering + sync + crash cluster (#148/#149/#154/#203/#204/#228/#233/#234/#264-268/#270) has no menu option-title representation (LA-bridge rendering, not a toggle), so it is not reflected in any tag.
+
 ## 0.9.67-dev — 2026-07-03 — CRASH HOTFIX: #270 LA hat swap CTDs OTHER players (non-resident headpiece reaches engine spawn/link)
 
 > EMERGENCY hotfix. In the 2026-07-03 21:48 three-player session, TWO viewers crashed to desktop when the Kruber mercenary wearer swapped hats. The mod's hat-swap path equips headpieces outside the native `inventory_list` declaration, so the wearer's chosen vanilla headpiece packages (`es_m_hat_01/05/07/08/09/10/12`) are NOT resident on viewer machines. The pre-existing mh_embed guard DETECTED the non-residency (7 correct `refusing to spawn` log lines across both logs) but the flow proceeded past the refusal and hit the engine two ways. Root-caused from the two crash logs' Lua stacks; wearer's own log shows no crash (resources resident locally).

@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.47-dev (2026-07-04) - Localization: dev status-tag audit (#301)
+
+- Applied the dev localization status-tag doctrine (#301) to every widget-title loc entry.
+- 13 titles tagged: 5 [working], 8 [untested], 0 issue-tagged. Added [working] to the 5 previously-untagged titles (forge_group, forge_hotkey, standard_crafting_hotkey, import_group, inventory_group); the 8 existing [untested] tags were verified and kept (no mapped issue closed).
+- No open cim issue mapped high-confidence to a dedicated widget: the Athanor display/behaviour bugs (#244, #239, #86) and the illusion/skin bug (#150) have no dedicated toggle in the data tree; the in-mission-access issues (#88, #96, #83, #80) concern runtime patches or the widget that moved to Tweaker: GUI; the CWV-craft bugs (#279, #278, #226) and enhancements (#277, #263, #87) have no cim widget. Left untagged-with-issue per doctrine rule 5.
+
+### Files
+- `crafting_in_modded_dev_localization.lua` - [working] prefix on the 5 untagged widget titles; existing [untested] tags kept.
+- `crafting_in_modded_dev.lua` - `MOD_VERSION` `0.8.46-dev` -> `0.8.47-dev`.
+
 ## 0.8.46-dev (2026-07-02) - 'Allow crafting bench in mission' widget moved to Tweaker: GUI (user direction)
 
 - The `allow_in_mission` CHECKBOX no longer exists in cim's menu. The option now lives in

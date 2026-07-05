@@ -1,5 +1,9 @@
 # Career Tweaker Changelog
 
+## 0.3.51-dev - 2026-07-04 - Localization: apply dev status-tag doctrine (#301)
+
+Localization: applied dev status-tag doctrine (#301). 150 option titles tagged: 149 [working] (2 of them also [diag]), 1 [Issue 283], 0 [untested]. Tags are prefixes on `en` widget-title strings only (group headers, master toggles, checkboxes, dropdowns, numeric fields); tooltips, descriptions, dropdown value labels, and the commented-out Big Rebalance `cbr_*` block were left untouched. `career_swapping_group` carries [Issue 283] (open bug: talent-swap re-apply drops stacking career buffs). `rework_es_mercenary_group` and `rework_bw_unchained_group` carry [diag] (the always-on `[crt:talent]` auto-dump in `_CRT_AUTO_DUMP_CAREERS` targets es_mercenary + bw_unchained). No setting_ids, defaults, mechanics, or display text changed.
+
 ## 0.3.50-dev - 2026-07-02 - #222 loc sweep: drop leading option-title restatements
 
 ### Changed - tooltip bodies no longer repeat the orange popup header

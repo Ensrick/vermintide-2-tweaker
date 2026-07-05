@@ -1,5 +1,9 @@
 # Tweaker: Events — Changelog
 
+## 0.4.21-dev (2026-07-04) -- Localization: applied dev status-tag doctrine (#301)
+
+Prefixed every option-title loc string with a dev status tag per `LOCALIZATION_STANDARD.md` § 13. 61 widget titles tagged: 56 [working] (the established mutator catalog + event_preset + suppress_live_event, all predating 0.4.14-dev), 5 [untested] (the Cursed Adventure feature added 0.4.14-dev: the `cat_cursed` group, `cursed_lighting`, the `cat_other` group, plus the two runtime title-generation sites for the discovered "Other Mutators" and the package-bearing curses). 0 issue-tagged: event_tweaker has no dedicated GitHub issue label (the `et` label maps to enemy_tweaker, not this mod) and no open issue maps to the mutator picker. Titles only; no `*_tooltip`, `preset_*` dropdown value labels, or `mod_description` touched. `MOD_VERSION` `0.4.20-dev` -> `0.4.21-dev`.
+
 ## 0.4.20-dev (2026-07-02) -- #222 loc sweep: removed leading option-title restatement from 8 option tooltips so the popup body no longer repeats the orange header
 
 ### Why

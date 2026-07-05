@@ -132,12 +132,12 @@ local loc = {
     -- (NB skulking_sorcerer = Nurgle, not Tzeentch; abundance_of_life = Slaanesh). The
     -- in-game Slaanesh curse internally keyed `abundance_of_life` is named "Unquenchable
     -- Thirst" (the engine codename is ironic — it drains life). Belakor is treated as a
-    -- god for prefixing. [confirmed working] tags kept as trailing notes (don't break sort).
+    -- god for prefixing.
     disable_curse_belakor_totems = { en = "[working] Disable: Belakor: Belakor's Totems" },
-    disable_curse_shadow_homing_skulls = { en = "[working] Disable: Belakor: Shadow Homing Skulls [confirmed working]" },
+    disable_curse_shadow_homing_skulls = { en = "[working] Disable: Belakor: Shadow Homing Skulls" },
     disable_curse_blood_storm = { en = "[working] Disable: Khorne: Blood Storm" },
     disable_curse_khorne_champions = { en = "[working] Disable: Khorne: Khorne Champions" },
-    disable_curse_skulls_of_fury = { en = "[working] Disable: Khorne: Skulls of Fury [confirmed working]" },
+    disable_curse_skulls_of_fury = { en = "[working] Disable: Khorne: Skulls of Fury" },
     disable_curse_corrupted_flesh = { en = "[working] Disable: Nurgle: Corrupted Flesh" },
     disable_curse_rotten_miasma = { en = "[working] Disable: Nurgle: Rotten Miasma" },
     disable_curse_skulking_sorcerer = { en = "[working] Disable: Nurgle: Skulking Sorcerer" },
@@ -1198,7 +1198,7 @@ local loc = {
 -- Test-status labels for the dynamically-generated CW-scenario + adventure-
 -- mission toggles (see TESTING_STATUS.md). dlc_group_* keys are group TITLES, so
 -- they're never labeled. Maps verified working in-game are listed in
--- _CT_CONFIRMED_MAPS and get [confirmed working]; everything else is [untested].
+-- _CT_CONFIRMED_MAPS and get [working]; everything else is [untested].
 -- Known issue: "Tower of Treachery" -- gargoyle skull does not appear in the
 -- chest (left [untested] until fixed/verified).
 local _CT_CONFIRMED_MAPS = {
@@ -1207,7 +1207,7 @@ local _CT_CONFIRMED_MAPS = {
 for setting_id, entry in pairs(AdventurePool.build_loc_entries()) do
     if entry and entry.en and not setting_id:find("^dlc_group_") then
         if _CT_CONFIRMED_MAPS[entry.en] then
-            entry.en = "[confirmed working] " .. entry.en
+            entry.en = "[working] " .. entry.en
         else
             entry.en = "[untested] " .. entry.en
         end

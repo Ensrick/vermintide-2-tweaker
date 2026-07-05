@@ -23,7 +23,7 @@ Major sections (search by name to jump):
 local mod = get_mod("mp")
 _MEM_PROBE_T0_MP = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.12-dev"
+local MOD_VERSION = "0.2.13-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").

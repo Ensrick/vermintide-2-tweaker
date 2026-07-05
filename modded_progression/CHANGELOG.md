@@ -1,5 +1,11 @@
 # Modded Progression — Changelog
 
+## 0.2.13-dev (2026-07-04) - Localization: applied dev status-tag doctrine (#301)
+
+### Changed
+- `modded_progression_localization.lua` - applied the #301 dev status-tag doctrine to option titles. 1 widget title tagged: `starting_state` -> `[untested]` (mp is a scaffolding stub whose progression paths are not yet confirmed working in-game; flagged as a working-vs-untested judgment call). Tooltips, descriptions, and dropdown value labels untouched.
+- `MOD_VERSION` `0.2.12-dev` -> `0.2.13-dev`.
+
 ## 0.2.12-dev (2026-07-01) — #174 loadout attribution probe (passive, log-only)
 
 ### Why

@@ -6,16 +6,16 @@ return {
         en = "Craft any weapon your career can use, with the properties and traits you choose. Open the Athanor (B key by default) to reach the modded crafting menu.",
     },
     forge_group = {
-        en = "Athanor (Mod Weapon Crafting)",
+        en = "[working] Athanor (Mod Weapon Crafting)",
     },
     forge_hotkey = {
-        en = "Open Athanor Crafting Menu (Keep only)",
+        en = "[working] Open Athanor Crafting Menu (Keep only)",
     },
     forge_hotkey_description = {
         en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Works in the Keep and the Chaos Wastes hub only, not inside missions; for in-mission crafting use the Standard Crafting Bench below.",
     },
     standard_crafting_hotkey = {
-        en = "Open Standard Crafting Bench",
+        en = "[working] Open Standard Crafting Bench",
     },
     standard_crafting_hotkey_description = {
         en = "Opens the standard Keep Smithy bench: salvage, craft, re-roll properties and traits, upgrade rarity, apply illusions, convert dust (not the Athanor). Works in the Keep and the Chaos Wastes; inside missions it follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus. You can also run /cim_craft_standard.",
@@ -54,7 +54,7 @@ return {
         en = "OFF (default): a crafted item can only take traits and properties from its own type (a melee weapon gets melee traits, a necklace gets necklace traits, and so on). ON: every trait and every property becomes available on any weapon or accessory you craft. Includes the Chaos Wastes traits, so this covers the option above.",
     },
     inventory_group = {
-        en = "Modded Inventory",
+        en = "[working] Modded Inventory",
     },
     show_only_modded_weapons = {
         en = "[untested] Show only modded weapons in inventory",
@@ -71,7 +71,7 @@ return {
         en = "When ON, saved crafts that need an item from a mod you no longer have active are skipped quietly, without the usual chat messages. They return automatically if you re-enable that mod.",
     },
     import_group = {
-        en = "Import",
+        en = "[working] Import",
     },
     saveweapon_import_hotkey = {
         en = "[untested] Import from SaveWeapon",

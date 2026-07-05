@@ -1,5 +1,7 @@
 # Weapon Tweaker Changelog
 
+## 0.12.206-dev (2026-07-04) - Ship #301 dev status-tag pass (rider on 0.12.205 #319 anim work)
+
 ## 0.12.205-dev (2026-07-04) - #319 pipeline audit results: restore 5 dropped Kerillian billhook picks (#290 residual), crowbill pick corrections, #286 Greataxe wield fix
 
 Full config-to-bake audit for #319 ("failing to get animations properly from config"): every `wt_dev_anim_p_*` key across all 7 `user_settings` configs on disk (5 Downloads backups, the pre-wipe backup, the live config) was parsed and diffed against the v0.12.203/.204 baked R-tables. **Result: of 764 distinct real event-picks, 746 were already faithfully honored.** The gaps, all fixed or explained here:

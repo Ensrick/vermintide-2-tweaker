@@ -1,5 +1,14 @@
 # Enemy Tweaker Changelog
 
+## 0.7.26-dev (2026-07-04): Localization dev status-tag pass (#301)
+
+### Changed
+- **Applied dev localization status-tag doctrine (#301).** Every rendered option-title loc entry now carries a status-tag prefix (group titles, master-toggle titles, and per-widget labels). 49 title keys tagged: 48 [working], 1 issue-tagged. `max_grunts_override` ("Max active trash enemies") carries `[Issue 213] [verify-fix] [diag]`: it raises `RecycleSettings.max_grunts`, the double-freeze fix (v0.7.22-dev `BreedFreezer` guard) awaits in-game verification, and the `[213:freeze]` printf probe is armed for it. All other rendered titles are established features with no open issue, tagged [working]. The 7 [working] tags in the per-difficulty generation loop expand to every Special Spawns group/cap/per-special title at load. Tooltips, dropdown value labels, and the commented-out Big Rebalance (`br_*`) block were not touched.
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.25-dev → 0.7.26-dev.
+- `enemy_tweaker_localization.lua` — status-tag prefixes on all rendered option-title entries (static + generated).
+
 ## 0.7.25-dev (2026-07-02) — #240 alert helpers made genuinely log-only (chat-spam fix)
 
 ### Fixed
