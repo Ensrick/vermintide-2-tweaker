@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.225-dev"
+local MOD_VERSION = "0.7.226-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -12399,6 +12399,21 @@ if rawget(_G, "ConflictDirector") then
             return func(self, event_name, optional_seed, origin_unit, origin_position)
         end
 
+        -- #324 (v0.7.226-dev): (re)attempt the Skaven Warlord trial injection at
+        -- chest-activation time. Mod load order between ct_dev and enemy_tweaker
+        -- is not guaranteed, so the load-time attempt may have run before et
+        -- registered the et_skaven_warlord breed; this call is idempotent
+        -- (marker early-out) and et-absence-guarded. Merged into THIS existing
+        -- hook body (single hook per Class.method - VMF drops duplicates);
+        -- definition lives in the "#324 Chest of Trials: Skaven Warlord trial"
+        -- block below. Runs synchronously BEFORE the prototype's inject_event
+        -- chains are resolved (TerrorEventMixer.start_event happens later in
+        -- the deferred start_event_list processing), so an injection completed
+        -- here is visible to this very chest's trial pick.
+        if type(mod._ct_ensure_warlord_trial) == "function" then
+            mod._ct_ensure_warlord_trial()
+        end
+
         -- [ct-probe] v0.7.157-dev unconditional Chest-of-Trials activation probe.
         -- Placed BEFORE the toggle gate so it fires on EVERY cursed-chest activation,
         -- toggle ON or OFF. The mod selects the trial INDIRECTLY through the seed
@@ -12530,6 +12545,323 @@ if rawget(_G, "TerrorEventMixer") then
         if not ok then error(err) end
     end)
 end
+
+-- ============================================================
+-- #324 (v0.7.226-dev) - Chest of Trials: Skaven Warlord trial (cross-mod with enemy_tweaker)
+-- ============================================================
+-- Adds ONE new cursed-chest trial terror event that spawns enemy_tweaker's
+-- mod-added `et_skaven_warlord` boss breed (the unused champion-recolour of
+-- Skarrik's model; registered by et's _et_skaven_warlord_breed.lua) plus a
+-- clan-rat retinue, and injects it as a RARE pick into the skaven
+-- cursed-chest pools. Folded into the always-on unique-trials behaviour
+-- (#117 precedent: the cursed_chest_unique_trials toggle was removed) - no
+-- new menu toggle; the feature is inert unless enemy_tweaker is installed.
+--
+-- TEMPLATE: mirrors GenericTerrorEvents.cursed_chest_challenge_skaven_rat_ogre
+-- (deus_generic_terror_events.lua:1374-1445 - the closest boss-type trial:
+-- one boss element with grudge-enhancement pre_spawn_func + one clan-rat adds
+-- element + the continue_when_spawned_count completion pair), with vanilla's
+-- distance/delay constants inlined from :92-107.
+--
+-- UPVALUE GOTCHA (CODE_REVIEW.md v0.7.89 burn): vanilla terror-event files
+-- capture `TerrorEventUtils.add_enhancements_for_difficulty` as a file-scope
+-- upvalue at boot (deus_generic_terror_events.lua:15), so HOOKING the util
+-- never reaches vanilla events. Irrelevant for OUR event: we resolve the
+-- CURRENT `TerrorEventUtils.add_enhancements_for_difficulty` reference at OUR
+-- definition time (mod load / injection time), exactly the way vanilla's own
+-- file resolves it at boot. That function defaults its enhancement set to
+-- _G.BossGrudgeMarks at CALL time (terror_event_utils.lua:197), so ct's Boss
+-- Grudge Marks banlist (sync_grudge_marks above) and the apply-chokepoint
+-- filter both keep working on this trial - and the grudge NAMES rendered by
+-- BossHealthUI come from GrudgeMarkedNames[et_skaven_warlord] (registered by
+-- et; consumer terror_event_utils.lua:59-78).
+--
+-- The vanilla trial's helper funcs are FILE LOCALS we cannot reference
+-- (cursed_chest_enemy_spawned_func :17-41, decal funcs :109-151), so we carry
+-- verbatim ports below. The spawned_func port keeps the
+-- `cursed_chest_objective_unit` buff wiring - that buff plus the
+-- `cursed_chest_enemies` spawn counter is what completes the trial: the chest
+-- flips to OPEN when the whole cursed_chest_prototype event finishes
+-- (deus_cursed_chest_extension.lua:173 `not TerrorEventMixer.find_event(...)`),
+-- and the event's final element waits for `counter.cursed_chest_enemies <= 0`.
+-- NetworkedFlowStateManager note (ct DEVELOPMENT.md "state-count leak"): each
+-- objective-unit buff leaks one flow-state slot in VANILLA; ct's shipped
+-- clear_object_state patch (v0.7.3-alpha) already reclaims them, so this
+-- trial adds no NEW leak pressure beyond any other trial.
+--
+-- DELIBERATE DEVIATION from the template: NO start_mission/end_mission
+-- elements. (a) A NEW mission name would need Missions + a
+-- NetworkLookup.mission_names entry on EVERY peer (request_mission does a
+-- strict-metatable lookup at mission_system.lua:135; the id is RPC'd to
+-- clients, so an unmodded client would hard-error). (b) REUSING a vanilla
+-- trial's mission name risks a hard fassert: end_mission asserts the mission
+-- is active (mission_system.lua:227), and two simultaneous chests sharing a
+-- name would end it twice. The mission elements are objective-HUD only -
+-- chest completion does not read them (deus_cursed_chest_extension.lua:173),
+-- so dropping them costs a banner, not function.
+--
+-- ET-ABSENCE GUARD: injection only happens once `rawget(_G, "Breeds")` has
+-- `et_skaven_warlord`. Load order between ct_dev and enemy_tweaker is not
+-- guaranteed, so injection is retried (idempotently) from the existing
+-- ConflictDirector.start_terror_event hook at chest activation (merged there
+-- - see the #324 line in that hook body; NO new hook on that method, VMF
+-- drops duplicates). If et is absent the skip is noted with a single printf
+-- and nothing else happens.
+--
+-- Cross-mod ref note: the guard keys off the BREED (rawget(_G,"Breeds")),
+-- not get_mod("enemy_tweaker") - et registers the breed at module load even
+-- when VMF-disabled (et DEVELOPMENT.md eager doctrine), and the breed table
+-- is what spawning actually needs.
+mod._ct_warlord_trial_injected = false
+mod._ct_warlord_trial_noted_absent = false
+
+-- Idempotent define + inject. Returns true once injected. Safe to call from
+-- module load AND from the start_terror_event hook every chest activation
+-- (marker early-out).
+-- 200-LOCAL NOTE: ALL of this feature's state (constants + the three
+-- vanilla-func ports) lives INSIDE this function on purpose - the ct main
+-- chunk sits at the Lua 5.1 200-active-locals ceiling (the first #324 build
+-- failed with "main function has more than 200 local variables" even from a
+-- do-block, whose locals still occupy chunk register slots while live), and
+-- function-scope locals get their own 200 budget. The helper closures are
+-- built at most once per session: the injected marker early-outs every later
+-- call before anything is constructed.
+mod._ct_ensure_warlord_trial = function()
+    if mod._ct_warlord_trial_injected then
+        return true
+    end
+    local GTE = rawget(_G, "GenericTerrorEvents")
+    local TEU = rawget(_G, "TerrorEventUtils")
+    if type(GTE) ~= "table" or type(TEU) ~= "table"
+            or type(TEU.add_enhancements_for_difficulty) ~= "function" then
+        return false
+    end
+
+    local WARLORD_BREED    = "et_skaven_warlord"
+    local TRIAL_EVENT_NAME = "ct_cursed_chest_challenge_skaven_warlord"
+    -- Existing skaven trial picks all carry weight = 3
+    -- (deus_generic_terror_events.lua:170-277); weight 1 makes ours a
+    -- rare-ish special trial (1-in-10 of the MORE_MONSTERS block, 1-in-28 of
+    -- the untagged fallback block).
+    local TRIAL_WEIGHT     = 1
+
+    local B = rawget(_G, "Breeds")
+    if not (B and type(B[WARLORD_BREED]) == "table") then
+        -- enemy_tweaker not installed (or its breed registration failed):
+        -- skip quietly, note ONCE per session.
+        if not mod._ct_warlord_trial_noted_absent then
+            mod._ct_warlord_trial_noted_absent = true
+            pcall(printf, "[ct-warlord-trial] breed %s absent (enemy_tweaker not installed?) - Skaven Warlord trial NOT injected (#324)", WARLORD_BREED)
+        end
+        return false
+    end
+
+    -- Vanilla constants, inlined (deus_generic_terror_events.lua:92-107).
+    local DELAY_WAVE_1    = 2
+    local DELAY_SPAWN     = 4
+    local DIST_SHORT      = 8
+    local DIST_LONG       = 20
+    local SPREAD_MED      = 7
+    local DECAL_RADIUS_MAP = { boss = 2, default = 1, elite = 1.2, special = 1.2 }
+    local SPAWN_DECAL_UNIT_NAME = "units/decals/deus_decal_aoe_cursedchest_01"
+
+    -- Port of cursed_chest_enemy_spawned_func (deus_generic_terror_events.lua:17-41).
+    -- Kept structurally identical to vanilla (no pcall wrapper) so the trial's
+    -- risk profile matches every vanilla trial. Our boss skips the aggro
+    -- branch exactly like the vanilla rat ogre (breed.boss gate).
+    local function _warlord_trial_spawned_func(unit, breed, optional_data)
+        if not breed.special and not breed.boss and not breed.cannot_be_aggroed then
+            local player_unit = PlayerUtils.get_random_alive_hero()
+            AiUtils.aggro_unit_of_enemy(unit, player_unit)
+        end
+
+        local buff_system = Managers.state.entity:system("buff_system")
+        buff_system:add_buff(unit, "cursed_chest_objective_unit", unit)
+
+        local blackboard = BLACKBOARDS[unit]
+        if blackboard then
+            local sound_event = "Play_normal_spawn_stinger"
+            if breed.special or breed.boss then
+                sound_event = "Play_special_spawn_stinger"
+            end
+            local audio_system = Managers.state.entity:system("audio_system")
+            audio_system:play_audio_unit_event(sound_event, unit)
+        end
+    end
+
+    -- Port of cursed_chest_enemy_spawn_decal_func (deus_generic_terror_events.lua:109-136).
+    local function _warlord_trial_spawn_decal_func(event, element, boxed_spawn_pos, breed_name)
+        local decal_map = event.decal_map or {}
+        event.decal_map = decal_map
+
+        local breed = Breeds[breed_name]
+        local spawn_radius
+        if breed.boss then
+            spawn_radius = DECAL_RADIUS_MAP.boss
+        elseif breed.special then
+            spawn_radius = DECAL_RADIUS_MAP.special
+        elseif breed.elite then
+            spawn_radius = DECAL_RADIUS_MAP.elite
+        else
+            spawn_radius = DECAL_RADIUS_MAP.default
+        end
+
+        local spawn_pos = boxed_spawn_pos:unbox()
+        local decal_spawn_pose = Matrix4x4.from_quaternion_position(Quaternion.identity(), spawn_pos)
+        Matrix4x4.set_scale(decal_spawn_pose, Vector3(spawn_radius, spawn_radius, spawn_radius))
+
+        local decal_unit = Managers.state.unit_spawner:spawn_network_unit(SPAWN_DECAL_UNIT_NAME, "network_synched_dummy_unit", nil, decal_spawn_pose)
+        decal_map[boxed_spawn_pos] = decal_unit
+    end
+
+    -- Port of cursed_chest_enemy_despawn_decal_func (deus_generic_terror_events.lua:138-151).
+    local function _warlord_trial_despawn_decal_func(event, element, boxed_spawn_pos)
+        local decal_map = event.decal_map
+        local unit = decal_map and decal_map[boxed_spawn_pos]
+        if unit then
+            Unit.flow_event(unit, "despawned")
+            local unit_go_id = Managers.state.unit_storage:go_id(unit)
+            Managers.state.network.network_transmit:send_rpc_clients("rpc_flow_event", unit_go_id, NetworkLookup.flow_events.despawned)
+            decal_map[boxed_spawn_pos] = nil
+        end
+    end
+
+    -- 1. Define the trial event. GenericTerrorEvents is resolved by NAME
+    -- at event-processing time (terror_event_mixer.lua:1723
+    -- `TerrorEventBlueprints[level_key][event_name] or
+    -- GenericTerrorEvents[event_name]`), so a mod-load/late definition is
+    -- fully visible - no boot snapshot to miss.
+    if not GTE[TRIAL_EVENT_NAME] then
+        GTE[TRIAL_EVENT_NAME] = {
+            {
+                "delay",
+                duration = DELAY_WAVE_1,
+            },
+            {
+                "play_stinger",
+                stinger_name = "Play_wave_start_spawn_stinger",
+            },
+            {
+                -- The boss element (mirrors deus_generic_terror_events.lua:1387-1401,
+                -- breed swapped). pre_spawn_func applies grudge enhancements per
+                -- difficulty exactly like vanilla boss trials: the mixer calls
+                -- element.pre_spawn_func(optional_data, difficulty, breed_name,
+                -- event, difficulty_tweak, element.enhancement_list)
+                -- (terror_event_mixer.lua:148-149), which is
+                -- add_enhancements_for_difficulty's exact signature
+                -- (terror_event_utils.lua:191).
+                "spawn_around_origin_unit",
+                breed_name = WARLORD_BREED,
+                spawn_counter_category = "cursed_chest_enemies",
+                optional_data = {
+                    prevent_killed_enemy_dialogue = true,
+                    spawned_func = _warlord_trial_spawned_func,
+                },
+                min_distance = DIST_LONG - SPREAD_MED * 0.5,
+                max_distance = DIST_LONG + SPREAD_MED * 0.5,
+                pre_spawn_unit_func = _warlord_trial_spawn_decal_func,
+                post_spawn_unit_func = _warlord_trial_despawn_decal_func,
+                spawn_delay = DELAY_SPAWN,
+                pre_spawn_func = TEU.add_enhancements_for_difficulty,
+            },
+            {
+                -- Clan-rat retinue (mirrors deus_generic_terror_events.lua:1402-1422
+                -- verbatim - same breed, same per-difficulty counts).
+                "spawn_around_origin_unit",
+                breed_name = "skaven_clan_rat",
+                spawn_counter_category = "cursed_chest_enemies",
+                difficulty_amount = {
+                    cataclysm = 18,
+                    hard = 12,
+                    harder = 14,
+                    hardest = 16,
+                    normal = 10,
+                },
+                optional_data = {
+                    prevent_killed_enemy_dialogue = true,
+                    spawned_func = _warlord_trial_spawned_func,
+                },
+                min_distance = DIST_SHORT - SPREAD_MED * 0.5,
+                max_distance = DIST_SHORT + SPREAD_MED * 0.5,
+                pre_spawn_unit_func = _warlord_trial_spawn_decal_func,
+                post_spawn_unit_func = _warlord_trial_despawn_decal_func,
+                spawn_delay = DELAY_SPAWN,
+            },
+            {
+                "delay",
+                duration = 1,
+            },
+            {
+                "continue_when_spawned_count",
+                duration = 20,
+                condition = function (counter)
+                    return counter.cursed_chest_enemies > 0
+                end,
+            },
+            {
+                "continue_when_spawned_count",
+                duration = 120,
+                condition = function (counter)
+                    return counter.cursed_chest_enemies <= 0
+                end,
+            },
+        }
+    end
+
+    -- 2. Inject the weighted pick into the skaven faction pools. The
+    -- faction event's shape is { { "one_of", { <inject blocks> } } }
+    -- (deus_generic_terror_events.lua:170-277; consumed at
+    -- terror_event_mixer.lua:1702-1709 element[1]=="one_of" ->
+    -- ipairs(element[2])). We add to every block whose
+    -- weighted_event_names already contains the rat-ogre trial - that is
+    -- exactly the MORE_MONSTERS-tagged block (:214-233) and the untagged
+    -- fallback block (:234-274), and never the elites/specials blocks.
+    -- This is a PERMANENT (session-lifetime) template addition, guarded
+    -- idempotent; the #117 force-rotation layer above operates on the
+    -- PROTOTYPE's event_name_list, not these weighted lists, so the two
+    -- compose without interference.
+    local injected = false
+    local faction_event = GTE.cursed_chest_challenge_faction_skaven
+    local one_of = type(faction_event) == "table" and faction_event[1]
+    local blocks = type(one_of) == "table" and one_of[1] == "one_of" and one_of[2]
+    if type(blocks) == "table" then
+        for _, block in ipairs(blocks) do
+            local wen = type(block) == "table" and block[1] == "inject_event"
+                and block.weighted_event_names
+            if type(wen) == "table" then
+                local is_monster_pool, already_present = false, false
+                for _, entry in ipairs(wen) do
+                    if entry.event_name == "cursed_chest_challenge_skaven_rat_ogre" then
+                        is_monster_pool = true
+                    end
+                    if entry.event_name == TRIAL_EVENT_NAME then
+                        already_present = true
+                    end
+                end
+                if is_monster_pool and not already_present then
+                    wen[#wen + 1] = {
+                        event_name = TRIAL_EVENT_NAME,
+                        weight = TRIAL_WEIGHT,
+                    }
+                    injected = true
+                end
+            end
+        end
+    end
+
+    if injected then
+        mod._ct_warlord_trial_injected = true
+        pcall(printf, "[ct-warlord-trial] Skaven Warlord trial %s injected into cursed_chest_challenge_faction_skaven pools (weight=%d) (#324)",
+            TRIAL_EVENT_NAME, TRIAL_WEIGHT)
+        return true
+    end
+    pcall(printf, "[ct-warlord-trial] pool injection found no matching weighted block - vanilla pool shape changed? (#324)")
+    return false
+end
+
+-- Load-time attempt (succeeds when enemy_tweaker loaded first); the
+-- start_terror_event hook retries at every chest activation otherwise.
+mod._ct_ensure_warlord_trial()
 
 -- ============================================================
 -- v0.7.128-dev — Parry-proc boon no-cooldown + per-career burn-on-ability VFX
@@ -14181,6 +14513,78 @@ _rt_register("cursed_chest_unique_trials", function()
         if p == "a" then
             return "force-rotation returned the previous pick ('a') — uniqueness not guaranteed"
         end
+    end
+end)
+
+-- #324 (v0.7.226-dev): Skaven Warlord cursed-chest trial (cross-mod with
+-- enemy_tweaker). Verifies the ensure/inject function + the et-absence guard,
+-- and - when et's breed is present - that the trial event is registered, the
+-- skaven pools carry the weighted pick, and the boss element's pre_spawn_func
+-- is the LIVE TerrorEventUtils.add_enhancements_for_difficulty reference
+-- (the CODE_REVIEW.md upvalue-gotcha check: grudge enhancements must apply).
+_rt_register("warlord_trial_injection", function()
+    if type(mod._ct_ensure_warlord_trial) ~= "function" then
+        return "mod._ct_ensure_warlord_trial missing - #324 feature block absent"
+    end
+    local GTE = rawget(_G, "GenericTerrorEvents")
+    if type(GTE) ~= "table" then
+        return "GenericTerrorEvents not loaded (run in keep)"
+    end
+    local B = rawget(_G, "Breeds")
+    local breed_present = B and type(B.et_skaven_warlord) == "table"
+    if not breed_present then
+        -- et absent: the guard must have kept the pools clean.
+        if GTE.ct_cursed_chest_challenge_skaven_warlord then
+            return "trial event registered but et_skaven_warlord breed absent - et-absence guard failed"
+        end
+        if mod._ct_warlord_trial_injected then
+            return "_ct_warlord_trial_injected true without the breed - guard failed"
+        end
+        return  -- PASS: correctly inert without enemy_tweaker
+    end
+    mod._ct_ensure_warlord_trial()
+    local ev = GTE.ct_cursed_chest_challenge_skaven_warlord
+    if type(ev) ~= "table" then
+        return "trial event not registered despite et_skaven_warlord present"
+    end
+    -- boss element sanity: breed + counter category + live pre_spawn_func ref
+    local boss_el
+    for _, el in ipairs(ev) do
+        if type(el) == "table" and el[1] == "spawn_around_origin_unit"
+                and el.breed_name == "et_skaven_warlord" then
+            boss_el = el
+            break
+        end
+    end
+    if not boss_el then
+        return "trial has no spawn_around_origin_unit element for et_skaven_warlord"
+    end
+    if boss_el.spawn_counter_category ~= "cursed_chest_enemies" then
+        return "boss element missing cursed_chest_enemies counter category - chest would never open"
+    end
+    local TEU = rawget(_G, "TerrorEventUtils")
+    if not (TEU and boss_el.pre_spawn_func == TEU.add_enhancements_for_difficulty) then
+        return "boss element pre_spawn_func is not TerrorEventUtils.add_enhancements_for_difficulty - grudge enhancements would not apply"
+    end
+    -- pool injection: at least one skaven weighted block must carry our pick
+    local found_in_pool = false
+    local faction_event = GTE.cursed_chest_challenge_faction_skaven
+    local one_of = type(faction_event) == "table" and faction_event[1]
+    local blocks = type(one_of) == "table" and one_of[1] == "one_of" and one_of[2]
+    if type(blocks) == "table" then
+        for _, block in ipairs(blocks) do
+            local wen = type(block) == "table" and block.weighted_event_names
+            if type(wen) == "table" then
+                for _, entry in ipairs(wen) do
+                    if entry.event_name == "ct_cursed_chest_challenge_skaven_warlord" then
+                        found_in_pool = true
+                    end
+                end
+            end
+        end
+    end
+    if not found_in_pool then
+        return "ct_cursed_chest_challenge_skaven_warlord not present in any cursed_chest_challenge_faction_skaven weighted pool"
     end
 end)
 

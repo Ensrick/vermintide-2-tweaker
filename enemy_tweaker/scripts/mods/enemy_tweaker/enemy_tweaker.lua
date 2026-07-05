@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.26-dev"
+local MOD_VERSION = "0.7.27-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -1064,6 +1064,18 @@ local function _apply_roaming_size_multiplier()
 end
 
 -- ============================================================
+-- Skaven Warlord breed registration (#324, v0.7.27-dev)
+-- ============================================================
+-- MUST run BEFORE the Champion elite-pool retune's load-time apply below
+-- (`_safe("champion_load_apply", ...)`): the new `et_skaven_warlord` breed is
+-- deep-copied from Breeds[skaven_storm_vermin_champion], and this ordering
+-- guarantees the copy snapshots PRISTINE vanilla 800-HP champion values even
+-- when the user's champion_in_elite_pool toggle is saved ON (the retune only
+-- mutates the live champion entry, never our detached copy). Full
+-- DEVELOPMENT.md breed-adding checklist walk + citations live in the file.
+mod:dofile("scripts/mods/enemy_tweaker/_et_skaven_warlord_breed")
+
+-- ============================================================
 -- Roaming Elite Pool: Stormvermin Champion (v0.7.18-dev)
 -- ============================================================
 -- Toggle-gated, default-OFF, HOST-side: a per-spawn roll can replace a ROAMING
@@ -1214,29 +1226,47 @@ _hook_wrap("ConflictDirector", "refresh_conflict_director_patches",
 end)
 
 -- ============================================================
--- Monster Pool: Skarrik Spinemangler (v0.7.12-dev)
+-- Monster Pool: Skaven Warlord (v0.7.12-dev; retargeted #324 v0.7.27-dev)
 -- ============================================================
 -- Toggle-gated, default-OFF, HOST-side: when a boss terror event would spawn a
--- standard monster, a per-spawn roll can replace it with the Skaven Warlord
--- (skaven_storm_vermin_warlord, "Skarrik Spinemangler"). Monsters spawn via
--- ConflictDirector boss terror events -> ConflictDirector:spawn_one ->
+-- standard monster, a per-spawn roll can replace it with the mod-added
+-- "Skaven Warlord" breed (et_skaven_warlord — the unused champion-recolour of
+-- Skarrik's model with vanilla 800-HP champion boss stats; see
+-- _et_skaven_warlord_breed.lua). v0.7.12-v0.7.26 swapped in literal Skarrik
+-- (skaven_storm_vermin_warlord); #324 retargets the swap to the new breed and
+-- renames the feature — the chance-slider semantics are unchanged. Monsters
+-- spawn via ConflictDirector boss terror events -> ConflictDirector:spawn_one ->
 -- spawn_queued_unit (conflict_director.lua:1732) — a DIFFERENT path than the
 -- horde breed-swap below (HordeSpawner), so this needs its own hook.
 --
 -- CRASH-SAFE PACKAGE LOAD: we substitute the breed TABLE only and let VANILLA
 -- spawn_queued_unit run its own load — it calls enemy_package_loader:request_breed
--- (conflict_director.lua:1738) on the real .package (resource_packages/breeds/
--- skaven_storm_vermin_warlord), and the spawn queue blocks on
--- is_breed_loaded_on_all_peers before instantiating. We NEVER call
--- Managers.package:load ourselves (the raw-unit-path call is what async-crashed
--- et at the v0.7.10 banner force-load, L820-829). The warlord is a registered
--- dynamically-loadable breed (EnemyPackageLoaderSettings 'level_specific'), and a
--- shipped mod (SpawnTweaks reverse-twins) already spawns it cross-level this way.
--- RESIDUAL RISK: on a level whose bundle lacks the warlord package, vanilla's
--- async load could still fail — default off + host-must-test (see tooltip).
+-- (conflict_director.lua:1740). For the MOD-ADDED breed that request resolves
+-- through EnemyPackageLoaderSettings.alias_to_breed (enemy_package_loader.lua:189
+-- `breed_name = ALIAS_TO_BREED[breed_name] or breed_name`; alias registered at
+-- breed registration) to skaven_storm_vermin_champion — a registered
+-- dynamically-loadable 'level_specific' breed
+-- (enemy_package_loader_settings.lua:42) whose package contains our clone's
+-- base_unit. The spawn queue still blocks on is_breed_loaded_on_all_peers
+-- (conflict_director.lua:1847), which alias-resolves the same way
+-- (enemy_package_loader.lua:955). We NEVER call Managers.package:load ourselves
+-- (the raw-unit-path call is what async-crashed et at the v0.7.10 banner
+-- force-load). RESIDUAL RISK: on a level whose bundle lacks the champion
+-- package, vanilla's async load could still fail — default off + host-must-test
+-- (see tooltip).
 --
 -- chaos_troll_chief is DELIBERATELY excluded — it's the Festering Ground scripted
 -- finale boss; swapping it would break that mission's scripted event.
+--
+-- _WARLORD_BREED (literal Skarrik) is kept for the two shipped off-arena crash
+-- guards below — both are breed-conditional on skaven_storm_vermin_warlord
+-- (the intro_timer wrap lives ON that breed's own stagger_modifier_function;
+-- the BTSpawnAllies guard gates on blackboard.breed.name), so they keep
+-- protecting Skarrik spawns from OTHER sources (vanilla Skittergate flows,
+-- SpawnTweaks-style mods). The NEW breed needs NEITHER guard: its champion
+-- base has no stagger_modifier_function (breed_skaven_storm_vermin_champion.lua,
+-- full read) and its behaviour tree has no BTSpawnAllies node
+-- (skaven_storm_vermin_champion_behavior.lua:5-133).
 local _WARLORD_BREED = "skaven_storm_vermin_warlord"
 local _WARLORD_ELIGIBLE_MONSTERS = {
     skaven_rat_ogre   = true,
@@ -1257,22 +1287,31 @@ local _WARLORD_ELIGIBLE_MONSTERS = {
 _hook_wrap("ConflictDirector", "spawn_queued_unit", "spawn_queued_unit_swaps",
         function(func, self, breed, boxed_spawn_pos, boxed_spawn_rot, spawn_category,
                  spawn_animation, spawn_type, optional_data, group_data, unit_data)
-    -- 1. Warlord monster-pool swap. Fast early-out: one mod:get when off.
+    -- 1. Skaven Warlord monster-pool swap (#324: target is the mod-added
+    -- et_skaven_warlord breed, no longer literal Skarrik). Fast early-out:
+    -- one mod:get when off. mod._et_warlord2_breed_name is set only after
+    -- _et_skaven_warlord_breed.lua completed registration — if registration
+    -- failed the swap stays inert (no fallback to Skarrik by design).
+    local wl2 = mod._et_warlord2_breed_name
     if mod:get("warlord_in_monster_pool")
+            and wl2
             and type(breed) == "table"
             and _WARLORD_ELIGIBLE_MONSTERS[breed.name]
-            and rawget(_G, "Breeds") and Breeds[_WARLORD_BREED] then
+            and rawget(_G, "Breeds") and Breeds[wl2] then
         -- Host-only: spawn_queued_unit/request_breed are server-authoritative.
         -- Substituting on the host means the warlord replicates to clients
         -- normally (engine network-synced loader + is_breed_loaded_on_all_peers
         -- gate). Managers.player.is_server is a boolean field (player_manager.lua:41).
+        -- CLIENT REQUIREMENT: every peer must have enemy_tweaker installed —
+        -- the mod-added breed's NetworkLookup entries only exist on et peers
+        -- (see the constraint banner in _et_skaven_warlord_breed.lua).
         local pm = Managers and Managers.player
         if pm and pm.is_server then
             local chance = mod:get("warlord_monster_chance") or 0
             if chance > 0 and math.random() * 100 <= chance then
                 local original = breed.name
-                breed = Breeds[_WARLORD_BREED]
-                _spawn_dbg("warlord", "monster %s -> Skarrik Spinemangler (chance=%d)", tostring(original), chance)
+                breed = Breeds[wl2]
+                _spawn_dbg("warlord", "monster %s -> Skaven Warlord (%s, chance=%d)", tostring(original), wl2, chance)
             end
         end
     end
@@ -3009,13 +3048,80 @@ _rt_register("breed_swap_map_table", function()
 end)
 
 _rt_register("warlord_monster_swap_hook", function()
-    -- Verifies the monster->warlord substitution hook target + breed exist.
+    -- Verifies the monster->Skaven Warlord substitution hook target + the
+    -- #324 swap target. The swap must point at the MOD-ADDED breed
+    -- (et_skaven_warlord), not literal Skarrik (retargeted v0.7.27-dev).
     if type(rawget(_G, "ConflictDirector")) ~= "table"
             or type(ConflictDirector.spawn_queued_unit) ~= "function" then
         return "ConflictDirector.spawn_queued_unit missing — warlord monster-swap hook target absent"
     end
-    if not (rawget(_G, "Breeds") and Breeds.skaven_storm_vermin_warlord) then
-        return "Breeds.skaven_storm_vermin_warlord missing — Skarrik Spinemangler breed not registered"
+    if mod._et_warlord2_breed_name ~= "et_skaven_warlord" then
+        return "mod._et_warlord2_breed_name is not 'et_skaven_warlord' — #324 swap retarget missing/failed"
+    end
+    if not (rawget(_G, "Breeds") and Breeds.et_skaven_warlord) then
+        return "Breeds.et_skaven_warlord missing — Skaven Warlord breed not registered"
+    end
+end)
+
+_rt_register("skaven_warlord_breed_checklist", function()
+    -- #324: full DEVELOPMENT.md breed-adding checklist verification for
+    -- et_skaven_warlord (side-tables seeded, network identity, package alias,
+    -- grudge names, vanilla-visible localization, pristine clone stats).
+    local name = "et_skaven_warlord"
+    local BreedsT = rawget(_G, "Breeds")
+    local b = BreedsT and BreedsT[name]
+    if type(b) ~= "table" then return "breed not in Breeds" end
+    if b.name ~= name then return "breed.name not overwritten (still " .. tostring(b.name) .. ")" end
+    if b.boss ~= true or b.race ~= "skaven" then return "breed lost boss/race fields" end
+    if type(b.max_health) ~= "table" or b.max_health[8] ~= 800 then
+        return "clone max_health[8] ~= 800 — champion elite retune leaked into the clone"
+    end
+    if b.base_unit ~= "units/beings/enemies/skaven_stormvermin_champion/chr_skaven_stormvermin_champion" then
+        return "clone base_unit is not the champion recolour unit"
+    end
+    if not mod._et_warlord2_threat_seeded then return "threat_values not seeded (CD.set_threat_value)" end
+    local sd = rawget(_G, "StatisticsDefinitions")
+    local pl = sd and sd.player
+    if not (pl and pl.damage_dealt_per_breed and pl.damage_dealt_per_breed[name]
+            and pl.kills_per_breed and pl.kills_per_breed[name]
+            and pl.kills_per_breed_persistent and pl.kills_per_breed_persistent[name]
+            and pl.kill_assists_per_breed and pl.kill_assists_per_breed[name]
+            and pl.kills_per_breed_difficulty and pl.kills_per_breed_difficulty[name]) then
+        return "StatisticsDefinitions per-breed seeds incomplete"
+    end
+    if pl.kills_per_breed_persistent[name].name ~= name then
+        return "kills_per_breed_persistent entry missing `name` leaf marker"
+    end
+    local nl = rawget(_G, "NetworkLookup")
+    if not (nl and nl.breeds and rawget(nl.breeds, name)) then
+        return "NetworkLookup.breeds missing forward/reverse entry"
+    end
+    if not (nl.damage_sources and rawget(nl.damage_sources, name)) then
+        return "NetworkLookup.damage_sources missing entry (AI melee damage_source = breed name)"
+    end
+    local epls = rawget(_G, "EnemyPackageLoaderSettings")
+    if not (epls and epls.alias_to_breed
+            and epls.alias_to_breed[name] == "skaven_storm_vermin_champion") then
+        return "EnemyPackageLoaderSettings.alias_to_breed missing — spawn would request a nonexistent package"
+    end
+    if not (rawget(_G, "BreedActions") and BreedActions[name]) then
+        return "BreedActions clone missing"
+    end
+    local dis = rawget(_G, "Dismemberments")
+    if not (dis and dis[name]) then
+        return "Dismemberments entry missing — unguarded index at generic_hit_reaction_extension.lua:544 would crash"
+    end
+    local gmn = rawget(_G, "GrudgeMarkedNames")
+    local glist = gmn and gmn[name]
+    if type(glist) ~= "table" or #glist < 10 then
+        return "GrudgeMarkedNames[et_skaven_warlord] missing or short (" .. tostring(glist and #glist) .. ")"
+    end
+    if not mod._et_warlord2_localize_hooked then
+        return "_G.Localize hook not installed — grudge names / display name unresolvable by vanilla"
+    end
+    local strings = mod._et_warlord2_loc_strings
+    if not (type(strings) == "table" and strings[glist[1]] and strings["et_skaven_warlord_name"]) then
+        return "warlord loc strings table incomplete (display name / first grudge key)"
     end
 end)
 

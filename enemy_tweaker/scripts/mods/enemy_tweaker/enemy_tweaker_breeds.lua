@@ -177,12 +177,56 @@ function M.collect_specials()
 end
 
 -- ============================================================
+-- Mod-added breeds (#324)
+-- ============================================================
+-- Naming convention for enemy_tweaker-added breeds: `et_<faction>_<role>`
+-- (precedent: the v0.2.x-v0.3.8 skeleton clones et_necro_skeleton*,
+-- et_ghost_skeleton_* -- see enemy_tweaker/DEVELOPMENT.md "Skeleton breed
+-- clones"). The Skaven Warlord is a boss breed deep-copied from PRISTINE
+-- vanilla skaven_storm_vermin_champion; registration + the full
+-- DEVELOPMENT.md breed-adding checklist live in _et_skaven_warlord_breed.lua.
+M.ET_SKAVEN_WARLORD = "et_skaven_warlord"
+
+-- Display-name loc key. Served to VANILLA `Localize` by the consolidated
+-- _G.Localize hook in _et_skaven_warlord_breed.lua -- VMF's mod_localization
+-- table is private to mod:localize and invisible to vanilla Localize
+-- (character_weapon_variants/REGRESSION_CHECKLIST.md:557 burn). BossHealthUI
+-- renders an UNmarked boss as Localize(breed.display_name or breed_name)
+-- (boss_health_ui.lua:303 + :174), so this key must resolve through the
+-- vanilla path, not mod:localize.
+M.ET_SKAVEN_WARLORD_NAME_KEY = "et_skaven_warlord_name"
+
+-- Grudge-marked display names (#324 Part 3). Ordered list of
+-- { key = <loc key>, en = <string> }; the KEYS are registered into vanilla
+-- GrudgeMarkedNames[et_skaven_warlord] (grudge_mark_settings.lua:196 table,
+-- consumed by TerrorEventUtils.get_grudge_marked_name at
+-- terror_event_utils.lua:59-78: name_list = GrudgeMarkedNames[breed_name],
+-- index = magic_number %% #name_list + 1, then Localize(name_list[index])).
+-- The STRINGS are served by the same _G.Localize hook as the display name.
+-- Style mirrors the vanilla name_grudge_* sets (title + epithet).
+M.WARLORD_GRUDGE_NAMES = {
+    { key = "et_grudge_warlord_001", en = "Skrittch the Thrice-Crowned" },
+    { key = "et_grudge_warlord_002", en = "Vraskitt the Gore-Warden" },
+    { key = "et_grudge_warlord_003", en = "Kritchak Blackfang" },
+    { key = "et_grudge_warlord_004", en = "Sneekit the Throat-Taker" },
+    { key = "et_grudge_warlord_005", en = "Queekrit the Man-Flayer" },
+    { key = "et_grudge_warlord_006", en = "Iskrit the Warp-Sworn" },
+    { key = "et_grudge_warlord_007", en = "Gnashrak the Tail-Ripper" },
+    { key = "et_grudge_warlord_008", en = "Skabrit Doom-Whisker" },
+    { key = "et_grudge_warlord_009", en = "Vermitch the Hollow-Eyed" },
+    { key = "et_grudge_warlord_010", en = "Rikkfang the Pit-Master" },
+    { key = "et_grudge_warlord_011", en = "Tretchik the Oath-Gnawer" },
+    { key = "et_grudge_warlord_012", en = "Karskit the Red-Clawed" },
+}
+
+-- ============================================================
 -- Display name resolution
 -- ============================================================
 
 M.BREED_NAME_OVERRIDES = {
     chaos_corruptor_sorcerer = "Lifeleech Sorcerer",
     chaos_vortex_sorcerer    = "Blightstormer",
+    et_skaven_warlord        = "Skaven Warlord",  -- #324 mod-added breed
 }
 
 local function _humanize(breed_name)

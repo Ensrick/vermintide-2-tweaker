@@ -1,5 +1,28 @@
 # Enemy Tweaker Changelog
 
+## 0.7.27-dev (2026-07-04): Skaven Warlord as a monster (#324)
+
+### Added
+- **New boss breed `et_skaven_warlord` ("Skaven Warlord")** — deep-copied from PRISTINE vanilla `skaven_storm_vermin_champion` (registration is placed BEFORE the Champion elite-pool retune's load-time apply, so the clone always carries the vanilla 800-HP champion boss stat block even with `champion_in_elite_pool` saved ON). Keeps the champion `base_unit` — the unused colour-variant of Skarrik's warlord model (`chr_skaven_stormvermin_champion`, breed_skaven_storm_vermin_champion.lua:12) — race skaven, behavior `storm_vermin_champion`. New subsystem file `_et_skaven_warlord_breed.lua` walks the full DEVELOPMENT.md breed-adding checklist: threat_values via `ConflictDirector.set_threat_value(nil, ...)`, full StatisticsDefinitions per-breed seed loop (incl. `name` leaf markers + per-difficulty children), NetworkLookup.breeds AND NetworkLookup.damage_sources forward+reverse (AI melee uses the breed name as damage_source, ai_utils.lua:266), `BreedActions` clone, `EnemyPackageLoaderSettings.alias_to_breed` -> champion package (the vanilla alias mechanic, enemy_package_loader.lua:189), `Dismemberments` share (unguarded consumer at generic_hit_reaction_extension.lua:544), SKAVEN race set, BreedHitZonesLookup mirror, warlord boss-bar portrait (`unit_frame_portrait_enemy_warlord`). PerformanceManager needs NO hook: `_activated_per_breed` is rebuilt from `pairs(Breeds)` inside `PerformanceManager.init` at level start (performance_manager.lua:84-88), which always runs after mod load; a live instance is belt-seeded anyway.
+- **Behavior-tree safety verified, no new guards needed:** the champion tree (skaven_storm_vermin_champion_behavior.lua:5-133) has NO BTSpawnAllies node and the breed has NO `stagger_modifier_function`, so neither of Skarrik's two shipped off-arena crash classes (v0.7.14 intro_timer, v0.7.16 spawner-group fassert) exists on the new breed. Skarrik's two guards stay in place (they are breed-conditional on `skaven_storm_vermin_warlord` and keep protecting Skarrik spawns from other sources).
+- **Grudge-mark names (#324 Part 3):** `GrudgeMarkedNames.et_skaven_warlord` registered with 12 new skaven-warlord names (Skrittch the Thrice-Crowned, Vraskitt the Gore-Warden, Kritchak Blackfang, Sneekit the Throat-Taker, Queekrit the Man-Flayer, Iskrit the Warp-Sworn, Gnashrak the Tail-Ripper, Skabrit Doom-Whisker, Vermitch the Hollow-Eyed, Rikkfang the Pit-Master, Tretchik the Oath-Gnawer, Karskit the Red-Clawed). Consumer verified: `TerrorEventUtils.get_grudge_marked_name` reads `GrudgeMarkedNames[breed_name]` at call time (terror_event_utils.lua:59-78) and Localizes each key — served by et's new (and only) consolidated `_G.Localize` hook, since VMF mod-localization is invisible to vanilla `Localize`. Unmarked spawns render `Localize(breed.display_name)` = "Skaven Warlord" (boss_health_ui.lua:303/:174).
+- **`/et_regression_test` checks:** `skaven_warlord_breed_checklist` (every checklist side-table + loc + alias + pristine-stat assertions) and an updated `warlord_monster_swap_hook` (swap must target `et_skaven_warlord`).
+
+### Changed
+- **Monster-pool swap retargeted (#324 Part 2):** `warlord_in_monster_pool` / `warlord_monster_chance` now substitute eligible monsters with the NEW Skaven Warlord breed instead of literal Skarrik Spinemangler. Chance semantics, eligibility list (Rat Ogre / Stormfiend / Chaos Spawn / Troll / Minotaur; troll_chief excluded), and host-side gating unchanged; setting_ids unchanged so saved settings carry over. Menu strings renamed to "Skaven Warlord ..." and re-tagged `[working]` -> `[untested]` per LOCALIZATION_STANDARD § 13.4 (significant overhaul).
+- **Constraint (documented in tooltip + code):** every peer in the lobby must have enemy_tweaker installed for the new breed — its NetworkLookup.breeds / damage_sources indices exist only on et peers (strict `__index` metatable, network_lookup.lua:2360-2367); a client without et hard-errors when the breed spawns. (Installed-but-disabled is safe: registration is module-level per the DEVELOPMENT.md eager doctrine.)
+
+### Files
+- `enemy_tweaker.lua:3` — MOD_VERSION 0.7.26-dev -> 0.7.27-dev.
+- `enemy_tweaker.lua:~1066` — dofile of the new breed subsystem (BEFORE the champion retune load-apply); `~1230-1330` — monster-pool banner + swap block retarget; `~3050-3140` — regression checks.
+- `scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua` — NEW: breed registration + checklist + `_G.Localize` hook.
+- `enemy_tweaker_breeds.lua` — breed-name constant, display-name key, 12 grudge-name entries, BREED_NAME_OVERRIDES entry.
+- `enemy_tweaker_data.lua` — section banner comment only (no widget changes).
+- `enemy_tweaker_localization.lua` — Skaven Warlord strings + [untested] tags.
+
+### Verify (in-game)
+- Enable "Add Skaven Warlord to monster pool" at 100%%, host a mission with a monster spawn: the recoloured warlord spawns with a "SKAVEN WARLORD" boss bar and warlord portrait; kill it (dismember included) with no crash. In a Chaos Wastes trial with grudge marks, the name renders as one of the 12 new grudge names.
+
 ## 0.7.26-dev (2026-07-04): Localization dev status-tag pass (#301)
 
 ### Changed

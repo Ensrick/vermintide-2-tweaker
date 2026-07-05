@@ -141,13 +141,17 @@ local loc = {
     preset_all_elites        = { en = "Theme: All Elites" },
 
     -- ============================================================
-    -- Skarrik Monster Pool
+    -- Skaven Warlord Monster Pool
     -- ============================================================
-    monster_swap_group              = { en = "[working] Skarrik Monster Pool" },
-    warlord_in_monster_pool         = { en = "[working] Add Skarrik Spinemangler to monster pool" },
-    warlord_in_monster_pool_tooltip = { en = "Lets a level's monster (Rat Ogre, Stormfiend, Chaos Spawn, Troll, or Minotaur) be replaced by Skarrik Spinemangler, the Skaven Warlord. Host only and experimental: away from his home level he may spawn without music, act passively, or not appear at all. The Festering Ground finale troll is never replaced." },
-    warlord_monster_chance          = { en = "[working] Skarrik spawn chance (%%)" },
-    warlord_monster_chance_tooltip  = { en = "The percent chance that an eligible monster is replaced by Skarrik Spinemangler. 0 never happens and 100 replaces every eligible monster; kept low so several Warlords do not appear at once." },
+    -- #324 (v0.7.27-dev): retargeted from literal Skarrik to the new
+    -- mod-added "Skaven Warlord" breed (et_skaven_warlord, the unused
+    -- champion-recolour of Skarrik's model). Significant overhaul, so the
+    -- tags drop [working] for [untested] per LOCALIZATION_STANDARD § 13.4.
+    monster_swap_group              = { en = "[untested] Skaven Warlord Monster Pool" },
+    warlord_in_monster_pool         = { en = "[untested] Add Skaven Warlord to monster pool" },
+    warlord_in_monster_pool_tooltip = { en = "Lets a level's monster (Rat Ogre, Stormfiend, Chaos Spawn, Troll, or Minotaur) be replaced by the Skaven Warlord, a new boss that uses the unused recolour of Skarrik's model with the Stormvermin Champion's full boss stats. Host rolls the chance, and every player in the lobby needs this mod installed for the Warlord to appear safely. The Festering Ground finale troll is never replaced." },
+    warlord_monster_chance          = { en = "[untested] Skaven Warlord spawn chance (%%)" },
+    warlord_monster_chance_tooltip  = { en = "The percent chance that an eligible monster is replaced by the Skaven Warlord. 0 never happens and 100 replaces every eligible monster; kept low so several Warlords do not appear at once." },
 
     -- ============================================================
     -- Spawn Pacing

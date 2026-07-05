@@ -346,11 +346,13 @@ return {
             },
 
             -- ============================================================
-            -- SKARRIK MONSTER POOL (v0.7.12-dev)
-            -- warlord_monster_chance is nested as a sub_widget of the
-            -- warlord_in_monster_pool master checkbox: enemy_tweaker.lua reads
-            -- the chance (line ~1258) ONLY when the checkbox is on (gated at
-            -- line ~1248), so VMF auto-hides the slider while the feature is off.
+            -- SKAVEN WARLORD MONSTER POOL (v0.7.12-dev; #324 retarget v0.7.27-dev)
+            -- Swap target is the mod-added et_skaven_warlord breed (see
+            -- _et_skaven_warlord_breed.lua); setting_ids kept unchanged so
+            -- saved settings carry over. warlord_monster_chance is nested as
+            -- a sub_widget of the warlord_in_monster_pool master checkbox:
+            -- enemy_tweaker.lua reads the chance ONLY when the checkbox is
+            -- on, so VMF auto-hides the slider while the feature is off.
             -- ============================================================
             {
                 setting_id  = "monster_swap_group",
