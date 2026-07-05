@@ -20,13 +20,18 @@ local mod = get_mod("gut_dev")
 -- with bool / int / float / "string" values. Keybinds/tables are skipped.
 
 -- This author's mods (same whitelist as the Mod Tweaker). Only these are exported
--- and only these are overridden — we never touch other authors' mods.
+-- and only these are overridden — we never touch other authors' mods, with ONE
+-- deliberate exception: HideBuffs ("UI Tweaks"). The #312 HUD-customizer
+-- write-through makes UI Tweaks the owner of the buff/boss/overcharge/energy bar
+-- positions, so the user's HUD layout now lives in HideBuffs' settings; including
+-- it here lets a config snapshot capture and restore that layout too.
 local _MY_MODS = {
     gut = true, gut_dev = true, wt = true, ct = true, ct_dev = true, gt = true, gt_dev = true,
     cim = true, cim_dev = true, crt = true, cosmetics_tweaker = true,
     dynamic_cosmetic_portraits = true, enemy_tweaker = true,
     character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
     verminious_dreams_lighting = true, verminious_dreams_lighting_dev = true,
+    HideBuffs = true,  -- UI Tweaks (#312): HUD layout lives in its settings now
 }
 
 local CONFIG_NAME = "gut_mod_settings.toml"

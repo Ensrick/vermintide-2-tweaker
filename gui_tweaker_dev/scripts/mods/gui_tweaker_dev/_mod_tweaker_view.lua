@@ -159,6 +159,7 @@ local _MY_MODS = {
     cim = true, cim_dev = true, crt = true, cosmetics_tweaker = true,
     dynamic_cosmetic_portraits = true, enemy_tweaker = true,
     character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
+    HideBuffs = true,  -- UI Tweaks (#312): surface its options as a Mod Tweaker tab
 }
 
 local function _nf(node, key)  -- defensive node-field read

@@ -5,6 +5,81 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.185-dev (2026-07-04) -- #312: UI Tweaks integration, phase 1
+
+Made the standalone Workshop mod "UI Tweaks" (internal id `HideBuffs`) a first-class
+citizen of gut's HUD tooling, so the two mods stop fighting over the same HUD elements.
+
+- **Root problem.** gut's HUD customizer and UI Tweaks BOTH reposition four shared HUD
+  elements every time the game draws them: the buff bar, the boss health bar, the
+  overcharge/heat bar, and the energy bar. gut moves its own registry scenegraph node
+  once; UI Tweaks moves a related node/widget-offset in the SAME transform chain every
+  frame inside its own hooks. Configure both and the offsets STACK (each nudges a
+  different node), which is confusing and wrong. UI Tweaks also has no in-game drag editor.
+- **Ownership model.** New checkbox `gut_uitweaks_sync` (HUD > UI Tweaks Integration,
+  default on). When UI Tweaks is installed AND enabled AND this is on, UI Tweaks becomes
+  the single owner of the four elements: gut's drag editor writes UI Tweaks' offset
+  settings instead of gut's own, and gut pins its own node to the vanilla baseline so it
+  contributes nothing (no more stacking). New `_gut_uitweaks_sync.lua` holds the element
+  map + is_owned / preview / commit / reset / migrate; it adds NO game hooks of its own.
+  A one-time `migrate()` folds any pre-existing gut HUD offsets for these elements into UI
+  Tweaks (additively, preserving the on-screen position) then zeros gut's, so nothing
+  jumps when ownership transfers. Total no-op when UI Tweaks is absent or disabled.
+- **Per-element verification (no exclusions).** Each element's UI Tweaks apply site was
+  read against gut's apply site in the decompiled engine + HideBuffs source. All four are
+  additive offsets in scenegraph UI units (1080p, y-up: +x right, +y up), matching gut's
+  cursor/drag space; `node.position` aliases `node.local_position` (ui_scenegraph.lua:82).
+  buff_ui -> `BUFFS_OFFSET_X/_Y` (buff_ui.lua:161-168, buff_pivot default {0,0}); boss_health
+  -> `OTHER_ELEMENTS_BOSS_HP_BAR_OFFSET_X/_Y` (HideBuffs.lua:576-584, clean base+offset);
+  overcharge_bar -> `OTHER_ELEMENTS_HEAT_BAR_OFFSET_X/_Y` (overcharge_bar.lua:4-11, widget
+  offset); energy_bar -> `OTHER_ENERGY_OFFSET_X/_Y` (HideBuffs.lua:457-463 via the
+  crosshair-follow on `screen_bottom_pivot`, of which gut's node is a child). No element was
+  excluded. Known phase-1 limitation: for buff/boss/overcharge, gut's registry node is a
+  parent of (or separate from) the node UI Tweaks moves, so the drag OVERLAY stays at gut's
+  node while the element shifts -- the element ends up correct, but the handle may not track
+  a large offset. energy_bar's overlay tracks (child node) but its bar follows the crosshair
+  and redraws only when dirty, so a live preview can lag. Committed values are always correct.
+- **Durable save.** Foreign-mod settings persist through `get_mod("VMF").save_unsaved_settings_to_file()`:
+  VMFMod.set writes into a single shared `_mods_settings` table + unsaved flag, and that flush
+  writes it via `Application.save_user_settings()` (VMF core/settings.lua:5-55). Commit/reset/
+  migrate call it; drag preview uses notify=false with no save (cheap in-memory).
+- **Mod Tweaker tab.** `HideBuffs` added to the `_MY_MODS` whitelist in both
+  `_mod_tweaker_view.lua` and `_mod_tweaker_state.lua`, so UI Tweaks' options get a tab when
+  it is installed (harmless when absent -- no VMF entry exists then). No STEP_OVERRIDES were
+  needed: UI Tweaks' offset sliders omit `decimals_number`, which VMF normalizes to 0
+  (options.lua:443), so gut's `_resolve_step` already yields step 1 -- correct pixel
+  granularity for a +/-5000 px offset (the drag bar covers coarse movement).
+- **Config file.** `HideBuffs` also added to `_MY_MODS` in `_gut_config_file.lua` (the one
+  deliberate third-party inclusion): because UI Tweaks now owns the HUD element positions,
+  the user's HUD layout lives in HideBuffs' settings, so `/export_settings` + `/reload_config`
+  now capture and restore it.
+- **Vanilla numeric-UI mirror.** New checkboxes `gut_vanilla_numeric_ui` and
+  `gut_vanilla_persistent_ammo` mirror the base game's Gameplay > HUD Customization options
+  into gut's menu. on_setting_changed writes `Application.set_user_setting(...)` +
+  `save_user_settings()`; on_all_mods_loaded seeds gut's stored values FROM the engine
+  (no notify) so a change made in the vanilla menu wins. Liveness caveat: `numeric_ui` is
+  live (UnitFramesHandler polls it every frame, unit_frames_handler.lua:1285);
+  `persistent_ammo_counter` is cached at chunk load (equipment_ui.lua:10) so it needs a game
+  restart -- stated in the tooltip.
+- New `/regression_test` checks: `uitweaks_modtweaker_whitelisted`, `uitweaks_sync_map_resolves`,
+  `vanilla_numeric_mirror_wired`. Loc titles carry `[untested]` (#301 doctrine); tooltips untagged.
+
+## 0.2.184-dev (2026-07-04) -- Localization: applied dev status-tag doctrine (#301)
+
+Localization: applied dev status-tag doctrine (#301). 75 widget titles tagged: 58 [working],
+7 [untested], 10 issue-tagged (#209, #281, #285, #193, #172, #155, #87, #80, #287, #274, #257,
+#126, #275, #140), with [crash] on 2, [verify-fix] on 5, [diag] on 4. No em dashes; tooltips,
+dropdown value labels, and Mod Tweaker custom-renderer strings left untagged.
+
+- Angle-bracket strip caveat (gut memory `^<(.-)>$`) checked FIRST: the strip in
+  `_mod_tweaker_view.lua:196,219` / `_mod_tweaker_state.lua:95,118` operates on the widget
+  KEY field of foreign mods (recovering a frozen `<key>` marker), never on gut's own resolved
+  display values, and the only value-side guard is `not string.find(s, "^<")`. A `[tag] ` prefix
+  starts with `[`, not `<`, and no gut loc entry is itself an angle-bracket string, so prefix
+  tagging is safe here with no adaptation needed.
+- `gut_use_non_modded_loadouts` normalized from the non-vocabulary `[confirmed working]` to
+  `[Issue 287] [diag]`.
+
 ## 0.2.183-dev (2026-07-03) -- #285: respawn-timer over the dead teammate portrait now actually renders
 
 The `gut_respawn_timer` feature (large seconds-to-respawn number over a dead teammate's

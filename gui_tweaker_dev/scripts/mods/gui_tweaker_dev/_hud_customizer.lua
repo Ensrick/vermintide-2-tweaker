@@ -124,10 +124,23 @@ end
 -- Writes baseline + pure delta (see local_position_for above); the baseline is
 -- the registry entry's vanilla_position, the same field reset_widget restores to.
 -- No-op when offset is {0, 0} unless forced; safe under pcall against missing nodes.
+--
+-- (#312) UI Tweaks ownership: when the standalone UI Tweaks mod (HideBuffs) owns
+-- this element (sync on + HB enabled), IT writes the element's own node/offset every
+-- frame. gut must contribute nothing, so pin gut's node to the vanilla baseline --
+-- this both zeros gut's own contribution and clears any residual gut offset so the
+-- two can't stack. See _gut_uitweaks_sync.lua for the element map + verification.
 local function _apply_offset_to_scenegraph(view, node_id, widget_id, force)
     if not view or not view.ui_scenegraph then return end
     local node = view.ui_scenegraph[node_id]
     if not node or not node.local_position then return end
+    local sync = mod._gut_uitweaks_sync
+    if sync and sync.is_owned and sync.is_owned(widget_id) then
+        local bx, by = CustomizerModule.local_position_for(widget_id, 0, 0)
+        node.local_position[1] = bx
+        node.local_position[2] = by
+        return
+    end
     local dx, dy = _get_widget_offset(widget_id)
     if not force and dx == 0 and dy == 0 then return end
     local lx, ly = CustomizerModule.local_position_for(widget_id, dx, dy)
@@ -253,19 +266,30 @@ function CustomizerModule.tick_drag()
     if _drag_active then
         local dx = cursor[1] - _drag_base[1]
         local dy = cursor[2] - _drag_base[2]
-        _set_widget_offset(_drag_active, dx, dy)
+        -- (#312) Owned elements write through to UI Tweaks instead of gut's own store.
+        local sync = mod._gut_uitweaks_sync
+        local owned = sync and sync.is_owned and sync.is_owned(_drag_active)
+        if owned then
+            pcall(sync.preview, _drag_active, dx, dy)  -- in-memory HB write; HB redraws next frame
+        else
+            _set_widget_offset(_drag_active, dx, dy)
+        end
         if released then
             local id = _drag_active
             local start_dx, start_dy = _drag_start_offset and _drag_start_offset[1] or 0,
                                        _drag_start_offset and _drag_start_offset[2] or 0
             local delta_x = dx - start_dx
             local delta_y = dy - start_dy
-            _save_offsets()
+            if owned then
+                pcall(sync.commit, id, dx, dy)  -- HB durable write + notify (re-layout)
+            else
+                _save_offsets()
+            end
             _drag_active = nil
             _drag_start_offset = nil
             -- _dbg: drag_end
-            pcall(_dbg, "[gui_tweaker] drag_end: id=%s final_offset={%d,%d} delta={%d,%d}",
-                tostring(id), dx, dy, delta_x, delta_y)
+            pcall(_dbg, "[gui_tweaker] drag_end: id=%s owned=%s final_offset={%d,%d} delta={%d,%d}",
+                tostring(id), tostring(owned and true or false), dx, dy, delta_x, delta_y)
         end
         _reapply_all_offsets()
         return
@@ -284,7 +308,16 @@ function CustomizerModule.tick_drag()
             if hit then
                 _drag_hover = entry.id
                 if pressed then
-                    local dx, dy = _get_widget_offset(entry.id)
+                    -- (#312) Anchor the drag at the element's CURRENT offset: UI Tweaks'
+                    -- when it owns this element, else gut's own stored offset.
+                    local sync = mod._gut_uitweaks_sync
+                    local dx, dy
+                    if sync and sync.is_owned and sync.is_owned(entry.id) then
+                        dx, dy = 0, 0
+                        pcall(function() dx, dy = sync.get_offset(entry.id) end)
+                    else
+                        dx, dy = _get_widget_offset(entry.id)
+                    end
                     _drag_active = entry.id
                     _drag_base[1] = cursor[1] - dx
                     _drag_base[2] = cursor[2] - dy
@@ -392,10 +425,29 @@ function CustomizerModule.install_hooks()
     return installed, failed, failures
 end
 
+-- (#312) Public offset accessors for the UI Tweaks sync module's one-time migrate()
+-- (reads gut's stored offset then clears it as it folds the value into UI Tweaks).
+-- Kept on the customizer so the in-memory cache and the persistent store stay in
+-- lockstep (clearing goes through _save_offsets, not a raw mod:set behind our back).
+function CustomizerModule.get_widget_offset(widget_id)
+    return _get_widget_offset(widget_id)
+end
+function CustomizerModule.clear_widget_offset(widget_id)
+    _offsets_cache[widget_id] = nil
+    _save_offsets()
+end
+
 -- Set widget's offset back to {0, 0}, persist, and re-apply to the live view.
 function CustomizerModule.reset_widget(widget_id)
     local entry = REGISTRY_BY_ID[widget_id]
     if not entry then return false end
+    -- (#312) If UI Tweaks owns this element, zero ITS offset too (element back to
+    -- vanilla) with a durable save; gut's node is already pinned to vanilla by the
+    -- owner-aware apply path, so clearing gut's store below just tidies bookkeeping.
+    local sync = mod._gut_uitweaks_sync
+    if sync and sync.is_owned and sync.is_owned(widget_id) then
+        pcall(sync.reset, widget_id)
+    end
     _offsets_cache[widget_id] = nil
     _save_offsets()
     local view = _live_views[entry.class_name]

@@ -30,6 +30,7 @@ mod — and check `.in_progress/` for sentinel files claiming a live session.
 | general_tweaker | Ensrick | stable | — | 2026-05-25 |
 | general_tweaker_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-05-26 |
 | gui_tweaker | Ensrick | stable | — | 2026-05-25 |
+| gui_tweaker_dev | Ensrick | in-flight | #312 UI Tweaks integration (session ae005bdc) | 2026-07-05 |
 | cosmetics_tweaker | Ensrick | stable | — | 2026-05-25 |
 | dynamic_cosmetic_portraits | Ensrick | stable | — | 2026-05-25 |
 | career_tweaker | Ensrick | stable | — | 2026-05-25 |

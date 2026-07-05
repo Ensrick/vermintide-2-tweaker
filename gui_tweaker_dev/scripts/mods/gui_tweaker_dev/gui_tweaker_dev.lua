@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.183-dev"
+local MOD_VERSION = "0.2.185-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -561,6 +561,10 @@ end)
 -- ============================================================
 
 local Customizer = mod:dofile("scripts/mods/gui_tweaker_dev/_hud_customizer")
+-- (#312) Publish the customizer so the UI Tweaks sync module's migrate() can read +
+-- clear gut's stored HUD offsets through the SAME in-memory cache the customizer
+-- uses (keeps cache and persistent store in lockstep). Resolved at call time.
+mod._gut_hud_customizer = Customizer
 -- Wire the two-channel debug helpers into the customizer module before any
 -- hooks fire (PROJECT_STANDARDS § 3.6 two-helper policy).
 pcall(Customizer.init_dbg, _dbg, _dbg_alert)
@@ -639,6 +643,29 @@ mod.on_setting_changed = function(setting_id)
         local cim = get_mod("cim_dev") or get_mod("cim")
         if cim then
             cim:set("allow_in_mission", mod:get("gut_cim_bench_in_mission") and true or false)
+        end
+    elseif setting_id == "gut_vanilla_numeric_ui" then
+        -- (#312) Mirror into the vanilla engine user setting. LIVE: UnitFramesHandler
+        -- polls Application.user_setting("numeric_ui") every update
+        -- (unit_frames_handler.lua:1285), so this takes effect without a restart.
+        pcall(function()
+            Application.set_user_setting("numeric_ui", mod:get("gut_vanilla_numeric_ui") and true or false)
+            Application.save_user_settings()
+        end)
+    elseif setting_id == "gut_vanilla_persistent_ammo" then
+        -- (#312) Mirror into the vanilla engine user setting. NOT live: vanilla
+        -- equipment_ui.lua:10 caches persistent_ammo_counter at chunk load, so this
+        -- needs a game restart to take effect (stated in the tooltip).
+        pcall(function()
+            Application.set_user_setting("persistent_ammo_counter", mod:get("gut_vanilla_persistent_ammo") and true or false)
+            Application.save_user_settings()
+        end)
+    elseif setting_id == "gut_uitweaks_sync" then
+        -- (#312) Turning sync ON: fold any existing gut HUD offsets for the mapped
+        -- elements into UI Tweaks so they aren't lost when gut stops applying its own
+        -- offset. One-time + idempotent (guard flag inside migrate); no-op when off.
+        if mod:get("gut_uitweaks_sync") and mod._gut_uitweaks_sync and mod._gut_uitweaks_sync.migrate then
+            pcall(mod._gut_uitweaks_sync.migrate)
         end
     end
 end
@@ -1795,6 +1822,89 @@ end)
 -- HideBuffs loaded before us. No-op if UI Tweaks isn't installed. See
 -- _gut_uitweaks_temporal_fix.lua for the verified diff + mechanism.
 local _gut_temporal_fix = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_uitweaks_temporal_fix")
+-- UI Tweaks HUD-customizer write-through (#312): when UI Tweaks (HideBuffs) is
+-- installed + enabled and gut_uitweaks_sync is on, UI Tweaks OWNS the buff bar,
+-- boss HP bar, overcharge bar, and energy bar -- gut's drag editor writes UI
+-- Tweaks' offsets instead of its own, so the two never stack. Adds NO game hooks;
+-- migrate() re-attempted at on_all_mods_loaded (HideBuffs may load after us). No-op
+-- when UI Tweaks is absent. See _gut_uitweaks_sync.lua for the element map + the
+-- per-element coordinate-space verification.
+local _gut_uitweaks_sync = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_uitweaks_sync")
+if _gut_uitweaks_sync and _gut_uitweaks_sync.install then pcall(_gut_uitweaks_sync.install) end
+
+-- (#312) UI Tweaks integration regression tests. Split needles so the source-pattern
+-- checks can never self-match; unreadable source => silent skip (pass).
+local function _gut_read_all(path)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local t = f:read("*a")
+    f:close()
+    return t
+end
+
+_rt_register("uitweaks_modtweaker_whitelisted", function()
+    -- HideBuffs must be in the _MY_MODS whitelist of BOTH the Mod Tweaker view and
+    -- state modules, so the "UI Tweaks" tab surfaces its options.
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local needle = "HideBuffs = " .. "true"
+    for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
+        local txt = _gut_read_all(dir .. fn)
+        if txt and not txt:find(needle, 1, true) then
+            return "UI Tweaks (#312) missing from _MY_MODS in " .. fn
+        end
+    end
+end)
+
+_rt_register("uitweaks_sync_map_resolves", function()
+    -- Every ELEMENT_MAP x/y key must resolve to a real HideBuffs.SETTING_NAMES entry.
+    -- Skips cleanly (pass) when UI Tweaks isn't installed.
+    local sync = mod._gut_uitweaks_sync
+    if type(sync) ~= "table" or type(sync.ELEMENT_MAP) ~= "table" then
+        return "uitweaks sync module or ELEMENT_MAP missing"
+    end
+    local HB = get_mod("HideBuffs")
+    if not HB then return end  -- HB absent: nothing to resolve, pass.
+    local names = HB.SETTING_NAMES
+    if type(names) ~= "table" then return "HideBuffs.SETTING_NAMES missing" end
+    for widget_id, m in pairs(sync.ELEMENT_MAP) do
+        if type(m) ~= "table" or not m.x or not m.y then
+            return "ELEMENT_MAP[" .. tostring(widget_id) .. "] malformed"
+        end
+        if names[m.x] == nil then
+            return string.format("ELEMENT_MAP[%s].x=%s not in HB.SETTING_NAMES", tostring(widget_id), tostring(m.x))
+        end
+        if names[m.y] == nil then
+            return string.format("ELEMENT_MAP[%s].y=%s not in HB.SETTING_NAMES", tostring(widget_id), tostring(m.y))
+        end
+    end
+end)
+
+_rt_register("vanilla_numeric_mirror_wired", function()
+    -- Both mirror setting ids exist in the data tree AND on_setting_changed writes
+    -- the vanilla engine setting.
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if dir then
+        local data_txt = _gut_read_all(dir .. "gui_tweaker_dev_data.lua")
+        if data_txt then
+            for _, sid in ipairs({ "gut_vanilla_numeric" .. "_ui", "gut_vanilla_persistent" .. "_ammo" }) do
+                if not data_txt:find(sid, 1, true) then
+                    return "vanilla mirror setting missing from data tree: " .. sid
+                end
+            end
+        end
+    end
+    local main_txt = _gut_read_all(src)
+    if main_txt and not main_txt:find('set_user_setting("numeric' .. '_ui"', 1, true) then
+        return "on_setting_changed missing the numeric_ui vanilla mirror write (#312)"
+    end
+end)
 -- UI Tweaks buff-bar end-time crash fix (absorbed): nil-guards
 -- PriorityBuffUI._add_buff so stacking buffs (e.g. Bardin OE pump stacks) stop
 -- spamming "attempt to compare nil with number" every frame. No-op if UI Tweaks
@@ -1832,6 +1942,16 @@ mod.on_all_mods_loaded = function(...)
     if _gut_prev_on_all_mods_loaded then _gut_prev_on_all_mods_loaded(...) end
     if _gut_temporal_fix and _gut_temporal_fix.apply then pcall(_gut_temporal_fix.apply) end
     if _gut_buffbar_fix and _gut_buffbar_fix.apply then pcall(_gut_buffbar_fix.apply) end
+    -- (#312) UI Tweaks write-through: re-attempt the one-time migrate now that
+    -- HideBuffs is definitely loaded (folds any pre-existing gut HUD offsets in).
+    if _gut_uitweaks_sync and _gut_uitweaks_sync.migrate then pcall(_gut_uitweaks_sync.migrate) end
+    -- (#312) Seed gut's vanilla-HUD mirror toggles FROM the live engine user
+    -- settings, so a change made in the vanilla Options menu wins. No notify -> no
+    -- write-back loop (would re-fire on_setting_changed and thrash the engine save).
+    pcall(function()
+        mod:set("gut_vanilla_numeric_ui", Application.user_setting("numeric_ui") and true or false)
+        mod:set("gut_vanilla_persistent_ammo", Application.user_setting("persistent_ammo_counter") and true or false)
+    end)
     -- Apply the config override LAST so it wins over whatever the mods restored.
     if _gut_config and _gut_config.apply then pcall(_gut_config.apply) end
     -- Bench-in-mission option (moved from cim 2026-07-02): one-time ADOPTION of the

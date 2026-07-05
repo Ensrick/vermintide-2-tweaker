@@ -194,6 +194,37 @@ local options_data = {
                             },
                         },
                     },
+                    -- UI Tweaks Integration (#312). gut_uitweaks_sync: when UI Tweaks
+                    -- (HideBuffs) is installed + enabled, the HUD drag editor writes UI
+                    -- Tweaks' offsets for the buff/boss/overcharge/energy bars instead of
+                    -- gut's own, so the two never stack (see _gut_uitweaks_sync.lua).
+                    -- The two vanilla mirrors reflect the base game's Gameplay > HUD
+                    -- Customization numeric options into gut's menu (write-through in
+                    -- on_setting_changed; seeded from the engine at on_all_mods_loaded).
+                    {
+                        setting_id  = "gut_uitweaks_integration_group",
+                        type        = "group",
+                        sub_widgets = {
+                            {
+                                setting_id    = "gut_uitweaks_sync",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gut_uitweaks_sync_tooltip",
+                            },
+                            {
+                                setting_id    = "gut_vanilla_numeric_ui",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gut_vanilla_numeric_ui_tooltip",
+                            },
+                            {
+                                setting_id    = "gut_vanilla_persistent_ammo",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gut_vanilla_persistent_ammo_tooltip",
+                            },
+                        },
+                    },
                     -- Overlays (former "On-Screen Overlays" category, deleted in the
                     -- 2026-07-02 reorg). Parry-block colour, respawn countdown over a
                     -- portrait, floating damage numbers - each an independent master
