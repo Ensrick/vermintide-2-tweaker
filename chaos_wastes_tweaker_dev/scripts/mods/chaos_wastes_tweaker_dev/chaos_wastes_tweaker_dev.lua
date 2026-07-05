@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.230-dev"
+local MOD_VERSION = "0.7.231-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5223,17 +5223,48 @@ local ADVENTURE_INCOMPATIBLE_PACK_MUTATORS = {
     no_roamers = true,
 }
 
+-- v0.7.231: the strip now keys off the crash predicate (missing difficulty_overrides),
+-- not only on_injected_adventure_level, so Belakor/other deus missions on adventure-derived
+-- conflict directors are covered. Marker asserted by /ct_regression_test.
+CT_NO_ROAMERS_DEUS_FIX_MARKER = "no_roamers_strip_keys_on_missing_difficulty_overrides_v0.7.231"
+
 mod:hook("MutatorHandler", "tweak_pack_spawning_settings", function(func, self, zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
-    if not on_injected_adventure_level() then
+    -- Strip the adventure-incompatible pack mutators (no_roamers) when EITHER:
+    --   (a) pack_spawning_settings lacks `difficulty_overrides` -- the exact field
+    --       no_roamers iterates with pairs() (mutator_no_roamers.lua:6), so letting it
+    --       run fatals `bad argument #1 to 'pairs' (table expected, got nil)`. This is
+    --       the precise crash predicate and ALSO covers deus missions running on
+    --       adventure-derived conflict directors like `chaos_light` that lack the field
+    --       -- e.g. a Belakor node (`military_belakor_path1`, conflict chaos_light /
+    --       deus_skaven_chaos): crash console 2026-07-05-23.30.21, guid 4c84c68a. The
+    --       v0.7.41 `on_injected_adventure_level()` check below never fires for these
+    --       (they ARE deus, not injected-into-stock-Adventure), so no_roamers reached
+    --       vanilla and crashed on first mission entry. OR
+    --   (b) on_injected_adventure_level() -- the original v0.7.41 aesthetic exemption
+    --       (no_roamers' area_density_coefficient=0 wipes roaming spawns, too aggressive
+    --       for adventure geometry). Kept OR-ed so this build never strips LESS than before.
+    -- On a normal CW level difficulty_overrides IS present and it isn't injected, so the
+    -- guard passes through and vanilla no_roamers runs untouched. Stripping never removes
+    -- a working mutator: with difficulty_overrides nil, no_roamers can only ever crash.
+    local missing_field = type(pack_spawning_settings) ~= "table" or pack_spawning_settings.difficulty_overrides == nil
+    if not (missing_field or on_injected_adventure_level()) then
         return func(self, zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
     end
     local function filter(list)
         if type(list) ~= "table" then return list end
-        local kept = {}
+        local kept, dropped = {}, nil
         for _, name in ipairs(list) do
-            if not ADVENTURE_INCOMPATIBLE_PACK_MUTATORS[name] then
+            if ADVENTURE_INCOMPATIBLE_PACK_MUTATORS[name] then
+                dropped = dropped or {}
+                dropped[#dropped + 1] = name
+            else
                 kept[#kept + 1] = name
             end
+        end
+        if dropped then
+            pcall(printf, "[ct:no_roamers] stripped {%s} on conflict '%s' (difficulty_overrides present=%s) - prevented pairs(nil) crash in mutator_no_roamers",
+                table.concat(dropped, ","), tostring(conflict_director_name),
+                tostring(type(pack_spawning_settings) == "table" and pack_spawning_settings.difficulty_overrides ~= nil))
         end
         return kept
     end
@@ -13025,13 +13056,18 @@ end)
 
 _rt_register("adventure_pack_compat_strip", function()
     -- v0.7.41: hook on MutatorHandler.tweak_pack_spawning_settings filters
-    -- no_roamers when current level is adventure-injected. Verify the marker
-    -- constant referenced in the filter table exists.
+    -- no_roamers when current level is adventure-injected. v0.7.231: also strips
+    -- when pack_spawning_settings lacks difficulty_overrides (deus missions on
+    -- adventure-derived conflict directors, e.g. Belakor). Verify both the
+    -- incompatible-list entry and the v0.7.231 crash-predicate fix marker.
     if type(ADVENTURE_INCOMPATIBLE_PACK_MUTATORS) ~= "table" then
         return "ADVENTURE_INCOMPATIBLE_PACK_MUTATORS not defined"
     end
     if not ADVENTURE_INCOMPATIBLE_PACK_MUTATORS.no_roamers then
         return "no_roamers missing from incompatible list"
+    end
+    if CT_NO_ROAMERS_DEUS_FIX_MARKER ~= "no_roamers_strip_keys_on_missing_difficulty_overrides_v0.7.231" then
+        return "v0.7.231 no_roamers deus-mission fix marker missing/changed - Belakor pairs(nil) crash may have regressed"
     end
 end)
 

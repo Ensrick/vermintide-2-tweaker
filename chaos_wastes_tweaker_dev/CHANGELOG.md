@@ -1,5 +1,14 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.231-dev (2026-07-05) - CRASH FIX: no_roamers pairs(nil) on Belakor / deus missions (adventure-derived conflict directors)
+
+**Crash console 2026-07-05-23.30.21 (guid 4c84c68a), mission load of `military_belakor_path1`:** `scripts/settings/mutators/mutator_no_roamers.lua:6: bad argument #1 to 'pairs' (table expected, got nil)`. The `no_roamers` mutator iterates `pack_spawning_settings.difficulty_overrides`, which is nil on the `chaos_light` conflict director this Belakor node runs. Same crash class ct fixed in v0.7.41 for injected-adventure levels - but that fix gated the strip on `on_injected_adventure_level()`, and a Belakor node is a genuine deus mission (not injected-into-stock-Adventure), so the strip never fired and vanilla `no_roamers` crashed at `generate_spawns` during `state_ingame.on_enter`.
+
+- **Broadened the `MutatorHandler.tweak_pack_spawning_settings` strip guard.** It now removes `ADVENTURE_INCOMPATIBLE_PACK_MUTATORS` (no_roamers) when EITHER `pack_spawning_settings.difficulty_overrides` is nil (the exact crash predicate - covers any deus mission on an adventure-derived conflict director like `chaos_light`) OR `on_injected_adventure_level()` (the original v0.7.41 aesthetic exemption, kept OR-ed so nothing strips less than before). On normal CW levels the field is present and the level isn't injected, so vanilla `no_roamers` runs untouched. Stripping never removes a working mutator: with `difficulty_overrides` nil, `no_roamers` can only ever crash.
+- Prints `[ct:no_roamers] stripped {no_roamers} on conflict '<name>' ...` via engine printf when it fires, so the next log confirms the guard engaged.
+- Regression: `adventure_pack_compat_strip` now also asserts `CT_NO_ROAMERS_DEUS_FIX_MARKER` so a future refactor can't silently drop the deus-mission coverage.
+- Unrelated to v0.7.230's bomb-boon change (isolated `grenade_explode_buff_area` hook).
+
 ## 0.7.230-dev (2026-07-05) - #120: Bomb Boon Cooldown now gates the bomb-BUBBLE boons (was hitting the wrong boon)
 
 **Root cause found from console 2026-07-05-23.03.16 (v0.7.229-dev).** The player held `boon_supportbomb_concentration_01` (a bomb-bubble boon) but ZERO `[ct-bomb-boon]` markers fired: `bomb_boon_cooldown`'s only runtime gate was hooked on `ProcFunctions.drop_item_on_ability_use` (the drop-a-bomb-on-ult boon), while the bomb-BUBBLE boons #120 is about (`boon_supportbomb_concentration/crit/healing/speed_01`) proc through a different function - `grenade_explode_buff_area` on `on_grenade_exploded` (deus_power_up_settings.lua:4389+; body morris_buff_settings.lua:3131), which `add_buff`s the AoE zone on every grenade explosion with no cooldown at all (`boon_supportbomb_shared_data = {duration=10, radius=6}`, buff_tweak_data.lua:583). So the setting's code + tooltip targeted the drop-on-ult boon, not the bubbles the issue names.
