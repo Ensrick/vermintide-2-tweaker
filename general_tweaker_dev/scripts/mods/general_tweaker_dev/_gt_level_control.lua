@@ -264,7 +264,17 @@ local function _gt_host_respawn(peer_id, local_player_id)
     if not (pm and pm.is_server) then return false, "must run on host" end
     local target
     for _, p in pairs(pm:players()) do
-        if p and p.peer_id == peer_id then target = p; break end
+        -- Match BOTH peer_id AND local_player_id. On a host/solo game the host peer
+        -- OWNS the human player (local_player_id 1) AND every bot (lpid 2-4) under the
+        -- SAME peer_id, so a peer_id-only match grabbed whichever pairs() yielded first
+        -- -- often a live bot. Case A then checked the bot's (alive) unit and reported
+        -- "not dead or awaiting rescue" for a player who was genuinely awaiting rescue
+        -- (health_state=respawn). Case B survived only because it keys party status by
+        -- (peer_id, local_player_id). (#338)
+        if p and p.peer_id == peer_id then
+            local p_lpid = (p.local_player_id and p:local_player_id()) or 1
+            if p_lpid == local_player_id then target = p; break end
+        end
     end
     if not target then return false, "player not found on host" end
     local unit = target.player_unit

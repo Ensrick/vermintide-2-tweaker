@@ -384,10 +384,16 @@ local function _vmf_categories()
                 local ok_en, en = pcall(mod_obj.is_enabled, mod_obj)
                 if ok_en then enabled = en and true or false end
             end
-            out[#out + 1] = {
-                mod_id = mod_name, label = label, widgets = list,
-                mod_obj = mod_obj, enabled = enabled, _flat = true,
-            }
+            -- #318: a VMF-DISABLED mod must NOT get a Mod Tweaker tab at all (parity
+            -- with _mod_tweaker_view.lua). Skip it entirely so only enabled
+            -- whitelisted mods become tabs. `enabled` stays true when is_enabled is
+            -- absent/errors, so an indeterminate mod still shows.
+            if enabled then
+                out[#out + 1] = {
+                    mod_id = mod_name, label = label, widgets = list,
+                    mod_obj = mod_obj, enabled = enabled, _flat = true,
+                }
+            end
         end
     end
     -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active

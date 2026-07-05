@@ -5,6 +5,11 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.194-dev (2026-07-05) -- #318: disabled mods no longer show as Mod Tweaker tabs [verify-fix]
+
+- FIX (#318): a VMF-**disabled** whitelisted mod (e.g. CWV when unchecked in the VMF mod list) still appeared as a greyed-out tab in the Mod Tweaker. That was deliberate old behavior (the tab builder set `tab.content.disabled` and appended a `*`), but it's wrong -- a disabled mod should not show at all. `_vmf_categories()` now **skips** any mod whose `is_enabled()` returns false, in BOTH `_mod_tweaker_view.lua` and `_mod_tweaker_state.lua`, so it never becomes a tab (and never folds into the #208 Equipment merge). `is_enabled` absent/erroring still defaults to shown, so an indeterminate mod isn't silently hidden. The downstream greyed-out-tab code is now dead (left in place, harmless).
+- Root cause was in gut's Mod Tweaker, not CWV -- #318 is a gut bug (mislabelled `cwv`).
+
 ## 0.2.193-dev (2026-07-05) -- #313: Crosshair Kill Confirmation options-menu bridge [untested]
 
 New integration for the sanctioned Workshop mod "Crosshair Kill Confirmation" (CKC, by pixaal).
