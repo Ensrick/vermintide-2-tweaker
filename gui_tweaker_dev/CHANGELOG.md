@@ -5,6 +5,45 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.195-dev (2026-07-05) -- #336: mission map opens mid-mission with a black backdrop when no menu level is resident [verify-fix]
+
+- FIX (#336 follow-up): the in-mission mission map (#305) now OPENS mid-mission even
+  when neither backdrop level is resident -- which is the normal case in most missions.
+  The prior #336 CTD fix fail-CLOSED there (chat notice "Cannot open the mission map here:
+  no menu backdrop level is loadable." + no-op, user log `gate=backdrop blocked
+  (keep=false preview=false) -> no-op`). The user's verdict: get it working, not just
+  explain why it doesn't. The fail-closed gate + chat notice are removed; the map now
+  transitions unconditionally.
+- **Three-tier backdrop def-swap (`_gut_mission_map.lua`, `_create_viewport_definition`
+  hook).** Tier 1 (keep resident/unknown) -> vanilla def, unchanged. Tier 2 (preview
+  stage positively gettable) -> preview-stage def, unchanged. Tier 3 (NEW; neither
+  gettable) -> the same def shape with NO `level_name` key and `object_sets = {}`, so the
+  Viewport UI element spawns an empty world = a plain black backdrop instead of crashing
+  or no-opping. A nil `level_name` is engine-safe on the Viewport path: `ui_passes.lua`
+  only spawns a level when `level_name` is non-nil (2447-2459). Tier 3 sets both
+  `_gut_mm_swapped_backdrop` (drives the existing `_update_object_sets` divert) and
+  `_gut_mm_none_backdrop`.
+- **Third singleton hook `_setup_object_sets`.** Vanilla `_setup_object_sets` reads the
+  def's `level_name` and calls `LevelResource.object_set_names(level_name)`
+  (`start_game_window_background_console.lua:112-123`) -- with tier 3's nil `level_name`
+  that would raise. On a none-backdrop instance (or any nil-level def) the hook sets
+  `self._object_sets = {}` and returns; native + preview-swap instances (which carry a
+  `level_name`) run vanilla untouched. HOOK PRE-FLIGHT: gut_dev registers no other hook
+  on `StartGameWindowBackgroundConsole` (grep 2026-07-05) -- this is the only hook on
+  that class+method.
+- `gut_open_mission_map` now emits a printf-only backdrop tier report
+  (`[gut_dev:MM] backdrop tier: keep=%s preview=%s -> %s`, tier = keep/preview/none) and
+  proceeds. All other gates (master toggle, keep no-op, adventure-only mechanism, host-only)
+  and the final `pcall` around `handle_transition` are unchanged.
+- rt: `mission_map_backdrop_swap` extended -- now also asserts `gut_open_mission_map` +
+  `_setup_object_sets` are present and that the `_gut_mm_none_backdrop` marker is still in
+  the module source (fails if the none tier is removed).
+- Loc: `gut_mission_map` title `[verify-fix] [crash] [Issue 336]` -> `[verify-fix]
+  [Issue 336]` (this follow-up is a feature-enable fix, not a crash fix).
+- VERIFY IN-GAME (Adventure mission, no backdrop level resident): press M (or /map) --
+  the mission-selection map should OPEN with a black backdrop (no chat notice, no crash),
+  and ESC/back should drop straight back into the mission.
+
 ## 0.2.194-dev (2026-07-05) -- #318: disabled mods no longer show as Mod Tweaker tabs [verify-fix]
 
 - FIX (#318): a VMF-**disabled** whitelisted mod (e.g. CWV when unchecked in the VMF mod list) still appeared as a greyed-out tab in the Mod Tweaker. That was deliberate old behavior (the tab builder set `tab.content.disabled` and appended a `*`), but it's wrong -- a disabled mod should not show at all. `_vmf_categories()` now **skips** any mod whose `is_enabled()` returns false, in BOTH `_mod_tweaker_view.lua` and `_mod_tweaker_state.lua`, so it never becomes a tab (and never folds into the #208 Equipment merge). `is_enabled` absent/erroring still defaults to shown, so an indeterminate mod isn't silently hidden. The downstream greyed-out-tab code is now dead (left in place, harmless).

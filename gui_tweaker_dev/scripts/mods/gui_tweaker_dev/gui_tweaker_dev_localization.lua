@@ -282,7 +282,7 @@ return {
     -- In-Mission Mission Map (#305)
     -- ============================================================
     gut_mission_map = {
-        en = "[verify-fix] [crash] [Issue 336] In-Mission Mission Map",
+        en = "[verify-fix] [Issue 336] In-Mission Mission Map",
     },
     gut_mission_map_tooltip = {
         en = "Opens the mission-selection map during a mission, the same screen the keep's M key shows. Use the keybind below (default M) or /map. Adventure only: it stays closed in Chaos Wastes and Versus. Off by default.",

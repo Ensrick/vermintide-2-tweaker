@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.194-dev"
+local MOD_VERSION = "0.2.195-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -123,13 +123,30 @@ end)
 
 _rt_register("mission_map_backdrop_swap", function()
     -- (#336) Mid-mission map CTD guard: the can_get trust-protocol helper must be
-    -- wired and the vanilla window must still expose both hooked methods (a vanilla
+    -- wired and the vanilla window must still expose all three hooked methods (a vanilla
     -- rename would silently orphan the swap and re-expose the crash).
     if type(mod._gut_mm_can_get_level) ~= "function" then return "_gut_mm_can_get_level missing" end
+    if type(mod.gut_open_mission_map) ~= "function" then return "gut_open_mission_map missing" end
     local w = rawget(_G, "StartGameWindowBackgroundConsole")
     if type(w) ~= "table" then return "StartGameWindowBackgroundConsole class missing" end
     if type(w._create_viewport_definition) ~= "function" then return "_create_viewport_definition missing" end
     if type(w._update_object_sets) ~= "function" then return "_update_object_sets missing" end
+    if type(w._setup_object_sets) ~= "function" then return "_setup_object_sets missing" end
+    -- (#336 follow-up) The none tier must stay wired: the level-less-def branch marks
+    -- _gut_mm_none_backdrop, and the _setup_object_sets divert reads it. Introspect the
+    -- module source via the public open function; needle split so this line can't self-match.
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map, "S")
+    if ok and type(info) == "table" and info.source then
+        local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+        local f = io.open(src_path, "r")
+        if f then
+            local txt = f:read("*a")
+            f:close()
+            if txt and not txt:find("_gut_mm_none" .. "_backdrop", 1, true) then
+                return "#336 regression: the none-tier marker _gut_mm_none_backdrop is gone (map fail-closes again when no backdrop level is resident)"
+            end
+        end
+    end
 end)
 
 _rt_register("arrow_hover_native_size", function()

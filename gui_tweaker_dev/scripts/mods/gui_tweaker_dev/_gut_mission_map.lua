@@ -23,6 +23,18 @@ local mod = get_mod("gut_dev")
 -- _gut_mission_hero_select.lua) mount the mission-safe inventory-preview stage
 -- instead whenever the keep backdrop is not gettable.
 --
+-- #336 FOLLOW-UP (three-tier backdrop). The preview stage is NOT resident in most
+-- missions either, so the earlier "fail closed unless a backdrop is gettable" gate
+-- left the map unopenable in the normal case (the user's actual complaint). The
+-- def-swap now has three tiers: (1) keep resident/unknown -> vanilla def; (2) preview
+-- gettable -> preview-stage def; (3) NEITHER gettable -> a level-less def (NO
+-- level_name key, empty object_sets). A nil level_name is engine-safe on the Viewport
+-- path: ui_passes.lua:2447-2459 only spawns a level when level_name is non-nil, so tier
+-- 3 gets an empty world = a plain black backdrop instead of a crash or a no-op. Tier 3
+-- also needs the _setup_object_sets divert: vanilla reads the def's level_name and calls
+-- LevelResource.object_set_names(nil) (start_game_window_background_console.lua:112-123),
+-- which raises -- so on a none-backdrop instance that pass is short-circuited too.
+--
 -- TRANSITION (verified): Managers.ui:handle_transition("start_game_view_force",
 -- { menu_state_name = "play", use_fade = true }).
 --   * start_game_view_force sets current_view="start_game_view" + exit_to_game=true
@@ -65,8 +77,9 @@ local mod = get_mod("gut_dev")
 --     gate on mod:get("gut_mission_map") itself -- which it does (SILENT no-op when
 --     off, so nothing changes with the feature disabled + the default "M" binding).
 --
--- Module dofile's from gui_tweaker_dev.lua after the main chunk. Registers TWO
--- singleton hooks on StartGameWindowBackgroundConsole (#336 backdrop swap below);
+-- Module dofile's from gui_tweaker_dev.lua after the main chunk. Registers THREE
+-- singleton hooks on StartGameWindowBackgroundConsole (#336 backdrop swap below:
+-- _create_viewport_definition, _update_object_sets, _setup_object_sets);
 -- HOOK PRE-FLIGHT: gut_dev registers no other hook on that class (grep 2026-07-05).
 
 local _pf = rawget(_G, "printf") or function(fmt, ...) print(string.format(fmt, ...)) end
@@ -105,21 +118,65 @@ local function _can_get_level(level_name)
 end
 mod._gut_mm_can_get_level = _can_get_level   -- consumed by /regression_test
 
--- Swap hook. Keep path (ui_keep_menu resident, or state unknown = keep-only flows)
--- is byte-for-byte vanilla. Swapped path mirrors the vanilla def shape
--- (start_game_window_background_console.lua:47-84) with level_name/object_sets
--- re-pointed at the preview stage, and marks the window instance so the
--- _update_object_sets hook below knows this backdrop is swapped. Full wrapper (not
--- hook_safe): the vanilla body itself raises before returning, so flow must DIVERT.
+-- Swap hook (three tiers, #336). Tier 1: keep path (ui_keep_menu resident, or state
+-- unknown = keep-only flows) is byte-for-byte vanilla. Tier 2: preview stage positively
+-- gettable -> mirror the vanilla def shape (start_game_window_background_console.lua:47-84)
+-- with level_name/object_sets re-pointed at the preview stage. Tier 3: neither gettable
+-- (the normal mid-mission case) -> the same shape with NO level_name key and empty object
+-- sets, so the Viewport spawns an empty world (black backdrop) instead of fail-closing.
+-- Tiers 2+3 mark the instance so the _update_object_sets hook diverts; tier 3 additionally
+-- marks _gut_mm_none_backdrop so the _setup_object_sets hook diverts (nil level_name would
+-- raise there). Full wrapper (not hook_safe): the vanilla body itself raises before
+-- returning, so flow must DIVERT.
 mod:hook("StartGameWindowBackgroundConsole", "_create_viewport_definition", function(func, self, ...)
+    -- Tier 1: keep backdrop resident, or state unknown -> vanilla def, no swap.
     if _can_get_level(KEEP_MENU_LEVEL) ~= false then
         return func(self, ...)
     end
-    local ok_sets, object_sets = pcall(LevelResource.object_set_names, PREVIEW_LEVEL)
-    if not ok_sets or type(object_sets) ~= "table" then object_sets = {} end
+    -- Tier 2: preview stage positively gettable -> swap the def onto it.
+    if _can_get_level(PREVIEW_LEVEL) == true then
+        local ok_sets, object_sets = pcall(LevelResource.object_set_names, PREVIEW_LEVEL)
+        if not ok_sets or type(object_sets) ~= "table" then object_sets = {} end
+        self._gut_mm_swapped_backdrop = true
+        _pf("[gut_dev:MM] backdrop def-swap APPLIED: %s not resident -> %s (%d object sets)",
+            KEEP_MENU_LEVEL, PREVIEW_LEVEL, #object_sets)
+        return {
+            scenegraph_id = "root_fit",
+            element = UIElements.Viewport,
+            style = {
+                viewport = {
+                    clear_screen_on_create = true,
+                    enable_sub_gui = false,
+                    fov = 50,
+                    layer = 990,
+                    level_name = PREVIEW_LEVEL,
+                    mood_setting = "default",
+                    shading_environment = "environment/ui_end_screen",
+                    viewport_name = "character_preview_viewport",
+                    world_name = "character_preview",
+                    world_flags = {
+                        Application.DISABLE_SOUND,
+                        Application.DISABLE_ESRAM,
+                        Application.ENABLE_VOLUMETRICS,
+                    },
+                    object_sets = object_sets,
+                    camera_position = { 0, 0, 0 },
+                    camera_lookat = { 0, 0, 0 },
+                },
+            },
+            content = {
+                button_hotspot = {
+                    allow_multi_hover = true,
+                },
+            },
+        }
+    end
+    -- Tier 3: neither backdrop level gettable -> level-less def (empty world, black
+    -- backdrop). No level_name key; empty object sets. Both markers set: the swapped
+    -- marker drives _update_object_sets; the none marker drives _setup_object_sets.
     self._gut_mm_swapped_backdrop = true
-    _pf("[gut_dev:MM] backdrop def-swap APPLIED: %s not resident -> %s (%d object sets)",
-        KEEP_MENU_LEVEL, PREVIEW_LEVEL, #object_sets)
+    self._gut_mm_none_backdrop    = true
+    _pf("[gut_dev:MM] backdrop def-swap NONE: no backdrop level gettable -> empty world (black backdrop)")
     return {
         scenegraph_id = "root_fit",
         element = UIElements.Viewport,
@@ -129,7 +186,6 @@ mod:hook("StartGameWindowBackgroundConsole", "_create_viewport_definition", func
                 enable_sub_gui = false,
                 fov = 50,
                 layer = 990,
-                level_name = PREVIEW_LEVEL,
                 mood_setting = "default",
                 shading_environment = "environment/ui_end_screen",
                 viewport_name = "character_preview_viewport",
@@ -139,7 +195,7 @@ mod:hook("StartGameWindowBackgroundConsole", "_create_viewport_definition", func
                     Application.DISABLE_ESRAM,
                     Application.ENABLE_VOLUMETRICS,
                 },
-                object_sets = object_sets,
+                object_sets = {},
                 camera_position = { 0, 0, 0 },
                 camera_lookat = { 0, 0, 0 },
             },
@@ -163,6 +219,24 @@ mod:hook("StartGameWindowBackgroundConsole", "_update_object_sets", function(fun
         return func(self, ...)
     end
     _pf("[gut_dev:MM] _update_object_sets diverted (swapped backdrop: keep-only object sets/flow events)")
+end)
+
+-- Object-set setup hook (#336 none tier). Vanilla _setup_object_sets reads
+-- self._viewport_widget_definition.style.viewport.level_name and calls
+-- LevelResource.object_set_names(level_name) (start_game_window_background_console.lua:112-123).
+-- On a none-backdrop instance that level_name is nil (tier 3 omits the key), and
+-- object_set_names(nil) raises. Short-circuit to an empty object-set map on the none
+-- instance (or any nil-level def); native + preview-swap instances carry a level_name
+-- and run vanilla untouched. Full wrapper: the vanilla body raises before returning.
+mod:hook("StartGameWindowBackgroundConsole", "_setup_object_sets", function(func, self, ...)
+    local vp_def = self._viewport_widget_definition
+    local level_name = vp_def and vp_def.style and vp_def.style.viewport and vp_def.style.viewport.level_name
+    if self._gut_mm_none_backdrop or level_name == nil then
+        self._object_sets = {}
+        _pf("[gut_dev:MM] _setup_object_sets diverted (none backdrop: nil level_name -> empty object sets)")
+        return
+    end
+    return func(self, ...)
 end)
 
 mod.gut_open_mission_map = function()
@@ -207,20 +281,17 @@ mod.gut_open_mission_map = function()
         mod:echo("The mission map is set to host only; only the party host can open it mid-mission.")
         return
     end
-    -- Backdrop availability gate (#336): the play screen's background window MUST
-    -- mount a level (see SAFETY docstring). Fail CLOSED unless the keep backdrop is
-    -- positively resident (never true mid-mission) or the swap hook's preview stage
-    -- is positively gettable -- an unknown (nil) verdict is treated as unavailable.
+    -- Backdrop tier report (#336). No availability gate any more: the def-swap hook
+    -- guarantees a spawn-safe viewport def in every state (keep def / preview def /
+    -- level-less empty-world def), so the map opens unconditionally. The tier is only
+    -- reported for triage -- "none" means a black backdrop, not a failure.
     local keep_ok    = _can_get_level(KEEP_MENU_LEVEL)
     local preview_ok = _can_get_level(PREVIEW_LEVEL)
-    if keep_ok ~= true and preview_ok ~= true then
-        _pf("[gut_dev:MM] gate=backdrop blocked (keep=%s preview=%s) -> no-op",
-            tostring(keep_ok), tostring(preview_ok))
-        mod:echo("Cannot open the mission map here: no menu backdrop level is loadable.")
-        return
-    end
-    _pf("[gut_dev:MM] gate=opened (mechanism=adventure host_only=%s is_host=%s backdrop keep=%s preview=%s) -> start_game_view_force menu_state_name=play",
-        tostring(host_only), tostring(is_host), tostring(keep_ok), tostring(preview_ok))
+    local tier = (keep_ok == true and "keep") or (preview_ok == true and "preview") or "none"
+    _pf("[gut_dev:MM] backdrop tier: keep=%s preview=%s -> %s",
+        tostring(keep_ok), tostring(preview_ok), tier)
+    _pf("[gut_dev:MM] gate=opened (mechanism=adventure host_only=%s is_host=%s tier=%s) -> start_game_view_force menu_state_name=play",
+        tostring(host_only), tostring(is_host), tier)
     local ok, err = pcall(function()
         Managers.ui:handle_transition("start_game_view_force", {
             menu_state_name = "play",
