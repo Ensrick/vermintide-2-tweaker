@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.226-dev"
+local MOD_VERSION = "0.7.227-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -7305,7 +7305,12 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
                     action = "freed-awaiting-rescue"
                     if chest_pos_box then
                         -- freed=true: already freed here, so the tick must NOT re-free it.
-                        mod._ct_pending_team_teleport[peer_id] = { lpid = local_player_id, anchor = chest_pos_box, ttl = 20.0, freed = true }
+                        -- #299 rework: key by peer_id/local_player_id -- host-owned BOTS share
+                        -- the host peer_id, so a peer-only key made sibling entries overwrite
+                        -- each other. Store the stable player OBJECT so the tick re-reads
+                        -- player_unit across the respawn/recovery instead of a fragile relookup.
+                        mod._ct_pending_team_teleport[peer_id .. "/" .. tostring(local_player_id)] =
+                            { peer_id = peer_id, lpid = local_player_id, player = player, anchor = chest_pos_box, ttl = 30.0, freed = true }
                     end
                 elseif is_knocked and not is_disabled_pact and StatusUtils and StatusUtils.set_revived_network then
                     -- bleeding out -> revive in place (skip disabler-held players).
@@ -7322,8 +7327,10 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
                     if chest_pos_box then
                         -- freed=nil: the unit spawns HANGING at the beacon a few frames later
                         -- (RespawnHandler sends ready_for_assisted_respawn=true), so the tick
-                        -- frees it once it appears, then teleports once it stands.
-                        mod._ct_pending_team_teleport[peer_id] = { lpid = local_player_id, anchor = chest_pos_box, ttl = 20.0 }
+                        -- frees it once it appears, then teleports once it stands. See the
+                        -- awaiting branch for the peer/lpid keying + stored-player rationale (#299).
+                        mod._ct_pending_team_teleport[peer_id .. "/" .. tostring(local_player_id)] =
+                            { peer_id = peer_id, lpid = local_player_id, player = player, anchor = chest_pos_box, ttl = 30.0 }
                     end
                 end
 
@@ -7397,24 +7404,49 @@ do
             for k in pairs(pending) do pending[k] = nil end
             return
         end
-        for peer_id, entry in pairs(pending) do
+        for key, entry in pairs(pending) do
             local drop = false
             pcall(function()
                 entry.ttl = (entry.ttl or 0) - (dt or 0)
-                local player = Managers.player:player(peer_id, entry.lpid)
+
+                -- #299 rework: resolve the unit via the STORED player object first (stable
+                -- across the respawn/recovery unit swap); only relookup by peer/lpid if the
+                -- stored handle has no unit yet (dead-branch: unit spawns a few frames later).
+                -- The prior code re-looked-up every tick and, per the 2026-07-05 host log,
+                -- never observed the freed unit as alive+controllable -> teleport never fired.
+                local player = entry.player
+                if not (player and player.player_unit) then
+                    player = Managers.player:player(entry.peer_id, entry.lpid) or player
+                    entry.player = player or entry.player
+                end
                 local unit = player and player.player_unit
-                local st = unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "status_system") or nil
+                local alive = (unit and Unit.alive(unit)) and true or false
+                local st = alive and ScriptUnit.has_extension(unit, "status_system") or nil
+                local awaiting = (st and st.is_ready_for_assisted_respawn and st:is_ready_for_assisted_respawn()) and true or false
+                local disabled = (st and st:is_disabled()) and true or false
+
+                -- Per-eval diagnostic, throttled to state CHANGES (armed always in dev per the
+                -- diagnostics doctrine). If a teleport still fails to fire, this prints the exact
+                -- reason (player missing / unit dead / stuck disabled / stuck awaiting).
+                local sig = tostring(player ~= nil) .. tostring(alive) .. tostring(disabled) .. tostring(awaiting)
+                if entry._last_sig ~= sig then
+                    entry._last_sig = sig
+                    pcall(printf, "[ct-chest-revive] tick key=%s found=%s alive=%s disabled=%s awaiting=%s ttl=%.1f (#299)",
+                        tostring(key), tostring(player ~= nil), tostring(alive), tostring(disabled), tostring(awaiting), entry.ttl or -1)
+                end
+
                 -- Dead-branch case: the respawned unit spawns HANGING at the beacon
                 -- (ready_for_assisted_respawn) and would wait for a manual rescue. Free it
                 -- ONCE (starts the same recovery the awaiting branch used), then fall
                 -- through to the controllable check. `freed` guards against re-sending.
-                if st and not entry.freed and st.is_ready_for_assisted_respawn and st:is_ready_for_assisted_respawn()
+                if st and not entry.freed and awaiting
                     and rawget(_G, "StatusUtils") and StatusUtils.set_respawned_network then
                     StatusUtils.set_respawned_network(unit, true, unit)
                     entry.freed = true
-                    pcall(printf, "[ct-chest-revive] freed respawned-hanging peer=%s at beacon; awaiting stand to teleport (#299)", tostring(peer_id))
+                    pcall(printf, "[ct-chest-revive] freed respawned-hanging key=%s at beacon; awaiting stand to teleport (#299)", tostring(key))
                 end
-                if st and not st:is_disabled() then
+
+                if st and not disabled then
                     -- controllable now -> send them to the team.
                     local anchor_pos = entry.anchor and entry.anchor:unbox()
                     local teammate = _nearest_controllable_teammate(anchor_pos, unit)
@@ -7429,18 +7461,20 @@ do
                             if go_id then
                                 nm.network_transmit:send_rpc_clients("rpc_teleport_unit_to", go_id, pos, rot)
                             end
-                            pcall(printf, "[ct-chest-revive] teleported peer=%s back to the team (#299)", tostring(peer_id))
+                            pcall(printf, "[ct-chest-revive] teleported key=%s back to the team (#299)", tostring(key))
                         end
                     else
-                        pcall(printf, "[ct-chest-revive] no controllable teammate to anchor peer=%s -- left in place (#299)", tostring(peer_id))
+                        pcall(printf, "[ct-chest-revive] no controllable teammate to anchor key=%s -- left in place (#299)", tostring(key))
                     end
                     drop = true
                 elseif entry.ttl <= 0 then
-                    pcall(printf, "[ct-chest-revive] team-teleport TTL expired for peer=%s (never became controllable) (#299)", tostring(peer_id))
+                    -- Log the FINAL state so a repeat failure is self-diagnosing.
+                    pcall(printf, "[ct-chest-revive] team-teleport TTL expired for key=%s (found=%s alive=%s disabled=%s awaiting=%s) (#299)",
+                        tostring(key), tostring(player ~= nil), tostring(alive), tostring(disabled), tostring(awaiting))
                     drop = true
                 end
             end)
-            if drop then pending[peer_id] = nil end
+            if drop then pending[key] = nil end
         end
     end
 end

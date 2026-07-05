@@ -1,5 +1,21 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.227-dev (2026-07-05) - #299 rework: chest-revive return-to-team teleport was never firing
+
+The 2026-07-05 host log (v0.7.225-dev) proved the revive half works but the teleport-back
+never fires: at a chest, three downed players were `freed-awaiting-rescue`, one went
+networked-`alive` ~1.6s later, yet ZERO `teleported back to the team` lines printed - every
+armed player ended in `team-teleport TTL expired ... never became controllable`. The tick's
+teleport branch was never entered.
+
+Root causes addressed in `_ct_chest_teleport_tick` + its arm sites:
+- **Stale unit resolution (primary).** The tick re-looked-up `Managers.player:player(peer,lpid).player_unit` every frame and never observed the freed unit as alive+not-disabled. Now the arm captures the stable **player object**; the tick reads `player.player_unit` off it (which updates across the respawn/recovery unit swap), only relooking-up if the stored handle has no unit yet.
+- **peer_id key collision.** Host-owned BOTS share the host peer_id (the log showed slots 3 & 4 both `110000106beb4a3`), so the peer-only `pending[peer_id]` key made sibling entries overwrite each other. Now keyed by `peer_id/local_player_id`.
+- **TTL vs transitions.** Bumped the arm TTL 20s -> 30s (accumulated-dt; CW node/loading transitions stall `mod.update` dt, so 20s of real gameplay could straddle a transition).
+- **Self-diagnosing.** Armed a throttled per-eval probe (`[ct-chest-revive] tick key=... found=.. alive=.. disabled=.. awaiting=.. ttl=..`, logged on state change) and the TTL-expiry line now prints the FINAL found/alive/disabled/awaiting state, so a repeat failure pinpoints the exact blocker.
+
+Still `[verify-fix] [diag]` until confirmed in-game (host-authoritative; needs a real chest revive to verify the teleport fires).
+
 ## 0.7.226-dev (2026-07-04) - #324 NEW: Skaven Warlord Chest-of-Trials trial (cross-mod with enemy_tweaker)
 
 - **New rare cursed-chest trial `ct_cursed_chest_challenge_skaven_warlord`:** spawns enemy_tweaker's new `et_skaven_warlord` boss (the unused champion-recolour of Skarrik's model, vanilla 800-HP champion stat block; registered by et v0.7.27-dev) plus the standard clan-rat retinue. Template: `cursed_chest_challenge_skaven_rat_ogre` (deus_generic_terror_events.lua:1374-1445, the closest boss-type trial) with vanilla's distance/delay constants inlined (:92-107) and verbatim ports of the file-local `cursed_chest_enemy_spawned_func` (:17-41; keeps the `cursed_chest_objective_unit` buff + `cursed_chest_enemies` counter wiring, so the chest opens when the trial clears - deus_cursed_chest_extension.lua:173) and the spawn/despawn decal funcs (:109-151). The boss element's `pre_spawn_func` resolves the LIVE `TerrorEventUtils.add_enhancements_for_difficulty` reference at OUR definition time (the CODE_REVIEW.md v0.7.89 upvalue-gotcha pattern done right), so grudge enhancements apply per difficulty exactly like vanilla boss trials, the Boss Grudge Marks banlist keeps biting, and grudge-marked Warlords render et's 12 new grudge names.

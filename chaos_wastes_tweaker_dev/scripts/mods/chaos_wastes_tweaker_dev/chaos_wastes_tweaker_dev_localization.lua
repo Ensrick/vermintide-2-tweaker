@@ -326,7 +326,7 @@ local loc = {
     ["9"] = { en = "9" },
     ["10"] = { en = "10" },
     cursed_chest_count = { en = "[diag] [Issue 132 & 60] Chests of Trials per Mission" },
-    respawn_on_chest_complete = { en = "[Issue 299] Revive Team on Chest Completion" },
+    respawn_on_chest_complete = { en = "[verify-fix] [diag] [Issue 299] Revive Team on Chest Completion" },
     respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials is completed, revive knocked-down players and respawn dead players with a wound and 50%% temporary health. Host-only." },
 
     -- ============================================================
