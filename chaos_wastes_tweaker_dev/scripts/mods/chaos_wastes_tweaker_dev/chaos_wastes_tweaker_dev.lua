@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.221-dev"
+local MOD_VERSION = "0.7.222-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -6632,6 +6632,22 @@ do
     end
 end
 
+-- #294 crash guard (exposed for /ct_regression_test). Returns whether it is SAFE to let
+-- vanilla _spawn_pickup spawn this pickup's unit. FALSE only when the pickup names a unit
+-- that is genuinely non-resident (would C-crash spawn_network_unit -> add_unit_extensions).
+-- Mirrors vanilla PickupSystem._safe_to_spawn_pickup (pickup_system.lua:878). Fails SAFE
+-- (returns true, i.e. does not block) when there's no named unit, when a spawn_override_func
+-- handles spawning itself, or when Application.can_get is unavailable -- so the guard can
+-- never false-drop a legitimate pickup, only stop a provably non-resident one.
+CT_PICKUP_RESIDENCY_GUARD_MARKER = "spawn_pickup_can_get_unit_guard_v0.7.222"
+function mod._ct_pickup_unit_spawn_safe(settings)
+    local un = settings and settings.unit_name
+    if not un then return true end                         -- no named unit -> not our concern
+    if settings.spawn_override_func then return true end   -- custom spawn path, leave alone
+    if not (rawget(_G, "Application") and Application.can_get) then return true end  -- can't check -> don't block
+    return Application.can_get("unit", un) and true or false
+end
+
 mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
     local on_adv = on_injected_adventure_level()
 
@@ -6644,6 +6660,21 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     if on_adv and _CW_COLLECTIBLE_TO_COIN[pickup_name] then
         pickup_name = "deus_soft_currency"
         settings = (AllPickups and AllPickups.deus_soft_currency) or settings
+    end
+
+    -- #294 (crash): guard the spawn chokepoint against a NON-RESIDENT pickup unit.
+    -- _ct_pickup_unit_spawn_safe mirrors vanilla's own PickupSystem._safe_to_spawn_pickup
+    -- (pickup_system.lua:878) can_get("unit", unit_name) check, which the _spawn_pickup
+    -- path (pickup_system.lua:1414 -> spawn_network_unit at :1290) does NOT perform. A
+    -- mutator pickup whose package isn't resident -- e.g. skulls_2023 'pup_skull_of_fury'
+    -- force-spawned via the gt devtool without the mutator package loaded -- otherwise
+    -- reaches spawn_network_unit non-resident and hard-crashes add_unit_extensions
+    -- (entity_manager2.lua:114 "table index is nil"). Skip it, exactly as vanilla's
+    -- _safe_to_spawn_pickup would (returns false -> no spawn).
+    if not mod._ct_pickup_unit_spawn_safe(settings) then
+        pcall(printf, "[ct:294] SKIP non-resident pickup '%s' (unit=%s not loaded) -- would crash spawn_network_unit/add_unit_extensions",
+            tostring(pickup_name), tostring(settings and settings.unit_name))
+        return
     end
 
     -- #58/#156 spawn census: count the FINAL pickup_name (post collectible->coin
@@ -7752,6 +7783,31 @@ _rt_register("bot_boon_announce_wired", function()
     end
     if type(mod:get("announce_bot_boons")) ~= "boolean" then
         return "BOT-BOON REGRESSION: announce_bot_boons checkbox not registered (mod:get is non-boolean)"
+    end
+end)
+
+-- #294 crash guard: the _spawn_pickup hook must skip a non-resident pickup unit (vanilla's
+-- own _safe_to_spawn_pickup check, which the _spawn_pickup path omits). Verify the guard
+-- helper exists and classifies correctly: nil settings + spawn_override_func pickups are SAFE
+-- (pass-through), a bogus non-resident unit_name is UNSAFE. Marker present too.
+_rt_register("pickup_residency_guard_installed", function()
+    if type(CT_PICKUP_RESIDENCY_GUARD_MARKER) ~= "string" or #CT_PICKUP_RESIDENCY_GUARD_MARKER == 0 then
+        return "#294 REGRESSION: CT_PICKUP_RESIDENCY_GUARD_MARKER not defined"
+    end
+    if type(mod._ct_pickup_unit_spawn_safe) ~= "function" then
+        return "#294 REGRESSION: mod._ct_pickup_unit_spawn_safe missing (non-resident pickup crash guard)"
+    end
+    if mod._ct_pickup_unit_spawn_safe(nil) ~= true then
+        return "#294 REGRESSION: guard must treat nil settings as safe (pass-through)"
+    end
+    if mod._ct_pickup_unit_spawn_safe({ unit_name = "units/x_zzz", spawn_override_func = function() end }) ~= true then
+        return "#294 REGRESSION: guard must leave spawn_override_func pickups alone (they self-spawn)"
+    end
+    -- With Application.can_get available (in-mission), a bogus unit path must read UNSAFE.
+    if rawget(_G, "Application") and Application.can_get then
+        if mod._ct_pickup_unit_spawn_safe({ unit_name = "units/mutator/__ct294_bogus_unit__" }) ~= false then
+            return "#294 REGRESSION: guard must classify a non-resident unit_name as UNSAFE (would crash spawn_network_unit)"
+        end
     end
 end)
 
