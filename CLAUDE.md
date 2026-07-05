@@ -170,7 +170,7 @@ All active mods build via **VMB** (the launcher). Only frozen legacy `tweaker` u
 **Where work happens.**
 
 - **`<mod>-dev/`** - all new feature work, in-flight fixes, experiments. Build/deploy/upload from here during the dev loop. MOD_VERSION carries the `-dev` (or `-alpha`/`-beta`) suffix.
-- **`<mod>/`** - stable releases only. When dev work matures and the user signs off on a release, cherry-pick or merge the changes into the stable dir, normalize MOD_VERSION (strip `-dev`/`-alpha`/etc.), then `build` + `deploy` + `upload` to the public Workshop item. The stable directory should never contain in-flight `-dev` work between releases.
+- **`<mod>/`** - stable releases only. When dev work matures and the user signs off on a release, cherry-pick or merge the changes into the stable dir, set MOD_VERSION to whatever the user names for the release (it MAY keep a pre-release suffix - e.g. ct promoted as `0.7.130-beta`, a public beta; strip the suffix only when the user names a clean version), then `build` + `deploy` + `upload` to the public Workshop item. The stable directory should never contain in-flight `-dev` work between releases.
 
 **Mod ID convention.** Stable carries the short canonical id (`ct`, `cim`, `gt`, plus the long `verminious_dreams_lighting`). Dev carries the `_dev` suffix (`ct_dev`, `cim_dev`, `gt_dev`, `verminious_dreams_lighting_dev`). Because these are distinct VMF mod registrations, both items can be subscribed simultaneously without conflict - a tester running dev keeps the stable item installed but disabled, or runs both side-by-side if their behaviors don't overlap destructively.
 
@@ -181,7 +181,7 @@ All active mods build via **VMB** (the launcher). Only frozen legacy `tweaker` u
 **Upload doctrine** - governed by the "Ship doctrine" section under Build Commands (the MOD_VERSION suffix decides). Two split-mod-specific gates:
 
 - **Dev uploads** target the friends-only Workshop item (`visibility = "friends_only"` in the dev clone's `itemV2.cfg`) and carry the `-dev` suffix, so they ship the full pipeline every build with NO ask. Dev clones must NEVER be promoted to public visibility under any circumstance; the launcher does not take `--allow-public` for them.
-- **Stable uploads** target the public Workshop item with a clean (no-suffix) MOD_VERSION. They require `-AllowPublic` (the launcher's visibility gate) AND a fresh per-build ship signal from the user naming the version - "ship it" from earlier does NOT carry forward.
+- **Stable uploads** target the public Workshop item. Two INDEPENDENT gates apply (user ruling 2026-07-04, closed #328): `-AllowPublic` keys off the item's `itemV2.cfg` visibility (`public` needs the flag, whatever the version says), and the fresh per-build ship signal keys off a CLEAN (no-suffix) MOD_VERSION only. A pre-release-suffixed build living on the stable/public item (e.g. ct `0.7.130-beta`) ships per the suffix rule - full pipeline, no ask. Workshop visibility is user-dictated per item; it is NEVER inferred from the version, directory, or stream, and no guard may couple the two.
 - **GitHub release** is part of the canonical `ship.ps1` path, run for either stream so `vt2-mod-updater` consumers stay in sync (Workshop propagation to the friends cohort is unreliable).
 
 ## Build Commands

@@ -679,11 +679,14 @@ Workshop ID / mod_id mapping.
    as a deliberate copy / patch — don't symlink, don't share files, don't
    build from the dev tree with a `--out=<stable>` trick. The stable tree
    must be an independent, audit-able copy of the released code.
-2. **Normalize MOD_VERSION** in `<mod>/scripts/mods/<mod>/<mod>.lua`: strip
-   any `-dev`/`-alpha`/`-beta`/`-rc<N>` suffix per § 6.1. A `0.7.66-dev` in
-   dev becomes `0.7.66` (or bump to `0.7.67` if the dev tree already had
-   that version on a previous stable build). Stable mods do NOT carry
-   pre-release suffixes.
+2. **Set MOD_VERSION to the version the user names for the release** in
+   `<mod>/scripts/mods/<mod>/<mod>.lua`. It MAY keep a pre-release suffix —
+   a public beta/alpha on the stable item is a legitimate, user-chosen state
+   (e.g. ct promoted 2026-07-03 as `0.7.130-beta`; gut stable runs as a
+   public alpha). Strip the suffix only when the user names a clean version
+   (then per § 6.1: `0.7.66-dev` in dev becomes `0.7.66`, or bump to
+   `0.7.67` if a previous stable build already used it). The suffix carried
+   here decides future ship approval per § 6.6.
 3. **Update the stable mod's CHANGELOG.md** with a single rolled-up entry
    covering the merged work. Reference the dev versions that contributed
    if it helps the reader (`merge of dev 0.7.62-dev..0.7.66-dev`).
@@ -762,6 +765,16 @@ require a FRESH, explicit, per-build ship signal from the user that names the
 version. "Ship it" said earlier does NOT carry forward. Default for these is
 build + deploy only; treat the upload like `git push --force`. Full promote
 checklist in § 6.5.
+
+**Visibility is orthogonal to the suffix rule (user ruling 2026-07-04, closed
+#328).** Workshop visibility (public / friends-only / private) is user-dictated
+per item and carries NO ship-approval meaning: the MOD_VERSION suffix alone
+decides whether a build ships without asking. A public item whose current
+version carries a pre-release suffix (e.g. stable ct at `0.7.130-beta`, a
+deliberate public beta) ships the full pipeline with no ask. Never infer,
+"correct", or guard a visibility from the version, directory, or stream —
+`-AllowPublic` is a purely mechanical flag, required whenever `itemV2.cfg`
+says `public`. There is no suffix-vs-visibility contradiction to tie-break.
 
 **Post-ship checks (both streams):**
 - Confirm `Uploaded new content` in `workshop_log.txt`. `ugc_tool` prints

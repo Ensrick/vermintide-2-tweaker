@@ -213,7 +213,8 @@ UPLOAD - a local deploy alone is silently clobbered.
   .\tools\ship\ship.ps1 -Mod <mod>            # build + deploy + upload + GitHub + verify
   ```
 
-  - Add `-AllowPublic` ONLY for a clean-versioned STABLE public release.
+  - Add `-AllowPublic` whenever the mod's `itemV2.cfg` visibility is public —
+    a mechanical launcher gate, applies regardless of version suffix (#328).
   - Add `-NoRemote` ONLY if PC-B is unreachable (and say so).
 - [ ] **APPROVAL RULE:**
   - **`-dev` / `-alpha` / `-beta`-versioned mods: ship with NO asking, every
