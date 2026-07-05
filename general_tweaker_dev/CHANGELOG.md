@@ -1,5 +1,25 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.184-dev (2026-07-04) -- #306 Save coordinates / teleport (per-map position slots)
+
+### Why
+Issue #306: a dev tool to bookmark a spot on the map and jump back to it. Useful for testing a specific arena/objective/spawn without re-walking the level.
+
+### Changed
+- **New file `_gt_saved_positions.lua`** (command-only, no hooks) registering 20 chat commands in a loop: `/save_position_1` .. `/save_position_10` capture the LOCAL player unit's current position + first-person look rotation; `/recall_position_1` .. `/recall_position_10` teleport that unit back. Each command echoes its result to the invoking player.
+- **Saves are PER MAP.** The store is keyed by `Managers.state.game_mode:level_key()` (`game_mode_manager.lua:897`, returns `self._level_key` -- the mod's existing pattern, `_gt_creature_spawner.lua:245`), so each map has its own independent 10 slots. Works in the keep AND in a mission (the keep is a level with a level_key too).
+- **Teleport primitive:** `PlayerUnitLocomotionExtension:teleport_to(pos, rot)` (`Vermintide-2-Source-Code/scripts/unit_extensions/default_player_unit/player_unit_locomotion_extension.lua:1005-1023`) -- sets the mover + unit position and, when `rot` is passed, `first_person_extension:set_rotation(rot)`. **Rotation restore ships** (position AND look direction are both restored). Mirrors vanilla's own saved-teleport tool, which stores points as `{x,y,z,qx,qy,qz,qw}` keyed by level and rebuilds with `Vector3(...)` / `Quaternion.from_elements(...)` (`imgui_teleport_tool.lua:352-363`).
+- **Persistence:** one VMF setting, `gt_saved_positions`, a plain nested table `positions[level_key][slot] = { x, y, z, qx, qy, qz, qw }`. Slot keys are STRINGS ("1".."10") and every level of nesting is a pure string-keyed hash of numbers -- no mixed array/hash tables, which the engine's user-settings serializer rejects (`vmf/modules/core/settings.lua:10`). Written through `mod:set` on every save so slots survive a crash. Stingray stack-temporary rule honored: only plain number components are persisted; `Vector3`/`Quaternion` are rebuilt fresh at recall time, never stored as userdata.
+- **Guards (each with a clear echo):** no local player unit (dead / spectating / not in a level) on save or recall (`Unit.alive` check); no current map yet; recall on a slot with nothing saved for the CURRENT map; recall wrapped in `pcall` so a cold engine field can't crash. `printf` (repo rule 9, mod-logging-off channel) records each save/recall to the console.
+- **Client-safe:** everything operates on the LOCAL player unit only (same movement surface noclip uses); no networking, no hooks.
+
+### Regression test
+- `/gt_regression_test` gains `saved_positions_module_wired`: asserts the module dofiled and exposed `mod._gt_save_position` / `mod._gt_recall_position`, the 10-slot count, and its marker.
+
+### Notes
+- `[untested]` per #301 tag doctrine -- verify in-game before promotion.
+- Version bump 0.2.183-dev -> 0.2.184-dev. No data widgets or localization added: the commands carry plain-string descriptions (like every other gt command) and `gt_saved_positions` is a hidden persistence blob, not a UI widget.
+
 ## v0.2.183-dev (2026-07-04) -- #320 Bots drink potions: advanced condition options
 
 ### Why

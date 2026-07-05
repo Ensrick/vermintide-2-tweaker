@@ -28,7 +28,7 @@ mod — and check `.in_progress/` for sentinel files claiming a live session.
 | chaos_wastes_tweaker | Ensrick | stable | — | 2026-05-25 |
 | chaos_wastes_tweaker_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-05-26 |
 | general_tweaker | Ensrick | stable | — | 2026-05-25 |
-| general_tweaker_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-05-26 |
+| general_tweaker_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-07-05 |
 | gui_tweaker | Ensrick | stable | — | 2026-05-25 |
 | gui_tweaker_dev | Ensrick | in-flight | dev clone (fork 2026-06-24) | 2026-07-05 |
 | cosmetics_tweaker | Ensrick | stable | — | 2026-05-25 |

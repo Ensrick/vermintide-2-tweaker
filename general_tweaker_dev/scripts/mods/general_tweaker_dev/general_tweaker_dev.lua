@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.183-dev"
+local MOD_VERSION = "0.2.184-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1925,6 +1925,24 @@ _rt_register("ai_locomotion_override_set_and_cleared", function()
     end
 end)
 
+_rt_register("saved_positions_module_wired", function()
+    -- #306 (v0.2.184-dev): the Saved Positions dev tool (_gt_saved_positions.lua)
+    -- registers /save_position_1..10 + /recall_position_1..10, capturing the local
+    -- player position + look rotation and teleporting back per map via
+    -- PlayerUnitLocomotionExtension:teleport_to. Structural check: the module
+    -- dofiled and exposed its save/recall entry points, the 10-slot count, and its
+    -- marker. If any of these are absent the module failed to load or was gutted.
+    if mod._GT_SAVED_POSITIONS_MARKER ~= "gt-saved-positions-per-map-slots" then
+        return "saved-positions marker absent — did _gt_saved_positions.lua load?"
+    end
+    if mod._gt_saved_positions_slot_count ~= 10 then
+        return "saved-positions slot count is not 10 (got " .. tostring(mod._gt_saved_positions_slot_count) .. ")"
+    end
+    if type(mod._gt_save_position) ~= "function" or type(mod._gt_recall_position) ~= "function" then
+        return "saved-positions save/recall entry points not exposed on mod"
+    end
+end)
+
 _rt_register("gt_no_mission_hotkey_flip", function()
     -- Issue #62 (2026-05-28): a legacy hook force-set the hotkeys-enabled arg of
     -- IngameUI.handle_menu_hotkeys to true mid-mission, enabling crash-prone keep
@@ -2380,5 +2398,14 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_probe_dummy_hits")
 --     (hook_safe UnitFrameUI.set_total_health_percentage + .update).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_melee_warning")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_hp_smoothing")
+
+-- Saved Positions (dev tool, #306): /save_position_1..10 + /recall_position_1..10.
+-- Command-only, no hooks. Captures the LOCAL player unit position + look rotation
+-- and teleports back via PlayerUnitLocomotionExtension:teleport_to; saves are
+-- per-map, persisted through the `gt_saved_positions` VMF setting. Self-contained;
+-- exposes mod._gt_save_position / mod._gt_recall_position / the structural marker
+-- for the saved_positions_module_wired regression check below. Load order
+-- irrelevant (no setting/state chain, no hooks).
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_saved_positions")
 
 mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GT) / 1024)

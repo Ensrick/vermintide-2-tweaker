@@ -38,6 +38,8 @@ no_bots, bots_in_keep,
 -- Spawners:
 spawncreature, nextcreature, prevcreature, destroycreatures, savecreature, selectedcreatures,
 spawnitem, nextitem, previtem,
+-- Saved positions (per-map teleport, #306):
+save_position_1 .. save_position_10, recall_position_1 .. recall_position_10,
 -- Dumps / debug:
 dump_settings, dump_level, dump_glossary, dump_cosmetics, dump_items_by_slot,
 dump_hero_view, dump_ai, dump_menu, ai_slotdump, bot_loadout_dump, fire_probe,
