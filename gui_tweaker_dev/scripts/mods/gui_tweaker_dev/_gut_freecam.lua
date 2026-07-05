@@ -65,6 +65,12 @@ local mod = get_mod("gut_dev")
 
 local _freecam_active = false
 local _exit_key_was_down = false
+-- Set when the checkbox flips ON while a menu/view is open: activation is DEFERRED
+-- until the menu closes. Entering free flight re-routes every input device to the
+-- FreeFlight service (free_flight_manager.lua:610-612), so activating under an open
+-- view leaves that view unresponsive to all input - the soft-lock reported 2026-07-05
+-- (gut_dev 0.2.189-dev log 17:14:49-17:15:12, forced close via Steam).
+local _pending_menu_close = false
 -- Saved so exit restores whatever owned third_person_mode before us (the 3P camera
 -- in _gut_camera.lua also drives this flag; unconditionally clearing it on freecam
 -- exit would break a co-active 3P camera).
@@ -83,6 +89,15 @@ end
 local function _local_player()
     local pm = Managers.player
     return pm and pm:local_player()
+end
+
+-- True while any menu/view owns the screen: a vanilla view or menu state
+-- (IngameUI.menu_active, ingame_ui.lua:228) or any transitioned-in view including
+-- VMF/mod views (IngameUI.current_view; vanilla treats "in a view" as the OR of the
+-- two, ingame_ui.lua:765). Live instance via Managers.ui._ingame_ui (ui_manager.lua:26).
+local function _menu_open()
+    local iui = Managers.ui and Managers.ui._ingame_ui
+    return iui and (iui.menu_active or iui.current_view ~= nil) or false
 end
 
 -- Resolve the local player + its per-player FreeFlight data slot. The slot is
@@ -179,6 +194,18 @@ mod._gut_apply_freecam = function(enabled)
             return
         end
         if _freecam_active or data.active then return end   -- already flying
+        -- MENU GATE: never enter free flight while a menu/view is open - the device
+        -- re-route would cut all input to it (soft-lock class). Defer: mod.update
+        -- completes the activation on the first frame after the menu closes.
+        if _menu_open() then
+            if not _pending_menu_close then
+                _pending_menu_close = true
+                printf("[gut_dev:FC] activation deferred: menu/view open")
+                mod:echo("Free camera: starts when you close the menu. F8 turns it off.")
+            end
+            return
+        end
+        _pending_menu_close = false
         -- Render the 3P body so the detached camera has something to look at (free
         -- flight leaves the player unit simulating; without third_person_mode the
         -- local body renders as 1P-only and is invisible from the free cam). Save the
@@ -194,13 +221,23 @@ mod._gut_apply_freecam = function(enabled)
         end
         _exit_key_was_down = true   -- swallow the keypress that toggled us on
         _freecam_active = true
+        printf("[gut_dev:FC] activated")
+        -- apply() owns ALL activation feedback so every entry path (checkbox,
+        -- keybind, /freecam, deferred menu-close) shows the exit key.
+        mod:echo("Free camera: ON. WASD move, mouse look, E/Q up/down, wheel speed. F8 to exit.")
     else
+        local was_on = _freecam_active or _pending_menu_close
+        _pending_menu_close = false
         if player and data and data.active then
             pcall(Managers.free_flight._exit_free_flight, Managers.free_flight, player, data)
         end
         _set_third_person(_prev_third_person)
         _prev_third_person = nil
         _freecam_active = false
+        if was_on then
+            printf("[gut_dev:FC] deactivated")
+            mod:echo("Free camera: OFF")
+        end
     end
 end
 
@@ -220,12 +257,25 @@ end
 local _gut_freecam_prev_update = mod.update
 mod.update = function(dt)
     if _gut_freecam_prev_update then _gut_freecam_prev_update(dt) end
+
+    -- Deferred activation: the checkbox was flipped ON inside a menu. Complete the
+    -- entry on the first frame the menu is gone (setting may have been flipped back
+    -- off meanwhile - then just drop the pending flag).
+    if _pending_menu_close and not _freecam_active then
+        if not mod:get("gut_freecam_enabled") then
+            _pending_menu_close = false
+        elseif not _menu_open() then
+            _pending_menu_close = false
+            printf("[gut_dev:FC] menu closed, completing deferred activation")
+            mod._gut_apply_freecam(true)
+        end
+    end
+
     if not _freecam_active then return end
 
     if _exit_key_pressed() then
         mod:set("gut_freecam_enabled", false)   -- fires on_setting_changed -> apply(false)
         mod._gut_apply_freecam(false)           -- explicit, in case VMF skips the programmatic set
-        mod:echo("Free camera: OFF")
         return
     end
 
@@ -290,6 +340,8 @@ do
             _set_third_person(_prev_third_person)
             _prev_third_person = nil
         end
+        -- A deferred activation must not survive a level change either.
+        _pending_menu_close = false
     end
 end
 
@@ -297,12 +349,7 @@ end
 mod.gut_freecam_toggle = function()
     local new_val = not mod:get("gut_freecam_enabled")
     mod:set("gut_freecam_enabled", new_val)
-    mod._gut_apply_freecam(new_val)
-    if new_val then
-        mod:echo("Free camera: ON (WASD move, mouse look, E/Q up/down, wheel = speed, F8 to exit)")
-    else
-        mod:echo("Free camera: OFF")
-    end
+    mod._gut_apply_freecam(new_val)   -- apply() owns the ON/OFF feedback
 end
 
 mod:command("freecam", "Toggle the detached free camera (F8 to exit)", function()

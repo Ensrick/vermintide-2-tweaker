@@ -5,6 +5,32 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.192-dev (2026-07-05) -- #307 fix Free Camera soft-lock when toggled from an open menu [verify-fix]
+
+User report (2026-07-05, running 0.2.189-dev, log 17.03.22-87719970): turning Free Camera on
+from inside the mod options menu "froze" the game - no input worked, forced close via Steam.
+Log timeline: freecam widget hovered/toggled 17:14:49, then nothing until Steam's close request
+triggered a CLEAN exit at 17:15:12 (save + "Lua signals application exit") - an input soft-lock,
+not an engine freeze.
+
+- **Root cause:** entering free flight routes EVERY input device to the FreeFlight service
+  (`block_device_except_service`, free_flight_manager.lua:610-612, by design). Toggling the
+  checkbox while the options view was open activated freecam UNDER the open menu, cutting all
+  input to it: no clicks, no ESC. The F8 raw-poll exit existed but nothing on screen said so
+  (the hint echo only fired on the /freecam-command path, and the menu blocked chat anyway).
+- **Fix (`_gut_freecam.lua`):** menu gate + deferred activation. `_gut_apply_freecam(true)`
+  now refuses to enter free flight while any menu/view is open (`IngameUI.menu_active` OR
+  `current_view ~= nil`, ingame_ui.lua:228/:765, via `Managers.ui._ingame_ui`,
+  ui_manager.lua:26) and defers: `mod.update` completes the activation on the first frame
+  after the menu closes (or drops it if the setting was flipped back off, and on any game
+  state change). apply() now owns ALL feedback: every activation path echoes the controls
+  incl. "F8 to exit"; deactivation echoes OFF once. Always-on `[gut_dev:FC]` printf lines
+  (deferred / activated / deactivated) for triage.
+- Loc: freecam titles [untested] -> [verify-fix]; tooltip documents the menu deferral.
+- VERIFY IN-GAME: in a mission or the keep, open Mod Options, turn Free Camera ON, close the
+  menu - the camera should detach only AFTER the menu closes, chat shows the F8 hint, and F8
+  returns control. Toggling it on and back off inside the menu should do nothing.
+
 ## 0.2.191-dev (2026-07-05) -- #312 UI Tweaks menu fix + #310 HUD edit-mode keybind [verify-fix]
 
 Fixes a #312 misread the user caught: UI Tweaks had been surfaced as its OWN separate tab in the Mod Tweaker menu (by whitelisting the stock `HideBuffs` mod), when the assignment ("interface with UI Tweaks... from within GUT's own menu, to the extent features overlap") wanted the options in GUT's own menu. Also adds the HUD edit-mode keybind #310 asked for (previously edit mode was reachable ONLY via the `/edit_hud` chat command, so there was no key to bind).
