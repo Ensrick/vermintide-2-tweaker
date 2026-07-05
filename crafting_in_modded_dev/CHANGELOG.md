@@ -1,5 +1,29 @@
 # Crafting in Modded Changelog
 
+## 0.8.49-dev (2026-07-05) - #83 round 2: panel smoke + top-array raw textures (session 9cc7ebf2)
+
+**CRASH FIX.** First in-mission Athanor test on v0.8.48-dev got PAST the blend layer (all three `[cim:83] forge viewport env` probes fired, `ui_store_preview` picked, resident) and crashed one frame later on the NEXT layer of the known keep-only-material class: `ui_passes.lua:194: Material 'forge_overview_top_glow_effect_smoke_1' not found in Gui`, from `HeroWindowWeaveForgePanel._draw` (log 18.29.57-9cc7ebf2, running v0.8.48-dev confirmed).
+
+### Why the existing B5/B6 prune missed it (two gaps, one latent)
+
+- The Panel mixes `top_glow_smoke_1` (`forge_overview_top_glow_effect_smoke_1`, `create_simple_uv_texture`, panel defs :525) into its NON-HDR `_bottom_widgets`. The B6 convergent rule pruned only `athanor_*` non-slot textures, so the smoke widget survived and fataled on the base mission Gui. Two sub-gaps: the prefix family was new, AND uv-texture widgets store `content.texture_id` as a TABLE (`{texture_id=..., uvs=...}`, `ui_widgets.lua:5638-5642`) that the string-only matcher could never match.
+- LATENT: the Panel's `_top_widgets` (third loop of its `_draw`, on `ui_top_renderer`) carries six more raw widgets (`athanor_power_bg` x2, `athanor_decoration_corner` x4) that no fix ever iterated - the next crash in line once smoke_1 was gone. Confirmed raw by the v0.8.21 grep rule (only `athanor_skilltree_slot_*` is atlas-backed).
+
+### Fix
+
+`_cim_suppress_skilltree_rings_in_mission` extended: (a) raw-texture predicate now also matches the `forge_overview_top_glow_effect_*` family; (b) texture-name resolver unwraps the uv-table shape; (c) the prune covers BOTH `_bottom_widgets` and `_top_widgets` for all four forge windows (no-op on clean arrays). Keep path untouched as before.
+
+### Regression test
+
+`skilltree_ring_widgets_suppressed_in_mission` rewritten: fixture now includes a uv-table smoke widget in `_bottom_widgets` and a raw-populated `_top_widgets` (power_bg string + decoration_corner uv-table + slot + text widget); asserts both arrays filtered in mission, both intact in keep. Also fixes the test's own off-by-one keep-count (expected 7 of 8 fixture widgets - would have false-failed the keep assertion).
+
+### In-game verify (#83, unchanged)
+
+Enable "Allow crafting bench in mission", start an adventure mission, press the Athanor hotkey (B): forge opens and is usable, no CTD. Log shows the three `[cim:83] forge viewport env` lines.
+
+### Files
+- `crafting_in_modded_dev.lua` - predicate + resolver + two-array prune, call-site comment, test rewrite; `MOD_VERSION` `0.8.48-dev` -> `0.8.49-dev`.
+
 ## 0.8.48-dev (2026-07-05) - #83: re-enable the in-mission Athanor (blend-AV root fix, not a gate)
 
 **FEATURE RESTORE + CRASH FIX.** The Athanor (weave forge) opens in missions again behind the `allow_in_mission` opt-in (the "Allow crafting bench in mission" toggle in Tweaker: GUI's In-Mission Menus), replacing the v0.8.23 hard keep-only gate. The gate existed because a render-level fatal (`script_world` `blend`) survived the Fix B/B2..B6 material/HDR hardening; that fatal is now root-caused and fixed instead of gated.
