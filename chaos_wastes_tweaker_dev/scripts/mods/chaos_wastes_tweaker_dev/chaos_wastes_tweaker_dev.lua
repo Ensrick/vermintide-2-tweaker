@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.228-dev"
+local MOD_VERSION = "0.7.229-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -6233,6 +6233,9 @@ end
 -- exist for all 4 gods and are not aliased (deus_level_settings.lua:380-392,981-989), so
 -- swapping only the god segment (keeping path<N>) is always valid. #146: finale_approach_god
 -- (0 = follow finale) themes ONLY sig_citadel; finale_dominant_god governs arena_citadel.
+-- #145 FIX marker (v0.7.219): the regression test asserts this constant + the function's
+-- presence + both deus_populate_graph wiring sites, so the fix can't silently revert.
+CT_CITADEL145_FIX_MARKER = "citadel145:force_finale_god_fix_v0.7.219"
 mod._ct_force_finale_god = function(graph, config)
     if type(graph) ~= "table" then return end
     local finale_idx = effective_setting("finale_dominant_god")
@@ -13313,6 +13316,46 @@ _rt_register("citadel145_probe_installed", function()
     end
     if CT_CITADEL145_MARKER ~= "citadel145:resolved_god_census_v0.7.212" then
         return "#145 REGRESSION: CT_CITADEL145_MARKER mismatch — got: " .. tostring(CT_CITADEL145_MARKER)
+    end
+end)
+
+-- v0.7.219-dev #145 FIX (closed v0.7.229, user-confirmed): the ACTUAL fix, not just the probe.
+-- mod._ct_force_finale_god rewrites the god segment of arena_citadel_* (finale) and sig_citadel_*
+-- (approach) on the FINISHED graph, restoring the finale_dominant_god override WITHOUT touching
+-- config.NO_DOMINANT_GOD. The #145 conflict returns silently if the function is stripped OR its
+-- call is dropped from either deus_populate_graph branch (normal + shop-converted), so this guards
+-- presence, the intentional-presence marker, AND both wiring sites (source-read; the needle is
+-- split so this very check can't self-match).
+_rt_register("citadel145_force_finale_god_fix", function()
+    if type(mod._ct_force_finale_god) ~= "function" then
+        return "#145 REGRESSION: mod._ct_force_finale_god missing (Citadel finale-god override fix stripped)"
+    end
+    if CT_CITADEL145_FIX_MARKER ~= "citadel145:force_finale_god_fix_v0.7.219" then
+        return "#145 REGRESSION: CT_CITADEL145_FIX_MARKER mismatch — got: " .. tostring(CT_CITADEL145_FIX_MARKER)
+    end
+    local ok, info = pcall(debug.getinfo, mod._ct_force_finale_god, "S")
+    if ok and type(info) == "table" and info.source then
+        local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+        local f = io.open(src_path, "r")
+        if f then
+            local txt = f:read("*a")
+            f:close()
+            if txt then
+                local needle = "mod._ct_force_finale_god(result[1], " .. "config)"
+                local count, pos = 0, 1
+                while true do
+                    local s = txt:find(needle, pos, true)
+                    if not s then break end
+                    count = count + 1
+                    pos = s + #needle
+                end
+                if count < 2 then
+                    return string.format(
+                        "#145 REGRESSION: finale-god fix wired at only %d of 2 deus_populate_graph branches (override no longer applied)",
+                        count)
+                end
+            end
+        end
     end
 end)
 

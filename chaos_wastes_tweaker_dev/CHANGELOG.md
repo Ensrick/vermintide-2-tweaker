@@ -1,5 +1,13 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.229-dev (2026-07-05) - #145 CLOSED (user-confirmed in-game): Citadel finale-god override
+
+User confirmed the v0.7.219 fix in-game (finale god matches the `finale_dominant_god` setting; the non-Tzeentch `arena_citadel` variants load). Closing #145. No behavior change this build - it adds the missing regression coverage for the FIX and corrects the loc tag.
+
+- **Regression test for the fix (`citadel145_force_finale_god_fix`).** The pre-existing `citadel145_probe_installed` check only guarded the diagnostic (`_ct_citadel145_dump`), not the fix. New check asserts `mod._ct_force_finale_god` is present, its `CT_CITADEL145_FIX_MARKER` matches, and it is still wired into BOTH `deus_populate_graph` branches (source-read count >= 2) - the exact silent-revert path (fix present but call dropped = #145 returns). Run via `/ct_regression_test`.
+- **Loc tag corrected.** `finale_dominant_god` was `[verify-fix] [diag] [Issue 145 & 56]`; #145 is now confirmed/closed and #56 was already closed, so both stale refs are dropped and `[verify-fix]` is retired. Kept `[diag]` paired to the still-open issue 135 (weekly god override; its `[ct:god135]` probe remains live on this exact setting). New tag: `[diag] [Issue 135] Finale God`. (That issue is deliberately dereferenced above so ship.ps1 step-6 does not mis-add `verify-fix` to a diag-only issue; its status is unchanged by this build.)
+- The #145 fix itself is unchanged (shipped v0.7.219): `mod._ct_force_finale_god` rewrites the god segment of `arena_citadel_*`/`sig_citadel_*` on the finished graph, honoring the override without touching `config.NO_DOMINANT_GOD`.
+
 ## 0.7.228-dev (2026-07-05) - #2 first ct_dev extraction (_ct_combat_hooks.lua) + #143 grenade-share census
 
 Two-part maintenance/diagnostics build; no gameplay behavior changes intended.

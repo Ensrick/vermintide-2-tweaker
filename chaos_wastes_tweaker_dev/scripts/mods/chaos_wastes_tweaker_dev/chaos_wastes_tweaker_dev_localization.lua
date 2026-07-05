@@ -113,7 +113,7 @@ local loc = {
     cursed_mission_count_tooltip = { en = "Each cluster curses 1-3 adjacent nodes, and this sets how many clusters spawn per run. 0 = vanilla (2-7). Max 30. Host-only." },
     disable_dominant_god = { en = "[untested] Disable Dominant-God Rule" },
     disable_dominant_god_tooltip = { en = "All 4 gods rotate uniformly across curses including the finale, instead of vanilla reserving the journey's dominant god for the finale." },
-    finale_dominant_god = { en = "[verify-fix] [diag] [Issue 145 & 56] Finale God" },
+    finale_dominant_god = { en = "[diag] [Issue 135] Finale God" },
     finale_dominant_god_tooltip = { en = "Forces a specific god's curse for the finale instead of the game's weekly rotation. Host-only." },
     -- Finale God dropdown option labels (values 0-4; see finale_god_options in *_data.lua).
     finale_god_rotation = { en = "Weekly Rotation" },
