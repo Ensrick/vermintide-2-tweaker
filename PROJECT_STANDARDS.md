@@ -1321,6 +1321,16 @@ When you ship a fix or a diagnostic for an issue, add the matching status label 
 **same pass** as the CHANGELOG entry (rule #5 territory). Filing a new issue: give it a
 type + mod immediately; add a status label only once you have actually shipped work.
 
+**Mechanized (issue #326).** `tools/ship/ship.ps1` step 6 now applies the status label
+automatically on every dev-stream ship: it parses the `#N` refs out of the CHANGELOG entry
+being shipped and runs `gh issue edit N --add-label` — `diagnostics-armed` when the entry
+header carries a `[diag]`/diagnostic/probe/instrument marker (instrumentation-only ship),
+`verify-fix` otherwise. Every decision is printed so a mixed entry (fix + probe in one) can
+be corrected by hand; loc-sweep entries, closed issues, and non-existent numbers are
+skipped. Two advisory QA guards back it up: `qa/check_issue_status_labels.ps1` (top
+CHANGELOG entry vs labels) and `qa/check_issue_tag_sync.ps1` (whole loc-tag surface vs
+labels, both directions — see `qa/CHECKS.md` rows 19f/19g).
+
 **Dev localization tags move with the issue (issue #301).** Opening or closing an issue
 that touches a dev-build feature means updating that feature's option-title status tag in
 the SAME pass — e.g. add `[Issue N]` when you open, drop it (→ `[working]`/`[untested]`) when

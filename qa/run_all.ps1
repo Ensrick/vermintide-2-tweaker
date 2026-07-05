@@ -135,6 +135,14 @@ Run-Check "check_loc_tags"     { & (Join-Path $here "check_loc_tags.ps1")     -Q
 # returns ever blocks; it also self-exits 0 when gh is offline/unauthenticated.
 # See qa/CHECKS.md row 19f.
 Run-Check "check_issue_status_labels" { & (Join-Path $here "check_issue_status_labels.ps1") -Quiet:$Quiet } -Policy 'Advisory'
+# check_issue_tag_sync is advisory-only (issue #326 part 2): the whole-surface
+# loc-tag <-> GitHub-label sync guard. Warns on stale [Issue N] tags (closed /
+# non-existent issues, LOCALIZATION_STANDARD § 13.4), [verify-fix]/[diag] tags
+# whose issue lacks the matching status label, and vice versa. Complements
+# check_issue_status_labels (which only reads each mod's TOP CHANGELOG entry).
+# Pinned Advisory; self-exits 0 when gh is offline/unauthenticated.
+# See qa/CHECKS.md row 19g.
+Run-Check "check_issue_tag_sync" { & (Join-Path $here "check_issue_tag_sync.ps1") -Quiet:$Quiet } -Policy 'Advisory'
 Run-Check "check_file_sizes"   { & (Join-Path $here "check_file_sizes.ps1")   -Quiet:$Quiet }
 Run-Check "check_command_collisions" { & (Join-Path $here "check_command_collisions.ps1") -Quiet:$Quiet }
 Run-Check "check_decisions_wired" { & (Join-Path $here "check_decisions_wired.ps1") -Quiet:$Quiet }

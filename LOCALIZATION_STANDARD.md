@@ -693,6 +693,14 @@ update happens in the SAME session/commit as the triggering change, never batche
 `[Issue N]` must reference an OPEN issue in `Ensrick/vermintide-2-tweaker`. A tag naming a
 closed issue is stale and must be corrected.
 
+**Mechanized (issue #326):** `qa/check_issue_tag_sync.ps1` (advisory, in `run_all`) enforces
+this section against GitHub — it warns on stale `[Issue N]` tags (closed / non-existent
+issues), on `[verify-fix]`/`[diag]` tags whose paired issue lacks the matching
+`verify-fix`/`diagnostics-armed` label, and on the reverse (a labeled open issue with no
+matching loc tag — legitimate when the fix has no menu surface, § 13.3/13.8). The ship-time
+half lives in `tools/ship/ship.ps1` step 6, which auto-adds the status label from the shipped
+CHANGELOG entry.
+
 ### 13.5 — Stable strips ALL tags (promotion is the strip point)
 
 Tags are dev-only. **Promotion to a clean (no-suffix) stable version strips every tag** as
