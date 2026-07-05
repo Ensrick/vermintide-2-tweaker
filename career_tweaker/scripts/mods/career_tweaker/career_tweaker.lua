@@ -1,6 +1,6 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.51-dev"
+local MOD_VERSION = "0.3.52-dev"
 _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -135,7 +135,7 @@ if not ok_trn then
     tourney = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 end
 
--- Armor & Overcharge toggles (4 default-OFF gameplay hooks). Unlike balance /
+-- Armor & Overcharge toggles (5 default-OFF gameplay hooks). Unlike balance /
 -- tourney these are pure runtime hooks gated live on mod:get — NO
 -- {apply,restore,active_count} contract and NO on_setting_changed dispatch; VMF
 -- re-reads mod:get and deactivates the hooks when the mod is disabled. The
@@ -921,6 +921,39 @@ _rt_register("armor_overcharge_hook_targets_present", function()
     local PUHE = rawget(_G, "PlayerUnitHealthExtension")
     if type(PUHE) ~= "table" or type(PUHE.add_damage) ~= "function" then
         return "PlayerUnitHealthExtension.add_damage missing"
+    end
+end)
+
+_rt_register("armor_overcharge_self_dot_toggle_wired", function()
+    -- #334: the self-inflicted-DoT fix adds toggle
+    -- `unchained_no_overcharge_from_self_dot` (the Blood Magic overcharge case)
+    -- and folds the Gromril + Necromancer self-DoT coverage into the existing
+    -- `armor_gromril_ignore_chip`. The `_is_self_dot` predicate is a module-local
+    -- in career_tweaker_armor_overcharge.lua (not reachable from here), so this
+    -- check verifies the new toggle's DATA widget + both LOC keys are present —
+    -- i.e. the option actually renders and reads back.
+    local ok_d, data = pcall(require, "scripts/mods/career_tweaker/career_tweaker_data")
+    if not ok_d or type(data) ~= "table" then return "career_tweaker_data not loadable" end
+    local found = false
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if node.setting_id == "unchained_no_overcharge_from_self_dot" then found = true end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+    if not found then
+        return "unchained_no_overcharge_from_self_dot widget missing from data tree"
+    end
+    local ok_l, loc = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_localization")
+    if ok_l and type(loc) == "table" then
+        if type(loc.unchained_no_overcharge_from_self_dot) ~= "table" then
+            return "unchained_no_overcharge_from_self_dot loc label missing"
+        end
+        if type(loc.unchained_no_overcharge_from_self_dot_tooltip) ~= "table" then
+            return "unchained_no_overcharge_from_self_dot_tooltip loc missing"
+        end
     end
 end)
 

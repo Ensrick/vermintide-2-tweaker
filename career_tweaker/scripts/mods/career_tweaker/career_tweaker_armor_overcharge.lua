@@ -1,14 +1,29 @@
 local mod = get_mod("crt")
 
 -- ============================================================
--- Armor & Overcharge toggles (hook-based)  [crt v0.3.32-dev]
+-- Armor & Overcharge toggles (hook-based)  [crt v0.3.52-dev]
 -- ============================================================
--- Four opt-in (default-OFF) gameplay toggles that exempt certain damage from
+-- Five opt-in (default-OFF) gameplay toggles that exempt certain damage from
 -- consuming Ironbreaker Gromril Armour / Necromancer Cursed Armor counters, or
--- from feeding Sienna Unchained's overcharge passive. All four are pure runtime
+-- from feeding Sienna Unchained's overcharge passive. All five are pure runtime
 -- hooks gated on `mod:get(...)` — no {apply,restore,active_count} lifecycle
 -- contract (VMF re-reads mod:get live and deactivates the hooks when the mod is
 -- disabled). dofile'd from career_tweaker.lua, same as career_tweaker_tourney.
+--
+-- ── Self-inflicted DoT coverage (Issue #334) ─────────────────────────────────
+-- The Chaos Wastes Slaanesh curse "Unquenchable Thirst" (internally
+-- curse_abundance_of_life) ticks self-damage every 2s through a custom_dot_tick
+-- that calls add_damage_network(unit, unit, damage, "torso", "wounded_dot", nil,
+-- ...) — attacker == victim, damage_type "wounded_dot", damage_source NIL
+-- (morris_buff_settings.lua:636-646). Because the source is nil the tick slips
+-- past vanilla's own exemption sets (INVALID_GROMRIL_DAMAGE_SOURCE /
+-- INVALID_DAMAGE_TO_OVERHEAT_DAMAGE_SOURCES, damage_utils.lua:2114-2127), so it
+-- eats Gromril every tick, converts to overcharge under Unchained Blood Magic,
+-- and eats a Necromancer Cursed Armor counter. Discriminator: damage_type ==
+-- "wounded_dot" AND attacker == victim (`_is_self_dot`) — the only wounded_dot
+-- self-tickers are curse/event/mutator DoTs (this curse, skulls_2023, Nurgle's
+-- Rot). Toggle #1 folds the Gromril + Necromancer coverage in; toggle #5 adds
+-- the Blood Magic overcharge case.
 --
 -- ── Authority model (load-bearing — determines correctness) ──────────────────
 -- Two distinct removal paths, two distinct authority models:
@@ -33,7 +48,7 @@ local mod = get_mod("crt")
 --    regardless of who hosts.
 --
 -- Net: TWO hook targets, not one (different functions, different authority).
---   * DamageUtils.apply_buffs_to_damage      → #1-gromril, #2, #3, #4
+--   * DamageUtils.apply_buffs_to_damage      → #1-gromril, #2, #3, #4, #5
 --   * PlayerUnitHealthExtension.add_damage   → #1-necromancer
 -- VMF no-duplicate-hook rule: grepped career_tweaker/ — neither target is hooked
 -- anywhere else in crt. Exactly ONE mod:hook per (Class, method) below.
@@ -103,6 +118,15 @@ local function _is_chip_or_aoe(damage_source, damage_type)
     return false
 end
 
+-- True for self-inflicted DoT ticks: CW curses (Unquenchable Thirst), event
+-- mutator DoTs, Nurgle's Rot. These stamp damage_type "wounded_dot" with the
+-- victim as its own attacker (e.g. morris_buff_settings.lua:636-646). Used to
+-- exempt these ticks from consuming Gromril / Necromancer Cursed Armor and, via
+-- toggle #5, from feeding Unchained Blood Magic overcharge (#334).
+local function _is_self_dot(attacker_unit, attacked_unit, damage_type)
+    return damage_type == "wounded_dot" and attacker_unit ~= nil and attacker_unit == attacked_unit
+end
+
 -- True when `damage_source` names a special breed (generic test + named set).
 local function _is_special_source(damage_source)
     if type(damage_source) ~= "string" then return false end
@@ -114,13 +138,16 @@ end
 
 -- Gromril exemption predicate (toggles #1-gromril + #2). Pre-checks the victim
 -- actually carries the marker so the shim is a no-op on non-Ironbreakers.
-local function _gromril_hit_is_exempt(attacked_unit, be, damage_source, damage_type)
+local function _gromril_hit_is_exempt(attacked_unit, attacker_unit, be, damage_source, damage_type)
     if not (be and be.has_buff_type and be:has_buff_type(GROMRIL_MARKER)) then
         return false
     end
 
-    -- Chip branch (toggle #1).
-    if mod:get("armor_gromril_ignore_chip") and _is_chip_or_aoe(damage_source, damage_type) then
+    -- Chip branch (toggle #1): chip/DoT/AOE sources, plus self-inflicted curse /
+    -- event / mutator DoT ticks (Unquenchable Thirst etc., #334) via _is_self_dot.
+    if mod:get("armor_gromril_ignore_chip")
+       and (_is_chip_or_aoe(damage_source, damage_type)
+            or _is_self_dot(attacker_unit, attacked_unit, damage_type)) then
         return true
     end
 
@@ -147,8 +174,17 @@ local function _is_sienna_unchained(be)
     return be and be.has_buff_perk and be:has_buff_perk("sienna_unchained")
 end
 
--- Overcharge exemption predicate (toggles #3 + #4).
-local function _overcharge_hit_is_exempt(attacked_unit, attacker_unit, damage_source)
+-- Overcharge exemption predicate (toggles #3 + #4 + #5).
+local function _overcharge_hit_is_exempt(attacked_unit, attacker_unit, damage_source, damage_type)
+    -- Self-inflicted DoT (toggle #5): CW curses (Unquenchable Thirst), event
+    -- mutator DoTs, Nurgle's Rot. None of these should build Blood Magic
+    -- overcharge; they slip past vanilla's overheat exemption set because their
+    -- damage_source is nil (#334, morris_buff_settings.lua:636-646).
+    if mod:get("unchained_no_overcharge_from_self_dot")
+       and _is_self_dot(attacker_unit, attacked_unit, damage_type) then
+        return true
+    end
+
     -- Friendly fire (toggle #3): attacker is an ally and not the victim itself.
     if mod:get("unchained_no_overcharge_from_ff") then
         local side_mgr = Managers.state and Managers.state.side
@@ -176,11 +212,12 @@ end
 mod:hook(DamageUtils, "apply_buffs_to_damage", function(func, current_damage, attacked_unit, attacker_unit,
         damage_source, victim_units, damage_type, buff_attack_type, first_hit, source_attacker_unit)
 
-    -- Fast early-out: if none of the four toggles is on, call straight through.
+    -- Fast early-out: if none of the five toggles is on, call straight through.
     if not (mod:get("armor_gromril_ignore_chip")
             or mod:get("armor_specials_dont_break_gromril")
             or mod:get("unchained_no_overcharge_from_ff")
-            or mod:get("unchained_no_overcharge_from_disablers")) then
+            or mod:get("unchained_no_overcharge_from_disablers")
+            or mod:get("unchained_no_overcharge_from_self_dot")) then
         return func(current_damage, attacked_unit, attacker_unit, damage_source,
                     victim_units, damage_type, buff_attack_type, first_hit, source_attacker_unit)
     end
@@ -194,7 +231,7 @@ mod:hook(DamageUtils, "apply_buffs_to_damage", function(func, current_damage, at
         -- Gromril shim (#1-gromril / #2): hide the marker from the consume+nullify
         -- block so vanilla neither removes it nor RPCs the removal to clients.
         if (mod:get("armor_gromril_ignore_chip") or mod:get("armor_specials_dont_break_gromril"))
-           and _gromril_hit_is_exempt(attacked_unit, be, damage_source, damage_type) then
+           and _gromril_hit_is_exempt(attacked_unit, attacker_unit, be, damage_source, damage_type) then
             local orig = be.has_buff_type
             restore_htb = orig
             be.has_buff_type = function(self, name)
@@ -207,8 +244,10 @@ mod:hook(DamageUtils, "apply_buffs_to_damage", function(func, current_damage, at
         -- "damage_taken_to_overcharge" stat so no overcharge is gained (and no
         -- rpc_damage_taken_overcharge is sent), leaving every other stat intact.
         if _is_sienna_unchained(be)
-           and (mod:get("unchained_no_overcharge_from_ff") or mod:get("unchained_no_overcharge_from_disablers"))
-           and _overcharge_hit_is_exempt(attacked_unit, attacker_unit, damage_source) then
+           and (mod:get("unchained_no_overcharge_from_ff")
+                or mod:get("unchained_no_overcharge_from_disablers")
+                or mod:get("unchained_no_overcharge_from_self_dot"))
+           and _overcharge_hit_is_exempt(attacked_unit, attacker_unit, damage_source, damage_type) then
             local orig_abv = be.apply_buffs_to_value
             restore_abv = orig_abv
             be.apply_buffs_to_value = function(self, value, stat_name, ...)
@@ -249,8 +288,9 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
         local unit = self.unit
         be = unit and ScriptUnit.has_extension(unit, "buff_system")
         if be and be.has_buff_type and be:has_buff_type(NECRO_COUNTER)
-           and _is_chip_or_aoe(damage_source_name, damage_type) then
-            -- Suppress the counter-stack consume for this one chip tick.
+           and (_is_chip_or_aoe(damage_source_name, damage_type)
+                or _is_self_dot(attacker_unit, self.unit, damage_type)) then
+            -- Suppress the counter-stack consume for this one chip / self-DoT tick.
             -- NOTE: this also skips any OTHER on_damage_taken procs the victim
             -- has for this single tick — acceptable for a chip tick on a
             -- Necromancer (the only on_damage_taken consumer we care about here).
@@ -276,4 +316,4 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
     end
 end)
 
-mod:info("[crt] armor/overcharge module loaded (4 toggles, 2 hooks)")
+mod:info("[crt] armor/overcharge module loaded (5 toggles, 2 hooks)")

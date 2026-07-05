@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.3.52-dev - 2026-07-05 - Fix: Chaos Wastes curse "Unquenchable Thirst" self-DoT eats armor and builds overcharge (#334)
+
+The Chaos Wastes Slaanesh curse "Unquenchable Thirst" (internally `curse_abundance_of_life`) ticks self-damage every 2s through a `custom_dot_tick` that calls `add_damage_network(unit, unit, ...)` with damage_type `"wounded_dot"` and a NIL damage_source (`morris_buff_settings.lua:636-646`). Because the source is nil the tick slips past vanilla's own exemption sets (`INVALID_GROMRIL_DAMAGE_SOURCE` / `INVALID_DAMAGE_TO_OVERHEAT_DAMAGE_SOURCES`, `damage_utils.lua:2114-2127`), so it consumed Ironbreaker Gromril Armour every tick, converted to overcharge under Unchained Blood Magic, and ate a Necromancer Cursed Armor counter. Added an `_is_self_dot` discriminator (damage_type `"wounded_dot"` AND attacker == victim) in `career_tweaker_armor_overcharge.lua` to catch these self-inflicted DoT ticks; the only `wounded_dot` self-tickers are curse / event / mutator DoTs (this curse, skulls_2023, Nurgle's Rot).
+
+### Changed - Gromril + Necromancer Cursed Armor coverage folded into `armor_gromril_ignore_chip`
+The existing "Armor ignores chip/DoT/AOE damage" toggle now also exempts self-inflicted curse / event / mutator DoT ticks (Unquenchable Thirst, Nurgle's Rot) from consuming Gromril Armour and Necromancer Cursed Armor counters. Label extended to name curse damage, tooltip gains a curse-coverage sentence, and the status tag moved from [working] to [verify-fix] [Issue 334].
+
+### Added - `unchained_no_overcharge_from_self_dot` toggle (default off)
+New Armor & Overcharge checkbox: when on, self-inflicted DoT ticks (the Chaos Wastes curse Unquenchable Thirst, Nurgle's Rot, and similar) no longer build overcharge through Sienna Unchained's Blood Magic passive. Tagged [untested]. Host-authoritative like the other overcharge toggles. Also added a `/crt_regression_test` check (`armor_overcharge_self_dot_toggle_wired`) verifying the new toggle's data widget + both loc keys are present.
+
 ## 0.3.51-dev - 2026-07-04 - Localization: apply dev status-tag doctrine (#301)
 
 Localization: applied dev status-tag doctrine (#301). 150 option titles tagged: 149 [working] (2 of them also [diag]), 1 [Issue 283], 0 [untested]. Tags are prefixes on `en` widget-title strings only (group headers, master toggles, checkboxes, dropdowns, numeric fields); tooltips, descriptions, dropdown value labels, and the commented-out Big Rebalance `cbr_*` block were left untouched. `career_swapping_group` carries [Issue 283] (open bug: talent-swap re-apply drops stacking career buffs). `rework_es_mercenary_group` and `rework_bw_unchained_group` carry [diag] (the always-on `[crt:talent]` auto-dump in `_CRT_AUTO_DUMP_CAREERS` targets es_mercenary + bw_unchained). No setting_ids, defaults, mechanics, or display text changed.

@@ -10,14 +10,16 @@ return {
     -- Armor & Overcharge (hook-based; v0.3.32-dev)
     -- ============================================================
     armor_overcharge_group                          = { en = "[working] Armor & Overcharge" },
-    armor_gromril_ignore_chip                       = { en = "[working] Armor ignores chip/DoT/AOE damage (Gromril + Necro Cursed Armor)" },
-    armor_gromril_ignore_chip_tooltip               = { en = "Ironbreaker's Gromril Armour and Necromancer's Cursed Armor are no longer used up by chip, damage-over-time, or area sources like fire, poison gas, warpfire, and troll bile. The armor still blocks the next real hit as normal." },
+    armor_gromril_ignore_chip                       = { en = "[verify-fix] [Issue 334] Armor ignores chip/DoT/AOE/curse damage (Gromril + Necro Cursed Armor)" },
+    armor_gromril_ignore_chip_tooltip               = { en = "Ironbreaker's Gromril Armour and Necromancer's Cursed Armor are no longer used up by chip, damage-over-time, or area sources like fire, poison gas, warpfire, and troll bile. Also covers self-inflicted curse damage-over-time such as the Chaos Wastes curse Unquenchable Thirst and Nurgle's Rot. The armor still blocks the next real hit as normal." },
     armor_specials_dont_break_gromril               = { en = "[working] Specials don't break Gromril (unless Gromril Curse)" },
     armor_specials_dont_break_gromril_tooltip       = { en = "Special enemies such as Hookrats, Assassins, and Leeches no longer use up Ironbreaker's Gromril Armour. The exception is the Gromril Curse talent, which lets specials break it as normal." },
     unchained_no_overcharge_from_ff                 = { en = "[working] Unchained: no overcharge from friendly fire" },
     unchained_no_overcharge_from_ff_tooltip         = { en = "Only enemy damage feeds her passive; friendly fire no longer builds overcharge." },
     unchained_no_overcharge_from_disablers          = { en = "[working] Unchained: no overcharge from special disablers" },
     unchained_no_overcharge_from_disablers_tooltip  = { en = "Special-disabler damage such as Hookrats, Leeches, and Assassins no longer feeds her overcharge. This also covers the initial grab or pounce hit, not just the ongoing damage." },
+    unchained_no_overcharge_from_self_dot           = { en = "[untested] Unchained: no overcharge from self-inflicted damage-over-time" },
+    unchained_no_overcharge_from_self_dot_tooltip   = { en = "Self-inflicted damage-over-time, such as the Chaos Wastes curse Unquenchable Thirst and Nurgle's Rot, no longer builds overcharge through Sienna Unchained's Blood Magic passive." },
     oe_benefit_from_cooldown_reduction              = { en = "[working] Outcast Engineer: benefit from Cooldown Reduction gear" },
     oe_benefit_from_cooldown_reduction_tooltip      = { en = "Makes Cooldown Reduction trinkets and charms actually speed up the Outcast Engineer's Crank Gun, which normally gets no benefit from them. A 10%% Cooldown Reduction charm makes his ability recharge about 10%% faster, and it only affects your own Outcast Engineer." },
 

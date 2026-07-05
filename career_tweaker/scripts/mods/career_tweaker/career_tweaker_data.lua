@@ -60,6 +60,7 @@ return {
                     { setting_id = "armor_specials_dont_break_gromril",     type = "checkbox", default_value = false, tooltip = "armor_specials_dont_break_gromril_tooltip" },
                     { setting_id = "unchained_no_overcharge_from_ff",       type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_ff_tooltip" },
                     { setting_id = "unchained_no_overcharge_from_disablers", type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_disablers_tooltip" },
+                    { setting_id = "unchained_no_overcharge_from_self_dot",  type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_self_dot_tooltip" },
                     { setting_id = "oe_benefit_from_cooldown_reduction",    type = "checkbox", default_value = false, tooltip = "oe_benefit_from_cooldown_reduction_tooltip" },
                 },
             },
