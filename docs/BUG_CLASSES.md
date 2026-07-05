@@ -946,3 +946,26 @@ When adding a new bug class entry, hold the line on:
 - **Document actual burns only.** Don't invent classes that haven't been seen — every entry above has at least one shipped fix to cite.
 - **Always include the canonical Issue / CHANGELOG / commit citation.** No entry without a paper trail.
 - **Don't bump mod versions when adding a new entry here.** Docs-only changes don't deploy.
+
+---
+
+## 20. Input-device re-route under an open menu (soft-lock, "game frozen")
+
+**First seen:** 2026-07-05 (gut_dev v0.2.189-dev Free Camera #307, fixed v0.2.192-dev)
+**Canonical Issue:** [#307](https://github.com/Ensrick/vermintide-2-tweaker/issues/307)
+**Lives in:** any feature that grabs exclusive input (`block_device_except_service`, free-flight entry, custom input services) while a menu/view can be open
+
+### Symptoms
+- User reports the game "froze" after toggling a mod option FROM the options menu; no input works (no clicks, no ESC, no chat); they force-close via Steam.
+- The console log shows NO crash: activity stops at the toggle timestamp, then a CLEAN exit ("Lua signals application exit" + save) when Steam sends the close request. A real engine freeze or crash never writes those exit lines.
+
+### Diagnosis pattern
+1. Log tail shows orderly shutdown -> it is an input soft-lock, not a hang/crash.
+2. Find the last user action before the gap (VMF widget probes / setting toggles in the log).
+3. Grep the feature for `block_device_except_service` / input-service acquisition running at setting-changed time with no check for an open view.
+
+### Fix template
+Gate the input grab on "no menu/view open": `local iui = Managers.ui._ingame_ui; iui.menu_active or iui.current_view ~= nil` (ingame_ui.lua:228/:765; instance via ui_manager.lua:26). DEFER the activation to `mod.update` on the first frame the menu is closed rather than refusing (the options checkbox is the primary entry point). Make every activation path announce the exit key via `mod:echo`; a raw `Keyboard.button` poll is the only reliable exit while devices are re-routed. Clear the pending flag on `on_game_state_changed`.
+
+### Reference fix
+`gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_freecam.lua` (commit 84f49bb): `_menu_open()` gate + `_pending_menu_close` deferral + apply()-owned feedback.
