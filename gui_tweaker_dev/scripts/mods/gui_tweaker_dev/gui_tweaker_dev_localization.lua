@@ -337,6 +337,12 @@ return {
     gut_mt_auto_collapse_tooltip = {
         en = "In the Mod Tweaker, keeps only one section open at a time, so opening a section closes the others at the same level. Turn off to expand sections independently (on by default).",
     },
+    gut_ckc_options_bridge = {
+        en = "[untested] Crosshair Kill Confirmation Options",
+    },
+    gut_ckc_options_bridge_tooltip = {
+        en = "When the Crosshair Kill Confirmation mod is installed, this replaces the vanilla Crosshair Kill Confirmation entry in the game's Options menu with a simple On / Off toggle for that mod, and forces the vanilla marker off (your previous choice is remembered and restored if you turn this off). It also adds a gear button next to that row that opens the Mod Tweaker on the Crosshair Kill Confirmation tab, where the mod's full options live. No effect if the mod is not installed. On by default.",
+    },
 
     -- ============================================================
     -- Loadout Manager -- issue #175 (modded-scoped store itself is implicit/always-on)

@@ -536,6 +536,13 @@ local options_data = {
                         default_value = true,
                         tooltip       = "gut_mt_auto_collapse_tooltip",
                     },
+                    {
+                        -- (#313) CKC options-menu bridge master toggle. Default on.
+                        setting_id    = "gut_ckc_options_bridge",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = "gut_ckc_options_bridge_tooltip",
+                    },
                 },
             },
         },

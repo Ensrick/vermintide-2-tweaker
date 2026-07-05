@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.192-dev"
+local MOD_VERSION = "0.2.193-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1965,6 +1965,49 @@ _rt_register("freecam_invariants", function()
     end
 end)
 
+-- (#313) Crosshair Kill Confirmation bridge regression tests. Split needles so the
+-- source-pattern checks can't self-match; unreadable source => silent skip (pass).
+_rt_register("ckc_modtweaker_whitelisted", function()
+    -- CKC must be whitelisted (BRACKETED key - the id has spaces) in ALL THREE _MY_MODS
+    -- tables so its options surface as a Mod Tweaker tab + config export.
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local needle = '["Crosshair Kill Confirmation"] = ' .. "true"
+    for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua", "_gut_config_file.lua" }) do
+        local txt = _gut_read_all(dir .. fn)
+        if txt and not txt:find(needle, 1, true) then
+            return "CKC (#313) missing from _MY_MODS in " .. fn
+        end
+    end
+end)
+
+_rt_register("ckc_bridge_module_wired", function()
+    -- The bridge module published its marker + API table at load (regardless of whether
+    -- the CKC mod itself is installed).
+    if mod._GUT_CKC_BRIDGE_MARKER ~= "gut-ckc-bridge-313" then
+        return "mod._GUT_CKC_BRIDGE_MARKER missing/wrong (bridge module not loaded)"
+    end
+    if type(mod._gut_ckc_bridge) ~= "table" then
+        return "mod._gut_ckc_bridge table missing"
+    end
+end)
+
+_rt_register("ckc_bridge_loc_keys", function()
+    -- The gut bridge checkbox loc key must exist in the raw loc file.
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local loc_txt = _gut_read_all(dir .. "gui_tweaker_dev_localization.lua")
+    if loc_txt and not loc_txt:find("gut_ckc_options" .. "_bridge", 1, true) then
+        return "gut_ckc_options_bridge missing from the loc table (#313)"
+    end
+end)
+
 -- UI Tweaks buff-bar end-time crash fix (absorbed): nil-guards
 -- PriorityBuffUI._add_buff so stacking buffs (e.g. Bardin OE pump stacks) stop
 -- spamming "attempt to compare nil with number" every frame. No-op if UI Tweaks
@@ -2194,6 +2237,16 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_options_probe")
 -- EXTENDED (open) dropdown option — ground-truth to confirm/correct the Mod Tweaker glow
 -- replication. Fires only on hover/open-state CHANGE (bounded). See _gut_glow_probe.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_glow_probe")
+
+-- (#313) Crosshair Kill Confirmation options-menu bridge. When the CKC mod
+-- ("Crosshair Kill Confirmation") is installed + togglable, takes over the vanilla
+-- crosshair_kill_confirm dropdown as an On/Off toggle for the mod, forces the vanilla
+-- marker off (remembering + restoring the prior group), and adds a gear that opens the
+-- Mod Tweaker on the CKC tab. Self-wires: chains on_all_mods_loaded + on_setting_changed
+-- at dofile time (this line is the ONLY main-file contribution). No-op when CKC is absent.
+-- Must dofile AFTER on_setting_changed (~632) + the on_all_mods_loaded chain (~2001), both
+-- well above here. See _gut_ckc_bridge.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_ckc_bridge")
 
 -- Dev probe (#123): capture how VMF actually does keybind REBINDING so we can later
 -- make the Mod Tweaker's read-only keybind rows settable. Hooks the three

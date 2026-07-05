@@ -5,6 +5,34 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.193-dev (2026-07-05) -- #313: Crosshair Kill Confirmation options-menu bridge [untested]
+
+New integration for the sanctioned Workshop mod "Crosshair Kill Confirmation" (CKC, by pixaal).
+Active only when CKC is installed and togglable and the new `gut_ckc_options_bridge` toggle is
+on (default on); a complete no-op otherwise (no hooks registered).
+
+- Whitelisted CKC (bracketed key `["Crosshair Kill Confirmation"]`, the id has spaces) into the
+  `_MY_MODS` tables of all three surfaces: `_mod_tweaker_view.lua`, `_mod_tweaker_state.lua`,
+  `_gut_config_file.lua` - so its 7 options surface as a Mod Tweaker tab and ride config export.
+  (These files plus `_gut_ckc_bridge.lua` itself landed early, riding commit 15ba7e4 while the
+  shared files were claimed by parallel work; this version adds the activation wiring.)
+- New module `_gut_ckc_bridge.lua`: takes over the vanilla `crosshair_kill_confirm` dropdown in
+  the game's Options menu. It becomes a 2-option On / Off toggle that LIVE-drives the CKC mod via
+  VMF `mod_state_changed` (parity with the VMF-menu checkbox, not staged through Apply). The
+  vanilla marker user_setting is forced "off" (CrosshairUI stops drawing it), remembering the
+  user's prior group and restoring it if the bridge toggle is turned off. A gear button is added
+  to the right of the row; clicking it opens the Mod Tweaker focused on the CKC tab.
+- Mod Tweaker one-shot tab focus (`_mod_tweaker_view.lua` `_apply_focus_request`): another
+  feature can set `mod._gut_mt_focus_request = <mod_id>` to open the Tweaker on that tab (page
+  flip aware). Consumed once, cleared whether or not the mod is found.
+- The bridge self-wires by chaining `on_all_mods_loaded` + `on_setting_changed` at dofile time;
+  the main file contributes only a single dofile line.
+- rt: `ckc_modtweaker_whitelisted`, `ckc_bridge_module_wired`, `ckc_bridge_loc_keys`.
+- VERIFY IN-GAME (with CKC installed, Workshop 1593460250): ESC -> Options -> Gameplay - the
+  "Crosshair Kill Confirmation" row shows On/Off and flipping it enables/disables the mod live;
+  the vanilla kill marker no longer draws; the gear opens the Mod Tweaker on the CKC tab.
+  Without CKC installed: the row behaves exactly like stock vanilla.
+
 ## 0.2.192-dev (2026-07-05) -- #307 fix Free Camera soft-lock when toggled from an open menu [verify-fix]
 
 User report (2026-07-05, running 0.2.189-dev, log 17.03.22-87719970): turning Free Camera on
