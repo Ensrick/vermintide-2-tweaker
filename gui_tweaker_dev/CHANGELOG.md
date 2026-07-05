@@ -5,6 +5,8 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.186-dev (2026-07-04) -- Ship #301 dev status-tag pass (rider on 0.2.185 #312 UI Tweaks work)
+
 ## 0.2.185-dev (2026-07-04) -- #312: UI Tweaks integration, phase 1
 
 Made the standalone Workshop mod "UI Tweaks" (internal id `HideBuffs`) a first-class
