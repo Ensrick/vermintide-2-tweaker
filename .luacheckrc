@@ -47,7 +47,8 @@ read_globals = {
     "AssetLoader",
     "Gui",
     "Camera",
-    "Viewport",
+    "Viewport", "ScriptViewport", "ScriptCamera",
+    "WwiseWorld", "TerrainDecoration", "ScatterSystem",   -- free-flight camera driver (#307)
     "ShadingEnvironment",
     "Boot",
     "Development",

@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.188-dev"
+local MOD_VERSION = "0.2.189-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1905,6 +1905,44 @@ _rt_register("vanilla_numeric_mirror_wired", function()
         return "on_setting_changed missing the numeric_ui vanilla mirror write (#312)"
     end
 end)
+_rt_register("freecam_invariants", function()
+    -- Free Camera (#307) load-bearing invariants, source-pattern checked so the two
+    -- prior-attempt failure classes can't regress silently. Resolve the module path
+    -- from the main file's source dir (same idiom as the mirror-wired check above).
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    -- Wiring must be live regardless of source availability.
+    if type(mod._gut_apply_freecam) ~= "function" then return "mod._gut_apply_freecam not wired" end
+    if type(mod.gut_freecam_toggle) ~= "function" then return "mod.gut_freecam_toggle not wired" end
+    local data_txt = _gut_read_all(dir .. "gui_tweaker_dev_data.lua")
+    if data_txt and not data_txt:find("gut_freecam_enabled", 1, true) then
+        return "gut_freecam_enabled missing from data tree"
+    end
+    local fc = _gut_read_all(dir .. "_gut_freecam.lua")
+    if not fc then return end   -- source not shipped in bundle; wiring checks above still ran
+    -- INVARIANT 1: never call set_disabled (the nil-run_func crash class that killed
+    -- the old gt attempt). Match the call form, not the word in comments.
+    if fc:find("set_disabled%s*%(") or fc:find(":set_disabled") then
+        return "freecam calls set_disabled -- the locomotion-freeze crash class (#307 must never reintroduce)"
+    end
+    -- INVARIANT 2: the anti-bleed hook is present (the fix the old attempt lacked).
+    if not fc:find("is_input_blocked", 1, true) then
+        return "freecam missing the PlayerInputExtension.is_input_blocked anti-bleed hook"
+    end
+    -- INVARIANT 3: exit is a RAW keyboard poll (input is blocked to all services).
+    if not fc:find("Keyboard.button", 1, true) then
+        return "freecam missing the raw Keyboard exit poll (chat/keybinds can't reach the user while active)"
+    end
+    -- INVARIANT 4: the disable_free_flight gate is NOT lifted (keeps the vanilla
+    -- F8/F9/drop-player dispatcher from running and misfiring).
+    if fc:find("disable_free_flight%s*=%s*false") then
+        return "freecam lifts disable_free_flight -- exposes the vanilla free-flight key dispatch (#307 keeps the gate up)"
+    end
+end)
+
 -- UI Tweaks buff-bar end-time crash fix (absorbed): nil-guards
 -- PriorityBuffUI._add_buff so stacking buffs (e.g. Bardin OE pump stacks) stop
 -- spamming "attempt to compare nil with number" every frame. No-op if UI Tweaks
@@ -2051,6 +2089,16 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mainmenu")
 -- mod.on_setting_changed / mod.on_game_state_changed / mod.on_disabled. Dropped gt's
 -- godmode/noclip post-spawn-reapply trigger (gut has neither). See _gut_camera.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_camera")
+
+-- Free Camera (#307): detached fly-cam via the engine FreeFlightManager (NOT the
+-- rig-offset 3P camera above). Character stops responding to input and stays put;
+-- WASD/mouse/E/Q fly the detached camera, F8 exits. Deliberately does NOT lift the
+-- disable_free_flight gate (so the vanilla F8/F9/drop-player dispatcher never runs)
+-- and never calls loco:set_disabled (the crash class that killed the old gt attempt).
+-- Hooks PlayerInputExtension.is_input_blocked + FreeFlightManager._exit_free_flight
+-- (preflight: no other gut hook on either). Must dofile AFTER _gut_camera so it
+-- chains mod.update / on_setting_changed / on_game_state_changed. See _gut_freecam.lua.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_freecam")
 
 -- Skip Cutscenes (MIGRATED from general_tweaker 2026-06-25, issue #106): hooks
 -- CutsceneSystem.flow_cb_cutscene_effect / flow_cb_activate_cutscene_logic /

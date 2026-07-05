@@ -1,5 +1,17 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.363-dev — 2026-07-05 — Fix compile failure: `main function has more than 200 local variables` (#284)
+
+**Symptom:** cwv stopped compiling with the Stingray error `main function has more than 200 local variables` at `character_weapon_variants.lua:10203`. Because `ship.ps1`'s GitHub-release stage (`publish-release.ps1`) rebuilds every mod, this broke the release stage of *every other mod's* ship even when that mod built/deployed/uploaded fine.
+
+**Root cause:** the top-level chunk crossed Lua 5.1's hard limit of 200 simultaneously-active local variables (`LUAI_MAXVARS`; the cited line is the 201st local, not the fault site). cwv declares 219 top-level locals.
+
+**Fix (no behavior change):** wrapped seven self-contained weapon-template blocks in `do ... end` so their private locals release from the top-level chunk instead of staying active for the whole file. Each block is a `[private constants + local helper(s) + _create_X_template() + immediate call]` unit that is defined and called once and never referenced afterward, so wrapping is purely a lexical-scoping change:
+
+- elven sword & shield, imperial dual swords, cudgel, sword & mace, shortsword, maul, poleaxe.
+
+This moves ~30 locals out of the top-level active set (219 → ~189), back under the 200 cap. The shared `_clone_damage_profile` helper stays top-level (it is used by many templates); wrapped blocks reference it as an upvalue. Verified: no wrapped constant or create-function is referenced outside its block (all external mentions are comments).
+
 ## 0.1.362-dev — 2026-07-04 — Fix Axe & Falchion on Kruber: 4th light attack had no proper animation (#319)
 
 **Symptom:** the 4th light of the Axe & Falchion combo on Kruber played no distinct animation (repeat of the 3rd swing at best, body freeze at worst).

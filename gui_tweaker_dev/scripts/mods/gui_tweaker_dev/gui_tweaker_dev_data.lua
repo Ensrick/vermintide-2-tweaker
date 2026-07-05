@@ -101,6 +101,25 @@ local options_data = {
                         default_value = false,
                         tooltip       = "gut_tp_disable_zoom_in_tooltip",
                     },
+                    -- Free Camera (#307): detached fly-cam. Separate mechanism from
+                    -- the 3P camera above (engine FreeFlightManager, not a rig-offset
+                    -- patch). EXIT is F8 (input is blocked to everything else while
+                    -- active). See _gut_freecam.lua.
+                    {
+                        setting_id    = "gut_freecam_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gut_freecam_enabled_tooltip",
+                    },
+                    {
+                        setting_id      = "gut_freecam_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gut_freecam_toggle",
+                        default_value   = {},
+                        tooltip         = "gut_freecam_hotkey_tooltip",
+                    },
                 },
             },
             -- ================================================================

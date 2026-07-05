@@ -48,6 +48,18 @@ return {
     gut_tp_disable_zoom_in_tooltip = {
         en = "When on, aiming or throwing no longer pulls the third-person camera in close, so it stays at your chosen distance and height. Useful for watching weapon animations.",
     },
+    gut_freecam_enabled = {
+        en = "[untested] [Issue 307] Free Camera",
+    },
+    gut_freecam_enabled_tooltip = {
+        en = "Detaches the camera so you can fly around and view the level. Your character stops responding to input and stays put. Controls: WASD to move, mouse to look, E and Q for up and down, mouse wheel to change speed. Press F8 to exit (while active, the camera has all input, so the menu, chat and other keys will not respond until you press F8). Also toggled with the /freecam chat command.",
+    },
+    gut_freecam_hotkey = {
+        en = "[untested] [Issue 307] Free Camera (Hotkey)",
+    },
+    gut_freecam_hotkey_tooltip = {
+        en = "Hotkey to turn the Free Camera on. Same as the /freecam chat command. To turn it off, press F8 (input is blocked to everything except the camera while it is active).",
+    },
 
     -- ============================================================
     -- Cutscenes & Monologues (migrated from general_tweaker 2026-06-25, #106;

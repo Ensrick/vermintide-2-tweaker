@@ -5,6 +5,54 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.189-dev (2026-07-05) -- #307: Free Camera (detached fly-cam) [untested]
+
+New feature under the 3rd-Person Camera group: a detached free camera to pan around and
+view the level. The character stops responding to input and stays put; WASD moves, mouse
+looks, E/Q go up/down, the mouse wheel changes speed. Toggle on with the checkbox, the
+`gut_freecam_hotkey` keybind, or `/freecam`; **exit with F8**.
+
+- **New `_gut_freecam.lua`.** Drives the engine's own `FreeFlightManager`:
+  `_enter_free_flight` creates an overlay viewport and renders from a detached camera while
+  the player unit keeps simulating (`free_flight_manager.lua:584-617`); `_exit_free_flight`
+  tears it down (:619-645). The per-frame camera motion is a trimmed faithful copy of vanilla
+  `_update_free_flight` (:655-717, move/look/speed only) driven from `mod.update` -- it OMITS
+  the vanilla drop-player-at-camera (Enter), DOF and raycast keys (:719+) so the camera is
+  view-only. Sets `Development._hardcoded_dev_params.third_person_mode = true` on enter so the
+  local body renders (a detached cam sees nothing otherwise).
+- **Avoids both prior-attempt failure classes.** The gt_dev Free Camera removed at
+  gt v0.2.113-dev failed two ways this design structurally prevents:
+  1. *WASD bled through to the character.* Fixed with a `PlayerInputExtension.is_input_blocked
+     -> true` hook for the local player (the block the old attempt lacked;
+     `player_input_extension.lua:149` nullifies every input the character reads).
+  2. *`loco:set_disabled(nil run_func)` crashed a frame later* in the engine's
+     `update_disabled_units` loop (`locomotion_templates_player.lua:323`, no nil-check). This
+     port **never touches locomotion** -- that crash class cannot occur.
+- **Gate stays up.** We do NOT lift `GameSettingsDevelopment.disable_free_flight`; that gate
+  is checked only inside `FreeFlightManager.update` (`free_flight_manager.lua:64`), the vanilla
+  dispatcher that reads F8/F9/F10 and the Enter=drop-player key. Leaving it up means that
+  dispatcher never runs, so none of those keys misfire; we drive the camera ourselves.
+- **Exit is a raw keyboard poll.** Because `_enter_free_flight` routes all input to the
+  FreeFlight service (`block_device_except_service`, :610-612), chat, VMF keybinds and the ESC
+  menu can't reach the user while active -- so F8 is read via raw `Keyboard.button` (hardware,
+  bypassing service routing), the same technique Photo Mode uses.
+- **Transition safety net** (a gap the Photo Mode mod itself has): a world teardown mid-freecam
+  routes to the engine's `_clear_free_flight` (NOT `_exit_free_flight`), so our exit never runs
+  and input would stay blocked into the next state. `on_game_state_changed` force-resets the
+  active flag; the `mod.update` tick also self-heals if the player/world vanishes underneath it;
+  and a `hook_safe` on `_exit_free_flight` syncs the flag + checkbox if the engine exits for any
+  reason we didn't drive.
+- **Hooks** (pre-flight verified disjoint from the rest of gut): `PlayerInputExtension.is_input_blocked`,
+  `FreeFlightManager._exit_free_flight`. Chains `mod.update` / `on_setting_changed` /
+  `on_game_state_changed` (capture-prev / call-prev-first).
+- **Regression test** `freecam_invariants` (`/regression_test`): asserts the wiring is live and
+  source-pattern-checks the four load-bearing invariants -- no `set_disabled` call, the
+  `is_input_blocked` hook present, the raw `Keyboard.button` exit poll present, and the
+  `disable_free_flight` gate NOT lifted.
+- **[untested]** -- structurally complete and compiles; needs in-game confirmation (enter shows a
+  detached cam with the body visible, WASD/mouse fly it, character doesn't move, F8 exits
+  cleanly, and a level transition mid-freecam leaves input working).
+
 ## 0.2.188-dev (2026-07-04) -- #305: In-mission mission map (keep "M" map mid-mission)
 
 New feature: open the mission-selection view (the keep's "M" map) during a mission.

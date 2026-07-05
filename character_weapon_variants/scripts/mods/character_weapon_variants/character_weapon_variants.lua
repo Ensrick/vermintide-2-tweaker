@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.362-dev"
+local MOD_VERSION = "0.1.363-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -1745,6 +1745,7 @@ _create_imperial_longsword_shield_template()
 -- ANIMATION ARCHITECTURE.
 -- ============================================================
 
+do  -- #284: scope elven-sword-shield template locals off the top-level chunk (>200-local limit)
 local _ESS_SPEED_MULT   = 1.15
 local _ESS_STAGGER_MULT = 0.85
 
@@ -1831,6 +1832,7 @@ local function _create_elven_sword_shield_template()
 end
 
 _create_elven_sword_shield_template()
+end  -- #284: end elven-sword-shield do-block
 
 -- ============================================================
 -- Imperial Dual Swords template (modified dual_wield_swords_template_1)
@@ -1842,6 +1844,7 @@ _create_elven_sword_shield_template()
 -- ANIMATION ARCHITECTURE.
 -- ============================================================
 
+do  -- #284: scope imperial-dual-swords template locals off the top-level chunk (>200-local limit)
 local _IDS_SPEED_MULT = 0.80
 local _IDS_POWER_MULT = 1.15
 
@@ -1961,6 +1964,7 @@ local function _create_imperial_dual_swords_template()
 end
 
 _create_imperial_dual_swords_template()
+end  -- #284: end imperial-dual-swords do-block
 
 -- ============================================================
 -- Cudgel template (one_hand_falchion_template_1 — recoloured to blunt)
@@ -1986,6 +1990,7 @@ _create_imperial_dual_swords_template()
 -- swoosh/impact → blunt_hit (and _armour). display_unit and block-arc
 -- sound also swapped so the inventory rig and parry foley match a
 -- mace, not a falchion.
+do  -- #284: scope cudgel template locals off the top-level chunk (>200-local limit)
 local _CUDGEL_DAMAGE_PROFILE_SWAP = {
 	light_slashing_axe_linesman       = "light_blunt_tank_diag",
 	light_slashing_axe_linesman_upper = "light_blunt_tank_upper",
@@ -2054,6 +2059,7 @@ local function _create_cudgel_template()
 end
 
 _create_cudgel_template()
+end  -- #284: end cudgel do-block
 
 -- ============================================================
 -- Sword and Mace template — INVERSE of dual_wield_hammer_sword
@@ -2082,6 +2088,7 @@ _create_cudgel_template()
 -- ============================================================
 
 -- Right-hand strike fields (was mace=blunt → sword=slashing).
+do  -- #284: scope sword-and-mace template locals off the top-level chunk (>200-local limit)
 local _SAM_RIGHT_HAND_SWAP = {
 	damage_profile = {
 		light_blunt_tank_diag = "light_slashing_linesman",
@@ -2197,6 +2204,7 @@ local function _create_sword_and_mace_template()
 end
 
 _create_sword_and_mace_template()
+end  -- #284: end sword-and-mace do-block
 
 -- ============================================================
 -- Shortsword template (modified one_handed_daggers_template_1)
@@ -2210,6 +2218,7 @@ _create_sword_and_mace_template()
 -- anim work needed. 1P universal across characters.
 -- ============================================================
 
+do  -- #284: scope shortsword template locals off the top-level chunk (>200-local limit)
 local _SHORTSWORD_SPEED_MULT = 0.92
 local _SHORTSWORD_POWER_MULT = 1.15
 
@@ -2310,6 +2319,7 @@ local function _create_shortsword_template()
 end
 
 _create_shortsword_template()
+end  -- #284: end shortsword do-block
 
 -- ============================================================
 -- Maul template (modified one_handed_hammer_wizard_template_1)
@@ -2332,6 +2342,7 @@ _create_shortsword_template()
 -- light_blunt_smiter, medium_blunt_tank_upper_1h, medium_push, light_push)
 -- are clean. FX/sound fields already non-fire (melee_hit_hammers_1h /
 -- blunt_hit / blunt_hit_armour) — no FX swap pass needed.
+do  -- #284: scope maul template locals off the top-level chunk (>200-local limit)
 local _MAUL_DAMAGE_PROFILE_SWAP = {
 	medium_blunt_smiter_heavy = "medium_blunt_smiter_2h_hammer",
 }
@@ -2462,6 +2473,7 @@ local function _create_maul_template()
 end
 
 _create_maul_template()
+end  -- #284: end maul do-block
 
 -- ============================================================
 -- Poleaxe template (modified two_handed_axes_template_1)
@@ -2482,6 +2494,7 @@ _create_maul_template()
 -- ARCHITECTURE.
 -- ============================================================
 
+do  -- #284: scope poleaxe template locals off the top-level chunk (>200-local limit)
 local _POLEAXE_SPEED_MULT = 1.20
 local _POLEAXE_POWER_MULT = 0.85
 
@@ -2542,6 +2555,7 @@ local function _create_poleaxe_template()
 end
 
 _create_poleaxe_template()
+end  -- #284: end poleaxe do-block
 
 -- ============================================================
 -- Outrider Grenade Launcher template (modified dr_deus_01_template_1)
