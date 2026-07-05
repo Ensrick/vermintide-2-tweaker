@@ -157,6 +157,18 @@ local options_data = {
                         default_value   = {},
                         tooltip         = "gut_hud_cycle_hotkey_tooltip",
                     },
+                    -- HUD edit-mode keybind (#310): enter/exit the click-drag HUD
+                    -- customizer without the /edit_hud chat command. function_name
+                    -- resolves to mod.gut_edit_hud_toggle (gui_tweaker_dev.lua).
+                    {
+                        setting_id      = "gut_edit_hud_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gut_edit_hud_toggle",
+                        default_value   = {},
+                        tooltip         = "gut_edit_hud_hotkey_tooltip",
+                    },
                     -- (b/c/d) UI Tweaks (HideBuffs) absorbed. Setting ids kept
                     -- verbatim from HideBuffs so the forked hb/ hooks resolve.
                     {
@@ -211,36 +223,40 @@ local options_data = {
                                     { setting_id = "UNOBTRUSIVE_MISSION_TOOLTIP",    type = "checkbox", default_value = false, tooltip = "UNOBTRUSIVE_MISSION_TOOLTIP_tooltip" },
                                 },
                             },
-                        },
-                    },
-                    -- UI Tweaks Integration (#312). gut_uitweaks_sync: when UI Tweaks
-                    -- (HideBuffs) is installed + enabled, the HUD drag editor writes UI
-                    -- Tweaks' offsets for the buff/boss/overcharge/energy bars instead of
-                    -- gut's own, so the two never stack (see _gut_uitweaks_sync.lua).
-                    -- The two vanilla mirrors reflect the base game's Gameplay > HUD
-                    -- Customization numeric options into gut's menu (write-through in
-                    -- on_setting_changed; seeded from the engine at on_all_mods_loaded).
-                    {
-                        setting_id  = "gut_uitweaks_integration_group",
-                        type        = "group",
-                        sub_widgets = {
+                            -- (e) UI Tweaks Integration (#312), now nested INSIDE the
+                            -- UI Tweaks group per user direction: all UI Tweaks options
+                            -- live under one "UI Tweaks" heading (hb_group relabelled
+                            -- "UI Tweaks" in localization). gut_uitweaks_sync: when the
+                            -- standalone UI Tweaks (HideBuffs) mod is installed + enabled,
+                            -- the HUD drag editor writes ITS offsets for the
+                            -- buff/boss/overcharge/energy bars so the two never stack
+                            -- (see _gut_uitweaks_sync.lua). The two vanilla mirrors
+                            -- reflect the base game's Gameplay > HUD Customization
+                            -- numeric options into gut's menu (write-through in
+                            -- on_setting_changed; seeded from the engine at load).
                             {
-                                setting_id    = "gut_uitweaks_sync",
-                                type          = "checkbox",
-                                default_value = true,
-                                tooltip       = "gut_uitweaks_sync_tooltip",
-                            },
-                            {
-                                setting_id    = "gut_vanilla_numeric_ui",
-                                type          = "checkbox",
-                                default_value = false,
-                                tooltip       = "gut_vanilla_numeric_ui_tooltip",
-                            },
-                            {
-                                setting_id    = "gut_vanilla_persistent_ammo",
-                                type          = "checkbox",
-                                default_value = false,
-                                tooltip       = "gut_vanilla_persistent_ammo_tooltip",
+                                setting_id  = "gut_uitweaks_integration_group",
+                                type        = "group",
+                                sub_widgets = {
+                                    {
+                                        setting_id    = "gut_uitweaks_sync",
+                                        type          = "checkbox",
+                                        default_value = true,
+                                        tooltip       = "gut_uitweaks_sync_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gut_vanilla_numeric_ui",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gut_vanilla_numeric_ui_tooltip",
+                                    },
+                                    {
+                                        setting_id    = "gut_vanilla_persistent_ammo",
+                                        type          = "checkbox",
+                                        default_value = false,
+                                        tooltip       = "gut_vanilla_persistent_ammo_tooltip",
+                                    },
+                                },
                             },
                         },
                     },

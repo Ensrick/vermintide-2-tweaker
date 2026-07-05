@@ -32,6 +32,7 @@ local _MY_MODS = {
     character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
     verminious_dreams_lighting = true, verminious_dreams_lighting_dev = true,
     HideBuffs = true,  -- UI Tweaks (#312): HUD layout lives in its settings now
+    ["Crosshair Kill Confirmation"] = true,  -- Crosshair Kill Confirmation (#313)
 }
 
 local CONFIG_NAME = "gut_mod_settings.toml"

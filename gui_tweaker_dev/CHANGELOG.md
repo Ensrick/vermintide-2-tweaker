@@ -5,6 +5,40 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.191-dev (2026-07-05) -- #312 UI Tweaks menu fix + #310 HUD edit-mode keybind [verify-fix]
+
+Fixes a #312 misread the user caught: UI Tweaks had been surfaced as its OWN separate tab in the Mod Tweaker menu (by whitelisting the stock `HideBuffs` mod), when the assignment ("interface with UI Tweaks... from within GUT's own menu, to the extent features overlap") wanted the options in GUT's own menu. Also adds the HUD edit-mode keybind #310 asked for (previously edit mode was reachable ONLY via the `/edit_hud` chat command, so there was no key to bind).
+
+- **UI Tweaks now lives in ONE group in GUT's own menu.** The absorbed HideBuffs tree (`hb_group`) is relabelled "Hide UI Elements & Buffs" -> **"UI Tweaks"**, and the former standalone "UI Tweaks Integration" group (sync toggle + the two vanilla numeric mirrors) is now **nested inside it** as a "Sync & Vanilla Mirrors" subgroup. So all UI Tweaks options sit under one "UI Tweaks" heading in the HUD category. No setting_ids changed (persistence + fork hooks intact).
+- **Removed the separate UI Tweaks tab from the Mod Tweaker.** `HideBuffs` de-whitelisted from `_MY_MODS` in `_mod_tweaker_view.lua` and `_mod_tweaker_state.lua`, so it no longer appears as its own tab in the in-game Mod Tweaker mod-list. (Left in `_gut_config_file.lua`'s export whitelist so HUD-layout snapshots still carry UI Tweaks settings.) The regression test `uitweaks_modtweaker_whitelisted` is inverted to `uitweaks_not_separate_modtweaker_tab` (now fails if HideBuffs is re-whitelisted).
+- **HUD edit-mode keybind (#310):** new `gut_edit_hud_hotkey` keybind widget in the HUD category, wired to `mod.gut_edit_hud_toggle` (extracted from the `/edit_hud` command body; both now call it). Bind a key to enter/exit the click-drag HUD customizer. NOTE: #310 also asks for element **resize** (corner-drag, 15-300%), which is still NOT built -- only move exists. #310 stays open for resize.
+
+## 0.2.190-dev (2026-07-05) -- #336: fix mid-mission map CTD (keep backdrop not resident) [verify-fix]
+
+- FIX (#336, 0-critical CTD): opening the in-mission mission map (#305) crashed to desktop
+  the moment the play screen entered. StartGameWindowBackgroundConsole's viewport def mounts
+  `levels/ui_keep_menu/world` and calls `LevelResource.object_set_names` on it at def-BUILD
+  time (`start_game_window_background_console.lua:56/66`); that level resource is resident
+  only in the hub, so mid-mission the engine raised "Level not loaded" - fatal, bypasses
+  pcall. Crash log `console-2026-07-05-16.49.12-44a6c78a...`, 17:01:57.032, skittergate,
+  gut_dev v0.2.188-dev. The #305 docstring wrongly asserted StartGameView mounts no
+  keep-only world - true for the view, not for its windows.
+- Fix (hero-select recipe, `_gut_mission_map.lua`): `Application.can_get("level", ...)`
+  pre-filter with the resident-level self-test; when `ui_keep_menu` is not gettable, a
+  singleton `mod:hook` on `_create_viewport_definition` returns the vanilla def shape
+  mounted on the mission-safe `levels/ui_inventory_preview/world` (+ its object sets); a
+  second singleton hook diverts `_update_object_sets` on swapped instances (keep-only
+  object sets / flow events like `quick_play` don't exist on the preview stage;
+  `Level.trigger_event` on a missing event is an engine-assert risk,
+  `menu_world_previewer.lua:769-770`). `gut_open_mission_map` now fails CLOSED (echo, no
+  transition) when neither backdrop level is positively gettable. Keep flow stays
+  byte-for-byte vanilla.
+- Loc: mission-map option titles re-tagged `[verify-fix] [crash] [Issue 336]` /
+  `[untested] [Issue 336]` per LOCALIZATION_STANDARD s13.4.
+- rt: new `mission_map_backdrop_swap` check (helper wired + both hook targets still exist).
+- VERIFY IN-GAME: in an Adventure mission press M (or `/map`) - the map opens over the
+  inventory-preview backdrop; pick a mission or ESC back into the run - no crash.
+
 ## 0.2.189-dev (2026-07-05) -- #307: Free Camera (detached fly-cam) [untested]
 
 New feature under the 3rd-Person Camera group: a detached free camera to pan around and

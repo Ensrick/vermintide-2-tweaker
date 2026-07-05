@@ -121,6 +121,14 @@ return {
     gut_hud_cycle_hotkey_tooltip = {
         en = "Hotkey to cycle the HUD mode through Off, Partial, Complete and Camera. Same as the /hud chat command.",
     },
+    -- HUD edit-mode keybind (#310): bind a key to enter/exit the click-drag HUD
+    -- customizer. Same as the /edit_hud chat command.
+    gut_edit_hud_hotkey = {
+        en = "[untested] Enter HUD Edit Mode",
+    },
+    gut_edit_hud_hotkey_tooltip = {
+        en = "Hotkey to enter or exit HUD edit mode, where you click and drag HUD elements to reposition them. Same as the /edit_hud chat command.",
+    },
     -- Retained: gut_hud_visibility_group was the standalone "Hide UI" container.
     -- Its members (dropdown + cycle hotkey) now sit directly under
     -- gut_hide_hud_ui_group, so this label is no longer referenced by a widget.
@@ -129,9 +137,12 @@ return {
         en = "Hide UI",
     },
 
-    -- UI Tweaks Integration (#312): drag-editor write-through to the standalone UI
-    -- Tweaks mod + two vanilla HUD-numeric mirrors.
-    gut_uitweaks_integration_group = { en = "[untested] UI Tweaks Integration" },
+    -- Sync + vanilla-mirror subgroup, now nested UNDER the "UI Tweaks" group
+    -- (hb_group) per user direction, so all UI Tweaks options share one heading.
+    -- Renamed from "UI Tweaks Integration" (the parent is already "UI Tweaks", so
+    -- an "integration" sub-label would be redundant): drag-editor write-through to
+    -- the standalone UI Tweaks mod + two vanilla HUD-numeric mirrors.
+    gut_uitweaks_integration_group = { en = "[untested] Sync & Vanilla Mirrors" },
     gut_uitweaks_sync              = { en = "[untested] UI Tweaks Owns HUD Elements" },
     gut_uitweaks_sync_tooltip      = { en = "With UI Tweaks (HideBuffs) installed, the HUD editor moves the buff, boss health, overcharge, and energy bars through UI Tweaks so the two never conflict. Requires UI Tweaks." },
     gut_vanilla_numeric_ui         = { en = "[untested] Numeric Health, Ammo, Cooldown" },
@@ -139,9 +150,11 @@ return {
     gut_vanilla_persistent_ammo         = { en = "[untested] Always Show Ammo Counter" },
     gut_vanilla_persistent_ammo_tooltip = { en = "Mirrors the vanilla Gameplay > HUD Customization option. Keeps your own ammo counter always visible. Requires a game restart." },
 
-    -- UI Tweaks (HideBuffs) absorbed. Label de-jargoned from "UI Tweaks
-    -- (absorbed)"; setting_id (hb_group) unchanged so the fork hooks resolve.
-    hb_group               = { en = "[Issue 281] Hide UI Elements & Buffs" },
+    -- Renamed to "UI Tweaks" (was "Hide UI Elements & Buffs"): this group is now
+    -- the SINGLE home for all UI Tweaks options (the absorbed HideBuffs tree plus
+    -- the #312 "Sync & Vanilla Mirrors" subgroup nested under it). setting_id
+    -- (hb_group) unchanged so the fork hooks resolve. #281 tag = the hb/ load bug.
+    hb_group               = { en = "[Issue 281] UI Tweaks" },
     HIDE_UI_ELEMENTS_GROUP = { en = "[working] Hide UI Elements" },
     HIDE_BUFFS_GROUP       = { en = "[working] Hide Active Buffs" },
 
@@ -269,19 +282,19 @@ return {
     -- In-Mission Mission Map (#305)
     -- ============================================================
     gut_mission_map = {
-        en = "[untested] In-Mission Mission Map",
+        en = "[verify-fix] [crash] [Issue 336] In-Mission Mission Map",
     },
     gut_mission_map_tooltip = {
         en = "Opens the mission-selection map during a mission, the same screen the keep's M key shows. Use the keybind below (default M) or /map. Adventure only: it stays closed in Chaos Wastes and Versus. Off by default.",
     },
     gut_mission_map_hotkey = {
-        en = "[untested] Open Mission Map (Mid-Mission)",
+        en = "[untested] [Issue 336] Open Mission Map (Mid-Mission)",
     },
     gut_mission_map_hotkey_tooltip = {
         en = "Hotkey to open the mission-selection map while in a mission; default M, same as /map. In the keep the game's own M key already does this, so the hotkey stays quiet there.",
     },
     gut_mission_map_host_only = {
-        en = "[untested] Mission map is host only",
+        en = "[untested] [Issue 336] Mission map is host only",
     },
     gut_mission_map_host_only_tooltip = {
         en = "When on, only the party host can open the mission map mid-mission; everyone else gets a short message instead. Off by default, so any player can open it to look around.",

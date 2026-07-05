@@ -159,7 +159,10 @@ local _MY_MODS = {
     cim = true, cim_dev = true, crt = true, cosmetics_tweaker = true,
     dynamic_cosmetic_portraits = true, enemy_tweaker = true,
     character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
-    HideBuffs = true,  -- UI Tweaks (#312): surface its options as a Mod Tweaker tab
+    -- HideBuffs deliberately NOT whitelisted (#312): UI Tweaks options live in
+    -- gut's OWN menu under the "UI Tweaks" group (gut_hide_hud_ui_group), not as a
+    -- separate Mod Tweaker tab. Re-adding it would resurrect the duplicate tab.
+    ["Crosshair Kill Confirmation"] = true,  -- Crosshair Kill Confirmation (#313)
 }
 
 local function _nf(node, key)  -- defensive node-field read
@@ -1406,10 +1409,47 @@ function ModTweakerView:_rebuild()
 
     self:_build_rows(self._categories[self._selected])
 
+    -- (#313) One-shot tab focus: if another feature (e.g. the CKC options gear button)
+    -- asked the Mod Tweaker to open on a specific mod's tab, honor it now. May re-slice
+    -- to another page; the request is cleared inside before any re-entry so _rebuild
+    -- can't recurse into focus.
+    self:_apply_focus_request()
+
     -- (Fix 5, v0.2.149-dev) The bottom hint text was removed (native Options has no hint).
 
     mod:debug("[mt] rebuild: total=%d page=%d/%d displayed=%d selected=%d rows=%d",
         total, self._page + 1, self._page_count, #self._categories, self._selected, #self._rows)
+end
+
+-- (#313) Consume mod._gut_mt_focus_request (a mod_id string). Locate that mod in the
+-- FULL pre-pagination category list, flip to its page if the strip paginates, and
+-- select its tab. One-shot: cleared whether or not the mod was found, so a stale
+-- request never sticks. A cross-page jump re-runs _rebuild ONCE (request already
+-- cleared -> no recursion). No-op when nothing requested.
+function ModTweakerView:_apply_focus_request()
+    local req = mod._gut_mt_focus_request
+    if not req then return end
+    local cats = self._all_categories
+    if type(cats) ~= "table" then mod._gut_mt_focus_request = nil; return end
+    local full_idx
+    for i = 1, #cats do
+        if cats[i] and cats[i].mod_id == req then full_idx = i; break end
+    end
+    if not full_idx then mod._gut_mt_focus_request = nil; return end  -- mod not present/whitelisted: drop it
+    local paged = (self._page_count or 1) > 1
+    local per_page = paged and (MAX_TABS - 1) or #cats
+    if per_page < 1 then per_page = 1 end
+    local target_page = math.floor((full_idx - 1) / per_page)
+    local local_idx = full_idx - target_page * per_page
+    mod._gut_mt_focus_request = nil  -- consume BEFORE any re-entry
+    if paged and target_page ~= (self._page or 0) then
+        self._page = target_page
+        self._selected = local_idx
+        self:_rebuild()  -- re-slice to the target page (request already cleared)
+        return
+    end
+    self._selected = math.clamp(local_idx, 1, math.max(1, #self._categories))
+    self:_build_rows(self._categories[self._selected])
 end
 
 -- ---------------------------------------------------------------

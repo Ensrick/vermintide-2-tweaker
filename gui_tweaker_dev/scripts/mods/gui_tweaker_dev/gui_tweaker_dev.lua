@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.189-dev"
+local MOD_VERSION = "0.2.191-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -120,6 +120,17 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg_alert raised" end
 end)
 
+
+_rt_register("mission_map_backdrop_swap", function()
+    -- (#336) Mid-mission map CTD guard: the can_get trust-protocol helper must be
+    -- wired and the vanilla window must still expose both hooked methods (a vanilla
+    -- rename would silently orphan the swap and re-expose the crash).
+    if type(mod._gut_mm_can_get_level) ~= "function" then return "_gut_mm_can_get_level missing" end
+    local w = rawget(_G, "StartGameWindowBackgroundConsole")
+    if type(w) ~= "table" then return "StartGameWindowBackgroundConsole class missing" end
+    if type(w._create_viewport_definition) ~= "function" then return "_create_viewport_definition missing" end
+    if type(w._update_object_sets) ~= "function" then return "_update_object_sets missing" end
+end)
 
 _rt_register("arrow_hover_native_size", function()
     -- (#92/#99) The arrow hover/glow overlay must be the BIGGER native sprite (30x35), NOT the
@@ -692,7 +703,12 @@ mod:hook_safe("IngameHud", "post_update", function(self, dt, t)
     end
 end)
 
-mod:command("edit_hud", "Toggle HUD edit mode (click-drag widgets to reposition)", function()
+-- HUD edit-mode toggle (#310). Shared by BOTH the /edit_hud command AND the
+-- gut_edit_hud_hotkey keybind. VMF keybinds with keybind_type="function_call"
+-- resolve function_name to mod.<name>, so this MUST be a field on `mod` (same
+-- pattern as mod.gut_hud_cycle in _hide_ui.lua). Previously edit mode was only
+-- reachable via /edit_hud, so there was no bindable key -- the gap the user hit.
+mod.gut_edit_hud_toggle = function()
     local enabled = not (Customizer.is_edit_mode() and true or false)
     -- We only flip the sticky bit; the alt-gesture path stays independent.
     Customizer.set_sticky(enabled)
@@ -701,6 +717,10 @@ mod:command("edit_hud", "Toggle HUD edit mode (click-drag widgets to reposition)
     else
         mod:echo("Edit mode: OFF.")
     end
+end
+
+mod:command("edit_hud", "Toggle HUD edit mode (click-drag widgets to reposition)", function()
+    mod.gut_edit_hud_toggle()
 end)
 
 mod:command("reset_hud", "Reset HUD widget(s) to vanilla position. Usage: /reset_hud [widget_id]", function(arg)
@@ -1842,9 +1862,11 @@ local function _gut_read_all(path)
     return t
 end
 
-_rt_register("uitweaks_modtweaker_whitelisted", function()
-    -- HideBuffs must be in the _MY_MODS whitelist of BOTH the Mod Tweaker view and
-    -- state modules, so the "UI Tweaks" tab surfaces its options.
+_rt_register("uitweaks_not_separate_modtweaker_tab", function()
+    -- #312 (reworked per user): HideBuffs must NOT be in the _MY_MODS whitelist.
+    -- UI Tweaks options live in gut's OWN menu under the single "UI Tweaks" group
+    -- (hb_group), not as a separate Mod Tweaker tab. A re-add resurrects the
+    -- duplicate tab the user flagged, so this now guards AGAINST the whitelist.
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
@@ -1853,8 +1875,8 @@ _rt_register("uitweaks_modtweaker_whitelisted", function()
     local needle = "HideBuffs = " .. "true"
     for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
         local txt = _gut_read_all(dir .. fn)
-        if txt and not txt:find(needle, 1, true) then
-            return "UI Tweaks (#312) missing from _MY_MODS in " .. fn
+        if txt and txt:find(needle, 1, true) then
+            return "HideBuffs is whitelisted in " .. fn .. " -- that resurrects the separate UI Tweaks tab (#312)"
         end
     end
 end)
