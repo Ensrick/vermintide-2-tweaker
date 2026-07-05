@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.198-dev"
+local MOD_VERSION = "0.2.199-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -190,6 +190,30 @@ _rt_register("localization_format_safe", function()
                     k, tostring(fmt_err))
             end
         end
+    end
+end)
+
+-- (#140) "A Parting of the Waves" (dlc_dwarf_whaling) stray post-skip fade fix
+-- (v0.2.178-dev): while the #106 post-skip guard is armed for a CutsceneSystem
+-- instance, flow_cb_cutscene_effect swallows every fx_fade. The map fires a late
+-- fx_fade ~97 ms BEFORE its camera node, so the one-shot _skip_next_fade (armed at
+-- the camera node) is still false when the fade arrives - the guard catches it.
+-- Source-pattern guard on _gut_cutscenes.lua (located via mod.gut_skip_cutscenes_toggle,
+-- defined there). CutsceneSystem class-presence is NOT asserted (it loads in-mission,
+-- nil at the keep where this runs). Split needle so this line can't self-match. No-op
+-- if unreadable.
+_rt_register("cutscene_postskip_fade_swallow", function()
+    local ok, info = pcall(debug.getinfo, mod.gut_skip_cutscenes_toggle or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local guard_needle = '_skipped_cutscene_system == self and name == "fx' .. '_fade"'
+    if not txt:find(guard_needle, 1, true) then
+        return "#140 regression: the post-skip fx_fade swallow guard is gone from flow_cb_cutscene_effect (stray black fade returns on 'A Parting of the Waves' / dlc_dwarf_whaling)"
     end
 end)
 -- ============================================================

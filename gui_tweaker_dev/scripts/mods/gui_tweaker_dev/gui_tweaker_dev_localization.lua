@@ -75,7 +75,7 @@ return {
         en = "Lets you skip cutscenes with ESC or Space (or the /skipcutscenes command), even ones the game normally will not let you skip. In Chaos Wastes, boss and phase cinematics are left alone because skipping them can desync the fight.",
     },
     gut_skip_cutscenes_auto = {
-        en = "[Issue 275 & 140] [diag] Auto-skip Cutscenes",
+        en = "[Issue 275] [diag] Auto-skip Cutscenes",
     },
     gut_skip_cutscenes_auto_tooltip = {
         en = "When on, cutscenes are skipped automatically the moment they start, so you never see them. Leave off to skip them manually with ESC or Space.",

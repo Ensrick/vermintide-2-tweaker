@@ -5,6 +5,23 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.199-dev (2026-07-05) -- #140 CLOSED (user-confirmed in-game): "A Parting of the Waves" stray post-skip fade
+
+- #140 CLOSED - user confirmed the v0.2.178-dev fix works in-game. On "A Parting of the
+  Waves" (`dlc_dwarf_whaling`) the CutsceneSystem flow fires late node groups after the
+  auto-skip, each with an `fx_fade` ~97 ms BEFORE its camera node, so the one-shot
+  `_skip_next_fade` (armed at the camera node) misses it and a black fade played. The
+  shipped fix swallows every `fx_fade` in `flow_cb_cutscene_effect` while the issue-106
+  post-skip guard is armed (`_skipped_cutscene_system == self`). The fix itself is
+  unchanged (live since v0.2.178-dev); this build adds the regression guard + flips the
+  loc tag on close.
+- TEST: new `_rt_register("cutscene_postskip_fade_swallow")` source-pattern guard - locates
+  `_gut_cutscenes.lua` via `mod.gut_skip_cutscenes_toggle` and asserts the fx_fade-swallow
+  line survives, so the fix cannot silently revert (`/regression_test`).
+- LOC: `gut_skip_cutscenes_auto` tag `[Issue 275 & 140]` -> `[Issue 275]` (dropped the now-closed
+  140 ref; kept `[diag]`). Issue 275 (the Enchanter's Lair boss-softlock, 0-critical) stays
+  open with its live diag probe, so its own label must NOT change on this ship.
+
 ## 0.2.198-dev (2026-07-05) -- #336: mission map AUTO-STARTS the picked mission + transparent backdrop (live mission visible) [verify-fix]
 
 - FIX (#336 follow-up, user report): picking a mission from the mid-mission map ran
