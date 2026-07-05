@@ -16,12 +16,13 @@ goes untagged and the Availability menu stays in lockstep with the picker.
 universal across all six characters and never needs cross-character work
 (feedback_1p_animations_universal). A tag never reflects any 1P state.
 
-TAG VOCABULARY (aligned to KRUBER_3P_ANIM_DECISIONS.md:14-20 + the picker):
-  [Working]          — 3P confirmed (native, or a verified cross-character port).
-  [Needs Animations] — a wield SET redirect is chosen + works at set level, but
+TAG VOCABULARY (v0.12.204-dev #301: lowercase doctrine forms; aligned to
+KRUBER_3P_ANIM_DECISIONS.md:14-20 + the picker):
+  [working]          — 3P confirmed (native, or a verified cross-character port).
+  [needs animations] — a wield SET redirect is chosen + works at set level, but
                        the per-attack animation mapping is still pending.
-  [Needs Offsets]    — set chosen, 3P grip offset still needed.
-  [Untested]         — no decision captured yet.
+  [needs offsets]    — set chosen, 3P grip offset still needed.
+  [untested]         — no decision captured yet.
 
 PROVENANCE of the confirmed/untested/offsets sets below: generated 2026-06-23
 from a parse of ANIMATION_COVERAGE.md (✅ WORKING / 🔁 native -> [Working];
@@ -72,8 +73,8 @@ local _CONFIRMED = {
         -- (.two_handed_hammer_priest_template.es_ / .two_handed_cog_hammers_template_1
         -- .es_) after picker tuning confirmed on Kruber. Coghammer's picks are all
         -- pass-through identity (already animated correctly on Kruber).
-        -- wh_2h_hammer (#180) + dr_2h_cog_hammer (#182) MOVED to _NEEDS_ANIMS below
-        -- (bad anims on Kruber) — re-tune via picker.
+        -- wh_2h_hammer (#180) + dr_2h_cog_hammer (#182) went through _NEEDS_ANIMS,
+        -- were re-tuned via picker, and are BAKED + CONFIRMED again below (v0.12.188).
         -- v0.12.156-dev: 7 more ports BAKED career-scoped into _3p_template_remaps
         -- (weapon_tweaker.lua) from the user's persisted dev-picker picks
         -- (user_settings.config 2026-06-25) — the last Kruber [Needs Animations] ports.
@@ -290,21 +291,24 @@ local function _is_native(career, weapon_key)
 end
 
 -- Public: status tag string for a (career, weapon_key) pair. NEVER returns nil.
--- Priority: native -> [Working]; confirmed set -> [Working]; needs-offsets ->
--- [Needs Offsets]; untested -> [Untested]; otherwise a decided cross-character
--- port whose per-attack map is still pending -> [Needs Animations] (the common
+-- Priority: native -> [working]; confirmed set -> [working]; needs-offsets ->
+-- [needs offsets]; untested -> [untested]; otherwise a decided cross-character
+-- port whose per-attack map is still pending -> [needs animations] (the common
 -- 📋/🔧 COVERAGE state). Bare/[untested]/[confirmed working] hand-typed prefixes
 -- in the loc strings are stripped + replaced by this (see the localization file).
+-- v0.12.204-dev (#301): emitted vocabulary normalized to the lowercase doctrine
+-- forms ([working]/[untested]/[needs animations]/[needs offsets]); the loc
+-- consumer that splices "→ <target>" onto [needs animations] matches this casing.
 function M.tag(career, weapon_key)
-    if _is_native(career, weapon_key) then return "[Working]" end
+    if _is_native(career, weapon_key) then return "[working]" end
     local recv = _char_key_for_career(career)
-    if not recv then return "[Untested]" end
-    if _CONFIRMED[recv] and _CONFIRMED[recv][weapon_key] then return "[Working]" end
-    if _NEEDS_OFFSETS[recv] and _NEEDS_OFFSETS[recv][weapon_key] then return "[Needs Offsets]" end
-    if _UNTESTED[recv] and _UNTESTED[recv][weapon_key] then return "[Untested]" end
+    if not recv then return "[untested]" end
+    if _CONFIRMED[recv] and _CONFIRMED[recv][weapon_key] then return "[working]" end
+    if _NEEDS_OFFSETS[recv] and _NEEDS_OFFSETS[recv][weapon_key] then return "[needs offsets]" end
+    if _UNTESTED[recv] and _UNTESTED[recv][weapon_key] then return "[untested]" end
     -- Default for a surviving cross-character port: a set is decided (the unlock
     -- map only carries ports with a chosen 3P target) but per-attack picks pend.
-    return "[Needs Animations]"
+    return "[needs animations]"
 end
 
 -- Public (v0.12.142-dev): bracketed redirect-target display name for a

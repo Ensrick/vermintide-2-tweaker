@@ -103,7 +103,7 @@ forge_skin, forge_power, forge_cancel, forge_confirm, salvage_debug,
 forge_list, forge_delete, inv_dump, mirror_dump, craft_recent
 ```
 
-### `et` (enemy_tweaker)
+### `enemy` (enemy_tweaker)
 ```
 et_dump_breeds, et_dump_compositions, et_status
 ```

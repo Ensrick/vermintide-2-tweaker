@@ -101,7 +101,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.203-dev"
+local MOD_VERSION = "0.12.205-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -894,7 +894,10 @@ local _3p_template_remaps = {
             -- Bardin: H1 and H3 release fires events that produce no visible
             -- animation on his crowbill SM. Use the elf-sword overhead targets.
             attack_swing_stab                = "attack_swing_down",
-            attack_swing_up_left             = "attack_swing_left_diagonal",
+            -- v0.12.205: up_left target corrected to the tester's pick
+            -- (attack_swing_left, consistent across all 7 configs on disk;
+            -- the table had drifted to left_diagonal). #319 audit.
+            attack_swing_up_left             = "attack_swing_left",
             attack_swing_charge_left         = "attack_swing_charge_left_diagonal", -- H1 charge windup
             attack_swing_heavy_left_up       = "attack_swing_heavy_down",           -- H1 release overhead
             attack_swing_charge_left_pose    = "attack_swing_charge_left_diagonal", -- H3 charge windup
@@ -908,7 +911,8 @@ local _3p_template_remaps = {
             attack_swing_stab          = "attack_swing_down",  -- thrust → vertical (no working thrust event on cross skeleton)
             attack_swing_heavy_left_up = "attack_swing_heavy",
             attack_swing_heavy_left_diagonal = "attack_swing_heavy",
-            attack_swing_up_left       = "attack_swing_left_diagonal",
+            -- v0.12.205: corrected to the tester's pick (see dr_ note). #319 audit.
+            attack_swing_up_left       = "attack_swing_left",
         },
     },
     -- one_handed_flails_flaming_template: no template-level remaps. H1
@@ -2360,6 +2364,19 @@ do
     R.two_handed_billhooks_template = R.two_handed_billhooks_template or {}
     R.two_handed_billhooks_template.wh_ = R.two_handed_billhooks_template.wh_ or false
     R.two_handed_billhooks_template.es_ = {
+        attack_swing_charge_down = "attack_swing_charge_left_diagonal",
+        attack_swing_charge_stab = "attack_swing_stab_charge",
+        attack_swing_heavy_down  = "attack_swing_heavy_left_diagonal",
+        attack_swing_heavy_left  = "attack_swing_left_diagonal",
+        attack_swing_stab_02     = "attack_swing_stab",
+    }
+    -- v0.12.205: Kerillian billhook picks RESTORED (#319 audit; residual of the
+    -- #290 two-namespace bug). The tester's 5 Kerillian billhook picks live in
+    -- the TEMPLATE-QUALIFIED namespace (user_settings(4).config 2026-07-03),
+    -- which the v0.12.203 bake read for es_/wh_ but not for we_ — so Kerillian's
+    -- billhook fired these 5 events raw on her spear SM. Values verbatim from
+    -- the tester config (identical to the confirmed-working es_ set above).
+    R.two_handed_billhooks_template.we_ = {
         attack_swing_charge_down = "attack_swing_charge_left_diagonal",
         attack_swing_charge_stab = "attack_swing_stab_charge",
         attack_swing_heavy_down  = "attack_swing_heavy_left_diagonal",

@@ -1695,8 +1695,8 @@ if _hp_tree then data.options.widgets[#data.options.widgets + 1] = _hp_tree end
 -- character. Done as one central pass so the order is correct regardless of the
 -- hand-maintained insertion order above and stays correct as new ports are
 -- appended. Crucially it sorts on the weapon_key ONLY, never the localized
--- label: the runtime status-tag prefix ([Working] / [Untested] /
--- [Needs Animations]) is applied downstream in the localization table and so
+-- label: the runtime status-tag prefix ([working] / [untested] /
+-- [needs animations]) is applied downstream in the localization table and so
 -- can never influence this order (the user-reported "tags messing up the sort"
 -- bug). Scoped strictly to the `weapon_availability` subtree; setting_ids are
 -- unchanged, so widget_unlock_map_consistency stays green.

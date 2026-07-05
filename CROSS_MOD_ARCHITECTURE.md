@@ -318,7 +318,7 @@ Decompiled source archived at
 |---|---|---|---|
 | `wt` (Tweaker: Weapons) | 114 + master | 0.12.61-dev | `Weapons.*`, `DamageProfileTemplates.*`, weapon function hooks (Flamethrower / Beam / TrueFlight) |
 | `ct` (Tweaker: Careers) | 299 + master (`cbr_master_enable_registrations`) | 0.3.0-dev | `TalentBuffTemplates.*`, `BuffTemplates.<career>_*`, passives / ults, `PassiveAbilitySettings.*` |
-| `et` (Tweaker: Enemies) | 14 + master | 0.5.0-dev | `DamageUtils.stagger_ai` / `calculate_damage` / `ActionShieldSlam._hit` hook rewrites, `BreedTweaks.*`, THP-from-kills buffs |
+| `enemy` (Tweaker: Enemies) | 14 + master | 0.5.0-dev | `DamageUtils.stagger_ai` / `calculate_damage` / `ActionShieldSlam._hit` hook rewrites, `BreedTweaks.*`, THP-from-kills buffs |
 | `bt` (buff_tweaker) | 1 master | scaffolded 2026-05-21 | **Single shared registration mod.** Pre-registers Big Rebalance buffs / damage profiles / explosion templates on every peer in deterministic sorted order. wt/ct/et's BR sub-toggles all check `(get_mod('bt') or {}):is_br_active()` before applying. |
 
 **SpicyEnemies module dropped entirely** — its 6 forced package preloads
