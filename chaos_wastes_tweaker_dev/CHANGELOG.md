@@ -1,5 +1,35 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.228-dev (2026-07-05) - #2 first ct_dev extraction (_ct_combat_hooks.lua) + #143 grenade-share census
+
+Two-part maintenance/diagnostics build; no gameplay behavior changes intended.
+
+**#2 file-size split, first ct_dev seam.** Moved the contiguous combat/proc/Chest-of-Trials
+runtime-hook block (old lines 12138-13354, 1,217 lines: Manann's Tempest cooldown, Mathlann's
+AoE cap #129, Corrupted Flesh guard #104, CoT enemy multiplier/uniqueness/rotation/Skaven
+Warlord trial #64/#117/#324, parry-proc strip + burn VFX, Myrmidia's Wildfire, Larger Clip
+#34, Block Ranger Veteran #259) verbatim into new `_ct_combat_hooks.lua` (1,270 lines),
+loaded by ONE `mod:dofile` at the same execution point. Zero mod._* promotions needed;
+`effective_setting`/`_dbg` get behavior-identical module shims (the `_ct_mechanic_tweaks`
+pattern). Main file 15,344 -> 14,133 lines. Pure move: lint PASS (9 files, 91 hooks, 0
+duplicate-hook/forward-ref), build OK. Extraction audit surfaced pre-existing dead code -
+the parry-cooldown strip's caller resolves a nil global and has been a silent no-op since
+~v0.7.128; preserved byte-identically and filed as #342 (decision: wire it or delete it).
+
+**#143 round 2: grenade world-spawn share census.** The 2026-07-04 log (v0.7.219) proved
+the 50% weight cut applies (`renorm: holy_hand 0.2500 -> 0.1250`, pool pre-normalized to
+sum 1.0 by CWV's javelin injection - cross-mod interplay now documented in the issue) and
+world-spawned Morgrim's dropped to 2 per session. The remaining perceived abundance points
+at grant-side faucets (Shrine of Strife `blessing_holy_hand_grenade`, the
+`drop_item_on_active_ability_use` boon, altar/shop power-ups - see issue comment). New
+`[ct:morgrim143] grenade world-spawn tally` printf counts EVERY grenade-type spawn at the
+existing `_spawn_pickup` chokepoint (no new hook), so holy's true share is readable from
+any log. Diagnostics-only.
+
+- VERIFY IN-GAME: normal CW run incl. Chest of Trials + one parry-boon and one
+  Manann's/Mathlann's boon (regression sweep of the moved hooks); grep the log for the
+  `grenade world-spawn tally` lines and report which Morgrim's faucet you're actually seeing.
+
 ## 0.7.227-dev (2026-07-05) - #299 rework: chest-revive return-to-team teleport was never firing
 
 The 2026-07-05 host log (v0.7.225-dev) proved the revive half works but the teleport-back
