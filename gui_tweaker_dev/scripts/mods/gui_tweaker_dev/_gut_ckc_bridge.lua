@@ -20,7 +20,10 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 --     value is remembered and restored if the user opts out of the bridge), so
 --     CrosshairUI stops drawing the vanilla marker;
 --   * a gear button is appended to the right of the row; clicking it opens the
---     gut Mod Tweaker focused on the CKC tab (its 7 real options live there).
+--     gut Mod Tweaker focused on CKC's options -- which live under Interface > HUD as a
+--     "Crosshair Kill Confirmation" sub-collapsible, NOT a top-level tab (#339). The
+--     focus request below still carries _CKC_NAME; the Mod Tweaker view redirects it to
+--     the gut Interface tab and expands the HUD + CKC groups.
 --
 -- ZERO BEHAVIOR CHANGE when CKC is absent: install() registers NO hooks at all,
 -- so the vanilla dropdown behaves exactly as stock.
@@ -237,8 +240,9 @@ local function _find_gear_hotspot(self)
     return nil
 end
 
--- Gear click: request focus on the CKC tab, then open the Mod Tweaker. Guarded for
--- the title-screen OptionsView (no ingame_ui transitions) -- on failure, clear the
+-- Gear click: request focus on CKC's options (the Mod Tweaker view redirects _CKC_NAME
+-- to the gut Interface tab + HUD/CKC groups, #339), then open the Mod Tweaker. Guarded
+-- for the title-screen OptionsView (no ingame_ui transitions) -- on failure, clear the
 -- request and echo a fallback hint.
 local function _open_mod_tweaker()
     mod._gut_mt_focus_request = _CKC_NAME

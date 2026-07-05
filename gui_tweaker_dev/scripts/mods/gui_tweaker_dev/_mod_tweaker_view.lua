@@ -162,8 +162,14 @@ local _MY_MODS = {
     -- HideBuffs deliberately NOT whitelisted (#312): UI Tweaks options live in
     -- gut's OWN menu under the "UI Tweaks" group (gut_hide_hud_ui_group), not as a
     -- separate Mod Tweaker tab. Re-adding it would resurrect the duplicate tab.
-    ["Crosshair Kill Confirmation"] = true,  -- Crosshair Kill Confirmation (#313)
+    -- Crosshair Kill Confirmation deliberately NOT whitelisted (#339, was wrongly a
+    -- tab under #313): its options are injected INTO gut's Interface tab under the HUD
+    -- group by _inject_ckc_into_gut, exactly like the UI Tweaks precedent. A THIRD-PARTY
+    -- integration is NEVER a top-level tab -- see gui_tweaker_dev/MOD_TWEAKER_INTEGRATION.md.
 }
+
+-- Third-party mod whose options fold into a gut category (NOT a tab). #339.
+local _CKC_NAME = "Crosshair Kill Confirmation"
 
 local function _nf(node, key)  -- defensive node-field read
     if type(node) ~= "table" then return nil end
@@ -567,6 +573,90 @@ local function _synthesize_equipment(cats)
     return rest
 end
 
+-- (#339) Fold Crosshair Kill Confirmation's live options INTO gut's "Interface" tab
+-- under the HUD group, as a "Crosshair Kill Confirmation" sub-collapsible -- NOT a
+-- top-level tab (the mistake #313 made). Reuses the _synthesize_equipment `_owners`
+-- mechanism to route CKC nodes to the real CKC mod, but MUTATES the existing gut
+-- category instead of appending a new one. See MOD_TWEAKER_INTEGRATION.md.
+--
+-- Correctness notes (traps handled):
+--   * NEVER mutate VMF's own list in place (it is reused every _rebuild) -- gut's widget
+--     array is COPIED and CKC's nodes are shallow-COPIED before stamping depth.
+--   * gut's category is MIXED-owner (its own settings + injected CKC settings), so
+--     _owner_mod_ids MUST include BOTH gut's id and CKC -- else apply/dirty (which take
+--     the `if _owner_mod_ids` branch) would flush ONLY CKC and silently drop every gut
+--     Interface edit. mod_obj stays = gut so gut's own settings fall back via _owner.
+--   * gut's category is _flat=true; the flat render path reads each node's own `depth`
+--     (rebased by the tab's min depth), so injected nodes MUST carry a `depth` in gut's
+--     natural depth space (HUD group depth + 1 for the sub-header, +2 for its options).
+local function _inject_ckc_into_gut(out)
+    local ckc = get_mod(_CKC_NAME)
+    if not ckc then return end                        -- CKC not installed: nothing to fold
+    local gut_cat
+    for _, c in ipairs(out) do
+        if c.mod_id == "gut" or c.mod_id == "gut_dev" then gut_cat = c; break end
+    end
+    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
+
+    local vmf = get_mod("VMF")
+    local wd = vmf and vmf.options_widgets_data
+    if type(wd) ~= "table" then return end
+    local ckc_list
+    for _, list in ipairs(wd) do
+        local h = (type(list) == "table") and list[1]
+        if h and _nf(h, "mod_name") == _CKC_NAME then ckc_list = list; break end
+    end
+    if type(ckc_list) ~= "table" or #ckc_list < 2 then return end  -- no real options
+
+    -- Locate the HUD group node + the end of its child block in gut's flat list.
+    local src = gut_cat.widgets
+    local hud_idx, hud_depth
+    for i = 1, #src do
+        if _nf(src[i], "setting_id") == "gut_hide_hud_ui_group" then
+            hud_idx = i; hud_depth = _nf(src[i], "depth") or 0; break
+        end
+    end
+    if not hud_idx then return end
+    local end_idx = #src + 1
+    for i = hud_idx + 1, #src do
+        if (_nf(src[i], "depth") or 0) <= hud_depth then end_idx = i; break end
+    end
+
+    -- Build the CKC sub-group block: a group header at HUD+1, CKC options rebased to HUD+2.
+    -- Title is the mod's proper name as a literal (a non-key string): _vmf_label localizes
+    -- against gut, gets a "<...>" miss, and falls back to this literal. Keeps the injection
+    -- self-contained without editing gut's loc file.
+    local block = { { setting_id = "gut_ckc_group", type = "group",
+                      title = _CKC_NAME, depth = hud_depth + 1 } }
+    local ckc_min
+    for i = 2, #ckc_list do
+        local d = _nf(ckc_list[i], "depth") or 0
+        if not ckc_min or d < ckc_min then ckc_min = d end
+    end
+    ckc_min = ckc_min or 0
+    local owners = gut_cat._owners or {}
+    for i = 2, #ckc_list do
+        local node = ckc_list[i]
+        local nn = {}                                 -- shallow copy (never mutate VMF's node)
+        for k, v in pairs(node) do nn[k] = v end
+        nn.depth = hud_depth + 2 + ((_nf(node, "depth") or 0) - ckc_min)
+        block[#block + 1] = nn
+        local sid = _nf(node, "setting_id")
+        if type(sid) == "string" then owners[sid] = { mod_id = _CKC_NAME, mod_obj = ckc } end
+    end
+
+    -- Splice the block into a COPY of gut's widget list at the end of the HUD child block.
+    local new_w = {}
+    for i = 1, end_idx - 1 do new_w[#new_w + 1] = src[i] end
+    for i = 1, #block do new_w[#new_w + 1] = block[i] end
+    for i = end_idx, #src do new_w[#new_w + 1] = src[i] end
+
+    gut_cat.widgets = new_w
+    gut_cat._owners = owners
+    gut_cat._owner_mod_ids = { gut_cat.mod_id, _CKC_NAME }   -- MIXED: flush BOTH buffers
+    -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
+end
+
 local function _vmf_categories()
     local out = {}
     local vmf = get_mod("VMF")
@@ -631,6 +721,9 @@ local function _vmf_categories()
             end
         end
     end
+    -- (#339) Fold Crosshair Kill Confirmation into gut's Interface tab under HUD (NOT a
+    -- tab). No-op when CKC is absent. Before the sort (it mutates the existing gut cat).
+    _inject_ckc_into_gut(out)
     -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active
     -- (or relabel the N=1-only-CWV tab). Done BEFORE the sort so Equipment participates.
     out = _synthesize_equipment(out)
@@ -1439,11 +1532,29 @@ function ModTweakerView:_apply_focus_request()
     if not req then return end
     local cats = self._all_categories
     if type(cats) ~= "table" then mod._gut_mt_focus_request = nil; return end
+    -- (#339) CKC options live under the gut "Interface" tab's HUD group, not a CKC tab.
+    -- Redirect a CKC focus request (from the vanilla-Options gear) to the gut category,
+    -- and expand the HUD + CKC sub-group so the user lands on CKC's options.
+    local expand_ckc = false
+    if req == "Crosshair Kill Confirmation" then
+        expand_ckc = true
+        req = nil
+        for i = 1, #cats do
+            local mid = cats[i] and cats[i].mod_id
+            if mid == "gut" or mid == "gut_dev" then req = mid; break end
+        end
+        if not req then mod._gut_mt_focus_request = nil; return end
+    end
     local full_idx
     for i = 1, #cats do
         if cats[i] and cats[i].mod_id == req then full_idx = i; break end
     end
     if not full_idx then mod._gut_mt_focus_request = nil; return end  -- mod not present/whitelisted: drop it
+    if expand_ckc then
+        self._expanded = self._expanded or {}
+        self._expanded[req .. ":gut_hide_hud_ui_group"] = true
+        self._expanded[req .. ":gut_ckc_group"] = true
+    end
     local paged = (self._page_count or 1) > 1
     local per_page = paged and (MAX_TABS - 1) or #cats
     if per_page < 1 then per_page = 1 end
