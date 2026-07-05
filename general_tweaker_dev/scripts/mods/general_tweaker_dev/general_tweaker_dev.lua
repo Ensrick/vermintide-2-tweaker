@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.182-dev"
+local MOD_VERSION = "0.2.183-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1559,6 +1559,50 @@ _rt_register("bot_behavior_master_sub_widgets_registered", function()
     end
     for id in pairs(want) do
         return id .. " missing from the master toggle's sub_widgets"
+    end
+end)
+
+_rt_register("bot_drink_potion_advanced_conditions_registered", function()
+    -- #320 (v0.2.183-dev): gt_bot_drink_potions_in_danger is a MASTER toggle with
+    -- 7 nested sub_widgets (the scan-range slider + four trigger checkboxes + the
+    -- two cluster-count sliders). Defaults must reproduce the former hard-coded
+    -- behavior (boss on, patrol on at 3, range 18; special + horde off), so a user
+    -- who never expands the option sees no change. A refactor that drops a
+    -- sub-widget or flips a default should trip this.
+    local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return "could not require data file" end
+    local master
+    local function find(node)
+        if master or type(node) ~= "table" then return end
+        if node.setting_id == "gt_bot_drink_potions_in_danger" then master = node return end
+        for _, child in pairs(node) do if type(child) == "table" then find(child) end end
+    end
+    find(data)
+    if not master then return "gt_bot_drink_potions_in_danger widget missing from the data tree" end
+    if type(master.sub_widgets) ~= "table" then return "drink-potions master toggle has no sub_widgets array" end
+    local want = {
+        gt_bot_drink_range_m       = { wtype = "numeric",  default = 18 },
+        gt_bot_drink_on_boss       = { wtype = "checkbox", default = true },
+        gt_bot_drink_on_special    = { wtype = "checkbox", default = false },
+        gt_bot_drink_on_patrol     = { wtype = "checkbox", default = true },
+        gt_bot_drink_patrol_count  = { wtype = "numeric",  default = 3 },
+        gt_bot_drink_on_horde      = { wtype = "checkbox", default = false },
+        gt_bot_drink_horde_count   = { wtype = "numeric",  default = 8 },
+    }
+    for _, w in ipairs(master.sub_widgets) do
+        local spec = w.setting_id and want[w.setting_id]
+        if spec then
+            if w.type ~= spec.wtype then
+                return w.setting_id .. " has type " .. tostring(w.type) .. ", want " .. spec.wtype
+            end
+            if w.default_value ~= spec.default then
+                return w.setting_id .. " default_value is " .. tostring(w.default_value) .. ", want " .. tostring(spec.default)
+            end
+            want[w.setting_id] = nil
+        end
+    end
+    for id in pairs(want) do
+        return id .. " missing from the drink-potions master toggle's sub_widgets"
     end
 end)
 

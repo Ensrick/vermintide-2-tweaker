@@ -505,7 +505,7 @@ local function _gt_instant_pickup_tick(self, unit, blackboard, t)
 end
 
 -- ----------------------------------------------------------------------------
--- REPLICANT BOTS PORT 2: Bots drink potions when in danger
+-- REPLICANT BOTS PORT 2: Bots drink potions when in danger (configurable, #320)
 -- ----------------------------------------------------------------------------
 -- WHAT
 --   Vanilla bots never drink their OWN potion -- player_bot_base.lua only ever
@@ -513,20 +513,31 @@ end
 --   a bot can sit on a Strength/Speed/Conc potion through a whole boss fight.
 -- FIX (gt idiom; NOT a copy of Replicant's bt_bot_drink_pot_action BT node)
 --   Throttled per-bot tick (mirrors the other _gt_*_tick fns). When a bot holds
---   a giveable/usable potion in slot_potion AND a "danger" is within range
---   (a breed.boss monster/lord, or a cluster of >= 3 elites = a roaming patrol),
---   drive the drink the way BTBotHealAction does: wield slot_potion and hold the
---   use input until the potion is consumed (slot empties). Reads LIVE breed data
---   each scan (breed.boss / breed.elite off the resolved Breed table), not a
---   static name roster. One drink per held potion (_gt_drinking latch cleared
---   when the slot empties). Host-side only (bots are host-only). Default OFF.
-local _GT_BOT_DANGER_RANGE = 18.0          -- meters; danger scan radius
-local _GT_BOT_DANGER_RANGE_SQ = _GT_BOT_DANGER_RANGE * _GT_BOT_DANGER_RANGE
-local _GT_BOT_PATROL_ELITE_THRESHOLD = 3   -- >= this many elites in range == "patrol"
+--   a giveable/usable potion in slot_potion AND a configured "danger" is within
+--   range, drive the drink the way BTBotHealAction does: wield slot_potion and
+--   hold the use input until the potion is consumed (slot empties). One drink
+--   per held potion (_gt_drinking latch cleared when the slot empties).
+--
+--   ADVANCED CONDITIONS (#320): the master toggle gt_bot_drink_potions_in_danger
+--   now nests sub-widgets that decide WHAT counts as danger, all read LIVE each
+--   scan inside _gt_danger_near (no on_setting_changed wiring):
+--     * gt_bot_drink_range_m      -- scan radius in metres (was hard-coded 18)
+--     * gt_bot_drink_on_boss      -- any breed.boss monster/lord in range
+--     * gt_bot_drink_on_special   -- any breed.special (disabler/ranged) in range
+--     * gt_bot_drink_on_patrol    -- >= gt_bot_drink_patrol_count elites in range
+--     * gt_bot_drink_on_horde     -- >= gt_bot_drink_horde_count trash in range
+--   Breed class is read live off each AI unit's Breed table (breed.boss /
+--   breed.special / breed.elite; trash = none of those -- verified against
+--   Vermintide-2-Source-Code/scripts/settings/breeds/*.lua 2026-07-04), not a
+--   static name roster. Host-side only (bots are host-only). Default OFF.
+local _GT_BOT_DANGER_RANGE = 18.0          -- meters; fallback danger scan radius
+local _GT_BOT_PATROL_ELITE_THRESHOLD = 3   -- fallback: >= this many elites == "patrol"
+local _GT_BOT_HORDE_TRASH_THRESHOLD = 8    -- fallback: >= this many trash == "horde"
 
--- True if a boss/lord breed, or a cluster of elites (a roaming patrol), is
--- within range of `self_pos`. Reads the live Breed table off each AI unit's
--- ai_system extension (not a static breed-name list).
+-- True if any ENABLED danger condition is met within the configured range of
+-- `self_pos`. Reads the live Breed table off each AI unit (breed.boss /
+-- breed.special / breed.elite; trash = none of those) and the live menu
+-- settings each call, so a condition change takes effect without a reload.
 local function _gt_danger_near(unit, self_pos)
     if not self_pos then return false end
     local side_manager = Managers.state.side
@@ -538,20 +549,47 @@ local function _gt_danger_near(unit, self_pos)
     local enemy_units = side.enemy_units and side:enemy_units()
     if not enemy_units then return false end
 
-    local elite_count = 0
+    -- Advanced conditions (#320), live-read each scan.
+    local on_boss    = mod:get("gt_bot_drink_on_boss")
+    local on_special = mod:get("gt_bot_drink_on_special")
+    local on_patrol  = mod:get("gt_bot_drink_on_patrol")
+    local on_horde   = mod:get("gt_bot_drink_on_horde")
+
+    -- Every trigger off -> the feature can never fire; bail before the scan.
+    if not (on_boss or on_special or on_patrol or on_horde) then
+        return false
+    end
+
+    local range = tonumber(mod:get("gt_bot_drink_range_m")) or _GT_BOT_DANGER_RANGE
+    local range_sq = range * range
+    -- Disabled cluster conditions use an unreachable threshold so their tallies
+    -- never trip (math.huge is never <= a finite count).
+    local patrol_threshold = on_patrol and (tonumber(mod:get("gt_bot_drink_patrol_count")) or _GT_BOT_PATROL_ELITE_THRESHOLD) or math.huge
+    local horde_threshold  = on_horde  and (tonumber(mod:get("gt_bot_drink_horde_count"))  or _GT_BOT_HORDE_TRASH_THRESHOLD) or math.huge
+
+    local elite_count, trash_count = 0, 0
     for i = 1, #enemy_units do
         local enemy = enemy_units[i]
         if ALIVE[enemy] then
             local ep = POSITION_LOOKUP[enemy]
-            if ep and Vector3.distance_squared(self_pos, ep) <= _GT_BOT_DANGER_RANGE_SQ then
+            if ep and Vector3.distance_squared(self_pos, ep) <= range_sq then
                 local breed = Unit.get_data(enemy, "breed")
                 if breed then
+                    -- Class priority: boss > special > elite > trash. A boss with
+                    -- its trigger off simply does nothing (it is not "trash").
                     if breed.boss then
-                        return true   -- a monster/lord in range -> danger
+                        if on_boss then return true end       -- a monster/lord in range
+                    elseif breed.special then
+                        if on_special then return true end     -- a disabler/ranged special in range
                     elseif breed.elite then
                         elite_count = elite_count + 1
-                        if elite_count >= _GT_BOT_PATROL_ELITE_THRESHOLD then
-                            return true   -- elite cluster -> treat as a patrol
+                        if elite_count >= patrol_threshold then
+                            return true                        -- elite cluster -> patrol
+                        end
+                    else
+                        trash_count = trash_count + 1
+                        if trash_count >= horde_threshold then
+                            return true                        -- trash cluster -> horde
                         end
                     end
                 end

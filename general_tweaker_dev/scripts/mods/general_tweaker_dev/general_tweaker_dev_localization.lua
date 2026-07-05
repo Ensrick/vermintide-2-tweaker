@@ -91,7 +91,29 @@ return {
     -- Replicant Bots ports (v0.2.131-dev). All host-side, default OFF, ported
     -- from the "Replicant Bots - Different Bots Experimental Branch" mod.
     gt_bot_drink_potions_in_danger = { en = "[untested] Bots drink potions when in danger (Replicant)" },
-    gt_bot_drink_potions_in_danger_tooltip = { en = "When a boss or a group of elites gets close, a bot will drink a potion it is carrying instead of hoarding it. Works only when you are the host." },
+    gt_bot_drink_potions_in_danger_tooltip = { en = "A bot drinks a potion it is carrying instead of hoarding it when danger is near. Expand this option to choose exactly which situations count as danger and how close enemies must be. Works only when you are the host." },
+
+    -- #320 advanced conditions: what counts as "danger" for a bot to drink.
+    gt_bot_drink_range_m = { en = "Danger scan range (m)" },
+    gt_bot_drink_range_m_tooltip = { en = "How close an enemy must be to count toward the danger checks below. Larger values make bots drink earlier." },
+
+    gt_bot_drink_on_boss = { en = "Drink near a boss or lord" },
+    gt_bot_drink_on_boss_tooltip = { en = "Drink when a monster, boss, or lord is in range (Rat Ogre, Chaos Spawn, Troll, Minotaur, Stormfiend, map bosses, etc.). On by default." },
+
+    gt_bot_drink_on_special = { en = "Drink near a special" },
+    gt_bot_drink_on_special_tooltip = { en = "Drink when a special enemy is in range (Gutter Runner, Packmaster, Blightstormer, Ratling Gunner, Warpfire Thrower, Leech, etc.). Off by default." },
+
+    gt_bot_drink_on_patrol = { en = "Drink near an elite patrol" },
+    gt_bot_drink_on_patrol_tooltip = { en = "Drink when at least the set number of elites are in range at once (Stormvermin, Maulers, Savages). Tune the count below. On by default." },
+
+    gt_bot_drink_patrol_count = { en = "Elites needed for a patrol" },
+    gt_bot_drink_patrol_count_tooltip = { en = "How many elites must be in range at once before it counts as a patrol worth a potion." },
+
+    gt_bot_drink_on_horde = { en = "Drink during a horde" },
+    gt_bot_drink_on_horde_tooltip = { en = "Drink when at least the set number of ordinary trash enemies are in range at once. Off by default." },
+
+    gt_bot_drink_horde_count = { en = "Enemies needed for a horde" },
+    gt_bot_drink_horde_count_tooltip = { en = "How many ordinary trash enemies must be in range at once before it counts as a horde worth a potion." },
 
     gt_bot_rescue_awaiting = { en = "[Issue 300] Bots rescue allies awaiting respawn" },
     gt_bot_rescue_awaiting_tooltip = { en = "Vanilla bots ignore a teammate waiting to be rescued at a respawn point; this sends them to go free that ally. Works only when you are the host; experimental, so verify it in game." },

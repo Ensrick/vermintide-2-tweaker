@@ -208,11 +208,68 @@ local _data = {
                         tooltip       = "ai_takeover_enabled_tooltip",
                     },
                     -- Replicant Bots ports (v0.2.131-dev). Host-side, default OFF.
+                    -- #320: the drink-potions toggle is now a MASTER with nested
+                    -- sub-widgets deciding WHAT counts as danger (VMF native
+                    -- master-toggle pattern: children auto-hide while the box is
+                    -- unchecked). setting_id preserved so persisted user state
+                    -- carries over. Children in feature order (each count slider
+                    -- directly under the trigger it tunes), read live in
+                    -- _gt_danger_near (no on_setting_changed wiring).
                     {
                         setting_id    = "gt_bot_drink_potions_in_danger",
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gt_bot_drink_potions_in_danger_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id      = "gt_bot_drink_range_m",
+                                type            = "numeric",
+                                default_value   = 18,
+                                range           = { 5, 40 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_drink_range_m_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_drink_on_boss",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_drink_on_boss_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_drink_on_special",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_drink_on_special_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_drink_on_patrol",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_drink_on_patrol_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_drink_patrol_count",
+                                type            = "numeric",
+                                default_value   = 3,
+                                range           = { 1, 10 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_drink_patrol_count_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_drink_on_horde",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_drink_on_horde_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_drink_horde_count",
+                                type            = "numeric",
+                                default_value   = 8,
+                                range           = { 3, 30 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_drink_horde_count_tooltip",
+                            },
+                        },
                     },
                     {
                         setting_id    = "gt_bot_rescue_awaiting",

@@ -1,5 +1,26 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.183-dev (2026-07-04) -- #320 Bots drink potions: advanced condition options
+
+### Why
+Issue #320: the "Bots drink potions when in danger" toggle had its trigger hard-coded (a `breed.boss` monster/lord, or >= 3 elites within 18 m). Players want to decide for themselves what counts as danger worth spending a potion on.
+
+### Changed
+- **`gt_bot_drink_potions_in_danger` is now a MASTER toggle (still default OFF) with 7 nested sub-widgets** deciding WHAT counts as danger, all read live inside `_gt_danger_near` each scan (no on_setting_changed wiring). setting_id preserved so persisted user state carries over. Children in feature order (each count slider directly under the trigger it tunes):
+  1. `gt_bot_drink_range_m` (slider, 18 m, 5-40) -- danger scan radius; replaces the hard-coded `local _GT_BOT_DANGER_RANGE = 18.0`.
+  2. `gt_bot_drink_on_boss` (on) -- drink when any `breed.boss` monster/lord is in range.
+  3. `gt_bot_drink_on_special` (off) -- drink when any `breed.special` (disabler/ranged) is in range. NEW condition (vanilla port only reacted to boss + elites).
+  4. `gt_bot_drink_on_patrol` (on) -- drink when an elite cluster is in range.
+  5. `gt_bot_drink_patrol_count` (slider, 3, 1-10) -- elites needed to count as a patrol; replaces the hard-coded `_GT_BOT_PATROL_ELITE_THRESHOLD = 3`.
+  6. `gt_bot_drink_on_horde` (off) -- drink when a trash cluster is in range. NEW condition.
+  7. `gt_bot_drink_horde_count` (slider, 8, 3-30) -- trash enemies needed to count as a horde.
+- **`_gt_danger_near` rewritten** to a single-pass scan that classifies each in-range enemy by its live Breed table (priority boss > special > elite > trash, where trash = none of those flags -- verified against `Vermintide-2-Source-Code/scripts/settings/breeds/*.lua`) and returns true as soon as an ENABLED condition is met. Disabled cluster conditions use a `math.huge` threshold so their tallies never trip; if every trigger is off the scan is skipped entirely.
+- Defaults reproduce the former hard-coded behavior exactly (boss on, patrol on at 3, range 18; special + horde off), so an existing user who never expands the option sees no behavior change.
+
+### Notes
+- Still `[untested]` per #301 tag doctrine -- host-side, bots are host-only; verify in-game before promotion.
+- Version bump 0.2.182-dev -> 0.2.183-dev; data widgets + localization added for all 7 sub-widgets.
+
 ## v0.2.182-dev (2026-07-04) -- #297 Bot Behavior Improvements master toggle + per-fix sub-menu + greedy pickup
 
 ### Why
