@@ -5,6 +5,32 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.198-dev (2026-07-05) -- #336: mission map AUTO-STARTS the picked mission + transparent backdrop (live mission visible) [verify-fix]
+
+- FIX (#336 follow-up, user report): picking a mission from the mid-mission map ran
+  matchmaking but never launched - the flow parks in `MatchmakingStateWaitForCountdown`
+  waiting for the keep waystone-portal countdown flag that nothing sets mid-mission
+  (user log: `Hosting game on mission: dlc_termite_1` then 2+ min idle;
+  `matchmaking_state_wait_for_countdown.lua:26-50`). New `hook_safe` on that state's
+  `on_enter`: host + adventure + not-in-keep -> set the countdown flag immediately, so
+  vanilla `MatchmakingStateStartGame` runs its full start machinery (quickplay level
+  roll, seed, difficulty, lobby data, `rpc_matchmaking_join_game`).
+- Vanilla's final step there is `game_mode:complete_level()` (`matchmaking_state_start_game.lua:408`)
+  which mid-mission would end the round as a FAKE "won" (rewards/stats for an abandoned
+  run, `game_mode_adventure.lua:124-129`). New `GameModeManager.complete_level` wrapper:
+  when armed by the auto-start (<15 s window) it diverts to
+  `level_transition_handler:promote_next_level_data()` - the same clean no-win
+  transition the vanilla return-to-keep vote uses (`game_mode_manager.lua:678-692`).
+  Unarmed/stale calls run vanilla (gt's /complete_level debug stays untouched).
+- CHANGE (#336, user request): the mid-mission backdrop is now TRANSPARENT - the
+  background window's `post_update` is wrapped so no viewport widget / world is ever
+  created on a swapped instance; the live mission renders behind the map UI, matching
+  the in-mission hero/inventory views. The v0.2.195 black empty-world tier and the
+  unused inventory-preview swap tier are removed. Loading-overlay fade preserved.
+- Tooltip updated (auto-start + live-game backdrop). All [verify-fix] pending in-game
+  confirmation: map opens transparent, picking a mission loads it for the party, no
+  fake end-of-mission rewards, ESC still returns to the run.
+
 ## 0.2.197-dev (2026-07-05) -- #307: Free Camera "no cam" -- drive the camera from RAW input (the unblock starved the FreeFlight service) [verify-fix]
 
 - FIX (#307 follow-up): with the v0.2.196 hard-lock fix in hand (user confirmed: chat +
