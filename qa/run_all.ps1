@@ -122,6 +122,11 @@ if ($Quick) {
     exit $script:blockingExit
 }
 
+# run_selftests exercises the -SelfTest of every self-test-capable script
+# (all fixture-based, offline, ~1s total). A self-test regression means a QA
+# check's own logic is broken - the gate must not trust a broken check, so
+# this is Standard policy (its exit 2 BLOCKS). Full pass only, not -Quick.
+Run-Check "run_selftests"      { & (Join-Path $here "run_selftests.ps1")      -Quiet:$Quiet }
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
 # check_loc_tags is advisory-only (dev status-tag doctrine, issue #301): it
 # surfaces stable-tag leaks, unknown-vocab tags, and mutex combos, but must

@@ -38,6 +38,13 @@ jobs:
         # TODO: tighten to fail-on-warning once CWV bare globals are refactored
         # and the baseline is clean.
 
+      - name: run_selftests.ps1 (unit tests of every QA check + ship.ps1 labeling logic)
+        shell: pwsh
+        run: ./qa/run_selftests.ps1
+        # No continue-on-error: a self-test regression means a QA check's own
+        # logic is broken, which is genuine breakage. All fixture-based and
+        # offline (no gh/network), so this never flakes in CI.
+
       - name: check_cfg.ps1
         shell: pwsh
         run: ./qa/check_cfg.ps1

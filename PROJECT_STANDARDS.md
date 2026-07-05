@@ -1356,6 +1356,7 @@ see what was open on a given date.
 | `check_localization.ps1` | `qa/` | unescaped `%`, referenced-but-undefined keys, missing `mod_description` | `.\qa\check_localization.ps1` |
 | `check_file_sizes.ps1` | `qa/` | files over 1500-line target / 2500-line hard limit | `.\qa\check_file_sizes.ps1` |
 | `check_stale_docs.ps1` | `qa/` | audit/review markdowns >14 days without SUPERSEDED banner | `.\qa\check_stale_docs.ps1 [-Fix]` |
+| `run_selftests.ps1` | `qa/` | regression in any QA check's own parsing/decision logic + ship.ps1 step-6 labeling logic (runs every script's `-SelfTest`; blocking) | `.\qa\run_selftests.ps1` |
 | `run_all.ps1` | `qa/` | all of the above | `.\qa\run_all.ps1 [-Quick] [-SkipLua]` |
 | GitHub Action | `.github/workflows/qa.yml` | runs all checks on push + PR | automatic |
 

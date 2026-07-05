@@ -48,10 +48,11 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$Mod,
+    [string]$Mod,
     [switch]$AllowPublic,
     [switch]$NoRemote,
-    [switch]$SkipGitHub
+    [switch]$SkipGitHub,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,6 +66,117 @@ function Fail {
     Write-Error $Message -ErrorAction Continue
     exit 1
 }
+
+# ---------------------------------------------------------------------------
+# Pure helpers for step 6 (issue status labeling, issue #326). Hoisted out of
+# the step so `-SelfTest` exercises the SAME code the live ship runs.
+# ---------------------------------------------------------------------------
+
+# Dev-stream = MOD_VERSION carries a release-track suffix. Only dev-stream
+# ships auto-label; a clean stable promotion re-ships already-labeled work.
+function Test-DevStreamVersion {
+    param([string]$Version)
+    return [bool]($Version -match '-(dev|alpha|beta|rc)\b')
+}
+
+# Top `## ` entry of a newest-first CHANGELOG. Returns @{ Header; Entry } or
+# $null when the file has no version header at all.
+function Get-TopChangelogEntry {
+    param([string[]]$Lines)
+    $first = -1; $second = -1
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -match '^\s*##\s+\S') {
+            if ($first -lt 0) { $first = $i } else { $second = $i; break }
+        }
+    }
+    if ($first -lt 0) { return $null }
+    $endEx = if ($second -ge 0) { $second } else { $Lines.Count }
+    return @{
+        Header = $Lines[$first].Trim()
+        Entry  = ($Lines[$first..($endEx - 1)] -join "`n")
+    }
+}
+
+# Decide what (if anything) to label from a shipped entry. Returns
+# @{ Skip = $null|'loc-sweep'|'no-refs'; Label = 'verify-fix'|'diagnostics-armed'; Refs = @(int...) }.
+#   * loc-sweep headers are skipped: their #N refs are tag CONTEXT, not
+#     shipped work (same heuristic as qa/check_issue_status_labels.ps1).
+#   * Label choice is ENTRY-level via header markers; a mixed fix+probe entry
+#     gets one label for all refs -- the caller prints it for hand-correction.
+function Get-ShipLabelPlan {
+    param([string]$Header, [string]$Entry)
+    if ($Header -match '(?i)(localization|loc sweep|status-tag doctrine|menu wording|localization audit|loc audit)') {
+        return @{ Skip = 'loc-sweep'; Label = $null; Refs = @() }
+    }
+    $label = if ($Header -match '(?i)\[diag\]|diagnostic|probe|instrument') { 'diagnostics-armed' } else { 'verify-fix' }
+    $numSet = @{}
+    foreach ($m in [regex]::Matches($Entry, '#(\d+)')) { $numSet[[int]$m.Groups[1].Value] = $true }
+    $refs = @($numSet.Keys | Sort-Object)
+    if ($refs.Count -eq 0) { return @{ Skip = 'no-refs'; Label = $label; Refs = @() } }
+    return @{ Skip = $null; Label = $label; Refs = $refs }
+}
+
+# Offline self-test of the step-6 logic (qa-script convention: exit 0 = OK,
+# exit 2 = regression). Runnable standalone (`ship.ps1 -SelfTest`) and via
+# qa/run_selftests.ps1. Network/gh interaction is NOT covered here -- that
+# path prints every decision at live-ship time for hand-correction.
+function Invoke-ShipSelfTest {
+    $script:__stpass = $true
+    function Assert($cond, $desc) {
+        $verdict = if ($cond) { 'PASS' } else { 'FAIL' }
+        $colour  = if ($cond) { 'Green' } else { 'Red' }
+        Write-Host ("  [{0}] {1}" -f $verdict, $desc) -ForegroundColor $colour
+        if (-not $cond) { $script:__stpass = $false }
+    }
+
+    Assert (Test-DevStreamVersion '0.7.225-dev')  "dev suffix ships labels (0.7.225-dev)"
+    Assert (Test-DevStreamVersion '0.2.1-beta')   "beta suffix ships labels (0.2.1-beta)"
+    Assert (-not (Test-DevStreamVersion '1.0.0')) "clean stable version does NOT auto-label (1.0.0)"
+    Assert (-not (Test-DevStreamVersion '(unknown)')) "unknown version does NOT auto-label"
+
+    $cl = @(
+        '# Changelog',
+        '',
+        '## 0.7.222-dev (2026-07-04) - #294 (crash) FIXED: non-resident pickup CTD',
+        '',
+        '- **#294 (crash) FIXED.** Details. Separate latent bug tracked as #322.',
+        '',
+        '## 0.7.221-dev (2026-07-04) - older entry referencing #288',
+        '',
+        '- old work on #288.'
+    )
+    $top = Get-TopChangelogEntry -Lines $cl
+    Assert ($null -ne $top) "top entry found in a normal changelog"
+    Assert ($top.Header -like '*0.7.222-dev*') "top header is the NEWEST version"
+    Assert ($top.Entry -notmatch '#288') "entry text does not bleed into the second entry"
+    Assert ($null -eq (Get-TopChangelogEntry -Lines @('no headers', 'here'))) "changelog without '## ' headers returns null"
+
+    $plan = Get-ShipLabelPlan -Header $top.Header -Entry $top.Entry
+    Assert ($null -eq $plan.Skip) "fix entry is not skipped"
+    Assert ($plan.Label -eq 'verify-fix') "fix entry labels verify-fix"
+    Assert (($plan.Refs -join ',') -eq '294,322') "refs harvested, deduped, sorted (294,322)"
+
+    $planD = Get-ShipLabelPlan -Header '## 0.7.225-dev - #144 retire trace, add [ct:vaul] probe' -Entry 'probe work for #144'
+    Assert ($planD.Label -eq 'diagnostics-armed') "probe-marker header labels diagnostics-armed"
+
+    $planL = Get-ShipLabelPlan -Header '## 0.12.204-dev - Localization: applied dev status-tag doctrine (#301)' -Entry 'refs #74 #108 as tag context'
+    Assert ($planL.Skip -eq 'loc-sweep') "loc-sweep header is skipped"
+
+    $planN = Get-ShipLabelPlan -Header '## 0.1.2-dev - housekeeping' -Entry 'no issue references here'
+    Assert ($planN.Skip -eq 'no-refs') "entry without #N refs is a no-op"
+
+    Write-Host ""
+    if ($script:__stpass) {
+        Write-Host "[ship.ps1 -SelfTest] OK -- step-6 labeling logic intact." -ForegroundColor Green
+        return 0
+    } else {
+        Write-Host "[ship.ps1 -SelfTest] FAILED -- labeling-logic regression." -ForegroundColor Red
+        return 2
+    }
+}
+
+if ($SelfTest) { exit (Invoke-ShipSelfTest) }
+if (-not $Mod) { Fail "Usage: ship.ps1 -Mod <name> [-AllowPublic] [-NoRemote] [-SkipGitHub]  (or ship.ps1 -SelfTest)" }
 
 # ---------------------------------------------------------------------------
 # Step 1: resolve paths + parse published_id and MOD_VERSION
@@ -279,7 +391,7 @@ try {
         Write-Host "  WARNING: MOD_VERSION unknown -- cannot tell dev from stable; label the shipped issues by hand." -ForegroundColor Yellow
         $labelSummary += 'SKIPPED (version unknown) -- label by hand'
     }
-    elseif ($modVersion -notmatch '-(dev|alpha|beta|rc)\b') {
+    elseif (-not (Test-DevStreamVersion $modVersion)) {
         Write-Host "  clean-version (stable) ship -- skipping: labels were applied when the dev build shipped." -ForegroundColor DarkGray
         $labelSummary += 'skipped (stable promotion)'
     }
@@ -301,30 +413,22 @@ try {
         else {
             # Top `## ` entry = the entry being shipped (CHANGELOGs are newest-first).
             $clLines = [System.IO.File]::ReadAllText($clPath, [System.Text.Encoding]::UTF8) -split "`r?`n"
-            $first = -1; $second = -1
-            for ($i = 0; $i -lt $clLines.Count; $i++) {
-                if ($clLines[$i] -match '^\s*##\s+\S') {
-                    if ($first -lt 0) { $first = $i } else { $second = $i; break }
-                }
-            }
-            if ($first -lt 0) {
+            $top = Get-TopChangelogEntry -Lines $clLines
+            if (-not $top) {
                 Write-Host "  WARNING: no '## ' entry in CHANGELOG.md -- nothing to label." -ForegroundColor Yellow
                 $labelSummary += 'SKIPPED (no CHANGELOG entry)'
             }
             else {
-                $endEx    = if ($second -ge 0) { $second } else { $clLines.Count }
-                $clHeader = $clLines[$first].Trim()
-                $clEntry  = ($clLines[$first..($endEx - 1)] -join "`n")
-                if ($clHeader -match '(?i)(localization|loc sweep|status-tag doctrine|menu wording|localization audit|loc audit)') {
+                $clHeader = $top.Header
+                $plan = Get-ShipLabelPlan -Header $top.Header -Entry $top.Entry
+                if ($plan.Skip -eq 'loc-sweep') {
                     Write-Host "  loc-sweep entry ($clHeader) -- its refs are tag context, not shipped work; skipping." -ForegroundColor DarkGray
                     $labelSummary += 'skipped (loc-sweep entry)'
                 }
                 else {
-                    $statusLabel = if ($clHeader -match '(?i)\[diag\]|diagnostic|probe|instrument') { 'diagnostics-armed' } else { 'verify-fix' }
-                    $numSet = @{}
-                    foreach ($m in [regex]::Matches($clEntry, '#(\d+)')) { $numSet[[int]$m.Groups[1].Value] = $true }
-                    $issueRefs = @($numSet.Keys | Sort-Object)
-                    if ($issueRefs.Count -eq 0) {
+                    $statusLabel = $plan.Label
+                    $issueRefs = $plan.Refs
+                    if ($plan.Skip -eq 'no-refs') {
                         Write-Host "  no #N refs in the shipped entry ($clHeader) -- nothing to label." -ForegroundColor DarkGray
                         $labelSummary += 'no issue refs in entry'
                     }
