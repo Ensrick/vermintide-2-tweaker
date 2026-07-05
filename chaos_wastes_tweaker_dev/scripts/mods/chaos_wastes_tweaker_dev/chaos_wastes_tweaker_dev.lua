@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.223-dev"
+local MOD_VERSION = "0.7.224-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -6686,8 +6686,13 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     -- #58/#156 spawn census: count the FINAL pickup_name (post collectible->coin
     -- conversion) once vanilla confirms it actually spawned. _spawn_pickup is the
     -- single chokepoint for both the spread pass and the guaranteed chest/altar pass,
-    -- so this tallies EVERYTHING. Returns a single unit (or nil) in vanilla.
-    local spawned = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
+    -- so this tallies EVERYTHING. #322: vanilla returns (pickup_unit, pickup_unit_go_id)
+    -- (pickup_system.lua:1207); capture and re-return BOTH. Only one vanilla caller uses
+    -- the go_id -- the linked-pickup RPC path (:1441 -> rpc_link_pickup) -- so dropping it
+    -- (the old `return spawned`, VMF_RECIPES 2 collapse) desynced surface-linked pickups
+    -- to clients. The #294 guard's early `return` (nil,nil) matches vanilla's own early
+    -- returns, so it stays correct.
+    local spawned, go_id = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
     if mod._ct_tally_count then mod._ct_tally_count(pickup_name, spawned) end
     -- #143 (read-only): tag every CONFIRMED Morgrim's Bomb spawn with its source
     -- (world spread-pool vs level-baked vs bomb-boon drop) so a live run settles
@@ -6695,7 +6700,7 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     if pickup_name == "holy_hand_grenade" and spawned ~= nil and mod._ct_morgrim143_count then
         mod._ct_morgrim143_count(spawn_type, on_adv)
     end
-    return spawned
+    return spawned, go_id
 end)
 -- Note: previous versions attempted to make altars/chests walk-through by mutating
 -- their actor collision filter / scene_query / collision_enabled flags. This
@@ -7610,30 +7615,8 @@ function mod._ct_boon_display_name(name)
     return tostring(name)
 end
 
--- #144 diagnostic helper: read-only snapshot of a recipient's CURRENT stored boon list.
--- DeusRunController:get_player_power_ups(peer, local_id) (deus_run_controller.lua:1080) returns
--- the run_state SharedState power_ups table — the SAME list the boon UI renders and the SAME
--- list add_power_ups appends to (deus_run_controller.lua:1126). Returns (count, comma-separated
--- names). On `mod` (not a file-scope local) per the 200-locals cap note, mirroring the pattern of
--- _ct_boon_display_name above. Fully pcall-guarded: any resolve/format failure returns
--- (-1, "<snapshot_error>") so a caller's printf can never disturb boon application.
-function mod._ct_boon144_list_snapshot(run_controller, local_player_id)
-    local ok, count, names = pcall(function()
-        local rs = run_controller and run_controller._run_state
-        local peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
-        local list = run_controller and run_controller.get_player_power_ups
-            and run_controller:get_player_power_ups(peer, local_player_id)
-        if type(list) ~= "table" then return 0, "" end
-        local parts = {}
-        for i = 1, #list do
-            local pu = list[i]
-            parts[i] = (pu and pu.name) and tostring(pu.name) or "?"
-        end
-        return #list, table.concat(parts, ",")
-    end)
-    if ok then return count, names end
-    return -1, "<snapshot_error>"
-end
+-- (#144 boon-list snapshot helper removed with the retired [ct:boon144] SHRINK trace — the
+-- list was proven never to lose the boon; the live instrument is mod._ct_vauls_anvil_reconcile.)
 
 -- v0.7.159-dev Task 2: converted hook_safe -> full mod:hook so disabled boons can be
 -- filtered OUT of `new_power_ups` BEFORE vanilla grants + activates them. ROOT CAUSE of
@@ -7672,54 +7655,15 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
         end
     end
 
-    -- #144 diagnostic: snapshot the recipient's boon list BEFORE the grant. The user reported a
-    -- STARTING boon (ct_boon_vauls_anvil) vanishing after acquiring another boon; their hypothesis
-    -- was a fixed-size boon array overflowing/overwriting. Vanilla has NO such cap (power_ups is a
-    -- dynamic SharedState table appended by add_power_ups — deus_run_controller.lua:1126 /
-    -- deus_run_state_spec.lua:298), so this watches for the list SHRINKING across a grant, which
-    -- would prove a real drop/overwrite. Gated on `not _ct_bot_mirror_active` so the re-entrant bot
-    -- grants (driven below) don't spam the trace; the human's own grants + vanilla set-reward
-    -- re-entries inside func() are still captured.
-    local _b144_pre_count, _b144_pre_list
-    if not _ct_bot_mirror_active then
-        _b144_pre_count, _b144_pre_list = mod._ct_boon144_list_snapshot(self, local_player_id)
-    end
-
+    -- #144: the [ct:boon144] before/after boon-list SHRINK trace that used to sit here has been
+    -- RETIRED. It did its job: two clean repro logs (host + client) proved the boon list only ever
+    -- GREW across grants and Vaul's Anvil (ct_boon_vauls_anvil) was never dropped from the list.
+    -- The report has since been re-characterized: the boon STAYS in the list but its EFFECT stops
+    -- working after an equip/wield action. That failure lives in the always_blocking perk lifecycle
+    -- (deus_always_blocking_buff -> status.override_blocking), not the boon list -- so the instrument
+    -- moved to mod._ct_vauls_anvil_reconcile below (tag [ct:vaul]), which both self-heals the perk
+    -- every frame AND probes the exact wielded/lockout/override state on each change.
     func(self, new_power_ups, local_player_id, present)
-
-    -- #144 diagnostic (cont.): snapshot AFTER the grant and emit before/after lists with counts.
-    -- `added` names the boons this call actually appended (post-disable-strip). With no vanilla
-    -- cap the stored list must only ever GROW by #new_power_ups; anything smaller means a boon was
-    -- dropped/overwritten — the smoking gun for the "starting boon disappears" report. Raw printf
-    -- (host runs VMF logging OFF, per diagnostics doctrine). Whole block pcall-wrapped so a
-    -- snapshot/format failure can never break boon application.
-    if not _ct_bot_mirror_active then
-        pcall(function()
-            if not new_power_ups or #new_power_ups == 0 then return end
-            local rs = self and self._run_state
-            local peer = rs and rs.get_own_peer_id and rs:get_own_peer_id()
-            local post_count, post_list = mod._ct_boon144_list_snapshot(self, local_player_id)
-            local added_parts = {}
-            for i = 1, #new_power_ups do
-                local pu = new_power_ups[i]
-                added_parts[i] = (pu and pu.name) and tostring(pu.name) or "?"
-            end
-            local added_csv = table.concat(added_parts, ",")
-            pcall(printf, "[ct:boon144] pre-grant peer=%s local_id=%s count=%s list=%s (issue #144)",
-                tostring(peer), tostring(local_player_id), tostring(_b144_pre_count), tostring(_b144_pre_list))
-            pcall(printf, "[ct:boon144] post-grant peer=%s local_id=%s count=%s added=%s list=%s (issue #144)",
-                tostring(peer), tostring(local_player_id), tostring(post_count), added_csv, tostring(post_list))
-            -- Loss detector: expected post = pre + #added. Fires only on a genuine shrink.
-            if type(_b144_pre_count) == "number" and type(post_count) == "number"
-                and _b144_pre_count >= 0 and post_count >= 0 then
-                local expected = _b144_pre_count + #new_power_ups
-                if post_count < expected then
-                    pcall(printf, "[ct:boon144] LOSS pre=%d added=%d expected=%d post=%d - a boon was dropped/overwritten across this grant (issue #144)",
-                        _b144_pre_count, #new_power_ups, expected, post_count)
-                end
-            end
-        end)
-    end
 
     -- v0.7.90: unconditional audit trail for every boon grant. Logs name, rarity, recipient,
     -- and toggle state — surfaces any boon that slipped through a toggle. Tag `[boon-trace]`
@@ -7905,16 +7849,12 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
         mode_random and "rolled" or "mirrored", #new_power_ups, #bots)
 end)
 
--- #144 install-time finding (logged once): there is NO fixed max-boon cap in vanilla. A player's
--- active power-ups live in a dynamic SharedState Lua table (deus_run_state_spec.lua:298 "power_ups",
--- type="table", default {}); DeusRunController.add_power_ups (deus_run_controller.lua:1126) only ever
--- table.clone + table.append + set_player_power_ups — never a bounded/fixed-size write — and the
--- network transport CHUNKS long encoded strings (shared_state.lua:298-303, STRING_CHUNK_SIZE=500)
--- and reassembles them (shared_state.lua:767-783) rather than truncating. So the overflow-overwrite
--- hypothesis for #144 is not supported by the engine; the [ct:boon144] pre/post trace above will
--- show whether the stored list actually SHRINKS on a grant vs. the starting boon simply never being
--- present in the stored list to begin with (a persistence / re-sync path, not a cap).
-pcall(printf, "[ct:boon144] no fixed boon cap in vanilla (power_ups is a dynamic SharedState table; add_power_ups appends - deus_run_controller.lua:1126 / deus_run_state_spec.lua:298). Watching for list SHRINK on grant. (issue #144)")
+-- #144 install-time finding (kept for the record): there is NO fixed max-boon cap in vanilla. A
+-- player's active power-ups live in a dynamic SharedState Lua table (deus_run_state_spec.lua:298
+-- "power_ups"); DeusRunController.add_power_ups (deus_run_controller.lua:1126) only ever appends.
+-- The boon-list SHRINK hypothesis was DISPROVEN by two clean repro logs, so the [ct:boon144] list
+-- trace is retired. The report is now: the boon stays in the list but its EFFECT stops after an
+-- equip/wield action -> tracked by the [ct:vaul] perk reconciler/probe (see mod._ct_vauls_anvil_reconcile).
 
 -- Regression guard for the announce_bot_boons feature. The singleton-hook invariant for
 -- (DeusRunController, add_power_ups) is enforced statically by tools/mod-lint; this runtime
@@ -7958,6 +7898,28 @@ _rt_register("pickup_residency_guard_installed", function()
     end
 end)
 
+-- #322: the _spawn_pickup hook must capture AND re-return BOTH of vanilla's return
+-- values (pickup_unit, pickup_unit_go_id). Dropping the go_id (`return spawned`)
+-- desyncs surface-linked pickups to clients (pickup_system.lua:1441 rpc_link_pickup).
+-- Source-pattern check: assert the two-value capture + two-value return survive.
+-- Anchored via the same-file #294 helper; best-effort (nil = pass if unreadable).
+_rt_register("spawn_pickup_returns_both_values", function()
+    local ok, info = pcall(debug.getinfo, mod._ct_pickup_unit_spawn_safe or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find("local spawned, go_id = func(", 1, true) then
+        return "#322 REGRESSION: _spawn_pickup hook no longer captures vanilla's 2nd return (pickup_unit_go_id) -- linked-pickup rpc_link_pickup client sync breaks"
+    end
+    if not txt:find("return spawned, go_id", 1, true) then
+        return "#322 REGRESSION: _spawn_pickup hook no longer re-returns go_id (VMF_RECIPES 2 multi-return collapse)"
+    end
+end)
+
 -- #299 chest-revive team-teleport wiring: the deferred return-to-team pass must be
 -- present (function + pending table) so a chest-revived player can't be left stranded
 -- at a distant respawn beacon. The tick is driven from the single mod.update owner
@@ -7975,18 +7937,21 @@ _rt_register("chest_revive_team_teleport_wired", function()
     end
 end)
 
--- #144 diagnostic install guard: the boon-list snapshot helper must resolve and stay side-effect
--- free. The pre/post [ct:boon144] trace is folded into the single (DeusRunController, add_power_ups)
--- hook above — this only verifies the helper exists and returns (number, string) for a bogus
--- controller (never crashing, never mutating anything).
-_rt_register("boon144_list_trace_installed", function()
-    if type(mod._ct_boon144_list_snapshot) ~= "function" then
-        return "#144 REGRESSION: mod._ct_boon144_list_snapshot missing (boon-list diagnostic)"
+-- #144 Vaul's Anvil reconciler/probe guard: the perk self-healing update func must exist and be
+-- registered into BuffFunctionTemplates.functions under the name the ct boon's controller buff
+-- points its update_func at, so the perk (deus_always_blocking_buff -> override_blocking) is
+-- reconciled every frame instead of relying on vanilla's orphaned weapon-swap trigger. Registration
+-- is deferred to whenever BuffFunctionTemplates is ready, so in a bare test env (no engine tables)
+-- only the callable presence is asserted.
+_rt_register("vauls_anvil_reconciler_installed", function()
+    if type(mod._ct_vauls_anvil_reconcile) ~= "function" then
+        return "#144 REGRESSION: mod._ct_vauls_anvil_reconcile missing (Vaul's Anvil perk reconciler)"
     end
-    local count, names = mod._ct_boon144_list_snapshot(nil, 1)
-    if type(count) ~= "number" or type(names) ~= "string" then
-        return "#144 REGRESSION: _ct_boon144_list_snapshot(nil,1) must return (number, string), got ("
-            .. type(count) .. ", " .. type(names) .. ")"
+    local bft = rawget(_G, "BuffFunctionTemplates")
+    if bft and bft.functions then
+        if bft.functions.ct_vauls_anvil_reconcile ~= mod._ct_vauls_anvil_reconcile then
+            return "#144 REGRESSION: ct_vauls_anvil_reconcile not registered into BuffFunctionTemplates.functions (buff update_func won't resolve)"
+        end
     end
 end)
 
