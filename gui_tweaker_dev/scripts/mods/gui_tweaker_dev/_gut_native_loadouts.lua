@@ -257,23 +257,80 @@ local function _dirtify()
 end
 
 -- ------------------------------------------------------------------
--- Seeding (issue #175 requirement 5): ONE-TIME snapshot of the official loadouts for a
--- career into the modded store on first activation. Official data is only ever READ.
+-- Seeding (issue #175 requirement 5): snapshot of the official loadouts for a career
+-- into the modded store. Official data is only ever READ.
+--
+-- issue #375 -- SELF-HEALING SEED. The original guard early-returned on ANY existing
+-- store entry (`if store[career_name] then return`), which combined with the pre-seed
+-- bare-entry write in the BU equip capture (:329) to permanently corrupt the store:
+-- an equip that landed before the first mirror-read created a bare entry
+-- `{loadouts={}}`, so the official snapshot NEVER imported and the store held only the
+-- slots equipped while in modded (symptom 1). Because whole official loadout rows were
+-- then missing, set_loadout_index's `if entry.loadouts[idx]` guard (:499) failed on
+-- every slot switch, so selected_index never advanced and edits wrote to the wrong row
+-- (symptom 2 cascades from 1).
+--
+-- Now: a one-time `_seeded` flag marks a fully-imported entry. A fresh career takes a
+-- full official snapshot. A pre-existing PARTIAL entry (no flag -- either a bare
+-- BU-capture entry or a store persisted by the buggy build) is REPAIRED once: every
+-- official loadout row the store is missing is added, and any row that lost its weapons
+-- (the corrupt-partial signature -- a legitimately edited loadout ALWAYS keeps both
+-- weapon slots) has its missing gear refilled from official. Rows the player genuinely
+-- edited (both weapons present) are left untouched, so deliberate jewelry unequips are
+-- preserved. Raw field reads only (mirror._career_data / _career_loadouts) -- no
+-- interface methods, so no get_item_from_id recursion (v0.2.173 burn).
 -- ------------------------------------------------------------------
+local function _row_is_corrupt_partial(row)
+    -- A legitimately edited loadout always retains both weapon slots; a row missing
+    -- either weapon is a partial capture from the pre-seed BU-equip bug (issue #375).
+    if type(row) ~= "table" then return true end
+    for slot in pairs(WEAPON_SLOT_SET) do
+        if row[slot] == nil then return true end
+    end
+    return false
+end
+
 local function _ensure_seeded(mirror, career_name)
     local store = _store()
-    if store[career_name] then return end
+    local entry = store[career_name]
+    if entry and entry._seeded then return end  -- already fully imported
     local cd = mirror._career_data and mirror._career_data[career_name]
     if type(cd) ~= "table" or cd[1] == nil then return end  -- official data not ready yet
     local selected = (mirror._career_loadouts and mirror._career_loadouts[career_name]) or 1
-    store[career_name] = {
-        selected_index = selected,
-        bot_index = nil,
-        loadouts = _deepcopy(cd),   -- array of { slot=id,..., talents=str }
-    }
+    if not entry then
+        store[career_name] = {
+            selected_index = selected,
+            bot_index = nil,
+            loadouts = _deepcopy(cd),   -- array of { slot=id,..., talents=str }
+            _seeded = true,
+        }
+        _persist()
+        printf("[gut_dev:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (fresh)",
+            tostring(career_name), #cd, selected)
+        return
+    end
+    -- Repair a partial/bare entry left by the pre-seed bug (issue #375).
+    local rows_added, rows_repaired = 0, 0
+    for i = 1, #cd do
+        local off_row = cd[i]
+        local st_row = entry.loadouts[i]
+        if st_row == nil then
+            entry.loadouts[i] = _deepcopy(off_row)
+            rows_added = rows_added + 1
+        elseif _row_is_corrupt_partial(st_row) then
+            for k, v in pairs(off_row) do
+                if st_row[k] == nil then st_row[k] = v end
+            end
+            rows_repaired = rows_repaired + 1
+        end
+    end
+    if entry.selected_index == nil or entry.loadouts[entry.selected_index] == nil then
+        entry.selected_index = selected
+    end
+    entry._seeded = true
     _persist()
-    printf("[gut_dev:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (read-only)",
-        tostring(career_name), #cd, selected)
+    printf("[gut_dev:NATIVE_LOADOUTS] repaired career=%s partial store (issue #375): rows_added=%d rows_repaired=%d loadouts=%d selected=%d",
+        tostring(career_name), rows_added, rows_repaired, #entry.loadouts, entry.selected_index)
 end
 
 -- Tri-state gear-id resolution: "yes" (item exists), "no" (checkable and absent right
@@ -331,8 +388,17 @@ local function _install_bu_capture()
         -- READONLY mode: no capture; the call passes through and the mirror-level write
         -- blocks make the equip snap back to the official loadout on the next refresh.
         if _adventure_mode() == MODE_STORE and career_name and backend_id and GEAR_SLOT_SET[slot_name] then
+            -- issue #375: seed the official snapshot BEFORE we can create a store entry.
+            -- An equip that lands before the first mirror-read must NOT leave a bare
+            -- `{loadouts={}}` entry -- that used to permanently block _ensure_seeded and
+            -- was the root cause of "official loadouts only partially import". Resolve the
+            -- mirror the same way _adventure_mode does (raw field, no interface method).
+            local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
+            if ok_m and mirror then _ensure_seeded(mirror, career_name) end
             local store = _store()
             local entry = store[career_name]
+            -- Fallback bare entry only if seeding could not run yet (official data not
+            -- ready). NOT flagged _seeded, so _ensure_seeded repairs it once data lands.
             if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
             local idx = entry.selected_index
             entry.loadouts[idx] = entry.loadouts[idx] or {}
@@ -791,6 +857,41 @@ mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from offi
 end)
 
 -- ==================================================================
+-- /gut_loadout_status (issue #375 diagnostics) -- echo the modded loadout store state
+-- to CHAT (visible with mod-logging off) plus a per-row slot dump to the console log, so
+-- "is the loadout system even working" is answerable at a glance: mode, realm, and for
+-- each career whether it seeded, how many loadout rows exist, the selected index, and
+-- (console) which gear/cosmetic slots each row actually holds.
+-- ==================================================================
+mod:command("gut_loadout_status", "Show the modded loadout store state (issue #375)", function()
+    local mode = _adventure_mode()
+    mod:echo(string.format("[loadouts] realm_modded=%s mode=%s", tostring(_in_modded_realm()), tostring(mode)))
+    if mode == MODE_OFF then
+        mod:echo("  feature INERT here (official realm / Versus / not in a backend view) -- store is not consulted")
+    end
+    local store = _store()
+    local any = false
+    for career_name, entry in pairs(store) do
+        any = true
+        local rows = entry.loadouts or {}
+        mod:echo(string.format("  %s: seeded=%s loadouts=%d selected=%s bot=%s",
+            tostring(career_name), tostring(entry._seeded and true or false),
+            #rows, tostring(entry.selected_index), tostring(entry.bot_index)))
+        for i = 1, #rows do
+            local row = rows[i]
+            local filled = {}
+            for _, s in ipairs(LOADOUT_SLOT_NAMES) do
+                if row and row[s] ~= nil then filled[#filled + 1] = s end
+            end
+            printf("[gut_dev:NATIVE_LOADOUTS] status career=%s row=%d selected=%s slots=[%s] talents=%s",
+                tostring(career_name), i, tostring(i == entry.selected_index),
+                table.concat(filled, ","), tostring(row and row.talents))
+        end
+    end
+    if not any then mod:echo("  store EMPTY -- open a modded hero view (and switch a loadout slot) to seed from official") end
+end)
+
+-- ==================================================================
 -- Regression markers (issue #175 requirement 11). Registered by gui_tweaker_dev.lua.
 -- ==================================================================
 M.HOOK_TARGETS = {
@@ -892,6 +993,23 @@ M.rt_checks = {
             local key = t[1] .. "." .. t[2]
             if seen[key] then return "duplicate hook target: " .. key end
             seen[key] = true
+        end
+    end },
+    { name = "native_loadouts_seed_repair_predicate", fn = function()
+        -- issue #375: the self-heal seed classifies a row as corrupt-partial iff it is
+        -- missing a WEAPON slot (a legitimately edited loadout always keeps both weapons,
+        -- so intentional jewelry unequips are NOT reclassified as corrupt).
+        if type(_row_is_corrupt_partial) ~= "function" then return "_row_is_corrupt_partial missing" end
+        if not _row_is_corrupt_partial(nil) then return "nil row must be corrupt-partial" end
+        if not _row_is_corrupt_partial({ slot_ranged = "r" }) then return "row missing slot_melee must be corrupt-partial" end
+        if not _row_is_corrupt_partial({ slot_melee = "m" }) then return "row missing slot_ranged must be corrupt-partial" end
+        -- Both weapons present, ring intentionally empty -> edited, NOT corrupt.
+        if _row_is_corrupt_partial({ slot_melee = "m", slot_ranged = "r" }) then
+            return "row with both weapons must NOT be corrupt-partial (would clobber edits)"
+        end
+        -- Every weapon slot must be a gear slot (repair reads gear from official).
+        for slot in pairs(WEAPON_SLOT_SET) do
+            if not GEAR_SLOT_SET[slot] then return "weapon slot not in gear set: " .. slot end
         end
     end },
 }
