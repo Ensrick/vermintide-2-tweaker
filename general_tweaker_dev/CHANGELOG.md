@@ -1,5 +1,21 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.192-dev (2026-07-06) -- #139 hardening: regression tests + BUG_CLASSES for the bot-teleport leash veto
+
+### Why
+#139 (bots teleport AWAY from downed players) was fixed by the v0.2.185-dev blanket leash veto and confirmed working in-game 2026-07-06; the issue is being closed. This entry adds the regression net so the fix cannot silently regress and future sessions do not repeat the follow-scoped diagnostic mistake that made the bug hard to see. No gameplay change.
+
+### Changed
+- **Three new `/gt_regression_test` checks** (always-on in dev, output via the harness echo/printf):
+  - `gt_bot139_needs_aid_status_predicate` -- drives the status truth table with a STUB status extension: knocked / hanging-from-hook / ledge-hanging-and-not-pulled-up return true; healthy and already-pulled-up return false. Catches a refactor that narrows the covered disabler set or drops the "not pulled up" clause.
+  - `gt_bot139_teleport_veto_singleton_and_gated` -- asserts EXACTLY ONE `BTConditions.should_teleport` hook in `_gt_bot_fixes.lua` (VMF drops a 2nd on the same pair, which would shadow the veto) and that the veto still gates on `_gt_aid_priority_on()` AND a downed side teammate, with the aid gate reading both `gt_bot_behavior_improvements` and `gt_bot_aid_priority`.
+  - `gt_bot139_aid_scan_is_side_scoped_not_follow` -- structural + behavioral guard that `_gt_any_side_teammate_needs_aid` scans the SIDE player list (`side.PLAYER_UNITS` via `side_by_unit`) and never the bot's follow target. This is the exact root-cause trap: vanilla `_update_move_targets` (`ai_bot_group_system.lua:695-719`) drops disabled players from the follow set unless every human is down, so a follow-scoped aid check is blind to a teammate who goes down while the bot is leashed to a living far player.
+- **Testability seam in `_gt_bot_fixes.lua`** (behavior-identical): the status-extension -> needs-aid boolean is split into a pure `_gt_status_needs_aid(st)` that `_gt_unit_needs_aid` now calls (the OR expression is byte-for-byte the former inline body -- the unit boundary can't be stubbed because `ALIVE[u]` reads the engine `POSITION_LOOKUP` map, `global_utils.lua:15`). Exposes `mod._gt_status_needs_aid` / `_gt_unit_needs_aid` / `_gt_any_side_teammate_needs_aid` / `_gt_aid_priority_on` as pure accessors, matching the existing `mod._gt_apply_fast_reactions` pattern. The veto decision logic in the `should_teleport` hook is untouched.
+- **Docs:** new `docs/BUG_CLASSES.md` class 25 (guards scoped to a bot's follow target are structurally blind to downed teammates; residual blind spots: broader `is_disabled` states, awaiting-rescue filtered out of `PLAYER_UNITS`). `docs/BUG_TRIAGE_RUNBOOK.md` gains a log-signature row steering bot-teleport investigations at the btlab probes (`[gt:btlab:d1/d2/d3/breach]`) rather than the follow-scoped `[gt_bot:139]` lines.
+
+### Notes
+- Out-of-scope gaps left for the open leash work and deliberately NOT covered by these tests or the fix: pounced / tentacle / vortex / corruptor / pack-master disabler states raise no need-aid; awaiting-rescue teammates are invisible to `PLAYER_UNITS` scans (use `side:player_units()`); `_gt_unit_needs_aid_or_rescue` is probe-only dead code.
+
 ## v0.2.191-dev (2026-07-06) -- #275: fix constant-true transitioned_one_third_health guard collapse (Nurgloth final-phase-at-spawn softlock) [verify-fix]
 
 ### Why (root cause)

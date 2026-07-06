@@ -960,6 +960,22 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     return ally, real_dist, need_type, look_at
 end)
 
+-- #139 pure predicate seam (v0.2.192-dev). The status-extension -> needs-aid
+-- boolean split out of _gt_unit_needs_aid, testability-only and BEHAVIOR
+-- IDENTICAL: the OR expression is byte-for-byte the former inline body. Exists
+-- because the /gt_regression_test must exercise the exact knocked / hook /
+-- ledge-not-pulled-up truth table with a STUB status extension -- and it cannot
+-- stub the unit boundary, since _gt_unit_needs_aid's ALIVE[u] guard reads the
+-- engine POSITION_LOOKUP map (global_utils.lua:15 `ALIVE = POSITION_LOOKUP`),
+-- which rejects a fake unit key. This leaf takes the status ext directly.
+-- Covered states (generic_status_extension.lua): is_knocked_down :2091,
+-- is_hanging_from_hook :2322, get_is_ledge_hanging :2286, is_pulled_up :2262.
+local function _gt_status_needs_aid(st)
+    return st:is_knocked_down()
+        or st:is_hanging_from_hook()
+        or (st:get_is_ledge_hanging() and not st:is_pulled_up())
+end
+
 -- #139 helper: does this ally unit currently need aid (knocked down / hanging
 -- from a hook / ledge-hanging-not-yet-pulled-up)? Mirrors the inline status
 -- checks in FIX 3b above. Used by FIX 7 to avoid snap-leashing a bot ONTO a
@@ -968,9 +984,7 @@ local function _gt_unit_needs_aid(u)
     if not (u and ALIVE[u]) then return false end
     local st = ScriptUnit.has_extension(u, "status_system")
     if not st then return false end
-    return st:is_knocked_down()
-        or st:is_hanging_from_hook()
-        or (st:get_is_ledge_hanging() and not st:is_pulled_up())
+    return _gt_status_needs_aid(st)
 end
 
 -- #139 (v0.2.185-dev): the aid-priority master+sub gate, shared by FIX 3b's
@@ -1043,6 +1057,18 @@ local function _gt_nearest_needing_aid(self_unit)
     end
     return best, best_d
 end
+
+-- #139 (v0.2.192-dev) testability exposures. Pure accessors -- no behavior
+-- change (same pattern as mod._gt_apply_fast_reactions above). The
+-- /gt_regression_test checks in general_tweaker_dev.lua drive these to guard the
+-- #139 leash veto against silent regression: the status truth table
+-- (_gt_status_needs_aid) and the side-scoped-not-follow scan
+-- (_gt_any_side_teammate_needs_aid). Publishing a reference does not alter the
+-- veto decision logic in the should_teleport hook.
+mod._gt_status_needs_aid            = _gt_status_needs_aid
+mod._gt_unit_needs_aid             = _gt_unit_needs_aid
+mod._gt_any_side_teammate_needs_aid = _gt_any_side_teammate_needs_aid
+mod._gt_aid_priority_on            = _gt_aid_priority_on
 
 -- ----------------------------------------------------------------------------
 -- FIX 7: Tighter bot follow leash (configurable teleport distance)

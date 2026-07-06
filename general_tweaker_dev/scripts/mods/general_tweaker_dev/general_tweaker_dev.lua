@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.191-dev"
+local MOD_VERSION = "0.2.192-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1506,6 +1506,140 @@ _rt_register("bot_leash_veto_while_teammate_needs_aid_present", function()
     -- FINAL `want` (so it also catches reason == "vanilla_40m").
     if not txt:find("_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid", 1, true) then
         return "the #139 blanket teleport veto (aid-priority + any-teammate-needs-aid) is missing from _gt_bot_fixes.lua"
+    end
+end)
+
+_rt_register("gt_bot139_needs_aid_status_predicate", function()
+    -- #139 (v0.2.192-dev): the leash veto keys off _gt_unit_needs_aid, whose
+    -- status -> boolean core is _gt_status_needs_aid: a teammate "needs aid" when
+    -- knocked down, hanging from a hook, or ledge-hanging AND not yet pulled up.
+    -- Exercise the exact truth table with a STUB status extension so a refactor
+    -- that narrows the covered states (or drops the "not pulled up" clause, which
+    -- would re-flag an ally who has already been helped up) is caught at load.
+    -- Stub tables, not live units: _gt_unit_needs_aid's ALIVE[u] guard reads the
+    -- engine POSITION_LOOKUP map (global_utils.lua:15) and rejects a fake key, so
+    -- the leaf predicate is the injectable seam.
+    local pred = mod._gt_status_needs_aid
+    if type(pred) ~= "function" then
+        return "mod._gt_status_needs_aid not exposed -- was the #139 leaf seam reverted?"
+    end
+    local function st(knocked, hook, ledge, pulled)
+        return {
+            is_knocked_down      = function() return knocked end,
+            is_hanging_from_hook = function() return hook end,
+            get_is_ledge_hanging = function() return ledge end,
+            is_pulled_up         = function() return pulled end,
+        }
+    end
+    local function b(v) return v and true or false end
+    local cases = {
+        { s = st(true,  false, false, false), want = true,  why = "knocked down" },
+        { s = st(false, true,  false, false), want = true,  why = "hanging from hook" },
+        { s = st(false, false, true,  false), want = true,  why = "ledge-hanging, not pulled up" },
+        { s = st(false, false, true,  true),  want = false, why = "ledge-hanging but already pulled up" },
+        { s = st(false, false, false, false), want = false, why = "healthy (no disabler state)" },
+        { s = st(false, false, false, true),  want = false, why = "healthy, pulled_up irrelevant" },
+    }
+    for _, c in ipairs(cases) do
+        if b(pred(c.s)) ~= c.want then
+            return string.format("_gt_status_needs_aid(%s): want=%s got=%s",
+                c.why, tostring(c.want), tostring(b(pred(c.s))))
+        end
+    end
+end)
+
+_rt_register("gt_bot139_teleport_veto_singleton_and_gated", function()
+    -- #139 (v0.2.192-dev): the blanket leash veto must live in EXACTLY ONE
+    -- BTConditions.should_teleport hook -- VMF silently drops a 2nd hook on the
+    -- same (Class, method) (CLAUDE.md non-negotiable 8), which would shadow the
+    -- veto. And the veto must gate on aid-priority AND a downed side teammate.
+    -- Assert both so a refactor can neither add a duplicate should_teleport hook
+    -- nor weaken the gate. Complements bot_leash_veto_..._present (which only
+    -- checks the veto conjunction marker) with the singleton count.
+    if type(mod._gt_aid_priority_on) ~= "function" then
+        return "mod._gt_aid_priority_on not exposed"
+    end
+    if type(mod._gt_any_side_teammate_needs_aid) ~= "function" then
+        return "mod._gt_any_side_teammate_needs_aid not exposed"
+    end
+    -- Read the shipped _gt_bot_fixes.lua text via the source path of a helper it
+    -- exports. Soft-skip (pass) if unreadable, as bot_leash_veto_... does, so a
+    -- packaged build with no source on disk doesn't spuriously fail.
+    local anchor = mod._gt_unit_needs_aid or mod._gt_apply_fast_reactions
+    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r"); if not f then return end
+    local txt = f:read("*a"); f:close(); if not txt then return end
+    -- (a) exactly one hook on this (Class, method) pair.
+    local n = 0
+    for _ in txt:gmatch('mod:hook%("BTConditions",%s*"should_teleport"') do n = n + 1 end
+    if n ~= 1 then
+        return string.format("expected exactly 1 BTConditions.should_teleport hook, found %d (duplicate-hook shadow risk)", n)
+    end
+    -- (b) veto gated on aid-priority AND a downed teammate.
+    if not txt:find("_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid", 1, true) then
+        return "the #139 blanket veto conjunction (aid-priority AND any-side-teammate-needs-aid) is missing"
+    end
+    -- (c) the aid-priority gate still ANDs BOTH the master and the sub-toggle.
+    if not txt:find("gt_bot_behavior_improvements", 1, true) or not txt:find("gt_bot_aid_priority", 1, true) then
+        return "aid-priority gate no longer reads both gt_bot_behavior_improvements and gt_bot_aid_priority"
+    end
+end)
+
+_rt_register("gt_bot139_aid_scan_is_side_scoped_not_follow", function()
+    -- #139 (v0.2.192-dev) STRUCTURAL + behavioral guard against the exact root
+    -- cause: _gt_any_side_teammate_needs_aid must scan the SIDE player list
+    -- (side.PLAYER_UNITS via side_by_unit), never the bot's follow target.
+    -- Vanilla AIBotGroupSystem._update_move_targets (ai_bot_group_system.lua
+    -- :695-719) drops disabled players from the follow-candidate set unless EVERY
+    -- human is down, so a follow-scoped aid check is structurally blind to a
+    -- teammate who went down while the bot was leashed to a LIVING far player.
+    if type(mod._gt_any_side_teammate_needs_aid) ~= "function" then
+        return "mod._gt_any_side_teammate_needs_aid not exposed"
+    end
+    local pred = mod._gt_status_needs_aid
+    if type(pred) ~= "function" then return "mod._gt_status_needs_aid not exposed" end
+
+    -- Behavioral: a healthy follow-target stub is NOT aid-worthy, while a knocked
+    -- non-follow teammate IS -- so a full side-list scan finds the downed teammate
+    -- the (healthy) follow target would otherwise hide.
+    local function st(knocked)
+        return {
+            is_knocked_down      = function() return knocked end,
+            is_hanging_from_hook = function() return false end,
+            get_is_ledge_hanging = function() return false end,
+            is_pulled_up         = function() return false end,
+        }
+    end
+    if (pred(st(false)) and true or false) ~= false then
+        return "healthy follow-target stub wrongly classified as needing aid"
+    end
+    if (pred(st(true)) and true or false) ~= true then
+        return "knocked non-follow teammate stub not classified as needing aid"
+    end
+
+    -- Structural: isolate the scan body and assert it is side-scoped, not
+    -- follow-scoped. Soft-skip if the source is not on disk (packaged build).
+    local anchor = mod._gt_any_side_teammate_needs_aid
+    local ok, info = pcall(debug.getinfo, anchor, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r"); if not f then return end
+    local txt = f:read("*a"); f:close(); if not txt then return end
+    -- ".-" is lazy and Lua's "." matches newlines, so this captures from the
+    -- function header to its col-0 closing `end` (all inner ends are indented).
+    -- Starting at the header excludes the preceding comment block.
+    local body = txt:match("local function _gt_any_side_teammate_needs_aid.-\nend")
+    if not body then return end  -- reformatted beyond recognition -> soft skip
+    if not body:find("PLAYER_UNITS", 1, true) or not body:find("side_by_unit", 1, true) then
+        return "aid scan no longer reads side.PLAYER_UNITS via side_by_unit -- side-scoped invariant broken"
+    end
+    if not body:find("_gt_unit_needs_aid", 1, true) then
+        return "aid scan no longer delegates to _gt_unit_needs_aid"
+    end
+    if body:find("follow", 1, true) then
+        return "aid scan references the bot's follow target -- re-scoped to follow (the #139 root cause)"
     end
 end)
 

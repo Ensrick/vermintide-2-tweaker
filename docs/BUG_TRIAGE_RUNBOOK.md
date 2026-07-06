@@ -162,6 +162,7 @@ is missing after you solve it, you add it in STEP 9.
 | `Attempting to rehook active hook` | Duplicate `mod:hook` / `mod:hook_safe` on the same `(Class, method)`; the second silently dropped. | Consolidate into one hook body. See STEP 6 pre-flight + `VMF_RECIPES.md` sec. 1. |
 | `[<mod_id>] enabled ...` missing entirely | The mod did not load on that peer. | Confirm subscribed + enabled in VMF; check vt2-mod-updater sync for friends. |
 | Game crashed, nothing relevant in log | Engine crash bypassing Lua logging. | Read the crash dump at `crash_dumps\<GUID>.dmp`. |
+| A bot abandons a downed teammate; `[gt_bot:139] ... follow downed=false` at the moment it happens | Follow-scoped bot diagnostic reads `follow_unit` AFTER the follow-set already dropped the disabled player - structurally blind to the down. `BUG_CLASSES.md` class 25. | Don't trust the follow-scoped `[gt_bot:139]`/`[139:bot_tp]` lines. Enable the Bot Teleport Lab (`gt_btlab_enabled`) and read the side-scoped probes: `[gt:btlab:d1]` (teleport detail), `[gt:btlab:d2]` (split follow assignment), `[gt:btlab:d3]` (per-human distances), `[gt:btlab:breach]` (radius breach). |
 
 ---
 

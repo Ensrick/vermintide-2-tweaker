@@ -1096,3 +1096,43 @@ gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in
 **Fix template.** Never purge synchronously in `remove_player`. Defer with a deadline (cosmetics uses 30s) and cancel in a `PlayerManager.add_remote_player` hook_safe - transitions re-add peers within seconds, genuine disconnects never do. Skip the local peer entirely. See cosmetics_tweaker 0.9.71-dev `[la-state] PEER-PURGE scheduled/canceled/executed`.
 
 **Related.** A second transition-window class rides along: RPCs sent to/from a peer that is mid-load are dropped silently with no error (same session: three client->host packets between 17:28:26-17:28:55 never arrived; keep-time round-trip was 98ms). Any "send once on state change" design must retry-until-acked or pull-on-ready-with-ack (cosmetics `cos_la_state_req`/`cos_la_state_ack`).
+
+---
+
+## 25. Bot guard scoped to the follow target is blind to downed teammates (follow-set drops the disabled BEFORE the guard runs)
+
+**First seen:** 2026-06-29 (gt_dev #139, v0.2.148/.152 partial fixes); resolved 2026-07-05 (v0.2.185-dev blanket veto), regression-netted 2026-07-06 (v0.2.192-dev)
+**Canonical Issue:** [#139](https://github.com/Ensrick/vermintide-2-tweaker/issues/139) (bots teleport AWAY from downed players)
+**Lives in:** any bot-AI guard, veto, or probe that reads the bot's CURRENT follow/move target (`blackboard.ai_bot_group_extension.data.follow_unit`) to decide something about "the teammate the bot cares about"
+
+### Symptoms
+- A bot behaves as if a downed/disabled teammate does not exist: it teleports or leashes toward a *living* far player instead of pathing in to revive the one who just went down.
+- The bug only manifests when the team is **split** (someone down here, a living player far away). With everyone bunched, or with only one human left standing, the same guard "works" - because the follow target happens to be the downed player.
+- A follow-scoped diagnostic (`[gt_bot:139] TELEPORT executed (follow downed=...)`) reports `follow downed=false` at the exact moment the bug fires, because by then `follow_unit` has already flipped to the living player - so the probe *looks* like the fix is working while the bot abandons the downed teammate.
+
+### Diagnosis pattern
+1. Read the vanilla follow-set builder: `AIBotGroupSystem._update_move_targets` (`ai_bot_group_system.lua:680`) splits players into non-disabled (`TEMP_PLAYER_UNITS`) and disabled (`TEMP_DISABLED_PLAYER_UNITS`) at `:695-708`, then swaps the disabled list in **only when `num_units == 0 and num_disabled_units > 0`** - i.e. every human is down (`:713-719`). So on any partial down, disabled players are *dropped* from the follow-candidate set and `follow_unit` becomes a living player.
+2. Therefore any guard that reads `follow_unit` (or `data.follow_unit`) to find "the teammate needing help" is structurally blind - the disabled teammate was removed one step upstream, before the guard ran.
+3. Confirm by scoping the check to the SIDE player list instead: `Managers.state.side.side_by_unit[bot_unit].PLAYER_UNITS` (`side.lua:50`), iterating all teammates and testing each with a status predicate (`is_knocked_down` / `is_hanging_from_hook` / `get_is_ledge_hanging and not is_pulled_up`, `generic_status_extension.lua:2091/2322/2286/2262`). If the side-scoped check sees the down but the follow-scoped one does not, this class.
+
+### Fix template
+Scope the aid/veto helper to the bot unit + the side player list, never the follow target. gt's `_gt_any_side_teammate_needs_aid(self_unit)` scans `side_by_unit[self_unit].PLAYER_UNITS` and delegates to `_gt_unit_needs_aid`; the veto is applied to the FINAL `should_teleport` decision so it also catches vanilla's 40 m teleport, not just the mod's tighter leash. Diagnostics should read the actual pre-teleport distance to the nearest downed teammate (the btlab `[gt:btlab:d1/d3/breach]` probes), not the post-flip follow state.
+
+```lua
+-- WRONG -- follow_unit already flipped to a living player on a partial down
+local target = blackboard.ai_bot_group_extension.data.follow_unit
+if target and _needs_aid(target) then ... end   -- blind to the downed teammate
+
+-- RIGHT -- scan the side-level player list
+local side = Managers.state.side.side_by_unit[self_unit]
+for _, u in ipairs(side.PLAYER_UNITS) do
+    if u ~= self_unit and _gt_unit_needs_aid(u) then ... end
+end
+```
+
+### Residual blind spots (do NOT assume covered)
+- **Broader `is_disabled` set raises no need-aid.** `_gt_unit_needs_aid` covers knocked / hook / ledge only. Vanilla `GenericStatusExtension.is_disabled` (`generic_status_extension.lua:2158`) also counts pounced, tentacle, chaos-spawn, vortex, corruptor, pack-master, overpowered - a teammate disabled by any of those does not trip the aid check.
+- **Awaiting-rescue is filtered out of `PLAYER_UNITS` entirely.** `SideManager._update_frame_tables` (`side_manager.lua:371`) rebuilds `side.PLAYER_UNITS` each frame from `side:player_units()`, dropping any unit for which `is_valid` (`side_manager.lua:338-340`) is false - and `is_valid` excludes `is_ready_for_assisted_respawn`. A fully-dead teammate awaiting a rescue point is therefore invisible to a `PLAYER_UNITS` scan; to see them, scan the unfiltered `side:player_units()` (`side.lua:222`, returns `_player_units`). gt deliberately leaves awaiting-rescue to `gt_bot_rescue_awaiting`, not the leash veto.
+
+### Reference fix
+gt_dev `_gt_bot_fixes.lua` blanket veto in the `BTConditions.should_teleport` hook (v0.2.185-dev) + `_gt_any_side_teammate_needs_aid` / `_gt_unit_needs_aid` / `_gt_status_needs_aid` helpers; regression tests `gt_bot139_needs_aid_status_predicate` / `gt_bot139_teleport_veto_singleton_and_gated` / `gt_bot139_aid_scan_is_side_scoped_not_follow` (v0.2.192-dev). CHANGELOG v0.2.148/.152/.185/.192-dev. Related: class 21 (POSITION_LOOKUP dead for the local player - a different "reads the wrong live table" bot-code trap).
