@@ -5,6 +5,12 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.204-dev (2026-07-05) -- issue 339 CLOSED (user-confirmed in-game): integrated mods fold into a category, never a top-level Mod Tweaker tab
+
+- issue 339 CLOSED (CRITICAL). The user confirmed in-game that Crosshair Kill Confirmation (integration issue 313) no longer renders as a top-level Mod Tweaker TAB; its options now appear INSIDE gut's Interface tab under the HUD group as a "Crosshair Kill Confirmation" sub-collapsible, and the vanilla-Options gear focuses that HUD category (not a CKC tab). Behavior fix already live: CKC is out of the `_MY_MODS` tab whitelist in `_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`; `_inject_ckc_into_gut` splices its live options under `gut_hide_hud_ui_group` as `gut_ckc_group`; `_gut_ckc_bridge.lua`'s focus request is redirected by `_apply_focus_request` to the gut Interface tab with the HUD + CKC groups auto-expanded. Same model as the UI Tweaks / HideBuffs precedent (issue 312). This build adds the hardening.
+- TEST (inverted the stale guard): `ckc_modtweaker_whitelisted` asserted the OLD (pre-339) invariant -- that CKC MUST be in `_MY_MODS` -- so it was returning a FAIL once the fix removed CKC. Replaced with `mod_tweaker_no_integrated_toplevel_tabs`, which asserts the correct 339 invariant: CKC is NOT whitelisted in the two tab-driving files AND `_inject_ckc_into_gut` is wired in both, so it folds into Interface>HUD. The config-EXPORT whitelist in `_gut_config_file.lua` legitimately keeps CKC + HideBuffs (settings snapshot, not tabs) and is intentionally not checked.
+- DOC: `MOD_TWEAKER_INTEGRATION.md` (authoritative) states the binding rule -- a top-level tab is only for the author's own Tweaker-series mods; a third-party integration (CKC issue 313, HideBuffs issue 312, HUD-adjust issue 310) NEVER gets a tab or top-level collapsible, it folds into the correct existing category collapsible. Any "open in Mod Tweaker" bridge focuses the CATEGORY, not a tab.
+
 ## 0.2.203-dev (2026-07-05) -- #363 CLOSED (user-confirmed in-game): regression guard for the Salvage store-atlas injection
 
 - #363 CLOSED. The user confirmed in-game that the in-mission Crafting Salvage page renders without crashing (fix shipped in v0.2.202-dev). No code change to the fix; this build adds the regression guard.

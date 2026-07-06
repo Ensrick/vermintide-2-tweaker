@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.203-dev"
+local MOD_VERSION = "0.2.204-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2076,19 +2076,34 @@ end)
 
 -- (#313) Crosshair Kill Confirmation bridge regression tests. Split needles so the
 -- source-pattern checks can't self-match; unreadable source => silent skip (pass).
-_rt_register("ckc_modtweaker_whitelisted", function()
-    -- CKC must be whitelisted (BRACKETED key - the id has spaces) in ALL THREE _MY_MODS
-    -- tables so its options surface as a Mod Tweaker tab + config export.
+_rt_register("mod_tweaker_no_integrated_toplevel_tabs", function()
+    -- (#339) A third-party INTEGRATED mod must NEVER get a top-level Mod Tweaker tab --
+    -- a tab is only for the author's own Tweaker-series mods. Crosshair Kill Confirmation
+    -- (#313, absorbed) must NOT be in the _MY_MODS whitelist of the two TAB-DRIVING files;
+    -- its options fold INTO gut's Interface tab under the HUD group via _inject_ckc_into_gut
+    -- (the UI Tweaks / HideBuffs #312 precedent). Re-adding CKC to _MY_MODS resurrects the
+    -- wrong #313 tab this issue corrects. NOTE: the config-EXPORT whitelist in
+    -- _gut_config_file.lua is a SEPARATE concern (settings snapshot/restore) and
+    -- legitimately keeps CKC + HideBuffs, so it is intentionally NOT checked here.
+    -- Binding rule: gui_tweaker_dev/MOD_TWEAKER_INTEGRATION.md.
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local needle = '["Crosshair Kill Confirmation"] = ' .. "true"
-    for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua", "_gut_config_file.lua" }) do
+    local ckc_tab_needle = '["Crosshair Kill Confirmation"] = ' .. "true"
+    local fold_needle    = "_inject_ckc_into" .. "_gut"
+    for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
         local txt = _gut_read_all(dir .. fn)
-        if txt and not txt:find(needle, 1, true) then
-            return "CKC (#313) missing from _MY_MODS in " .. fn
+        if txt then
+            if txt:find(ckc_tab_needle, 1, true) then
+                return "CKC is whitelisted in _MY_MODS in " .. fn ..
+                    " -- resurrects the wrong #313 top-level tab (#339); it must fold into the HUD group"
+            end
+            if not txt:find(fold_needle, 1, true) then
+                return "_inject_ckc_into_gut fold missing from " .. fn ..
+                    " -- CKC options would not appear under the Interface>HUD category (#339)"
+            end
         end
     end
 end)
