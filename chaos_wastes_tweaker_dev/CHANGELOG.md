@@ -1,5 +1,18 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.236-dev (2026-07-06) - CLOSE issue 291 (Cataclysm-3 journey-win CTD) - user-confirmed fixed
+
+User confirmed in-game 2026-07-06: winning a CW journey with Progressive Difficulty ramped to
+Cataclysm 3 no longer crashes at the journey-completion screen. The fix shipped earlier (v0.7.220-dev,
+commit 0e9260b: a guard on `StatisticsUtil._register_completed_journey_difficulty` that clamps only the
+RECORDED difficulty to the `DefaultDifficulties` ceiling when the ramped tier isn't in the list; marker
+`CT_JOURNEY_DIFFICULTY_GUARD_MARKER`, regression test `journey_difficulty_guard_installed`). This build
+only strips the menu status tag. No behavior change.
+
+- LOC: `progressive_difficulty` title `[crash] [diag] [Issue 291]` -> `[diag]` (kept `[diag]` - the
+  `[ct:progdiff]` / `[ct:journeyguard]` probes stay armed). issue 291 was the only open crash issue
+  referencing this setting, so `[crash]` comes off per LOCALIZATION_STANDARD s13.
+
 ## 0.7.235-dev (2026-07-06) - Strip issue 211 loc tag (Disabled Boons group; issue already closed)
 
 Loc-only follow-up. issue 211 is already closed on GitHub; this flips the menu title to match.
