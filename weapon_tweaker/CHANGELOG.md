@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.207-dev (2026-07-05) - CRASH FIX #362: create_equipment hook returned nil -> add_equipment fatal
+
+**Crash console 2026-07-06-00.12.37 (guid ff863169):** picking up a debug-`/spawn`-ed `whale_oil_barrel` off the whaling map crashed at `simple_inventory_extension.lua:915 attempt to index local 'slot_equipment_data' (a nil value)`. Chain: the barrel's 3p unit (`wpn_whale_oil_barrel_01_3p`) is non-resident off-level -> cosmetics_tweaker skips its spawn (avoiding a C-assert) -> vanilla `GearUtils.create_equipment` indexes the nil unit and raises (`entity_manager2.lua:114`) -> **wt's create_equipment pcall caught it and `return nil`** -> vanilla `add_equipment` indexes that nil return UNGUARDED (`slot_equipment_data.master_item`/`.skin`, :876/:880) -> fatal.
+
+- **wt's create_equipment hook now returns an empty `{}` stub instead of `nil`** on pcall failure (and `result or {}` on the success path). `add_equipment` completes -> the item equips-but-unrendered (all unit fields nil -> vanilla wield guards on `Unit.alive`) instead of crashing the game. The `[wt][ERROR] create_equipment CRASHED …` diagnostic line is unchanged. The old `return nil` (v0.12.77 #26, to keep a raise from killing sibling hooks) was the 'guard that delegates still crashes' class: it turned a caught error into a guaranteed downstream crash. This hardens EVERY create_equipment failure, not just this barrel.
+- **Normal-play risk: low** — on the actual whaling map the package is resident and create_equipment succeeds; this needs a non-resident level-event unit (off-level `/spawn`). Deeper follow-up (force-load the package / block off-level level-event pickups) tracked in #362.
+
 ## 0.12.206-dev (2026-07-04) - Ship #301 dev status-tag pass (rider on 0.12.205 #319 anim work)
 
 ## 0.12.205-dev (2026-07-04) - #319 pipeline audit results: restore 5 dropped Kerillian billhook picks (#290 residual), crowbill pick corrections, #286 Greataxe wield fix

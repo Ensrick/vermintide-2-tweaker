@@ -101,7 +101,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.206-dev"
+local MOD_VERSION = "0.12.207-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -3756,14 +3756,25 @@ mod:traced_hook("GearUtils", "create_equipment", function(func, world, slot_name
         mod:error("create_equipment CRASHED: weapon=%s slot=%s career=%s is_bot=%s rhu=%s has_override=%s err=%s",
             tostring(weapon_key), tostring(slot_name), tostring(career_name),
             tostring(is_bot), tostring(rhu), has_override, tostring(result))
-        return nil
+        -- Return an EMPTY stub, NEVER nil: vanilla SimpleInventoryExtension.add_equipment
+        -- indexes the return UNGUARDED (`slot_equipment_data.master_item = ...` and
+        -- `.skin`, simple_inventory_extension.lua:876/880), so a nil return converts our
+        -- CAUGHT error into a HARD crash on the caller ("attempt to index local
+        -- 'slot_equipment_data' (a nil value)"). Repro: a non-resident level-event 3p unit
+        -- -- e.g. a whale_oil_barrel /spawn-ed off the whaling map -- makes cosmetics_tweaker
+        -- skip the spawn (avoiding a C-assert), vanilla GearUtils then indexes the nil unit
+        -- (entity_manager2.lua:114) and raises, we catch it, and the old `return nil` crashed
+        -- add_equipment (console 2026-07-06-00.12.37, guid ff863169). With a stub the item
+        -- equips-but-unrendered (all unit fields nil -> vanilla wield guards on Unit.alive)
+        -- instead of taking down the game; the [wt][ERROR] above stays for diagnosis.
+        return {}
     end
     if result and item_data then
         local weapon_key = item_data.name
         _scale_weapon_units(result, weapon_key, career_name)
         _offset_weapon_units(result, weapon_key, career_name)
     end
-    return result
+    return result or {}   -- never nil to the vanilla caller (see stub rationale above)
 end)
 
 -- ============================================================
