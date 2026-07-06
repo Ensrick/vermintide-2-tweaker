@@ -39,6 +39,20 @@ local Breeds = Breeds
 -- grimoire/skull and re-break the give) gets caught. See FIX 1 header below.
 GT_NECRO_POTION_GIVE_HALF_MARKER_v0_2_138 = "gt-necro-potion-give-half-targeted-promote"
 
+-- issue 142: the "ignore the backward/segment teleport gate" master+sub gate,
+-- shared by FIX 7's tighter leash (skips its behind-segment gate), the new
+-- backward-teleport fallback in the should_teleport hook, and FIX 3b's
+-- force-revive path retry. Declared EARLY (before any consumer) so the
+-- _select_ally_by_utility hook, the tighter leash, and the should_teleport hook
+-- all capture it as an upvalue -- a later file-scope local would resolve to a nil
+-- global inside those already-parsed closures. Reads live each call, no
+-- on_setting_changed wiring. Default: master OFF, sub ON, so it only takes effect
+-- once the user enables the Bot Options master.
+local function _gt_ignore_backward_gate_on()
+    return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_ignore_backward_gate")
+end
+mod._gt_ignore_backward_gate_on = _gt_ignore_backward_gate_on
+
 -- ============================================================================
 -- REPLICANT BOTS PORT 1: Faster bot reactions (gt_bot_fast_reactions)
 -- ----------------------------------------------------------------------------
@@ -937,6 +951,20 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                 if nt then
                     -- Mandatory engine path-gate: only force-pick a reachable ally.
                     local _, _aid_path = self:_ally_path_allowed(unit, pu, t)
+                    -- issue 142: when the backward-gate override is on, ignore the
+                    -- _ally_path_allowed behind-segment cooldown for an ally who
+                    -- needs aid. That helper returns false,false for up to ~10s
+                    -- when a failed path's target is BEHIND the bot on the main
+                    -- path (player_bot_base.lua:1962-1978, ignore_for = 10 for a
+                    -- behind segment); forcing the retry lets the bot path back to
+                    -- the revive immediately instead of standing off for the
+                    -- cooldown. Scoped to the aid loop (nt is only set for downed /
+                    -- hooked / ledge allies). Vanilla's own _select_ally_by_utility
+                    -- segment skip is left untouched -- FIX 3b already bypasses it
+                    -- by re-scanning the roster here.
+                    if _gt_ignore_backward_gate_on() then
+                        _aid_path = true
+                    end
                     local cpos = POSITION_LOOKUP[pu]
                     if _aid_path and self_pos and cpos then
                         local d = Vector3.distance(self_pos, cpos)
@@ -1102,11 +1130,20 @@ local function _gt_tighter_leash_wants(blackboard)
     end
 
     local self_unit = blackboard.unit
-    local conflict_director = Managers.state.conflict
-    local self_segment = conflict_director:get_player_unit_segment(self_unit) or 1
-    local target_segment = conflict_director:get_player_unit_segment(follow_unit)
-    if not target_segment or target_segment < self_segment then
-        return false
+
+    -- issue 142: the behind-segment gate (a follow target whose main-path segment
+    -- is behind the bot blocks any teleport -- vanilla should_teleport
+    -- bt_bot_conditions.lua:1220-1222) is opt-out by default via
+    -- gt_bot_ignore_backward_gate, so the tighter leash can pull a bot BACKWARD to
+    -- a straggler. The aid exception below and the #139 blanket veto in the hook
+    -- still apply, so a bot never abandons a downed teammate to chase a straggler.
+    if not _gt_ignore_backward_gate_on() then
+        local conflict_director = Managers.state.conflict
+        local self_segment = conflict_director:get_player_unit_segment(self_unit) or 1
+        local target_segment = conflict_director:get_player_unit_segment(follow_unit)
+        if not target_segment or target_segment < self_segment then
+            return false
+        end
     end
 
     local has_priority_target = blackboard.target_unit and blackboard.target_unit == blackboard.priority_target_enemy
@@ -1138,6 +1175,63 @@ local function _gt_tighter_leash_wants(blackboard)
     return fire
 end
 
+-- issue 142: "does the leash want a BACKWARD teleport?" -- mirrors vanilla
+-- BTConditions.should_teleport (bt_bot_conditions.lua:1208-1241) MINUS the
+-- behind-segment gate (:1220-1222), so a follow target that is behind the bot on
+-- the main path still triggers. Same state gates as vanilla: a live follow_unit,
+-- not already teleported, and the aid exception (:1224-1228 -- a bot going for a
+-- revive or with a priority enemy never leashes). Fires when the bot->follow
+-- squared distance meets the SAME threshold the tighter leash uses (the
+-- gt_bot_follow_distance_m slider; >= 40 == vanilla's 1600 sq). The caller
+-- (should_teleport hook) only reaches this when vanilla AND the tighter leash both
+-- declined and the master + gt_bot_ignore_backward_gate toggle are on; the #139
+-- blanket aid veto is applied LAST, in the hook, never here.
+--
+-- `dist_sq` may be injected: the /gt_regression_test drives this with a stub
+-- blackboard, and the ALIVE / ScriptUnit / Vector3 reads below are file-local
+-- upvalues a test cannot stub (same constraint that made #139 split
+-- _gt_status_needs_aid). Production passes nil and we read the same navmesh
+-- whereabouts positions vanilla's should_teleport reads.
+local function _gt_backward_teleport_wants(blackboard, dist_sq)
+    if not blackboard then
+        return false
+    end
+    local group_ext = blackboard.ai_bot_group_extension
+    local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+    if not follow_unit or blackboard.has_teleported then
+        return false
+    end
+
+    -- Aid exception preserved (vanilla :1224-1228): never leash a bot that is
+    -- going for a revive/rescue or holding a priority enemy target.
+    local has_priority_target = blackboard.target_unit and blackboard.target_unit == blackboard.priority_target_enemy
+    if blackboard.target_ally_need_type or has_priority_target then
+        return false
+    end
+
+    if not dist_sq then
+        if not ALIVE[follow_unit] then
+            return false
+        end
+        local self_wb = ScriptUnit.has_extension(blackboard.unit, "whereabouts_system")
+        local follow_wb = ScriptUnit.has_extension(follow_unit, "whereabouts_system")
+        local self_position = self_wb and self_wb:last_position_on_navmesh()
+        local follow_position = follow_wb and follow_wb:last_position_on_navmesh()
+        if not self_position or not follow_position then
+            return false
+        end
+        dist_sq = Vector3.distance_squared(self_position, follow_position)
+    end
+
+    local dist_m = mod:get("gt_bot_follow_distance_m") or 40.0
+    local fire = dist_sq >= dist_m * dist_m
+    if fire then
+        mod:debug("[gt:bot-leash] should_teleport TRUE at %.1fm (backward gate ignored, thresh=%.1fm)", math.sqrt(dist_sq), dist_m)
+    end
+    return fire
+end
+mod._gt_backward_teleport_wants = _gt_backward_teleport_wants
+
 mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- Bot Teleport Lab (diagnostics) dispatch: D1 decision-recorder + D4 segment
     -- probe + D5 aid probe. Merged here because VMF drops a 2nd hook on this
@@ -1155,6 +1249,18 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     if not want then
         want = _gt_tighter_leash_wants(blackboard)
         if want then reason = "tighter_leash" end
+    end
+    -- issue 142: if vanilla AND the tighter leash both declined, the backward-gate
+    -- override (master + gt_bot_ignore_backward_gate) lets the bot teleport to a
+    -- follow target BEHIND it on the main path -- the case vanilla's segment gate
+    -- (bt_bot_conditions.lua:1220-1222) always refuses. Same distance threshold as
+    -- the tighter leash (>= 40 == vanilla's 1600 sq). Evaluated BEFORE the #139
+    -- aid veto below, so that veto stays the FINAL word on the combined decision
+    -- (a downed teammate still overrides a backward leash -- the bot paths in to
+    -- revive rather than teleporting to its straggler follow target).
+    if not want and _gt_ignore_backward_gate_on() then
+        want = _gt_backward_teleport_wants(blackboard)
+        if want then reason = "backward" end
     end
     -- #139 probe: stamp which branch wants the teleport so the .run probe can
     -- name the trigger. Stamped every call (nil when no teleport is wanted);
@@ -1657,6 +1763,59 @@ local function _gt_apply_btlab_follow_override(bot_ai_data)
     end
 end
 
+-- FIX A (issue 383) marker: the split fix now writes data.follow_position (a
+-- vanilla-spacing fan point around the bot's OWN assigned human), not just
+-- data.follow_unit. If a refactor drops the follow_position recompute this
+-- disappears and gt_bot383_fix9_splits_follow_position fails.
+GT_BOT383_FIX9_SPLIT_FOLLOW_POSITION_MARKER = "gt-bot383-fix9-split-follow-position"
+
+-- nav_world accessor -- the same source vanilla's _update_move_targets reads
+-- (ai_bot_group_system.lua:682). Guarded so a missing ai_system just yields nil
+-- (the caller then leaves follow_position untouched for that bot).
+local function _gt_bot_nav_world()
+    local entity_mgr = Managers.state and Managers.state.entity
+    local ai_system = entity_mgr and entity_mgr:system("ai_system")
+    return ai_system and ai_system:nav_world()
+end
+
+-- FIX A (issue 383): compute `needed` navmesh-valid destination points fanned
+-- around `unit`, EXACTLY the way vanilla fans points around its single
+-- selected_unit (ai_bot_group_system.lua:780-791, and the per-human man-man
+-- branch :744-755). Reused per split human so a bot reassigned off vanilla's
+-- selected_unit stands NEAR its OWN human with the same spread the engine uses,
+-- never ON it. pcall-wrapped: the GwNav* queries are engine calls, and the
+-- contract is that ANY failure (nil position, bad navmesh) returns nil so the
+-- caller leaves the bot's vanilla follow_position intact rather than stamping the
+-- raw player position (which crowded the human / blocked their shots -- the
+-- gt_dev too-close report). Returns the points array (always `needed` long,
+-- vanilla pads short results with the origin point), or nil on failure.
+local function _gt_fan_points_for_unit(system, nav_world, unit, needed)
+    -- Cheap guards first (so the /gt_regression_test can exercise the nil-return
+    -- fallback contract without a POSITION_LOOKUP entry for a stub unit).
+    if not (system and nav_world and unit and needed and needed > 0) then
+        return nil
+    end
+    local unit_pos = POSITION_LOOKUP[unit]
+    if not unit_pos then
+        return nil
+    end
+    local ok, points = pcall(function ()
+        local disallowed_at_pos, current_mapping =
+            system:_selected_unit_is_in_disallowed_nav_tag_volume(nav_world, unit_pos)
+        if disallowed_at_pos then
+            local origin_point = system:_find_origin(nav_world, unit)
+            return system:_find_destination_points_outside_volume(nav_world, unit_pos, current_mapping, origin_point, needed)
+        end
+        local cluster_position, rotation = system:_find_cluster_position(nav_world, unit)
+        return system:_find_destination_points(nav_world, cluster_position, rotation, needed)
+    end)
+    if ok and type(points) == "table" and #points > 0 then
+        return points
+    end
+    return nil
+end
+mod._gt_fan_points_for_unit = _gt_fan_points_for_unit
+
 mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, bot_ai_data) -- luacheck: ignore self
     -- Bot Teleport Lab (diagnostics) D2 follow-tracker dispatch. This pair is
     -- ALREADY hooked (this FIX 9 hook_safe), so the lab CANNOT take a fresh hook
@@ -1695,8 +1854,11 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
     -- both are on (they're opposite strategies; precedence avoids a VMF mutex whose
     -- checkbox wouldn't visually refresh -- see reference_vmf_checkbox_cached_display_state).
     -- All bots leash to the host; set ONLY follow_unit and leave vanilla's fanned-out
-    -- follow_position (the spread distance) intact -- same reasoning as the split fix,
-    -- so the bots don't crowd the host / block shots.
+    -- follow_position (the spread distance) intact. When the host IS vanilla's
+    -- selected_unit that fan is already correct; when it is not, follow-host carries
+    -- the same residual issue-383 offset the split branch now corrects below
+    -- (deliberately out of scope here -- issue 383 targets FIX 9 / split). Not
+    -- stamping POSITION_LOOKUP[host] keeps bots off the host's shot line either way.
     if follow_host then
         if not (host_unit and HEALTH_ALIVE[host_unit]) then return end   -- host dead/unit-less: leave vanilla
         local n = 0
@@ -1727,19 +1889,57 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
     for bot_unit in pairs(bot_ai_data) do bots[#bots + 1] = bot_unit end
     table.sort(bots, function(a, b) return tostring(a) < tostring(b) end)
 
+    -- Group the bots we move OFF vanilla's single selected_unit; each such bot
+    -- needs a fresh follow_position fanned around ITS human (issue 383). Bots left
+    -- on vanilla's selected_unit keep vanilla's already-correct fan point.
+    local fan_groups   -- human_unit -> { bot_unit, ... }, lazily created
     for i = 1, #bots do
         local data = bot_ai_data[bots[i]]
-        -- Don't override a parked (hold-position) bot.
+        -- Don't override a parked (hold-position) bot (vanilla already set its
+        -- follow_position = hold_position:unbox() and follow_unit = nil).
         if data and not data.hold_position then
             local human = humans[(i - 1) % num + 1]
             if HEALTH_ALIVE[human] then   -- re-validate: don't strand on a just-died target
-                -- Re-point ONLY the leader; leave data.follow_position alone.
-                -- Vanilla _assign_destination_points already wrote a fanned-out spread
-                -- point (ai_bot_group_system.lua:1115) for this bot index a moment ago.
-                -- Stamping POSITION_LOOKUP[human] here made bots stand ON the player /
-                -- on their shot line (gt_dev too-close report). follow_unit alone keeps
-                -- the split assignment + the comfortable vanilla follow distance.
+                -- FIX A (issue 383): vanilla wrote data.follow_unit = selected_unit
+                -- (one human) and data.follow_position = a fan point around THAT
+                -- human for every bot. Re-pointing only follow_unit left the bot
+                -- standing near the wrong human. Capture vanilla's assignment; if we
+                -- move the bot to a DIFFERENT human, queue it for a fan-point
+                -- recompute around its new human. If it stays on vanilla's human,
+                -- leave follow_position untouched (already the right fan point).
+                local vanilla_follow = data.follow_unit
                 data.follow_unit = human
+                if human ~= vanilla_follow then
+                    fan_groups = fan_groups or {}
+                    local g = fan_groups[human]
+                    if not g then
+                        g = {}
+                        fan_groups[human] = g
+                    end
+                    g[#g + 1] = bots[i]
+                end
+            end
+        end
+    end
+
+    -- FIX A (issue 383): fan each reassigned human's bots around that human with
+    -- the SAME spacing vanilla uses for its single selected_unit, so split bots
+    -- stand NEAR their assigned human (never ON them, the old too-close report).
+    -- Per-human fan sized to the group so two bots on one human still spread out.
+    -- On any nav failure the bot keeps vanilla's fanned point (no player-stomp).
+    if fan_groups then
+        local nav_world = _gt_bot_nav_world()
+        if nav_world then
+            for human, group in pairs(fan_groups) do
+                local points = _gt_fan_points_for_unit(self, nav_world, human, #group)
+                if points then
+                    for k = 1, #group do
+                        local p = points[k]
+                        if p then
+                            bot_ai_data[group[k]].follow_position = p
+                        end
+                    end
+                end
             end
         end
     end

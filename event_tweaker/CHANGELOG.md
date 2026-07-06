@@ -1,5 +1,20 @@
 # Tweaker: Events — Changelog
 
+## 0.4.23-dev (2026-07-06) -- Post-init conflict-settings snapshot (issue 393 diagnostics-armed; no behavior change)
+
+### Why
+Issue 386 (v0.4.22-dev) stopped the injected `high_intensity` mutator from CRASHING `ConflictDirector.init`, but the mutator reportedly has little observable in-mission effect. Hypothesis [unverified]: `enemy_tweaker`'s own conflict-director patch re-application runs on the SAME `refresh_conflict_director_patches` chain (`conflict_director.lua:886`, dispatched from `ConflictDirector.init` line 94) and overwrites the mutator's `CurrentIntensitySettings` / `CurrentPacing` writes (`mutator_high_intensity.lua:8-14` sets `max_intensity=200`, `decay_per_second=10`, `decay_delay=0.5`, `intensity_add_per_percent_dmg_taken=0.1`, and the three `delay_*_threat_value=200`) after they land but before they take effect. This build adds a read-only probe to settle that either way; it changes NO behavior.
+
+### Added -- `event_tweaker.lua`
+- New `hook_safe` on `ConflictDirector.init` (fires AFTER init completes; event_tweaker had no prior `ConflictDirector` hook). Prints ONE guarded `printf` line per mission init: `[event-inject:393] post-init snapshot | injected=[<names or none>] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s (self.delay_horde=%s)`. It reads the four `CurrentIntensitySettings` fields, the three `CurrentPacing.delay_*_threat_value` fields (per-difficulty tables after the #386 sanitizer, summarized as `table:normal=<v>`), and the converted `self.delay_horde_threat_value` the director instance will pace against (`conflict_director.lua:219`). The injected list is event_tweaker's own `gather_mutators()` -- the same builder the `[event-inject]` special_events line uses.
+
+### What the line proves
+- `high_intensity` in the injected list but `max_intensity` reads a vanilla default (not 200) and/or the delays are NOT `table:normal=200` -> the mutator's writes were STOMPED after landing (confirms the hypothesis; next step is ordering enemy_tweaker's re-application vs the mutator's).
+- `max_intensity=200` and delays `table:normal=200` with `high_intensity` injected -> the writes SURVIVED intact, so the "little effect" report is not a stomped-settings problem and the search moves to how the pacing/intensity values are consumed.
+
+### Not changed
+- No behavior change. Injection, presets, mutator catalog, DLC gate, the three live-event hooks, and the #386 sanitizer are untouched -- this only adds a read-only `printf` snapshot. printf only (user runs mod-logging OFF), always-on in dev per the diagnostics doctrine. `MOD_VERSION` `0.4.22-dev` -> `0.4.23-dev`.
+
 ## 0.4.22-dev (2026-07-06) -- Fix ConflictDirector.init death from injected mutators writing scalar pacing values (issue 386)
 
 ### Why

@@ -173,6 +173,16 @@ local _data = {
                                 default_value = true,
                                 tooltip       = "gt_bot_aid_priority_tooltip",
                             },
+                            -- issue 142: let the follow leash + force-revive pull a
+                            -- bot BACKWARD to a straggler / downed teammate the game
+                            -- otherwise abandons once they fall behind on the main
+                            -- path. Default ON (the reported behaviour is the bug).
+                            {
+                                setting_id    = "gt_bot_ignore_backward_gate",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_ignore_backward_gate_tooltip",
+                            },
                             {
                                 setting_id    = "gt_bot_ironbreaker_revive_in_ult",
                                 type          = "checkbox",

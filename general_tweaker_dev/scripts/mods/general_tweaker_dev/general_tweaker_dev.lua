@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.193-dev"
+local MOD_VERSION = "0.2.194-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1643,6 +1643,171 @@ _rt_register("gt_bot139_aid_scan_is_side_scoped_not_follow", function()
     end
 end)
 
+_rt_register("gt_bot383_fix9_splits_follow_position", function()
+    -- issue 383 (v0.2.194-dev): FIX 9 (split bots among humans) must set
+    -- data.follow_position -- a vanilla-spacing fan point around each bot's OWN
+    -- assigned human -- not only data.follow_unit. Re-pointing follow_unit alone
+    -- left a split bot standing next to the WRONG human (movement reads
+    -- follow_position, player_bot_base.lua:1655). Marker + source-pattern guard,
+    -- plus a behavioral check of the fan helper's nil-return fallback contract.
+    if GT_BOT383_FIX9_SPLIT_FOLLOW_POSITION_MARKER ~= "gt-bot383-fix9-split-follow-position" then
+        return "issue-383 split follow_position marker absent -- was the FIX A recompute reverted?"
+    end
+    -- Behavioral: the fan helper returns nil (caller then leaves follow_position
+    -- untouched) on its guard paths -- no nav_world, non-positive count. Exercises
+    -- the "fall back rather than stamp the raw player position" contract without a
+    -- live navmesh / POSITION_LOOKUP entry.
+    local fan = mod._gt_fan_points_for_unit
+    if type(fan) ~= "function" then
+        return "mod._gt_fan_points_for_unit not exposed -- FIX A fan helper missing"
+    end
+    if fan({}, nil, {}, 1) ~= nil then
+        return "fan helper must return nil when nav_world is nil (fallback contract)"
+    end
+    if fan({}, "navworld", {}, 0) ~= nil then
+        return "fan helper must return nil when needed <= 0 (fallback contract)"
+    end
+    -- Structural: the split branch computes a per-human fan and writes
+    -- data.follow_position, still guarding hold_position. Soft-skip if the source
+    -- is not on disk (packaged build).
+    local ok, info = pcall(debug.getinfo, fan, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(srcp, "r"); if not f then return end
+    local txt = f:read("*a"); f:close(); if not txt then return end
+    if not txt:find("_gt_fan_points_for_unit(self, nav_world, human", 1, true) then
+        return "FIX 9 split branch no longer computes a fan around each human"
+    end
+    if not txt:find("group[k]].follow_position = p", 1, true) then
+        return "FIX 9 split branch no longer writes data.follow_position from the fan"
+    end
+    if not txt:find("not data.hold_position", 1, true) then
+        return "FIX 9 split branch dropped the hold_position guard"
+    end
+end)
+
+_rt_register("gt_bot142_backward_wants_no_segment_gate", function()
+    -- issue 142 (v0.2.194-dev): _gt_backward_teleport_wants mirrors vanilla
+    -- should_teleport MINUS the behind-segment gate, so a follow target behind the
+    -- bot still triggers once beyond the leash threshold. Drive the pure decision
+    -- with a stub blackboard + injected squared distance (ScriptUnit/ALIVE/Vector3
+    -- are file-local upvalues a test cannot stub). "Behind" is implicit: the
+    -- function reads no segment, so a beyond-threshold distance fires regardless.
+    local wants = mod._gt_backward_teleport_wants
+    if type(wants) ~= "function" then
+        return "mod._gt_backward_teleport_wants not exposed"
+    end
+    local FAR = 5000    -- ~70 m^2; above any slider threshold (max 40 m => 1600 sq)
+    local NEAR = 50     -- ~7 m^2; below the tightest threshold (10 m => 100 sq)
+    local function bb(extra)
+        local b = { unit = {}, ai_bot_group_extension = { data = { follow_unit = {} } } }
+        for k, v in pairs(extra or {}) do b[k] = v end
+        return b
+    end
+    if wants(bb(), FAR) ~= true then
+        return "backward wants should be true for a beyond-threshold follow target (behind or not)"
+    end
+    if wants(bb({ has_teleported = true }), FAR) ~= false then
+        return "backward wants must be false when has_teleported is set"
+    end
+    if wants(bb({ target_ally_need_type = "knocked_down" }), FAR) ~= false then
+        return "backward wants must be false when target_ally_need_type is set (aid exception)"
+    end
+    local prio = {}
+    if wants(bb({ target_unit = prio, priority_target_enemy = prio }), FAR) ~= false then
+        return "backward wants must be false when the bot holds its priority enemy target"
+    end
+    if wants(bb(), NEAR) ~= false then
+        return "backward wants must be false within the leash threshold"
+    end
+end)
+
+_rt_register("gt_bot142_veto_still_final", function()
+    -- issue 142 (v0.2.194-dev): the backward-teleport branch must be evaluated
+    -- BEFORE the #139 blanket aid veto in the should_teleport hook, so the veto
+    -- stays the FINAL word on the combined decision (a downed teammate overrides a
+    -- backward leash -- the bot paths in to revive). Assert source order.
+    local anchor = mod._gt_backward_teleport_wants or mod._gt_ignore_backward_gate_on
+    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(srcp, "r"); if not f then return end
+    local txt = f:read("*a"); f:close(); if not txt then return end
+    local backward_at = txt:find("want = _gt_backward_teleport_wants(blackboard)", 1, true)
+    if not backward_at then
+        return "backward-teleport branch missing from the should_teleport hook"
+    end
+    local veto_at = txt:find("_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid", 1, true)
+    if not veto_at then
+        return "the #139 blanket aid veto is missing from the should_teleport hook"
+    end
+    if backward_at >= veto_at then
+        return "the #139 aid veto must come AFTER the backward-branch want assignment (veto must be final)"
+    end
+end)
+
+_rt_register("gt_bot261_leash_conflict_invariants", function()
+    -- issue 261 (v0.2.194-dev): guard the whole bot-leash / teleport conflict net
+    -- so the issue-142 backward-gate work cannot silently loosen a neighbouring
+    -- bound. (a) the tighter leash still reads the gt_bot_follow_distance_m slider;
+    -- (b) improved-combat still caps the special-chase path via CHASE_MAX_DIST_SQ
+    -- on _enemy_path_allowed; (c) FIX 10's greedy pickup post-passes still honour
+    -- vanilla's follow-range gates; (d) exactly ONE hook each on should_teleport
+    -- and BTBotTeleportToAllyAction.run (VMF drops a 2nd on the same pair).
+    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
+    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(srcp, "r"); if not f then return end
+    local txt = f:read("*a"); f:close(); if not txt then return end
+
+    -- (a) tighter leash reads the distance slider.
+    local leash_body = txt:match("local function _gt_tighter_leash_wants.-\nend")
+    if not leash_body then
+        return "could not isolate _gt_tighter_leash_wants body"
+    end
+    if not leash_body:find("gt_bot_follow_distance_m", 1, true) then
+        return "tighter leash no longer reads gt_bot_follow_distance_m"
+    end
+
+    -- (c) greedy pickup follow-range gates intact.
+    if GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182 ~= "gt-bot-greedy-pickup-mule-health-postpass" then
+        return "greedy-pickup marker absent -- FIX 10 follow-range gate net broken"
+    end
+    if not txt:find("allowed_to_take_health_pickup", 1, true)
+            or not txt:find("max_pickup_range", 1, true)
+            or not txt:find("max_pickup_dist_sq", 1, true) then
+        return "FIX 10 pickup post-passes no longer reference the vanilla follow-range gates"
+    end
+
+    -- (d) exactly one hook each on the two teleport (Class, method) pairs.
+    local n_st, n_run = 0, 0
+    for _ in txt:gmatch('mod:hook%("BTConditions",%s*"should_teleport"') do n_st = n_st + 1 end
+    for _ in txt:gmatch('mod:hook%("BTBotTeleportToAllyAction",%s*"run"') do n_run = n_run + 1 end
+    if n_st ~= 1 then
+        return string.format("expected exactly 1 BTConditions.should_teleport hook, found %d", n_st)
+    end
+    if n_run ~= 1 then
+        return string.format("expected exactly 1 BTBotTeleportToAllyAction.run hook, found %d", n_run)
+    end
+
+    -- (b) improved-combat chase cap still bounds _enemy_path_allowed. Sibling file
+    -- in the same dir; soft-skip if not on disk.
+    local ibc_src = srcp:gsub("_gt_bot_fixes%.lua$", "_gt_improved_bot_combat.lua")
+    local cf = io.open(ibc_src, "r")
+    if cf then
+        local ctxt = cf:read("*a"); cf:close()
+        if ctxt then
+            if not ctxt:find("CHASE_MAX_DIST_SQ", 1, true) then
+                return "improved-combat chase cap constant CHASE_MAX_DIST_SQ missing"
+            end
+            if not ctxt:find("_enemy_path_allowed", 1, true) then
+                return "improved-combat no longer hooks _enemy_path_allowed (chase cap unbound)"
+            end
+        end
+    end
+end)
+
 _rt_register("bot_follow_mode_dropdown_consolidated", function()
     -- v0.2.152-dev: gt_bot_split_among_players + gt_bot_follow_host checkboxes
     -- replaced by a single gt_bot_follow_mode dropdown (default/follow_host/split).
@@ -1657,8 +1822,9 @@ end)
 
 _rt_register("bot_behavior_master_sub_widgets_registered", function()
     -- #297 (v0.2.182-dev): gt_bot_behavior_improvements is a MASTER toggle with
-    -- 10 nested sub_widgets (8 checkboxes default ON + the 2 delay sliders,
-    -- defaults 3 / 4). Checkbox ids reuse the pre-bundle setting ids so persisted
+    -- nested sub_widgets (checkboxes default ON + the 2 delay sliders, defaults
+    -- 3 / 4). issue 142 (v0.2.194-dev) added gt_bot_ignore_backward_gate.
+    -- Checkbox ids reuse the pre-bundle setting ids so persisted
     -- pre-bundle user choices are restored; defaults must stay ON so the master
     -- alone reproduces the former v0.2.128-dev bundle behavior.
     local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
@@ -1682,6 +1848,7 @@ _rt_register("bot_behavior_master_sub_widgets_registered", function()
         gt_bot_instant_pickup            = { wtype = "checkbox", default = true },
         gt_bot_greedy_pickup             = { wtype = "checkbox", default = true },
         gt_bot_aid_priority              = { wtype = "checkbox", default = true },
+        gt_bot_ignore_backward_gate      = { wtype = "checkbox", default = true },
         gt_bot_ironbreaker_revive_in_ult = { wtype = "checkbox", default = true },
     }
     for _, w in ipairs(master.sub_widgets) do

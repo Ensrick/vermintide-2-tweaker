@@ -364,8 +364,12 @@ end
 --   D1: record the measured bot->follow distance + current leash threshold onto
 --       the blackboard, so the execution-side (.run) hook can classify the
 --       trigger (vanilla 40m vs gt tighter leash) when a teleport actually fires.
---   D4: self vs follow_unit conflict-segment values + whether the segment gate
---       (target_segment >= self_segment) passed or blocked.
+--   D4: self vs follow_unit conflict-segment values + whether VANILLA's segment
+--       gate (target_segment >= self_segment) passed or blocked. NOTE (issue 142):
+--       gt's gt_bot_ignore_backward_gate can now OVERRIDE a BLOCK (the tighter
+--       leash / backward fallback teleport a bot to a behind-segment follow
+--       target anyway), so a BLOCK no longer guarantees "never teleports this
+--       tick" -- the probe deliberately still reports VANILLA's raw comparison.
 --   D5: target_ally_need_type + whether target_unit == priority_target_enemy,
 --       i.e. why the aid exception did/didn't fire.
 -- ============================================================================
@@ -391,7 +395,7 @@ mod._gt_btlab_observe_should_teleport = function(blackboard)
             local self_seg   = _segment_of(unit) or 1
             local follow_seg = follow and _segment_of(follow)
             local gate = (follow_seg and follow_seg >= self_seg) and "PASS" or "BLOCK"
-            _pf("[gt:btlab:d4] bot=%s self_seg=%s follow_seg=%s gate=%s (BLOCK => never teleports this tick)",
+            _pf("[gt:btlab:d4] bot=%s self_seg=%s follow_seg=%s gate=%s (vanilla gate; issue-142 backward override can still teleport on BLOCK)",
                 _unit_label(unit), tostring(self_seg), tostring(follow_seg), gate)
         end
 

@@ -1,5 +1,19 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.194-dev (2026-07-06) -- bot leash: split follow_position (issue 383) + ignore the backward/segment teleport gate (issue 142) [untested]
+
+### Why
+Two coupled bot-follow gaps. issue 383: FIX 9 (split bots one-per-human) only re-pointed `data.follow_unit`, leaving `data.follow_position` fanned around vanilla's single selected_unit -- so a split bot followed one human's index but stood next to a DIFFERENT human (movement reads follow_position, `player_bot_base.lua:1655`). issue 142: bots refuse to teleport or path BACKWARD along the main path -- vanilla `should_teleport` (`bt_bot_conditions.lua:1220-1222`) and `_ally_path_allowed` (`player_bot_base.lua:1962-1978`) both bail when the target's conflict segment is behind the bot, so a player who drops behind is abandoned until they catch up.
+
+### Changed
+- **issue 383 -- FIX 9 now splits follow_position too.** When the split reassignment moves a bot off vanilla's selected_unit, gt recomputes `data.follow_position` as a navmesh fan point around that bot's OWN human, reusing the engine's own destination-point helpers (`_selected_unit_is_in_disallowed_nav_tag_volume` / `_find_cluster_position` / `_find_destination_points` / `_find_destination_points_outside_volume`, `ai_bot_group_system.lua:744-791`) sized to the per-human bot count, so bots keep vanilla spacing near their human. Any nav failure falls back to leaving the vanilla follow_position untouched (never stamps the raw player position -- the old too-close report). Bots left on vanilla's human keep vanilla's already-correct fan point; hold_position bots are still skipped.
+- **issue 142 -- new sub-toggle `gt_bot_ignore_backward_gate`** (default ON, nested under the Bot Options master, `[untested]`). When on: the FIX 7 tighter leash skips its behind-segment gate; a new `_gt_backward_teleport_wants` fallback fires a teleport (same `gt_bot_follow_distance_m` threshold, >= 40 m == vanilla's 1600 sq) to a follow target vanilla and the tighter leash both declined for being behind; and FIX 3b force-revive ignores `_ally_path_allowed`'s behind-segment cooldown for aid-needing allies so the bot retries the revive immediately. The #139 blanket aid veto stays the FINAL check on the combined decision (a downed teammate still overrides a backward leash), and the aid exception is preserved throughout. Vanilla's own `_select_ally_by_utility` segment skip is left untouched.
+- **Four new `/gt_regression_test` checks** (always-on in dev): `gt_bot383_fix9_splits_follow_position` (marker + fan-helper nil-return fallback + source pattern), `gt_bot142_backward_wants_no_segment_gate` (stub-blackboard truth table: beyond-threshold behind target -> true; has_teleported / target_ally_need_type / priority target -> false; within threshold -> false), `gt_bot142_veto_still_final` (source order: backward branch before the #139 veto), and `gt_bot261_leash_conflict_invariants` (tighter leash reads the slider; improved-combat `CHASE_MAX_DIST_SQ` still bounds `_enemy_path_allowed`; FIX 10 greedy-pickup follow-range gates intact; exactly one hook each on `should_teleport` and `BTBotTeleportToAllyAction.run`).
+
+### Notes
+- No new hooks added -- all changes merge into the already-hooked `should_teleport`, `_select_ally_by_utility`, and `_assign_destination_points` bodies. The Bot Teleport Lab d4 segment probe still reports VANILLA's raw comparison; its comment now flags that the issue-142 override can teleport on a BLOCK.
+- Host-side only (bot AI is server-side); no RPC, so all changes are inert / crash-safe on clients. `[untested]` until confirmed in-game.
+
 ## v0.2.193-dev (2026-07-06) -- issue 275 CLOSED (user-confirmed in-game): constant-true BTConditions guard collapse
 
 ### Why
