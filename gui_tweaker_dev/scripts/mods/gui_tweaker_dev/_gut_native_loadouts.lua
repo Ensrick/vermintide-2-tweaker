@@ -775,14 +775,40 @@ local function _shallow_copy(t)
 end
 
 mod:hook("HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout", function(func, self, loadout, loadout_index)
-    if type(loadout) ~= "table" then
-        return func(self, loadout, loadout_index)
-    end
-    -- Resolve career for the currently-equipped fallback lookup (mirrors vanilla :814-819).
+    -- Resolve career for the live re-fetch + currently-equipped fallback lookup (mirrors vanilla :814-819).
     local profile = rawget(_G, "SPProfiles") and SPProfiles[self._profile_index]
     local career_settings = profile and profile.careers and profile.careers[self._career_index]
     local career_name = career_settings and career_settings.name
     local BU = rawget(_G, "BackendUtils")
+
+    -- STALE-PREVIEW FIX (issue #379). The loadout button caches `content.loadout` once, at
+    -- _populate_loadout_buttons (window-enter) time (hero_window_loadout_selection_console.lua:191).
+    -- But the item interface REBUILDS self._career_loadouts as brand-new tables on every refresh
+    -- (backend_interface_item_playfab.lua:166 `table.clear` -> :170 fresh per-career table -> :179
+    -- fresh row tables), so the cached `content.loadout` reference is ORPHANED the moment anything
+    -- dirties the interface -- e.g. equipping a weapon while the hero view stays open. The hovered
+    -- context-menu preview then keeps drawing that dead snapshot until the whole inventory is closed
+    -- and reopened (the only path that re-runs _populate_loadout_buttons). Re-fetch the LIVE loadout
+    -- row for this index so the preview always reflects current data. get_career_loadouts is the exact
+    -- interface getter vanilla's _populate_loadout_buttons calls -- it self-refreshes when dirty and
+    -- (in modded) pulls from our store -- and it is NOT get_item_from_id, so there is no mirror-read
+    -- recursion (v0.2.173 burn). Scoped to a modded backend view (the loadout surface we own); the
+    -- official realm keeps exact vanilla behavior. Falls back to the passed `loadout` if the live row
+    -- is unavailable (e.g. index out of range mid-add).
+    if career_name and _adventure_mode() ~= MODE_OFF then
+        local ok_live, live = pcall(function()
+            local iface = Managers.backend:get_interface("items")
+            local cl = iface and iface:get_career_loadouts(career_name)
+            return cl and cl[loadout_index]
+        end)
+        if ok_live and type(live) == "table" then
+            loadout = live
+        end
+    end
+
+    if type(loadout) ~= "table" then
+        return func(self, loadout, loadout_index)
+    end
 
     local sanitized
     for i = 1, #EQUIPMENT_PREVIEW_SLOTS do
