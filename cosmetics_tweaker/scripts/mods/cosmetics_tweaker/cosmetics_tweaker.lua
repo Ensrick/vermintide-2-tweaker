@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.68-dev"
+local MOD_VERSION = "0.9.69-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2799,6 +2799,23 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
         local n = 0
         for _, entry in pairs(mod._pending_la_emit_on_exit) do
             if entry and entry.player_unit and Unit.alive(entry.player_unit) then
+                if entry.revert then
+                    -- v0.9.69-dev (#265 Slice 1): committed vanilla pick over a
+                    -- synced LA entry -> broadcast the revert for BOTH key
+                    -- namespaces the apply flow writes (weapon_key + template).
+                    mod:info("[cos-la-sync] EMIT-REVERT-ON-EXIT weapon=%s template=%s hand=%s vanilla=%s",
+                        tostring(entry.weapon_key), tostring(entry.template_key),
+                        tostring(entry.hand_field), tostring(entry.vanilla_key))
+                    if mod._send_la_revert then
+                        mod._send_la_revert(entry.player_unit, entry.weapon_key, "offhand",
+                            entry.vanilla_key, entry.hand_field)
+                        if entry.template_key and entry.template_key ~= entry.weapon_key then
+                            mod._send_la_revert(entry.player_unit, entry.template_key, "offhand",
+                                entry.vanilla_key, entry.hand_field)
+                        end
+                    end
+                    n = n + 1
+                else
                 -- v0.9.61-dev (#203): [cos-la-sync] the authoritative offhand key
                 -- actually broadcast on screen exit. Pair with the receiver's
                 -- [cos-la-sync] RECV line (same armoury_key) in the HOST's log to
@@ -2814,6 +2831,7 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                         entry.armoury_key, entry.vanilla_key, entry.hand_field)
                 end
                 n = n + 1
+                end
             end
         end
         if n > 0 then
@@ -3780,6 +3798,45 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                 mod._pending_la_emit_on_exit[vkey] = nil
             end
         end
+        -- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1 / I2): when the synced
+        -- store still holds an LA entry for this weapon (an APPLIED pick, this
+        -- session or restored from an earlier one), a committed vanilla pick
+        -- must broadcast a REVERT -- clearing the queued emit alone leaves
+        -- every remote peer rendering the stale LA cosmetic forever (the exact
+        -- 2026-07-03 21:15 repro). QUEUED, not sent: the on_exit Apply gate
+        -- still drops the whole queue on an un-Applied browse, mirroring the
+        -- LA-apply flow. Store read via mod._la_equips_by_peer (runtime alias;
+        -- the local's forward decl sits below this function).
+        do
+            local pm_v = Managers and Managers.player
+            local lp_ok_v, lp_v = pcall(function() return pm_v and pm_v:local_player() end)
+            local player_unit_v = lp_ok_v and lp_v and lp_v.player_unit
+            local store_v = mod._la_equips_by_peer
+            local synced_v = store_v and lp_v and lp_v.peer_id and store_v[lp_v.peer_id]
+            if synced_v and player_unit_v and Unit.alive(player_unit_v) then
+                local template_key_v = nil
+                if self._item_backend_id and Managers and Managers.backend then
+                    local bi_v = Managers.backend:get_interface("items")
+                    local item_v = bi_v and bi_v.get_item_from_id and bi_v:get_item_from_id(self._item_backend_id)
+                    template_key_v = item_v and item_v.data and item_v.data.template
+                end
+                local wk_v = weapon_key or "slot_unknown"
+                if (template_key_v and synced_v[template_key_v]) or synced_v[wk_v] then
+                    local vkey2 = (self._item_backend_id or "__no_backend__") .. "|" .. tostring(hand_field)
+                    mod._pending_la_emit_on_exit = mod._pending_la_emit_on_exit or {}
+                    mod._pending_la_emit_on_exit[vkey2] = {
+                        revert       = true,
+                        player_unit  = player_unit_v,
+                        weapon_key   = wk_v,
+                        template_key = template_key_v,
+                        hand_field   = hand_field,
+                        vanilla_key  = opt.vanilla_skin or opt.name,
+                    }
+                    mod:info("[cos-la-sync] EXIT-QUEUE REVERT queued bid=%s hand=%s vanilla_pick=%s (synced LA entry pending revert)",
+                        tostring(self._item_backend_id), tostring(hand_field), tostring(opt.name))
+                end
+            end
+        end
     end
 
     -- v0.9.9.4-dev: deselect any prior selection in THIS hand's row; rows
@@ -3929,6 +3986,24 @@ if BackendUtils then
                 tostring(entry ~= nil),
                 tostring(entry and entry.kind),
                 tostring(entry and entry.armoury_key))
+            -- v0.9.69-dev (Slice 0, I6 / #264): the switch-back render loss has
+            -- never been pinned because every gate here logs only via _dbg.
+            -- One dedup'd printf per (wearer, template, disposition) so the
+            -- user's log shows whether a husk wield found the store entry.
+            do
+                local seen = mod._la_gate_seen
+                if not seen then seen = {}; mod._la_gate_seen = seen end
+                local dispo = (entry and (entry.kind or "?") .. "/" .. tostring(entry.armoury_key))
+                    or (equips and "no-entry-for-template" or "no-store-for-wearer")
+                local sk = tostring(_current_husk_wield.wearer_peer) .. "|" .. tostring(template) .. "|" .. dispo
+                if not seen[sk] and printf then
+                    seen[sk] = true
+                    printf("[la-state] HUSK-GATE wearer=%s slot=%s template=%s -> %s",
+                        tostring(_current_husk_wield.wearer_peer),
+                        tostring(_current_husk_wield.slot_name),
+                        tostring(template), dispo)
+                end
+            end
             -- [cos:sync] #154: husk cross-character weapon mesh-swap gate. The
             -- reported failure is an EMPTY husk cache at wield time
             -- (cache_entry=false) so the swap never fires and the teammate's
@@ -3984,6 +4059,21 @@ if BackendUtils then
                             tostring(_current_husk_wield.wearer_peer), tostring(template),
                             tostring(hand_field),
                             tostring(prev), tostring(la_unit), tostring(entry.armoury_key))
+                        -- v0.9.69-dev (Slice 0, I6): mod-logging-OFF-visible
+                        -- confirmation that the wield-path swap fired (#264's
+                        -- missing evidence). Dedup'd per (wearer, template, key).
+                        do
+                            local seen = mod._la_gate_seen
+                            if not seen then seen = {}; mod._la_gate_seen = seen end
+                            local sk = "swap|" .. tostring(_current_husk_wield.wearer_peer)
+                                .. "|" .. tostring(template) .. "|" .. tostring(entry.armoury_key)
+                            if not seen[sk] and printf then
+                                seen[sk] = true
+                                printf("[la-state] HUSK-SWAP applied wearer=%s template=%s hand=%s -> %s (key=%s)",
+                                    tostring(_current_husk_wield.wearer_peer), tostring(template),
+                                    tostring(hand_field), tostring(la_unit), tostring(entry.armoury_key))
+                            end
+                        end
                         -- v0.9.43-dev RESOLVE+HUSK trace: the husk DOES swap the
                         -- mesh to the LA custom unit (using new_units[1]/[2] for
                         -- the 1p/3p check) — this is why the CLIENT renders the
@@ -5776,10 +5866,31 @@ if CosmeticUtils then
             and player and player.player_unit
         then
             local equips = _local_la_equips[player.player_unit]
-            if equips and equips[slot] then
+            local had_local_la = equips and equips[slot] or nil
+            if had_local_la then
                 _dbg("[net-safe] update_cosmetic_slot %s: clearing stale LA cache entry %s",
                     tostring(slot), tostring(equips[slot]))
                 equips[slot] = nil
+            end
+            -- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1 / I2): revert must
+            -- BROADCAST, not just clear local state. Guarded to the LOCAL
+            -- human player (bots share the host peer_id -- a bot career swap
+            -- must not revert the host's slots) and to slots that actually
+            -- held LA state (locally tracked this session OR still present in
+            -- the synced store from an earlier session/persistence restore).
+            do
+                local pm_r = Managers and Managers.player
+                local lp_ok_r, lp_r = pcall(function() return pm_r and pm_r:local_player() end)
+                if lp_ok_r and lp_r and player == lp_r and mod._send_la_revert then
+                    local had_synced = lp_r.peer_id and _la_equips_by_peer[lp_r.peer_id]
+                        and _la_equips_by_peer[lp_r.peer_id][slot] ~= nil
+                    if had_local_la or had_synced then
+                        local kind = (slot == "slot_hat" and "hat")
+                            or (slot == "slot_skin" and "armor") or "illusion"
+                        mod._send_la_revert(player.player_unit, slot, kind,
+                            (kind == "illusion") and skin_name or item_name, nil)
+                    end
+                end
             end
             -- v0.9.12-dev: persistence parity for the clear path. If the user
             -- equips a vanilla item over a previously-saved LA one, the on-disk
@@ -5928,6 +6039,13 @@ end
 -- Two readers, two different upvalue resolutions. Reassign to the existing
 -- table here so the rest of the file's references continue to work.
 _la_equips_by_peer = _la_equips_by_peer or {}
+-- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1): runtime alias so code that
+-- sits LEXICALLY BEFORE the forward declaration (the offhand picker press
+-- handler, ~line 3760) can consult the synced store at runtime without
+-- re-triggering the v0.9.0.11 global-nil upvalue bug. The table identity is
+-- never replaced (writes are per-key), so the alias stays valid for the
+-- whole session.
+mod._la_equips_by_peer = _la_equips_by_peer
 
 -- Late-spawn replay queue. Each entry:
 -- { wearer_peer_id, slot, kind, armoury_key, vanilla_key, expires_at }
@@ -5984,10 +6102,24 @@ local function _wearer_unit_for_peer(wearer_peer_id)
     if not wearer_peer_id then return nil end
     local pm = Managers and Managers.player
     if not pm then return nil end
+    -- v0.9.69-dev (#268, I4 targeting): resolve the HUMAN player at the peer.
+    -- The old first-alive sweep over players_at_peer could return a BOT's
+    -- unit on a host peer (bots share the host's peer_id at local_player_id
+    -- 2..4; pairs order is arbitrary), sending a wearer's cosmetic onto a
+    -- bot. player_from_peer_id defaults local_player_id=1 = the human
+    -- (player_manager.lua:463-470) and is nil-safe.
+    if pm.player_from_peer_id then
+        local p = pm:player_from_peer_id(wearer_peer_id)
+        if p and p.player_unit and Unit.alive(p.player_unit) then
+            return p.player_unit
+        end
+    end
+    -- Fallback sweep (older API shape / early-spawn window): humans only.
     local players = pm.players_at_peer and pm:players_at_peer(wearer_peer_id)
     if not players then return nil end
     for _, p in pairs(players) do
-        if p.player_unit and Unit.alive(p.player_unit) then
+        if p.player_unit and Unit.alive(p.player_unit)
+            and (not p.is_player_controlled or p:is_player_controlled()) then
             return p.player_unit
         end
     end
@@ -6055,6 +6187,11 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
             tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field))
         _trace("SYNC emit HOST->all wearer=%s slot=%s kind=%s armoury=%s hand=%s",
             tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field))
+        -- v0.9.69-dev (Slice 0, I6): emit routing must be visible with mod
+        -- logging OFF -- the #264-comment transport loss could not be pinned
+        -- because this branch only logged via _dbg/_trace.
+        if printf then printf("[la-state] EMIT host->all wearer=%s slot=%s kind=%s key=%s hand=%s",
+            tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field)) end
         mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
             wearer_peer_id = wearer_peer,
             slot           = slot_name,
@@ -6100,12 +6237,22 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
         _dbg("[cos_la_apply emit] CLIENT->req DEFERRED+queued (no host peer_id yet) wearer=%s slot=%s key=%s queue_size=%d",
             tostring(wearer_peer), tostring(slot_name), tostring(armoury_key),
             #mod._la_deferred_emits)
+        -- v0.9.69-dev (Slice 0, I6): the deferred branch is the prime suspect
+        -- for the 79s-late mid-mission emits (#264 comment). printf so the
+        -- user's log shows exactly when an emit queued instead of sending.
+        if printf then printf("[la-state] EMIT client DEFERRED (no host yet) slot=%s kind=%s key=%s queue=%d",
+            tostring(slot_name), tostring(kind), tostring(armoury_key), #mod._la_deferred_emits) end
         return
     end
     _dbg("[cos_la_apply emit] CLIENT->req wearer=%s slot=%s kind=%s key=%s hand=%s host=%s",
         tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field), tostring(host))
     _trace("SYNC emit CLIENT->req wearer=%s slot=%s kind=%s armoury=%s hand=%s host=%s",
         tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field), tostring(host))
+    -- v0.9.69-dev (Slice 0, I6): pair this line with the host's [la-state]
+    -- REQ-RECV line to pin a lost request to the wire (mid-mission transport
+    -- loss, #264 comment).
+    if printf then printf("[la-state] EMIT client->req host=%s slot=%s kind=%s key=%s hand=%s",
+        tostring(host), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field)) end
     mod:network_send("cos_la_apply_req", host, COS_RPC_SCHEMA, {
         slot         = slot_name,
         kind         = kind,
@@ -6141,16 +6288,25 @@ local function _drain_deferred_la_emits()
         else
             -- Re-emit. If we're now host, the broadcast fires directly. If
             -- we're now client with a known host, the request lands.
+            -- v0.9.69-dev (#265 Slice 1): revert entries drain too -- delete
+            -- instead of write, payload carries revert=true and no armoury_key.
             if am_host then
-                _la_equips_by_peer[entry.wearer_peer] = _la_equips_by_peer[entry.wearer_peer] or {}
-                _la_equips_by_peer[entry.wearer_peer][entry.slot_name] = {
-                    kind = entry.kind, armoury_key = entry.armoury_key, vanilla_key = entry.vanilla_key,
-                    hand_field = entry.hand_field,
-                }
+                if entry.revert then
+                    if _la_equips_by_peer[entry.wearer_peer] then
+                        _la_equips_by_peer[entry.wearer_peer][entry.slot_name] = nil
+                    end
+                else
+                    _la_equips_by_peer[entry.wearer_peer] = _la_equips_by_peer[entry.wearer_peer] or {}
+                    _la_equips_by_peer[entry.wearer_peer][entry.slot_name] = {
+                        kind = entry.kind, armoury_key = entry.armoury_key, vanilla_key = entry.vanilla_key,
+                        hand_field = entry.hand_field,
+                    }
+                end
                 mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
                     wearer_peer_id = entry.wearer_peer,
                     slot           = entry.slot_name,
                     kind           = entry.kind,
+                    revert         = entry.revert or nil,
                     armoury_key    = entry.armoury_key,
                     vanilla_key    = entry.vanilla_key,
                     hand_field     = entry.hand_field,
@@ -6158,10 +6314,14 @@ local function _drain_deferred_la_emits()
                 _dbg("[cos_la_apply drain] HOST broadcast wearer=%s slot=%s key=%s (was queued %.1fs)",
                     tostring(entry.wearer_peer), tostring(entry.slot_name),
                     tostring(entry.armoury_key), now - entry.queued_at)
+                if printf then printf("[la-state] EMIT drain host->all wearer=%s slot=%s kind=%s key=%s revert=%s (queued %.1fs)",
+                    tostring(entry.wearer_peer), tostring(entry.slot_name), tostring(entry.kind),
+                    tostring(entry.armoury_key), tostring(entry.revert or false), now - entry.queued_at) end
             else
                 mod:network_send("cos_la_apply_req", host, COS_RPC_SCHEMA, {
                     slot         = entry.slot_name,
                     kind         = entry.kind,
+                    revert       = entry.revert or nil,
                     armoury_key  = entry.armoury_key,
                     vanilla_key  = entry.vanilla_key,
                     hand_field   = entry.hand_field,
@@ -6169,6 +6329,9 @@ local function _drain_deferred_la_emits()
                 _dbg("[cos_la_apply drain] CLIENT->req sent wearer=%s slot=%s key=%s host=%s (was queued %.1fs)",
                     tostring(entry.wearer_peer), tostring(entry.slot_name),
                     tostring(entry.armoury_key), tostring(host), now - entry.queued_at)
+                if printf then printf("[la-state] EMIT drain client->req host=%s slot=%s kind=%s key=%s revert=%s (queued %.1fs)",
+                    tostring(host), tostring(entry.slot_name), tostring(entry.kind),
+                    tostring(entry.armoury_key), tostring(entry.revert or false), now - entry.queued_at) end
             end
             -- Drop entry from queue after successful re-emit.
         end
@@ -6176,6 +6339,82 @@ local function _drain_deferred_la_emits()
     mod._la_deferred_emits = survivors
 end
 mod._drain_deferred_la_emits = _drain_deferred_la_emits
+
+-- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1 / invariant I2): REVERT
+-- broadcast. Every prior emit path covered APPLY only; reverting to vanilla
+-- cleared local stores and sent NOTHING, so remote peers kept the stale LA
+-- cosmetic until disconnect (D2/D3 in the audit). A revert is a state change
+-- like any other: same routing as _send_la_apply (host short-circuit /
+-- client req / deferred queue), payload carries `revert = true` with NO
+-- armoury_key. Old-version peers drop the payload harmlessly at their
+-- `armoury_key` guard (schema unchanged). Attached to `mod` (not a local)
+-- so call sites lexically before this point can reach it at runtime and no
+-- top-level local is spent (200-local ceiling).
+mod._send_la_revert = function(unit, slot_name, kind, vanilla_key, hand_field)
+    if not (unit and Unit.alive(unit)) then return end
+    if not (slot_name and kind) then return end
+    if (kind == "offhand" or kind == "illusion") and not hand_field then
+        hand_field = "left_hand_unit"
+    end
+    local wearer_peer = nil
+    local pm = Managers and Managers.player
+    if pm and pm.owner then
+        local owner = pm:owner(unit)
+        wearer_peer = owner and owner.peer_id or nil
+    end
+    wearer_peer = wearer_peer or _local_player_peer_id()
+    if not wearer_peer then return end
+    local dedup_key = wearer_peer .. "|" .. tostring(slot_name) .. "|" .. tostring(kind) .. "|REVERT|" .. tostring(hand_field)
+    local now = os.clock()
+    local prev = _last_emit_at[dedup_key]
+    if prev and (now - prev) < _EMIT_DEDUP_WINDOW then
+        return
+    end
+    _last_emit_at[dedup_key] = now
+
+    if _is_local_server() then
+        if _la_equips_by_peer[wearer_peer] then
+            _la_equips_by_peer[wearer_peer][slot_name] = nil
+        end
+        if printf then printf("[la-state] REVERT host->all wearer=%s slot=%s kind=%s (store entry cleared)",
+            tostring(wearer_peer), tostring(slot_name), tostring(kind)) end
+        mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
+            wearer_peer_id = wearer_peer,
+            slot           = slot_name,
+            kind           = kind,
+            revert         = true,
+            vanilla_key    = vanilla_key,
+            hand_field     = hand_field,
+        })
+        return
+    end
+
+    local host = _host_peer_id()
+    if not host then
+        mod._la_deferred_emits = mod._la_deferred_emits or {}
+        mod._la_deferred_emits[#mod._la_deferred_emits + 1] = {
+            wearer_peer  = wearer_peer,
+            slot_name    = slot_name,
+            kind         = kind,
+            revert       = true,
+            vanilla_key  = vanilla_key,
+            hand_field   = hand_field,
+            queued_at    = os.clock(),
+        }
+        if printf then printf("[la-state] REVERT client DEFERRED (no host yet) slot=%s kind=%s queue=%d",
+            tostring(slot_name), tostring(kind), #mod._la_deferred_emits) end
+        return
+    end
+    if printf then printf("[la-state] REVERT client->req host=%s slot=%s kind=%s",
+        tostring(host), tostring(slot_name), tostring(kind)) end
+    mod:network_send("cos_la_apply_req", host, COS_RPC_SCHEMA, {
+        slot         = slot_name,
+        kind         = kind,
+        revert       = true,
+        vanilla_key  = vanilla_key,
+        hand_field   = hand_field,
+    })
+end
 
 local function _resolve_la_variant(armoury_key)
     local la = get_mod("Loremasters-Armoury")
@@ -6781,6 +7020,137 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
         tostring(ok1), tostring(ok2))
 end
 
+-- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1): revert-side primitives.
+-- Attached to `mod` (no new top-level locals; the main chunk is near the Lua
+-- 200-local ceiling) but defined HERE so the closures capture the same
+-- upvalues the apply path uses (_la_equips_by_peer, _offhand_reswap_active,
+-- _wearer_unit_for_peer, ...).
+
+-- Slot-level re-equip pulse that restores the NATIVE offhand/illusion render
+-- after a revert: with the store entry deleted, the pulse's get_item_units
+-- re-resolution falls through to vanilla (mesh AND texture -- a fresh spawn
+-- carries no LA paint). Same machinery/guards as _ensure_offhand_mesh's
+-- pulse (re-entrancy flag, cooldown via _offhand_reswap_state, slot-level
+-- wield only -- NEVER World.destroy_unit) but with the INVERSE gate: it runs
+-- regardless of LA variant state, because the target state is vanilla.
+-- Safe contexts only (network recv callback / mod.update), like the caller.
+mod._la_native_pulse = function(owner_unit, tag)
+    if _offhand_reswap_active then return end
+    if not (owner_unit and Unit.alive(owner_unit)) then return end
+    local inv = ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(owner_unit, "inventory_system")
+    local equipment = inv and inv._equipment
+    if not (equipment and equipment.slots and inv.wield) then return end
+    local st = _offhand_reswap_state[owner_unit]
+    if st and st.key == "__native__" and (os.clock() - st.t) < _OFFHAND_RESWAP_COOLDOWN then return end
+    local orig_slot = inv.wielded_slot
+    if not orig_slot then return end
+    local slots = equipment.slots
+    local pulse_slot
+    if orig_slot == "slot_melee" and slots["slot_ranged"] then
+        pulse_slot = "slot_ranged"
+    elseif orig_slot == "slot_ranged" and slots["slot_melee"] then
+        pulse_slot = "slot_melee"
+    else
+        for sn, sd in pairs(slots) do
+            if sn ~= orig_slot and sd and (sn == "slot_melee" or sn == "slot_ranged") then
+                pulse_slot = sn
+                break
+            end
+        end
+    end
+    if not pulse_slot then return end
+    _offhand_reswap_state[owner_unit] = { t = os.clock(), key = "__native__", tries = 1 }
+    _offhand_reswap_active = true
+    local ok1 = pcall(inv.wield, inv, pulse_slot)
+    local ok2 = pcall(inv.wield, inv, orig_slot)
+    _offhand_reswap_active = false
+    if printf then printf("[la-state] NATIVE-PULSE tag=%s owner=%s pulse=%s<->%s ok=%s/%s",
+        tostring(tag), tostring(owner_unit), tostring(orig_slot), tostring(pulse_slot),
+        tostring(ok1), tostring(ok2)) end
+end
+
+-- Re-create the wearer's NATIVE hat attachment after a hat revert. Only
+-- stomps the slot when it still renders the LA unit (if vanilla's own
+-- loadout resync already replaced it, no-op) -- convergent regardless of
+-- RPC-vs-resync arrival order. Residency-gated (the #270 class: never hand
+-- the engine a non-resident unit; the 0.9.67 create_attachment gate
+-- backstops this independently).
+mod._la_restore_native_hat = function(owner_unit, slot_name, vanilla_key, la_unit_path)
+    local ext = ScriptUnit and ScriptUnit.has_extension
+        and ScriptUnit.has_extension(owner_unit, "attachment_system")
+    if not (ext and ext.create_attachment) then return false, "no-attachment-ext" end
+    local slot_data = ext._attachments and ext._attachments.slots and ext._attachments.slots[slot_name]
+    local current = slot_data and slot_data.item_data and slot_data.item_data.unit
+    if la_unit_path and current and current ~= la_unit_path then
+        return false, "already-native"
+    end
+    local item = vanilla_key and ItemMasterList and rawget(ItemMasterList, vanilla_key)
+    if not (item and item.unit) then return false, "no-vanilla-item" end
+    if Application and Application.can_get and not Application.can_get("unit", item.unit) then
+        return false, "vanilla-unit-non-resident"
+    end
+    if slot_data then
+        if AttachmentUtils and AttachmentUtils.destroy_attachment then
+            pcall(AttachmentUtils.destroy_attachment, ext._world, ext._unit, slot_data)
+        end
+        ext._attachments.slots[slot_name] = nil
+    end
+    local ok, err = pcall(ext.create_attachment, ext, slot_name, table.clone(item))
+    return ok, err
+end
+
+-- Receiver for an authoritative revert broadcast (called from the
+-- cos_la_apply handler, a safe network-callback context). Deletes the store
+-- entry, purges any queued re-apply for the same (wearer, slot) so a
+-- pending retry can't re-impose the reverted cosmetic, then restores the
+-- native render per kind.
+mod._la_apply_revert_recv = function(wearer, slot_name, kind, vanilla_key, hand_field)
+    local entry = _la_equips_by_peer[wearer] and _la_equips_by_peer[wearer][slot_name]
+    if _la_equips_by_peer[wearer] then
+        _la_equips_by_peer[wearer][slot_name] = nil
+    end
+    if _la_pending_apply and #_la_pending_apply > 0 then
+        local kept = {}
+        for i = 1, #_la_pending_apply do
+            local e = _la_pending_apply[i]
+            if not (e[1] == wearer and e[2] == slot_name) then
+                kept[#kept + 1] = e
+            end
+        end
+        _la_pending_apply = kept
+    end
+    local wu = _wearer_unit_for_peer(wearer)
+    local outcome
+    if kind == "offhand" or kind == "illusion" then
+        if wu then
+            mod._la_native_pulse(wu, "revert")
+            outcome = "pulse"
+        else
+            outcome = "wearer-not-spawned (native restores on next wield)"
+        end
+    elseif kind == "hat" then
+        local la_unit_path = nil
+        if entry and entry.armoury_key then
+            local variant = _resolve_la_variant(entry.armoury_key)
+            la_unit_path = variant and variant.new_units and variant.new_units[1]
+        end
+        local vk = vanilla_key or (entry and entry.vanilla_key)
+        if wu then
+            local ok, why = mod._la_restore_native_hat(wu, slot_name, vk, la_unit_path)
+            outcome = ok and "hat-restored" or ("hat-restore-skipped: " .. tostring(why))
+        else
+            outcome = "wearer-not-spawned"
+        end
+    else -- armor: store delete stops future re-imposition; the body repaint
+         -- rides the next native slot_skin resync / respawn (rare path;
+         -- active armor un-paint needs LA API work -- see issue 265).
+        outcome = "armor: store cleared, repaint deferred to native resync"
+    end
+    if printf then printf("[la-state] REVERT-RECV wearer=%s slot=%s kind=%s had_entry=%s -> %s",
+        tostring(wearer), tostring(slot_name), tostring(kind),
+        tostring(entry ~= nil), tostring(outcome)) end
+end
+
 -- HOST: receives equip requests from clients, validates, records into
 -- `_la_equips_by_peer`, broadcasts the authoritative cos_la_apply to ALL.
 mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version, payload)
@@ -6806,6 +7176,31 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version
     local hand_field  = payload.hand_field
     if (kind == "offhand" or kind == "illusion") and not hand_field then
         hand_field = "left_hand_unit"
+    end
+    -- v0.9.69-dev (Slice 0, I6): host-side receipt line BEFORE any validation,
+    -- so a client req that reaches the host but is then rejected/deduped is
+    -- distinguishable from one lost on the wire (#264-comment transport loss).
+    if printf then printf("[la-state] REQ-RECV from=%s slot=%s kind=%s key=%s revert=%s",
+        tostring(sender_peer_id), tostring(slot_name), tostring(kind),
+        tostring(armoury_key), tostring(payload.revert or false)) end
+    -- v0.9.69-dev (#265 Slice 1): client-originated REVERT. No armoury_key to
+    -- validate -- delete the sender's store entry and rebroadcast the revert
+    -- authoritatively to all peers (the sender included, for lockstep).
+    if payload.revert then
+        if slot_name and kind then
+            if _la_equips_by_peer[sender_peer_id] then
+                _la_equips_by_peer[sender_peer_id][slot_name] = nil
+            end
+            mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
+                wearer_peer_id = sender_peer_id,
+                slot           = slot_name,
+                kind           = kind,
+                revert         = true,
+                vanilla_key    = payload.vanilla_key,
+                hand_field     = hand_field,
+            })
+        end
+        return
     end
     if not (slot_name and kind and armoury_key) then return end
     -- v0.9.3.2-hotfix: accept armoury_keys present in EITHER our bridge index
@@ -6900,6 +7295,16 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
     local hand_field   = payload.hand_field
     if (kind == "offhand" or kind == "illusion") and not hand_field then
         hand_field = "left_hand_unit"
+    end
+    -- v0.9.69-dev (#265 Slice 1): authoritative REVERT. Delete the store
+    -- entry and restore the native render (pulse / hat re-create) via the
+    -- receiver helper defined after _ensure_offhand_mesh. Placed BEFORE the
+    -- armoury_key guard -- a revert carries none by design.
+    if payload.revert then
+        if wearer and slot_name and kind and mod._la_apply_revert_recv then
+            mod._la_apply_revert_recv(wearer, slot_name, kind, payload.vanilla_key, hand_field)
+        end
+        return
     end
     if not (wearer and slot_name and kind and armoury_key) then return end
 
@@ -7003,13 +7408,18 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
     -- returns the local player, #234), since cos_la_apply broadcasts to "all"
     -- including the originating client. Safe context (network callback, not a
     -- _wield_slot body).
+    -- v0.9.69-dev (#268, invariant I4 targeting): scope the mesh pulse to THE
+    -- wearer's unit only. The old loop hit every player at the wearer peer
+    -- (`players_at_peer`), and a host peer owns its BOTS -- one host equip
+    -- force-swapped bot Saltzpyre's Witch Hunter shield to a Kruber empire
+    -- mesh (2026-07-03 21:39/21:41 client log, three owner units per equip).
+    -- `_wearer_unit_for_peer` now resolves the HUMAN player at the peer
+    -- (PlayerManager.player_from_peer_id defaults local_player_id=1;
+    -- player_manager.lua:463-470 -- bots live at other local_player_ids).
     if applied and (kind == "offhand" or kind == "illusion") then
-        local pm = Managers and Managers.player
-        local players = pm and pm.players_at_peer and pm:players_at_peer(wearer)
-        if players then
-            for _, p in pairs(players) do
-                _ensure_offhand_mesh(p.player_unit, hand_field, armoury_key, "recv")
-            end
+        local wu = _wearer_unit_for_peer(wearer)
+        if wu then
+            _ensure_offhand_mesh(wu, hand_field, armoury_key, "recv")
         end
     end
     if not applied then
@@ -7258,6 +7668,19 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
     -- v0.9.0.8-hotfix: diagnostic log.
     _dbg("[husk-wield-wrap] entry wearer=%s slot=%s husk_unit=%s",
         tostring(wearer_peer), tostring(slot_name), tostring(husk_unit))
+    -- v0.9.69-dev (Slice 0, I6 / #264): a nil wearer_peer here silently kills
+    -- BOTH the get_item_units mesh swap AND the post-vanilla repaint for this
+    -- wield. Surface it once per husk unit in the mod-logging-OFF log.
+    if not wearer_peer and husk_unit then
+        local seen = mod._la_gate_seen
+        if not seen then seen = {}; mod._la_gate_seen = seen end
+        local sk = "wield-nopeer|" .. tostring(husk_unit)
+        if not seen[sk] and printf then
+            seen[sk] = true
+            printf("[la-state] HUSK-WIELD wearer-unresolved husk=%s slot=%s (mesh swap + repaint skipped this path)",
+                tostring(husk_unit), tostring(slot_name))
+        end
+    end
     -- v0.9.43-dev HUSK trace: a remote peer's body (husk) is (re)wielding a
     -- slot. This drives the husk get_item_units mesh-swap (RESOLVE husk-mesh-
     -- swap) + the post-vanilla repaint below. Repro #4 (host swaps secondary
@@ -9011,6 +9434,27 @@ end)
 
 -- #45: RPC schema constant must be a positive number so every network_send
 -- prepends it and every network_register gate has something to compare against.
+-- #265 (Slice 1): the revert pipeline must stay wired end to end -- sender,
+-- receiver, and both native-restore primitives. A missing piece regresses to
+-- "revert clears local state and never propagates".
+_rt_register("cos_la_revert_pipeline_wired", function()
+    if type(mod._send_la_revert) ~= "function" then
+        return "mod._send_la_revert missing"
+    end
+    if type(mod._la_apply_revert_recv) ~= "function" then
+        return "mod._la_apply_revert_recv missing"
+    end
+    if type(mod._la_native_pulse) ~= "function" then
+        return "mod._la_native_pulse missing"
+    end
+    if type(mod._la_restore_native_hat) ~= "function" then
+        return "mod._la_restore_native_hat missing"
+    end
+    if type(mod._la_equips_by_peer) ~= "table" then
+        return "mod._la_equips_by_peer runtime alias missing"
+    end
+end)
+
 _rt_register("cos_rpc_schema_present", function()
     if type(COS_RPC_SCHEMA) ~= "number" then
         return "COS_RPC_SCHEMA not defined as number"

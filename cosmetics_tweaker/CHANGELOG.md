@@ -1,5 +1,34 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.69-dev — 2026-07-06 — LA sync core, slices 0+1: revert-to-vanilla now broadcasts (#265) + wearer-scoped apply (#268) + [la-state] transport/store instrumentation
+
+> First two slices of `docs/LA_SYNC_CORE_AUDIT.md` (invariants I2, I4, I6). No render-path restructure yet - that is slice 2 (next build).
+
+### #265 - reverting LA -> vanilla never propagated (FIX, invariant I2)
+Every equip path emitted `cos_la_apply`; every revert path only cleared local state (`_local_la_equips`, the exit queue, persistence) and sent NOTHING, so remote peers kept the stale LA cosmetic until disconnect. Now revert is a broadcast state change like any other:
+- New `mod._send_la_revert` - same routing as apply (host short-circuit / client `cos_la_apply_req` / deferred queue), payload carries `revert=true` and NO armoury_key. Old-version peers drop it harmlessly at their armoury_key guard (COS_RPC_SCHEMA unchanged).
+- Receiver (`mod._la_apply_revert_recv`): deletes `_la_equips_by_peer[wearer][slot]`, purges pending re-applies for that (wearer, slot), then restores the native render: offhand/illusion via a slot-level re-equip pulse (`mod._la_native_pulse` - store entry gone, so `get_item_units` re-resolves vanilla mesh AND texture; never `World.destroy_unit`); hat via native re-create (`mod._la_restore_native_hat`, only when the slot still renders the LA unit, residency-gated per the #270 class); armor clears the store and rides the next native resync (active un-paint needs LA API work, noted on issue 265).
+- Wearer-side triggers: vanilla hat/armor/illusion equip over LA state (CosmeticUtils hook clear branch - guarded to the LOCAL human player; bots share the host peer_id and must not revert the host's slots), and a committed vanilla offhand pick (queued as a revert entry, drained on customization exit under the existing Apply gate; un-Applied browses still drop the queue).
+- Revert-worthiness is checked against the SYNCED store (not just session-local caches) so a cosmetic restored from persistence in an earlier session reverts correctly too.
+
+### #268 - one equip pulsed co-peer BOT units (FIX, invariant I4 targeting)
+The recv-path mesh pulse looped `players_at_peer(wearer)`; a host peer owns its bots, so one host equip force-swapped bot shields to the wearer's mesh (client log 2026-07-03 21:39/21:41: three owner units per equip incl. a Witch Hunter bot shield). Now the pulse targets exactly the wearer unit, and `_wearer_unit_for_peer` resolves the HUMAN player at the peer via `PlayerManager.player_from_peer_id` (local_player_id defaults to 1 = human; bots live at 2+ - player_manager.lua:463-470) with a humans-only fallback sweep (`is_player_controlled`). Likely also the mechanism behind several #204 "stretched skin" sightings.
+
+### Slice 0 - `[la-state]` instrumentation (invariant I6, engine printf, mod-logging-OFF visible)
+The #264-comment mid-mission transport loss and the #264 switch-back render loss could not be pinned because emit routing and the husk wield gates logged only via `_dbg`/`_trace`. New bounded printf lines:
+- `EMIT host->all` / `EMIT client->req` / `EMIT client DEFERRED` (+ drain variants) - which routing branch each emit took.
+- `REQ-RECV` on the host BEFORE any validation/dedup - a req that reached the host but was rejected is now distinguishable from one lost on the wire.
+- `REVERT[-RECV]` / `NATIVE-PULSE` - the whole revert pipeline narrates itself.
+- `HUSK-GATE` / `HUSK-SWAP` / `HUSK-WIELD wearer-unresolved` - dedup'd per (wearer, template, disposition): shows on every husk wield whether the store had the entry, whether the mesh swap fired, or whether wearer resolution failed (the three silent-death candidates for #264).
+
+### Verify in-game (2 players)
+1. #265: host applies an LA shield, client sees it; host reverts to a vanilla shield (Apply) -> client's view returns to vanilla without disconnect. Log: `EMIT-REVERT-ON-EXIT` (wearer) -> `[la-state] REVERT-RECV ... -> pulse` (client). Same for an LA hat -> vanilla hat (`hat-restored`).
+2. #268: host with bots equips an LA shield -> `RE-SWAP` lines name ONLY the host's own unit; bot shields untouched.
+3. #264 evidence (fix lands in slice 2): weapon switch-back now leaves `[la-state] HUSK-GATE ...` lines pinning which gate ate the re-apply.
+
+### Files
+- `cosmetics_tweaker.lua` - revert sender/receiver/native-restore primitives (mod-attached, zero new top-level locals - 200-local ceiling), wearer-scoped recv pulse, human-scoped `_wearer_unit_for_peer`, three wearer-side revert triggers, `[la-state]` printf set, `cos_la_revert_pipeline_wired` regression check; `MOD_VERSION` `0.9.68-dev` -> `0.9.69-dev`. No new RPC names, no schema bump, no force-loads, no `World.destroy_unit`.
+
 ## 0.9.68-dev — 2026-07-04 — Localization: applied dev status-tag doctrine (#301)
 
 Tagged all 15 option-title loc entries (4 group titles + 11 checkbox/numeric titles) with a dev status prefix: 10 `[working]`, 4 `[untested]` (the experimental Third-Person Equipment group + its 3 options — reimplemented, coarse positions, unverified in-game), 1 `[Issue 230] [verify-fix]` (Cosmetic Availability group — the unobtainable-cosmetic ownership fix shipped 0.9.63-dev, awaiting in-game confirmation). Tags on option titles only; tooltips, descriptions, custom-illusion item name/description entries, and the ~1272 auto-generated Cosmetic Availability sub-toggles (programmatic labels in `_cosmetic_unlocks.lua`, not literal loc entries — represented by the group tag) were left untagged. The large open LA shield/hat rendering + sync + crash cluster (#148/#149/#154/#203/#204/#228/#233/#234/#264-268/#270) has no menu option-title representation (LA-bridge rendering, not a toggle), so it is not reflected in any tag.
