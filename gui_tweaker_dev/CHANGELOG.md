@@ -5,6 +5,13 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.202-dev (2026-07-05) -- CRASH FIX #363: in-mission Crafting Salvage page (gui_store_menu_atlas not in Gui)
+
+**Crash console 2026-07-06-00.49.31** (in-mission, bench toggle ON + cim_dev, wood_elf): opening the Salvage page of the in-mission Crafting tab crashed at `ui_passes.lua:194: Material 'gui_store_menu_atlas' not found in Gui` (DRAW fatal). The vanilla Salvage page draws its auto-fill rarity buttons (`store_tag_icon_weapon_*`) from `gui_store_menu_atlas` (material file `materials/ui/ui_1080p_store_menu`), which `store_ui_settings.lua` lists under `ui_materials_in_inn` -- so vanilla adds it to the ingame ui/ui_top renderer only in the keep. In a mission that renderer lacks it -> uncatchable "Material not found in Gui" fatal (same class as the pose-atlas / loading-screen crashes).
+
+- **Extended `_gut_gui_material_guard.lua`** (the `UIRenderer.create` hook that already injects the pose-cosmetics atlas #155) to ALSO inject `materials/ui/ui_1080p_store_menu` into ingame ui/ui_top renderers when resident (can_get-gated). The store atlas IS resident in-mission (`resource_packages/dlcs/store` is force-loaded at boot), so -- unlike the pose atlas which usually self-skips -- this injection lands and the Salvage page renders. Edge-logged `[gut:80] injected 'materials/ui/ui_1080p_store_menu' …` so the next in-mission Salvage test is verifiable.
+- Complements #80 (the tab-enable fix in v0.2.200): v0.2.200 made the tab clickable in Adventure; this makes its Salvage page not crash.
+
 ## 0.2.201-dev (2026-07-05) -- #152 CLOSED (user-confirmed in-game): Mod Tweaker slider-arrow increment + hold-repeat
 
 - #152 CLOSED (user confirmed the slider arrows no longer over-adjust). Fix live since

@@ -56,6 +56,21 @@ local POSE_MAT   = "materials/ui/ui_1080p_pose_cosmetics"
 local INGAME_SIG = "materials/ui/ui_1080p_hud_atlas_textures"  -- in every ingame ui/ui_top renderer material list
 local _pose_logged_state = nil  -- edge latch: nil / "present" / "absent" (de-spam the printf)
 
+-- (#80) In-mission Crafting-tab store-atlas injection. The vanilla salvage craft page
+-- (craft_page_salvage_console.lua:398) draws its auto-fill rarity buttons
+-- (store_tag_icon_weapon_plentiful/common/rare/exotic) out of the `gui_store_menu_atlas`
+-- material, which lives in `materials/ui/ui_1080p_store_menu`. store_ui_settings.lua lists
+-- that resource under `ui_materials_in_inn`, so vanilla adds it to the ingame ui/ui_top
+-- renderer material list ONLY in the keep -- in a mission the Salvage page draws it and takes
+-- the same uncatchable "Material not found in Gui" DRAW fatal (ui_passes.lua:194) as the pose
+-- atlas above. UNLIKE the pose atlas, the store resource IS resident in a mission
+-- (resource_packages/dlcs/store is force-loaded at boot -- see the console-*.log
+-- `Force_load: resource_packages/dlcs/store` line), so the can_get-gated injection actually
+-- lands, letting the in-mission Crafting tab's Salvage page render. Crash console
+-- 2026-07-06-00.49.xx (salvage page on wood_elf, gui_store_menu_atlas not found in Gui).
+local STORE_MAT = "materials/ui/ui_1080p_store_menu"
+local _store_logged_state = nil
+
 -- gw_fonts is in nearly every UIRenderer.create material list and is resident whenever
 -- GUIs are created. If can_get can't see it, can_get's "material" resource type is not
 -- reliable in this build -> we NEVER filter (avoid false-dropping valid materials and
@@ -87,7 +102,7 @@ local function _prepare(n, ...)
     -- Pass 1: classify this create call. `has_ingame_sig` marks the ingame ui/ui_top
     -- renderers (the ones the in-mission Cosmetics window draws on); `has_pose` = the pose
     -- material is already in the list (keep context -- nothing to inject).
-    local has_ingame_sig, has_pose = false, false
+    local has_ingame_sig, has_pose, has_store = false, false, false
     do
         local i = 1
         while i <= n do
@@ -96,6 +111,7 @@ local function _prepare(n, ...)
                 local path = args[i + 1]
                 if path == INGAME_SIG then has_ingame_sig = true end
                 if path == POSE_MAT   then has_pose = true end
+                if path == STORE_MAT  then has_store = true end
                 i = i + 2
             else
                 i = i + 1
@@ -109,6 +125,13 @@ local function _prepare(n, ...)
     if has_ingame_sig and not has_pose then
         local ok, avail = pcall(can_get, "material", POSE_MAT)
         append_pose = (ok and avail == true)
+    end
+    -- (#80) store atlas: same gate. It IS resident in-mission (dlcs/store force-loaded at
+    -- boot), so this injection lands where the pose one self-skips.
+    local append_store = false
+    if has_ingame_sig and not has_store then
+        local ok, avail = pcall(can_get, "material", STORE_MAT)
+        append_store = (ok and avail == true)
     end
 
     -- Pass 2: copy tokens, dropping any ("material", <unloadable>) pair (existing guard).
@@ -137,6 +160,10 @@ local function _prepare(n, ...)
         oi = oi + 1; out[oi] = "material"
         oi = oi + 1; out[oi] = POSE_MAT                 -- (#155) resident -> add to the ingame Gui
     end
+    if append_store then
+        oi = oi + 1; out[oi] = "material"
+        oi = oi + 1; out[oi] = STORE_MAT                -- (#80) resident -> in-mission Salvage/Crafting page can draw
+    end
 
     -- Publish the in-mission pose-atlas Gui-residency signal for the Cosmetics-tab gate in
     -- _gut_mission_inventory.lua. Only meaningful for ingame renderers; edge-logged.
@@ -154,9 +181,22 @@ local function _prepare(n, ...)
                 printf("[gut:155] pose atlas '%s' NOT resident (can_get=false) at ingame-renderer create -- Cosmetics tab stays gated in-mission; a package pin is needed to go further", POSE_MAT)
             end
         end
+
+        -- (#80) store-atlas residency: edge-logged so the next in-mission Salvage test verifies.
+        local store_state = (has_store or append_store) and "present" or "absent"
+        if _store_logged_state ~= store_state then
+            _store_logged_state = store_state
+            if append_store then
+                printf("[gut:80] injected '%s' into an ingame UI renderer (gui_store_menu_atlas now in its Gui -> in-mission Salvage/Crafting page can draw)", STORE_MAT)
+            elseif has_store then
+                printf("[gut:80] ingame UI renderer already carries '%s' (keep context) -- no injection needed", STORE_MAT)
+            else
+                printf("[gut:80] store atlas '%s' NOT resident (can_get=false) at ingame-renderer create -- Salvage-page tag icons cannot draw in-mission", STORE_MAT)
+            end
+        end
     end
 
-    if not dropped and not append_pose then
+    if not dropped and not append_pose and not append_store then
         return nil  -- unchanged: caller uses the originals
     end
     if dropped then
@@ -179,6 +219,6 @@ mod:hook("UIRenderer", "create", function(func, world, ...)
     return func(world, ...)                             -- fail-open: unchanged OR error -> originals untouched
 end)
 
-mod:info("[gut] GUI material guard installed (drops unloadable create_screen_gui materials to prevent client CTDs; injects the pose-cosmetics atlas into in-mission renderers when resident, #155)")
+mod:info("[gut] GUI material guard installed (drops unloadable create_screen_gui materials to prevent client CTDs; injects the pose-cosmetics atlas #155 and the store-menu atlas #80 into in-mission renderers when resident)")
 
 return {}
