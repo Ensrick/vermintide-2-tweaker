@@ -1,5 +1,9 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.73-dev — 2026-07-06 — Regression battery for the LA sync fixes (issues closed on user sign-off)
+
+Five new `/regression_test` checks locking the 0.9.69-0.9.72 fixes: `cos_la_reconcile_and_pull_wired` (extended: purge tick, offhand restore, persistence API), `cos_la_reconcile_no_entry_terminal` (#264 revert-safety), `cos_la_peer_purge_defer_and_execute` (BUG_CLASSES 24, functional), `cos_la_revert_recv_deletes_entry` (#265, functional), `cos_la_offhand_persistence_roundtrip` (save/read/clear round-trip, functional). All use fake peers/backend_ids and leave no residue. Issues #264 #265 #267 #268 #270 #373 closed on user in-game sign-off 2026-07-06; #266 stays open for the slice-6 data-parity deliverable.
+
 ## 0.9.72-dev — 2026-07-06 — FIX: illusion landing on the WRONG weapon (weapon-identity guard in the apply core) + legacy slot-key namespace retired
 
 > From the 2026-07-06 18:16/18:27 session (user HOSTING, first session where sync held into missions). User report: the illusion appeared on a different weapon after changing.

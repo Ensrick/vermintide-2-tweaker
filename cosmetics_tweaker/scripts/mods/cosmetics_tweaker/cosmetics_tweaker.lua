@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.72-dev"
+local MOD_VERSION = "0.9.73-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -9778,10 +9778,83 @@ _rt_register("cos_la_reconcile_and_pull_wired", function()
     if type(mod._la_reconcile) ~= "function" then
         return "mod._la_reconcile missing"
     end
-    -- Source-pattern checks: the five render triggers must route through
-    -- reconcile, and the state-pull RPC must be registered.
-    -- (Runtime-visible surface only; the call sites are covered by the
-    -- [la-state] instrumentation at play time.)
+    if type(mod._la_tick_peer_purges) ~= "function" then
+        return "mod._la_tick_peer_purges missing (transition-wipe fix, BUG_CLASSES 24)"
+    end
+    if type(mod._la_restore_offhand_selections) ~= "function" then
+        return "mod._la_restore_offhand_selections missing (offhand persistence)"
+    end
+    if not (LA_PERSIST and type(LA_PERSIST.save_offhand) == "function"
+        and type(LA_PERSIST.clear_offhand) == "function"
+        and type(LA_PERSIST.get_saved_offhands) == "function") then
+        return "LA_PERSIST offhand API incomplete"
+    end
+end)
+
+-- #264: reconcile must treat a missing store entry as TERMINAL ("no-entry"),
+-- not retryable - otherwise a reverted cosmetic is re-imposed by stale
+-- pending-queue entries. Pure store-lookup path; no engine calls.
+_rt_register("cos_la_reconcile_no_entry_terminal", function()
+    if type(mod._la_reconcile) ~= "function" then return "reconcile missing" end
+    local ok, applied, reason = pcall(mod._la_reconcile, "rt_fake_peer_no_entry", "rt_fake_slot", "rt", false)
+    if not ok then return "reconcile errored on empty store: " .. tostring(applied) end
+    if applied ~= false or reason ~= "no-entry" then
+        return "expected (false, 'no-entry'), got (" .. tostring(applied) .. ", " .. tostring(reason) .. ")"
+    end
+end)
+
+-- BUG_CLASSES 24: a due deferred purge must execute (store + deadline
+-- cleared); the local peer must never be purged. Functional test against
+-- the real tick using a fake peer with an already-expired deadline.
+_rt_register("cos_la_peer_purge_defer_and_execute", function()
+    if type(mod._la_tick_peer_purges) ~= "function" then return "tick missing" end
+    if type(mod._la_equips_by_peer) ~= "table" then return "store alias missing" end
+    local fake = "rt_fake_peer_purge"
+    mod._la_peer_purge_at = mod._la_peer_purge_at or {}
+    mod._la_peer_purge_at[fake] = os.clock() - 1
+    mod._la_equips_by_peer[fake] = { rt_slot = { kind = "offhand", armoury_key = "rt_key" } }
+    mod._la_tick_peer_purges()
+    local leftover_store = mod._la_equips_by_peer[fake]
+    local leftover_deadline = mod._la_peer_purge_at[fake]
+    mod._la_equips_by_peer[fake] = nil
+    mod._la_peer_purge_at[fake] = nil
+    if leftover_store ~= nil then return "due purge did not clear the store entry" end
+    if leftover_deadline ~= nil then return "due purge did not clear the deadline" end
+end)
+
+-- #265: a revert broadcast received for a peer must DELETE the store entry
+-- (armor kind = pure store path, no unit/engine work when the wearer is not
+-- spawned - fake peer guarantees that).
+_rt_register("cos_la_revert_recv_deletes_entry", function()
+    if type(mod._la_apply_revert_recv) ~= "function" then return "revert recv missing" end
+    if type(mod._la_equips_by_peer) ~= "table" then return "store alias missing" end
+    local fake = "rt_fake_peer_revert"
+    mod._la_equips_by_peer[fake] = {
+        slot_skin = { kind = "armor", armoury_key = "rt_key", vanilla_key = "rt_v" },
+    }
+    local ok, err = pcall(mod._la_apply_revert_recv, fake, "slot_skin", "armor", "rt_v", nil)
+    local leftover = mod._la_equips_by_peer[fake] and mod._la_equips_by_peer[fake].slot_skin
+    mod._la_equips_by_peer[fake] = nil
+    if not ok then return "revert recv errored: " .. tostring(err) end
+    if leftover ~= nil then return "revert did not delete the store entry" end
+end)
+
+-- 0.9.71: offhand picks must round-trip through the persistence file
+-- (save -> read back -> clear -> gone). Uses a fake backend_id; leaves no
+-- residue in la_persisted_equips.
+_rt_register("cos_la_offhand_persistence_roundtrip", function()
+    if not (LA_PERSIST and LA_PERSIST.save_offhand) then return "offhand API missing" end
+    local bid, hand = "rt_fake_bid_0001", "left_hand_unit"
+    LA_PERSIST.save_offhand(bid, hand, "rt_key", "rt_vanilla")
+    local saved = LA_PERSIST.get_saved_offhands()
+    local rec = saved and saved[bid] and saved[bid][hand]
+    if not (rec and rec.armoury_key == "rt_key" and rec.vanilla_key == "rt_vanilla") then
+        LA_PERSIST.clear_offhand(bid, hand)
+        return "saved offhand did not read back"
+    end
+    LA_PERSIST.clear_offhand(bid, hand)
+    saved = LA_PERSIST.get_saved_offhands()
+    if saved and saved[bid] then return "cleared offhand still present" end
 end)
 
 -- #265 (Slice 1): the revert pipeline must stay wired end to end -- sender,
