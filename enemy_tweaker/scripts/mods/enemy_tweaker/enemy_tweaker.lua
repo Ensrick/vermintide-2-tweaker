@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.28-dev"
+local MOD_VERSION = "0.7.29-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -3598,5 +3598,13 @@ end)
 -- mod:hook (so no duplicate-hook concern). Exposes mod._et_apply_fly_disable,
 -- re-applied from on_setting_changed above.
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")
+
+-- Nurgloth phase-desync blackboard probe (issue 275 diagnostics). Two NEW
+-- mod:hook_safe on AiBreedSnippets.on_chaos_exalted_sorcerer_drachenfels_spawn /
+-- _update (grepped: no pre-existing et hook on either). Always-on in dev, engine
+-- printf, no menu toggle. Chains cleanly under DutchSpice's hook_origin
+-- replacement (VMF duplicate-drop is per-mod). See the file header for the full
+-- source citations and cross-mod analysis.
+mod:dofile("scripts/mods/enemy_tweaker/_et_nurgloth_probe")
 
 mod:info("[mem-probe] et boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_ET) / 1024)

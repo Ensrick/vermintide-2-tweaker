@@ -1,5 +1,36 @@
 # Enemy Tweaker Changelog
 
+## 0.7.29-dev (2026-07-06): #275 diagnostics - Nurgloth blackboard phase probe
+
+- **Issue 275 diagnostics (no fix, capture only):** Nurgloth (breed
+  `chaos_exalted_sorcerer_drachenfels`, The Enchanter's Lair = `dlc_castle`)
+  desyncs into his final phase at appearance with health floored at ~66% on a
+  friend's machine; gut's cutscene skip was exonerated (cinematic played fully,
+  desync persisted). New host-side probe captures the boss blackboard so the next
+  repro shows WHY the fight jumps a phase at spawn. 66% is exactly the two-thirds
+  phase-transition threshold (`blackboard.current_health_percent <= 0.66`,
+  bt_conditions.lua:332), so the probe reads that exact FIELD next to the
+  transition-done flags and mode/phase, and separately reads the health
+  extension's own percent so a divergence is visible.
+- **New file `scripts/mods/enemy_tweaker/_et_nurgloth_probe.lua`** — two NEW
+  `mod:hook_safe` on `AiBreedSnippets.on_chaos_exalted_sorcerer_drachenfels_spawn`
+  and `..._update` (grepped: enemy_tweaker had no prior hook on either method).
+  SPAWN prints one line (`in_boss_arena / mode / phase / intro_timer / hp_pct /
+  min_hp_pct / invincible`). UPDATE prints one throttled line every 5s plus an
+  immediate line whenever `mode` / `phase` / `two_thirds_transition_done` /
+  `one_third_transition_done` changes (`mode / phase / current_health_percent /
+  min_hp_pct / invincible / two_thirds_done / one_third_done / third_phase /
+  defensive_dur`). Throttle + last-seen state stored on the blackboard.
+- **Cross-mod:** the friend runs DutchSpice, which `hook_origin`-REPLACES the
+  spawn body (DutchSpice.lua:1766). VMF's duplicate-drop is per-mod and safe
+  hooks run after the hook chain (including a `hook_origin` replacement), so this
+  probe fires even when DutchSpice's replacement is the active spawn function.
+- **Doctrine:** always-on in dev, no menu toggle, engine `printf` (user runs
+  mod-logging OFF), every read guarded, whole body pcall-wrapped so a probe fault
+  can never break the fight. Tag `[et:275]` — grep the friend's console log for it.
+- **Files:** `enemy_tweaker.lua:3` MOD_VERSION 0.7.28-dev -> 0.7.29-dev; `~3602`
+  dofile of the new probe (after `_et_boss_tweaks`); new `_et_nurgloth_probe.lua`.
+
 ## 0.7.28-dev (2026-07-05): #213 CLOSED (user-confirmed) - double-freeze guard regression test + loc-tag flip
 
 - #213 CLOSED (user confirmed the "Tried to freeze unit twice in the same frame" engine error
