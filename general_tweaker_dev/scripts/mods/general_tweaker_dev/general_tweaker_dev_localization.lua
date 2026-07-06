@@ -188,7 +188,7 @@ return {
     -- mod, Workshop ID 1395132559, MIT-licensed). gt_cs_* / gt_is_* namespaces.
     gt_spawners_group = { en = "[working] Spawners" },
 
-    gt_cs_group = { en = "[Issue 254] Creature Spawner" },
+    gt_cs_group = { en = "[verify-fix] [Issue 254 & 275] Creature Spawner" },
     gt_cs_unit_list = { en = "[untested] Available Unit List" },
     gt_cs_unit_list_tooltip = { en = "Choose which set of enemies the cycle hotkeys move through: Regular, Dummy (practice targets), Misc (debug units), Special, Boss, or All. Changing this jumps the selection to the first enemy in the new set." },
     gt_cs_unit_list_regular = { en = "Regular" },

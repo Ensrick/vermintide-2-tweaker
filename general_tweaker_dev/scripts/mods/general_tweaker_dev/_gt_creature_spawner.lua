@@ -862,12 +862,33 @@ if Breeds and Breeds.chaos_exalted_sorcerer_drachenfels then
     end)
 end
 
--- Drachenfels phase-transition condition — bias to TRUE outside dlc_castle
--- so the boss skips its arena-specific defensive phase and stays in
--- offensive mode (otherwise the missing arena nodes cause a soft lock).
+-- Drachenfels phase-transition condition. OUTSIDE dlc_castle force TRUE so a
+-- Creature-Spawner-spawned Nurgloth skips its arena-specific defensive phase and
+-- stays offensive (the missing arena nodes would otherwise soft-lock it). INSIDE
+-- dlc_castle (the real Nurgloth arena, incl. CW dlc_castle_* variants) defer to
+-- vanilla so the real boss fight runs its three defensive/offensive cycles.
+--
+-- 2026-07-06 (issue 275): the old body
+--     return (_gt_cs_is_in_level("dlc_castle") and func(...)) or true
+-- COLLAPSED to constant-true everywhere. In the real arena, when vanilla
+-- correctly returned false (boss had not yet passed the one-third-health
+-- transition), `(true and false) or true` still yielded true, forcing Nurgloth's
+-- BT into its "final offense phase" (chaos_exalted_sorcerer_drachenfels_behavior
+-- .lua:239) at full health with the intro's 0.65 min-health gate never lowered -
+-- breaking the real boss fight, always. Probe evidence (2026-07-06 author log):
+--   [et:275] HOOK sorcerer_drachenfels_go_offensive_intense | hp_pct=1.000 ...
+--            two_thirds_done=nil one_third_done=nil
+-- The decision now lives in the pure, regression-tested helper below (explicit
+-- branching; vanilla's return is passed through unaltered, multi-return safe).
+function mod._gt_cs_one_third_wrapper(in_arena, ...)
+    if in_arena then
+        return ...
+    end
+    return true
+end
 if BTConditions then
     mod:hook(BTConditions, "transitioned_one_third_health", function(func, ...)
-        return (_gt_cs_is_in_level("dlc_castle") and func(...)) or true
+        return mod._gt_cs_one_third_wrapper(_gt_cs_is_in_level("dlc_castle"), func(...))
     end)
 end
 

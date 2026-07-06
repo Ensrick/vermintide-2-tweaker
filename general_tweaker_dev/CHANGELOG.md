@@ -1,5 +1,55 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.191-dev (2026-07-06) -- #275: fix constant-true transitioned_one_third_health guard collapse (Nurgloth final-phase-at-spawn softlock) [verify-fix]
+
+### Why (root cause)
+The Creature Spawner's Drachenfels/Nurgloth phase hook read:
+```lua
+mod:hook(BTConditions, "transitioned_one_third_health", function(func, ...)
+    return (_gt_cs_is_in_level("dlc_castle") and func(...)) or true
+end)
+```
+Intent: outside `dlc_castle` force TRUE so a Creature-Spawner-spawned Nurgloth skips
+its arena-specific defensive phase; inside the real arena (incl. CW `dlc_castle_*`
+variants) defer to vanilla. The boolean COLLAPSES: in `dlc_castle`, when vanilla
+correctly returns `false` (boss has not yet passed the one-third-health transition),
+`(true and false) or true` still yields `true`. The condition was CONSTANT TRUE
+everywhere, forcing Nurgloth's BT straight into "final offense phase"
+(`chaos_exalted_sorcerer_drachenfels_behavior.lua:239`) at full health with the
+intro's 0.65 min-health gate never lowered - so the real Enchanter's Lair boss
+fight was broken/softlocked, always. `BTConditions.transitioned_one_third_health`
+(`bt_conditions.lua:355`) returns `current_health_percent <= 0.33 and
+one_third_transition_done`; `bt_node.lua` resolves conditions by name every
+evaluation, so the collapsed guard poisons every tick.
+
+### Evidence
+`[et:275]` probe capture (2026-07-06 author log):
+`[et:275] HOOK sorcerer_drachenfels_go_offensive_intense | hp_pct=1.000 ... two_thirds_done=nil one_third_done=nil`
+(final-offense phase entered at full health, transitions never flagged).
+
+### Changed
+- `_gt_creature_spawner.lua`: rewrote the hook body with explicit branching via a
+  new pure helper `mod._gt_cs_one_third_wrapper(in_arena, ...)` - inside the arena
+  return vanilla's result unaltered (multi-return preserved), outside force `true`.
+  Extended the intent comment with the 2026-07-06 collapse post-mortem + probe line.
+- `general_tweaker_dev.lua`: new `/gt_regression_test` check
+  `gt_cs_transitioned_one_third_not_forced` asserts the helper's truth table
+  ((true,false)->false, (true,true)->true, (false,false)->true, (false,true)->true),
+  wired to the same helper the hook calls so the collapse can never silently return.
+- Idiom sweep of the whole repo for `(cond and func(...)) or <literal>` hook tails:
+  only this line was a genuine collapsing-guard bug (it wraps a BOOLEAN condition
+  where `false` is the meaningful in-arena case). The other same-shape lines
+  (`BTSpawnAllies.run`, `BTLootRatFleeAction.{enter,run,leave}`, the navmesh-query
+  guards) wrap functions that return truthy BT-status strings / tables / discarded
+  values in their defer branch, so their `or <default>` tails do not corrupt a
+  meaningful return - left unchanged.
+
+### VERIFY IN-GAME (#275)
+Enchanter's Lair: Nurgloth must run THREE defensive/offensive phase cycles (waves at
+100->66%, 66->33%, 33->0) with the health gate stepping 0.65/0.32/0 (`[et:275]` STATE
+lines show `two_thirds_done` then `one_third_done` flipping true), and the fight must
+be completable.
+
 ## v0.2.190-dev (2026-07-06) -- #241: suppress ledge-grab + out-of-bounds death while noclipping [verify-fix]
 
 ### Why

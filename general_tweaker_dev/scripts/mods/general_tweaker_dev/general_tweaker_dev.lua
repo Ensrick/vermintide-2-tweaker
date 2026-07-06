@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.190-dev"
+local MOD_VERSION = "0.2.191-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -2014,6 +2014,34 @@ _rt_register("gt_cs_is_in_level_prefix_match", function()
     end
     Managers.state.game_mode = saved_game_mode
     if fail then return fail end
+end)
+
+_rt_register("gt_cs_transitioned_one_third_not_forced", function()
+    -- Issue #275 (2026-07-06): the transitioned_one_third_health hook body used to
+    -- be `(_gt_cs_is_in_level("dlc_castle") and func(...)) or true`, which collapses
+    -- to constant-true. Inside the real Nurgloth arena a legitimate vanilla `false`
+    -- (boss has not yet passed the one-third-health transition) became true via the
+    -- `or true` tail, forcing the BT into its final-offense phase at full health and
+    -- breaking the real fight everywhere, always. The fix routes the hook through
+    -- the pure helper mod._gt_cs_one_third_wrapper(in_arena, vanilla_result);
+    -- assert its truth table so the collapse can never return.
+    local wrap = mod._gt_cs_one_third_wrapper
+    if type(wrap) ~= "function" then
+        return "mod._gt_cs_one_third_wrapper missing (hook not routed through the pure helper)"
+    end
+    local cases = {
+        { in_arena = true,  vanilla = false, want = false, why = "in arena, vanilla false -> defer (must NOT force true)" },
+        { in_arena = true,  vanilla = true,  want = true,  why = "in arena, vanilla true -> true" },
+        { in_arena = false, vanilla = false, want = true,  why = "outside arena -> force true (spawner Nurgloth skips arena phase)" },
+        { in_arena = false, vanilla = true,  want = true,  why = "outside arena -> force true" },
+    }
+    for _, c in ipairs(cases) do
+        local got = wrap(c.in_arena, c.vanilla)
+        if got ~= c.want then
+            return string.format("in_arena=%s vanilla=%s want=%s got=%s (%s)",
+                tostring(c.in_arena), tostring(c.vanilla), tostring(c.want), tostring(got), c.why)
+        end
+    end
 end)
 
 _rt_register("bots_in_keep_setting_registered", function()
