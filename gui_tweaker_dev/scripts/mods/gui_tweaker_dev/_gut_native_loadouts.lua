@@ -487,11 +487,18 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         -- Fall back to the official value ONLY on an affirmative miss; on UNKNOWN
         -- (backend not inspectable) serve the store value unchanged - guessing
         -- "official" there would bleed official gear into modded loadouts at boot.
-        if _resolve_item_raw(value) == RESOLVE_NO then
+        local rstate = _resolve_item_raw(value)
+        if rstate == RESOLVE_NO then
             _trace_gear_read(career_name, key, idx, value, "official-fallback-resolve-no")  -- issue #387
             return func(self, career_name, key, optional_loadout_index)
         end
-        _trace_gear_read(career_name, key, idx, value, "store")  -- issue #387
+        -- issue #387: split YES vs UNKNOWN. Empirically (console-2026-07-06-21.28) a weapon
+        -- served on UNKNOWN can still fail at PRESENTATION (get_item_from_id -> nil), leaving
+        -- the slot stuck on the previously-wielded weapon after a loadout switch (es_mercenary
+        -- loadout-5 melee C60E860C16C0B5E9: served source=store, never resolved to an item, so
+        -- the grid kept loadout-6's melee while the ranged slot updated normally). YES means
+        -- the raw registry holds it right now; UNKNOWN means we could not inspect the registry.
+        _trace_gear_read(career_name, key, idx, value, rstate == RESOLVE_YES and "store-yes" or "store-unknown")  -- issue #387
     end
     return value
 end)
@@ -914,32 +921,78 @@ end)
 -- each career whether it seeded, how many loadout rows exist, the selected index, and
 -- (console) which gear/cosmetic slots each row actually holds.
 -- ==================================================================
-mod:command("gut_loadout_status", "Show the modded loadout store state (issue #375)", function()
+-- issue #387 presentation-side resolution probe. SAFE to call get_item_from_id here because
+-- this runs in a chat-command context, NOT inside a mirror read hook (the v0.2.173 recursion
+-- was get_item_from_id called from within the get_character_data hook). Returns the resolved
+-- item key (or nil) so a dangling/unresolvable weapon id -- the id that leaves a slot stuck on
+-- the previous weapon at switch time -- is visible per row.
+local function _probe_resolve(id)
+    if id == nil then return nil end
+    local ok, key = pcall(function()
+        local iface = Managers.backend:get_interface("items")
+        local item = iface and iface:get_item_from_id(id)
+        return item and item.data and (item.data.key or item.data.name)
+    end)
+    return ok and key or nil
+end
+
+mod:command("gut_loadout_status", "Show the modded loadout store state + resolve gear ids (issue #375/#387)", function(career_arg)
     local mode = _adventure_mode()
     mod:echo(string.format("[loadouts] realm_modded=%s mode=%s", tostring(_in_modded_realm()), tostring(mode)))
     if mode == MODE_OFF then
         mod:echo("  feature INERT here (official realm / Versus / not in a backend view) -- store is not consulted")
     end
+    local filter = (career_arg and career_arg ~= "") and career_arg or nil
     local store = _store()
     local any = false
     for career_name, entry in pairs(store) do
-        any = true
-        local rows = entry.loadouts or {}
-        mod:echo(string.format("  %s: seeded=%s loadouts=%d selected=%s bot=%s",
-            tostring(career_name), tostring(entry._seeded and true or false),
-            #rows, tostring(entry.selected_index), tostring(entry.bot_index)))
-        for i = 1, #rows do
-            local row = rows[i]
-            local filled = {}
-            for _, s in ipairs(LOADOUT_SLOT_NAMES) do
-                if row and row[s] ~= nil then filled[#filled + 1] = s end
+        if not filter or career_name == filter then
+            any = true
+            local rows = entry.loadouts or {}
+            -- Count unresolvable WEAPON ids across rows (the #387 stuck-weapon signature).
+            local weapon_fail = 0
+            for i = 1, #rows do
+                local row = rows[i]
+                for slot in pairs(WEAPON_SLOT_SET) do
+                    local id = row and row[slot]
+                    if id ~= nil and _probe_resolve(id) == nil then weapon_fail = weapon_fail + 1 end
+                end
             end
-            printf("[gut_dev:NATIVE_LOADOUTS] status career=%s row=%d selected=%s slots=[%s] talents=%s",
-                tostring(career_name), i, tostring(i == entry.selected_index),
-                table.concat(filled, ","), tostring(row and row.talents))
+            mod:echo(string.format("  %s: seeded=%s loadouts=%d selected=%s bot=%s weapon_ids_unresolvable=%d",
+                tostring(career_name), tostring(entry._seeded and true or false),
+                #rows, tostring(entry.selected_index), tostring(entry.bot_index), weapon_fail))
+            for i = 1, #rows do
+                local row = rows[i]
+                local filled = {}
+                for _, s in ipairs(LOADOUT_SLOT_NAMES) do
+                    if row and row[s] ~= nil then filled[#filled + 1] = s end
+                end
+                printf("[gut_dev:NATIVE_LOADOUTS] status career=%s row=%d selected=%s slots=[%s] talents=%s",
+                    tostring(career_name), i, tostring(i == entry.selected_index),
+                    table.concat(filled, ","), tostring(row and row.talents))
+                -- issue #387: resolve each GEAR slot id both ways -- raw registry (what the
+                -- get_character_data fallback consults) AND get_item_from_id (what the hero-view
+                -- presentation consults). A slot with raw=UNKNOWN/YES but get_item_from_id=FAIL is
+                -- exactly the stuck-weapon case: served from the store, unpresentable at switch.
+                if row then
+                    for _, s in ipairs(GEAR_SLOT_NAMES) do
+                        local id = row[s]
+                        if id ~= nil then
+                            local raw = _resolve_item_raw(id)
+                            local rawname = (raw == RESOLVE_YES and "raw=YES") or (raw == RESOLVE_NO and "raw=NO") or "raw=UNKNOWN"
+                            local key = _probe_resolve(id)
+                            printf("[gut_dev:NATIVE_LOADOUTS] status-resolve career=%s row=%d %s id=%s %s get_item_from_id=%s",
+                                tostring(career_name), i, s, tostring(id), rawname, tostring(key or "<FAIL>"))
+                        end
+                    end
+                end
+            end
         end
     end
-    if not any then mod:echo("  store EMPTY -- open a modded hero view (and switch a loadout slot) to seed from official") end
+    if not any then
+        if filter then mod:echo("  no store entry for '" .. filter .. "'")
+        else mod:echo("  store EMPTY -- open a modded hero view (and switch a loadout slot) to seed from official") end
+    end
 end)
 
 -- ==================================================================
