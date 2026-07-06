@@ -49,7 +49,6 @@ local World           = World
 local LineObject      = LineObject
 local Color           = Color
 local Vector3         = Vector3
-local POSITION_LOOKUP = POSITION_LOOKUP
 local HEALTH_ALIVE    = HEALTH_ALIVE
 local Broadphase      = Broadphase
 
@@ -120,12 +119,14 @@ local function _entities(name)
     return ok and map or nil
 end
 
--- Best-effort unit position for distance culling. POSITION_LOOKUP is authoritative
--- for pickups/AI but not guaranteed for arbitrary level interactables/spawners, so
--- fall back to the unit's own node-0 position.
+-- Best-effort unit position for distance culling. NEVER read POSITION_LOOKUP
+-- here: this file runs as a mod.update consumer, and in that phase the lookup's
+-- raw Vector3 entries are DEAD temporaries for any unit the engine hasn't
+-- refreshed this section (keep, menu, chat phase) -- passing one to a Vector3
+-- API throws "Vector3 expected, got userdata" (the issue-337 bug class that
+-- already bit the local-player read below; 3031-error spam 2026-07-06 when the
+-- highlights first went live in the keep). Always read the unit live.
 local function _unit_pos(unit)
-    local p = POSITION_LOOKUP[unit]
-    if p then return p end
     if Unit.alive(unit) then
         local ok, wp = pcall(Unit.local_position, unit, 0)
         if ok then return wp end
@@ -200,7 +201,7 @@ end
 local function _add_aggro_circle(lo, color, unit, breed, up)
     local r = breed and breed.detection_radius
     if not r or r <= 0 then return false end
-    local pos = POSITION_LOOKUP[unit]
+    local pos = _unit_pos(unit)   -- live read; POSITION_LOOKUP is dead in mod.update
     if not pos then return false end
     LineObject.add_circle(lo, color, pos, r, up)
     return true
@@ -396,7 +397,7 @@ local function _draw(dt)
             for _, player in pairs(players) do
                 local unit = player.player_unit
                 if unit and Unit.alive(unit) then
-                    local pos = POSITION_LOOKUP[unit]
+                    local pos = _unit_pos(unit)   -- live read; POSITION_LOOKUP is dead in mod.update
                     if pos and Vector3.distance_squared(pos, player_pos) <= range_sq then
                         if _add_unit_box(lo, col, unit) then n_player = n_player + 1 end
                     end

@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.195-dev (2026-07-06) -- debug highlights: live position reads (fix per-frame error spam, nothing rendering) [verify-fix]
+
+### Why
+First live use of the issue 302 debug highlights (in the keep, 2026-07-06 session on v0.2.194-dev) spammed 3031 per-frame errors -- `_gt_debug_highlights.lua:259: bad argument #1 to 'distance_squared' (Vector3 expected, got userdata)` -- and drew nothing: the draw aborts at the first culled unit every frame. Root cause is the issue-337 bug class: the draw runs as a mod.update consumer, where `POSITION_LOOKUP`'s raw Vector3 entries are DEAD temporaries for units the engine has not refreshed in that section. The file already dodged this for the local player read (v0.2.189) but still trusted the lookup for every other unit (`_unit_pos`, the aggro-circle read, and the player-box loop). Not a v0.2.194 regression: all `gt_dh_*` toggles were still false in every earlier session, so the draw path had never executed.
+
+### Changed
+- `_gt_debug_highlights.lua`: all unit positions are now LIVE reads (`Unit.local_position` via the pcall-guarded `_unit_pos`); the `POSITION_LOOKUP` alias and its three read sites are gone.
+- New `/gt_regression_test` check `gt_dh_no_position_lookup_reads`: fails if anyone reintroduces a `POSITION_LOOKUP` index into `_gt_debug_highlights.lua`.
+
+### Refs
+issue 302 (debug highlights), issue 337 (POSITION_LOOKUP-dead-in-mod.update bug class).
+
 ## v0.2.194-dev (2026-07-06) -- bot leash: split follow_position (issue 383) + ignore the backward/segment teleport gate (issue 142) [untested]
 
 ### Why

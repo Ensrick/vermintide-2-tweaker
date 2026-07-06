@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.194-dev"
+local MOD_VERSION = "0.2.195-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1805,6 +1805,32 @@ _rt_register("gt_bot261_leash_conflict_invariants", function()
                 return "improved-combat no longer hooks _enemy_path_allowed (chase cap unbound)"
             end
         end
+    end
+end)
+
+_rt_register("gt_dh_no_position_lookup_reads", function()
+    -- issue 302 (v0.2.195-dev): the debug-highlights draw runs as a mod.update
+    -- consumer, where POSITION_LOOKUP's raw Vector3 entries are DEAD temporaries
+    -- for any unit the engine has not refreshed this section (issue-337 bug
+    -- class; see reference memory + BUG_CLASSES). Passing one to a Vector3 API
+    -- throws "Vector3 expected, got userdata" -- 3031-error spam and zero
+    -- rendering when the highlights first went live 2026-07-06. Every position
+    -- in _gt_debug_highlights.lua must be a LIVE read (_unit_pos /
+    -- Unit.local_position); this test fails if anyone reintroduces a
+    -- POSITION_LOOKUP index into that file. Sibling-file read; soft-skip when
+    -- source is not on disk (packaged build).
+    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
+    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dh_src = srcp:gsub("_gt_bot_fixes%.lua$", "_gt_debug_highlights.lua")
+    if dh_src == srcp then return end
+    local f = io.open(dh_src, "r")
+    if not f then return end
+    local txt = f:read("*a"); f:close()
+    if not txt then return end
+    if txt:find("POSITION_LOOKUP[", 1, true) or txt:find("= POSITION_LOOKUP", 1, true) then
+        return "_gt_debug_highlights.lua reads POSITION_LOOKUP -- dead in mod.update (issue-337 class); use _unit_pos live reads"
     end
 end)
 
