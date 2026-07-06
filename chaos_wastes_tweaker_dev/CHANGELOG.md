@@ -1,5 +1,12 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.235-dev (2026-07-06) - Strip issue 211 loc tag (Disabled Boons group; issue already closed)
+
+Loc-only follow-up. issue 211 is already closed on GitHub; this flips the menu title to match.
+
+- LOC: `disabled_boons_group` group header `[verify-fix] [Issue 211] Disabled Boons` -> `Disabled Boons`
+  (group headers carry no status tag). No behavior change.
+
 ## 0.7.234-dev (2026-07-06) - CLOSE issue 262 (NetworkedFlowStateManager 512-cap host crash) - user-confirmed fixed
 
 User confirmed in-game 2026-07-06: the host no longer crashes at the 512 flow-state cap during a

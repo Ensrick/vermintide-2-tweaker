@@ -408,7 +408,7 @@ local loc = {
     -- ============================================================
     disable_boon_bombs_group = { en = "[working] Disable Boons: Bomb Boons" },
     start_boon_bombs_group = { en = "[working] Starting Boons: Bomb Boons" },
-    disabled_boons_group = { en = "[verify-fix] [Issue 211] Disabled Boons" },
+    disabled_boons_group = { en = "Disabled Boons" },
     starting_boons_group = { en = "[Issue 144] Starting Boons" },
     -- v0.7.27c parent group display names
     disable_boon_defensive_boons_group = { en = "[working] Disable Boons: Defensive" },
