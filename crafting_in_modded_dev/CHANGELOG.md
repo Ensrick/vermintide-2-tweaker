@@ -1,5 +1,39 @@
 # Crafting in Modded Changelog
 
+## 0.8.51-dev (2026-07-06) - issue 278: guard clients against unknown item_names ids on loadout sync (receiver side)
+
+- Companion to CWV 0.1.365-dev, which carries the PRIMARY (sender-side) fix and the
+  issue-279 render fix. Crash: `console-2026-07-04-00.57.22-2cb5e90e` at 01:00:54 -
+  a CLIENT decoding host `rpc_sync_loadout_slot` for a cim-crafted CWV ranged weapon
+  hit `network_lookup.lua:2521: Table item_names does not contain key: 3243` via
+  `loadout_utils.lua:70 create_loadout_item_from_rpc_data` (locals: `slot_name=
+  "slot_ranged" item_id=3243 rarity_id=9 power_level=302`).
+- Root cause is cross-peer index divergence, NOT a cim-minted key: cim never writes
+  `NetworkLookup.item_names` (the crafted item reuses the statically-registered CWV
+  variant key). Modded keys are index-appended (`#tbl + 1`) per peer, so the numeric
+  wire id (`NetworkLookup.item_names[item.key]`, loadout_utils.lua:25) is peer-local.
+  Decisive divergence in the 07-04 session: the host ran Loremaster's Armoury
+  (enabled) whose clone entries cosmetics_tweaker's `_la_bridge.register_all` appends
+  into item_names (`_la_bridge.lua:639-645`); the crashing client had LA DISABLED
+  (`enabled="false"` in its ModManager list), so host id 3243 was past the client's
+  table end.
+- FIX (second layer, receiver side): cim's existing hook on
+  `(PlayerManager, rpc_sync_loadout_slot)` converted from `mod:hook_safe` to a full
+  `mod:hook` wrap (`_cim_consolidated_rpc_sync_loadout_slot_hook`; still the sole cim
+  hook on the pair per the duplicate-hook pre-flight). Before vanilla decodes, the
+  guard rawget-checks `item_id` against `NetworkLookup.item_names` and DROPS the RPC
+  with a printf ALERT (`[cim:278] ALERT dropped rpc_sync_loadout_slot ...`) when the
+  id is unknown on this peer - an unknown id can no longer CTD a cim client, whatever
+  mod produced it. The pre-existing post-decode "modded"-rarity restore is unchanged
+  and runs after the wrapped vanilla call; all 11 vanilla params are threaded through
+  so the server relay (player_manager.lua:83) stays intact.
+- TEST: new `_rt_register("rpc_sync_loadout_unknown_id_guard")` - asserts the wrap
+  hook installed and sanity-checks the guard's rawget decision against a known-vanilla
+  id and an absurd sentinel id.
+- In-game verify (BOTH peers on cim_dev 0.8.51-dev + cwv 0.1.365-dev, full Steam
+  restart each): host equips a crafted CWV ranged weapon in the keep with a client
+  connected; the client must not crash.
+
 ## 0.8.50-dev (2026-07-05) - #239 CLOSED (user-confirmed in-game): hide the meaningless "Cost: 0" readout in the modded Athanor
 
 - #239 CLOSED - user confirmed the v0.8.45-dev fix works in-game. The modded Athanor

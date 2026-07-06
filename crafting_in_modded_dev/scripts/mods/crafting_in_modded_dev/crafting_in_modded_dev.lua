@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.50-dev"
+local MOD_VERSION = "0.8.51-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -824,13 +824,49 @@ mod:network_register("cim_modded_slot", _rpc_cim_modded_slot)
 mod._cim_rpc_modded_slot = _rpc_cim_modded_slot
 mod._cim_modded_slot_state = _cim_modded_slot_state
 
--- Restore "modded" rarity post-decode on cim clients. hook_safe fires AFTER
--- vanilla's `rpc_sync_loadout_slot` has stored the item under
--- `_player_loadouts[unique_id][slot_name]` with rarity = "unique" (the wire
--- value). We look up the side-channel flag for that (peer, slot) and upgrade
--- in-place. No-op if the side-channel hasn't arrived yet — the side-channel
--- receiver above handles the inverse out-of-order case.
-mod:hook_safe("PlayerManager", "rpc_sync_loadout_slot", function(self, channel_id, peer_id, local_player_id, slot_id, item_id, rarity_id)
+-- _cim_consolidated_rpc_sync_loadout_slot_hook — the SOLE cim hook on
+-- (PlayerManager, rpc_sync_loadout_slot). Two concerns share this one body
+-- (VMF drops a second hook on the same pair from the same mod, CLAUDE.md
+-- non-negotiable 8):
+--
+-- 1. v0.8.51-dev (issue 278) PRE-decode guard: vanilla's decode
+--    (`LoadoutUtils.create_loadout_item_from_rpc_data`, loadout_utils.lua:72)
+--    does `NetworkLookup.item_names[item_id]` on the NUMERIC wire id; a
+--    missing index hits the strict __index error metamethod
+--    (network_lookup.lua:2521) and CTDs this client. Modded item_names
+--    entries are index-appended per peer, so a host whose mod set appended
+--    MORE entries (e.g. Loremaster's Armoury clones via cosmetics_tweaker's
+--    _la_bridge — enabled on the 07-04 host, disabled on the crashed client)
+--    emits ids past our table's end. The primary fix is sender-side in CWV
+--    0.1.365-dev (base_weapon key substitution); this guard is the second
+--    layer so NO unknown id — from any mod, any peer — can CTD a cim client.
+--    Dropping the RPC only means the remote loadout panel keeps the previous
+--    item for that slot; nothing else consumes `_player_loadouts` on clients.
+--    This hook was `mod:hook_safe` (post-decode only) before v0.8.51-dev; it
+--    had to become a full wrap because a safe-hook cannot run BEFORE vanilla.
+--
+-- 2. Post-decode "modded" rarity restore (pre-existing behavior, unchanged):
+--    fires AFTER vanilla has stored the item under
+--    `_player_loadouts[unique_id][slot_name]` with rarity = "unique" (the
+--    wire value). We look up the side-channel flag for that (peer, slot) and
+--    upgrade in-place. No-op if the side-channel hasn't arrived yet — the
+--    side-channel receiver above handles the inverse out-of-order case.
+mod:hook("PlayerManager", "rpc_sync_loadout_slot", function(func, self, channel_id, peer_id, local_player_id, slot_id, item_id, rarity_id, power_level, buff_ids, buff_value_type_ids, buff_values)
+    -- [cim:278] pre-decode guard. rawget bypasses NetworkLookup's strict
+    -- __index error metamethod; nil = this peer never registered that index.
+    local NL = rawget(_G, "NetworkLookup")
+    local names = NL and NL.item_names
+    if names and item_id ~= nil and rawget(names, item_id) == nil then
+        printf("[cim:278] ALERT dropped rpc_sync_loadout_slot: item_names id %s unknown on this peer (from peer=%s slot_id=%s rarity_id=%s). Host/client modded-item registration diverges — make sure every peer runs the same mods and current builds.",
+            tostring(item_id), tostring(peer_id), tostring(slot_id), tostring(rarity_id))
+        return
+    end
+
+    -- Every vanilla param threaded through unchanged (player_manager.lua:69) —
+    -- dropping trailing args from a wrap hook corrupts the relay
+    -- (send_rpc_clients at player_manager.lua:83 re-sends them).
+    func(self, channel_id, peer_id, local_player_id, slot_id, item_id, rarity_id, power_level, buff_ids, buff_value_type_ids, buff_values)
+
     -- v0.8.15-dev master gate: when loadout persistence is OFF (default), cim
     -- does not patch any received-slot rarity. (`_cim_modded_slot_state` stays
     -- empty because the sender-side `sync_loadout_slot` hook never fired the
@@ -840,12 +876,12 @@ mod:hook_safe("PlayerManager", "rpc_sync_loadout_slot", function(self, channel_i
     local uid = _cim_unique_id(peer_id, local_player_id)
     local slot_state = _cim_modded_slot_state[uid]
     if not slot_state then return end
-    local NL = rawget(_G, "NetworkLookup")
     local slot_name = NL and NL.equipment_slots and NL.equipment_slots[slot_id]
     if not slot_name or not slot_state[slot_name] then return end
     local stored = self._player_loadouts and self._player_loadouts[uid] and self._player_loadouts[uid][slot_name]
     if stored then stored.rarity = "modded" end
 end)
+mod._cim_rpc_loadout_guard_installed = true
 
 -- ============================================================
 -- Modded inventory filter + loadout restore
@@ -6413,6 +6449,31 @@ _rt_register("single_on_enter_hook_per_class", function()
     end
     if #missing > 0 then
         return "classes not loaded (run in-keep): " .. table.concat(missing, ", ")
+    end
+end)
+
+_rt_register("rpc_sync_loadout_unknown_id_guard", function()
+    -- (issue 278) A client CTD'd decoding `rpc_sync_loadout_slot` because the
+    -- host's NUMERIC item_names id (index-appended per peer; 3243 in the crash
+    -- log) did not exist in the client's table — strict __index metamethod at
+    -- network_lookup.lua:2521 via loadout_utils.lua:72. cim's consolidated
+    -- wrap hook on (PlayerManager, rpc_sync_loadout_slot) now pre-checks the
+    -- id with rawget and DROPS the RPC (printf ALERT) instead of decoding.
+    -- This asserts the wrap-form hook installed at load time; if it silently
+    -- regressed to a post-only safe-hook, the guard cannot run before vanilla.
+    if mod._cim_rpc_loadout_guard_installed ~= true then
+        return "PlayerManager.rpc_sync_loadout_slot unknown-id guard not installed (issue 278 client-CTD regression)"
+    end
+    -- Sanity: the guard's decision function must agree with vanilla's decode —
+    -- a known-vanilla id must pass, an absurd id must be seen as unknown.
+    local NL = rawget(_G, "NetworkLookup")
+    local names = NL and NL.item_names
+    if type(names) ~= "table" then return "NetworkLookup.item_names unavailable" end
+    if rawget(names, 1) == nil then
+        return "item_names[1] missing — lookup table shape changed; guard assumptions invalid"
+    end
+    if rawget(names, 900000001) ~= nil then
+        return "sentinel id 900000001 unexpectedly present in item_names"
     end
 end)
 

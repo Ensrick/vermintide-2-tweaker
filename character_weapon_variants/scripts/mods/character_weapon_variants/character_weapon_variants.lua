@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.364-dev"
+local MOD_VERSION = "0.1.365-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -529,6 +529,15 @@ local _variant_definitions = {
 		-- on the blunderbuss model — clear the inherited left so the preview
 		-- doesn't render BOTH weapons.
 		no_left_hand    = true,
+		-- v0.1.365-dev (issue 279): also clear the inherited AMMO unit fields.
+		-- dr_deus_01 carries ammo_unit / ammo_unit_3p (the trollhammer torpedo
+		-- meshes, item_master_list_morris.lua:7-8), and our template clone keeps
+		-- ammo_data with ammo_hand flipped to "right" — so any NO-SKIN resolution
+		-- of this entry (a cim-CRAFTED copy has no pre-applied skin) attached the
+		-- torpedo to the blunderbuss at wield (gear_utils.lua:164/169/248): the
+		-- "crafted item renders merged with the Trollhammer" bug. The curated
+		-- skin already declares ammo_unit = nil; this makes the bare entry agree.
+		no_ammo_unit    = true,
 		inventory_icon  = "icon_wpn_empire_blunderbuss_t1",
 		hud_icon        = "weapon_generic_icon_blunderbuss",
 		skin_display_name = "Outrider Grenade Launcher",
@@ -8661,6 +8670,23 @@ local function _build_entry(def, backend_id)
 	if def.no_left_hand then
 		entry.left_hand_unit = nil
 	end
+	-- v0.1.365-dev (issue 279): `no_ammo_unit = true` clears the AMMO unit
+	-- fields inherited from the base clone. Needed when the variant's visual
+	-- family changed (e.g. cwv_es_outrider_grenade_launcher clones dr_deus_01,
+	-- whose entry carries the trollhammer torpedo ammo_unit/ammo_unit_3p) —
+	-- with the template's ammo_data intact, GearUtils.spawn_inventory_unit
+	-- (gear_utils.lua:164/169/248) attaches the inherited ammo mesh to the
+	-- variant's own hand unit whenever NO skin resolves for the item. The
+	-- curated pre-applied skin masks this on native CWV items (a skin replaces
+	-- the whole unit set incl. ammo_unit, backend_utils.lua:171-183), but a
+	-- cim-CRAFTED copy of the variant has no skin and rendered BOTH meshes
+	-- merged (issue 279). Ammo COUNT is untouched: it lives in the weapon
+	-- template's ammo_data, not on these unit-path fields.
+	if def.no_ammo_unit then
+		entry.ammo_unit = nil
+		entry.ammo_unit_3p = nil
+		printf("[cwv:279] cleared inherited ammo units on %s (no_ammo_unit)", tostring(def.item_key))
+	end
 	if def.inventory_icon then
 		entry.inventory_icon = def.inventory_icon
 	end
@@ -9443,6 +9469,65 @@ if BackendUtils then
 		if def.left_hand_unit  then result.left_hand_unit  = def.left_hand_unit  end
 		return result
 	end)
+end
+
+-- ============================================================
+-- issue 278: net-safe loadout sync for cwv variant keys
+-- ============================================================
+-- `SimpleInventoryExtension.add_equipment` (simple_inventory_extension.lua:885)
+-- and `LoadoutUtils.hot_join_sync` (loadout_utils.lua:62) broadcast
+-- `rpc_sync_loadout_slot` with `item_id = NetworkLookup.item_names[item.key]`
+-- (loadout_utils.lua:25). For a cwv_* key that numeric id is a LOCAL
+-- index-append (`#tbl + 1` in `_auto_register_all`), so its value depends on
+-- every other mod that appended to item_names on THIS peer before us —
+-- e.g. Loremaster's Armoury clone entries (appended by cosmetics_tweaker's
+-- `_la_bridge.register_all` only on peers where LA is enabled). Host with LA
+-- + client without LA = the host's cwv id (3243 in the issue-278 crash log)
+-- doesn't exist on the client, and the receiving peer's decode
+-- (`NetworkLookup.item_names[item_id]`, loadout_utils.lua:72) hits the strict
+-- __index error metamethod (network_lookup.lua:2521) -> client CTD.
+--
+-- Fix (same shape as cosmetics_tweaker's LA net-safe substitution,
+-- cosmetics_tweaker.lua v0.8.60-dev): substitute a SHADOW item whose `.key`
+-- is the variant's `base_weapon` (a vanilla ItemMasterList key with an
+-- identical, boot-time-stable item_names index on every peer) before the RPC
+-- encodes. Local state is untouched (the shadow lives only for this call);
+-- remote peers' `PlayerManager._player_loadouts` (inspect/Tab UI) show the
+-- base weapon — consistent with what the husk already renders for cwv items
+-- (husk equipment syncs by the inherited base `.name`, see issue 280 notes).
+--
+-- LoadoutUtils is a PLAIN TABLE (`LoadoutUtils = LoadoutUtils or {}`), so
+-- table-form hook with a nil guard (same BackendUtils pitfall, CLAUDE.md
+-- "Hooking"). Sole CWV hook on (LoadoutUtils, sync_loadout_slot) — verified
+-- by pre-flight grep; cosmetics_tweaker/cim hook the same function from THEIR
+-- mod registrations, which VMF chains fine across mods.
+if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
+	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
+		local key = item and item.key
+		if type(key) == "string" and key:sub(1, 4) == "cwv_" then
+			local def = _find_def(key)
+			local base_key = def and def.base_weapon
+			if base_key and rawget(ItemMasterList, base_key)
+					and NetworkLookup and NetworkLookup.item_names
+					and rawget(NetworkLookup.item_names, base_key) then
+				local shadow = {}
+				for k, v in pairs(item) do shadow[k] = v end
+				shadow.key = base_key
+				shadow.ItemId = base_key
+				printf("[cwv:278] sync_loadout_slot net-safe: %s -> %s (slot=%s)",
+					key, base_key, tostring(slot_name))
+				return func(player, slot_name, shadow, sync_to_specific_peer_id)
+			end
+			-- No safe fallback key: better to skip the sync (remote loadout
+			-- panel shows the previous item) than to CTD every peer whose
+			-- item_names table diverges from ours.
+			printf("[cwv:278] ALERT sync_loadout_slot SKIPPED for %s (no vanilla base_weapon fallback resolvable)",
+				tostring(key))
+			return
+		end
+		return func(player, slot_name, item, sync_to_specific_peer_id)
+	end)
+	_cwv_net_safe_loadout_hook_installed = true
 end
 
 -- NOTE: the per-perspective 1P/3P unit swap mechanism (previously used
@@ -10640,6 +10725,51 @@ _rt_register("cwv_husk_fx_guard_installed", function()
     end
     if _cwv_axe_shield_residency_ran ~= true then
         return "dr_shield_axe base-unit force-load did not run (Issue #280 husk-residency primary fix)"
+    end
+end)
+
+_rt_register("cwv_net_safe_loadout_sync_installed", function()
+    -- Issue #278 (CLIENT CTD): the host equipping a cwv item (native or
+    -- cim-crafted) broadcast `rpc_sync_loadout_slot` with the HOST-LOCAL
+    -- `NetworkLookup.item_names` index of the cwv key. That index depends on
+    -- which other mods appended to item_names on each peer (LA via
+    -- cosmetics_tweaker's _la_bridge being the big divergence source), so a
+    -- client with a shorter table CTD'd in the strict __index metamethod
+    -- (network_lookup.lua:2521 via loadout_utils.lua:72). The fix substitutes
+    -- the variant's vanilla `base_weapon` key on the wire (shadow item).
+    -- This asserts the sender-side hook actually installed at load time.
+    if _cwv_net_safe_loadout_hook_installed ~= true then
+        return "LoadoutUtils.sync_loadout_slot net-safe hook not installed (Issue #278 client-CTD regression)"
+    end
+    -- Every non-skin-only def must carry a base_weapon that resolves in
+    -- ItemMasterList — it is the wire fallback key.
+    for _, d in ipairs(_variant_definitions) do
+        if not d.skin_only and (type(d.base_weapon) ~= "string"
+                or not rawget(ItemMasterList, d.base_weapon)) then
+            return string.format(
+                "variant %s has no resolvable base_weapon (%s) — net-safe loadout sync cannot substitute it (Issue #278)",
+                tostring(d.item_key), tostring(d.base_weapon))
+        end
+    end
+end)
+
+_rt_register("cwv_outrider_no_ammo_unit", function()
+    -- Issue #279 (merged render): the outrider entry inherited dr_deus_01's
+    -- torpedo ammo_unit/ammo_unit_3p from the clone; with the template's
+    -- ammo_data intact (ammo_hand flipped to "right"), any NO-SKIN resolution
+    -- (cim-crafted copies carry no pre-applied skin) attached the trollhammer
+    -- torpedo to the blunderbuss (gear_utils.lua:164/169/248). The def now
+    -- declares `no_ammo_unit = true` and `_build_entry` clears both fields.
+    local d = _find_def("cwv_es_outrider_grenade_launcher")
+    if not d then return nil end -- def removed entirely: nothing to guard
+    if d.no_ammo_unit ~= true then
+        return "cwv_es_outrider_grenade_launcher def lost no_ammo_unit = true (Issue #279 merged-render regression)"
+    end
+    local entry = ItemMasterList and rawget(ItemMasterList, "cwv_es_outrider_grenade_launcher")
+    if entry and (entry.ammo_unit ~= nil or entry.ammo_unit_3p ~= nil) then
+        return string.format(
+            "outrider ItemMasterList entry still carries ammo units (ammo_unit=%s ammo_unit_3p=%s) — torpedo will merge into no-skin renders (Issue #279)",
+            tostring(entry.ammo_unit), tostring(entry.ammo_unit_3p))
     end
 end)
 
