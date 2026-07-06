@@ -1,6 +1,44 @@
 ﻿# General Tweaker Changelog
 
-## v0.2.189-dev (2026-07-05) -- #337 round 2: POSITION_LOOKUP live seed + debug-highlights player read [verify-fix]
+## v0.2.190-dev (2026-07-06) -- #241: suppress ledge-grab + out-of-bounds death while noclipping [verify-fix]
+
+### Why
+Noclip flips locomotion to `script_driven_no_mover` and teleports the body each
+frame, but it never changes the character STATE MACHINE. So while free-flying the
+player's CSM sits in `falling` (or `catapulted`), and those states still run two
+world-boundary safety mechanics that yank you out of noclip:
+- **Forced ledge-grab.** `PlayerCharacterStateFalling.update` (falling.lua:254) and
+  `...Catapulted.update` (catapulted.lua:95) call `CharacterStateHelper.is_ledge_hanging`
+  every frame; a hit does `csm:change_state("ledge_hanging", ...)`, which lerp-snaps you
+  onto the ledge (the "teleport-back" in the report) and disables control.
+- **"Fell out of the world" death.** The inline `z < -240` check in both states routes
+  through `HealthSystem.suicide(self, unit)` on the host (health_system.lua:176) - so
+  flying below the map kills you.
+
+### Changed
+- `_gt_noclip.lua`: three new hooks, ALL gated on `(_noclip_active AND unit == local
+  player)` so they are completely inert with noclip off or for any other unit:
+  - `CharacterStateHelper.is_ledge_hanging` -> `false` for the local player. Both falling
+    and catapulted call it by direct table access (no upvalue capture), so one hook covers
+    both. Stops the forced grab + the lerp-snap teleport-back.
+  - `CharacterStateHelper.will_be_ledge_hanging` -> `false` for the local player (the
+    predictive jumping/leaping path).
+  - `HealthSystem.suicide` -> no-op for the local player. Kills the `z < -240` host-side
+    death (latched `printf` logs the first suppression per fly episode, not per frame).
+- KNOWN FOLLOW-UP (noted on #241): when the local player is a *client*, the `z < -240`
+  check sends `rpc_suicide` to the remote host, and the death is decided there - out of
+  reach of a client-side hook. Covered cleanly for the host case (the repro); the client
+  edge is deferred on #241.
+- Pre-flight: grepped general_tweaker_dev for existing hooks on these three (Class,
+  method) pairs -- none. gt bot code uses the extension method `get_is_ledge_hanging()`,
+  a distinct symbol.
+- VERIFY IN-GAME: load a mission, `/noclip` on, fly OUT past the level boundary and DOWN
+  below the map. Expected: no forced ledge-grab / control loss near ledges, and no "fell
+  out of the world" death below the map - you keep flying. `/noclip` off to land normally.
+  (Log carries `[gt][noclip] issue #241: boundary-safety suppression armed` on load and
+  `... suppressed out-of-bounds suicide` the first time you dip below z=-240.)
+
+## v0.2.189-dev (2026-07-05) -- #337 round 2: POSITION_LOOKUP live seed + debug-highlights + bot-HUD player read (#293/#295 retest) [verify-fix]
 
 ### Why
 v0.2.188's one-tick deferral did NOT fix the false "teleport failed" (user re-test on
@@ -22,10 +60,21 @@ handle in every mod-reachable phase - deferral cannot escape it.
   `POSITION_LOOKUP[player_unit]` every frame from mod.update, raising "bad argument #2
   (Vector3 expected, got userdata)" 1182x in `console-2026-07-05-17.19.28` and aborting
   the draw (nothing rendered). Now reads `Unit.world_position(player_unit, 0)` live.
+- `_gt_bot_teleport_lab.lua`: SAME bug class in the Dev Tools bot-behavior HUD +
+  leash-line draw (the #293/#295 retest -- user confirmed the overlay was INVISIBLE even
+  though the log showed "HUD gui created OK"). `_do_draw` read the local player's dead
+  `POSITION_LOOKUP` handle for `you_pos` / the follow-unit pos and fed it to
+  `Vector3.distance` / `LineObject.add_line`; the throw was silently swallowed by the
+  `pcall(_do_draw)` wrapper, so NO `Gui.text` ever ran (hence no error in the log
+  either). Added a guarded `_live_pos(unit)` helper (Unit.world_position) and routed
+  every draw-phase position read through it; the d1..d10 observer probes keep
+  POSITION_LOOKUP (they run in the live BT-action phase where it is valid).
 - VERIFY IN-GAME: (1) save + recall a position - lands with saved look AND echoes
   "Recalled to position slot N", no failed message; check the log has no
   `[gt:saved_pos] ... FAILED` line. (2) Turn on a Debug Highlights category - wireframes
-  actually render now.
+  actually render now (and no `debug_highlights ... distance_squared` error spam).
+  (3) In a mission with bots, turn on Dev Tools > bot behavior HUD - the per-bot columns
+  actually appear on screen now (leash lines too if enabled).
 
 ## v0.2.188-dev (2026-07-05) -- #337 fix false "teleport failed" on /recall_position_N [verify-fix]
 

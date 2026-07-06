@@ -42,6 +42,10 @@ local mod = get_mod("gt_dev")
 -- ============================================================
 
 local _noclip_active = false
+-- Issue #241: latch so the out-of-bounds-suicide suppression logs once per fly
+-- episode. The z<-240 check re-fires every frame while the body is below the
+-- world, so an unlatched printf would spam the console log.
+local _oob_suicide_logged = false
 
 local function _local_player_unit()
     local pm = Managers.player
@@ -59,6 +63,7 @@ end
 -- and the shared post_spawn_reapply consumer (godmode + noclip) resolve it.
 mod._gt_apply_noclip = function(enabled)
     _noclip_active = enabled and true or false
+    _oob_suicide_logged = false  -- fresh episode: re-arm the #241 OOB-death log
     local loco, unit = _local_locomotion()
     if not loco then
         mod:info("[noclip] no locomotion extension yet (not in a level?) — flag stored, will re-arm on player spawn via extensions_ready hook")
@@ -142,6 +147,67 @@ function(func, self, unit, dt, t)
     self.velocity_network:store(velocity)
     self.velocity_current:store(velocity)
 end)
+
+-- ============================================================
+-- Issue #241: decouple the local player from world-boundary safety
+-- mechanics WHILE noclip is active, so free-flying past the playable
+-- edge or below the map no longer yanks you out of noclip or kills you.
+-- Two mechanics, three hooks, ALL gated on (_noclip_active AND the unit
+-- is the local player), so they are completely inert with noclip off or
+-- for any other unit:
+--
+--   (1) Forced LEDGE-GRAB. Both PlayerCharacterStateFalling.update
+--       (falling.lua:254) and ...Catapulted.update (catapulted.lua:95)
+--       call CharacterStateHelper.is_ledge_hanging(world, unit, params)
+--       by direct table access (no upvalue capture), so one table hook
+--       covers both; will_be_ledge_hanging covers the predictive
+--       jumping/leaping path. Returning false stops the change_state
+--       into "ledge_hanging" -- which is also what lerp-snaps you onto
+--       the ledge (the "teleport-back" in the report).
+--   (2) "Fell out of the world" DEATH. The z < -240 check inlined in
+--       both states routes through HealthSystem.suicide(self, unit) on
+--       the host (health_system.lua:176); suppress it for the local
+--       player. NOTE: when the local player is a *client*, that same
+--       check instead does network_transmit:send_rpc_server("rpc_suicide")
+--       and the death is decided on the remote host, which this hook
+--       cannot reach -- tracked as a follow-up on #241.
+--
+-- Pre-flight (2026-07-06): grepped general_tweaker_dev for existing hooks
+-- on these three (Class, method) pairs -- none. gt's bot code uses the
+-- status-extension method get_is_ledge_hanging(), a distinct symbol, not
+-- CharacterStateHelper.is_ledge_hanging.
+-- ============================================================
+
+local function _is_local_noclip_unit(unit)
+    return _noclip_active and unit == _local_player_unit()
+end
+
+mod:hook("CharacterStateHelper", "is_ledge_hanging", function(func, world, unit, params)
+    if _is_local_noclip_unit(unit) then
+        return false
+    end
+    return func(world, unit, params)
+end)
+
+mod:hook("CharacterStateHelper", "will_be_ledge_hanging", function(func, world, unit, params)
+    if _is_local_noclip_unit(unit) then
+        return false
+    end
+    return func(world, unit, params)
+end)
+
+mod:hook("HealthSystem", "suicide", function(func, self, unit)
+    if _is_local_noclip_unit(unit) then
+        if not _oob_suicide_logged then
+            printf("[gt][noclip] issue #241: suppressed out-of-bounds suicide for local player (z<-240 while noclipping)")
+            _oob_suicide_logged = true
+        end
+        return
+    end
+    return func(self, unit)
+end)
+
+printf("[gt][noclip] issue #241: boundary-safety suppression armed (ledge-grab + out-of-bounds death)")
 
 -- Called from the main file's on_game_state_changed: locomotion extensions are
 -- torn down across level transitions; the next player spawn comes back in
