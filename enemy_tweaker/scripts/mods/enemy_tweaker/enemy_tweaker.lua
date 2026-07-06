@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.29-dev"
+local MOD_VERSION = "0.7.30-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -3599,12 +3599,15 @@ end)
 -- re-applied from on_setting_changed above.
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")
 
--- Nurgloth phase-desync blackboard probe (issue 275 diagnostics). Two NEW
--- mod:hook_safe on AiBreedSnippets.on_chaos_exalted_sorcerer_drachenfels_spawn /
--- _update (grepped: no pre-existing et hook on either). Always-on in dev, engine
--- printf, no menu toggle. Chains cleanly under DutchSpice's hook_origin
--- replacement (VMF duplicate-drop is per-mod). See the file header for the full
--- source citations and cross-mod analysis.
+-- Nurgloth phase-desync probe (issue 275 diagnostics). v0.7.30-dev rewrite: the
+-- v0.7.29 mod:hook_safe on the AiBreedSnippets TABLE never fired (the breed
+-- captures a DIRECT function ref at breed load, breed_..._drachenfels.lua:119,
+-- invoked as breed.run_on_spawn, ai_simple_extension.lua:227). Now wraps the
+-- breed FIELDS (run_on_spawn / run_on_game_update) plus the seven penny
+-- BTEnterHooks/BTLeaveHooks phase transitions, installed from a pre-step on
+-- AISystem.create_all_trees (sole et hook on that pair) so the wrappers land
+-- before BTNode.init captures the hook upvalues. Always-on in dev, engine printf,
+-- no menu toggle. See the file header for full source citations.
 mod:dofile("scripts/mods/enemy_tweaker/_et_nurgloth_probe")
 
 mod:info("[mem-probe] et boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_ET) / 1024)

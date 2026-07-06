@@ -1,5 +1,44 @@
 # Enemy Tweaker Changelog
 
+## 0.7.30-dev (2026-07-06): #275 - probe rewired to breed-field wrap + phase tracers
+
+- **Root cause of the silent no-op:** the v0.7.29 probe hooked the
+  `AiBreedSnippets` TABLE via `mod:hook_safe`, but the breed captures a DIRECT
+  function reference at breed-definition load
+  (`run_on_spawn = AiBreedSnippets.on_chaos_exalted_sorcerer_drachenfels_spawn`,
+  breed_chaos_exalted_sorcerer_drachenfels.lua:119) and the engine invokes it as
+  `breed.run_on_spawn(unit, blackboard)` (ai_simple_extension.lua:227/:257). A
+  table hook never fires. The author's full-boss-fight log confirmed it: probe
+  armed at load, zero SPAWN/STATE lines.
+- **Fix - breed-field wrap:** `_et_nurgloth_probe.lua` now wraps the breed FIELDS
+  `run_on_spawn` and `run_on_game_update` (the update field is
+  `run_on_game_update`, invoked at ai_system.lua:894 -- not `run_on_update`)
+  directly, idempotently, preserving the exact original reference and calling it
+  raw so vanilla behavior is byte-for-byte intact; the probe runs AFTER, so the
+  blackboard is populated. Pure field wrap in et's `_et_boss_tweaks.lua` style, no
+  `mod:hook` on the snippet. SPAWN and STATE printf formats are UNCHANGED
+  (`[et:275]` tags, 5s throttle, immediate print on mode/phase/flag change).
+- **New phase-transition tracers:** wraps the seven penny-registered drachenfels
+  BT hooks -- merged into the global `BTEnterHooks` / `BTLeaveHooks` tables via
+  `DLCUtils.merge` (bt_enter_hooks.lua:542 / bt_leave_hooks.lua:339) from
+  `settings.bt_enter_hooks` / `settings.bt_leave_hooks`
+  (penny_ai_settings_part_3.lua:77 / :213). Enter: `intro_enter`,
+  `re_enter_defensive_mode`, `begin_defensive_mode`. Leave: `intro_leave`,
+  `transition_at_two_thirds`, `transition_at_one_third`,
+  `go_offensive_intense`. Each fires a
+  `[et:275] HOOK <name> | hp_pct min_hp_pct two_thirds_done one_third_done` line
+  (original called first, tracer after). Prints `[et:275] tracers armed: N wrapped`.
+- **Install timing:** `BTNode.init` captures the enter/leave hook into an upvalue
+  at node construction (bt_node.lua:24-33), which happens in
+  `AISystem.create_all_trees` at mission load (ai_system.lua:105/:1693). The wrap
+  is therefore driven from a pre-step on `AISystem.create_all_trees` (sole et hook
+  on that pair) -- tables wrapped, THEN original runs -- so each mission's fresh
+  BTNodes capture our wrappers. Breed wrap rides the same point (Breeds is a boot
+  global; mission load precedes the boss spawn). Both idempotent across missions.
+- **Doctrine unchanged:** always-on in dev, no menu toggle, engine `printf` (user
+  runs mod-logging OFF), every read guarded, probe bodies pcall-wrapped; the
+  ORIGINAL always runs raw so a probe fault can never disturb the fight.
+
 ## 0.7.29-dev (2026-07-06): #275 diagnostics - Nurgloth blackboard phase probe
 
 - **Issue 275 diagnostics (no fix, capture only):** Nurgloth (breed
