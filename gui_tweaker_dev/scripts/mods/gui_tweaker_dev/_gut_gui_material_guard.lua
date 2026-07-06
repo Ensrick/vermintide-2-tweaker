@@ -71,6 +71,41 @@ local _pose_logged_state = nil  -- edge latch: nil / "present" / "absent" (de-sp
 local STORE_MAT = "materials/ui/ui_1080p_store_menu"
 local _store_logged_state = nil
 
+-- (#336) In-mission mission-map AREA-VIDEO injection. The console area-selection window
+-- (start_game_window_area_selection_console_v2.lua:647-670 _assign_video_player, drawn at
+-- :628-638) and its PC sibling (start_game_window_area_selection.lua:458-476) draw each
+-- area's preview video through the AreaSettings[*].video_settings.material_name material
+-- (e.g. area_video_bogenhafen), whose material resource is video_settings.resource
+-- (area_settings.lua:12-15). Vanilla appends those resources to the ingame ui/ui_top
+-- renderer material lists ONLY inside `if is_in_inn` (ingame_ui_settings.lua:594-601
+-- ui_renderer_function; :681-688 ui_top_renderer_function), so a mid-mission map open that
+-- reaches area selection takes the uncatchable "Material 'area_video_*' not found in Gui"
+-- DRAW fatal at UIRenderer.draw_video -> Gui.video (shipped ui_renderer.lua:1345; user
+-- crash console-2026-07-06-03.24.08, dlc_dwarf_whaling, 03:28:50). Same class as the pose
+-- (#155) and store (#80) atlases above: inject each area-video resource into ingame
+-- renderers when it is resident (can_get-gated -- a non-resident add would itself fatal
+-- create_screen_gui). The per-material outcome is published in
+-- `mod._gut_area_videos_ingame` (material_name -> true/false) so _gut_mission_map.lua can
+-- skip the video widget for any material that did NOT make it into the Gui (the
+-- belt-and-suspenders second layer).
+local _area_logged_state = nil
+
+-- AreaSettings video entries ({ material_name=, resource= } per area). Read live each
+-- ingame-renderer create: the table is boot-populated (base area_settings.lua + the DLC
+-- level_unlock_settings_* files) long before any mission renderer exists.
+local function _area_video_entries()
+    local out = {}
+    local area_settings = rawget(_G, "AreaSettings")
+    if type(area_settings) ~= "table" then return out end
+    for _, settings in pairs(area_settings) do
+        local vs = settings.video_settings
+        if type(vs) == "table" and vs.resource and vs.material_name then
+            out[#out + 1] = vs
+        end
+    end
+    return out
+end
+
 -- gw_fonts is in nearly every UIRenderer.create material list and is resident whenever
 -- GUIs are created. If can_get can't see it, can_get's "material" resource type is not
 -- reliable in this build -> we NEVER filter (avoid false-dropping valid materials and
@@ -94,21 +129,25 @@ end
 
 -- Processes a UIRenderer.create material list: DROPS every ("material", <unloadable path>)
 -- pair (the create_screen_gui CTD guard) and, for ingame renderers, ADDS the pose-cosmetics
--- material when it's resident but missing (#155). Returns (new_table, count) when the list
--- changed, or nil to signal "unchanged -- use the originals" (preserves the fast path).
+-- material (#155), the store-menu atlas (#80) and the AreaSettings area-video materials
+-- (#336) when resident but missing. Returns (new_table, count) when the list changed, or
+-- nil to signal "unchanged -- use the originals" (preserves the fast path).
 local function _prepare(n, ...)
     local args = { ... }
 
     -- Pass 1: classify this create call. `has_ingame_sig` marks the ingame ui/ui_top
     -- renderers (the ones the in-mission Cosmetics window draws on); `has_pose` = the pose
-    -- material is already in the list (keep context -- nothing to inject).
+    -- material is already in the list (keep context -- nothing to inject). `seen` records
+    -- every material path in the list for the area-video presence check (#336).
     local has_ingame_sig, has_pose, has_store = false, false, false
+    local seen = {}
     do
         local i = 1
         while i <= n do
             local tok = args[i]
             if tok == "material" and i < n and type(args[i + 1]) == "string" then
                 local path = args[i + 1]
+                seen[path] = true
                 if path == INGAME_SIG then has_ingame_sig = true end
                 if path == POSE_MAT   then has_pose = true end
                 if path == STORE_MAT  then has_store = true end
@@ -132,6 +171,34 @@ local function _prepare(n, ...)
     if has_ingame_sig and not has_store then
         local ok, avail = pcall(can_get, "material", STORE_MAT)
         append_store = (ok and avail == true)
+    end
+    -- (#336) area videos: same gate, one decision per AreaSettings entry. Also PUBLISH the
+    -- per-material outcome (material_name -> in-Gui true/false) for the mission-map module's
+    -- video-widget skip guard, and collect the injected/skipped names for the edge log.
+    local append_areas = nil
+    local area_injected, area_skipped, area_present = nil, nil, 0
+    if has_ingame_sig then
+        local flags = {}
+        for _, vs in ipairs(_area_video_entries()) do
+            if seen[vs.resource] then
+                flags[vs.material_name] = true          -- keep context: vanilla already listed it
+                area_present = area_present + 1
+            else
+                local ok, avail = pcall(can_get, "material", vs.resource)
+                if ok and avail == true then
+                    append_areas = append_areas or {}
+                    append_areas[#append_areas + 1] = vs.resource
+                    flags[vs.material_name] = true
+                    area_injected = area_injected or {}
+                    area_injected[#area_injected + 1] = vs.material_name
+                else
+                    flags[vs.material_name] = false     -- NOT in the Gui: drawing it would fatal
+                    area_skipped = area_skipped or {}
+                    area_skipped[#area_skipped + 1] = vs.material_name
+                end
+            end
+        end
+        mod._gut_area_videos_ingame = flags
     end
 
     -- Pass 2: copy tokens, dropping any ("material", <unloadable>) pair (existing guard).
@@ -164,6 +231,12 @@ local function _prepare(n, ...)
         oi = oi + 1; out[oi] = "material"
         oi = oi + 1; out[oi] = STORE_MAT                -- (#80) resident -> in-mission Salvage/Crafting page can draw
     end
+    if append_areas then
+        for j = 1, #append_areas do
+            oi = oi + 1; out[oi] = "material"
+            oi = oi + 1; out[oi] = append_areas[j]      -- (#336) resident -> mid-mission map area videos can draw
+        end
+    end
 
     -- Publish the in-mission pose-atlas Gui-residency signal for the Cosmetics-tab gate in
     -- _gut_mission_inventory.lua. Only meaningful for ingame renderers; edge-logged.
@@ -194,9 +267,21 @@ local function _prepare(n, ...)
                 printf("[gut:80] store atlas '%s' NOT resident (can_get=false) at ingame-renderer create -- Salvage-page tag icons cannot draw in-mission", STORE_MAT)
             end
         end
+
+        -- (#336) area-video residency: edge-logged counts + names so the next mid-mission
+        -- map open verifies which area previews can draw and which are video-skipped.
+        local n_inj = area_injected and #area_injected or 0
+        local n_skip = area_skipped and #area_skipped or 0
+        local area_state = string.format("present=%d injected=%d skipped=%d", area_present, n_inj, n_skip)
+        if _area_logged_state ~= area_state then
+            _area_logged_state = area_state
+            printf("[gut:336] area-video materials at ingame-renderer create: %s%s%s", area_state,
+                n_inj > 0 and (" injected=[" .. table.concat(area_injected, ",") .. "]") or "",
+                n_skip > 0 and (" video-skipped=[" .. table.concat(area_skipped, ",") .. "] (not resident; mission-map area preview stays a static image)") or "")
+        end
     end
 
-    if not dropped and not append_pose and not append_store then
+    if not dropped and not append_pose and not append_store and not append_areas then
         return nil  -- unchanged: caller uses the originals
     end
     if dropped then
@@ -219,6 +304,6 @@ mod:hook("UIRenderer", "create", function(func, world, ...)
     return func(world, ...)                             -- fail-open: unchanged OR error -> originals untouched
 end)
 
-mod:info("[gut] GUI material guard installed (drops unloadable create_screen_gui materials to prevent client CTDs; injects the pose-cosmetics atlas #155 and the store-menu atlas #80 into in-mission renderers when resident)")
+mod:info("[gut] GUI material guard installed (drops unloadable create_screen_gui materials to prevent client CTDs; injects the pose-cosmetics atlas #155, the store-menu atlas #80 and the AreaSettings area-video materials #336 into in-mission renderers when resident)")
 
 return {}

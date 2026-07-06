@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.205-dev"
+local MOD_VERSION = "0.2.206-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -146,6 +146,91 @@ _rt_register("mission_map_backdrop_swap", function()
                 return "#336 regression: the none-tier marker _gut_mm_none_backdrop is gone (map fail-closes again when no backdrop level is resident)"
             end
         end
+    end
+end)
+
+-- (#336 CRASH) Mid-mission map area-video guard: BOTH layers must survive. Layer 1 is the
+-- AreaSettings video-material injection in _gut_gui_material_guard.lua (located as a
+-- sibling of the map module); layer 2 is the video-widget skip guard on the two
+-- area-selection windows in _gut_mission_map.lua. If either is removed, hovering an area
+-- on the mid-mission map takes the uncatchable "Material 'area_video_*' not found in Gui"
+-- draw fatal again (shipped ui_renderer.lua:1345; crash console-2026-07-06-03.24.08).
+-- Split needles so this check can't self-match. No-op if files unreadable.
+_rt_register("area_video_guard_two_layers", function()
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local map_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local function read_all(path)
+        local fh = io.open(path, "r")
+        if not fh then return nil end
+        local t = fh:read("*a")
+        fh:close()
+        return t
+    end
+    -- Layer 2: the skip guard in the map module (both windows + the drawable check).
+    local map_txt = read_all(map_path)
+    if map_txt then
+        if not map_txt:find("_area_video" .. "_drawable", 1, true) then
+            return "#336 regression: _area_video_drawable is gone from the map module (area videos draw unguarded -> mid-mission draw fatal)"
+        end
+        if not map_txt:find('"_assign_video' .. '_player"', 1, true) then
+            return "#336 regression: the StartGameWindowAreaSelectionConsoleV2._assign_video_player skip guard is gone (console-layout area hover crashes mid-mission again)"
+        end
+        if not map_txt:find('"_setup_video' .. '_player"', 1, true) then
+            return "#336 regression: the StartGameWindowAreaSelection._setup_video_player skip guard is gone (PC-layout area hover crashes mid-mission again)"
+        end
+    end
+    -- Layer 1: the injection + publish in the sibling material guard.
+    local dir = map_path:match("^(.*[/\\])[^/\\]*$")
+    local guard_txt = dir and read_all(dir .. "_gut_gui_material_guard.lua")
+    if guard_txt then
+        if not guard_txt:find("_area_video" .. "_entries", 1, true) then
+            return "#336 regression: the AreaSettings video-material enumeration is gone from the GUI guard (no injection -> keep-only materials mid-mission)"
+        end
+        if not guard_txt:find("if append" .. "_areas then", 1, true) then
+            return "#336 regression: the append_areas residency gate is gone -- area videos no longer injected into ingame renderers"
+        end
+        if not guard_txt:find("mod._gut_area_videos" .. "_ingame", 1, true) then
+            return "#336 regression: the per-material publish (mod._gut_area_videos_ingame) is gone -- the map module's skip guard falls back to keep-only heuristics"
+        end
+    end
+    -- The two hooked vanilla methods must still exist (a vanilla rename would orphan the
+    -- guards and re-expose the crash). Classes load with ingame_ui at boot.
+    local v2 = rawget(_G, "StartGameWindowAreaSelectionConsoleV2")
+    if type(v2) == "table" and type(v2._assign_video_player) ~= "function" then
+        return "vanilla drift: StartGameWindowAreaSelectionConsoleV2._assign_video_player missing (skip guard orphaned)"
+    end
+    local pc = rawget(_G, "StartGameWindowAreaSelection")
+    if type(pc) == "table" and type(pc._setup_video_player) ~= "function" then
+        return "vanilla drift: StartGameWindowAreaSelection._setup_video_player missing (skip guard orphaned)"
+    end
+end)
+
+-- (#336) Mid-mission map PREVIEW backdrop: the package-load + def-swap must survive. The
+-- tier-2 swap mounts levels/ui_inventory_preview/world (gated on has_loaded of its managed
+-- package under the module's own ref) so the map has a real, framebuffer-clearing menu
+-- backdrop mid-mission; losing any piece regresses to the v0.2.198 black plate +
+-- button-glow bleeding. Split needles so this check can't self-match. No-op if unreadable.
+_rt_register("mission_map_preview_backdrop", function()
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local map_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(map_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    if not txt:find("resource_packages/levels/ui_inventory" .. "_preview", 1, true) then
+        return "#336 regression: the preview-stage package path is gone from the map module (no backdrop package load)"
+    end
+    if not txt:find("_kick_preview_pkg" .. "_load", 1, true) then
+        return "#336 regression: the preview-package async load kick is gone (map never gets the preview backdrop)"
+    end
+    if not txt:find("has_loaded(PREVIEW" .. "_PKG, MM_PKG_REF)", 1, true) then
+        return "#336 regression: the has_loaded package gate is gone from the def-swap (v0.2.190 lesson: can_get('level') is false until the PACKAGE loads; ungated mount = C-fatal, gated absence = black plate)"
+    end
+    if not txt:find("level_name = PREVIEW" .. "_LEVEL", 1, true) then
+        return "#336 regression: the tier-2 def no longer mounts the preview level (black backdrop + glow bleeding return)"
     end
 end)
 
@@ -2331,12 +2416,20 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_inventory")
 -- evidence in _gut_mission_hero_select.lua and HERO_SELECT_RESEARCH_173.md.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_hero_select")
 
--- In-mission MISSION MAP (#305): opens the start-game / mission-selection view (the
--- keep "M" map) mid-mission via the vanilla `start_game_view_force` transition
+-- In-mission MISSION MAP (#305, #336): opens the start-game / mission-selection view
+-- (the keep "M" map) mid-mission via the vanilla `start_game_view_force` transition
 -- (mod.gut_open_mission_map + /map + the gut_mission_map_hotkey keybind, default M).
--- Adventure-only (deus/versus/weave blocked); optional host-only toggle. StartGameView
--- mounts NO keep-only world (unlike CharacterSelectionView), so this needs no backdrop
--- swap and registers ZERO hooks. See _gut_mission_map.lua.
+-- Adventure-only (deus/versus/weave blocked); optional host-only toggle. Mid-mission the
+-- background window's keep-only world is swapped to the inventory-preview stage (managed
+-- package async-loaded under ref "gut_mission_map"; level-less fallback while it streams),
+-- picking a mission auto-starts it (countdown-flag arm + complete_level divert), and the
+-- area-selection video widgets are skipped when their material is not in the ingame Gui
+-- (the #336 area_video_* draw fatal). Hooks (all preflight-verified singletons): FOUR on
+-- StartGameWindowBackgroundConsole, TWO on the area-selection windows
+-- (StartGameWindowAreaSelectionConsoleV2._assign_video_player /
+-- StartGameWindowAreaSelection._setup_video_player), hook_safe on
+-- MatchmakingStateWaitForCountdown.on_enter, full hook on GameModeManager.complete_level;
+-- chains mod.on_game_state_changed (preview-package arm). See _gut_mission_map.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_map")
 
 -- EXPERIMENTAL/diagnostic (#173 feasibility): /gut_swap_career <n> asks the game to
