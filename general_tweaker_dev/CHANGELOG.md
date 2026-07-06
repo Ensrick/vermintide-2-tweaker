@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.193-dev (2026-07-06) -- issue 275 CLOSED (user-confirmed in-game): constant-true BTConditions guard collapse
+
+### Why
+issue 275 (Nurgloth stuck in his final phase at full health on The Enchanter's Lair) is CLOSED: the user confirmed in-game on v0.2.191-dev that the fight is healthy -- the intro health gate steps 0.65 -> 0.32, `transition_at_two_thirds` flips, and the fight is completable. Root cause was gt's collapsing `(cond and func(...)) or true` guard on `BTConditions.transitioned_one_third_health` (fix commit b166251, shipped v0.2.191-dev). The adjacent gut cutscene wired-`on_skip` policy (gut commit d4784dc) is confirmed CORRECT behavior -- the boss cinematic plays by design -- not part of this softlock. Docs-and-loc close-out only; no gameplay change.
+
+### Changed
+- **LOC:** `gt_cs_group` (Creature Spawner) status tag trimmed from `[verify-fix] [Issue 254 & 275]` to `[verify-fix] [Issue 254]` -- issue 254 is still open, so its ref and the verify-fix tag stay; only the confirmed-closed 275 ref is removed (LOCALIZATION_STANDARD s13).
+- **Docs:** new `docs/BUG_CLASSES.md` class 26 ("Collapsing `and`/`or` guard in a hook wrapper") -- the constant-true idiom, the "grep BTConditions hooks first on any phase-machine misbehavior" diagnosis order, the explicit-branch fix template, and the repo idiom-sweep caveat. New `general_tweaker_dev/POSTMORTEMS.md` with the full issue 275 timeline (why the symptom pointed at gut Skip Cutscenes, the two wrong level-key identifications, and why diagnosis needed a breed-field-wrapped blackboard probe -- `AiBreedSnippets` table hooks are bypassed by the breed's direct function references captured at load, and `BTConditions` hooks must wrap before `create_all_trees`).
+
+### Notes
+- Regression net already lives (v0.2.191-dev): `gt_cs_transitioned_one_third_not_forced` asserts the helper truth table so the collapse cannot silently return. The `[et:275]` phase probe stays armed in enemy_tweaker (untouched here).
+
 ## v0.2.192-dev (2026-07-06) -- #139 hardening: regression tests + BUG_CLASSES for the bot-teleport leash veto
 
 ### Why

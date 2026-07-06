@@ -1136,3 +1136,46 @@ end
 
 ### Reference fix
 gt_dev `_gt_bot_fixes.lua` blanket veto in the `BTConditions.should_teleport` hook (v0.2.185-dev) + `_gt_any_side_teammate_needs_aid` / `_gt_unit_needs_aid` / `_gt_status_needs_aid` helpers; regression tests `gt_bot139_needs_aid_status_predicate` / `gt_bot139_teleport_veto_singleton_and_gated` / `gt_bot139_aid_scan_is_side_scoped_not_follow` (v0.2.192-dev). CHANGELOG v0.2.148/.152/.185/.192-dev. Related: class 21 (POSITION_LOOKUP dead for the local player - a different "reads the wrong live table" bot-code trap).
+
+---
+
+## 26. Collapsing `and`/`or` guard in a hook wrapper (condition/flag reads as a stuck constant)
+
+**First seen:** 2026-07-06 (gt_dev #275 Creature Spawner Drachenfels/Nurgloth phase hook; fix v0.2.191-dev, closed v0.2.193-dev)
+**Canonical Issue:** [#275](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) (Nurgloth final-phase-at-full-health softlock on The Enchanter's Lair)
+**Lives in:** any `mod:hook(C, m, ...)` whose body is `return (in_scope and func(...)) or fallback` when vanilla `C.m` legitimately returns `false`/`nil` (BT conditions, ownership/eligibility predicates, any boolean-returning vanilla fn)
+
+### Symptoms
+- A hooked system behaves as if a condition/flag is stuck at a constant value — a vanilla-IMPOSSIBLE state (e.g. a boss BT branch entered with its gating condition provably `false`; a phase machine that never advances or advances instantly).
+- The bug is TOTAL, not intermittent: the guard is constant-true (or constant-`fallback`) on EVERY evaluation, so the feature is "always broken" rather than "sometimes broken" — which misdirects investigation toward whatever unrelated feature was toggled (13 attempts on #275 chased gut Skip Cutscenes and two wrong level-key identifications before the hook was read).
+- No error, no crash log — the wrapper returns a valid-typed value, just the wrong one.
+
+### Diagnosis pattern
+1. When a boss / AI **phase machine** misbehaves, grep the ENTIRE active mod stack for `mod:hook(BTConditions` / `"BTConditions"` FIRST — BT conditions are name-resolved on EVERY evaluation (`bt_node.lua:55-57`), so a single collapsed guard poisons every tick with no caching to mask it.
+2. Read the hook body. The tell is a boolean tail: `return (in_scope and func(...)) or <literal>`. Look up the wrapped vanilla fn in `Vermintide-2-Source-Code` — if it legitimately returns `false`/`nil` as a MEANINGFUL result, the `or <literal>` overwrites it with the literal every time that case fires.
+3. Two failure sub-modes fold into one idiom: (a) the boolean collapse above; (b) multi-RETURN truncation — `(cond and func(...))` only forwards `func`'s FIRST return into the `and`, dropping the rest (distinct precedent: class 2, "Hook wrapper multi-return collapse").
+
+### Fix template
+Branch explicitly; never lean on `and`/`or` to route a vanilla return you care about.
+```lua
+-- WRONG -- (true and false) or true == true; the false case is unreachable,
+--          and any 2nd/3rd return of func is dropped.
+mod:hook(BTConditions, "transitioned_one_third_health", function(func, ...)
+    return (_gt_cs_is_in_level("dlc_castle") and func(...)) or true
+end)
+
+-- RIGHT -- explicit branch; in-scope returns vanilla UNALTERED (multi-return
+--          preserved), out-of-scope returns the intended fallback.
+mod:hook(BTConditions, "transitioned_one_third_health", function(func, ...)
+    if _gt_cs_is_in_level("dlc_castle") then return func(...) end
+    return true
+end)
+```
+Then sweep the repo for the idiom: `\(.*and func\(.*\)\) or ` across every active mod's hooks. Not every match is a bug — the `or <default>` tail is harmless when the defer branch returns a truthy BT-status string / table / discarded value (gt's v0.2.191 sweep cleared `BTSpawnAllies.run`, `BTLootRatFleeAction.{enter,run,leave}`, and the navmesh-query guards on that basis). It is ONLY a bug when the wrapped fn's `false`/`nil` is a meaningful result. Back the fix with a truth-table regression check wired to the SAME helper the hook calls (gt: `gt_cs_transitioned_one_third_not_forced`).
+
+### Related Issues / commits
+- Issue [#275](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) — misattributed to cutscene skipping for ~13 attempts; root cause was this collapse in `_gt_creature_spawner.lua`. Fix commit `b166251`.
+- Probe evidence (`[et:275]` breed-field-wrapped blackboard probe, 2026-07-06 author log): `[et:275] HOOK sorcerer_drachenfels_go_offensive_intense | hp_pct=1.000 ... two_thirds_done=nil one_third_done=nil` — final-offense phase entered at full health, transitions never flagged.
+- `general_tweaker_dev/CHANGELOG.md` v0.2.191-dev (fix + repo idiom sweep + `gt_cs_transitioned_one_third_not_forced` check), v0.2.193-dev (#275 close-out).
+- `general_tweaker_dev/POSTMORTEMS.md` — full #275 timeline (why the probe had to be breed-field-wrapped; why BT hooks must wrap before `create_all_trees`).
+- Related: class 2 (multi-return collapse via `return wrapper(func(...))`) — same "don't route a vanilla return through an expression" root, different operator.
