@@ -5,6 +5,11 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.205-dev (2026-07-05) -- issue 307 CLOSED (user-confirmed in-game): Free Camera
+
+- issue 307 CLOSED. The user confirmed in-game that the Free Camera works: it detaches the camera to fly around the level (WASD move, mouse look, E/Q up/down, wheel speed), freezes the character, and exits cleanly with F8. Fix already live in `_gut_freecam.lua` (ported from `FreeFlightManager`): the input device is RELEASED after entering so the game does not hard-lock, `is_input_blocked` freezes the character, and the camera is driven from the raw Keyboard/Mouse. No code change this build; this is the close-out.
+- Stripped the `[verify-fix] [Issue 307]` dev status tags from the two menu-visible loc strings (`gut_freecam_enabled`, `gut_freecam_hotkey`) now that the fix is user-confirmed -- they read plain "Free Camera" / "Free Camera (Hotkey)". The `freecam_invariants` regression guard (asserts `mod._gut_apply_freecam` + `mod.gut_freecam_toggle` stay wired) remains in place.
+
 ## 0.2.204-dev (2026-07-05) -- issue 339 CLOSED (user-confirmed in-game): integrated mods fold into a category, never a top-level Mod Tweaker tab
 
 - issue 339 CLOSED (CRITICAL). The user confirmed in-game that Crosshair Kill Confirmation (integration issue 313) no longer renders as a top-level Mod Tweaker TAB; its options now appear INSIDE gut's Interface tab under the HUD group as a "Crosshair Kill Confirmation" sub-collapsible, and the vanilla-Options gear focuses that HUD category (not a CKC tab). Behavior fix already live: CKC is out of the `_MY_MODS` tab whitelist in `_mod_tweaker_view.lua` + `_mod_tweaker_state.lua`; `_inject_ckc_into_gut` splices its live options under `gut_hide_hud_ui_group` as `gut_ckc_group`; `_gut_ckc_bridge.lua`'s focus request is redirected by `_apply_focus_request` to the gut Interface tab with the HUD + CKC groups auto-expanded. Same model as the UI Tweaks / HideBuffs precedent (issue 312). This build adds the hardening.
