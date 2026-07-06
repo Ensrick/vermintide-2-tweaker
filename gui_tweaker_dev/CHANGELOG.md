@@ -5,6 +5,11 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.203-dev (2026-07-05) -- #363 CLOSED (user-confirmed in-game): regression guard for the Salvage store-atlas injection
+
+- #363 CLOSED. The user confirmed in-game that the in-mission Crafting Salvage page renders without crashing (fix shipped in v0.2.202-dev). No code change to the fix; this build adds the regression guard.
+- TEST: new `salvage_store_atlas_injected` source-pattern guard on `_gut_gui_material_guard.lua` (located as a sibling of `_gut_mission_inventory.lua`). Asserts the three load-bearing pieces of the store-atlas injection survive: the `materials/ui/ui_1080p_store_menu` path declaration, the `append_store` residency gate, and the token append into the ingame Gui material list. If any is removed, the Salvage page would take the "Material not found in Gui" C-fatal in-mission again, and the test now catches it on `/regression_test`.
+
 ## 0.2.202-dev (2026-07-05) -- CRASH FIX #363: in-mission Crafting Salvage page (gui_store_menu_atlas not in Gui)
 
 **Crash console 2026-07-06-00.49.31** (in-mission, bench toggle ON + cim_dev, wood_elf): opening the Salvage page of the in-mission Crafting tab crashed at `ui_passes.lua:194: Material 'gui_store_menu_atlas' not found in Gui` (DRAW fatal). The vanilla Salvage page draws its auto-fill rarity buttons (`store_tag_icon_weapon_*`) from `gui_store_menu_atlas` (material file `materials/ui/ui_1080p_store_menu`), which `store_ui_settings.lua` lists under `ui_materials_in_inn` -- so vanilla adds it to the ingame ui/ui_top renderer only in the keep. In a mission that renderer lacks it -> uncatchable "Material not found in Gui" fatal (same class as the pose-atlas / loading-screen crashes).

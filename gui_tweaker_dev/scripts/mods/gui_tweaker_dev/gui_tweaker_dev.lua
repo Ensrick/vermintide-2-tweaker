@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.202-dev"
+local MOD_VERSION = "0.2.203-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1795,6 +1795,45 @@ _rt_register("crafting_tab_honors_bench_toggle", function()
     end
     if not txt:find(tab_needle, 1, true) then
         return "#80 regression: the Crafting tab (tb[3]) disable_button is no longer driven by bench_ok"
+    end
+end)
+
+-- (#363/#80) In-mission Salvage/Crafting page store-atlas injection. The vanilla
+-- Salvage craft page draws its auto-fill rarity buttons (store_tag_icon_weapon_*) out
+-- of gui_store_menu_atlas, which lives in materials/ui/ui_1080p_store_menu -- a
+-- keep-only (ui_materials_in_inn) resource, so in a mission the ingame renderer lacks it
+-- and the draw takes an uncatchable "Material not found in Gui" C-fatal
+-- (ui_passes.lua:194). The store package IS resident in-mission (dlcs/store force-loaded
+-- at boot), so _gut_gui_material_guard.lua injects it into ingame ui/ui_top renderers
+-- when can_get confirms residency (mirrors the pose-atlas #155 injection). This guard
+-- FAILS if any of the three load-bearing pieces (STORE_MAT declaration, the append_store
+-- residency gate, the token append into the Gui material list) is removed -- the Salvage
+-- page would crash in-mission again. The guard file has no addressable mod.* function
+-- (it's an anonymous UIRenderer.create hook + `return {}`), so locate it as a sibling of
+-- _gut_mission_inventory.lua (via mod.gut_open_mission_inventory) in the same dir. Split
+-- needles so this check can't self-match. No-op when source unreadable.
+_rt_register("salvage_store_atlas_injected", function()
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_inventory or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src_path:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local f = io.open(dir .. "_gut_gui_material_guard.lua", "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local decl_needle   = "STORE" .. '_MAT = "materials/ui/ui_1080p_store_menu"'
+    local gate_needle   = "if append" .. "_store then"
+    local append_needle = "out[oi] = STORE" .. "_MAT"
+    if not txt:find(decl_needle, 1, true) then
+        return "#363 regression: the store-atlas material path (materials/ui/ui_1080p_store_menu) is gone from the GUI guard"
+    end
+    if not txt:find(gate_needle, 1, true) then
+        return "#363 regression: the append_store residency gate is gone -- store atlas no longer injected into ingame renderers (Salvage page would C-fatal in-mission)"
+    end
+    if not txt:find(append_needle, 1, true) then
+        return "#363 regression: the store-atlas token is no longer appended to the ingame Gui material list (Salvage-page tag icons can't draw in-mission)"
     end
 end)
 
