@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.200-dev"
+local MOD_VERSION = "0.2.201-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1497,6 +1497,28 @@ end)
 -- off a foreign mod's widget, so the registry is the working path — see _resolve_step /
 -- STEP_OVERRIDES comments). Guards against a regression that reverts the registry keys to
 -- directory names (which silently never match) or drops the min-anchoring.
+_rt_register("mod_tweaker_arrow_edge_latch_hold_repeat", function()
+    -- (#152) Mod Tweaker slider arrows: a single click = ONE natural increment, EDGE-LATCHED
+    -- (one step per physical press, no auto-move on press), and a HELD arrow repeats after a
+    -- delay and ACCELERATES - matching the vanilla options slider. Guard the accelerating
+    -- hold-repeat by source-pattern on _mod_tweaker_view.lua (path via View._resolve_step).
+    -- Split needle so this line can't self-match. No-op if the source is unreadable.
+    local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    if not ok_view or type(View) ~= "table" or type(View._resolve_step) ~= "function" then return end
+    local ok, info = pcall(debug.getinfo, View._resolve_step, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local hold_needle = "row._arrow_hnext = row._arrow" .. "_hf + math.max(2,"
+    if not txt:find(hold_needle, 1, true) then
+        return "#152 REGRESSION: the accelerating arrow hold-repeat is gone (Mod Tweaker slider arrows over-adjust / auto-move on press again)"
+    end
+end)
+
 _rt_register("mod_tweaker_step_resolution", function()
     local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
     if not ok_view or type(View) ~= "table" then return "view module unavailable" end

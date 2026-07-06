@@ -5,6 +5,17 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.201-dev (2026-07-05) -- #152 CLOSED (user-confirmed in-game): Mod Tweaker slider-arrow increment + hold-repeat
+
+- #152 CLOSED (user confirmed the slider arrows no longer over-adjust). Fix live since
+  v0.2.109-dev: a single arrow click = ONE natural increment (1 for ints, 10^-decimals),
+  EDGE-LATCHED (one step per physical press, no auto-move on press); a HELD arrow repeats
+  after a ~0.37s delay and ACCELERATES, matching the vanilla options slider. Fix unchanged;
+  this build adds the regression guard.
+- TEST: new `mod_tweaker_arrow_edge_latch_hold_repeat` source-pattern guard asserts the
+  accelerating hold-repeat survives (the existing `mod_tweaker_step_resolution` guards the
+  step VALUE resolution, not the click/hold behavior).
+
 ## 0.2.200-dev (2026-07-05) -- #80 FIX: in-mission Crafting tab was greyed in Adventure too (stable-only cim check missed cim_dev)
 
 **User report:** the CIM standard crafting bench tab is greyed in-mission even in normal Adventure (~9 prior attempts had no effect). Chaos Wastes exclusion is correct and intended (loadout is altar-upgraded there); the bug was that it was ALSO greyed in Adventure, where it should work.
