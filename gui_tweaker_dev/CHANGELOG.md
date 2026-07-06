@@ -5,6 +5,12 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.207-dev (2026-07-06) -- issue 336 CLOSED (user-confirmed in-game): mid-mission mission map
+
+- issue 336 CLOSED. The user confirmed in-game on v0.2.206-dev: the mid-mission map opens over the inventory-preview menu stage (no black plate, no button-glow trails), area selection no longer crashes on `area_video_*` materials, and picking a mission auto-starts it for the party. Both regression guards have been registered since v0.2.206-dev (`area_video_guard_two_layers`, `mission_map_preview_backdrop`); no behavior change this build.
+- LOC: stripped the dev status tags from the three mission-map menu strings now that the fix is user-confirmed (`gut_mission_map` dropped `[verify-fix] [Issue 336]`; `gut_mission_map_hotkey` and `gut_mission_map_host_only` dropped `[untested] [Issue 336]`) per LOCALIZATION_STANDARD s13.
+- DOC: cataloged the crash class as `docs/BUG_CLASSES.md` entry 23 ("keep-only Gui material drawn mid-mission") covering the three shipped instances (pose atlas issue 155, store atlas issue 363, area videos issue 336) and the two-layer fix template (inject-when-resident + skip-the-widget).
+
 ## 0.2.206-dev (2026-07-06) -- issue 336 follow-up: CRASH FIX mid-mission map area videos + PREVIEW backdrop replaces the black "transparent" tier [verify-fix]
 
 **CRASH (0-critical), user log console-2026-07-06-03.24.08 (gut_dev v0.2.204-dev, `dlc_dwarf_whaling`; reproduced by RainReligion, console-2026-07-06-00.40.54):** map opened mid-mission at 03:28:45 (`[gut_dev:MM] backdrop tier: keep=false -> transparent`), the user navigated to area selection (03:28:49 `Enter Substate StartGameWindowAreaSelectionConsoleV2`), and at 03:28:50 the client hard-crashed: `scripts/ui/ui_renderer.lua:1345: Material 'area_video_bogenhafen' not found in Gui`.

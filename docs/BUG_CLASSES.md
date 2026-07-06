@@ -1050,3 +1050,39 @@ Multiple mods hooking the same writer chain safely: `force_default=true` is stic
 
 ### Reference fix
 cosmetics_tweaker v0.9.66-dev (`_create_preview_widget` re-point + `_update_environment` pin, cosmetics_tweaker.lua ~2619-2751); cim_dev v0.8.48-dev (`mod._cim_pick_mission_env` + variation pin, commit 2a4c2c7). Memory: `reference_vt2_shading_env_variation_blend_av`.
+
+---
+
+## 23. Keep-only Gui material drawn mid-mission ("Material 'X' not found in Gui" draw fatal)
+
+**First seen:** 2026-07-02 (gut_dev pose-cosmetics atlas, issue 155); repeats: store atlas (issue 363, gut_dev v0.2.202-dev), area-selection videos (issue 336, gut_dev v0.2.206-dev)
+**Canonical Issue:** [#336](https://github.com/Ensrick/vermintide-2-tweaker/issues/336) (area videos; carries the class's fullest two-layer fix)
+**Lives in:** any mod-forced keep view/window opened mid-mission (mission map, in-mission inventory/crafting, hero select) whose widgets reference materials vanilla registers only in the keep
+
+### Symptoms
+- `<<Lua Error>> scripts/ui/ui_renderer.lua:<line>: Material '<name>' not found in Gui.` at draw time (`Gui.video` shipped `:1345` / decompiled `:1296` for video passes, `ui_passes.lua:194` for texture passes) -> hard CTD. Not catchable at the draw site.
+- Works flawlessly in the keep; crashes only when the same screen is opened mid-mission, often seconds after open (the first frame the offending widget actually draws, e.g. hovering an area on mission select).
+
+### Diagnosis pattern
+1. Grep the material name against `scripts/ui/views/ingame_ui_settings.lua` - the ingame `ui_renderer_function` / `ui_top_renderer_function` append whole material groups only inside `if is_in_inn then` (`:594-601` AreaSettings videos in ui_renderer_function, `:681-688` in ui_top_renderer_function; the same blocks add achievement atlas, inn singles, lock test, pose cosmetics, tutorial videos, DLC `ui_materials_in_inn`).
+2. If not there, grep DLC `*_ui_settings.lua` for `ui_materials_in_inn` (e.g. `store_ui_settings.lua:85`).
+3. Find the draw site (widget texture pass or `UIRenderer.draw_video`) and audit whether the widget can be skipped cleanly - every vanilla consumer of the widget field must nil-guard.
+
+### Fix template
+Two layers, both idempotent (reference `_gut_gui_material_guard.lua`):
+```lua
+-- 1. INJECT-WHEN-RESIDENT: ONE consolidated UIRenderer.create hook per mod;
+--    append "material", <path> pairs for ingame ui/ui_top renderers, gated on
+--    pcall'd Application.can_get residency with a self-test (can_get on a
+--    known-resident material must return true, else treat can_get as
+--    untrustworthy and skip). printf the injected/skipped outcome.
+-- 2. SKIP-THE-WIDGET: where injection can self-skip (resource not resident in
+--    this mission), guard the widget CREATION site so the material is never
+--    drawn (e.g. no-op _assign_video_player when the material is not in the
+--    Gui; the static fallback image stays). Verify every vanilla consumer
+--    nil-guards the widget before relying on the skip.
+```
+Layer 1 alone is not a fix (residency varies per mission - the pose atlas usually self-skips); layer 2 alone loses content the renderer could legally show (the store atlas IS resident and injects fine). Ship both.
+
+### Reference fix
+gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in the one consolidated `UIRenderer.create` hook) + `_gut_mission_map.lua` video-widget skip guards, commit 1b2cea8 (v0.2.206-dev). Related but distinct: class 22 (shading-env VARIATION AV - env resident, variation name absent); `memory: reference_vt2_create_screen_gui_missing_material_crash` (create_screen_gui C-fatal at Gui CREATE time, pre-filter the material list).

@@ -282,19 +282,19 @@ return {
     -- In-Mission Mission Map (#305)
     -- ============================================================
     gut_mission_map = {
-        en = "[verify-fix] [Issue 336] In-Mission Mission Map",
+        en = "In-Mission Mission Map",
     },
     gut_mission_map_tooltip = {
         en = "Opens the mission-selection map during a mission, the same screen the keep's M key shows, drawn over a proper menu backdrop like in the keep. Picking a mission starts it right away for the whole party (host side). Use the keybind below (default M) or /map. Adventure only: it stays closed in Chaos Wastes and Versus. Off by default.",
     },
     gut_mission_map_hotkey = {
-        en = "[untested] [Issue 336] Open Mission Map (Mid-Mission)",
+        en = "Open Mission Map (Mid-Mission)",
     },
     gut_mission_map_hotkey_tooltip = {
         en = "Hotkey to open the mission-selection map while in a mission; default M, same as /map. In the keep the game's own M key already does this, so the hotkey stays quiet there.",
     },
     gut_mission_map_host_only = {
-        en = "[untested] [Issue 336] Mission map is host only",
+        en = "Mission map is host only",
     },
     gut_mission_map_host_only_tooltip = {
         en = "When on, only the party host can open the mission map mid-mission; everyone else gets a short message instead. Off by default, so any player can open it to look around.",
