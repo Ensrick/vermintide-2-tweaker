@@ -1,5 +1,21 @@
 # Enemy Tweaker Changelog
 
+## 0.7.28-dev (2026-07-05): #213 CLOSED (user-confirmed) - double-freeze guard regression test + loc-tag flip
+
+- #213 CLOSED (user confirmed the "Tried to freeze unit twice in the same frame" engine error
+  no longer appears under raised grunt caps). The live guard (since v0.7.22-dev) hooks
+  BreedFreezer.try_mark_unit_for_freeze, replicates vanilla's own duplicate check, and returns
+  true when a unit is already queued this batch so the caller skips the redundant
+  mark_for_deletion - the unit stays frozen exactly once and the ERROR is suppressed. Fail-open
+  (any unresolvable state falls through to vanilla). Confirmed live in the v0.7.214 host log
+  (`[et] [213:freeze] suppressed`, zero double-freeze errors across 106k lines). Fix unchanged;
+  this build adds the guard + loc flip.
+- TEST: new `double_freeze_guard_wired` source-pattern check asserts the BreedFreezer suppression
+  hook survives (the existing `et_freeze_probe_present` guarded only the printf probe helper, not
+  the fix logic).
+- LOC: `max_grunts_override` tag `[Issue 213] [verify-fix] [diag]` -> `[diag]` (dropped the
+  now-closed 213 ref + verify-fix; kept `[diag]` - the `[213:freeze]` probe stays armed).
+
 ## 0.7.27-dev (2026-07-04): Skaven Warlord as a monster (#324)
 
 ### Added

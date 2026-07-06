@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.27-dev"
+local MOD_VERSION = "0.7.28-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -3227,6 +3227,27 @@ _rt_register("et_freeze_probe_present", function()
     if type(_et_probe) ~= "function" then return "_et_probe helper missing" end
     local ok = pcall(_et_probe, "rt_smoke", "regression smoke")
     if not ok then return "_et_probe raised on smoke call" end
+end)
+
+_rt_register("double_freeze_guard_wired", function()
+    -- (#213) The engine "Tried to freeze unit twice in the same frame" ERROR under raised
+    -- grunt caps is suppressed by a guard hook on BreedFreezer.try_mark_unit_for_freeze that
+    -- replicates vanilla's own duplicate check and returns true when the unit is already
+    -- queued this batch (so the caller skips the redundant mark_for_deletion). BreedFreezer
+    -- loads in-mission (nil at the keep), so guard the fix by source-pattern via the
+    -- file-local _rt_register. Split needle so this line can't self-match. No-op if unreadable.
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local needle = '"BreedFreezer", "try_mark_unit_for_freeze", "double_freeze' .. '_guard"'
+    if not txt:find(needle, 1, true) then
+        return "#213 REGRESSION: the double_freeze_guard hook on BreedFreezer.try_mark_unit_for_freeze is gone (the 'freeze unit twice' engine error returns under raised grunt caps)"
+    end
 end)
 
 

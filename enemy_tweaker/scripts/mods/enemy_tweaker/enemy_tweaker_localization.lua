@@ -178,7 +178,7 @@ local loc = {
         en = "The game starts a new horde once fewer than this many basic enemies are still alive (normally 60). Lower values mean hordes come almost back to back; the range is 10 to 240.",
     },
 
-    max_grunts_override = { en = "[Issue 213] [verify-fix] [diag] Max active trash enemies" },
+    max_grunts_override = { en = "[diag] Max active trash enemies" },
     max_grunts_override_tooltip = {
         en = "Sets how many basic trash enemies can be alive at the same time (the normal cap is about 90). Raising it packs the map with more enemies at once for an Onslaught-style feel; the range is 10 to 360.",
     },
