@@ -1,5 +1,22 @@
 # Tweaker: Events — Changelog
 
+## 0.4.22-dev (2026-07-06) -- Fix ConflictDirector.init death from injected mutators writing scalar pacing values (issue 386)
+
+### Why
+Injecting a mutator whose `update_conflict_settings` writes plain numbers into `CurrentPacing` (canonical case `mutator_high_intensity.lua:12-14`: `delay_horde_threat_value` / `delay_specials_threat_value` / `delay_mini_patrol_threat_value = 200`) killed `ConflictDirector.init` and left the whole mission with zero AI (host reported no spawns, no boss, no terror events for an entire Adventure run).
+
+Mechanism: `MutatorHandler.conflict_director_updated_settings` (`mutator_handler.lua:567`) runs every INITIALIZED mutator's `update_conflict_settings`, and is dispatched by `ConflictDirector.refresh_conflict_director_patches` (`conflict_director.lua:886`), which `ConflictDirector.init` calls at line 94 -- BEFORE init reads those same three fields at lines 219-221 and passes each to `DifficultyTweak.converters.tweaked_delay_threat_value`. That converter ALWAYS indexes its argument as a per-difficulty table (`difficulty_tweak.lua` `get_value_for_difficulty`: `value_table[Difficulties[i]]`), so a scalar there is an uncatchable "attempt to index a number value" fatal. In plain vanilla Adventure these mutators aren't in the list, so the fields keep their table-shaped base values (`conflict_settings.lua`, keys `normal`..`versus_base`); event_tweaker's live-event injection is what puts a scalar-writing mutator into the set on a normal map.
+
+### Fixed -- `event_tweaker.lua`
+- Added a `hook_safe` on `MutatorHandler.conflict_director_updated_settings` that runs after the vanilla dispatch writes the scalars (still synchronously inside `refresh_conflict_director_patches`, so before init's line 219 read) and converts any scalar left in the three pacing fields into `{ normal = v, [current_difficulty] = v }`. `get_value_for_difficulty` walks DOWN the `Difficulties` list to index 1 == `normal`, so the floor key covers every difficulty; init then reads a table and resolves the intended magnitude (200) instead of crashing. Host-only in effect (`conflict_director_updated_settings` early-returns on clients) and a strict no-op whenever the fields are already tables -- i.e. whenever nothing is injected. Emits `[event-inject:386] sanitized update_conflict_settings for [<mutators>] (fields: ...)` via `printf` only when it actually converts a scalar.
+- New regression check `issue386_sanitize_pacing_scalar_to_table`: a stub scalar `delay_horde_threat_value = 200` must convert to an indexable table (floor `normal` + current-difficulty key both 200), and an already-tabular field must be left untouched (no-op).
+
+### Not changed
+- Injection timing, presets, mutator catalog, DLC gate, and the three live-event hooks untouched -- this only reshapes the scalar CurrentPacing writes into what `ConflictDirector.init` expects. `MOD_VERSION` `0.4.21-dev` -> `0.4.22-dev`.
+
+### In-game verify
+Host any Adventure mission with an event_tweaker preset (or checkbox) that injects `high_intensity`: enemies must spawn normally, the log shows the `[event-inject:386]` line and NO `difficulty_tweak.lua` "index a number value" error, and the run must reach and spawn a boss / terror events.
+
 ## 0.4.21-dev (2026-07-04) -- Localization: applied dev status-tag doctrine (#301)
 
 Prefixed every option-title loc string with a dev status tag per `LOCALIZATION_STANDARD.md` § 13. 61 widget titles tagged: 56 [working] (the established mutator catalog + event_preset + suppress_live_event, all predating 0.4.14-dev), 5 [untested] (the Cursed Adventure feature added 0.4.14-dev: the `cat_cursed` group, `cursed_lighting`, the `cat_other` group, plus the two runtime title-generation sites for the discovered "Other Mutators" and the package-bearing curses). 0 issue-tagged: event_tweaker has no dedicated GitHub issue label (the `et` label maps to enemy_tweaker, not this mod) and no open issue maps to the mutator picker. Titles only; no `*_tooltip`, `preset_*` dropdown value labels, or `mod_description` touched. `MOD_VERSION` `0.4.20-dev` -> `0.4.21-dev`.

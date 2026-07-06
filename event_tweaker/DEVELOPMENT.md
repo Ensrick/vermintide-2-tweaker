@@ -187,6 +187,22 @@ Individual mutator checkboxes do NOT auto-reload (5 toggles would = 5 keep reloa
 
 E.g. `geheimnisnacht_2021` (NOT `mutator_geheimnisnacht_2021`). The `mutator_` prefix is the filename convention, but the registered name (the one in `NetworkLookup.mutator_templates`) is just the suffix.
 
+### Injected mutators that write scalar pacing values crash `ConflictDirector.init` (issue 386, v0.4.22-dev)
+
+Some mutators' `update_conflict_settings` write PLAIN NUMBERS into `CurrentPacing`. The canonical case is `mutator_high_intensity.lua:12-14`:
+
+```lua
+CurrentPacing.delay_horde_threat_value       = 200
+CurrentPacing.delay_specials_threat_value    = 200
+CurrentPacing.delay_mini_patrol_threat_value = 200
+```
+
+`MutatorHandler.conflict_director_updated_settings` (`mutator_handler.lua:567`) runs every INITIALIZED mutator's `update_conflict_settings` and is dispatched from `ConflictDirector.refresh_conflict_director_patches` (`conflict_director.lua:886`), which `ConflictDirector.init` calls at line 94 — **before** init reads those three fields at lines 219-221 and passes each to `DifficultyTweak.converters.tweaked_delay_threat_value`. That converter **always** indexes its argument as a per-difficulty table (`difficulty_tweak.lua` `get_value_for_difficulty`: `value_table[Difficulties[i]]`), so a scalar there is an uncatchable "attempt to index a number value" fatal that kills the director → zero AI for the whole mission. Vanilla Adventure never lists these mutators, so the fields keep their table-shaped base values (`conflict_settings.lua`, keys `normal`..`versus_base`); **our injection is what triggers it**.
+
+**Fix (do not remove):** a `hook_safe` on `MutatorHandler.conflict_director_updated_settings` runs after the vanilla dispatch writes the scalars (still inside `refresh_conflict_director_patches`, so before init's line 219 read) and converts any scalar left in those three fields into `{ normal = v, [current_difficulty] = v }`. `get_value_for_difficulty` walks DOWN to `Difficulties[1] == "normal"`, so the floor key covers every difficulty. Host-only in effect (`conflict_director_updated_settings` early-returns on clients) and a strict no-op when the fields are already tables. Regression check: `issue386_sanitize_pacing_scalar_to_table`.
+
+**If you add a mutator to the catalog:** if its source `update_conflict_settings` assigns a plain number to any field ConflictDirector reads as a per-difficulty table, this sanitizer already covers the three known pacing fields — extend `PACING_TABLE_FIELDS` if a new field surfaces.
+
 ## Diagnostic commands
 
 - `/event_probe` — dump `active_events`, `special_events`, `weekly_events` from the hooked backend interface (you'll see your injected entries reflected back) plus what the mod would currently inject given the active settings.
