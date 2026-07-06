@@ -1,5 +1,14 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.233-dev (2026-07-06) - CLOSE issue 104 (Blood in the Darkness host FPS) as vanilla injected-map overhead
+
+Close issue 104 (Blood in the Darkness host FPS) as vanilla injected-map overhead - census showed
+FPS tracks level-baked flow-state counts, not the curse-lighting shading_callback; the corrupted-flesh
+cloud cap mitigation stays, dev issue tag stripped from its setting title.
+
+- LOC: stripped `[verify-fix]` and `[Issue 104]` from `flesh_guard_clouds_per_minute` (kept `[diag]`
+  - the flesh_guard `[ct:aoe]` / `[ct:flesh_guard]` attribution printf stays armed). No behavior change.
+
 ## 0.7.232-dev (2026-07-05) - CLOSED 6 user-confirmed-fixed issues: #143 #119 #133 #121 #115 #114 (regression guards + loc-tag flips)
 
 User confirmed all six fixed in-game; closing with regression guards where the fix was not

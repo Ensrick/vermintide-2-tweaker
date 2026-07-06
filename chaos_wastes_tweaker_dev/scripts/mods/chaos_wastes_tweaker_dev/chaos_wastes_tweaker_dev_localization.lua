@@ -107,7 +107,7 @@ local loc = {
     disabled_curses_group = { en = "[working] Disabled Curses" },
     force_belakor = { en = "[working] Always Include Belakor's Temple" },
     -- v0.7.200-dev (#104): rolling-window cap on Corrupted Flesh gas clouds.
-    flesh_guard_clouds_per_minute = { en = "[verify-fix] [diag] [Issue 104] Corrupted Flesh: max clouds per minute" },
+    flesh_guard_clouds_per_minute = { en = "[diag] Corrupted Flesh: max clouds per minute" },
     flesh_guard_clouds_per_minute_tooltip = { en = "Marked enemies burst into a globadier-style poison gas cloud on death; this limits how many spawn per minute. 0 = vanilla, uncapped. Lower this if the curse tanks your framerate on dense missions. Host's value applies to the whole lobby." },
     cursed_mission_count = { en = "[untested] Cursed Mission Count" },
     cursed_mission_count_tooltip = { en = "Each cluster curses 1-3 adjacent nodes, and this sets how many clusters spawn per run. 0 = vanilla (2-7). Max 30. Host-only." },
