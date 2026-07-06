@@ -1,5 +1,23 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.72-dev — 2026-07-06 — FIX: illusion landing on the WRONG weapon (weapon-identity guard in the apply core) + legacy slot-key namespace retired
+
+> From the 2026-07-06 18:16/18:27 session (user HOSTING, first session where sync held into missions). User report: the illusion appeared on a different weapon after changing.
+
+### Root cause (log + code evidence)
+The store keys one offhand pick under THREE namespaces - weapon item key, template key, and a legacy WIELDED-SLOT key ("slot_melee", minted only by the hot-join replay; live in this session: host emit `slot=slot_melee key=Kruber_bret_shield_basic2_Luidhard01` at 18:35:44.704, and the state-pull ack `count=3` shows all three stored). Meanwhile `_apply_la_on_unit`'s offhand branch IGNORED the stored key and painted whatever left-hand unit was currently wielded. Any recv/retry/transition reconcile that fired while a different weapon was in hand painted the pick onto that weapon.
+
+### Fixes
+- **Weapon-identity guard in the apply core (offhand + illusion branches).** Offhand: paint only when the stored key matches the wielded item's template/name/key/item_type; otherwise return false (retryable; the correct weapon re-applies on its own wield reconcile). Illusion: entry keys are cosmetic slots - paint only when that slot is the wielded one. Skips log once per pair: `[la-state] APPLY SKIP wrong-weapon`.
+- **slot-key namespace retired at the source:** the hot-join replay now emits the weapon TEMPLATE key. Legacy "slot_melee" offhand entries still in stores can never pass the guard, so they are inert.
+- **Pull self-target guard:** after leaving a session the host resolver can return our own peer id while `_is_local_server()` is transiently false (18:30:42: 8 retries against self, then GAVE UP) - a self-targeted pull now just disarms.
+
+### Verify in-game (2 players)
+Wearer applies an LA shield on weapon A, wields weapon B (another shield weapon or a left-hand-unit weapon like a bow), triggers reconciles (transition, peer join): weapon B must stay untouched on every screen; log shows `APPLY SKIP wrong-weapon` instead of a paint. Weapon A still renders correctly when wielded.
+
+### Files
+- `cosmetics_tweaker.lua` - identity guards in `_apply_la_on_unit` (offhand/illusion), hot-join replay template key, pull self-target guard; `MOD_VERSION` -> `0.9.72-dev`.
+
 ## 0.9.71-dev — 2026-07-06 — ROOT CAUSE: store wiped on every level transition (remove_player fires on transitions) + pull retry-with-ack + shield picks persist across restarts
 
 > Diagnosis from the 2026-07-06 17:25/17:26 two-machine session (user CLIENT `...ef3befb`, Rain HOST `...beb4a3`), the first with 0.9.70's `[la-state]` instrumentation. Two defects explain the whole in-mission matrix ("only each wearer sees their own shield after leaving keep; client swaps invisible to host; host swaps visible to client").

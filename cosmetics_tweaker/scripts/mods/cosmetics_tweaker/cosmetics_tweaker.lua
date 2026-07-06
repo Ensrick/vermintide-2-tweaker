@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.71-dev"
+local MOD_VERSION = "0.9.72-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -6905,6 +6905,35 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
     if kind == "offhand" then
         local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
         local equipment = inv and inv._equipment
+        -- v0.9.72-dev WEAPON-IDENTITY GUARD (2026-07-06 18:27/18:34 session):
+        -- this branch painted whatever left-hand unit was CURRENTLY wielded,
+        -- ignoring which weapon the stored entry belongs to - while the store
+        -- keys the same pick under THREE namespaces (weapon item key,
+        -- template key, and a legacy wielded-slot key like "slot_melee" from
+        -- the hot-join replay; host 18:35:44.704 shows such an entry live).
+        -- Any recv/retry/transition reconcile firing while a DIFFERENT weapon
+        -- was in hand painted the illusion onto that weapon. Only paint when
+        -- the wielded item actually matches the stored key; otherwise return
+        -- false (pending retry keeps it briefly; the next wield of the RIGHT
+        -- weapon re-applies via the wield reconcile).
+        local w_slot_data = equipment and equipment.slots and inv.wielded_slot
+            and equipment.slots[inv.wielded_slot]
+        local w_item = w_slot_data and w_slot_data.item_data
+        if w_item then
+            local match = (slot_name == w_item.template) or (slot_name == w_item.name)
+                or (slot_name == w_item.key) or (slot_name == w_item.item_type)
+            if not match then
+                local seen = mod._la_gate_seen
+                if not seen then seen = {}; mod._la_gate_seen = seen end
+                local sk = "offhand-wrongweapon|" .. tostring(slot_name) .. "|" .. tostring(w_item.template)
+                if not seen[sk] and printf then
+                    seen[sk] = true
+                    printf("[la-state] APPLY SKIP wrong-weapon: entry key=%s but wielded template=%s name=%s (kind=offhand armoury=%s)",
+                        tostring(slot_name), tostring(w_item.template), tostring(w_item.name), tostring(armoury_key))
+                end
+                return false
+            end
+        end
         local left_unit = equipment and equipment.left_hand_wielded_unit_3p
         if not left_unit or not Unit.alive(left_unit) then
             -- v0.9.0.3-hotfix: silenced. Previously logged per retry → the
@@ -6985,6 +7014,29 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         if not la or type(la.apply_new_skin_from_texture) ~= "function" then return false end
         local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
         local equipment = inv and inv._equipment
+        -- v0.9.72-dev WEAPON-IDENTITY GUARD (see offhand branch): illusion
+        -- entries are keyed by the COSMETIC SLOT ("slot_melee"/"slot_ranged",
+        -- from update_cosmetic_slot); only paint when that slot is the one
+        -- currently wielded (or the key matches the wielded item directly).
+        local w_slot_data = equipment and equipment.slots and inv.wielded_slot
+            and equipment.slots[inv.wielded_slot]
+        local w_item = w_slot_data and w_slot_data.item_data
+        if w_item then
+            local match = (slot_name == inv.wielded_slot)
+                or (slot_name == w_item.template) or (slot_name == w_item.name)
+                or (slot_name == w_item.key) or (slot_name == w_item.item_type)
+            if not match then
+                local seen = mod._la_gate_seen
+                if not seen then seen = {}; mod._la_gate_seen = seen end
+                local sk = "illusion-wrongweapon|" .. tostring(slot_name) .. "|" .. tostring(inv.wielded_slot)
+                if not seen[sk] and printf then
+                    seen[sk] = true
+                    printf("[la-state] APPLY SKIP wrong-weapon: entry key=%s but wielded slot=%s template=%s (kind=illusion armoury=%s)",
+                        tostring(slot_name), tostring(inv.wielded_slot), tostring(w_item.template), tostring(armoury_key))
+                end
+                return false
+            end
+        end
         local right_unit = equipment and equipment.right_hand_wielded_unit_3p
         local left_unit_w = equipment and equipment.left_hand_wielded_unit_3p
         if (not right_unit or not Unit.alive(right_unit))
@@ -8507,9 +8559,15 @@ if AttachmentUtils then
                 if bid then _migrate_legacy_offhand_selection(bid) end
                 local per_hand_sel = bid and _offhand_selection[bid]
                 if type(per_hand_sel) == "table" then
+                    -- v0.9.72-dev: key the replay by the weapon TEMPLATE, not
+                    -- the wielded slot. This site was the only writer of the
+                    -- legacy "slot_melee"-style offhand keys (host 18:35:44
+                    -- evidence) - a namespace the weapon-identity guard in
+                    -- _apply_la_on_unit can never match to an item.
+                    local replay_key = (item_data and item_data.template) or wielded_slot
                     for hand_field, sel in pairs(per_hand_sel) do
                         if type(sel) == "table" and sel.la_armoury_key then
-                            _send_la_apply(unit, wielded_slot, "offhand",
+                            _send_la_apply(unit, replay_key, "offhand",
                                 sel.la_armoury_key, sel.vanilla_skin, hand_field)
                         end
                     end
@@ -8818,6 +8876,15 @@ mod.update = function(dt)
             local now_p = os.clock()
             if now_p >= (st.next_at or 0) then
                 local pull_host = _host_peer_id()
+                -- v0.9.72-dev: after leaving a session the resolver can hand
+                -- back OUR OWN peer id while _is_local_server() is still
+                -- transiently false (18:30:42 log: 8 retries against self).
+                -- A self-targeted pull is meaningless - drop the arming.
+                local self_peer = _local_peer_id_quick()
+                if pull_host and self_peer and pull_host == self_peer then
+                    mod._la_state_pull_pending = nil
+                    pull_host = nil
+                end
                 if pull_host then
                     if st.attempts >= 8 then
                         if printf then printf("[la-state] STATE-PULL GAVE UP after %d unacked attempts (host=%s)",
