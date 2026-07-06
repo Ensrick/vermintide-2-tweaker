@@ -35,7 +35,7 @@ trailing `-- cross-mod-ok` comment.
 |---|---|---|---|
 | wt · wt_dev · ct · ct_dev · crt · enemy_tweaker | **bt** *(retired)* | Big Rebalance master gate (`is_br_active`) + `net_replay` diagnostics | BR sub-features inert — `if not (bt and bt.is_br_active) then return false`. bt is retired, so permanently inert by design (not stripped). |
 | **character_weapon_variants** | **MoreItemsLibrary** | Register CWV variant items into the local backend (CWV's core) | ⚠️ Warns + registers **zero** variants (no crash). **Non-functional standalone** unless MIL is provided by cosmetics_tweaker's embed or standalone MIL. See *Known gap*, [#82]. |
-| wt · wt_dev | character_weapon_variants | `can_wield` dedup — skip CWV-managed careers so the two don't double-provide | wt applies its own cross-char unlocks normally |
+| wt · wt_dev | character_weapon_variants | Presence flag (#368): wt + CWV are **independent** (overlap allowed). wt flips overlapping cross-char availability defaults **ON** when CWV is present and covers CWV's `cwv_variant` items with its own toggles. The old `cwv_managed` dedup/cede is being removed. | wt applies its standalone cross-char defaults (ports OFF) |
 | gt · gt_dev | cim | Enable the mid-mission Customize/Forge tab (cim neutralizes the preview crash) | Forge tab stays disabled mid-mission (the safe path) |
 | cosmetics_tweaker | cim | Defer modded-realm vanilla-illusion-swap ownership to cim | cosmetics_tweaker keeps owning the swap (its own fallback) |
 | cosmetics_tweaker | Loremasters-Armoury + MIL | LA cosmetic bridge (mirror LA hats/illusions, husk swap) | Bridge dormant + echoes a notice |
@@ -51,7 +51,7 @@ Per-edge file:line citations live in the 2026-06-22 audit + `CROSS_MOD_ARCHITECT
 | **mp** | `get_mod("mp").{is_unlocked, spend, credit, grant_item, has_currency, …}` | none wired yet (CWV/cosmetics are the designed consumers) |
 | **bt** *(retired)* | `get_mod("bt"):is_br_active()` / `:net_replay()` | wt · wt_dev · ct · ct_dev · et · crt (guarded → inert) |
 | **cim** | presence flag (`get_mod("cim") ~= nil`) — owns modded-realm vanilla-illusion swap | cosmetics_tweaker · gt · gt_dev |
-| **cwv** | presence flag — owns its cross-character variant items | wt · wt_dev |
+| **cwv** | presence flag — owns its cross-character variant items (`cwv_variant`); wt reads it to flip overlapping availability defaults ON + expose toggles for CWV's items (#368) | wt · wt_dev |
 
 Most cross-mod contracts are **presence-flag** checks, not method APIs.
 

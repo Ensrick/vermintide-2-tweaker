@@ -1,5 +1,11 @@
 # Cross-Character Port Decisions — weapon_tweaker
 
+> **Spec change (Issue #368, 2026-07-05):** entries below that mark a weapon "CWV-managed
+> (skip)" or defer it to CWV reflect the **retired** exclusion model. wt and CWV are now
+> independent (overlap allowed); wt is the availability control surface. Treat those "skip"
+> notes as historical — the `cwv_managed` cede is being removed and wt's toggles default ON
+> for the overlapping weapons when CWV is installed. See `CROSS_MOD_ARCHITECTURE.md`.
+
 Live document. Captures user decisions for every cross-character weapon port:
 which weapon, which receiver, whether 3P render needs a target-weapon remap,
 which target weapon if so. Drives `_WIELD_ANIM_CAREER_3P_PATCHES` in

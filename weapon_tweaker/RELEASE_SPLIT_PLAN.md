@@ -90,8 +90,11 @@ and it guarantees no in-progress port labels can ever surface to subscribers.
 4. **Remove dev tooling** (per Decision 3): drop the two `wt_dev_*` modules + their wiring.
 5. Normalize `MOD_VERSION` → `0.13.0-alpha`, keep `published_id = 3712896117` unchanged.
 
-`cwv_managed` stays as-is (it correctly cedes `wh_1h_falchion`/`wh_dual_wield_axe_falchion`
-on Kruber to CWV when CWV is installed).
+**`cwv_managed` is being REMOVED** (Issue #368, 2026-07-05): wt and CWV now operate
+independently (overlap allowed), so wt no longer cedes `wh_1h_falchion`/`wh_dual_wield_axe_falchion`
+on Kruber to CWV. Instead wt is the availability control surface — its per-weapon toggles default
+ON when CWV is installed and also cover CWV's items. See `CROSS_MOD_ARCHITECTURE.md`. (The earlier
+"stays as-is" plan here is superseded.)
 
 ---
 

@@ -192,7 +192,7 @@ Remaining core: ~2000 lines. **No production impact; structural only.**
 - ~~`mod.MOD_VERSION`~~ — currently `local MOD_VERSION`; not exposed. `lobby_tweaker` manifest reader expects `mod.MOD_VERSION` and falls back to nil when not found — functional but inelegant.
 
 **Outbound (wt calls get_mod on others):**
-- `character_weapon_variants` — presence detection only (guarded with `~= nil` check). When installed, wt skips adding `_cwv_managed` career rows for certain weapons to avoid duplicate unlock widgets.
+- `character_weapon_variants` — presence detection only (guarded with `~= nil` check). ~~When installed, wt skips adding `_cwv_managed` career rows for certain weapons to avoid duplicate unlock widgets.~~ **Superseded (Issue #368, 2026-07-05):** wt and CWV are independent (overlap allowed); the `cwv_managed` cede is being removed. wt now uses the presence flag to default its overlapping cross-char toggles ON and to cover CWV's `cwv_variant` items — it is the availability control surface. See `CROSS_MOD_ARCHITECTURE.md`.
 - `buff_tweaker` (`bt`) — BR master gate. Pattern: `if not (bt and bt.is_br_active) then return false end`.
 
 **Shared global writes:**

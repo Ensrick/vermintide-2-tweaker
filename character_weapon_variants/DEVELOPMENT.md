@@ -570,6 +570,13 @@ Cross-character illusions only swap the 3D model. If both weapons share the same
 
 For **new variant weapons** (separate items, not just illusions), animation work belongs in this mod via the template-clone path — see "Animation: System B" below. The `weapon_tweaker` runtime hook is the right tool only for vanilla items unlocked on new careers and for husk fixes; CWV variants own their template and should bake the redirects directly into the clone.
 
+> **Note — availability is a separate axis from animation ownership (Issue #368, 2026-07-05).**
+> The above is about who bakes 3P *animation* redirects (CWV owns its variants' anims). It does
+> NOT mean CWV owns *availability*. wt and CWV are **independent** on availability (overlap
+> allowed): CWV is default-on with no per-weapon toggles, and wt is the availability control
+> surface — when co-installed, wt's per-weapon toggles default ON for the overlapping weapons and
+> also cover CWV's `cwv_variant` items. See `CROSS_MOD_ARCHITECTURE.md`.
+
 ## Animation: System B (template-clone path)
 
 Variant weapons that need 3P animation fixes (cross-character moveset, missing clips on the target body) handle that work **here**, not in `weapon_tweaker`. The pattern is to clone the source template at mod load, rewrite the animation fields we care about, and store the clone as a new entry in the `Weapons` global. The variant's `template` field points at the clone, so the engine spawns it with our edits.

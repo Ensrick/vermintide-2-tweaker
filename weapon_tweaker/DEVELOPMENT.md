@@ -65,6 +65,11 @@ Genuine functional cross-character ports (brace, longbow, billhook, etc.)
   3P side uses `anim_event_3p` remap onto a good-enough native vocab. CWV
   variants are **designed to play differently enough** to feel like new
   weapons, distinct from wt's full-freedom cross-character access.
+  **Independent of wt (Issue #368):** neither mod suppresses the other;
+  overlap is allowed. wt is the availability control surface — its
+  per-weapon toggles default ON when CWV is installed and also cover CWV's
+  `cwv_variant` items (CWV has no per-weapon toggles). The old
+  `_cwv_managed` cede table is being removed. See `CROSS_MOD_ARCHITECTURE.md`.
 - **`cosmetics_tweaker` cross-char cosmetic swap (planned)** — destination
   for identical-functional ports being removed from wt.
 

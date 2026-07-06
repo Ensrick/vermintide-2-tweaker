@@ -24,6 +24,39 @@ Three mods with distinct responsibilities, designed to work independently but en
 
 ---
 
+## weapon_tweaker ↔ character_weapon_variants: independent; wt is the availability control surface
+
+> **Spec (2026-07-05, Issue #368) — supersedes the earlier "wt suppresses/defers to CWV" model
+> described in the interface-point bullets below.** The two mods operate **independently**;
+> neither suppresses the other, and overlap is expected and allowed (the same weapon may be
+> reachable on the same receiver through both).
+
+- **wt** provides cross-character *access* — it expands vanilla `ItemMasterList[key].can_wield`
+  so an existing weapon is wieldable by a new career. **CWV** provides *variant items* (new cloned
+  IML entries, marked `entry.cwv_variant = true`) **plus** its own cross-access `can_wield`
+  expansions on vanilla keys. Both may cover the same weapon+receiver; that is fine.
+- **CWV is default-on with no per-weapon toggles.** It makes its weapons available at load and
+  exposes no enable/disable UI (only a few feature checkboxes).
+- **wt is the availability control surface.** It owns the per-weapon enable/disable toggles
+  (`unlock_<career>_<weapon_key>`). When **both** mods are installed:
+  - Overlapping cross-character weapons **default ON** in wt (matching CWV's default-on, so
+    installing wt never silently disables what CWV already grants). wt's standalone defaults
+    (cross-char ports OFF) apply only when CWV is **absent**.
+  - **wt's menu also covers CWV's weapons.** For CWV's genuinely-new cloned variant items
+    (`cwv_variant == true`), wt enumerates them and exposes per-item availability toggles
+    (default-on) so the user has one place to control them; for overlapping vanilla-key access,
+    wt's existing static toggles apply.
+  - **wt's toggle is authoritative** — disabling a weapon in wt removes the receiver from
+    availability regardless of which mod added it (wt is the last writer of `can_wield`, running
+    on every game-state transition, i.e. after CWV's load-time expansion).
+- **Removed:** the `_cwv_managed` cede table + `cwv_skip` gate in `apply_weapon_unlocks` (wt no
+  longer withholds `wh_1h_falchion` / `wh_dual_wield_axe_falchion` on Kruber when CWV is present).
+
+Implementation is tracked in **Issue #368** (deferred pending go-ahead; includes fixing a live
+`wh_1h_axe`-on-Kruber clobber where wt's strip-rebuild removed CWV's unlock every state transition).
+
+---
+
 ## Mod 1: weapon_tweaker
 
 **Responsibility:** Allow any character to equip any other character's existing weapons.
@@ -39,9 +72,10 @@ Three mods with distinct responsibilities, designed to work independently but en
 - No shield mixing across characters
 - No custom icons or descriptions
 
-**Interface point with character_weapon_variants:**
-- weapon_tweaker may detect the character_weapon_variants and suppress redundant unlocks (e.g., if the new mod already provides "Imperial Axe and Shield" for Kruber, weapon_tweaker doesn't also need to unlock Bardin's axe+shield on Kruber)
-- Optional: weapon_tweaker could offer a setting "Use [new mod] weapons instead of raw cross-career unlocks" for weapon types that have a purpose-built variant
+**Interface point with character_weapon_variants:** independent, overlap allowed — wt is the
+availability control surface. See the "weapon_tweaker ↔ character_weapon_variants" section above
+(Issue #368). wt does **not** suppress unlocks for weapons CWV provides; instead its per-weapon
+toggles default ON when CWV is installed and also cover CWV's own variant items.
 
 ---
 
@@ -104,7 +138,7 @@ Three mods with distinct responsibilities, designed to work independently but en
 - No animation remapping (inherits from whatever weapon template it's based on, or weapon_tweaker provides remaps)
 
 ### Interface points
-- **weapon_tweaker:** Can detect this mod and defer to its purpose-built items instead of raw cross-career unlocks for the same weapon type
+- **weapon_tweaker:** independent — wt does NOT defer to CWV's items (that "defer" model is retired, Issue #368). Both mods may cover the same weapon+receiver; wt is the availability control surface and, when installed alongside CWV, enumerates CWV's `cwv_variant` items to expose per-item enable/disable toggles (CWV itself has none). See the "weapon_tweaker ↔ character_weapon_variants" section at the top of this doc.
 - **cosmetics_tweaker:** Can detect this mod and register offhand/illusion options for its items
 
 ---
