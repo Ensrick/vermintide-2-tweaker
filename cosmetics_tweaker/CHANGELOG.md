@@ -1,5 +1,30 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.70-dev — 2026-07-06 — LA sync core, slices 2+2b: single reconcile entry point (#264) + hot-join pull-on-ready (#267)
+
+> Slices 2 and 2b of `docs/LA_SYNC_CORE_AUDIT.md` (invariants I3, I9). Ships together with 0.9.69's slices 0+1 for the next playtest.
+
+### #264 - weapon switch-back lost the cosmetic on peers (FIX, invariant I3)
+Reconcile was wired per-trigger: recv, retry, transition, husk wield, and local wield each had a bespoke re-apply, and the switch-back wield fell through all of them (confirmed both directions 2026-07-03 21:41). New single entry point `mod._la_reconcile(wearer_peer, slot, tag, allow_pulse)`:
+- Reads ONLY the synced store (I1), resolves ONLY the human wearer's unit (I4), applies paint via the existing `_apply_la_on_unit`, and treats mesh+paint as one gated unit (I7).
+- Safe contexts (network recv / mod.update: `allow_pulse=true`) pulse a stale kind="unit" mesh via `_ensure_offhand_mesh` as before.
+- Wield contexts (`allow_pulse=false` - pulsing inside `_wield_slot` would re-enter wield) now VERIFY the just-spawned mesh against the store and, on a miss (the #264 silent failure), queue a deferred pulse into `_la_pending_apply`; the drain repairs the mesh from mod.update a frame later. A switch-back can no longer die silently: it either re-renders or logs `[la-state] RECONCILE ... mesh stale after wield, deferred pulse queued`.
+- All five triggers repointed: `cos_la_apply` recv, pending-drain retry (with `no-entry` now terminal so a reverted cosmetic is never re-imposed by a stale queue entry), #233 transition walk, husk `_wield_slot` post-vanilla repaint, local `_wield_slot` re-apply (the local body's stale-mesh case, previously declared out of scope, now heals via the same deferred pulse).
+
+### #267 - hot-joiner never saw already-equipped cosmetics (FIX, invariant I9)
+Every push was timed off "peer appeared" and lost the 17-25ms race against the joiner's `peer_ingame` flip (re-confirmed by the user 2026-07-06); an empty joiner store cannot self-heal. Delivery is now joiner-driven:
+- New request RPC `cos_la_state_req` (additive; no schema bump - old peers ignore unknown RPC names). When a peer's own game state enters `StateIngame` (the VMF `on_game_state_changed` "enter"/"StateIngame" signal - vmf_loader.lua:118), it flags a pull; mod.update sends the request once a host peer_id resolves. The request's ARRIVAL proves the joiner is a live session member, so the host's targeted replies cannot lose the pre-ingame race.
+- Host replies with one targeted `cos_la_apply` per stored (wearer, slot), reusing the existing payload shape; the joiner's recv path (mirror + reconcile) does the rest. The requester's own entries are included - after a transition they re-drive the local reconcile, hardening #233 from a second direction.
+- The existing state-change re-emits and hot-join targeted replay stay as belt-and-suspenders (idempotent); the pull is the correctness path.
+
+### Verify in-game (2 players)
+1. #267: host equips an LA shield/hat, THEN the client joins - client renders both WITHOUT the host re-equipping. Log: client `[la-state] STATE-PULL req`, host `STATE-PULL reply: N entr(ies)`, client `RECV`+`RE-SWAP`.
+2. #264: mid-mission, wearer swaps to secondary and back - other machine re-renders the cosmetic (watch for `HUSK-GATE` -> `HUSK-SWAP applied`, or `RECONCILE ... deferred pulse queued` -> `RE-SWAP tag=retry`). Test both directions (host wearer + client wearer).
+3. #233 regression: keep<->mission transitions still re-render (TRANSITION-WALK lines unchanged).
+
+### Files
+- `cosmetics_tweaker.lua` - `mod._la_reconcile` + five trigger repoints, `cos_la_state_req` register + pull trigger/drain, RPC doc comment (5 RPCs), `cos_la_reconcile_and_pull_wired` regression check; `MOD_VERSION` `0.9.69-dev` -> `0.9.70-dev`. One ADDITIVE RPC name, no schema bump, no new hooks, no force-loads, no `World.destroy_unit`.
+
 ## 0.9.69-dev — 2026-07-06 — LA sync core, slices 0+1: revert-to-vanilla now broadcasts (#265) + wearer-scoped apply (#268) + [la-state] transport/store instrumentation
 
 > First two slices of `docs/LA_SYNC_CORE_AUDIT.md` (invariants I2, I4, I6). No render-path restructure yet - that is slice 2 (next build).

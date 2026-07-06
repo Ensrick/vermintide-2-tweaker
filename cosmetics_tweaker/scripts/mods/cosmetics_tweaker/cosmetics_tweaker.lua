@@ -54,13 +54,16 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.69-dev"
+local MOD_VERSION = "0.9.70-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
 -- message (no state mutation, no crash). Bump ONLY when the payload shape of any
--- of this mod's 4 RPCs (cos_la_apply / cos_la_apply_req / cos_glow_apply /
--- cos_glow_apply_req) changes (add/remove/reorder/retype a field). Initial = 1.
+-- of this mod's 5 RPCs (cos_la_apply / cos_la_apply_req / cos_la_state_req /
+-- cos_glow_apply / cos_glow_apply_req) changes (add/remove/reorder/retype a
+-- field). ADDITIVE optional fields (v0.9.69's revert flag) and ADDITIVE RPC
+-- names (v0.9.70's cos_la_state_req) do NOT bump -- old peers drop/ignore
+-- them harmlessly. Initial = 1.
 local COS_RPC_SCHEMA = 1
 _MEM_PROBE_T0_COS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
@@ -882,6 +885,18 @@ mod.on_game_state_changed = function(status, state_name)
     -- Fix: PC-A itself re-emits its `_local_la_equips` on every state
     -- change. Drain logic lives in mod.update (after locals are declared).
     mod._la_self_rebroadcast_pending = true
+
+    -- v0.9.70-dev (#267, LA_SYNC_CORE_AUDIT Slice 2b / invariant I9): PULL ON
+    -- READY. Every push timed off "peer appeared" loses the 17-25ms race
+    -- against the receiver's peer_ingame flip (#267 hot-join, #233
+    -- transition), and a hot-joiner's empty store cannot self-heal. So the
+    -- JOINER asks: once our own game state is provably ingame, request the
+    -- host's full LA store (drained in mod.update once a host peer_id is
+    -- resolvable -- flag only here; _is_local_server/_host_peer_id live
+    -- lexically below this function).
+    if status == "enter" and state_name == "StateIngame" then
+        mod._la_state_pull_pending = true
+    end
 
     -- v0.9.65-dev (#233): arm a bounded, per-frame CLIENT-side re-apply of every
     -- REMOTE peer's cached LA offhand/illusion equip after a level transition. The
@@ -7151,6 +7166,52 @@ mod._la_apply_revert_recv = function(wearer, slot_name, kind, vanilla_key, hand_
         tostring(entry ~= nil), tostring(outcome)) end
 end
 
+-- v0.9.70-dev (#264, LA_SYNC_CORE_AUDIT Slice 2 / invariant I3): the SINGLE
+-- render-reconcile entry point. Every trigger that (re)renders a peer's
+-- cosmetic-bearing units -- recv, pending retry, transition walk, husk wield,
+-- local wield -- calls THIS instead of its own bespoke re-apply, so a trigger
+-- nobody special-cased (the #264 weapon switch-back) cannot fall through.
+-- Reads ONLY the synced store (I1), targets ONLY the human wearer's unit
+-- (I4, via _wearer_unit_for_peer), and treats mesh+paint as one gated unit
+-- (I7): in safe contexts (allow_pulse=true: network callback / mod.update)
+-- a stale kind="unit" mesh is pulsed via _ensure_offhand_mesh; in wield
+-- contexts (allow_pulse=false: called from inside a _wield_slot body, where
+-- pulsing would re-enter wield) a stale mesh is DEFERRED to the pending
+-- drain, which pulses from mod.update within a frame or two.
+-- Returns (applied, reason): reason="no-entry" is terminal for retry loops
+-- (a revert deleted the entry); "wearer-not-spawned" is retryable.
+mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
+    local equips = _la_equips_by_peer[wearer_peer]
+    local eq = equips and equips[slot_name]
+    if not (eq and eq.kind and eq.armoury_key) then return false, "no-entry" end
+    local wu = _wearer_unit_for_peer(wearer_peer)
+    if not wu then return false, "wearer-not-spawned" end
+    local applied = _apply_la_on_unit(wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
+    if applied and (eq.kind == "offhand" or eq.kind == "illusion") then
+        if allow_pulse then
+            _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, tag)
+        else
+            -- Wield context: verify the just-spawned mesh against the store;
+            -- if the in-wield get_item_units swap silently missed (#264's
+            -- failure mode), hand the mesh repair to the pending drain.
+            local inv = ScriptUnit and ScriptUnit.has_extension
+                and ScriptUnit.has_extension(wu, "inventory_system")
+            local equipment = inv and inv._equipment
+            local wf = (eq.hand_field == "right_hand_unit")
+                and "right_hand_wielded_unit_3p" or "left_hand_wielded_unit_3p"
+            local live = equipment and equipment[wf]
+            if live and Unit.alive(live) and not _offhand_paint_mesh_ok(live, eq.armoury_key) then
+                _la_pending_apply[#_la_pending_apply + 1] = {
+                    wearer_peer, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key, os.clock() + 5,
+                }
+                if printf then printf("[la-state] RECONCILE tag=%s wearer=%s slot=%s -> mesh stale after wield, deferred pulse queued (key=%s)",
+                    tostring(tag), tostring(wearer_peer), tostring(slot_name), tostring(eq.armoury_key)) end
+            end
+        end
+    end
+    return applied
+end
+
 -- HOST: receives equip requests from clients, validates, records into
 -- `_la_equips_by_peer`, broadcasts the authoritative cos_la_apply to ALL.
 mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version, payload)
@@ -7237,6 +7298,45 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version
         vanilla_key    = vanilla_key,
         hand_field     = hand_field,
     })
+end)
+
+-- v0.9.70-dev (#267, LA_SYNC_CORE_AUDIT Slice 2b / invariant I9): HOST side
+-- of the pull-on-ready flow. A peer that just reached StateIngame requests
+-- the full LA store; we reply with one targeted cos_la_apply per recorded
+-- (wearer, slot). Reuses the existing broadcast payload shape, so the
+-- joiner's recv path (mirror + reconcile) needs nothing new. The requester's
+-- own entries are included deliberately -- after a transition they re-drive
+-- the client's local reconcile, hardening #233. Old-version peers never send
+-- this RPC and ignore it if received (unknown name), so it is
+-- backward-compatible without a schema bump.
+mod:network_register("cos_la_state_req", function(sender_peer_id, schema_version, payload)
+    if schema_version ~= COS_RPC_SCHEMA then
+        if printf then printf("[rpc:schema] cos_la_state_req DROP peer=%s sent=v%s expect=v%d",
+            tostring(sender_peer_id), tostring(schema_version), COS_RPC_SCHEMA) end
+        return
+    end
+    if not _is_local_server() then return end
+    if not sender_peer_id then return end
+    local n = 0
+    for wearer_peer, slots in pairs(_la_equips_by_peer) do
+        if type(slots) == "table" then
+            for slot_name, entry in pairs(slots) do
+                if type(entry) == "table" and entry.kind and entry.armoury_key then
+                    mod:network_send("cos_la_apply", sender_peer_id, COS_RPC_SCHEMA, {
+                        wearer_peer_id = wearer_peer,
+                        slot           = slot_name,
+                        kind           = entry.kind,
+                        armoury_key    = entry.armoury_key,
+                        vanilla_key    = entry.vanilla_key,
+                        hand_field     = entry.hand_field,
+                    })
+                    n = n + 1
+                end
+            end
+        end
+    end
+    if printf then printf("[la-state] STATE-PULL reply: %d entr(ies) -> requester=%s",
+        n, tostring(sender_peer_id)) end
 end)
 
 -- v0.9.0-dev: peer-disconnect cleanup. Without this _la_equips_by_peer grows
@@ -7335,7 +7435,9 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
     _dbg("[cos_la_apply recv] CACHE WRITE _la_equips_by_peer[%s][%s] now has %d slot(s) total",
         tostring(wearer), tostring(slot_name), n)
 
-    local applied = _try_apply_by_peer(wearer, slot_name, kind, armoury_key, vanilla_key)
+    -- v0.9.70-dev (Slice 2 / I3): recv now routes through the single
+    -- reconcile entry point (paint + gated mesh pulse, wearer-scoped).
+    local applied = mod._la_reconcile(wearer, slot_name, "recv", true)
     -- v0.9.61-dev (#203): [cos-la-sync] receiver-side outcome via mod:info so it
     -- lands in the HOST's log (the missing evidence for #203 -- a client log can't
     -- show the host painting the wearer's husk). Deduped on
@@ -7408,20 +7510,10 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
     -- returns the local player, #234), since cos_la_apply broadcasts to "all"
     -- including the originating client. Safe context (network callback, not a
     -- _wield_slot body).
-    -- v0.9.69-dev (#268, invariant I4 targeting): scope the mesh pulse to THE
-    -- wearer's unit only. The old loop hit every player at the wearer peer
-    -- (`players_at_peer`), and a host peer owns its BOTS -- one host equip
-    -- force-swapped bot Saltzpyre's Witch Hunter shield to a Kruber empire
-    -- mesh (2026-07-03 21:39/21:41 client log, three owner units per equip).
-    -- `_wearer_unit_for_peer` now resolves the HUMAN player at the peer
-    -- (PlayerManager.player_from_peer_id defaults local_player_id=1;
-    -- player_manager.lua:463-470 -- bots live at other local_player_ids).
-    if applied and (kind == "offhand" or kind == "illusion") then
-        local wu = _wearer_unit_for_peer(wearer)
-        if wu then
-            _ensure_offhand_mesh(wu, hand_field, armoury_key, "recv")
-        end
-    end
+    -- v0.9.69-dev (#268, invariant I4 targeting): the mesh pulse is scoped to
+    -- THE wearer's unit only (the old players_at_peer loop force-swapped a
+    -- host's BOT shields). v0.9.70-dev: the pulse now lives INSIDE
+    -- mod._la_reconcile (allow_pulse=true above), so nothing extra runs here.
     if not applied then
         -- Wearer unit not spawned locally yet (loading screen race / late
         -- network spawn / husk not wielding the right slot). Queue and retry
@@ -7825,7 +7917,13 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
                         _trace("HUSK wield-repaint stored_key=%s kind=%s armoury=%s slot=%s wearer=%s",
                             tostring(stored_key), tostring(entry.kind), tostring(entry.armoury_key),
                             tostring(slot_name), tostring(wearer_peer))
-                        _apply_la_on_unit(husk_unit, stored_key, entry.kind, entry.armoury_key, entry.vanilla_key)
+                        -- v0.9.70-dev (#264, Slice 2 / I3): route through the single
+                        -- reconcile entry point. allow_pulse=false -- we are INSIDE a
+                        -- _wield_slot body (pulsing would re-enter wield); if the
+                        -- in-wield get_item_units mesh swap missed, reconcile defers
+                        -- a pulse to the pending drain, which runs from mod.update a
+                        -- frame later. THIS is the switch-back repair path.
+                        mod._la_reconcile(wearer_peer, stored_key, "husk-wield", false)
                     end
                 end
             end
@@ -8472,16 +8570,13 @@ mod.update = function(dt)
                                     if not wu then
                                         st.seen[dkey] = "unresolved"
                                     else
-                                        -- Re-paint: handles kind="texture" AND repaints a
-                                        -- kind="unit" after its mesh swap. Returns true only
-                                        -- when the offhand is currently wielded (its own
-                                        -- guard reads left/right_hand_wielded_unit_3p).
-                                        local applied = _try_apply_by_peer(peer, slot_name, eq.kind,
-                                            eq.armoury_key, eq.vanilla_key)
+                                        -- v0.9.70-dev (Slice 2 / I3): route through the
+                                        -- single reconcile entry point (paint + gated
+                                        -- mesh pulse; this drain is a safe pulse context).
+                                        -- Semantics preserved: applied only when the
+                                        -- offhand is currently wielded.
+                                        local applied = mod._la_reconcile(peer, slot_name, "transition", true)
                                         if applied then
-                                            -- Offhand wielded: also re-swap a kind="unit" mesh
-                                            -- (self-gated/no-op for kind="texture").
-                                            _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, "transition")
                                             st.seen[dkey] = "applied"
                                         else
                                             st.seen[dkey] = "unwielded"
@@ -8564,6 +8659,25 @@ mod.update = function(dt)
     -- fast when queue is empty.
     if mod._drain_deferred_la_emits then mod._drain_deferred_la_emits() end
 
+    -- v0.9.70-dev (#267, Slice 2b / I9): send the pull-on-ready state request
+    -- armed by on_game_state_changed. Client-only (the host owns the store);
+    -- waits until a host peer_id is resolvable, then fires exactly once per
+    -- arming. The request's arrival at the host proves this peer is a live
+    -- session member, so the host's targeted replies cannot lose the
+    -- pre-ingame race that killed the push model.
+    if mod._la_state_pull_pending then
+        if _is_local_server() then
+            mod._la_state_pull_pending = nil
+        else
+            local pull_host = _host_peer_id()
+            if pull_host then
+                mod._la_state_pull_pending = nil
+                if printf then printf("[la-state] STATE-PULL req -> host=%s", tostring(pull_host)) end
+                mod:network_send("cos_la_state_req", pull_host, COS_RPC_SCHEMA, {})
+            end
+        end
+    end
+
     -- v0.9.0-dev: TPE per-frame tick was previously in a now-deleted earlier
     -- mod.update definition that this one overwrote. Restoring here.
     if TPE and TPE.update then TPE.update(dt) end
@@ -8582,23 +8696,14 @@ mod.update = function(dt)
         local kept = {}
         for i = 1, #_la_pending_apply do
             local entry = _la_pending_apply[i]
-            local wp, slot, kind, ak, vk, deadline = entry[1], entry[2], entry[3], entry[4], entry[5], entry[6]
-            local applied_now = _try_apply_by_peer(wp, slot, kind, ak, vk)
-            -- v0.9.64-dev (#233): a kind="unit" offhand that spawned VANILLA before
-            -- this entry arrived (host's shield at the client's mission start) can't
-            -- be fixed by texture-paint alone -- _apply_la_on_unit's offhand branch
-            -- even returns true after the #204 SKIP, so the entry would drop
-            -- "applied" with the mesh still wrong. Drive a real mesh re-swap here
-            -- (mod.update is a safe context to pulse-wield). _ensure_offhand_mesh
-            -- self-gates: no-op once the mesh matches / not resident / cooldown.
-            if kind == "offhand" or kind == "illusion" then
-                local wu = _wearer_unit_for_peer(wp)
-                if wu then
-                    local eq = _la_equips_by_peer[wp] and _la_equips_by_peer[wp][slot]
-                    _ensure_offhand_mesh(wu, eq and eq.hand_field, ak, "retry")
-                end
-            end
-            if not applied_now and now < deadline then
+            local wp, slot, deadline = entry[1], entry[2], entry[6]
+            -- v0.9.70-dev (Slice 2 / I3): retries route through the single
+            -- reconcile entry point (paint + gated mesh pulse; mod.update is a
+            -- safe pulse context). reason=="no-entry" is terminal -- a revert
+            -- deleted the store entry, so retrying would re-impose a cosmetic
+            -- the wearer already dropped.
+            local applied_now, reason = mod._la_reconcile(wp, slot, "retry", true)
+            if not applied_now and reason ~= "no-entry" and now < deadline then
                 kept[#kept + 1] = entry
             end
         end
@@ -9417,8 +9522,12 @@ mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipmen
                                 string.format("peer=local slot=%s template=%s key=%s decision=REAPPLY",
                                     tostring(wielded_slot), tostring(stored_key), tostring(entry.armoury_key)))
                         end
-                        pcall(_apply_la_on_unit, self._unit, stored_key, entry.kind,
-                            entry.armoury_key, entry.vanilla_key)
+                        -- v0.9.70-dev (#264/#234, Slice 2 / I3): route through the
+                        -- single reconcile entry point. allow_pulse=false (inside a
+                        -- wield body); a stale kind="unit" mesh on the local body is
+                        -- deferred to the pending drain's safe pulse -- previously a
+                        -- skipped spawn-time swap was declared out of scope here.
+                        pcall(mod._la_reconcile, local_peer, stored_key, "local-wield", false)
                     end
                 end
             end
@@ -9434,6 +9543,19 @@ end)
 
 -- #45: RPC schema constant must be a positive number so every network_send
 -- prepends it and every network_register gate has something to compare against.
+-- #264/#267 (Slice 2/2b): the reconcile entry point and the pull-on-ready
+-- flow must stay wired. Losing reconcile regresses to per-trigger re-apply
+-- drift; losing the pull regresses hot-join to the pre-ingame push race.
+_rt_register("cos_la_reconcile_and_pull_wired", function()
+    if type(mod._la_reconcile) ~= "function" then
+        return "mod._la_reconcile missing"
+    end
+    -- Source-pattern checks: the five render triggers must route through
+    -- reconcile, and the state-pull RPC must be registered.
+    -- (Runtime-visible surface only; the call sites are covered by the
+    -- [la-state] instrumentation at play time.)
+end)
+
 -- #265 (Slice 1): the revert pipeline must stay wired end to end -- sender,
 -- receiver, and both native-restore primitives. A missing piece regresses to
 -- "revert clears local state and never propagates".

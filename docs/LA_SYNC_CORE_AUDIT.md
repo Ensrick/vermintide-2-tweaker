@@ -2,6 +2,22 @@
 
 Research and design only. No code was changed to produce this document.
 
+> **Migration status (2026-07-06):** Slices 0, 1, 2, and 2b are IMPLEMENTED
+> and shipped: slices 0+1 in cosmetics_tweaker **0.9.69-dev** (`[la-state]`
+> instrumentation incl. emit routing + husk wield gates; revert broadcast,
+> closes #265; plus the #268 wearer-scoping from slice 2 pulled forward),
+> slices 2+2b in **0.9.70-dev** (`mod._la_reconcile` single entry point with
+> all five triggers repointed, closes #264; `cos_la_state_req` pull-on-ready,
+> closes #267). All four await in-game verification - the per-slice verify
+> steps live in the two CHANGELOG entries. Slices 3-6 (gate-into-primitive,
+> store collapse, persistence-through-set, #266 data parity) remain open.
+> Source correction found during implementation, relevant to #373: weave
+> `_magic_NN` items carry the SAME `item_type` as their base weapon
+> (`item_master_list_lake.lua:594-608`, `item_type = "es_1h_sword_shield_breton"`),
+> so section 5.3's family-map concern does NOT extend to weave keys - the
+> weave gap is in the apply path (different `left_hand_unit` mesh,
+> `wpn_emp_gk_shield_01_magic_01`), not availability.
+
 **Motivating problem (user, 2026-07-03):** "These cosmetic issues have been so
 persistent, with slow progress. It seems there should be some kind of logic that
 governs all these interactions which is common sense that's not being applied ...
