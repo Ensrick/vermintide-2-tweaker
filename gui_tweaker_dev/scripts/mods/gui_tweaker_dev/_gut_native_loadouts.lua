@@ -362,6 +362,27 @@ local function _resolve_item_raw(id)
 end
 
 -- ------------------------------------------------------------------
+-- issue #387 diagnostic (weapons don't follow the selected loadout while jewelry/cosmetics
+-- do). get_character_data is HOT (called per slot per interface refresh), so a raw printf
+-- would flood the log. This throttles to ONE line per (career, slot) whenever the resolved
+-- (index, value, source) tuple CHANGES -- exactly a loadout switch or an equip -- so the log
+-- reads as a clean per-switch trace: which id each GEAR slot served, from the modded STORE or
+-- an OFFICIAL fallback. Comparing slot_melee/slot_ranged against slot_necklace across the same
+-- switches shows whether the weapon slots are silently diverting to the (index-agnostic)
+-- official read while jewelry is served from the store. Always-on in dev, never a menu toggle.
+-- ------------------------------------------------------------------
+local _gear_read_trace = {}
+local function _trace_gear_read(career_name, key, idx, value, source)
+    local tk = tostring(career_name) .. "/" .. tostring(key)
+    local sig = tostring(idx) .. "|" .. tostring(value) .. "|" .. source
+    if _gear_read_trace[tk] ~= sig then
+        _gear_read_trace[tk] = sig
+        printf("[gut_dev:NATIVE_LOADOUTS] #387 gear-read career=%s slot=%s idx=%s value=%s source=%s",
+            tostring(career_name), tostring(key), tostring(idx), tostring(value), source)
+    end
+end
+
+-- ------------------------------------------------------------------
 -- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
 -- route through an LA-CLONED interface whose copied methods bypass class-level hooks, so
 -- gear equips never reached the PlayFabMirrorAdventure.set_character_data capture (friend
@@ -457,16 +478,20 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
     if GEAR_SLOT_SET[key] then
         if value == nil then
             if WEAPON_SLOT_SET[key] then
+                _trace_gear_read(career_name, key, idx, value, "official-fallback-nil-weapon")  -- issue #387
                 return func(self, career_name, key, optional_loadout_index)
             end
+            _trace_gear_read(career_name, key, idx, value, "store-nil-jewelry")  -- issue #387
             return nil
         end
         -- Fall back to the official value ONLY on an affirmative miss; on UNKNOWN
         -- (backend not inspectable) serve the store value unchanged - guessing
         -- "official" there would bleed official gear into modded loadouts at boot.
         if _resolve_item_raw(value) == RESOLVE_NO then
+            _trace_gear_read(career_name, key, idx, value, "official-fallback-resolve-no")  -- issue #387
             return func(self, career_name, key, optional_loadout_index)
         end
+        _trace_gear_read(career_name, key, idx, value, "store")  -- issue #387
     end
     return value
 end)
