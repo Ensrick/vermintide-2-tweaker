@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 10 | Never claim "fixed" / "feature-complete" until the USER confirms in-game. Compile success and structural review are not verification. |
 | 11 | Loc: raw setting keys in widget fields, never pre-localize before registration; escape a literal `%` as `%%`. No em dashes in menu-facing strings. Dev builds carry option-title status tags per `LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; stable (clean-versioned) never does. |
 | 12 | Mechanics claims: grep `C:\Users\danjo\source\repos\Vermintide-2-Source-Code` and cite `file:line`, else write `[unverified]`. Never invent internals. |
-| 13 | Deferred/blocked work goes to GitHub Issues (search first), not floating TODO comments. Label with the FIXED taxonomy — status (`verify-fix`/`diagnostics-armed` ONLY, added when work ships) + type (`bug`/`enhancement`/`feature`, with `crash` a flag on `bug`) + mod tag. Never invent a new status label. Full scheme: `PROJECT_STANDARDS.md` §11 "Labels". |
+| 13 | Deferred/blocked work goes to GitHub Issues (search first), not floating TODO comments. Label with the FIXED taxonomy — status (`verify-fix`/`diagnostics-armed` ONLY, added when work ships) + type (`bug`/`enhancement`/`feature`, with `crash` a flag on `bug`) + mod tag. Never invent a new status label. Issue format: title 8 words max; body = empirical data only (~150 words: Symptom/Evidence/Fix/Refs). Full scheme: `PROJECT_STANDARDS.md` §11 "Labels" + "Issue format". |
 | 14 | On any bug report: read `docs/BUG_TRIAGE_RUNBOOK.md` FIRST, then match `docs/BUG_CLASSES.md`, before diving into mod source. |
 
 > **READ FIRST**: `PROJECT_STANDARDS.md` (repo root) is the operational rulebook

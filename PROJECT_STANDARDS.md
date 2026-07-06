@@ -1285,6 +1285,26 @@ gh issue list --repo Ensrick/vermintide-2-tweaker --state all # incl. closed
 4. Run `gh issue list` at the start of a session if you want a picture of
    what's open before diving in.
 
+### Issue format (binding, user directive 2026-07-06)
+
+Issues had drifted verbose (e.g. #373: 551-word body, 30-word title). The user
+reads issues as a test queue across multiple agents; padding wastes his tokens.
+
+- **Title: 8 words max** after the `[mod]`/`mod:` prefix. Detail goes in the
+  body, never the title.
+- **Body: empirical data only, ~150 words target.** Sections, each 1-3 lines,
+  skip any that are empty:
+  - `**Symptom:**` what happens, where (mission/menu/weapon).
+  - `**Evidence:**` log lines, `file:line` citations, repro steps. Data, not prose.
+  - `**Fix:**` one line of direction. ONE leading hypothesis; name an alternative
+    only if the fix differs.
+  - `**Refs:**` bare `#N` list, no relationship essays.
+- **Cut entirely:** restating the title, "Grounding"/background narrative,
+  hedging (`[unverified]` on a hypothesis line is enough), meta-commentary,
+  multi-paragraph hypothesis walkthroughs.
+- **Comments follow the same rule:** version stamp + what shipped + how to test,
+  nothing else.
+
 ### Labels (canonical taxonomy — do NOT invent new status labels)
 
 Every issue carries three dimensions: **status + type + mod**. Nothing else is a
