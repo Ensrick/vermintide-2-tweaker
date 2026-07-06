@@ -1,5 +1,17 @@
 local mod = get_mod("gut_dev")
 
+-- cim presence, DEV-CLONE-AWARE. gut_dev is tested WITH cim_dev (stable cim disabled),
+-- so a stable-only get_mod("cim") check silently returns nil during dev testing and gut
+-- force-greys the in-mission Crafting tab even in Adventure -- this was the #80 root cause
+-- behind ~9 "no effect" iterations. Matches the rest of gut_dev (gui_tweaker_dev.lua:695 /
+-- :2113, data-file _cim_present()). Every use below is a RUNTIME (mission-time) call, so a
+-- plain get_mod is enough -- no load-order manifest scan needed (unlike the data-file helper
+-- that unfolds at registration). Stable-gut promotion strips the cim_dev term, same as the
+-- other dev-first cim checks already in gut_dev.
+local function _gut_cim_present()
+    return (get_mod("cim_dev") or get_mod("cim")) ~= nil
+end
+
 -- _gut_mission_inventory.lua — in-mission hero-view access.
 --
 -- MIGRATED from general_tweaker (gt) 2026-06-24: this feature moved out of gt and
@@ -158,7 +170,7 @@ mod:hook("HeroWindowLoadoutConsole", "_customize_item", function(func, self, ite
         tostring(item and (item.key or (d and d.key)) or "?"),
         tostring(d and d.slot_type or "?"),
         tostring(in_keep),
-        get_mod("cim") and "present" or "absent",
+        _gut_cim_present() and "present" or "absent",
         get_mod("cosmetics_tweaker") and "present" or "absent",
         allowed and "ALLOW" or "BLOCK")
     if allowed then
@@ -220,7 +232,9 @@ local function _gut_mount_fix_active()
     -- Take over the mount only when we must: mid-mission with cim ABSENT. In the keep
     -- vanilla works; with cim, cim's own hook does the level strip. STABLE cim id only.
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    return (not in_keep) and (get_mod("cim") == nil)
+    -- dev-aware (#80): a cim_dev user IS a cim user; the old stable-only check made gut
+    -- double-apply the mount fix alongside cim_dev's own. cim/cim_dev present -> gut passes through.
+    return (not in_keep) and (not _gut_cim_present())
 end
 
 mod:hook("HeroWindowItemCustomization", "_create_item_preview_widget_definition", function(func, self)
@@ -342,10 +356,17 @@ mod:hook_safe("HeroWindowPanelConsole", "on_enter", function(self)
     if tb and tb[3] then
         local mech = Managers.mechanism and Managers.mechanism.current_mechanism_name
             and Managers.mechanism:current_mechanism_name()
-        local bench_ok = mod:get("gut_cim_bench_in_mission")
-            and get_mod("cim") ~= nil
-            and mech ~= "deus"
+        local toggle   = mod:get("gut_cim_bench_in_mission") and true or false
+        local cim      = _gut_cim_present()   -- dev-aware: cim OR cim_dev (#80 fix)
+        local not_deus = mech ~= "deus"        -- CW/deus intentionally excluded (altar-upgraded loadout)
+        local bench_ok = toggle and cim and not_deus
         tb[3].content.button_hotspot.disable_button = not bench_ok
+        -- printf (NOT mod:debug) so the in-game test produces evidence with mod logging OFF.
+        -- #80: for ~9 iterations bench_ok was silently false because the cim check was
+        -- stable-only while the user runs cim_dev; this line surfaces every input.
+        printf("[gut:80] Crafting tab set: toggle=%s cim=%s mech=%s not_deus=%s -> bench_ok=%s (%s)",
+            tostring(toggle), tostring(cim), tostring(mech), tostring(not_deus),
+            tostring(bench_ok), bench_ok and "ENABLED" or "greyed")
     end
     -- (#172) COSMETICS tab (tb[4]): vanilla UI (change hat/skin/frame/pose mid-mission).
     -- ENABLED unconditionally mid-mission and does NOT depend on cosmetics_tweaker -- it is
@@ -361,7 +382,7 @@ mod:hook_safe("HeroWindowPanelConsole", "on_enter", function(self)
     end
     mod:debug("[gut:mission-tabs] in-mission tab strip enabled (tabs=%s, bench=%s, pose_atlas_ingame=%s)",
         tostring(tb and #tb or 0),
-        tostring(mod:get("gut_cim_bench_in_mission") and get_mod("cim") and true or false),
+        tostring(mod:get("gut_cim_bench_in_mission") and _gut_cim_present() and true or false),
         tostring(mod._gut_pose_atlas_ingame and true or false))
 end)
 

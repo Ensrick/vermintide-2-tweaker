@@ -5,6 +5,17 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.200-dev (2026-07-05) -- #80 FIX: in-mission Crafting tab was greyed in Adventure too (stable-only cim check missed cim_dev)
+
+**User report:** the CIM standard crafting bench tab is greyed in-mission even in normal Adventure (~9 prior attempts had no effect). Chaos Wastes exclusion is correct and intended (loadout is altar-upgraded there); the bug was that it was ALSO greyed in Adventure, where it should work.
+
+**Root cause:** `_gut_mission_inventory.lua` gated the tab on `get_mod("cim")` (STABLE id only), in FOUR places, while the rest of gut_dev correctly uses `get_mod("cim_dev") or get_mod("cim")` (gui_tweaker_dev.lua:695/:2113, data `_cim_present()`). The user (and any dev tester) runs **cim_dev** with stable cim disabled (`enabled="false"` in console 2026-07-05-23.47.05), so `get_mod("cim")` returned nil, `bench_ok` was always false, and gut's `HeroWindowPanelConsole.on_enter` hook **force-greyed** the tab -- even though vanilla `create_ui_elements` leaves the forge tab ENABLED in Adventure (`can_add('forge')` true; disable_button set only at hero_window_panel_console.lua:142/:147, no per-frame re-eval). The stable-only check failing silently is why the mechanism looked correct through ~9 iterations.
+
+- **Fix:** new dev-clone-aware `_gut_cim_present()` helper (`get_mod("cim_dev") or get_mod("cim")`); replaced all four stable-only cim checks in `_gut_mission_inventory.lua` (tab-enable gate, the `_gut_mount_fix_active` double-apply guard, and two diagnostics). Adventure gating now: `toggle ON` + cim/cim_dev present + `mech ~= "deus"`.
+- **Armed diagnostic:** the tab decision now prints via engine `printf` (visible with mod logging OFF): `[gut:80] Crafting tab set: toggle=.. cim=.. mech=.. not_deus=.. -> bench_ok=.. (ENABLED/greyed)`. The prior diagnostic was `mod:debug` (invisible to the user), which is part of why 9 attempts couldn't be verified from logs.
+- Chaos Wastes/deus stays greyed by design (unchanged). Athanor stays keep-only (unchanged).
+- **Verify (Adventure only):** with the bench toggle ON and cim/cim_dev loaded, open the in-mission inventory in an Adventure mission -> the Crafting tab is clickable (not greyed), and the log shows `[gut:80] ... -> bench_ok=true (ENABLED)`.
+
 ## 0.2.199-dev (2026-07-05) -- #140 CLOSED (user-confirmed in-game): "A Parting of the Waves" stray post-skip fade
 
 - #140 CLOSED - user confirmed the v0.2.178-dev fix works in-game. On "A Parting of the
