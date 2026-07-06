@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.208-dev"
+local MOD_VERSION = "0.2.209-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -299,6 +299,50 @@ _rt_register("cutscene_postskip_fade_swallow", function()
     local guard_needle = '_skipped_cutscene_system == self and name == "fx' .. '_fade"'
     if not txt:find(guard_needle, 1, true) then
         return "#140 regression: the post-skip fx_fade swallow guard is gone from flow_cb_cutscene_effect (stray black fade returns on 'A Parting of the Waves' / dlc_dwarf_whaling)"
+    end
+end)
+-- (issue 275) The Skip Cutscenes feature must NEVER latch script_data.skippable_cutscenes
+-- ON at rest -- the retail default is unset. gut only SCOPE-unlocks it around a
+-- skip_pressed call on a cutscene that carries a wired event_on_skip; a boss cinematic
+-- with event_on_skip=nil (Nurgloth on The Enchanter's Lair / dlc_castle) must play out or
+-- the fight desyncs and floors at ~66% health (softlock). This guards both the removed
+-- global latch and the wired-skip gate that replaced it.
+_rt_register("gut_cutscene_no_global_latch", function()
+    -- 1. The wired-skip gate must exist and REFUSE a nil-on_skip cutscene while ACCEPTING
+    --    a wired one -- this is the whole issue-275 policy in one function.
+    local gate = mod._gut_cutscene_has_wired_skip
+    if type(gate) ~= "function" then
+        return "issue 275 regression: mod._gut_cutscene_has_wired_skip gate missing (cutscene skip gating removed?)"
+    end
+    if gate({ event_on_skip = nil }) ~= false then
+        return "issue 275 regression: wired-skip gate ACCEPTS a nil event_on_skip cutscene (a locked boss cinematic would be skipped -> fight desync)"
+    end
+    if gate({ event_on_skip = "cs_01_skip" }) ~= true then
+        return "issue 275 regression: wired-skip gate REJECTS a wired event_on_skip cutscene (mission-intro skips would break)"
+    end
+    -- 2. At rest (no cutscene in flight, e.g. run from the keep) the engine skip gate must
+    --    be unset. gut never latches it; a truthy value means the load-time / toggle latch
+    --    was re-introduced (verify with the source guard below; a co-installed cutscene mod
+    --    could also set it).
+    if script_data and script_data.skippable_cutscenes then
+        return "issue 275 regression: script_data.skippable_cutscenes is truthy at rest (global latch re-introduced? retail leaves it unset)"
+    end
+    -- 3. Source guard on _gut_cutscenes.lua (located via the toggle fn's source): the
+    --    removed toggle-time latch must stay gone and the gate must still be defined.
+    local ok, info = pcall(debug.getinfo, mod.gut_skip_cutscenes_toggle or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local toggle_latch = "skippable_cutscenes = new" .. "_val"   -- split so this file can't self-match
+    if txt:find(toggle_latch, 1, true) then
+        return "issue 275 regression: the toggle re-latches script_data.skippable_cutscenes (should only scope-unlock around skip_pressed)"
+    end
+    if not txt:find("_gut_cutscene_has_wired" .. "_skip", 1, true) then
+        return "issue 275 regression: the _gut_cutscene_has_wired_skip gate is gone from _gut_cutscenes.lua"
     end
 end)
 -- ============================================================

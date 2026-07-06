@@ -11,10 +11,15 @@ local mod = get_mod("gut_dev")
 -- mod.gut_skip_cutscenes_toggle).
 --
 -- VT2's CutsceneSystem gates the ESC/Space skip behind
--- `script_data.skippable_cutscenes`. Flipping that flag is enough to let the
--- player dismiss any cutscene manually; in "auto" mode we additionally trigger
--- the cutscene's own skip event the moment activation flows fire, so the player
--- never sits through the cutscene at all.
+-- `script_data.skippable_cutscenes` (cutscene_system.lua:98). ISSUE 275 POLICY
+-- (0.2.209-dev): gut only unlocks/skips a cutscene that carries a WIRED
+-- `event_on_skip` flow event; that flag is SCOPE-unlocked just around the
+-- skip_pressed call, never latched on globally, so a boss/phase cinematic with
+-- event_on_skip=nil (Nurgloth on The Enchanter's Lair / dlc_castle) plays out
+-- untouched instead of desyncing the fight into a ~66%-health softlock. In "auto"
+-- mode we additionally trigger the deferred skip the moment a wired cutscene's
+-- activation flow fires, so the player never sits through a skippable cutscene. See
+-- the `_gut_cutscene_has_wired_skip` gate below.
 --
 -- Hooks (all guarded; PRE-FLIGHT verified disjoint from the rest of gut — a
 -- whole-mod grep before migration found NO other gut hook on CutsceneSystem or on
@@ -165,11 +170,11 @@ local _skip_next_fade = false
 -- (camera activation → letterbox apply → audio ducking) has time to land,
 -- then call `skip_pressed` which runs the full teardown.
 local _pending_auto_skip_system = nil
--- gt v0.2.102-dev: outside CW the deferred auto-skip force-unlocks (skips even
--- author-locked cutscenes); in CW it does NOT force-unlock (force=false), so
--- vanilla skip_pressed honors the author lock — ordinary CW cutscenes skip,
--- boss/phase cinematics don't.
-local _pending_auto_skip_force = false
+-- issue 275 (0.2.209-dev): the old `_pending_auto_skip_force` flag (the deus-vs-
+-- adventure force-unlock split) is gone. Under the wired-on_skip policy the deferred
+-- processor only ever fires for a cutscene that carries a wired event_on_skip, and it
+-- scope-unlocks script_data.skippable_cutscenes around that single skip_pressed call
+-- every time (then restores the at-rest value on every path, including a throw).
 -- gut v0.2.159-dev (#106, bastion re-arm variant, 2026-07-01): post-skip camera guard.
 -- HOST log 2026-07-01 21:09:26 (dlc_bastion_nurgle_path1): gut's auto-skip completed
 -- clean in 16 ms, but the LEVEL's flow timeline kept firing DELAYED camera-activate
@@ -203,25 +208,37 @@ local function _gut_cutscene_skip_active()
     return mod:get("gut_skip_cutscenes_enabled") and true or false
 end
 
--- gt v0.2.95-dev / v0.2.102-dev: in a Chaos Wastes (deus) run, do NOT FORCE-UNLOCK
--- the author lock (but DO still auto-skip author-SKIPPABLE cutscenes — the hook
--- below defers to vanilla skip_pressed in CW). CW boss intro / phase cinematics
--- (Nurgloth on Enchanter's Lair, etc.) live in the LEVEL flow, not the breed code,
--- and are author-LOCKED (skippable_cutscenes=false) precisely because skipping
--- them desyncs the fight: CutsceneSystem.skip_pressed fires the cutscene's
--- `event_on_skip` LEVEL flow event early (cutscene_system.lua:97-105), and on a
--- boss level that flow event is what drives the boss's phase/state -- so an
--- auto-skip (or our force-unlock of the author lock) jumps the boss to a later
--- phase and deadlocks it (reported 2026-06-18, Enchanter's Lair / Nurgloth).
--- Detect a CW run via the deus run controller (the same probe ct uses). In CW we
--- only suppress the FORCE-UNLOCK (the unskippable-override); both auto-skip and
--- manual skip still work for author-SKIPPABLE cutscenes via vanilla skip_pressed.
+-- issue 275 (0.2.209-dev): gut may only unlock/skip a cutscene that carries a WIRED
+-- `event_on_skip` flow event. The engine's skip has no per-cutscene lock -- it gates
+-- the whole thing behind `if self.active_camera and script_data.skippable_cutscenes`
+-- (cutscene_system.lua:98). `event_on_skip` is the LEVEL author's own skip/teardown
+-- flow event: on skip the engine fires it early (cutscene_system.lua:99-105). A
+-- mission-INTRO cutscene ships one (e.g. cs_01_skip) -> skipping is safe. Nurgloth's
+-- mid-mission boss cinematic on The Enchanter's Lair (dlc_castle) ships
+-- `event_on_skip=nil` -> there is NO legal skip path, and terminating it early leaves
+-- the level's cinematic flow sequence dangling; the boss fight state machine desyncs
+-- and his health floors at ~66% forever (softlock, reported 2026-06-18 / repro
+-- 2026-07-05). So: nil `event_on_skip` = LOCKED = play it out vanilla, no unlock, no
+-- skip. This gate replaces the old deus/adventure split: deus and adventure now behave
+-- identically (wired on_skip = skippable, nil = locked). `_gut_in_deus` survives only
+-- to keep the `in_deus` field in the [gut:cutscene] probe output for log continuity.
 local function _gut_in_deus()
     local mechanism = Managers and Managers.mechanism and Managers.mechanism.game_mechanism
         and Managers.mechanism:game_mechanism()
     return mechanism and mechanism.get_deus_run_controller
         and mechanism:get_deus_run_controller() ~= nil or false
 end
+
+-- issue 275 gate: a cutscene is legally skippable ONLY if it carries a wired
+-- `event_on_skip`. The engine stores it on the CutsceneSystem instance as
+-- `self.event_on_skip` in flow_cb_activate_cutscene_logic (cutscene_system.lua:183)
+-- and nils it on skip / deactivate (:105 / :196). nil = no wired skip path -> gut
+-- must leave the cutscene playing. Exposed as mod._gut_cutscene_has_wired_skip so the
+-- regression scaffold can assert it refuses a nil-on_skip cutscene.
+local function _gut_cutscene_has_wired_skip(cutscene_system)
+    return cutscene_system ~= nil and cutscene_system.event_on_skip ~= nil
+end
+mod._gut_cutscene_has_wired_skip = _gut_cutscene_has_wired_skip
 
 if CutsceneSystem then
     mod:hook(CutsceneSystem, "flow_cb_cutscene_effect", function(func, self, name, ...)
@@ -271,32 +288,29 @@ if CutsceneSystem then
                 _cs_snapshot(self))
         end
         if _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") then
-            -- gt v0.2.102-dev: auto-skip now ALSO runs in a Chaos Wastes (deus) run,
-            -- but WITHOUT force-unlocking the author lock there. In CW we defer to
-            -- vanilla skip_pressed and let the engine's own
-            -- `script_data.skippable_cutscenes` check decide — so author-SKIPPABLE
-            -- cutscenes (e.g. forest_ambush_belakor_path1 / cs_01_skip, a path
-            -- intro) auto-skip, while author-LOCKED boss/phase cinematics (Nurgloth
-            -- on Enchanter's Lair) are left alone (skipping them desyncs the fight).
-            -- This is exactly "auto-press the skip key" — same path as manual.
-            -- Outside CW we force-unlock + skip everything, as before.
-            local in_deus = _gut_in_deus()
-            if not in_deus then
-                script_data.skippable_cutscenes = true   -- force-unlock outside CW
-            end
-            -- gt v0.2.104-dev: swallow the cutscene's fade-IN when it will actually skip
-            -- (skippable now: forced true outside CW; the level's own value in CW). A
-            -- CW author-LOCKED cutscene reads false here -> leave its fade
-            -- alone. Pairs with the same set in the deferred processor (fade-OUT) so
-            -- an auto-skipped cutscene shows no blackscreen.
-            if script_data.skippable_cutscenes then
+            -- issue 275: only queue an auto-skip for a cutscene that carries a WIRED
+            -- event_on_skip (the param the flow just passed; vanilla stored it on
+            -- self.event_on_skip at cutscene_system.lua:183). A locked boss/phase
+            -- cinematic (event_on_skip=nil, e.g. Nurgloth on dlc_castle) is left to
+            -- play out vanilla -- skipping it fires the level flow's event_on_skip
+            -- early and desyncs the fight into a ~66%-health softlock. deus and
+            -- adventure are treated identically now; the wired-skip gate is the sole
+            -- arbiter (the old in_deus force-unlock split is gone with the global
+            -- latch it relied on).
+            if event_on_skip ~= nil then
+                -- Swallow the cutscene's fade-IN since it will actually skip; pairs
+                -- with the deferred processor's fade-OUT so no blackscreen shows.
                 _skip_next_fade = true
+                -- Don't fire event_on_skip directly here -- defer to skip_pressed on
+                -- the next tick so vanilla's full teardown runs (letterbox off +
+                -- cameras deactivated + logic deactivated + event_on_skip). The
+                -- deferred processor scope-unlocks script_data.skippable_cutscenes
+                -- only around that skip_pressed call.
+                _pending_auto_skip_system = self
+            else
+                _printf("[gut:cutscene] LOCKED (no wired on_skip flow event - not skippable, issue 275) | level=%s in_deus=%s",
+                    _level_key(), tostring(_gut_in_deus()))
             end
-            -- Don't fire event_on_skip directly here — defer to skip_pressed
-            -- on the next tick so vanilla's full teardown runs (letterbox
-            -- off + cameras deactivated + logic deactivated + event_on_skip).
-            _pending_auto_skip_system = self
-            _pending_auto_skip_force  = not in_deus
         end
         return result
     end)
@@ -329,11 +343,14 @@ if CutsceneSystem then
                 _printf("[gut:cutscene] post-skip camera guard ARMED | level=%s", _level_key())
             end
         end
-        -- gt v0.2.95-dev: in a CW run, fall through to vanilla skip_pressed (which
-        -- only skips author-SKIPPABLE cutscenes) -- do NOT force-unlock the author
-        -- lock, so boss intro/phase cinematics can't be skipped (auto OR manual)
-        -- into a desync. Outside CW, force-unlock as before.
-        if _gut_cutscene_skip_active() and not in_deus then
+        -- issue 275: force-unlock (scope-only) ONLY when the cutscene carries a wired
+        -- event_on_skip. A boss/phase cinematic with event_on_skip=nil (Nurgloth /
+        -- dlc_castle) has no legal skip path; unlocking it fires the level flow's
+        -- event_on_skip early and desyncs the fight -> softlock. For a locked cutscene
+        -- we fall through to vanilla skip_pressed with script_data.skippable_cutscenes
+        -- unset (retail default), so vanilla's own gate refuses the skip and the
+        -- cutscene plays out. deus and adventure are treated identically now.
+        if _gut_cutscene_skip_active() and _gut_cutscene_has_wired_skip(self) then
             local saved = script_data.skippable_cutscenes
             script_data.skippable_cutscenes = true
             _skip_next_fade = true
@@ -344,12 +361,18 @@ if CutsceneSystem then
             -- skip is now unnecessary — cancel it.
             _pending_auto_skip_system = nil
             _arm_post_skip_guard()
-            _printf("[gut:cutscene] SKIP-PRESSED after (force-unlock) | %s", _cs_snapshot(self))
+            _printf("[gut:cutscene] SKIP-PRESSED after (unlock, wired on_skip) | %s", _cs_snapshot(self))
             return result
+        end
+        -- Locked cutscene (no wired on_skip): a genuine skip press on an active locked
+        -- cutscene logs the decision, then falls through to vanilla (which refuses).
+        if _gut_cutscene_skip_active() and had_camera and not _gut_cutscene_has_wired_skip(self) then
+            _printf("[gut:cutscene] LOCKED (no wired on_skip flow event - not skippable, issue 275) | level=%s in_deus=%s",
+                _level_key(), tostring(in_deus))
         end
         local result = func(self, ...)
         _arm_post_skip_guard()
-        _printf("[gut:cutscene] SKIP-PRESSED after (vanilla/CW) | %s", _cs_snapshot(self))
+        _printf("[gut:cutscene] SKIP-PRESSED after (vanilla) | %s", _cs_snapshot(self))
         return result
     end)
 
@@ -446,38 +469,39 @@ mod.update = function(dt)
     end
     if _pending_auto_skip_system then
         local sys = _pending_auto_skip_system
-        local force = _pending_auto_skip_force
         _pending_auto_skip_system = nil
-        _pending_auto_skip_force  = false
-        -- Guard against pcall failure tearing down our state — we already
-        -- cleared the pending flags above. Vanilla skip_pressed checks
-        -- `self.active_camera and script_data.skippable_cutscenes` itself,
-        -- but we also guard here so we don't blow up if the cutscene was
-        -- already torn down before our tick fired (race with another mod
-        -- or the cutscene ending naturally).
+        -- Capture the at-rest skip gate value OUTSIDE the pcall so we can restore it on
+        -- EVERY path below (issue 275): a throw inside skip_pressed must never leak a
+        -- latched script_data.skippable_cutscenes = true. Vanilla skip_pressed checks
+        -- `self.active_camera and script_data.skippable_cutscenes` itself, but we also
+        -- guard here so we don't blow up if the cutscene was already torn down before
+        -- our tick fired (race with another mod or the cutscene ending naturally).
+        local saved_skippable = script_data.skippable_cutscenes
         local ok, err = pcall(function()
-            if sys.active_camera then
-                local saved = script_data.skippable_cutscenes
-                -- Outside CW: force-unlock so even author-locked cutscenes skip.
-                -- In CW (force=false): do NOT force — let vanilla skip_pressed honor
-                -- the author lock, so boss cinematics aren't auto-skipped into a
-                -- desync while ordinary CW cutscenes still skip.
-                if force then script_data.skippable_cutscenes = true end
-                -- gt v0.2.104-dev: swallow the post-skip fade-OUT when the cutscene
-                -- will actually skip (skippable after the optional force-unlock).
-                -- An author-LOCKED cutscene skip_pressed leaves alone (CW boss) keeps
-                -- its own fade.
-                if script_data.skippable_cutscenes then
-                    _skip_next_fade = true
-                end
+            -- issue 275: re-verify the wired event_on_skip at fire time (defense in
+            -- depth; it is niled only on skip/deactivate, so a genuinely skippable
+            -- cutscene still carries it here). No wired path -> leave it playing.
+            if sys.active_camera and _gut_cutscene_has_wired_skip(sys) then
+                -- Scope-unlock ONLY around this skip_pressed. At rest
+                -- script_data.skippable_cutscenes stays unset (retail default, issue
+                -- 275); we set it true just so vanilla's gate
+                -- `if self.active_camera and script_data.skippable_cutscenes` fires.
+                -- Also swallow the post-skip fade-OUT.
+                script_data.skippable_cutscenes = true
+                _skip_next_fade = true
                 -- DIAGNOSTIC (#106): the deferred tick + before/after teardown state.
+                -- force_unlock is always true here now: we only reach this for a
+                -- wired-on_skip cutscene (issue 275).
                 _printf("[gut:cutscene] AUTO-SKIP deferred-tick firing | level=%s force_unlock=%s skippable=%s | before: %s",
-                    _level_key(), tostring(force), tostring(script_data.skippable_cutscenes), _cs_snapshot(sys))
+                    _level_key(), tostring(true), tostring(script_data.skippable_cutscenes), _cs_snapshot(sys))
                 sys:skip_pressed()
                 _printf("[gut:cutscene] AUTO-SKIP deferred-tick done | after: %s", _cs_snapshot(sys))
-                script_data.skippable_cutscenes = saved
+            elseif sys.active_camera then
+                _printf("[gut:cutscene] LOCKED (no wired on_skip flow event - not skippable, issue 275) | level=%s", _level_key())
             end
         end)
+        -- Restore the at-rest skip gate unconditionally (see saved_skippable note above).
+        script_data.skippable_cutscenes = saved_skippable
         if not ok then
             _printf("[gut:cutscene] deferred skip failed: %s (cutscene state likely already torn down — harmless)", tostring(err))
         end
@@ -499,7 +523,11 @@ end
 mod.gut_skip_cutscenes_toggle = function()
     local new_val = not mod:get("gut_skip_cutscenes_enabled")
     mod:set("gut_skip_cutscenes_enabled", new_val)
-    script_data.skippable_cutscenes = new_val or nil
+    -- issue 275: do NOT latch script_data.skippable_cutscenes ON. At rest the engine
+    -- skip gate stays unset (retail default); the hooks scope-unlock it only around a
+    -- skip_pressed call on a cutscene that carries a wired event_on_skip. When
+    -- disabling, clear any stale set defensively.
+    if not new_val then script_data.skippable_cutscenes = nil end
     mod:echo("Skip cutscenes: " .. (new_val and "ON" or "OFF"))
 end
 
@@ -507,10 +535,11 @@ mod:command("skipcutscenes", "Toggle skipping cutscenes (auto-skip if 'Auto-skip
     mod.gut_skip_cutscenes_toggle()
 end)
 
--- Apply once at load if the user kept the setting on across sessions.
-if mod:get("gut_skip_cutscenes_enabled") then
-    script_data.skippable_cutscenes = true
-end
+-- issue 275: NO load-time latch. Previously gut set script_data.skippable_cutscenes
+-- = true at load whenever the toggle was on, which force-unlocked EVERY cutscene
+-- engine-wide (including author-locked boss cinematics like Nurgloth on dlc_castle).
+-- At rest the flag now stays unset, exactly like retail; the hooks scope-unlock it
+-- only around a skip on a cutscene that carries a wired event_on_skip.
 
 mod:info("[gut] Skip Cutscenes installed (migrated from gt, issue #106; [gut:cutscene] printf diagnostic active; toggle: %s, auto: %s)",
     tostring(mod:get("gut_skip_cutscenes_enabled")), tostring(mod:get("gut_skip_cutscenes_auto")))

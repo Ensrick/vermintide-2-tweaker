@@ -69,13 +69,13 @@ return {
         en = "[working] Cutscenes & Monologues",
     },
     gut_skip_cutscenes_enabled = {
-        en = "[Issue 274, 257 & 126] [verify-fix] [diag] Skip Cutscenes",
+        en = "[verify-fix] [Issue 275] Skip Cutscenes",
     },
     gut_skip_cutscenes_enabled_tooltip = {
-        en = "Lets you skip cutscenes with ESC or Space (or the /skipcutscenes command), even ones the game normally will not let you skip. In Chaos Wastes, boss and phase cinematics are left alone because skipping them can desync the fight.",
+        en = "Lets you skip cutscenes with ESC or Space (or the /skipcutscenes command), even ones the game normally will not let you skip. Boss and phase cinematics that the level gives no built-in skip path (for example Nurgloth on The Enchanter's Lair) are left to play out, because skipping them can desync the fight.",
     },
     gut_skip_cutscenes_auto = {
-        en = "[Issue 275] [diag] Auto-skip Cutscenes",
+        en = "[verify-fix] [Issue 275] Auto-skip Cutscenes",
     },
     gut_skip_cutscenes_auto_tooltip = {
         en = "When on, cutscenes are skipped automatically the moment they start, so you never see them. Leave off to skip them manually with ESC or Space.",
