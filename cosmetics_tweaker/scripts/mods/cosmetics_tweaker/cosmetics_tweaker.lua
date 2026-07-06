@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.70-dev"
+local MOD_VERSION = "0.9.71-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -895,7 +895,13 @@ mod.on_game_state_changed = function(status, state_name)
     -- resolvable -- flag only here; _is_local_server/_host_peer_id live
     -- lexically below this function).
     if status == "enter" and state_name == "StateIngame" then
-        mod._la_state_pull_pending = true
+        -- v0.9.71-dev: fresh retry state per arming. The 17:28:26 pull in the
+        -- 2026-07-06 session fired once into the host's load window and was
+        -- lost with no ack and no re-send (host log shows no REQ/reply) - the
+        -- exact I9 fire-and-forget failure the pull was meant to fix. Now the
+        -- drain re-sends every 5s until the host's cos_la_state_ack lands
+        -- (max 8 attempts).
+        mod._la_state_pull_pending = { attempts = 0, next_at = 0 }
     end
 
     -- v0.9.65-dev (#233): arm a bounded, per-frame CLIENT-side re-apply of every
@@ -2829,6 +2835,10 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                                 entry.vanilla_key, entry.hand_field)
                         end
                     end
+                    -- v0.9.71-dev: committed revert also clears the on-disk pick.
+                    if entry.backend_id and LA_PERSIST and LA_PERSIST.clear_offhand then
+                        LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)
+                    end
                     n = n + 1
                 else
                 -- v0.9.61-dev (#203): [cos-la-sync] the authoritative offhand key
@@ -2844,6 +2854,13 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                 if entry.template_key and entry.template_key ~= entry.weapon_key then
                     _send_la_apply(entry.player_unit, entry.template_key, "offhand",
                         entry.armoury_key, entry.vanilla_key, entry.hand_field)
+                end
+                -- v0.9.71-dev: committed Apply persists the pick across game
+                -- restarts (user report 2026-07-06: shield illusions died with
+                -- the session - _offhand_selection had no on-disk mirror).
+                if entry.backend_id and LA_PERSIST and LA_PERSIST.save_offhand then
+                    LA_PERSIST.save_offhand(entry.backend_id, entry.hand_field,
+                        entry.armoury_key, entry.vanilla_key)
                 end
                 n = n + 1
                 end
@@ -3046,6 +3063,63 @@ local function _merge_la_offhand_options()
     _la_offhand_merged = true
     mod:info("[offhand] merged LA shield options (focus gate: %d keys)",
         (function() local n = 0; for _ in pairs(_LA_FOCUS_KEYS) do n = n + 1 end; return n end)())
+end
+
+-- v0.9.71-dev: restore persisted offhand (shield) picks into
+-- `_offhand_selection` once the LA bridge pools exist. Reconstructs the SAME
+-- option record shape `_merge_la_offhand_options` builds (la_armoury_key /
+-- vanilla_skin / intended_unit) by looking the armoury_key up in
+-- LA_BRIDGE.la_offhand_options_by_weapon_type, so the local render path
+-- (BackendUtils.get_item_units mesh override + LA paint) treats a restored
+-- pick exactly like a fresh one. One-shot; arms the self-rebroadcast so
+-- peers learn the restored picks through the normal emit flow.
+mod._la_restore_offhand_selections = function()
+    if mod._la_offhand_restore_done then return end
+    if not (LA_BRIDGE and LA_BRIDGE.registered) then return end
+    if type(LA_BRIDGE.la_offhand_options_by_weapon_type) ~= "table" then return end
+    if not (LA_PERSIST and LA_PERSIST.get_saved_offhands) then return end
+    mod._la_offhand_restore_done = true
+    local saved = LA_PERSIST.get_saved_offhands()
+    if not next(saved) then return end
+    -- armoury_key -> bridge option record (first hit wins; records for the
+    -- same key are identical across weapon types/hands).
+    local by_key = {}
+    for _, hand_pools in pairs(LA_BRIDGE.la_offhand_options_by_weapon_type) do
+        for _, pool in pairs(hand_pools) do
+            for _, la_opt in ipairs(pool) do
+                if la_opt.armoury_key and not by_key[la_opt.armoury_key] then
+                    by_key[la_opt.armoury_key] = la_opt
+                end
+            end
+        end
+    end
+    local n, miss = 0, 0
+    for backend_id, hands in pairs(saved) do
+        for hand_field, rec in pairs(hands) do
+            local la_opt = rec and rec.armoury_key and by_key[rec.armoury_key]
+            if la_opt then
+                _offhand_selection[backend_id] = _offhand_selection[backend_id] or {}
+                _offhand_selection[backend_id][hand_field] = {
+                    name            = la_opt.name .. " (LA)",
+                    la_armoury_key  = la_opt.armoury_key,
+                    vanilla_skin    = la_opt.vanilla_skin,
+                    intended_unit   = la_opt.intended_unit,
+                    rarity          = "promo",
+                }
+                if la_opt.intended_unit then _preload_offhand_package(la_opt.intended_unit) end
+                n = n + 1
+            else
+                miss = miss + 1
+            end
+        end
+    end
+    if n > 0 then
+        -- Peers learn restored picks via the normal state-change re-emit walk
+        -- (it reads _offhand_selection for equipped backend_ids).
+        mod._la_self_rebroadcast_pending = true
+    end
+    if printf then printf("[la-state] OFFHAND-RESTORE %d pick(s) restored from disk, %d unresolvable (LA variant missing)",
+        n, miss) end
 end
 
 -- v0.9.9.1 REVERT: removed v0.9.9.0 UIUtils.get_ui_information_from_item
@@ -3783,6 +3857,7 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                 hand_field   = hand_field,
                 armoury_key  = opt.la_armoury_key,
                 vanilla_key  = opt.vanilla_skin,
+                backend_id   = self._item_backend_id,  -- v0.9.71: persistence key
             }
             -- v0.9.43-dev WRITE trace: deferred peer-sync emit queued (drains on
             -- SCREEN exit, not now — see on_exit hook). This is the commit that
@@ -3846,6 +3921,7 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                         template_key = template_key_v,
                         hand_field   = hand_field,
                         vanilla_key  = opt.vanilla_skin or opt.name,
+                        backend_id   = self._item_backend_id,  -- v0.9.71: persistence key
                     }
                     mod:info("[cos-la-sync] EXIT-QUEUE REVERT queued bid=%s hand=%s vanilla_pick=%s (synced LA entry pending revert)",
                         tostring(self._item_backend_id), tostring(hand_field), tostring(opt.name))
@@ -7337,6 +7413,24 @@ mod:network_register("cos_la_state_req", function(sender_peer_id, schema_version
     end
     if printf then printf("[la-state] STATE-PULL reply: %d entr(ies) -> requester=%s",
         n, tostring(sender_peer_id)) end
+    -- v0.9.71-dev: explicit ack so the requester can distinguish "empty
+    -- store" from "request lost in the load window" and stop retrying.
+    mod:network_send("cos_la_state_ack", sender_peer_id, COS_RPC_SCHEMA, { count = n })
+end)
+
+-- v0.9.71-dev: requester side of the pull ack (see the retry drain in
+-- mod.update). Old-version hosts never send this; the requester then retries
+-- up to its cap and gives up loudly - still strictly better than one silent
+-- fire-and-forget send.
+mod:network_register("cos_la_state_ack", function(sender_peer_id, schema_version, payload)
+    if schema_version ~= COS_RPC_SCHEMA then return end
+    local attempts = type(mod._la_state_pull_pending) == "table"
+        and mod._la_state_pull_pending.attempts or "?"
+    mod._la_state_pull_pending = nil
+    if printf then printf("[la-state] STATE-PULL acked by host=%s count=%s (attempt %s)",
+        tostring(sender_peer_id),
+        tostring(type(payload) == "table" and payload.count or "?"),
+        tostring(attempts)) end
 end)
 
 -- v0.9.0-dev: peer-disconnect cleanup. Without this _la_equips_by_peer grows
@@ -7344,28 +7438,72 @@ end)
 -- for peers who left long ago (visible if they share peer_id with a future
 -- joiner, which Steam sometimes recycles). Also clears _last_emit_at so the
 -- dedup window doesn't suppress legitimate fresh emits after re-join.
+-- v0.9.71-dev ROOT-CAUSE FIX (2026-07-06 17:25/17:26 session logs, both
+-- machines): `PlayerManager.remove_player` fires for EVERY peer - including
+-- the machine's OWN peer - on EVERY level transition, not just on
+-- disconnects (host log 17:28:20.460/.471: remove_player for self AND the
+-- client during the keep->mission load, each immediately followed by this
+-- hook's purge line). The v0.9.0 immediate purge therefore WIPED
+-- `_la_equips_by_peer` on every machine at every transition, which is why
+-- TRANSITION-WALK always armed with `offhand_entries=0`, HUSK-GATE logged
+-- `no-store-for-wearer` post-transition, and no illusion survived into a
+-- mission (the store the audit assumed transition-proof never was).
+-- Fix: DEFER the purge 30s. A transition re-adds the peer within seconds
+-- (add_remote_player cancels the deadline); a genuine disconnect never
+-- re-adds, so the purge still runs - the Steam peer_id-recycling rationale
+-- of v0.9.0 is preserved, just 30s later. The local peer is never purged.
 if rawget(_G, "PlayerManager") then
     mod:hook_safe(PlayerManager, "remove_player", function(self, peer_id, local_player_id)
         if not peer_id then return end
-        if _la_equips_by_peer and _la_equips_by_peer[peer_id] then
-            _dbg("[cos_la_apply] peer %s left — purging _la_equips_by_peer entry", tostring(peer_id))
-            _la_equips_by_peer[peer_id] = nil
-        end
-        if _last_emit_at then
-            for k, _ in pairs(_last_emit_at) do
-                if type(k) == "string" and k:sub(1, #tostring(peer_id) + 1) == (tostring(peer_id) .. "|") then
-                    _last_emit_at[k] = nil
-                end
-            end
-        end
-        -- v0.9.0-dev: also drop per-peer glow cache. Stale entries would
-        -- bleed into any future peer who somehow reuses the same peer_id
-        -- (Steam recycles occasionally), and the cache grows otherwise.
-        if mod._glow_by_peer and mod._glow_by_peer[peer_id] then
-            _dbg("[cos_glow_apply] peer %s left — purging _glow_by_peer entry", tostring(peer_id))
-            mod._glow_by_peer[peer_id] = nil
+        local has_state = (_la_equips_by_peer and _la_equips_by_peer[peer_id]) ~= nil
+            or (mod._glow_by_peer and mod._glow_by_peer[peer_id]) ~= nil
+        if not has_state then return end
+        mod._la_peer_purge_at = mod._la_peer_purge_at or {}
+        if not mod._la_peer_purge_at[peer_id] then
+            mod._la_peer_purge_at[peer_id] = os.clock() + 30
+            if printf then printf("[la-state] PEER-PURGE scheduled peer=%s in 30s (remove_player; canceled if the peer re-adds - transitions do)",
+                tostring(peer_id)) end
         end
     end)
+    -- Transition/hot-join re-add cancels the pending purge. Remote peers
+    -- re-enter via add_remote_player on every level load.
+    mod:hook_safe(PlayerManager, "add_remote_player", function(self, peer_id, ...)
+        if peer_id and mod._la_peer_purge_at and mod._la_peer_purge_at[peer_id] then
+            mod._la_peer_purge_at[peer_id] = nil
+            if printf then printf("[la-state] PEER-PURGE canceled peer=%s (re-added - transition, not a disconnect)",
+                tostring(peer_id)) end
+        end
+    end)
+end
+
+-- Executes due deferred purges. Called from mod.update.
+mod._la_tick_peer_purges = function()
+    local q = mod._la_peer_purge_at
+    if not q or not next(q) then return end
+    local now = os.clock()
+    local local_peer = _local_player_peer_id()
+    for peer_id, deadline in pairs(q) do
+        if peer_id == local_peer then
+            q[peer_id] = nil  -- never purge our own state
+        elseif now >= deadline then
+            q[peer_id] = nil
+            if _la_equips_by_peer and _la_equips_by_peer[peer_id] then
+                _la_equips_by_peer[peer_id] = nil
+            end
+            if _last_emit_at then
+                for k, _ in pairs(_last_emit_at) do
+                    if type(k) == "string" and k:sub(1, #tostring(peer_id) + 1) == (tostring(peer_id) .. "|") then
+                        _last_emit_at[k] = nil
+                    end
+                end
+            end
+            if mod._glow_by_peer and mod._glow_by_peer[peer_id] then
+                mod._glow_by_peer[peer_id] = nil
+            end
+            if printf then printf("[la-state] PEER-PURGE executed peer=%s (no re-add within 30s - genuine leave)",
+                tostring(peer_id)) end
+        end
+    end
 end
 
 -- ALL PEERS: receives the authoritative apply broadcast. Only accept it from
@@ -8636,6 +8774,8 @@ mod.update = function(dt)
             -- under a different design (likely per-backend_id selection
             -- + backend-mirror persistence).
             _merge_la_offhand_options()
+            -- v0.9.71-dev: pools are built - restore persisted shield picks.
+            if mod._la_restore_offhand_selections then mod._la_restore_offhand_selections() end
             _la_bridge_init_done = true
         end
     end
@@ -8669,14 +8809,35 @@ mod.update = function(dt)
         if _is_local_server() then
             mod._la_state_pull_pending = nil
         else
-            local pull_host = _host_peer_id()
-            if pull_host then
-                mod._la_state_pull_pending = nil
-                if printf then printf("[la-state] STATE-PULL req -> host=%s", tostring(pull_host)) end
-                mod:network_send("cos_la_state_req", pull_host, COS_RPC_SCHEMA, {})
+            -- v0.9.71-dev: retry-until-acked. One send proved lossy in the
+            -- 2026-07-06 session (packets to/from a still-loading peer vanish
+            -- silently); the pull now repeats every 5s until the host's
+            -- cos_la_state_ack arrives, capped at 8 attempts.
+            local st = mod._la_state_pull_pending
+            if type(st) ~= "table" then st = { attempts = 0, next_at = 0 }; mod._la_state_pull_pending = st end
+            local now_p = os.clock()
+            if now_p >= (st.next_at or 0) then
+                local pull_host = _host_peer_id()
+                if pull_host then
+                    if st.attempts >= 8 then
+                        if printf then printf("[la-state] STATE-PULL GAVE UP after %d unacked attempts (host=%s)",
+                            st.attempts, tostring(pull_host)) end
+                        mod._la_state_pull_pending = nil
+                    else
+                        st.attempts = st.attempts + 1
+                        st.next_at = now_p + 5
+                        if printf then printf("[la-state] STATE-PULL req -> host=%s (attempt %d/8)",
+                            tostring(pull_host), st.attempts) end
+                        mod:network_send("cos_la_state_req", pull_host, COS_RPC_SCHEMA, {})
+                    end
+                end
             end
         end
     end
+
+    -- v0.9.71-dev: execute deferred peer purges (see the remove_player hook -
+    -- transitions schedule-and-cancel; only genuine leaves reach execution).
+    if mod._la_tick_peer_purges then mod._la_tick_peer_purges() end
 
     -- v0.9.0-dev: TPE per-frame tick was previously in a now-deleted earlier
     -- mod.update definition that this one overwrote. Restoring here.

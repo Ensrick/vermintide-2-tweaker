@@ -1086,3 +1086,13 @@ Layer 1 alone is not a fix (residency varies per mission - the pose atlas usuall
 
 ### Reference fix
 gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in the one consolidated `UIRenderer.create` hook) + `_gut_mission_map.lua` video-widget skip guards, commit 1b2cea8 (v0.2.206-dev). Related but distinct: class 22 (shading-env VARIATION AV - env resident, variation name absent); `memory: reference_vt2_create_screen_gui_missing_material_crash` (create_screen_gui C-fatal at Gui CREATE time, pre-filter the material list).
+
+## 24. PlayerManager.remove_player fires on LEVEL TRANSITIONS, not just disconnects (peer-keyed caches wiped every map change)
+
+**Symptom.** Any per-peer runtime store purged from a `remove_player` hook silently empties on every keep<->mission transition, on every machine, INCLUDING the machine's own peer entry. Downstream symptoms look like sync/render bugs: post-transition re-apply walks find nothing (`offhand_entries=0`), receivers report `no-store-for-wearer`, cosmetics/state "reset" when leaving the keep even though no peer left.
+
+**Diagnosis pattern.** Vanilla logs `PlayerManager:remove_player peer_id=<p> <lpid>` per player per transition (own peer + remote peers + bots). If your purge log line follows those at map-change time, this class - not a disconnect, not a wire loss. Hard evidence: cosmetics 2026-07-06 17:28:20.460/.471 (host removed ITSELF then the client during a keep->mission load; both store entries wiped; client mirrored at 17:28:17.531).
+
+**Fix template.** Never purge synchronously in `remove_player`. Defer with a deadline (cosmetics uses 30s) and cancel in a `PlayerManager.add_remote_player` hook_safe - transitions re-add peers within seconds, genuine disconnects never do. Skip the local peer entirely. See cosmetics_tweaker 0.9.71-dev `[la-state] PEER-PURGE scheduled/canceled/executed`.
+
+**Related.** A second transition-window class rides along: RPCs sent to/from a peer that is mid-load are dropped silently with no error (same session: three client->host packets between 17:28:26-17:28:55 never arrived; keep-time round-trip was 98ms). Any "send once on state change" design must retry-until-acked or pull-on-ready-with-ack (cosmetics `cos_la_state_req`/`cos_la_state_ack`).

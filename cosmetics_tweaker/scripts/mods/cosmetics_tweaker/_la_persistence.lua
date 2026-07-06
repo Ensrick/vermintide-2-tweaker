@@ -44,7 +44,7 @@ local SCHEMA = 1
 local _state = nil
 
 local function _empty_state()
-    return { schema = SCHEMA, careers = {}, illusions = {} }
+    return { schema = SCHEMA, careers = {}, illusions = {}, offhands = {} }
 end
 
 local function _load()
@@ -57,6 +57,10 @@ local function _load()
         schema = data.schema or SCHEMA,
         careers = (type(data.careers) == "table") and data.careers or {},
         illusions = (type(data.illusions) == "table") and data.illusions or {},
+        -- v0.9.71-dev: offhand (shield) picks per weapon instance. Additive
+        -- section, same schema number - older builds ignore unknown keys.
+        -- Shape: offhands[backend_id][hand_field] = { armoury_key, vanilla_key }
+        offhands = (type(data.offhands) == "table") and data.offhands or {},
     }
 end
 
@@ -155,6 +159,45 @@ end
 
 M.is_known_backend_id = function(backend_id)
     return M.get_saved_illusion(backend_id) ~= nil
+end
+
+-- v0.9.71-dev: OFFHAND (shield) pick persistence. `_offhand_selection` was
+-- the ONLY LA store with no on-disk mirror, so every shield illusion died
+-- with the session (user report 2026-07-06). Saved on a committed Apply,
+-- cleared on a committed vanilla revert, restored into `_offhand_selection`
+-- once the LA bridge has built its option pools (the restore entry point
+-- lives in cosmetics_tweaker.lua, `mod._la_restore_offhand_selections`).
+
+M.save_offhand = function(backend_id, hand_field, armoury_key, vanilla_key)
+    if not (backend_id and hand_field and armoury_key) then return end
+    if not _state then _load() end
+    _state.offhands = _state.offhands or {}
+    _state.offhands[backend_id] = _state.offhands[backend_id] or {}
+    local cur = _state.offhands[backend_id][hand_field]
+    if cur and cur.armoury_key == armoury_key then return end
+    _state.offhands[backend_id][hand_field] = {
+        armoury_key = armoury_key, vanilla_key = vanilla_key,
+    }
+    _persist()
+    mod:info("[la-persist] save offhand %s/%s = %s", tostring(backend_id),
+        tostring(hand_field), tostring(armoury_key))
+end
+
+M.clear_offhand = function(backend_id, hand_field)
+    if not (backend_id and hand_field) then return end
+    if not _state then _load() end
+    local o = _state.offhands and _state.offhands[backend_id]
+    if not o or o[hand_field] == nil then return end
+    mod:info("[la-persist] clear offhand %s/%s (was %s)", tostring(backend_id),
+        tostring(hand_field), tostring(o[hand_field].armoury_key))
+    o[hand_field] = nil
+    if next(o) == nil then _state.offhands[backend_id] = nil end
+    _persist()
+end
+
+M.get_saved_offhands = function()
+    if not _state then _load() end
+    return _state.offhands or {}
 end
 
 -- ============================================================

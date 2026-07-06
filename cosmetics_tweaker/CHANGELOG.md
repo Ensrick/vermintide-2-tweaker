@@ -1,5 +1,32 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.71-dev — 2026-07-06 — ROOT CAUSE: store wiped on every level transition (remove_player fires on transitions) + pull retry-with-ack + shield picks persist across restarts
+
+> Diagnosis from the 2026-07-06 17:25/17:26 two-machine session (user CLIENT `...ef3befb`, Rain HOST `...beb4a3`), the first with 0.9.70's `[la-state]` instrumentation. Two defects explain the whole in-mission matrix ("only each wearer sees their own shield after leaving keep; client swaps invisible to host; host swaps visible to client").
+
+### Defect 1 (FIX): `PlayerManager.remove_player` fires on LEVEL TRANSITIONS, wiping the store everywhere
+Hard evidence: host log 17:28:20.460/.471 - `PlayerManager:remove_player` for the host's OWN peer and the client during the keep->mission load, each followed by this mod's v0.9.0 disconnect purge (`purging _la_equips_by_peer entry`). Client side identically at 17:28:17.531. Result: every machine entered the mission with an EMPTY store - which is why `TRANSITION-WALK armed ... offhand_entries=0` in every session to date, `HUSK-GATE -> no-store-for-wearer` after every transition, and no cosmetic survived into a mission. The audit's "store survives transitions" assumption (section 1.1) was false all along; every transition-window fix built on it (#233 walk, 0.9.70 reconcile) was reading a table that had just been emptied.
+**Fix:** purge is now DEFERRED 30s and canceled when the peer re-adds (`add_remote_player` fires within seconds on every transition). Genuine disconnects still purge (30s later), preserving the Steam peer_id-recycling rationale. Own peer never purged. Log: `PEER-PURGE scheduled/canceled/executed`.
+
+### Defect 2 (FIX): packets sent during a peer's load window vanish silently; the 0.9.70 pull fired exactly once
+Hard evidence: client sent state-pull 17:28:26.264, re-emit 17:28:28.503, and swap emits 17:28:55.188 - the host log has NO `REQ-RECV`/reply between 17:28:00 and 17:29:14 (its own 17:28:28.932 broadcast also never reached the client). The keep-time req at 17:27:55 round-tripped in 98ms, so the wire itself is fine outside load windows. Delivery to/from a loading peer is silently dropped, and the one-shot pull had no ack and no retry - the same I9 class it was built to fix.
+**Fix:** the pull retries every 5s until the host's new `cos_la_state_ack` (carries entry count) lands, capped at 8 attempts, all logged (`STATE-PULL req (attempt n/8)` / `acked` / `GAVE UP`). Ack is an additive RPC name - no schema bump; old hosts simply never ack and the client stops after the cap.
+
+### With both fixed, the expected in-mission flow
+Stores survive the transition on BOTH machines -> each machine's transition walk re-applies the OTHER side's cosmetics locally with no network needed; the retried pull covers hot-join and any residual gap; mid-mission swap emits landed outside load windows already (host->client worked at 17:29:14; client->host at 17:28:55 died only because it raced the host's load - it now re-syncs via the acked pull and surviving store on the next reconcile trigger).
+
+### NEW: shield picks persist across game restarts (user report 2026-07-06)
+`_offhand_selection` was the only LA store with no on-disk mirror - every shield illusion died with the session. Now: a committed Apply saves `offhands[backend_id][hand] = {armoury_key, vanilla_key}` into the existing `la_persisted_equips` VMF setting (additive section, backward compatible); a committed vanilla revert clears it; on boot, once the LA bridge builds its pools, picks are restored into `_offhand_selection` (same record shape as a fresh pick - mesh override + paint path identical) and the self-rebroadcast arms so peers learn them. Log: `OFFHAND-RESTORE n pick(s)`. Hat/armor/row-1-illusion persistence (`careers`/`illusions` sections) unchanged. Full illusion-system integration (inventory icons per instance, official-item edge cases) tracked in a new issue.
+
+### Verify in-game (2 players)
+1. Keep -> mission: BOTH players' LA shields render on the other's screen in mission with no re-equip. Log: `PEER-PURGE scheduled` + `canceled` pairs at the transition, `TRANSITION-WALK armed ... offhand_entries>=1` (first non-zero ever), `STATE-PULL ... acked`.
+2. Mid-mission swaps: both directions now sync (client swap -> host sees it; watch `REQ-RECV` on the host).
+3. Restart the game: previously Applied shield picks render on your own screen in the keep without re-equipping (`OFFHAND-RESTORE` line), and peers see them once you join a lobby.
+
+### Files
+- `cosmetics_tweaker.lua` - deferred peer purge (remove_player/add_remote_player hooks + update tick), pull retry + `cos_la_state_ack` (6th RPC, additive), offhand persistence save/clear taps + `mod._la_restore_offhand_selections`; `MOD_VERSION` -> `0.9.71-dev`.
+- `_la_persistence.lua` - `offhands` section + `save_offhand`/`clear_offhand`/`get_saved_offhands` (schema unchanged, additive).
+
 ## 0.9.70-dev — 2026-07-06 — LA sync core, slices 2+2b: single reconcile entry point (#264) + hot-join pull-on-ready (#267)
 
 > Slices 2 and 2b of `docs/LA_SYNC_CORE_AUDIT.md` (invariants I3, I9). Ships together with 0.9.69's slices 0+1 for the next playtest.
