@@ -1,5 +1,16 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.234-dev (2026-07-06) - CLOSE issue 262 (NetworkedFlowStateManager 512-cap host crash) - user-confirmed fixed
+
+User confirmed in-game 2026-07-06: the host no longer crashes at the 512 flow-state cap during a
+Chest of Trials fight under raised enemy caps. The fix shipped earlier (v0.7.213-dev, commit 520ed9a:
+`flow_cb_create_state` decline-at-cap guard, regression test `networked_flow_state_cap_guarded`); this
+build only strips the menu status tag. No behavior change.
+
+- LOC: `cot_enemy_multiplier` title `[crash] [verify-fix] [Issue 262]` -> `[working]`. issue 262 was the
+  only open crash issue referencing this setting, so `[crash]` comes off per LOCALIZATION_STANDARD s13.
+  Related host-crash guards: issue 129 (Mathlann AoE), issue 205 (settings-sync flood).
+
 ## 0.7.233-dev (2026-07-06) - CLOSE issue 104 (Blood in the Darkness host FPS) as vanilla injected-map overhead
 
 Close issue 104 (Blood in the Darkness host FPS) as vanilla injected-map overhead - census showed

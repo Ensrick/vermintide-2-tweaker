@@ -303,7 +303,7 @@ local loc = {
     altar_reuse_cost_mult_upgrade = { en = "[working] Weapon upgrade altar: cost multiplier per reuse" },
     altar_reuse_count_tooltip = { en = "1 = vanilla single use. Each extra use rerolls the offered items so you can fix a bad pick. Host-only." },
     altar_reuse_cost_mult_tooltip = { en = "1.0 keeps the coin cost flat, 2.0 doubles it each use (1x, 2x, 4x), and 0.5 halves it each use. Host-only." },
-    cot_enemy_multiplier = { en = "[crash] [verify-fix] [Issue 262] Chest of Trials enemy multiplier" },
+    cot_enemy_multiplier = { en = "[working] Chest of Trials enemy multiplier" },
     cot_enemy_multiplier_tooltip = { en = "1.0 = vanilla, 2.0 = double, 5.0 = huge horde, scaling the enemies in a Chest of Trials wave. Only affects trial waves, not normal mission spawns. Host-only." },
     shrine_boon_count = { en = "Shrines: Number of Available Boons" },
     chest_boon_count = { en = "Chests: Number of Available Boons" },
