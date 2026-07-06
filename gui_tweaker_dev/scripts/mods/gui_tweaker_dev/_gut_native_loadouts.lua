@@ -670,6 +670,83 @@ mod:hook("HeroWindowLoadoutSelectionConsole", "_save_bot_equipment", function(fu
 end)
 
 -- ==================================================================
+-- LOADOUT-PREVIEW CRASH GUARD (issue #372).
+-- The hero-view loadout context menu populates a hovered saved loadout via
+-- HeroWindowLoadoutSelectionConsole._populate_context_menu_loadout
+-- (hero_window_loadout_selection_console.lua:811). Its EQUIPMENT loop (:913-933)
+-- reads each gear slot's backend id straight off the loadout row and does
+--   item = item_interface:get_item_from_id(backend_id)
+--   local icon, name = UIUtils.get_ui_information_from_item(item)   -- item.data
+--   content[slot].rarity = UISettings.item_rarity_textures[item.rarity]
+-- with NO nil-guard -- unlike the COSMETICS loop right above it (:840-867), which
+-- guards `if item then ... else Application.warning`. When `item` is nil this fatals
+-- at ui_utils.lua:248 (`item.data`). We OWN the modded loadout store, and by design
+-- that store legitimately holds a gear id that is unresolvable RIGHT NOW -- a
+-- late-registering cim craft / LA-cosmetics per-instance UUID, or a genuinely stale
+-- id (the store is never destructively sanitized; see the get_character_data
+-- fallback + the two 2026-07-02 spawn-fatal burns). So a client hovering a saved
+-- loadout in the keep CTDs (crash 16.09.08 log: es_mercenary slot_ranged item=nil).
+-- Because we own this modded loadout surface, we own its preview: substitute any
+-- unresolvable equipment id with the career's currently-equipped (always-resolvable)
+-- item for that slot in a SHALLOW COPY -- NEVER mutate the store row -- and pcall the
+-- vanilla call as a last-resort backstop for the pathological case where even the
+-- fallback will not resolve. Resolution uses the raw tri-state _resolve_item_raw
+-- (NOT iface:get_item_from_id), so we never trip the get_item_from_id -> _refresh ->
+-- mirror-read recursion (v0.2.173 burn). Cosmetic slots are already nil-safe in
+-- vanilla, so we leave them untouched.
+--
+-- Pre-flight (2026-07-06): grepped gui_tweaker_dev for hooks on
+-- (HeroWindowLoadoutSelectionConsole, _populate_context_menu_loadout) -- NONE. gut's
+-- other hooks on this class target _save_bot_equipment (this file, above) and
+-- _show_context_menu (_gut_mission_inventory.lua) -- distinct methods.
+-- ==================================================================
+local EQUIPMENT_PREVIEW_SLOTS = { "slot_melee", "slot_ranged", "slot_necklace", "slot_ring", "slot_trinket_1" }
+
+local function _shallow_copy(t)
+    local c = {}
+    for k, v in pairs(t) do c[k] = v end
+    return c
+end
+
+mod:hook("HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout", function(func, self, loadout, loadout_index)
+    if type(loadout) ~= "table" then
+        return func(self, loadout, loadout_index)
+    end
+    -- Resolve career for the currently-equipped fallback lookup (mirrors vanilla :814-819).
+    local profile = rawget(_G, "SPProfiles") and SPProfiles[self._profile_index]
+    local career_settings = profile and profile.careers and profile.careers[self._career_index]
+    local career_name = career_settings and career_settings.name
+    local BU = rawget(_G, "BackendUtils")
+
+    local sanitized
+    for i = 1, #EQUIPMENT_PREVIEW_SLOTS do
+        local slot = EQUIPMENT_PREVIEW_SLOTS[i]
+        local id = loadout[slot]
+        -- Only RESOLVE_YES guarantees get_ui_information_from_item receives a real item.
+        if id == nil or _resolve_item_raw(id) ~= RESOLVE_YES then
+            local fb_id
+            if career_name and BU and BU.get_loadout_item then
+                local ok_fb, fb = pcall(BU.get_loadout_item, career_name, slot)
+                fb_id = ok_fb and fb and fb.backend_id
+            end
+            -- Substitute only a fallback that itself resolves; otherwise leave the
+            -- slot as-is and rely on the pcall backstop below.
+            if fb_id and _resolve_item_raw(fb_id) == RESOLVE_YES then
+                sanitized = sanitized or _shallow_copy(loadout)
+                sanitized[slot] = fb_id
+            end
+        end
+    end
+
+    local ok = pcall(func, self, sanitized or loadout, loadout_index)
+    if not ok then
+        printf("[gut_dev:NATIVE_LOADOUTS] issue #372: suppressed loadout-preview crash (unresolvable equipment item; career=%s idx=%s)",
+            tostring(career_name), tostring(loadout_index))
+    end
+    -- _populate_context_menu_loadout returns nothing (void populate); no value to forward.
+end)
+
+-- ==================================================================
 -- Re-seed command. The seed is one-time by design, so a snapshot taken while the mirror
 -- held bad data (e.g. blacksmith items committed to the cloud by the pre-isolation #174
 -- bleed, seen 2026-07-02 on merc Kruber slot_melee) is frozen until explicitly reset.
@@ -727,6 +804,7 @@ M.HOOK_TARGETS = {
     { "PlayFabMirrorAdventure", "delete_loadout" },
     { "BackendInterfaceItemPlayfab", "refresh_bot_loadouts" },
     { "HeroWindowLoadoutSelectionConsole", "_save_bot_equipment" },
+    { "HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout" },  -- issue #372 preview crash guard
     { "BackendUtils", "set_loadout_item" },  -- TABLE-form, installed deferred (_install_bu_capture)
 }
 
