@@ -333,29 +333,55 @@ local function _ensure_seeded(mirror, career_name)
         tostring(career_name), rows_added, rows_repaired, #entry.loadouts, entry.selected_index)
 end
 
--- Tri-state gear-id resolution: "yes" (item exists), "no" (checkable and absent right
--- now), "unknown" (cannot check). RAW FIELD READS ONLY - NEVER interface methods.
--- Burn 2026-07-02 #3 (v0.2.173, PC-A 21:09 log): calling iface:get_item_from_id() from
--- inside the mirror get_character_data hook recursed unboundedly - get_item_from_id ->
--- get_all_backend_items -> `if self._dirty then self:_refresh()` (backend_interface_
--- item_playfab.lua) -> _refresh -> mirror get_character_data -> our hook -> resolve ->
--- get_item_from_id -> _dirty STILL true (cleared only when _refresh completes) -> stack
--- overflow (~10k frames, surfaced at cosmetics_tweaker.lua:1513 on the same chain), and
--- the error-handler frame dumps then exhausted the 1 GiB lua_heap. Reading `_items` /
--- `_fake_items` directly (interfaces registry field per backend_manager_playfab.lua:202)
--- performs no dirty check, so re-entry is structurally impossible. A stale table during
--- a pending refresh at worst yields a transient "no" -> per-read official fallback that
--- self-heals on the next read.
+-- Tri-state gear-id resolution: "yes" (item PRESENTABLE right now), "no" (checkable and
+-- absent right now), "unknown" (cannot check). RAW FIELD READS ONLY - NEVER interface methods.
+--
+-- issue #387 FIX (v0.2.215) -- FAITHFUL to get_item_from_id. This predicate must agree with
+-- what the hero-view presentation uses, `iface:get_item_from_id(id)`, or a served weapon reads
+-- "presentable" here yet renders nil downstream and the slot STICKS on the previously-wielded
+-- weapon after a loadout switch. Source (backend_interface_item_playfab.lua:384-388):
+--   get_item_from_id(id) == get_all_backend_items()[id] == self._items[id]  (after a dirty _refresh)
+-- It consults `self._items` ONLY -- NEVER `self._fake_items`, and applies NO other validation
+-- (no data/removed-set check; there is no _all_backend_items field). The OLD resolver returned
+-- YES on `_items`-OR-`_fake_items` presence: `_fake_items` is a strict subset of `_items` in the
+-- normal case (the mirror inserts every fake into BOTH, playfab_mirror_base.lua:2400-2401), so it
+-- added no true positives -- but in the game-mode branch `self._items` is a FROZEN CLONE taken at
+-- the last refresh (:68-73) while `_fake_items` stays live, so a fake-only / stale-clone id read
+-- YES here yet get_item_from_id (which rebuilds `_items`) returned nil. That divergence was the
+-- #387 stuck-weapon signature (es_mercenary loadout-5 melee C60E860C16C0B5E9: served store, never
+-- presentable). So: drop the `_fake_items` positive and read the SAME source get_item_from_id
+-- resolves against.
+--   _dirty == false : `self._items` IS what get_item_from_id returns -> read it directly.
+--   _dirty == true  : (a loadout switch sets _dirty, :667) `self._items` is stale; get_item_from_id
+--     would _refresh and rebuild it from `backend_mirror:get_all_inventory_items()` (:75) plus the
+--     active game-mode overlay (:68-73). Predict from those SOURCE tables.
+--
+-- Burn 2026-07-02 #3 (v0.2.173, PC-A 21:09 log): calling iface:get_item_from_id() from inside the
+-- mirror get_character_data hook recursed unboundedly - get_item_from_id -> get_all_backend_items ->
+-- `if self._dirty then self:_refresh()` -> _refresh -> mirror get_character_data -> our hook ->
+-- resolve -> get_item_from_id -> _dirty STILL true -> stack overflow (~10k frames, surfaced at
+-- cosmetics_tweaker.lua:1513) then 1 GiB lua_heap exhaustion. Every read below is a PLAIN FIELD
+-- INDEX (no method call, no dirty check): `get_all_inventory_items()` is a bare `return
+-- self._inventory_items` (playfab_mirror_base.lua:2189), so reading `_inventory_items` directly
+-- performs no refresh and re-entry is structurally impossible. A stale table at worst yields a
+-- transient "no" -> per-read official fallback that self-heals on the next read.
 local RESOLVE_YES, RESOLVE_NO, RESOLVE_UNKNOWN = 1, 2, 3
 local function _resolve_item_raw(id)
     local ok, state = pcall(function()
         local backend = Managers and Managers.backend
         local iface = backend and backend._interfaces and backend._interfaces.items
         if not iface then return RESOLVE_UNKNOWN end
-        local items = iface._items
-        local fakes = iface._fake_items
-        if not items and not fakes then return RESOLVE_UNKNOWN end
-        if (items and items[id]) or (fakes and fakes[id]) then return RESOLVE_YES end
+        if not iface._dirty then
+            local items = iface._items                       -- exactly what get_item_from_id reads when clean
+            if items == nil then return RESOLVE_UNKNOWN end
+            return items[id] and RESOLVE_YES or RESOLVE_NO
+        end
+        -- dirty: self._items is stale; predict the pending rebuild from its sources.
+        local mirror = iface._backend_mirror
+        local inv = mirror and mirror._inventory_items       -- backend_mirror:get_all_inventory_items() -> _items on refresh (:75)
+        local gm = iface._active_game_mode_specific_items    -- overlaid onto _items on refresh (:71-73)
+        if inv == nil and gm == nil then return RESOLVE_UNKNOWN end
+        if (inv and inv[id]) or (gm and gm[id]) then return RESOLVE_YES end
         return RESOLVE_NO
     end)
     return ok and state or RESOLVE_UNKNOWN
@@ -996,6 +1022,96 @@ mod:command("gut_loadout_status", "Show the modded loadout store state + resolve
 end)
 
 -- ==================================================================
+-- /scrub_official_loadouts (issue #402) -- OFFICIAL-realm repair for the pre-isolation #174
+-- bleed: modded/dangling weapon + portrait-frame ids committed to the OFFICIAL cloud loadouts
+-- BEFORE the modded-realm isolation (this file) existed. Audit 2026-07-06 (decompiled source):
+-- every runtime write that diverges official _career_data from its mirror (and so reaches the
+-- PlayFab cloud) funnels through PlayFabMirrorBase.set_character_data -- it writes _career_data
+-- at :1933 BEFORE delegating to set_career_read_only_data at :1941, so it is the SOLE choke
+-- point, and both the weapon AND the portrait FRAME (slot_frame is an ordinary loadout slot,
+-- not a hero-attribute) persist through it. We hook it and no-op it in modded, so NO new leak
+-- is possible. But rows already corrupted by the pre-isolation bleed never self-heal -- this
+-- repairs them.
+--
+-- REPORT (default, read-only, safe anywhere): list every official loadout slot (slot_melee /
+--   slot_ranged / slot_frame) whose stored id does NOT resolve via get_item_from_id -- the exact
+--   ids the engine silently falls back on (merc Kruber -> Blacksmith greatsword).
+-- APPLY (`/scrub_official_loadouts apply`): replace each broken slot's id with a resolvable id
+--   the player ALREADY OWNS for that same slot (taken from another of their official loadout
+--   rows). It writes ONLY a value it has verified resolves, into a slot that is CURRENTLY broken,
+--   so it can never break a working slot; if no owned replacement resolves it reports and skips
+--   (re-equip that slot manually). HARD-GATED to the OFFICIAL realm: in modded, set_character_data
+--   is captured to the store, so the official write would never land -- refuse and say so.
+-- ==================================================================
+mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids in OFFICIAL loadouts (issue #402; add 'apply' to write, default report-only)", function(arg)
+    local do_apply = (arg == "apply")
+    if do_apply and _in_modded_realm() then
+        mod:echo("[scrub] REFUSED -- you are in the MODDED realm; an official write is captured to the modded store here.")
+        mod:echo("[scrub] Enter the OFFICIAL (EAC-trusted) realm, open the hero view, then run: /scrub_official_loadouts apply")
+        return
+    end
+    local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
+    if not ok_m or not mirror or type(mirror._career_data) ~= "table" then
+        mod:echo("[scrub] backend not ready -- open the hero view first, then re-run")
+        return
+    end
+    local SCRUB_SLOTS = { "slot_melee", "slot_ranged", "slot_frame" }
+    -- A replacement must itself resolve; only ever an id the player already owns for this slot.
+    local function _owned_replacement(slot, rows)
+        for i = 1, #rows do
+            local id = rows[i] and rows[i][slot]
+            if id ~= nil and _probe_resolve(id) ~= nil then return id end
+        end
+        return nil
+    end
+    mod:echo(string.format("[scrub] official loadout audit (%s)%s",
+        do_apply and "APPLY" or "report-only", _in_modded_realm() and " [WARN: modded realm -- report only]" or ""))
+    local broken, fixed, skipped = 0, 0, 0
+    for career_name, rows in pairs(mirror._career_data) do
+        if type(rows) == "table" then
+            for i = 1, #rows do
+                local row = rows[i]
+                if type(row) == "table" then
+                    for _, slot in ipairs(SCRUB_SLOTS) do
+                        local id = row[slot]
+                        if id ~= nil and _probe_resolve(id) == nil then
+                            broken = broken + 1
+                            printf("[gut_dev:NATIVE_LOADOUTS] #402 official BROKEN career=%s row=%d slot=%s id=%s",
+                                tostring(career_name), i, slot, tostring(id))
+                            if do_apply then
+                                local repl = _owned_replacement(slot, rows)
+                                if repl ~= nil then
+                                    local ok_w = pcall(function() mirror:set_character_data(career_name, slot, repl, nil, i) end)
+                                    if ok_w then
+                                        fixed = fixed + 1
+                                        printf("[gut_dev:NATIVE_LOADOUTS] #402 official REPAIRED career=%s row=%d slot=%s -> %s",
+                                            tostring(career_name), i, slot, tostring(repl))
+                                    else
+                                        skipped = skipped + 1
+                                    end
+                                else
+                                    skipped = skipped + 1
+                                    printf("[gut_dev:NATIVE_LOADOUTS] #402 official NO-OWNED-REPLACEMENT career=%s row=%d slot=%s (re-equip this slot manually)",
+                                        tostring(career_name), i, slot)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if broken == 0 then
+        mod:echo("[scrub] official loadouts clean -- no broken weapon/frame ids")
+    elseif do_apply then
+        mod:echo(string.format("[scrub] repaired %d/%d broken slot(s)%s; stay in the menu a moment so it commits to the cloud",
+            fixed, broken, skipped > 0 and string.format(" (%d skipped -- re-equip manually)", skipped) or ""))
+    else
+        mod:echo(string.format("[scrub] found %d broken slot(s) -- see console for ids. To fix: enter the OFFICIAL realm and run /scrub_official_loadouts apply", broken))
+    end
+end)
+
+-- ==================================================================
 -- Regression markers (issue #175 requirement 11). Registered by gui_tweaker_dev.lua.
 -- ==================================================================
 M.HOOK_TARGETS = {
@@ -1088,6 +1204,22 @@ M.rt_checks = {
         end
         for s in pairs(WEAPON_SLOT_SET) do
             if not GEAR_SLOT_SET[s] then return "weapon slot not in gear set: " .. s end
+        end
+    end },
+    { name = "native_loadouts_official_write_chokepoint", fn = function()
+        -- issue #402: the SOLE runtime write that diverges official _career_data from its mirror
+        -- (and thus reaches the PlayFab cloud) is PlayFabMirrorBase.set_character_data -- it writes
+        -- _career_data at playfab_mirror_base.lua:1933 BEFORE delegating to set_career_read_only_data
+        -- at :1941, and both weapons AND the portrait FRAME (slot_frame) persist through it. Blocking
+        -- these five in modded is the COMPLETE isolation guarantee, so each MUST stay a hooked target
+        -- (a dropped hook would re-open the leak). Audit source: the two 2026-07-06 investigations.
+        local want = { set_character_data = false, set_career_read_only_data = false,
+                       set_loadout_index = false, add_loadout = false, delete_loadout = false }
+        for _, t in ipairs(M.HOOK_TARGETS) do
+            if t[1] == "PlayFabMirrorAdventure" and want[t[2]] ~= nil then want[t[2]] = true end
+        end
+        for method, present in pairs(want) do
+            if not present then return "official-write choke point not hooked: " .. method end
         end
     end },
     { name = "native_loadouts_hook_targets_unique", fn = function()

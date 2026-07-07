@@ -61,6 +61,7 @@ gut_inv,                       -- open inventory mid-mission (migrated from gt /
 gut_hero_select,               -- open HeroView talents layout mid-mission (live-safe; career PICK stays keep-only by design)
 reset_modded_loadouts,         -- wipe the modded loadout store (optional career arg) -> re-seed from official (native loadouts #175)
 gut_loadout_status,            -- dump the modded loadout store state to chat + console (native loadouts #375 diagnostic)
+scrub_official_loadouts,       -- repair modded/dangling weapon+frame ids in OFFICIAL loadouts (#402; 'apply' to write, default report-only)
 gut_regression_test, gut_lua_mem
 ```
 *(partial gut audit added 2026-06-24 alongside the in-mission inventory migration; gut was previously un-audited in this file — other gut commands may exist.)*
