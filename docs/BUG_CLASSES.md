@@ -1271,3 +1271,35 @@ DamageUtils.heal_network(owner_unit, owner_unit, amount, "heal_from_proc")
 ### Related Issues / commits
 - #405 hotfix crt v0.3.53-dev; #406 hotfix ct_dev v0.7.237-dev (STABLE ct carries it until promotion).
 - Sweep rule: on finding one, grep every mod for `heal_network(`/`add_damage_network(` and audit the gates (enemy_tweaker's two procs were already correct).
+
+## 30. Modded craft intercept assumes `recipe_override` is always non-nil (true on M+K, false on the console/gamepad craft-item page)
+
+**First seen:** 2026-07-07 (cim_dev: no CWV weapon could be crafted on a gamepad)
+**Canonical Issue:** [#407](https://github.com/Ensrick/vermintide-2-tweaker/issues/407) (cim/cim_dev)
+**Lives in:** any mod that hooks `BackendInterfaceCraftingPlayfab.craft` (or `CraftingManager.craft`) and branches on `recipe_override`, replacing the PlayFab roundtrip with local synthesis. cim's standard forge is the instance.
+
+### Symptoms
+- Crafting works fine on mouse+keyboard but EVERY craft is silently dropped on the console/gamepad crafting UI. In cim the tell is the chat warning "Craft dropped - no recipe selected (recipe_override=nil)" and `[craft_attempt] recipe=nil` on windows named `HeroWindowCrafting*Console`. The user reads it as "CWV items won't craft" but it drops vanilla items too.
+- Input-mode-relative, not item-relative: the same template crafts on M+K and drops on a controller. Testing on only one input mode never reproduces the other.
+
+### Diagnosis pattern
+1. Vanilla `_get_valid_recipe(item_backend_ids, recipe_override)` (backend_interface_crafting_base.lua:27-51) has TWO modes: a non-nil override validates that one recipe; a **nil** override AUTO-DETECTS by iterating every recipe and returning the first whose validation passes.
+2. The two UIs feed it differently. PC "Craft Item" passes the recipe explicitly (`parent:craft(items, self._recipe_name)`, craft_page_craft_item.lua:322). The **console** "Craft Item" passes NONE (`parent:craft(items)`, craft_page_craft_item_console.lua:325) and leans on the auto-detect. (Only the craft-item console page does this; salvage/reroll/apply-skin/upgrade/extract/convert consoles all pass `self._recipe_name`.)
+3. A mod that intercepts `craft` cannot fall through to vanilla `func` in modded realm (it enqueues the EAC-gated PlayFab request -> `playfab_eac_error` reason 511 -> kick). So a hook that early-drops on `not recipe_override` kills every console craft-item.
+
+### Fix template
+When `recipe_override` is nil, re-derive it locally from the dropped item's `slot_type` (the same choice vanilla setup_recipe_requirements makes, craft_page_craft_item_console.lua:80-84) instead of dropping — then proceed through the mod's own recipe/synth path:
+```lua
+if not recipe_override then
+    local bid1 = item_backend_ids and item_backend_ids[1]
+    local slot = bid1 and Managers.backend:get_interface("items"):get_item_masterlist_data(bid1)
+    slot = slot and slot.slot_type
+    recipe_override = mod._craft_item_recipe_for_slot(slot)   -- melee/ranged->craft_weapon, jewelry->per-slot synth
+end
+if not recipe_override then return _silent_drop(...) end       -- only NOW is a nil override a real user error
+```
+
+### Related Issues / commits
+- #407 fix cim_dev v0.8.53-dev (`standard_forge.lua` craft() hook + `mod._cim407_craft_item_recipe_for_slot`). STABLE cim carries it until promotion.
+- Regression: `/cim_regression_test` -> `console_craft_item_nil_recipe_resolves`.
+- Related: class 27 (#390 crafted-CWV base-render) — same feature (cim crafting a CWV variant), different failure stage (this one blocks the craft entirely; 27 is the post-craft render).

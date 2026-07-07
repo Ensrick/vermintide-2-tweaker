@@ -1,5 +1,42 @@
 # Crafting in Modded Changelog
 
+## 0.8.53-dev (2026-07-07) - issue 407: CWV (and all) items fail to craft on the console/gamepad UI [verify-fix]
+
+- SYMPTOM (issue 407): every craft attempt on the gamepad/console crafting UI is
+  dropped with chat warning "Craft dropped - no recipe selected (recipe_override=nil)".
+  User could not craft any CWV variant (e.g. cwv_es_axe_shield_veteran). Log shows
+  `[craft_attempt] recipe=nil` on all five attempts, all on `HeroWindowCraftingConsole`.
+- ROOT CAUSE: vanilla's console "Craft Item" page calls `parent:craft(items)` with NO
+  recipe (craft_page_craft_item_console.lua:325) and relies on backend
+  auto-detection (backend_interface_crafting_base.lua:42-50 iterates every recipe
+  when recipe_override is nil). The PC page instead passes `self._recipe_name`
+  explicitly (craft_page_craft_item.lua:322) - which is why crafting only broke on
+  the gamepad UI, never on mouse+keyboard. cim's `BackendInterfaceCraftingPlayfab.craft`
+  hook can't fall through to vanilla `func` (it would enqueue the EAC-gated PlayFab
+  request and kick the player in modded realm), so on a nil recipe it simply dropped
+  the craft.
+- FIX (standard_forge.lua craft() hook): when recipe_override arrives nil, re-derive
+  the craft-item recipe from the dropped item's `slot_type`, exactly as vanilla
+  setup_recipe_requirements picks it (craft_page_craft_item_console.lua:80-84):
+  melee/ranged -> craft_weapon, and cim's per-slot jewelry synths
+  necklace -> craft_necklace, ring -> craft_charm, trinket -> craft_trinket (matching
+  the setup_recipe_requirements pin at standard_forge.lua:330-333). Only the console
+  craft-item page passes nil; every other console page (salvage/reroll/apply-skin/
+  upgrade/extract/convert) already passes self._recipe_name, so a nil override
+  unambiguously means craft-item. Mapping exposed as
+  `mod._cim407_craft_item_recipe_for_slot` for the regression check.
+- DIAGNOSTIC: `[cim:407] console craft-item: nil recipe resolved -> <recipe> (bid=.. slot=..)`
+  via engine printf (always in log regardless of the debug-logging toggle).
+- REGRESSION: `/cim_regression_test` -> `console_craft_item_nil_recipe_resolves` asserts
+  each slot maps to the right synth, non-craftable slots resolve to nil, and every
+  resolved recipe has a live synth registered.
+- BUG_CLASS: added class 30 (modded craft intercept assumes recipe_override always
+  non-nil - true on M+K, false on the console craft-item page).
+- VERIFY (2-player not required; single-client gamepad test): open the Athanor forge
+  with a controller active, drop a CWV weapon template into Craft Item, press craft.
+  Expect a real `cwv_<key>_NNN` item minted (not the "no recipe selected" warning) and
+  `[cim:407]` in the log. Repeat for a jewelry template (necklace/ring/trinket).
+
 ## 0.8.52-dev (2026-07-06) - issue 390: CWV variants crafted via cim rendered as the base vanilla weapon [verify-fix]
 
 - SYMPTOM (issue 390, two confirmed repros of one root cause): a Nordland Claymore

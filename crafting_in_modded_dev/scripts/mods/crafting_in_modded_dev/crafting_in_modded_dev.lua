@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.52-dev"
+local MOD_VERSION = "0.8.53-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -8092,6 +8092,41 @@ _rt_register("cim390_cwv_craft_render_fix", function()
     -- surface it rather than silently ship the base-mesh bug.
     if mod._cim390_units_rescue_installed ~= true then
         return "#390 regression: cim-side get_item_units rescue for crafted CWV variants not installed (crafted copies render base mesh)"
+    end
+end)
+
+_rt_register("console_craft_item_nil_recipe_resolves", function()
+    -- (#407) The console/gamepad "Craft Item" page calls parent:craft(items) with
+    -- recipe_override=nil (craft_page_craft_item_console.lua:325) and relies on
+    -- vanilla backend recipe auto-detection. cim's craft() hook can't fall through
+    -- to vanilla (EAC kick), so it re-derives the recipe from the dropped item's
+    -- slot_type. Before the fix, cim dropped EVERY console craft-item — no CWV
+    -- (or any) weapon could be crafted on the gamepad UI. The PC page passes
+    -- self._recipe_name explicitly, which is why crafting worked on M+K only.
+    local f = mod._cim407_craft_item_recipe_for_slot
+    if type(f) ~= "function" then
+        return "mod._cim407_craft_item_recipe_for_slot missing — console craft-item nil-recipe fix regressed; gamepad crafting drops every item"
+    end
+    if f("melee")    ~= "craft_weapon"   then return "melee -> "    .. tostring(f("melee"))    .. " (want craft_weapon)"   end
+    if f("ranged")   ~= "craft_weapon"   then return "ranged -> "   .. tostring(f("ranged"))   .. " (want craft_weapon)"   end
+    if f("necklace") ~= "craft_necklace" then return "necklace -> " .. tostring(f("necklace")) .. " (want craft_necklace)" end
+    if f("ring")     ~= "craft_charm"    then return "ring -> "     .. tostring(f("ring"))     .. " (want craft_charm)"    end
+    if f("trinket")  ~= "craft_trinket"  then return "trinket -> "  .. tostring(f("trinket"))  .. " (want craft_trinket)"  end
+    -- Non-craftable slots must return nil so the craft still drops cleanly (no
+    -- accidental synth for hat/skin/frame drops).
+    if f("hat") ~= nil or f("skin") ~= nil then
+        return "non-craftable slot resolved to a recipe — would mis-synth a cosmetic drop"
+    end
+    -- Every resolved recipe name must have a live synth, or the craft() hook
+    -- would set recipe_override then still drop at the synth-lookup stage.
+    local synth_names = mod._cim407_synth_names_for_rt
+    if type(synth_names) == "table" then
+        for _, slot in ipairs({ "melee", "ranged", "necklace", "ring", "trinket" }) do
+            local rn = f(slot)
+            if not synth_names[rn] then
+                return string.format("resolved recipe %s (slot %s) has no synth registered", tostring(rn), slot)
+            end
+        end
     end
 end)
 

@@ -1182,6 +1182,13 @@ synth.craft_necklace = _make_craft_synth({ necklace = true })
 synth.craft_charm    = _make_craft_synth({ ring = true })
 synth.craft_trinket  = _make_craft_synth({ trinket = true })
 
+-- Issue 407: expose the synth-name set so /cim_regression_test can verify every
+-- recipe the console craft-item resolver derives (craft_weapon / craft_necklace /
+-- craft_charm / craft_trinket) actually has a live synth registered. A boolean
+-- snapshot, not the closures, so the test can't accidentally invoke a synth.
+mod._cim407_synth_names_for_rt = {}
+for _name in pairs(synth) do mod._cim407_synth_names_for_rt[_name] = true end
+
 -- ============================================================
 -- Direct-craft chat commands (feedback #6)
 -- ============================================================
@@ -1421,6 +1428,21 @@ end)
 -- craft() short-circuit: replace PlayFab roundtrip with local synth
 -- ============================================================
 
+-- Issue 407: map a dropped item's slot_type to the cim synth recipe used when
+-- the console "Craft Item" page supplies no recipe_override. Vanilla
+-- craft_page_craft_item_console.lua:80-84 picks craft_weapon for melee/ranged
+-- and craft_jewellery for jewelry; cim substitutes its per-slot jewelry synths
+-- (craft_necklace / craft_charm / craft_trinket) so the jewelry slot is honored
+-- exactly as the setup_recipe_requirements pin does. Exposed on `mod` for the
+-- /cim_regression_test check (console_craft_item_nil_recipe_resolves).
+mod._cim407_craft_item_recipe_for_slot = function(slot)
+    if slot == "melee" or slot == "ranged" then return "craft_weapon" end
+    if slot == "necklace" then return "craft_necklace" end
+    if slot == "ring"     then return "craft_charm"    end
+    if slot == "trinket"  then return "craft_trinket"  end
+    return nil
+end
+
 mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career_name, item_backend_ids, recipe_override)
     -- Illusion-swap intercept FIRST: applies regardless of whether the
     -- standard crafting UI is open. Defined in illusion_swap.lua and
@@ -1474,6 +1496,37 @@ mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career
     -- diagnosis — captures career, recipe, list length, first 3 item BIDs.
     if mod._cim_autodump_craft_attempt then
         pcall(mod._cim_autodump_craft_attempt, career_name, item_backend_ids, recipe_override)
+    end
+    if not recipe_override then
+        -- Console/gamepad "Craft Item" page passes NO recipe: vanilla
+        -- craft_page_craft_item_console.lua:325 calls `parent:craft(items)` with
+        -- recipe_override=nil and relies on backend auto-detection
+        -- (backend_interface_crafting_base.lua:42-50 iterates every recipe). The
+        -- PC page instead passes `self._recipe_name` explicitly
+        -- (craft_page_craft_item.lua:322) — which is why crafting only breaks on
+        -- the console UI. cim CANNOT fall through to vanilla `func` here (it would
+        -- enqueue the EAC-gated PlayFab request and kick the player), so we
+        -- re-derive the craft-item recipe from the dropped item's slot_type via
+        -- mod._cim407_craft_item_recipe_for_slot (mirrors vanilla
+        -- setup_recipe_requirements at craft_page_craft_item_console.lua:80-84,
+        -- substituting cim's per-slot jewelry synths for craft_jewellery — the
+        -- same pin setup_recipe_requirements applies at standard_forge.lua:330-333).
+        -- Issue 407.
+        -- Resolve the dropped item's slot_type. get_item_masterlist_data
+        -- internally calls self:get_item_from_id (item_playfab.lua:351), which is
+        -- the method cim hooks to surface `cim_template_*` entries from
+        -- _template_cache — so this resolves a synthetic template bid to its
+        -- data.slot_type, exactly as the craft_attempt autodump does.
+        local bid1       = item_backend_ids and item_backend_ids[1]
+        local item_iface = bid1 and Managers.backend and Managers.backend:get_interface("items")
+        local item_data  = item_iface and item_iface:get_item_masterlist_data(bid1)
+        local slot       = item_data and item_data.slot_type
+        local derived    = slot and mod._cim407_craft_item_recipe_for_slot(slot)
+        if derived and synth[derived] then
+            recipe_override = derived
+            pcall(printf, "[cim:407] console craft-item: nil recipe resolved -> %s (bid=%s slot=%s)",
+                tostring(derived), tostring(bid1), tostring(slot))
+        end
     end
     if not recipe_override then
         return _silent_drop(string.format(
