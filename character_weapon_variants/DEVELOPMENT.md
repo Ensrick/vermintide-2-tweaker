@@ -1127,7 +1127,7 @@ variant has a scale/offset (def- or type-level) and how it resolves on the husk.
 | cwv_wh_javelin | we_javelin | DIFFERS (L; R=invis sentinel) | force-loaded (boar spear) | - | def; resolves w/ skin |
 | cwv_es_outrider_grenade_launcher | dr_deus_01 | DIFFERS (R) | force-loaded | **strip (no_ammo_unit)** | none |
 | cwv_es_musket | es_handgun | same (R) | none needed (base loads) | - | type; SCALE needs skin (skinless = native scale) |
-| cwv_es_musket_old | es_handgun | DIFFERS (R, custom mesh) | force-loaded | - | none (native-authored scale) |
+| cwv_es_musket_old | es_handgun | DIFFERS (R, MOD-BUNDLED custom mesh) | EXCLUDED from force-load (mod-bundle = always resident; loading it is the #403 boot fatal, BUG_CLASSES 28) | - | none (native-authored scale) |
 | cwv_dr_priest_greathammer | wh_2h_hammer | DIFFERS (R, dwarf mesh) | force-loaded | - | none |
 | cwv_es_priest_greathammer | wh_2h_hammer | DIFFERS (R) | force-loaded | - | none |
 | cwv_es_warpriest_hammer | wh_1h_hammer | DIFFERS (R) | force-loaded | - | none |

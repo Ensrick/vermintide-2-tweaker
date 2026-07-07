@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.368-dev — 2026-07-06 — HOTFIX: v0.1.367 boot fatal (residency queued a mod-local mesh into the engine package loader) (#403)
+
+**Issue 403 [verify-fix] — game could not boot at all on v0.1.367-dev (engine fatal ~18s into startup, every launch):**
+- **Root cause (crash block, console-2026-07-07-02.16.55):** the new data-driven residency pass swept `cwv_es_musket_old`, whose `right_hand_unit` is CWV's own MOD-BUNDLED custom mesh (`units/cwv_es_musket_custom/cwv_es_musket_custom`). Mod-local meshes are NOT engine packages; `Managers.package:load` only QUEUES, so the pcall around it succeeded and the uncatchable fatal fired later in `PackageManager._pop_queue` (`<<Script Error>>units/cwv_es_musket_custom/cwv_es_musket_custom_3p`). Every other swept path is a vanilla `units/weapons/player/` per-unit package (those load fine, proven across 3 prior sessions).
+- **Fix:** `_om._husk_override_unit_needs_residency` now returns nil for any unit path not under `units/weapons/player/`. Mod-bundled meshes ship inside CWV's own bundle and are resident wherever the mod is installed, so they never needed residency. The regression test derives from the same predicate, so the loaded set and the assertion stay consistent. All 22 gap closures from v0.1.367 are preserved (they are all vanilla paths).
+- **Verify in-game:** the game boots; `[cwv:LOAD] v0.1.368-dev` in the log; NO `[cwv husk-override-residency]` line naming a `units/cwv_*` path.
+
 ## 0.1.367-dev — 2026-07-06 — Husk residency hardened to data-driven (closes 22 latent invisible-husk gaps) + coverage tests + defensive logging + crafted-copy backend_id widening + docs (issues 396/401/399/392/390)
 
 Follow-up to the v0.1.366-dev husk cluster: a per-variant audit of all 30 defs (residency / ammo / transform) against the husk render path, then hardening the residual gaps of the same classes so coverage is complete BY CONSTRUCTION rather than by a hand-maintained list. No new in-mission behavior beyond making more variants render correctly on the husk; all fixes still need a 2-player MISSION re-test.

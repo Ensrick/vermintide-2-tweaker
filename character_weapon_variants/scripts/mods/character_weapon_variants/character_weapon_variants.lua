@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.367-dev"
+local MOD_VERSION = "0.1.368-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -4448,6 +4448,14 @@ do
 		local u = def and def[field]
 		if type(u) ~= "string" or u == "" then return nil end
 		if u:find("wpn_invisible_weapon", 1, true) then return nil end
+		-- Issue 403 boot fatal: ONLY vanilla weapon meshes are loadable
+		-- per-unit packages. A mod-bundled mesh (units/cwv_*, e.g. the old
+		-- musket custom unit) is NOT a package; queuing it via
+		-- Managers.package:load is an UNCATCHABLE engine fatal when the async
+		-- queue pops (PackageManager._pop_queue) - the pcall around load()
+		-- cannot protect it. Mod-bundled meshes are resident wherever the mod
+		-- is installed, so they never need residency anyway.
+		if u:find("units/weapons/player/", 1, true) ~= 1 then return nil end
 		if u == _base_field_unit(def.base_weapon, field) then return nil end
 		return u
 	end

@@ -1208,7 +1208,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
     return v_w3p, v_a3p, v_w1p, v_a1p
 end)
 ```
-Residency is the other half: the mesh the husk will spawn (curated-skin override units == `def.right_hand_unit`/`.left_hand_unit`) must be RESIDENT on every client. Force-load override units that DIFFER from the base, data-driven over all defs, ref-held at boot — NOT a mission-load blanket load (class: 1 GiB Lua-heap). Keep the vanilla base-unit force-load as the issue-280 crash floor and a general `start_weapon_fx` nil-slot guard as the durable crash net. Fixes that require the husk to resolve the CWV INSTANCE (transform on a skinless/cim-crafted equip; template-level sound swaps) are blocked until #392 gives the husk a way to see the CWV item (net-safe skin/marker on the wire).
+Residency is the other half: the mesh the husk will spawn (curated-skin override units == `def.right_hand_unit`/`.left_hand_unit`) must be RESIDENT on every client. Force-load override units that DIFFER from the base, data-driven over all defs, ref-held at boot — NOT a mission-load blanket load (class: 1 GiB Lua-heap), and ONLY vanilla `units/weapons/player/` paths (class 28: a mod-bundled mesh queued into `Managers.package:load` is an uncatchable boot fatal). Keep the vanilla base-unit force-load as the issue-280 crash floor and a general `start_weapon_fx` nil-slot guard as the durable crash net. Fixes that require the husk to resolve the CWV INSTANCE (transform on a skinless/cim-crafted equip; template-level sound swaps) are blocked until #392 gives the husk a way to see the CWV item (net-safe skin/marker on the wire).
 
 ### Fix sites (v0.1.366-dev / v0.1.367-dev, `character_weapon_variants.lua`)
 - `SimpleHuskInventoryExtension.start_weapon_fx` guard — durable nil-slot crash net (issue 280).
@@ -1221,3 +1221,29 @@ Residency is the other half: the mesh the husk will spawn (curated-skin override
 - v0.1.366-dev ship commit `ff8fa2c`; hardening in v0.1.367-dev (`character_weapon_variants/CHANGELOG.md`).
 - Full mechanism + audit table (which variants are covered, which await #392) in `character_weapon_variants/DEVELOPMENT.md` "Husk rendering path".
 - Related: class 5 (self-owned vs husk extension classes are separate roots) — same "hook the path the husk actually takes" root.
+
+## 28. Mod-bundled unit path queued into `Managers.package:load` = uncatchable async boot fatal
+
+**First seen:** 2026-07-07 (CWV v0.1.367-dev — game could not boot at all)
+**Canonical Issue:** [#403](https://github.com/Ensrick/vermintide-2-tweaker/issues/403)
+**Lives in:** any residency/force-load pass that derives load targets from item defs (CWV, wt cross-char ports, cosmetics preloads)
+
+### Symptoms
+- Engine fatal seconds into startup on EVERY launch (game unbootable), no Lua crash block from the mod itself. Crash log shows `<<Script Error>><unit path>` with a stack in `PackageManager._pop_queue` / `force_load` (`foundation/scripts/managers/package/package_manager.lua:194/137`) called from `boot.lua` — not from any mod file.
+- The mod's own load-time printf for the offending path reported SUCCESS (`force-loaded ... resident=false`).
+
+### Diagnosis pattern
+1. `Managers.package:load(path, ref, nil, true, true)` only QUEUES an async load — a pcall around it always succeeds. The fatal fires LATER when the queue pops the entry and the engine finds no such resource package. Nothing in Lua can catch it (same family as class 22's uncatchable AV).
+2. Vanilla per-weapon meshes under `units/weapons/player/...` ARE loadable as per-unit packages (proven: CWV residency passes across many sessions). A MOD-BUNDLED unit (`units/<mod>_.../...`, built into the mod's own bundle) is NOT an engine package — queuing it (or any derived `.."_3p"` sibling) is the fatal.
+3. Fingerprint: the `<<Script Error>>` path matches a `right_hand_unit`/`left_hand_unit` value in a mod def whose mesh ships in the mod bundle.
+
+### Fix template
+Filter the load predicate to vanilla weapon paths only; mod-bundled meshes are resident wherever the mod is installed and never need force-loading:
+```lua
+if u:find("units/weapons/player/", 1, true) ~= 1 then return nil end
+```
+Keep the predicate SHARED between the loader and its regression test so the assertion tracks the filter.
+
+### Related Issues / commits
+- #403 hotfix cwv v0.1.368-dev; the sweep that exposed it: v0.1.367-dev data-driven residency (class 27).
+- Memory: `reference_vt2_package_load_needs_package_not_unit_path` (the general "unit path = async crash" rule; this class adds the vanilla-weapon-path exception and the mod-bundle trap).
