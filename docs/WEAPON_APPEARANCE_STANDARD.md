@@ -88,14 +88,27 @@ explicitly swap. `—` = not applicable.
 | Sync | source | consumer (§5) | — | — |
 
 **The gaps this standard is closing** (as of 2026-07-07):
-- Units, paths 3 & 4: only the musket was swapped; every other cross-char melee
-  variant previews as its base mesh (#237). → §4.1.
-- Residency, path 1: owner-side residency not covered, so a variant whose
-  override unit is non-resident on the owner renders absent (#415). → §4.5.
-- Texture, all paths: bespoke `Material.set_texture` copies, no per-instance
-  persistence (#227, #416). → §4.3.
+- Units, path 3 (inventory preview): fixed v0.1.370-dev — `_cwv_preview_meshswap_apply`
+  swaps the previewer spawn_data (#237, pending in-game verify). → §4.1.
+- Units, path 4 (illusion browser): still base mesh; the path-3 swap was never
+  mirrored to `LootItemUnitPreviewer.spawn_units` (issue #419). → §4.1.
+- Units/Transform coupling: mesh-swap resolves via `_find_def` (registration-
+  independent) but transform via `_transform_map` (registration-gated), so a
+  unit-bearing variant that forgets a transform field swaps its mesh with NO
+  transform, silently — this is why the musket needs the `force_register` crutch
+  (issue #417). → §4.1 / §4.2.
+- Residency ref-string is duplicated producer↔consumer with no shared constant;
+  a rename silently degrades every preview swap to base mesh (issue #418). → §4.5.
+- Residency, path 1: the boot pass `_force_load_husk_override_units` already runs
+  on the host, so owner residency IS covered; #415's residual absent-shield is the
+  ranged-slot offhand-attach root, pending the disambiguating in-game test. → §4.5.
+- Texture, all paths: bespoke `Material.set_texture` copies (BANNED primitive —
+  §4.3 mandates `Unit.set_texture_for_materials`), no per-instance persistence,
+  `WA` not shared cross-mod (#227, #416, issue #420). → §4.3.
 - Sync: husk resolves BASE `item_data`, so husk-side concern resolution that
-  keys on the cwv identity silently no-ops for skinless variants (#392). → §5.
+  keys on the cwv identity silently no-ops for skinless variants (#392); a
+  husk-reliable base+career positive signal (like the ammo strip already uses)
+  closes most facets without the full marker (see #392 audit note). → §5.
 
 ---
 
@@ -189,9 +202,14 @@ bare base-key match that would touch a real vanilla weapon (#399).
 A husk 3P unit must be force-loaded resident on EVERY peer before
 `_wield_slot` can spawn it, else the husk renders absent/base (#396, #401). The
 residency pass is DATA-DRIVEN: walk every def, force-load any per-hand override
-unit (and `_3p`) that differs from the base weapon's. **Extend to the owner
-path** for variants whose override unit lives in a package the wielder's career
-does not natively load (#415, Bretonnian shields on non-GK Empire careers).
+unit (and `_3p`) that differs from the base weapon's. This boot pass runs
+UNCONDITIONALLY (host included), so it already covers the owner path — #415's
+absent Bretonnian shield on non-GK Empire careers is therefore NOT a residency
+gap but a ranged-slot offhand-attach issue (verify in-game before treating it as
+residency). The producer ref string and the `_3p`+`has_loaded` guard must live
+in a SINGLE shared constant + predicate, not re-inlined per site (issue #418):
+`_force_load_axe_shield_husk_units` currently omits the safety predicates that
+the data-driven pass and the preview swap both carry.
 
 ---
 
@@ -249,7 +267,7 @@ that passes in-world but fails in preview is the #237 class.
 | #409 | Units/Texture | 3 | Old Musket preview — resolver bailed (fixed v0.1.369 force_register) |
 | #396 | Residency | 2 | Imperial Longsword invisible on husk |
 | #401 | Residency/Units | 2 | Axe+Shield reverts to dwarf base — wrong units force-loaded |
-| #415 | Residency | 1 | Longsword shield offhand absent for HOST (owner residency) |
+| #415 | Units/attach | 1 | Shield offhand absent for HOST — offhand-attach, NOT residency (verify) |
 | #394 | Transform | 2 | Poleaxe grip offset not on husk |
 | #397 | Transform | 2 | umbrella: all transforms on husk |
 | #399 | Ammo | 2 | Trollhammer torpedo on husk |
@@ -257,6 +275,10 @@ that passes in-world but fails in preview is the #237 class.
 | #416 | Texture/Sync | 2 | per-hand illusion picks don't replicate to peers |
 | #204 | Texture/Sync | 2 | LA shield texture warps onto wrong mesh on husk |
 | #392 | Sync | 2 | umbrella: husk resolves base item_data |
+| #417 | Units/Transform | 1,3 | mesh swaps but transform silently skips (reg-gate fork) |
+| #418 | Residency | 2,3 | ref-string / guard duplicated — rename → silent base mesh |
+| #419 | Units | 4 | illusion browser previews base mesh (path-3 swap not mirrored) |
+| #420 | Texture | all | WA not shared; Material.set_texture banned-primitive copies |
 
 ---
 
