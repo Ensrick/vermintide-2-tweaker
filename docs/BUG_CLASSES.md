@@ -1247,3 +1247,27 @@ Keep the predicate SHARED between the loader and its regression test so the asse
 ### Related Issues / commits
 - #403 hotfix cwv v0.1.368-dev; the sweep that exposed it: v0.1.367-dev data-driven residency (class 27).
 - Memory: `reference_vt2_package_load_needs_package_not_unit_path` (the general "unit path = async crash" rule; this class adds the vanilla-weapon-path exception and the mod-bundle trap).
+
+## 29. Client-side buff proc calls a server-only DamageUtils API (`heal_network` fassert "Only server can heal")
+
+**First seen:** 2026-07-07 (crt Fires from Ash THP, client session; sweep found ct's kill-heal boon same day)
+**Canonical Issue:** [#405](https://github.com/Ensrick/vermintide-2-tweaker/issues/405) (crt), [#406](https://github.com/Ensrick/vermintide-2-tweaker/issues/406) (ct/ct_dev)
+**Lives in:** any mod-added or mod-wrapped buff proc / BuffFunctionTemplates function that grants healing (or other server-authoritative effects) — crt/ct/et Big Rebalance reworks, CW power-ups
+
+### Symptoms
+- A CLIENT hard-crashes mid-mission the moment a proc fires (e.g. on their own kill): `fassert "Only server can heal"` from `damage_utils.lua:2636`, stack through `buff_extension.lua trigger_procs` into the mod's buff_func. HOST-side play never reproduces — the bug ships and survives until the author first plays as a client with the toggle/boon active.
+
+### Diagnosis pattern
+1. `trigger_procs` runs on the killer's/actor's LOCAL machine — on_kill/on_hit procs fire with `is_server = false` on clients.
+2. `DamageUtils.heal_network` (and its siblings) fasserts server authority. EVERY vanilla `heal_from_proc` call site is gated `Managers.player.is_server` (`buff_templates.lua:313-328, :404`) or `Managers.state.network.is_server` (`:435+`). A wrapper that copies the heal but drops the gate is this class.
+3. The heal is not lost by gating: the host also triggers the same proc for a client's kill (server-side buff instance), so the host instance grants the heal — vanilla's exact semantics. (Requires the host to run the mod; degraded-not-crashed otherwise.)
+
+### Fix template
+```lua
+if not (Managers and Managers.player and Managers.player.is_server) then return end
+DamageUtils.heal_network(owner_unit, owner_unit, amount, "heal_from_proc")
+```
+
+### Related Issues / commits
+- #405 hotfix crt v0.3.53-dev; #406 hotfix ct_dev v0.7.237-dev (STABLE ct carries it until promotion).
+- Sweep rule: on finding one, grep every mod for `heal_network(`/`add_damage_network(` and audit the gates (enemy_tweaker's two procs were already correct).
