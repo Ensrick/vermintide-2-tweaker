@@ -90,8 +90,11 @@ explicitly swap. `—` = not applicable.
 **The gaps this standard is closing** (as of 2026-07-07):
 - Units, path 3 (inventory preview): fixed v0.1.370-dev — `_cwv_preview_meshswap_apply`
   swaps the previewer spawn_data (#237, pending in-game verify). → §4.1.
-- Units, path 4 (illusion browser): still base mesh; the path-3 swap was never
-  mirrored to `LootItemUnitPreviewer.spawn_units` (issue #419). → §4.1.
+- Units, path 4 (illusion browser): resolves upstream via the shared
+  `get_item_units` hook (loot_item_unit_previewer.lua:270 calls it; CWV forces the
+  override there) — NOT a spawn-time swap. #419 verified as covered, downgraded to
+  a verify-only edge case (an entry reaching spawn_units with no cwv backend_id or
+  skin). → §4.1.
 - Units/Transform coupling: mesh-swap resolves via `_find_def` (registration-
   independent) but transform via `_transform_map` (registration-gated), so a
   unit-bearing variant that forgets a transform field swaps its mesh with NO
@@ -105,10 +108,11 @@ explicitly swap. `—` = not applicable.
 - Texture, all paths: bespoke `Material.set_texture` copies (BANNED primitive —
   §4.3 mandates `Unit.set_texture_for_materials`), no per-instance persistence,
   `WA` not shared cross-mod (#227, #416, issue #420). → §4.3.
-- Sync: husk resolves BASE `item_data`, so husk-side concern resolution that
-  keys on the cwv identity silently no-ops for skinless variants (#392); a
-  husk-reliable base+career positive signal (like the ammo strip already uses)
-  closes most facets without the full marker (see #392 audit note). → §5.
+- Sync: husk resolves BASE `item_data` (#392). Phase C (v0.1.372-dev) now re-keys
+  the husk MESH + TRANSFORM off the husk-reliable base+career positive signal for
+  unambiguous cross-char variants (`can_wield`-excluded, safe-by-construction),
+  closing #394/#396/#397/#401 EXCEPT where weapon_tweaker has expanded `can_wield`;
+  full parity there still needs the per-wearer marker. → §5.
 
 ---
 

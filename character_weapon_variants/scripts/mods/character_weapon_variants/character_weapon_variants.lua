@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.371-dev"
+local MOD_VERSION = "0.1.372-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -4697,6 +4697,17 @@ local function _detach_musket_bayonet(world, rifle_unit)
 end
 
 mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+	-- Husk MESH re-key (issues 396/401) -- WEAPON_APPEARANCE_STANDARD section 5.
+	-- MUST run BEFORE the vanilla spawn: the husk resolves the BASE item_data
+	-- (name = base weapon), so vanilla spawn_inventory_unit would select the BASE
+	-- mesh even for a cross-character variant (backend_id/skin absent on the wire,
+	-- #392). Point the hand's unit at the variant's override via the husk-reliable
+	-- base+career positive signal, guarded so it can only pick a RESIDENT vanilla
+	-- override for an unambiguous cross-char pair -- never a native weapon, never a
+	-- non-resident mesh. No-op when nothing resolves (today's behavior).
+	if not owner_unit_1p and _om._husk_rekey_units then
+		_om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p)
+	end
 	local v_w3p, v_a3p, v_w1p, v_a1p =
 		func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
 
@@ -4728,7 +4739,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		-- issues 397/394: apply the CWV scale/offset transform to the husk 3P
 		-- weapon unit, mirroring the owner-side create_equipment hook.
 		if _om._husk_apply_cwv_transform then
-			_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p)
+			_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p, owner_unit_3p)
 		end
 	end
 
@@ -9832,6 +9843,56 @@ do
 	-- asserts every no_ammo_unit def contributes its base + careers here.
 	_om._no_ammo_careers_by_base = _no_ammo_careers_by_base
 
+	-- issues 396/397/401 husk mesh+transform re-key: base_weapon -> career -> def,
+	-- for (base, career) pairs the career CANNOT natively wield (can_wield
+	-- exclusion -> a genuine native wielder is never matched) AND exactly one
+	-- variant claims (unambiguous). Husk-reliable POSITIVE signal (same family as
+	-- the ammo strip) that resolves a skinless / cim-crafted cross-char variant on
+	-- remote screens without the cwv identity the wire never carries (#392).
+	-- Native-wieldable or ambiguous pairs resolve to nil -> today's base behavior,
+	-- so this can never mis-apply a variant to a native weapon.
+	-- CAVEAT: reads the OBSERVER's ItemMasterList[base].can_wield; if weapon_tweaker
+	-- has expanded it to grant cross-char access, the receiving careers count as
+	-- native and this resolver conservatively declines (no regression) -- full
+	-- parity there still needs the Phase 3 sync marker.
+	local _husk_def_by_base_career = {}
+	do
+		local _seen = {}   -- "base|career" -> def, or false once ambiguous
+		local function _native(base_key, career)
+			local base = rawget(ItemMasterList, base_key)
+			local cw = type(base) == "table" and base.can_wield
+			if type(cw) ~= "table" then return true end   -- unknown -> exclude (conservative)
+			for _, c in ipairs(cw) do if c == career then return true end end
+			return false
+		end
+		for _, def in ipairs(_variant_definitions) do
+			local base = def.base_weapon
+			if type(base) == "string" then
+				for _, career in ipairs(def.careers or {}) do
+					if type(career) == "string" and not _native(base, career) then
+						local k = base .. "|" .. career
+						local slot = _husk_def_by_base_career[base]
+						if not slot then slot = {}; _husk_def_by_base_career[base] = slot end
+						if _seen[k] == nil then
+							_seen[k] = def
+							slot[career] = def
+						elseif _seen[k] ~= def then
+							_seen[k] = false          -- two variants share (base, career): ambiguous
+							slot[career] = nil
+						end
+					end
+				end
+			end
+		end
+	end
+	_om._husk_def_by_base_career = _husk_def_by_base_career   -- exposed for regression
+
+	local function _resolve_husk_def_by_base_career(base_name, career)
+		if not (base_name and career) then return nil end
+		local slot = _husk_def_by_base_career[base_name]
+		return slot and slot[career] or nil
+	end
+
 	-- Set of every CWV base_weapon key — used only to scope the "no def
 	-- resolved" husk diagnostic so it doesn't spam on the common native-weapon
 	-- wield case (fires only for weapons whose base a CWV variant clones).
@@ -9862,6 +9923,33 @@ do
 			end
 		end)
 		return name
+	end
+
+	-- Husk MESH re-key (issues 396/401). Runs BEFORE the vanilla spawn (the caller
+	-- mutates item_units in place). For an unambiguous cross-char (base, career) the
+	-- husk would otherwise spawn the BASE mesh; point the hand's unit at the
+	-- variant's override -- but ONLY if that override's "_3p" form is already
+	-- force-loaded resident (shared _om._resident_override_3p guard; issue 403
+	-- crash-floor) and differs from what's there. Idempotent and fail-safe: no
+	-- resident override, native/ambiguous pair, or nil career -> item_units untouched.
+	_om._husk_rekey_units = function(hand, item_data, item_units, owner_unit_3p)
+		if not (item_data and item_units) then return end
+		local base_name = item_data.name
+		if not base_name then return end
+		local career = _husk_career_name(owner_unit_3p)
+		local def = _resolve_husk_def_by_base_career(base_name, career)
+		if not def then return end
+		local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
+		local override = def[field]
+		if type(override) ~= "string" or override == "" then return end
+		-- Confirm the "_3p" override is resident (helper returns _3p path or nil); we
+		-- write the BASE-form path, vanilla spawn_inventory_unit appends "_3p".
+		if not (_om._resident_override_3p and _om._resident_override_3p(override)) then return end
+		if item_units[field] == override then return end   -- idempotent
+		item_units[field] = override
+		_husk_log_once("mesh_rekey:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand),
+			"[cwv husk-mesh] re-keyed hand=%s base=%s career=%s -> %s (issue 396/401 base+career)",
+			tostring(hand), tostring(base_name), tostring(career), tostring(override))
 	end
 
 	-- Returns true if it stripped a torpedo/ammo unit (caller then nils its
@@ -9906,7 +9994,7 @@ do
 	-- once the skin/backend_id are absent). When nothing resolves and the item
 	-- is a CWV base weapon, log it: that is the disambiguating evidence for the
 	-- #392 base-resolution umbrella (husk never sees the CWV instance).
-	_om._husk_apply_cwv_transform = function(hand, item_data, item_units, weapon_unit_3p)
+	_om._husk_apply_cwv_transform = function(hand, item_data, item_units, weapon_unit_3p, owner_unit_3p)
 		if not (weapon_unit_3p and _is_unit(weapon_unit_3p)) then
 			-- The 3P weapon unit is nil/dead. For a CWV base weapon this means the
 			-- spawn returned nothing (override unit non-resident on this client, or
@@ -9922,6 +10010,18 @@ do
 		end
 		local skin = item_units and item_units.skin
 		local def = _resolve_cwv_def(item_data, skin)
+		if not def then
+			-- #392/#397 fallback: cwv identity absent on the husk. Resolve via the
+			-- husk-reliable base+career positive signal (unambiguous cross-char only,
+			-- can_wield-excluded) so a skinless / cim-crafted variant still applies.
+			local bc_career = _husk_career_name(owner_unit_3p)
+			def = _resolve_husk_def_by_base_career(item_data and item_data.name, bc_career)
+			if def then
+				_husk_log_once("bc_xform:" .. tostring(item_data and item_data.name) .. ":" .. tostring(bc_career) .. ":" .. tostring(hand),
+					"[cwv husk-transform] resolved via base+career: base=%s career=%s def=%s hand=%s (issue 397 re-key)",
+					tostring(item_data and item_data.name), tostring(bc_career), tostring(def.item_key), tostring(hand))
+			end
+		end
 		if not def then
 			local base_name = item_data and item_data.name
 			if base_name and _cwv_base_weapons[base_name] then
@@ -11492,6 +11592,36 @@ _rt_register("cwv_husk_override_ref_shared", function()
     end
     if type(_om._resident_override_3p) ~= "function" then
         return "_om._resident_override_3p missing -- shared preview/browser swap guard lost (#418)"
+    end
+end)
+
+_rt_register("cwv_husk_base_career_rekey", function()
+    -- Phase C (#392/#394/#396/#397/#401): the husk base+career re-key resolves a
+    -- skinless / cim-crafted cross-char variant on remote screens. SAFETY INVARIANT:
+    -- the map must NEVER contain a (base, career) pair the career can NATIVELY wield
+    -- -- that would mis-apply a variant's mesh/transform to a genuine native weapon
+    -- on other players' screens. can_wield exclusion enforces this at build time;
+    -- this test re-derives it at runtime so a def/careers edit can't silently break it.
+    if type(_om._husk_def_by_base_career) ~= "table" then
+        return "_om._husk_def_by_base_career not exposed -- husk base+career re-key missing (Phase C)"
+    end
+    if type(_om._husk_rekey_units) ~= "function" then
+        return "_om._husk_rekey_units missing -- husk mesh re-key lost (issues 396/401)"
+    end
+    for base, slot in pairs(_om._husk_def_by_base_career) do
+        local master = rawget(ItemMasterList, base)
+        local cw = type(master) == "table" and master.can_wield
+        if type(cw) == "table" then
+            for career in pairs(slot) do
+                for _, native in ipairs(cw) do
+                    if native == career then
+                        return string.format(
+                            "base+career re-key includes NATIVE pair base=%s career=%s -- would mis-apply a variant to a native weapon on husks (Phase C safety)",
+                            tostring(base), tostring(career))
+                    end
+                end
+            end
+        end
     end
 end)
 
