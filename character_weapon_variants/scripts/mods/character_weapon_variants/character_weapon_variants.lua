@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.368-dev"
+local MOD_VERSION = "0.1.369-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -9384,10 +9384,17 @@ local _type_transforms = {
 	},
 	-- Old Musket (cwv_es_musket_old): custom mesh is already the right
 	-- shape (proportions baked into the FBX) — no Y stretch needed, no
-	-- X/Z thinning. Leaving the transform empty here means
-	-- `_resolve_field` returns nil for all axes, so the mesh renders at
-	-- its native authored scale.
-	cwv_es_musket_old = {},
+	-- X/Z thinning, so it carries NO generic scale/offset. But it still
+	-- needs its bespoke pose + textures applied on the resolver-driven
+	-- render paths (inventory preview / illusion browser), which bail at
+	-- the nil-def guard unless the def is registered. `force_register`
+	-- (issue 409) puts it into `_transform_map` with no transform values,
+	-- so `_resolve_preview_def` returns it and `_cwv_spawn_item_post`
+	-- reaches the Old-Musket pose/texture block instead of early-returning.
+	-- (Its actual pose is still the absolute per-perspective/stance pose in
+	-- the `_om` module — the custom mesh needs an absolute reset, not the
+	-- generic additive offset.)
+	cwv_es_musket_old = { force_register = true },
 }
 
 -- Per-variant override > type-level default > nil.
@@ -9406,7 +9413,13 @@ for _, def in ipairs(_variant_definitions) do
 	-- and `_resolve_cwv_def` returns nil at apply time.
 	-- Includes the per-perspective `_1p` / `_3p` variants so a def that only
 	-- sets a 1P-specific or 3P-specific transform is still registered.
-	if _resolve_field(def, "right_hand_scale")
+	-- Issue 409: `force_register` lets a custom-mesh item that needs NO generic
+	-- scale/offset (native authored scale) still enter `_transform_map`, so every
+	-- resolver-driven render path (preview, illusion browser) resolves its def and
+	-- reaches its rotation/texture apply instead of bailing at the nil-def guard.
+	-- Rotation fields are also gate signals now — a rotation-only def must register.
+	if _resolve_field(def, "force_register")
+			or _resolve_field(def, "right_hand_scale")
 			or _resolve_field(def, "left_hand_scale")
 			or _resolve_field(def, "right_hand_offset")
 			or _resolve_field(def, "left_hand_offset")
@@ -9417,13 +9430,22 @@ for _, def in ipairs(_variant_definitions) do
 			or _resolve_field(def, "right_hand_scale_3p")
 			or _resolve_field(def, "left_hand_scale_3p")
 			or _resolve_field(def, "right_hand_offset_3p")
-			or _resolve_field(def, "left_hand_offset_3p") then
+			or _resolve_field(def, "left_hand_offset_3p")
+			or _resolve_field(def, "right_hand_rotation")
+			or _resolve_field(def, "left_hand_rotation")
+			or _resolve_field(def, "right_hand_rotation_1p")
+			or _resolve_field(def, "left_hand_rotation_1p")
+			or _resolve_field(def, "right_hand_rotation_3p")
+			or _resolve_field(def, "left_hand_rotation_3p") then
 		_transform_map[def.item_key] = def
 		if not def.no_skin then
 			_skin_transform_map[def.item_key .. "_skin"] = def
 		end
 	end
 end
+
+-- Exposed for /cwv_regression_test (musket_old_force_registered, #409).
+mod._cwv_transform_registered = function(key) return _transform_map[key] ~= nil end
 
 -- Custom illusions with their own scale/offset fields (e.g. greathammer
 -- skins applied to 1H mace targets need to scale the oversized 2H model
@@ -9503,20 +9525,47 @@ end
 
 local function _is_unit(v) return type(v) == "userdata" and pcall(Unit.alive, v) end
 
-local function _apply_scale(unit, scale_tbl)
-	if not unit or not _is_unit(unit) then return end
+-- ============================================================
+-- WeaponAppearance (WA) — the single weapon-appearance geometry module
+-- ============================================================
+-- ONE place that owns the scale / offset / position / rotation math for a
+-- weapon unit, called by EVERY render path so no path re-implements the math:
+--   1. in-world owner/bot  — GearUtils.create_equipment
+--   2. husk (remote)       — GearUtils.spawn_inventory_unit (owner_unit_1p==nil)
+--   3. inventory preview    — MenuWorldPreviewer/_spawn_item -> _cwv_spawn_item_post
+--   4. illusion browser     — LootItemUnitPreviewer.spawn_units
+-- Full contract: docs/WEAPON_APPEARANCE_STANDARD.md (Phase 4).
+--
+-- Conventions (DO NOT reintroduce per-site copies of this math):
+--   * scale    — ABSOLUTE set. Idempotent by nature.
+--   * offset   — ADDITIVE nudge from the mesh's native local position. Guarded
+--                idempotent (weak table) because MenuWorldPreviewer's _spawn_item
+--                super-call fires the hook TWICE per spawn and additive would
+--                double. (This is why scale/rotation/position, being absolute,
+--                need no guard.)
+--   * position — ABSOLUTE set, for custom meshes that need a full pose reset
+--                (e.g. the Old Musket). Mutually exclusive with offset; if both
+--                are present, position wins.
+--   * rotation — ABSOLUTE set. Accepts EITHER {x,y,z} Euler DEGREES (the human-
+--                tunable standard: Quaternion.from_euler_angles_xyz takes degrees,
+--                memory reference_vt2_euler_angles_degrees) OR a QuaternionBox /
+--                raw Quaternion for hand-authored non-principal-axis poses.
+--   * 1P and 3P are applied to SEPARATE units BY THE CALLER; this module never
+--     infers perspective, so a 3P change can never touch the 1P grip (and vice
+--     versa). Callers resolve `<field>_1p` / `<field>_3p` / unified via
+--     `_resolve_field` and hand WA the already-resolved value.
+local WA = {}
+
+function WA.apply_scale(unit, scale_tbl)
+	if not scale_tbl or not unit or not _is_unit(unit) then return end
 	pcall(Unit.set_local_scale, unit, 0, Vector3(scale_tbl[1], scale_tbl[2], scale_tbl[3]))
 end
 
--- _apply_offset is additive (current + offset). MenuWorldPreviewer extends
--- HeroPreviewer and its _spawn_item super-calls the parent, so both hooks fire
--- per spawn for MenuWorldPreviewer instances and would double the offset. Guard
--- with a weak-keyed set so the second invocation is a no-op; the table cleans
--- itself up when the unit is GC'd. Scale is idempotent so it doesn't need this.
+-- Additive offset with per-unit idempotency (see conventions above).
 local _offset_applied = setmetatable({}, { __mode = "k" })
 
-local function _apply_offset(unit, offset_tbl)
-	if not unit or not _is_unit(unit) then return end
+function WA.apply_offset(unit, offset_tbl)
+	if not offset_tbl or not unit or not _is_unit(unit) then return end
 	if not Unit.alive(unit) then return end
 	if _offset_applied[unit] then return end
 	_offset_applied[unit] = true
@@ -9525,9 +9574,54 @@ local function _apply_offset(unit, offset_tbl)
 	Unit.set_local_position(unit, 0, Vector3(cx + offset_tbl[1], cy + offset_tbl[2], cz + offset_tbl[3]))
 end
 
-local function _transform_unit(unit, scale_tbl, offset_tbl)
-	if scale_tbl then _apply_scale(unit, scale_tbl) end
-	if offset_tbl then _apply_offset(unit, offset_tbl) end
+function WA.apply_position(unit, pos_tbl)
+	if not pos_tbl or not unit or not _is_unit(unit) then return end
+	pcall(Unit.set_local_position, unit, 0, Vector3(pos_tbl[1], pos_tbl[2], pos_tbl[3]))
+end
+
+-- Normalize a rotation spec to a raw Quaternion. Accepts {x,y,z} euler DEGREES,
+-- a QuaternionBox (has :unbox()), or a raw Quaternion. Returns nil on unusable
+-- input so callers no-op instead of crashing.
+local function _wa_to_quaternion(rot)
+	if rot == nil then return nil end
+	if type(rot) == "table" and type(rot[1]) == "number" then
+		-- {x,y,z} euler degrees (the authoring standard)
+		local ok, q = pcall(Quaternion.from_euler_angles_xyz, rot[1], rot[2], rot[3])
+		return ok and q or nil
+	end
+	-- QuaternionBox (:unbox()) or raw Quaternion userdata.
+	local ok, q = pcall(function() return rot.unbox and rot:unbox() or rot end)
+	return ok and q or nil
+end
+
+function WA.apply_rotation(unit, rot)
+	if rot == nil or not unit or not _is_unit(unit) then return end
+	local q = _wa_to_quaternion(rot)
+	if q == nil then return end
+	pcall(Unit.set_local_rotation, unit, 0, q)
+end
+mod._wa_to_quaternion_for_rt = _wa_to_quaternion  -- exposed for /cwv regression
+
+-- Single dispatch used by every render path. spec = { scale=, offset=,
+-- position=, rotation= }; any field may be nil (that aspect is left native).
+function WA.apply(unit, spec)
+	if not spec or not unit or not _is_unit(unit) then return end
+	if spec.scale then WA.apply_scale(unit, spec.scale) end
+	if spec.position then
+		WA.apply_position(unit, spec.position)
+	elseif spec.offset then
+		WA.apply_offset(unit, spec.offset)
+	end
+	if spec.rotation then WA.apply_rotation(unit, spec.rotation) end
+end
+mod._cwv_weapon_appearance = WA  -- cross-file / cross-mod handle (Phase 2+)
+
+-- Legacy thin wrappers so existing call sites read unchanged; `_transform_unit`
+-- now also carries rotation. New code should call WA.apply directly.
+local function _apply_scale(unit, scale_tbl)  WA.apply_scale(unit, scale_tbl) end
+local function _apply_offset(unit, offset_tbl) WA.apply_offset(unit, offset_tbl) end
+local function _transform_unit(unit, scale_tbl, offset_tbl, rotation)
+	WA.apply(unit, { scale = scale_tbl, offset = offset_tbl, rotation = rotation })
 end
 
 -- Vanilla mace+sword cosmetic tweak (toggleable via "mace_sword_tweak"
@@ -9719,16 +9813,18 @@ do
 			end
 			return
 		end
-		local scale, offset
+		local scale, offset, rotation
 		if hand == "right" then
-			scale  = _resolve_field(def, "right_hand_scale_3p")  or _resolve_field(def, "right_hand_scale")
-			offset = _resolve_field(def, "right_hand_offset_3p") or _resolve_field(def, "right_hand_offset")
+			scale    = _resolve_field(def, "right_hand_scale_3p")    or _resolve_field(def, "right_hand_scale")
+			offset   = _resolve_field(def, "right_hand_offset_3p")   or _resolve_field(def, "right_hand_offset")
+			rotation = _resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "right_hand_rotation")
 		else
-			scale  = _resolve_field(def, "left_hand_scale_3p")  or _resolve_field(def, "left_hand_scale")
-			offset = _resolve_field(def, "left_hand_offset_3p") or _resolve_field(def, "left_hand_offset")
+			scale    = _resolve_field(def, "left_hand_scale_3p")    or _resolve_field(def, "left_hand_scale")
+			offset   = _resolve_field(def, "left_hand_offset_3p")   or _resolve_field(def, "left_hand_offset")
+			rotation = _resolve_field(def, "left_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation")
 		end
-		if scale or offset then
-			_transform_unit(weapon_unit_3p, scale, offset)
+		if scale or offset or rotation then
+			_transform_unit(weapon_unit_3p, scale, offset, rotation)
 			printf("[cwv husk-transform] applied hand=%s def=%s scale=%s offset=%s -- issues 397/394",
 				tostring(hand), tostring(def.item_key or def.item_type),
 				scale and "y" or "n", offset and "y" or "n")
@@ -9901,12 +9997,20 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 	local left_scale_3p   = _resolve_field(def, "left_hand_scale_3p")   or left_scale
 	local right_offset_3p = _resolve_field(def, "right_hand_offset_3p") or right_offset
 	local left_offset_3p  = _resolve_field(def, "left_hand_offset_3p")  or left_offset
+	-- Rotation (WeaponAppearance): absolute-set orientation, resolved per hand
+	-- per perspective exactly like scale/offset. nil = leave native orientation.
+	local right_rot       = _resolve_field(def, "right_hand_rotation")
+	local left_rot        = _resolve_field(def, "left_hand_rotation")
+	local right_rot_1p    = _resolve_field(def, "right_hand_rotation_1p") or right_rot
+	local left_rot_1p     = _resolve_field(def, "left_hand_rotation_1p")  or left_rot
+	local right_rot_3p    = _resolve_field(def, "right_hand_rotation_3p") or right_rot
+	local left_rot_3p     = _resolve_field(def, "left_hand_rotation_3p")  or left_rot
 	if not def.scale_3p_only then
-		_transform_unit(result.right_unit_1p, right_scale_1p, right_offset_1p)
-		_transform_unit(result.left_unit_1p,  left_scale_1p,  left_offset_1p)
+		_transform_unit(result.right_unit_1p, right_scale_1p, right_offset_1p, right_rot_1p)
+		_transform_unit(result.left_unit_1p,  left_scale_1p,  left_offset_1p,  left_rot_1p)
 	end
-	_transform_unit(result.right_unit_3p, right_scale_3p, right_offset_3p)
-	_transform_unit(result.left_unit_3p,  left_scale_3p,  left_offset_3p)
+	_transform_unit(result.right_unit_3p, right_scale_3p, right_offset_3p, right_rot_3p)
+	_transform_unit(result.left_unit_3p,  left_scale_3p,  left_offset_3p,  left_rot_3p)
 
 	return result
 end)
@@ -9983,13 +10087,15 @@ local function _cwv_spawn_item_post(self, item_name)
 	-- Preview spawns 3P-style models; use _3p override if set, else unified.
 	if slot.right and _is_unit(slot.right) then
 		_transform_unit(slot.right,
-			_resolve_field(def, "right_hand_scale_3p")  or _resolve_field(def, "right_hand_scale"),
-			_resolve_field(def, "right_hand_offset_3p") or _resolve_field(def, "right_hand_offset"))
+			_resolve_field(def, "right_hand_scale_3p")    or _resolve_field(def, "right_hand_scale"),
+			_resolve_field(def, "right_hand_offset_3p")   or _resolve_field(def, "right_hand_offset"),
+			_resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "right_hand_rotation"))
 	end
 	if slot.left and _is_unit(slot.left) then
 		_transform_unit(slot.left,
-			_resolve_field(def, "left_hand_scale_3p")  or _resolve_field(def, "left_hand_scale"),
-			_resolve_field(def, "left_hand_offset_3p") or _resolve_field(def, "left_hand_offset"))
+			_resolve_field(def, "left_hand_scale_3p")    or _resolve_field(def, "left_hand_scale"),
+			_resolve_field(def, "left_hand_offset_3p")   or _resolve_field(def, "left_hand_offset"),
+			_resolve_field(def, "left_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation"))
 	end
 
 	-- v0.1.293: bind cwv_es_musket_old textures + track for live tuning in the
@@ -10187,9 +10293,11 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	          or _resolve_field(def, "right_hand_scale")     or _resolve_field(def, "left_hand_scale")
 	local offset = _resolve_field(def, "right_hand_offset_3p") or _resolve_field(def, "left_hand_offset_3p")
 	          or _resolve_field(def, "right_hand_offset")    or _resolve_field(def, "left_hand_offset")
-	if scale or offset then
+	local rotation = _resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation_3p")
+	          or _resolve_field(def, "right_hand_rotation")    or _resolve_field(def, "left_hand_rotation")
+	if scale or offset or rotation then
 		for _, unit in ipairs(units) do
-			_transform_unit(unit, scale, offset)
+			_transform_unit(unit, scale, offset, rotation)
 		end
 	end
 
@@ -11280,6 +11388,40 @@ _rt_register("mace_sword_rename_prefix_match", function()
     -- Negative control: an unrelated key must NOT match.
     if has_prefix("es_dual_wield_hammer_falchion_skin_01_name", prefix) then
         return "prefix match spuriously succeeded for a non-mace+sword key"
+    end
+end)
+
+_rt_register("weapon_appearance_module_present", function()
+    -- Phase 1 (issue 409 + the rotation abstraction): the single WeaponAppearance
+    -- module must own scale/offset/position/rotation and be reachable, and its
+    -- rotation normalizer must accept {x,y,z} euler DEGREES, a QuaternionBox, and
+    -- nil — so every render path shares ONE rotation math path instead of the four
+    -- bespoke quaternion blocks this replaces.
+    local WA = mod._cwv_weapon_appearance
+    if type(WA) ~= "table" then return "mod._cwv_weapon_appearance (WeaponAppearance) missing" end
+    for _, m in ipairs({ "apply", "apply_scale", "apply_offset", "apply_position", "apply_rotation" }) do
+        if type(WA[m]) ~= "function" then return "WeaponAppearance." .. m .. " missing" end
+    end
+    local to_q = mod._wa_to_quaternion_for_rt
+    if type(to_q) ~= "function" then return "rotation normalizer not exposed" end
+    if to_q(nil) ~= nil then return "nil rotation must normalize to nil (leave native)" end
+    if to_q({ 90, 0, 0 }) == nil then return "euler {90,0,0} did not normalize to a quaternion" end
+    local ok_qb, qb = pcall(QuaternionBox, Quaternion.identity())
+    if ok_qb and to_q(qb) == nil then return "QuaternionBox did not normalize to a quaternion" end
+    if to_q({ "not", "numbers" }) ~= nil then return "non-numeric table must normalize to nil, not crash" end
+end)
+
+_rt_register("musket_old_force_registered", function()
+    -- Issue 409: cwv_es_musket_old carries no generic scale/offset (native mesh),
+    -- so before force_register it never entered _transform_map -> the preview /
+    -- illusion-browser resolvers returned nil and bailed BEFORE its pose+texture
+    -- block. force_register must put it in the map so the resolver-driven paths
+    -- reach its apply. Regression: if the gate stops honoring force_register, the
+    -- inventory preview mis-poses the musket again.
+    local check = mod._cwv_transform_registered
+    if type(check) ~= "function" then return "mod._cwv_transform_registered helper missing" end
+    if not check("cwv_es_musket_old") then
+        return "#409 regression: cwv_es_musket_old NOT registered in _transform_map (force_register gate broke)"
     end
 end)
 
